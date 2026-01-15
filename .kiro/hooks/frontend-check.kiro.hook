@@ -1,0 +1,14 @@
+{
+  "enabled": true,
+  "name": "前端代码规范检查",
+  "description": "保存前端文件时自动检查 Modern Soft UI 规范并修正",
+  "version": "1",
+  "when": {
+    "type": "fileSave",
+    "pattern": "**/frontend/**/*.{tsx,ts,jsx,js}"
+  },
+  "then": {
+    "type": "askAgent",
+    "prompt": "检查刚保存的前端文件，查找并修正以下违规代码：\n\n**必须修正的问题：**\n1. `bg-white` 用于大背景 → 改为 `bg-slate-50`\n2. `text-black` 或 `#000000` → 改为 `text-slate-900`\n3. `shadow-md/lg/xl` → 改为 `shadow-[0_8px_30px_rgb(0,0,0,0.04)]`\n4. 硬编码颜色值 → 使用 Design System tokens\n\n**正确样式参考：**\n- 大背景: `bg-slate-50`\n- 卡片背景: `bg-white`\n- 主文字: `text-slate-900`\n- 次文字: `text-slate-500`\n- 卡片圆角: `rounded-2xl`\n- 按钮圆角: `rounded-full`\n- 毛玻璃: `bg-white/70 backdrop-blur-xl border-white/40`\n\n**检查步骤：**\n1. 读取刚保存的文件内容\n2. 检查 Tailwind 类名是否符合 Modern Soft UI 规范\n3. 如果发现违规，直接修改文件修正问题\n4. 如果没有违规，不需要任何操作\n\n请直接修改文件，不要只是报告问题。"
+  }
+}

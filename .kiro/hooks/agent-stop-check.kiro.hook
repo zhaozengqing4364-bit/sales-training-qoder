@@ -1,0 +1,15 @@
+{
+  "enabled": true,
+  "name": "Agent 执行完成检查",
+  "description": "Agent 执行完成后检查所有修改的文件是否符合规范",
+  "version": "1",
+  "when": {
+    "type": "agentStop"
+  },
+  "then": {
+    "type": "askAgent",
+    "prompt": "Agent 执行完成，请检查本次修改的所有文件：\n\n**Python 文件检查：**\n1. 是否有 print() 语句 (应使用 logger)\n2. 是否使用 SQLAlchemy 2.0 语法 (select() 而非 query())\n3. 是否使用 Pydantic v2 语法 (from_attributes 而非 orm_mode)\n4. 错误处理是否使用 Result.fail() 而非 raise HTTPException\n\n**前端文件检查：**\n1. 是否符合 Modern Soft UI 规范\n2. 大背景是否使用 bg-slate-50\n3. 是否有硬编码颜色值\n\n**如果发现问题：**\n列出需要修正的文件和具体问题，然后直接修改文件。\n\n**如果没有问题：**\n简短确认即可，不需要详细报告。"
+  },
+  "workspaceFolderName": "语音训练平台",
+  "shortName": "agent-stop-check"
+}

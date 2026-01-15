@@ -1,0 +1,18 @@
+{
+  "enabled": true,
+  "name": "WebSocket 消息格式检查",
+  "description": "保存 WebSocket 文件时检查消息格式是否符合契约",
+  "version": "1",
+  "when": {
+    "type": "fileEdited",
+    "patterns": [
+      "**/frontend/**/*.{tsx,ts}"
+    ]
+  },
+  "then": {
+    "type": "askAgent",
+    "prompt": "检查刚保存的 WebSocket 文件是否符合消息契约：\n\n**必须检查的项目：**\n1. 所有发送的消息是否包含 `type`, `timestamp`, `trace_id`, `data` 字段\n2. 消息类型是否符合 `docs/api-contract/websocket.md` 定义\n3. 新增消息类型: `fuzzy_detection`, `stage_update`, `score_update`\n\n**消息格式示例：**\n```python\n{\n    \"type\": \"fuzzy_detection\",\n    \"timestamp\": \"2025-01-11T10:00:00Z\",\n    \"trace_id\": \"abc123\",\n    \"data\": {\"detections\": [...]}\n}\n```\n\n**检查步骤：**\n1. 读取刚保存的文件\n2. 检查所有 `send_json` 调用的消息格式\n3. 如果发现不符合规范，直接修改文件\n4. 如果符合规范，不需要任何操作"
+  },
+  "workspaceFolderName": "语音训练平台",
+  "shortName": "websocket-check"
+}

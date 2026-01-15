@@ -1,0 +1,709 @@
+openapi: 3.0.3
+info:
+  title: Enterprise AI Intelligent Practice System API
+  description: REST API for PPT presentation coaching and sales practice bot
+  version: 1.0.0
+  contact:
+    name: API Support
+
+servers:
+  - url: https://api.example.com/v1
+    description: Production server
+  - url: http://localhost:8000/v1
+    description: Local development server
+
+tags:
+  - name: auth
+    description: Authentication operations
+  - name: presentations
+    description: PPT presentation management
+  - name: practice
+    description: Practice session operations
+  - name: analytics
+    description: Analytics and leaderboard
+
+paths:
+  /auth/wechat:
+    post:
+      tags: [auth]
+      summary: Authenticate with enterprise WeChat
+      description: Exchange WeChat auth code for session token
+      operationId: wechatLogin
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code]
+              properties:
+                code:
+                  type: string
+                  description: WeChat authorization code
+                  example: "wx_auth_abc123"
+      responses:
+        '200':
+          description: Authentication successful
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /presentations:
+    get:
+      tags: [presentations]
+      summary: List all presentations
+      operationId: listPresentations
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [ready, processing, failed]
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+      responses:
+        '200':
+          description: List of presentations
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  presentations:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Presentation'
+                  total:
+                    type: integer
+                  page:
+                    type: integer
+
+    post:
+      tags: [presentations]
+      summary: Upload a new presentation
+      operationId: uploadPresentation
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file, title]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: PPTX file (max 50MB)
+                title:
+                  type: string
+                  description: Presentation title
+      responses:
+        '201':
+          description: Presentation uploaded successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Presentation'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /presentations/{presentation_id}:
+    get:
+      tags: [presentations]
+      summary: Get presentation details
+      operationId: getPresentation
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/PresentationId'
+      responses:
+        '200':
+          description: Presentation details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PresentationDetail'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    delete:
+      tags: [presentations]
+      summary: Delete a presentation
+      operationId: deletePresentation
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/PresentationId'
+      responses:
+        '204':
+          description: Presentation deleted
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /presentations/{presentation_id}/pages:
+    get:
+      tags: [presentations]
+      summary: Get presentation pages
+      operationId: getPresentationPages
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/PresentationId'
+      responses:
+        '200':
+          description: List of pages
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Page'
+
+  /presentations/{presentation_id}/pages/{page_number}/talking-points:
+    get:
+      tags: [presentations]
+      summary: Get required talking points for a page
+      operationId: getTalkingPoints
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/PresentationId'
+        - name: page_number
+          in: path
+          required: true
+          schema:
+            type: integer
+    post:
+      tags: [presentations]
+      summary: Add required talking point
+      operationId: addTalkingPoint
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/PresentationId'
+        - name: page_number
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [description]
+              properties:
+                description:
+                  type: string
+                  example: "Must mention our proprietary technology"
+      responses:
+        '201':
+          description: Talking point added
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RequiredTalkingPoint'
+
+  /presentations/{presentation_id}/forbidden-words:
+    get:
+      tags: [presentations]
+      summary: Get forbidden words for presentation
+      operationId: getForbiddenWords
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/PresentationId'
+    post:
+      tags: [presentations]
+      summary: Add forbidden word
+      operationId: addForbiddenWord
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/PresentationId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [phrase, suggested_alternative]
+              properties:
+                phrase:
+                  type: string
+                  example: "I don't know"
+                suggested_alternative:
+                  type: string
+                  example: "Let me verify that information"
+                page_id:
+                  type: string
+                  format: uuid
+                  description: If specified, applies only to this page
+
+  /practice/sessions:
+    post:
+      tags: [practice]
+      summary: Start a new practice session
+      operationId: startSession
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [scenario_type]
+              properties:
+                scenario_type:
+                  type: string
+                  enum: [presentation, sales]
+                presentation_id:
+                  type: string
+                  format: uuid
+                  description: Required for presentation scenario
+                sales_persona:
+                  type: string
+                  description: Customer persona for sales bot
+                  enum: [impatient_ceo, skeptical_buyer, price_focused]
+      responses:
+        '201':
+          description: Session created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PracticeSession'
+
+  /practice/sessions/{session_id}:
+    get:
+      tags: [practice]
+      summary: Get session details
+      operationId: getSession
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/SessionId'
+      responses:
+        '200':
+          description: Session details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PracticeSessionDetail'
+
+    patch:
+      tags: [practice]
+      summary: Update session status
+      operationId: updateSession
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/SessionId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                status:
+                  type: string
+                  enum: [in_progress, paused, completed]
+                current_page:
+                  type: integer
+      responses:
+        '200':
+          description: Session updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PracticeSession'
+
+    delete:
+      tags: [practice]
+      summary: End session and generate report
+      operationId: endSession
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/SessionId'
+      responses:
+        '200':
+          description: Session ended, report generated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionReport'
+
+  /practice/sessions/{session_id}/report:
+    get:
+      tags: [practice]
+      summary: Get session report with scores
+      operationId: getSessionReport
+      security:
+        - BearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/SessionId'
+      responses:
+        '200':
+          description: Session report
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SessionReport'
+
+  /practice/history:
+    get:
+      tags: [practice]
+      summary: Get user's practice history
+      operationId: getPracticeHistory
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: scenario_type
+          in: query
+          schema:
+            type: string
+            enum: [presentation, sales]
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 20
+      responses:
+        '200':
+          description: Practice history
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  sessions:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/PracticeSession'
+                  total:
+                    type: integer
+
+  /analytics/leaderboard:
+    get:
+      tags: [analytics]
+      summary: Get leaderboard
+      operationId: getLeaderboard
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: scenario_type
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: [presentation, sales]
+        - name: presentation_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+          description: Filter by specific presentation
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 10
+      responses:
+        '200':
+          description: Leaderboard
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/LeaderboardEntry'
+
+  /analytics/dashboard:
+    get:
+      tags: [analytics]
+      summary: Get admin analytics dashboard
+      operationId: getAnalytics
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Analytics data
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  total_sessions:
+                    type: integer
+                  completion_rate:
+                    type: number
+                    format: float
+                  average_score:
+                    type: number
+                    format: float
+                  most_common_gaps:
+                    type: array
+                    items:
+                      type: string
+                  score_distribution:
+                    type: object
+                    properties:
+                      excellent:
+                        type: integer
+                      good:
+                        type: integer
+                      needs_improvement:
+                        type: integer
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  parameters:
+    PresentationId:
+      name: presentation_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+    SessionId:
+      name: session_id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+
+  schemas:
+    AuthResponse:
+      type: object
+      properties:
+        access_token:
+          type: string
+        user:
+          $ref: '#/components/schemas/User'
+
+    User:
+      type: object
+      properties:
+        user_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        department:
+          type: string
+
+    Presentation:
+      type: object
+      properties:
+        presentation_id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        status:
+          type: string
+          enum: [ready, processing, failed]
+        upload_date:
+          type: string
+          format: date-time
+        total_pages:
+          type: integer
+
+    PresentationDetail:
+      allOf:
+        - $ref: '#/components/schemas/Presentation'
+        - type: object
+          properties:
+            file_url:
+              type: string
+            version_number:
+              type: integer
+            pages:
+              type: array
+              items:
+                $ref: '#/components/schemas/Page'
+
+    Page:
+      type: object
+      properties:
+        page_id:
+          type: string
+          format: uuid
+        page_number:
+          type: integer
+        ocr_extracted_text:
+          type: string
+        image_url:
+          type: string
+        needs_manual_review:
+          type: boolean
+        talking_points:
+          type: array
+          items:
+            $ref: '#/components/schemas/RequiredTalkingPoint'
+
+    RequiredTalkingPoint:
+      type: object
+      properties:
+        point_id:
+          type: string
+          format: uuid
+        description:
+          type: string
+        is_ai_generated:
+          type: boolean
+        confirmed_by_admin:
+          type: boolean
+
+    PracticeSession:
+      type: object
+      properties:
+        session_id:
+          type: string
+          format: uuid
+        scenario_type:
+          type: string
+          enum: [presentation, sales]
+        status:
+          type: string
+          enum: [preparing, in_progress, paused, completed, scoring]
+        start_time:
+          type: string
+          format: date-time
+
+    PracticeSessionDetail:
+      allOf:
+        - $ref: '#/components/schemas/PracticeSession'
+        - type: object
+          properties:
+            presentation:
+              $ref: '#/components/schemas/Presentation'
+            current_page:
+              type: integer
+            interruption_count:
+              type: integer
+            total_duration_seconds:
+              type: integer
+            interruption_events:
+              type: array
+              items:
+                $ref: '#/components/schemas/InterruptionEvent'
+
+    InterruptionEvent:
+      type: object
+      properties:
+        event_id:
+          type: string
+          format: uuid
+        timestamp:
+          type: string
+          format: date-time
+        interruption_type:
+          type: string
+          enum: [forbidden_word, missing_point, vague_response]
+        trigger_content:
+          type: string
+        ai_response:
+          type: string
+        detection_latency_ms:
+          type: integer
+
+    SessionReport:
+      type: object
+      properties:
+        session_id:
+          type: string
+          format: uuid
+        logic_score:
+          type: number
+          format: float
+        accuracy_score:
+          type: number
+          format: float
+        completeness_score:
+          type: number
+          format: float
+        overall_score:
+          type: number
+          format: float
+        suggestions:
+          type: array
+          items:
+            type: string
+        audio_url:
+          type: string
+        transcript_url:
+          type: string
+
+    LeaderboardEntry:
+      type: object
+      properties:
+        rank:
+          type: integer
+        user:
+          $ref: '#/components/schemas/User'
+        average_score:
+          type: number
+          format: float
+        total_sessions:
+          type: integer
+
+  responses:
+    BadRequest:
+      description: Bad request
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error:
+                type: string
+              details:
+                type: object
+
+    Unauthorized:
+      description: Unauthorized
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error:
+                type: string
+                example: "Invalid or expired token"
+
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error:
+                type: string
+                example: "Presentation not found"

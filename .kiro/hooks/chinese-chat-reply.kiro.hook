@@ -1,0 +1,13 @@
+{
+  "enabled": true,
+  "name": "中文回复",
+  "description": "确保 AI 使用中文回复",
+  "version": "1",
+  "when": {
+    "type": "promptSubmit"
+  },
+  "then": {
+    "type": "sendMessage",
+    "message": "请使用中文回复用户的问题。"
+  }
+}

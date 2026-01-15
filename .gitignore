@@ -1,0 +1,154 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.venv/
+venv/
+ENV/
+env/
+*.mo
+*.pot
+
+# Node.js / JavaScript / TypeScript
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+dist/
+build/
+*.tsbuildinfo
+.eslintcache
+
+# Frontend specific
+.vite/
+.cache/
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
+# Environment variables
+.env
+.env.*
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+!.env.example
+
+# Logs
+*.log
+logs/
+*.log.*
+
+# IDEs and Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+*.sublime-project
+*.sublime-workspace
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+data/db/
+data/*.db
+
+# Vector Database (ChromaDB)
+data/chromadb/
+*.chroma
+
+# Audio / Media files (uploads)
+data/audio/
+data/ppts/
+uploads/
+*.pptx
+*.pdf
+*.mp3
+*.wav
+*.mp4
+*.webm
+
+# Model files (if downloaded locally)
+models/
+*.bin
+*.safetensors
+*.gguf
+.cache/
+
+# Deployment files (examples kept, specifics ignored)
+deploy/*.service
+deploy/*.conf
+!deploy/*.service.example
+!deploy/*.conf.example
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+coverage/
+*.cover
+.hypothesis/
+junit*.xml
+
+# Prometheus / Monitoring
+prometheus_data/
+grafana_data/
+
+# Temporary files
+*.tmp
+*.bak
+*.backup
+tmp/
+temp/
+
+# OS specific
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Redis dump
+dump.rdb
+
+# Alembic (keep migrations, ignore temp data)
+backend/alembic/versions/*.pyc
+
+# Enterprise WeChat secrets (if any)
+wechat_secrets/
+*.key
+*.pem
+*.crt
+!(example*.key)
+!(example*.pem)
+!(example*.crt)

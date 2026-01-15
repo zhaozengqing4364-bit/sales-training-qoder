@@ -1,0 +1,300 @@
+"""
+AI Model Configuration Manager
+
+Singleton service for managing AI model configurations.
+Provides in-memory caching with database persistence.
+
+References:
+- Requirements: R4 (Dynamic Model Switching)
+- Design: model-config-management/design.md
+"""
+import os
+from typing import Any
+
+from sqlalchemy import select, and_
+
+from common.ai.encryption import decrypt_api_key, encrypt_api_key, mask_api_key
+from common.ai.models import ModelConfig, ModelProvider, ModelType
+from common.db.session import AsyncSessionLocal
+from common.error_handling.result import Result
+from common.monitoring.logger import get_logger
+
+logger = get_logger(__name__)
+
+
+class ConfigManager:
+    """
+    Singleton service for managing AI model configurations.
+
+    Features:
+    - In-memory cache for fast access
+    - Database persistence
+    - Environment variable fallback
+    - Automatic cache refresh on config changes
+    """
+
+    _instance: "ConfigManager | None" = None
+    _initialized: bool = False
+
+    def __new__(cls) -> "ConfigManager":
+        if cls._instance is None:
+            cls._instance = super().__new__(cls)
+        return cls._instance
+
+    def __init__(self) -> None:
+        if ConfigManager._initialized:
+            return
+
+        # In-memory cache
+        self._cache: dict[str, ModelConfig] = {}  # id -> config
+        self._defaults: dict[ModelType, ModelConfig] = {}  # type -> default config
+        self._by_type: dict[ModelType, list[ModelConfig]] = {}  # type -> all configs
+
+        ConfigManager._initialized = True
+        logger.info("ConfigManager initialized")
+
+    async def initialize(self) -> None:
+        """
+        Load all configurations from database on startup.
+        Should be called during application startup.
+        """
+        await self.refresh_cache()
+        logger.info(
+            f"ConfigManager loaded {len(self._cache)} configs, "
+            f"defaults: {list(self._defaults.keys())}"
+        )
+
+    async def refresh_cache(self) -> None:
+        """
+        Refresh in-memory cache from database.
+        Called on startup and after config changes.
+        """
+        try:
+            async with AsyncSessionLocal() as db:
+                stmt = select(ModelConfig).where(ModelConfig.is_active == True)
+                result = await db.execute(stmt)
+                configs = result.scalars().all()
+
+                # Clear and rebuild cache
+                self._cache.clear()
+                self._defaults.clear()
+                self._by_type.clear()
+
+                for config in configs:
+                    self._cache[config.id] = config
+
+                    # Group by type
+                    model_type = ModelType(config.model_type)
+                    if model_type not in self._by_type:
+                        self._by_type[model_type] = []
+                    self._by_type[model_type].append(config)
+
+                    # Track defaults
+                    if config.is_default:
+                        self._defaults[model_type] = config
+
+                logger.debug(f"Cache refreshed: {len(self._cache)} configs")
+
+        except Exception as e:
+            logger.error(f"Failed to refresh config cache: {e}")
+
+    def get_config(
+        self,
+        model_type: ModelType,
+        provider: ModelProvider | None = None,
+        model_name: str | None = None
+    ) -> ModelConfig | None:
+        """
+        Get a model configuration.
+
+        Args:
+            model_type: Type of model (llm, embedding, asr, tts)
+            provider: Optional provider filter
+            model_name: Optional model name filter
+
+        Returns:
+            ModelConfig if found, None otherwise
+        """
+        configs = self._by_type.get(model_type, [])
+
+        if not configs:
+            return None
+
+        # Filter by provider and model_name if specified
+        for config in configs:
+            if provider and config.provider != provider.value:
+                continue
+            if model_name and config.model_name != model_name:
+                continue
+            return config
+
+        # Return default if no specific match
+        return self._defaults.get(model_type)
+
+    def get_default_config(self, model_type: ModelType) -> ModelConfig | None:
+        """
+        Get the default configuration for a model type.
+
+        Args:
+            model_type: Type of model
+
+        Returns:
+            Default ModelConfig or None
+        """
+        return self._defaults.get(model_type)
+
+    def get_all_configs(self, model_type: ModelType | None = None) -> list[ModelConfig]:
+        """
+        Get all configurations, optionally filtered by type.
+
+        Args:
+            model_type: Optional type filter
+
+        Returns:
+            List of ModelConfig
+        """
+        if model_type:
+            return self._by_type.get(model_type, [])
+        return list(self._cache.values())
+
+    def get_config_by_id(self, config_id: str) -> ModelConfig | None:
+        """
+        Get configuration by ID.
+
+        Args:
+            config_id: Configuration UUID
+
+        Returns:
+            ModelConfig or None
+        """
+        return self._cache.get(config_id)
+
+    def get_decrypted_api_key(self, config: ModelConfig) -> Result[str]:
+        """
+        Get decrypted API key for a configuration.
+
+        Args:
+            config: ModelConfig instance
+
+        Returns:
+            Result with decrypted key or error
+        """
+        return decrypt_api_key(config.api_key_encrypted)
+
+    def get_env_fallback(self, model_type: ModelType) -> dict[str, Any] | None:
+        """
+        Get configuration from environment variables as fallback.
+
+        Args:
+            model_type: Type of model
+
+        Returns:
+            Dict with config values or None
+        """
+        if model_type == ModelType.LLM:
+            api_key = os.getenv("OPENAI_API_KEY")
+            if api_key:
+                return {
+                    "provider": "openai",
+                    "base_url": os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1"),
+                    "api_key": api_key,
+                    "model_name": os.getenv("OPENAI_MODEL", "gpt-4o"),
+                    "extra_config": {
+                        "temperature": float(os.getenv("LLM_TEMPERATURE", "0.7")),
+                        "timeout": float(os.getenv("LLM_TIMEOUT", "10.0")),
+                    }
+                }
+
+        elif model_type == ModelType.EMBEDDING:
+            api_key = os.getenv("OPENAI_API_KEY")
+            if api_key:
+                return {
+                    "provider": "openai",
+                    "base_url": os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1"),
+                    "api_key": api_key,
+                    "model_name": os.getenv("EMBEDDING_MODEL", "text-embedding-3-small"),
+                    "extra_config": {}
+                }
+
+        elif model_type == ModelType.ASR:
+            # 使用实际的环境变量名 ASR_API_KEY (qwen3-asr-flash)
+            api_key = os.getenv("ASR_API_KEY")
+            if api_key:
+                return {
+                    "provider": "alibaba",
+                    "base_url": os.getenv("ASR_API_URL", "wss://dashscope.aliyuncs.com/api-ws/v1/realtime"),
+                    "api_key": api_key,
+                    "model_name": os.getenv("ASR_MODEL", "qwen3-asr-flash-realtime"),
+                    "extra_config": {}
+                }
+
+        elif model_type == ModelType.TTS:
+            # Edge TTS doesn't need API key
+            return {
+                "provider": "local",
+                "base_url": "",
+                "api_key": "",
+                "model_name": os.getenv("TTS_VOICE", "zh-CN-XiaoxiaoNeural"),
+                "extra_config": {}
+            }
+
+        return None
+
+    def get_effective_config(self, model_type: ModelType) -> dict[str, Any] | None:
+        """
+        Get effective configuration, with database taking precedence over env vars.
+
+        Args:
+            model_type: Type of model
+
+        Returns:
+            Dict with config values or None
+        """
+        # Try database config first
+        db_config = self.get_default_config(model_type)
+        if db_config:
+            key_result = self.get_decrypted_api_key(db_config)
+            # If decryption succeeds and we have a valid key, use database config
+            if key_result.is_success and key_result.value:
+                return {
+                    "provider": db_config.provider,
+                    "base_url": db_config.base_url,
+                    "api_key": key_result.value,
+                    "model_name": db_config.model_name,
+                    "extra_config": db_config.extra_config or {},
+                }
+            else:
+                # Decryption failed, log warning and fall back to env vars
+                logger.warning(
+                    f"Database config decryption failed for {model_type.value}, "
+                    f"falling back to environment variables"
+                )
+
+        # Fallback to environment variables
+        return self.get_env_fallback(model_type)
+
+
+# Singleton instance
+_config_manager: ConfigManager | None = None
+
+
+def get_config_manager() -> ConfigManager:
+    """
+    Get singleton ConfigManager instance.
+
+    Returns:
+        ConfigManager instance
+    """
+    global _config_manager
+    if _config_manager is None:
+        _config_manager = ConfigManager()
+    return _config_manager
+
+
+async def initialize_config_manager() -> None:
+    """
+    Initialize ConfigManager on application startup.
+    Should be called in FastAPI lifespan.
+    """
+    manager = get_config_manager()
+    await manager.initialize()

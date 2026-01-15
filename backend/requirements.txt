@@ -1,0 +1,59 @@
+# FastAPI and Web Framework
+fastapi>=0.104.0
+uvicorn[standard]>=0.24.0
+python-multipart>=0.0.6
+websockets>=12.0
+
+# ASR and TTS (minimal versions to avoid build issues)
+edge-tts>=6.1.9
+funasr==1.1.18
+modelscope>=1.11.0
+torch>=2.0.0
+torchaudio>=2.0.0
+pydub>=0.25.1
+onnx>=1.14.0
+onnxconverter-common>=1.13.0
+
+# AI and Vector Database (simplified)
+langchain>=0.1.0
+langchain-openai>=0.0.2
+openai>=1.6.0
+chromadb>=0.4.18
+
+# Database
+sqlalchemy>=2.0.23
+aiosqlite>=0.19.0
+alembic>=1.13.0
+
+# Data Validation
+pydantic>=2.5.0
+pydantic-settings>=2.1.0
+
+# Authentication and Security
+python-jose[cryptography]>=3.3.0
+passlib[bcrypt]>=1.7.4
+
+# HTTP Client
+httpx>=0.25.0
+aiofiles>=23.2.0
+
+# Monitoring and Logging
+structlog>=23.2.0
+prometheus-client>=0.19.0
+
+# Testing
+pytest>=7.4.0
+pytest-asyncio>=0.21.0
+pytest-cov>=4.1.0
+
+# Code Quality
+ruff>=0.1.0
+
+# PPT Processing
+python-pptx>=0.6.23
+Pillow>=10.0.0
+
+# Utilities
+python-dotenv>=1.0.0
+orjson>=3.9.0
+email-validator>=2.0.0

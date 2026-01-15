@@ -1,0 +1,18 @@
+{
+  "enabled": true,
+  "name": "Python 代码规范检查",
+  "description": "保存 Python 文件时自动检查并修正违规代码",
+  "version": "1",
+  "when": {
+    "type": "fileEdited",
+    "patterns": [
+      "**/backend/**/*.py"
+    ]
+  },
+  "then": {
+    "type": "askAgent",
+    "prompt": "检查刚保存的文件，查找并修正以下违规代码：\n\n**必须修正的问题：**\n1. `print()` 语句 → 改为 `logger.info()` 或 `logger.debug()`\n2. `session.query(Model)` → 改为 `select(Model)` [SQLAlchemy 2.0]\n3. `orm_mode = True` → 改为 `from_attributes = True` [Pydantic v2]\n4. `raise HTTPException(500, ...)` → 改为 `return Result.fail(\"[ERROR_CODE]\")`\n5. 同步数据库操作 → 改为 `async/await`\n6. `from sqlalchemy.orm import Session` → 改为 `from sqlalchemy.ext.asyncio import AsyncSession`\n\n**检查步骤：**\n1. 读取刚保存的文件内容\n2. 逐条检查上述违规项\n3. 如果发现违规，直接修改文件修正问题\n4. 如果没有违规，不需要任何操作\n\n请直接修改文件，不要只是报告问题。"
+  },
+  "workspaceFolderName": "语音训练平台",
+  "shortName": "python-check"
+}

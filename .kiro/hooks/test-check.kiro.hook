@@ -1,0 +1,18 @@
+{
+  "enabled": true,
+  "name": "测试文件规范检查",
+  "description": "保存测试文件时检查是否符合测试规范",
+  "version": "1",
+  "when": {
+    "type": "fileEdited",
+    "patterns": [
+      "**/tests/**/*.py"
+    ]
+  },
+  "then": {
+    "type": "askAgent",
+    "prompt": "检查刚保存的测试文件是否符合测试规范：\n\n**必须检查的项目：**\n1. 测试函数命名是否符合 `test_<action>_<scenario>_<expected>` 格式\n2. 是否使用 AAA 模式 (Arrange-Act-Assert)\n3. 是否使用 `pytest` 和 `pytest-asyncio`\n4. mock 是否正确使用\n\n**命名示例：**\n- `test_create_agent_with_valid_data_returns_success`\n- `test_delete_agent_with_sessions_returns_error`\n\n**检查步骤：**\n1. 读取刚保存的文件\n2. 检查测试函数命名和结构\n3. 如果发现不符合规范，直接修改文件\n4. 如果符合规范，不需要任何操作"
+  },
+  "workspaceFolderName": "语音训练平台",
+  "shortName": "test-check"
+}

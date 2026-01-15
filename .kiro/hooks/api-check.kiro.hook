@@ -1,0 +1,18 @@
+{
+  "enabled": true,
+  "name": "API 契约检查",
+  "description": "保存 API 文件时检查是否符合 API 契约",
+  "version": "1",
+  "when": {
+    "type": "fileEdited",
+    "patterns": [
+      "**/api/**/*.py"
+    ]
+  },
+  "then": {
+    "type": "askAgent",
+    "prompt": "检查刚保存的 API 文件是否符合项目规范：\n\n**必须检查的项目：**\n1. API 响应格式是否使用 `{\"success\": true/false, \"data\": ..., \"trace_id\": ...}`\n2. 错误处理是否使用 `Result.fail(\"[ERROR_CODE]\")` 而非 `raise HTTPException`\n3. 分页响应是否包含 `items, total, page, page_size`\n4. 路由路径是否符合 RESTful 规范\n\n**参考 API 契约文档：**\n- `docs/api-contract/agents.md`\n- `docs/api-contract/personas.md`\n- `docs/api-contract/knowledge.md`\n- `docs/api-contract/replay.md`\n\n**检查步骤：**\n1. 读取刚保存的文件\n2. 检查响应格式和错误处理\n3. 如果发现不符合规范，直接修改文件\n4. 如果符合规范，不需要任何操作"
+  },
+  "workspaceFolderName": "语音训练平台",
+  "shortName": "api-check"
+}

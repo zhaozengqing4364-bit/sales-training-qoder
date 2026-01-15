@@ -1,0 +1,18 @@
+{
+  "enabled": true,
+  "name": "新文件模板检查",
+  "description": "创建新 Python 文件时检查是否符合模板规范",
+  "version": "1",
+  "when": {
+    "type": "fileCreated",
+    "patterns": [
+      "**/backend/**/*.py"
+    ]
+  },
+  "then": {
+    "type": "askAgent",
+    "prompt": "检查新创建的 Python 文件是否符合项目模板规范：\n\n**根据文件路径判断类型并参考对应模板：**\n1. 如果是 `**/api/**/*.py` → 参考 `.kiro/templates/backend/api_route.py`\n2. 如果是 `**/capabilities/**/*.py` → 参考 `.kiro/templates/backend/capability.py`\n3. 如果是 `**/websocket/**/*.py` → 参考 `.kiro/templates/backend/websocket_handler.py`\n\n**通用检查项：**\n1. 是否有正确的 import 语句\n2. 是否使用 logger 而非 print\n3. 是否使用 async/await\n4. 是否有适当的类型注解\n\n**检查步骤：**\n1. 读取新创建的文件和对应模板\n2. 检查文件结构是否符合模板\n3. 如果发现问题，直接修改文件\n4. 如果符合规范，不需要任何操作"
+  },
+  "workspaceFolderName": "语音训练平台",
+  "shortName": "new-file-template-check"
+}

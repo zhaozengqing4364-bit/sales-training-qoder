@@ -1,0 +1,69 @@
+@import "tailwindcss";
+
+:root {
+  /* Premium Palette - Warm & Airy */
+  /* Backgrounds */
+  --color-bg-main: #FAFAF9;
+  /* warm gray / stone-50 */
+  --color-bg-card: #FFFFFF;
+
+  /* Text */
+  --color-text-primary: #18181B;
+  /* zinc-950 */
+  --color-text-secondary: #71717A;
+  /* zinc-500 */
+  --color-text-tertiary: #A1A1AA;
+  /* zinc-400 */
+
+  /* Accents (Pastel but legible) */
+  --color-accent-blue: #3B82F6;
+  --color-accent-blue-soft: #EFF6FF;
+  --color-accent-purple: #8B5CF6;
+  --color-accent-purple-soft: #F5F3FF;
+
+  /* Glass tokens */
+  --glass-bg: rgba(255, 255, 255, 0.65);
+  --glass-border: rgba(255, 255, 255, 0.6);
+  --glass-shine: rgba(255, 255, 255, 0.4);
+}
+
+@theme inline {
+  --color-background: var(--color-bg-main);
+  --color-foreground: var(--color-text-primary);
+  --font-sans: var(--font-jakarta);
+
+  /* Smooth, multi-layer shadows for "Levitation" feel */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.04);
+  --shadow-card: 0 4px 6px -1px rgba(0, 0, 0, 0.02), 0 2px 4px -1px rgba(0, 0, 0, 0.02);
+  --shadow-float: 0 20px 25px -5px rgba(0, 0, 0, 0.05), 0 10px 10px -5px rgba(0, 0, 0, 0.01);
+  --shadow-glow: 0 0 40px -10px rgba(59, 130, 246, 0.15);
+
+  --radius-subtle: 1rem;
+  /* 16px */
+  --radius-medium: 1.5rem;
+  /* 24px - Standard for cards */
+  --radius-full: 9999px;
+  /* Buttons */
+}
+
+body {
+  background-color: var(--color-bg-main);
+  color: var(--color-text-primary);
+  font-family: var(--font-sans), "PingFang SC", "Microsoft YaHei", "Heiti SC", system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Scrollbar hiding for clean UI */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* Mobile Safe Area */
+.pb-safe {
+  padding-bottom: env(safe-area-inset-bottom);
+}

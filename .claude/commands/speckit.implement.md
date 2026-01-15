@@ -1,5 +1,8 @@
 ---
 description: Execute the implementation plan by processing and executing all tasks defined in tasks.md
+scripts:
+  sh: scripts/bash/check-prerequisites.sh --json --require-tasks --include-tasks
+  ps: scripts/powershell/check-prerequisites.ps1 -Json -RequireTasks -IncludeTasks
 ---
 
 ## User Input
@@ -12,7 +15,7 @@ You **MUST** consider the user input before proceeding (if not empty).
 
 ## Outline
 
-1. Run `.specify/scripts/bash/check-prerequisites.sh --json --require-tasks --include-tasks` from repo root and parse FEATURE_DIR and AVAILABLE_DOCS list. All paths must be absolute. For single quotes in args like "I'm Groot", use escape syntax: e.g 'I'\''m Groot' (or double-quote if possible: "I'm Groot").
+1. Run `{SCRIPT}` from repo root and parse FEATURE_DIR and AVAILABLE_DOCS list. All paths must be absolute. For single quotes in args like "I'm Groot", use escape syntax: e.g 'I'\''m Groot' (or double-quote if possible: "I'm Groot").
 
 2. **Check checklists status** (if FEATURE_DIR/checklists/ exists):
    - Scan all checklist files in the checklists/ directory
@@ -119,6 +122,20 @@ You **MUST** consider the user input before proceeding (if not empty).
 
 8. Progress tracking and error handling:
    - Report progress after each completed task
+   - **[AUTO - Quality Assurance] 每个任务完成后自动调用 code_reviewer**:
+     * 使用 Skill 工具调用 `code_reviewer`
+     * 检查代码是否符合 CLAUDE.md 中的规范
+     * 检查代码是否符合 constitution 原则
+     * 检查代码是否符合通用编码规范（SOLID、DRY、KISS、YAGNI）
+     * **[前端项目] 检查代码是否符合前端 UI/UX 规范**：
+       - 使用 Skill 工具调用 `ui-ux-pro-max`
+       - 验证组件设计符合设计系统（颜色、字体、间距）
+       - 检查可访问性（颜色对比度、ARIA 标签、键盘导航）
+       - 验证响应式设计（断点、布局适配）
+       - 检查性能（懒加载、图片优化、代码分割）
+     * 生成审查报告并显示给用户
+     * **如果发现严重问题（违反核心原则），暂停执行并提示用户**
+     * 轻微问题记录并在实现后统一处理
    - Halt execution if any non-parallel task fails
    - For parallel tasks [P], continue with successful tasks, report failed ones
    - Provide clear error messages with context for debugging

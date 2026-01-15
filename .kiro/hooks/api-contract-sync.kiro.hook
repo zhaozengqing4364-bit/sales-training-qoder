@@ -1,0 +1,18 @@
+{
+  "enabled": true,
+  "name": "API 契约一致性检查",
+  "description": "API 契约文档更新时提醒同步后端实现",
+  "version": "1",
+  "when": {
+    "type": "fileEdited",
+    "patterns": [
+      "docs/api-contract/**/*.md"
+    ]
+  },
+  "then": {
+    "type": "askAgent",
+    "prompt": "API 契约文档已更新，请检查：\n\n**需要同步的内容：**\n1. 后端 API 实现是否与契约一致\n2. Pydantic schemas 是否需要更新\n3. 前端类型定义 (frontend/src/types/api-future.ts) 是否需要更新\n\n**对应关系：**\n- docs/api-contract/agents.md → backend/src/agent/api/agents.py\n- docs/api-contract/personas.md → backend/src/agent/api/personas.py\n- docs/api-contract/knowledge.md → backend/src/common/knowledge/api.py\n- docs/api-contract/websocket.md → backend/src/sales_bot/websocket/\n- docs/api-contract/replay.md → backend/src/common/conversation/api.py\n\n**检查步骤：**\n1. 读取更新的契约文档\n2. 检查对应的后端实现\n3. 如果发现不一致，提醒用户需要同步哪些文件"
+  },
+  "workspaceFolderName": "语音训练平台",
+  "shortName": "api-contract-sync"
+}

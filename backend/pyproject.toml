@@ -1,0 +1,49 @@
+[project]
+name = "ai-practice-backend"
+version = "1.0.0"
+requires-python = ">=3.11"
+
+[tool.ruff]
+line-length = 88
+target-version = "py311"
+select = ["E", "F", "I", "N", "W", "UP"]
+ignore = ["E501", "N806", "N803"]
+src = ["src"]
+
+[tool.ruff.isort]
+known-first-party = ["src"]
+
+[tool.black]
+line-length = 88
+target-version = ["py311"]
+include = '\.pyi?$'
+exclude = '''
+/(
+    \.git
+  | \.venv
+  | venv
+  | env
+  | build
+  | dist
+  | __pycache__
+)/
+'''
+
+[tool.mypy]
+python_version = "3.11"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+plugins = ["pydantic.mypy"]
+[[tool.mypy.overrides]]
+module = ["funasr.*", "edge_tts.*", "chromadb.*"]
+ignore_missing_imports = true
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+pythonpath = ["src"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = "-v --cov=src --cov-report=html --cov-report=term-missing"

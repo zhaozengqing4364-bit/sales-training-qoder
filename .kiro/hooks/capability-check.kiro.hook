@@ -1,0 +1,18 @@
+{
+  "enabled": true,
+  "name": "能力模块规范检查",
+  "description": "保存能力模块文件时检查是否符合模板规范",
+  "version": "1",
+  "when": {
+    "type": "fileEdited",
+    "patterns": [
+      "**/capabilities/**/*.py"
+    ]
+  },
+  "then": {
+    "type": "askAgent",
+    "prompt": "检查刚保存的能力模块文件是否符合模板规范：\n\n**必须检查的项目：**\n1. 是否继承 `BaseCapability`\n2. 是否定义 `capability_id`, `name` 类属性\n3. 是否实现 `execute()` 方法，返回 `CapabilityResult`\n4. 是否使用 `@CapabilityRegistry.register` 装饰器注册\n5. 错误处理是否返回 `CapabilityResult(success=False, fallback=\"[ERROR_CODE]\")`\n\n**参考模板：**\n`.kiro/templates/backend/capability.py`\n\n**检查步骤：**\n1. 读取刚保存的文件和模板文件\n2. 对比检查是否符合模板结构\n3. 如果发现不符合规范，直接修改文件\n4. 如果符合规范，不需要任何操作"
+  },
+  "workspaceFolderName": "语音训练平台",
+  "shortName": "capability-check"
+}
