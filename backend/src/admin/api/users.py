@@ -204,6 +204,321 @@ async def get_user(
     return success_response(user_to_response(user).model_dump())
 
 
+@router.get("/{user_id}/stats", response_model=dict)
+async def get_user_stats(
+    user_id: str,
+    time_range: str = Query("all_time", description="Time range: 7d, 30d, 90d, all_time"),
+    current_user: User = Depends(get_current_admin_user),
+    db: AsyncSession = Depends(get_db)
+) -> dict[str, Any]:
+    """
+    Get detailed statistics for a specific user
+    
+    Returns:
+    - Total sessions, completed sessions, completion rate
+    - Average score, best score, worst score
+    - Total practice duration
+    - Agent/Persona usage breakdown
+    - Recent activity info
+    """
+    from datetime import timedelta
+    from sqlalchemy import case, distinct
+    from common.db.models import PracticeSession
+    from agent.models import Agent, Persona
+    
+    # Verify user exists
+    user_result = await db.execute(select(User).where(User.user_id == user_id))
+    user = user_result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=404, detail="[USER_NOT_FOUND]")
+    
+    # Calculate time range
+    now = datetime.utcnow()
+    if time_range == "7d":
+        start_date = now - timedelta(days=7)
+    elif time_range == "30d":
+        start_date = now - timedelta(days=30)
+    elif time_range == "90d":
+        start_date = now - timedelta(days=90)
+    else:
+        start_date = datetime(2000, 1, 1)
+    
+    # Session statistics
+    stats_query = select(
+        func.count(PracticeSession.session_id).label("total_sessions"),
+        func.sum(case((PracticeSession.status == "completed", 1), else_=0)).label("completed_sessions"),
+        func.avg(
+            PracticeSession.logic_score * 0.4 +
+            PracticeSession.accuracy_score * 0.3 +
+            PracticeSession.completeness_score * 0.3
+        ).label("avg_score"),
+        func.max(
+            PracticeSession.logic_score * 0.4 +
+            PracticeSession.accuracy_score * 0.3 +
+            PracticeSession.completeness_score * 0.3
+        ).label("best_score"),
+        func.min(
+            case(
+                (PracticeSession.status == "completed",
+                 PracticeSession.logic_score * 0.4 +
+                 PracticeSession.accuracy_score * 0.3 +
+                 PracticeSession.completeness_score * 0.3),
+                else_=None
+            )
+        ).label("worst_score"),
+        func.sum(PracticeSession.total_duration_seconds).label("total_duration"),
+        func.max(PracticeSession.start_time).label("last_practice"),
+        func.count(distinct(PracticeSession.agent_id)).label("unique_agents"),
+        func.count(distinct(PracticeSession.persona_id)).label("unique_personas")
+    ).where(
+        PracticeSession.user_id == user_id,
+        PracticeSession.start_time >= start_date
+    )
+    
+    result = await db.execute(stats_query)
+    row = result.one()
+    
+    total_sessions = row.total_sessions or 0
+    completed_sessions = row.completed_sessions or 0
+    completion_rate = round((completed_sessions / total_sessions * 100) if total_sessions > 0 else 0, 1)
+    
+    # Agent usage breakdown
+    agent_usage_query = select(
+        Agent.id,
+        Agent.name,
+        func.count(PracticeSession.session_id).label("count")
+    ).join(
+        PracticeSession, Agent.id == PracticeSession.agent_id
+    ).where(
+        PracticeSession.user_id == user_id,
+        PracticeSession.start_time >= start_date
+    ).group_by(Agent.id, Agent.name).order_by(func.count(PracticeSession.session_id).desc()).limit(5)
+    
+    agent_result = await db.execute(agent_usage_query)
+    agent_usage = [{"agent_id": str(r.id), "name": r.name, "count": r.count} for r in agent_result.all()]
+    
+    # Persona usage breakdown
+    persona_usage_query = select(
+        Persona.id,
+        Persona.name,
+        func.count(PracticeSession.session_id).label("count")
+    ).join(
+        PracticeSession, Persona.id == PracticeSession.persona_id
+    ).where(
+        PracticeSession.user_id == user_id,
+        PracticeSession.start_time >= start_date
+    ).group_by(Persona.id, Persona.name).order_by(func.count(PracticeSession.session_id).desc()).limit(5)
+    
+    persona_result = await db.execute(persona_usage_query)
+    persona_usage = [{"persona_id": str(r.id), "name": r.name, "count": r.count} for r in persona_result.all()]
+    
+    stats_data = {
+        "user": user_to_response(user).model_dump(),
+        "statistics": {
+            "total_sessions": total_sessions,
+            "completed_sessions": completed_sessions,
+            "completion_rate": completion_rate,
+            "average_score": round(row.avg_score or 0, 1),
+            "best_score": round(row.best_score or 0, 1),
+            "worst_score": round(row.worst_score or 0, 1),
+            "total_duration_minutes": round((row.total_duration or 0) / 60, 1),
+            "last_practice": row.last_practice.isoformat() if row.last_practice else None,
+            "unique_agents_used": row.unique_agents or 0,
+            "unique_personas_used": row.unique_personas or 0
+        },
+        "agent_usage": agent_usage,
+        "persona_usage": persona_usage
+    }
+    
+    return success_response(stats_data)
+
+
+@router.get("/{user_id}/sessions", response_model=dict)
+async def get_user_sessions(
+    user_id: str,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(10, ge=1, le=50),
+    status: str | None = Query(None, description="Filter by status"),
+    current_user: User = Depends(get_current_admin_user),
+    db: AsyncSession = Depends(get_db)
+) -> dict[str, Any]:
+    """
+    Get paginated practice sessions for a specific user
+    
+    Returns detailed session history including:
+    - Session ID, start/end time, status, duration
+    - Agent and Persona used
+    - Scores (logic, accuracy, completeness, overall)
+    """
+    from common.db.models import PracticeSession, Scenario
+    from agent.models import Agent, Persona
+    
+    # Verify user exists
+    user_result = await db.execute(select(User).where(User.user_id == user_id))
+    if not user_result.scalar_one_or_none():
+        raise HTTPException(status_code=404, detail="[USER_NOT_FOUND]")
+    
+    # Build query
+    query = select(
+        PracticeSession,
+        Agent.name.label("agent_name"),
+        Persona.name.label("persona_name"),
+        Scenario.name.label("scenario_name"),
+        Scenario.scenario_type
+    ).outerjoin(
+        Agent, PracticeSession.agent_id == Agent.id
+    ).outerjoin(
+        Persona, PracticeSession.persona_id == Persona.id
+    ).outerjoin(
+        Scenario, PracticeSession.scenario_id == Scenario.scenario_id
+    ).where(PracticeSession.user_id == user_id)
+    
+    count_query = select(func.count()).select_from(PracticeSession).where(PracticeSession.user_id == user_id)
+    
+    if status:
+        query = query.where(PracticeSession.status == status)
+        count_query = count_query.where(PracticeSession.status == status)
+    
+    # Get total count
+    total = (await db.execute(count_query)).scalar() or 0
+    
+    # Apply pagination
+    query = query.order_by(PracticeSession.start_time.desc())
+    query = query.offset((page - 1) * page_size).limit(page_size)
+    
+    result = await db.execute(query)
+    rows = result.all()
+    
+    sessions = []
+    for row in rows:
+        session = row.PracticeSession
+        overall_score = None
+        if session.logic_score is not None:
+            overall_score = round(
+                session.logic_score * 0.4 +
+                (session.accuracy_score or 0) * 0.3 +
+                (session.completeness_score or 0) * 0.3, 1
+            )
+        
+        sessions.append({
+            "session_id": str(session.session_id),
+            "start_time": session.start_time.isoformat() if session.start_time else None,
+            "end_time": session.end_time.isoformat() if session.end_time else None,
+            "status": session.status,
+            "duration_minutes": round((session.total_duration_seconds or 0) / 60, 1),
+            "scenario_name": row.scenario_name,
+            "scenario_type": row.scenario_type,
+            "agent_name": row.agent_name,
+            "persona_name": row.persona_name,
+            "scores": {
+                "logic": session.logic_score,
+                "accuracy": session.accuracy_score,
+                "completeness": session.completeness_score,
+                "overall": overall_score
+            },
+            "interruption_count": session.interruption_count or 0
+        })
+    
+    return success_response({
+        "items": sessions,
+        "total": total,
+        "page": page,
+        "page_size": page_size,
+        "has_more": (page * page_size) < total
+    })
+
+
+@router.get("/{user_id}/progress", response_model=dict)
+async def get_user_progress(
+    user_id: str,
+    time_range: str = Query("30d", description="Time range: 7d, 30d, 90d, all_time"),
+    granularity: str = Query("day", description="Granularity: day, week"),
+    current_user: User = Depends(get_current_admin_user),
+    db: AsyncSession = Depends(get_db)
+) -> dict[str, Any]:
+    """
+    Get user progress/improvement trend over time
+    
+    Returns:
+    - Score trend (daily/weekly average scores)
+    - Session frequency trend
+    - Skill improvement rate
+    """
+    from datetime import timedelta
+    from common.db.models import PracticeSession
+    
+    # Verify user exists
+    user_result = await db.execute(select(User).where(User.user_id == user_id))
+    if not user_result.scalar_one_or_none():
+        raise HTTPException(status_code=404, detail="[USER_NOT_FOUND]")
+    
+    # Calculate time range
+    now = datetime.utcnow()
+    if time_range == "7d":
+        start_date = now - timedelta(days=7)
+    elif time_range == "30d":
+        start_date = now - timedelta(days=30)
+    elif time_range == "90d":
+        start_date = now - timedelta(days=90)
+    else:
+        start_date = datetime(2000, 1, 1)
+    
+    # Trend data query - group by date
+    trend_query = select(
+        func.date(PracticeSession.start_time).label("date"),
+        func.count(PracticeSession.session_id).label("sessions_count"),
+        func.avg(
+            PracticeSession.logic_score * 0.4 +
+            PracticeSession.accuracy_score * 0.3 +
+            PracticeSession.completeness_score * 0.3
+        ).label("average_score"),
+        func.avg(PracticeSession.logic_score).label("avg_logic"),
+        func.avg(PracticeSession.accuracy_score).label("avg_accuracy"),
+        func.avg(PracticeSession.completeness_score).label("avg_completeness")
+    ).where(
+        PracticeSession.user_id == user_id,
+        PracticeSession.start_time >= start_date,
+        PracticeSession.status == "completed"
+    ).group_by(
+        func.date(PracticeSession.start_time)
+    ).order_by(
+        func.date(PracticeSession.start_time)
+    )
+    
+    result = await db.execute(trend_query)
+    rows = result.all()
+    
+    trend_data = [
+        {
+            "date": str(row.date),
+            "sessions_count": row.sessions_count,
+            "average_score": round(row.average_score or 0, 1),
+            "logic_score": round(row.avg_logic or 0, 1),
+            "accuracy_score": round(row.avg_accuracy or 0, 1),
+            "completeness_score": round(row.avg_completeness or 0, 1)
+        }
+        for row in rows
+    ]
+    
+    # Calculate improvement rate (first week vs last week average)
+    if len(trend_data) >= 7:
+        first_week_scores = [d["average_score"] for d in trend_data[:7] if d["average_score"] > 0]
+        last_week_scores = [d["average_score"] for d in trend_data[-7:] if d["average_score"] > 0]
+        
+        first_avg = sum(first_week_scores) / len(first_week_scores) if first_week_scores else 0
+        last_avg = sum(last_week_scores) / len(last_week_scores) if last_week_scores else 0
+        
+        improvement_rate = round(((last_avg - first_avg) / first_avg * 100) if first_avg > 0 else 0, 1)
+    else:
+        improvement_rate = 0
+    
+    return success_response({
+        "trend_data": trend_data,
+        "improvement_rate": improvement_rate,
+        "total_data_points": len(trend_data)
+    })
+
+
 @router.delete("/{user_id}", response_model=dict)
 async def delete_user(
     user_id: str,

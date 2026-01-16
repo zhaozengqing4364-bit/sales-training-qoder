@@ -1,12 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { api } from "@/lib/api/client";
 import { AdminUser } from "@/lib/api/types";
 import { GlassCard } from "@/components/ui/glass-card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Search, Filter, MoreHorizontal, UserPlus, Download, Mail, Shield, Ban, Trash2, Calendar, CheckCircle, Loader2 } from "lucide-react";
+import { Search, Filter, MoreHorizontal, UserPlus, Download, Mail, Shield, Ban, Trash2, Calendar, CheckCircle, Loader2, Eye } from "lucide-react";
 import {
     Dialog,
     DialogContent,
@@ -90,6 +91,7 @@ const initialCreateForm: CreateUserForm = {
 };
 
 export default function UsersPage() {
+    const router = useRouter();
     const [users, setUsers] = useState<AdminUser[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const toast = useToast();
@@ -139,7 +141,7 @@ export default function UsersPage() {
                 page: page,
                 page_size: 10
             });
-            setUsers(data);
+            setUsers(data.items || []);
         } catch (err) {
             console.error("Failed to load users:", err);
         } finally {
@@ -700,6 +702,7 @@ export default function UsersPage() {
                                         onSuspend={() => handleSuspend(user.id)}
                                         onActivate={() => handleActivate(user.id)}
                                         onDelete={() => handleDelete(user.id)}
+                                        onViewDetail={() => router.push(`/admin/users/${user.id}`)}
                                         isLoading={actionLoading === user.id}
                                     />
                                 </div>
@@ -760,6 +763,7 @@ export default function UsersPage() {
                                             onSuspend={() => handleSuspend(user.id)}
                                             onActivate={() => handleActivate(user.id)}
                                             onDelete={() => handleDelete(user.id)}
+                                            onViewDetail={() => router.push(`/admin/users/${user.id}`)}
                                             isLoading={actionLoading === user.id}
                                         />
                                     </td>
@@ -804,6 +808,7 @@ function UserActionMenu({
     onSuspend, 
     onActivate, 
     onDelete,
+    onViewDetail,
     isLoading 
 }: { 
     user: AdminUser;
@@ -811,6 +816,7 @@ function UserActionMenu({
     onSuspend: () => void;
     onActivate: () => void;
     onDelete: () => void;
+    onViewDetail: () => void;
     isLoading: boolean;
 }) {
     return (
@@ -832,6 +838,9 @@ function UserActionMenu({
                         <DialogDescription>{user.email}</DialogDescription>
                     </DialogHeader>
                     <div className="py-4 space-y-2">
+                        <Button onClick={onViewDetail} variant="ghost" className="w-full justify-start text-slate-700 hover:bg-slate-50 hover:text-blue-600">
+                            <Eye className="w-4 h-4 mr-3" /> 查看详情
+                        </Button>
                         <Button onClick={onEdit} variant="ghost" className="w-full justify-start text-slate-700 hover:bg-slate-50 hover:text-blue-600">
                             <Shield className="w-4 h-4 mr-3" /> 编辑权限
                         </Button>

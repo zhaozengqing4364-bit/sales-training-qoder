@@ -10,9 +10,7 @@ References:
 - Constitution Principle II: Real-Time Priority - <200ms streaming latency
 - Constitution Principle V: Cost Control - ¥0.00033/s (API) vs free (local)
 """
-from typing import Any
-
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from common.ai.config_manager import get_config_manager
 from common.ai.models import ModelConfig, ModelProvider, ModelType
@@ -22,7 +20,7 @@ from common.error_handling.result import Result
 from common.monitoring.logger import get_logger
 
 if TYPE_CHECKING:
-    from common.audio.asr_local import LocalASRProvider
+    pass
 
 logger = get_logger(__name__)
 
@@ -103,8 +101,19 @@ class ASRService:
                 logger.warning("Alibaba ASR API key not configured, using local fallback")
                 from common.audio.asr_local import LocalASRProvider
                 self._provider = LocalASRProvider(device="cuda")
+        elif provider_name == ModelProvider.LOCAL_STREAMING.value or provider_name == "local_streaming":
+            # Use streaming Paraformer model for real-time scenarios
+            logger.info("Using local streaming ASR (Paraformer-zh-streaming)")
+            from common.audio.asr_streaming import LocalStreamingASRProvider
+            extra_config = self._effective_config.get("extra_config", {})
+            device = extra_config.get("device", "cuda")
+            chunk_size_ms = extra_config.get("chunk_size_ms", 600)
+            self._provider = LocalStreamingASRProvider(
+                device=device,
+                chunk_size_ms=chunk_size_ms,
+            )
         else:
-            # Default to local model
+            # Default to local model (non-streaming)
             logger.info("Using local ASR model")
             from common.audio.asr_local import LocalASRProvider
             device = self._effective_config.get("extra_config", {}).get("device", "cuda")

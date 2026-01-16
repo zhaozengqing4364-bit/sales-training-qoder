@@ -11,9 +11,9 @@ References:
 import os
 from typing import Any
 
-from sqlalchemy import select, and_
+from sqlalchemy import select
 
-from common.ai.encryption import decrypt_api_key, encrypt_api_key, mask_api_key
+from common.ai.encryption import decrypt_api_key
 from common.ai.models import ModelConfig, ModelProvider, ModelType
 from common.db.session import AsyncSessionLocal
 from common.error_handling.result import Result
@@ -217,6 +217,20 @@ class ConfigManager:
                 }
 
         elif model_type == ModelType.ASR:
+            # Check if local_streaming is explicitly requested
+            asr_provider = os.getenv("ASR_PROVIDER", "").lower()
+            if asr_provider == "local_streaming":
+                # Use local streaming Paraformer model
+                return {
+                    "provider": "local_streaming",
+                    "base_url": "",
+                    "api_key": "",
+                    "model_name": "paraformer-zh-streaming",
+                    "extra_config": {
+                        "device": os.getenv("ASR_DEVICE", "cpu"),
+                        "chunk_size_ms": int(os.getenv("ASR_CHUNK_SIZE_MS", "600")),
+                    }
+                }
             # 使用实际的环境变量名 ASR_API_KEY (qwen3-asr-flash)
             api_key = os.getenv("ASR_API_KEY")
             if api_key:
@@ -227,6 +241,17 @@ class ConfigManager:
                     "model_name": os.getenv("ASR_MODEL", "qwen3-asr-flash-realtime"),
                     "extra_config": {}
                 }
+            # Default to local_streaming when no API key is configured
+            return {
+                "provider": "local_streaming",
+                "base_url": "",
+                "api_key": "",
+                "model_name": "paraformer-zh-streaming",
+                "extra_config": {
+                    "device": os.getenv("ASR_DEVICE", "cpu"),
+                    "chunk_size_ms": int(os.getenv("ASR_CHUNK_SIZE_MS", "600")),
+                }
+            }
 
         elif model_type == ModelType.TTS:
             # Edge TTS doesn't need API key

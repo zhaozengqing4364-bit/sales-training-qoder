@@ -13,12 +13,12 @@ import uuid
 from datetime import datetime
 
 from sqlalchemy import (
+    JSON,
     Boolean,
     CheckConstraint,
     Column,
     DateTime,
     Index,
-    JSON,
     String,
     Text,
     UniqueConstraint,
@@ -42,6 +42,7 @@ class ModelProvider(str, enum.Enum):
     ALIBABA = "alibaba"
     ANTHROPIC = "anthropic"
     LOCAL = "local"
+    LOCAL_STREAMING = "local_streaming"  # Paraformer-zh-streaming for real-time ASR
 
 
 class ModelConfig(Base):
@@ -99,7 +100,7 @@ class ModelConfig(Base):
         ),
         # Validate provider values
         CheckConstraint(
-            "provider IN ('openai', 'azure', 'alibaba', 'anthropic', 'local')",
+            "provider IN ('openai', 'azure', 'alibaba', 'anthropic', 'local', 'local_streaming')",
             name="ck_model_config_provider"
         ),
         # Validate test status values

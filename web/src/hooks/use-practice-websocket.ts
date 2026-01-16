@@ -20,10 +20,13 @@ export interface InterruptMessageData {
 }
 
 // WebSocket 消息类型
+// Critical Fix #2: 添加stream_id和request_id字段用于消息版本控制
 export interface WSMessage {
     type: string;
     timestamp: string;
     trace_id?: string;
+    stream_id?: string;  // TTS流ID，用于识别消息属于哪个流
+    request_id?: number;  // 请求ID，用于识别消息属于哪个请求
     data: unknown;
 }
 
@@ -96,6 +99,10 @@ export interface PracticeState {
     audioUnlocked: boolean;
     /** Whether streaming TTS is currently active */
     isStreamingTTS: boolean;
+    /** Whether backpressure is active (audio sending should pause) */
+    isBackpressureActive: boolean;
+    /** Whether network is slow (backpressure buffer overflow detected) */
+    isNetworkSlow: boolean;
 }
 
 interface UsePracticeWebSocketOptions {
@@ -160,6 +167,18 @@ export function usePracticeWebSocket(options: UsePracticeWebSocketOptions) {
     // Track current streaming TTS text for message display
     const currentStreamingTextRef = useRef<string | null>(null);
     
+    // Critical Fix #2: 跟踪当前TTS流ID，用于过滤过期的TTS消息
+    const currentStreamIdRef = useRef<string | null>(null);
+    const currentRequestIdRef = useRef<number>(0);
+    
+    // Backpressure control state (Requirements: Voice Practice Optimization P0-2)
+    const isBackpressureActiveRef = useRef(false);
+    const localAudioBufferRef = useRef<string[]>([]);  // Buffer for audio during backpressure
+    const MAX_LOCAL_BUFFER_SIZE = 200;  // ~4 seconds of audio at 20ms chunks
+    
+    // Critical Fix #4: 添加flushing标志防止flush和sendAudio交错
+    const isFlushingRef = useRef(false);
+    
     const [state, setState] = useState<PracticeState>({
         isConnected: false,
         isConnecting: false,
@@ -173,6 +192,8 @@ export function usePracticeWebSocket(options: UsePracticeWebSocketOptions) {
         interimTranscript: "",
         audioUnlocked: false,
         isStreamingTTS: false,
+        isBackpressureActive: false,
+        isNetworkSlow: false,
     });
 
     const getToken = useCallback(() => {
@@ -345,19 +366,29 @@ export function usePracticeWebSocket(options: UsePracticeWebSocketOptions) {
                 case "asr_transcript": {
                     const data = message.data as { text: string; is_final: boolean };
                     
-                    if (data.is_final && data.text.trim()) {
-                        const newMsg: ChatMessage = {
-                            id: `user-${Date.now()}`,
-                            sender: "user",
-                            message: data.text,
-                            timestamp: new Date().toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" }),
-                        };
-                        setState(prev => ({
-                            ...prev,
-                            messages: [...prev.messages, newMsg],
-                            interimTranscript: "",
-                        }));
-                    } else if (!data.is_final && data.text) {
+                    if (data.is_final) {
+                        // 最终结果：添加消息（如果有文本）并清空中间结果
+                        if (data.text.trim()) {
+                            const newMsg: ChatMessage = {
+                                id: `user-${Date.now()}`,
+                                sender: "user",
+                                message: data.text,
+                                timestamp: new Date().toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" }),
+                            };
+                            setState(prev => ({
+                                ...prev,
+                                messages: [...prev.messages, newMsg],
+                                interimTranscript: "",
+                            }));
+                        } else {
+                            // 即使最终文本为空，也要清空中间结果
+                            setState(prev => ({
+                                ...prev,
+                                interimTranscript: "",
+                            }));
+                        }
+                    } else if (data.text) {
+                        // 中间结果：更新显示
                         setState(prev => ({
                             ...prev,
                             interimTranscript: data.text,
@@ -384,11 +415,29 @@ export function usePracticeWebSocket(options: UsePracticeWebSocketOptions) {
 
                 case "tts_audio": {
                     const data = message.data as TTSAudioData;
+                    
+                    // Critical Fix #2: 检查stream_id和request_id，过滤过期的TTS消息
+                    const messageStreamId = message.stream_id;
+                    const messageRequestId = message.request_id;
+                    
+                    if (messageStreamId) {
+                        // 更新当前stream_id（如果有新的）
+                        if (!currentStreamIdRef.current || messageStreamId !== currentStreamIdRef.current) {
+                            console.log(`[TTS Audio] New stream: stream_id=${messageStreamId}, request_id=${messageRequestId}`);
+                            currentStreamIdRef.current = messageStreamId;
+                            if (messageRequestId !== undefined) {
+                                currentRequestIdRef.current = messageRequestId;
+                            }
+                        }
+                    }
+                    
                     // 检查是否已有相同文本的消息（避免重复）
                     setState(prev => {
-                        const lastMsg = prev.messages[prev.messages.length - 1];
-                        // 如果最后一条消息是 AI 发的且文本相同，不重复添加
-                        if (lastMsg?.sender === "ai" && lastMsg.message === data.text) {
+                        // 检查所有消息中是否已存在相同文本的 AI 消息
+                        const isDuplicate = prev.messages.some(
+                            msg => msg.sender === "ai" && msg.message === data.text
+                        );
+                        if (isDuplicate) {
                             return prev;
                         }
                         const newMsg: ChatMessage = {
@@ -400,6 +449,7 @@ export function usePracticeWebSocket(options: UsePracticeWebSocketOptions) {
                         return {
                             ...prev,
                             messages: [...prev.messages, newMsg],
+                            aiState: "speaking",
                         };
                     });
                     queueTTSAudio(data);
@@ -416,6 +466,30 @@ export function usePracticeWebSocket(options: UsePracticeWebSocketOptions) {
                  */
                 case "tts_chunk": {
                     const chunkData = message.data as TTSChunkMessage;
+                    
+                    // Critical Fix #2: 检查stream_id，过滤过期的TTS chunk
+                    const messageStreamId = message.stream_id;
+                    const messageRequestId = message.request_id;
+                    
+                    // 如果这是第一个chunk (chunk_index === 0)，更新当前的stream_id
+                    if (chunkData.chunk_index === 0) {
+                        if (messageStreamId) {
+                            console.log(`[TTS] New stream started: stream_id=${messageStreamId}, request_id=${messageRequestId}`);
+                            currentStreamIdRef.current = messageStreamId;
+                            if (messageRequestId !== undefined) {
+                                currentRequestIdRef.current = messageRequestId;
+                            }
+                        }
+                    } else {
+                        // 对于非首chunk，检查stream_id是否匹配
+                        if (messageStreamId && messageStreamId !== currentStreamIdRef.current) {
+                            console.warn(
+                                `[TTS] Dropping stale chunk: expected stream_id=${currentStreamIdRef.current}, ` +
+                                `got stream_id=${messageStreamId}, chunk_index=${chunkData.chunk_index}`
+                            );
+                            return; // 忽略过期的chunk
+                        }
+                    }
                     
                     // Convert to TTSChunkData format for streaming player
                     const chunk: TTSChunkData = {
@@ -451,9 +525,11 @@ export function usePracticeWebSocket(options: UsePracticeWebSocketOptions) {
                             // Add AI message to chat when we have the full text
                             if (chunkData.text) {
                                 setState(prev => {
-                                    const lastMsg = prev.messages[prev.messages.length - 1];
-                                    // Avoid duplicate messages
-                                    if (lastMsg?.sender === "ai" && lastMsg.message === chunkData.text) {
+                                    // 检查所有消息中是否已存在相同文本的 AI 消息
+                                    const isDuplicate = prev.messages.some(
+                                        msg => msg.sender === "ai" && msg.message === chunkData.text
+                                    );
+                                    if (isDuplicate) {
                                         return prev;
                                     }
                                     const newMsg: ChatMessage = {
@@ -484,6 +560,13 @@ export function usePracticeWebSocket(options: UsePracticeWebSocketOptions) {
                             streamingPlayer.end();
                             if (chunkData.text) {
                                 setState(prev => {
+                                    // 检查所有消息中是否已存在相同文本的 AI 消息
+                                    const isDuplicate = prev.messages.some(
+                                        msg => msg.sender === "ai" && msg.message === chunkData.text
+                                    );
+                                    if (isDuplicate) {
+                                        return prev;
+                                    }
                                     const newMsg: ChatMessage = {
                                         id: `ai-${Date.now()}`,
                                         sender: "ai",
@@ -526,6 +609,23 @@ export function usePracticeWebSocket(options: UsePracticeWebSocketOptions) {
                 case "interrupted": {
                     const data = message.data as { reason: string };
                     
+                    // Critical Fix #2: 检查stream_id，只停止被中断的那个流
+                    const interruptedStreamId = message.stream_id;
+                    
+                    if (interruptedStreamId && interruptedStreamId !== currentStreamIdRef.current) {
+                        // 这是一个过期流的中断消息，忽略
+                        console.log(
+                            `[Interrupt] Ignoring stale interrupt: interrupted_stream=${interruptedStreamId}, ` +
+                            `current_stream=${currentStreamIdRef.current}`
+                        );
+                        break;
+                    }
+                    
+                    // 清除当前stream_id，表示没有活跃的TTS流
+                    if (interruptedStreamId) {
+                        currentStreamIdRef.current = null;
+                    }
+                    
                     // Ensure playback is stopped (in case it wasn't already)
                     streamingPlayer.interrupt();
                     
@@ -546,7 +646,7 @@ export function usePracticeWebSocket(options: UsePracticeWebSocketOptions) {
                         isStreamingTTS: false,
                     }));
                     
-                    console.log(`[Interrupt] Received confirmation from backend (reason: ${data.reason})`);
+                    console.log(`[Interrupt] Received confirmation from backend (reason: ${data.reason}, stream_id: ${interruptedStreamId})`);
                     break;
                 }
 
@@ -602,6 +702,30 @@ export function usePracticeWebSocket(options: UsePracticeWebSocketOptions) {
 
                 case "heartbeat":
                     break;
+
+                /**
+                 * Handle backpressure signal from backend
+                 * 
+                 * Requirements: Voice Practice Optimization P0-2
+                 * - slow_down: Pause sending audio, buffer locally
+                 * - resume: Flush local buffer and resume normal sending
+                 */
+                case "backpressure": {
+                    const data = message.data as { action: string; queue_size: number };
+                    const isSlowDown = data.action === "slow_down";
+                    
+                    isBackpressureActiveRef.current = isSlowDown;
+                    setState(prev => ({ ...prev, isBackpressureActive: isSlowDown }));
+                    
+                    if (isSlowDown) {
+                        console.warn(`[Backpressure] Activated - server queue size: ${data.queue_size}`);
+                    } else {
+                        console.log(`[Backpressure] Deactivated - server queue size: ${data.queue_size}`);
+                        // Flush local buffer when backpressure is released
+                        flushLocalAudioBuffer();
+                    }
+                    break;
+                }
 
                 default:
                     console.log("Unknown message type:", message.type);
@@ -698,16 +822,117 @@ export function usePracticeWebSocket(options: UsePracticeWebSocketOptions) {
         }));
     }, [sendMessage]);
 
+    /**
+     * Flush local audio buffer when backpressure is released
+     * 
+     * Sends buffered audio chunks with rate limiting to avoid
+     * immediately overwhelming the server again.
+     * 
+     * Critical Fix #4: 添加flushing标志防止与sendAudio交错
+     * 
+     * Requirements: Voice Practice Optimization P0-2
+     */
+    const flushLocalAudioBuffer = useCallback(() => {
+        if (localAudioBufferRef.current.length === 0) {
+            return;
+        }
+        
+        // Critical Fix #4: 设置flushing标志，防止新的sendAudio调用交错
+        if (isFlushingRef.current) {
+            console.log("[Backpressure] Already flushing, skipping duplicate flush");
+            return;
+        }
+        
+        isFlushingRef.current = true;
+        const chunksToSend = localAudioBufferRef.current.splice(0);
+        console.log(`[Backpressure] Flushing ${chunksToSend.length} buffered audio chunks`);
+        
+        // Send chunks with 10ms interval to avoid overwhelming server
+        let index = 0;
+        const sendNext = () => {
+            if (index < chunksToSend.length && !isBackpressureActiveRef.current) {
+                sendMessage("audio_chunk", {
+                    audio: chunksToSend[index],
+                    sample_rate: 16000,
+                    interrupt: false,
+                });
+                index++;
+                setTimeout(sendNext, 10);  // 10ms interval between chunks
+            } else {
+                // Flush完成，清除标志
+                isFlushingRef.current = false;
+                if (index >= chunksToSend.length) {
+                    console.log(`[Backpressure] Flush complete, sent ${index} chunks`);
+                }
+            }
+        };
+        sendNext();
+    }, [sendMessage]);
+
+    /**
+     * Send audio data with backpressure awareness
+     * 
+     * When backpressure is active, audio is buffered locally instead
+     * of being sent immediately.
+     * 
+     * Critical Fix #4: 在flushing期间将音频加入buffer，防止交错
+     * 
+     * Requirements: Voice Practice Optimization P0-2
+     */
     const sendAudio = useCallback((audioData: string, interrupt = false) => {
+        // Interrupt messages bypass backpressure
+        if (interrupt) {
+            sendMessage("audio_chunk", {
+                audio: audioData,
+                sample_rate: 16000,
+                interrupt: true,
+            });
+            return;
+        }
+        
+        // Critical Fix #4: 如果正在flushing或backpressure激活，则缓冲
+        if (isBackpressureActiveRef.current || isFlushingRef.current) {
+            // Enforce local buffer limit to prevent memory issues
+            if (localAudioBufferRef.current.length >= MAX_LOCAL_BUFFER_SIZE) {
+                // Drop oldest chunk and notify user about slow network
+                localAudioBufferRef.current.shift();
+                console.warn("[Backpressure] Local buffer full, dropping oldest chunk");
+                // Set network slow flag to notify user
+                setState(prev => {
+                    if (!prev.isNetworkSlow) {
+                        return { ...prev, isNetworkSlow: true };
+                    }
+                    return prev;
+                });
+            }
+            localAudioBufferRef.current.push(audioData);
+            
+            // 如果是因为flushing而缓冲，记录日志
+            if (isFlushingRef.current && !isBackpressureActiveRef.current) {
+                console.log("[Backpressure] Buffering audio during flush");
+            }
+            return;
+        }
+        
+        // Normal send - clear network slow flag if it was set
+        setState(prev => {
+            if (prev.isNetworkSlow) {
+                return { ...prev, isNetworkSlow: false };
+            }
+            return prev;
+        });
+        
         sendMessage("audio_chunk", {
             audio: audioData,
             sample_rate: 16000,
-            interrupt,
+            interrupt: false,
         });
     }, [sendMessage]);
 
     const sendAudioEnd = useCallback(() => {
         sendMessage("audio_end", {});
+        // 清空中间转录结果，避免残留显示
+        setState(prev => ({ ...prev, interimTranscript: "" }));
     }, [sendMessage]);
 
     const commitAudio = useCallback(() => {
@@ -818,5 +1043,7 @@ export function usePracticeWebSocket(options: UsePracticeWebSocketOptions) {
         clearStreamingQueue: streamingPlayer.clearQueue,
         /** Interrupt streaming playback (stop + clear queue) */
         interruptStreamingTTS: streamingPlayer.interrupt,
+        /** Flush local audio buffer (for backpressure control) */
+        flushLocalAudioBuffer,
     };
 }

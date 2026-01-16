@@ -20,17 +20,8 @@ import {
     DialogTitle,
 } from "@/components/ui/glass-modal";
 
-interface LinkedPersona {
-    id: string;
+interface LinkedPersona extends AdminPersona {
     persona_id: string;
-    persona: {
-        id: string;
-        name: string;
-        icon: string;
-        difficulty: string;
-        description?: string;
-    };
-    display_order: number;
     is_default: boolean;
 }
 
@@ -96,12 +87,12 @@ export default function AgentEditPage({ params }: { params: Promise<{ id: string
     const [availablePersonas, setAvailablePersonas] = useState<AdminPersona[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
-    
+
     // Add Persona Dialog
     const [isAddPersonaOpen, setIsAddPersonaOpen] = useState(false);
     const [selectedPersonaId, setSelectedPersonaId] = useState<string>("");
     const [isAddingPersona, setIsAddingPersona] = useState(false);
-    
+
     // Remove Persona Confirm
     const [removeTarget, setRemoveTarget] = useState<LinkedPersona | null>(null);
     const [isRemoving, setIsRemoving] = useState(false);
@@ -126,19 +117,19 @@ export default function AgentEditPage({ params }: { params: Promise<{ id: string
                 ]);
                 setAgent(agentData);
                 setLinkedPersonas(personasData as LinkedPersona[]);
-                setAvailablePersonas(allPersonas);
-                setAvailableKnowledgeBases(allKnowledgeBases);
-                
+                setAvailablePersonas(allPersonas.items || []);
+                setAvailableKnowledgeBases(allKnowledgeBases.items || []);
+
                 // Load linked knowledge bases from agent data
                 const kbIds = agentData.default_knowledge_base_ids || [];
                 if (kbIds.length > 0) {
-                    const linkedKBs = allKnowledgeBases.filter(kb => kbIds.includes(kb.id));
+                    const linkedKBs = (allKnowledgeBases.items || []).filter((kb: AdminKnowledgeBase) => kbIds.includes(kb.id));
                     setLinkedKnowledgeBases(linkedKBs.map(kb => ({
                         id: kb.id,
                         name: kb.name,
                         description: kb.description,
                         category: kb.category,
-                        document_count: kb.doc_count || 0,
+                        document_count: kb.document_count || 0,
                     })));
                 }
             } catch (err) {
@@ -170,19 +161,18 @@ export default function AgentEditPage({ params }: { params: Promise<{ id: string
             toast.error("请选择一个角色");
             return;
         }
-        
+
         setIsAddingPersona(true);
         try {
             await api.admin.addPersonaToAgent(id, {
                 persona_id: selectedPersonaId,
-                display_order: linkedPersonas.length,
                 is_default: linkedPersonas.length === 0,
             });
-            
+
             // Reload linked personas
             const updated = await api.admin.getAgentPersonas(id);
             setLinkedPersonas(updated as LinkedPersona[]);
-            
+
             setIsAddPersonaOpen(false);
             setSelectedPersonaId("");
             toast.success("角色关联成功");
@@ -196,7 +186,7 @@ export default function AgentEditPage({ params }: { params: Promise<{ id: string
 
     const handleRemovePersona = async () => {
         if (!removeTarget) return;
-        
+
         setIsRemoving(true);
         try {
             await api.admin.removePersonaFromAgent(id, removeTarget.persona_id);
@@ -216,7 +206,7 @@ export default function AgentEditPage({ params }: { params: Promise<{ id: string
             await api.admin.updateAgentPersona(id, persona.persona_id, {
                 is_default: true,
             });
-            
+
             // Update local state
             setLinkedPersonas(prev => prev.map(p => ({
                 ...p,
@@ -245,14 +235,14 @@ export default function AgentEditPage({ params }: { params: Promise<{ id: string
             toast.error("请选择一个知识库");
             return;
         }
-        
+
         setIsAddingKB(true);
         try {
             const newKBIds = [...linkedKnowledgeBases.map(kb => kb.id), selectedKBId];
-            await api.admin.updateAgent(id, { 
-                default_knowledge_base_ids: newKBIds 
+            await api.admin.updateAgent(id, {
+                default_knowledge_base_ids: newKBIds
             } as Partial<AdminAgent>);
-            
+
             // Update local state
             const addedKB = availableKnowledgeBases.find(kb => kb.id === selectedKBId);
             if (addedKB) {
@@ -261,10 +251,10 @@ export default function AgentEditPage({ params }: { params: Promise<{ id: string
                     name: addedKB.name,
                     description: addedKB.description,
                     category: addedKB.category,
-                    document_count: addedKB.doc_count || 0,
+                    document_count: addedKB.document_count || 0,
                 }]);
             }
-            
+
             setIsAddKBOpen(false);
             setSelectedKBId("");
             toast.success("知识库关联成功");
@@ -279,16 +269,16 @@ export default function AgentEditPage({ params }: { params: Promise<{ id: string
     // Handle remove knowledge base
     const handleRemoveKnowledgeBase = async () => {
         if (!removeKBTarget || !agent) return;
-        
+
         setIsRemovingKB(true);
         try {
             const newKBIds = linkedKnowledgeBases
                 .filter(kb => kb.id !== removeKBTarget.id)
                 .map(kb => kb.id);
-            await api.admin.updateAgent(id, { 
-                default_knowledge_base_ids: newKBIds 
+            await api.admin.updateAgent(id, {
+                default_knowledge_base_ids: newKBIds
             } as Partial<AdminAgent>);
-            
+
             setLinkedKnowledgeBases(prev => prev.filter(kb => kb.id !== removeKBTarget.id));
             setRemoveKBTarget(null);
             toast.success("已移除知识库");
@@ -319,7 +309,7 @@ export default function AgentEditPage({ params }: { params: Promise<{ id: string
                 open={!!removeTarget}
                 onOpenChange={(open) => !open && setRemoveTarget(null)}
                 title="移除角色"
-                description={`确定要从该智能体移除「${removeTarget?.persona.name}」吗？`}
+                description={`确定要从该智能体移除「${removeTarget?.name}」吗？`}
                 confirmText="移除"
                 variant="danger"
                 onConfirm={handleRemovePersona}
@@ -337,7 +327,7 @@ export default function AgentEditPage({ params }: { params: Promise<{ id: string
                 onConfirm={handleRemoveKnowledgeBase}
                 isLoading={isRemovingKB}
             />
-            
+
             {/* Header */}
             <div className="flex items-center justify-between">
                 <div className="flex items-center gap-4">
@@ -351,7 +341,7 @@ export default function AgentEditPage({ params }: { params: Promise<{ id: string
                         <Trash2 className="w-4 h-4 mr-2" />
                         删除
                     </Button>
-                    <Button 
+                    <Button
                         onClick={handleSave}
                         disabled={isSaving}
                         className="bg-slate-900 hover:bg-slate-800 text-white shadow-lg shadow-slate-900/20 rounded-full px-6"
@@ -367,10 +357,10 @@ export default function AgentEditPage({ params }: { params: Promise<{ id: string
                 <GlassCard className="md:col-span-2 p-8 space-y-6">
                     <div className="space-y-2">
                         <label className="text-xs font-bold text-slate-400 uppercase tracking-widest">智能体名称</label>
-                        <Input 
-                            value={agent.name} 
+                        <Input
+                            value={agent.name}
                             onChange={(e) => setAgent({ ...agent, name: e.target.value })}
-                            className="bg-slate-50 border-slate-200" 
+                            className="bg-slate-50 border-slate-200"
                         />
                     </div>
                     <div className="space-y-2">
@@ -386,9 +376,9 @@ export default function AgentEditPage({ params }: { params: Promise<{ id: string
                     <div className="pt-4">
                         <div className="flex items-center justify-between mb-4">
                             <h3 className="text-sm font-bold text-slate-800">关联角色</h3>
-                            <Button 
-                                variant="ghost" 
-                                size="sm" 
+                            <Button
+                                variant="ghost"
+                                size="sm"
                                 className="text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded-full"
                                 onClick={() => setIsAddPersonaOpen(true)}
                             >
@@ -396,9 +386,9 @@ export default function AgentEditPage({ params }: { params: Promise<{ id: string
                                 添加角色
                             </Button>
                         </div>
-                        
+
                         {linkedPersonas.length === 0 ? (
-                            <div 
+                            <div
                                 className="text-center py-12 border-2 border-dashed border-slate-200 rounded-2xl cursor-pointer hover:border-blue-300 hover:bg-blue-50/30 transition-all"
                                 onClick={() => setIsAddPersonaOpen(true)}
                             >
@@ -409,17 +399,17 @@ export default function AgentEditPage({ params }: { params: Promise<{ id: string
                         ) : (
                             <div className="space-y-2">
                                 {linkedPersonas.map((lp) => {
-                                    const diffConfig = DIFFICULTY_MAP[lp.persona.difficulty] || DIFFICULTY_MAP.medium;
+                                    const diffConfig = DIFFICULTY_MAP[lp.difficulty] || DIFFICULTY_MAP.medium;
                                     return (
-                                        <div 
+                                        <div
                                             key={lp.id}
                                             className="flex items-center gap-3 p-4 rounded-2xl border border-slate-100 bg-slate-50/50 group hover:bg-white hover:border-slate-200 transition-all"
                                         >
                                             <GripVertical className="w-4 h-4 text-slate-300 cursor-grab" />
-                                            <span className="text-2xl">{lp.persona.icon || "👤"}</span>
+                                            <span className="text-2xl">{lp.icon || "👤"}</span>
                                             <div className="flex-1 min-w-0">
                                                 <div className="flex items-center gap-2">
-                                                    <span className="font-bold text-slate-800">{lp.persona.name}</span>
+                                                    <span className="font-bold text-slate-800">{lp.name}</span>
                                                     {lp.is_default && (
                                                         <Badge variant="blue" className="text-[10px]">默认</Badge>
                                                     )}
@@ -464,15 +454,14 @@ export default function AgentEditPage({ params }: { params: Promise<{ id: string
                             {Object.entries(CAPABILITY_METADATA).map(([capId, meta]) => {
                                 const capConfig = (agent.capabilities_config as CapabilitiesConfig)?.[capId];
                                 const isEnabled = capConfig?.enabled ?? false;
-                                
+
                                 return (
-                                    <div 
+                                    <div
                                         key={capId}
-                                        className={`flex items-center justify-between p-4 rounded-2xl border transition-all ${
-                                            isEnabled 
-                                                ? "border-blue-200 bg-blue-50/30" 
-                                                : "border-slate-100 bg-slate-50/50"
-                                        }`}
+                                        className={`flex items-center justify-between p-4 rounded-2xl border transition-all ${isEnabled
+                                            ? "border-blue-200 bg-blue-50/30"
+                                            : "border-slate-100 bg-slate-50/50"
+                                            }`}
                                     >
                                         <div className="flex items-center gap-3">
                                             <span className="text-xl">{meta.icon}</span>
@@ -482,8 +471,8 @@ export default function AgentEditPage({ params }: { params: Promise<{ id: string
                                             </div>
                                         </div>
                                         <label className="relative inline-flex items-center cursor-pointer">
-                                            <input 
-                                                type="checkbox" 
+                                            <input
+                                                type="checkbox"
                                                 className="sr-only peer"
                                                 checked={isEnabled}
                                                 onChange={(e) => {
@@ -503,7 +492,7 @@ export default function AgentEditPage({ params }: { params: Promise<{ id: string
                                 );
                             })}
                         </div>
-                        
+
                         {/* 知识库检索提示 */}
                         {(agent.capabilities_config as CapabilitiesConfig)?.knowledge_retrieval?.enabled && linkedKnowledgeBases.length === 0 && (
                             <div className="mt-3 p-3 rounded-xl bg-amber-50 border border-amber-200">
@@ -542,9 +531,9 @@ export default function AgentEditPage({ params }: { params: Promise<{ id: string
                         <div className="flex items-center justify-between mb-4">
                             <h3 className="text-sm font-bold text-slate-800">知识库关联</h3>
                             {linkedKnowledgeBases.length > 0 && (
-                                <Button 
-                                    variant="ghost" 
-                                    size="sm" 
+                                <Button
+                                    variant="ghost"
+                                    size="sm"
                                     className="text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded-full h-7 px-2"
                                     onClick={() => setIsAddKBOpen(true)}
                                 >
@@ -553,7 +542,7 @@ export default function AgentEditPage({ params }: { params: Promise<{ id: string
                             )}
                         </div>
                         {linkedKnowledgeBases.length === 0 ? (
-                            <div 
+                            <div
                                 className="text-center py-8 border-2 border-dashed border-slate-200 rounded-2xl cursor-pointer hover:border-blue-300 hover:bg-blue-50/30 transition-all"
                                 onClick={() => setIsAddKBOpen(true)}
                             >
@@ -563,7 +552,7 @@ export default function AgentEditPage({ params }: { params: Promise<{ id: string
                         ) : (
                             <div className="space-y-2">
                                 {linkedKnowledgeBases.map((kb) => (
-                                    <div 
+                                    <div
                                         key={kb.id}
                                         className="flex items-center gap-2 p-3 rounded-xl border border-slate-100 bg-slate-50/50 group hover:bg-white hover:border-slate-200 transition-all"
                                     >
@@ -610,11 +599,10 @@ export default function AgentEditPage({ params }: { params: Promise<{ id: string
                                         <div
                                             key={persona.id}
                                             onClick={() => setSelectedPersonaId(persona.id)}
-                                            className={`flex items-center gap-3 p-4 rounded-xl border-2 cursor-pointer transition-all ${
-                                                isSelected 
-                                                    ? "border-blue-500 bg-blue-50/50" 
-                                                    : "border-slate-100 hover:border-slate-200 hover:bg-slate-50"
-                                            }`}
+                                            className={`flex items-center gap-3 p-4 rounded-xl border-2 cursor-pointer transition-all ${isSelected
+                                                ? "border-blue-500 bg-blue-50/50"
+                                                : "border-slate-100 hover:border-slate-200 hover:bg-slate-50"
+                                                }`}
                                         >
                                             <span className="text-2xl">{persona.icon || "👤"}</span>
                                             <div className="flex-1">
@@ -630,9 +618,8 @@ export default function AgentEditPage({ params }: { params: Promise<{ id: string
                                                     )}
                                                 </div>
                                             </div>
-                                            <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
-                                                isSelected ? "border-blue-500 bg-blue-500" : "border-slate-300"
-                                            }`}>
+                                            <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${isSelected ? "border-blue-500 bg-blue-500" : "border-slate-300"
+                                                }`}>
                                                 {isSelected && <div className="w-2 h-2 rounded-full bg-white" />}
                                             </div>
                                         </div>
@@ -642,14 +629,14 @@ export default function AgentEditPage({ params }: { params: Promise<{ id: string
                         )}
                     </div>
                     <DialogFooter>
-                        <Button 
-                            variant="ghost" 
+                        <Button
+                            variant="ghost"
                             className="rounded-full"
                             onClick={() => setIsAddPersonaOpen(false)}
                         >
                             取消
                         </Button>
-                        <Button 
+                        <Button
                             className="rounded-full bg-slate-900 text-white"
                             onClick={handleAddPersona}
                             disabled={!selectedPersonaId || isAddingPersona}
@@ -681,18 +668,17 @@ export default function AgentEditPage({ params }: { params: Promise<{ id: string
                                         <div
                                             key={kb.id}
                                             onClick={() => setSelectedKBId(kb.id)}
-                                            className={`flex items-center gap-3 p-4 rounded-xl border-2 cursor-pointer transition-all ${
-                                                isSelected 
-                                                    ? "border-blue-500 bg-blue-50/50" 
-                                                    : "border-slate-100 hover:border-slate-200 hover:bg-slate-50"
-                                            }`}
+                                            className={`flex items-center gap-3 p-4 rounded-xl border-2 cursor-pointer transition-all ${isSelected
+                                                ? "border-blue-500 bg-blue-50/50"
+                                                : "border-slate-100 hover:border-slate-200 hover:bg-slate-50"
+                                                }`}
                                         >
                                             <Database className={`w-8 h-8 ${isSelected ? "text-blue-500" : "text-slate-400"}`} />
                                             <div className="flex-1">
                                                 <div className="font-bold text-slate-800">{kb.name}</div>
                                                 <div className="flex items-center gap-2 mt-1">
                                                     <span className="text-xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">
-                                                        {kb.doc_count || 0} 文档
+                                                        {kb.document_count || 0} 文档
                                                     </span>
                                                     {kb.description && (
                                                         <span className="text-xs text-slate-400 truncate max-w-[150px]">
@@ -701,9 +687,8 @@ export default function AgentEditPage({ params }: { params: Promise<{ id: string
                                                     )}
                                                 </div>
                                             </div>
-                                            <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${
-                                                isSelected ? "border-blue-500 bg-blue-500" : "border-slate-300"
-                                            }`}>
+                                            <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${isSelected ? "border-blue-500 bg-blue-500" : "border-slate-300"
+                                                }`}>
                                                 {isSelected && <div className="w-2 h-2 rounded-full bg-white" />}
                                             </div>
                                         </div>
@@ -713,14 +698,14 @@ export default function AgentEditPage({ params }: { params: Promise<{ id: string
                         )}
                     </div>
                     <DialogFooter>
-                        <Button 
-                            variant="ghost" 
+                        <Button
+                            variant="ghost"
                             className="rounded-full"
                             onClick={() => setIsAddKBOpen(false)}
                         >
                             取消
                         </Button>
-                        <Button 
+                        <Button
                             className="rounded-full bg-slate-900 text-white"
                             onClick={handleAddKnowledgeBase}
                             disabled={!selectedKBId || isAddingKB}

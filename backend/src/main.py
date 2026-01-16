@@ -19,6 +19,7 @@ from admin.api import admin
 from admin.api.model_configs import router as model_configs_router
 from admin.api.system_logs import router as admin_system_logs_router
 from admin.api.training_records import router as admin_training_records_router
+from admin.api.analytics import router as admin_analytics_router
 
 # Admin API (users, training records, system logs)
 from admin.api.users import router as admin_users_router
@@ -233,6 +234,7 @@ app.include_router(replay_router, prefix="/api/v1", tags=["replay"])
 # Admin API routes (users, training records, system logs)
 app.include_router(admin_users_router, prefix="/api/v1", tags=["admin-users"])
 app.include_router(admin_training_records_router, prefix="/api/v1", tags=["admin-training-records"])
+app.include_router(admin_analytics_router, prefix="/api/v1", tags=["admin-analytics"])
 app.include_router(admin_system_logs_router, prefix="/api/v1", tags=["admin-system-logs"])
 
 # Model Config API routes

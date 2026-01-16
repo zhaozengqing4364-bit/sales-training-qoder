@@ -52,7 +52,7 @@ export default function PersonasPage() {
     const [page, setPage] = useState(1);
     const [total, setTotal] = useState(0);
     const [isFilterOpen, setIsFilterOpen] = useState(false);
-    
+
     // Create dialog state
     const [isCreateOpen, setIsCreateOpen] = useState(false);
     const [isCreating, setIsCreating] = useState(false);
@@ -63,7 +63,7 @@ export default function PersonasPage() {
         difficulty: "medium" as "easy" | "medium" | "hard",
         system_prompt: "你是一个AI角色，请根据设定进行对话。",
     });
-    
+
     // Delete confirm dialog
     const [deleteTarget, setDeleteTarget] = useState<AdminPersona | null>(null);
     const [isDeleting, setIsDeleting] = useState(false);
@@ -78,8 +78,8 @@ export default function PersonasPage() {
                 page_size: 10
             });
             // result 是 AdminPersona[] 数组
-            setPersonas(result);
-            setTotal(result.length);
+            setPersonas(result.items || []);
+            setTotal(result.total || 0);
         } catch (err) {
             console.error("Failed to load personas:", err);
             setError(err instanceof Error ? err.message : "加载失败");
@@ -91,7 +91,7 @@ export default function PersonasPage() {
 
     useEffect(() => {
         loadData();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [page, searchQuery]);
 
     const handleCreate = async () => {
@@ -99,7 +99,7 @@ export default function PersonasPage() {
             toast.error("请输入角色名称");
             return;
         }
-        
+
         setIsCreating(true);
         try {
             await api.admin.createPersona({
@@ -129,7 +129,7 @@ export default function PersonasPage() {
 
     const handleDelete = async () => {
         if (!deleteTarget) return;
-        
+
         setIsDeleting(true);
         try {
             await api.admin.deletePersona(deleteTarget.id);
@@ -157,7 +157,7 @@ export default function PersonasPage() {
                 onConfirm={handleDelete}
                 isLoading={isDeleting}
             />
-            
+
             {/* Header */}
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div>
@@ -179,8 +179,8 @@ export default function PersonasPage() {
                             <div className="py-6 space-y-4">
                                 <div className="space-y-2">
                                     <label className="text-xs font-bold text-slate-500 uppercase">角色名称</label>
-                                    <input 
-                                        className="w-full h-10 rounded-lg border border-slate-200 px-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none" 
+                                    <input
+                                        className="w-full h-10 rounded-lg border border-slate-200 px-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
                                         placeholder="例如：挑剔的客户"
                                         value={newPersona.name}
                                         onChange={(e) => setNewPersona(prev => ({ ...prev, name: e.target.value }))}
@@ -188,8 +188,8 @@ export default function PersonasPage() {
                                 </div>
                                 <div className="space-y-2">
                                     <label className="text-xs font-bold text-slate-500 uppercase">描述</label>
-                                    <input 
-                                        className="w-full h-10 rounded-lg border border-slate-200 px-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none" 
+                                    <input
+                                        className="w-full h-10 rounded-lg border border-slate-200 px-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
                                         placeholder="角色的简短描述"
                                         value={newPersona.description}
                                         onChange={(e) => setNewPersona(prev => ({ ...prev, description: e.target.value }))}
@@ -197,7 +197,7 @@ export default function PersonasPage() {
                                 </div>
                                 <div className="space-y-2">
                                     <label className="text-xs font-bold text-slate-500 uppercase">角色类型</label>
-                                    <select 
+                                    <select
                                         className="w-full h-10 rounded-lg border border-slate-200 px-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none bg-white"
                                         value={newPersona.category}
                                         onChange={(e) => setNewPersona(prev => ({ ...prev, category: e.target.value as typeof newPersona.category }))}
@@ -210,7 +210,7 @@ export default function PersonasPage() {
                                 </div>
                                 <div className="space-y-2">
                                     <label className="text-xs font-bold text-slate-500 uppercase">难度</label>
-                                    <select 
+                                    <select
                                         className="w-full h-10 rounded-lg border border-slate-200 px-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none bg-white"
                                         value={newPersona.difficulty}
                                         onChange={(e) => setNewPersona(prev => ({ ...prev, difficulty: e.target.value as typeof newPersona.difficulty }))}
@@ -222,8 +222,8 @@ export default function PersonasPage() {
                                 </div>
                                 <div className="space-y-2">
                                     <label className="text-xs font-bold text-slate-500 uppercase">系统提示词</label>
-                                    <textarea 
-                                        className="w-full h-24 rounded-lg border border-slate-200 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none resize-none" 
+                                    <textarea
+                                        className="w-full h-24 rounded-lg border border-slate-200 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none resize-none"
                                         placeholder="定义角色的行为和性格..."
                                         value={newPersona.system_prompt}
                                         onChange={(e) => setNewPersona(prev => ({ ...prev, system_prompt: e.target.value }))}
@@ -231,7 +231,7 @@ export default function PersonasPage() {
                                 </div>
                             </div>
                             <DialogFooter>
-                                <Button 
+                                <Button
                                     className="w-full rounded-full bg-slate-900 text-white"
                                     onClick={handleCreate}
                                     disabled={isCreating}
@@ -408,7 +408,7 @@ export default function PersonasPage() {
                             </table>
                         )}
                     </div>
-                    
+
                     {/* Pagination */}
                     {personas.length > 0 && (
                         <div className="px-6 py-4 border-t border-slate-100 flex items-center justify-between">
@@ -416,18 +416,18 @@ export default function PersonasPage() {
                                 显示 {(page - 1) * 10 + 1}-{Math.min(page * 10, total || personas.length)} 共 {total || personas.length} 个角色
                             </span>
                             <div className="flex gap-2">
-                                <Button 
-                                    variant="outline" 
-                                    size="sm" 
-                                    className="h-8 text-xs rounded-full" 
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="h-8 text-xs rounded-full"
                                     disabled={page === 1}
                                     onClick={() => setPage(p => p - 1)}
                                 >
                                     上一页
                                 </Button>
-                                <Button 
-                                    variant="outline" 
-                                    size="sm" 
+                                <Button
+                                    variant="outline"
+                                    size="sm"
                                     className="h-8 text-xs rounded-full"
                                     onClick={() => setPage(p => p + 1)}
                                     disabled={personas.length < 10}

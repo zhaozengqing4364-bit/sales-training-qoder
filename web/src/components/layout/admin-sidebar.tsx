@@ -15,6 +15,7 @@ import {
     PanelLeftOpen,
     BookOpen,
     ArrowLeft,
+    BarChart3,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -83,6 +84,7 @@ export function AdminSidebarContent({ isCollapsed = false, toggleSidebar, showTo
         { label: "角色管理", icon: Users, href: "/admin/personas" },
         { label: "知识库管理", icon: BookOpen, href: "/admin/knowledge" },
         { label: "训练记录", icon: FileText, href: "/admin/records" },
+        { label: "数据分析", icon: BarChart3, href: "/admin/analytics" },
         { label: "系统设置", icon: Settings, href: "/admin/settings" },
         { label: "操作日志", icon: Activity, href: "/admin/logs" },
     ];

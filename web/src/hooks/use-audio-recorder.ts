@@ -87,8 +87,66 @@ export function useAudioRecorder(options: UseAudioRecorderOptions = {}) {
         }
     }, []);
 
-    // 重采样函数
-    const resample = useCallback((inputData: Float32Array, inputSampleRate: number, outputSampleRate: number): Float32Array => {
+    /**
+     * High-quality audio resampling using OfflineAudioContext
+     * 
+     * Uses Web Audio API's built-in resampling which applies proper
+     * anti-aliasing filters for better audio quality.
+     * 
+     * Requirements: Voice Practice Optimization P1-2
+     * 
+     * @param inputData - Input audio samples (Float32Array)
+     * @param inputSampleRate - Source sample rate (e.g., 48000)
+     * @param outputSampleRate - Target sample rate (e.g., 16000)
+     * @returns Resampled audio data
+     */
+    const resampleHQ = useCallback(async (
+        inputData: Float32Array, 
+        inputSampleRate: number, 
+        outputSampleRate: number
+    ): Promise<Float32Array> => {
+        if (inputSampleRate === outputSampleRate) {
+            return inputData;
+        }
+        
+        try {
+            // Calculate output length
+            const outputLength = Math.round(inputData.length * outputSampleRate / inputSampleRate);
+            
+            // Create offline context at target sample rate
+            const offlineCtx = new OfflineAudioContext(1, outputLength, outputSampleRate);
+            
+            // Create buffer with input data at source sample rate
+            const buffer = offlineCtx.createBuffer(1, inputData.length, inputSampleRate);
+            buffer.getChannelData(0).set(inputData);
+            
+            // Create source and connect to destination
+            const source = offlineCtx.createBufferSource();
+            source.buffer = buffer;
+            source.connect(offlineCtx.destination);
+            source.start(0);
+            
+            // Render the resampled audio
+            const renderedBuffer = await offlineCtx.startRendering();
+            return renderedBuffer.getChannelData(0);
+        } catch (err) {
+            console.warn("[AudioRecorder] OfflineAudioContext resampling failed, falling back to linear:", err);
+            // Fallback to linear interpolation if OfflineAudioContext fails
+            return resampleLinear(inputData, inputSampleRate, outputSampleRate);
+        }
+    }, []);
+
+    /**
+     * Linear interpolation resampling (fallback method)
+     * 
+     * Used when OfflineAudioContext is not available or fails.
+     * Lower quality but synchronous and widely supported.
+     */
+    const resampleLinear = useCallback((
+        inputData: Float32Array, 
+        inputSampleRate: number, 
+        outputSampleRate: number
+    ): Float32Array => {
         if (inputSampleRate === outputSampleRate) {
             return inputData;
         }
@@ -107,6 +165,9 @@ export function useAudioRecorder(options: UseAudioRecorderOptions = {}) {
         
         return output;
     }, []);
+
+    // Legacy resample function (uses linear interpolation)
+    const resample = resampleLinear;
 
     // Float32 转 16-bit PCM
     const floatTo16BitPCM = useCallback((float32Array: Float32Array): Int16Array => {
@@ -128,30 +189,40 @@ export function useAudioRecorder(options: UseAudioRecorderOptions = {}) {
         return btoa(binary);
     }, []);
 
-    // 处理音频数据的通用函数
-    const processAudioData = useCallback((audioData: Float32Array, chunkCount: number) => {
-        // 重采样
-        const resampledData = resample(audioData, inputSampleRateRef.current, targetSampleRate);
-        
-        // 转换为 PCM
-        const pcmData = floatTo16BitPCM(resampledData);
-        
-        // 转换为 base64
-        const base64 = int16ArrayToBase64(pcmData);
-        
-        // 发送
-        onAudioDataRef.current?.(base64);
-        
-        // 每 20 个块记录一次
-        if (chunkCount % 20 === 0) {
-            let maxAmp = 0;
-            for (let i = 0; i < audioData.length; i++) {
-                const abs = Math.abs(audioData[i]);
-                if (abs > maxAmp) maxAmp = abs;
+    /**
+     * Process audio data: resample, convert to PCM, encode to base64, and send
+     * 
+     * Uses high-quality OfflineAudioContext resampling with fallback to linear.
+     * 
+     * Requirements: Voice Practice Optimization P1-2
+     */
+    const processAudioData = useCallback(async (audioData: Float32Array, chunkCount: number) => {
+        try {
+            // High-quality resampling using OfflineAudioContext
+            const resampledData = await resampleHQ(audioData, inputSampleRateRef.current, targetSampleRate);
+            
+            // 转换为 PCM
+            const pcmData = floatTo16BitPCM(resampledData);
+            
+            // 转换为 base64
+            const base64 = int16ArrayToBase64(pcmData);
+            
+            // 发送
+            onAudioDataRef.current?.(base64);
+            
+            // 每 20 个块记录一次
+            if (chunkCount % 20 === 0) {
+                let maxAmp = 0;
+                for (let i = 0; i < audioData.length; i++) {
+                    const abs = Math.abs(audioData[i]);
+                    if (abs > maxAmp) maxAmp = abs;
+                }
+                console.log(`[AudioRecorder] Chunk #${chunkCount}: max=${maxAmp.toFixed(4)}`);
             }
-            console.log(`[AudioRecorder] Chunk #${chunkCount}: max=${maxAmp.toFixed(4)}`);
+        } catch (err) {
+            console.error("[AudioRecorder] Failed to process audio data:", err);
         }
-    }, [targetSampleRate, resample, floatTo16BitPCM, int16ArrayToBase64]);
+    }, [targetSampleRate, resampleHQ, floatTo16BitPCM, int16ArrayToBase64]);
 
     // 检测 AudioWorklet 支持
     const checkWorkletSupport = useCallback((): boolean => {

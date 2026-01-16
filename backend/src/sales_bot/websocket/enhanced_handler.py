@@ -14,6 +14,7 @@ References:
 """
 import asyncio
 import base64
+import uuid
 from datetime import datetime
 from typing import Any
 
@@ -30,6 +31,7 @@ from common.audio.tts_service import get_tts_service, TTSChunk
 from common.conversation.storage import MessageStorageService
 from common.knowledge.service import KnowledgeService
 from common.monitoring.logger import get_logger
+from common.monitoring.latency_tracker import get_latency_tracker, LatencyTracker
 from common.websocket.base_handler import BaseWebSocketHandler
 
 logger = get_logger(__name__)
@@ -78,6 +80,13 @@ class EnhancedSalesHandler(BaseWebSocketHandler):
         self.asr_task: asyncio.Task | None = None    # ASR 处理任务
         self.current_transcript = ""                  # 当前识别结果
 
+        # Backpressure control (Requirements: Voice Practice Optimization P0-2)
+        # Increased watermarks to reduce false "network slow" warnings
+        self.ASR_QUEUE_MAX_SIZE = 200  # Maximum queue size (increased from 100)
+        self.ASR_HIGH_WATERMARK = 150  # Trigger slow_down at this level (increased from 80)
+        self.ASR_LOW_WATERMARK = 100   # Trigger resume at this level (increased from 50)
+        self._backpressure_active = False  # Track backpressure state
+
         # Audio buffer and sequence tracking (still needed for audio processing)
         self.audio_buffer: bytes = b""
         self.expected_sequence = 0
@@ -93,7 +102,17 @@ class EnhancedSalesHandler(BaseWebSocketHandler):
         # Task references for interrupt cancellation (Requirements 3.3, 3.4)
         self._llm_task: asyncio.Task | None = None
         self._tts_task: asyncio.Task | None = None
+        self._greeting_task: asyncio.Task | None = None
         self._is_interrupted: bool = False
+        self._db_lock = asyncio.Lock()  # Serialize DB access for the same session
+
+        # Critical Fix #2 & #3: 消息版本控制防止乱序和状态不同步
+        self.current_request_id: int = 0  # 当前请求ID,递增
+        self.current_stream_id: str | None = None  # 当前TTS流ID
+        self.uuid = uuid  # 保存uuid模块引用
+        
+        # Internal state for current turn
+        self._current_turn_initialized: bool = False
 
     async def initialize(
         self,
@@ -228,7 +247,7 @@ class EnhancedSalesHandler(BaseWebSocketHandler):
         await self._send_status("listening")
 
         # Send greeting after a short delay
-        asyncio.create_task(self._send_delayed_greeting())
+        self._greeting_task = asyncio.create_task(self._send_delayed_greeting())
 
         try:
             while self.running:
@@ -248,6 +267,8 @@ class EnhancedSalesHandler(BaseWebSocketHandler):
         finally:
             self.running = False
             self.manager.disconnect(self.scenario, session_id)
+            if self._greeting_task:
+                self._greeting_task.cancel()
             processing_task.cancel()
 
             # End capability session
@@ -312,6 +333,11 @@ class EnhancedSalesHandler(BaseWebSocketHandler):
             elif msg_type == "heartbeat_ack":
                 pass
 
+            elif msg_type == "interrupt":
+                # Handle user interrupt - stop TTS and LLM tasks
+                reason = data.get("reason", "unknown")
+                await self._handle_user_interrupt(reason)
+
             else:
                 logger.warning(f"Unknown message type: {msg_type}")
 
@@ -319,27 +345,143 @@ class EnhancedSalesHandler(BaseWebSocketHandler):
             logger.error(f"Error handling message {msg_type}: {str(e)}")
             await self._send_error("[PROCESSING_ERROR]", "处理消息时出错")
 
+    async def _handle_user_interrupt(self, reason: str = "unknown"):
+        """
+        Handle user interrupt signal - immediately stop TTS and LLM tasks.
+        
+        Target: <100ms response time (Constitution Principle II)
+        
+        Args:
+            reason: Reason for interrupt ('user_speaking' or 'manual')
+        """
+        logger.info(f"[INTERRUPT] User interrupt received (reason: {reason})")
+        self._is_interrupted = True
+        
+        # Cancel greeting if it's still pending
+        if self._greeting_task and not self._greeting_task.done():
+            self._greeting_task.cancel()
+            logger.info("[INTERRUPT] Greeting task cancelled")
+        
+        # Critical Fix #2: 记录被中断的stream_id
+        interrupted_stream_id = self.current_stream_id
+        
+        # Cancel TTS task if running
+        if self._tts_task and not self._tts_task.done():
+            self._tts_task.cancel()
+            logger.info("[INTERRUPT] TTS task cancelled")
+            try:
+                await self._tts_task
+            except asyncio.CancelledError:
+                pass
+            self._tts_task = None
+        
+        # Cancel LLM task if running
+        if self._llm_task and not self._llm_task.done():
+            self._llm_task.cancel()
+            logger.info("[INTERRUPT] LLM task cancelled")
+            try:
+                await self._llm_task
+            except asyncio.CancelledError:
+                pass
+            self._llm_task = None
+        
+        # Stop streaming ASR
+        await self._stop_streaming_asr()
+        
+        # Send interrupt confirmation to frontend
+        # Critical Fix #2: 附加被中断的stream_id，让前端停止播放该流的音频
+        trace_id = self.context.trace_id if self.context else None
+        await self.manager.send_json(
+            self.websocket,
+            {
+                "type": "interrupted",
+                "timestamp": datetime.utcnow().isoformat(),
+                "trace_id": trace_id,
+                "stream_id": interrupted_stream_id,  # 添加stream_id
+                "data": {"reason": reason},
+            },
+        )
+        
+        # Reset interrupt flag for next interaction
+        self._is_interrupted = False
+        self._current_turn_initialized = False # Reset turn state
+        await self._send_status("listening")
+        logger.info("[INTERRUPT] Interrupt handling complete")
+        
+    async def _start_new_turn(self, interaction_type: str = "audio"):
+        """
+        Unified method to start a new conversation turn.
+        Ensures turn_count and trace_id are updated exactly once per interaction.
+        """
+        if self._current_turn_initialized:
+            logger.debug(f"Turn already initialized for turn_count={self.turn_count}")
+            return
+            
+        self.turn_count += 1
+        new_trace_id = str(self.uuid.uuid4())
+        
+        if self.context:
+            self.context.turn_count = self.turn_count
+            self.context.trace_id = new_trace_id
+            
+        self._current_turn_initialized = True
+        logger.info(f"[TURN {self.turn_count}] Started new {interaction_type} interaction, trace_id={new_trace_id}")
+        return new_trace_id
+
     async def _handle_audio_chunk(self, data: dict):
         """Handle audio chunk - forward to streaming ASR immediately."""
         audio_base64 = data.get("audio", "")
         interrupt = data.get("interrupt", False)
 
         if interrupt:
-            logger.info("User interrupted AI")
-            await self._stop_streaming_asr()
-            await self._send_status("listening")
+            logger.info("User interrupted AI via audio chunk")
+            await self._handle_user_interrupt("user_speaking")
             return
 
         if audio_base64:
             # 如果 ASR 还没启动，自动启动
             if not self.asr_queue:
                 logger.info("Auto-starting ASR on first audio chunk")
+                # Cancel greeting if user starts speaking
+                if self._greeting_task and not self._greeting_task.done():
+                    self._greeting_task.cancel()
                 await self._start_streaming_asr()
 
             if self.asr_queue:
                 try:
                     audio_bytes = base64.b64decode(audio_base64)
-                    # 直接放入队列，流式发送给 ASR
+                    
+                    # Record latency: audio received
+                    trace_id = self.context.trace_id if self.context else None
+                    if trace_id:
+                        latency_tracker = get_latency_tracker()
+                        latency_tracker.record(
+                            trace_id,
+                            LatencyTracker.STAGE_AUDIO_RECEIVED,
+                            {"audio_size": len(audio_bytes)},
+                        )
+                    
+                    # Check queue size for backpressure control
+                    queue_size = self.asr_queue.qsize()
+                    
+                    # Trigger backpressure if queue is getting full
+                    if queue_size >= self.ASR_HIGH_WATERMARK and not self._backpressure_active:
+                        self._backpressure_active = True
+                        await self._send_backpressure("slow_down", queue_size)
+                        logger.warning(f"[BACKPRESSURE] Activated - queue size: {queue_size}")
+                    
+                    # Resume if queue has drained
+                    elif queue_size <= self.ASR_LOW_WATERMARK and self._backpressure_active:
+                        self._backpressure_active = False
+                        await self._send_backpressure("resume", queue_size)
+                        logger.info(f"[BACKPRESSURE] Deactivated - queue size: {queue_size}")
+                    
+                    # Drop audio if queue is at max capacity (prevent memory issues)
+                    if queue_size >= self.ASR_QUEUE_MAX_SIZE:
+                        logger.warning(f"[BACKPRESSURE] Queue full ({queue_size}), dropping audio chunk")
+                        return
+                    
+                    # 放入队列，流式发送给 ASR
                     await self.asr_queue.put(audio_bytes)
                 except Exception as e:
                     logger.error(f"Failed to decode audio: {e}")
@@ -352,6 +494,9 @@ class EnhancedSalesHandler(BaseWebSocketHandler):
         self.is_user_speaking = True
         self.current_transcript = ""
         self.asr_queue = asyncio.Queue()
+        
+        # Start new turn early (Requirement VII: Observability)
+        await self._start_new_turn(interaction_type="audio")
 
         # 启动 ASR 处理任务
         self.asr_task = asyncio.create_task(self._run_streaming_asr())
@@ -394,6 +539,12 @@ class EnhancedSalesHandler(BaseWebSocketHandler):
         """Run streaming ASR and process results."""
         asr_service = get_asr_service()
         total_bytes = 0
+        trace_id = self.context.trace_id if self.context else None
+        latency_tracker = get_latency_tracker()
+        
+        # Record ASR start
+        if trace_id:
+            latency_tracker.record(trace_id, LatencyTracker.STAGE_ASR_START)
 
         async def audio_generator():
             """Generate audio chunks from queue."""
@@ -412,9 +563,11 @@ class EnhancedSalesHandler(BaseWebSocketHandler):
 
         final_transcript = ""
         try:
-            # 流式处理 ASR
+            # 流式处理 ASR，FunASR 流式模型会返回累积文本
+            # 每次返回的是从开始到当前的完整文本，不是增量
             async for result in asr_service.stream_transcribe(audio_generator()):
                 if result.is_success and result.value:
+                    # FunASR 流式模型返回累积文本，直接使用
                     self.current_transcript = result.value
                     # 发送中间结果给前端
                     await self._send_transcript(result.value, is_final=False)
@@ -425,6 +578,14 @@ class EnhancedSalesHandler(BaseWebSocketHandler):
                 final_transcript = self.current_transcript
                 logger.info(f"ASR final: {final_transcript}")
                 await self._send_transcript(final_transcript, is_final=True)
+                
+                # Record ASR complete
+                if trace_id:
+                    latency_tracker.record(
+                        trace_id, 
+                        LatencyTracker.STAGE_ASR_COMPLETE,
+                        {"transcript_length": len(final_transcript)},
+                    )
             else:
                 logger.warning("ASR returned empty transcript")
                 await self._send_status("listening")
@@ -438,24 +599,31 @@ class EnhancedSalesHandler(BaseWebSocketHandler):
 
     async def _handle_audio_end(self):
         """Handle audio end signal - trigger ASR commit."""
-        logger.info("Audio end received, stopping ASR stream")
-        await self._stop_streaming_asr()
+        # Use a flag to prevent multiple concurrent processing
+        if getattr(self, "_is_processing_audio_end", False):
+            logger.debug("Already processing audio end, skipping duplicate call")
+            return
+            
+        self._is_processing_audio_end = True
+        try:
+            logger.info("Audio end received, stopping ASR stream")
+            await self._stop_streaming_asr()
+        finally:
+            self._is_processing_audio_end = False
 
     async def _process_user_text(self, text: str):
         """
         Process user text with capability module integration.
-
-        This is the enhanced version that:
-        1. Saves user message to storage
-        2. Runs capability modules in parallel
-        3. Sends real-time feedback (fuzzy detection, stage update, score update)
-        4. Generates AI response
-        5. Saves AI message to storage
         """
-        # Increment turn count
-        self.turn_count += 1
+        # Critical Fix #2: 递增请求ID
+        self.current_request_id += 1
+        current_req_id = self.current_request_id
+        logger.info(f"[REQUEST {current_req_id}] Processing user text: {text[:50]}...")
+        
+        # 1. Ensure turn is initialized (for text-only turns or if ASR didn't start)
+        await self._start_new_turn(interaction_type="text")
+        
         if self.context:
-            self.context.increment_turn()
             self.context.add_message("user", text)
 
         # Add to local conversation history
@@ -464,14 +632,15 @@ class EnhancedSalesHandler(BaseWebSocketHandler):
         # 1. Save user message
         user_message_id = None
         if self.message_storage and self.session_id:
-            save_result = await self.message_storage.save_message(
-                session_id=self.session_id,
-                turn_number=self.turn_count,
-                role="user",
-                content=text,
-            )
-            if save_result.is_success:
-                user_message_id = save_result.value.id
+            async with self._db_lock:
+                save_result = await self.message_storage.save_message(
+                    session_id=self.session_id,
+                    turn_number=self.turn_count,
+                    role="user",
+                    content=text,
+                )
+                if save_result.is_success:
+                    user_message_id = save_result.value.id
 
         await self._send_status("thinking")
         logger.info(f"[PROCESS] Processing user text: {text[:50]}...")
@@ -481,7 +650,9 @@ class EnhancedSalesHandler(BaseWebSocketHandler):
         knowledge_context: str = ""  # 知识库检索结果
         logger.info(f"[PROCESS] Running capability modules...")
         if self.capability_runner and self.context:
-            capability_results = await self.capability_runner.run_all(self.context, text)
+            # Use lock to prevent concurrent DB access from background tasks (like greeting save)
+            async with self._db_lock:
+                capability_results = await self.capability_runner.run_all(self.context, text)
 
             # 3. Process capability results and send real-time feedback
             for i, result in enumerate(capability_results):
@@ -514,11 +685,31 @@ class EnhancedSalesHandler(BaseWebSocketHandler):
 
         # 4. Update message with analysis data
         if self.message_storage and user_message_id and analysis_data:
-            await self.message_storage.update_analysis(user_message_id, **analysis_data)
+            async with self._db_lock:
+                await self.message_storage.update_analysis(user_message_id, **analysis_data)
 
+        # End of turn processing
+        self._current_turn_initialized = False
+        
         # 5. Generate AI response (with knowledge context)
         logger.info(f"[PROCESS] Calling _generate_response...")
-        response_text = await self._generate_response(text, knowledge_context)
+        
+        # Check if interrupted before starting LLM
+        if self._is_interrupted:
+            logger.info("[PROCESS] Aborted - user interrupted")
+            await self._send_status("listening")
+            return
+        
+        # Wrap LLM call in a task for cancellation support
+        self._llm_task = asyncio.create_task(self._generate_response(text, knowledge_context))
+        try:
+            response_text = await self._llm_task
+        except asyncio.CancelledError:
+            logger.info("[PROCESS] LLM task was cancelled")
+            response_text = None
+        finally:
+            self._llm_task = None
+        
         logger.info(f"[PROCESS] Response received: {response_text[:50] if response_text else 'None'}...")
 
         if response_text:
@@ -528,15 +719,35 @@ class EnhancedSalesHandler(BaseWebSocketHandler):
 
             # 6. Save AI message
             if self.message_storage and self.session_id:
-                await self.message_storage.save_message(
-                    session_id=self.session_id,
-                    turn_number=self.turn_count,
-                    role="assistant",
-                    content=response_text,
-                )
+                async with self._db_lock:
+                    await self.message_storage.save_message(
+                        session_id=self.session_id,
+                        turn_number=self.turn_count,
+                        role="assistant",
+                        content=response_text,
+                    )
 
-            # 7. Send TTS response
-            await self._send_tts_response(response_text)
+            # Check if interrupted before starting TTS
+            if self._is_interrupted:
+                logger.info("[PROCESS] Aborted TTS - user interrupted")
+                await self._send_status("listening")
+                return
+
+            # 7. Send TTS response (wrapped in task for cancellation)
+            # Critical Fix #2: 为这个TTS流生成新的stream_id
+            current_stream_id = str(self.uuid.uuid4())
+            self.current_stream_id = current_stream_id
+            logger.info(f"[PROCESS] Starting TTS with stream_id={current_stream_id}")
+            
+            self._tts_task = asyncio.create_task(
+                self._send_tts_response_streaming(response_text, current_req_id, current_stream_id)
+            )
+            try:
+                await self._tts_task
+            except asyncio.CancelledError:
+                logger.info("[PROCESS] TTS task was cancelled")
+            finally:
+                self._tts_task = None
         else:
             fallback = self._get_fallback_response()
             self.conversation_history.append({"role": "assistant", "content": fallback})
@@ -550,6 +761,13 @@ class EnhancedSalesHandler(BaseWebSocketHandler):
         """Generate LLM response based on Persona configuration and knowledge context."""
         try:
             logger.info(f"[LLM] Starting generation for: {user_text[:50]}...")
+            
+            # Record LLM start
+            trace_id = self.context.trace_id if self.context else None
+            if trace_id:
+                latency_tracker = get_latency_tracker()
+                latency_tracker.record(trace_id, LatencyTracker.STAGE_LLM_START)
+            
             llm_service = get_llm_service()
             logger.info(f"[LLM] Service configured: {llm_service.is_configured}, provider: {llm_service.provider}, model: {llm_service.model_name}")
 
@@ -585,6 +803,15 @@ class EnhancedSalesHandler(BaseWebSocketHandler):
 
             if result.is_success:
                 logger.info(f"[LLM] Response received: {result.value[:50] if result.value else 'None'}...")
+                
+                # Record LLM complete
+                if trace_id:
+                    latency_tracker.record(
+                        trace_id, 
+                        LatencyTracker.STAGE_LLM_COMPLETE,
+                        {"response_length": len(result.value) if result.value else 0},
+                    )
+                
                 return result.value
             else:
                 logger.warning(f"[LLM] Generation failed: {result.fallback}")
@@ -623,15 +850,18 @@ class EnhancedSalesHandler(BaseWebSocketHandler):
 
         # Save greeting message
         if self.message_storage and self.session_id:
-            await self.message_storage.save_message(
-                session_id=self.session_id,
-                turn_number=0,
-                role="assistant",
-                content=greeting,
-            )
+            async with self._db_lock:
+                await self.message_storage.save_message(
+                    session_id=self.session_id,
+                    turn_number=0,
+                    role="assistant",
+                    content=greeting,
+                )
 
+        # Critical Fix #2: greeting也需要stream_id和request_id
+        self.current_request_id += 1
+        self.current_stream_id = str(self.uuid.uuid4())
         await self._send_tts_response(greeting)
-        self.turn_count += 1
         await self._send_status("listening")
 
 
@@ -692,7 +922,11 @@ class EnhancedSalesHandler(BaseWebSocketHandler):
         )
 
     async def _send_tts_response(self, text: str):
-        """Send TTS audio response to client using Persona's TTS config."""
+        """
+        Send TTS audio response to client using Persona's TTS config.
+        
+        Critical Fix #2: 添加stream_id和request_id防止消息乱序
+        """
         tts_service = get_tts_service()
         trace_id = self.context.trace_id if self.context else None
 
@@ -719,12 +953,15 @@ class EnhancedSalesHandler(BaseWebSocketHandler):
                 audio_base64 = base64.b64encode(audio_data).decode("utf-8")
                 duration_ms = int(len(audio_data) / 2) if audio_data else len(text) * 100
 
+                # Critical Fix #2: 添加stream_id和request_id到TTS消息
                 await self.manager.send_json(
                     self.websocket,
                     {
                         "type": "tts_audio",
                         "timestamp": datetime.utcnow().isoformat(),
                         "trace_id": trace_id,
+                        "stream_id": self.current_stream_id,  # 添加stream_id
+                        "request_id": self.current_request_id,  # 添加request_id
                         "data": {
                             "text": text,
                             "audio": audio_base64,
@@ -741,13 +978,19 @@ class EnhancedSalesHandler(BaseWebSocketHandler):
             await self._send_tts_fallback(text, trace_id)
 
     async def _send_tts_fallback(self, text: str, trace_id: str | None):
-        """Send TTS fallback message for browser TTS."""
+        """
+        Send TTS fallback message for browser TTS.
+        
+        Critical Fix #2: 添加stream_id和request_id防止消息乱序
+        """
         await self.manager.send_json(
             self.websocket,
             {
                 "type": "tts_audio",
                 "timestamp": datetime.utcnow().isoformat(),
                 "trace_id": trace_id,
+                "stream_id": self.current_stream_id,  # 添加stream_id
+                "request_id": self.current_request_id,  # 添加request_id
                 "data": {
                     "text": text,
                     "audio": "",
@@ -757,26 +1000,23 @@ class EnhancedSalesHandler(BaseWebSocketHandler):
             },
         )
 
-    async def _send_tts_response_streaming(self, text: str):
+    async def _send_tts_response_streaming(self, text: str, request_id: int, stream_id: str):
         """
         Send TTS audio response in streaming chunks.
         
-        Sends audio chunks incrementally as they are generated, enabling
-        low-latency playback on the frontend using MediaSource API.
-        
-        Message format for each chunk:
-        - type: "tts_chunk"
-        - data.chunk_index: Sequential index (0-based)
-        - data.audio: Base64 encoded audio chunk
-        - data.duration_ms: Estimated duration of this chunk
-        - data.is_final: Whether this is the last chunk
-        - data.text: Full text (only on final chunk)
-        - data.total_duration_ms: Total duration (only on final chunk)
-        
         Requirements: 2.1, 2.4, 2.6 (Streaming TTS Playback)
+        Critical Fix #2: 添加stream_id防止TTS消息乱序
         """
+        logger.info(f"[TTS] Starting streaming for request {request_id}, stream {stream_id}, text: {text[:30]}...")
+        from common.audio.tts_service import get_tts_service, TTSChunk
         tts_service = get_tts_service()
         trace_id = self.context.trace_id if self.context else None
+        latency_tracker = get_latency_tracker()
+        first_chunk_sent = False
+
+        # Record TTS start
+        if trace_id:
+            latency_tracker.record(trace_id, LatencyTracker.STAGE_TTS_START)
 
         # Apply Persona's TTS config if available
         tts_config = self.persona_config.get("tts_config", {})
@@ -791,6 +1031,17 @@ class EnhancedSalesHandler(BaseWebSocketHandler):
 
         async def on_chunk(chunk: TTSChunk):
             """Callback to send each TTS chunk to the client."""
+            nonlocal first_chunk_sent
+            
+            # Check if interrupted or stream expired
+            if self._is_interrupted:
+                logger.info(f"[TTS] Interrupted - canceling stream {stream_id}")
+                raise asyncio.CancelledError("TTS interrupted by user")
+            
+            if stream_id != self.current_stream_id:
+                logger.warning(f"[TTS] Stream ID mismatch: expected {self.current_stream_id}, got {stream_id}. Stopping.")
+                raise asyncio.CancelledError("TTS stream expired")
+            
             audio_base64 = base64.b64encode(chunk.audio).decode("utf-8") if chunk.audio else ""
             
             message_data = {
@@ -805,25 +1056,54 @@ class EnhancedSalesHandler(BaseWebSocketHandler):
                 message_data["text"] = chunk.text
                 message_data["total_duration_ms"] = chunk.total_duration_ms
             
+            # Critical Fix #2: 添加stream_id和request_id到每个TTS chunk
             await self.manager.send_json(
                 self.websocket,
                 {
                     "type": "tts_chunk",
                     "timestamp": datetime.utcnow().isoformat(),
                     "trace_id": trace_id,
+                    "stream_id": stream_id,
+                    "request_id": request_id, 
                     "data": message_data,
                 },
             )
+            
+            # Record first chunk latency
+            if not first_chunk_sent and chunk.audio:
+                first_chunk_sent = True
+                if trace_id:
+                    latency_tracker.record(
+                        trace_id, 
+                        LatencyTracker.STAGE_TTS_FIRST_CHUNK,
+                        {"chunk_size": len(chunk.audio)},
+                    )
+                logger.debug(f"[TTS] Sent first chunk for stream {stream_id}")
+            
+            # Record TTS complete on final chunk
+            if chunk.is_final and trace_id:
+                latency_tracker.record(
+                    trace_id,
+                    LatencyTracker.STAGE_TTS_COMPLETE,
+                    {"total_duration_ms": chunk.total_duration_ms},
+                )
+                # Complete the trace
+                latency_tracker.complete_trace(trace_id)
 
         try:
             result = await tts_service.synthesize_streaming(text, on_chunk)
 
-            if not result.is_success:
-                logger.warning(f"TTS streaming failed: {result.fallback}")
+            if result.is_success:
+                logger.info(f"[TTS] Streaming complete for stream {stream_id}")
+            else:
+                logger.warning(f"[TTS] Streaming failed: {result.fallback}")
                 await self._send_tts_fallback(text, trace_id)
 
+        except asyncio.CancelledError:
+            logger.info(f"[TTS] Stream {stream_id} task was cancelled")
+            raise
         except Exception as e:
-            logger.error(f"TTS streaming error: {str(e)}", exc_info=True)
+            logger.error(f"[TTS] Streaming error: {str(e)}", exc_info=True)
             await self._send_tts_fallback(text, trace_id)
 
     async def _send_status(self, ai_state: str):
@@ -839,6 +1119,34 @@ class EnhancedSalesHandler(BaseWebSocketHandler):
                     "session_status": "in_progress",
                     "ai_state": ai_state,
                     "turn_count": self.turn_count,
+                },
+            },
+        )
+
+    async def _send_backpressure(self, action: str, queue_size: int):
+        """
+        Send backpressure signal to client.
+        
+        Used to control audio streaming rate when ASR queue is getting full.
+        
+        Args:
+            action: 'slow_down' or 'resume'
+            queue_size: Current queue size for debugging
+        
+        Requirements: Voice Practice Optimization P0-2
+        """
+        trace_id = self.context.trace_id if self.context else None
+        await self.manager.send_json(
+            self.websocket,
+            {
+                "type": "backpressure",
+                "timestamp": datetime.utcnow().isoformat(),
+                "trace_id": trace_id,
+                "data": {
+                    "action": action,
+                    "queue_size": queue_size,
+                    "high_watermark": self.ASR_HIGH_WATERMARK,
+                    "low_watermark": self.ASR_LOW_WATERMARK,
                 },
             },
         )

@@ -184,6 +184,12 @@ class SimpleSalesHandler(BaseWebSocketHandler):
         self.last_user_text_time: float = 0  # 上一条消息时间戳
         self.DUPLICATE_THRESHOLD = 2.0  # 2秒内相同消息视为重复
 
+        # Critical Fix #2 & #3: 消息版本控制防止乱序和状态不同步
+        self.current_request_id: int = 0  # 当前请求ID，递增
+        self.current_stream_id: str | None = None  # 当前TTS流ID
+        import uuid
+        self.uuid = uuid  # 保存uuid模块引用
+
     async def _load_persona_config(self, persona_id: str | None) -> dict:
         """Load persona configuration from database or use default."""
         # Try to load from database first
@@ -431,15 +437,17 @@ class SimpleSalesHandler(BaseWebSocketHandler):
                     break
 
         try:
-            # 流式处理 ASR
+            # 流式处理 ASR，FunASR 流式模型会返回累积文本
+            # 每次返回的是从开始到当前的完整文本，不是增量
             async for result in asr_service.stream_transcribe(audio_generator()):
                 if result.is_success and result.value:
+                    # FunASR 流式模型返回累积文本，直接使用
                     self.current_transcript = result.value
                     # 发送中间结果给前端
                     await self._send_transcript(result.value, is_final=False)
                     logger.debug(f"ASR interim: {result.value}")
 
-            # ASR 完成，发送最终结果（但不在这里处理 LLM，避免被 timeout 取消）
+            # ASR 完成，发送最终结果
             if self.current_transcript and len(self.current_transcript.strip()) > 0:
                 logger.info(f"ASR final: {self.current_transcript}")
                 await self._send_transcript(self.current_transcript, is_final=True)
@@ -460,6 +468,11 @@ class SimpleSalesHandler(BaseWebSocketHandler):
 
     async def _process_user_text(self, text: str):
         """Process user text: generate LLM response and TTS"""
+
+        # Critical Fix #2: 递增请求ID
+        self.current_request_id += 1
+        current_req_id = self.current_request_id
+        logger.info(f"[REQUEST {current_req_id}] Processing user text: {text[:50]}...")
 
         # 去重检查：相同文本在短时间内重复发送
         current_time = time.time()
@@ -508,8 +521,11 @@ class SimpleSalesHandler(BaseWebSocketHandler):
             self.turn_count += 1
 
             # Send TTS response
+            # Critical Fix #2: 为这个TTS流生成新的stream_id
+            self.current_stream_id = str(self.uuid.uuid4())
+            logger.info(f"[REQUEST {current_req_id}] Starting TTS with stream_id={self.current_stream_id}")
             logger.info(f"Sending TTS response for: {response_text[:30]}...")
-            await self._send_tts_response(response_text)
+            await self._send_tts_response(response_text, current_req_id)
         else:
             # Fallback response
             fallback = self._get_fallback_response()
@@ -520,7 +536,9 @@ class SimpleSalesHandler(BaseWebSocketHandler):
                 "content": fallback
             })
 
-            await self._send_tts_response(fallback)
+            # Critical Fix #2: 为fallback也生成stream_id
+            self.current_stream_id = str(self.uuid.uuid4())
+            await self._send_tts_response(fallback, current_req_id)
 
         # Back to listening
         await self._send_status("listening")
@@ -619,7 +637,10 @@ class SimpleSalesHandler(BaseWebSocketHandler):
         })
 
         # Send as TTS
-        await self._send_tts_response(greeting)
+        # Critical Fix #2: greeting也需要stream_id和request_id
+        self.current_request_id += 1
+        self.current_stream_id = str(self.uuid.uuid4())
+        await self._send_tts_response(greeting, self.current_request_id)
         self.turn_count += 1
 
         # Update status to listening
@@ -637,8 +658,12 @@ class SimpleSalesHandler(BaseWebSocketHandler):
             }
         })
 
-    async def _send_tts_response(self, text: str):
-        """Send TTS audio response to client using Edge TTS"""
+    async def _send_tts_response(self, text: str, request_id: int):
+        """
+        Send TTS audio response to client using Edge TTS
+        
+        Critical Fix #2: 添加stream_id和request_id防止消息乱序
+        """
         tts_service = get_tts_service()
 
         try:
@@ -662,9 +687,12 @@ class SimpleSalesHandler(BaseWebSocketHandler):
 
                 logger.info(f"TTS generated {len(audio_data)} bytes for: {text[:30]}...")
 
+                # Critical Fix #2: 添加stream_id和request_id到TTS消息
                 await self.manager.send_json(self.websocket, {
                     "type": "tts_audio",
                     "timestamp": datetime.utcnow().isoformat(),
+                    "stream_id": self.current_stream_id,  # 添加stream_id
+                    "request_id": request_id,  # 添加request_id
                     "data": {
                         "text": text,
                         "audio": audio_base64,
@@ -677,6 +705,8 @@ class SimpleSalesHandler(BaseWebSocketHandler):
                 await self.manager.send_json(self.websocket, {
                     "type": "tts_audio",
                     "timestamp": datetime.utcnow().isoformat(),
+                    "stream_id": self.current_stream_id,  # 添加stream_id
+                    "request_id": request_id,  # 添加request_id
                     "data": {
                         "text": text,
                         "audio": "",
@@ -690,6 +720,8 @@ class SimpleSalesHandler(BaseWebSocketHandler):
             await self.manager.send_json(self.websocket, {
                 "type": "tts_audio",
                 "timestamp": datetime.utcnow().isoformat(),
+                "stream_id": self.current_stream_id,  # 添加stream_id
+                "request_id": request_id,  # 添加request_id
                 "data": {
                     "text": text,
                     "audio": "",

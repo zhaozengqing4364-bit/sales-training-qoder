@@ -220,25 +220,22 @@ async def get_dashboard_stats(
             
             # Calculate percentile (simplified: based on all completed sessions)
             all_scores_stmt = select(
-                func.count().label("total"),
-                func.sum(
-                    func.cast(
-                        (func.coalesce(PracticeSession.logic_score, 0) +
-                         func.coalesce(PracticeSession.accuracy_score, 0) +
-                         func.coalesce(PracticeSession.completeness_score, 0)) / 3 < last_score,
-                        type_=func.INTEGER
-                    )
-                ).label("below")
+                (func.coalesce(PracticeSession.logic_score, 0) +
+                 func.coalesce(PracticeSession.accuracy_score, 0) +
+                 func.coalesce(PracticeSession.completeness_score, 0)) / 3
             ).where(
                 PracticeSession.status == "completed"
             )
             
             scores_result = await db.execute(all_scores_stmt)
-            scores_row = scores_result.one()
+            all_scores = [row[0] for row in scores_result.all() if row[0] is not None]
             
-            total_sessions = scores_row.total or 1
-            below_count = scores_row.below or 0
-            percentile = int((below_count / total_sessions) * 100) if total_sessions > 0 else 50
+            if all_scores:
+                below_count = sum(1 for s in all_scores if s < last_score)
+                total_sessions = len(all_scores)
+                percentile = int((below_count / total_sessions) * 100) if total_sessions > 0 else 50
+            else:
+                percentile = 50
             
             last_session_info = LastSession(
                 score=last_score,

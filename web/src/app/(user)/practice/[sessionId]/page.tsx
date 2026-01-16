@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
-import { Mic, Square, FileText, ArrowLeft, AlertCircle, Wifi, WifiOff, Play } from "lucide-react";
+import { Mic, Square, FileText, ArrowLeft, AlertCircle, Wifi, WifiOff, Play, MicOff } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ChatBubble } from "@/components/ui/chat-bubble";
 import { AudioVisualizer } from "@/components/ui/audio-visualizer";
@@ -24,6 +24,25 @@ export default function PracticeSessionPage() {
     const [isPanelOpen, setIsPanelOpen] = React.useState(false);
     const [sessionTime, setSessionTime] = React.useState(0);
     const messagesEndRef = React.useRef<HTMLDivElement>(null);
+    
+    // 录音模式：'hold' = 按住说话，'toggle' = 点击切换
+    const [recordingMode, setRecordingMode] = React.useState<'hold' | 'toggle'>('hold');
+    // 检测是否为移动端
+    const [isMobile, setIsMobile] = React.useState(false);
+    
+    // 防止快速点击导致多个录音会话 (Critical Fix #1)
+    const [isStartingRecording, setIsStartingRecording] = React.useState(false);
+    const isStartingRef = React.useRef(false);
+    
+    // 检测移动端
+    React.useEffect(() => {
+        const checkMobile = () => {
+            setIsMobile(window.innerWidth < 768 || 'ontouchstart' in window);
+        };
+        checkMobile();
+        window.addEventListener('resize', checkMobile);
+        return () => window.removeEventListener('resize', checkMobile);
+    }, []);
 
     // WebSocket 连接
     const {
@@ -38,6 +57,7 @@ export default function PracticeSessionPage() {
         isPlayingAudio,
         interimTranscript,
         audioUnlocked,
+        isNetworkSlow,
         sendAudio,
         sendAudioEnd,
         sendControl,
@@ -102,9 +122,16 @@ export default function PracticeSessionPage() {
         }
     }, [hasPermission, requestPermission]);
 
-    // 统一的录音开始处理 - 包含所有业务逻辑检查
-    const handleStartRecording = React.useCallback(() => {
-        // 业务逻辑检查（按钮的 disabled 已处理连接和权限，这里主要处理 AI 说话状态）
+    // 统一的录音开始处理 - 包含所有业务逻辑检查和防抖
+    // Critical Fix #1: 防止快速点击导致多个录音会话同时运行
+    const handleStartRecording = React.useCallback(async () => {
+        // 防止快速双击 - 使用 ref 进行同步检查
+        if (isStartingRef.current) {
+            console.log('[Recording] Blocked: already starting');
+            return;
+        }
+        
+        // 业务逻辑检查
         if (!isConnected || hasPermission === false) {
             return;
         }
@@ -114,9 +141,21 @@ export default function PracticeSessionPage() {
             return;
         }
         
-        // 解锁音频并开始录音
-        unlockAudio();
-        startRecording();
+        // 设置防抖标志
+        isStartingRef.current = true;
+        setIsStartingRecording(true);
+        
+        try {
+            // 解锁音频并开始录音
+            unlockAudio();
+            await startRecording();
+        } finally {
+            // 延迟重置防抖标志，防止极快的连续点击
+            setTimeout(() => {
+                isStartingRef.current = false;
+                setIsStartingRecording(false);
+            }, 100);
+        }
     }, [isConnected, hasPermission, isRecording, unlockAudio, startRecording]);
 
     // 统一的录音停止处理
@@ -126,8 +165,27 @@ export default function PracticeSessionPage() {
         }
     }, [isRecording, stopRecording]);
 
-    // 空格键按住说话
+    // 点击切换模式的处理函数
+    const handleToggleRecording = React.useCallback(() => {
+        if (!isConnected || hasPermission === false) {
+            return;
+        }
+        
+        if (isRecording) {
+            stopRecording();
+        } else {
+            unlockAudio();
+            startRecording();
+        }
+    }, [isConnected, hasPermission, isRecording, unlockAudio, startRecording, stopRecording]);
+
+    // 空格键按住说话（仅在 hold 模式下生效）
     React.useEffect(() => {
+        // 点击切换模式下不使用空格键
+        if (recordingMode === 'toggle') {
+            return;
+        }
+        
         const handleKeyDown = (e: KeyboardEvent) => {
             // 忽略输入框中的空格
             const target = e.target as HTMLElement;
@@ -161,7 +219,7 @@ export default function PracticeSessionPage() {
             window.removeEventListener("keydown", handleKeyDown);
             window.removeEventListener("keyup", handleKeyUp);
         };
-    }, [handleStartRecording, handleStopRecording]);
+    }, [handleStartRecording, handleStopRecording, recordingMode]);
 
     const handleEndSession = () => {
         sendControl("end");
@@ -380,6 +438,14 @@ export default function PracticeSessionPage() {
                     </div>
                 )}
 
+                {/* 网络慢提示 */}
+                {isNetworkSlow && (
+                    <div className="mx-4 mt-4 p-3 bg-amber-50 border border-amber-100 rounded-lg flex items-center gap-2 text-sm text-amber-600">
+                        <AlertCircle className="w-4 h-4" />
+                        网络较慢，部分语音可能丢失，请检查网络连接
+                    </div>
+                )}
+
                 {/* 聊天列表 */}
                 <div className="flex-1 overflow-y-auto p-4 md:p-6 pb-[220px] md:pb-[200px]">
                     <div className="max-w-3xl mx-auto">
@@ -459,18 +525,39 @@ export default function PracticeSessionPage() {
                                         ? "bg-red-500 hover:bg-red-600 scale-110"
                                         : "bg-indigo-600 hover:bg-indigo-700"
                                 )}
-                                onMouseDown={handleStartRecording}
-                                onMouseUp={handleStopRecording}
-                                onMouseLeave={handleStopRecording}
-                                onTouchStart={handleStartRecording}
-                                onTouchEnd={handleStopRecording}
+                                // 根据模式选择不同的事件处理
+                                {...(recordingMode === 'toggle' 
+                                    ? { onClick: handleToggleRecording }
+                                    : {
+                                        onMouseDown: handleStartRecording,
+                                        onMouseUp: handleStopRecording,
+                                        onMouseLeave: handleStopRecording,
+                                        onTouchStart: handleStartRecording,
+                                        onTouchEnd: handleStopRecording,
+                                    }
+                                )}
                             >
-                                <Mic className={cn("w-6 h-6 md:w-8 md:h-8", isRecording && "animate-pulse")} />
+                                {isRecording ? (
+                                    <MicOff className="w-6 h-6 md:w-8 md:h-8 animate-pulse" />
+                                ) : (
+                                    <Mic className="w-6 h-6 md:w-8 md:h-8" />
+                                )}
                             </Button>
 
+                            {/* 桌面端：空格键提示 */}
                             <div className="hidden md:block absolute right-0 text-xs text-slate-400">
-                                按住空格键也可以说话
+                                {recordingMode === 'hold' ? '按住空格键也可以说话' : '点击切换录音'}
                             </div>
+                            
+                            {/* 移动端：模式切换按钮 */}
+                            <Button
+                                variant="ghost"
+                                size="sm"
+                                className="md:hidden absolute right-0 text-xs text-slate-500"
+                                onClick={() => setRecordingMode(prev => prev === 'hold' ? 'toggle' : 'hold')}
+                            >
+                                {recordingMode === 'hold' ? '切换点击模式' : '切换按住模式'}
+                            </Button>
                         </div>
 
                         <p className="text-xs text-slate-400 font-medium">
@@ -481,8 +568,8 @@ export default function PracticeSessionPage() {
                                 : isPlayingAudio
                                 ? "AI 正在说话..."
                                 : isRecording
-                                ? "正在录音..."
-                                : "按住说话 / 松开发送"}
+                                ? recordingMode === 'toggle' ? "点击停止录音" : "正在录音..."
+                                : recordingMode === 'toggle' ? "点击开始说话" : "按住说话 / 松开发送"}
                         </p>
                     </div>
                 </div>

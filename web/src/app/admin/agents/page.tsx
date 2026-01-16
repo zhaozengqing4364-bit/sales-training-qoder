@@ -47,27 +47,27 @@ export default function AgentsPage() {
     const [agents, setAgents] = useState<AdminAgent[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
-    
+
     // Filter & Search States
     const [searchQuery, setSearchQuery] = useState("");
     const [statusFilter, setStatusFilter] = useState("all");
     const [page, setPage] = useState(1);
     const [isFilterOpen, setIsFilterOpen] = useState(false);
-    
+
     // Create Dialog States
     const [isCreateOpen, setIsCreateOpen] = useState(false);
     const [newAgentName, setNewAgentName] = useState("");
     const [newAgentDescription, setNewAgentDescription] = useState("");
     const [newAgentCategory, setNewAgentCategory] = useState("sales");
     const [isCreating, setIsCreating] = useState(false);
-    
+
     // Delete Confirm Dialog
     const [deleteTarget, setDeleteTarget] = useState<AdminAgent | null>(null);
     const [isDeleting, setIsDeleting] = useState(false);
-    
+
     // Status dropdown
     const [statusDropdownId, setStatusDropdownId] = useState<string | null>(null);
-    
+
     // Close dropdown when clicking outside
     useEffect(() => {
         const handleClickOutside = () => setStatusDropdownId(null);
@@ -87,7 +87,7 @@ export default function AgentsPage() {
                 page: page,
                 page_size: 10
             });
-            setAgents(data);
+            setAgents(data.items || []);
         } catch (err) {
             console.error("Failed to load agents:", err);
             setError(err instanceof Error ? err.message : "加载失败");
@@ -99,7 +99,7 @@ export default function AgentsPage() {
 
     useEffect(() => {
         loadData();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+        // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [page, statusFilter, searchQuery]);
 
     const handleCreate = async () => {
@@ -107,16 +107,16 @@ export default function AgentsPage() {
             toast.error("请输入智能体名称");
             return;
         }
-        
+
         setIsCreating(true);
-        
+
         try {
             await api.admin.createAgent({
                 name: newAgentName,
                 description: newAgentDescription || undefined,
                 category: newAgentCategory
             });
-            
+
             setIsCreateOpen(false);
             setNewAgentName("");
             setNewAgentDescription("");
@@ -133,7 +133,7 @@ export default function AgentsPage() {
 
     const handleDelete = async () => {
         if (!deleteTarget) return;
-        
+
         setIsDeleting(true);
         try {
             await api.admin.deleteAgent(deleteTarget.id);
@@ -153,7 +153,7 @@ export default function AgentsPage() {
             setStatusDropdownId(null);
             return;
         }
-        
+
         try {
             if (newStatus === "published") {
                 await api.admin.publishAgent(agent.id);
@@ -191,7 +191,7 @@ export default function AgentsPage() {
                 onConfirm={handleDelete}
                 isLoading={isDeleting}
             />
-            
+
             {/* Header */}
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div>
@@ -201,7 +201,7 @@ export default function AgentsPage() {
                 <div className="flex gap-3">
                     <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
                         <DialogTrigger asChild>
-                            <Button 
+                            <Button
                                 type="button"
                                 className="rounded-full bg-slate-900 hover:bg-slate-800 text-white shadow-lg shadow-slate-900/20"
                             >
@@ -216,8 +216,8 @@ export default function AgentsPage() {
                             <div className="py-6 space-y-4">
                                 <div className="space-y-2">
                                     <label className="text-xs font-bold text-slate-500 uppercase">智能体名称</label>
-                                    <input 
-                                        className="w-full h-10 rounded-lg border border-slate-200 px-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none" 
+                                    <input
+                                        className="w-full h-10 rounded-lg border border-slate-200 px-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
                                         placeholder="例如：销售教练"
                                         value={newAgentName}
                                         onChange={(e) => setNewAgentName(e.target.value)}
@@ -225,7 +225,7 @@ export default function AgentsPage() {
                                 </div>
                                 <div className="space-y-2">
                                     <label className="text-xs font-bold text-slate-500 uppercase">类别</label>
-                                    <select 
+                                    <select
                                         className="w-full h-10 rounded-lg border border-slate-200 px-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none bg-white"
                                         value={newAgentCategory}
                                         onChange={(e) => setNewAgentCategory(e.target.value)}
@@ -238,8 +238,8 @@ export default function AgentsPage() {
                                 </div>
                                 <div className="space-y-2">
                                     <label className="text-xs font-bold text-slate-500 uppercase">描述</label>
-                                    <textarea 
-                                        className="w-full h-24 rounded-lg border border-slate-200 p-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none resize-none" 
+                                    <textarea
+                                        className="w-full h-24 rounded-lg border border-slate-200 p-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none resize-none"
                                         placeholder="描述该智能体的功能..."
                                         value={newAgentDescription}
                                         onChange={(e) => setNewAgentDescription(e.target.value)}
@@ -247,7 +247,7 @@ export default function AgentsPage() {
                                 </div>
                             </div>
                             <DialogFooter>
-                                <Button 
+                                <Button
                                     type="button"
                                     variant="ghost"
                                     className="rounded-full"
@@ -255,7 +255,7 @@ export default function AgentsPage() {
                                 >
                                     取消
                                 </Button>
-                                <Button 
+                                <Button
                                     type="button"
                                     className="rounded-full bg-slate-900 text-white"
                                     onClick={handleCreate}
@@ -296,22 +296,22 @@ export default function AgentsPage() {
                                 <div>
                                     <label className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 block">状态</label>
                                     <div className="flex flex-wrap gap-2">
-                                        <Badge 
-                                            variant={statusFilter === 'all' ? 'blue' : 'secondary'} 
+                                        <Badge
+                                            variant={statusFilter === 'all' ? 'blue' : 'secondary'}
                                             className="cursor-pointer"
                                             onClick={() => setStatusFilter('all')}
                                         >
                                             全部
                                         </Badge>
-                                        <Badge 
-                                            variant={statusFilter === 'published' ? 'blue' : 'secondary'} 
+                                        <Badge
+                                            variant={statusFilter === 'published' ? 'blue' : 'secondary'}
                                             className="cursor-pointer"
                                             onClick={() => setStatusFilter('published')}
                                         >
                                             已发布
                                         </Badge>
-                                        <Badge 
-                                            variant={statusFilter === 'draft' ? 'blue' : 'secondary'} 
+                                        <Badge
+                                            variant={statusFilter === 'draft' ? 'blue' : 'secondary'}
                                             className="cursor-pointer"
                                             onClick={() => setStatusFilter('draft')}
                                         >
@@ -379,7 +379,7 @@ export default function AgentsPage() {
                                     },
                                     {
                                         label: "角色数",
-                                        value: agent.role_count
+                                        value: agent.persona_count || 0
                                     }
                                 ]}
                                 actions={
@@ -389,10 +389,10 @@ export default function AgentsPage() {
                                                 <Edit2 className="w-4 h-4" />
                                             </Button>
                                         </Link>
-                                        <Button 
-                                            onClick={() => setDeleteTarget(agent)} 
-                                            variant="ghost" 
-                                            size="icon" 
+                                        <Button
+                                            onClick={() => setDeleteTarget(agent)}
+                                            variant="ghost"
+                                            size="icon"
                                             className="h-8 w-8 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-full"
                                         >
                                             <Trash2 className="w-4 h-4" />
@@ -463,7 +463,7 @@ export default function AgentsPage() {
                                             </div>
                                         </td>
                                         <td className="px-6 py-4 font-medium text-slate-700">
-                                            {agent.role_count}
+                                            {agent.persona_count || 0}
                                         </td>
                                         <td className="px-6 py-4 font-medium text-slate-700">
                                             {agent.usage_count}
@@ -475,10 +475,10 @@ export default function AgentsPage() {
                                                         <Edit2 className="w-4 h-4" />
                                                     </Button>
                                                 </Link>
-                                                <Button 
-                                                    onClick={() => setDeleteTarget(agent)} 
-                                                    variant="ghost" 
-                                                    size="icon" 
+                                                <Button
+                                                    onClick={() => setDeleteTarget(agent)}
+                                                    variant="ghost"
+                                                    size="icon"
                                                     className="h-8 w-8 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-full"
                                                 >
                                                     <Trash2 className="w-4 h-4" />
@@ -491,22 +491,22 @@ export default function AgentsPage() {
                         </tbody>
                     </table>
                 </div>
-                 {/* Pagination */}
-                 <div className="px-6 py-4 border-t border-slate-100 flex items-center justify-between">
+                {/* Pagination */}
+                <div className="px-6 py-4 border-t border-slate-100 flex items-center justify-between">
                     <span className="text-xs text-slate-400 font-medium">显示 {agents.length > 0 ? `${(page - 1) * 10 + 1}-${(page - 1) * 10 + agents.length}` : '0'} 个智能体</span>
                     <div className="flex gap-2">
-                        <Button 
-                            variant="outline" 
-                            size="sm" 
-                            className="h-8 text-xs rounded-full" 
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-8 text-xs rounded-full"
                             disabled={page === 1}
                             onClick={() => setPage(p => p - 1)}
                         >
                             上一页
                         </Button>
-                        <Button 
-                            variant="outline" 
-                            size="sm" 
+                        <Button
+                            variant="outline"
+                            size="sm"
                             className="h-8 text-xs rounded-full"
                             onClick={() => setPage(p => p + 1)}
                             disabled={agents.length < 10}
