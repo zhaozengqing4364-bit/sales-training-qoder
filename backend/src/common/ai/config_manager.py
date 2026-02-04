@@ -192,13 +192,14 @@ class ConfigManager:
             Dict with config values or None
         """
         if model_type == ModelType.LLM:
-            api_key = os.getenv("OPENAI_API_KEY")
+            # Support both LLM_API_KEY (new) and OPENAI_API_KEY (legacy) for backward compatibility
+            api_key = os.getenv("LLM_API_KEY") or os.getenv("OPENAI_API_KEY")
             if api_key:
                 return {
-                    "provider": "openai",
-                    "base_url": os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1"),
+                    "provider": os.getenv("LLM_PROVIDER", "openai"),
+                    "base_url": os.getenv("LLM_BASE_URL") or os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1"),
                     "api_key": api_key,
-                    "model_name": os.getenv("OPENAI_MODEL", "gpt-4o"),
+                    "model_name": os.getenv("LLM_MODEL") or os.getenv("OPENAI_MODEL", "gpt-4o"),
                     "extra_config": {
                         "temperature": float(os.getenv("LLM_TEMPERATURE", "0.7")),
                         "timeout": float(os.getenv("LLM_TIMEOUT", "10.0")),
