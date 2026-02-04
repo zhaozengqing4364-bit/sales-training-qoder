@@ -95,7 +95,10 @@ class TestKeywordTrigger:
 
     def test_case_insensitive(self):
         """Test keyword matching is case insensitive"""
-        trigger = KeywordTrigger(keywords=["Price", "OBJECTION"])
+        trigger = KeywordTrigger(
+            keywords=["Price", "OBJECTION"],
+            cooldown_turns=0
+        )
 
         context = TriggerContext(
             session_id="test",

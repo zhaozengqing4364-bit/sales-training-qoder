@@ -38,19 +38,20 @@ class TestTurnCountTrigger:
         """Test cooldown prevents premature triggers"""
         trigger = TurnCountTrigger(turn_interval=5, cooldown_turns=3)
 
-        # First trigger at turn 5
+        # First trigger at turn 5 (cooldown of 3 turns, 0 turns since last trigger)
+        # Since this is the first trigger, we need turns_since_last_trigger >= 3
         context = TriggerContext(
             session_id="test",
             turn_count=5,
             messages=[],
-            turns_since_last_trigger=0
+            turns_since_last_trigger=3
         )
         assert trigger.should_trigger(context) is True
 
         # Record trigger
         trigger.record_trigger(5)
 
-        # Should not trigger at turn 10 (only 5 turns since last trigger)
+        # Should trigger at turn 10 with sufficient cooldown (5 turns since last)
         context.turn_count = 10
         context.turns_since_last_trigger = 5
         assert trigger.should_trigger(context) is True  # 5 >= 3
