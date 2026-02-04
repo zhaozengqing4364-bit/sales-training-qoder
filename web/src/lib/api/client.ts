@@ -25,6 +25,15 @@ import {
     UserDetailStats,
     UserSessionsResponse,
     UserProgressResponse,
+    PromptTemplate,
+    PromptTemplateCreate,
+    PromptTemplateUpdate,
+    ScenarioPrompt,
+    ScenarioPromptCreate,
+    PromptRenderRequest,
+    PromptRenderResponse,
+    ComprehensiveReport,
+    RealtimeEvaluationFeedback,
 } from "./types";
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
@@ -645,6 +654,91 @@ export const api = {
                 method: "POST",
                 body: JSON.stringify(data),
             });
+        },
+
+        // Prompt Templates (B10)
+        getPromptTemplates: async (params?: { prompt_type?: string; category?: string; is_active?: boolean }) => {
+            const queryParams = new URLSearchParams();
+            if (params?.prompt_type) queryParams.append("prompt_type", params.prompt_type);
+            if (params?.category) queryParams.append("category", params.category);
+            if (params?.is_active !== undefined) queryParams.append("is_active", String(params.is_active));
+            const query = queryParams.toString() ? `?${queryParams.toString()}` : "";
+            return apiFetch<PromptTemplate[]>(`/prompt-templates${query}`);
+        },
+
+        getPromptTemplate: async (id: string) => {
+            return apiFetch<PromptTemplate>(`/prompt-templates/${id}`);
+        },
+
+        createPromptTemplate: async (data: PromptTemplateCreate) => {
+            return apiFetch<PromptTemplate>("/prompt-templates", {
+                method: "POST",
+                body: JSON.stringify(data),
+            });
+        },
+
+        updatePromptTemplate: async (id: string, data: PromptTemplateUpdate) => {
+            return apiFetch<PromptTemplate>(`/prompt-templates/${id}`, {
+                method: "PUT",
+                body: JSON.stringify(data),
+            });
+        },
+
+        deletePromptTemplate: async (id: string) => {
+            return apiFetch<void>(`/prompt-templates/${id}`, {
+                method: "DELETE",
+            });
+        },
+
+        renderPromptTemplate: async (id: string, variables: Record<string, any>) => {
+            const request: PromptRenderRequest = { template_id: id, variables };
+            return apiFetch<PromptRenderResponse>(`/prompt-templates/${id}/render`, {
+                method: "POST",
+                body: JSON.stringify(request),
+            });
+        },
+
+        setDefaultPromptTemplate: async (id: string, promptType: string) => {
+            return apiFetch<PromptTemplate>(`/prompt-templates/${id}/set-default?prompt_type=${promptType}`, {
+                method: "POST",
+            });
+        },
+
+        getPromptTemplateForScenario: async (scenarioType: string, promptType: string, scenarioId?: string) => {
+            const queryParams = new URLSearchParams({ prompt_type: promptType });
+            if (scenarioId) queryParams.append("scenario_id", scenarioId);
+            return apiFetch<PromptTemplate | null>(`/prompt-templates/by-scenario/${scenarioType}?${queryParams.toString()}`);
+        },
+
+        // Scenario Prompts
+        getScenarioPrompts: async (params?: { scenario_type?: string; prompt_type?: string }) => {
+            const queryParams = new URLSearchParams();
+            if (params?.scenario_type) queryParams.append("scenario_type", params.scenario_type);
+            if (params?.prompt_type) queryParams.append("prompt_type", params.prompt_type);
+            const query = queryParams.toString() ? `?${queryParams.toString()}` : "";
+            return apiFetch<ScenarioPrompt[]>(`/scenario-prompts${query}`);
+        },
+
+        createScenarioPrompt: async (data: ScenarioPromptCreate) => {
+            return apiFetch<ScenarioPrompt>("/scenario-prompts", {
+                method: "POST",
+                body: JSON.stringify(data),
+            });
+        },
+
+        deleteScenarioPrompt: async (id: string) => {
+            return apiFetch<void>(`/scenario-prompts/${id}`, {
+                method: "DELETE",
+            });
+        },
+
+        // Staged Evaluation & Comprehensive Report (C6-C7)
+        getComprehensiveReport: async (sessionId: string) => {
+            return apiFetch<ComprehensiveReport>(`/evaluation/sessions/${sessionId}/report`);
+        },
+
+        getRealtimeEvaluationFeedback: async (sessionId: string) => {
+            return apiFetch<RealtimeEvaluationFeedback[]>(`/evaluation/sessions/${sessionId}/feedback`);
         },
     },
 };

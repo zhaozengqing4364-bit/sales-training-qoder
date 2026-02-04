@@ -314,3 +314,135 @@ export interface UserProgressResponse {
     total_data_points: number;
 }
 
+// Prompt Template types (B10)
+export type PromptType =
+    | "summary"
+    | "system"
+    | "system_prompt"
+    | "extraction"
+    | "scoring"
+    | "stage"
+    | "fuzzy_detection"
+    | "interruption"
+    | "tracking"
+    | "welcome"
+    | "evaluation"
+    | "report";
+
+export interface PromptTemplate {
+    id: string;
+    name: string;
+    prompt_type: PromptType;
+    category: string;
+    template: string;
+    variables: string[];
+    is_active: boolean;
+    is_default: boolean;
+    is_system: boolean;
+    created_at: string;
+    updated_at: string;
+}
+
+export interface PromptTemplateCreate {
+    name: string;
+    prompt_type: PromptType;
+    category?: string;
+    template: string;
+    variables?: string[];
+    is_active?: boolean;
+    is_default?: boolean;
+}
+
+export interface PromptTemplateUpdate {
+    name?: string;
+    prompt_type?: PromptType;
+    category?: string;
+    template?: string;
+    variables?: string[];
+    is_active?: boolean;
+    is_default?: boolean;
+}
+
+export interface ScenarioPrompt {
+    id: string;
+    scenario_type: string;
+    scenario_id?: string;
+    prompt_type: string;
+    template_id: string;
+    template?: PromptTemplate;
+    is_active: boolean;
+    created_at: string;
+}
+
+export interface ScenarioPromptCreate {
+    scenario_type: string;
+    scenario_id?: string;
+    prompt_type: string;
+    template_id: string;
+    is_active?: boolean;
+}
+
+export interface PromptRenderRequest {
+    template_id: string;
+    variables: Record<string, any>;
+}
+
+export interface PromptRenderResponse {
+    template_id: string;
+    rendered: string;
+    missing_variables: string[];
+    extra_variables: string[];
+}
+
+// Staged Evaluation types (C6-C7)
+export interface StageEvaluationResult {
+    stage_number: number;
+    start_turn: number;
+    end_turn: number;
+    timestamp: string;
+    scores: Record<string, number>;
+    strengths: string[];
+    weaknesses: string[];
+    suggestions: string[];
+    summary: string;
+}
+
+export interface DimensionScore {
+    name: string;
+    score: number;
+    weight: number;
+    description: string;
+}
+
+export interface StageSummary {
+    stage_number: number;
+    start_turn: number;
+    end_turn: number;
+    average_score: number;
+    key_points: string[];
+    summary: string;
+}
+
+export interface ComprehensiveReport {
+    session_id: string;
+    generated_at: string;
+    overall_score: number;
+    dimension_scores: DimensionScore[];
+    stage_summaries: StageSummary[];
+    key_strengths: string[];
+    key_improvements: string[];
+    detailed_feedback: string;
+    recommendations: string[];
+    comparison_to_baseline?: Record<string, any>;
+}
+
+// Real-time evaluation feedback (C6)
+export interface RealtimeEvaluationFeedback {
+    stage_number: number;
+    timestamp: string;
+    scores: Record<string, number>;
+    feedback: string;
+    suggestions: string[];
+    trigger_type: "turn_count" | "time_interval" | "keyword" | "stage_transition";
+}
+
