@@ -136,6 +136,14 @@ backend/src/
 │   ├── api/                   # 场景管理 API
 │   ├── services/              # BotService, ContextManager
 │   └── websocket/             # 销售对练 WebSocket
+├── prompt_templates/          # 提示词模板系统 (B1-B6)
+│   ├── models.py              # PromptTemplate, PromptType 模型
+│   ├── service.py             # PromptTemplateService 业务逻辑
+│   ├── loader.py              # 模板加载与缓存
+│   └── renderer.py            # Jinja2 模板渲染
+├── evaluation/                # 分阶段评估系统 (C1-C3)
+│   ├── services/              # StagedEvaluationService
+│   └── triggers/              # 触发器 (keyword, time_interval, turn_count, stage_transition)
 ├── admin/                     # 管理后台 API
 │   └── api/                   # users, analytics, model_configs
 ├── common/                    # 共享模块 (不依赖业务)
@@ -243,6 +251,79 @@ docs/
 ❌ 猜测 API 结构              → 先查 docs/api-contract/
 ❌ 使用 alert/popup           → 状态指示器优雅降级
 ```
+
+## 新功能模块
+
+### Prompt Template System (提示词模板系统)
+
+基于 Jinja2 的动态提示词管理系统，支持变量注入和模板继承。
+
+**主要组件**:
+- `PromptTemplateService` - 模板 CRUD 和版本管理
+- `PromptTemplateLoader` - 从文件系统/数据库加载模板
+- `PromptRenderer` - Jinja2 渲染与变量注入
+
+**Prompt 类型** (`PromptType`):
+```python
+- SYSTEM / SYSTEM_PROMPT  # 系统提示词
+- SUMMARY                 # 对话总结
+- EXTRACTION              # 信息提取
+- SCORING                 # 评分提示词
+- STAGE                   # 阶段评估
+- EVALUATION              # 综合评估
+- REPORT                  # 报告生成
+- WELCOME                 # 欢迎语
+- INTERRUPTION            # 中断检测
+- TRACKING                # 要点跟踪
+- FUZZY_DETECTION         # 模糊检测
+```
+
+**使用示例**:
+```python
+from prompt_templates.service import PromptTemplateService
+from prompt_templates.renderer import PromptRenderer
+
+# 获取模板
+template = await PromptTemplateService.get_by_type_and_scenario(
+    prompt_type="evaluation",
+    scenario_id="sales_bot"
+)
+
+# 渲染模板
+renderer = PromptRenderer(template)
+rendered = await renderer.render({
+    "conversation_history": messages,
+    "stage_name": "需求挖掘"
+})
+```
+
+### Staged Evaluation System (分阶段评估系统)
+
+基于触发器的对话分阶段评估系统，将长对话划分为多个阶段进行独立评估。
+
+**触发器类型** (`evaluation/triggers/`):
+- `KeywordTrigger` - 关键词匹配触发
+- `TimeIntervalTrigger` - 时间间隔触发
+- `TurnCountTrigger` - 回合数触发
+- `StageTransitionTrigger` - 阶段转换触发
+
+**核心服务**:
+```python
+from evaluation.services.staged_evaluation import StagedEvaluationService
+
+evaluation_service = StagedEvaluationService(db_session)
+
+# 处理新消息，检测是否需要触发阶段评估
+result = await evaluation_service.process_message(
+    session_id=session_id,
+    message=new_message,
+    stage_configs=configs
+)
+```
+
+**数据表**:
+- `staged_evaluation_results` - 各阶段评估结果
+- `comprehensive_reports` - 综合评估报告
 
 ## 核心架构模式
 
@@ -357,6 +438,9 @@ const agents = await api.admin.getAgents({ page: 1, page_size: 20 });
 | 新页面/前端功能 | `docs/roadmap/frontend-pages-spec.md` |
 | 后端新 API/能力 | `docs/roadmap/backend-gap-analysis.md` |
 | API 接口规范 | `docs/api-contract/` |
+| 提示词模板系统 | `docs/specs/B-prompt-template-system.md` |
+| 分阶段评估系统 | `docs/specs/C-staged-evaluation-system.md` |
+| 代码审查知识库 | `docs/code-review/knowledge-system-full-analysis.md` |
 
 ## API 契约 (已完成实现)
 
@@ -409,6 +493,24 @@ const agents = await api.admin.getAgents({ page: 1, page_size: 20 });
 | ASR 转录超时 | 模型未下载/网络问题 | 首次运行会自动下载模型，请耐心等待 |
 | TTS 无声音 | 浏览器自动播放策略 | 确保用户已与页面交互（点击/触摸） |
 | 数据库连接失败 | SQLite 文件权限问题 | 检查 `backend/data/` 目录权限 |
+
+## 最近更新
+
+### 2026-02-04
+- **C1-C3**: 实现分阶段评估系统 (Staged Evaluation System)
+  - 触发器系统：关键词、时间间隔、回合数、阶段转换
+  - 阶段评估服务与数据模型
+  - 数据表：`staged_evaluation_results`, `comprehensive_reports`
+
+### 2026-02-03
+- **B1-B6**: 实现提示词模板系统 (Prompt Template System)
+  - Jinja2 模板渲染引擎
+  - 模板版本管理与热重载
+  - PromptType 分类系统
+
+### 2026-01-15
+- 添加数据分析优化和语音训练流式功能
+- 修复 .gitignore 错误忽略前端 lib 目录
 
 <!-- MANUAL ADDITIONS START -->
 <!-- 手动添加的内容放在这里，不会被自动更新覆盖 -->
