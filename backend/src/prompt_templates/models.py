@@ -1,0 +1,224 @@
+"""
+Pydantic Models for Prompt Templates
+
+Requirements: B2 - Create Pydantic models for prompt templates
+
+Features:
+- PromptTemplate: Full model with all fields
+- PromptTemplateCreate: Input model for creation with auto variable extraction
+- PromptTemplateUpdate: Input model for partial updates
+- ScenarioPrompt: Link between scenarios and templates
+- PromptType: Enum for prompt type classification
+- Variable extraction from Jinja2 templates
+"""
+
+from __future__ import annotations
+
+import json
+import re
+from datetime import datetime
+from enum import Enum
+from typing import Any, List, Optional
+from uuid import UUID
+
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+
+
+class PromptType(str, Enum):
+    """Prompt type classification."""
+
+    SUMMARY = "summary"
+    SYSTEM = "system"
+    SYSTEM_PROMPT = "system_prompt"
+    EXTRACTION = "extraction"
+    SCORING = "scoring"
+    STAGE = "stage"
+    FUZZY_DETECTION = "fuzzy_detection"
+    INTERRUPTION = "interruption"
+    TRACKING = "tracking"
+    WELCOME = "welcome"
+    EVALUATION = "evaluation"
+    REPORT = "report"
+
+
+class PromptTemplateBase(BaseModel):
+    """Base model for prompt templates."""
+
+    name: str = Field(..., min_length=1, max_length=255, description="Template name")
+    prompt_type: PromptType = Field(..., description="Type of prompt")
+    category: str = Field(
+        default="common", min_length=1, max_length=100, description="Category for grouping"
+    )
+    template: str = Field(..., min_length=1, description="Jinja2 template string")
+    variables: List[str] = Field(
+        default_factory=list, description="Variable names used in template"
+    )
+    is_active: bool = Field(default=True, description="Whether template is active")
+    is_default: bool = Field(default=False, description="Whether this is the default for its type")
+
+
+class PromptTemplateCreate(PromptTemplateBase):
+    """Model for creating a new prompt template."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    @model_validator(mode="after")
+    def extract_variables(self) -> PromptTemplateCreate:
+        """Extract variables from template if not explicitly provided."""
+        if not self.variables and self.template:
+            self.variables = self._extract_variables_from_template(self.template)
+        return self
+
+    @staticmethod
+    def _extract_variables_from_template(template: str) -> List[str]:
+        """
+        Extract Jinja2 variable names from template.
+
+        Supports:
+        - {{ variable }}
+        - {{ variable|filter }}
+        - {{ variable.attribute }}
+
+        Returns:
+            List of unique variable names
+        """
+        # Match {{ variable }} or {{ variable|filter }} or {{ variable.attribute }}
+        pattern = r"\{\{\s*(\w+)(?:\.[\w\[\]]+)?(?:\|[^}]+)?\s*\}\}"
+        matches = re.findall(pattern, template)
+        return list(dict.fromkeys(matches))  # Remove duplicates while preserving order
+
+
+class PromptTemplateUpdate(BaseModel):
+    """Model for updating an existing prompt template (partial update)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: Optional[str] = Field(default=None, min_length=1, max_length=255)
+    prompt_type: Optional[PromptType] = None
+    category: Optional[str] = Field(default=None, min_length=1, max_length=100)
+    template: Optional[str] = None
+    variables: Optional[List[str]] = None
+    is_active: Optional[bool] = None
+    is_default: Optional[bool] = None
+
+    @model_validator(mode="after")
+    def extract_variables_on_template_change(self) -> PromptTemplateUpdate:
+        """Re-extract variables if template is updated."""
+        if self.template is not None and self.variables is None:
+            self.variables = PromptTemplateCreate._extract_variables_from_template(self.template)
+        return self
+
+
+class PromptTemplate(PromptTemplateBase):
+    """Full prompt template model (database representation)."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID = Field(..., description="Unique identifier")
+    is_system: bool = Field(default=False, description="Whether this is a system template")
+    created_at: datetime = Field(..., description="Creation timestamp")
+    updated_at: datetime = Field(..., description="Last update timestamp")
+
+    @field_validator("variables", mode="before")
+    @classmethod
+    def validate_variables(cls, v: Any) -> List[str]:
+        """Ensure variables is always a list of strings."""
+        if v is None:
+            return []
+        if isinstance(v, str):
+            # Handle JSON string from database
+            try:
+                parsed = json.loads(v)
+                return parsed if isinstance(parsed, list) else []
+            except json.JSONDecodeError:
+                return []
+        return list(v)
+
+
+class ScenarioPromptBase(BaseModel):
+    """Base model for scenario prompt assignments."""
+
+    scenario_type: str = Field(
+        ..., min_length=1, max_length=50, description="Type of scenario (sales, presentation)"
+    )
+    scenario_id: Optional[str] = Field(
+        default=None, max_length=255, description="Optional specific scenario ID"
+    )
+    prompt_type: str = Field(
+        ..., min_length=1, max_length=50, description="Type of prompt for this assignment"
+    )
+    template_id: UUID = Field(..., description="Reference to prompt template")
+    is_active: bool = Field(default=True, description="Whether this assignment is active")
+
+
+class ScenarioPromptCreate(ScenarioPromptBase):
+    """Model for creating a scenario prompt assignment."""
+
+    model_config = ConfigDict(extra="forbid")
+
+
+class ScenarioPrompt(ScenarioPromptBase):
+    """Full scenario prompt model (database representation)."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID = Field(..., description="Unique identifier")
+    created_at: datetime = Field(..., description="Creation timestamp")
+
+
+class PromptTemplateResponse(BaseModel):
+    """Response model for API (includes template with resolved variables)."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    name: str
+    prompt_type: PromptType
+    category: str
+    template: str
+    variables: List[str]
+    is_active: bool
+    is_default: bool
+    is_system: bool
+    created_at: datetime
+    updated_at: datetime
+
+
+class ScenarioPromptResponse(BaseModel):
+    """Response model for scenario prompt assignments."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: UUID
+    scenario_type: str
+    scenario_id: Optional[str]
+    prompt_type: str
+    template: Optional[PromptTemplateResponse] = None  # Expanded template
+    is_active: bool
+    created_at: datetime
+
+
+class PromptRenderRequest(BaseModel):
+    """Request to render a prompt template with variables."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    template_id: UUID = Field(..., description="Template to render")
+    variables: dict[str, Any] = Field(
+        default_factory=dict, description="Variable values for rendering"
+    )
+
+
+class PromptRenderResponse(BaseModel):
+    """Response with rendered prompt."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    template_id: UUID
+    rendered: str = Field(..., description="Rendered template string")
+    missing_variables: List[str] = Field(
+        default_factory=list, description="Variables that were not provided"
+    )
+    extra_variables: List[str] = Field(
+        default_factory=list, description="Variables provided but not in template"
+    )
