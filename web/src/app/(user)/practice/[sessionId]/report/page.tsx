@@ -1,575 +1,174 @@
 "use client";
 
-import * as React from "react";
-import { useParams, useRouter } from "next/navigation";
-import { GlassCard } from "@/components/ui/glass-card";
+/**
+ * Comprehensive Report Display Page (C7)
+ */
+
+import { useState, useEffect } from "react";
+import { useRouter, useParams } from "next/navigation";
+import { ArrowLeft, CheckCircle, AlertTriangle, Lightbulb, Target, Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import {
-    ArrowLeft,
-    RotateCcw,
-    History,
-    Home,
-    Clock,
-    MessageSquare,
-    TrendingUp,
-    TrendingDown,
-    Minus,
-    ChevronDown,
-    ChevronUp,
-    Play,
-    CheckCircle2,
-    AlertTriangle,
-    Lightbulb,
-    Loader2,
-} from "lucide-react";
-import { cn } from "@/lib/utils";
+import { GlassCard } from "@/components/ui/glass-card";
+import { StatusIndicator } from "@/components/ui/status-indicator";
 import { api } from "@/lib/api/client";
+import { ComprehensiveReport } from "@/lib/api/types";
+import { cn } from "@/lib/utils";
 
-// 类型定义
-interface ScoreDimension {
-    name: string;
-    score: number;
-    trend?: "up" | "down" | "stable";
-}
-
-interface ConversationTurn {
-    id: string;
-    role: "user" | "ai";
-    content: string;
-    timestamp: string;
-    score?: number;
-    feedback?: string;
-}
-
-interface SessionReport {
-    session_id: string;
-    agent_name: string;
-    persona_name: string;
-    duration_seconds: number;
-    total_turns: number;
-    overall_score: number;
-    dimensions: ScoreDimension[];
-    highlights: string[];
-    improvements: string[];
-    suggestions: string[];
-    conversation: ConversationTurn[];
-}
-
-// 雷达图组件
-function RadarChart({ dimensions }: { dimensions: ScoreDimension[] }) {
-    const size = 240;
-    const center = size / 2;
-    const radius = 80;
-    const levels = 5;
-
-    if (dimensions.length < 3) {
-        return (
-            <div className="w-[240px] h-[240px] flex items-center justify-center text-slate-400 text-sm">
-                数据不足
-            </div>
-        );
-    }
-
-    const getPoint = (index: number, value: number) => {
-        const angle = (Math.PI * 2 * index) / dimensions.length - Math.PI / 2;
-        const r = (value / 100) * radius;
-        return {
-            x: center + r * Math.cos(angle),
-            y: center + r * Math.sin(angle),
-        };
-    };
-
-    const gridLevels = Array.from({ length: levels }, (_, i) => {
-        const levelRadius = ((i + 1) / levels) * radius;
-        const points = dimensions.map((_, idx) => {
-            const angle = (Math.PI * 2 * idx) / dimensions.length - Math.PI / 2;
-            return `${center + levelRadius * Math.cos(angle)},${center + levelRadius * Math.sin(angle)}`;
-        });
-        return points.join(" ");
-    });
-
-    const dataPoints = dimensions.map((d, i) => {
-        const point = getPoint(i, d.score);
-        return `${point.x},${point.y}`;
-    }).join(" ");
-
-    const axes = dimensions.map((_, i) => {
-        const angle = (Math.PI * 2 * i) / dimensions.length - Math.PI / 2;
-        return {
-            x2: center + radius * Math.cos(angle),
-            y2: center + radius * Math.sin(angle),
-        };
-    });
-
-    const labels = dimensions.map((d, i) => {
-        const angle = (Math.PI * 2 * i) / dimensions.length - Math.PI / 2;
-        const labelRadius = radius + 30;
-        return {
-            x: center + labelRadius * Math.cos(angle),
-            y: center + labelRadius * Math.sin(angle),
-            name: d.name,
-            score: d.score,
-        };
-    });
-
-    return (
-        <svg width={size} height={size} className="mx-auto">
-            {gridLevels.map((points, i) => (
-                <polygon
-                    key={i}
-                    points={points}
-                    fill="none"
-                    stroke="rgb(226, 232, 240)"
-                    strokeWidth="1"
-                />
-            ))}
-            
-            {axes.map((axis, i) => (
-                <line
-                    key={i}
-                    x1={center}
-                    y1={center}
-                    x2={axis.x2}
-                    y2={axis.y2}
-                    stroke="rgb(226, 232, 240)"
-                    strokeWidth="1"
-                />
-            ))}
-            
-            <polygon
-                points={dataPoints}
-                fill="rgba(99, 102, 241, 0.2)"
-                stroke="rgb(99, 102, 241)"
-                strokeWidth="2"
-                className="transition-all duration-500"
-            />
-            
-            {dimensions.map((d, i) => {
-                const point = getPoint(i, d.score);
-                return (
-                    <circle
-                        key={i}
-                        cx={point.x}
-                        cy={point.y}
-                        r="5"
-                        fill="rgb(99, 102, 241)"
-                        className="transition-all duration-500"
-                    />
-                );
-            })}
-            
-            {labels.map((label, i) => (
-                <g key={i}>
-                    <text
-                        x={label.x}
-                        y={label.y - 6}
-                        textAnchor="middle"
-                        dominantBaseline="middle"
-                        className="text-[11px] fill-slate-700 font-medium"
-                    >
-                        {label.name}
-                    </text>
-                    <text
-                        x={label.x}
-                        y={label.y + 8}
-                        textAnchor="middle"
-                        dominantBaseline="middle"
-                        className="text-[10px] fill-indigo-600 font-bold"
-                    >
-                        {label.score}
-                    </text>
-                </g>
-            ))}
-        </svg>
-    );
-}
-
-// 趋势图标
-function TrendIcon({ trend }: { trend?: "up" | "down" | "stable" }) {
-    if (trend === "up") return <TrendingUp className="w-4 h-4 text-emerald-500" />;
-    if (trend === "down") return <TrendingDown className="w-4 h-4 text-red-500" />;
-    return <Minus className="w-4 h-4 text-slate-400" />;
-}
-
-// 评分等级
-function getScoreLevel(score: number): { label: string; color: string } {
-    if (score >= 90) return { label: "优秀", color: "bg-emerald-50 text-emerald-600" };
-    if (score >= 80) return { label: "良好", color: "bg-blue-50 text-blue-600" };
-    if (score >= 70) return { label: "中等", color: "bg-amber-50 text-amber-600" };
-    if (score >= 60) return { label: "及格", color: "bg-orange-50 text-orange-600" };
-    return { label: "需改进", color: "bg-red-50 text-red-600" };
-}
-
-export default function PracticeReportPage() {
-    const params = useParams();
+export default function ComprehensiveReportPage() {
     const router = useRouter();
+    const params = useParams();
     const sessionId = params.sessionId as string;
+    const [loading, setLoading] = useState(true);
+    const [report, setReport] = useState<ComprehensiveReport | null>(null);
+    const [error, setError] = useState<string | null>(null);
 
-    const [report, setReport] = React.useState<SessionReport | null>(null);
-    const [loading, setLoading] = React.useState(true);
-    const [error, setError] = React.useState<string | null>(null);
-    const [expandedTurn, setExpandedTurn] = React.useState<string | null>(null);
-
-    // 加载报告数据
-    React.useEffect(() => {
-        async function loadReport() {
-            try {
-                setLoading(true);
-                // 尝试获取增强报告
-                const response = await api.sessions.getEnhancedReport(sessionId);
-                if (response) {
-                    // 转换 API 响应为报告格式
-                    const data = response;
-                    
-                    setReport({
-                        session_id: sessionId,
-                        agent_name: data.agent_name || "AI 教练",
-                        persona_name: data.persona_name || "销售场景",
-                        duration_seconds: data.duration_seconds || 0,
-                        total_turns: data.total_turns || 0,
-                        overall_score: data.overall_score || 0,
-                        dimensions: data.dimension_scores?.map(d => ({
-                            name: d.name,
-                            score: d.score,
-                            trend: undefined,
-                        })) || [
-                            { name: "专业度", score: 75, trend: "up" as const },
-                            { name: "沟通技巧", score: 80, trend: "stable" as const },
-                            { name: "销售流程", score: 70, trend: "up" as const },
-                            { name: "应变能力", score: 65, trend: "down" as const },
-                            { name: "产品知识", score: 85, trend: "up" as const },
-                        ],
-                        highlights: data.strengths?.length > 0 ? data.strengths : [
-                            "产品介绍清晰准确",
-                            "能够有效处理客户异议",
-                        ],
-                        improvements: data.improvements?.length > 0 ? data.improvements : [
-                            "需要更多倾听客户需求",
-                            "价格谈判技巧有待提升",
-                        ],
-                        suggestions: data.suggestions || [
-                            "建议学习 SPIN 销售法",
-                            "多练习处理价格异议的话术",
-                        ],
-                        conversation: [],
-                    });
-                }
-            } catch (err) {
-                console.error("Failed to load report:", err);
-                setError("加载报告失败");
-                // 使用模拟数据
-                setReport({
-                    session_id: sessionId,
-                    agent_name: "销售教练",
-                    persona_name: "挑剔客户",
-                    duration_seconds: 320,
-                    total_turns: 12,
-                    overall_score: 78,
-                    dimensions: [
-                        { name: "专业度", score: 82, trend: "up" },
-                        { name: "沟通技巧", score: 75, trend: "stable" },
-                        { name: "销售流程", score: 80, trend: "up" },
-                        { name: "应变能力", score: 70, trend: "down" },
-                        { name: "产品知识", score: 85, trend: "up" },
-                    ],
-                    highlights: [
-                        "产品介绍清晰准确",
-                        "能够有效处理客户异议",
-                    ],
-                    improvements: [
-                        "需要更多倾听客户需求",
-                        "价格谈判技巧有待提升",
-                    ],
-                    suggestions: [
-                        "建议学习 SPIN 销售法",
-                        "多练习处理价格异议的话术",
-                    ],
-                    conversation: [],
-                });
-            } finally {
-                setLoading(false);
-            }
-        }
+    useEffect(() => {
         loadReport();
     }, [sessionId]);
 
-    const formatDuration = (seconds: number) => {
-        const mins = Math.floor(seconds / 60);
-        const secs = seconds % 60;
-        return `${mins}分${secs}秒`;
+    const loadReport = async () => {
+        try {
+            const data = await api.admin.getComprehensiveReport(sessionId);
+            setReport(data);
+        } catch (err) {
+            setError(err instanceof Error ? err.message : "加载失败");
+        } finally {
+            setLoading(false);
+        }
     };
 
     if (loading) {
         return (
-            <div className="min-h-screen bg-slate-50 flex items-center justify-center">
-                <div className="text-center">
-                    <Loader2 className="w-8 h-8 animate-spin text-indigo-600 mx-auto mb-4" />
-                    <p className="text-slate-500">加载报告中...</p>
-                </div>
+            <div className="container mx-auto px-4 py-12 text-center">
+                <StatusIndicator status="processing" size={32} />
+                <p className="mt-4 text-zinc-500">加载报告中...</p>
             </div>
         );
     }
 
-    if (!report) {
+    if (error || !report) {
         return (
-            <div className="min-h-screen bg-slate-50 flex items-center justify-center">
-                <div className="text-center">
-                    <AlertTriangle className="w-12 h-12 text-amber-500 mx-auto mb-4" />
-                    <p className="text-slate-700 font-medium mb-2">报告不存在</p>
-                    <p className="text-slate-500 text-sm mb-4">{error}</p>
-                    <Button onClick={() => router.push("/")} variant="outline">
-                        返回首页
-                    </Button>
-                </div>
+            <div className="container mx-auto px-4 py-12 text-center">
+                <AlertTriangle className="w-12 h-12 text-amber-500 mx-auto mb-4" />
+                <p className="text-zinc-600">{error || "报告不存在"}</p>
+                <Button variant="outline" onClick={() => router.back()} className="mt-4">返回</Button>
             </div>
         );
     }
 
-    const scoreLevel = getScoreLevel(report.overall_score);
+    const getScoreColor = (score: number) => score >= 80 ? "text-green-600" : score >= 60 ? "text-yellow-600" : "text-red-600";
 
     return (
-        <div className="min-h-screen bg-slate-50">
-            {/* 头部 */}
-            <header className="sticky top-0 z-10 bg-white/80 backdrop-blur-lg border-b border-slate-200/50">
-                <div className="max-w-4xl mx-auto px-4 h-14 flex items-center justify-between">
-                    <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => router.back()}
-                        className="gap-2"
-                    >
-                        <ArrowLeft className="w-4 h-4" />
-                        返回
-                    </Button>
-                    <h1 className="text-base font-semibold text-slate-800">训练报告</h1>
-                    <div className="w-16" />
-                </div>
-            </header>
+        <div className="container mx-auto px-4 py-6 max-w-5xl">
+            <div className="flex items-center justify-between mb-6">
+                <Button variant="ghost" size="sm" onClick={() => router.back()}>
+                    <ArrowLeft className="w-4 h-4 mr-2" />返回
+                </Button>
+                <Button variant="outline" size="sm">
+                    <Download className="w-4 h-4 mr-2" />导出报告
+                </Button>
+            </div>
 
-            <main className="max-w-4xl mx-auto px-4 py-6 space-y-6 pb-24">
-                {/* 总分卡片 */}
-                <GlassCard className="p-6">
-                    <div className="flex flex-col md:flex-row items-center gap-6">
-                        {/* 分数圆环 */}
-                        <div className="relative">
-                            <svg width="140" height="140" className="transform -rotate-90">
-                                <circle
-                                    cx="70"
-                                    cy="70"
-                                    r="60"
-                                    fill="none"
-                                    stroke="rgb(226, 232, 240)"
-                                    strokeWidth="12"
-                                />
-                                <circle
-                                    cx="70"
-                                    cy="70"
-                                    r="60"
-                                    fill="none"
-                                    stroke="rgb(99, 102, 241)"
-                                    strokeWidth="12"
-                                    strokeLinecap="round"
-                                    strokeDasharray={`${(report.overall_score / 100) * 377} 377`}
-                                    className="transition-all duration-1000"
-                                />
-                            </svg>
-                            <div className="absolute inset-0 flex flex-col items-center justify-center">
-                                <span className="text-4xl font-bold text-slate-800">
-                                    {report.overall_score}
-                                </span>
-                                <Badge className={cn("mt-1", scoreLevel.color)}>
-                                    {scoreLevel.label}
-                                </Badge>
-                            </div>
-                        </div>
-
-                        {/* 基本信息 */}
-                        <div className="flex-1 text-center md:text-left">
-                            <h2 className="text-xl font-bold text-slate-800 mb-2">
-                                {report.agent_name} · {report.persona_name}
-                            </h2>
-                            <div className="flex flex-wrap justify-center md:justify-start gap-4 text-sm text-slate-500">
-                                <span className="flex items-center gap-1">
-                                    <Clock className="w-4 h-4" />
-                                    {formatDuration(report.duration_seconds)}
-                                </span>
-                                <span className="flex items-center gap-1">
-                                    <MessageSquare className="w-4 h-4" />
-                                    {report.total_turns} 轮对话
-                                </span>
-                            </div>
-                        </div>
+            <GlassCard className="p-6 mb-6">
+                <div className="text-center">
+                    <div className="inline-flex items-center justify-center w-24 h-24 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 text-white mb-4">
+                        <span className="text-3xl font-bold">{report.overall_score.toFixed(0)}</span>
                     </div>
-                </GlassCard>
+                    <h1 className="text-2xl font-bold text-zinc-900 mb-2">综合评估报告</h1>
+                    <p className={cn("text-lg font-medium", getScoreColor(report.overall_score))}>
+                        {report.overall_score >= 90 ? "优秀" : report.overall_score >= 80 ? "良好" : report.overall_score >= 60 ? "及格" : "待改进"}
+                    </p>
+                </div>
+            </GlassCard>
 
-                {/* 雷达图 + 维度详情 */}
-                <div className="grid md:grid-cols-2 gap-6">
-                    <GlassCard className="p-6">
-                        <h3 className="text-base font-semibold text-slate-800 mb-4">能力雷达图</h3>
-                        <RadarChart dimensions={report.dimensions} />
-                    </GlassCard>
-
-                    <GlassCard className="p-6">
-                        <h3 className="text-base font-semibold text-slate-800 mb-4">维度评分</h3>
-                        <div className="space-y-4">
-                            {report.dimensions.map((dim) => (
-                                <div key={dim.name}>
-                                    <div className="flex items-center justify-between mb-1">
-                                        <span className="text-sm text-slate-600 flex items-center gap-2">
-                                            {dim.name}
-                                            <TrendIcon trend={dim.trend} />
-                                        </span>
-                                        <span className="text-sm font-semibold text-slate-800">
-                                            {dim.score}
-                                        </span>
-                                    </div>
-                                    <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
-                                        <div
-                                            className="h-full bg-indigo-500 rounded-full transition-all duration-500"
-                                            style={{ width: `${dim.score}%` }}
-                                        />
-                                    </div>
-                                </div>
-                            ))}
+            <GlassCard className="p-6 mb-6">
+                <h2 className="text-lg font-semibold text-zinc-900 mb-4">分项评分</h2>
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                    {report.dimension_scores.map((dim) => (
+                        <div key={dim.name} className="text-center">
+                            <div className="relative w-full h-2 bg-zinc-200 rounded-full mb-2">
+                                <div
+                                    className={cn("absolute top-0 left-0 h-full rounded-full",
+                                        dim.score >= 80 ? "bg-green-500" : dim.score >= 60 ? "bg-yellow-500" : "bg-red-500")}
+                                    style={{ width: `${dim.score}%` }}
+                                />
+                            </div>
+                            <p className="text-2xl font-bold text-zinc-900">{dim.score.toFixed(0)}</p>
+                            <p className="text-xs text-zinc-600">{dim.name}</p>
                         </div>
-                    </GlassCard>
+                    ))}
                 </div>
+            </GlassCard>
 
-                {/* 亮点与改进 */}
-                <div className="grid md:grid-cols-2 gap-6">
-                    {/* 亮点 */}
-                    <GlassCard className="p-6">
-                        <h3 className="text-base font-semibold text-slate-800 mb-4 flex items-center gap-2">
-                            <CheckCircle2 className="w-5 h-5 text-emerald-500" />
-                            表现亮点
-                        </h3>
-                        <ul className="space-y-3">
-                            {report.highlights.map((item, idx) => (
-                                <li
-                                    key={idx}
-                                    className="flex items-start gap-2 text-sm text-slate-600"
-                                >
-                                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 mt-2 flex-shrink-0" />
-                                    {item}
-                                </li>
-                            ))}
-                            {report.highlights.length === 0 && (
-                                <li className="text-sm text-slate-400">暂无数据</li>
-                            )}
-                        </ul>
-                    </GlassCard>
-
-                    {/* 改进点 */}
-                    <GlassCard className="p-6">
-                        <h3 className="text-base font-semibold text-slate-800 mb-4 flex items-center gap-2">
-                            <AlertTriangle className="w-5 h-5 text-amber-500" />
-                            待改进
-                        </h3>
-                        <ul className="space-y-3">
-                            {report.improvements.map((item, idx) => (
-                                <li
-                                    key={idx}
-                                    className="flex items-start gap-2 text-sm text-slate-600"
-                                >
-                                    <span className="w-1.5 h-1.5 rounded-full bg-amber-500 mt-2 flex-shrink-0" />
-                                    {item}
-                                </li>
-                            ))}
-                            {report.improvements.length === 0 && (
-                                <li className="text-sm text-slate-400">暂无数据</li>
-                            )}
-                        </ul>
-                    </GlassCard>
-                </div>
-
-                {/* 建议 */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
                 <GlassCard className="p-6">
-                    <h3 className="text-base font-semibold text-slate-800 mb-4 flex items-center gap-2">
-                        <Lightbulb className="w-5 h-5 text-blue-500" />
-                        学习建议
-                    </h3>
-                    <ul className="space-y-3">
-                        {report.suggestions.map((item, idx) => (
-                            <li
-                                key={idx}
-                                className="flex items-start gap-3 p-3 bg-blue-50/50 rounded-xl text-sm text-slate-600"
-                            >
-                                <span className="w-6 h-6 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-xs font-semibold flex-shrink-0">
-                                    {idx + 1}
-                                </span>
-                                {item}
+                    <div className="flex items-center gap-2 mb-4">
+                        <CheckCircle className="w-5 h-5 text-green-500" />
+                        <h3 className="font-semibold text-zinc-900">主要优势</h3>
+                    </div>
+                    <ul className="space-y-2">
+                        {report.key_strengths.map((s, i) => (
+                            <li key={i} className="flex items-start gap-2 text-sm text-zinc-700">
+                                <span className="w-1 h-1 rounded-full bg-green-500 mt-2" />{s}
                             </li>
                         ))}
-                        {report.suggestions.length === 0 && (
-                            <li className="text-sm text-slate-400">暂无建议</li>
-                        )}
                     </ul>
                 </GlassCard>
 
-                {/* 对话回放入口 */}
-                {report.conversation.length > 0 && (
-                    <GlassCard className="p-6">
-                        <div className="flex items-center justify-between mb-4">
-                            <h3 className="text-base font-semibold text-slate-800 flex items-center gap-2">
-                                <Play className="w-5 h-5 text-indigo-500" />
-                                对话回放
-                            </h3>
-                            <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => router.push(`/history/${sessionId}`)}
-                            >
-                                查看完整对话
-                            </Button>
-                        </div>
-                        <div className="space-y-2">
-                            {report.conversation.slice(0, 3).map((turn) => (
-                                <div
-                                    key={turn.id}
-                                    className={cn(
-                                        "p-3 rounded-xl text-sm",
-                                        turn.role === "user"
-                                            ? "bg-indigo-50 ml-8"
-                                            : "bg-slate-100 mr-8"
-                                    )}
-                                >
-                                    <p className="text-slate-600 line-clamp-2">{turn.content}</p>
-                                </div>
-                            ))}
-                        </div>
-                    </GlassCard>
-                )}
-            </main>
-
-            {/* 底部操作栏 */}
-            <div className="fixed bottom-0 left-0 right-0 bg-white/80 backdrop-blur-lg border-t border-slate-200/50 p-4">
-                <div className="max-w-4xl mx-auto flex gap-3">
-                    <Button
-                        variant="outline"
-                        className="flex-1 gap-2"
-                        onClick={() => router.push("/")}
-                    >
-                        <Home className="w-4 h-4" />
-                        返回首页
-                    </Button>
-                    <Button
-                        variant="outline"
-                        className="flex-1 gap-2"
-                        onClick={() => router.push("/history")}
-                    >
-                        <History className="w-4 h-4" />
-                        历史记录
-                    </Button>
-                    <Button
-                        className="flex-1 gap-2 bg-indigo-600 hover:bg-indigo-700"
-                        onClick={() => router.push(`/practice/${sessionId}?retry=true`)}
-                    >
-                        <RotateCcw className="w-4 h-4" />
-                        再练一次
-                    </Button>
-                </div>
+                <GlassCard className="p-6">
+                    <div className="flex items-center gap-2 mb-4">
+                        <AlertTriangle className="w-5 h-5 text-amber-500" />
+                        <h3 className="font-semibold text-zinc-900">改进建议</h3>
+                    </div>
+                    <ul className="space-y-2">
+                        {report.key_improvements.map((imp, i) => (
+                            <li key={i} className="flex items-start gap-2 text-sm text-zinc-700">
+                                <span className="w-1 h-1 rounded-full bg-amber-500 mt-2" />{imp}
+                            </li>
+                        ))}
+                    </ul>
+                </GlassCard>
             </div>
+
+            {report.stage_summaries.length > 0 && (
+                <GlassCard className="p-6 mb-6">
+                    <h2 className="text-lg font-semibold text-zinc-900 mb-4">阶段分析</h2>
+                    <div className="space-y-3">
+                        {report.stage_summaries.map((stage) => (
+                            <div key={stage.stage_number} className="flex items-center gap-4 p-3 bg-zinc-50 rounded-lg">
+                                <div className="w-10 h-10 rounded-full bg-zinc-200 flex items-center justify-center font-semibold text-zinc-700">
+                                    {stage.stage_number}
+                                </div>
+                                <div className="flex-1">
+                                    <div className="flex justify-between mb-1">
+                                        <span className="text-sm font-medium">第{stage.stage_number}阶段</span>
+                                        <span className={cn("text-sm font-semibold", getScoreColor(stage.average_score))}>
+                                            {stage.average_score.toFixed(0)}分
+                                        </span>
+                                    </div>
+                                    <p className="text-xs text-zinc-600">{stage.summary}</p>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </GlassCard>
+            )}
+
+            {report.recommendations.length > 0 && (
+                <GlassCard className="p-6">
+                    <div className="flex items-center gap-2 mb-4">
+                        <Lightbulb className="w-5 h-5 text-amber-500" />
+                        <h2 className="text-lg font-semibold text-zinc-900">练习建议</h2>
+                    </div>
+                    <ul className="space-y-2">
+                        {report.recommendations.map((rec, i) => (
+                            <li key={i} className="flex items-start gap-2 text-sm text-zinc-700">
+                                <Target className="w-4 h-4 text-blue-500 flex-shrink-0 mt-0.5" />{rec}
+                            </li>
+                        ))}
+                    </ul>
+                </GlassCard>
+            )}
         </div>
     );
 }
