@@ -119,7 +119,7 @@ class PromptRenderer:
                 success=False,
                 error_message=f"Template syntax error: {e.message}",
             )
-        except Exception as e:
+        except (RuntimeError, ValueError, TypeError) as e:
             return RenderResult(
                 rendered="",
                 success=False,
@@ -163,7 +163,7 @@ class PromptRenderer:
             return True, None
         except TemplateSyntaxError as e:
             return False, f"Template syntax error at line {e.lineno}: {e.message}"
-        except Exception as e:
+        except (RuntimeError, ValueError, TypeError) as e:
             return False, f"Validation error: {str(e)}"
 
 

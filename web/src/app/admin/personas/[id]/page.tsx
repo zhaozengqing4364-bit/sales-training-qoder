@@ -111,8 +111,8 @@ export default function EditPersonaPage() {
             setFormData({
                 name: personaData.name || "",
                 description: personaData.description || "",
-                category: personaData.category || "customer",
-                difficulty: personaData.difficulty || "medium",
+                category: (personaData.category || "customer") as "customer" | "interviewer" | "coach" | "examiner",
+                difficulty: (personaData.difficulty || "medium") as "easy" | "medium" | "hard",
                 system_prompt: personaData.system_prompt || "",
             });
             
@@ -126,18 +126,18 @@ export default function EditPersonaPage() {
                 });
             }
             
-            setAvailableKnowledgeBases(allKnowledgeBases);
+            setAvailableKnowledgeBases(allKnowledgeBases.items);
 
             // Load linked knowledge bases
             const kbIds = personaData.knowledge_base_ids || [];
             if (kbIds.length > 0) {
-                const linkedKBs = allKnowledgeBases.filter(kb => kbIds.includes(kb.id));
+                const linkedKBs = allKnowledgeBases.items.filter((kb: AdminKnowledgeBase) => kbIds.includes(kb.id));
                 setLinkedKnowledgeBases(linkedKBs.map(kb => ({
                     id: kb.id,
                     name: kb.name,
                     description: kb.description,
                     category: kb.category,
-                    document_count: kb.doc_count || 0,
+                    document_count: kb.doc_count || kb.document_count || 0,
                 })));
             }
         } catch (err) {
@@ -194,7 +194,7 @@ export default function EditPersonaPage() {
                     name: addedKB.name,
                     description: addedKB.description,
                     category: addedKB.category,
-                    document_count: addedKB.doc_count || 0,
+                    document_count: addedKB.doc_count || addedKB.document_count || 0,
                 }]);
             }
             
@@ -531,7 +531,7 @@ export default function EditPersonaPage() {
                                         });
                                         
                                         const response = await fetch(
-                                            `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"}/admin/model-configs/tts/preview?${params}`,
+                                            `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:3444/api/v1"}/admin/model-configs/tts/preview?${params}`,
                                             { method: "POST" }
                                         );
                                         
@@ -606,7 +606,7 @@ export default function EditPersonaPage() {
                                                 <div className="font-bold text-slate-800">{kb.name}</div>
                                                 <div className="flex items-center gap-2 mt-1">
                                                     <span className="text-xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">
-                                                        {kb.doc_count || 0} 文档
+                                                        {kb.doc_count || kb.document_count || 0} 文档
                                                     </span>
                                                     {kb.description && (
                                                         <span className="text-xs text-slate-400 truncate max-w-[150px]">

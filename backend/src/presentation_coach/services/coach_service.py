@@ -2,10 +2,11 @@
 Presentation Coach Service - Business logic for PPT coaching
 Handles coaching workflow, scoring, and session management
 """
-from datetime import datetime
+
+from datetime import datetime, timezone
 from typing import Any
 
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.db.models import (
@@ -34,9 +35,7 @@ class PresentationCoachService:
         self.db = db
 
     async def create_session(
-        self,
-        user_id: str,
-        presentation_id: str
+        self, user_id: str, presentation_id: str
     ) -> Result[PracticeSession]:
         """
         Create a new practice session
@@ -46,7 +45,7 @@ class PresentationCoachService:
             result = await self.db.execute(
                 select(Presentation).where(
                     Presentation.presentation_id == presentation_id,
-                    Presentation.status == "ready"
+                    Presentation.status == "ready",
                 )
             )
             presentation = result.scalar_one_or_none()
@@ -68,7 +67,7 @@ class PresentationCoachService:
                 user_id=user_id,
                 scenario_id=scenario.scenario_id,
                 presentation_id=presentation_id,
-                status="preparing"
+                status="preparing",
             )
 
             self.db.add(session)
@@ -78,7 +77,7 @@ class PresentationCoachService:
             logger.info(f"Created session: {session.session_id}")
             return Result.ok(session)
 
-        except Exception as e:
+        except (RuntimeError, ValueError, OSError) as e:
             logger.error(f"Failed to create session: {str(e)}")
             await self.db.rollback()
             return Result.fail("[USE_KEYWORD_SEARCH]")
@@ -89,14 +88,14 @@ class PresentationCoachService:
             result = await self.db.execute(
                 update(PracticeSession)
                 .where(PracticeSession.session_id == session_id)
-                .values(status="in_progress", start_time=datetime.utcnow())
+                .values(status="in_progress", start_time=datetime.now(timezone.utc))
             )
             await self.db.commit()
 
             logger.info(f"Started session: {session_id}")
             return Result.ok(True)
 
-        except Exception as e:
+        except (RuntimeError, ValueError, OSError) as e:
             logger.error(f"Failed to start session: {str(e)}")
             await self.db.rollback()
             return Result.fail("[START_FAILED]")
@@ -104,38 +103,41 @@ class PresentationCoachService:
     async def end_session(self, session_id: str) -> Result[SessionDetail]:
         """End session and generate report"""
         try:
-            result = await self.db.execute(
-                update(PracticeSession)
-                .where(PracticeSession.session_id == session_id)
-                .values(
-                    status="scoring",
-                    end_time=datetime.utcnow()
-                )
-            )
-            await self.db.commit()
-
-            # Get session details
             session_result = await self.db.execute(
                 select(PracticeSession).where(PracticeSession.session_id == session_id)
             )
             session = session_result.scalar_one_or_none()
 
-            if session:
-                # Generate scores
-                await self._calculate_scores(session)
-                await self.db.refresh(session)
+            if session is None:
+                return Result.fail("[SESSION_NOT_FOUND]")
+
+            if session.end_time is None:
+                session.end_time = datetime.now(timezone.utc)
+
+            if session.status not in {"completed", "scoring"}:
+                session.status = "completed"
+
+            if session.start_time and session.end_time:
+                session.total_duration_seconds = max(
+                    0,
+                    int((session.end_time - session.start_time).total_seconds()),
+                )
+
+            await self.db.commit()
+
+            # Generate scores
+            await self._calculate_scores(session)
+            await self.db.refresh(session)
 
             return Result.ok(session)
 
-        except Exception as e:
+        except (RuntimeError, ValueError, OSError) as e:
             logger.error(f"Failed to end session: {str(e)}")
             await self.db.rollback()
             return Result.fail("[END_FAILED]")
 
     async def get_current_page_requirements(
-        self,
-        session_id: str,
-        page_number: int
+        self, session_id: str, page_number: int
     ) -> Result[dict[str, Any]]:
         """Get required talking points for current page"""
         try:
@@ -148,27 +150,39 @@ class PresentationCoachService:
             if not session:
                 return Result.fail("[SESSION_NOT_FOUND]")
 
+            # Resolve presentation page count for right-panel context
+            total_pages_result = await self.db.execute(
+                select(func.count(Page.page_id)).where(
+                    Page.presentation_id == session.presentation_id
+                )
+            )
+            total_pages = int(total_pages_result.scalar() or 0)
+
             # Get page requirements
             page_result = await self.db.execute(
                 select(Page).where(
                     Page.presentation_id == session.presentation_id,
-                    Page.page_number == page_number
+                    Page.page_number == page_number,
                 )
             )
             page = page_result.scalar_one_or_none()
 
             if not page:
-                return Result.ok({
-                    "page_number": page_number,
-                    "required_points": [],
-                    "forbidden_words": []
-                })
+                return Result.ok(
+                    {
+                        "page_number": page_number,
+                        "total_pages": total_pages,
+                        "required_points": [],
+                        "forbidden_words": [],
+                        "page_content": "",
+                    }
+                )
 
             # Get required points
             points_result = await self.db.execute(
                 select(RequiredTalkingPoint).where(
                     RequiredTalkingPoint.page_id == page.page_id,
-                    RequiredTalkingPoint.confirmed_by_admin == True
+                    RequiredTalkingPoint.confirmed_by_admin == True,
                 )
             )
             required_points = points_result.scalars().all()
@@ -176,20 +190,23 @@ class PresentationCoachService:
             # Get forbidden words
             words_result = await self.db.execute(
                 select(ForbiddenWord).where(
-                    (ForbiddenWord.presentation_id == session.presentation_id) |
-                    (ForbiddenWord.page_id == page.page_id)
+                    (ForbiddenWord.presentation_id == session.presentation_id)
+                    | (ForbiddenWord.page_id == page.page_id)
                 )
             )
             forbidden_words = words_result.scalars().all()
 
-            return Result.ok({
-                "page_number": page_number,
-                "page_content": page.ocr_extracted_text,
-                "required_points": [p.description for p in required_points],
-                "forbidden_words": [w.phrase for w in forbidden_words]
-            })
+            return Result.ok(
+                {
+                    "page_number": page_number,
+                    "total_pages": total_pages,
+                    "page_content": page.ocr_extracted_text,
+                    "required_points": [p.description for p in required_points],
+                    "forbidden_words": [w.phrase for w in forbidden_words],
+                }
+            )
 
-        except Exception as e:
+        except (RuntimeError, ValueError, OSError) as e:
             logger.error(f"Failed to get page requirements: {str(e)}")
             return Result.fail("[USE_KEYWORD_SEARCH]")
 
@@ -199,7 +216,7 @@ class PresentationCoachService:
         interruption_type: InterruptionType,
         trigger_content: str,
         ai_response: str,
-        detection_latency_ms: int
+        detection_latency_ms: int,
     ) -> Result[InterruptionEvent]:
         """Record an interruption event"""
         try:
@@ -208,7 +225,7 @@ class PresentationCoachService:
                 interruption_type=interruption_type.value,
                 trigger_content=trigger_content,
                 ai_response=ai_response,
-                detection_latency_ms=detection_latency_ms
+                detection_latency_ms=detection_latency_ms,
             )
 
             self.db.add(event)
@@ -225,7 +242,7 @@ class PresentationCoachService:
 
             return Result.ok(event)
 
-        except Exception as e:
+        except (RuntimeError, ValueError, OSError) as e:
             logger.error(f"Failed to record interruption: {str(e)}")
             await self.db.rollback()
             return Result.fail("[LOG_FAILED]")
@@ -257,15 +274,13 @@ class PresentationCoachService:
 
             # Accuracy score: inverse of forbidden word interruptions
             forbidden_count = sum(
-                1 for e in events
-                if e.interruption_type == "forbidden_word"
+                1 for e in events if e.interruption_type == "forbidden_word"
             )
             session.accuracy_score = max(0, 100 - (forbidden_count * 10))
 
             # Completeness score: based on required points coverage
             missing_count = sum(
-                1 for e in events
-                if e.interruption_type == "missing_point"
+                1 for e in events if e.interruption_type == "missing_point"
             )
             session.completeness_score = max(0, 100 - (missing_count * 15))
 

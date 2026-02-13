@@ -11,8 +11,9 @@ References:
 """
 from __future__ import annotations
 
+import re
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import func, select
@@ -34,6 +35,7 @@ from .schemas import (
     KnowledgeDocumentListItem,
     UpdateKnowledgeBaseRequest,
 )
+from .processor import get_document_processor
 from .vector_store import get_knowledge_vector_store
 
 if TYPE_CHECKING:
@@ -78,7 +80,7 @@ class KnowledgeService:
             logger.info(f"Created KnowledgeBase: {kb.id} - {kb.name}")
             return Result.ok(kb)
 
-        except Exception as e:
+        except (RuntimeError, ValueError, OSError) as e:
             logger.error(f"Failed to create KnowledgeBase: {e}")
             return Result.fail(f"[KNOWLEDGE_BASE_CREATE_FAILED] {str(e)}")
 
@@ -155,7 +157,7 @@ class KnowledgeService:
             if value is not None:
                 setattr(kb, field, value)
 
-        kb.updated_at = datetime.utcnow()
+        kb.updated_at = datetime.now(timezone.utc)
 
         await self.db.flush()
         await self.db.refresh(kb)
@@ -231,7 +233,7 @@ class KnowledgeService:
 
             return None
 
-        except Exception as e:
+        except (RuntimeError, ValueError, OSError) as e:
             logger.warning(f"Reference check failed (continuing): {e}")
             return None
 
@@ -294,7 +296,7 @@ class KnowledgeService:
             logger.info(f"Created document: {doc.id} in KB {kb_id}")
             return Result.ok(doc)
 
-        except Exception as e:
+        except (RuntimeError, ValueError, OSError) as e:
             logger.error(f"Failed to create document: {e}")
             return Result.fail(f"[DOCUMENT_CREATE_FAILED] {str(e)}")
 
@@ -454,33 +456,63 @@ class KnowledgeService:
 
         kb = kb_result.value
 
+        embedding_failure: str | None = None
+        vector_results: list[dict[str, Any]] = []
+
         # Generate query embedding
         embedding_service = get_embedding_service()
-        if not embedding_service.is_configured:
-            logger.warning("Embedding service not configured")
-            return Result.ok([])
+        if embedding_service.is_configured:
+            embed_result = await embedding_service.embed(query)
+            if embed_result.is_success and embed_result.value:
+                # Search vector store
+                vector_store = get_knowledge_vector_store()
+                search_result = await vector_store.search(
+                    collection_name=kb.vector_collection,
+                    query_embedding=embed_result.value,
+                    top_k=top_k,
+                    similarity_threshold=similarity_threshold,
+                )
 
-        embed_result = await embedding_service.embed(query)
-        if not embed_result.is_success:
-            logger.error(f"Failed to embed query: {embed_result.error}")
-            return Result.ok([])  # Graceful degradation
+                if search_result.is_success and isinstance(search_result.value, list):
+                    vector_results = search_result.value
+            else:
+                embedding_failure = embed_result.fallback or "[EMBEDDING_FAILED]"
+                logger.warning(
+                    "Embedding failed for knowledge search, fallback to keyword matching",
+                    knowledge_base_id=kb_id,
+                    reason=embedding_failure,
+                )
+        else:
+            embedding_failure = "[EMBEDDING_NOT_CONFIGURED]"
+            logger.warning(
+                "Embedding service not configured, fallback to keyword matching",
+                knowledge_base_id=kb_id,
+            )
 
-        # Search vector store
-        vector_store = get_knowledge_vector_store()
-        search_result = await vector_store.search(
-            collection_name=kb.vector_collection,
-            query_embedding=embed_result.value,
+        if vector_results:
+            logger.info(
+                f"Search in KB {kb_id}: query='{query[:50]}...', results={len(vector_results)}"
+            )
+            return Result.ok(vector_results)
+
+        keyword_results = await self._search_multiple_by_keywords(
+            kb_ids=[kb_id],
+            query=query,
             top_k=top_k,
-            similarity_threshold=similarity_threshold,
         )
+        if keyword_results:
+            logger.info(
+                "Keyword fallback search in KB succeeded",
+                knowledge_base_id=kb_id,
+                query=query[:50],
+                result_count=len(keyword_results),
+            )
+            return Result.ok(keyword_results[:top_k])
 
-        if not search_result.is_success:
-            return Result.ok([])
+        if embedding_failure:
+            return Result.fail(f"[KNOWLEDGE_SEARCH_UNAVAILABLE] {embedding_failure}")
 
-        logger.info(
-            f"Search in KB {kb_id}: query='{query[:50]}...', results={len(search_result.value)}"
-        )
-        return Result.ok(search_result.value)
+        return Result.ok([])
 
     async def search_multiple(
         self,
@@ -506,41 +538,224 @@ class KnowledgeService:
 
         # Generate query embedding once
         embedding_service = get_embedding_service()
-        if not embedding_service.is_configured:
-            return Result.ok([])
-
-        embed_result = await embedding_service.embed(query)
-        if not embed_result.is_success:
-            return Result.ok([])
-
-        query_embedding = embed_result.value
         all_results: list[dict[str, Any]] = []
+        embedding_failure: str | None = None
 
-        # Search each KB
+        if embedding_service.is_configured:
+            embed_result = await embedding_service.embed(query)
+            if embed_result.is_success and embed_result.value:
+                query_embedding = embed_result.value
+
+                # Search each KB
+                vector_store = get_knowledge_vector_store()
+                for kb_id in kb_ids:
+                    kb_result = await self.get_by_id(kb_id)
+                    if not kb_result.is_success:
+                        continue
+
+                    kb = kb_result.value
+                    search_result = await vector_store.search(
+                        collection_name=kb.vector_collection,
+                        query_embedding=query_embedding,
+                        top_k=top_k,
+                        similarity_threshold=similarity_threshold,
+                    )
+
+                    if search_result.is_success:
+                        # Add KB info to results
+                        for r in search_result.value:
+                            r["knowledge_base_id"] = kb_id
+                            r["knowledge_base_name"] = kb.name
+                        all_results.extend(search_result.value)
+            else:
+                embedding_failure = embed_result.fallback or "[EMBEDDING_FAILED]"
+                logger.warning(
+                    "Embedding failed for multi-knowledge search, fallback to keyword matching",
+                    reason=embedding_failure,
+                )
+        else:
+            embedding_failure = "[EMBEDDING_NOT_CONFIGURED]"
+            logger.warning("Embedding service not configured, fallback to keyword matching")
+
+        # Sort by score and take top_k
+        all_results.sort(key=lambda x: x.get("score", 0), reverse=True)
+        if all_results:
+            return Result.ok(all_results[:top_k])
+
+        keyword_results = await self._search_multiple_by_keywords(
+            kb_ids=kb_ids,
+            query=query,
+            top_k=top_k,
+        )
+        if keyword_results:
+            return Result.ok(keyword_results[:top_k])
+
+        if embedding_failure:
+            return Result.fail(f"[KNOWLEDGE_SEARCH_UNAVAILABLE] {embedding_failure}")
+
+        return Result.ok([])
+
+    @staticmethod
+    def _build_keyword_candidates(query: str) -> list[str]:
+        """Build coarse keywords for fallback retrieval without embeddings."""
+        normalized_query = query.strip().lower()
+        if not normalized_query:
+            return []
+
+        candidates: list[str] = []
+        seen: set[str] = set()
+
+        def add_candidate(token: str) -> None:
+            value = token.strip().lower()
+            if not value or value in seen:
+                return
+            if len(value) < 2:
+                return
+            seen.add(value)
+            candidates.append(value)
+
+        add_candidate(normalized_query)
+
+        compact_query = "".join(re.findall(r"[a-z0-9\u4e00-\u9fff]+", normalized_query))
+        add_candidate(compact_query)
+
+        for fragment in re.findall(r"[a-z0-9]+|[\u4e00-\u9fff]+", normalized_query):
+            if len(candidates) >= 24:
+                break
+            if re.fullmatch(r"[\u4e00-\u9fff]+", fragment):
+                add_candidate(fragment)
+                if len(fragment) >= 4:
+                    for ngram_size in (4, 3, 2):
+                        if len(candidates) >= 24:
+                            break
+                        if len(fragment) < ngram_size:
+                            continue
+                        for index in range(0, len(fragment) - ngram_size + 1):
+                            add_candidate(fragment[index:index + ngram_size])
+                            if len(candidates) >= 24:
+                                break
+            elif len(fragment) >= 2:
+                add_candidate(fragment)
+
+        return candidates[:24]
+
+    @staticmethod
+    def _keyword_match_score(
+        normalized_content: str,
+        normalized_query: str,
+        candidates: list[str],
+    ) -> float:
+        """Score keyword overlap for fallback search."""
+        if not normalized_content:
+            return 0.0
+
+        score = 0.0
+        if normalized_query and normalized_query in normalized_content:
+            score += 3.0
+
+        matched_count = 0
+        for candidate in candidates:
+            if candidate and candidate in normalized_content:
+                matched_count += 1
+                if len(candidate) >= 6:
+                    score += 1.4
+                elif len(candidate) >= 4:
+                    score += 1.1
+                else:
+                    score += 0.8
+
+        if matched_count <= 0:
+            return 0.0
+
+        coverage = matched_count / max(1, len(candidates))
+        return score + coverage
+
+    async def _search_multiple_by_keywords(
+        self,
+        kb_ids: list[str],
+        query: str,
+        top_k: int,
+    ) -> list[dict[str, Any]]:
+        """Fallback retrieval strategy that matches chunk text by keywords."""
+        normalized_query = query.strip().lower()
+        if not normalized_query:
+            return []
+
+        candidates = self._build_keyword_candidates(normalized_query)
+        if not candidates:
+            return []
+
         vector_store = get_knowledge_vector_store()
+        merged_results: list[dict[str, Any]] = []
+
         for kb_id in kb_ids:
             kb_result = await self.get_by_id(kb_id)
             if not kb_result.is_success:
                 continue
 
             kb = kb_result.value
-            search_result = await vector_store.search(
-                collection_name=kb.vector_collection,
-                query_embedding=query_embedding,
-                top_k=top_k,
-                similarity_threshold=similarity_threshold,
-            )
+            collection = vector_store._get_collection(kb.vector_collection)
+            if collection is None:
+                continue
 
-            if search_result.is_success:
-                # Add KB info to results
-                for r in search_result.value:
-                    r["knowledge_base_id"] = kb_id
-                    r["knowledge_base_name"] = kb.name
-                all_results.extend(search_result.value)
+            try:
+                raw_chunks = collection.get(include=["documents", "metadatas"])
+            except Exception as exc:  # noqa: BLE001
+                logger.warning(
+                    "Keyword fallback collection read failed",
+                    knowledge_base_id=kb_id,
+                    reason=str(exc),
+                )
+                continue
 
-        # Sort by score and take top_k
-        all_results.sort(key=lambda x: x.get("score", 0), reverse=True)
-        return Result.ok(all_results[:top_k])
+            documents = raw_chunks.get("documents") if isinstance(raw_chunks, dict) else []
+            metadatas = raw_chunks.get("metadatas") if isinstance(raw_chunks, dict) else []
+
+            if not isinstance(documents, list):
+                continue
+
+            for index, content in enumerate(documents):
+                if not isinstance(content, str):
+                    continue
+                snippet_source = content.strip()
+                if not snippet_source:
+                    continue
+
+                normalized_content = snippet_source.lower()
+                raw_score = self._keyword_match_score(
+                    normalized_content=normalized_content,
+                    normalized_query=normalized_query,
+                    candidates=candidates,
+                )
+                if raw_score < 1.2:
+                    continue
+
+                metadata: dict[str, Any] = {}
+                if isinstance(metadatas, list) and index < len(metadatas):
+                    metadata_candidate = metadatas[index]
+                    if isinstance(metadata_candidate, dict):
+                        metadata = metadata_candidate
+
+                normalized_score = round(min(0.95, 0.45 + raw_score * 0.07), 4)
+
+                merged_results.append(
+                    {
+                        "content": snippet_source,
+                        "score": normalized_score,
+                        "source": metadata.get("document_title", "未知来源"),
+                        "metadata": {
+                            "document_id": metadata.get("document_id"),
+                            "document_title": metadata.get("document_title"),
+                            "chunk_index": metadata.get("chunk_index"),
+                        },
+                        "knowledge_base_id": kb_id,
+                        "knowledge_base_name": kb.name,
+                        "retrieval_mode": "keyword_fallback",
+                    }
+                )
+
+        merged_results.sort(key=lambda x: x.get("score", 0), reverse=True)
+        return merged_results[: max(1, top_k)]
 
     # ========== Document Preview ==========
 
@@ -560,7 +775,7 @@ class KnowledgeService:
         if not doc_result.is_success:
             return Result.fail("[DOCUMENT_NOT_FOUND]")
 
-        _doc = doc_result.value  # Validate document exists
+        doc = doc_result.value  # Validate document exists
         kb_result = await self.get_by_id(kb_id)
         if not kb_result.is_success:
             return Result.fail("[KNOWLEDGE_BASE_NOT_FOUND]")
@@ -572,7 +787,13 @@ class KnowledgeService:
         collection = vector_store._get_collection(kb.vector_collection)
 
         if not collection:
-            return Result.ok(([], 0))
+            logger.warning(
+                "Vector collection unavailable, fallback to source document chunks",
+                knowledge_base_id=kb_id,
+                document_id=doc_id,
+            )
+            fallback = await self._get_document_chunks_from_source(doc, page, page_size)
+            return Result.ok(fallback)
 
         try:
             # Get all chunks for this document
@@ -582,7 +803,13 @@ class KnowledgeService:
             )
 
             if not results or not results["documents"]:
-                return Result.ok(([], 0))
+                logger.info(
+                    "No vector chunks found for document, fallback to source document chunks",
+                    knowledge_base_id=kb_id,
+                    document_id=doc_id,
+                )
+                fallback = await self._get_document_chunks_from_source(doc, page, page_size)
+                return Result.ok(fallback)
 
             # Format chunks
             chunks = []
@@ -608,6 +835,42 @@ class KnowledgeService:
 
             return Result.ok((paginated, total))
 
-        except Exception as e:
+        except (RuntimeError, ValueError, OSError) as e:
             logger.error(f"Failed to get document chunks: {e}")
-            return Result.ok(([], 0))
+            fallback = await self._get_document_chunks_from_source(doc, page, page_size)
+            return Result.ok(fallback)
+
+    async def _get_document_chunks_from_source(
+        self,
+        doc: KnowledgeDocument,
+        page: int,
+        page_size: int,
+    ) -> tuple[list[dict[str, Any]], int]:
+        """Fallback preview by reading original source file and splitting into chunks."""
+        try:
+            processor = get_document_processor()
+            content = await processor._read_document(doc.file_url, doc.file_type)  # noqa: SLF001
+            if not content:
+                return ([], 0)
+
+            chunks = processor._split_into_chunks(content)  # noqa: SLF001
+            if not chunks:
+                return ([], 0)
+
+            formatted = [
+                {
+                    "index": chunk.get("index", index),
+                    "content": chunk.get("content", ""),
+                    "metadata": chunk.get("metadata", {}),
+                }
+                for index, chunk in enumerate(chunks)
+                if isinstance(chunk, dict)
+            ]
+            total = len(formatted)
+
+            start = (page - 1) * page_size
+            end = start + page_size
+            return (formatted[start:end], total)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(f"Fallback source preview failed: {exc}")
+            return ([], 0)

@@ -10,6 +10,7 @@ Implements Constitution Principles:
 import logging
 import uuid
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from enum import Enum
 
 from langchain_classic.chains import ConversationChain
@@ -128,14 +129,24 @@ class SalesBotService:
 
             return Result(value=session_id)
 
-        except Exception as e:
+        except (RuntimeError, ValueError, TypeError, OSError) as e:
             logger.error(
                 "Failed to create sales bot session",
                 extra={"error": str(e)},
                 exc_info=True
             )
-            # Fallback: Return UUID anyway, conversation will use simpler logic
-            return Result(value=uuid.uuid4())
+            # Fallback: create a lightweight session without LLM chain
+            fallback_session_id = uuid.uuid4()
+            self.active_sessions[fallback_session_id] = {
+                "user_id": user_id,
+                "scenario_id": scenario_id,
+                "persona": persona,
+                "chain": None,
+                "turn_count": 0,
+                "total_tokens": 0,
+                "start_time": None,
+            }
+            return Result(value=fallback_session_id)
 
     async def start_session(self, session_id: uuid.UUID) -> Result[str]:
         """
@@ -148,7 +159,7 @@ class SalesBotService:
                 return Result.fail(fallback="[SESSION_NOT_FOUND]")
 
             session = self.active_sessions[session_id]
-            session["start_time"] = uuid.uuid4()  # Use as timestamp placeholder
+            session["start_time"] = datetime.now(timezone.utc)
 
             persona = session["persona"]
 
@@ -172,7 +183,7 @@ class SalesBotService:
 
             return Result(value=opening)
 
-        except Exception as e:
+        except (RuntimeError, ValueError, OSError) as e:
             logger.error(
                 "Failed to start sales bot session",
                 extra={"session_id": str(session_id), "error": str(e)},
@@ -200,8 +211,12 @@ class SalesBotService:
             chain = session["chain"]
             persona = session["persona"]
 
-            # Get response from LLM
-            response = await chain.apredict(input=user_text)
+            # Get response from LLM (or deterministic fallback when LLM unavailable)
+            if chain is None:
+                fallback_response = self._get_fallback_response(session_id)
+                response = fallback_response.text
+            else:
+                response = await chain.apredict(input=user_text)
 
             # Token tracking (Constitution Principle V)
             estimated_tokens = len(user_text) + len(response)
@@ -252,7 +267,7 @@ class SalesBotService:
             )
             # Fallback response based on persona
             return Result(value=self._get_fallback_response(session_id))
-        except Exception as e:
+        except (RuntimeError, ValueError, OSError) as e:
             logger.error(
                 "Failed to process user input in sales bot",
                 extra={"session_id": str(session_id), "error": str(e)},
@@ -366,7 +381,7 @@ class SalesBotService:
 
             return Result(value=summary)
 
-        except Exception as e:
+        except (RuntimeError, ValueError, OSError) as e:
             logger.error(
                 "Failed to end sales bot session",
                 extra={"session_id": str(session_id), "error": str(e)},

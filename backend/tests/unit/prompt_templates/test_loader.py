@@ -6,16 +6,16 @@ TDD Tests for Task B5: Implement PromptTemplateLoader
 
 import pytest
 import asyncio
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from uuid import uuid4, UUID
 from unittest.mock import AsyncMock, MagicMock
 
-from src.prompt_templates.loader import (
+from prompt_templates.loader import (
     PromptTemplateLoader,
     CachedTemplate,
     get_loader,
 )
-from src.prompt_templates.models import PromptTemplate, PromptType
+from prompt_templates.models import PromptTemplate, PromptType
 
 
 class TestCachedTemplate:
@@ -38,7 +38,7 @@ class TestCachedTemplate:
         assert cached.is_expired(300) is False
 
         # Simulate old cache by manipulating cached_at
-        cached.cached_at = datetime.utcnow().timestamp() - 400
+        cached.cached_at = datetime.now(timezone.utc).timestamp() - 400
         assert cached.is_expired(300) is True
 
 
@@ -63,8 +63,8 @@ class TestPromptTemplateLoader:
             is_active=True,
             is_default=True,
             is_system=False,
-            created_at=datetime.utcnow(),
-            updated_at=datetime.utcnow(),
+            created_at=datetime.now(timezone.utc),
+            updated_at=datetime.now(timezone.utc),
         )
 
     def test_initialization(self):
@@ -110,7 +110,7 @@ class TestPromptTemplateLoader:
     async def test_get_from_cache_expired(self, loader, sample_template):
         """Test that expired entries are removed"""
         cached = CachedTemplate(template=sample_template)
-        cached.cached_at = datetime.utcnow().timestamp() - 100  # Expired
+        cached.cached_at = datetime.now(timezone.utc).timestamp() - 100  # Expired
         loader._cache[sample_template.id] = cached
 
         result = loader._get_from_cache(sample_template.id)
@@ -139,8 +139,8 @@ class TestPromptTemplateLoader:
                 is_active=True,
                 is_default=False,
                 is_system=False,
-                created_at=datetime.utcnow(),
-                updated_at=datetime.utcnow(),
+                created_at=datetime.now(timezone.utc),
+                updated_at=datetime.now(timezone.utc),
             )
             templates.append(template)
             await loader._add_to_cache(template)
@@ -160,8 +160,8 @@ class TestPromptTemplateLoader:
             is_active=True,
             is_default=False,
             is_system=False,
-            created_at=datetime.utcnow(),
-            updated_at=datetime.utcnow(),
+            created_at=datetime.now(timezone.utc),
+            updated_at=datetime.now(timezone.utc),
         )
         await loader._add_to_cache(new_template)
 

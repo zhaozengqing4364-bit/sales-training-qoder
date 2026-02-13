@@ -138,7 +138,7 @@ export default function EditPromptTemplatePage({ params }: PageProps) {
     if (loading) {
         return (
             <div className="container mx-auto px-4 py-12 max-w-4xl text-center">
-                <StatusIndicator status="processing" size={24} />
+                <StatusIndicator status="loading"  />
                 <p className="mt-4 text-zinc-500">加载中...</p>
             </div>
         );
@@ -307,7 +307,7 @@ export default function EditPromptTemplatePage({ params }: PageProps) {
                         >
                             {saving ? (
                                 <>
-                                    <StatusIndicator status="processing" size={16} className="mr-2" />
+                                    <StatusIndicator status="loading"  className="mr-2" />
                                     保存中...
                                 </>
                             ) : (
@@ -336,7 +336,7 @@ export default function EditPromptTemplatePage({ params }: PageProps) {
                     <Button onClick={handleTestRender} disabled={testing} className="w-full">
                         {testing ? (
                             <>
-                                <StatusIndicator status="processing" size={16} className="mr-2" />
+                                <StatusIndicator status="loading"  className="mr-2" />
                                 渲染中...
                             </>
                         ) : (

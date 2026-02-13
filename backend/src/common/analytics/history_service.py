@@ -4,20 +4,41 @@ Practice History Query Service - Queries and retrieves practice history
 Implements Constitution Principles:
 - I. NO ERROR POPUPS - Graceful degradation
 - V. Cost control - Efficient queries
+
+Story 3.2: 学员历史记录与报告摘要列表
 """
 
 import logging
 import uuid
+from dataclasses import dataclass
 from datetime import datetime, timedelta
+from typing import Any
 
-from sqlalchemy import desc, select
+from sqlalchemy import desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from common.db.models import PracticeSession, Scenario
+from common.db.models import PracticeSession, Scenario, ComprehensiveReport
 from common.error_handling.result import Result
+from sqlalchemy.exc import SQLAlchemyError
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class SessionWithReportSummary:
+    """Session with report summary for history list."""
+    session_id: str
+    scenario_name: str
+    scenario_type: str
+    persona_name: str | None
+    agent_name: str | None
+    start_time: datetime
+    duration_seconds: int
+    overall_score: float | None
+    report_status: str
+    report_generated_at: datetime | None
+    status: str
 
 
 class HistoryService:
@@ -74,7 +95,7 @@ class HistoryService:
 
             return Result(value=sessions)
 
-        except Exception as e:
+        except (SQLAlchemyError, ValueError) as e:
             logger.error(
                 "Failed to get user history",
                 extra={"user_id": str(user_id), "error": str(e)},
@@ -117,7 +138,7 @@ class HistoryService:
 
             return Result(value=session)
 
-        except Exception as e:
+        except (SQLAlchemyError, ValueError) as e:
             logger.error(
                 "Failed to get session detail",
                 extra={"session_id": str(session_id), "error": str(e)},
@@ -166,7 +187,7 @@ class HistoryService:
 
             return Result(value=sessions)
 
-        except Exception as e:
+        except (SQLAlchemyError, ValueError) as e:
             logger.error(
                 "Failed to get recent sessions",
                 extra={"user_id": str(user_id), "error": str(e)},
@@ -228,7 +249,7 @@ class HistoryService:
 
             return Result(value=trends)
 
-        except Exception as e:
+        except (SQLAlchemyError, ValueError) as e:
             logger.error(
                 "Failed to get score trends",
                 extra={"user_id": str(user_id), "error": str(e)},
@@ -303,13 +324,127 @@ class HistoryService:
 
             return Result(value=stats)
 
-        except Exception as e:
+        except (SQLAlchemyError, ValueError) as e:
             logger.error(
                 "Failed to get user statistics",
                 extra={"user_id": str(user_id), "error": str(e)},
                 exc_info=True
             )
             return Result.fail(fallback="[STATS_FAILED]")
+
+
+    async def get_user_history_with_report_summary(
+        self,
+        db: AsyncSession,
+        user_id: uuid.UUID,
+        page: int = 1,
+        page_size: int = 20,
+        scenario_type: str | None = None,
+    ) -> Result[dict[str, Any]]:
+        """
+        Get practice history with report summary for a user (Story 3.2).
+
+        Args:
+            db: Database session
+            user_id: User ID
+            page: Page number (1-based)
+            page_size: Items per page
+            scenario_type: Filter by scenario type (optional)
+
+        Returns:
+            Result with sessions list, total count, and pagination info
+        """
+        try:
+            # Build base query with joins
+            query = (
+                select(
+                    PracticeSession,
+                    ComprehensiveReport.overall_score,
+                )
+                .options(
+                    selectinload(PracticeSession.scenario),
+                    selectinload(PracticeSession.agent),
+                    selectinload(PracticeSession.persona),
+                )
+                .outerjoin(
+                    ComprehensiveReport,
+                    ComprehensiveReport.session_id == PracticeSession.session_id
+                )
+                .where(PracticeSession.user_id == user_id)
+            )
+
+            # Filter by scenario type if specified
+            if scenario_type:
+                query = query.where(PracticeSession.scenario.has(scenario_type=scenario_type))
+
+            # Get total count
+            count_query = select(func.count()).select_from(query.subquery())
+            total = (await db.execute(count_query)).scalar() or 0
+
+            # Apply sorting and pagination
+            query = (
+                query.order_by(desc(PracticeSession.start_time))
+                .offset((page - 1) * page_size)
+                .limit(page_size)
+            )
+
+            result = await db.execute(query)
+            rows = result.all()
+
+            # Build response items
+            sessions = []
+            for row in rows:
+                session = row[0]
+                overall_score = row[1]
+
+                # Calculate duration
+                duration_seconds = 0
+                if session.end_time and session.start_time:
+                    duration_seconds = int(
+                        (session.end_time - session.start_time).total_seconds()
+                    )
+                elif session.total_duration_seconds:
+                    duration_seconds = session.total_duration_seconds
+
+                sessions.append(SessionWithReportSummary(
+                    session_id=session.session_id,
+                    scenario_name=session.scenario.name if session.scenario else "未知场景",
+                    scenario_type=session.scenario.scenario_type if session.scenario else "unknown",
+                    persona_name=session.persona.name if session.persona else None,
+                    agent_name=session.agent.name if session.agent else None,
+                    start_time=session.start_time,
+                    duration_seconds=duration_seconds,
+                    overall_score=overall_score,
+                    report_status=session.report_status or "pending",
+                    report_generated_at=session.report_generated_at,
+                    status=session.status,
+                ))
+
+            logger.info(
+                "User history with report summary retrieved",
+                extra={
+                    "user_id": str(user_id),
+                    "count": len(sessions),
+                    "total": total,
+                    "page": page,
+                }
+            )
+
+            return Result(value={
+                "sessions": sessions,
+                "total": total,
+                "page": page,
+                "page_size": page_size,
+                "total_pages": (total + page_size - 1) // page_size,
+            })
+
+        except (SQLAlchemyError, ValueError) as e:
+            logger.error(
+                "Failed to get user history with report summary",
+                extra={"user_id": str(user_id), "error": str(e)},
+                exc_info=True
+            )
+            return Result.fail(fallback="[HISTORY_FAILED]")
 
 
 # Singleton instance

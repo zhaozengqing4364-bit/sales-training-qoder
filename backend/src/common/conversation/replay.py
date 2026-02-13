@@ -18,8 +18,10 @@ from sqlalchemy.orm import selectinload
 
 from common.conversation.models import ConversationMessage
 from common.db.models import PracticeSession, SessionStatus
+from common.db.voice_policy_snapshot import build_voice_policy_snapshot_ref_payload
 from common.error_handling.result import Result
 from common.monitoring.logger import get_logger
+from sqlalchemy.exc import SQLAlchemyError
 
 logger = get_logger(__name__)
 
@@ -31,7 +33,6 @@ STAGE_NAMES = {
     "objection": "异议处理",
     "closing": "促成成交"
 }
-
 
 class ReplayService:
     """
@@ -56,6 +57,13 @@ class ReplayService:
         """
         self.db = db
 
+    @staticmethod
+    def _normalize_turn_number(raw_turn_number: int | None, fallback_turn_number: int = 1) -> int:
+        """Normalize legacy turn numbers to keep API contract compatible (>=1)."""
+        if isinstance(raw_turn_number, int) and raw_turn_number >= 1:
+            return raw_turn_number
+        return max(1, fallback_turn_number)
+
     async def _get_session(self, session_id: str) -> Result[PracticeSession]:
         """
         Get a practice session by ID.
@@ -78,7 +86,7 @@ class ReplayService:
 
             return Result.ok(session)
 
-        except Exception as e:
+        except (SQLAlchemyError, ValueError, OSError) as e:
             logger.error(f"Failed to get session: {str(e)}")
             return Result.fail(f"[SESSION_GET_FAILED] {str(e)}")
 
@@ -152,7 +160,7 @@ class ReplayService:
 
             return Result.ok((messages, total))
 
-        except Exception as e:
+        except (SQLAlchemyError, ValueError, OSError) as e:
             logger.error(f"Failed to get messages: {str(e)}")
             return Result.fail(f"[MESSAGES_GET_FAILED] {str(e)}")
 
@@ -217,8 +225,9 @@ class ReplayService:
                 "session_id": session_id,
                 "agent_name": agent_name,
                 "persona_name": persona_name,
+                "voice_policy_snapshot_ref": build_voice_policy_snapshot_ref_payload(session.voice_policy_snapshot),
                 "total_duration_ms": total_duration_ms,
-                "messages": [self._message_to_dict(m) for m in messages],
+                "messages": [self._message_to_dict(m, index + 1) for index, m in enumerate(messages)],
                 "timeline_markers": timeline_markers,
                 "stage_summary": stage_summary
             }
@@ -227,19 +236,26 @@ class ReplayService:
 
             return Result.ok(replay_data)
 
-        except Exception as e:
+        except (SQLAlchemyError, ValueError, OSError) as e:
             logger.error(f"Failed to get replay data: {str(e)}")
             return Result.fail(f"[REPLAY_DATA_FAILED] {str(e)}")
 
-    async def get_highlights(self, session_id: str) -> Result[list[dict[str, Any]]]:
+    async def get_highlights(self, session_id: str) -> Result[dict[str, Any]]:
         """
-        Get highlighted messages (key moments) from a session.
+        Get highlighted messages (key moments) from a session with summary.
+
+        Story 3.4: 高光片段与原因可解释呈现
 
         Args:
             session_id: Practice session UUID
 
         Returns:
-            Result[list[dict]]: Success with highlights or failure
+            Result[dict]: Success with highlights and summary or failure
+            Format: {
+                "highlights": [...],
+                "total_good": int,
+                "total_bad": int
+            }
 
         Requirements: R10.3
         """
@@ -262,25 +278,47 @@ class ReplayService:
             messages = list(result.scalars().all())
 
             highlights = []
-            for msg in messages:
+            total_good = 0
+            total_bad = 0
+
+            for index, msg in enumerate(messages):
+                # Get message context (prev and next messages)
+                context = await self._get_message_context(msg)
+
                 highlight = {
                     "id": msg.id,
-                    "turn_number": msg.turn_number,
+                    "turn_number": self._normalize_turn_number(msg.turn_number, index + 1),
                     "role": msg.role,
                     "content": msg.content,
                     "timestamp": msg.timestamp.isoformat() if msg.timestamp else None,
                     "highlight_type": msg.highlight_type,
                     "highlight_reason": msg.highlight_reason,
                     "ai_feedback": msg.ai_feedback,
-                    "suggested_response": self._generate_suggested_response(msg)
+                    "suggested_response": self._generate_suggested_response(msg),
+                    "sales_stage": msg.sales_stage,
+                    "stage_name": STAGE_NAMES.get(msg.sales_stage, msg.sales_stage) if msg.sales_stage else None,
+                    "context": context
                 }
                 highlights.append(highlight)
 
-            logger.info(f"Retrieved {len(highlights)} highlights for session {session_id}")
+                # Count by type
+                if msg.highlight_type == "good":
+                    total_good += 1
+                elif msg.highlight_type == "bad":
+                    total_bad += 1
 
-            return Result.ok(highlights)
+            logger.info(
+                f"Retrieved {len(highlights)} highlights for session {session_id}",
+                extra={"total_good": total_good, "total_bad": total_bad}
+            )
 
-        except Exception as e:
+            return Result.ok({
+                "highlights": highlights,
+                "total_good": total_good,
+                "total_bad": total_bad
+            })
+
+        except (SQLAlchemyError, ValueError, OSError) as e:
             logger.error(f"Failed to get highlights: {str(e)}")
             return Result.fail(f"[HIGHLIGHTS_GET_FAILED] {str(e)}")
 
@@ -420,7 +458,11 @@ class ReplayService:
         """
         return sum(msg.duration_ms or 0 for msg in messages)
 
-    def _message_to_dict(self, message: ConversationMessage) -> dict[str, Any]:
+    def _message_to_dict(
+        self,
+        message: ConversationMessage,
+        fallback_turn_number: int = 1,
+    ) -> dict[str, Any]:
         """
         Convert a ConversationMessage to a dictionary.
 
@@ -433,7 +475,7 @@ class ReplayService:
         return {
             "id": message.id,
             "session_id": message.session_id,
-            "turn_number": message.turn_number,
+            "turn_number": self._normalize_turn_number(message.turn_number, fallback_turn_number),
             "role": message.role,
             "content": message.content,
             "audio_url": message.audio_url,
@@ -474,3 +516,62 @@ class ReplayService:
                 return f"建议改进: {'; '.join(suggestions)}"
 
         return None
+
+    async def _get_message_context(
+        self,
+        message: ConversationMessage,
+        context_range: int = 1
+    ) -> dict[str, Any]:
+        """Get context messages around a highlight.
+
+        Args:
+            message: The highlight message
+            context_range: Number of messages before and after to include
+
+        Returns:
+            dict: Context with prev_message and next_message
+        """
+        context = {"prev_message": None, "next_message": None}
+
+        try:
+            # Get previous message
+            if message.turn_number > 1:
+                prev_stmt = (
+                    select(ConversationMessage)
+                    .where(
+                        ConversationMessage.session_id == message.session_id,
+                        ConversationMessage.turn_number == message.turn_number - 1
+                    )
+                )
+                prev_result = await self.db.execute(prev_stmt)
+                prev_msg = prev_result.scalar_one_or_none()
+                if prev_msg:
+                    context["prev_message"] = {
+                        "id": prev_msg.id,
+                        "role": prev_msg.role,
+                        "content": prev_msg.content,
+                        "timestamp": prev_msg.timestamp.isoformat() if prev_msg.timestamp else None,
+                    }
+
+            # Get next message
+            next_stmt = (
+                select(ConversationMessage)
+                .where(
+                    ConversationMessage.session_id == message.session_id,
+                    ConversationMessage.turn_number == message.turn_number + 1
+                )
+            )
+            next_result = await self.db.execute(next_stmt)
+            next_msg = next_result.scalar_one_or_none()
+            if next_msg:
+                context["next_message"] = {
+                    "id": next_msg.id,
+                    "role": next_msg.role,
+                    "content": next_msg.content,
+                    "timestamp": next_msg.timestamp.isoformat() if next_msg.timestamp else None,
+                }
+
+        except (SQLAlchemyError, ValueError) as e:
+            logger.warning(f"Failed to get message context: {str(e)}")
+
+        return context

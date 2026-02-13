@@ -10,13 +10,15 @@ References:
 """
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.error_handling.result import Result
 from common.monitoring.logger import get_logger
+
+from sqlalchemy.exc import SQLAlchemyError
 
 from ..models import AgentPersona, Persona, PersonaStatus
 from ..schemas import (
@@ -73,7 +75,7 @@ class PersonaService:
             logger.info(f"Created Persona: {persona.id} - {persona.name}")
             return Result.ok(persona)
 
-        except Exception as e:
+        except (SQLAlchemyError, ValueError) as e:
             logger.error(f"Failed to create Persona: {e}")
             return Result.fail(f"[PERSONA_CREATE_FAILED] {str(e)}")
 
@@ -118,6 +120,7 @@ class PersonaService:
                 icon=persona.icon,
                 category=persona.category,
                 difficulty=persona.difficulty,
+                status=persona.status,
                 is_public=persona.is_public,
                 usage_count=0,
                 agent_count=agent_count
@@ -157,7 +160,7 @@ class PersonaService:
                     value = value.model_dump()
                 setattr(persona, field, value)
 
-        persona.updated_at = datetime.utcnow()
+        persona.updated_at = datetime.now(timezone.utc)
 
         await self.db.flush()
         await self.db.refresh(persona)
@@ -226,6 +229,6 @@ class PersonaService:
             logger.info(f"Duplicated Persona: {original.id} -> {new_persona.id}")
             return Result.ok(new_persona)
 
-        except Exception as e:
+        except (SQLAlchemyError, ValueError) as e:
             logger.error(f"Failed to duplicate Persona: {e}")
             return Result.fail(f"[PERSONA_DUPLICATE_FAILED] {str(e)}")

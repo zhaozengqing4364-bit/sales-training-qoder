@@ -5,6 +5,22 @@ Tests that end-to-end latency meets <300ms target
 import asyncio
 import pytest
 import time
+import uuid
+
+
+def _percentile(values: list[float], percentile: float) -> float:
+    if not values:
+        return 0.0
+    ordered = sorted(values)
+    if len(ordered) == 1:
+        return ordered[0]
+    rank = max(0.0, min(1.0, percentile / 100.0)) * (len(ordered) - 1)
+    lower = int(rank)
+    upper = min(lower + 1, len(ordered) - 1)
+    if lower == upper:
+        return ordered[lower]
+    weight = rank - lower
+    return ordered[lower] * (1 - weight) + ordered[upper] * weight
 
 
 @pytest.mark.performance
@@ -12,27 +28,84 @@ class TestE2ELatency:
     """Performance tests for end-to-end latency"""
 
     @pytest.mark.asyncio
-    async def test_session_creation_latency(self):
-        """Test session creation is fast"""
-        from common.db.session import AsyncSessionLocal
-        from presentation_coach.services.coach_service import PresentationCoachService
+    async def test_session_creation_latency(self, async_client, test_db):
+        """Session creation path should satisfy NFR-P4 percentile targets."""
+        from agent.models import Agent, AgentPersona, Persona
+        from common.auth.service import create_access_token
+        from common.db.models import Scenario, User
 
-        async with AsyncSessionLocal() as db:
-            service = PresentationCoachService(db)
+        user = User(
+            user_id=str(uuid.uuid4()),
+            wechat_user_id=f"perf-user-{uuid.uuid4().hex[:8]}",
+            name="Perf User",
+            email=f"perf_{uuid.uuid4().hex[:6]}@example.com",
+            role="user",
+        )
+        scenario = Scenario(
+            scenario_id=str(uuid.uuid4()),
+            scenario_type="sales",
+            name="perf_explicit_sales_scenario",
+            description="Performance test scenario",
+            is_active=True,
+        )
+        agent = Agent(
+            id=str(uuid.uuid4()),
+            name="Perf Agent",
+            description="Performance test agent",
+            category="sales",
+            system_prompt="You are a performance test sales coach.",
+            status="published",
+        )
+        persona = Persona(
+            id=str(uuid.uuid4()),
+            name="Perf Persona",
+            description="Performance test persona",
+            category="customer",
+            difficulty="medium",
+            system_prompt="You are a budget-conscious customer.",
+            status="active",
+        )
+        test_db.add_all([user, scenario, agent, persona])
+        await test_db.flush()
+        test_db.add(
+            AgentPersona(
+                id=str(uuid.uuid4()),
+                agent_id=agent.id,
+                persona_id=persona.id,
+                is_default=True,
+            )
+        )
+        await test_db.commit()
 
-            # Use a fake presentation ID for testing
+        token = create_access_token(data={"sub": str(user.user_id)})
+        headers = {"Authorization": f"Bearer {token}"}
+
+        samples_ms: list[float] = []
+        for _ in range(25):
             start = time.perf_counter()
-            result = await service.create_session(
-                user_id="test_user_id",
-                presentation_id="test_presentation_id"
+            response = await async_client.post(
+                "/api/v1/practice/sessions",
+                headers=headers,
+                json={
+                    "scenario_type": "sales",
+                    "scenario_id": scenario.scenario_id,
+                    "agent_id": agent.id,
+                    "persona_id": persona.id,
+                },
             )
             end = time.perf_counter()
 
-            latency_ms = (end - start) * 1000
+            assert response.status_code == 201, response.text
+            payload = response.json()
+            assert payload["success"] is True
+            assert payload["data"]["scenario_id"] == scenario.scenario_id
+            samples_ms.append((end - start) * 1000)
 
-            # Session creation should be reasonably fast
-            # Even if it fails (not found), the check should be fast
-            assert latency_ms < 500, f"Session creation took {latency_ms:.2f}ms"
+        p95 = _percentile(samples_ms, 95)
+        p99 = _percentile(samples_ms, 99)
+
+        assert p95 < 100, f"session create p95={p95:.2f}ms (samples={len(samples_ms)})"
+        assert p99 < 200, f"session create p99={p99:.2f}ms (samples={len(samples_ms)})"
 
     @pytest.mark.asyncio
     async def test_interruption_to_response_latency(self):

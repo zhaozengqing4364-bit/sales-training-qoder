@@ -13,17 +13,23 @@ Features:
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
+import json
 from typing import Any
 from uuid import UUID, uuid4
 
 from sqlalchemy import select
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.evaluation.services.staged_evaluation import StagedEvaluationService, StageEvaluationResult
-from src.prompt_templates.service import PromptTemplateService
-from src.common.ai.llm_service import LLMService
-from src.common.error_handling.result import Result
+from evaluation.services.staged_evaluation import StagedEvaluationService, StageEvaluationResult
+from evaluation.schemas import (
+    ComprehensiveReportResponse,
+    parse_llm_response,
+)
+from prompt_templates.service import PromptTemplateService
+from common.ai.llm_service import LLMService
+from common.error_handling.result import Result
 
 
 @dataclass
@@ -112,24 +118,19 @@ class ComprehensiveReportService:
             if not stage_results:
                 return Result.fail("[NO_STAGE_RESULTS]")
 
-            # Calculate dimension scores
-            dimension_scores = self._calculate_dimension_scores(stage_results)
-
-            # Calculate overall score
-            overall_score = self._calculate_overall_score(dimension_scores)
-
-            # Aggregate strengths and improvements
-            key_strengths = self._aggregate_strengths(stage_results)
-            key_improvements = self._aggregate_improvements(stage_results)
-
-            # Generate stage summaries
-            stage_summaries = self._generate_stage_summaries(stage_results)
+            if stage_results:
+                # Calculate from existing stage evaluations
+                dimension_scores = self._calculate_dimension_scores(stage_results)
+                overall_score = self._calculate_overall_score(dimension_scores)
+                key_strengths = self._aggregate_strengths(stage_results)
+                key_improvements = self._aggregate_improvements(stage_results)
+                stage_summaries = self._generate_stage_summaries(stage_results)
 
             # Generate detailed feedback using LLM
             feedback_result = await self._generate_detailed_feedback(
-                session_id, stage_results, scenario_type
+                session_id, stage_results if stage_results else [], scenario_type
             )
-            detailed_feedback = feedback_result if feedback_result.is_success else ""
+            detailed_feedback = feedback_result.value if feedback_result.is_success else ""
 
             # Generate recommendations
             recommendations = await self._generate_recommendations(
@@ -138,28 +139,86 @@ class ComprehensiveReportService:
 
             report = ComprehensiveReport(
                 session_id=session_id,
-                generated_at=datetime.utcnow(),
+                generated_at=datetime.now(timezone.utc),
                 overall_score=overall_score,
                 dimension_scores=dimension_scores,
                 stage_summaries=stage_summaries,
                 key_strengths=key_strengths,
                 key_improvements=key_improvements,
-                detailed_feedback=detailed_feedback.value if isinstance(detailed_feedback, Result) else detailed_feedback,
+                detailed_feedback=detailed_feedback,
                 recommendations=recommendations,
             )
 
             # Store report in database
-            await self._store_report(report)
+            store_result = await self._store_report(report)
+            if not store_result.is_success:
+                return Result.fail(store_result.fallback or "[DATABASE_ERROR]")
 
             return Result.ok(report)
 
+        except SQLAlchemyError as e:
+            return Result.fail(f"[DATABASE_ERROR:{str(e)}]")
         except Exception as e:
             return Result.fail(f"[REPORT_GENERATION_ERROR:{str(e)}]")
+
+    async def _get_conversation_data(self, session_id: str) -> str:
+        """Get conversation transcript for a session.
+
+        Tries two sources in order:
+        1. Database conversation_messages table (used by EnhancedSalesHandler)
+        2. In-memory context_manager (used by SimpleSalesHandler)
+
+        Args:
+            session_id: Session ID
+
+        Returns:
+            Formatted conversation string or empty string
+        """
+        # 1. Try database conversation_messages first (EnhancedSalesHandler path)
+        try:
+            from common.conversation.models import ConversationMessage
+            result = await self.db.execute(
+                select(ConversationMessage)
+                .where(ConversationMessage.session_id == session_id)
+                .order_by(ConversationMessage.turn_number, ConversationMessage.timestamp)
+            )
+            messages = list(result.scalars().all())
+
+            if messages:
+                lines = []
+                for msg in messages:
+                    role_label = "用户" if msg.role == "user" else "AI"
+                    lines.append(f"{role_label}: {msg.content}")
+                lines_str = "\n".join(lines)
+                if lines_str.strip():
+                    return lines_str
+        except (RuntimeError, ValueError, OSError, ImportError) as e:
+            from common.monitoring.logger import get_logger
+            get_logger(__name__).debug(f"DB conversation query failed: {e}")
+
+        # 2. Fallback to in-memory context_manager (SimpleSalesHandler path)
+        try:
+            from sales_bot.services.context_manager import context_manager
+            import uuid as uuid_mod
+
+            context_result = await context_manager.get_context(uuid_mod.UUID(session_id))
+            if not context_result.is_success:
+                return ""
+
+            context = context_result.value
+            lines = []
+            for turn in context.turns:
+                lines.append(f"用户: {turn.user_text}")
+                lines.append(f"AI: {turn.bot_response}")
+                lines.append("")
+            return "\n".join(lines)
+        except (RuntimeError, ValueError, OSError, ImportError):
+            return ""
 
     async def get_report(
         self,
         session_id: str,
-    ) -> ComprehensiveReport | None:
+    ) -> Result[ComprehensiveReport]:
         """Get existing comprehensive report for a session.
 
         Args:
@@ -168,30 +227,36 @@ class ComprehensiveReportService:
         Returns:
             ComprehensiveReport or None if not found
         """
-        from src.common.db.models import ComprehensiveReport as DBModel
+        from common.db.models import ComprehensiveReport as DBModel
 
-        result = await self.db.execute(
-            select(DBModel).where(DBModel.session_id == session_id)
-        )
-        db_report = result.scalar_one_or_none()
+        try:
+            result = await self.db.execute(
+                select(DBModel).where(DBModel.session_id == session_id)
+            )
+            db_report = result.scalar_one_or_none()
 
-        if not db_report:
-            return None
+            if not db_report:
+                return Result.fail("[REPORT_NOT_FOUND]")
 
-        return ComprehensiveReport(
-            session_id=db_report.session_id,
-            generated_at=db_report.generated_at,
-            overall_score=db_report.overall_score,
-            dimension_scores=[
-                DimensionScore(**d) for d in db_report.dimension_scores
-            ],
-            stage_summaries=db_report.stage_summaries,
-            key_strengths=db_report.key_strengths,
-            key_improvements=db_report.key_improvements,
-            detailed_feedback=db_report.detailed_feedback,
-            recommendations=db_report.recommendations,
-            comparison_to_baseline=db_report.comparison_to_baseline,
-        )
+            report = ComprehensiveReport(
+                session_id=db_report.session_id,
+                generated_at=db_report.created_at or datetime.now(timezone.utc),
+                overall_score=db_report.overall_score or 0.0,
+                dimension_scores=[
+                    DimensionScore(**d) for d in (db_report.dimension_scores or [])
+                ],
+                stage_summaries=db_report.stage_summaries or [],
+                key_strengths=db_report.key_strengths or [],
+                key_improvements=db_report.key_improvements or [],
+                detailed_feedback=db_report.detailed_feedback or "",
+                recommendations=db_report.recommendations or [],
+            )
+
+            return Result.ok(report)
+        except SQLAlchemyError as e:
+            return Result.fail(f"[DATABASE_ERROR:{str(e)}]")
+        except Exception as e:
+            return Result.fail(f"[REPORT_RETRIEVAL_ERROR:{str(e)}]")
 
     def _calculate_dimension_scores(
         self,
@@ -347,26 +412,59 @@ class ComprehensiveReportService:
         Returns:
             Result with detailed feedback text
         """
-        # Get report generation prompt
-        prompt_template = await self.prompt_service.get_template_for_scenario(
-            prompt_type="report",
-            scenario_type=scenario_type,
-        )
+        try:
+            # Get report generation prompt
+            prompt_template = await self.prompt_service.get_template_for_scenario(
+                prompt_type="report",
+                scenario_type=scenario_type,
+            )
 
-        if not prompt_template:
-            return Result.fail("[REPORT_PROMPT_NOT_FOUND]")
+            if not prompt_template:
+                return Result.fail("[REPORT_PROMPT_NOT_FOUND]")
 
-        # Prepare context
-        context = {
-            "session_id": session_id,
-            "stage_count": len(stage_results),
-            "overall_summary": self._format_stage_summaries(stage_results),
-        }
+            # Prepare context
+            context = {
+                "session_id": session_id,
+                "stage_count": len(stage_results),
+                "overall_summary": self._format_stage_summaries(stage_results),
+            }
 
-        # Call LLM
-        result = await self.llm.generate_report(context)
+            # Call LLM
+            llm_result = await self.llm.generate_report(context)
+            if not llm_result.is_success:
+                return Result.fail(llm_result.fallback or "[LLM_ERROR]")
 
-        return result
+            raw_value = llm_result.value
+            raw_payload = None
+            if isinstance(raw_value, str):
+                try:
+                    raw_payload = json.loads(raw_value)
+                except json.JSONDecodeError:
+                    raw_payload = None
+            elif isinstance(raw_value, dict):
+                raw_payload = raw_value
+
+            parse_result = await parse_llm_response(llm_result.value, ComprehensiveReportResponse)
+            if not parse_result.is_success:
+                if isinstance(raw_payload, dict):
+                    detailed_feedback = str(raw_payload.get("detailed_feedback", ""))
+                    if detailed_feedback:
+                        return Result.ok(detailed_feedback)
+
+                return Result.fail(f"[LLM_VALIDATION_FAILED:{parse_result.fallback}]")
+
+            parsed = parse_result.value
+            if parsed is None:
+                return Result.fail("[LLM_VALIDATION_FAILED:EMPTY_RESPONSE]")
+
+            detailed_feedback = parsed.detailed_feedback
+            if not detailed_feedback:
+                if isinstance(raw_payload, dict):
+                    detailed_feedback = str(raw_payload.get("detailed_feedback", ""))
+
+            return Result.ok(detailed_feedback)
+        except Exception:
+            return Result.ok("")
 
     async def _generate_recommendations(
         self,
@@ -384,21 +482,24 @@ class ComprehensiveReportService:
         Returns:
             List of recommendations
         """
-        recommendations = []
+        try:
+            recommendations = []
 
-        # Add recommendations based on low-scoring dimensions
-        for dim in dimension_scores:
-            if dim.score < 60:
-                recommendations.append(
-                    f"Focus on improving {dim.name.replace('_', ' ')} "
-                    f"(current score: {dim.score:.0f}/100)"
-                )
+            # Add recommendations based on low-scoring dimensions
+            for dim in dimension_scores:
+                if dim.score < 60:
+                    recommendations.append(
+                        f"Focus on improving {dim.name.replace('_', ' ')} "
+                        f"(current score: {dim.score:.0f}/100)"
+                    )
 
-        # Add recommendations based on improvement areas
-        for improvement in key_improvements[:3]:
-            recommendations.append(f"Practice: {improvement}")
+            # Add recommendations based on improvement areas
+            for improvement in key_improvements[:3]:
+                recommendations.append(f"Practice: {improvement}")
 
-        return recommendations[:5]  # Max 5 recommendations
+            return recommendations[:5]  # Max 5 recommendations
+        except Exception:
+            return []
 
     def _get_dimension_description(self, dimension_name: str) -> str:
         """Get description for a dimension.
@@ -435,18 +536,16 @@ class ComprehensiveReportService:
             parts.append(f"Stage {stage.stage_number}: {stage.summary}")
         return "\n".join(parts)
 
-    async def _store_report(self, report: ComprehensiveReport) -> None:
+    async def _store_report(self, report: ComprehensiveReport) -> Result[None]:
         """Store report in database.
 
         Args:
             report: Report to store
         """
-        from src.common.db.models import ComprehensiveReport as DBModel
+        from common.db.models import ComprehensiveReport as DBModel
 
         db_report = DBModel(
-            id=uuid4(),
             session_id=report.session_id,
-            generated_at=report.generated_at,
             overall_score=report.overall_score,
             dimension_scores=[
                 {
@@ -462,8 +561,15 @@ class ComprehensiveReportService:
             key_improvements=report.key_improvements,
             detailed_feedback=report.detailed_feedback,
             recommendations=report.recommendations,
-            comparison_to_baseline=report.comparison_to_baseline,
         )
 
-        self.db.add(db_report)
-        await self.db.commit()
+        try:
+            self.db.add(db_report)
+            await self.db.commit()
+            return Result.ok(None)
+        except SQLAlchemyError as e:
+            await self.db.rollback()
+            return Result.fail(f"[DATABASE_ERROR:{str(e)}]")
+        except Exception as e:
+            await self.db.rollback()
+            return Result.fail(f"[STORAGE_ERROR:{str(e)}]")

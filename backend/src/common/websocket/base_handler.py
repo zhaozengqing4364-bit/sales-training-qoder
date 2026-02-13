@@ -3,11 +3,17 @@ Base WebSocket Handler with connection lifecycle management
 Constitution Principle I: No error popups, graceful degradation
 """
 import asyncio
-from datetime import datetime
+from datetime import datetime, timezone
+from typing import Optional
 
 from fastapi import WebSocket, WebSocketDisconnect
+from starlette.websockets import WebSocketState
 
 from common.monitoring.logger import get_logger, set_trace_id, get_trace_id
+from common.websocket.session_state_service import (
+    SessionStateSnapshot,
+    get_session_state_service,
+)
 
 logger = get_logger(__name__)
 
@@ -34,7 +40,7 @@ class ConnectionManager:
         # Send acknowledgment
         await self.send_json(websocket, {
             "type": "connected",
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
             "data": {"session_id": session_id}
         })
 
@@ -77,7 +83,7 @@ def get_connection_manager() -> ConnectionManager:
 class BaseWebSocketHandler:
     """
     Base class for scenario-specific WebSocket handlers
-    Implements message queue for non-blocking handling
+    Implements message queue for non-blocking handling and session state recovery
     """
 
     def __init__(self, scenario: str):
@@ -85,6 +91,10 @@ class BaseWebSocketHandler:
         self.manager = get_connection_manager()
         self.message_queue: asyncio.Queue = None
         self.running = False
+        self.websocket: WebSocket | None = None
+        self.session_id: str | None = None
+        self.state_service = get_session_state_service()
+        self.user_id: str | None = None
 
     async def handle_connection(
         self,
@@ -102,16 +112,28 @@ class BaseWebSocketHandler:
             from common.auth.service import verify_token
             payload = verify_token(token)
             set_trace_id(payload.get("trace_id", ""))
-        except Exception as e:
+            self.user_id = payload.get("user_id")
+        except (RuntimeError, ValueError, OSError) as e:
             logger.warning(f"Token verification failed: {str(e)}")
             set_trace_id("")
 
+        # Check for existing session state (reconnection scenario)
+        existing_state = await self.state_service.get_state(session_id)
+        is_reconnection = existing_state.is_success and existing_state.value is not None
+
         # Connect
+        self.websocket = websocket
+        self.session_id = session_id
         await self.manager.connect(websocket, self.scenario, session_id)
 
         # Initialize message queue
         self.message_queue = asyncio.Queue()
         self.running = True
+
+        # Restore state if reconnection
+        if is_reconnection:
+            logger.info(f"Reconnection detected for session: {session_id}")
+            await self._restore_session_state(existing_state.value)
 
         # Start message processing task
         processing_task = asyncio.create_task(self._process_messages())
@@ -131,19 +153,38 @@ class BaseWebSocketHandler:
                     # Send heartbeat
                     await self.manager.send_json(websocket, {
                         "type": "heartbeat",
-                        "timestamp": datetime.utcnow().isoformat(),
+                        "timestamp": datetime.now(timezone.utc).isoformat(),
                         "data": {}
                     })
 
         except WebSocketDisconnect:
             logger.info(f"WebSocket disconnected normally: session={session_id}")
-        except Exception as e:
+        except (RuntimeError, ValueError, OSError) as e:
             logger.error(f"WebSocket error: {str(e)}")
         finally:
+            # Save session state before cleanup
+            await self._save_session_state()
             # Cleanup
             self.running = False
             self.manager.disconnect(self.scenario, session_id)
             processing_task.cancel()
+
+    async def send_message(self, message: dict):
+        """Send message to current websocket connection (SessionManager hook)."""
+        if not self.websocket:
+            return
+        await self.manager.send_json(self.websocket, message)
+
+    async def close(self, code: int = 1000, reason: str = "Session closed"):
+        """Close current websocket connection safely (SessionManager hook)."""
+        if not self.websocket:
+            return
+
+        try:
+            if self.websocket.client_state == WebSocketState.CONNECTED:
+                await self.websocket.close(code=code, reason=reason)
+        except (RuntimeError, ValueError, OSError) as e:
+            logger.warning(f"Failed to close websocket: {e}")
 
     async def _process_messages(self):
         """
@@ -156,7 +197,7 @@ class BaseWebSocketHandler:
                 await self.handle_message(message)
             except asyncio.CancelledError:
                 break
-            except Exception as e:
+            except (RuntimeError, ValueError, OSError) as e:
                 logger.error(f"Message processing error: {str(e)}")
 
     async def handle_message(self, message: dict):
@@ -177,7 +218,7 @@ class BaseWebSocketHandler:
         """
         await self.manager.send_json(websocket, {
             "type": "error",
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": datetime.now(timezone.utc).isoformat(),
             "data": {
                 "code": error_code,
                 "message": message,
@@ -185,3 +226,63 @@ class BaseWebSocketHandler:
                 "trace_id": get_trace_id()
             }
         })
+
+    def _create_state_snapshot(self) -> SessionStateSnapshot:
+        """
+        Create a session state snapshot.
+        Override in subclasses to include scenario-specific state.
+        """
+        return SessionStateSnapshot(
+            session_id=self.session_id or "",
+            scenario=self.scenario,
+            user_id=self.user_id,
+        )
+
+    async def _save_session_state(self):
+        """Save current session state snapshot."""
+        if not self.session_id:
+            return
+
+        snapshot = self._create_state_snapshot()
+        result = await self.state_service.save_state(snapshot)
+
+        if result.is_success:
+            logger.info(f"Saved session state: {self.session_id}")
+        else:
+            logger.warning(f"Failed to save session state: {result.fallback}")
+
+    async def _restore_session_state(self, state: SessionStateSnapshot):
+        """
+        Restore session state from snapshot.
+        Override in subclasses to handle scenario-specific state restoration.
+        """
+        logger.info(
+            f"Restoring session state: session_id={state.session_id}, "
+            f"scenario={state.scenario}"
+        )
+        # Base implementation - subclasses can override to restore specific state
+
+    async def _send_reconnection_success(self, state: SessionStateSnapshot):
+        """
+        Send reconnection success message to client.
+        """
+        websocket = self._get_active_websocket()
+        if not websocket:
+            return
+
+        await self.manager.send_json(
+            websocket,
+            {
+                "type": "reconnected",
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "data": {
+                    "session_id": state.session_id,
+                    "scenario": state.scenario,
+                    "restored_state": state.to_dict(),
+                },
+            },
+        )
+
+    def _get_active_websocket(self) -> WebSocket | None:
+        """Get current active websocket for the session."""
+        return self.websocket

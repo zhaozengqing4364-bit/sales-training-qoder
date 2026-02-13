@@ -22,27 +22,29 @@ export default function LoginPage() {
 
         try {
             const res = await api.auth.login({ email, password });
-            if (res.token) {
-                localStorage.setItem("token", res.token);
+            // Backend returns { token, user: { id, name, email, role } }
+            const token = res.access_token || res.token;
+            if (token) {
+                localStorage.setItem("token", token);
                 // Store user info for sidebar display
                 if (res.user) {
                     localStorage.setItem("user", JSON.stringify({
-                        id: res.user.id,
+                        id: res.user.user_id || res.user.id,
                         name: res.user.name,
                         display_name: res.user.name,
                         email: res.user.email,
                         role: res.user.role,
                     }));
                 }
-                
+
                 // Redirect based on role or default to dashboard
                 router.push("/");
             } else {
                 setError("登录失败，未获取到令牌");
             }
-        } catch (err: any) {
+        } catch (err: unknown) {
             console.error("Login failed", err);
-            setError(err.message || "登录失败，请检查账号密码");
+            setError(err instanceof Error ? err.message : "登录失败，请检查账号密码");
         } finally {
             setIsLoading(false);
         }
@@ -83,6 +85,8 @@ export default function LoginPage() {
                         <div className="space-y-2">
                             <Input 
                                 type="email"
+                                name="email"
+                                autoComplete="username"
                                 placeholder="name@company.com" 
                                 className="bg-white/50 focus:bg-white transition-colors h-12 rounded-full px-6"
                                 value={email}
@@ -93,6 +97,8 @@ export default function LoginPage() {
                         <div className="space-y-2">
                             <Input 
                                 type="password" 
+                                name="password"
+                                autoComplete="current-password"
                                 placeholder="••••••••" 
                                 className="bg-white/50 focus:bg-white transition-colors h-12 rounded-full px-6"
                                 value={password}

@@ -3,7 +3,6 @@
 import { AdminSidebar, AdminSidebarContent } from "@/components/layout/admin-sidebar";
 import { GlassSheet } from "@/components/ui/glass-sheet";
 import { Button } from "@/components/ui/button";
-import { ToastProvider } from "@/components/ui/toast";
 import { Menu, Shield } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useSidebarStore } from "@/hooks/use-sidebar";
@@ -18,13 +17,8 @@ export default function AdminLayout({
     const { isLoading, isAuthorized } = useAuthProtection({ requiredRole: "admin" });
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
     const { isCollapsed } = useSidebarStore();
-    const [mounted, setMounted] = useState(false);
 
-    useEffect(() => {
-        setMounted(true);
-    }, []);
-
-    const isSidebarCollapsed = mounted ? isCollapsed : false;
+    const isSidebarCollapsed = isCollapsed;
 
     // Edge Swipe to Open Sidebar
     useEffect(() => {
@@ -78,7 +72,6 @@ export default function AdminLayout({
     }
 
     return (
-        <ToastProvider>
         <div className="flex bg-[#FAFAF9] min-h-screen text-slate-900 selection:bg-blue-100 selection:text-blue-900 relative overflow-hidden">
 
             {/* Soft Ambient Background - Admin Style */}
@@ -120,6 +113,5 @@ export default function AdminLayout({
                 </div>
             </main>
         </div>
-        </ToastProvider>
     );
 }

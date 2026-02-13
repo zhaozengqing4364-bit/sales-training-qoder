@@ -8,7 +8,7 @@ References:
 - Design: Section 12 (Replay Service)
 """
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -67,7 +67,7 @@ class TestReplayService:
             msg.role = "user" if i % 2 == 0 else "assistant"
             msg.content = f"Message {i + 1}"
             msg.audio_url = f"https://storage.example.com/audio/msg-{i + 1}.mp3"
-            msg.timestamp = datetime.utcnow()
+            msg.timestamp = datetime.now(timezone.utc)
             msg.duration_ms = 3000 + i * 500
             msg.fuzzy_words = None
             msg.sales_stage = "opening" if i == 0 else "discovery"
@@ -250,7 +250,7 @@ class TestReplayService:
         highlight_msg.turn_number = 2
         highlight_msg.role = "user"
         highlight_msg.content = "我们的产品大概能帮您节省30%"
-        highlight_msg.timestamp = datetime.utcnow()
+        highlight_msg.timestamp = datetime.now(timezone.utc)
         highlight_msg.is_highlight = True
         highlight_msg.highlight_type = "bad"
         highlight_msg.highlight_reason = "模糊词使用"
@@ -260,14 +260,21 @@ class TestReplayService:
         mock_highlights_result = MagicMock()
         mock_highlights_result.scalars.return_value.all.return_value = [highlight_msg]
 
-        mock_db.execute.side_effect = [mock_session_result, mock_highlights_result]
+        # Mock context messages (prev and next)
+        mock_prev_result = MagicMock()
+        mock_prev_result.scalar_one_or_none.return_value = None
+        mock_next_result = MagicMock()
+        mock_next_result.scalar_one_or_none.return_value = None
+
+        # 4 calls: session check, highlights query, prev context, next context
+        mock_db.execute.side_effect = [mock_session_result, mock_highlights_result, mock_prev_result, mock_next_result]
 
         # Act
         result = await service.get_highlights(mock_completed_session.session_id)
 
         # Assert
         assert result.is_success
-        highlights = result.value
+        highlights = result.value["highlights"]
         assert len(highlights) == 1
         assert highlights[0]["highlight_type"] == "bad"
         assert highlights[0]["highlight_reason"] == "模糊词使用"
@@ -282,6 +289,7 @@ class TestReplayService:
         mock_highlights_result = MagicMock()
         mock_highlights_result.scalars.return_value.all.return_value = []
 
+        # Only 2 calls when no highlights: session check, highlights query (no context calls needed)
         mock_db.execute.side_effect = [mock_session_result, mock_highlights_result]
 
         # Act
@@ -289,7 +297,9 @@ class TestReplayService:
 
         # Assert
         assert result.is_success
-        assert len(result.value) == 0
+        assert len(result.value["highlights"]) == 0
+        assert result.value["total_good"] == 0
+        assert result.value["total_bad"] == 0
 
     # ========== _generate_timeline_markers tests ==========
 

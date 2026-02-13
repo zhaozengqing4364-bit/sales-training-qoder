@@ -10,13 +10,71 @@ Phase 2.2: TTS服务工厂和降级机制
 """
 
 import os
+import time
 from collections.abc import Awaitable, Callable
 from enum import Enum
 
+from common.ai.config_manager import get_config_manager
+from common.ai.models import ModelType
 from common.error_handling.result import Result
 from common.monitoring.logger import get_logger
 
 logger = get_logger(__name__)
+
+
+def _resolve_tts_runtime_config() -> dict[str, object] | None:
+    """Resolve runtime TTS config from database default config only."""
+    try:
+        config_manager = get_config_manager()
+        db_config = config_manager.get_default_config(ModelType.TTS)
+        if not db_config or not db_config.is_active:
+            return None
+
+        provider_raw = str(db_config.provider).lower()
+        if provider_raw in {"alibaba", "aliyun"}:
+            provider = TTSProvider.ALIYUN.value
+        else:
+            provider = TTSProvider.EDGE.value
+
+        api_key = ""
+        if db_config.api_key_encrypted:
+            decrypt_result = config_manager.get_decrypted_api_key(db_config)
+            if decrypt_result.is_success and decrypt_result.value:
+                api_key = decrypt_result.value
+
+        return {
+            "provider": provider,
+            "api_key": api_key,
+            "voice": db_config.model_name or "",
+            "extra_config": db_config.extra_config or {},
+        }
+    except Exception as exc:  # noqa: BLE001
+        logger.warning(f"Failed to resolve TTS runtime config: {exc}")
+        return None
+
+
+def _apply_edge_voice_config(service: object, runtime_config: dict[str, object] | None) -> None:
+    """Apply runtime voice/rate/pitch to Edge TTS service if available."""
+    if not runtime_config:
+        return
+
+    if runtime_config.get("provider") != TTSProvider.EDGE.value:
+        return
+
+    voice = runtime_config.get("voice")
+    extra_config = runtime_config.get("extra_config", {})
+    if isinstance(voice, str) and voice and hasattr(service, "voice"):
+        setattr(service, "voice", voice)
+
+    if isinstance(extra_config, dict) and hasattr(service, "set_voice_parameters"):
+        rate = extra_config.get("rate")
+        volume = extra_config.get("volume")
+        pitch = extra_config.get("pitch")
+        service.set_voice_parameters(  # type: ignore[attr-defined]
+            rate=rate if isinstance(rate, str) else None,
+            volume=volume if isinstance(volume, str) else None,
+            pitch=pitch if isinstance(pitch, str) else None,
+        )
 
 
 class TTSProvider(Enum):
@@ -44,16 +102,28 @@ class TTSServiceFactory:
         Raises:
             ValueError: 如果提供商名称未知
         """
-        provider = provider or os.getenv("TTS_PROVIDER", TTSProvider.ALIYUN.value)
+        runtime_config = _resolve_tts_runtime_config()
+        provider = (
+            provider
+            or (runtime_config.get("provider") if runtime_config else None)
+            or os.getenv("TTS_PROVIDER", TTSProvider.ALIYUN.value)
+        )
 
         if provider == TTSProvider.ALIYUN.value:
             from common.audio.aliyun_streaming_tts import get_aliyun_tts_service
 
-            return get_aliyun_tts_service()
-        elif provider == TTSProvider.EDGE.value:
+            api_key = runtime_config.get("api_key") if runtime_config else None
+            voice = runtime_config.get("voice") if runtime_config else None
+            return get_aliyun_tts_service(
+                api_key=api_key if isinstance(api_key, str) else None,
+                default_voice=voice if isinstance(voice, str) and voice else None,
+            )
+        elif provider in {TTSProvider.EDGE.value, "local"}:
             from common.audio.tts_service import get_tts_service
 
-            return get_tts_service()
+            service = get_tts_service()
+            _apply_edge_voice_config(service, runtime_config)
+            return service
         elif provider == TTSProvider.BROWSER.value:
             # 浏览器TTS不需要后端服务
             raise ValueError(
@@ -75,34 +145,55 @@ class TTSServiceWithFallback:
         self.fallback_service: object | None = None
         self.primary_available = False
         self.fallback_available = False
+        self.runtime_config = _resolve_tts_runtime_config()
+        self.metrics = {
+            "primary_success": 0,
+            "primary_failures": 0,
+            "fallback_success": 0,
+            "fallback_failures": 0,
+            "browser_fallbacks": 0,
+            "last_provider": None,
+        }
+
+        configured_provider = (
+            self.runtime_config.get("provider")
+            if self.runtime_config
+            else os.getenv("TTS_PROVIDER", TTSProvider.ALIYUN.value)
+        )
 
         # 尝试初始化主服务（阿里云）
-        try:
-            from common.audio.aliyun_streaming_tts import (
-                AliyunStreamingTTS,
-                get_aliyun_tts_service,
-            )
+        if configured_provider == TTSProvider.ALIYUN.value:
+            try:
+                from common.audio.aliyun_streaming_tts import AliyunStreamingTTS
 
-            self.primary_service = get_aliyun_tts_service()
-            # 验证服务是否真正可用（检查API Key等）
-            if isinstance(self.primary_service, AliyunStreamingTTS):
-                if self.primary_service.api_key:
-                    self.primary_available = True
-                    logger.info("Aliyun TTS service initialized successfully")
+                api_key = self.runtime_config.get("api_key") if self.runtime_config else None
+                voice = self.runtime_config.get("voice") if self.runtime_config else None
+                self.primary_service = get_aliyun_tts_service(
+                    api_key=api_key if isinstance(api_key, str) else None,
+                    default_voice=voice if isinstance(voice, str) and voice else None,
+                )
+                # 验证服务是否真正可用（检查API Key等）
+                if isinstance(self.primary_service, AliyunStreamingTTS):
+                    if self.primary_service.api_key:
+                        self.primary_available = True
+                        logger.info("Aliyun TTS service initialized successfully")
+                    else:
+                        logger.warning("Aliyun TTS initialized but API key is empty")
                 else:
-                    logger.warning("Aliyun TTS initialized but API key is empty")
-            else:
-                self.primary_available = True
-                logger.info("Aliyun TTS service initialized")
-        except Exception as e:
-            logger.warning(f"Aliyun TTS not available: {e}")
-            self.primary_available = False
+                    self.primary_available = True
+                    logger.info("Aliyun TTS service initialized")
+            except Exception as e:
+                logger.warning(f"Aliyun TTS not available: {e}")
+                self.primary_available = False
+        else:
+            logger.info("TTS configured to Edge/local provider, skip Aliyun primary")
 
         # 尝试初始化备用服务（Edge-TTS）
         try:
-            from common.audio.tts_service import TTSService, get_tts_service
+            from common.audio.tts_service import TTSService
 
             self.fallback_service = get_tts_service()
+            _apply_edge_voice_config(self.fallback_service, self.runtime_config)
             # 验证服务是否真正可用
             if isinstance(self.fallback_service, TTSService):
                 self.fallback_available = True
@@ -138,6 +229,8 @@ class TTSServiceWithFallback:
         Returns:
             Result[int]: 成功返回总时长(ms)，失败返回降级指令
         """
+        start_time = time.perf_counter()
+
         # 1. 尝试阿里云TTS
         if self.primary_available and self.primary_service:
             try:
@@ -145,12 +238,17 @@ class TTSServiceWithFallback:
                     text, on_chunk, voice, stream_id
                 )
                 if result.is_success:
-                    logger.debug("Aliyun TTS synthesis succeeded")
+                    self.metrics["primary_success"] += 1
+                    self.metrics["last_provider"] = TTSProvider.ALIYUN.value
+                    elapsed_ms = int((time.perf_counter() - start_time) * 1000)
+                    logger.debug(f"Aliyun TTS synthesis succeeded in {elapsed_ms}ms")
                     return result
+                self.metrics["primary_failures"] += 1
                 logger.warning(
                     f"Aliyun TTS failed, falling back to Edge-TTS: {result.fallback}"
                 )
-            except Exception as e:
+            except (ConnectionError, OSError, RuntimeError, ValueError) as e:
+                self.metrics["primary_failures"] += 1
                 logger.warning(f"Aliyun TTS error, falling back: {e}")
 
         # 2. 降级到 Edge-TTS
@@ -170,15 +268,22 @@ class TTSServiceWithFallback:
                     text, edge_on_chunk, voice
                 )
                 if result.is_success:
-                    logger.info("Fallback to Edge-TTS succeeded")
+                    self.metrics["fallback_success"] += 1
+                    self.metrics["last_provider"] = TTSProvider.EDGE.value
+                    elapsed_ms = int((time.perf_counter() - start_time) * 1000)
+                    logger.info(f"Fallback to Edge-TTS succeeded in {elapsed_ms}ms")
                     return result
+                self.metrics["fallback_failures"] += 1
                 logger.warning(
                     f"Edge-TTS failed, falling back to browser: {result.fallback}"
                 )
-            except Exception as e:
+            except (ConnectionError, OSError, RuntimeError, ValueError) as e:
+                self.metrics["fallback_failures"] += 1
                 logger.error(f"Edge-TTS fallback failed: {e}")
 
         # 3. 最终降级到浏览器TTS
+        self.metrics["browser_fallbacks"] += 1
+        self.metrics["last_provider"] = TTSProvider.BROWSER.value
         logger.error("All TTS services failed, instructing browser TTS")
         return Result.fail("[USE_BROWSER_TTS]")
 
@@ -199,6 +304,8 @@ class TTSServiceWithFallback:
         Returns:
             Result[bool]: 成功返回True，失败返回降级指令
         """
+        start_time = time.perf_counter()
+
         # 1. 尝试阿里云TTS
         if self.primary_available and self.primary_service:
             try:
@@ -206,12 +313,17 @@ class TTSServiceWithFallback:
                     text, output_file, voice
                 )
                 if result.is_success:
-                    logger.debug("Aliyun TTS file synthesis succeeded")
+                    self.metrics["primary_success"] += 1
+                    self.metrics["last_provider"] = TTSProvider.ALIYUN.value
+                    elapsed_ms = int((time.perf_counter() - start_time) * 1000)
+                    logger.debug(f"Aliyun TTS file synthesis succeeded in {elapsed_ms}ms")
                     return result
+                self.metrics["primary_failures"] += 1
                 logger.warning(
                     f"Aliyun TTS file synthesis failed, falling back: {result.fallback}"
                 )
-            except Exception as e:
+            except (ConnectionError, OSError, RuntimeError, ValueError) as e:
+                self.metrics["primary_failures"] += 1
                 logger.warning(f"Aliyun TTS file error, falling back: {e}")
 
         # 2. 降级到 Edge-TTS
@@ -221,13 +333,20 @@ class TTSServiceWithFallback:
                     text, output_file, voice
                 )
                 if result.is_success:
-                    logger.info("Fallback to Edge-TTS file synthesis succeeded")
+                    self.metrics["fallback_success"] += 1
+                    self.metrics["last_provider"] = TTSProvider.EDGE.value
+                    elapsed_ms = int((time.perf_counter() - start_time) * 1000)
+                    logger.info(f"Fallback to Edge-TTS file synthesis succeeded in {elapsed_ms}ms")
                     return result
+                self.metrics["fallback_failures"] += 1
                 logger.warning(f"Edge-TTS file synthesis failed: {result.fallback}")
-            except Exception as e:
+            except (ConnectionError, OSError, RuntimeError, ValueError) as e:
+                self.metrics["fallback_failures"] += 1
                 logger.error(f"Edge-TTS file fallback failed: {e}")
 
         # 3. 最终降级
+        self.metrics["browser_fallbacks"] += 1
+        self.metrics["last_provider"] = TTSProvider.BROWSER.value
         logger.error("All TTS file services failed")
         return Result.fail("[USE_BROWSER_TTS]")
 
@@ -251,6 +370,7 @@ class TTSServiceWithFallback:
                 "provider": TTSProvider.BROWSER.value,
                 "available": True,  # 浏览器TTS始终可用
             },
+            "metrics": dict(self.metrics),
         }
 
 
@@ -278,3 +398,20 @@ def reset_tts_service_with_fallback() -> None:
     global _tts_service_with_fallback
     _tts_service_with_fallback = None
     logger.debug("TTS service with fallback reset")
+
+
+def get_tts_service():
+    """Compatibility wrapper for tests and legacy patch points."""
+    from common.audio.tts_service import get_tts_service as _get_tts_service
+
+    return _get_tts_service()
+
+
+def get_aliyun_tts_service(
+    api_key: str | None = None,
+    default_voice: str | None = None,
+):
+    """Compatibility wrapper for tests and legacy patch points."""
+    from common.audio.aliyun_streaming_tts import get_aliyun_tts_service as _get_aliyun
+
+    return _get_aliyun(api_key=api_key, default_voice=default_voice)

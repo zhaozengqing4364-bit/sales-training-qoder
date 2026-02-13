@@ -17,14 +17,8 @@ export default function DashboardLayout({
     const { isLoading } = useAuthProtection();
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
     const { isCollapsed } = useSidebarStore();
-    const [mounted, setMounted] = useState(false);
 
-    useEffect(() => {
-        setMounted(true);
-    }, []);
-
-    // Prevent hydration mismatch by rendering default state initially
-    const isSidebarCollapsed = mounted ? isCollapsed : false;
+    const isSidebarCollapsed = isCollapsed;
 
     // Edge Swipe to Open Sidebar
     useEffect(() => {

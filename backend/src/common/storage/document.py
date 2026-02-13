@@ -54,7 +54,7 @@ class DocumentStorageService:
         try:
             self.base_path.mkdir(parents=True, exist_ok=True)
             logger.info(f"Document storage path: {self.base_path}")
-        except Exception as e:
+        except (OSError, ValueError, RuntimeError) as e:
             logger.error(f"Failed to create document storage path: {e}")
 
     async def save_document(
@@ -102,7 +102,7 @@ class DocumentStorageService:
             # Return local path
             return str(file_path)
 
-        except Exception as e:
+        except (OSError, ValueError, RuntimeError) as e:
             logger.error(
                 f"Failed to save document: {e}",
                 knowledge_base_id=knowledge_base_id,
@@ -198,7 +198,7 @@ class DocumentStorageService:
                 logger.info(f"Deleted document file: {file_path}")
                 return True
             return False
-        except Exception as e:
+        except (OSError, ValueError, RuntimeError) as e:
             logger.error(f"Failed to delete document: {e}")
             return False
 
@@ -230,7 +230,7 @@ class DocumentStorageService:
             logger.info(f"Deleted {count} document files for KB {knowledge_base_id}")
             return count
 
-        except Exception as e:
+        except (OSError, ValueError, RuntimeError) as e:
             logger.error(f"Failed to delete KB documents: {e}")
             return 0
 
@@ -256,7 +256,7 @@ class DocumentStorageService:
                         total_files += 1
                         total_size += file_path.stat().st_size
 
-        except Exception as e:
+        except (OSError, ValueError, RuntimeError) as e:
             logger.error(f"Failed to get storage stats: {e}")
 
         return {

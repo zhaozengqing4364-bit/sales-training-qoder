@@ -44,6 +44,6 @@ class Result(Generic[T]):
         if self.is_success and self.value is not None:
             try:
                 return Result.ok(fn(self.value))
-            except Exception as e:
+            except (RuntimeError, ValueError) as e:
                 return Result.fail(str(e))
         return self

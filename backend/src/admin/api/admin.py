@@ -13,6 +13,7 @@ from datetime import datetime
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from pydantic import BaseModel
 from sqlalchemy import select
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.auth.service import get_current_user
@@ -51,8 +52,10 @@ class TalkingPointCreate(BaseModel):
 
 
 class ForbiddenWordCreate(BaseModel):
-    word: str
+    word: str | None = None
+    phrase: str | None = None
     pattern_type: str = "literal"  # literal or regex
+    suggested_alternative: str | None = None
 
 
 # Presentations CRUD
@@ -78,7 +81,7 @@ async def create_presentation(
         await db.refresh(presentation)
 
         return presentation
-    except Exception as e:
+    except SQLAlchemyError as e:
         logger.error(f"Failed to create presentation: {str(e)}")
         raise HTTPException(status_code=500, detail="Failed to create presentation")
 
@@ -179,7 +182,7 @@ async def upload_presentation(
 
         return presentation
 
-    except Exception as e:
+    except (SQLAlchemyError, OSError, ValueError) as e:
         logger.error(f"Failed to upload presentation: {str(e)}")
         raise HTTPException(status_code=500, detail="Failed to upload presentation")
 
@@ -200,7 +203,7 @@ async def list_presentations(
         presentations = result.scalars().all()
 
         return {"presentations": presentations, "total": len(presentations)}
-    except Exception as e:
+    except SQLAlchemyError as e:
         logger.error(f"Failed to list presentations: {str(e)}")
         raise HTTPException(status_code=500, detail="Failed to list presentations")
 
@@ -224,7 +227,7 @@ async def get_presentation(
         return presentation
     except HTTPException:
         raise
-    except Exception as e:
+    except SQLAlchemyError as e:
         logger.error(f"Failed to get presentation: {str(e)}")
         raise HTTPException(status_code=500, detail="Failed to get presentation")
 
@@ -256,7 +259,7 @@ async def delete_presentation(
         return {"deleted": True}
     except HTTPException:
         raise
-    except Exception as e:
+    except SQLAlchemyError as e:
         logger.error(f"Failed to delete presentation: {str(e)}")
         raise HTTPException(status_code=500, detail="Failed to delete presentation")
 
@@ -278,7 +281,7 @@ async def list_pages(
         pages = result.scalars().all()
 
         return {"pages": pages, "total": len(pages)}
-    except Exception as e:
+    except SQLAlchemyError as e:
         logger.error(f"Failed to list pages: {str(e)}")
         raise HTTPException(status_code=500, detail="Failed to list pages")
 
@@ -323,7 +326,7 @@ async def update_page(
         return page
     except HTTPException:
         raise
-    except Exception as e:
+    except SQLAlchemyError as e:
         logger.error(f"Failed to update page: {str(e)}")
         raise HTTPException(status_code=500, detail="Failed to update page")
 
@@ -353,7 +356,7 @@ async def create_talking_point(
         await db.refresh(talking_point)
 
         return talking_point
-    except Exception as e:
+    except SQLAlchemyError as e:
         logger.error(f"Failed to create talking point: {str(e)}")
         raise HTTPException(status_code=500, detail="Failed to create talking point")
 
@@ -376,7 +379,7 @@ async def list_talking_points(
         points = result.scalars().all()
 
         return {"points": points, "total": len(points)}
-    except Exception as e:
+    except SQLAlchemyError as e:
         logger.error(f"Failed to list talking points: {str(e)}")
         raise HTTPException(status_code=500, detail="Failed to list talking points")
 
@@ -405,13 +408,13 @@ async def delete_talking_point(
         return {"deleted": True}
     except HTTPException:
         raise
-    except Exception as e:
+    except SQLAlchemyError as e:
         logger.error(f"Failed to delete talking point: {str(e)}")
         raise HTTPException(status_code=500, detail="Failed to delete talking point")
 
 
 # Forbidden Words CRUD
-@router.post("/admin/presentations/{presentation_id}/forbidden-words")
+@router.post("/admin/presentations/{presentation_id}/forbidden-words", status_code=201)
 async def create_forbidden_word(
     presentation_id: str,
     data: ForbiddenWordCreate,
@@ -420,12 +423,17 @@ async def create_forbidden_word(
 ):
     """Create a forbidden word for a presentation"""
     try:
+        phrase_value = (data.phrase or data.word or "").strip()
+        if not phrase_value:
+            raise HTTPException(status_code=400, detail="Forbidden phrase is required")
+
         forbidden_word = ForbiddenWord(
-            word_id=uuid.uuid4(),
-            presentation_id=uuid.UUID(presentation_id),
-            word=data.word,
-            pattern_type=data.pattern_type,
-            created_at=datetime.now(),
+            word_id=str(uuid.uuid4()),
+            presentation_id=presentation_id,
+            page_id=None,
+            phrase=phrase_value,
+            suggested_alternative=data.suggested_alternative,
+            is_regex=(data.pattern_type == "regex"),
         )
 
         db.add(forbidden_word)
@@ -433,7 +441,9 @@ async def create_forbidden_word(
         await db.refresh(forbidden_word)
 
         return forbidden_word
-    except Exception as e:
+    except HTTPException:
+        raise
+    except SQLAlchemyError as e:
         logger.error(f"Failed to create forbidden word: {str(e)}")
         raise HTTPException(status_code=500, detail="Failed to create forbidden word")
 
@@ -454,7 +464,7 @@ async def list_forbidden_words(
         words = result.scalars().all()
 
         return {"words": words, "total": len(words)}
-    except Exception as e:
+    except SQLAlchemyError as e:
         logger.error(f"Failed to list forbidden words: {str(e)}")
         raise HTTPException(status_code=500, detail="Failed to list forbidden words")
 
@@ -483,6 +493,6 @@ async def delete_forbidden_word(
         return {"deleted": True}
     except HTTPException:
         raise
-    except Exception as e:
+    except SQLAlchemyError as e:
         logger.error(f"Failed to delete forbidden word: {str(e)}")
         raise HTTPException(status_code=500, detail="Failed to delete forbidden word")

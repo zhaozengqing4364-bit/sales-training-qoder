@@ -8,8 +8,10 @@
 docs/api-contract/
 ├── README.md           # 本文件 - 契约说明
 ├── agents.md           # Agent 管理 API 契约
+├── analytics.md        # 分析与排行榜 API 契约
 ├── personas.md         # Persona 管理 API 契约
 ├── knowledge.md        # 知识库管理 API 契约
+├── support-runtime.md  # 支持角色运行状态只读 API 契约
 ├── sessions.md         # 会话管理 API 契约 (增强)
 ├── replay.md           # 对话回放 API 契约
 └── websocket.md        # WebSocket 消息契约
@@ -47,7 +49,7 @@ docs/api-contract/
 
 ## 响应格式规范
 
-所有 API 使用统一响应格式:
+默认 API 使用统一响应格式（历史兼容接口以模块文档为准，如 `analytics.md`）:
 
 ```json
 // 成功
@@ -90,3 +92,9 @@ docs/api-contract/
 | 日期 | 变更 | 影响模块 |
 |------|------|----------|
 | 2025-01-11 | 初始创建 | 全部 |
+| 2026-02-10 | 新增 analytics 契约，补齐排行榜参数归一化与 include_me 能力 | analytics |
+| 2026-02-10 | 规范化 agents/personas/knowledge 契约并切换为“已实现”状态 | agents, personas, knowledge |
+| 2026-02-11 | 新增 support 运行状态只读契约 | support-runtime |
+| 2026-02-11 | 补充 Agent 归档状态会话创建保护说明 | agents |
+| 2026-02-11 | 补充 Agent/Persona 增强模式参数配对约束 | agents |
+| 2026-02-11 | 新增 sessions 契约并补齐创建会话策略快照、报告/回放快照引用字段 | sessions, replay |

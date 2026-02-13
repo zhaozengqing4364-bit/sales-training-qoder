@@ -21,7 +21,7 @@ from uuid import UUID
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.prompt_templates.models import PromptTemplate
+from prompt_templates.models import PromptTemplate
 
 
 @dataclass
@@ -130,7 +130,7 @@ class PromptTemplateLoader:
             PromptTemplate or None
         """
         from sqlalchemy import select
-        from src.common.db.models import PromptTemplate as PromptTemplateDB
+        from common.db.models import PromptTemplate as PromptTemplateDB
 
         result = await db_session.execute(
             select(PromptTemplateDB).where(PromptTemplateDB.id == template_id)

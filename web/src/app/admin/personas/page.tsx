@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/components/ui/toast";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-import { Search, Filter, MoreHorizontal, Plus, Star, Edit2, Trash2, AlertCircle, RefreshCcw } from "lucide-react";
+import { Search, Filter, Plus, Star, Edit2, Trash2, AlertCircle, RefreshCcw, Power } from "lucide-react";
 import {
     Dialog,
     DialogContent,
@@ -41,6 +41,15 @@ const categoryLabels: Record<string, string> = {
     examiner: "考官",
 };
 
+const normalizePersonaStatus = (status?: string): "active" | "inactive" => (
+    status === "inactive" ? "inactive" : "active"
+);
+
+const personaStatusLabel: Record<"active" | "inactive", string> = {
+    active: "启用中",
+    inactive: "已停用",
+};
+
 export default function PersonasPage() {
     const toast = useToast();
     const [personas, setPersonas] = useState<AdminPersona[]>([]);
@@ -67,6 +76,7 @@ export default function PersonasPage() {
     // Delete confirm dialog
     const [deleteTarget, setDeleteTarget] = useState<AdminPersona | null>(null);
     const [isDeleting, setIsDeleting] = useState(false);
+    const [statusUpdatingId, setStatusUpdatingId] = useState<string | null>(null);
 
     const loadData = async () => {
         setIsLoading(true);
@@ -141,6 +151,31 @@ export default function PersonasPage() {
             toast.error(`删除失败: ${err instanceof Error ? err.message : "未知错误"}`);
         } finally {
             setIsDeleting(false);
+        }
+    };
+
+    const handleToggleStatus = async (persona: AdminPersona) => {
+        const currentStatus = normalizePersonaStatus(persona.status);
+        const nextStatus = currentStatus === "active" ? "inactive" : "active";
+
+        setStatusUpdatingId(persona.id);
+        try {
+            const updated = await api.admin.updatePersona(persona.id, { status: nextStatus });
+            const effectiveStatus = normalizePersonaStatus(updated?.status || nextStatus);
+
+            setPersonas((prev) =>
+                prev.map((item) => (
+                    item.id === persona.id
+                        ? { ...item, status: effectiveStatus }
+                        : item
+                ))
+            );
+            toast.success(effectiveStatus === "active" ? "角色已启用" : "角色已停用");
+        } catch (err) {
+            console.error("Failed to toggle persona status:", err);
+            toast.error(`状态更新失败: ${err instanceof Error ? err.message : "未知错误"}`);
+        } finally {
+            setStatusUpdatingId(null);
         }
     };
 
@@ -327,6 +362,14 @@ export default function PersonasPage() {
                                 columns={[
                                     { label: "类型", value: categoryLabels[p.category] || p.category },
                                     {
+                                        label: "状态",
+                                        value: (
+                                            <Badge variant={normalizePersonaStatus(p.status) === "active" ? "green" : "red"}>
+                                                {personaStatusLabel[normalizePersonaStatus(p.status)]}
+                                            </Badge>
+                                        )
+                                    },
+                                    {
                                         label: "难度",
                                         value: (
                                             <div className="flex">
@@ -339,8 +382,17 @@ export default function PersonasPage() {
                                 ]}
                                 actions={
                                     <div className="absolute top-4 right-4">
-                                        <Button variant="ghost" size="icon" className="text-slate-400 hover:text-slate-900 rounded-full">
-                                            <MoreHorizontal className="w-4 h-4" />
+                                        <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            className="text-slate-600 hover:text-slate-900 rounded-full"
+                                            onClick={() => handleToggleStatus(p)}
+                                            disabled={statusUpdatingId === p.id}
+                                        >
+                                            <Power className="w-4 h-4 mr-1" />
+                                            {statusUpdatingId === p.id
+                                                ? "处理中"
+                                                : normalizePersonaStatus(p.status) === "active" ? "停用" : "启用"}
                                         </Button>
                                     </div>
                                 }
@@ -363,6 +415,7 @@ export default function PersonasPage() {
                                         <th className="px-6 py-4">描述</th>
                                         <th className="px-6 py-4">类型</th>
                                         <th className="px-6 py-4">难度</th>
+                                        <th className="px-6 py-4">状态</th>
                                         <th className="px-6 py-4 text-right">操作</th>
                                     </tr>
                                 </thead>
@@ -390,8 +443,25 @@ export default function PersonasPage() {
                                                     ))}
                                                 </div>
                                             </td>
+                                            <td className="px-6 py-4">
+                                                <Badge variant={normalizePersonaStatus(p.status) === "active" ? "green" : "red"}>
+                                                    {personaStatusLabel[normalizePersonaStatus(p.status)]}
+                                                </Badge>
+                                            </td>
                                             <td className="px-6 py-4 text-right">
                                                 <div className="flex justify-end gap-2">
+                                                    <Button
+                                                        onClick={() => handleToggleStatus(p)}
+                                                        variant="ghost"
+                                                        size="sm"
+                                                        className="h-8 px-3 text-slate-500 hover:text-indigo-600 hover:bg-indigo-50 rounded-full"
+                                                        disabled={statusUpdatingId === p.id}
+                                                    >
+                                                        <Power className="w-3.5 h-3.5 mr-1" />
+                                                        {statusUpdatingId === p.id
+                                                            ? "处理中..."
+                                                            : normalizePersonaStatus(p.status) === "active" ? "停用" : "启用"}
+                                                    </Button>
                                                     <Link href={`/admin/personas/${p.id}`}>
                                                         <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-full">
                                                             <Edit2 className="w-4 h-4" />

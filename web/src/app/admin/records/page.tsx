@@ -178,7 +178,7 @@ export default function RecordsPage() {
                                     <div className="flex flex-wrap gap-2">
                                         {[
                                             { id: 'all', label: '全部' },
-                                            { id: 'sales_bot', label: '销售对练' },
+                                            { id: 'sales', label: '销售对练' },
                                             { id: 'presentation', label: 'PPT 演示' },
                                         ].map(c => (
                                             <Badge 
@@ -216,7 +216,7 @@ export default function RecordsPage() {
                             }
                             icon={
                                 <div className={`w-10 h-10 rounded-full flex items-center justify-center text-lg font-bold
-                                    ${record.scenario_type === 'sales_bot' ? 'bg-blue-50 text-blue-600' :
+                                    ${record.scenario_type === 'sales' ? 'bg-blue-50 text-blue-600' :
                                         record.scenario_type === 'presentation' ? 'bg-purple-50 text-purple-600' :
                                             'bg-slate-100 text-slate-500'}`}>
                                     <FileText className="w-5 h-5" />
@@ -270,7 +270,7 @@ export default function RecordsPage() {
                                     </td>
                                     <td className="px-6 py-4">
                                         <Badge variant="secondary" className="bg-slate-50 text-slate-600 font-normal border-slate-200">
-                                            {record.scenario_type === 'sales_bot' ? '销售教练' : 'PPT演讲'}
+                                            {record.scenario_type === 'sales' ? '销售教练' : 'PPT演讲'}
                                         </Badge>
                                     </td>
                                     <td className="px-6 py-4">

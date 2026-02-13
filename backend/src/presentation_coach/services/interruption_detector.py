@@ -47,7 +47,7 @@ class InterruptionDetector:
             semantic_result = await self._check_semantic(transcript, context)
             return Result.ok(semantic_result)
 
-        except Exception as e:
+        except (RuntimeError, ValueError, OSError) as e:
             logger.error(f"Interruption detection error: {str(e)}")
             # On error, don't interrupt
             return Result.ok(None)
@@ -112,6 +112,10 @@ class InterruptionDetector:
                 # No requirements, no need to interrupt
                 return None
 
+            covered_points = self._check_points_covered(transcript, required_points)
+            if covered_points >= len(required_points):
+                return None
+
             # Build prompt
             points_str = "\n".join([f"- {p}" for p in required_points])
             prompt = f"""Analyze the following speech transcript and determine if the speaker is:
@@ -146,7 +150,7 @@ Answer with YES if you should interrupt, NO otherwise. Keep it brief."""
 
             return None
 
-        except Exception as e:
+        except (RuntimeError, ValueError, OSError) as e:
             logger.warning(f"Semantic analysis error: {str(e)}")
             return None
 

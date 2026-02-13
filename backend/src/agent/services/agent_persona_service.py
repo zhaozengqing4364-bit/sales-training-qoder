@@ -16,9 +16,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from common.error_handling.result import Result
 from common.monitoring.logger import get_logger
 
+from sqlalchemy.exc import SQLAlchemyError
+
 from ..models import Agent, AgentPersona, Persona
 from ..schemas import (
-    AgentPersonaResponse,
     AgentPersonaWithDetails,
     CreateAgentPersonaRequest,
     PersonaListItem,
@@ -47,6 +48,8 @@ class AgentPersonaService:
         
         if not agent:
             return Result.fail("[AGENT_NOT_FOUND]")
+        if agent.status == "archived":
+            return Result.fail("[AGENT_ARCHIVED]")
         
         # Check persona exists
         persona_stmt = select(Persona).where(Persona.id == data.persona_id)
@@ -55,6 +58,8 @@ class AgentPersonaService:
         
         if not persona:
             return Result.fail("[PERSONA_NOT_FOUND]")
+        if persona.status != "active":
+            return Result.fail("[PERSONA_INACTIVE]")
         
         # Check if already linked
         existing_stmt = select(AgentPersona).where(
@@ -85,7 +90,7 @@ class AgentPersonaService:
             logger.info(f"Linked Persona {data.persona_id} to Agent {agent_id}")
             return Result.ok(link)
             
-        except Exception as e:
+        except (SQLAlchemyError, ValueError) as e:
             logger.error(f"Failed to link Persona: {e}")
             return Result.fail(f"[LINK_FAILED] {str(e)}")
 
@@ -128,6 +133,7 @@ class AgentPersonaService:
                 icon=persona.icon,
                 category=persona.category,
                 difficulty=persona.difficulty,
+                status=persona.status,
                 is_public=persona.is_public,
                 usage_count=0,
                 agent_count=agent_count
@@ -153,6 +159,15 @@ class AgentPersonaService:
         data: UpdateAgentPersonaRequest
     ) -> Result[AgentPersona]:
         """Update Agent-Persona association - R4.3"""
+        agent_stmt = select(Agent).where(Agent.id == agent_id)
+        agent_result = await self.db.execute(agent_stmt)
+        agent = agent_result.scalar_one_or_none()
+
+        if not agent:
+            return Result.fail("[AGENT_NOT_FOUND]")
+        if agent.status == "archived":
+            return Result.fail("[AGENT_ARCHIVED]")
+
         stmt = select(AgentPersona).where(
             AgentPersona.agent_id == agent_id,
             AgentPersona.persona_id == persona_id
@@ -162,6 +177,14 @@ class AgentPersonaService:
         
         if not link:
             return Result.fail("[LINK_NOT_FOUND]")
+
+        persona_stmt = select(Persona).where(Persona.id == persona_id)
+        persona_result = await self.db.execute(persona_stmt)
+        persona = persona_result.scalar_one_or_none()
+        if not persona:
+            return Result.fail("[PERSONA_NOT_FOUND]")
+        if persona.status != "active":
+            return Result.fail("[PERSONA_INACTIVE]")
         
         # If setting as default, clear other defaults
         if data.is_default is True:

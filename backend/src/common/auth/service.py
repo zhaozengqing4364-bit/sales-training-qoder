@@ -4,14 +4,14 @@ Constitution Principle VI: Data Privacy & Compliance
 """
 import os
 import uuid
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 
 from dotenv import load_dotenv
 from fastapi import Depends, HTTPException
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError, jwt
 from passlib.context import CryptContext
-from sqlalchemy import cast, select
+from sqlalchemy import cast, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.types import String as SQLAlchemyString
 
@@ -27,7 +27,7 @@ JWT_SECRET = os.getenv("JWT_SECRET", "your-super-secret-key-change-in-production
 JWT_ALGORITHM = os.getenv("JWT_ALGORITHM", "HS256")
 JWT_EXPIRATION_HOURS = int(os.getenv("JWT_EXPIRATION_HOURS", "24"))
 
-security = HTTPBearer()
+security = HTTPBearer(auto_error=False)
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 
@@ -35,9 +35,9 @@ def create_access_token(data: dict, expires_delta: timedelta | None = None) -> s
     """Create JWT access token"""
     to_encode = data.copy()
     if expires_delta:
-        expire = datetime.utcnow() + expires_delta
+        expire = datetime.now(UTC) + expires_delta
     else:
-        expire = datetime.utcnow() + timedelta(hours=JWT_EXPIRATION_HOURS)
+        expire = datetime.now(UTC) + timedelta(hours=JWT_EXPIRATION_HOURS)
 
     to_encode.update({"exp": expire})
     encoded_jwt = jwt.encode(to_encode, JWT_SECRET, algorithm=JWT_ALGORITHM)
@@ -59,6 +59,9 @@ async def get_current_user(
     db: AsyncSession = Depends(get_db)
 ) -> User:
     """Get current authenticated user from JWT token"""
+    if credentials is None:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
     token = credentials.credentials
 
     try:
@@ -136,12 +139,6 @@ async def authenticate_wechat(code: str) -> User | None:
     return None
 
 
-def get_db():
-    """Dependency to get database session"""
-    import common.db.session as db_module
-    return db_module.get_db()
-
-
 async def get_dev_user(db: AsyncSession) -> User:
     """
     Development mode: Get or create a mock user for testing
@@ -152,22 +149,39 @@ async def get_dev_user(db: AsyncSession) -> User:
     if os.getenv("ENVIRONMENT") != "development":
         raise HTTPException(status_code=401, detail="Development mode only")
 
-    # Try to find existing dev user
-    result = await db.execute(select(User).where(User.email == "dev@example.com"))
-    user = result.scalar_one_or_none()
+    # Try to find existing dev user by either stable email or stable WeChat ID.
+    # This prevents unique-key conflicts when email was edited in dev mode.
+    result = await db.execute(
+        select(User).where(
+            or_(
+                User.email == "dev@example.com",
+                User.wechat_user_id == "dev_wechat_user",
+            )
+        )
+    )
+    user = result.scalars().first()
 
     if not user:
-        # Create dev user (only use fields that exist in User model)
         user = User(
             user_id=str(uuid.uuid4()),
             wechat_user_id="dev_wechat_user",
             email="dev@example.com",
             name="Developer",
-            department="Development"
+            department="Development",
         )
         db.add(user)
         await db.commit()
         await db.refresh(user)
+        return user
+
+    # Keep dev account identity fields canonical for predictable local testing.
+    user.wechat_user_id = "dev_wechat_user"
+    if not user.email:
+        user.email = "dev@example.com"
+    if not user.name:
+        user.name = "Developer"
+    await db.commit()
+    await db.refresh(user)
 
     return user
 
@@ -186,7 +200,7 @@ async def get_current_user_optional(
     if os.getenv("ENVIRONMENT") == "development":
         try:
             return await get_dev_user(db)
-        except Exception:
+        except (RuntimeError, ValueError, OSError):
             pass
 
     try:

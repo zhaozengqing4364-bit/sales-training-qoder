@@ -205,7 +205,7 @@ class EmbeddingService:
         except httpx.TimeoutException:
             logger.error("Embedding request timeout")
             return Result.fail("[EMBEDDING_TIMEOUT]")
-        except Exception as e:
+        except (ConnectionError, TimeoutError, RuntimeError, ValueError, OSError) as e:
             logger.error(f"Embedding error: {str(e)}")
             return Result.fail(f"[EMBEDDING_ERROR] {str(e)}")
 
@@ -258,7 +258,7 @@ class EmbeddingService:
         except httpx.TimeoutException:
             logger.error("Azure embedding request timeout")
             return Result.fail("[EMBEDDING_TIMEOUT]")
-        except Exception as e:
+        except (ConnectionError, TimeoutError, RuntimeError, ValueError, OSError) as e:
             logger.error(f"Azure embedding error: {str(e)}")
             return Result.fail(f"[EMBEDDING_ERROR] {str(e)}")
 

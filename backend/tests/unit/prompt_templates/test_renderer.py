@@ -7,7 +7,7 @@ TDD Tests for Task B4: Implement PromptRenderer
 import pytest
 from uuid import uuid4
 
-from src.prompt_templates.renderer import PromptRenderer, RenderResult, render_template
+from prompt_templates.renderer import PromptRenderer, RenderResult, render_template
 
 
 class TestPromptRenderer:

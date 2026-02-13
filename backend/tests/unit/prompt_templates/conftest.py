@@ -5,10 +5,10 @@ Requirements: B3 - Create test skeleton for prompt templates
 """
 
 import pytest
-from datetime import datetime
+from datetime import datetime, timezone
 from uuid import uuid4, UUID
 
-from src.prompt_templates.models import (
+from prompt_templates.models import (
     PromptTemplate,
     PromptTemplateCreate,
     ScenarioPrompt,
@@ -40,7 +40,7 @@ def sample_prompt_template_create() -> PromptTemplateCreate:
 @pytest.fixture
 def sample_prompt_template() -> PromptTemplate:
     """Sample full prompt template model."""
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     return PromptTemplate(
         id=uuid4(),
         name="Sample Template",
@@ -78,14 +78,14 @@ def sample_scenario_prompt(sample_template_id: UUID) -> ScenarioPrompt:
         prompt_type="extraction",
         template_id=sample_template_id,
         is_active=True,
-        created_at=datetime.utcnow(),
+        created_at=datetime.now(timezone.utc),
     )
 
 
 @pytest.fixture
 def mock_llm_service(mocker):
     """Mock LLM service for testing."""
-    mock = mocker.patch("src.common.ai.llm_service.get_llm_service")
+    mock = mocker.patch("common.ai.llm_service.get_llm_service")
     mock.return_value.is_configured = True
     mock.return_value.generate.return_value = "Mocked LLM response"
     return mock

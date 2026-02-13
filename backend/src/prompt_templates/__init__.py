@@ -5,7 +5,7 @@ Provides configurable prompt management for AI evaluation system.
 """
 
 # Import models first (no dependencies)
-from src.prompt_templates.models import (
+from prompt_templates.models import (
     PromptTemplate,
     PromptTemplateCreate,
     PromptTemplateUpdate,
@@ -17,21 +17,21 @@ from src.prompt_templates.models import (
 )
 
 # Import renderer (only depends on models)
-from src.prompt_templates.renderer import (
+from prompt_templates.renderer import (
     PromptRenderer,
     RenderResult,
     render_template,
 )
 
 # Import loader (only depends on models)
-from src.prompt_templates.loader import (
+from prompt_templates.loader import (
     PromptTemplateLoader,
     CachedTemplate,
     get_loader,
 )
 
 # Import service (depends on renderer, loader, models)
-from src.prompt_templates.service import PromptTemplateService
+from prompt_templates.service import PromptTemplateService
 
 __all__ = [
     # Models

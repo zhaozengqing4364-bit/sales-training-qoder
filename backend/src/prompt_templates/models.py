@@ -74,18 +74,74 @@ class PromptTemplateCreate(PromptTemplateBase):
         """
         Extract Jinja2 variable names from template.
 
-        Supports:
-        - {{ variable }}
-        - {{ variable|filter }}
-        - {{ variable.attribute }}
+        Strategy:
+        1. Extract variables from output blocks in appearance order ({{ ... }}).
+        2. For valid Jinja2 templates, merge undeclared vars from AST (captures if/for conditions).
+        3. Keep first-seen order for output vars and append missing AST vars deterministically.
 
         Returns:
-            List of unique variable names
+            List of unique variable names.
         """
-        # Match {{ variable }} or {{ variable|filter }} or {{ variable.attribute }}
-        pattern = r"\{\{\s*(\w+)(?:\.[\w\[\]]+)?(?:\|[^}]+)?\s*\}\}"
-        matches = re.findall(pattern, template)
-        return list(dict.fromkeys(matches))  # Remove duplicates while preserving order
+
+        def dedupe(values: List[str]) -> List[str]:
+            return list(dict.fromkeys(values))
+
+        def extract_output_vars(raw_template: str) -> List[str]:
+            """Extract first identifier from each top-level output block, tolerating nested braces."""
+            variables: List[str] = []
+            depth = 0
+            start = -1
+            index = 0
+
+            while index < len(raw_template) - 1:
+                token = raw_template[index : index + 2]
+
+                if token == "{{":
+                    if depth == 0:
+                        start = index + 2
+                    depth += 1
+                    index += 2
+                    continue
+
+                if token == "}}" and depth > 0:
+                    depth -= 1
+                    if depth == 0 and start >= 0:
+                        expression = raw_template[start:index]
+                        previous = None
+                        cleaned = expression
+                        while previous != cleaned:
+                            previous = cleaned
+                            cleaned = re.sub(r"\{\{[^{}]*\}\}", " ", cleaned)
+
+                        match = re.search(r"[A-Za-z_][A-Za-z0-9_]*", cleaned)
+                        if match:
+                            variables.append(match.group(0))
+                        start = -1
+                    index += 2
+                    continue
+
+                index += 1
+
+            return dedupe(variables)
+
+        output_vars = extract_output_vars(template)
+
+        try:
+            from jinja2 import meta
+            from jinja2.sandbox import SandboxedEnvironment
+
+            env = SandboxedEnvironment(autoescape=False)
+            parsed = env.parse(template)
+            undeclared_vars = sorted(meta.find_undeclared_variables(parsed))
+        except Exception:
+            undeclared_vars = []
+
+        merged = list(output_vars)
+        for variable in undeclared_vars:
+            if variable not in merged:
+                merged.append(variable)
+
+        return dedupe(merged)
 
 
 class PromptTemplateUpdate(BaseModel):

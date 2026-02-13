@@ -271,6 +271,7 @@ class PersonaListItem(BaseModel):
     icon: str | None = None
     category: PersonaCategoryType
     difficulty: PersonaDifficultyType
+    status: PersonaStatusType
     is_public: bool
     usage_count: int = 0
     agent_count: int = 0

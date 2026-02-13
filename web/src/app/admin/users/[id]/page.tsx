@@ -184,11 +184,11 @@ export default function UserDetailPage() {
                     </Button>
                     <div className="flex items-center gap-3">
                         <div className="w-12 h-12 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center text-white font-bold text-lg">
-                            {(user.username || user.email || "U").charAt(0).toUpperCase()}
+                            {(user.display_name || user.email || "U").charAt(0).toUpperCase()}
                         </div>
                         <div>
                             <h1 className="text-2xl font-black text-slate-900">
-                                {user.username || user.email || "未知用户"}
+                                {user.display_name || user.email || "未知用户"}
                             </h1>
                             <p className="text-slate-500 text-sm">
                                 {user.department || "未设置部门"} · {user.email}

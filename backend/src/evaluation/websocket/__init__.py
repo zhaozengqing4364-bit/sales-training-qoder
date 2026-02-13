@@ -4,6 +4,6 @@ Evaluation WebSocket Module
 Provides non-intrusive real-time evaluation feedback via WebSocket.
 """
 
-from src.evaluation.websocket.broadcaster import EvaluationBroadcaster
+from evaluation.websocket.broadcaster import EvaluationBroadcaster
 
 __all__ = ["EvaluationBroadcaster"]

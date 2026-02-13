@@ -10,7 +10,7 @@ Response Format:
 
 Requirements: 2.1, 2.2, 2.3, 2.4, 2.5
 """
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Literal
 
 from fastapi import APIRouter, Depends
@@ -22,6 +22,7 @@ from common.auth.service import get_current_user
 from common.db.models import PracticeSession, Scenario, User
 from common.db.session import get_db
 from common.monitoring.logger import get_logger, get_trace_id
+from sqlalchemy.exc import SQLAlchemyError
 
 logger = get_logger(__name__)
 
@@ -121,7 +122,7 @@ async def get_dashboard_stats(
     """
     try:
         user_id = str(current_user.user_id)
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         
         # Calculate week boundaries
         # This week: from Monday 00:00 to now
@@ -257,7 +258,7 @@ async def get_dashboard_stats(
         return success_response(stats.model_dump())
         
     except Exception as e:
-        logger.error(f"Failed to get dashboard stats: {str(e)}")
+        logger.error(f"Failed to get dashboard stats: {type(e).__name__}: {str(e)}")
         return error_response("[DASHBOARD_STATS_FAILED]", "获取仪表盘数据失败")
 
 
@@ -281,7 +282,7 @@ async def get_recommendation(
     """
     try:
         user_id = str(current_user.user_id)
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         week_ago = now - timedelta(days=7)
         
         # Get recent sessions
@@ -362,5 +363,5 @@ async def get_recommendation(
         return success_response(recommendation.model_dump())
         
     except Exception as e:
-        logger.error(f"Failed to get recommendation: {str(e)}")
+        logger.error(f"Failed to get recommendation: {type(e).__name__}: {str(e)}")
         return error_response("[RECOMMENDATION_FAILED]", "获取推荐失败")

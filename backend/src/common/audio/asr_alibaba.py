@@ -222,7 +222,7 @@ class AlibabaASRProvider(ASRProvider):
             logger.error(f"ASR WebSocket closed: {e}")
             yield Result.fail("[USE_BROWSER_ASR]")
 
-        except Exception as e:
+        except (ConnectionError, OSError, RuntimeError, ValueError) as e:
             logger.error(f"ASR streaming error: {str(e)}", exc_info=True)
             yield Result.fail("[USE_BROWSER_ASR]")
 
@@ -346,6 +346,6 @@ class AlibabaASRProvider(ASRProvider):
 
             return Result.ok(True)
 
-        except Exception as e:
+        except (ConnectionError, OSError, RuntimeError, ValueError) as e:
             logger.error(f"Alibaba ASR health check failed: {str(e)}")
             return Result.fail(False)

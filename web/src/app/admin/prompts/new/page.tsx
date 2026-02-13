@@ -213,7 +213,7 @@ export default function NewPromptTemplatePage() {
                         >
                             {saving ? (
                                 <>
-                                    <StatusIndicator status="processing" size={16} className="mr-2" />
+                                    <StatusIndicator status="loading"  className="mr-2" />
                                     保存中...
                                 </>
                             ) : (

@@ -26,6 +26,7 @@ from common.db.schemas import (
 )
 from common.db.session import get_db
 from common.monitoring.logger import get_logger
+from presentation_coach.services.ppt_parser import get_ppt_parser
 
 logger = get_logger(__name__)
 
@@ -60,7 +61,7 @@ async def upload_presentation(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """Upload a new PPT presentation"""
+    """Upload a new PPT presentation with automatic parsing"""
     try:
         # Save file
         upload_dir = os.getenv("PPT_STORAGE_PATH", "./data/ppts")
@@ -70,8 +71,8 @@ async def upload_presentation(
         file_extension = file.filename.split(".")[-1]
         file_path = os.path.join(upload_dir, f"{file_id}.{file_extension}")
 
+        content = await file.read()
         with open(file_path, "wb") as buffer:
-            content = await file.read()
             buffer.write(content)
 
         # Create presentation record
@@ -80,21 +81,53 @@ async def upload_presentation(
             file_url=file_path,
             file_size_bytes=len(content),
             uploaded_by_admin_id=current_user.user_id,
-            status="processing"  # Will be processed by OCR
+            status="processing"
         )
 
         db.add(presentation)
         await db.commit()
         await db.refresh(presentation)
 
-        # Trigger OCR processing (async, non-blocking)
-        # TODO: Add background task for OCR
+        # Parse PPT and create page records
+        parser = get_ppt_parser()
+        parse_result = await parser.parse_presentation(content, file.filename)
 
-        logger.info(f"Presentation uploaded: {presentation.presentation_id}")
+        if parse_result.is_success:
+            parsed_data = parse_result.value
+
+            # Update presentation with total pages
+            presentation.total_pages = parsed_data.get("total_pages", 0)
+
+            # Create page records
+            for page_data in parsed_data.get("pages", []):
+                page = Page(
+                    presentation_id=presentation.presentation_id,
+                    page_number=page_data["page_number"],
+                    ocr_extracted_text=page_data.get("extracted_text", ""),
+                    extraction_confidence=0.95,  # PPT parsing has high confidence
+                    needs_manual_review=False,
+                )
+                db.add(page)
+
+            presentation.status = "ready"
+            await db.commit()
+
+            logger.info(
+                f"Presentation uploaded and parsed: {presentation.presentation_id} "
+                f"with {presentation.total_pages} pages"
+            )
+        else:
+            # Parsing failed, mark for manual review
+            presentation.status = "failed"
+            await db.commit()
+            logger.error(
+                f"Failed to parse presentation {presentation.presentation_id}: "
+                f"{parse_result.error}"
+            )
 
         return presentation
 
-    except Exception as e:
+    except (RuntimeError, ValueError, OSError) as e:
         logger.error(f"Failed to upload presentation: {str(e)}")
         await db.rollback()
         raise HTTPException(status_code=500, detail="Upload failed")
@@ -238,7 +271,7 @@ async def get_forbidden_words(
     return words
 
 
-@router.post("/presentations/{presentation_id}/forbidden-words")
+@router.post("/presentations/{presentation_id}/forbidden-words", status_code=201)
 async def add_forbidden_word(
     presentation_id: str,
     word: ForbiddenWordCreate,

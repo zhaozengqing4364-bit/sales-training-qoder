@@ -15,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.db.models import PracticeSession, RequiredTalkingPoint, Scenario
 from common.error_handling.result import Result
+from sqlalchemy.exc import SQLAlchemyError
 
 logger = logging.getLogger(__name__)
 
@@ -138,7 +139,7 @@ class AnalyticsService:
 
             return Result(value=stats)
 
-        except Exception as e:
+        except (SQLAlchemyError, ValueError) as e:
             logger.error(
                 "Failed to calculate dashboard stats",
                 extra={"scenario_type": scenario_type, "error": str(e)},
@@ -202,7 +203,7 @@ class AnalyticsService:
 
             return Result(value=distribution)
 
-        except Exception as e:
+        except (SQLAlchemyError, ValueError) as e:
             logger.error(
                 "Failed to calculate score distribution",
                 extra={"scenario_type": scenario_type, "error": str(e)},
@@ -268,7 +269,7 @@ class AnalyticsService:
 
             return Result(value=gaps)
 
-        except Exception as e:
+        except (SQLAlchemyError, ValueError) as e:
             logger.error(
                 "Failed to calculate common gaps",
                 extra={"scenario_type": scenario_type, "error": str(e)},
@@ -333,7 +334,7 @@ class AnalyticsService:
 
             return Result(value=trend_data)
 
-        except Exception as e:
+        except (SQLAlchemyError, ValueError) as e:
             logger.error(
                 "Failed to calculate trend data",
                 extra={"scenario_type": scenario_type, "error": str(e)},

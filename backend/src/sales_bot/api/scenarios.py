@@ -60,7 +60,7 @@ async def list_scenarios(
 
         return response_data
 
-    except Exception as e:
+    except (RuntimeError, ValueError, OSError) as e:
         logger.error(f"Failed to list scenarios: {str(e)}")
         # Return empty list on error instead of throwing
         return []
@@ -145,7 +145,7 @@ async def list_sales_personas(
         if active_persona_ids:
             personas = [p for p in personas if p["id"] in active_persona_ids]
 
-    except Exception as e:
+    except (RuntimeError, ValueError, OSError) as e:
         logger.warning(f"Could not filter personas from database: {str(e)}")
 
     return personas
@@ -179,6 +179,6 @@ async def get_scenario(
 
     except HTTPException:
         raise
-    except Exception as e:
+    except (RuntimeError, ValueError, OSError) as e:
         logger.error(f"Failed to get scenario: {str(e)}")
         raise HTTPException(status_code=500, detail="Failed to load scenario")

@@ -1,10 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
+import { authHandler } from "@/lib/auth-handler";
 
 interface AuthProtectionOptions {
-    requiredRole?: "admin" | "user";
+    requiredRole?: "admin" | "user" | "support";
+    requiredRoles?: Array<"admin" | "user" | "support">;
 }
 
 interface UserInfo {
@@ -15,71 +17,95 @@ interface UserInfo {
     role: string;
 }
 
+interface AuthRuntimeState {
+    hydrated: boolean;
+    token: string | null;
+    user: UserInfo | null;
+}
+
+function readAuthRuntimeState(): AuthRuntimeState {
+    if (typeof window === "undefined") {
+        return {
+            hydrated: false,
+            token: null,
+            user: null,
+        };
+    }
+
+    const nextToken = localStorage.getItem("token");
+    const storedUser = localStorage.getItem("user");
+    let nextUser: UserInfo | null = null;
+
+    if (storedUser) {
+        try {
+            nextUser = JSON.parse(storedUser) as UserInfo;
+        } catch {
+            nextUser = null;
+        }
+    }
+
+    return {
+        hydrated: true,
+        token: nextToken,
+        user: nextUser,
+    };
+}
+
 export function useAuthProtection(options?: AuthProtectionOptions) {
     const router = useRouter();
     const pathname = usePathname();
-    const [isLoading, setIsLoading] = useState(true);
-    const [user, setUser] = useState<UserInfo | null>(null);
-    const [isAuthorized, setIsAuthorized] = useState(false);
+    const [authState, setAuthState] = useState<AuthRuntimeState>(() => readAuthRuntimeState());
+
+    const requiredRoles = options?.requiredRoles || (options?.requiredRole ? [options.requiredRole] : undefined);
+    const isLoginPath = pathname === "/login";
+    const token = authState.token;
+    const user = authState.user;
+    const isLoading = !authState.hydrated;
+    const isDevBypass = process.env.NODE_ENV === "development" && Boolean(token) && Boolean(user);
+    const roleMismatch = Boolean(
+        requiredRoles &&
+        !requiredRoles.includes((user?.role || "user") as "admin" | "user" | "support")
+    );
+
+    const isAuthorized = isLoginPath || (!isLoading && (isDevBypass || (!!token && !roleMismatch)));
+
+    const syncAuthState = useCallback(() => {
+        setAuthState(readAuthRuntimeState());
+    }, []);
 
     useEffect(() => {
-        // Skip check for login page
-        if (pathname === "/login") {
-            setIsLoading(false);
-            setIsAuthorized(true);
+        if (typeof window === "undefined") {
             return;
         }
 
-        // DEV MODE: Allow bypassing auth for testing
-        if (process.env.NODE_ENV === "development") {
-            const devToken = localStorage.getItem("token");
-            const devUser = localStorage.getItem("user");
-            if (devToken && devUser) {
-                try {
-                    const userInfo = JSON.parse(devUser);
-                    setUser(userInfo);
-                    setIsAuthorized(true);
-                    setIsLoading(false);
-                    return;
-                } catch {
-                    // Fall through to normal auth
-                }
-            }
+        const handleStorage = () => syncAuthState();
+        const unsubscribe = authHandler.subscribe(() => syncAuthState());
+
+        window.addEventListener("storage", handleStorage);
+        return () => {
+            window.removeEventListener("storage", handleStorage);
+            unsubscribe();
+        };
+    }, [syncAuthState]);
+
+    useEffect(() => {
+        if (isLoading) {
+            return;
         }
 
-        const token = localStorage.getItem("token");
+        if (isLoginPath) {
+            return;
+        }
+
         if (!token) {
-            router.push("/login");
+            router.replace("/login");
             return;
         }
 
-        // Get user info from localStorage
-        const storedUser = localStorage.getItem("user");
-        let userInfo: UserInfo | null = null;
-
-        if (storedUser) {
-            try {
-                userInfo = JSON.parse(storedUser);
-                setUser(userInfo);
-            } catch {
-                // Ignore parse errors
-            }
+        if (roleMismatch) {
+            router.replace("/");
         }
-
-        // Check role if required
-        if (options?.requiredRole) {
-            const userRole = userInfo?.role || "user";
-
-            if (options.requiredRole === "admin" && userRole !== "admin") {
-                // Redirect non-admin users to home page
-                router.push("/");
-                return;
-            }
-        }
-
-        setIsAuthorized(true);
-        setIsLoading(false);
-    }, [router, pathname, options?.requiredRole]);
+    }, [isLoading, isLoginPath, roleMismatch, router, token]);
 
     return { isLoading, user, isAuthorized };
 }

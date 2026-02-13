@@ -302,7 +302,7 @@ class FuzzyDetectionCapability(BaseCapability):
                 feedback=feedback
             )
 
-        except Exception as e:
+        except (RuntimeError, ValueError, KeyError) as e:
             logger.error(
                 f"Fuzzy detection failed: {e}",
                 session_id=context.session_id

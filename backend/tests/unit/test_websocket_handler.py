@@ -6,7 +6,7 @@ import pytest
 import asyncio
 from unittest.mock import Mock, AsyncMock, patch
 
-from src.common.websocket.base_handler import (
+from common.websocket.base_handler import (
     ConnectionManager,
     BaseWebSocketHandler,
     get_connection_manager
@@ -166,7 +166,7 @@ class TestBaseWebSocketHandler:
         """Verify connection is accepted and tracked"""
         # Mock token verification
         with patch(
-            "src.common.auth.service.verify_token",
+            "common.auth.service.verify_token",
             return_value={"trace_id": "test-trace"}
         ):
             # Mock receive_json to wait forever (simulate open connection)
@@ -201,7 +201,7 @@ class TestBaseWebSocketHandler:
     ):
         """Verify client_ready message is sent after connection"""
         with patch(
-            "src.common.auth.service.verify_token",
+            "common.auth.service.verify_token",
             return_value={}
         ):
             # Mock receive_json to throw immediately to exit
@@ -275,7 +275,7 @@ class TestBaseWebSocketHandler:
     async def test_send_error_includes_trace_id(self, handler, mock_websocket):
         """Verify error messages include trace_id for observability"""
         with patch(
-            "src.common.websocket.base_handler.get_trace_id",
+            "common.websocket.base_handler.get_trace_id",
             return_value="test-trace-123"
         ):
             await handler.send_error(
@@ -290,7 +290,7 @@ class TestBaseWebSocketHandler:
     async def test_handle_message_calls_registered_handler(self, handler):
         """Verify message type is logged"""
         # Mock logger
-        with patch("src.common.websocket.base_handler.logger") as mock_logger:
+        with patch("common.websocket.base_handler.logger") as mock_logger:
             await handler.handle_message({"type": "test_message", "data": {}})
 
             # Verify message type was logged
@@ -301,7 +301,7 @@ class TestBaseWebSocketHandler:
         mock_websocket.receive_json = AsyncMock(side_effect=[asyncio.TimeoutError(), Exception("Stop")])
 
         with patch(
-            "src.common.auth.service.verify_token",
+            "common.auth.service.verify_token",
             return_value={}
         ):
             try:
@@ -324,7 +324,7 @@ class TestBaseWebSocketHandler:
         )
 
         with patch(
-            "src.common.auth.service.verify_token",
+            "common.auth.service.verify_token",
             return_value={}
         ):
             try:

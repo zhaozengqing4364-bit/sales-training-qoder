@@ -1684,7 +1684,7 @@ describe('Property 7: Interrupt Queue Clearing - Comprehensive Tests', () => {
     it('should handle multiple consecutive interrupts', () => {
       const chunks = generateChunks(20, [100, 500]);
       
-      let state: InterruptOperationState = {
+      const state: InterruptOperationState = {
         chunkQueue: chunks,
         isPlaying: true,
         operationLog: [],

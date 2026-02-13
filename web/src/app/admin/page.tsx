@@ -1,15 +1,16 @@
 
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { GlassCard } from "@/components/ui/glass-card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
-    Users, Activity, HardDrive, Plus, ArrowUp, ArrowRight, TrendingUp, AlertCircle, Search,
-    FileText, Bell, CheckCircle2, Server, Database, Cloud, Shield
+    Users, Activity, HardDrive, Plus, ArrowUp, AlertCircle, Search,
+    Server, Database, Cloud
 } from "lucide-react";
 import Link from "next/link";
+import { api } from "@/lib/api/client";
 import {
     Dialog,
     DialogContent,
@@ -20,9 +21,72 @@ import {
     DialogTrigger,
 } from "@/components/ui/glass-modal";
 
+function extractNumberField(payload: unknown, key: string): number | null {
+    if (!payload || typeof payload !== "object") return null;
+    const value = (payload as Record<string, unknown>)[key];
+    if (typeof value === "number" && Number.isFinite(value)) return value;
+    return null;
+}
+
 export default function AdminDashboardPage() {
     // State to manage specific dialogs if needed, or rely on Radix primitives
     const [searchTerm, setSearchTerm] = useState("");
+    const [liveMetrics, setLiveMetrics] = useState({
+        backendStatus: "unknown" as "unknown" | "online" | "offline",
+        totalUsers: 0,
+        weeklySessions: 0,
+        totalSessions: 0,
+        systemLogs: 0,
+        storageTracked: 0,
+    });
+
+    useEffect(() => {
+        let cancelled = false;
+
+        const loadLiveMetrics = async () => {
+            const [healthResult, dashboardResult, usersResult, logsResult, storageResult] = await Promise.allSettled([
+                api.internal.health(),
+                api.analyticsOpen.getDashboard({ days: 7 }),
+                api.admin.getUsers({ page: 1, page_size: 1 }),
+                api.adminTools.getSystemLogs({ page: 1, page_size: 1 }),
+                api.analyticsOpen.getStorageStats(),
+            ]);
+
+            if (cancelled) return;
+
+            const next = {
+                backendStatus: healthResult.status === "fulfilled" ? "online" as const : "offline" as const,
+                totalUsers:
+                    usersResult.status === "fulfilled"
+                        ? Number(usersResult.value.total || 0)
+                        : 0,
+                weeklySessions:
+                    dashboardResult.status === "fulfilled"
+                        ? Number(dashboardResult.value.total_sessions || 0)
+                        : 0,
+                totalSessions:
+                    dashboardResult.status === "fulfilled"
+                        ? Number(dashboardResult.value.completed_sessions || 0)
+                        : 0,
+                systemLogs:
+                    logsResult.status === "fulfilled"
+                        ? Number(extractNumberField(logsResult.value, "total") || 0)
+                        : 0,
+                storageTracked:
+                    storageResult.status === "fulfilled"
+                        ? Number(extractNumberField(storageResult.value, "total_files") || extractNumberField(storageResult.value, "total_records") || 0)
+                        : 0,
+            };
+
+            setLiveMetrics(next);
+        };
+
+        loadLiveMetrics();
+
+        return () => {
+            cancelled = true;
+        };
+    }, []);
 
     return (
         <div className="space-y-10 animate-in fade-in slide-in-from-bottom-4 duration-500 pb-20">
@@ -78,6 +142,37 @@ export default function AdminDashboardPage() {
                     </Dialog>
                 </div>
             </header>
+
+            <GlassCard className="p-5 border border-blue-100/60 bg-blue-50/40">
+                <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+                    <h2 className="text-sm font-bold text-slate-800 uppercase tracking-wider">实时系统快照</h2>
+                    <Badge variant={liveMetrics.backendStatus === "online" ? "green" : liveMetrics.backendStatus === "offline" ? "red" : "secondary"}>
+                        {liveMetrics.backendStatus === "online" ? "后端在线" : liveMetrics.backendStatus === "offline" ? "后端离线" : "状态未知"}
+                    </Badge>
+                </div>
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                    <div>
+                        <div className="text-xs text-slate-500">注册用户</div>
+                        <div className="text-xl font-black text-slate-900 mt-1">{liveMetrics.totalUsers}</div>
+                    </div>
+                    <div>
+                        <div className="text-xs text-slate-500">近7天会话</div>
+                        <div className="text-xl font-black text-slate-900 mt-1">{liveMetrics.weeklySessions}</div>
+                    </div>
+                    <div>
+                        <div className="text-xs text-slate-500">完成会话</div>
+                        <div className="text-xl font-black text-slate-900 mt-1">{liveMetrics.totalSessions}</div>
+                    </div>
+                    <div>
+                        <div className="text-xs text-slate-500">系统日志数</div>
+                        <div className="text-xl font-black text-slate-900 mt-1">{liveMetrics.systemLogs}</div>
+                    </div>
+                    <div>
+                        <div className="text-xs text-slate-500">存储记录</div>
+                        <div className="text-xl font-black text-slate-900 mt-1">{liveMetrics.storageTracked}</div>
+                    </div>
+                </div>
+            </GlassCard>
 
             {/* Bento Grid Stats */}
             <div className="grid grid-cols-12 gap-6">

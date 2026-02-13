@@ -370,6 +370,9 @@ class TestTTSServiceWithFallback:
                 assert status["fallback"]["available"] is True
                 assert status["final_fallback"]["provider"] == "browser"
                 assert status["final_fallback"]["available"] is True
+                assert status["metrics"]["primary_success"] == 0
+                assert status["metrics"]["fallback_success"] == 0
+                assert status["metrics"]["last_provider"] is None
 
 
 class TestSingleton:

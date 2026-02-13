@@ -5,9 +5,9 @@ Test ASR Service Wrapper and Delegation
 import pytest
 from unittest.mock import Mock, AsyncMock, patch
 
-from src.common.audio.asr_service import ASRService
-from src.common.audio.asr_base import ASRProvider
-from src.common.error_handling.result import Result
+from common.audio.asr_service import ASRService
+from common.audio.asr_base import ASRProvider
+from common.error_handling.result import Result
 
 @pytest.fixture
 def mock_provider():
@@ -78,14 +78,14 @@ class TestASRService:
     def test_get_asr_service_singleton(self):
         """Should return singleton ASR service instance"""
         # Reset singleton
-        import src.common.audio.asr_service as service_module
+        import common.audio.asr_service as service_module
         service_module._asr_service = None
         
         # Mock ConfigManager to avoid database access
-        with patch('src.common.audio.asr_service.get_config_manager') as mock_cm:
+        with patch('common.audio.asr_service.get_config_manager') as mock_cm:
             mock_cm.return_value.get_effective_config.return_value = None
             
-            from src.common.audio.asr_service import get_asr_service
+            from common.audio.asr_service import get_asr_service
             
             service1 = get_asr_service()
             service2 = get_asr_service()

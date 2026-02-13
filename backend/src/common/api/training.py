@@ -10,7 +10,7 @@ Response Format:
 
 Requirements: 3.1, 3.2, 3.3
 """
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Literal, Optional
 
 from fastapi import APIRouter, Depends, Query
@@ -22,6 +22,7 @@ from common.auth.service import get_current_user
 from common.db.models import PracticeSession, Scenario, User
 from common.db.session import get_db
 from common.monitoring.logger import get_logger, get_trace_id
+from sqlalchemy.exc import SQLAlchemyError
 
 logger = get_logger(__name__)
 
@@ -152,7 +153,7 @@ async def get_training_categories(
         
         return success_response(categories)
         
-    except Exception as e:
+    except (SQLAlchemyError, ValueError) as e:
         logger.error(f"Failed to get training categories: {str(e)}")
         return error_response("[TRAINING_CATEGORIES_FAILED]", "获取训练分类失败")
 
@@ -284,7 +285,7 @@ async def get_sessions(
                 id=str(session.session_id),
                 title=title,
                 agent_type=agent_type,
-                start_time=session.start_time.isoformat() if session.start_time else datetime.utcnow().isoformat(),
+                start_time=session.start_time.isoformat() if session.start_time else datetime.now(timezone.utc).isoformat(),
                 duration_seconds=duration_seconds,
                 score=score
             ).model_dump())
@@ -299,6 +300,6 @@ async def get_sessions(
         
         return success_response(response_data)
         
-    except Exception as e:
+    except (SQLAlchemyError, ValueError) as e:
         logger.error(f"Failed to get sessions: {str(e)}")
         return error_response("[SESSIONS_FAILED]", "获取会话历史失败")

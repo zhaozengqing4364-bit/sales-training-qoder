@@ -1,9 +1,15 @@
 "use client";
 
 import { useCallback, useRef, useState, useEffect } from "react";
+import { debug } from "@/lib/debug";
+
+// P2-16: Module-level cache for AudioWorklet support detection
+let _workletSupportCached: boolean | null = null;
 
 interface UseAudioRecorderOptions {
     onAudioData?: (base64Audio: string) => void;
+    /** v1-13: Binary callback — receives raw Int16Array PCM directly (preferred over Base64) */
+    onAudioDataBinary?: (pcmData: Int16Array) => void;
     onAudioEnd?: () => void;
     onSpeakingChange?: (speaking: boolean) => void;
     targetSampleRate?: number;
@@ -24,7 +30,8 @@ interface AudioRecorderState {
 
 export function useAudioRecorder(options: UseAudioRecorderOptions = {}) {
     const { 
-        onAudioData, 
+        onAudioData,
+        onAudioDataBinary,
         onAudioEnd, 
         onSpeakingChange, 
         targetSampleRate = 16000,
@@ -45,6 +52,7 @@ export function useAudioRecorder(options: UseAudioRecorderOptions = {}) {
     const isRecordingRef = useRef(false);
     const streamRef = useRef<MediaStream | null>(null);
     const onAudioDataRef = useRef(onAudioData);
+    const onAudioDataBinaryRef = useRef(onAudioDataBinary);
     const onAudioEndRef = useRef(onAudioEnd);
     const onSpeakingChangeRef = useRef(onSpeakingChange);
     const inputSampleRateRef = useRef(48000);
@@ -52,9 +60,10 @@ export function useAudioRecorder(options: UseAudioRecorderOptions = {}) {
     // 保持回调引用最新
     useEffect(() => {
         onAudioDataRef.current = onAudioData;
+        onAudioDataBinaryRef.current = onAudioDataBinary;
         onAudioEndRef.current = onAudioEnd;
         onSpeakingChangeRef.current = onSpeakingChange;
-    }, [onAudioData, onAudioEnd, onSpeakingChange]);
+    }, [onAudioData, onAudioDataBinary, onAudioEnd, onSpeakingChange]);
     
     // 同步 stream ref
     useEffect(() => {
@@ -130,7 +139,7 @@ export function useAudioRecorder(options: UseAudioRecorderOptions = {}) {
             const renderedBuffer = await offlineCtx.startRendering();
             return renderedBuffer.getChannelData(0);
         } catch (err) {
-            console.warn("[AudioRecorder] OfflineAudioContext resampling failed, falling back to linear:", err);
+            debug.warn("[AudioRecorder] OfflineAudioContext resampling failed, falling back to linear:", err);
             // Fallback to linear interpolation if OfflineAudioContext fails
             return resampleLinear(inputData, inputSampleRate, outputSampleRate);
         }
@@ -182,10 +191,8 @@ export function useAudioRecorder(options: UseAudioRecorderOptions = {}) {
     // Int16Array 转 Base64
     const int16ArrayToBase64 = useCallback((int16Array: Int16Array): string => {
         const bytes = new Uint8Array(int16Array.buffer);
-        let binary = "";
-        for (let i = 0; i < bytes.byteLength; i++) {
-            binary += String.fromCharCode(bytes[i]);
-        }
+        // NEW-13 Fix: Single spread call instead of O(n²) loop concatenation
+        const binary = String.fromCharCode(...bytes);
         return btoa(binary);
     }, []);
 
@@ -198,17 +205,22 @@ export function useAudioRecorder(options: UseAudioRecorderOptions = {}) {
      */
     const processAudioData = useCallback(async (audioData: Float32Array, chunkCount: number) => {
         try {
-            // High-quality resampling using OfflineAudioContext
-            const resampledData = await resampleHQ(audioData, inputSampleRateRef.current, targetSampleRate);
+            // v1-14 Fix: Use linear resampling for real-time chunks to avoid
+            // creating ~50 OfflineAudioContext instances per second.
+            // Linear interpolation is fast, synchronous, and sufficient for speech ASR.
+            const resampledData = resampleLinear(audioData, inputSampleRateRef.current, targetSampleRate);
             
             // 转换为 PCM
             const pcmData = floatTo16BitPCM(resampledData);
             
-            // 转换为 base64
-            const base64 = int16ArrayToBase64(pcmData);
-            
-            // 发送
-            onAudioDataRef.current?.(base64);
+            // v1-13: Prefer binary callback (skips Base64 entirely)
+            if (onAudioDataBinaryRef.current) {
+                onAudioDataBinaryRef.current(pcmData);
+            } else {
+                // Legacy Base64 path
+                const base64 = int16ArrayToBase64(pcmData);
+                onAudioDataRef.current?.(base64);
+            }
             
             // 每 20 个块记录一次
             if (chunkCount % 20 === 0) {
@@ -217,21 +229,27 @@ export function useAudioRecorder(options: UseAudioRecorderOptions = {}) {
                     const abs = Math.abs(audioData[i]);
                     if (abs > maxAmp) maxAmp = abs;
                 }
-                console.log(`[AudioRecorder] Chunk #${chunkCount}: max=${maxAmp.toFixed(4)}`);
+                debug.log(`[AudioRecorder] Chunk #${chunkCount}: max=${maxAmp.toFixed(4)}`);
             }
         } catch (err) {
             console.error("[AudioRecorder] Failed to process audio data:", err);
         }
     }, [targetSampleRate, resampleHQ, floatTo16BitPCM, int16ArrayToBase64]);
 
-    // 检测 AudioWorklet 支持
+    // P2-16: Cached AudioWorklet support detection (module-level cache)
     const checkWorkletSupport = useCallback((): boolean => {
         if (forceScriptProcessor) {
             return false;
         }
         
+        // Return cached result if available
+        if (_workletSupportCached !== null) {
+            return _workletSupportCached;
+        }
+        
         // Check if AudioWorklet is available
         if (typeof AudioWorkletNode === 'undefined') {
+            _workletSupportCached = false;
             return false;
         }
         
@@ -240,8 +258,10 @@ export function useAudioRecorder(options: UseAudioRecorderOptions = {}) {
             const testContext = new AudioContext();
             const hasWorklet = 'audioWorklet' in testContext;
             testContext.close();
+            _workletSupportCached = hasWorklet;
             return hasWorklet;
         } catch {
+            _workletSupportCached = false;
             return false;
         }
     }, [forceScriptProcessor]);
@@ -278,10 +298,10 @@ export function useAudioRecorder(options: UseAudioRecorderOptions = {}) {
             // Note: We don't connect to destination to avoid feedback
             // workletNode.connect(audioContext.destination);
             
-            console.log("[AudioRecorder] AudioWorklet setup complete");
+            debug.log("[AudioRecorder] AudioWorklet setup complete");
             return true;
         } catch (err) {
-            console.warn("[AudioRecorder] AudioWorklet setup failed, falling back to ScriptProcessorNode:", err);
+            debug.warn("[AudioRecorder] AudioWorklet setup failed, falling back to ScriptProcessorNode:", err);
             return false;
         }
     }, [processAudioData]);
@@ -292,7 +312,7 @@ export function useAudioRecorder(options: UseAudioRecorderOptions = {}) {
         source: MediaStreamAudioSourceNode,
         processorBufferSize: number
     ): void => {
-        console.warn("[AudioRecorder] Using ScriptProcessorNode (deprecated) - AudioWorklet not available");
+        debug.warn("[AudioRecorder] Using ScriptProcessorNode (deprecated) - AudioWorklet not available");
         
         const processor = audioContext.createScriptProcessor(processorBufferSize, 1, 1);
         processorRef.current = processor;
@@ -318,7 +338,7 @@ export function useAudioRecorder(options: UseAudioRecorderOptions = {}) {
         source.connect(processor);
         processor.connect(audioContext.destination);
         
-        console.log("[AudioRecorder] ScriptProcessorNode setup complete");
+        debug.log("[AudioRecorder] ScriptProcessorNode setup complete");
     }, [processAudioData]);
 
     // 开始录音
@@ -326,7 +346,7 @@ export function useAudioRecorder(options: UseAudioRecorderOptions = {}) {
         if (isRecordingRef.current) return;
 
         try {
-            console.log("[AudioRecorder] Starting...");
+            debug.log("[AudioRecorder] Starting...");
             
             // Check AudioWorklet support
             const workletSupported = checkWorkletSupport();
@@ -344,7 +364,7 @@ export function useAudioRecorder(options: UseAudioRecorderOptions = {}) {
             
             const audioTrack = newStream.getAudioTracks()[0];
             if (audioTrack) {
-                console.log("[AudioRecorder] Track:", {
+                debug.log("[AudioRecorder] Track:", {
                     label: audioTrack.label,
                     enabled: audioTrack.enabled,
                     readyState: audioTrack.readyState,
@@ -363,11 +383,11 @@ export function useAudioRecorder(options: UseAudioRecorderOptions = {}) {
             audioContextRef.current = audioContext;
             inputSampleRateRef.current = audioContext.sampleRate;
             
-            console.log(`[AudioRecorder] AudioContext: state=${audioContext.state}, sampleRate=${audioContext.sampleRate}`);
+            debug.log(`[AudioRecorder] AudioContext: state=${audioContext.state}, sampleRate=${audioContext.sampleRate}`);
 
             if (audioContext.state === 'suspended') {
                 await audioContext.resume();
-                console.log("[AudioRecorder] AudioContext resumed");
+                debug.log("[AudioRecorder] AudioContext resumed");
             }
 
             // 创建音频源
@@ -395,7 +415,7 @@ export function useAudioRecorder(options: UseAudioRecorderOptions = {}) {
             setIsRecording(true);
             setError(null);
             
-            console.log(`[AudioRecorder] Recording started (using ${workletSetupSuccess ? 'AudioWorklet' : 'ScriptProcessorNode'})`);
+            debug.log(`[AudioRecorder] Recording started (using ${workletSetupSuccess ? 'AudioWorklet' : 'ScriptProcessorNode'})`);
 
         } catch (err) {
             console.error("[AudioRecorder] Failed to start:", err);
@@ -410,7 +430,7 @@ export function useAudioRecorder(options: UseAudioRecorderOptions = {}) {
             return;
         }
 
-        console.log("[AudioRecorder] Stopping...");
+        debug.log("[AudioRecorder] Stopping...");
 
         isRecordingRef.current = false;
         setIsRecording(false);
@@ -450,7 +470,7 @@ export function useAudioRecorder(options: UseAudioRecorderOptions = {}) {
         onAudioEndRef.current?.();
         onSpeakingChangeRef.current?.(false);
         
-        console.log("[AudioRecorder] Recording stopped");
+        debug.log("[AudioRecorder] Recording stopped");
     }, []); // 无依赖，函数引用稳定
 
     // 清理资源

@@ -17,6 +17,9 @@ import {
     ArrowLeft,
     BarChart3,
     MessageSquareText,
+    Sparkles,
+    Presentation,
+    type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -47,15 +50,38 @@ interface UserInfo {
     department?: string;
 }
 
+function getCachedAdminUser(): UserInfo | null {
+    if (typeof window === "undefined") {
+        return null;
+    }
+
+    const storedUser = localStorage.getItem("user");
+    if (!storedUser) {
+        return null;
+    }
+
+    try {
+        const parsed = JSON.parse(storedUser) as {
+            id?: string;
+            user_id?: string;
+            name?: string;
+            display_name?: string;
+            role?: string;
+            department?: string;
+        };
+        return {
+            id: parsed.id || parsed.user_id || "",
+            display_name: parsed.name || parsed.display_name || "用户",
+            role: parsed.role || "user",
+            department: parsed.department,
+        };
+    } catch {
+        return null;
+    }
+}
+
 export function AdminSidebar() {
     const { isCollapsed, toggleSidebar } = useSidebarStore();
-    // Prevent hydration mismatch
-    const [mounted, setMounted] = useState(false);
-    useEffect(() => {
-        setMounted(true);
-    }, []);
-
-    if (!mounted) return null;
 
     return (
         <aside
@@ -83,10 +109,12 @@ export function AdminSidebarContent({ isCollapsed = false, toggleSidebar, showTo
         { label: "用户管理", icon: Users, href: "/admin/users" },
         { label: "智能体管理", icon: Bot, href: "/admin/agents" },
         { label: "角色管理", icon: Users, href: "/admin/personas" },
+        { label: "PPT演练管理", icon: Presentation, href: "/admin/presentations" },
         { label: "知识库管理", icon: BookOpen, href: "/admin/knowledge" },
         { label: "提示词管理", icon: MessageSquareText, href: "/admin/prompts" },
         { label: "训练记录", icon: FileText, href: "/admin/records" },
         { label: "数据分析", icon: BarChart3, href: "/admin/analytics" },
+        { label: "语音策略", icon: Sparkles, href: "/admin/voice-runtime" },
         { label: "系统设置", icon: Settings, href: "/admin/settings" },
         { label: "操作日志", icon: Activity, href: "/admin/logs" },
     ];
@@ -151,30 +179,20 @@ export function AdminSidebarContent({ isCollapsed = false, toggleSidebar, showTo
 }
 
 function AdminUserCard({ isCollapsed }: { isCollapsed: boolean }) {
-    const [userInfo, setUserInfo] = useState<UserInfo | null>(null);
+    const [userInfo, setUserInfo] = useState<UserInfo | null>(() => getCachedAdminUser());
 
     useEffect(() => {
-        // Try to get user info from localStorage first (set during login)
-        const storedUser = localStorage.getItem("user");
-        if (storedUser) {
-            try {
-                const parsed = JSON.parse(storedUser);
-                setUserInfo({
-                    id: parsed.id,
-                    display_name: parsed.name || parsed.display_name || "用户",
-                    role: parsed.role || "user",
-                    department: parsed.department,
-                });
-            } catch {
-                // Ignore parse errors
-            }
-        }
-
         // Fetch fresh user info from API
         api.user.getMe().then((data) => {
-            setUserInfo(data);
+            const nextUserInfo: UserInfo = {
+                id: data.user_id,
+                display_name: data.name,
+                role: data.role,
+                department: data.department,
+            };
+            setUserInfo(nextUserInfo);
             // Update localStorage
-            localStorage.setItem("user", JSON.stringify(data));
+            localStorage.setItem("user", JSON.stringify(nextUserInfo));
         }).catch(() => {
             // Ignore errors, use cached data
         });
@@ -308,7 +326,13 @@ function BackToUserLink({ isCollapsed }: { isCollapsed: boolean }) {
     );
 }
 
-function AdminNavLink({ item, pathname, isCollapsed }: { item: any, pathname: string, isCollapsed: boolean }) {
+interface AdminNavItem {
+    label: string;
+    href: string;
+    icon: LucideIcon;
+}
+
+function AdminNavLink({ item, pathname, isCollapsed }: { item: AdminNavItem, pathname: string, isCollapsed: boolean }) {
     const isActive = pathname === item.href || (item.href !== '/admin' && pathname.startsWith(item.href) && item.href !== '/admin');
 
     const LinkContent = (

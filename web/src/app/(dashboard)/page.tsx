@@ -51,9 +51,19 @@ export default function HomePage() {
     const [isFilterOpen, setIsFilterOpen] = useState(false);
     
     // Data State
+    const defaultStats: DashboardStats = {
+        weekly_activity: { total_duration_minutes: 0, session_count: 0, trend_direction: "flat", trend_percentage: 0 },
+        last_session: { score: 0, percentile: 50, trend: "stable" },
+    };
+    const defaultRecommendation: Recommendation = {
+        title: "开始练习",
+        reason: "欢迎使用训练系统，开始一次练习来提升您的技能吧！",
+        action_label: "开始训练",
+        target_path: "/training",
+    };
     const [isLoading, setIsLoading] = useState(true);
-    const [stats, setStats] = useState<DashboardStats | null>(null);
-    const [recommendation, setRecommendation] = useState<Recommendation | null>(null);
+    const [stats, setStats] = useState<DashboardStats>(defaultStats);
+    const [recommendation, setRecommendation] = useState<Recommendation>(defaultRecommendation);
     const [historyItems, setHistoryItems] = useState<SessionItem[]>([]);
 
     const handleDeleteHistory = (id: string) => {
@@ -63,30 +73,23 @@ export default function HomePage() {
     // Load Data from API
     useEffect(() => {
         const loadDashboardData = async () => {
-            try {
-                setIsLoading(true);
-                // Parallel fetching for better performance
-                const [statsData, recData, historyData] = await Promise.all([
-                    api.dashboard.getStats(),
-                    api.dashboard.getRecommendation(),
-                    api.dashboard.getHistory()
-                ]);
+            setIsLoading(true);
+            const [statsResult, recResult, historyResult] = await Promise.allSettled([
+                api.dashboard.getStats(),
+                api.dashboard.getRecommendation(),
+                api.dashboard.getHistory()
+            ]);
 
-                setStats(statsData);
-                setRecommendation(recData);
-                setHistoryItems(historyData);
-            } catch (error) {
-                console.error("Failed to load dashboard data:", error);
-                // In a real app, you might show a toast error here
-            } finally {
-                setIsLoading(false);
-            }
+            setStats(statsResult.status === "fulfilled" ? statsResult.value : defaultStats);
+            setRecommendation(recResult.status === "fulfilled" ? recResult.value : defaultRecommendation);
+            setHistoryItems(historyResult.status === "fulfilled" ? historyResult.value : []);
+            setIsLoading(false);
         };
 
         loadDashboardData();
     }, []);
 
-    if (isLoading || !stats || !recommendation) {
+    if (isLoading) {
         return <DashboardSkeleton />;
     }
 
@@ -177,7 +180,7 @@ export default function HomePage() {
                                 <div className="p-4 bg-slate-50 rounded-2xl">
                                     <div className="text-xs font-bold text-slate-400 uppercase">训练场次</div>
                                     <div className="text-2xl font-black text-slate-900 mt-1">{stats.weekly_activity.session_count}</div>
-                                    <div className="text-xs text-slate-500 font-bold mt-1">平均 {Math.round(stats.weekly_activity.total_duration_minutes / stats.weekly_activity.session_count)}分钟 / 场</div>
+                                    <div className="text-xs text-slate-500 font-bold mt-1">平均 {stats.weekly_activity.session_count > 0 ? Math.round(stats.weekly_activity.total_duration_minutes / stats.weekly_activity.session_count) : 0}分钟 / 场</div>
                                 </div>
                                 <div className="p-4 bg-slate-50 rounded-2xl">
                                     <div className="text-xs font-bold text-slate-400 uppercase">重点领域</div>
@@ -225,10 +228,10 @@ export default function HomePage() {
                         <TrendingUp className="w-8 h-8" />
                     </div>
                     <div>
-                        <div className="text-3xl font-black text-slate-900">{stats.last_session.score}</div>
+                        <div className="text-3xl font-black text-slate-900">{stats.last_session?.score ?? 0}</div>
                         <div className="text-xs font-bold text-slate-400 uppercase mt-1">上次得分</div>
                     </div>
-                     <p className="text-xs text-slate-500 px-4">您的表现优于 {stats.last_session.percentile}% 的用户，继续保持！</p>
+                     <p className="text-xs text-slate-500 px-4">您的表现优于 {stats.last_session?.percentile ?? 0}% 的用户，继续保持！</p>
                 </GlassCard>
             </section>
 
@@ -292,9 +295,9 @@ export default function HomePage() {
                                                 <div className="flex gap-4">
                                                     <div className={cn("w-12 h-12 rounded-2xl flex items-center justify-center font-bold text-lg group-hover:scale-110 transition-transform",
                                                         // UI mapping logic
-                                                        item.scenario_type === 'sales_bot' ? "bg-blue-50 text-blue-600" : "bg-purple-50 text-purple-600"
+                                                        item.scenario_type === 'sales' ? "bg-blue-50 text-blue-600" : "bg-purple-50 text-purple-600"
                                                     )}>
-                                                        {item.scenario_type === 'sales_bot' ? 'S' : 'P'}
+                                                        {item.scenario_type === 'sales' ? 'S' : 'P'}
                                                     </div>
                                                     <div className="text-left">
                                                         <h4 className="font-bold text-base text-slate-900">{item.title}</h4>
@@ -327,11 +330,11 @@ export default function HomePage() {
                                         <DialogHeader>
                                             <DialogTitle className="flex items-center gap-3">
                                                 <div className={cn("w-8 h-8 rounded-lg flex items-center justify-center text-sm",
-                                                    item.scenario_type === 'sales_bot' ? "bg-blue-50 text-blue-600" : "bg-purple-50 text-purple-600"
+                                                    item.scenario_type === 'sales' ? "bg-blue-50 text-blue-600" : "bg-purple-50 text-purple-600"
                                                 )}>
-                                                    {item.scenario_type === 'sales_bot' ? 'S' : 'P'}
+                                                    {item.scenario_type === 'sales' ? 'S' : 'P'}
                                                 </div>
-                                                {item.scenario_type === 'sales_bot' ? '会话分析' : '演示分析'}
+                                                {item.scenario_type === 'sales' ? '会话分析' : '演示分析'}
                                             </DialogTitle>
                                             <DialogDescription>ID: #{item.id} • {formatTimeAgo(item.start_time)}</DialogDescription>
                                         </DialogHeader>

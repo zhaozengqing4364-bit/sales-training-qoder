@@ -1,5 +1,26 @@
 # CLAUDE.md
 
+## 🤖 AI 开发系统
+
+### 会话启动流程
+
+```
+1. pwd
+2. git log --oneline -10
+3. Read .agent/progress.md
+4. Read .agent/tasks.json
+5. Read .agent/project-context.md
+```
+
+### 核心原则
+
+1. 增量开发 - 每次只处理一个任务
+2. 严格测试 - 必须验证才能标记完成
+3. 小步提交 - 完成就 commit
+4. 清晰记录 - 更新 progress.md
+
+# CLAUDE.md
+
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
 ## Project Overview
@@ -42,6 +63,26 @@ cp backend/.env.example backend/.env
 # 前端环境变量
 cp web/.env.example web/.env.local
 # 编辑 web/.env.local 配置 API 地址等
+```
+
+**关键环境变量**:
+```bash
+# TTS 配置
+TTS_PROVIDER=aliyun                    # aliyun | edge | browser
+ALIYUN_DASHSCOPE_API_KEY=your_key      # 阿里云 DashScope API Key
+ALIYUN_TTS_MODEL=cosyvoice-v1          # TTS 模型
+ALIYUN_TTS_VOICE=longxia               # 默认语音
+
+# ASR 配置
+ASR_PROVIDER=alibaba                   # alibaba | local
+ALIYUN_ASR_API_KEY=your_key            # 阿里云 ASR API Key
+
+# 数据库
+DATABASE_URL=postgresql+asyncpg://user:pass@localhost/db
+
+# 日志
+LOG_LEVEL=INFO
+WEBSOCKET_DEBUG=false
 ```
 
 ### Backend
@@ -134,28 +175,50 @@ backend/src/
 │   └── websocket/             # PPT 演练 WebSocket
 ├── sales_bot/                 # 销售对练场景 (独立)
 │   ├── api/                   # 场景管理 API
-│   ├── services/              # BotService, ContextManager
+│   ├── services/              # BotService, ContextManager, SummaryService
 │   └── websocket/             # 销售对练 WebSocket
-├── prompt_templates/          # 提示词模板系统 (B1-B6)
+│       ├── base_sales_handler.py    # 销售handler基类
+│       ├── enhanced_handler.py      # 增强版handler (TTS降级)
+│       ├── simple_handler.py        # 简化版handler
+│       └── components/              # 组件化模块
+│           ├── capability_processor.py
+│           ├── message_persistence.py
+│           └── tts_component.py
+├── prompt_templates/          # 提示词模板系统 (B1-B10)
+│   ├── api/                   # 模板管理API
 │   ├── models.py              # PromptTemplate, PromptType 模型
 │   ├── service.py             # PromptTemplateService 业务逻辑
 │   ├── loader.py              # 模板加载与缓存
 │   └── renderer.py            # Jinja2 模板渲染
-├── evaluation/                # 分阶段评估系统 (C1-C3)
-│   ├── services/              # StagedEvaluationService
+├── evaluation/                # 分阶段评估系统 (C1-C7)
+│   ├── api.py                 # 评估API
+│   ├── schemas.py             # 评估数据模型
+│   ├── services/              # StagedEvaluationService, ComprehensiveReport
 │   └── triggers/              # 触发器 (keyword, time_interval, turn_count, stage_transition)
 ├── admin/                     # 管理后台 API
-│   └── api/                   # users, analytics, model_configs
+│   └── api/                   # users, analytics, model_configs, system_logs
 ├── common/                    # 共享模块 (不依赖业务)
 │   ├── ai/                    # LLM, Embedding, ConfigManager
-│   ├── audio/                 # ASR (FunASR), TTS (Edge-TTS)
+│   ├── api/                   # 通用API响应格式
+│   ├── audio/                 # ASR (FunASR/Alibaba), TTS (Edge-TTS/Aliyun/降级)
+│   │   ├── asr_base.py
+│   │   ├── asr_service.py
+│   │   ├── asr_alibaba.py         # 阿里云ASR
+│   │   ├── asr_with_fallback.py   # ASR降级机制
+│   │   ├── tts_factory.py         # TTS工厂
+│   │   ├── tts_service.py
+│   │   └── aliyun_streaming_tts.py # 阿里云流式TTS
 │   ├── auth/                  # JWT 认证
+│   ├── cache/                 # 缓存 (Redis/内存)
 │   ├── conversation/          # 对话引擎、回放
 │   ├── db/                    # SQLAlchemy 2.0 会话
 │   ├── error_handling/        # Result[T] 错误处理
 │   ├── knowledge/             # ChromaDB 向量存储
-│   ├── monitoring/            # 结构化日志 (structlog)
-│   └── websocket/             # BaseWebSocketHandler
+│   ├── logging/               # 结构化日志 (structlog)
+│   ├── rate_limit/            # 限流控制
+│   ├── resilience/            # 熔断器、重试
+│   ├── validation/            # 输入验证
+│   └── websocket/             # BaseWebSocketHandler, SessionManager
 └── tests/                     # 测试目录
     ├── unit/                  # 单元测试 (70%)
     ├── integration/           # 集成测试 (20%)
@@ -168,14 +231,40 @@ web/src/
 │   ├── (auth)/                # 认证页面
 │   ├── (dashboard)/           # 用户仪表板
 │   ├── (user)/                # 练习页面
+│   │   └── practice/
+│   │       └── [sessionId]/   # 练习会话页面
+│   │           ├── page.tsx
+│   │           └── report/    # 评估报告页面
 │   └── admin/                 # 管理后台
+│       ├── knowledge/         # 知识库管理
+│       ├── personas/          # Persona管理
+│       ├── prompts/           # 提示词模板管理
+│       ├── records/           # 演练记录
+│       ├── settings/          # 系统设置
+│       └── users/             # 用户管理
 ├── components/
+│   ├── analytics/             # 数据分析图表
+│   ├── knowledge/             # 知识库组件
 │   ├── layout/                # 侧边栏、导航
-│   └── ui/                    # 原子组件 (glass-card, button, input)
-├── hooks/                     # use-practice-websocket, use-audio-recorder
+│   ├── practice/              # 练习相关组件
+│   │   ├── presentation/      # PPT演练组件
+│   │   └── realtime-feedback.tsx
+│   ├── training/              # 训练组件
+│   └── ui/                    # 原子组件 (glass-card, button, input, checkbox, status-indicator)
+├── hooks/                     # 自定义Hooks
+│   ├── websocket/             # WebSocket相关hooks
+│   │   ├── types.ts
+│   │   ├── message-handlers.ts
+│   │   └── use-audio-playback.ts
+│   ├── use-audio-recorder.ts
+│   ├── use-practice-websocket.ts
+│   ├── use-streaming-audio-player.ts
+│   ├── use-knowledge-base-linker.ts
+│   └── use-debounce-request.ts
 ├── lib/
 │   ├── api/                   # API client (types.ts, client.ts)
-│   └── auth-handler.ts
+│   ├── debug.ts               # 调试工具
+│   └── performance.ts         # 性能监控
 └── types/                     # TypeScript 类型定义
 
 docs/
@@ -198,12 +287,14 @@ docs/
 - FastAPI (异步 Web 框架)
 - SQLAlchemy 2.0+ (async ORM)
 - Pydantic 2.0+ (数据验证)
-- FunASR 1.1.18 (阿里通义实验室 ASR)
-- edge-tts (文本转语音)
+- FunASR 1.1.18 / Alibaba qwen3-asr-flash (流式 ASR)
+- Edge-TTS / 阿里云 DashScope TTS (文本转语音，支持自动降级)
 - LangChain (AI 编排)
 - ChromaDB (向量数据库)
-- aiosqlite (异步 SQLite)
+- PostgreSQL (关系数据库)
 - structlog (结构化日志)
+- tenacity (重试机制)
+- aiohttp (异步 HTTP 客户端)
 
 ### 前端
 - Next.js 16.1.1 (React 框架)
@@ -325,6 +416,35 @@ result = await evaluation_service.process_message(
 - `staged_evaluation_results` - 各阶段评估结果
 - `comprehensive_reports` - 综合评估报告
 
+### TTS 服务与降级机制
+
+多层级 TTS 服务架构，支持自动降级和流式输出。
+
+**服务层级** (`TTSProvider`):
+```python
+- ALIYUN   # 阿里云 DashScope (推荐，延迟 <200ms)
+- EDGE     # Edge-TTS (免费备用)
+- BROWSER  # 浏览器 TTS (最终降级)
+```
+
+**使用示例**:
+```python
+from common.audio.tts_factory import TTSServiceFactory, TTSProvider
+
+# 使用工厂创建服务
+tts_service = TTSServiceFactory.create(TTSProvider.ALIYUN.value)
+
+# 流式生成音频
+async for audio_chunk in tts_service.generate_stream(text="你好"):
+    if audio_chunk.is_success:
+        yield audio_chunk.value
+```
+
+**降级策略**:
+1. 阿里云失败 → 自动降级到 Edge-TTS
+2. Edge-TTS 失败 → 通知前端使用浏览器 TTS
+3. 所有降级操作对上层透明
+
 ## 核心架构模式
 
 ### 0. 测试驱动开发
@@ -441,6 +561,58 @@ const agents = await api.admin.getAgents({ page: 1, page_size: 20 });
 | 提示词模板系统 | `docs/specs/B-prompt-template-system.md` |
 | 分阶段评估系统 | `docs/specs/C-staged-evaluation-system.md` |
 | 代码审查知识库 | `docs/code-review/knowledge-system-full-analysis.md` |
+| 系统深度分析 | `docs/system-deep-analysis-report.md` |
+| 修复报告 | `docs/deep-repair-completion-report.md` |
+| 后端原则 | `.kiro/steering/backend-principles.md` |
+| 前端原则 | `.kiro/steering/frontend-principles.md` |
+| 快速参考 | `.kiro/steering/QUICK-REFERENCE.md` |
+
+## Claude Code 并行开发 (Agent Teams)
+
+### 文档索引
+- **完整文档索引**: https://code.claude.com/docs/llms.txt
+- **Agent Teams 文档**: https://code.claude.com/docs/agent-teams
+
+### 启用 Agent Teams
+在 `settings.json` 或环境变量中启用:
+```json
+{
+  "env": {
+    "CLAUDE_CODE_EXPERIMENTAL_AGENT_TEAMS": "1"
+  }
+}
+```
+
+### 适用场景
+
+| 场景 | 描述 |
+|------|------|
+| **研究与审查** | 多个 teammate 同时调查问题的不同方面 |
+| **新模块/功能** | 每个 teammate 负责独立的模块 |
+| **竞争假设调试** | teammate 并行测试不同理论 |
+| **跨层协调** | 前端、后端、测试各由不同 teammate 负责 |
+
+### 与 Subagents 对比
+
+| 特性 | Subagents | Agent Teams |
+|------|-----------|-------------|
+| **上下文** | 独立窗口，结果返回调用者 | 独立窗口，完全独立 |
+| **通信** | 只向主 agent 报告 | teammate 之间直接消息 |
+| **协调** | 主 agent 管理所有工作 | 共享任务列表，自协调 |
+| **最佳用例** | 只需结果的专注任务 | 需要讨论和协作的复杂工作 |
+| **Token 成本** | 较低 | 较高 |
+
+### 最佳实践
+1. **给 teammate 足够上下文** - 在 spawn prompt 中包含任务特定细节
+2. **任务大小适中** - 自包含单元，产生清晰交付物
+3. **等待 teammate 完成** - 不要让 lead 抢先实现任务
+4. **从研究和审查开始** - 清晰边界、不需写代码的任务
+5. **避免文件冲突** - 每个 teammate 拥有不同的文件集
+6. **监控和引导** - 检查进度，重定向无效方法
+
+### 显示模式
+- **In-process**: 所有 teammate 在主终端内运行 (Shift+Up/Down 切换)
+- **Split panes**: 每个 teammate 独立分屏 (需要 tmux 或 iTerm2)
 
 ## API 契约 (已完成实现)
 
@@ -467,10 +639,16 @@ const agents = await api.admin.getAgents({ page: 1, page_size: 20 });
 
 ```
 □ ruff check 通过
-□ 无 print() 语句
+□ ruff format 已执行
+□ mypy 类型检查通过
+□ 无 print() 语句 (使用 logger)
 □ 使用 Result[T] 包装错误
 □ 前端无 alert/popup
-□ API 响应格式正确
+□ API 响应格式正确 (success/data/error/trace_id)
+□ 新增环境变量已添加到 .env.example
+□ 数据库迁移已创建 (如有模型变更)
+□ 单元测试通过
+□ 前端 build 成功
 ```
 
 ## 日志与调试
@@ -481,10 +659,22 @@ const agents = await api.admin.getAgents({ page: 1, page_size: 20 });
 - 日志级别通过 `LOG_LEVEL` 环境变量配置
 - 查看 WebSocket 日志: 设置 `WEBSOCKET_DEBUG=true`
 
+### TTS 调试
+```python
+# 查看 TTS 降级日志
+logger.info("TTS fallback triggered", provider="aliyun", fallback_to="edge")
+
+# 测试 TTS 服务
+python -c "from common.audio.tts_factory import TTSServiceFactory; \
+           tts = TTSServiceFactory.create('aliyun'); \
+           print('TTS service created successfully')"
+```
+
 ### 前端调试
 - 使用 `use-practice-websocket.ts` 中的状态进行调试
 - 浏览器 DevTools Network 标签页查看 WebSocket 消息
 - 使用 `--watch` 模式进行开发时自动热重载
+- 调试工具: `lib/debug.ts` 提供性能追踪和日志工具
 
 ### 常见问题排查
 | 问题 | 可能原因 | 解决方法 |
@@ -492,9 +682,32 @@ const agents = await api.admin.getAgents({ page: 1, page_size: 20 });
 | WebSocket 连接失败 | 后端未启动/端口错误 | 检查后端是否在 3444 端口运行 |
 | ASR 转录超时 | 模型未下载/网络问题 | 首次运行会自动下载模型，请耐心等待 |
 | TTS 无声音 | 浏览器自动播放策略 | 确保用户已与页面交互（点击/触摸） |
+| TTS 降级频繁 | 阿里云 API Key 无效 | 检查 `ALIYUN_DASHSCOPE_API_KEY` |
 | 数据库连接失败 | SQLite 文件权限问题 | 检查 `backend/data/` 目录权限 |
+| 前端样式异常 | Tailwind 缓存问题 | 重启 `npm run dev` 或清除 `.next` 目录 |
 
 ## 最近更新
+
+### 2026-02-12
+- **Agent Teams 文档集成**: 添加 Claude Code 并行开发指南
+  - Agent Teams 启用方式
+  - 适用场景和最佳实践
+  - 与 Subagents 的对比
+  - 显示模式配置
+
+### 2026-02-06
+- **TTS 服务降级机制**: 实现多层级 TTS 降级策略
+  - 阿里云 DashScope 流式 TTS (推荐，延迟 <200ms)
+  - Edge-TTS (免费备用)
+  - 浏览器 TTS (最终降级)
+  - 自动降级链: 阿里云 → Edge-TTS → 浏览器TTS
+  - 新增: `TTSServiceFactory`, `AliyunStreamingTTSService`
+
+### 2026-02-05
+- **C4-C7**: 分阶段评估前端集成
+  - 评估结果展示组件
+  - 综合报告页面
+  - 实时反馈优化
 
 ### 2026-02-04
 - **C1-C3**: 实现分阶段评估系统 (Staged Evaluation System)
@@ -503,10 +716,18 @@ const agents = await api.admin.getAgents({ page: 1, page_size: 20 });
   - 数据表：`staged_evaluation_results`, `comprehensive_reports`
 
 ### 2026-02-03
-- **B1-B6**: 实现提示词模板系统 (Prompt Template System)
+- **B7-B10**: 提示词模板系统完善
+  - B7-B8: 迁移现有 Prompts 到模板系统
+  - B9-B10: 前端提示词模板管理界面
   - Jinja2 模板渲染引擎
   - 模板版本管理与热重载
   - PromptType 分类系统
+
+### 2026-02-02
+- **WebSocket 组件化重构**: `sales_bot/websocket/components/`
+  - `capability_processor.py` - 能力处理
+  - `message_persistence.py` - 消息持久化
+  - `tts_component.py` - TTS 组件
 
 ### 2026-01-15
 - 添加数据分析优化和语音训练流式功能

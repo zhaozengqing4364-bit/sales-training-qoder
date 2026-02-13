@@ -190,7 +190,7 @@ export default function AdminPromptsPage() {
             {/* Loading State */}
             {loading && (
                 <div className="flex items-center justify-center py-12">
-                    <StatusIndicator status="processing" size={20} />
+                    <StatusIndicator status="loading"  />
                     <span className="ml-2 text-zinc-500">加载中...</span>
                 </div>
             )}
@@ -369,7 +369,7 @@ export default function AdminPromptsPage() {
                 <div className="text-center">
                     <AlertCircle className="w-12 h-12 text-amber-500 mx-auto mb-4" />
                     <p className="text-zinc-600 mb-6">
-                        确定要删除提示词模板 "{selectedTemplate?.name}" 吗？
+                        确定要删除提示词模板 &ldquo;{selectedTemplate?.name}&rdquo; 吗？
                         <br />
                         此操作不可恢复。
                     </p>

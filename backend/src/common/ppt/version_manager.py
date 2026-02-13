@@ -112,7 +112,7 @@ class VersionManager:
 
             return Result(value=version)
 
-        except Exception as e:
+        except (RuntimeError, ValueError, OSError) as e:
             logger.error(
                 "Failed to create version",
                 extra={"presentation_id": str(presentation_id), "error": str(e)},
@@ -171,7 +171,7 @@ class VersionManager:
 
             return Result(value=versions)
 
-        except Exception as e:
+        except (RuntimeError, ValueError, OSError) as e:
             logger.error(
                 "Failed to get version history",
                 extra={"presentation_id": str(presentation_id), "error": str(e)},
@@ -239,7 +239,7 @@ class VersionManager:
 
             return Result(value=True)
 
-        except Exception as e:
+        except (RuntimeError, ValueError, OSError) as e:
             logger.error(
                 "Failed to rollback",
                 extra={
@@ -296,7 +296,7 @@ class VersionManager:
 
             return Result(value=True)
 
-        except Exception as e:
+        except (RuntimeError, ValueError, OSError) as e:
             logger.error(
                 "Failed to cleanup old versions",
                 extra={"presentation_id": str(presentation_id), "error": str(e)},

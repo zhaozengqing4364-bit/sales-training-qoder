@@ -14,8 +14,9 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.exc import SQLAlchemyError
 
-from common.auth.service import get_current_user
+from common.auth.service import get_current_admin_user, get_current_user
 from common.db.models import User
 from common.db.session import get_db
 from common.monitoring.logger import get_logger
@@ -42,6 +43,16 @@ admin_router = APIRouter(prefix="/admin/agents", tags=["admin-agents"])
 user_router = APIRouter(prefix="/agents", tags=["agents"])
 
 
+async def commit_or_500(db: AsyncSession, action: str) -> None:
+    """Persist transaction and convert DB failures to HTTP 500."""
+    try:
+        await db.commit()
+    except SQLAlchemyError as exc:
+        await db.rollback()
+        logger.error(f"Database commit failed during {action}: {exc}")
+        raise HTTPException(status_code=500, detail="[DB_COMMIT_FAILED]") from exc
+
+
 # =============================================================================
 # Admin API Endpoints - R1
 # =============================================================================
@@ -50,7 +61,7 @@ user_router = APIRouter(prefix="/agents", tags=["agents"])
 @admin_router.post("", response_model=dict)
 async def create_agent(
     request: CreateAgentRequest,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_admin_user),
     db: AsyncSession = Depends(get_db)
 ) -> dict[str, Any]:
     """
@@ -65,6 +76,7 @@ async def create_agent(
         raise HTTPException(status_code=400, detail=result.fallback)
     
     agent = result.value
+    await commit_or_500(db, "create_agent")
     return {
         "success": True,
         "data": AgentCreateResponse(
@@ -82,7 +94,7 @@ async def list_agents_admin(
     page_size: int = Query(20, ge=1, le=100, description="Items per page"),
     category: str | None = Query(None, description="Filter by category"),
     status: str | None = Query(None, description="Filter by status"),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_admin_user),
     db: AsyncSession = Depends(get_db)
 ) -> dict[str, Any]:
     """
@@ -113,7 +125,7 @@ async def list_agents_admin(
 @admin_router.get("/{agent_id}", response_model=dict)
 async def get_agent_admin(
     agent_id: str,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_admin_user),
     db: AsyncSession = Depends(get_db)
 ) -> dict[str, Any]:
     """
@@ -138,7 +150,7 @@ async def get_agent_admin(
 async def update_agent(
     agent_id: str,
     request: UpdateAgentRequest,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_admin_user),
     db: AsyncSession = Depends(get_db)
 ) -> dict[str, Any]:
     """
@@ -153,6 +165,7 @@ async def update_agent(
         raise HTTPException(status_code=404, detail=result.fallback)
     
     agent = result.value
+    await commit_or_500(db, "update_agent")
     return {
         "success": True,
         "data": {
@@ -166,7 +179,7 @@ async def update_agent(
 @admin_router.delete("/{agent_id}", response_model=dict)
 async def delete_agent(
     agent_id: str,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_admin_user),
     db: AsyncSession = Depends(get_db)
 ) -> dict[str, Any]:
     """
@@ -185,6 +198,7 @@ async def delete_agent(
             )
         raise HTTPException(status_code=404, detail=result.fallback)
     
+    await commit_or_500(db, "delete_agent")
     return {
         "success": True,
         "data": {"deleted": True}
@@ -194,7 +208,7 @@ async def delete_agent(
 @admin_router.post("/{agent_id}/publish", response_model=dict)
 async def publish_agent(
     agent_id: str,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_admin_user),
     db: AsyncSession = Depends(get_db)
 ) -> dict[str, Any]:
     """
@@ -211,6 +225,7 @@ async def publish_agent(
         raise HTTPException(status_code=404, detail=result.fallback)
     
     agent = result.value
+    await commit_or_500(db, "publish_agent")
     return {
         "success": True,
         "data": AgentPublishResponse(
@@ -224,7 +239,7 @@ async def publish_agent(
 @admin_router.post("/{agent_id}/archive", response_model=dict)
 async def archive_agent(
     agent_id: str,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_admin_user),
     db: AsyncSession = Depends(get_db)
 ) -> dict[str, Any]:
     """
@@ -239,6 +254,7 @@ async def archive_agent(
         raise HTTPException(status_code=404, detail=result.fallback)
     
     agent = result.value
+    await commit_or_500(db, "archive_agent")
     return {
         "success": True,
         "data": {
@@ -251,7 +267,7 @@ async def archive_agent(
 @admin_router.post("/{agent_id}/unpublish", response_model=dict)
 async def unpublish_agent(
     agent_id: str,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_admin_user),
     db: AsyncSession = Depends(get_db)
 ) -> dict[str, Any]:
     """
@@ -266,6 +282,7 @@ async def unpublish_agent(
         raise HTTPException(status_code=404, detail=result.fallback)
     
     agent = result.value
+    await commit_or_500(db, "unpublish_agent")
     return {
         "success": True,
         "data": {

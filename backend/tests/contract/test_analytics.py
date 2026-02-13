@@ -59,6 +59,28 @@ class TestAnalyticsContract:
         )
         assert response.status_code in [200, 401]
 
+    async def test_get_leaderboard_with_include_me_and_alias_filters(
+        self,
+        async_client: AsyncClient,
+        auth_headers: dict
+    ):
+        """Test alias normalization and include_me payload in leaderboard API."""
+        response = await async_client.get(
+            "/api/v1/analytics/leaderboard"
+            "?scenario_type=sales_bot&time_period=week&include_me=true&limit=20",
+            headers=auth_headers
+        )
+        assert response.status_code in [200, 401]
+
+        if response.status_code == 200:
+            payload = response.json()
+            assert payload.get("scenario_type") == "sales"
+            assert payload.get("time_period") == "weekly"
+            assert isinstance(payload.get("entries", []), list)
+            assert "my_rank" in payload
+            assert payload["my_rank"].get("scenario_type") == "sales"
+            assert payload["my_rank"].get("time_period") == "weekly"
+
     async def test_get_my_rank(
         self,
         async_client: AsyncClient,
@@ -70,6 +92,25 @@ class TestAnalyticsContract:
             headers=auth_headers
         )
         assert response.status_code in [200, 401]
+
+    async def test_get_my_rank_with_alias_time_period(
+        self,
+        async_client: AsyncClient,
+        auth_headers: dict
+    ):
+        """Test my-rank API normalizes scenario/time aliases."""
+        response = await async_client.get(
+            "/api/v1/analytics/leaderboard/my-rank"
+            "?scenario_type=sales_bot&time_period=month",
+            headers=auth_headers
+        )
+        assert response.status_code in [200, 401]
+
+        if response.status_code == 200:
+            payload = response.json()
+            assert payload.get("scenario_type") == "sales"
+            assert payload.get("time_period") == "monthly"
+            assert "rank" in payload
 
     async def test_get_progress_stats(
         self,

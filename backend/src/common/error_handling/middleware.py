@@ -5,7 +5,7 @@ All errors are caught and converted to fallback responses
 """
 import traceback
 
-from fastapi import Request, status
+from fastapi import HTTPException, Request, status
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.types import ASGIApp
@@ -35,7 +35,7 @@ class ErrorHandlerMiddleware(BaseHTTPMiddleware):
             response = await call_next(request)
             return response
 
-        except Exception as exc:
+        except (RuntimeError, ValueError) as exc:
             # Log the full error with trace_id
             logger.error(
                 f"Unhandled exception: {str(exc)}",
@@ -48,7 +48,7 @@ class ErrorHandlerMiddleware(BaseHTTPMiddleware):
             # User-facing: friendly status update
             # Admin-facing: full error details in logs
             return JSONResponse(
-                status_code=status.HTTP_200_OK,  # Always 200 - no error status
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 content={
                     "success": False,
                     "fallback": self._get_fallback_response(exc, request),
@@ -99,10 +99,29 @@ async def global_exception_handler(request: Request, exc: Exception):
     )
 
     return JSONResponse(
-        status_code=status.HTTP_200_OK,
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
         content={
             "success": False,
             "fallback": "[PLEASE_TRY_AGAIN]",
             "trace_id": trace_id,
         }
     )
+
+
+async def http_exception_handler(request: Request, exc: HTTPException):
+    """FastAPI HTTPException handler with trace_id for observability."""
+    trace_id = get_trace_id()
+    detail = exc.detail
+    if isinstance(detail, str):
+        message = detail
+    else:
+        message = str(detail)
+
+    payload = {
+        "success": False,
+        "error": message,
+        "message": message,
+        "detail": detail,
+        "trace_id": trace_id,
+    }
+    return JSONResponse(status_code=exc.status_code, content=payload)

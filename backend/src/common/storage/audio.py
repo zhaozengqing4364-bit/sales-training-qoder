@@ -15,7 +15,7 @@ Environment Variables:
 """
 import os
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Optional
 
@@ -59,7 +59,7 @@ class AudioStorageService:
         try:
             self.base_path.mkdir(parents=True, exist_ok=True)
             logger.info(f"Audio storage path: {self.base_path}")
-        except Exception as e:
+        except (OSError, ValueError, RuntimeError) as e:
             logger.error(f"Failed to create audio storage path: {e}")
 
     async def save_audio(
@@ -107,7 +107,7 @@ class AudioStorageService:
             # Return URL or path
             return self.get_audio_url(session_id, message_id, format)
 
-        except Exception as e:
+        except (OSError, ValueError, RuntimeError) as e:
             logger.error(
                 f"Failed to save audio: {e}",
                 session_id=session_id,
@@ -203,7 +203,7 @@ class AudioStorageService:
                 logger.info(f"Deleted audio file: {file_path}")
                 return True
             return False
-        except Exception as e:
+        except (OSError, ValueError, RuntimeError) as e:
             logger.error(f"Failed to delete audio: {e}")
             return False
 
@@ -235,7 +235,7 @@ class AudioStorageService:
             logger.info(f"Deleted {count} audio files for session {session_id}")
             return count
 
-        except Exception as e:
+        except (OSError, ValueError, RuntimeError) as e:
             logger.error(f"Failed to delete session audio: {e}")
             return 0
 
@@ -250,7 +250,7 @@ class AudioStorageService:
             Number of files deleted.
         """
         days = retention_days or AUDIO_RETENTION_DAYS
-        cutoff_date = datetime.utcnow() - timedelta(days=days)
+        cutoff_date = datetime.now(timezone.utc) - timedelta(days=days)
         deleted_count = 0
 
         try:
@@ -277,7 +277,7 @@ class AudioStorageService:
             )
             return deleted_count
 
-        except Exception as e:
+        except (OSError, ValueError, RuntimeError) as e:
             logger.error(f"Failed to cleanup old files: {e}")
             return deleted_count
 
@@ -303,7 +303,7 @@ class AudioStorageService:
                         total_files += 1
                         total_size += file_path.stat().st_size
 
-        except Exception as e:
+        except (OSError, ValueError, RuntimeError) as e:
             logger.error(f"Failed to get storage stats: {e}")
 
         return {

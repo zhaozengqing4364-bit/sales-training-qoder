@@ -40,7 +40,7 @@ export function RealtimeFeedback() {
                     onClick={() => setIsExpanded(true)}
                     className="flex items-center gap-2 px-4 py-2 bg-white rounded-full shadow-lg border"
                 >
-                    <StatusIndicator status="listening" size={16} />
+                    <div className="w-4 h-4 rounded-full bg-emerald-500 animate-pulse" />
                     <span className="text-sm">{unreadCount} 条新反馈</span>
                 </button>
             )}

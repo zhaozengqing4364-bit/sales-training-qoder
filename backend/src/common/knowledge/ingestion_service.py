@@ -94,7 +94,7 @@ class IngestionService:
 
             return Result(value=True)
 
-        except Exception as e:
+        except (RuntimeError, ValueError, OSError) as e:
             logger.error(
                 "Failed to ingest presentation",
                 extra={"presentation_id": str(extraction.presentation_id), "error": str(e)},
@@ -160,7 +160,7 @@ class IngestionService:
 
             return Result(value=True)
 
-        except Exception as e:
+        except (RuntimeError, ValueError, OSError) as e:
             logger.error(
                 "Failed to update page",
                 extra={
@@ -198,7 +198,7 @@ class IngestionService:
 
             return Result(value=True)
 
-        except Exception as e:
+        except (RuntimeError, ValueError, OSError) as e:
             logger.error(
                 "Failed to delete presentation",
                 extra={"presentation_id": str(presentation_id), "error": str(e)},
@@ -245,7 +245,7 @@ class IngestionService:
 
             return Result(value=result.value)
 
-        except Exception as e:
+        except (RuntimeError, ValueError, OSError) as e:
             logger.error(
                 "Failed to search similar pages",
                 extra={

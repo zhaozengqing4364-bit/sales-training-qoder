@@ -21,6 +21,14 @@ async def clean_staged_eval_tables(test_db: AsyncSession):
     await test_db.commit()
 
 
+@pytest_asyncio.fixture(autouse=True)
+async def postgres_only(test_db: AsyncSession):
+    """These schema assertions rely on PostgreSQL system catalogs and JSONB behavior."""
+    dialect_name = test_db.bind.dialect.name if test_db.bind else ""
+    if dialect_name != "postgresql":
+        pytest.skip("PostgreSQL-only staged evaluation DB tests")
+
+
 class TestStagedEvaluationResultsTable:
     """Test staged_evaluation_results table structure."""
 

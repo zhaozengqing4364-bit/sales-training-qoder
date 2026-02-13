@@ -33,6 +33,47 @@ interface LinkedKnowledgeBase {
     document_count: number;
 }
 
+interface ModelConfigListItem {
+    id: string;
+    name: string;
+    model_type: string;
+    provider: string;
+    model_name: string;
+    is_default: boolean;
+    is_active: boolean;
+    last_test_status: string | null;
+}
+
+interface ModelConfigListResponse {
+    llm: ModelConfigListItem[];
+    embedding: ModelConfigListItem[];
+    asr: ModelConfigListItem[];
+    tts: ModelConfigListItem[];
+    total: number;
+}
+
+interface RuntimeProfileItem {
+    id: string;
+    name: string;
+    voice_mode: "legacy" | "stepfun_realtime";
+    model_name: string;
+    voice_name: string;
+    is_default: boolean;
+    is_active: boolean;
+}
+
+interface AgentVoicePolicyConfig {
+    enabled: boolean;
+    runtime_profile_id?: string | null;
+    voice_mode_override?: "legacy" | "stepfun_realtime" | null;
+    instructions_override?: string | null;
+    tool_policy_override?: {
+        enable_web_search?: boolean;
+        enable_internal_retrieval?: boolean;
+        retrieval_priority?: "kb_only" | "kb_first" | "web_first" | "balanced";
+    };
+}
+
 const DIFFICULTY_MAP: Record<string, { label: string; color: string }> = {
     easy: { label: "简单", color: "text-emerald-600 bg-emerald-50" },
     medium: { label: "中等", color: "text-blue-600 bg-blue-50" },
@@ -50,6 +91,7 @@ interface CapabilitiesConfig {
     sales_stage?: CapabilityConfig;
     realtime_scoring?: CapabilityConfig;
     knowledge_retrieval?: CapabilityConfig;
+    llm?: CapabilityConfig;
     [key: string]: CapabilityConfig | undefined;
 }
 
@@ -100,25 +142,63 @@ export default function AgentEditPage({ params }: { params: Promise<{ id: string
     // Knowledge Base State
     const [linkedKnowledgeBases, setLinkedKnowledgeBases] = useState<LinkedKnowledgeBase[]>([]);
     const [availableKnowledgeBases, setAvailableKnowledgeBases] = useState<AdminKnowledgeBase[]>([]);
+    const [llmConfigs, setLlmConfigs] = useState<ModelConfigListItem[]>([]);
     const [isAddKBOpen, setIsAddKBOpen] = useState(false);
     const [selectedKBId, setSelectedKBId] = useState<string>("");
     const [isAddingKB, setIsAddingKB] = useState(false);
     const [removeKBTarget, setRemoveKBTarget] = useState<LinkedKnowledgeBase | null>(null);
     const [isRemovingKB, setIsRemovingKB] = useState(false);
+    const [runtimeProfiles, setRuntimeProfiles] = useState<RuntimeProfileItem[]>([]);
+    const [agentVoicePolicy, setAgentVoicePolicy] = useState<AgentVoicePolicyConfig>({
+        enabled: true,
+        runtime_profile_id: null,
+        voice_mode_override: null,
+        instructions_override: "",
+        tool_policy_override: {
+            enable_web_search: false,
+            enable_internal_retrieval: true,
+            retrieval_priority: "kb_first",
+        },
+    });
+    const [isSavingVoicePolicy, setIsSavingVoicePolicy] = useState(false);
 
     useEffect(() => {
         const loadData = async () => {
             try {
-                const [agentData, personasData, allPersonas, allKnowledgeBases] = await Promise.all([
+                const [agentData, personasData, allPersonas, allKnowledgeBases, modelConfigsData, voiceProfiles, voicePolicy] = await Promise.all([
                     api.admin.getAgent(id),
                     api.admin.getAgentPersonas(id),
                     api.admin.getPersonas({ page_size: 100 }),
                     api.admin.getKnowledgeBases({ page_size: 100 }),
+                    api.admin.getModelConfigs(),
+                    api.admin.getVoiceRuntimeProfiles({ only_active: true }),
+                    api.admin.getAgentVoicePolicy(id),
                 ]);
                 setAgent(agentData);
                 setLinkedPersonas(personasData as LinkedPersona[]);
                 setAvailablePersonas(allPersonas.items || []);
                 setAvailableKnowledgeBases(allKnowledgeBases.items || []);
+                setRuntimeProfiles((voiceProfiles.items || []) as RuntimeProfileItem[]);
+                setAgentVoicePolicy({
+                    enabled: (voicePolicy as AgentVoicePolicyConfig).enabled ?? true,
+                    runtime_profile_id: (voicePolicy as AgentVoicePolicyConfig).runtime_profile_id || null,
+                    voice_mode_override: (voicePolicy as AgentVoicePolicyConfig).voice_mode_override || null,
+                    instructions_override: (voicePolicy as AgentVoicePolicyConfig).instructions_override || "",
+                    tool_policy_override: {
+                        enable_web_search:
+                            (voicePolicy as AgentVoicePolicyConfig).tool_policy_override?.enable_web_search ?? false,
+                        enable_internal_retrieval:
+                            (voicePolicy as AgentVoicePolicyConfig).tool_policy_override?.enable_internal_retrieval ?? true,
+                        retrieval_priority:
+                            (voicePolicy as AgentVoicePolicyConfig).tool_policy_override?.retrieval_priority || "kb_first",
+                    },
+                });
+
+                const modelConfigs = modelConfigsData as ModelConfigListResponse | ModelConfigListItem[];
+                const llmModelList = Array.isArray(modelConfigs)
+                    ? modelConfigs.filter((item) => item.model_type === "llm")
+                    : modelConfigs.llm;
+                setLlmConfigs(llmModelList.filter((item) => item.is_active));
 
                 // Load linked knowledge bases from agent data
                 const kbIds = agentData.default_knowledge_base_ids || [];
@@ -153,6 +233,29 @@ export default function AgentEditPage({ params }: { params: Promise<{ id: string
             toast.error("保存失败");
         } finally {
             setIsSaving(false);
+        }
+    };
+
+    const handleSaveVoicePolicy = async () => {
+        setIsSavingVoicePolicy(true);
+        try {
+            await api.admin.updateAgentVoicePolicy(id, {
+                enabled: agentVoicePolicy.enabled,
+                runtime_profile_id: agentVoicePolicy.runtime_profile_id || null,
+                voice_mode_override: agentVoicePolicy.voice_mode_override || null,
+                instructions_override: agentVoicePolicy.instructions_override || null,
+                tool_policy_override: {
+                    enable_web_search: agentVoicePolicy.tool_policy_override?.enable_web_search ?? false,
+                    enable_internal_retrieval: agentVoicePolicy.tool_policy_override?.enable_internal_retrieval ?? true,
+                    retrieval_priority: agentVoicePolicy.tool_policy_override?.retrieval_priority || "kb_first",
+                },
+            });
+            toast.success("语音策略已保存");
+        } catch (err) {
+            console.error("Failed to update voice policy:", err);
+            toast.error("语音策略保存失败");
+        } finally {
+            setIsSavingVoicePolicy(false);
         }
     };
 
@@ -301,6 +404,13 @@ export default function AgentEditPage({ params }: { params: Promise<{ id: string
     if (!agent) {
         return <div className="p-8 text-center text-red-500">未找到智能体</div>;
     }
+
+    const llmSettings = (
+        ((agent.capabilities_config as CapabilitiesConfig)?.llm as CapabilityConfig | undefined) ?? {}
+    ) as CapabilityConfig;
+    const selectedModelConfigId = typeof llmSettings["model_config_id"] === "string"
+        ? (llmSettings["model_config_id"] as string)
+        : "";
 
     return (
         <div className="space-y-6 max-w-4xl mx-auto animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -510,20 +620,188 @@ export default function AgentEditPage({ params }: { params: Promise<{ id: string
                         <h3 className="text-sm font-bold text-slate-800 mb-4">模型设置</h3>
                         <div className="space-y-4">
                             <div className="space-y-2">
-                                <label className="text-[10px] font-bold text-slate-400 uppercase">模型版本</label>
-                                <select className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm outline-none">
-                                    <option>DeepSeek Chat</option>
-                                    <option>GPT-4o</option>
-                                    <option>GPT-3.5-turbo</option>
+                                <label className="text-[10px] font-bold text-slate-400 uppercase">LLM 配置</label>
+                                <select
+                                    className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm outline-none"
+                                    value={selectedModelConfigId}
+                                    onChange={(e) => {
+                                        const configId = e.target.value;
+                                        const capabilities = { ...(agent.capabilities_config as CapabilitiesConfig || {}) };
+                                        capabilities.llm = {
+                                            ...(capabilities.llm || {}),
+                                            enabled: true,
+                                        };
+
+                                        if (configId) {
+                                            capabilities.llm.model_config_id = configId;
+                                        } else {
+                                            delete capabilities.llm.model_config_id;
+                                        }
+
+                                        setAgent({ ...agent, capabilities_config: capabilities });
+                                    }}
+                                >
+                                    <option value="">系统默认模型（按全局默认）</option>
+                                    {llmConfigs.map((config) => (
+                                        <option key={config.id} value={config.id}>
+                                            {config.name} · {config.provider}/{config.model_name}
+                                        </option>
+                                    ))}
                                 </select>
                             </div>
                             <div className="space-y-2">
-                                <label className="text-[10px] font-bold text-slate-400 uppercase">采样温度</label>
-                                <div className="flex items-center gap-3">
-                                    <input type="range" min="0" max="1" step="0.1" defaultValue="0.7" className="flex-1 accent-slate-900" />
-                                    <span className="text-xs font-bold text-slate-600 w-8 text-right">0.7</span>
-                                </div>
+                                <label className="text-[10px] font-bold text-slate-400 uppercase">说明</label>
+                                <p className="text-xs text-slate-500 leading-relaxed">
+                                    当前智能体可指定专属 LLM 配置；留空则使用系统默认。温度、超时等参数请在「系统设置 → 模型配置」中配置到对应模型。
+                                </p>
                             </div>
+                        </div>
+                    </GlassCard>
+
+                    <GlassCard className="p-6">
+                        <h3 className="text-sm font-bold text-slate-800 mb-4">语音策略（Realtime）</h3>
+                        <div className="space-y-4">
+                            <div className="flex items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+                                <span className="text-sm text-slate-700">启用 Agent 语音策略</span>
+                                <label className="relative inline-flex items-center cursor-pointer">
+                                    <input
+                                        type="checkbox"
+                                        className="sr-only peer"
+                                        checked={agentVoicePolicy.enabled}
+                                        onChange={(e) =>
+                                            setAgentVoicePolicy((prev) => ({
+                                                ...prev,
+                                                enabled: e.target.checked,
+                                            }))
+                                        }
+                                    />
+                                    <div className="w-11 h-6 bg-slate-200 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                                </label>
+                            </div>
+
+                            <div className="space-y-2">
+                                <label className="text-[10px] font-bold text-slate-400 uppercase">运行时配置档</label>
+                                <select
+                                    className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm outline-none"
+                                    value={agentVoicePolicy.runtime_profile_id || ""}
+                                    onChange={(e) =>
+                                        setAgentVoicePolicy((prev) => ({
+                                            ...prev,
+                                            runtime_profile_id: e.target.value || null,
+                                        }))
+                                    }
+                                >
+                                    <option value="">跟随系统默认</option>
+                                    {runtimeProfiles.map((profile) => (
+                                        <option key={profile.id} value={profile.id}>
+                                            {profile.name} · {profile.voice_mode === "stepfun_realtime" ? "Realtime" : "经典"}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            <div className="space-y-2">
+                                <label className="text-[10px] font-bold text-slate-400 uppercase">模式覆盖</label>
+                                <select
+                                    className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm outline-none"
+                                    value={agentVoicePolicy.voice_mode_override || ""}
+                                    onChange={(e) =>
+                                        setAgentVoicePolicy((prev) => ({
+                                            ...prev,
+                                            voice_mode_override: (e.target.value as "legacy" | "stepfun_realtime" | "") || null,
+                                        }))
+                                    }
+                                >
+                                    <option value="">不覆盖（跟随配置档）</option>
+                                    <option value="stepfun_realtime">强制 Realtime</option>
+                                    <option value="legacy">强制经典链路</option>
+                                </select>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-2">
+                                <label className="text-xs text-slate-600 flex items-center gap-2">
+                                    <input
+                                        type="checkbox"
+                                        checked={agentVoicePolicy.tool_policy_override?.enable_internal_retrieval ?? true}
+                                        onChange={(e) =>
+                                            setAgentVoicePolicy((prev) => ({
+                                                ...prev,
+                                                tool_policy_override: {
+                                                    ...(prev.tool_policy_override || {}),
+                                                    enable_internal_retrieval: e.target.checked,
+                                                },
+                                            }))
+                                        }
+                                    />
+                                    内部知识检索
+                                </label>
+                                <label className="text-xs text-slate-600 flex items-center gap-2">
+                                    <input
+                                        type="checkbox"
+                                        checked={agentVoicePolicy.tool_policy_override?.enable_web_search ?? false}
+                                        onChange={(e) =>
+                                            setAgentVoicePolicy((prev) => ({
+                                                ...prev,
+                                                tool_policy_override: {
+                                                    ...(prev.tool_policy_override || {}),
+                                                    enable_web_search: e.target.checked,
+                                                },
+                                            }))
+                                        }
+                                    />
+                                    联网搜索
+                                </label>
+                            </div>
+
+                            <div className="space-y-2">
+                                <label className="text-[10px] font-bold text-slate-400 uppercase">检索优先级</label>
+                                <select
+                                    className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm outline-none"
+                                    value={agentVoicePolicy.tool_policy_override?.retrieval_priority || "kb_first"}
+                                    onChange={(e) =>
+                                        setAgentVoicePolicy((prev) => ({
+                                            ...prev,
+                                            tool_policy_override: {
+                                                ...(prev.tool_policy_override || {}),
+                                                retrieval_priority: e.target.value as "kb_only" | "kb_first" | "web_first" | "balanced",
+                                            },
+                                        }))
+                                    }
+                                >
+                                    <option value="kb_only">仅知识库</option>
+                                    <option value="kb_first">知识库优先</option>
+                                    <option value="web_first">联网优先</option>
+                                    <option value="balanced">均衡</option>
+                                </select>
+                            </div>
+
+                            <div className="space-y-2">
+                                <label className="text-[10px] font-bold text-slate-400 uppercase">附加指令</label>
+                                <textarea
+                                    className="w-full min-h-[90px] rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-300"
+                                    value={agentVoicePolicy.instructions_override || ""}
+                                    onChange={(e) =>
+                                        setAgentVoicePolicy((prev) => ({
+                                            ...prev,
+                                            instructions_override: e.target.value,
+                                        }))
+                                    }
+                                    placeholder="例如：必须严格扮演采购总监，追问预算和ROI。"
+                                />
+                            </div>
+
+                            <Button
+                                className="rounded-full bg-slate-900 text-white"
+                                onClick={handleSaveVoicePolicy}
+                                disabled={isSavingVoicePolicy}
+                            >
+                                {isSavingVoicePolicy ? (
+                                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                                ) : (
+                                    <Save className="w-4 h-4 mr-2" />
+                                )}
+                                保存语音策略
+                            </Button>
                         </div>
                     </GlassCard>
 

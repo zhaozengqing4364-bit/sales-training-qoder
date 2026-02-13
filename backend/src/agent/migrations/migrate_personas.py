@@ -236,7 +236,7 @@ async def migrate_personas(db: AsyncSession) -> dict:
         await db.commit()
         logger.info("Migration completed successfully")
         
-    except Exception as e:
+    except (RuntimeError, ValueError, OSError) as e:
         await db.rollback()
         error_msg = f"Migration failed: {str(e)}"
         logger.error(error_msg)

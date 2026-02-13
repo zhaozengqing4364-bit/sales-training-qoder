@@ -10,7 +10,7 @@ import asyncio
 import os
 import sys
 from uuid import uuid4
-from datetime import datetime
+from datetime import datetime, timezone
 
 # Add src to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
@@ -320,8 +320,8 @@ async def migrate_prompts():
                 is_active=True,
                 is_default=prompt_data.get("is_default", False),
                 is_system=True,
-                created_at=datetime.utcnow(),
-                updated_at=datetime.utcnow(),
+                created_at=datetime.now(timezone.utc),
+                updated_at=datetime.now(timezone.utc),
             )
 
             session.add(template)

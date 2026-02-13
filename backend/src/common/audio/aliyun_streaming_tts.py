@@ -51,7 +51,7 @@ class AliyunStreamingTTS:
         "longtian": "龙天 (磁性男声)",
     }
 
-    def __init__(self, api_key: str | None = None):
+    def __init__(self, api_key: str | None = None, default_voice: str | None = None):
         """
         初始化阿里云TTS服务
 
@@ -73,7 +73,7 @@ class AliyunStreamingTTS:
                 "dashscope library is required. Install with: pip install dashscope>=1.25.3"
             )
 
-        self.default_voice = "longxiaochun"
+        self.default_voice = default_voice or "longxiaochun"
         self.default_format = AudioFormat.MP3
         self.default_sample_rate = 16000
 
@@ -256,9 +256,17 @@ class StreamCallbackHandler(ResultCallback):
 _aliyun_tts_service: AliyunStreamingTTS | None = None
 
 
-def get_aliyun_tts_service() -> AliyunStreamingTTS:
+def get_aliyun_tts_service(
+    api_key: str | None = None,
+    default_voice: str | None = None,
+) -> AliyunStreamingTTS:
     """获取单例TTS服务"""
     global _aliyun_tts_service
     if _aliyun_tts_service is None:
-        _aliyun_tts_service = AliyunStreamingTTS()
+        _aliyun_tts_service = AliyunStreamingTTS(api_key=api_key, default_voice=default_voice)
+    else:
+        if api_key and _aliyun_tts_service.api_key != api_key:
+            _aliyun_tts_service = AliyunStreamingTTS(api_key=api_key, default_voice=default_voice)
+        elif default_voice:
+            _aliyun_tts_service.default_voice = default_voice
     return _aliyun_tts_service

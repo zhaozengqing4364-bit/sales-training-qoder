@@ -6,6 +6,7 @@ from collections.abc import AsyncGenerator
 
 from dotenv import load_dotenv
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.exc import SQLAlchemyError
 
 load_dotenv()
 
@@ -39,12 +40,16 @@ AsyncSessionLocal = async_sessionmaker(
 
 
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
-    """Dependency for FastAPI to get database session"""
+    """Dependency for FastAPI to get database session.
+    
+    P1-9: Removed implicit auto-commit. Business logic must explicitly
+    call session.commit() to control transaction boundaries.
+    This prevents accidental commits of incomplete data.
+    """
     async with AsyncSessionLocal() as session:
         try:
             yield session
-            await session.commit()
-        except Exception:
+        except (SQLAlchemyError, ValueError):
             await session.rollback()
             raise
         finally:

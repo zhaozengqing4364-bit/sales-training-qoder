@@ -9,6 +9,8 @@ References:
 """
 from __future__ import annotations
 
+import hashlib
+import io
 import os
 from typing import Any
 
@@ -203,12 +205,19 @@ class DocumentProcessor:
 
             reader = PdfReader(file_path)
             text_parts = []
-            for page in reader.pages:
+            image_text_parts = []
+            for page_index, page in enumerate(reader.pages, start=1):
                 text = page.extract_text()
-                if text:
-                    text_parts.append(text)
+                if text and text.strip():
+                    text_parts.append(text.strip())
 
-            return "\n\n".join(text_parts)
+                image_texts = self._extract_text_from_pdf_images(page, page_index)
+                if image_texts:
+                    image_text_parts.extend(image_texts)
+
+            merged_parts = text_parts + image_text_parts
+            merged_content = "\n\n".join(part for part in merged_parts if part).strip()
+            return merged_content or None
         except Exception as e:
             logger.error(f"Failed to read PDF: {e}")
             return None
@@ -231,10 +240,117 @@ class DocumentProcessor:
                 if para.text.strip():
                     text_parts.append(para.text)
 
-            return "\n\n".join(text_parts)
+            image_text_parts = self._extract_text_from_docx_images(doc)
+            merged_parts = text_parts + image_text_parts
+            merged_content = "\n\n".join(part for part in merged_parts if part).strip()
+            return merged_content or None
         except Exception as e:
             logger.error(f"Failed to read DOCX: {e}")
             return None
+
+    def _extract_text_from_pdf_images(self, page: Any, page_index: int) -> list[str]:
+        """Extract OCR text from images embedded in a PDF page."""
+        image_texts: list[str] = []
+        try:
+            page_images = getattr(page, "images", None)
+            if not page_images:
+                return image_texts
+
+            for image_index, image in enumerate(page_images, start=1):
+                image_bytes = getattr(image, "data", None)
+                if not image_bytes:
+                    continue
+
+                ocr_text = self._ocr_image_bytes(
+                    image_bytes,
+                    source=f"pdf_page_{page_index}_image_{image_index}",
+                )
+                if ocr_text:
+                    image_texts.append(ocr_text)
+        except Exception as e:
+            logger.warning(f"PDF image OCR skipped on page {page_index}: {e}")
+
+        return image_texts
+
+    def _extract_text_from_docx_images(self, doc: Any) -> list[str]:
+        """Extract OCR text from images embedded in a DOCX document."""
+        image_texts: list[str] = []
+        try:
+            rels = getattr(getattr(doc, "part", None), "rels", {}) or {}
+            if not rels:
+                return image_texts
+
+            seen_images: set[str] = set()
+            for rel in rels.values():
+                target_part = getattr(rel, "target_part", None)
+                content_type = getattr(target_part, "content_type", "")
+                if not isinstance(content_type, str) or not content_type.startswith("image/"):
+                    continue
+
+                image_bytes = getattr(target_part, "blob", None)
+                if not image_bytes:
+                    continue
+
+                image_hash = hashlib.md5(image_bytes).hexdigest()
+                if image_hash in seen_images:
+                    continue
+                seen_images.add(image_hash)
+
+                ocr_text = self._ocr_image_bytes(
+                    image_bytes,
+                    source=f"docx_image_{len(seen_images)}",
+                )
+                if ocr_text:
+                    image_texts.append(ocr_text)
+        except Exception as e:
+            logger.warning(f"DOCX image OCR skipped: {e}")
+
+        return image_texts
+
+    def _ocr_image_bytes(self, image_bytes: bytes, source: str) -> str | None:
+        """Run OCR on image bytes and return normalized text."""
+        try:
+            try:
+                import pytesseract
+                from PIL import Image, ImageOps
+            except ImportError:
+                logger.debug("pytesseract/Pillow not installed, image OCR disabled")
+                return None
+
+            with Image.open(io.BytesIO(image_bytes)) as image:
+                # Improve OCR accuracy for scanned docs.
+                grayscale_image = ImageOps.autocontrast(image.convert("L"))
+                # Try Chinese+English first, then fallback to English only.
+                for lang in ("chi_sim+eng", "eng"):
+                    try:
+                        raw_text = pytesseract.image_to_string(
+                            grayscale_image,
+                            lang=lang,
+                            config="--psm 6",
+                        )
+                        clean_text = self._normalize_text(raw_text)
+                        if clean_text:
+                            return clean_text
+                    except Exception as ocr_error:
+                        logger.debug(f"OCR attempt failed ({source}, lang={lang}): {ocr_error}")
+        except Exception as e:
+            logger.warning(f"Failed OCR for {source}: {e}")
+
+        return None
+
+    def _normalize_text(self, text: str) -> str:
+        """Normalize extracted OCR text to reduce noisy chunks."""
+        if not text:
+            return ""
+
+        lines = [line.strip() for line in text.splitlines()]
+        lines = [line for line in lines if line]
+        normalized = "\n".join(lines).strip()
+
+        # Avoid storing tiny noisy OCR fragments (e.g. a single symbol).
+        if len(normalized) < 6:
+            return ""
+        return normalized
 
     def _split_into_chunks(self, content: str) -> list[dict[str, Any]]:
         """

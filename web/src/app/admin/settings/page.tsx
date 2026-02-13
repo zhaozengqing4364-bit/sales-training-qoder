@@ -43,7 +43,7 @@ import { api } from "@/lib/api/client";
 
 // ============ Model Config Types ============
 type ModelType = "llm" | "embedding" | "asr" | "tts";
-type ModelProvider = "openai" | "azure" | "alibaba" | "local";
+type ModelProvider = "openai" | "azure" | "alibaba" | "anthropic" | "local" | "local_streaming";
 
 interface ModelConfigItem {
     id: string;
@@ -54,6 +54,10 @@ interface ModelConfigItem {
     is_default: boolean;
     is_active: boolean;
     last_test_status: string | null;
+}
+
+interface ModelConfigArrayItem extends ModelConfigItem {
+    model_type: ModelType;
 }
 
 interface ModelConfigDetail {
@@ -137,8 +141,29 @@ const PROVIDER_OPTIONS: { value: ModelProvider; label: string }[] = [
     { value: "openai", label: "OpenAI" },
     { value: "azure", label: "Azure OpenAI" },
     { value: "alibaba", label: "阿里云" },
+    { value: "anthropic", label: "Anthropic" },
     { value: "local", label: "本地/其他" },
+    { value: "local_streaming", label: "本地流式（ASR）" },
 ];
+
+const MODEL_PROVIDER_MAP: Record<ModelType, ModelProvider[]> = {
+    llm: ["openai", "azure", "alibaba", "anthropic"],
+    embedding: ["openai", "azure"],
+    asr: ["alibaba", "local", "local_streaming"],
+    tts: ["alibaba", "local"],
+};
+
+function requiresApiKey(modelType: ModelType, provider: ModelProvider) {
+    if (modelType === "tts" && provider === "local") return false;
+    if (modelType === "asr" && (provider === "local" || provider === "local_streaming")) return false;
+    return true;
+}
+
+function requiresBaseUrl(modelType: ModelType, provider: ModelProvider) {
+    if (modelType === "tts") return false;
+    if (modelType === "asr" && (provider === "local" || provider === "local_streaming")) return false;
+    return true;
+}
 
 function getTestStatusBadge(status: string | null) {
     if (status === "success") {
@@ -206,7 +231,7 @@ export default function SettingsPage() {
                 pitch: extra.pitch || "+0Hz",
             });
 
-            const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"}/admin/model-configs/tts/preview?${params}`, {
+            const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL || "http://localhost:3444/api/v1"}/admin/model-configs/tts/preview?${params}`, {
                 method: "POST",
             });
 
@@ -263,7 +288,19 @@ export default function SettingsPage() {
         setIsLoadingModels(true);
         try {
             const data = await api.admin.getModelConfigs();
-            setConfigs(data);
+            if (Array.isArray(data)) {
+                const arrayData = data as ModelConfigArrayItem[];
+                const formatted: ModelConfigListResponse = {
+                    llm: arrayData.filter((c) => c.model_type === 'llm'),
+                    embedding: arrayData.filter((c) => c.model_type === 'embedding'),
+                    asr: arrayData.filter((c) => c.model_type === 'asr'),
+                    tts: arrayData.filter((c) => c.model_type === 'tts'),
+                    total: data.length
+                };
+                setConfigs(formatted);
+            } else {
+                setConfigs(data as ModelConfigListResponse);
+            }
         } catch (err) {
             console.error("Failed to load model configs:", err);
             toast.error("加载配置失败");
@@ -273,10 +310,11 @@ export default function SettingsPage() {
     };
 
     const resetForm = () => {
+        const defaultProvider = MODEL_PROVIDER_MAP[activeModelType][0];
         setFormData({
             name: "",
             model_type: activeModelType,
-            provider: "openai",
+            provider: defaultProvider,
             base_url: "",
             api_key: "",
             model_name: "",
@@ -287,7 +325,15 @@ export default function SettingsPage() {
     };
 
     const handleCreate = async () => {
-        if (!formData.name.trim() || !formData.base_url.trim() || !formData.api_key.trim() || !formData.model_name.trim()) {
+        const apiKeyRequired = requiresApiKey(formData.model_type, formData.provider);
+        const baseUrlRequired = requiresBaseUrl(formData.model_type, formData.provider);
+
+        if (
+            !formData.name.trim() ||
+            (baseUrlRequired && !formData.base_url.trim()) ||
+            (apiKeyRequired && !formData.api_key.trim()) ||
+            !formData.model_name.trim()
+        ) {
             toast.error("请填写所有必填字段");
             return;
         }
@@ -329,6 +375,24 @@ export default function SettingsPage() {
 
     const handleUpdate = async () => {
         if (!editingConfig) return;
+        const modelType = editingConfig.model_type as ModelType;
+        const provider = editingConfig.provider as ModelProvider;
+        const baseUrlRequired = requiresBaseUrl(modelType, provider);
+        const apiKeyRequired = requiresApiKey(modelType, provider);
+
+        if (!formData.name.trim() || !formData.model_name.trim()) {
+            toast.error("请填写所有必填字段");
+            return;
+        }
+        if (baseUrlRequired && !formData.base_url.trim()) {
+            toast.error("当前提供商需要填写 API 地址");
+            return;
+        }
+        if (apiKeyRequired && editingConfig.api_key_masked === "未设置" && !formData.api_key.trim()) {
+            toast.error("当前提供商需要 API Key");
+            return;
+        }
+
         setIsSubmitting(true);
         try {
             const updateData: UpdateModelConfigRequest = {
@@ -597,7 +661,11 @@ export default function SettingsPage() {
                                     className="rounded-full bg-slate-900 hover:bg-slate-800 text-white text-xs"
                                     onClick={() => {
                                         resetForm();
-                                        setFormData((prev) => ({ ...prev, model_type: activeModelType }));
+                                        setFormData((prev) => ({
+                                            ...prev,
+                                            model_type: activeModelType,
+                                            provider: MODEL_PROVIDER_MAP[activeModelType][0],
+                                        }));
                                         setIsCreateOpen(true);
                                     }}
                                 >
@@ -775,7 +843,15 @@ export default function SettingsPage() {
                                 <select
                                     className="w-full h-10 rounded-lg border border-slate-200 px-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none bg-white"
                                     value={formData.model_type}
-                                    onChange={(e) => setFormData((prev) => ({ ...prev, model_type: e.target.value as ModelType }))}
+                                    onChange={(e) => {
+                                        const nextType = e.target.value as ModelType;
+                                        const fallbackProvider = MODEL_PROVIDER_MAP[nextType][0];
+                                        setFormData((prev) => ({
+                                            ...prev,
+                                            model_type: nextType,
+                                            provider: MODEL_PROVIDER_MAP[nextType].includes(prev.provider) ? prev.provider : fallbackProvider,
+                                        }));
+                                    }}
                                 >
                                     {(Object.keys(MODEL_TYPE_CONFIG) as ModelType[]).map((type) => (
                                         <option key={type} value={type}>{MODEL_TYPE_CONFIG[type].label}</option>
@@ -792,14 +868,16 @@ export default function SettingsPage() {
                                 onChange={(e) => setFormData((prev) => ({ ...prev, provider: e.target.value as ModelProvider }))}
                                 disabled={isEditOpen}
                             >
-                                {PROVIDER_OPTIONS.map((opt) => (
+                                {PROVIDER_OPTIONS.filter((opt) => MODEL_PROVIDER_MAP[formData.model_type].includes(opt.value)).map((opt) => (
                                     <option key={opt.value} value={opt.value}>{opt.label}</option>
                                 ))}
                             </select>
                         </div>
 
                         <div className="space-y-2">
-                            <label className="text-xs font-bold text-slate-500 uppercase">API 地址 *</label>
+                            <label className="text-xs font-bold text-slate-500 uppercase">
+                                API 地址 {requiresBaseUrl(formData.model_type, formData.provider) ? "*" : "(可选)"}
+                            </label>
                             <input
                                 className="w-full h-10 rounded-lg border border-slate-200 px-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none font-mono"
                                 placeholder="https://api.openai.com/v1"
@@ -810,7 +888,7 @@ export default function SettingsPage() {
 
                         <div className="space-y-2">
                             <label className="text-xs font-bold text-slate-500 uppercase">
-                                API Key {isEditOpen ? "(留空保持不变)" : "*"}
+                                API Key {isEditOpen ? "(留空保持不变)" : (requiresApiKey(formData.model_type, formData.provider) ? "*" : "(可选)")}
                             </label>
                             <input
                                 type="password"
@@ -978,7 +1056,12 @@ export default function SettingsPage() {
                             variant="outline"
                             className="rounded-full"
                             onClick={() => handleTestConnection()}
-                            disabled={isTesting || !formData.base_url || !formData.api_key || !formData.model_name}
+                            disabled={
+                                isTesting ||
+                                !formData.model_name ||
+                                (requiresBaseUrl(formData.model_type, formData.provider) && !formData.base_url) ||
+                                (requiresApiKey(formData.model_type, formData.provider) && !formData.api_key)
+                            }
                         >
                             {isTesting ? (
                                 <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> 测试中...</>

@@ -39,6 +39,32 @@ const formatFileSize = (bytes: number): string => {
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 };
 
+type PreviewChunk = { index: number; content: string };
+
+const normalizePreviewChunks = (chunks: unknown): PreviewChunk[] => {
+    if (!Array.isArray(chunks)) {
+        return [];
+    }
+
+    return chunks
+        .map((chunk, fallbackIndex) => {
+            if (typeof chunk === "string") {
+                return { index: fallbackIndex, content: chunk };
+            }
+
+            if (chunk && typeof chunk === "object") {
+                const chunkObject = chunk as { index?: unknown; content?: unknown };
+                const safeIndex = typeof chunkObject.index === "number" ? chunkObject.index : fallbackIndex;
+                const safeContent = typeof chunkObject.content === "string" ? chunkObject.content : "";
+
+                return { index: safeIndex, content: safeContent };
+            }
+
+            return null;
+        })
+        .filter((chunk): chunk is PreviewChunk => !!chunk);
+};
+
 export default function KnowledgeDetailPage() {
     const params = useParams();
     const router = useRouter();
@@ -56,7 +82,7 @@ export default function KnowledgeDetailPage() {
 
     // Preview state
     const [previewDoc, setPreviewDoc] = useState<AdminKnowledgeDocument | null>(null);
-    const [previewChunks, setPreviewChunks] = useState<Array<{ index: number; content: string }>>([]);
+    const [previewChunks, setPreviewChunks] = useState<PreviewChunk[]>([]);
     const [isLoadingPreview, setIsLoadingPreview] = useState(false);
 
     // Delete state
@@ -147,7 +173,7 @@ export default function KnowledgeDetailPage() {
 
         try {
             const data = await api.admin.getDocumentPreview(kbId, doc.id);
-            setPreviewChunks(data.chunks || []);
+            setPreviewChunks(normalizePreviewChunks(data.chunks));
         } catch (err) {
             console.error("Failed to load preview:", err);
             toast.error("加载预览失败");
@@ -201,7 +227,7 @@ export default function KnowledgeDetailPage() {
                 open={!!deleteTarget}
                 onOpenChange={(open) => !open && setDeleteTarget(null)}
                 title="删除文档"
-                description={`确定要删除「${deleteTarget?.title}」吗？此操作不可撤销。`}
+                description={`确定要删除「${deleteTarget?.file_name}」吗？此操作不可撤销。`}
                 confirmText="删除"
                 variant="danger"
                 onConfirm={handleDelete}
@@ -214,7 +240,7 @@ export default function KnowledgeDetailPage() {
                     <DialogHeader>
                         <DialogTitle className="flex items-center gap-2">
                             <FileText className="w-5 h-5 text-blue-600" />
-                            {previewDoc?.title}
+                            {previewDoc?.file_name}
                         </DialogTitle>
                         <DialogDescription>
                             共 {previewChunks.length} 个分块
@@ -337,7 +363,7 @@ export default function KnowledgeDetailPage() {
                                             <FileText className="w-5 h-5 text-slate-500" />
                                         </div>
                                         <div>
-                                            <div className="font-medium text-slate-900">{doc.title}</div>
+                                            <div className="font-medium text-slate-900">{doc.file_name}</div>
                                             <div className="flex items-center gap-3 mt-1 text-xs text-slate-500">
                                                 <span>{doc.file_type.toUpperCase()}</span>
                                                 <span>{formatFileSize(doc.file_size)}</span>

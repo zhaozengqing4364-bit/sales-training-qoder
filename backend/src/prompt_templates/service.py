@@ -14,12 +14,14 @@ from __future__ import annotations
 
 from typing import Any
 from uuid import UUID, uuid4
-from datetime import datetime
+from datetime import datetime, timezone
 
+from pydantic import ValidationError
 from sqlalchemy import select, and_, or_
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.prompt_templates.models import (
+from common.monitoring.logger import get_logger
+from prompt_templates.models import (
     PromptTemplate,
     PromptTemplateCreate,
     PromptTemplateUpdate,
@@ -29,8 +31,10 @@ from src.prompt_templates.models import (
     PromptRenderRequest,
     PromptRenderResponse,
 )
-from src.prompt_templates.renderer import render_template
-from src.prompt_templates.loader import get_loader
+from prompt_templates.renderer import render_template
+from prompt_templates.loader import get_loader
+
+logger = get_logger(__name__)
 
 
 class PromptTemplateService:
@@ -51,6 +55,18 @@ class PromptTemplateService:
         self.db = db_session
         self.loader = get_loader()
 
+    @staticmethod
+    def _safe_model_validate(db_template: Any) -> PromptTemplate | None:
+        try:
+            return PromptTemplate.model_validate(db_template)
+        except ValidationError as exc:
+            logger.warning(
+                "Skipping invalid prompt template row",
+                template_id=getattr(db_template, "id", None),
+                error=str(exc),
+            )
+            return None
+
     async def create_template(
         self,
         data: PromptTemplateCreate,
@@ -63,10 +79,10 @@ class PromptTemplateService:
         Returns:
             Created PromptTemplate
         """
-        from src.common.db.models import PromptTemplate as PromptTemplateDB
+        from common.db.models import PromptTemplate as PromptTemplateDB
 
         template_id = uuid4()
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
 
         db_template = PromptTemplateDB(
             id=template_id,
@@ -87,7 +103,10 @@ class PromptTemplateService:
         await self.db.refresh(db_template)
 
         # Convert to Pydantic model
-        return PromptTemplate.model_validate(db_template)
+        normalized = self._safe_model_validate(db_template)
+        if normalized is None:
+            raise ValueError("invalid prompt template data")
+        return normalized
 
     async def get_template(self, template_id: UUID) -> PromptTemplate | None:
         """Get a template by ID.
@@ -104,7 +123,7 @@ class PromptTemplateService:
             return cached
 
         # Load from database
-        from src.common.db.models import PromptTemplate as PromptTemplateDB
+        from common.db.models import PromptTemplate as PromptTemplateDB
 
         result = await self.db.execute(
             select(PromptTemplateDB).where(PromptTemplateDB.id == template_id)
@@ -112,7 +131,10 @@ class PromptTemplateService:
         db_template = result.scalar_one_or_none()
 
         if db_template:
-            return PromptTemplate.model_validate(db_template)
+            normalized = self._safe_model_validate(db_template)
+            if normalized is None:
+                raise ValueError("invalid prompt template data")
+            return normalized
         return None
 
     async def update_template(
@@ -129,7 +151,7 @@ class PromptTemplateService:
         Returns:
             Updated PromptTemplate or None if not found
         """
-        from src.common.db.models import PromptTemplate as PromptTemplateDB
+        from common.db.models import PromptTemplate as PromptTemplateDB
 
         result = await self.db.execute(
             select(PromptTemplateDB).where(PromptTemplateDB.id == template_id)
@@ -146,7 +168,7 @@ class PromptTemplateService:
                 value = value.value if hasattr(value, "value") else value
             setattr(db_template, field, value)
 
-        db_template.updated_at = datetime.utcnow()
+        db_template.updated_at = datetime.now(timezone.utc)
 
         await self.db.commit()
         await self.db.refresh(db_template)
@@ -154,7 +176,10 @@ class PromptTemplateService:
         # Invalidate cache
         await self.loader.invalidate_cache(template_id)
 
-        return PromptTemplate.model_validate(db_template)
+        normalized = self._safe_model_validate(db_template)
+        if normalized is None:
+            raise ValueError("invalid prompt template data")
+        return normalized
 
     async def delete_template(self, template_id: UUID) -> bool:
         """Delete a template (soft delete by deactivating).
@@ -165,7 +190,7 @@ class PromptTemplateService:
         Returns:
             True if deleted, False if not found
         """
-        from src.common.db.models import PromptTemplate as PromptTemplateDB
+        from common.db.models import PromptTemplate as PromptTemplateDB
 
         result = await self.db.execute(
             select(PromptTemplateDB).where(PromptTemplateDB.id == template_id)
@@ -177,7 +202,7 @@ class PromptTemplateService:
 
         # Soft delete - just deactivate
         db_template.is_active = False
-        db_template.updated_at = datetime.utcnow()
+        db_template.updated_at = datetime.now(timezone.utc)
 
         await self.db.commit()
 
@@ -206,7 +231,7 @@ class PromptTemplateService:
         Returns:
             List of PromptTemplate
         """
-        from src.common.db.models import PromptTemplate as PromptTemplateDB
+        from common.db.models import PromptTemplate as PromptTemplateDB
 
         query = select(PromptTemplateDB)
 
@@ -222,7 +247,12 @@ class PromptTemplateService:
         result = await self.db.execute(query)
         db_templates = result.scalars().all()
 
-        return [PromptTemplate.model_validate(t) for t in db_templates]
+        normalized: list[PromptTemplate] = []
+        for item in db_templates:
+            converted = self._safe_model_validate(item)
+            if converted is not None:
+                normalized.append(converted)
+        return normalized
 
     async def get_template_for_scenario(
         self,
@@ -245,7 +275,7 @@ class PromptTemplateService:
         Returns:
             Best matching PromptTemplate or None
         """
-        from src.common.db.models import (
+        from common.db.models import (
             PromptTemplate as PromptTemplateDB,
             ScenarioPrompt as ScenarioPromptDB,
         )
@@ -267,7 +297,10 @@ class PromptTemplateService:
             )
             template = result.scalar_one_or_none()
             if template:
-                return PromptTemplate.model_validate(template)
+                normalized = self._safe_model_validate(template)
+                if normalized is None:
+                    raise ValueError("invalid prompt template data")
+                return normalized
 
         # Try scenario-type only
         if scenario_type:
@@ -286,7 +319,10 @@ class PromptTemplateService:
             )
             template = result.scalar_one_or_none()
             if template:
-                return PromptTemplate.model_validate(template)
+                normalized = self._safe_model_validate(template)
+                if normalized is None:
+                    raise ValueError("invalid prompt template data")
+                return normalized
 
         # Fall back to global default
         result = await self.db.execute(
@@ -300,7 +336,10 @@ class PromptTemplateService:
         )
         template = result.scalar_one_or_none()
         if template:
-            return PromptTemplate.model_validate(template)
+            normalized = self._safe_model_validate(template)
+            if normalized is None:
+                raise ValueError("invalid prompt template data")
+            return normalized
 
         return None
 
@@ -347,7 +386,7 @@ class PromptTemplateService:
         Returns:
             Created ScenarioPrompt
         """
-        from src.common.db.models import ScenarioPrompt as ScenarioPromptDB
+        from common.db.models import ScenarioPrompt as ScenarioPromptDB
 
         assignment_id = uuid4()
 
@@ -358,7 +397,7 @@ class PromptTemplateService:
             prompt_type=data.prompt_type,
             template_id=data.template_id,
             is_active=data.is_active,
-            created_at=datetime.utcnow(),
+            created_at=datetime.now(timezone.utc),
         )
 
         self.db.add(db_assignment)
@@ -381,7 +420,7 @@ class PromptTemplateService:
         Returns:
             True if successful, False if template not found
         """
-        from src.common.db.models import PromptTemplate as PromptTemplateDB
+        from common.db.models import PromptTemplate as PromptTemplateDB
 
         # First, unset any existing default for this type
         await self.db.execute(
@@ -404,7 +443,7 @@ class PromptTemplateService:
             return False
 
         template.is_default = True
-        template.updated_at = datetime.utcnow()
+        template.updated_at = datetime.now(timezone.utc)
 
         await self.db.commit()
 
@@ -412,3 +451,130 @@ class PromptTemplateService:
         await self.loader.invalidate_cache()
 
         return True
+
+    async def list_scenario_prompts(
+        self,
+        scenario_type: str | None = None,
+        prompt_type: str | None = None,
+        is_active: bool | None = None,
+    ) -> list[ScenarioPrompt]:
+        """List scenario prompt assignments with optional filtering.
+
+        Args:
+            scenario_type: Filter by scenario type (e.g., 'sales', 'presentation')
+            prompt_type: Filter by prompt type
+            is_active: Filter by active status
+
+        Returns:
+            List of ScenarioPrompt assignments
+        """
+        from common.db.models import (
+            ScenarioPrompt as ScenarioPromptDB,
+            PromptTemplate as PromptTemplateDB,
+        )
+
+        query = select(ScenarioPromptDB).join(
+            PromptTemplateDB,
+            ScenarioPromptDB.template_id == PromptTemplateDB.id,
+            isouter=True
+        )
+
+        if scenario_type:
+            query = query.where(ScenarioPromptDB.scenario_type == scenario_type)
+        if prompt_type:
+            query = query.where(ScenarioPromptDB.prompt_type == prompt_type)
+        if is_active is not None:
+            query = query.where(ScenarioPromptDB.is_active == is_active)
+
+        query = query.order_by(ScenarioPromptDB.created_at.desc())
+
+        result = await self.db.execute(query)
+        assignments = result.scalars().all()
+
+        return [ScenarioPrompt.model_validate(a) for a in assignments]
+
+    async def get_scenario_prompt(
+        self,
+        assignment_id: UUID,
+    ) -> ScenarioPrompt | None:
+        """Get a scenario prompt assignment by ID.
+
+        Args:
+            assignment_id: Assignment UUID
+
+        Returns:
+            ScenarioPrompt or None if not found
+        """
+        from common.db.models import ScenarioPrompt as ScenarioPromptDB
+
+        result = await self.db.execute(
+            select(ScenarioPromptDB).where(ScenarioPromptDB.id == assignment_id)
+        )
+        assignment = result.scalar_one_or_none()
+
+        if assignment:
+            return ScenarioPrompt.model_validate(assignment)
+        return None
+
+    async def delete_scenario_prompt(
+        self,
+        assignment_id: UUID,
+    ) -> bool:
+        """Delete a scenario prompt assignment.
+
+        Args:
+            assignment_id: Assignment UUID
+
+        Returns:
+            True if deleted, False if not found
+        """
+        from common.db.models import ScenarioPrompt as ScenarioPromptDB
+
+        result = await self.db.execute(
+            select(ScenarioPromptDB).where(ScenarioPromptDB.id == assignment_id)
+        )
+        assignment = result.scalar_one_or_none()
+
+        if not assignment:
+            return False
+
+        await self.db.delete(assignment)
+        await self.db.commit()
+
+        return True
+
+    async def update_scenario_prompt(
+        self,
+        assignment_id: UUID,
+        is_active: bool | None = None,
+        template_id: UUID | None = None,
+    ) -> ScenarioPrompt | None:
+        """Update a scenario prompt assignment.
+
+        Args:
+            assignment_id: Assignment UUID
+            is_active: New active status
+            template_id: New template ID
+
+        Returns:
+            Updated ScenarioPrompt or None if not found
+        """
+        from common.db.models import ScenarioPrompt as ScenarioPromptDB
+
+        result = await self.db.execute(
+            select(ScenarioPromptDB).where(ScenarioPromptDB.id == assignment_id)
+        )
+        assignment = result.scalar_one_or_none()
+
+        if not assignment:
+            return None
+
+        if is_active is not None:
+            assignment.is_active = is_active
+        if template_id is not None:
+            assignment.template_id = template_id
+
+        await self.db.commit()
+        await self.db.refresh(assignment)
+
+        return ScenarioPrompt.model_validate(assignment)

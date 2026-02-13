@@ -2,6 +2,7 @@
 Pydantic Schemas for API validation
 Generated from data-model.md and contracts/openapi.yaml
 """
+from typing import Any
 from datetime import datetime
 from enum import Enum
 from uuid import UUID
@@ -26,6 +27,13 @@ class SessionStatus(str, Enum):
     PAUSED = "paused"
     COMPLETED = "completed"
     SCORING = "scoring"
+
+
+class SessionLifecycleAction(str, Enum):
+    START = "start"
+    PAUSE = "pause"
+    RESUME = "resume"
+    END = "end"
 
 
 class InterruptionType(str, Enum):
@@ -159,7 +167,7 @@ class ForbiddenWordResponse(ForbiddenWordBase):
 
 # ========== Practice Session Schemas ==========
 class SessionBase(BaseModel):
-    scenario_type: ScenarioType
+    scenario_type: ScenarioType = ScenarioType.SALES
     presentation_id: UUID | None = None  # Required for presentation scenario
     sales_persona: str | None = None  # For sales bot scenario
     scenario_id: UUID | None = None  # Optional scenario ID
@@ -169,11 +177,29 @@ class SessionCreate(SessionBase):
     # Agent Platform fields (R12: Session Management Enhancement)
     agent_id: UUID | None = None  # Optional Agent ID for enhanced sessions
     persona_id: UUID | None = None  # Optional Persona ID for enhanced sessions
+    voice_mode: str | None = Field(None, description="Voice mode override: legacy | stepfun_realtime")
+    runtime_profile_id: UUID | None = Field(None, description="Optional runtime profile override")
 
 
 class SessionUpdate(BaseModel):
     status: SessionStatus | None = None
     current_page: int | None = None
+
+
+class SessionLifecycleRequest(BaseModel):
+    action: SessionLifecycleAction
+
+
+class SessionLifecycleResponse(BaseModel):
+    session_id: UUID
+    previous_status: SessionStatus
+    status: SessionStatus
+    ai_state: str
+    changed: bool
+    scenario_type: ScenarioType | None = None
+    start_time: datetime
+    end_time: datetime | None = None
+    total_duration_seconds: int | None = None
 
 
 class SessionResponse(BaseModel):
@@ -184,6 +210,10 @@ class SessionResponse(BaseModel):
     scenario_id: UUID
     scenario_type: ScenarioType | None = None  # Made optional for model compatibility
     presentation_id: UUID | None = None
+    voice_mode: str | None = None
+    voice_runtime_profile_id: UUID | None = None
+    voice_policy_snapshot: dict[str, Any] | None = None
+    voice_policy_snapshot_ref: "VoicePolicySnapshotReference | None" = None
     status: SessionStatus
     start_time: datetime
     end_time: datetime | None = None
@@ -196,6 +226,19 @@ class SessionDetail(SessionResponse):
     interruption_count: int = 0
     total_duration_seconds: int | None = None
     interruption_events: list['InterruptionEventResponse'] = []
+
+
+# ========== Voice Policy Snapshot Schemas ==========
+class VoicePolicySnapshotReference(BaseModel):
+    """Immutable voice policy baseline reference stored at session creation time."""
+
+    voice_mode: str | None = None
+    runtime_profile_id: str | None = None
+    tool_policy: dict[str, Any] = Field(default_factory=dict)
+    knowledge_base_ids: list[str] = Field(default_factory=list)
+    source: dict[str, str] = Field(default_factory=dict)
+    resolved_at: str | None = None
+    agent_persona_override_config: dict[str, Any] | None = None
 
 
 # ========== Interruption Event Schemas ==========
@@ -220,6 +263,7 @@ class SessionReport(BaseModel):
     suggestions: list[str]
     audio_url: str | None = None
     transcript_url: str | None = None
+    voice_policy_snapshot_ref: VoicePolicySnapshotReference | None = None
 
 
 # ========== Enhanced Session Report Schema (R12) ==========
@@ -252,6 +296,7 @@ class EnhancedSessionReport(BaseModel):
     duration_seconds: int | None = None
     agent_name: str | None = None
     persona_name: str | None = None
+    voice_policy_snapshot_ref: VoicePolicySnapshotReference | None = None
 
 
 # ========== Session Stats Schema (R12.4) ==========
@@ -314,4 +359,5 @@ class ResumeMessage(BaseModel):
 # Update forward references
 PageResponse.model_rebuild()
 PresentationDetail.model_rebuild()
+SessionResponse.model_rebuild()
 SessionDetail.model_rebuild()

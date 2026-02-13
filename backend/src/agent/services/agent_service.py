@@ -10,7 +10,7 @@ References:
 """
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, List, Tuple
 
 from sqlalchemy import func, select
@@ -19,6 +19,8 @@ from sqlalchemy.orm import selectinload
 
 from common.error_handling.result import Result
 from common.monitoring.logger import get_logger
+
+from sqlalchemy.exc import SQLAlchemyError
 
 from ..models import Agent, AgentPersona, AgentStatus, Persona
 from ..schemas import (
@@ -75,7 +77,7 @@ class AgentService:
             logger.info(f"Created Agent: {agent.id} - {agent.name}")
             return Result.ok(agent)
             
-        except Exception as e:
+        except (SQLAlchemyError, ValueError) as e:
             logger.error(f"Failed to create Agent: {e}")
             return Result.fail(f"[AGENT_CREATE_FAILED] {str(e)}")
     
@@ -202,7 +204,7 @@ class AgentService:
             if value is not None:
                 setattr(agent, field, value)
         
-        agent.updated_at = datetime.utcnow()
+        agent.updated_at = datetime.now(timezone.utc)
         
         await self.db.flush()
         await self.db.refresh(agent)
@@ -257,8 +259,8 @@ class AgentService:
             return Result.fail("[AGENT_ALREADY_PUBLISHED]")
         
         agent.status = AgentStatus.PUBLISHED.value
-        agent.published_at = datetime.utcnow()
-        agent.updated_at = datetime.utcnow()
+        agent.published_at = datetime.now(timezone.utc)
+        agent.updated_at = datetime.now(timezone.utc)
         
         await self.db.flush()
         await self.db.refresh(agent)
@@ -280,7 +282,7 @@ class AgentService:
             return Result.fail("[AGENT_NOT_FOUND]")
         
         agent.status = AgentStatus.ARCHIVED.value
-        agent.updated_at = datetime.utcnow()
+        agent.updated_at = datetime.now(timezone.utc)
         
         await self.db.flush()
         await self.db.refresh(agent)
@@ -306,7 +308,7 @@ class AgentService:
         
         agent.status = AgentStatus.DRAFT.value
         agent.published_at = None
-        agent.updated_at = datetime.utcnow()
+        agent.updated_at = datetime.now(timezone.utc)
         
         await self.db.flush()
         await self.db.refresh(agent)
