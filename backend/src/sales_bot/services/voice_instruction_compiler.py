@@ -119,11 +119,16 @@ class VoiceInstructionCompiler:
         internal_retrieval_enabled = bool(
             tool_policy.get("enable_internal_retrieval", True)
         )
+        require_kb_grounding = bool(tool_policy.get("require_kb_grounding", False))
         retrieval_priority = str(
             tool_policy.get("retrieval_priority") or "kb_first"
         ).lower()
         if internal_retrieval_enabled:
-            if retrieval_priority == "kb_only":
+            if require_kb_grounding:
+                directives.append(
+                    "当会话启用知识库强制模式时，必须先检索内部知识库并仅依据命中内容回答；未命中时明确告知并拒绝推断。"
+                )
+            elif retrieval_priority == "kb_only":
                 directives.append("仅使用内部知识库检索，不调用联网搜索。")
             elif retrieval_priority == "kb_first":
                 directives.append(

@@ -849,6 +849,7 @@ async def get_session_knowledge_check(
     allow_web_search_without_kb = bool(
         tool_policy.get("allow_web_search_without_kb", False)
     )
+    require_kb_grounding = bool(tool_policy.get("require_kb_grounding", False))
     internal_retrieval_enabled = bool(
         tool_policy.get("enable_internal_retrieval", False)
     )
@@ -880,6 +881,23 @@ async def get_session_knowledge_check(
 
     last_status = str(knowledge_metrics.get("last_status") or "not_triggered")
     last_error = str(knowledge_metrics.get("last_error") or "")
+    kb_lock_required = require_kb_grounding
+    kb_lock_block_count = int(knowledge_metrics.get("kb_lock_block_count") or 0)
+    kb_lock_last_status = str(
+        knowledge_metrics.get("kb_lock_last_status") or "not_required"
+    )
+    kb_lock_status = "pass"
+    if kb_lock_required:
+        if not kb_bound:
+            kb_lock_status = "blocked_no_kb"
+        elif kb_lock_last_status and kb_lock_last_status != "not_required":
+            kb_lock_status = kb_lock_last_status
+        elif last_status == "kb_not_ready" or "[KB_NOT_READY]" in last_error:
+            kb_lock_status = "blocked_not_ready"
+        elif last_status == "search_failed" or last_error:
+            kb_lock_status = "blocked_search_failed"
+        elif attempt_count > 0 and hit_query_count <= 0:
+            kb_lock_status = "blocked_empty"
 
     if not internal_retrieval_enabled:
         status = "disabled"
@@ -910,6 +928,7 @@ async def get_session_knowledge_check(
         "network_access_mode": network_access_mode,
         "enforcement_level": enforcement_level,
         "allow_web_search_without_kb": allow_web_search_without_kb,
+        "require_kb_grounding": require_kb_grounding,
         "kb_bound": kb_bound,
         "effective_tool_types": effective_tool_types,
         "instruction_contract_hash": str(
@@ -932,6 +951,11 @@ async def get_session_knowledge_check(
         if isinstance(knowledge_metrics.get("recent_queries"), list)
         else [],
         "updated_at": knowledge_metrics.get("updated_at"),
+        "kb_lock_required": kb_lock_required,
+        "kb_lock_status": kb_lock_status,
+        "kb_lock_block_count": kb_lock_block_count,
+        "kb_lock_last_status": kb_lock_last_status,
+        "kb_lock_updated_at": knowledge_metrics.get("kb_lock_updated_at"),
     }
 
     return success_response(diagnostics)

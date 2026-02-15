@@ -37,6 +37,7 @@ interface ToolPolicy {
   network_access_mode: 'off' | 'controlled'; // 默认 off，强制禁网
   enforcement_level: 'strict' | 'best_effort'; // 默认 strict
   allow_web_search_without_kb: boolean; // 默认 false
+  require_kb_grounding: boolean; // 默认 false，开启后每轮必须命中知识库才允许生成
 }
 ```
 
@@ -44,6 +45,9 @@ interface ToolPolicy {
 - `network_access_mode=off` 时必须禁用 `web_search`（与是否绑定知识库无关）
 - 绑定知识库时，系统会强制 `retrieval_priority=kb_only`
 - 未绑定知识库且 `allow_web_search_without_kb=false` 时，同样禁用 `web_search`
+- `require_kb_grounding=true` 时进入知识库硬锁模式：
+  - 每轮必须先检索内部知识并命中可引用片段，才允许生成回答
+  - 未绑定知识库 / 文档未就绪 / 检索失败 / 未命中都会触发阻断回复
 
 ### 接口
 

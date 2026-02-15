@@ -269,6 +269,43 @@ async def test_resolve_effective_policy_allows_controlled_web_search_without_kb_
 
 
 @pytest.mark.asyncio
+async def test_resolve_effective_policy_enforces_kb_lock_when_enabled(
+    test_db: AsyncSession,
+):
+    """KB lock should force internal-only retrieval even without bound KB IDs."""
+    profile = VoiceRuntimeProfile(
+        id=str(uuid.uuid4()),
+        name="知识库硬锁档位",
+        is_default=True,
+        is_active=True,
+        voice_mode="stepfun_realtime",
+        model_name="step-audio-2",
+        voice_name="qingchunshaonv",
+        temperature=0.7,
+        tool_policy={
+            "enable_web_search": True,
+            "enable_internal_retrieval": False,
+            "network_access_mode": "controlled",
+            "allow_web_search_without_kb": True,
+            "retrieval_priority": "web_first",
+            "require_kb_grounding": True,
+        },
+    )
+    test_db.add(profile)
+    await test_db.commit()
+
+    service = VoiceRuntimePolicyService(test_db)
+    effective = await service.resolve_effective_policy()
+
+    assert effective["knowledge_base_ids"] == []
+    assert effective["tool_policy"]["require_kb_grounding"] is True
+    assert effective["tool_policy"]["enable_internal_retrieval"] is True
+    assert effective["tool_policy"]["enable_web_search"] is False
+    assert effective["tool_policy"]["retrieval_priority"] == "kb_only"
+    assert effective["source"]["tool_policy_enforcement"] == "kb_lock_unbound"
+
+
+@pytest.mark.asyncio
 async def test_create_profile_should_switch_default_flag(test_db: AsyncSession):
     """Creating a new default profile should clear previous default profile."""
     existing_default = VoiceRuntimeProfile(

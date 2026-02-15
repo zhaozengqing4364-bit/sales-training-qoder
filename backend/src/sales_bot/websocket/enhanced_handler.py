@@ -27,6 +27,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from fastapi import WebSocket
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from agent.capabilities.runner import CapabilityRunner
@@ -37,8 +38,10 @@ from common.ai.config_manager import get_config_manager
 from common.ai.llm_service import create_llm_service, get_llm_service
 from common.ai.models import ModelType
 from common.audio.asr_service import get_asr_service
+from common.db.models import PracticeSession
 from common.audio.tts_factory import get_tts_service_with_fallback
 from common.db.session import AsyncSessionLocal
+from common.knowledge.kb_lock_guard import evaluate_kb_lock_decision
 from common.knowledge.service import KnowledgeService
 from common.monitoring.latency_tracker import LatencyTracker, get_latency_tracker
 from common.monitoring.logger import get_logger
@@ -97,6 +100,7 @@ class EnhancedSalesHandler(BaseSalesHandler):
         self._db_lock = asyncio.Lock()
         self._llm_override_service: object | None = None
         self._llm_override_config_id: str | None = None
+        self._voice_policy_snapshot: dict[str, Any] = {}
 
         # Internal state for current turn
         self._current_turn_initialized: bool = False
@@ -127,6 +131,16 @@ class EnhancedSalesHandler(BaseSalesHandler):
         self.agent_id = agent_id
         self.persona_id = persona_id
         self.user_id = user_id
+
+        session_result = await db.execute(
+            select(PracticeSession.voice_policy_snapshot).where(
+                PracticeSession.session_id == session_id
+            )
+        )
+        session_snapshot = session_result.scalar_one_or_none()
+        self._voice_policy_snapshot = (
+            session_snapshot if isinstance(session_snapshot, dict) else {}
+        )
 
         # Load Agent configuration
         agent_service = AgentService(db)
@@ -630,17 +644,34 @@ class EnhancedSalesHandler(BaseSalesHandler):
             await self._send_status("listening")
             return
 
-        # 5. Generate AI response (with knowledge context)
-        self._llm_task = asyncio.create_task(
-            self._generate_response(text, knowledge_context=knowledge_context)
+        kb_lock_decision = await evaluate_kb_lock_decision(
+            query=text,
+            effective_policy=self._voice_policy_snapshot,
         )
-        try:
-            response_text = await self._llm_task
-        except asyncio.CancelledError:
-            logger.info("[PROCESS] LLM task was cancelled")
-            response_text = None
-        finally:
-            self._llm_task = None
+        if kb_lock_decision.lock_required:
+            if kb_lock_decision.allow_generation:
+                knowledge_context = kb_lock_decision.grounding_context
+            else:
+                logger.info(
+                    "[KB_LOCK] Blocked generation on enhanced path",
+                    session_id=self.session_id,
+                    status=kb_lock_decision.status,
+                )
+
+        # 5. Generate AI response (with knowledge context)
+        if kb_lock_decision.lock_required and not kb_lock_decision.allow_generation:
+            response_text = kb_lock_decision.user_message
+        else:
+            self._llm_task = asyncio.create_task(
+                self._generate_response(text, knowledge_context=knowledge_context)
+            )
+            try:
+                response_text = await self._llm_task
+            except asyncio.CancelledError:
+                logger.info("[PROCESS] LLM task was cancelled")
+                response_text = None
+            finally:
+                self._llm_task = None
 
         logger.info(f"[PROCESS] Response: {response_text[:50] if response_text else 'None'}...")
 

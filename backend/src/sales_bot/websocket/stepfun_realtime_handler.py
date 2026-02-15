@@ -34,6 +34,7 @@ from common.db.session_lifecycle import (
     InvalidSessionTransitionError,
     SessionLifecycleService,
 )
+from common.knowledge.kb_lock_guard import evaluate_kb_lock_decision
 from common.knowledge.service import KnowledgeService
 from common.monitoring.logger import get_logger, get_trace_id
 from common.websocket.base_handler import BaseWebSocketHandler
@@ -202,6 +203,7 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
 
         self._feedback_context: AgentContext | None = None
         self._pending_grounding_context: str = ""
+        self._pending_blocked_response_text: str = ""
         self._pending_response_after_commit = False
         self._awaiting_transcription_after_commit = False
         self._pending_response_timeout_task: asyncio.Task | None = None
@@ -445,6 +447,11 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
             tool_policy["allow_web_search_without_kb"] = allow_web_search_without_kb
             changed = True
 
+        require_kb_grounding = bool(tool_policy.get("require_kb_grounding", False))
+        if tool_policy.get("require_kb_grounding") != require_kb_grounding:
+            tool_policy["require_kb_grounding"] = require_kb_grounding
+            changed = True
+
         if has_bound_knowledge_base and not bool(
             tool_policy.get("enable_internal_retrieval", False)
         ):
@@ -478,6 +485,23 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
             tool_policy["enable_web_search"] = False
             changed = True
 
+        if require_kb_grounding and not bool(
+            tool_policy.get("enable_internal_retrieval", False)
+        ):
+            tool_policy["enable_internal_retrieval"] = True
+            changed = True
+
+        if require_kb_grounding and bool(tool_policy.get("enable_web_search", False)):
+            tool_policy["enable_web_search"] = False
+            changed = True
+
+        if require_kb_grounding and (
+            str(tool_policy.get("retrieval_priority") or "").strip().lower()
+            != "kb_only"
+        ):
+            tool_policy["retrieval_priority"] = "kb_only"
+            changed = True
+
         source = policy.get("source")
         if not isinstance(source, dict):
             source = {}
@@ -486,6 +510,10 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
         enforcement_reason = ""
         if network_access_mode == "off":
             enforcement_reason = "network_off"
+        elif require_kb_grounding and has_bound_knowledge_base:
+            enforcement_reason = "kb_lock_enforced"
+        elif require_kb_grounding:
+            enforcement_reason = "kb_lock_unbound"
         elif has_bound_knowledge_base:
             enforcement_reason = "kb_internal_only"
         elif not allow_web_search_without_kb:
@@ -956,6 +984,7 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
                 if transition:
                     await self._cancel_pending_response_after_commit()
                     self._pending_grounding_context = ""
+                    self._pending_blocked_response_text = ""
                     await self._send_upstream({"type": "response.cancel"})
                     await self._send_upstream({"type": "input_audio_buffer.clear"})
                     await self._send_status("idle")
@@ -969,6 +998,7 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
             if transition:
                 await self._cancel_pending_response_after_commit()
                 self._pending_grounding_context = ""
+                self._pending_blocked_response_text = ""
                 await self._send_upstream({"type": "response.cancel"})
                 await self._send_upstream({"type": "input_audio_buffer.clear"})
                 await self._send_status("idle")
@@ -1191,6 +1221,7 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
         """
         normalized_query = query.strip()
         self._pending_grounding_context = ""
+        self._pending_blocked_response_text = ""
         if not normalized_query:
             self._log_grounding_debug("prefetch_skipped", reason="empty_query")
             return
@@ -1202,6 +1233,36 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
         has_bound_knowledge_base = isinstance(knowledge_base_ids, list) and bool(
             [item for item in knowledge_base_ids if str(item).strip()]
         )
+        require_kb_grounding = bool(tool_policy.get("require_kb_grounding", False))
+        if require_kb_grounding:
+            decision = await evaluate_kb_lock_decision(
+                query=normalized_query,
+                effective_policy=self._effective_policy,
+                record_metric=self._record_knowledge_runtime_metric,
+            )
+            if decision.allow_generation:
+                self._pending_blocked_response_text = ""
+                self._pending_grounding_context = decision.grounding_context
+                await self._record_kb_lock_decision(status=decision.status, blocked=False)
+                self._log_grounding_debug(
+                    "prefetch_kb_lock_passed",
+                    query_length=len(normalized_query),
+                    result_count=decision.result_count,
+                    retrieval_mode=decision.retrieval_mode,
+                )
+            else:
+                self._pending_blocked_response_text = decision.user_message
+                self._pending_grounding_context = ""
+                await self._record_kb_lock_decision(status=decision.status, blocked=True)
+                self._log_grounding_debug(
+                    "prefetch_kb_lock_blocked",
+                    query_length=len(normalized_query),
+                    kb_count=len(knowledge_base_ids) if isinstance(knowledge_base_ids, list) else 0,
+                    status=decision.status,
+                    error_detail=decision.error_detail,
+                )
+            return
+
         internal_retrieval_enabled = bool(
             tool_policy.get("enable_internal_retrieval", True)
         )
@@ -1429,6 +1490,55 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
             )
             return False
 
+        blocked_response_text = self._pending_blocked_response_text.strip()
+        if blocked_response_text:
+            self.current_request_id += 1
+            if count_turn:
+                self.turn_count += 1
+            stream_id = str(uuid.uuid4())
+            await self._send_status("thinking")
+            await self._persist_message(
+                turn_number=max(1, self.turn_count),
+                role="assistant",
+                content=blocked_response_text,
+            )
+            async with self._sales_stage_lock:
+                self._append_sales_stage_context_message(
+                    role="assistant",
+                    content=blocked_response_text,
+                    turn_number=max(1, self.turn_count),
+                )
+            if self._feedback_context is not None:
+                self._feedback_context.add_message(
+                    role="assistant",
+                    content=blocked_response_text,
+                )
+            await self.manager.send_json(
+                self.websocket,
+                {
+                    "type": "tts_audio",
+                    "timestamp": datetime.now(UTC).isoformat(),
+                    "stream_id": stream_id,
+                    "request_id": self.current_request_id,
+                    "data": {
+                        "text": blocked_response_text,
+                        "audio": "",
+                        "audio_format": "",
+                        "duration_ms": len(blocked_response_text) * 100,
+                        "fallback": "browser_tts",
+                    },
+                },
+            )
+            self._pending_blocked_response_text = ""
+            self._pending_grounding_context = ""
+            self._log_grounding_debug(
+                "response_blocked_by_kb_lock",
+                request_id=self.current_request_id,
+                turn_count=self.turn_count,
+            )
+            await self._send_status("listening")
+            return True
+
         self.current_request_id += 1
         if count_turn:
             self.turn_count += 1
@@ -1467,6 +1577,7 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
         """Stop current generation and clear buffered input."""
         await self._cancel_pending_response_after_commit()
         self._pending_grounding_context = ""
+        self._pending_blocked_response_text = ""
         self._pending_tool_followup_response = False
         self._awaiting_transcription_after_commit = False
         self._has_uncommitted_audio = False
@@ -1503,6 +1614,7 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
         """Close session after notifying frontend."""
         await self._cancel_pending_response_after_commit()
         self._pending_grounding_context = ""
+        self._pending_blocked_response_text = ""
         if self._feedback_context is not None:
             if self._fuzzy_detection_enabled:
                 await self._fuzzy_detection_capability.on_session_end(
@@ -2037,6 +2149,23 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
             await self._persist_runtime_metrics_to_session()
         except Exception as exc:  # noqa: BLE001
             logger.warning(f"Failed to record knowledge runtime metric: {exc}")
+
+    async def _record_kb_lock_decision(self, *, status: str, blocked: bool) -> None:
+        """Record per-turn KB lock decision for diagnostics."""
+        try:
+            metrics = self._ensure_knowledge_runtime_metrics()
+            metrics["kb_lock_required"] = True
+            metrics["kb_lock_last_status"] = status
+            metrics["kb_lock_updated_at"] = datetime.now(UTC).isoformat()
+            if blocked:
+                metrics["kb_lock_block_count"] = int(
+                    metrics.get("kb_lock_block_count") or 0
+                ) + 1
+            else:
+                metrics.setdefault("kb_lock_block_count", 0)
+            await self._persist_runtime_metrics_to_session()
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(f"Failed to record KB lock decision: {exc}")
 
     async def _persist_runtime_metrics_to_session(self) -> None:
         """Persist in-memory runtime metrics to practice_sessions.voice_policy_snapshot."""

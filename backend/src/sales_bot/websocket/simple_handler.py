@@ -178,6 +178,14 @@ class SimpleSalesHandler(BaseSalesHandler):
 
             # Get system prompt from loaded persona config
             system_prompt = self.persona_config.get("system_prompt", "你是一个AI助手。")
+            knowledge_context = str(kwargs.get("knowledge_context") or "").strip()
+            if knowledge_context:
+                system_prompt = (
+                    f"{system_prompt}\n\n"
+                    "【内部知识依据】\n"
+                    f"{knowledge_context}\n\n"
+                    "请仅依据以上内部知识内容回答，若依据不足请明确说明。"
+                )
 
             # Build context
             context = {

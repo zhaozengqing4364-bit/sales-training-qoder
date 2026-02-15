@@ -49,3 +49,37 @@ async def test_enhanced_connection_init_failure_does_not_fallback_to_simple(monk
     fallback_to_simple.assert_not_awaited()
     websocket.accept.assert_awaited_once()
     websocket.close.assert_awaited_once_with(code=4502, reason="ENHANCED_INIT_FAILED")
+
+
+@pytest.mark.asyncio
+async def test_handle_sales_websocket_rejects_when_kb_lock_unbound(monkeypatch):
+    websocket = MagicMock()
+    websocket.accept = AsyncMock()
+    websocket.close = AsyncMock()
+
+    monkeypatch.setattr(
+        sales_router,
+        "_resolve_session_runtime",
+        AsyncMock(return_value=("sales", "stepfun_realtime", None, None)),
+    )
+    monkeypatch.setattr(
+        sales_router,
+        "_is_kb_lock_unbound_session",
+        AsyncMock(return_value=True),
+    )
+
+    handle_stepfun = AsyncMock()
+    monkeypatch.setattr(sales_router, "_handle_stepfun_realtime_connection", handle_stepfun)
+
+    await sales_router._handle_sales_websocket(
+        websocket=websocket,
+        session_id="11111111-1111-1111-1111-111111111111",
+        token="token",
+        agent_id=None,
+        persona_id=None,
+        voice_mode="stepfun_realtime",
+    )
+
+    websocket.accept.assert_awaited_once()
+    websocket.close.assert_awaited_once_with(code=4410, reason="KB_LOCK_UNBOUND")
+    handle_stepfun.assert_not_awaited()

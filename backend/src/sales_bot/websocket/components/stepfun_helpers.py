@@ -88,6 +88,10 @@ def ensure_knowledge_runtime_metrics(policy: dict[str, Any]) -> dict[str, Any]:
     knowledge_metrics.setdefault("last_error", None)
     knowledge_metrics.setdefault("last_retrieval_mode", None)
     knowledge_metrics.setdefault("mode_counts", {})
+    knowledge_metrics.setdefault("kb_lock_required", False)
+    knowledge_metrics.setdefault("kb_lock_block_count", 0)
+    knowledge_metrics.setdefault("kb_lock_last_status", "not_required")
+    knowledge_metrics.setdefault("kb_lock_updated_at", None)
 
     runtime_metrics["knowledge_retrieval"] = knowledge_metrics
     return knowledge_metrics

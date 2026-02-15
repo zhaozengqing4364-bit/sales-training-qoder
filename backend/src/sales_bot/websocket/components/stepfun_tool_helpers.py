@@ -23,12 +23,16 @@ def build_stepfun_tools_from_policy(
     retrieval_priority = (
         str(tool_policy.get("retrieval_priority") or "").strip().lower()
     )
+    require_kb_grounding = bool(tool_policy.get("require_kb_grounding", False))
     network_access_mode = str(tool_policy.get("network_access_mode") or "off").lower()
     allow_web_search_without_kb = bool(
         tool_policy.get("allow_web_search_without_kb", False)
     )
 
-    if retrieval_priority == "kb_only":
+    if require_kb_grounding:
+        enable_internal_retrieval = True
+        enable_web_search = False
+    elif retrieval_priority == "kb_only":
         enable_internal_retrieval = True
         enable_web_search = False
     elif has_bound_knowledge_base:

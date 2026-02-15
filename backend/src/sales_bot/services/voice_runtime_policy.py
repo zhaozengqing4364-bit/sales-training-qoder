@@ -54,6 +54,7 @@ DEFAULT_TOOL_POLICY: dict[str, Any] = {
     "network_access_mode": "off",
     "enforcement_level": "strict",
     "allow_web_search_without_kb": False,
+    "require_kb_grounding": False,
 }
 
 
@@ -567,6 +568,19 @@ class VoiceRuntimePolicyService:
             tool_policy["enable_web_search"] = False
             tool_policy["retrieval_priority"] = "kb_only"
             source["tool_policy_enforcement"] = "kb_internal_only"
+        if tool_policy["require_kb_grounding"]:
+            tool_policy["enable_internal_retrieval"] = True
+            tool_policy["enable_web_search"] = False
+            tool_policy["retrieval_priority"] = "kb_only"
+            if has_bound_knowledge_base:
+                source["tool_policy_enforcement"] = "kb_lock_enforced"
+            else:
+                source["tool_policy_enforcement"] = "kb_lock_unbound"
+            source["kb_lock_enforcement"] = (
+                "kb_required_and_bound"
+                if has_bound_knowledge_base
+                else "kb_required_unbound"
+            )
         if tool_policy["network_access_mode"] == "off":
             tool_policy["enable_web_search"] = False
             source["network_access_enforcement"] = "network_off"
@@ -600,6 +614,10 @@ class VoiceRuntimePolicyService:
 
         if tool_policy["network_access_mode"] == "off":
             tool_policy["enable_web_search"] = False
+        if tool_policy["require_kb_grounding"]:
+            tool_policy["enable_internal_retrieval"] = True
+            tool_policy["enable_web_search"] = False
+            tool_policy["retrieval_priority"] = "kb_only"
         if has_bound_knowledge_base:
             tool_policy["enable_internal_retrieval"] = True
             tool_policy["enable_web_search"] = False
@@ -753,6 +771,10 @@ class VoiceRuntimePolicyService:
             merged.get("allow_web_search_without_kb"),
             DEFAULT_TOOL_POLICY["allow_web_search_without_kb"],
         )
+        require_kb_grounding = _to_bool(
+            merged.get("require_kb_grounding"),
+            DEFAULT_TOOL_POLICY["require_kb_grounding"],
+        )
         enable_internal_retrieval = _to_bool(
             merged.get("enable_internal_retrieval"),
             DEFAULT_TOOL_POLICY["enable_internal_retrieval"],
@@ -813,6 +835,7 @@ class VoiceRuntimePolicyService:
             "network_access_mode": network_access_mode,
             "enforcement_level": enforcement_level,
             "allow_web_search_without_kb": allow_web_search_without_kb,
+            "require_kb_grounding": require_kb_grounding,
         }
 
     def _merge_knowledge_base_ids(

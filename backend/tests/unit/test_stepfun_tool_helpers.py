@@ -143,3 +143,23 @@ def test_build_tools_allows_web_search_in_controlled_mode_without_kb():
     assert len(tools) == 1
     assert tools[0]["type"] == "web_search"
     assert tools[0]["function"]["options"]["top_k"] == 3
+
+
+def test_build_tools_require_kb_grounding_forces_internal_retrieval():
+    tools = build_stepfun_tools_from_policy(
+        {
+            "knowledge_base_ids": [],
+            "tool_policy": {
+                "enable_web_search": True,
+                "enable_internal_retrieval": False,
+                "network_access_mode": "controlled",
+                "allow_web_search_without_kb": True,
+                "retrieval_priority": "web_first",
+                "require_kb_grounding": True,
+            },
+        }
+    )
+
+    assert len(tools) == 1
+    assert tools[0]["type"] == "function"
+    assert tools[0]["function"]["name"] == "search_internal_knowledge"

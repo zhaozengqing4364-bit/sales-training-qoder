@@ -443,6 +443,55 @@ async def test_knowledge_check_reports_kb_not_ready_status(
 
 
 @pytest.mark.asyncio
+async def test_knowledge_check_reports_kb_lock_unbound_status(
+    async_client: AsyncClient,
+    auth_headers: dict,
+    test_db: AsyncSession,
+):
+    """Knowledge-check should surface kb lock diagnostics when lock is enabled but KB unbound."""
+    _, agent, persona = await _create_runtime_entities(test_db)
+
+    create_resp = await async_client.post(
+        "/api/v1/practice/sessions",
+        headers=auth_headers,
+        json={
+            "scenario_type": "sales",
+            "agent_id": agent.id,
+            "persona_id": persona.id,
+            "voice_mode": "stepfun_realtime",
+        },
+    )
+    assert create_resp.status_code == 201
+    session_id = create_resp.json()["data"]["session_id"]
+
+    session_result = await test_db.execute(
+        select(PracticeSession).where(PracticeSession.session_id == session_id)
+    )
+    session = session_result.scalar_one()
+    snapshot = deepcopy(session.voice_policy_snapshot)
+    snapshot["tool_policy"] = {
+        "enable_internal_retrieval": True,
+        "require_kb_grounding": True,
+    }
+    snapshot["knowledge_base_ids"] = []
+    session.voice_policy_snapshot = snapshot
+    session.status = "completed"
+    await test_db.commit()
+
+    resp = await async_client.get(
+        f"/api/v1/practice/sessions/{session_id}/knowledge-check",
+        headers=auth_headers,
+    )
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["success"] is True
+    assert body["data"]["kb_lock_required"] is True
+    assert body["data"]["kb_lock_status"] == "blocked_no_kb"
+    assert body["data"]["require_kb_grounding"] is True
+
+
+@pytest.mark.asyncio
 async def test_session_snapshot_access_control_owner_admin_only(
     async_client: AsyncClient,
     auth_headers: dict,

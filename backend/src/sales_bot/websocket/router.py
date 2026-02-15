@@ -140,6 +140,16 @@ async def _handle_sales_websocket(
         await websocket.close(code=4409, reason="SESSION_SCENARIO_MISMATCH")
         return
 
+    kb_lock_unbound = await _is_kb_lock_unbound_session(resolved_session_id)
+    if kb_lock_unbound:
+        logger.warning(
+            "Rejected /ws/sales connection due to KB lock without bound knowledge base",
+            session_id=resolved_session_id,
+        )
+        await websocket.accept()
+        await websocket.close(code=4410, reason="KB_LOCK_UNBOUND")
+        return
+
     # Enforce voice mode lock from persisted session snapshot.
     normalized_voice_mode = _normalize_requested_voice_mode(voice_mode)
     if normalized_voice_mode and normalized_voice_mode != persisted_voice_mode:
@@ -253,6 +263,39 @@ async def _resolve_session_runtime(
         )
 
     return None, default_mode, None, None
+
+
+def _is_kb_lock_unbound_snapshot(snapshot: object) -> bool:
+    if not isinstance(snapshot, dict):
+        return False
+    tool_policy = snapshot.get("tool_policy")
+    if not isinstance(tool_policy, dict):
+        return False
+    if not bool(tool_policy.get("require_kb_grounding", False)):
+        return False
+    knowledge_base_ids = snapshot.get("knowledge_base_ids")
+    if not isinstance(knowledge_base_ids, list):
+        return True
+    return not bool([item for item in knowledge_base_ids if str(item).strip()])
+
+
+async def _is_kb_lock_unbound_session(session_id: str) -> bool:
+    try:
+        async with AsyncSessionLocal() as db:
+            result = await db.execute(
+                select(PracticeSession.voice_policy_snapshot).where(
+                    PracticeSession.session_id == session_id
+                )
+            )
+            snapshot = result.scalar_one_or_none()
+            return _is_kb_lock_unbound_snapshot(snapshot)
+    except (RuntimeError, ValueError, OSError) as exc:
+        logger.warning(
+            "Failed to evaluate KB lock binding before websocket connect",
+            session_id=session_id,
+            error=str(exc),
+        )
+        return False
 
 
 async def _handle_simple_connection(

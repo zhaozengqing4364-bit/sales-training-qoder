@@ -390,6 +390,72 @@ async def test_prepare_grounding_context_applies_internal_only_guardrail_when_kb
 
 
 @pytest.mark.asyncio
+async def test_prepare_grounding_context_sets_blocked_response_when_kb_lock_blocks(
+    monkeypatch,
+):
+    handler = StepFunRealtimeHandler()
+    handler._effective_policy = {
+        "knowledge_base_ids": ["kb-1"],
+        "tool_policy": {
+            "require_kb_grounding": True,
+            "enable_internal_retrieval": True,
+        },
+    }
+    handler._record_kb_lock_decision = AsyncMock()
+    monkeypatch.setattr(
+        stepfun_module,
+        "evaluate_kb_lock_decision",
+        AsyncMock(
+            return_value=SimpleNamespace(
+                allow_generation=False,
+                status="blocked_empty",
+                user_message="知识库未命中，请补充关键词",
+                result_count=0,
+                retrieval_mode="",
+                error_detail="",
+            )
+        ),
+    )
+
+    await handler._prepare_grounding_context("介绍产品价格")
+
+    assert handler._pending_blocked_response_text == "知识库未命中，请补充关键词"
+    assert handler._pending_grounding_context == ""
+    handler._record_kb_lock_decision.assert_awaited_once_with(
+        status="blocked_empty",
+        blocked=True,
+    )
+
+
+@pytest.mark.asyncio
+async def test_create_response_uses_local_blocked_message_without_upstream_call():
+    handler = StepFunRealtimeHandler()
+    handler.websocket = MagicMock()
+    handler.manager = MagicMock()
+    handler.manager.send_json = AsyncMock()
+    handler._send_status = AsyncMock()
+    handler._send_upstream = AsyncMock()
+    handler._persist_message = AsyncMock()
+    handler._pending_blocked_response_text = "当前会话必须先命中知识库，暂不生成回答。"
+    handler.turn_count = 0
+
+    created = await handler._create_response(count_turn=True)
+
+    assert created is True
+    assert handler.turn_count == 1
+    handler._send_upstream.assert_not_awaited()
+    handler._persist_message.assert_awaited_once_with(
+        turn_number=1,
+        role="assistant",
+        content="当前会话必须先命中知识库，暂不生成回答。",
+    )
+    assert handler.manager.send_json.await_count == 1
+    payload = handler.manager.send_json.await_args_list[0].args[1]
+    assert payload["type"] == "tts_audio"
+    assert payload["data"]["text"] == "当前会话必须先命中知识库，暂不生成回答。"
+
+
+@pytest.mark.asyncio
 async def test_flush_active_response_persists_assistant_message_and_sends_final_chunk():
     handler = StepFunRealtimeHandler()
     handler.turn_count = 3

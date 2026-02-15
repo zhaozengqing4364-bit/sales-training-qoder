@@ -29,6 +29,7 @@ import json
 import time
 import uuid
 from datetime import datetime, timezone
+from typing import Any
 
 from fastapi import WebSocket, WebSocketDisconnect
 from starlette.websockets import WebSocketState
@@ -39,6 +40,7 @@ from common.db.session_lifecycle import (
     InvalidSessionTransitionError,
     SessionLifecycleService,
 )
+from common.knowledge.kb_lock_guard import evaluate_kb_lock_decision
 from common.monitoring.logger import get_logger, get_trace_id
 from common.websocket.base_handler import BaseWebSocketHandler
 from common.websocket.session_manager import get_session_manager
@@ -96,6 +98,7 @@ class BaseSalesHandler(BaseWebSocketHandler):
         self.ai_state = "idle"
         self.session_scenario_type = scenario
         self._greeting_sent = False
+        self._voice_policy_snapshot: dict[str, Any] = {}
 
     # ========== Connection Lifecycle ==========
 
@@ -179,6 +182,11 @@ class BaseSalesHandler(BaseWebSocketHandler):
                 if session:
                     self.session_status = str(session.status or "preparing")
                     self.session_scenario_type = scenario_type or self.scenario
+                    snapshot = getattr(session, "voice_policy_snapshot", None)
+                    if isinstance(snapshot, dict):
+                        self._voice_policy_snapshot = snapshot
+                    else:
+                        self._voice_policy_snapshot = {}
         except (RuntimeError, ValueError, OSError) as exc:
             logger.warning(f"Failed to sync session lifecycle state: {exc}")
 
@@ -626,8 +634,23 @@ class BaseSalesHandler(BaseWebSocketHandler):
 
         await self._send_status("thinking")
 
-        # Generate LLM response
-        response_text = await self._generate_response(text)
+        # Apply KB lock decision before LLM generation.
+        response_text: str | None = None
+        knowledge_context = ""
+        kb_lock_decision = await evaluate_kb_lock_decision(
+            query=text,
+            effective_policy=self._voice_policy_snapshot,
+        )
+        if kb_lock_decision.lock_required and not kb_lock_decision.allow_generation:
+            response_text = kb_lock_decision.user_message
+        elif kb_lock_decision.lock_required:
+            knowledge_context = kb_lock_decision.grounding_context
+
+        if response_text is None:
+            response_text = await self._generate_response(
+                text,
+                knowledge_context=knowledge_context,
+            )
 
         logger.info(f"LLM response generated: {response_text[:50] if response_text else 'None'}...")
 
