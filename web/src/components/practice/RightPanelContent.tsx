@@ -22,6 +22,7 @@ import type {
 
 interface RightPanelContentProps {
     scenarioType: "sales" | "presentation";
+    presentationId?: string;
     currentSlide: SlideUpdate | null;
     points: PointCovered[];
     forbiddenWords: ForbiddenWordDetection[];
@@ -33,6 +34,7 @@ interface RightPanelContentProps {
 
 export const RightPanelContent = React.memo(function RightPanelContent({
     scenarioType,
+    presentationId,
     currentSlide,
     points,
     forbiddenWords,
@@ -45,9 +47,11 @@ export const RightPanelContent = React.memo(function RightPanelContent({
         return (
             <div className="space-y-4">
                 <SlideViewer
+                    presentationId={presentationId}
                     currentPage={currentSlide?.current_page || 1}
                     totalPages={currentSlide?.total_pages || 1}
                     slideContent={currentSlide?.content}
+                    slideImageUrl={currentSlide?.image_url}
                     onPageChange={(page) => {
                         sendMessage("page_change", { page_number: page });
                     }}

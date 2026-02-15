@@ -162,6 +162,8 @@ async def update_agent(
     result = await service.update(agent_id, request)
     
     if not result.is_success:
+        if result.fallback == "[AGENT_CATEGORY_RESTRICTED]":
+            raise HTTPException(status_code=400, detail=result.fallback)
         raise HTTPException(status_code=404, detail=result.fallback)
     
     agent = result.value

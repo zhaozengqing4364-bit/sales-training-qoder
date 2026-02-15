@@ -1,396 +1,532 @@
 "use client";
 
-/**
- * Admin Prompt Templates Management Page (B10)
- *
- * Features:
- * - List all prompt templates
- * - Create, edit, delete templates
- * - Preview rendered templates
- * - Manage scenario assignments
- */
-
-import { useState, useEffect, useCallback } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import {
-    Plus,
-    Search,
-    Edit2,
-    Trash2,
-    Eye,
-    Copy,
-    CheckCircle,
-    XCircle,
-    AlertCircle,
-    Sparkles,
-} from "lucide-react";
+import { Plus, RefreshCw, Search, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { GlassCard } from "@/components/ui/glass-card";
-import { GlassModal } from "@/components/ui/glass-modal";
-import { StatusIndicator } from "@/components/ui/status-indicator";
 import { Badge } from "@/components/ui/badge";
-import { api } from "@/lib/api/client";
-import { PromptTemplate, PromptType } from "@/lib/api/types";
+import { useToast } from "@/components/ui/toast";
+import { api, getApiErrorMessage } from "@/lib/api/client";
+import { PromptTemplate, PromptType, ScenarioPrompt } from "@/lib/api/types";
 import { cn } from "@/lib/utils";
 
 const PROMPT_TYPE_LABELS: Record<PromptType, string> = {
-    summary: "总结",
-    system: "系统",
-    system_prompt: "系统提示词",
-    extraction: "提取",
-    scoring: "评分",
-    stage: "阶段",
-    fuzzy_detection: "模糊检测",
-    interruption: "打断检测",
-    tracking: "跟踪",
-    welcome: "欢迎词",
-    evaluation: "实时评价",
-    report: "综合报告",
+  summary: "总结",
+  system: "系统",
+  system_prompt: "系统提示词",
+  extraction: "信息提取",
+  scoring: "评分",
+  stage: "阶段",
+  fuzzy_detection: "模糊检测",
+  interruption: "打断检测",
+  tracking: "跟踪",
+  welcome: "欢迎词",
+  evaluation: "实时评价",
+  report: "综合报告",
 };
 
 const PROMPT_TYPE_COLORS: Record<PromptType, string> = {
-    summary: "bg-blue-100 text-blue-800",
-    system: "bg-purple-100 text-purple-800",
-    system_prompt: "bg-purple-100 text-purple-800",
-    extraction: "bg-green-100 text-green-800",
-    scoring: "bg-yellow-100 text-yellow-800",
-    stage: "bg-orange-100 text-orange-800",
-    fuzzy_detection: "bg-red-100 text-red-800",
-    interruption: "bg-pink-100 text-pink-800",
-    tracking: "bg-cyan-100 text-cyan-800",
-    welcome: "bg-indigo-100 text-indigo-800",
-    evaluation: "bg-teal-100 text-teal-800",
-    report: "bg-gray-100 text-gray-800",
+  summary: "bg-blue-100 text-blue-700",
+  system: "bg-slate-200 text-slate-700",
+  system_prompt: "bg-slate-200 text-slate-700",
+  extraction: "bg-green-100 text-green-700",
+  scoring: "bg-amber-100 text-amber-700",
+  stage: "bg-orange-100 text-orange-700",
+  fuzzy_detection: "bg-rose-100 text-rose-700",
+  interruption: "bg-pink-100 text-pink-700",
+  tracking: "bg-cyan-100 text-cyan-700",
+  welcome: "bg-indigo-100 text-indigo-700",
+  evaluation: "bg-teal-100 text-teal-700",
+  report: "bg-zinc-200 text-zinc-700",
 };
 
+function getRoleLabel(role: string): string {
+  if (role === "admin") {
+    return "管理员";
+  }
+  if (role === "support") {
+    return "运营";
+  }
+  return "只读";
+}
+
 export default function AdminPromptsPage() {
-    const router = useRouter();
-    const [templates, setTemplates] = useState<PromptTemplate[]>([]);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
-    const [searchQuery, setSearchQuery] = useState("");
-    const [typeFilter, setTypeFilter] = useState<PromptType | "all">("all");
-    const [showInactive, setShowInactive] = useState(false);
+  const router = useRouter();
+  const toast = useToast();
 
-    // Modal states
-    const [selectedTemplate, setSelectedTemplate] = useState<PromptTemplate | null>(null);
-    const [showPreviewModal, setShowPreviewModal] = useState(false);
-    const [showDeleteModal, setShowDeleteModal] = useState(false);
-    const [deleting, setDeleting] = useState(false);
+  const [templates, setTemplates] = useState<PromptTemplate[]>([]);
+  const [scenarioPrompts, setScenarioPrompts] = useState<ScenarioPrompt[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [typeFilter, setTypeFilter] = useState<PromptType | "all">("all");
+  const [showInactive, setShowInactive] = useState(false);
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
 
-    // Load templates
-    const loadTemplates = useCallback(async () => {
-        setLoading(true);
-        setError(null);
-        try {
-            const data = await api.admin.getPromptTemplates({
-                is_active: showInactive ? undefined : true,
-            });
-            setTemplates(data);
-        } catch (err) {
-            setError(err instanceof Error ? err.message : "加载失败");
-        } finally {
-            setLoading(false);
-        }
-    }, [showInactive]);
+  const [userRole, setUserRole] = useState("user");
+  const [isOperating, setIsOperating] = useState(false);
 
-    useEffect(() => {
-        loadTemplates();
-    }, [loadTemplates]);
+  const [bindingTemplateId, setBindingTemplateId] = useState("");
+  const [bindingScenarioType, setBindingScenarioType] = useState<"sales" | "presentation">("presentation");
+  const [bindingPromptType, setBindingPromptType] = useState<PromptType>("interruption");
+  const [bindingScenarioId, setBindingScenarioId] = useState("");
 
-    // Filter templates
-    const filteredTemplates = templates.filter((template) => {
-        const matchesSearch =
-            template.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            template.template.toLowerCase().includes(searchQuery.toLowerCase());
-        const matchesType = typeFilter === "all" || template.prompt_type === typeFilter;
-        return matchesSearch && matchesType;
+  const isAdmin = userRole === "admin";
+  const canOperate = userRole === "admin" || userRole === "support";
+
+  const loadData = async () => {
+    setLoading(true);
+    try {
+      const [templatesResult, scenarioPromptsResult, userResult] = await Promise.allSettled([
+        api.admin.getPromptTemplates({ is_active: showInactive ? undefined : true }),
+        api.admin.getScenarioPrompts(),
+        api.user.getMe(),
+      ]);
+
+      if (templatesResult.status === "fulfilled") {
+        setTemplates(templatesResult.value);
+      } else {
+        setTemplates([]);
+      }
+
+      if (scenarioPromptsResult.status === "fulfilled") {
+        setScenarioPrompts(scenarioPromptsResult.value);
+      } else {
+        setScenarioPrompts([]);
+      }
+
+      if (userResult.status === "fulfilled") {
+        setUserRole(String(userResult.value.role || "user"));
+      } else {
+        setUserRole("user");
+      }
+    } catch (error) {
+      console.error("Failed to load prompt admin data", error);
+      toast.error("提示词数据加载失败");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    void loadData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showInactive]);
+
+  const filteredTemplates = useMemo(() => {
+    return templates.filter((template) => {
+      const matchesSearch =
+        template.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        template.category.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        template.template.toLowerCase().includes(searchQuery.toLowerCase());
+      const matchesType = typeFilter === "all" || template.prompt_type === typeFilter;
+      return matchesSearch && matchesType;
     });
+  }, [searchQuery, templates, typeFilter]);
 
-    // Delete template
-    const handleDelete = async () => {
-        if (!selectedTemplate) return;
+  const templateMap = useMemo(() => {
+    return new Map(templates.map((item) => [item.id, item]));
+  }, [templates]);
 
-        setDeleting(true);
-        try {
-            await api.admin.deletePromptTemplate(selectedTemplate.id);
-            await loadTemplates();
-            setShowDeleteModal(false);
-            setSelectedTemplate(null);
-        } catch (err) {
-            setError(err instanceof Error ? err.message : "删除失败");
-        } finally {
-            setDeleting(false);
-        }
-    };
+  const selectedTemplate = useMemo(() => {
+    if (!selectedTemplateId) {
+      return null;
+    }
+    return templateMap.get(selectedTemplateId) || null;
+  }, [selectedTemplateId, templateMap]);
 
-    // Copy template content
-    const handleCopy = async (content: string) => {
-        try {
-            await navigator.clipboard.writeText(content);
-        } catch {
-            // Ignore copy errors
-        }
-    };
+  const selectedTemplateBindings = useMemo(() => {
+    if (!selectedTemplateId) {
+      return scenarioPrompts;
+    }
+    return scenarioPrompts.filter((item) => item.template_id === selectedTemplateId);
+  }, [scenarioPrompts, selectedTemplateId]);
 
-    return (
-        <div className="container mx-auto px-4 py-6 max-w-7xl">
-            {/* Header */}
-            <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
-                <div>
-                    <h1 className="text-2xl font-semibold text-zinc-900">提示词模板管理</h1>
-                    <p className="text-zinc-500 mt-1">管理 AI 系统的提示词模板和场景分配</p>
-                </div>
-                <Button
-                    onClick={() => router.push("/admin/prompts/new")}
-                    className="bg-zinc-900 hover:bg-zinc-800"
-                >
-                    <Plus className="w-4 h-4 mr-2" />
-                    新建模板
-                </Button>
-            </div>
+  const refreshAfterMutation = async (successMessage: string) => {
+    await loadData();
+    toast.success(successMessage);
+  };
 
-            {/* Filters */}
-            <GlassCard className="p-4 mb-6">
-                <div className="flex flex-col md:flex-row gap-4">
-                    <div className="flex-1 relative">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
-                        <Input
-                            placeholder="搜索模板名称或内容..."
-                            value={searchQuery}
-                            onChange={(e) => setSearchQuery(e.target.value)}
-                            className="pl-10"
-                        />
-                    </div>
-                    <select
-                        value={typeFilter}
-                        onChange={(e) => setTypeFilter(e.target.value as PromptType | "all")}
-                        className="px-3 py-2 rounded-lg border border-zinc-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
-                    >
-                        <option value="all">所有类型</option>
-                        {Object.entries(PROMPT_TYPE_LABELS).map(([type, label]) => (
-                            <option key={type} value={type}>
-                                {label}
-                            </option>
-                        ))}
-                    </select>
-                    <label className="flex items-center gap-2 text-sm text-zinc-600">
-                        <input
-                            type="checkbox"
-                            checked={showInactive}
-                            onChange={(e) => setShowInactive(e.target.checked)}
-                            className="rounded border-zinc-300"
-                        />
-                        显示已禁用
-                    </label>
-                </div>
-            </GlassCard>
+  const handleToggleActive = async (template: PromptTemplate) => {
+    if (!canOperate) {
+      toast.error("当前角色无操作权限");
+      return;
+    }
 
-            {/* Loading State */}
-            {loading && (
-                <div className="flex items-center justify-center py-12">
-                    <StatusIndicator status="loading"  />
-                    <span className="ml-2 text-zinc-500">加载中...</span>
-                </div>
-            )}
+    setIsOperating(true);
+    try {
+      await api.admin.updatePromptTemplate(template.id, {
+        is_active: !template.is_active,
+      });
+      await refreshAfterMutation(template.is_active ? "模板已停用" : "模板已启用");
+    } catch (error) {
+      toast.error(getApiErrorMessage(error));
+    } finally {
+      setIsOperating(false);
+    }
+  };
 
-            {/* Error State */}
-            {error && !loading && (
-                <div className="flex items-center justify-center py-12 text-red-500">
-                    <AlertCircle className="w-5 h-5 mr-2" />
-                    {error}
-                </div>
-            )}
+  const handleSetDefault = async (template: PromptTemplate) => {
+    if (!canOperate) {
+      toast.error("当前角色无操作权限");
+      return;
+    }
 
-            {/* Templates Grid */}
-            {!loading && !error && (
-                <div className="grid gap-4">
-                    {filteredTemplates.map((template) => (
-                        <GlassCard
-                            key={template.id}
-                            className={cn(
-                                "p-4 transition-all hover:shadow-lg",
-                                !template.is_active && "opacity-60"
-                            )}
-                        >
-                            <div className="flex items-start justify-between gap-4">
-                                <div className="flex-1 min-w-0">
-                                    <div className="flex items-center gap-2 mb-2">
-                                        <h3 className="font-medium text-zinc-900 truncate">
-                                            {template.name}
-                                        </h3>
-                                        <Badge
-                                            className={cn(
-                                                "text-xs",
-                                                PROMPT_TYPE_COLORS[template.prompt_type]
-                                            )}
-                                        >
-                                            {PROMPT_TYPE_LABELS[template.prompt_type]}
-                                        </Badge>
-                                        {template.is_default && (
-                                            <Badge className="bg-amber-100 text-amber-800 text-xs">
-                                                默认
-                                            </Badge>
-                                        )}
-                                        {template.is_system && (
-                                            <Badge className="bg-slate-100 text-slate-800 text-xs">
-                                                系统
-                                            </Badge>
-                                        )}
-                                        {!template.is_active && (
-                                            <Badge className="bg-gray-100 text-gray-600 text-xs">
-                                                已禁用
-                                            </Badge>
-                                        )}
-                                    </div>
+    setIsOperating(true);
+    try {
+      await api.admin.setDefaultPromptTemplate(template.id, template.prompt_type);
+      await refreshAfterMutation("已设为默认模板");
+    } catch (error) {
+      toast.error(getApiErrorMessage(error));
+    } finally {
+      setIsOperating(false);
+    }
+  };
 
-                                    <p className="text-sm text-zinc-500 mb-2">
-                                        分类: {template.category}
-                                    </p>
+  const handleCreateScenarioBinding = async () => {
+    if (!canOperate) {
+      toast.error("当前角色无操作权限");
+      return;
+    }
 
-                                    <div className="bg-zinc-50 rounded-lg p-3 text-sm text-zinc-600 font-mono line-clamp-3">
-                                        {template.template}
-                                    </div>
+    if (!bindingTemplateId) {
+      toast.error("请先选择模板");
+      return;
+    }
 
-                                    <div className="flex items-center gap-2 mt-3">
-                                        <span className="text-xs text-zinc-400">变量:</span>
-                                        {template.variables.length > 0 ? (
-                                            template.variables.map((v) => (
-                                                <Badge
-                                                    key={v}
-                                                    variant="secondary"
-                                                    className="text-xs"
-                                                >
-                                                    {v}
-                                                </Badge>
-                                            ))
-                                        ) : (
-                                            <span className="text-xs text-zinc-400">无</span>
-                                        )}
-                                    </div>
-                                </div>
+    setIsOperating(true);
+    try {
+      await api.admin.createScenarioPrompt({
+        scenario_type: bindingScenarioType,
+        scenario_id: bindingScenarioId.trim() || undefined,
+        prompt_type: bindingPromptType,
+        template_id: bindingTemplateId,
+        is_active: true,
+      });
+      setBindingScenarioId("");
+      await refreshAfterMutation("场景绑定已创建");
+    } catch (error) {
+      toast.error(getApiErrorMessage(error));
+    } finally {
+      setIsOperating(false);
+    }
+  };
 
-                                <div className="flex items-center gap-1">
-                                    <Button
-                                        variant="ghost"
-                                        size="sm"
-                                        onClick={() => {
-                                            setSelectedTemplate(template);
-                                            setShowPreviewModal(true);
-                                        }}
-                                        title="预览"
-                                    >
-                                        <Eye className="w-4 h-4" />
-                                    </Button>
-                                    <Button
-                                        variant="ghost"
-                                        size="sm"
-                                        onClick={() => handleCopy(template.template)}
-                                        title="复制"
-                                    >
-                                        <Copy className="w-4 h-4" />
-                                    </Button>
-                                    <Button
-                                        variant="ghost"
-                                        size="sm"
-                                        onClick={() =>
-                                            router.push(`/admin/prompts/${template.id}/edit`)
-                                        }
-                                        title="编辑"
-                                    >
-                                        <Edit2 className="w-4 h-4" />
-                                    </Button>
-                                    {!template.is_system && (
-                                        <Button
-                                            variant="ghost"
-                                            size="sm"
-                                            className="text-red-500 hover:text-red-700"
-                                            onClick={() => {
-                                                setSelectedTemplate(template);
-                                                setShowDeleteModal(true);
-                                            }}
-                                            title="删除"
-                                        >
-                                            <Trash2 className="w-4 h-4" />
-                                        </Button>
-                                    )}
-                                </div>
-                            </div>
-                        </GlassCard>
-                    ))}
+  const handleDeleteScenarioBinding = async (assignmentId: string) => {
+    if (!canOperate) {
+      toast.error("当前角色无操作权限");
+      return;
+    }
 
-                    {filteredTemplates.length === 0 && (
-                        <div className="text-center py-12">
-                            <Sparkles className="w-12 h-12 text-zinc-300 mx-auto mb-4" />
-                            <p className="text-zinc-500">没有找到匹配的提示词模板</p>
-                        </div>
-                    )}
-                </div>
-            )}
+    setIsOperating(true);
+    try {
+      await api.admin.deleteScenarioPrompt(assignmentId);
+      await refreshAfterMutation("场景绑定已删除");
+    } catch (error) {
+      toast.error(getApiErrorMessage(error));
+    } finally {
+      setIsOperating(false);
+    }
+  };
 
-            {/* Preview Modal */}
-            <GlassModal
-                isOpen={showPreviewModal}
-                onClose={() => setShowPreviewModal(false)}
-                title="模板预览"
-                size="lg"
-            >
-                {selectedTemplate && (
-                    <div className="space-y-4">
-                        <div className="flex items-center gap-2">
-                            <Badge className={PROMPT_TYPE_COLORS[selectedTemplate.prompt_type]}>
-                                {PROMPT_TYPE_LABELS[selectedTemplate.prompt_type]}
-                            </Badge>
-                            <span className="font-medium">{selectedTemplate.name}</span>
-                        </div>
-                        <div className="bg-zinc-900 text-zinc-100 rounded-lg p-4 font-mono text-sm overflow-auto max-h-96">
-                            <pre>{selectedTemplate.template}</pre>
-                        </div>
-                        <div className="flex items-center gap-2">
-                            <span className="text-sm text-zinc-500">可用变量:</span>
-                            {selectedTemplate.variables.map((v) => (
-                                <Badge key={v} variant="secondary">
-                                    {v}
-                                </Badge>
-                            ))}
-                        </div>
-                    </div>
-                )}
-            </GlassModal>
+  useEffect(() => {
+    if (!selectedTemplate) {
+      return;
+    }
 
-            {/* Delete Confirmation Modal */}
-            <GlassModal
-                isOpen={showDeleteModal}
-                onClose={() => setShowDeleteModal(false)}
-                title="确认删除"
-                size="sm"
-            >
-                <div className="text-center">
-                    <AlertCircle className="w-12 h-12 text-amber-500 mx-auto mb-4" />
-                    <p className="text-zinc-600 mb-6">
-                        确定要删除提示词模板 &ldquo;{selectedTemplate?.name}&rdquo; 吗？
-                        <br />
-                        此操作不可恢复。
-                    </p>
-                    <div className="flex justify-center gap-3">
-                        <Button
-                            variant="outline"
-                            onClick={() => setShowDeleteModal(false)}
-                            disabled={deleting}
-                        >
-                            取消
-                        </Button>
-                        <Button
-                            variant="destructive"
-                            onClick={handleDelete}
-                            disabled={deleting}
-                        >
-                            {deleting ? "删除中..." : "确认删除"}
-                        </Button>
-                    </div>
-                </div>
-            </GlassModal>
+    setBindingTemplateId(selectedTemplate.id);
+    setBindingPromptType(selectedTemplate.prompt_type);
+    setBindingScenarioType(selectedTemplate.category === "sales" ? "sales" : "presentation");
+  }, [selectedTemplate]);
+
+  return (
+    <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+        <div>
+          <h1 className="text-3xl font-black text-slate-900 tracking-tight">提示词管理</h1>
+          <p className="text-slate-500 mt-1">默认展示业务操作。模板正文编辑收敛到开发者模式。</p>
         </div>
-    );
+        <div className="flex gap-2 items-center">
+          <Badge className="bg-slate-100 text-slate-700">当前角色：{getRoleLabel(userRole)}</Badge>
+          <Button variant="outline" className="rounded-full" onClick={() => void loadData()} disabled={loading}>
+            <RefreshCw className={cn("w-4 h-4 mr-2", loading && "animate-spin")} />
+            刷新
+          </Button>
+          {isAdmin ? (
+            <Button
+              className="rounded-full bg-slate-900 text-white"
+              onClick={() => router.push("/admin/prompts/new")}
+            >
+              <Plus className="w-4 h-4 mr-2" />
+              新建模板
+            </Button>
+          ) : null}
+        </div>
+      </div>
+
+      <GlassCard className="p-4 space-y-4">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+          <div className="md:col-span-2 relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
+            <Input
+              value={searchQuery}
+              onChange={(event) => setSearchQuery(event.target.value)}
+              placeholder="搜索模板名称/分类/内容"
+              className="pl-9"
+            />
+          </div>
+          <select
+            value={typeFilter}
+            onChange={(event) => setTypeFilter(event.target.value as PromptType | "all")}
+            className="rounded-lg border border-zinc-200 bg-stone-50 px-3 py-2 text-sm"
+          >
+            <option value="all">全部类型</option>
+            {Object.entries(PROMPT_TYPE_LABELS).map(([type, label]) => (
+              <option key={type} value={type}>
+                {label}
+              </option>
+            ))}
+          </select>
+          <label className="flex items-center gap-2 text-sm text-zinc-600">
+            <input
+              type="checkbox"
+              checked={showInactive}
+              onChange={(event) => setShowInactive(event.target.checked)}
+            />
+            显示停用模板
+          </label>
+        </div>
+      </GlassCard>
+
+      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+        <GlassCard className="p-4 xl:col-span-2">
+          <div className="overflow-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-slate-500 border-b border-slate-200">
+                  <th className="py-2 pr-3">模板</th>
+                  <th className="py-2 pr-3">类型</th>
+                  <th className="py-2 pr-3">业务分类</th>
+                  <th className="py-2 pr-3">状态</th>
+                  <th className="py-2 pr-3">默认</th>
+                  <th className="py-2">操作</th>
+                </tr>
+              </thead>
+              <tbody>
+                {loading ? (
+                  <tr>
+                    <td colSpan={6} className="py-8 text-center text-slate-500">
+                      正在加载模板...
+                    </td>
+                  </tr>
+                ) : filteredTemplates.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="py-10 text-center text-slate-500">
+                      未找到符合条件的模板
+                    </td>
+                  </tr>
+                ) : (
+                  filteredTemplates.map((template) => {
+                    const isSelected = selectedTemplateId === template.id;
+                    return (
+                      <tr
+                        key={template.id}
+                        className={cn(
+                          "border-b border-slate-100 hover:bg-slate-50/60",
+                          isSelected && "bg-slate-100/70"
+                        )}
+                      >
+                        <td className="py-3 pr-3">
+                          <button
+                            type="button"
+                            className="text-left"
+                            onClick={() => setSelectedTemplateId(template.id)}
+                          >
+                            <div className="font-semibold text-zinc-900">{template.name}</div>
+                            <div className="text-xs text-slate-500">ID: {template.id.slice(0, 8)}...</div>
+                          </button>
+                        </td>
+                        <td className="py-3 pr-3">
+                          <Badge className={PROMPT_TYPE_COLORS[template.prompt_type]}>
+                            {PROMPT_TYPE_LABELS[template.prompt_type]}
+                          </Badge>
+                        </td>
+                        <td className="py-3 pr-3 text-slate-600">{template.category}</td>
+                        <td className="py-3 pr-3">
+                          <Badge className={template.is_active ? "bg-emerald-100 text-emerald-700" : "bg-slate-200 text-slate-700"}>
+                            {template.is_active ? "启用" : "停用"}
+                          </Badge>
+                        </td>
+                        <td className="py-3 pr-3">
+                          {template.is_default ? <Badge className="bg-amber-100 text-amber-700">默认</Badge> : "-"}
+                        </td>
+                        <td className="py-3">
+                          <div className="flex flex-wrap gap-2">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              disabled={!canOperate || isOperating}
+                              onClick={() => void handleToggleActive(template)}
+                            >
+                              {template.is_active ? "停用" : "启用"}
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              disabled={!canOperate || template.is_default || isOperating}
+                              onClick={() => void handleSetDefault(template)}
+                            >
+                              设为默认
+                            </Button>
+                            {isAdmin ? (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => router.push(`/admin/prompts/${template.id}/edit`)}
+                              >
+                                编辑
+                              </Button>
+                            ) : null}
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+        </GlassCard>
+
+        <GlassCard className="p-4 space-y-4">
+          <h3 className="text-lg font-bold text-slate-900">模板详情</h3>
+          {!selectedTemplate ? (
+            <div className="text-sm text-slate-500">点击左侧模板查看详情与场景绑定。</div>
+          ) : (
+            <div className="space-y-3">
+              <div>
+                <div className="text-sm font-semibold text-zinc-900">{selectedTemplate.name}</div>
+                <div className="text-xs text-slate-500 mt-1">类型：{PROMPT_TYPE_LABELS[selectedTemplate.prompt_type]} · 分类：{selectedTemplate.category}</div>
+              </div>
+
+              <div className="text-xs text-slate-500">变量：{selectedTemplate.variables.length ? selectedTemplate.variables.join("、") : "无"}</div>
+
+              <details className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                <summary className="cursor-pointer text-sm font-semibold text-slate-800">开发者模式：查看模板正文</summary>
+                <pre className="mt-3 whitespace-pre-wrap text-xs text-slate-700 leading-relaxed max-h-60 overflow-auto">
+                  {selectedTemplate.template}
+                </pre>
+              </details>
+            </div>
+          )}
+        </GlassCard>
+      </div>
+
+      <GlassCard className="p-5 space-y-4">
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+          <div>
+            <h3 className="text-lg font-bold text-slate-900">场景绑定</h3>
+            <p className="text-sm text-slate-500">将模板绑定到销售/演讲场景，避免运行时使用错误模板。</p>
+          </div>
+          <Badge className="bg-slate-100 text-slate-700">当前 {selectedTemplateBindings.length} 条</Badge>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
+          <select
+            value={bindingTemplateId}
+            onChange={(event) => {
+              const nextId = event.target.value;
+              setBindingTemplateId(nextId);
+              const selected = templateMap.get(nextId);
+              if (selected) {
+                setBindingPromptType(selected.prompt_type);
+              }
+            }}
+            className="rounded-lg border border-zinc-200 bg-stone-50 px-3 py-2 text-sm"
+          >
+            <option value="">选择模板</option>
+            {templates.filter((item) => item.is_active).map((item) => (
+              <option key={item.id} value={item.id}>
+                {item.name}
+              </option>
+            ))}
+          </select>
+
+          <select
+            value={bindingScenarioType}
+            onChange={(event) => setBindingScenarioType(event.target.value as "sales" | "presentation")}
+            className="rounded-lg border border-zinc-200 bg-stone-50 px-3 py-2 text-sm"
+          >
+            <option value="sales">销售场景</option>
+            <option value="presentation">演讲场景</option>
+          </select>
+
+          <select
+            value={bindingPromptType}
+            onChange={(event) => setBindingPromptType(event.target.value as PromptType)}
+            className="rounded-lg border border-zinc-200 bg-stone-50 px-3 py-2 text-sm"
+          >
+            {Object.entries(PROMPT_TYPE_LABELS).map(([type, label]) => (
+              <option key={type} value={type}>
+                {label}
+              </option>
+            ))}
+          </select>
+
+          <Input
+            value={bindingScenarioId}
+            onChange={(event) => setBindingScenarioId(event.target.value)}
+            placeholder="可选：具体 scenario_id"
+          />
+
+          <Button
+            className="rounded-lg bg-slate-900 text-white"
+            disabled={!canOperate || isOperating}
+            onClick={() => void handleCreateScenarioBinding()}
+          >
+            新建绑定
+          </Button>
+        </div>
+
+        <div className="space-y-2">
+          {selectedTemplateBindings.length === 0 ? (
+            <div className="text-sm text-slate-500 py-4">暂无绑定记录</div>
+          ) : (
+            selectedTemplateBindings.map((item) => {
+              const linkedTemplate = templateMap.get(item.template_id);
+              return (
+                <div key={item.id} className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-3 flex flex-col md:flex-row md:items-center md:justify-between gap-2">
+                  <div className="text-sm text-slate-700">
+                    <span className="font-semibold text-zinc-900">{linkedTemplate?.name || item.template_id}</span>
+                    <span className="mx-2 text-slate-400">·</span>
+                    <span>{item.scenario_type === "sales" ? "销售" : "演讲"}</span>
+                    <span className="mx-2 text-slate-400">·</span>
+                    <span>{PROMPT_TYPE_LABELS[item.prompt_type as PromptType] || item.prompt_type}</span>
+                    <span className="mx-2 text-slate-400">·</span>
+                    <span>{item.scenario_id || "全场景"}</span>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={!canOperate || isOperating}
+                    onClick={() => void handleDeleteScenarioBinding(item.id)}
+                  >
+                    删除绑定
+                  </Button>
+                </div>
+              );
+            })
+          )}
+        </div>
+      </GlassCard>
+
+      {!loading && filteredTemplates.length === 0 ? (
+        <GlassCard className="p-12 text-center">
+          <Sparkles className="w-10 h-10 mx-auto mb-3 text-zinc-300" />
+          <p className="text-zinc-500">当前条件下没有可显示的模板。</p>
+        </GlassCard>
+      ) : null}
+    </div>
+  );
 }

@@ -110,6 +110,7 @@ export function AdminSidebarContent({ isCollapsed = false, toggleSidebar, showTo
         { label: "智能体管理", icon: Bot, href: "/admin/agents" },
         { label: "角色管理", icon: Users, href: "/admin/personas" },
         { label: "PPT演练管理", icon: Presentation, href: "/admin/presentations" },
+        { label: "PPT AI策略", icon: Sparkles, href: "/admin/presentation-ai" },
         { label: "知识库管理", icon: BookOpen, href: "/admin/knowledge" },
         { label: "提示词管理", icon: MessageSquareText, href: "/admin/prompts" },
         { label: "训练记录", icon: FileText, href: "/admin/records" },

@@ -23,6 +23,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from common.auth.service import get_current_user, require_role
+from common.db.models import User
 from common.db.session import get_db
 from common.monitoring.logger import get_logger
 from prompt_templates.models import (
@@ -37,7 +39,11 @@ from prompt_templates.models import (
 )
 from prompt_templates.service import PromptTemplateService
 
-router = APIRouter(prefix="/api/v1/prompt-templates", tags=["prompt-templates"])
+router = APIRouter(
+    prefix="/api/v1/prompt-templates",
+    tags=["prompt-templates"],
+    dependencies=[Depends(require_role(["admin", "support"]))],
+)
 logger = get_logger(__name__)
 
 
@@ -67,6 +73,47 @@ def _raise_prompt_http_error(
         detail={
             "error": error_code,
             "message": message,
+        },
+    )
+
+
+def _is_admin(user: User) -> bool:
+    return str(getattr(user, "role", "")).lower() == "admin"
+
+
+def _require_admin_editor(user: User) -> None:
+    if _is_admin(user):
+        return
+    raise HTTPException(
+        status_code=403,
+        detail={
+            "error": "[PROMPT_TEMPLATE_EDIT_ADMIN_ONLY]",
+            "message": "仅管理员可编辑提示词正文与元信息。",
+        },
+    )
+
+
+def _require_operator_safe_update(
+    *,
+    user: User,
+    data: PromptTemplateUpdate,
+) -> None:
+    if _is_admin(user):
+        return
+
+    changed_fields = set(data.model_dump(exclude_unset=True).keys())
+    if not changed_fields:
+        return
+
+    allowed_fields = {"is_active", "is_default"}
+    if changed_fields.issubset(allowed_fields):
+        return
+
+    raise HTTPException(
+        status_code=403,
+        detail={
+            "error": "[PROMPT_TEMPLATE_EDIT_ADMIN_ONLY]",
+            "message": "运营角色仅可启停模板与切换默认，不可修改模板正文。",
         },
     )
 
@@ -138,9 +185,11 @@ async def get_template_for_scenario(
 @router.post("", response_model=PromptTemplate, status_code=201)
 async def create_prompt_template(
     data: PromptTemplateCreate,
+    current_user: User = Depends(get_current_user),
     service: PromptTemplateService = Depends(get_prompt_service),
 ) -> PromptTemplate:
     """Create a new prompt template."""
+    _require_admin_editor(current_user)
     try:
         return await service.create_template(data)
     except SQLAlchemyError as exc:
@@ -193,9 +242,11 @@ async def get_prompt_template(
 async def update_prompt_template(
     template_id: UUID,
     data: PromptTemplateUpdate,
+    current_user: User = Depends(get_current_user),
     service: PromptTemplateService = Depends(get_prompt_service),
 ) -> PromptTemplate:
     """Update a prompt template."""
+    _require_operator_safe_update(user=current_user, data=data)
     try:
         template = await service.update_template(template_id, data)
         if not template:
@@ -315,7 +366,11 @@ async def set_default_template(
 
 
 # Scenario Prompt Assignment Routes
-scenario_router = APIRouter(prefix="/api/v1/scenario-prompts", tags=["scenario-prompts"])
+scenario_router = APIRouter(
+    prefix="/api/v1/scenario-prompts",
+    tags=["scenario-prompts"],
+    dependencies=[Depends(require_role(["admin", "support"]))],
+)
 
 
 @scenario_router.get("", response_model=list[ScenarioPrompt])

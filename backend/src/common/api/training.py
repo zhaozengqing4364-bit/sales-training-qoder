@@ -105,15 +105,6 @@ TRAINING_CATEGORIES = [
         tags=["演讲", "表达", "PPT"],
         status="active"
     ),
-    TrainingCategory(
-        id="customer_service",
-        title="客服训练",
-        description="客户服务场景模拟，提升服务质量和问题解决能力",
-        icon_key="Headphones",
-        color_theme="bg-green-50 text-green-600",
-        tags=["客服", "服务", "沟通"],
-        status="coming_soon"
-    ),
 ]
 
 

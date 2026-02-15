@@ -17,7 +17,7 @@ from uuid import UUID, uuid4
 from datetime import datetime, timezone
 
 from pydantic import ValidationError
-from sqlalchemy import select, and_, or_
+from sqlalchemy import and_, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.monitoring.logger import get_logger
@@ -81,7 +81,7 @@ class PromptTemplateService:
         """
         from common.db.models import PromptTemplate as PromptTemplateDB
 
-        template_id = uuid4()
+        template_id = str(uuid4())
         now = datetime.now(timezone.utc)
 
         db_template = PromptTemplateDB(
@@ -126,7 +126,7 @@ class PromptTemplateService:
         from common.db.models import PromptTemplate as PromptTemplateDB
 
         result = await self.db.execute(
-            select(PromptTemplateDB).where(PromptTemplateDB.id == template_id)
+            select(PromptTemplateDB).where(PromptTemplateDB.id == str(template_id))
         )
         db_template = result.scalar_one_or_none()
 
@@ -154,7 +154,7 @@ class PromptTemplateService:
         from common.db.models import PromptTemplate as PromptTemplateDB
 
         result = await self.db.execute(
-            select(PromptTemplateDB).where(PromptTemplateDB.id == template_id)
+            select(PromptTemplateDB).where(PromptTemplateDB.id == str(template_id))
         )
         db_template = result.scalar_one_or_none()
 
@@ -193,7 +193,7 @@ class PromptTemplateService:
         from common.db.models import PromptTemplate as PromptTemplateDB
 
         result = await self.db.execute(
-            select(PromptTemplateDB).where(PromptTemplateDB.id == template_id)
+            select(PromptTemplateDB).where(PromptTemplateDB.id == str(template_id))
         )
         db_template = result.scalar_one_or_none()
 
@@ -388,14 +388,14 @@ class PromptTemplateService:
         """
         from common.db.models import ScenarioPrompt as ScenarioPromptDB
 
-        assignment_id = uuid4()
+        assignment_id = str(uuid4())
 
         db_assignment = ScenarioPromptDB(
             id=assignment_id,
             scenario_type=data.scenario_type,
             scenario_id=data.scenario_id,
             prompt_type=data.prompt_type,
-            template_id=data.template_id,
+            template_id=str(data.template_id),
             is_active=data.is_active,
             created_at=datetime.now(timezone.utc),
         )
@@ -422,20 +422,21 @@ class PromptTemplateService:
         """
         from common.db.models import PromptTemplate as PromptTemplateDB
 
-        # First, unset any existing default for this type
+        now = datetime.now(timezone.utc)
+
+        # First, unset existing defaults for this prompt type.
         await self.db.execute(
-            select(PromptTemplateDB)
+            update(PromptTemplateDB)
             .where(
-                and_(
-                    PromptTemplateDB.prompt_type == prompt_type.value,
-                    PromptTemplateDB.is_default == True,
-                )
+                PromptTemplateDB.prompt_type == prompt_type.value,
+                PromptTemplateDB.is_default == True,
             )
+            .values(is_default=False, updated_at=now)
         )
 
         # Set new default
         result = await self.db.execute(
-            select(PromptTemplateDB).where(PromptTemplateDB.id == template_id)
+            select(PromptTemplateDB).where(PromptTemplateDB.id == str(template_id))
         )
         template = result.scalar_one_or_none()
 
@@ -443,7 +444,7 @@ class PromptTemplateService:
             return False
 
         template.is_default = True
-        template.updated_at = datetime.now(timezone.utc)
+        template.updated_at = now
 
         await self.db.commit()
 
@@ -508,7 +509,7 @@ class PromptTemplateService:
         from common.db.models import ScenarioPrompt as ScenarioPromptDB
 
         result = await self.db.execute(
-            select(ScenarioPromptDB).where(ScenarioPromptDB.id == assignment_id)
+            select(ScenarioPromptDB).where(ScenarioPromptDB.id == str(assignment_id))
         )
         assignment = result.scalar_one_or_none()
 
@@ -531,7 +532,7 @@ class PromptTemplateService:
         from common.db.models import ScenarioPrompt as ScenarioPromptDB
 
         result = await self.db.execute(
-            select(ScenarioPromptDB).where(ScenarioPromptDB.id == assignment_id)
+            select(ScenarioPromptDB).where(ScenarioPromptDB.id == str(assignment_id))
         )
         assignment = result.scalar_one_or_none()
 
@@ -562,7 +563,7 @@ class PromptTemplateService:
         from common.db.models import ScenarioPrompt as ScenarioPromptDB
 
         result = await self.db.execute(
-            select(ScenarioPromptDB).where(ScenarioPromptDB.id == assignment_id)
+            select(ScenarioPromptDB).where(ScenarioPromptDB.id == str(assignment_id))
         )
         assignment = result.scalar_one_or_none()
 
@@ -572,7 +573,7 @@ class PromptTemplateService:
         if is_active is not None:
             assignment.is_active = is_active
         if template_id is not None:
-            assignment.template_id = template_id
+            assignment.template_id = str(template_id)
 
         await self.db.commit()
         await self.db.refresh(assignment)

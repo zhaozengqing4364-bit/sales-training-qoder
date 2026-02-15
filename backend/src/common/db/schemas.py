@@ -2,26 +2,27 @@
 Pydantic Schemas for API validation
 Generated from data-model.md and contracts/openapi.yaml
 """
-from typing import Any
+
 from datetime import datetime
-from enum import Enum
+from enum import StrEnum
+from typing import Any, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
 
-class ScenarioType(str, Enum):
+class ScenarioType(StrEnum):
     PRESENTATION = "presentation"
     SALES = "sales"
 
 
-class PresentationStatus(str, Enum):
+class PresentationStatus(StrEnum):
     PROCESSING = "processing"
     READY = "ready"
     FAILED = "failed"
 
 
-class SessionStatus(str, Enum):
+class SessionStatus(StrEnum):
     PREPARING = "preparing"
     IN_PROGRESS = "in_progress"
     PAUSED = "paused"
@@ -29,14 +30,14 @@ class SessionStatus(str, Enum):
     SCORING = "scoring"
 
 
-class SessionLifecycleAction(str, Enum):
+class SessionLifecycleAction(StrEnum):
     START = "start"
     PAUSE = "pause"
     RESUME = "resume"
     END = "end"
 
 
-class InterruptionType(str, Enum):
+class InterruptionType(StrEnum):
     FORBIDDEN_WORD = "forbidden_word"
     MISSING_POINT = "missing_point"
     VAGUE_RESPONSE = "vague_response"
@@ -75,7 +76,7 @@ class AuthResponse(BaseModel):
 
 # ========== Scenario Schemas ==========
 class ScenarioBase(BaseModel):
-    scenario_type: ScenarioType
+    scenario_type: ScenarioType = ScenarioType.SALES
     name: str = Field(..., max_length=100)
     description: str | None = None
     persona_prompt: str | None = None  # For sales bot
@@ -110,7 +111,7 @@ class PresentationResponse(PresentationBase):
 class PresentationDetail(PresentationResponse):
     model_config = ConfigDict(from_attributes=True)
     file_url: str
-    pages: list['PageResponse'] = []
+    pages: list["PageResponse"] = []
 
 
 # ========== Page Schemas ==========
@@ -126,7 +127,7 @@ class PageResponse(PageBase):
     presentation_id: UUID
     extraction_confidence: float | None = None
     needs_manual_review: bool = False
-    talking_points: list['RequiredTalkingPointResponse'] = []
+    talking_points: list["RequiredTalkingPointResponse"] = []
 
 
 # ========== Required Talking Point Schemas ==========
@@ -177,8 +178,12 @@ class SessionCreate(SessionBase):
     # Agent Platform fields (R12: Session Management Enhancement)
     agent_id: UUID | None = None  # Optional Agent ID for enhanced sessions
     persona_id: UUID | None = None  # Optional Persona ID for enhanced sessions
-    voice_mode: str | None = Field(None, description="Voice mode override: legacy | stepfun_realtime")
-    runtime_profile_id: UUID | None = Field(None, description="Optional runtime profile override")
+    voice_mode: str | None = Field(
+        None, description="Voice mode override: legacy | stepfun_realtime"
+    )
+    runtime_profile_id: UUID | None = Field(
+        None, description="Optional runtime profile override"
+    )
 
 
 class SessionUpdate(BaseModel):
@@ -194,24 +199,28 @@ class SessionLifecycleResponse(BaseModel):
     session_id: UUID
     previous_status: SessionStatus
     status: SessionStatus
-    ai_state: str
+    ai_state: Literal["listening", "idle"]
     changed: bool
-    scenario_type: ScenarioType | None = None
+    scenario_type: ScenarioType
     start_time: datetime
     end_time: datetime | None = None
     total_duration_seconds: int | None = None
 
 
 class SessionResponse(BaseModel):
-    """Response for practice session - does not require scenario_type from model"""
+    """Response for practice session."""
+
     model_config = ConfigDict(from_attributes=True)
     session_id: UUID
     user_id: UUID
     scenario_id: UUID
-    scenario_type: ScenarioType | None = None  # Made optional for model compatibility
+    scenario_type: ScenarioType = ScenarioType.SALES
     presentation_id: UUID | None = None
+    agent_id: UUID | None = None
+    persona_id: UUID | None = None
     voice_mode: str | None = None
-    voice_runtime_profile_id: UUID | None = None
+    runtime_profile_id: UUID | None = None
+    voice_runtime_profile_id: UUID | None = Field(default=None, exclude=True)
     voice_policy_snapshot: dict[str, Any] | None = None
     voice_policy_snapshot_ref: "VoicePolicySnapshotReference | None" = None
     status: SessionStatus
@@ -225,7 +234,7 @@ class SessionDetail(SessionResponse):
     presentation: PresentationResponse | None = None
     interruption_count: int = 0
     total_duration_seconds: int | None = None
-    interruption_events: list['InterruptionEventResponse'] = []
+    interruption_events: list["InterruptionEventResponse"] = []
 
 
 # ========== Voice Policy Snapshot Schemas ==========
@@ -234,6 +243,8 @@ class VoicePolicySnapshotReference(BaseModel):
 
     voice_mode: str | None = None
     runtime_profile_id: str | None = None
+    instruction_contract_hash: str | None = None
+    network_access_mode: str | None = None
     tool_policy: dict[str, Any] = Field(default_factory=dict)
     knowledge_base_ids: list[str] = Field(default_factory=list)
     source: dict[str, str] = Field(default_factory=dict)
@@ -269,6 +280,7 @@ class SessionReport(BaseModel):
 # ========== Enhanced Session Report Schema (R12) ==========
 class DimensionScore(BaseModel):
     """Score for a single dimension"""
+
     name: str
     score: float = Field(..., ge=0, le=100)
     weight: float = Field(default=1.0, ge=0, le=1)
@@ -276,6 +288,7 @@ class DimensionScore(BaseModel):
 
 class SessionHighlight(BaseModel):
     """Highlight moment from session"""
+
     message_id: str
     turn_number: int
     highlight_type: str  # good|bad|neutral
@@ -285,6 +298,7 @@ class SessionHighlight(BaseModel):
 
 class EnhancedSessionReport(BaseModel):
     """Enhanced session report with dimension scores - R12.3"""
+
     session_id: UUID
     overall_score: float = Field(..., ge=0, le=100)
     dimension_scores: list[DimensionScore] = Field(default_factory=list)
@@ -302,6 +316,7 @@ class EnhancedSessionReport(BaseModel):
 # ========== Session Stats Schema (R12.4) ==========
 class SessionStats(BaseModel):
     """User session statistics"""
+
     total_sessions: int = 0
     weekly_sessions: int = 0
     average_score: float = 0.0

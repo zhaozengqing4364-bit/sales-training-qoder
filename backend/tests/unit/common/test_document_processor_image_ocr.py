@@ -2,9 +2,12 @@ from __future__ import annotations
 
 import sys
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import pytest
 
+import common.knowledge.processor as processor_module
+from common.knowledge.models import DocumentStatus
 from common.knowledge.processor import DocumentProcessor
 
 
@@ -99,3 +102,46 @@ async def test_read_docx_combines_paragraph_text_and_image_ocr(monkeypatch, tmp_
     assert content is not None
     assert "文档段落A" in content
     assert "文档图片OCR内容" in content
+
+
+@pytest.mark.asyncio
+async def test_process_document_fails_when_embedding_service_not_configured(
+    monkeypatch,
+):
+    processor = DocumentProcessor()
+    monkeypatch.setattr(
+        processor,
+        "_read_document",
+        AsyncMock(return_value="企业产品资料：A系列、B系列。"),
+    )
+    monkeypatch.setattr(
+        processor,
+        "_split_into_chunks",
+        lambda _content: [
+            {
+                "index": 0,
+                "content": "企业产品资料：A系列、B系列。",
+                "metadata": {"start_char": 0, "end_char": 15},
+            }
+        ],
+    )
+
+    embedding_service = SimpleNamespace(is_configured=False)
+    monkeypatch.setattr(
+        processor_module,
+        "get_embedding_service",
+        lambda: embedding_service,
+    )
+
+    result = await processor.process_document(
+        doc_id="doc-1",
+        file_path="/tmp/dummy.txt",
+        file_type="txt",
+        document_title="产品文档",
+        knowledge_base_id="kb-1",
+        vector_collection="kb_collection_1",
+    )
+
+    assert result["status"] == DocumentStatus.FAILED.value
+    assert result["chunk_count"] == 0
+    assert "[EMBEDDING_NOT_CONFIGURED]" in str(result["error_message"])

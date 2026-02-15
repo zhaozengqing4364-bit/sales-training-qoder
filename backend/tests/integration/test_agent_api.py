@@ -158,6 +158,19 @@ class TestAdminAgentAPI:
         assert "id" in data["data"]
         assert "created_at" in data["data"]
 
+    async def test_create_agent_rejects_unsupported_category(
+        self, async_client, auth_headers, sample_agent_data
+    ):
+        """Should reject unsupported agent categories."""
+        response = await async_client.post(
+            "/api/v1/admin/agents",
+            json={**sample_agent_data, "category": "customer_service"},
+            headers=auth_headers,
+        )
+
+        assert response.status_code == 400
+        assert "[AGENT_CATEGORY_RESTRICTED]" in response.text
+
     async def test_admin_routes_require_admin_role(
         self,
         async_client,
@@ -263,6 +276,26 @@ class TestAdminAgentAPI:
         data = response.json()
         assert data["success"] is True
         assert data["data"]["name"] == "Updated Name"
+
+    async def test_update_agent_rejects_unsupported_category(
+        self, async_client, auth_headers, sample_agent_data
+    ):
+        """Should reject unsupported category updates."""
+        create_response = await async_client.post(
+            "/api/v1/admin/agents",
+            json=sample_agent_data,
+            headers=auth_headers,
+        )
+        agent_id = create_response.json()["data"]["id"]
+
+        response = await async_client.put(
+            f"/api/v1/admin/agents/{agent_id}",
+            json={"category": "interview"},
+            headers=auth_headers,
+        )
+
+        assert response.status_code == 400
+        assert "[AGENT_CATEGORY_RESTRICTED]" in response.text
 
     async def test_update_agent_persists_across_sessions(
         self,

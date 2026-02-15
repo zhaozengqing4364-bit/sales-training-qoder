@@ -16,12 +16,67 @@ import {
     CheckCircle,
     Plus,
     Trash2,
-    Save,
     Loader2,
     Target,
     Ban
 } from "lucide-react";
 import Link from "next/link";
+
+function PresentationThumbnail({
+    presentationId,
+    pageNumber,
+    alt,
+}: {
+    presentationId: string;
+    pageNumber: number;
+    alt: string;
+}) {
+    const [thumbnailUrl, setThumbnailUrl] = useState<string | null>(null);
+
+    useEffect(() => {
+        let active = true;
+        let localObjectUrl: string | null = null;
+
+        const loadThumbnail = async () => {
+            try {
+                const blob = await api.presentations.getThumbnailBlob(
+                    presentationId,
+                    pageNumber,
+                );
+                if (!active) {
+                    return;
+                }
+                localObjectUrl = URL.createObjectURL(blob);
+                setThumbnailUrl(localObjectUrl);
+            } catch {
+                if (active) {
+                    setThumbnailUrl(null);
+                }
+            }
+        };
+
+        void loadThumbnail();
+
+        return () => {
+            active = false;
+            if (localObjectUrl) {
+                URL.revokeObjectURL(localObjectUrl);
+            }
+        };
+    }, [presentationId, pageNumber]);
+
+    if (!thumbnailUrl) {
+        return <Presentation className="w-8 h-8 text-slate-300" />;
+    }
+
+    return (
+        <img
+            src={thumbnailUrl}
+            alt={alt}
+            className="w-full h-full object-cover rounded-lg"
+        />
+    );
+}
 
 // Types
 interface PageDetail {
@@ -240,6 +295,8 @@ export default function PresentationDetailPage() {
         );
     }
 
+    const selectedPageDetail = presentation.pages?.find((page) => page.page_number === selectedPage);
+
     return (
         <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
             {/* Header */}
@@ -295,15 +352,11 @@ export default function PresentationDetailPage() {
                                     onClick={() => setSelectedPage(page.page_number)}
                                 >
                                     <div className="aspect-video bg-slate-100 rounded-lg mb-2 flex items-center justify-center">
-                                        {page.image_url ? (
-                                            <img
-                                                src={page.image_url}
-                                                alt={`Page ${page.page_number}`}
-                                                className="w-full h-full object-cover rounded-lg"
-                                            />
-                                        ) : (
-                                            <Presentation className="w-8 h-8 text-slate-300" />
-                                        )}
+                                        <PresentationThumbnail
+                                            presentationId={presentationId}
+                                            pageNumber={page.page_number}
+                                            alt={`Page ${page.page_number}`}
+                                        />
                                     </div>
                                     <p className="text-center text-sm font-medium text-slate-700">
                                         第 {page.page_number} 页
@@ -311,6 +364,26 @@ export default function PresentationDetailPage() {
                                 </div>
                             ))}
                         </div>
+                    </GlassCard>
+
+                    <GlassCard className="p-6">
+                        <h3 className="text-lg font-bold text-slate-900 mb-2">
+                            第 {selectedPage} 页内容预览
+                        </h3>
+                        <p className="text-sm text-slate-500 mb-4">
+                            基于后端解析结果展示当前页面的文本内容，可用于核对演练上下文。
+                        </p>
+                        {selectedPageDetail?.extracted_text ? (
+                            <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                                <p className="text-sm text-slate-700 whitespace-pre-wrap break-words leading-6">
+                                    {selectedPageDetail.extracted_text}
+                                </p>
+                            </div>
+                        ) : (
+                            <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">
+                                当前页面暂无可预览内容。请检查该页是否解析成功，或在后台补充要点配置。
+                            </div>
+                        )}
                     </GlassCard>
                 </TabsContent>
 

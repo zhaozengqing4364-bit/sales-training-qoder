@@ -10,7 +10,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { cn } from "@/lib/utils";
 import {
     TrendingUp, Filter, MoreHorizontal,
-    Calendar, CheckCircle2, Zap, BarChart3, ArrowRight, Headphones
+    Calendar, CheckCircle2, Zap, BarChart3, ArrowRight, Presentation
 } from "lucide-react";
 import Link from "next/link";
 import {
@@ -113,17 +113,17 @@ export default function HomePage() {
                                 </DialogHeader>
                                 <div className="space-y-4 py-4">
                                     <div className="flex gap-3">
-                                        <div className="mt-1 bg-amber-100 p-1 rounded-full h-fit"><Headphones className="w-3 h-3 text-amber-600" /></div>
+                                        <div className="mt-1 bg-violet-100 p-1 rounded-full h-fit"><Presentation className="w-3 h-3 text-violet-600" /></div>
                                         <div>
-                                            <div className="text-sm font-bold text-slate-900">新板块：客户服务训练</div>
-                                            <p className="text-xs text-slate-500">模拟高压投诉场景，提升危机处理能力。</p>
+                                            <div className="text-sm font-bold text-slate-900">PPT 长时演讲稳定性优化</div>
+                                            <p className="text-xs text-slate-500">长时间实时演练支持更稳定，减少中断与角色偏航。</p>
                                         </div>
                                     </div>
                                     <div className="flex gap-3">
                                         <div className="mt-1 bg-blue-100 p-1 rounded-full h-fit"><Zap className="w-3 h-3 text-blue-600" /></div>
                                         <div>
-                                            <div className="text-sm font-bold text-slate-900">新角色：谈判教练</div>
-                                            <p className="text-xs text-slate-500">练习薪资谈判与合同商议。</p>
+                                            <div className="text-sm font-bold text-slate-900">演讲策略配置简化</div>
+                                            <p className="text-xs text-slate-500">策略管理改为最简模式，关键参数更清晰。</p>
                                         </div>
                                     </div>
                                     <div className="flex gap-3">
@@ -136,7 +136,7 @@ export default function HomePage() {
                                 </div>
                                 <DialogFooter>
                                     <Button variant="ghost" onClick={() => setIsWeeklyStatsOpen(false)} className="rounded-full">稍后再说</Button>
-                                    <Button onClick={() => router.push('/training/customer-service')} className="rounded-full bg-slate-900 text-white px-6">立即体验</Button>
+                                    <Button onClick={() => router.push('/training/presentation')} className="rounded-full bg-slate-900 text-white px-6">立即体验</Button>
                                 </DialogFooter>
                             </DialogContent>
                         </Dialog>
@@ -319,7 +319,7 @@ export default function HomePage() {
                                                     <div className="flex-1 pl-4">
                                                         <div className="text-[10px] uppercase font-bold text-slate-400 mb-1 tracking-wider">趋势</div>
                                                         <div className={cn("text-sm font-bold flex items-center gap-1 text-emerald-600")}>
-                                                            {item.score_trend || "--"}
+                                                            --
                                                         </div>
                                                     </div>
                                                 </div>

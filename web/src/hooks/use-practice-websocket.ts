@@ -36,6 +36,7 @@ import { handleWebSocketMessage } from "./websocket/message-handlers";
 const MAX_RECONNECT_ATTEMPTS = 5;
 const MAX_LOCAL_BUFFER_SIZE = 200; // ~4 seconds of audio at 20ms chunks
 const INTERIM_TRANSCRIPT_THROTTLE_MS = 80;
+const MAX_CHAT_MESSAGES = 200;
 
 // v1-13: Binary frame type constants (must match backend)
 const BINARY_AUDIO_CHUNK = 0x01;
@@ -49,6 +50,10 @@ function deriveConnectionFlags(connectionState: ConnectionState): {
         isConnected: connectionState === "connected",
         isConnecting: connectionState === "connecting" || connectionState === "reconnecting",
     };
+}
+
+function maskWsUrlToken(url: string): string {
+    return url.replace(/([?&]token=)[^&]+/i, "$1***");
 }
 
 /** v1-13: Convert Int16Array PCM to Base64 string (used only during backpressure fallback). */
@@ -153,7 +158,17 @@ export function usePracticeWebSocket(options: UsePracticeWebSocketOptions) {
             message: text,
             timestamp: new Date().toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" }),
         };
-        setState(prev => ({ ...prev, ...extraState, messages: [...prev.messages, newMsg] }));
+        setState(prev => {
+            const nextMessages = [...prev.messages, newMsg];
+            return {
+                ...prev,
+                ...extraState,
+                messages:
+                    nextMessages.length > MAX_CHAT_MESSAGES
+                        ? nextMessages.slice(-MAX_CHAT_MESSAGES)
+                        : nextMessages,
+            };
+        });
     }, []);
 
     // ── Stream tracking (Critical Fix #2) ──
@@ -263,6 +278,10 @@ export function usePracticeWebSocket(options: UsePracticeWebSocketOptions) {
         if (state.sessionStatus !== "in_progress" || state.connectionState !== "connected") {
             return;
         }
+        debug.log("[PracticeWS] Send text", {
+            length: content.length,
+            preview: content.slice(0, 80),
+        });
         sendMessage("text", { text: content });
         const newMsg: ChatMessage = {
             id: `user-${Date.now()}`,
@@ -270,7 +289,16 @@ export function usePracticeWebSocket(options: UsePracticeWebSocketOptions) {
             message: content,
             timestamp: new Date().toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" }),
         };
-        setState(prev => ({ ...prev, messages: [...prev.messages, newMsg] }));
+        setState(prev => {
+            const nextMessages = [...prev.messages, newMsg];
+            return {
+                ...prev,
+                messages:
+                    nextMessages.length > MAX_CHAT_MESSAGES
+                        ? nextMessages.slice(-MAX_CHAT_MESSAGES)
+                        : nextMessages,
+            };
+        });
     }, [sendMessage, state.connectionState, state.sessionStatus]);
 
     /**
@@ -396,7 +424,17 @@ export function usePracticeWebSocket(options: UsePracticeWebSocketOptions) {
     const sendAudioEnd = useCallback(() => {
         sendMessage("audio_end", {});
         clearInterimTranscriptThrottle();
-        setState(prev => (prev.interimTranscript ? { ...prev, interimTranscript: "" } : prev));
+        setState(prev => {
+            const nextAiState = prev.sessionStatus === "in_progress" ? "thinking" : prev.aiState;
+            if (prev.interimTranscript === "" && prev.aiState === nextAiState) {
+                return prev;
+            }
+            return {
+                ...prev,
+                interimTranscript: "",
+                aiState: nextAiState,
+            };
+        });
     }, [sendMessage, clearInterimTranscriptThrottle]);
 
     const commitAudio = useCallback(() => {
@@ -408,6 +446,12 @@ export function usePracticeWebSocket(options: UsePracticeWebSocketOptions) {
     }, [sendMessage]);
 
     const sendControl = useCallback((action: "start" | "pause" | "resume" | "end") => {
+        debug.log("[PracticeWS] Send control", {
+            action,
+            sessionId,
+            scenarioType,
+            voiceMode,
+        });
         if (action === "start" || action === "resume") {
             setState(prev => ({
                 ...prev,
@@ -439,7 +483,16 @@ export function usePracticeWebSocket(options: UsePracticeWebSocketOptions) {
         }
 
         sendMessage("control", { action });
-    }, [audioQueueRef, clearInterimTranscriptThrottle, interruptStreamingPlayback, isPlayingRef, sendMessage]);
+    }, [
+        audioQueueRef,
+        clearInterimTranscriptThrottle,
+        interruptStreamingPlayback,
+        isPlayingRef,
+        scenarioType,
+        sendMessage,
+        sessionId,
+        voiceMode,
+    ]);
 
     // ── Message handler (delegates to extracted module) ──
     // NEW-10/11 Fix: Ref-based approach breaks circular dependency chain
@@ -453,6 +506,7 @@ export function usePracticeWebSocket(options: UsePracticeWebSocketOptions) {
             isBackpressureActiveRef, audioQueueRef, isPlayingRef,
             flushLocalAudioBuffer, scheduleInterimTranscriptUpdate,
             clearInterimTranscriptThrottle,
+            sendMessage,
         });
     }, [
         onMessage,
@@ -467,6 +521,7 @@ export function usePracticeWebSocket(options: UsePracticeWebSocketOptions) {
         isPlayingRef,
         scheduleInterimTranscriptUpdate,
         clearInterimTranscriptThrottle,
+        sendMessage,
     ]);
 
     // Keep ref in sync with latest handleMessage closure
@@ -508,10 +563,24 @@ export function usePracticeWebSocket(options: UsePracticeWebSocketOptions) {
         applyConnectionState(connectingState, null);
 
         const url = buildWsUrl();
+        debug.log("[PracticeWS] Connecting", {
+            sessionId,
+            scenarioType,
+            voiceMode,
+            agentId: agentId || null,
+            personaId: personaId || null,
+            reconnectAttempt: reconnectAttempts.current,
+            url: maskWsUrlToken(url),
+            debugEnabled: debug.enabled(),
+        });
         const ws = new WebSocket(url);
 
         ws.onopen = () => {
-            debug.log("WebSocket connected");
+            debug.log("[PracticeWS] WebSocket connected", {
+                sessionId,
+                scenarioType,
+                voiceMode,
+            });
             reconnectAttempts.current = 0;
             isConnectingRef.current = false;
             applyConnectionState("connected", null);
@@ -523,6 +592,11 @@ export function usePracticeWebSocket(options: UsePracticeWebSocketOptions) {
         };
 
         ws.onerror = () => {
+            debug.warn("[PracticeWS] WebSocket error event (details usually unavailable, wait for onclose)", {
+                sessionId,
+                readyState: ws.readyState,
+                reconnectAttempt: reconnectAttempts.current,
+            });
             isConnectingRef.current = false;
             if (ws.readyState !== WebSocket.CLOSED) {
                 setState(prev => ({
@@ -535,7 +609,6 @@ export function usePracticeWebSocket(options: UsePracticeWebSocketOptions) {
         };
 
         ws.onclose = (event) => {
-            debug.log("WebSocket closed:", event.code, event.reason);
             if (wsRef.current === ws) {
                 wsRef.current = null;
             }
@@ -550,12 +623,21 @@ export function usePracticeWebSocket(options: UsePracticeWebSocketOptions) {
                 && event.code !== 1000
                 && event.code !== 1001;
 
+            debug.warn("[PracticeWS] WebSocket closed", {
+                sessionId,
+                code: event.code,
+                reason: event.reason,
+                wasClean: event.wasClean,
+                shouldRetry,
+                reconnectAttempt: reconnectAttempts.current,
+            });
+
             if (shouldRetry) {
                 resetRealtimeRuntimeState();
                 applyConnectionState("reconnecting", "连接中断，正在重连...");
                 const delay = Math.min(1000 * Math.pow(2, reconnectAttempts.current), 30000);
                 reconnectAttempts.current++;
-                debug.log(`Reconnecting in ${delay}ms (attempt ${reconnectAttempts.current})`);
+                debug.log(`[PracticeWS] Reconnecting in ${delay}ms (attempt ${reconnectAttempts.current})`);
                 setTimeout(() => {
                     if (!manualDisconnectRef.current) {
                         connect();
@@ -569,10 +651,20 @@ export function usePracticeWebSocket(options: UsePracticeWebSocketOptions) {
         };
 
         wsRef.current = ws;
-    }, [applyConnectionState, buildWsUrl, resetRealtimeRuntimeState]);
+    }, [
+        agentId,
+        applyConnectionState,
+        buildWsUrl,
+        personaId,
+        resetRealtimeRuntimeState,
+        scenarioType,
+        sessionId,
+        voiceMode,
+    ]);
 
     const disconnect = useCallback(() => {
         manualDisconnectRef.current = true;
+        debug.log("[PracticeWS] Disconnect requested by user", { sessionId });
         isConnectingRef.current = false;
         reconnectAttempts.current = 0;
         clearInterimTranscriptThrottle();
@@ -582,7 +674,7 @@ export function usePracticeWebSocket(options: UsePracticeWebSocketOptions) {
             wsRef.current.close(1000, "User disconnected");
             wsRef.current = null;
         }
-    }, [applyConnectionState, clearInterimTranscriptThrottle, resetRealtimeRuntimeState]);
+    }, [applyConnectionState, clearInterimTranscriptThrottle, resetRealtimeRuntimeState, sessionId]);
 
     // ── Interrupt ──
     /**

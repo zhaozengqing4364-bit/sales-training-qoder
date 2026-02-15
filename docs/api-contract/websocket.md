@@ -175,6 +175,24 @@ PPT 翻页
 }
 ```
 
+### interrupt (✅ 已实现)
+
+显式中断当前 AI 播放/思考（推荐在用户抢话前发送）。
+
+```json
+{
+  "type": "interrupt",
+  "timestamp": "2025-01-11T10:00:00Z",
+  "data": {
+    "reason": "user_speaking" | "manual"
+  }
+}
+```
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| reason | string | ❌ | 中断原因，默认 `manual` |
+
 ---
 
 ## 音频传输协议
@@ -298,10 +316,54 @@ AI 反馈/打断
   "timestamp": "2025-01-11T10:00:00Z",
   "trace_id": "abc123",
   "data": {
-    "interruption": true,
-    "reason": "forbidden_word" | "missing_point" | "vague_response",
-    "trigger": "大概",
-    "message": "您使用了模糊词'大概'，建议给出具体数据"
+    "feedback_type": "forbidden_word" | "missing_point" | "vague_response",
+    "message": "您使用了模糊词'大概'，建议给出具体数据",
+    "suggestions": [],
+    "current_page": 2
+  }
+}
+```
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| feedback_type | string | ✅ | 反馈类型 |
+| message | string | ✅ | 反馈文案 |
+| suggestions | string[] | ❌ | 备选建议 |
+| current_page | number | ❌ | 当前页号 |
+
+### slide_update (✅ 已实现)
+
+PPT 页上下文更新（翻页或重连恢复时发送）。
+
+```json
+{
+  "type": "slide_update",
+  "timestamp": "2025-01-11T10:00:00Z",
+  "trace_id": "abc123",
+  "data": {
+    "current_page": 2,
+    "page_number": 2,
+    "total_pages": 10,
+    "content": "本页提纲",
+    "page_content": "本页提纲"
+  }
+}
+```
+
+### point_covered (✅ 已实现)
+
+页面必讲点覆盖度更新。
+
+```json
+{
+  "type": "point_covered",
+  "timestamp": "2025-01-11T10:00:00Z",
+  "trace_id": "abc123",
+  "data": {
+    "point_id": "session-1:1",
+    "is_covered": true,
+    "content": "客户痛点",
+    "current_page": 2
   }
 }
 ```
@@ -360,7 +422,6 @@ AI 反馈/打断
   "type": "interrupted",
   "timestamp": "2025-01-11T10:00:00Z",
   "trace_id": "abc123",
-  "stream_id": "stream-uuid-001",
   "data": {
     "reason": "user_speaking",
     "session_status": "in_progress",

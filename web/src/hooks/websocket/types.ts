@@ -67,8 +67,11 @@ export interface ScoreUpdate {
 
 export interface SlideUpdate {
     current_page: number;
-    total_pages: number;
+    page_number?: number;
+    total_pages: number | null;
     content?: string;
+    page_content?: string;
+    image_url?: string;
 }
 
 export interface PointCovered {

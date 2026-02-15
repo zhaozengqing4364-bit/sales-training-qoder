@@ -1,6 +1,7 @@
 """
 Unit tests for VoiceRuntimePolicyService.
 """
+
 from __future__ import annotations
 
 import uuid
@@ -81,12 +82,19 @@ async def test_resolve_effective_policy_precedence(test_db: AsyncSession):
     assert effective["voice_mode"] == "legacy"
     assert effective["model_name"] == "step-audio-2"
     assert set(effective["knowledge_base_ids"]) == {"kb_agent_1", "kb_persona_1"}
-    assert effective["tool_policy"]["enable_web_search"] is True
+    assert effective["tool_policy"]["enable_web_search"] is False
+    assert effective["tool_policy"]["retrieval_priority"] == "kb_only"
+    assert effective["source"]["tool_policy_enforcement"] == "kb_internal_only"
+    assert effective["tool_policy"]["network_access_mode"] == "off"
+    assert isinstance(effective["instruction_contract_hash"], str)
+    assert effective["instruction_contract_hash"]
     assert "角色设定" in effective["instructions"]
 
 
 @pytest.mark.asyncio
-async def test_resolve_effective_policy_disables_retrieval_without_kb(test_db: AsyncSession):
+async def test_resolve_effective_policy_disables_retrieval_without_kb(
+    test_db: AsyncSession,
+):
     """Internal retrieval should auto-disable when no knowledge base is bound."""
     profile = VoiceRuntimeProfile(
         id=str(uuid.uuid4()),
@@ -107,10 +115,14 @@ async def test_resolve_effective_policy_disables_retrieval_without_kb(test_db: A
 
     assert effective["knowledge_base_ids"] == []
     assert effective["tool_policy"]["enable_internal_retrieval"] is False
+    assert effective["tool_policy"]["enable_web_search"] is False
+    assert effective["source"]["tool_policy_enforcement"] == "no_kb_no_web"
 
 
 @pytest.mark.asyncio
-async def test_resolve_effective_policy_kb_only_disables_web_search(test_db: AsyncSession):
+async def test_resolve_effective_policy_kb_only_disables_web_search(
+    test_db: AsyncSession,
+):
     """KB-only retrieval priority should enforce internal retrieval and disable web search."""
     agent = Agent(
         id=str(uuid.uuid4()),
@@ -148,7 +160,49 @@ async def test_resolve_effective_policy_kb_only_disables_web_search(test_db: Asy
 
 
 @pytest.mark.asyncio
-async def test_resolve_effective_policy_contains_snapshot_metadata(test_db: AsyncSession):
+async def test_resolve_effective_policy_disables_web_search_when_kb_bound_even_if_internal_retrieval_disabled(
+    test_db: AsyncSession,
+):
+    """When KB is bound, policy should always force KB-only internal retrieval."""
+    agent = Agent(
+        id=str(uuid.uuid4()),
+        name="联网禁用测试智能体",
+        description="测试 KB 绑定时禁用联网",
+        category="sales",
+        status="published",
+        default_knowledge_base_ids=["kb_enterprise_1"],
+    )
+    profile = VoiceRuntimeProfile(
+        id=str(uuid.uuid4()),
+        name="冲突策略档位",
+        is_default=True,
+        is_active=True,
+        voice_mode="stepfun_realtime",
+        model_name="step-audio-2",
+        voice_name="qingchunshaonv",
+        temperature=0.7,
+        tool_policy={
+            "enable_internal_retrieval": False,
+            "enable_web_search": True,
+            "retrieval_priority": "web_first",
+        },
+    )
+    test_db.add_all([agent, profile])
+    await test_db.commit()
+
+    service = VoiceRuntimePolicyService(test_db)
+    effective = await service.resolve_effective_policy(agent_id=agent.id)
+
+    assert effective["tool_policy"]["enable_internal_retrieval"] is True
+    assert effective["tool_policy"]["enable_web_search"] is False
+    assert effective["tool_policy"]["retrieval_priority"] == "kb_only"
+    assert effective["source"]["tool_policy_enforcement"] == "kb_internal_only"
+
+
+@pytest.mark.asyncio
+async def test_resolve_effective_policy_contains_snapshot_metadata(
+    test_db: AsyncSession,
+):
     """Resolved policy should always include snapshot baseline metadata fields."""
     profile = VoiceRuntimeProfile(
         id=str(uuid.uuid4()),
@@ -169,12 +223,49 @@ async def test_resolve_effective_policy_contains_snapshot_metadata(test_db: Asyn
     assert effective["voice_mode"] == "legacy"
     assert effective["runtime_profile_id"] == profile.id
     assert isinstance(effective["tool_policy"], dict)
+    assert effective["tool_policy"]["network_access_mode"] == "off"
     assert isinstance(effective["knowledge_base_ids"], list)
     assert isinstance(effective["source"], dict)
     assert effective["source"].get("runtime_profile") == "system_default"
     assert "resolved_at" in effective
+    assert isinstance(effective.get("instruction_contract_hash"), str)
     resolved_at = datetime.fromisoformat(str(effective["resolved_at"]))
     assert resolved_at.year >= 2025
+
+
+@pytest.mark.asyncio
+async def test_resolve_effective_policy_allows_controlled_web_search_without_kb_when_enabled(
+    test_db: AsyncSession,
+):
+    """Controlled mode can allow web search without KB when explicitly enabled."""
+    profile = VoiceRuntimeProfile(
+        id=str(uuid.uuid4()),
+        name="联网受控档位",
+        is_default=True,
+        is_active=True,
+        voice_mode="stepfun_realtime",
+        model_name="step-audio-2",
+        voice_name="qingchunshaonv",
+        temperature=0.7,
+        tool_policy={
+            "enable_web_search": True,
+            "enable_internal_retrieval": False,
+            "network_access_mode": "controlled",
+            "allow_web_search_without_kb": True,
+            "retrieval_priority": "web_first",
+        },
+    )
+    test_db.add(profile)
+    await test_db.commit()
+
+    service = VoiceRuntimePolicyService(test_db)
+    effective = await service.resolve_effective_policy()
+
+    assert effective["knowledge_base_ids"] == []
+    assert effective["tool_policy"]["network_access_mode"] == "controlled"
+    assert effective["tool_policy"]["allow_web_search_without_kb"] is True
+    assert effective["tool_policy"]["enable_web_search"] is True
+    assert effective["tool_policy"]["enable_internal_retrieval"] is False
 
 
 @pytest.mark.asyncio
@@ -210,6 +301,8 @@ async def test_create_profile_should_switch_default_flag(test_db: AsyncSession):
 
     assert created["is_default"] is True
 
-    result = await test_db.execute(select(VoiceRuntimeProfile).where(VoiceRuntimeProfile.name == "旧默认"))
+    result = await test_db.execute(
+        select(VoiceRuntimeProfile).where(VoiceRuntimeProfile.name == "旧默认")
+    )
     old_profile = result.scalar_one()
     assert old_profile.is_default is False

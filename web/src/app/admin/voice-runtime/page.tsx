@@ -11,6 +11,8 @@ import { Loader2, Plus, Save, Trash2, RefreshCw, Sparkles } from "lucide-react";
 
 type VoiceMode = "legacy" | "stepfun_realtime";
 type RetrievalPriority = "kb_only" | "kb_first" | "web_first" | "balanced";
+type NetworkAccessMode = "off" | "controlled";
+type EnforcementLevel = "strict" | "best_effort";
 
 interface RuntimeProfile {
     id: string;
@@ -37,6 +39,9 @@ interface RuntimeProfile {
         retrieval_similarity_threshold?: number;
         strict_instruction_following?: boolean;
         require_grounding?: boolean;
+        network_access_mode?: NetworkAccessMode;
+        enforcement_level?: EnforcementLevel;
+        allow_web_search_without_kb?: boolean;
     };
 }
 
@@ -64,6 +69,9 @@ const EMPTY_FORM: Omit<RuntimeProfile, "id"> = {
         retrieval_similarity_threshold: 0.65,
         strict_instruction_following: true,
         require_grounding: true,
+        network_access_mode: "off",
+        enforcement_level: "strict",
+        allow_web_search_without_kb: false,
     },
 };
 
@@ -364,6 +372,63 @@ export default function VoiceRuntimePage() {
                                 <option value="kb_first">知识库优先</option>
                                 <option value="web_first">联网优先</option>
                                 <option value="balanced">均衡模式</option>
+                            </select>
+                        </div>
+                        <div className="space-y-2">
+                            <label className="text-xs font-bold text-slate-500 uppercase">网络访问模式</label>
+                            <select
+                                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                                value={form.tool_policy.network_access_mode || "off"}
+                                onChange={(event) =>
+                                    setForm((prev) => ({
+                                        ...prev,
+                                        tool_policy: {
+                                            ...prev.tool_policy,
+                                            network_access_mode: event.target.value as NetworkAccessMode,
+                                        },
+                                    }))
+                                }
+                            >
+                                <option value="off">禁止联网</option>
+                                <option value="controlled">受控联网</option>
+                            </select>
+                        </div>
+                        <div className="space-y-2">
+                            <label className="text-xs font-bold text-slate-500 uppercase">执行级别</label>
+                            <select
+                                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                                value={form.tool_policy.enforcement_level || "strict"}
+                                onChange={(event) =>
+                                    setForm((prev) => ({
+                                        ...prev,
+                                        tool_policy: {
+                                            ...prev.tool_policy,
+                                            enforcement_level: event.target.value as EnforcementLevel,
+                                        },
+                                    }))
+                                }
+                            >
+                                <option value="strict">严格</option>
+                                <option value="best_effort">尽力而为</option>
+                            </select>
+                        </div>
+                        <div className="space-y-2 md:col-span-2">
+                            <label className="text-xs font-bold text-slate-500 uppercase">无知识库时允许联网</label>
+                            <select
+                                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                                value={form.tool_policy.allow_web_search_without_kb ? "true" : "false"}
+                                onChange={(event) =>
+                                    setForm((prev) => ({
+                                        ...prev,
+                                        tool_policy: {
+                                            ...prev.tool_policy,
+                                            allow_web_search_without_kb: event.target.value === "true",
+                                        },
+                                    }))
+                                }
+                            >
+                                <option value="false">否</option>
+                                <option value="true">是</option>
                             </select>
                         </div>
                         <div className="space-y-2 md:col-span-2">

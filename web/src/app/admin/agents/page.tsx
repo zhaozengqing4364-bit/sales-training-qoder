@@ -232,8 +232,6 @@ export default function AgentsPage() {
                                     >
                                         <option value="sales">销售</option>
                                         <option value="presentation">演讲</option>
-                                        <option value="interview">面试</option>
-                                        <option value="customer_service">客服</option>
                                     </select>
                                 </div>
                                 <div className="space-y-2">

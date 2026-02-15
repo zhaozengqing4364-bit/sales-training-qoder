@@ -1,6 +1,7 @@
 """
 Utilities for projecting immutable voice policy snapshot references.
 """
+
 from __future__ import annotations
 
 from typing import Any
@@ -16,6 +17,8 @@ def build_voice_policy_snapshot_ref_payload(snapshot: Any) -> dict[str, Any] | N
     reference: dict[str, Any] = {
         "voice_mode": snapshot.get("voice_mode"),
         "runtime_profile_id": snapshot.get("runtime_profile_id"),
+        "instruction_contract_hash": snapshot.get("instruction_contract_hash"),
+        "network_access_mode": snapshot.get("network_access_mode"),
         "resolved_at": snapshot.get("resolved_at"),
     }
 
@@ -24,7 +27,9 @@ def build_voice_policy_snapshot_ref_payload(snapshot: Any) -> dict[str, Any] | N
 
     knowledge_base_ids = snapshot.get("knowledge_base_ids")
     if isinstance(knowledge_base_ids, list):
-        reference["knowledge_base_ids"] = [str(item) for item in knowledge_base_ids if item is not None]
+        reference["knowledge_base_ids"] = [
+            str(item) for item in knowledge_base_ids if item is not None
+        ]
     else:
         reference["knowledge_base_ids"] = []
 
@@ -41,7 +46,9 @@ def build_voice_policy_snapshot_ref_payload(snapshot: Any) -> dict[str, Any] | N
     return reference
 
 
-def build_voice_policy_snapshot_ref(snapshot: Any) -> VoicePolicySnapshotReference | None:
+def build_voice_policy_snapshot_ref(
+    snapshot: Any,
+) -> VoicePolicySnapshotReference | None:
     """Build typed snapshot reference model used by practice session responses."""
     payload = build_voice_policy_snapshot_ref_payload(snapshot)
     if payload is None:

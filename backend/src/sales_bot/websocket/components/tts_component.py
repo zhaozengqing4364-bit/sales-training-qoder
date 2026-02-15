@@ -9,8 +9,9 @@ Handles all TTS response generation:
 
 import asyncio
 import base64
-from datetime import datetime, timezone
-from typing import Any, Callable
+from collections.abc import Callable
+from datetime import UTC, datetime
+from typing import Any
 
 from fastapi import WebSocket
 
@@ -54,40 +55,77 @@ class TTSComponent:
         request_id: int,
     ) -> None:
         """
-        Send single-shot TTS audio response.
+        Send TTS response.
 
-        Critical Fix #2: Includes stream_id and request_id to prevent message ordering issues.
-        P1-12: Creates a per-call Communicate instance instead of mutating global singleton.
+        Priority:
+        1) Stream via service (`tts_chunk`) for lower latency
+        2) Fallback to aggregated single-shot (`tts_audio`)
+        3) Browser TTS fallback
         """
-        params = self._get_tts_params()
+        effective_stream_id = stream_id or f"tts-{request_id}"
+
+        # Prefer service-level streaming path
+        if hasattr(self.tts_service, "synthesize_streaming"):
+            await self.send_response_streaming(
+                text=text,
+                request_id=request_id,
+                stream_id=effective_stream_id,
+                websocket=websocket,
+                manager=manager,
+                trace_id=trace_id,
+                is_interrupted_fn=lambda: False,
+                current_stream_id_fn=lambda: effective_stream_id,
+            )
+            return
 
         try:
-            import edge_tts
+            synthesize = getattr(self.tts_service, "synthesize", None)
+            if not callable(synthesize):
+                raise RuntimeError("TTS service does not support synthesize")
 
-            communicate = edge_tts.Communicate(
-                text,
-                params["voice"],
-                rate=params["rate"],
-                volume=params["volume"],
-                pitch=params["pitch"],
-            )
-            audio_chunks: list[bytes] = []
-            async for chunk in communicate.stream():
-                if chunk["type"] == "audio":
-                    audio_chunks.append(chunk["data"])
+            result = await synthesize(text)
+            if not result.is_success:
+                logger.warning(f"TTS synthesize failed: {result.fallback}")
+                await self.send_fallback(
+                    text,
+                    websocket,
+                    manager,
+                    trace_id,
+                    effective_stream_id,
+                    request_id,
+                )
+                return
 
-            if audio_chunks:
-                audio_data = b"".join(audio_chunks)
+            audio_stream = result.value
+            binary_chunks: list[bytes] = []
+            string_chunks: list[str] = []
+            async for chunk in audio_stream:
+                if isinstance(chunk, bytes):
+                    binary_chunks.append(chunk)
+                elif isinstance(chunk, str):
+                    string_chunks.append(chunk)
+
+            if binary_chunks:
+                audio_data = b"".join(binary_chunks)
                 audio_base64 = base64.b64encode(audio_data).decode("utf-8")
-                duration_ms = int(len(audio_data) / 2) if audio_data else len(text) * 100
+                duration_ms = (
+                    int(len(audio_data) / 2) if audio_data else len(text) * 100
+                )
+            elif string_chunks:
+                audio_base64 = "".join(string_chunks)
+                duration_ms = len(text) * 100
+            else:
+                audio_base64 = ""
+                duration_ms = len(text) * 100
 
+            if audio_base64:
                 await manager.send_json(
                     websocket,
                     {
                         "type": "tts_audio",
-                        "timestamp": datetime.now(timezone.utc).isoformat(),
+                        "timestamp": datetime.now(UTC).isoformat(),
                         "trace_id": trace_id,
-                        "stream_id": stream_id,
+                        "stream_id": effective_stream_id,
                         "request_id": request_id,
                         "data": {
                             "text": text,
@@ -98,11 +136,25 @@ class TTSComponent:
                 )
             else:
                 logger.warning("TTS produced no audio chunks")
-                await self.send_fallback(text, websocket, manager, trace_id, stream_id, request_id)
+                await self.send_fallback(
+                    text,
+                    websocket,
+                    manager,
+                    trace_id,
+                    effective_stream_id,
+                    request_id,
+                )
 
         except (ConnectionError, OSError, RuntimeError, ValueError) as e:
             logger.error(f"TTS error: {str(e)}", exc_info=True)
-            await self.send_fallback(text, websocket, manager, trace_id, stream_id, request_id)
+            await self.send_fallback(
+                text,
+                websocket,
+                manager,
+                trace_id,
+                effective_stream_id,
+                request_id,
+            )
 
     async def send_response_streaming(
         self,
@@ -146,7 +198,9 @@ class TTSComponent:
                 raise asyncio.CancelledError("TTS stream expired")
 
             duration_ms = len(audio_data) // 16 if audio_data else 0
-            audio_base64 = base64.b64encode(audio_data).decode("utf-8") if audio_data else ""
+            audio_base64 = (
+                base64.b64encode(audio_data).decode("utf-8") if audio_data else ""
+            )
 
             message_data: dict[str, Any] = {
                 "chunk_index": chunk_index,
@@ -162,7 +216,7 @@ class TTSComponent:
                 websocket,
                 {
                     "type": "tts_chunk",
-                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "timestamp": datetime.now(UTC).isoformat(),
                     "trace_id": trace_id,
                     "stream_id": stream_id,
                     "request_id": request_id,
@@ -187,14 +241,18 @@ class TTSComponent:
                 logger.info(f"[TTS] Streaming complete for stream {stream_id}")
             else:
                 logger.warning(f"[TTS] Streaming failed: {result.fallback}")
-                await self.send_fallback(text, websocket, manager, trace_id, stream_id, request_id)
+                await self.send_fallback(
+                    text, websocket, manager, trace_id, stream_id, request_id
+                )
 
         except asyncio.CancelledError:
             logger.info(f"[TTS] Stream {stream_id} task was cancelled")
             raise
         except (ConnectionError, OSError, RuntimeError, ValueError) as e:
             logger.error(f"[TTS] Streaming error: {str(e)}", exc_info=True)
-            await self.send_fallback(text, websocket, manager, trace_id, stream_id, request_id)
+            await self.send_fallback(
+                text, websocket, manager, trace_id, stream_id, request_id
+            )
 
     async def send_fallback(
         self,
@@ -210,7 +268,7 @@ class TTSComponent:
             websocket,
             {
                 "type": "tts_audio",
-                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "timestamp": datetime.now(UTC).isoformat(),
                 "trace_id": trace_id,
                 "stream_id": stream_id,
                 "request_id": request_id,

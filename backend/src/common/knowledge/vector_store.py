@@ -159,6 +159,7 @@ class KnowledgeVectorStore:
         top_k: int = 3,
         similarity_threshold: float = 0.7,
         document_ids: list[str] | None = None,
+        metadata_filter: dict[str, Any] | None = None,
     ) -> Result[list[dict[str, Any]]]:
         """
         Search for similar chunks.
@@ -179,12 +180,25 @@ class KnowledgeVectorStore:
 
         try:
             # Build where clause
-            where = None
+            where_clauses: list[dict[str, Any]] = []
             if document_ids:
                 if len(document_ids) == 1:
-                    where = {"document_id": document_ids[0]}
+                    where_clauses.append({"document_id": document_ids[0]})
                 else:
-                    where = {"document_id": {"$in": document_ids}}
+                    where_clauses.append({"document_id": {"$in": document_ids}})
+
+            if isinstance(metadata_filter, dict):
+                for key, expected in metadata_filter.items():
+                    if isinstance(expected, list):
+                        where_clauses.append({key: {"$in": [item for item in expected]}})
+                    else:
+                        where_clauses.append({key: expected})
+
+            where = None
+            if len(where_clauses) == 1:
+                where = where_clauses[0]
+            elif len(where_clauses) > 1:
+                where = {"$and": where_clauses}
 
             # Query
             results = collection.query(

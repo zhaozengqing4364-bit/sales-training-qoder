@@ -61,7 +61,9 @@ ALLOWED_FILE_TYPES = {"pdf", "docx", "txt", "md"}
 MAX_FILE_SIZE = 50 * 1024 * 1024  # 50MB
 
 
-async def _commit_or_raise(db: AsyncSession, detail: str = "[DATABASE_COMMIT_FAILED]") -> None:
+async def _commit_or_raise(
+    db: AsyncSession, detail: str = "[DATABASE_COMMIT_FAILED]"
+) -> None:
     """Commit current transaction and raise HTTPException on failure."""
     try:
         await db.commit()
@@ -367,7 +369,9 @@ async def upload_document(
     except Exception as e:
         await db.rollback()
         await storage.delete_document(kb_id, doc_id, file_ext)
-        logger.error(f"Document upload commit failed, rolled back and cleaned file: {e}")
+        logger.error(
+            f"Document upload commit failed, rolled back and cleaned file: {e}"
+        )
         raise HTTPException(status_code=500, detail="[DOCUMENT_SAVE_FAILED]") from e
 
     # Get database URL for background task
@@ -556,8 +560,10 @@ async def search_knowledge_base_admin(
         raise HTTPException(status_code=404, detail=result.fallback)
 
     search_results = _format_search_results(result.value or [])
-    payload = KnowledgeSearchResponse(results=search_results).model_dump()
-    payload["total"] = len(search_results)
+    payload = KnowledgeSearchResponse(
+        results=search_results,
+        total=len(search_results),
+    ).model_dump()
 
     return {
         "success": True,
@@ -585,8 +591,10 @@ async def search_knowledge_base_internal(
         raise HTTPException(status_code=404, detail=result.fallback)
 
     search_results = _format_search_results(result.value or [])
-    payload = KnowledgeSearchResponse(results=search_results).model_dump()
-    payload["total"] = len(search_results)
+    payload = KnowledgeSearchResponse(
+        results=search_results,
+        total=len(search_results),
+    ).model_dump()
 
     return {"success": True, "data": payload}
 

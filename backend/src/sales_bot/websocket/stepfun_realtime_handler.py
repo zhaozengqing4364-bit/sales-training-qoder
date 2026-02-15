@@ -6,6 +6,7 @@ StepFun Realtime API, enabling a dual-mode runtime:
 - legacy: existing ASR -> LLM -> TTS pipeline
 - stepfun_realtime: end-to-end realtime speech model
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -13,7 +14,6 @@ import base64
 import json
 import os
 import uuid
-from copy import deepcopy
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
@@ -28,8 +28,6 @@ from agent.capabilities.realtime_scoring import RealtimeScoringCapability
 from agent.capabilities.sales_stage import SalesStageCapability
 from agent.context import AgentContext
 from agent.models import Agent, Persona
-from common.conversation.models import ConversationMessage
-from common.conversation.storage import MessageStorageService
 from common.db.models import PracticeSession
 from common.db.session import AsyncSessionLocal
 from common.db.session_lifecycle import (
@@ -39,9 +37,65 @@ from common.db.session_lifecycle import (
 from common.knowledge.service import KnowledgeService
 from common.monitoring.logger import get_logger, get_trace_id
 from common.websocket.base_handler import BaseWebSocketHandler
+from sales_bot.services.voice_instruction_compiler import (
+    VoiceInstructionCompiler,
+    build_instruction_contract_hash,
+)
 from sales_bot.services.voice_runtime_policy import VoiceRuntimePolicyService
+from sales_bot.websocket.components.stepfun_event_payloads import (
+    build_asr_transcript_event,
+    build_error_event,
+    build_heartbeat_event,
+    build_stage_update_event,
+    build_status_event,
+)
+from sales_bot.websocket.components.stepfun_function_call_helpers import (
+    build_function_call_output_event,
+    build_unsupported_function_output,
+    decode_function_arguments,
+    is_json_object_payload,
+    parse_function_call_event,
+)
+from sales_bot.websocket.components.stepfun_helpers import (
+    ensure_knowledge_runtime_metrics,
+    extract_response_text,
+    extract_text_payload,
+    format_stage_name,
+)
+from sales_bot.websocket.components.stepfun_internal_knowledge_searcher import (
+    search_internal_knowledge,
+)
+from sales_bot.websocket.components.stepfun_knowledge_helpers import (
+    resolve_grounding_context_limits,
+)
+from sales_bot.websocket.components.stepfun_message_helpers import (
+    extract_analysis_patch_fields,
+    normalize_message_persistence_payload,
+    patch_existing_message_analysis,
+    save_stepfun_message,
+)
+from sales_bot.websocket.components.stepfun_runtime_metrics_helpers import (
+    apply_knowledge_runtime_metric,
+    persist_runtime_metrics_to_session,
+)
+from sales_bot.websocket.components.stepfun_tool_helpers import (
+    build_stepfun_tools_from_policy,
+)
+from sales_bot.websocket.components.stepfun_upstream_router import (
+    UpstreamEventRoute,
+    classify_upstream_event,
+    extract_error_message,
+    extract_function_call_from_item_created,
+    extract_response_done_function_calls,
+)
 
 logger = get_logger(__name__)
+
+PENDING_RESPONSE_FALLBACK_SECONDS = 0.8
+TRANSCRIPTION_WAIT_GRACE_SECONDS = 2.4
+GROUNDING_WAIT_GRACE_SECONDS = 8.0
+GROUNDING_WAIT_POLL_SECONDS = 0.05
+TRANSCRIPTION_DUPLICATE_WINDOW_SECONDS = 2.0
 
 
 @dataclass
@@ -63,7 +117,8 @@ class FunctionCallState:
 
     call_id: str
     name: str
-    arguments: str = ""
+    delta_arguments: str = ""
+    done_arguments: str = ""
 
 
 class StepFunRealtimeHandler(BaseWebSocketHandler):
@@ -90,14 +145,27 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
         self._executed_call_ids: set[str] = set()
 
         self._stepfun_api_key = os.getenv("STEPFUN_API_KEY", "")
-        self._stepfun_url = os.getenv("STEPFUN_REALTIME_URL", "wss://api.stepfun.com/v1/realtime")
+        self._stepfun_url = os.getenv(
+            "STEPFUN_REALTIME_URL", "wss://api.stepfun.com/v1/realtime"
+        )
         self._stepfun_model = os.getenv("STEPFUN_REALTIME_MODEL", "step-audio-2")
         self._stepfun_voice = os.getenv("STEPFUN_REALTIME_VOICE", "qingchunshaonv")
-        self._stepfun_temperature = float(os.getenv("STEPFUN_REALTIME_TEMPERATURE", "0.7"))
-        self._stepfun_input_audio_format = os.getenv("STEPFUN_REALTIME_INPUT_AUDIO_FORMAT", "pcm16")
-        self._stepfun_output_audio_format = os.getenv("STEPFUN_REALTIME_OUTPUT_AUDIO_FORMAT", "pcm16")
-        self._stepfun_output_sample_rate = int(os.getenv("STEPFUN_REALTIME_OUTPUT_SAMPLE_RATE", "24000"))
+        self._stepfun_temperature = float(
+            os.getenv("STEPFUN_REALTIME_TEMPERATURE", "0.7")
+        )
+        self._stepfun_input_audio_format = os.getenv(
+            "STEPFUN_REALTIME_INPUT_AUDIO_FORMAT", "pcm16"
+        )
+        self._stepfun_output_audio_format = os.getenv(
+            "STEPFUN_REALTIME_OUTPUT_AUDIO_FORMAT", "pcm16"
+        )
+        self._stepfun_output_sample_rate = int(
+            os.getenv("STEPFUN_REALTIME_OUTPUT_SAMPLE_RATE", "24000")
+        )
         self._stepfun_instructions = os.getenv("STEPFUN_REALTIME_INSTRUCTIONS", "")
+        self._instruction_contract_hash = build_instruction_contract_hash(
+            self._stepfun_instructions
+        )
         self.session_status = "preparing"
         self.ai_state = "idle"
         self.session_scenario_type = "sales"
@@ -106,7 +174,9 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
         self._persisted_message_keys: set[tuple[int, str, str]] = set()
         self._sales_stage_runtime_config: dict[str, Any] = {"enabled": True}
         self._sales_stage_enabled = True
-        self._sales_stage_capability = SalesStageCapability(self._sales_stage_runtime_config)
+        self._sales_stage_capability = SalesStageCapability(
+            self._sales_stage_runtime_config
+        )
         self._sales_stage_context: AgentContext | None = None
         self._sales_stage_lock = asyncio.Lock()
         self._last_emitted_stage: str | None = None
@@ -119,20 +189,42 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
 
         self._fuzzy_detection_runtime_config: dict[str, Any] = {"enabled": True}
         self._fuzzy_detection_enabled = True
-        self._fuzzy_detection_capability = FuzzyDetectionCapability(self._fuzzy_detection_runtime_config)
+        self._fuzzy_detection_capability = FuzzyDetectionCapability(
+            self._fuzzy_detection_runtime_config
+        )
 
         self._realtime_scoring_runtime_config: dict[str, Any] = {"enabled": True}
         self._realtime_scoring_enabled = True
-        self._realtime_scoring_capability = RealtimeScoringCapability(self._realtime_scoring_runtime_config)
+        self._realtime_scoring_capability = RealtimeScoringCapability(
+            self._realtime_scoring_runtime_config
+        )
         self._latest_score_snapshot: dict[str, Any] | None = None
 
         self._feedback_context: AgentContext | None = None
         self._pending_grounding_context: str = ""
         self._pending_response_after_commit = False
+        self._awaiting_transcription_after_commit = False
         self._pending_response_timeout_task: asyncio.Task | None = None
+        self._pending_response_generation = 0
         self._pending_response_lock = asyncio.Lock()
         self._pending_tool_followup_response = False
         self._has_uncommitted_audio = False
+        self._grounding_preparation_in_progress = False
+        self._last_final_transcript_text = ""
+        self._last_final_transcript_turn: int | None = None
+        self._last_final_transcript_at: float = 0.0
+        self._grounding_debug_log = os.getenv(
+            "STEPFUN_GROUNDING_DEBUG_LOG", "false"
+        ).lower() in {"1", "true", "yes", "on"}
+
+    def _log_grounding_debug(self, event: str, **fields: Any) -> None:
+        if not self._grounding_debug_log:
+            return
+        logger.info(
+            f"[GROUNDING_DEBUG] {event}",
+            session_id=self.session_id,
+            **fields,
+        )
 
     async def handle_connection(
         self,
@@ -147,7 +239,10 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
         await self.manager.connect(websocket, self.scenario, session_id)
 
         if not self._stepfun_api_key:
-            await self._send_error("[STEPFUN_KEY_MISSING]", "未配置 STEPFUN_API_KEY，无法使用 Realtime 模式")
+            await self._send_error(
+                "[STEPFUN_KEY_MISSING]",
+                "未配置 STEPFUN_API_KEY，无法使用 Realtime 模式",
+            )
             await self.close(code=4000, reason="STEPFUN_API_KEY missing")
             self.manager.disconnect(self.scenario, session_id)
             return
@@ -159,7 +254,9 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
             await self._sync_session_state()
             await self._connect_upstream()
             self._upstream_task = asyncio.create_task(self._receive_upstream_events())
-            initial_ai_state = "listening" if self.session_status == "in_progress" else "idle"
+            initial_ai_state = (
+                "listening" if self.session_status == "in_progress" else "idle"
+            )
             await self._send_status(initial_ai_state)
 
             while self.running:
@@ -178,7 +275,9 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
             logger.info(f"StepFun WS cancelled: session={session_id}")
         except (RuntimeError, ValueError, OSError) as e:
             logger.error(f"StepFun WS error: {e}", exc_info=True)
-            await self._send_error("[STEPFUN_CONNECTION_ERROR]", "Realtime 语音连接失败")
+            await self._send_error(
+                "[STEPFUN_CONNECTION_ERROR]", "Realtime 语音连接失败"
+            )
         finally:
             self.running = False
             await self._cancel_pending_response_after_commit()
@@ -196,19 +295,29 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
         self._effective_policy = {}
         async with AsyncSessionLocal() as db:
             session_result = await db.execute(
-                select(PracticeSession).where(PracticeSession.session_id == self.session_id)
+                select(PracticeSession).where(
+                    PracticeSession.session_id == self.session_id
+                )
             )
             session = session_result.scalar_one_or_none()
             if not session:
-                logger.warning(f"Session not found when loading voice policy: {self.session_id}")
+                logger.warning(
+                    f"Session not found when loading voice policy: {self.session_id}"
+                )
                 return
 
             self._session_agent_id = str(session.agent_id) if session.agent_id else None
-            self._session_persona_id = str(session.persona_id) if session.persona_id else None
+            self._session_persona_id = (
+                str(session.persona_id) if session.persona_id else None
+            )
             self._session_user_id = str(session.user_id) if session.user_id else None
             await self._refresh_sales_stage_runtime_config(db)
 
-            snapshot = session.voice_policy_snapshot if isinstance(session.voice_policy_snapshot, dict) else None
+            snapshot = (
+                session.voice_policy_snapshot
+                if isinstance(session.voice_policy_snapshot, dict)
+                else None
+            )
             if snapshot:
                 self._effective_policy = snapshot
             else:
@@ -220,18 +329,211 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
                     runtime_profile_override=session.voice_runtime_profile_id,
                 )
                 session.voice_policy_snapshot = self._effective_policy
-                session.voice_mode = self._effective_policy.get("voice_mode", session.voice_mode or "legacy")
-                session.voice_runtime_profile_id = self._effective_policy.get("runtime_profile_id")
+                session.voice_mode = self._effective_policy.get(
+                    "voice_mode", session.voice_mode or "legacy"
+                )
+                session.voice_runtime_profile_id = self._effective_policy.get(
+                    "runtime_profile_id"
+                )
                 await db.commit()
 
-            self._stepfun_model = str(self._effective_policy.get("model_name", self._stepfun_model))
-            self._stepfun_voice = str(self._effective_policy.get("voice_name", self._stepfun_voice))
-            self._stepfun_temperature = float(self._effective_policy.get("temperature", self._stepfun_temperature))
-            self._stepfun_input_audio_format = str(self._effective_policy.get("input_audio_format", self._stepfun_input_audio_format))
-            self._stepfun_output_audio_format = str(self._effective_policy.get("output_audio_format", self._stepfun_output_audio_format))
-            self._stepfun_output_sample_rate = int(self._effective_policy.get("output_sample_rate", self._stepfun_output_sample_rate))
-            self._stepfun_instructions = str(self._effective_policy.get("instructions", self._stepfun_instructions))
+            guardrail_applied = self._enforce_tool_policy_guardrails()
+            if guardrail_applied:
+                session.voice_policy_snapshot = self._effective_policy
+                await db.commit()
+
+            self._stepfun_model = str(
+                self._effective_policy.get("model_name", self._stepfun_model)
+            )
+            self._stepfun_voice = str(
+                self._effective_policy.get("voice_name", self._stepfun_voice)
+            )
+            self._stepfun_temperature = float(
+                self._effective_policy.get("temperature", self._stepfun_temperature)
+            )
+            self._stepfun_input_audio_format = str(
+                self._effective_policy.get(
+                    "input_audio_format", self._stepfun_input_audio_format
+                )
+            )
+            self._stepfun_output_audio_format = str(
+                self._effective_policy.get(
+                    "output_audio_format", self._stepfun_output_audio_format
+                )
+            )
+            self._stepfun_output_sample_rate = int(
+                self._effective_policy.get(
+                    "output_sample_rate", self._stepfun_output_sample_rate
+                )
+            )
+            self._stepfun_instructions = str(
+                self._effective_policy.get("instructions", self._stepfun_instructions)
+            )
+            self._instruction_contract_hash = str(
+                self._effective_policy.get("instruction_contract_hash")
+                or build_instruction_contract_hash(self._stepfun_instructions)
+            )
             self._ensure_knowledge_runtime_metrics()
+            tool_policy = self._effective_policy.get("tool_policy")
+            if not isinstance(tool_policy, dict):
+                tool_policy = {}
+            knowledge_base_ids = self._effective_policy.get("knowledge_base_ids")
+            if not isinstance(knowledge_base_ids, list):
+                knowledge_base_ids = []
+            logger.info(
+                "StepFun policy loaded",
+                session_id=self.session_id,
+                policy_source="snapshot" if snapshot else "resolved",
+                voice_mode=str(self._effective_policy.get("voice_mode") or ""),
+                internal_retrieval_enabled=bool(
+                    tool_policy.get("enable_internal_retrieval", False)
+                ),
+                retrieval_priority=str(tool_policy.get("retrieval_priority") or ""),
+                network_access_mode=str(tool_policy.get("network_access_mode") or ""),
+                instruction_contract_hash=self._instruction_contract_hash,
+                knowledge_base_count=len(knowledge_base_ids),
+            )
+
+    def _enforce_tool_policy_guardrails(self) -> bool:
+        policy = self._effective_policy
+        if not isinstance(policy, dict):
+            self._effective_policy = {}
+            return False
+
+        changed = False
+        knowledge_base_ids = policy.get("knowledge_base_ids")
+        if not isinstance(knowledge_base_ids, list):
+            knowledge_base_ids = []
+            changed = True
+        normalized_kb_ids = [
+            str(item).strip() for item in knowledge_base_ids if str(item).strip()
+        ]
+        has_bound_knowledge_base = bool(normalized_kb_ids)
+
+        tool_policy = policy.get("tool_policy")
+        if not isinstance(tool_policy, dict):
+            tool_policy = {}
+            changed = True
+
+        network_access_mode = str(
+            tool_policy.get("network_access_mode") or "off"
+        ).lower()
+        if network_access_mode not in {"off", "controlled"}:
+            network_access_mode = "off"
+            changed = True
+        if tool_policy.get("network_access_mode") != network_access_mode:
+            tool_policy["network_access_mode"] = network_access_mode
+            changed = True
+
+        enforcement_level = str(
+            tool_policy.get("enforcement_level") or "strict"
+        ).lower()
+        if enforcement_level not in {"strict", "best_effort"}:
+            enforcement_level = "strict"
+            changed = True
+        if tool_policy.get("enforcement_level") != enforcement_level:
+            tool_policy["enforcement_level"] = enforcement_level
+            changed = True
+
+        allow_web_search_without_kb = bool(
+            tool_policy.get("allow_web_search_without_kb", False)
+        )
+        if (
+            tool_policy.get("allow_web_search_without_kb")
+            != allow_web_search_without_kb
+        ):
+            tool_policy["allow_web_search_without_kb"] = allow_web_search_without_kb
+            changed = True
+
+        if has_bound_knowledge_base and not bool(
+            tool_policy.get("enable_internal_retrieval", False)
+        ):
+            tool_policy["enable_internal_retrieval"] = True
+            changed = True
+
+        if has_bound_knowledge_base and bool(
+            tool_policy.get("enable_web_search", False)
+        ):
+            tool_policy["enable_web_search"] = False
+            changed = True
+
+        if has_bound_knowledge_base and (
+            str(tool_policy.get("retrieval_priority") or "").strip().lower()
+            != "kb_only"
+        ):
+            tool_policy["retrieval_priority"] = "kb_only"
+            changed = True
+
+        if (
+            not has_bound_knowledge_base
+            and not allow_web_search_without_kb
+            and bool(tool_policy.get("enable_web_search", False))
+        ):
+            tool_policy["enable_web_search"] = False
+            changed = True
+
+        if network_access_mode == "off" and bool(
+            tool_policy.get("enable_web_search", False)
+        ):
+            tool_policy["enable_web_search"] = False
+            changed = True
+
+        source = policy.get("source")
+        if not isinstance(source, dict):
+            source = {}
+            changed = True
+
+        enforcement_reason = ""
+        if network_access_mode == "off":
+            enforcement_reason = "network_off"
+        elif has_bound_knowledge_base:
+            enforcement_reason = "kb_internal_only"
+        elif not allow_web_search_without_kb:
+            enforcement_reason = "no_kb_no_web"
+
+        if (
+            enforcement_reason
+            and source.get("tool_policy_enforcement") != enforcement_reason
+        ):
+            source["tool_policy_enforcement"] = enforcement_reason
+            changed = True
+
+        if not changed:
+            return False
+
+        instructions = str(policy.get("instructions") or "").strip()
+        if not instructions:
+            instructions = VoiceInstructionCompiler.compile_base_contract(
+                policy=policy,
+                agent=None,
+                persona=None,
+            ).base_instructions
+        if (
+            str(tool_policy.get("network_access_mode") or "").lower() == "off"
+            and "禁止联网检索" not in instructions
+        ):
+            instructions = (
+                f"{instructions}\n\n【执行约束补丁】\n- 禁止联网检索，禁止引用外部实时信息。"
+                if instructions
+                else "【执行约束补丁】\n- 禁止联网检索，禁止引用外部实时信息。"
+            )
+
+        policy["knowledge_base_ids"] = normalized_kb_ids
+        policy["tool_policy"] = tool_policy
+        policy["network_access_mode"] = str(
+            tool_policy.get("network_access_mode") or "off"
+        )
+        policy["instructions"] = instructions
+        policy["instruction_contract_hash"] = build_instruction_contract_hash(
+            instructions
+        )
+        policy["source"] = source
+        self._effective_policy = policy
+        self._log_grounding_debug(
+            "policy_guardrail_applied",
+            kb_count=len(normalized_kb_ids),
+        )
+        return True
 
     @staticmethod
     def _merge_sales_stage_runtime_config(
@@ -286,7 +588,9 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
 
         if self._session_agent_id:
             agent_result = await db.execute(
-                select(Agent.capabilities_config).where(Agent.id == self._session_agent_id)
+                select(Agent.capabilities_config).where(
+                    Agent.id == self._session_agent_id
+                )
             )
             agent_raw = agent_result.scalar_one_or_none()
             if isinstance(agent_raw, dict):
@@ -294,7 +598,9 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
 
         if self._session_persona_id:
             persona_result = await db.execute(
-                select(Persona.behavior_config, Persona.scoring_weights).where(Persona.id == self._session_persona_id)
+                select(Persona.behavior_config, Persona.scoring_weights).where(
+                    Persona.id == self._session_persona_id
+                )
             )
             persona_row = persona_result.first()
             if persona_row:
@@ -325,7 +631,9 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
             )
             self._sales_stage_runtime_config = {"enabled": True}
             self._sales_stage_enabled = True
-            self._sales_stage_capability = SalesStageCapability(self._sales_stage_runtime_config)
+            self._sales_stage_capability = SalesStageCapability(
+                self._sales_stage_runtime_config
+            )
 
         fuzzy_runtime_config = self._merge_capability_runtime_config(
             capability_key="fuzzy_detection",
@@ -335,8 +643,12 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
         )
         try:
             self._fuzzy_detection_runtime_config = fuzzy_runtime_config
-            self._fuzzy_detection_enabled = bool(fuzzy_runtime_config.get("enabled", True))
-            self._fuzzy_detection_capability = FuzzyDetectionCapability(fuzzy_runtime_config)
+            self._fuzzy_detection_enabled = bool(
+                fuzzy_runtime_config.get("enabled", True)
+            )
+            self._fuzzy_detection_capability = FuzzyDetectionCapability(
+                fuzzy_runtime_config
+            )
         except (RuntimeError, ValueError, KeyError) as exc:
             logger.warning(
                 "Invalid fuzzy-detection runtime config, fallback to defaults",
@@ -345,7 +657,9 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
             )
             self._fuzzy_detection_runtime_config = {"enabled": True}
             self._fuzzy_detection_enabled = True
-            self._fuzzy_detection_capability = FuzzyDetectionCapability(self._fuzzy_detection_runtime_config)
+            self._fuzzy_detection_capability = FuzzyDetectionCapability(
+                self._fuzzy_detection_runtime_config
+            )
 
         scoring_runtime_config = self._merge_capability_runtime_config(
             capability_key="realtime_scoring",
@@ -362,8 +676,12 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
 
         try:
             self._realtime_scoring_runtime_config = scoring_runtime_config
-            self._realtime_scoring_enabled = bool(scoring_runtime_config.get("enabled", True))
-            self._realtime_scoring_capability = RealtimeScoringCapability(scoring_runtime_config)
+            self._realtime_scoring_enabled = bool(
+                scoring_runtime_config.get("enabled", True)
+            )
+            self._realtime_scoring_capability = RealtimeScoringCapability(
+                scoring_runtime_config
+            )
         except (RuntimeError, ValueError, KeyError) as exc:
             logger.warning(
                 "Invalid realtime-scoring runtime config, fallback to defaults",
@@ -372,7 +690,9 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
             )
             self._realtime_scoring_runtime_config = {"enabled": True}
             self._realtime_scoring_enabled = True
-            self._realtime_scoring_capability = RealtimeScoringCapability(self._realtime_scoring_runtime_config)
+            self._realtime_scoring_capability = RealtimeScoringCapability(
+                self._realtime_scoring_runtime_config
+            )
 
         self._sales_stage_context = None
         self._feedback_context = None
@@ -385,7 +705,10 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
         try:
             async with AsyncSessionLocal() as db:
                 lifecycle_service = SessionLifecycleService(db)
-                session, scenario_type = await lifecycle_service.get_session_with_scenario(self.session_id)
+                (
+                    session,
+                    scenario_type,
+                ) = await lifecycle_service.get_session_with_scenario(self.session_id)
                 if session:
                     self.session_status = str(session.status or "preparing")
                     self.session_scenario_type = scenario_type or "sales"
@@ -398,7 +721,9 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
             return
 
         try:
-            overall_score = float(self._latest_score_snapshot.get("overall_score") or 0.0)
+            overall_score = float(
+                self._latest_score_snapshot.get("overall_score") or 0.0
+            )
         except (TypeError, ValueError):
             overall_score = 0.0
         overall_score = max(0.0, min(100.0, overall_score))
@@ -425,7 +750,10 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
         try:
             async with AsyncSessionLocal() as db:
                 lifecycle_service = SessionLifecycleService(db)
-                session, scenario_type = await lifecycle_service.get_session_with_scenario(self.session_id)
+                (
+                    session,
+                    scenario_type,
+                ) = await lifecycle_service.get_session_with_scenario(self.session_id)
                 if not session:
                     await self._send_error("[SESSION_NOT_FOUND]", "会话不存在")
                     return None
@@ -442,7 +770,9 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
                     await db.rollback()
                     self.session_status = str(session.status or self.session_status)
                     await self._send_error("[INVALID_SESSION_TRANSITION]", exc.message)
-                    await self._send_status("idle" if self.session_status != "in_progress" else "listening")
+                    await self._send_status(
+                        "idle" if self.session_status != "in_progress" else "listening"
+                    )
                     return None
 
                 if action == "end":
@@ -481,7 +811,9 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
         headers = {"Authorization": f"Bearer {self._stepfun_api_key}"}
 
         logger.info(f"Connecting StepFun realtime: model={self._stepfun_model}")
-        self.upstream_ws = await websockets.connect(endpoint, additional_headers=headers)
+        self.upstream_ws = await websockets.connect(
+            endpoint, additional_headers=headers
+        )
 
         turn_detection_value = None
         if self._effective_policy.get("turn_detection") == "server_vad":
@@ -499,7 +831,23 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
         }
         if self._stepfun_instructions:
             session_payload["session"]["instructions"] = self._stepfun_instructions
-        tools = self._build_stepfun_tools_from_policy()
+        tools = self._enforce_stepfun_tool_guardrails(
+            self._build_stepfun_tools_from_policy()
+        )
+        knowledge_base_ids = self._effective_policy.get("knowledge_base_ids")
+        has_bound_knowledge_base = isinstance(knowledge_base_ids, list) and bool(
+            [item for item in knowledge_base_ids if str(item).strip()]
+        )
+        tool_policy = self._effective_policy.get("tool_policy")
+        if not isinstance(tool_policy, dict):
+            tool_policy = {}
+        logger.info(
+            "StepFun tools prepared",
+            session_id=self.session_id,
+            tool_types=[str(tool.get("type") or "") for tool in tools],
+            kb_bound=has_bound_knowledge_base,
+            network_access_mode=str(tool_policy.get("network_access_mode") or ""),
+        )
         if tools:
             session_payload["session"]["tools"] = tools
 
@@ -535,7 +883,9 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
                 return
             audio = data.get("audio")
             if audio:
-                await self._send_upstream({"type": "input_audio_buffer.append", "audio": audio})
+                await self._send_upstream(
+                    {"type": "input_audio_buffer.append", "audio": audio}
+                )
                 self._has_uncommitted_audio = True
 
         elif msg_type == "audio_end":
@@ -647,7 +997,9 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
             return
 
         audio_b64 = base64.b64encode(payload).decode("utf-8")
-        await self._send_upstream({"type": "input_audio_buffer.append", "audio": audio_b64})
+        await self._send_upstream(
+            {"type": "input_audio_buffer.append", "audio": audio_b64}
+        )
         self._has_uncommitted_audio = True
 
     async def _ensure_feedback_context(self) -> None:
@@ -664,7 +1016,9 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
             conversation_history=[],
             agent_config={
                 "capabilities_config": self._agent_capabilities_config,
-                "default_knowledge_base_ids": self._effective_policy.get("knowledge_base_ids", []),
+                "default_knowledge_base_ids": self._effective_policy.get(
+                    "knowledge_base_ids", []
+                ),
             },
             persona_config={
                 **self._persona_behavior_config,
@@ -674,9 +1028,13 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
         )
 
         if self._fuzzy_detection_enabled:
-            await self._fuzzy_detection_capability.on_session_start(self._feedback_context)
+            await self._fuzzy_detection_capability.on_session_start(
+                self._feedback_context
+            )
         if self._realtime_scoring_enabled:
-            await self._realtime_scoring_capability.on_session_start(self._feedback_context)
+            await self._realtime_scoring_capability.on_session_start(
+                self._feedback_context
+            )
 
     async def _send_fuzzy_detection(self, detections: list[dict[str, Any]]) -> None:
         if not detections:
@@ -719,16 +1077,7 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
 
     @staticmethod
     def _format_stage_name(stage_id: str | None) -> str:
-        mapping = {
-            "opening": "开场破冰",
-            "discovery": "需求挖掘",
-            "presentation": "方案呈现",
-            "objection": "异议处理",
-            "closing": "促成成交",
-        }
-        if not isinstance(stage_id, str):
-            return ""
-        return mapping.get(stage_id, stage_id)
+        return format_stage_name(stage_id)
 
     async def _run_realtime_feedback(
         self,
@@ -748,20 +1097,38 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
         if self._feedback_context is None:
             return analysis_data
 
-        self._feedback_context.turn_count = max(self._feedback_context.turn_count, turn_number)
+        self._feedback_context.turn_count = max(
+            self._feedback_context.turn_count, turn_number
+        )
 
         if self._fuzzy_detection_enabled:
-            fuzzy_result = await self._fuzzy_detection_capability.execute(self._feedback_context, text)
-            fuzzy_payload = fuzzy_result.data if isinstance(fuzzy_result.data, dict) else {}
-            detections = fuzzy_payload.get("detections") if isinstance(fuzzy_payload, dict) else None
+            fuzzy_result = await self._fuzzy_detection_capability.execute(
+                self._feedback_context, text
+            )
+            fuzzy_payload = (
+                fuzzy_result.data if isinstance(fuzzy_result.data, dict) else {}
+            )
+            detections = (
+                fuzzy_payload.get("detections")
+                if isinstance(fuzzy_payload, dict)
+                else None
+            )
             if isinstance(detections, list) and detections:
                 await self._send_fuzzy_detection(detections)
                 analysis_data["fuzzy_words"] = detections
 
         if self._realtime_scoring_enabled:
-            score_result = await self._realtime_scoring_capability.execute(self._feedback_context, text)
-            score_payload = score_result.data if isinstance(score_result.data, dict) else {}
-            dimensions = score_payload.get("dimensions") if isinstance(score_payload, dict) else None
+            score_result = await self._realtime_scoring_capability.execute(
+                self._feedback_context, text
+            )
+            score_payload = (
+                score_result.data if isinstance(score_result.data, dict) else {}
+            )
+            dimensions = (
+                score_payload.get("dimensions")
+                if isinstance(score_payload, dict)
+                else None
+            )
 
             dimension_scores: dict[str, float] = {}
             if isinstance(dimensions, list):
@@ -773,12 +1140,24 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
                     if isinstance(name, str) and isinstance(score, (int, float)):
                         dimension_scores[name] = max(0.0, min(100.0, float(score)))
 
-            overall_raw = score_payload.get("overall") if isinstance(score_payload, dict) else None
+            overall_raw = (
+                score_payload.get("overall")
+                if isinstance(score_payload, dict)
+                else None
+            )
             if not isinstance(overall_raw, (int, float)):
-                overall_raw = sum(dimension_scores.values()) / len(dimension_scores) if dimension_scores else 0.0
+                overall_raw = (
+                    sum(dimension_scores.values()) / len(dimension_scores)
+                    if dimension_scores
+                    else 0.0
+                )
             overall_score = max(0.0, min(100.0, float(overall_raw)))
 
-            feedback_message = score_payload.get("feedback") if isinstance(score_payload, dict) else None
+            feedback_message = (
+                score_payload.get("feedback")
+                if isinstance(score_payload, dict)
+                else None
+            )
             suggestions: list[str] = []
             if isinstance(feedback_message, str) and feedback_message.strip():
                 suggestions = [feedback_message.strip()]
@@ -813,41 +1192,102 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
         normalized_query = query.strip()
         self._pending_grounding_context = ""
         if not normalized_query:
+            self._log_grounding_debug("prefetch_skipped", reason="empty_query")
             return
 
         tool_policy = self._effective_policy.get("tool_policy")
         if not isinstance(tool_policy, dict):
             tool_policy = {}
-        if not bool(tool_policy.get("enable_internal_retrieval", True)):
+        knowledge_base_ids = self._effective_policy.get("knowledge_base_ids")
+        has_bound_knowledge_base = isinstance(knowledge_base_ids, list) and bool(
+            [item for item in knowledge_base_ids if str(item).strip()]
+        )
+        internal_retrieval_enabled = bool(
+            tool_policy.get("enable_internal_retrieval", True)
+        )
+        if not internal_retrieval_enabled and not has_bound_knowledge_base:
+            self._log_grounding_debug(
+                "prefetch_skipped",
+                reason="internal_retrieval_disabled",
+                query_length=len(normalized_query),
+            )
             return
+        if not internal_retrieval_enabled and has_bound_knowledge_base:
+            self._log_grounding_debug(
+                "prefetch_internal_retrieval_forced",
+                reason="kb_bound_guardrail",
+                query_length=len(normalized_query),
+            )
 
         try:
             top_k = int(tool_policy.get("retrieval_top_k", 3) or 3)
         except (TypeError, ValueError):
             top_k = 3
         retrieval = await self._tool_search_internal_knowledge(
-            {"query": normalized_query, "top_k": max(1, min(5, top_k))}
+            {"query": normalized_query, "top_k": max(1, min(8, top_k))}
         )
 
         if not isinstance(retrieval, dict):
+            self._log_grounding_debug(
+                "prefetch_skipped",
+                reason="invalid_retrieval_payload",
+                query_length=len(normalized_query),
+            )
             return
         if int(retrieval.get("count") or 0) <= 0:
+            self._log_grounding_debug(
+                "prefetch_skipped",
+                reason="retrieval_empty",
+                query_length=len(normalized_query),
+                retrieval_message=str(retrieval.get("message") or ""),
+            )
+            if has_bound_knowledge_base:
+                self._pending_grounding_context = (
+                    "你必须仅依据企业内部知识库回答，禁止联网搜索或臆测。\n"
+                    f"用户问题：{normalized_query}\n"
+                    "当前内部知识库未检索到充分证据，请明确说明暂未命中相关内部资料，"
+                    "并引导用户提供更具体的产品关键词或版本信息。"
+                )
+                self._log_grounding_debug(
+                    "prefetch_guardrail_applied",
+                    reason="retrieval_empty",
+                    query_length=len(normalized_query),
+                )
             return
 
         rows = retrieval.get("results")
         if not isinstance(rows, list):
             return
 
+        snippet_limit, snippet_char_limit = resolve_grounding_context_limits(
+            normalized_query
+        )
         snippets: list[str] = []
-        for index, row in enumerate(rows[:3], start=1):
+        for index, row in enumerate(rows[:snippet_limit], start=1):
             if not isinstance(row, dict):
                 continue
             snippet = str(row.get("snippet") or "").strip()
             if not snippet:
                 continue
+            snippet = snippet[:snippet_char_limit]
             snippets.append(f"{index}. {snippet}")
 
         if not snippets:
+            self._log_grounding_debug(
+                "prefetch_skipped",
+                reason="snippet_empty",
+                query_length=len(normalized_query),
+            )
+            self._pending_grounding_context = (
+                "你必须仅依据企业内部知识库回答，禁止联网搜索或臆测。\n"
+                f"用户问题：{normalized_query}\n"
+                "当前检索结果缺少可引用片段，请明确告知用户未检索到可用内部依据。"
+            )
+            self._log_grounding_debug(
+                "prefetch_guardrail_applied",
+                reason="snippet_empty",
+                query_length=len(normalized_query),
+            )
             return
 
         self._pending_grounding_context = (
@@ -855,6 +1295,11 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
             f"用户问题：{normalized_query}\n"
             + "\n".join(snippets)
             + "\n若信息不足，请明确说明不确定之处。"
+        )
+        self._log_grounding_debug(
+            "prefetch_applied",
+            query_length=len(normalized_query),
+            snippet_count=len(snippets),
         )
 
     async def _schedule_response_after_commit(self) -> None:
@@ -868,43 +1313,98 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
             if self._pending_response_after_commit:
                 return
             self._pending_response_after_commit = True
+            self._awaiting_transcription_after_commit = True
+            self._pending_response_generation += 1
+            generation = self._pending_response_generation
             timeout_task = self._pending_response_timeout_task
             self._pending_response_timeout_task = asyncio.create_task(
-                self._pending_response_timeout_fallback()
+                self._pending_response_timeout_fallback(generation)
             )
 
         if timeout_task:
             timeout_task.cancel()
 
-    async def _pending_response_timeout_fallback(self) -> None:
+    async def _pending_response_timeout_fallback(
+        self, expected_generation: int | None = None
+    ) -> None:
         try:
-            await asyncio.sleep(0.8)
-            await self._create_response_from_pending_commit()
+            await asyncio.sleep(PENDING_RESPONSE_FALLBACK_SECONDS)
+            if (
+                expected_generation is not None
+                and expected_generation != self._pending_response_generation
+            ):
+                self._log_grounding_debug(
+                    "skip_stale_pending_response_timeout",
+                    expected_generation=expected_generation,
+                    active_generation=self._pending_response_generation,
+                )
+                return
+            transcription_deadline = (
+                asyncio.get_running_loop().time() + TRANSCRIPTION_WAIT_GRACE_SECONDS
+            )
+            while (
+                self._awaiting_transcription_after_commit
+                and asyncio.get_running_loop().time() < transcription_deadline
+            ):
+                await asyncio.sleep(GROUNDING_WAIT_POLL_SECONDS)
+            if self._awaiting_transcription_after_commit:
+                self._log_grounding_debug(
+                    "timeout_proceeded_without_transcription_completion"
+                )
+            if self._grounding_preparation_in_progress:
+                self._log_grounding_debug("timeout_waiting_for_prefetch")
+            deadline = asyncio.get_running_loop().time() + GROUNDING_WAIT_GRACE_SECONDS
+            while (
+                self._grounding_preparation_in_progress
+                and asyncio.get_running_loop().time() < deadline
+            ):
+                await asyncio.sleep(GROUNDING_WAIT_POLL_SECONDS)
+            if self._grounding_preparation_in_progress:
+                self._log_grounding_debug(
+                    "timeout_proceeded_without_prefetch_completion"
+                )
+            await self._create_response_from_pending_commit(
+                expected_generation=expected_generation
+            )
         except asyncio.CancelledError:
             return
 
     async def _cancel_pending_response_after_commit(self) -> None:
         async with self._pending_response_lock:
             self._pending_response_after_commit = False
+            self._awaiting_transcription_after_commit = False
+            self._pending_response_generation += 1
             timeout_task = self._pending_response_timeout_task
             self._pending_response_timeout_task = None
 
         if timeout_task:
             timeout_task.cancel()
 
-    async def _create_response_from_pending_commit(self) -> bool:
+    async def _create_response_from_pending_commit(
+        self, expected_generation: int | None = None
+    ) -> bool:
         async with self._pending_response_lock:
             if not self._pending_response_after_commit:
                 return False
+            if (
+                expected_generation is not None
+                and expected_generation != self._pending_response_generation
+            ):
+                self._log_grounding_debug(
+                    "skip_stale_pending_response_commit",
+                    expected_generation=expected_generation,
+                    active_generation=self._pending_response_generation,
+                )
+                return False
             self._pending_response_after_commit = False
+            self._awaiting_transcription_after_commit = False
             timeout_task = self._pending_response_timeout_task
             self._pending_response_timeout_task = None
 
         if timeout_task and timeout_task is not asyncio.current_task():
             timeout_task.cancel()
 
-        await self._create_response(count_turn=True)
-        return True
+        return await self._create_response(count_turn=True)
 
     async def _commit_and_respond(self):
         """Commit buffered user audio and trigger model response."""
@@ -918,8 +1418,17 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
         self._has_uncommitted_audio = False
         await self._schedule_response_after_commit()
 
-    async def _create_response(self, *, count_turn: bool = False):
+    async def _create_response(self, *, count_turn: bool = False) -> bool:
         """Create a new upstream response and initialize local response state."""
+        if self._active_response is not None:
+            logger.info(
+                "Skip response.create because active response exists",
+                session_id=self.session_id,
+                active_request_id=self._active_response.request_id,
+                pending_followup=self._pending_tool_followup_response,
+            )
+            return False
+
         self.current_request_id += 1
         if count_turn:
             self.turn_count += 1
@@ -933,23 +1442,40 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
             "response": {"modalities": ["audio", "text"]},
         }
         grounding_context = self._pending_grounding_context.strip()
-        if grounding_context:
-            response_payload["response"]["instructions"] = grounding_context
+        turn_instructions = VoiceInstructionCompiler.compose_turn_instructions(
+            base_instructions=self._stepfun_instructions,
+            grounding_context=grounding_context,
+        )
+        if turn_instructions:
+            response_payload["response"]["instructions"] = turn_instructions
         self._pending_grounding_context = ""
+        self._log_grounding_debug(
+            "response_create",
+            request_id=self.current_request_id,
+            has_grounding_context=bool(grounding_context),
+            grounding_context_length=len(grounding_context),
+            has_base_instructions=bool(self._stepfun_instructions.strip()),
+            final_instruction_length=len(turn_instructions),
+            instruction_contract_hash=self._instruction_contract_hash,
+        )
 
         await self._send_status("thinking")
         await self._send_upstream(response_payload)
+        return True
 
     async def _handle_interrupt(self, reason: str):
         """Stop current generation and clear buffered input."""
         await self._cancel_pending_response_after_commit()
         self._pending_grounding_context = ""
         self._pending_tool_followup_response = False
+        self._awaiting_transcription_after_commit = False
         self._has_uncommitted_audio = False
         await self._send_upstream({"type": "response.cancel"})
         await self._send_upstream({"type": "input_audio_buffer.clear"})
 
-        interrupted_stream_id = self._active_response.stream_id if self._active_response else None
+        interrupted_stream_id = (
+            self._active_response.stream_id if self._active_response else None
+        )
         self._active_response = None
 
         await self.manager.send_json(
@@ -962,12 +1488,16 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
                 "data": {
                     "reason": reason,
                     "session_status": self.session_status,
-                    "ai_state": "listening" if self.session_status == "in_progress" else "idle",
+                    "ai_state": "listening"
+                    if self.session_status == "in_progress"
+                    else "idle",
                     "turn_count": self.turn_count,
                 },
             },
         )
-        await self._send_status("listening" if self.session_status == "in_progress" else "idle")
+        await self._send_status(
+            "listening" if self.session_status == "in_progress" else "idle"
+        )
 
     async def _handle_session_end(self):
         """Close session after notifying frontend."""
@@ -975,9 +1505,13 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
         self._pending_grounding_context = ""
         if self._feedback_context is not None:
             if self._fuzzy_detection_enabled:
-                await self._fuzzy_detection_capability.on_session_end(self._feedback_context)
+                await self._fuzzy_detection_capability.on_session_end(
+                    self._feedback_context
+                )
             if self._realtime_scoring_enabled:
-                await self._realtime_scoring_capability.on_session_end(self._feedback_context)
+                await self._realtime_scoring_capability.on_session_end(
+                    self._feedback_context
+                )
         await self.manager.send_json(
             self.websocket,
             {
@@ -1008,107 +1542,184 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
 
     async def _handle_upstream_event(self, event: dict):
         """Map selected StepFun events to existing frontend contract."""
-        event_type = event.get("type", "")
+        event_type = str(event.get("type", ""))
+        route = classify_upstream_event(event_type)
 
-        if event_type in {"session.created", "session.updated"}:
+        if route == UpstreamEventRoute.IGNORE:
             return
-
-        if event_type == "conversation.item.created":
-            item = event.get("item", {}) if isinstance(event.get("item"), dict) else {}
-            if item.get("type") == "function_call":
-                call_id = str(item.get("call_id") or "")
-                name = str(item.get("name") or "")
-                if call_id and name:
-                    self._function_call_states[call_id] = FunctionCallState(call_id=call_id, name=name)
+        if route == UpstreamEventRoute.CONVERSATION_ITEM_CREATED:
+            await self._handle_upstream_conversation_item_created(event)
             return
-
-        if event_type in {
-            "conversation.item.input_audio_transcription.delta",
-            "input_audio_buffer.transcription.delta",
-        }:
-            transcript = event.get("delta", "")
-            if transcript:
-                await self._send_transcript(transcript, is_final=False)
+        if route == UpstreamEventRoute.TRANSCRIPTION_DELTA:
+            await self._handle_upstream_transcription_delta(event)
             return
-
-        if event_type in {
-            "conversation.item.input_audio_transcription.completed",
-            "input_audio_buffer.transcription.completed",
-        }:
-            transcript = event.get("transcript", "")
-            if transcript:
-                turn_number = self._resolve_user_turn_number_for_transcript()
-                await self._send_transcript(transcript, is_final=True)
-                sales_stage = await self._analyze_and_emit_sales_stage(
-                    user_text=transcript,
-                    turn_number=turn_number,
-                )
-                realtime_analysis = await self._run_realtime_feedback(
-                    user_text=transcript,
-                    turn_number=turn_number,
-                    sales_stage=sales_stage,
-                )
-                await self._persist_message(
-                    turn_number=turn_number,
-                    role="user",
-                    content=transcript,
-                    sales_stage=sales_stage,
-                    analysis_data=realtime_analysis,
-                )
-                await self._prepare_grounding_context(transcript)
-                await self._create_response_from_pending_commit()
+        if route == UpstreamEventRoute.TRANSCRIPTION_COMPLETED:
+            await self._handle_upstream_transcription_completed(event)
             return
-
-        if event_type == "response.created":
-            response = event.get("response", {}) if isinstance(event.get("response"), dict) else {}
-            response_id = response.get("id")
-            if self._active_response and response_id:
-                self._active_response.response_id = response_id
+        if route == UpstreamEventRoute.RESPONSE_CREATED:
+            await self._handle_upstream_response_created(event)
             return
-
-        if event_type in {"response.text.delta", "response.audio_transcript.delta"}:
-            delta = event.get("delta", "")
-            if self._active_response and delta:
-                self._active_response.text_parts.append(delta)
+        if route == UpstreamEventRoute.RESPONSE_TEXT_DELTA:
+            await self._handle_upstream_response_text_delta(event)
             return
-
-        if event_type == "response.function_call_arguments.delta":
+        if route == UpstreamEventRoute.FUNCTION_ARGUMENTS_DELTA:
             await self._accumulate_function_call_arguments(event)
             return
-
-        if event_type == "response.function_call_arguments.done":
+        if route == UpstreamEventRoute.FUNCTION_ARGUMENTS_DONE:
             await self._accumulate_function_call_arguments(event, done=True)
             return
-
-        if event_type == "response.audio.delta":
-            delta = event.get("delta", "")
-            if self._active_response and delta:
-                await self._forward_audio_delta_chunk(delta)
+        if route == UpstreamEventRoute.RESPONSE_AUDIO_DELTA:
+            await self._handle_upstream_response_audio_delta(event)
+            return
+        if route == UpstreamEventRoute.RESPONSE_DONE:
+            await self._handle_upstream_response_done(event)
+            return
+        if route == UpstreamEventRoute.ERROR:
+            await self._handle_upstream_error(event)
             return
 
-        if event_type == "response.done":
-            await self._flush_active_response(event)
-            handled_from_done = await self._handle_function_calls_from_response_done(event)
-            if handled_from_done:
-                self._pending_tool_followup_response = False
-            elif self._pending_tool_followup_response:
-                self._pending_tool_followup_response = False
-                await self._create_response()
+    async def _handle_upstream_conversation_item_created(self, event: dict) -> None:
+        """Track function-call state created by upstream model."""
+        function_call = extract_function_call_from_item_created(event)
+        if not function_call:
             return
 
-        if event_type == "error":
-            detail = event.get("message") or "Realtime 服务返回错误"
-            await self._send_error("[STEPFUN_API_ERROR]", str(detail))
+        call_id, name = function_call
+        self._function_call_states[call_id] = FunctionCallState(
+            call_id=call_id,
+            name=name,
+        )
+
+    async def _handle_upstream_transcription_delta(self, event: dict) -> None:
+        """Forward interim ASR transcript to frontend."""
+        transcript = event.get("delta", "")
+        if transcript:
+            await self._send_transcript(transcript, is_final=False)
+
+    async def _handle_upstream_transcription_completed(self, event: dict) -> None:
+        """Persist final ASR transcript and continue response chain."""
+        transcript = event.get("transcript", "")
+        if not transcript:
             return
 
-    async def _flush_active_response(self, response_done_event: dict):
+        turn_number = self._resolve_user_turn_number_for_transcript()
+        normalized_transcript = transcript.strip()
+        now = asyncio.get_running_loop().time()
+        is_duplicate_transcript = (
+            bool(normalized_transcript)
+            and normalized_transcript == self._last_final_transcript_text
+            and turn_number == self._last_final_transcript_turn
+            and (now - self._last_final_transcript_at)
+            <= TRANSCRIPTION_DUPLICATE_WINDOW_SECONDS
+        )
+        if is_duplicate_transcript:
+            self._log_grounding_debug(
+                "duplicate_transcription_completed_ignored",
+                turn_number=turn_number,
+                transcript_length=len(normalized_transcript),
+            )
+            return
+
+        self._last_final_transcript_text = normalized_transcript
+        self._last_final_transcript_turn = turn_number
+        self._last_final_transcript_at = now
+        self._awaiting_transcription_after_commit = False
+        await self._send_transcript(transcript, is_final=True)
+        sales_stage = await self._analyze_and_emit_sales_stage(
+            user_text=transcript,
+            turn_number=turn_number,
+        )
+        realtime_analysis = await self._run_realtime_feedback(
+            user_text=transcript,
+            turn_number=turn_number,
+            sales_stage=sales_stage,
+        )
+        await self._persist_message(
+            turn_number=turn_number,
+            role="user",
+            content=transcript,
+            sales_stage=sales_stage,
+            analysis_data=realtime_analysis,
+        )
+        self._grounding_preparation_in_progress = True
+        try:
+            await self._prepare_grounding_context(transcript)
+        finally:
+            self._grounding_preparation_in_progress = False
+
+        await self._create_response_from_pending_commit()
+
+    async def _handle_upstream_response_created(self, event: dict) -> None:
+        """Bind upstream response id to current active response state."""
+        response = (
+            event.get("response", {}) if isinstance(event.get("response"), dict) else {}
+        )
+        response_id = response.get("id")
+        if self._active_response and response_id:
+            self._active_response.response_id = response_id
+
+    async def _handle_upstream_response_text_delta(self, event: dict) -> None:
+        """Accumulate response text/audio transcript delta for fallback flush."""
+        delta = event.get("delta", "")
+        if self._active_response and delta:
+            self._active_response.text_parts.append(delta)
+
+    async def _handle_upstream_response_audio_delta(self, event: dict) -> None:
+        """Forward realtime audio chunk to frontend."""
+        delta = event.get("delta", "")
+        if self._active_response and delta:
+            await self._forward_audio_delta_chunk(delta)
+
+    async def _handle_upstream_response_done(self, event: dict) -> None:
+        """Finalize response and execute potential tool follow-ups."""
+        had_active_response = await self._flush_active_response(event)
+        handled_from_done = False
+        if had_active_response:
+            handled_from_done = await self._handle_function_calls_from_response_done(
+                event
+            )
+        if handled_from_done:
+            self._pending_tool_followup_response = False
+        elif self._pending_tool_followup_response and had_active_response:
+            self._pending_tool_followup_response = False
+            await self._create_response()
+        elif self._pending_tool_followup_response:
+            self._pending_tool_followup_response = False
+            self._log_grounding_debug(
+                "skip_followup_without_active_response",
+                event_type=str(event.get("type") or ""),
+            )
+
+    async def _handle_upstream_error(self, event: dict) -> None:
+        """Normalize upstream error and forward to frontend."""
+        await self._send_error("[STEPFUN_API_ERROR]", extract_error_message(event))
+
+    async def _flush_active_response(self, response_done_event: dict) -> bool:
         """Finalize active response and send final marker (or fallback)."""
         response_state = self._active_response
-        self._active_response = None
-
         if not response_state:
             await self._send_status("listening")
-            return
+            return False
+
+        response_obj = (
+            response_done_event.get("response", {})
+            if isinstance(response_done_event.get("response"), dict)
+            else {}
+        )
+        done_response_id = response_obj.get("id")
+        if (
+            response_state.response_id
+            and done_response_id
+            and done_response_id != response_state.response_id
+        ):
+            self._log_grounding_debug(
+                "skip_mismatched_response_done",
+                active_response_id=response_state.response_id,
+                done_response_id=str(done_response_id),
+            )
+            return False
+
+        self._active_response = None
 
         response_text = self._extract_response_text(response_done_event)
         if not response_text:
@@ -1135,7 +1746,7 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
         # No output at all in this round; only reset status.
         if response_state.chunk_index == 0 and not response_text:
             await self._send_status("listening")
-            return
+            return True
 
         # Streaming path: already sent audio chunks, now send final marker with text.
         if response_state.chunk_index > 0:
@@ -1159,7 +1770,7 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
                 },
             )
             await self._send_status("listening")
-            return
+            return True
 
         # Fallback path: no audio chunks received from upstream.
         payload_data = {
@@ -1181,6 +1792,7 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
         )
 
         await self._send_status("listening")
+        return True
 
     async def _forward_audio_delta_chunk(self, delta_b64: str):
         """Forward one upstream audio delta as frontend tts_chunk for low-latency playback."""
@@ -1198,7 +1810,9 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
             return
 
         if output_format == "pcm16":
-            duration_ms = int(len(raw_bytes) / 2 / self._stepfun_output_sample_rate * 1000)
+            duration_ms = int(
+                len(raw_bytes) / 2 / self._stepfun_output_sample_rate * 1000
+            )
             audio_payload = base64.b64encode(raw_bytes).decode("utf-8")
         else:
             # Approximate mp3/other encoded chunk duration
@@ -1231,11 +1845,11 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
 
         response_state.chunk_index += 1
 
-    async def _accumulate_function_call_arguments(self, event: dict, done: bool = False):
+    async def _accumulate_function_call_arguments(
+        self, event: dict, done: bool = False
+    ):
         """Collect function-call arguments from delta/done events."""
-        call_id = str(event.get("call_id") or "")
-        name = str(event.get("name") or "")
-        arguments_part = str(event.get("arguments") or "")
+        call_id, name, arguments_part = parse_function_call_event(event)
         if not call_id:
             return
 
@@ -1246,43 +1860,51 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
         elif name and state.name == "unknown":
             state.name = name
 
-        state.arguments += arguments_part
-
         if done:
+            if arguments_part:
+                state.done_arguments = arguments_part
+            raw_arguments, source = self._resolve_function_call_arguments(state)
+            self._log_grounding_debug(
+                "function_call_arguments_resolved",
+                call_id=call_id,
+                function_name=state.name,
+                delta_length=len(state.delta_arguments),
+                done_length=len(state.done_arguments),
+                selected_source=source,
+                selected_is_valid_json=is_json_object_payload(raw_arguments),
+            )
             await self._execute_function_call(
                 call_id=call_id,
                 function_name=state.name,
-                raw_arguments=state.arguments,
+                raw_arguments=raw_arguments,
                 trigger_followup_response=True,
             )
+            return
 
-    async def _handle_function_calls_from_response_done(self, response_done_event: dict) -> bool:
+        if arguments_part:
+            state.delta_arguments += arguments_part
+
+    @staticmethod
+    def _resolve_function_call_arguments(state: FunctionCallState) -> tuple[str, str]:
+        done_arguments = state.done_arguments.strip()
+        delta_arguments = state.delta_arguments.strip()
+
+        if done_arguments and is_json_object_payload(done_arguments):
+            return done_arguments, "done"
+        if delta_arguments and is_json_object_payload(delta_arguments):
+            return delta_arguments, "delta"
+        if done_arguments:
+            return done_arguments, "done_invalid_json"
+        return delta_arguments, "delta_invalid_json"
+
+    async def _handle_function_calls_from_response_done(
+        self, response_done_event: dict
+    ) -> bool:
         """
         Execute function calls emitted in `response.done`.
         Returns True if at least one function call was handled.
         """
-        response = response_done_event.get("response")
-        if not isinstance(response, dict):
-            return False
-
-        output_items = response.get("output", [])
-        if not isinstance(output_items, list):
-            return False
-
-        function_calls: list[dict[str, str]] = []
-        for output in output_items:
-            if not isinstance(output, dict):
-                continue
-            if output.get("type") != "function_call":
-                continue
-            function_calls.append(
-                {
-                    "call_id": str(output.get("call_id") or ""),
-                    "name": str(output.get("name") or "unknown"),
-                    "arguments": str(output.get("arguments") or "{}"),
-                }
-            )
-
+        function_calls = extract_response_done_function_calls(response_done_event)
         if not function_calls:
             return False
 
@@ -1313,34 +1935,40 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
             return False
 
         function_name = function_name or "unknown"
-        try:
-            arguments_obj = json.loads(raw_arguments or "{}")
-            if not isinstance(arguments_obj, dict):
-                arguments_obj = {}
-        except json.JSONDecodeError:
-            arguments_obj = {}
+        arguments_obj = decode_function_arguments(raw_arguments)
+        self._log_grounding_debug(
+            "function_call_execute",
+            call_id=call_id,
+            function_name=function_name,
+            raw_arguments_length=len(raw_arguments),
+            argument_keys=sorted(arguments_obj.keys()),
+            has_query=bool(str(arguments_obj.get("query") or "").strip()),
+        )
 
         output_payload: dict[str, Any]
         if function_name == "search_internal_knowledge":
             output_payload = await self._tool_search_internal_knowledge(arguments_obj)
         else:
-            output_payload = {
-                "error": f"Unsupported function '{function_name}'",
-                "supported_functions": ["search_internal_knowledge"],
-            }
+            output_payload = build_unsupported_function_output(function_name)
+
+        self._log_grounding_debug(
+            "function_call_output",
+            call_id=call_id,
+            function_name=function_name,
+            result_count=int(output_payload.get("count") or 0),
+            retrieval_mode=str(output_payload.get("retrieval_mode") or ""),
+            message=str(output_payload.get("message") or ""),
+            has_error=bool(output_payload.get("error")),
+        )
 
         self._executed_call_ids.add(call_id)
         self._function_call_states.pop(call_id, None)
 
         await self._send_upstream(
-            {
-                "type": "conversation.item.create",
-                "item": {
-                    "type": "function_call_output",
-                    "call_id": call_id,
-                    "output": json.dumps(output_payload, ensure_ascii=False),
-                },
-            }
+            build_function_call_output_event(
+                call_id=call_id,
+                output_payload=output_payload,
+            )
         )
 
         if trigger_followup_response:
@@ -1350,145 +1978,35 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
                 await self._create_response()
         return True
 
-    async def _tool_search_internal_knowledge(self, arguments_obj: dict[str, Any]) -> dict[str, Any]:
+    async def _tool_search_internal_knowledge(
+        self, arguments_obj: dict[str, Any]
+    ) -> dict[str, Any]:
         """Search internal knowledge bases bound to current policy."""
-        query = str(arguments_obj.get("query") or "").strip()
-        tool_policy = self._effective_policy.get("tool_policy", {})
-        kb_ids = self._effective_policy.get("knowledge_base_ids") or []
-        if not isinstance(kb_ids, list):
-            kb_ids = []
-        kb_ids = [str(kb_id) for kb_id in kb_ids if kb_id]
-
-        if not query:
-            await self._record_knowledge_runtime_metric(
-                query="",
-                result_count=0,
-                status="missing_query",
-                knowledge_base_ids=kb_ids,
-            )
-            return {"query": "", "count": 0, "results": [], "message": "缺少 query 参数"}
-
-        if not kb_ids:
-            await self._record_knowledge_runtime_metric(
-                query=query,
-                result_count=0,
-                status="no_kb_bound",
-                knowledge_base_ids=[],
-            )
-            return {
-                "query": query,
-                "count": 0,
-                "results": [],
-                "message": "当前会话未关联内部知识库",
-            }
-
-        top_k_value = arguments_obj.get("top_k", tool_policy.get("retrieval_top_k", 5))
-        threshold = tool_policy.get("retrieval_similarity_threshold", 0.65)
-        try:
-            top_k = max(1, int(top_k_value))
-        except (TypeError, ValueError):
-            top_k = 5
-
-        async with AsyncSessionLocal() as db:
-            service = KnowledgeService(db)
-            search_result = await service.search_multiple(
-                kb_ids=kb_ids,
-                query=query,
-                top_k=top_k,
-                similarity_threshold=float(threshold),
-            )
-
-        if not search_result.is_success:
-            error_detail = str(search_result.fallback or "unknown_error")
-            await self._record_knowledge_runtime_metric(
-                query=query,
-                result_count=0,
-                status="search_failed",
-                knowledge_base_ids=kb_ids,
-                top_k=top_k,
-                similarity_threshold=float(threshold),
-                error_message=error_detail,
-            )
-            return {
-                "query": query,
-                "count": 0,
-                "results": [],
-                "message": "知识检索失败",
-                "error": error_detail,
-            }
-
-        rows = search_result.value or []
-        results: list[dict[str, Any]] = []
-        retrieval_modes: set[str] = set()
-        for row in rows[:top_k]:
-            content = str(row.get("content") or "")
-            snippet = content[:220]
-            retrieval_mode = str(row.get("retrieval_mode") or "").strip()
-            if retrieval_mode:
-                retrieval_modes.add(retrieval_mode)
-            results.append(
-                {
-                    "knowledge_base_id": row.get("knowledge_base_id"),
-                    "knowledge_base_name": row.get("knowledge_base_name"),
-                    "score": row.get("score"),
-                    "snippet": snippet,
-                    "retrieval_mode": retrieval_mode or "vector",
-                }
-            )
-
-        effective_retrieval_mode = (
-            "keyword_fallback"
-            if retrieval_modes and retrieval_modes == {"keyword_fallback"}
-            else "vector"
+        output = await search_internal_knowledge(
+            arguments_obj=arguments_obj,
+            effective_policy=self._effective_policy,
+            session_factory=AsyncSessionLocal,
+            knowledge_service_cls=KnowledgeService,
+            record_metric=self._record_knowledge_runtime_metric,
         )
-        status = "hit" if results else "miss"
-        if results and effective_retrieval_mode == "keyword_fallback":
-            status = "hit_keyword_fallback"
-
-        await self._record_knowledge_runtime_metric(
-            query=query,
-            result_count=len(results),
-            status=status,
-            knowledge_base_ids=kb_ids,
-            top_k=top_k,
-            similarity_threshold=float(threshold),
-            retrieval_mode=effective_retrieval_mode,
+        knowledge_base_ids = self._effective_policy.get("knowledge_base_ids")
+        if not isinstance(knowledge_base_ids, list):
+            knowledge_base_ids = []
+        query_text = str(arguments_obj.get("query") or "")
+        self._log_grounding_debug(
+            "internal_retrieval",
+            query_length=len(query_text.strip()),
+            kb_count=len(knowledge_base_ids),
+            result_count=int(output.get("count") or 0),
+            retrieval_mode=str(output.get("retrieval_mode") or ""),
+            status_message=str(output.get("message") or ""),
+            has_error=bool(output.get("error")),
         )
-
-        return {
-            "query": query,
-            "count": len(results),
-            "results": results,
-            "retrieval_mode": effective_retrieval_mode,
-        }
+        return output
 
     def _ensure_knowledge_runtime_metrics(self) -> dict[str, Any]:
         """Ensure runtime metrics structure exists on effective policy snapshot."""
-        runtime_metrics = self._effective_policy.get("runtime_metrics")
-        if not isinstance(runtime_metrics, dict):
-            runtime_metrics = {}
-            self._effective_policy["runtime_metrics"] = runtime_metrics
-
-        knowledge_metrics = runtime_metrics.get("knowledge_retrieval")
-        if not isinstance(knowledge_metrics, dict):
-            knowledge_metrics = {}
-
-        knowledge_metrics.setdefault("attempt_count", 0)
-        knowledge_metrics.setdefault("hit_query_count", 0)
-        knowledge_metrics.setdefault("total_results", 0)
-        knowledge_metrics.setdefault("last_query", "")
-        knowledge_metrics.setdefault("last_result_count", 0)
-        knowledge_metrics.setdefault("last_status", "not_triggered")
-        knowledge_metrics.setdefault("last_top_k", None)
-        knowledge_metrics.setdefault("last_similarity_threshold", None)
-        knowledge_metrics.setdefault("bound_knowledge_base_ids", [])
-        knowledge_metrics.setdefault("updated_at", None)
-        knowledge_metrics.setdefault("recent_queries", [])
-        knowledge_metrics.setdefault("last_error", None)
-        knowledge_metrics.setdefault("last_retrieval_mode", None)
-
-        runtime_metrics["knowledge_retrieval"] = knowledge_metrics
-        return knowledge_metrics
+        return ensure_knowledge_runtime_metrics(self._effective_policy)
 
     async def _record_knowledge_runtime_metric(
         self,
@@ -1504,35 +2022,17 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
     ) -> None:
         """Record knowledge retrieval diagnostics for later report verification."""
         try:
-            metrics = self._ensure_knowledge_runtime_metrics()
-            previous_attempt = int(metrics.get("attempt_count") or 0)
-            previous_hit_query = int(metrics.get("hit_query_count") or 0)
-            previous_total_results = int(metrics.get("total_results") or 0)
-
-            safe_result_count = max(0, int(result_count))
-            metrics["attempt_count"] = previous_attempt + 1
-            metrics["hit_query_count"] = previous_hit_query + (1 if safe_result_count > 0 else 0)
-            metrics["total_results"] = previous_total_results + safe_result_count
-            metrics["last_query"] = query
-            metrics["last_result_count"] = safe_result_count
-            metrics["last_status"] = status
-            metrics["last_top_k"] = top_k
-            metrics["last_similarity_threshold"] = similarity_threshold
-            metrics["bound_knowledge_base_ids"] = knowledge_base_ids
-            metrics["updated_at"] = datetime.now(UTC).isoformat()
-            metrics["last_error"] = str(error_message).strip() if error_message else None
-            metrics["last_retrieval_mode"] = retrieval_mode or None
-
-            recent_queries = metrics.get("recent_queries")
-            if not isinstance(recent_queries, list):
-                recent_queries = []
-            if query:
-                recent_queries = [query, *[str(item) for item in recent_queries if str(item) and str(item) != query]][:5]
-            metrics["recent_queries"] = recent_queries
-
-            hit_query_count = int(metrics.get("hit_query_count") or 0)
-            attempt_count = int(metrics.get("attempt_count") or 0)
-            metrics["hit_rate"] = round(hit_query_count / attempt_count, 4) if attempt_count > 0 else 0.0
+            apply_knowledge_runtime_metric(
+                effective_policy=self._effective_policy,
+                query=query,
+                result_count=result_count,
+                status=status,
+                knowledge_base_ids=knowledge_base_ids,
+                top_k=top_k,
+                similarity_threshold=similarity_threshold,
+                error_message=error_message,
+                retrieval_mode=retrieval_mode,
+            )
 
             await self._persist_runtime_metrics_to_session()
         except Exception as exc:  # noqa: BLE001
@@ -1540,74 +2040,48 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
 
     async def _persist_runtime_metrics_to_session(self) -> None:
         """Persist in-memory runtime metrics to practice_sessions.voice_policy_snapshot."""
-        runtime_metrics = self._effective_policy.get("runtime_metrics")
-        if not isinstance(runtime_metrics, dict):
-            return
-
-        async with AsyncSessionLocal() as db:
-            result = await db.execute(
-                select(PracticeSession).where(PracticeSession.session_id == self.session_id)
-            )
-            session = result.scalar_one_or_none()
-            if not session:
-                return
-
-            base_snapshot = session.voice_policy_snapshot if isinstance(session.voice_policy_snapshot, dict) else {}
-            snapshot = deepcopy(base_snapshot)
-            snapshot_runtime = snapshot.get("runtime_metrics")
-            if not isinstance(snapshot_runtime, dict):
-                snapshot_runtime = {}
-
-            knowledge_metrics = runtime_metrics.get("knowledge_retrieval")
-            if isinstance(knowledge_metrics, dict):
-                snapshot_runtime["knowledge_retrieval"] = knowledge_metrics
-                snapshot["runtime_metrics"] = snapshot_runtime
-                session.voice_policy_snapshot = snapshot
-                await db.commit()
+        await persist_runtime_metrics_to_session(
+            session_id=self.session_id,
+            effective_policy=self._effective_policy,
+            session_factory=AsyncSessionLocal,
+        )
 
     def _build_stepfun_tools_from_policy(self) -> list[dict[str, Any]]:
         """Build StepFun tool definitions from resolved policy."""
+        return build_stepfun_tools_from_policy(self._effective_policy)
+
+    def _enforce_stepfun_tool_guardrails(
+        self, tools: list[dict[str, Any]]
+    ) -> list[dict[str, Any]]:
+        """Filter tool list using final effective policy guarantees."""
+        filtered_tools = list(tools)
         tool_policy = self._effective_policy.get("tool_policy")
         if not isinstance(tool_policy, dict):
             tool_policy = {}
-        enable_web_search = bool(tool_policy.get("enable_web_search", False))
-        enable_internal_retrieval = bool(tool_policy.get("enable_internal_retrieval", True))
-        web_top_k = int(tool_policy.get("web_search_top_k", 5) or 5)
-        web_timeout = int(tool_policy.get("web_search_timeout_seconds", 3) or 3)
 
-        tools: list[dict[str, Any]] = []
-        if enable_web_search:
-            tools.append(
-                {
-                    "type": "web_search",
-                    "function": {
-                        "description": "当问题依赖最新公开信息时使用网络搜索补充答案。",
-                        "options": {
-                            "top_k": max(1, web_top_k),
-                            "timeout_seconds": max(1, web_timeout),
-                        },
-                    },
-                }
-            )
-        if enable_internal_retrieval:
-            tools.append(
-                {
-                    "type": "function",
-                    "function": {
-                        "name": "search_internal_knowledge",
-                        "description": "检索企业内部知识库，用于回答产品、流程和策略问题。",
-                        "parameters": {
-                            "type": "object",
-                            "properties": {
-                                "query": {"type": "string", "description": "用户问题或检索关键词"},
-                                "top_k": {"type": "integer", "description": "返回条数（可选）"},
-                            },
-                            "required": ["query"],
-                        },
-                    },
-                }
-            )
-        return tools
+        knowledge_base_ids = self._effective_policy.get("knowledge_base_ids")
+        has_bound_knowledge_base = isinstance(knowledge_base_ids, list) and bool(
+            [item for item in knowledge_base_ids if str(item).strip()]
+        )
+        network_access_mode = str(
+            tool_policy.get("network_access_mode") or "off"
+        ).lower()
+        allow_web_search_without_kb = bool(
+            tool_policy.get("allow_web_search_without_kb", False)
+        )
+
+        should_remove_web_search = (
+            network_access_mode == "off"
+            or has_bound_knowledge_base
+            or not allow_web_search_without_kb
+        )
+        if should_remove_web_search:
+            filtered_tools = [
+                tool
+                for tool in filtered_tools
+                if str(tool.get("type") or "").lower() != "web_search"
+            ]
+        return filtered_tools
 
     async def _send_upstream(self, payload: dict):
         """Send one event to StepFun upstream."""
@@ -1627,7 +2101,9 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
             user_id=self._session_user_id or "unknown-user",
             state={},
             conversation_history=[],
-            agent_config={"capabilities_config": {"sales_stage": self._sales_stage_runtime_config}},
+            agent_config={
+                "capabilities_config": {"sales_stage": self._sales_stage_runtime_config}
+            },
             persona_config={},
             turn_count=max(0, self.turn_count),
         )
@@ -1723,12 +2199,7 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
         """Send stage update event with unified websocket envelope."""
         await self.manager.send_json(
             self.websocket,
-            {
-                "type": "stage_update",
-                "timestamp": datetime.now(UTC).isoformat(),
-                "trace_id": get_trace_id(),
-                "data": stage_data,
-            },
+            build_stage_update_event(stage_data=stage_data, trace_id=get_trace_id()),
         )
 
     async def _update_existing_message_sales_stage(
@@ -1746,48 +2217,17 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
         if not self.session_id:
             return
 
-        async with self._db_lock:
-            try:
-                async with AsyncSessionLocal() as db:
-                    statement = (
-                        select(ConversationMessage.id)
-                        .where(ConversationMessage.session_id == self.session_id)
-                        .where(ConversationMessage.turn_number == turn_number)
-                        .where(ConversationMessage.role == role)
-                        .where(ConversationMessage.content == content)
-                        .order_by(ConversationMessage.timestamp.desc())
-                        .limit(1)
-                    )
-                    result = await db.execute(statement)
-                    message_id = result.scalar_one_or_none()
-                    if not message_id:
-                        return
-
-                    storage = MessageStorageService(db)
-                    update_result = await storage.update_analysis(
-                        message_id,
-                        sales_stage=sales_stage,
-                        fuzzy_words=fuzzy_words,
-                        score_snapshot=score_snapshot,
-                        ai_feedback=ai_feedback,
-                    )
-                    if not update_result.is_success:
-                        logger.warning(
-                            "Failed to patch analysis on duplicate message",
-                            session_id=self.session_id,
-                            turn_number=turn_number,
-                            role=role,
-                            sales_stage=sales_stage,
-                        )
-            except (RuntimeError, ValueError, OSError) as exc:
-                logger.warning(
-                    "Error patching analysis on duplicate message",
-                    session_id=self.session_id,
-                    turn_number=turn_number,
-                    role=role,
-                    sales_stage=sales_stage,
-                    error=str(exc),
-                )
+        await patch_existing_message_analysis(
+            session_id=self.session_id,
+            turn_number=turn_number,
+            role=role,
+            content=content,
+            sales_stage=sales_stage,
+            fuzzy_words=fuzzy_words,
+            score_snapshot=score_snapshot,
+            ai_feedback=ai_feedback,
+            db_lock=self._db_lock,
+        )
 
     async def _persist_message(
         self,
@@ -1799,77 +2239,46 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
         analysis_data: dict[str, Any] | None = None,
     ) -> None:
         """Persist one conversation message for replay/report consistency."""
-        normalized_content = content.strip()
-        if not self.session_id or not normalized_content:
+        if not self.session_id:
             return
 
-        normalized_turn = max(1, int(turn_number))
+        normalized_payload = normalize_message_persistence_payload(
+            turn_number=turn_number,
+            content=content,
+            sales_stage=sales_stage,
+            analysis_data=analysis_data,
+        )
+        if normalized_payload is None:
+            return
+
+        normalized_turn, normalized_content, analysis_payload = normalized_payload
         message_key = (normalized_turn, role, normalized_content)
-        analysis_payload = analysis_data.copy() if isinstance(analysis_data, dict) else {}
-        if isinstance(sales_stage, str) and sales_stage:
-            analysis_payload["sales_stage"] = sales_stage
 
         if message_key in self._persisted_message_keys:
-            needs_patch = bool(analysis_payload)
-            if needs_patch:
+            if analysis_payload:
+                patch_fields = extract_analysis_patch_fields(analysis_payload)
                 await self._update_existing_message_sales_stage(
                     turn_number=normalized_turn,
                     role=role,
                     content=normalized_content,
-                    sales_stage=(
-                        analysis_payload.get("sales_stage")
-                        if isinstance(analysis_payload.get("sales_stage"), str)
-                        and analysis_payload.get("sales_stage")
-                        else None
-                    ),
-                    fuzzy_words=(
-                        analysis_payload.get("fuzzy_words")
-                        if isinstance(analysis_payload.get("fuzzy_words"), list)
-                        else None
-                    ),
-                    score_snapshot=(
-                        analysis_payload.get("score_snapshot")
-                        if isinstance(analysis_payload.get("score_snapshot"), dict)
-                        else None
-                    ),
-                    ai_feedback=(
-                        analysis_payload.get("ai_feedback")
-                        if isinstance(analysis_payload.get("ai_feedback"), str)
-                        else None
-                    ),
+                    sales_stage=patch_fields["sales_stage"],
+                    fuzzy_words=patch_fields["fuzzy_words"],
+                    score_snapshot=patch_fields["score_snapshot"],
+                    ai_feedback=patch_fields["ai_feedback"],
                 )
             return
 
         self._persisted_message_keys.add(message_key)
-
-        async with self._db_lock:
-            try:
-                async with AsyncSessionLocal() as db:
-                    storage = MessageStorageService(db)
-                    save_result = await storage.save_message(
-                        session_id=self.session_id,
-                        turn_number=normalized_turn,
-                        role=role,
-                        content=normalized_content,
-                        analysis_data=analysis_payload or None,
-                    )
-                    if not save_result.is_success:
-                        self._persisted_message_keys.discard(message_key)
-                        logger.warning(
-                            "Failed to persist StepFun realtime message",
-                            session_id=self.session_id,
-                            turn_number=normalized_turn,
-                            role=role,
-                        )
-            except (RuntimeError, ValueError, OSError) as exc:
-                self._persisted_message_keys.discard(message_key)
-                logger.warning(
-                    "Error persisting StepFun realtime message",
-                    session_id=self.session_id,
-                    turn_number=normalized_turn,
-                    role=role,
-                    error=str(exc),
-                )
+        saved = await save_stepfun_message(
+            session_id=self.session_id,
+            turn_number=normalized_turn,
+            role=role,
+            content=normalized_content,
+            analysis_payload=analysis_payload,
+            db_lock=self._db_lock,
+        )
+        if not saved:
+            self._persisted_message_keys.discard(message_key)
 
     def _resolve_user_turn_number_for_transcript(self) -> int:
         """
@@ -1887,99 +2296,50 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
         """Send ASR transcript in existing frontend message format."""
         await self.manager.send_json(
             self.websocket,
-            {
-                "type": "asr_transcript",
-                "timestamp": datetime.now(UTC).isoformat(),
-                "data": {"text": text, "is_final": is_final, "confidence": 0.95},
-            },
+            build_asr_transcript_event(text=text, is_final=is_final),
         )
 
     async def _send_status(self, ai_state: str):
         self.ai_state = ai_state
         await self.manager.send_json(
             self.websocket,
-            {
-                "type": "status",
-                "timestamp": datetime.now(UTC).isoformat(),
-                "trace_id": get_trace_id(),
-                "data": {
-                    "session_status": self.session_status,
-                    "ai_state": ai_state,
-                    "turn_count": self.turn_count,
-                },
-            },
+            build_status_event(
+                session_status=self.session_status,
+                ai_state=ai_state,
+                turn_count=self.turn_count,
+                trace_id=get_trace_id(),
+            ),
         )
 
     async def _send_heartbeat(self):
         await self.manager.send_json(
             self.websocket,
-            {
-                "type": "heartbeat",
-                "timestamp": datetime.now(UTC).isoformat(),
-                "data": {},
-            },
+            build_heartbeat_event(),
         )
 
     async def _send_error(self, code: str, message: str):
         await self.manager.send_json(
             self.websocket,
-            {
-                "type": "error",
-                "timestamp": datetime.now(UTC).isoformat(),
-                "trace_id": get_trace_id(),
-                "data": {
-                    "code": code,
-                    "message": message,
-                    "user_action": "请稍后重试",
-                    "session_status": self.session_status,
-                    "ai_state": self.ai_state,
-                    "turn_count": self.turn_count,
-                },
-            },
+            build_error_event(
+                code=code,
+                message=message,
+                session_status=self.session_status,
+                ai_state=self.ai_state,
+                turn_count=self.turn_count,
+                trace_id=get_trace_id(),
+            ),
         )
 
     @staticmethod
     def _extract_text_payload(data: dict) -> str:
         """Extract text payload from websocket data with legacy fallback."""
-        text = data.get("text")
-        if isinstance(text, str) and text.strip():
-            return text
-
-        legacy_text = data.get("content")
-        if isinstance(legacy_text, str) and legacy_text.strip():
-            return legacy_text
-
-        return ""
+        return extract_text_payload(data)
 
     @staticmethod
     def _extract_response_text(response_done_event: dict) -> str:
         """Extract assistant text from response.done payload."""
-        response = response_done_event.get("response")
-        if not isinstance(response, dict):
-            return ""
+        return extract_response_text(response_done_event)
 
-        output = response.get("output", [])
-        if not isinstance(output, list):
-            return ""
-
-        text_parts: list[str] = []
-        for item in output:
-            if not isinstance(item, dict):
-                continue
-            if item.get("type") != "message":
-                continue
-            content = item.get("content", [])
-            if not isinstance(content, list):
-                continue
-            for part in content:
-                if not isinstance(part, dict):
-                    continue
-                if "text" in part and isinstance(part["text"], str):
-                    text_parts.append(part["text"])
-                elif "transcript" in part and isinstance(part["transcript"], str):
-                    text_parts.append(part["transcript"])
-
-        return "".join(text_parts).strip()
 
 def create_stepfun_realtime_handler() -> StepFunRealtimeHandler:
     """Factory for router usage consistency."""

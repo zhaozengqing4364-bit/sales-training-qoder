@@ -6,7 +6,7 @@ import { GlassCard } from "@/components/ui/glass-card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ArrowRight, Loader2, AlertCircle } from "lucide-react";
-import { api } from "@/lib/api/client";
+import { api, getApiErrorMessage } from "@/lib/api/client";
 
 export default function LoginPage() {
     const router = useRouter();
@@ -43,8 +43,7 @@ export default function LoginPage() {
                 setError("登录失败，未获取到令牌");
             }
         } catch (err: unknown) {
-            console.error("Login failed", err);
-            setError(err instanceof Error ? err.message : "登录失败，请检查账号密码");
+            setError(getApiErrorMessage(err));
         } finally {
             setIsLoading(false);
         }

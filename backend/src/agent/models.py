@@ -354,3 +354,61 @@ class AgentVoicePolicy(Base):
 
     agent = relationship("Agent", back_populates="voice_policy")
     runtime_profile = relationship("VoiceRuntimeProfile", back_populates="agent_policies")
+
+
+class PresentationAIPolicy(Base):
+    """
+    PresentationAIPolicy - Scope-based AI policy for PPT coaching.
+
+    Scope priority:
+    global < scenario < presentation
+    """
+
+    __tablename__ = "presentation_ai_policies"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    scope_type = Column(String(20), nullable=False, default="global")
+    scope_id = Column(String(64), nullable=True)
+    enabled = Column(Boolean, nullable=False, default=True)
+
+    # Prompt-first configuration (template binding)
+    prompt_config = Column(JSON, nullable=False, default=dict)
+    # Rule engine configuration (thresholds/cooldowns)
+    rule_config = Column(JSON, nullable=False, default=dict)
+    # Hard guardrail fallback toggles
+    fallback_config = Column(JSON, nullable=False, default=dict)
+
+    created_at = Column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+    updated_at = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
+    updated_by = Column(String(36), ForeignKey("users.user_id"), nullable=True)
+
+    __table_args__ = (
+        CheckConstraint(
+            "scope_type IN ('global', 'scenario', 'presentation')",
+            name="ck_presentation_ai_policy_scope_type",
+        ),
+        CheckConstraint(
+            "((scope_type = 'global' AND scope_id IS NULL) "
+            "OR (scope_type IN ('scenario', 'presentation') AND scope_id IS NOT NULL))",
+            name="ck_presentation_ai_policy_scope_id",
+        ),
+        UniqueConstraint(
+            "scope_type",
+            "scope_id",
+            name="uq_presentation_ai_policy_scope",
+        ),
+        Index(
+            "idx_presentation_ai_policy_scope",
+            "scope_type",
+            "scope_id",
+        ),
+        Index("idx_presentation_ai_policy_enabled", "enabled"),
+    )
+
+    updater = relationship("User", foreign_keys=[updated_by])

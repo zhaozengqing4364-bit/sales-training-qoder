@@ -1,13 +1,12 @@
-"""
-Sales Scenarios API - Manage sales practice scenarios
-Provides endpoints for listing available sales personas and scenarios
-"""
-from typing import List
+"""Sales scenario APIs for listing scenarios and available personas."""
+
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from agent.models import Agent, AgentPersona, Persona
 from common.auth.service import get_current_user
 from common.db.models import Scenario, User
 from common.db.session import get_db
@@ -18,11 +17,34 @@ logger = get_logger(__name__)
 router = APIRouter()
 
 
+def _extract_persona_characteristics(traits: Any) -> list[str]:
+    """Normalize persona traits into frontend-friendly characteristic strings."""
+    if isinstance(traits, dict):
+        items = [
+            f"{key}: {value}"
+            for key, value in traits.items()
+            if isinstance(key, str) and str(key).strip() and value is not None
+        ]
+        if items:
+            return items
+
+    if isinstance(traits, list):
+        return [
+            str(item).strip()
+            for item in traits
+            if isinstance(item, str) and item.strip()
+        ]
+
+    return []
+
+
 @router.get("/scenarios")
 async def list_scenarios(
-    scenario_type: str = Query(None, description="Filter by scenario type: 'presentation' or 'sales'"),
+    scenario_type: str = Query(
+        None, description="Filter by scenario type: 'presentation' or 'sales'"
+    ),
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ):
     """
     List available practice scenarios
@@ -31,7 +53,7 @@ async def list_scenarios(
         List of scenarios with their configurations
     """
     try:
-        query = select(Scenario).where(Scenario.is_active == True)
+        query = select(Scenario).where(Scenario.is_active.is_(True))
 
         if scenario_type:
             query = query.where(Scenario.scenario_type == scenario_type)
@@ -68,8 +90,9 @@ async def list_scenarios(
 
 @router.get("/scenarios/sales/personas")
 async def list_sales_personas(
+    agent_id: str | None = Query(None, description="Optional agent ID filter"),
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ):
     """
     List available sales personas for practice
@@ -77,85 +100,51 @@ async def list_sales_personas(
     Returns:
         List of persona configurations with descriptions
     """
-    # Hardcoded personas that match the bot service
-    personas = [
-        {
-            "id": "impatient_ceo",
-            "name": "急躁 CEO",
-            "description": "时间紧迫，对冗长回答缺乏耐心。要求简洁直接的回答。",
-            "characteristics": [
-                "不喜欢长篇大论",
-                "希望快速得到要点",
-                "会打断啰嗦的回答",
-                "重视效率"
-            ],
-            "difficulty": "hard"
-        },
-        {
-            "id": "skeptical_buyer",
-            "name": "怀疑型买家",
-            "description": "质疑一切，需要证据和证明。对夸张的宣传保持怀疑态度。",
-            "characteristics": [
-                "会问很多问题",
-                "要求看到数据支持",
-                "不轻易相信承诺",
-                "需要详细解释"
-            ],
-            "difficulty": "medium"
-        },
-        {
-            "id": "price_focused",
-            "name": "价格关注者",
-            "description": "只关心价格和折扣，对价值不太敏感。",
-            "characteristics": [
-                "反复询问价格",
-                "要求折扣",
-                "与竞品比较价格",
-                "对价格敏感"
-            ],
-            "difficulty": "medium"
-        },
-        {
-            "id": "technical_cto",
-            "name": "技术型 CTO",
-            "description": "询问深度技术问题，需要专业解答。",
-            "characteristics": [
-                "关注技术细节",
-                "询问架构和实现",
-                "需要专业术语",
-                "重视技术能力"
-            ],
-            "difficulty": "hard"
-        }
-    ]
-
-    # Try to get scenarios from database to check which are active
     try:
-        result = await db.execute(
-            select(Scenario).where(
-                Scenario.scenario_type == "sales",
-                Scenario.is_active == True
+        stmt = (
+            select(Persona, AgentPersona.display_order)
+            .join(AgentPersona, AgentPersona.persona_id == Persona.id)
+            .join(Agent, Agent.id == AgentPersona.agent_id)
+            .where(
+                Agent.category == "sales",
+                Agent.status == "published",
+                Persona.status == "active",
+                Persona.is_public.is_(True),
             )
+            .order_by(AgentPersona.display_order.asc(), Persona.created_at.asc())
         )
-        active_scenarios = result.scalars().all()
 
-        # Filter personas based on active scenarios
-        active_persona_ids = [s.name for s in active_scenarios]
+        if agent_id:
+            stmt = stmt.where(Agent.id == agent_id)
 
-        if active_persona_ids:
-            personas = [p for p in personas if p["id"] in active_persona_ids]
+        result = await db.execute(stmt)
+        rows = result.all()
+
+        unique_personas: dict[str, dict[str, Any]] = {}
+        for persona, _display_order in rows:
+            if persona.id in unique_personas:
+                continue
+
+            unique_personas[persona.id] = {
+                "id": persona.id,
+                "name": persona.name,
+                "description": persona.description or "",
+                "characteristics": _extract_persona_characteristics(persona.traits),
+                "difficulty": persona.difficulty,
+            }
+
+        return list(unique_personas.values())
 
     except (RuntimeError, ValueError, OSError) as e:
-        logger.warning(f"Could not filter personas from database: {str(e)}")
-
-    return personas
+        logger.warning(f"Could not load sales personas from database: {str(e)}")
+        return []
 
 
 @router.get("/scenarios/{scenario_id}")
 async def get_scenario(
     scenario_id: str,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ):
     """Get detailed information about a specific scenario"""
     try:
@@ -174,7 +163,7 @@ async def get_scenario(
             "description": scenario.description,
             "persona_prompt": scenario.persona_prompt,
             "is_active": scenario.is_active,
-            "created_at": scenario.created_at.isoformat()
+            "created_at": scenario.created_at.isoformat(),
         }
 
     except HTTPException:

@@ -1,0 +1,1034 @@
+{
+  "meta": {
+    "run_id": "20260213T134317Z",
+    "source": ".agent/tasks.json",
+    "scope_lock": "AUDIT-001..AUDIT-029",
+    "started_at": "2026-02-13T13:43:17Z",
+    "retry_policy": {
+      "full_scan_passes": 1,
+      "targeted_retries_max": 2,
+      "classification_after_retry_exhausted": "BLOCKED"
+    },
+    "blocked_policy": {
+      "definition": "External dependency unavailable or environment precondition unsatisfied",
+      "requires_unblock_condition": true,
+      "classify_as_fail_if_internal_defect_reproducible": true
+    },
+    "audit_record_template_path": ".agent/evidence/20260213T134317Z/task-1-audit-template.json",
+    "registry_normalized_at": "2026-02-13T13:44:30Z",
+    "wave2_completed_at": "2026-02-13T14:00:53.889094+00:00",
+    "final_gate_completed_at": "2026-02-13T14:09:15.650897+00:00",
+    "final_gate_log": ".agent/evidence/20260213T134317Z/task-12-final-gate.log",
+    "final_report": "docs/audit-report-20260213T134317Z.md",
+    "regression_matrix": ".agent/evidence/20260213T134317Z/audit-regression-matrix.md"
+  },
+  "tasks": [
+    {
+      "id": "AUDIT-001",
+      "description": "建立统一核查模板（按钮→前端函数→后端接口→数据库）",
+      "verdict": "PASS",
+      "passes": true,
+      "confidence": "high",
+      "evidence": {
+        "command": "jq \".tasks | length\" .agent/evidence/20260213T134317Z/audit-index.json; jq -e \"all(.tasks[]; has(\"id\") and has(\"verdict\") and has(\"passes\") and has(\"evidence\"))\" .agent/evidence/20260213T134317Z/audit-index.json",
+        "output_path": ".agent/evidence/20260213T134317Z/task-1-registry-validation.log",
+        "code_refs": [
+          ".agent/tasks.json",
+          ".agent/evidence/20260213T134317Z/audit-index.json"
+        ],
+        "db_refs": [],
+        "expected": "AUDIT registry contains exactly 29 normalized entries with verdict/evidence shape.",
+        "actual": "Registry validation log shows 29 entries and schema assertion true.",
+        "repro_steps": [
+          "Run recorded command",
+          "Inspect referenced FE/BE code paths",
+          "Compare expected vs actual and persist output path"
+        ],
+        "unblock_condition": ""
+      },
+      "trace": {
+        "page": "",
+        "button_label": "",
+        "frontend_handler": "",
+        "http_method": "",
+        "api_path": "",
+        "db_table": ""
+      }
+    },
+    {
+      "id": "AUDIT-002",
+      "description": "登录鉴权模块按钮一致性核查",
+      "verdict": "PASS",
+      "passes": true,
+      "confidence": "medium",
+      "evidence": {
+        "command": "grep -n \"api.auth.login\" \"web/src/app/(auth)/login/page.tsx\"; grep -n \"/auth/login\" \"backend/src/common/auth/api.py\"",
+        "output_path": ".agent/evidence/20260213T134317Z/task-3-audit-002-008.md",
+        "code_refs": [
+          "web/src/app/(auth)/login/page.tsx",
+          "backend/src/common/auth/api.py"
+        ],
+        "db_refs": [
+          "users"
+        ],
+        "expected": "Login button triggers auth API and backend exposes login/logout endpoints with users persistence path.",
+        "actual": "Frontend handleLogin calls api.auth.login; backend exposes /auth/login and /auth/logout handlers.",
+        "repro_steps": [
+          "Run recorded command",
+          "Inspect referenced FE/BE code paths",
+          "Compare expected vs actual and persist output path"
+        ],
+        "unblock_condition": ""
+      },
+      "trace": {
+        "page": "",
+        "button_label": "",
+        "frontend_handler": "",
+        "http_method": "",
+        "api_path": "",
+        "db_table": ""
+      }
+    },
+    {
+      "id": "AUDIT-003",
+      "description": "用户首页 Dashboard 按钮一致性核查",
+      "verdict": "PASS",
+      "passes": true,
+      "confidence": "medium",
+      "evidence": {
+        "command": "grep -n \"api.dashboard.getStats\" \"web/src/app/(dashboard)/page.tsx\"; grep -n \"/dashboard/stats\" \"backend/src/common/api/dashboard.py\"",
+        "output_path": ".agent/evidence/20260213T134317Z/task-3-audit-002-008.md",
+        "code_refs": [
+          "web/src/app/(dashboard)/page.tsx",
+          "backend/src/common/api/dashboard.py"
+        ],
+        "db_refs": [
+          "practice_sessions, scenarios, users"
+        ],
+        "expected": "Dashboard actions resolve to backend stats/recommendation/history APIs.",
+        "actual": "Dashboard page invokes stats/recommendation/history calls; backend implements stats and recommendation routes.",
+        "repro_steps": [
+          "Run recorded command",
+          "Inspect referenced FE/BE code paths",
+          "Compare expected vs actual and persist output path"
+        ],
+        "unblock_condition": ""
+      },
+      "trace": {
+        "page": "",
+        "button_label": "",
+        "frontend_handler": "",
+        "http_method": "",
+        "api_path": "",
+        "db_table": ""
+      }
+    },
+    {
+      "id": "AUDIT-004",
+      "description": "训练大厅主页面按钮一致性核查",
+      "verdict": "PASS",
+      "passes": true,
+      "confidence": "medium",
+      "evidence": {
+        "command": "grep -n \"api.training.getCategories\" \"web/src/app/(dashboard)/training/page.tsx\"; grep -n \"/training-categories\" \"backend/src/common/api/training.py\"",
+        "output_path": ".agent/evidence/20260213T134317Z/task-3-audit-002-008.md",
+        "code_refs": [
+          "web/src/app/(dashboard)/training/page.tsx",
+          "backend/src/common/api/training.py"
+        ],
+        "db_refs": [
+          "scenarios"
+        ],
+        "expected": "Training category buttons map to category API and scenario-backed data.",
+        "actual": "Training page requests getCategories; backend exposes /training-categories and session listing logic.",
+        "repro_steps": [
+          "Run recorded command",
+          "Inspect referenced FE/BE code paths",
+          "Compare expected vs actual and persist output path"
+        ],
+        "unblock_condition": ""
+      },
+      "trace": {
+        "page": "",
+        "button_label": "",
+        "frontend_handler": "",
+        "http_method": "",
+        "api_path": "",
+        "db_table": ""
+      }
+    },
+    {
+      "id": "AUDIT-005",
+      "description": "销售训练页面按钮一致性核查",
+      "verdict": "PASS",
+      "passes": true,
+      "confidence": "medium",
+      "evidence": {
+        "command": "grep -n \"getSalesAgents\" \"web/src/app/(dashboard)/training/sales/page.tsx\"; grep -n \"/scenarios/sales/personas\" \"backend/src/sales_bot/api/scenarios.py\"",
+        "output_path": ".agent/evidence/20260213T134317Z/task-3-audit-002-008.md",
+        "code_refs": [
+          "web/src/app/(dashboard)/training/sales/page.tsx",
+          "backend/src/sales_bot/api/scenarios.py",
+          "backend/src/common/api/training.py"
+        ],
+        "db_refs": [
+          "scenarios, agents, personas, agent_personas"
+        ],
+        "expected": "Sales training filters and persona retrieval map to DB-backed scenario/agent/persona relations.",
+        "actual": "Sales page calls scenario+persona APIs; backend persona API queries AgentPersona+Persona join.",
+        "repro_steps": [
+          "Run recorded command",
+          "Inspect referenced FE/BE code paths",
+          "Compare expected vs actual and persist output path"
+        ],
+        "unblock_condition": ""
+      },
+      "trace": {
+        "page": "",
+        "button_label": "",
+        "frontend_handler": "",
+        "http_method": "",
+        "api_path": "",
+        "db_table": ""
+      }
+    },
+    {
+      "id": "AUDIT-006",
+      "description": "演讲训练页面按钮一致性核查",
+      "verdict": "PASS",
+      "passes": true,
+      "confidence": "medium",
+      "evidence": {
+        "command": "grep -n \"api.agents.getList\" \"web/src/app/(dashboard)/training/presentation/page.tsx\"; grep -n \"prefix=\"/agents\"\" \"backend/src/agent/api/agents.py\"",
+        "output_path": ".agent/evidence/20260213T134317Z/task-3-audit-002-008.md",
+        "code_refs": [
+          "web/src/app/(dashboard)/training/presentation/page.tsx",
+          "backend/src/agent/api/agents.py"
+        ],
+        "db_refs": [
+          "agents, scenarios"
+        ],
+        "expected": "Presentation training list maps to published agent listing API.",
+        "actual": "Presentation page calls getList(\"presentation\") and routes to agent detail pages.",
+        "repro_steps": [
+          "Run recorded command",
+          "Inspect referenced FE/BE code paths",
+          "Compare expected vs actual and persist output path"
+        ],
+        "unblock_condition": ""
+      },
+      "trace": {
+        "page": "",
+        "button_label": "",
+        "frontend_handler": "",
+        "http_method": "",
+        "api_path": "",
+        "db_table": ""
+      }
+    },
+    {
+      "id": "AUDIT-007",
+      "description": "客服训练页面按钮一致性核查",
+      "verdict": "PASS",
+      "passes": true,
+      "confidence": "medium",
+      "evidence": {
+        "command": "grep -n \"getCustomerAgents\" \"web/src/app/(dashboard)/training/customer-service/page.tsx\"; grep -n \"customer\" \"backend/src/common/api/training.py\"",
+        "output_path": ".agent/evidence/20260213T134317Z/task-3-audit-002-008.md",
+        "code_refs": [
+          "web/src/app/(dashboard)/training/customer-service/page.tsx",
+          "backend/src/common/api/training.py"
+        ],
+        "db_refs": [
+          "agents, scenarios"
+        ],
+        "expected": "Customer-service training entry resolves to backend-filtered agent data.",
+        "actual": "Customer-service page invokes getCustomerAgents and navigates to selected agent detail.",
+        "repro_steps": [
+          "Run recorded command",
+          "Inspect referenced FE/BE code paths",
+          "Compare expected vs actual and persist output path"
+        ],
+        "unblock_condition": ""
+      },
+      "trace": {
+        "page": "",
+        "button_label": "",
+        "frontend_handler": "",
+        "http_method": "",
+        "api_path": "",
+        "db_table": ""
+      }
+    },
+    {
+      "id": "AUDIT-008",
+      "description": "智能体详情页（开始练习）按钮一致性核查",
+      "verdict": "FAIL",
+      "passes": false,
+      "confidence": "medium",
+      "evidence": {
+        "command": "grep -n \"createSession\" \"web/src/app/(dashboard)/agents/[agentId]/page.tsx\"; python3 test_websocket.py",
+        "output_path": ".agent/evidence/20260213T134317Z/task-3-audit-002-008.md",
+        "code_refs": [
+          "web/src/app/(dashboard)/agents/[agentId]/page.tsx",
+          "backend/src/common/api/practice.py",
+          ".agent/evidence/20260213T134317Z/task-8-ws-smoke.log"
+        ],
+        "db_refs": [
+          "practice_sessions, agents, personas"
+        ],
+        "expected": "Enhanced start-practice flow should create session and emit capability messages consistently.",
+        "actual": "Code path includes agent/persona/voice_mode persistence, but WS smoke test reports enhanced capability message failure.",
+        "repro_steps": [
+          "Run recorded command",
+          "Inspect referenced FE/BE code paths",
+          "Compare expected vs actual and persist output path"
+        ],
+        "unblock_condition": "Fix enhanced sales WS capability message chain and verify with `python3 test_websocket.py` capability checks."
+      },
+      "trace": {
+        "page": "",
+        "button_label": "",
+        "frontend_handler": "",
+        "http_method": "",
+        "api_path": "",
+        "db_table": ""
+      }
+    },
+    {
+      "id": "AUDIT-009",
+      "description": "实时练习会话页按钮一致性核查",
+      "verdict": "FAIL",
+      "passes": false,
+      "confidence": "medium",
+      "evidence": {
+        "command": "grep -n \"controlLifecycle\" \"web/src/app/(user)/practice/[sessionId]/page.tsx\"; python3 test_websocket.py; python3 test_websocket_detailed.py",
+        "output_path": ".agent/evidence/20260213T134317Z/task-4-audit-009-014.md",
+        "code_refs": [
+          "web/src/app/(user)/practice/[sessionId]/page.tsx",
+          "backend/src/common/api/practice.py",
+          ".agent/evidence/20260213T134317Z/task-8-ws-smoke.log",
+          ".agent/evidence/20260213T134317Z/task-8-ws-detailed.log",
+          ".agent/evidence/20260213T134317Z/task-9-contract-drift.md"
+        ],
+        "db_refs": [
+          "practice_sessions, conversation_messages, interruption_events"
+        ],
+        "expected": "Session lifecycle actions and WS validation should reject invalid session and maintain stable flow.",
+        "actual": "WS smoke logs invalid-session rejection failure; detailed WS script terminates with AttributeError after SESSION_NOT_STARTED sequence. Task-9 drift check flags session top-level runtime profile naming drift risk and getSession typing drift.",
+        "repro_steps": [
+          "Run recorded command",
+          "Inspect referenced FE/BE code paths",
+          "Compare expected vs actual and persist output path"
+        ],
+        "unblock_condition": "Ensure invalid session rejection and repair `test_websocket_detailed.py` script stability; rerun smoke+detailed WS suites."
+      },
+      "trace": {
+        "page": "",
+        "button_label": "",
+        "frontend_handler": "",
+        "http_method": "",
+        "api_path": "",
+        "db_table": ""
+      }
+    },
+    {
+      "id": "AUDIT-010",
+      "description": "回放页面按钮一致性核查",
+      "verdict": "PASS",
+      "passes": true,
+      "confidence": "medium",
+      "evidence": {
+        "command": "grep -n \"getReplay\" \"web/src/app/(user)/practice/[sessionId]/replay/page.tsx\"; grep -n \"/replay\" \"backend/src/common/conversation/api.py\"",
+        "output_path": ".agent/evidence/20260213T134317Z/task-4-audit-009-014.md",
+        "code_refs": [
+          "web/src/app/(user)/practice/[sessionId]/replay/page.tsx",
+          "backend/src/common/conversation/api.py",
+          "backend/src/common/conversation/replay.py"
+        ],
+        "db_refs": [
+          "conversation_messages, practice_sessions"
+        ],
+        "expected": "Replay controls map to replay/messages/highlights APIs with persisted conversation records.",
+        "actual": "Replay page calls replay/messages/highlights APIs and backend conversation API exposes corresponding routes.",
+        "repro_steps": [
+          "Run recorded command",
+          "Inspect referenced FE/BE code paths",
+          "Compare expected vs actual and persist output path"
+        ],
+        "unblock_condition": ""
+      },
+      "trace": {
+        "page": "",
+        "button_label": "",
+        "frontend_handler": "",
+        "http_method": "",
+        "api_path": "",
+        "db_table": ""
+      }
+    },
+    {
+      "id": "AUDIT-011",
+      "description": "报告页面按钮一致性核查",
+      "verdict": "PASS",
+      "passes": true,
+      "confidence": "medium",
+      "evidence": {
+        "command": "grep -n \"getReport\" \"web/src/app/(user)/practice/[sessionId]/report/page.tsx\"; grep -n \"/practice/sessions/{session_id}/report\" \"backend/src/common/api/practice.py\"",
+        "output_path": ".agent/evidence/20260213T134317Z/task-4-audit-009-014.md",
+        "code_refs": [
+          "web/src/app/(user)/practice/[sessionId]/report/page.tsx",
+          "backend/src/common/api/practice.py",
+          ".agent/evidence/20260213T134317Z/task-9-contract-drift.md"
+        ],
+        "db_refs": [
+          "staged_evaluation_results, comprehensive_reports"
+        ],
+        "expected": "Report page buttons map to report/knowledge/highlight/comprehensive report APIs.",
+        "actual": "Report page triggers report and comprehensive report APIs; backend exposes report and comprehensive-report routes. Task-9 drift check confirms report snapshot field compatibility while documenting top-level session naming drift.",
+        "repro_steps": [
+          "Run recorded command",
+          "Inspect referenced FE/BE code paths",
+          "Compare expected vs actual and persist output path"
+        ],
+        "unblock_condition": ""
+      },
+      "trace": {
+        "page": "",
+        "button_label": "",
+        "frontend_handler": "",
+        "http_method": "",
+        "api_path": "",
+        "db_table": ""
+      }
+    },
+    {
+      "id": "AUDIT-012",
+      "description": "历史记录页面按钮一致性核查",
+      "verdict": "PASS",
+      "passes": true,
+      "confidence": "medium",
+      "evidence": {
+        "command": "grep -n \"getMyHistory\" \"web/src/app/(dashboard)/history/page.tsx\"; grep -n \"/practice/history\" \"backend/src/common/api/practice.py\"",
+        "output_path": ".agent/evidence/20260213T134317Z/task-4-audit-009-014.md",
+        "code_refs": [
+          "web/src/app/(dashboard)/history/page.tsx",
+          "backend/src/common/api/practice.py",
+          "backend/src/common/api/dashboard.py"
+        ],
+        "db_refs": [
+          "practice_sessions, scenarios"
+        ],
+        "expected": "History list/statistics/trends remain aligned with session status/report status payload fields.",
+        "actual": "History page uses matching APIs and status fields; backend history response includes session/report status fields.",
+        "repro_steps": [
+          "Run recorded command",
+          "Inspect referenced FE/BE code paths",
+          "Compare expected vs actual and persist output path"
+        ],
+        "unblock_condition": ""
+      },
+      "trace": {
+        "page": "",
+        "button_label": "",
+        "frontend_handler": "",
+        "http_method": "",
+        "api_path": "",
+        "db_table": ""
+      }
+    },
+    {
+      "id": "AUDIT-013",
+      "description": "排行榜页面按钮一致性核查",
+      "verdict": "PASS",
+      "passes": true,
+      "confidence": "high",
+      "evidence": {
+        "command": "grep -n \"getPublicLeaderboard\" \"web/src/app/(dashboard)/leaderboard/page.tsx\"; pytest tests/contract/test_analytics.py",
+        "output_path": ".agent/evidence/20260213T134317Z/task-4-audit-009-014.md",
+        "code_refs": [
+          "web/src/app/(dashboard)/leaderboard/page.tsx",
+          "backend/src/common/api/analytics.py",
+          "backend/tests/contract/test_analytics.py",
+          ".agent/evidence/20260213T134317Z/task-9-contract-drift.md"
+        ],
+        "db_refs": [
+          "leaderboard_entries, users"
+        ],
+        "expected": "Leaderboard filters map to API parameters and contract remains stable.",
+        "actual": "Leaderboard page forwards scenario/time filters; contract tests include leaderboard and my-rank routes. Task-9 drift check confirms leaderboard contract compatibility (rank/average_score/best_score).",
+        "repro_steps": [
+          "Run recorded command",
+          "Inspect referenced FE/BE code paths",
+          "Compare expected vs actual and persist output path"
+        ],
+        "unblock_condition": ""
+      },
+      "trace": {
+        "page": "",
+        "button_label": "",
+        "frontend_handler": "",
+        "http_method": "",
+        "api_path": "",
+        "db_table": ""
+      }
+    },
+    {
+      "id": "AUDIT-014",
+      "description": "个人中心页面按钮一致性核查",
+      "verdict": "PASS",
+      "passes": true,
+      "confidence": "medium",
+      "evidence": {
+        "command": "grep -n \"updateProfile\" \"web/src/app/(dashboard)/profile/page.tsx\"; grep -n \"/auth/logout\" \"backend/src/common/auth/api.py\"",
+        "output_path": ".agent/evidence/20260213T134317Z/task-4-audit-009-014.md",
+        "code_refs": [
+          "web/src/app/(dashboard)/profile/page.tsx",
+          "backend/src/common/api/users.py",
+          "backend/src/common/auth/api.py"
+        ],
+        "db_refs": [
+          "users"
+        ],
+        "expected": "Profile save/logout flow is wired end-to-end with user record updates and auth endpoint.",
+        "actual": "Profile page calls getMe/updateProfile/logout and backend exposes logout endpoint and user APIs.",
+        "repro_steps": [
+          "Run recorded command",
+          "Inspect referenced FE/BE code paths",
+          "Compare expected vs actual and persist output path"
+        ],
+        "unblock_condition": ""
+      },
+      "trace": {
+        "page": "",
+        "button_label": "",
+        "frontend_handler": "",
+        "http_method": "",
+        "api_path": "",
+        "db_table": ""
+      }
+    },
+    {
+      "id": "AUDIT-015",
+      "description": "支持运行态页面按钮一致性核查",
+      "verdict": "PASS",
+      "passes": true,
+      "confidence": "medium",
+      "evidence": {
+        "command": "grep -n \"getOverview\" \"web/src/app/(dashboard)/support/runtime/page.tsx\"; grep -n \"/support/runtime/overview\" \"backend/src/support/api/runtime_status.py\"",
+        "output_path": ".agent/evidence/20260213T134317Z/task-5-audit-015-020.md",
+        "code_refs": [
+          "web/src/app/(dashboard)/support/runtime/page.tsx",
+          "backend/src/support/api/runtime_status.py"
+        ],
+        "db_refs": [
+          "system_logs, practice_sessions"
+        ],
+        "expected": "Support runtime page filters and fault list map to read-only support runtime APIs.",
+        "actual": "Page requests overview/faults and backend defines matching endpoints with status/limit filters.",
+        "repro_steps": [
+          "Run recorded command",
+          "Inspect referenced FE/BE code paths",
+          "Compare expected vs actual and persist output path"
+        ],
+        "unblock_condition": ""
+      },
+      "trace": {
+        "page": "",
+        "button_label": "",
+        "frontend_handler": "",
+        "http_method": "",
+        "api_path": "",
+        "db_table": ""
+      }
+    },
+    {
+      "id": "AUDIT-016",
+      "description": "管理台首页按钮一致性核查",
+      "verdict": "FAIL",
+      "passes": false,
+      "confidence": "medium",
+      "evidence": {
+        "command": "grep -n \"api.admin.getUsers\" \"web/src/app/admin/page.tsx\"; grep -n \"/overview\" \"backend/src/admin/api/analytics.py\"",
+        "output_path": ".agent/evidence/20260213T134317Z/task-5-audit-015-020.md",
+        "code_refs": [
+          "web/src/app/admin/page.tsx",
+          "backend/src/admin/api/users.py",
+          "backend/src/admin/api/analytics.py",
+          "backend/src/admin/api/system_logs.py"
+        ],
+        "db_refs": [
+          "users, system_logs, practice_sessions"
+        ],
+        "expected": "Admin home cards map to user/log/analytics backend endpoints.",
+        "actual": "Admin homepage contains visible action buttons without concrete FE->API mapping for several actions; only part of entries are wired.",
+        "repro_steps": [
+          "Run recorded command",
+          "Inspect referenced FE/BE code paths",
+          "Compare expected vs actual and persist output path"
+        ],
+        "unblock_condition": "Bind each visible admin action button to an implemented backend endpoint or hide unsupported controls."
+      },
+      "trace": {
+        "page": "",
+        "button_label": "",
+        "frontend_handler": "",
+        "http_method": "",
+        "api_path": "",
+        "db_table": ""
+      }
+    },
+    {
+      "id": "AUDIT-017",
+      "description": "管理台用户列表页面按钮一致性核查",
+      "verdict": "FAIL",
+      "passes": false,
+      "confidence": "high",
+      "evidence": {
+        "command": "grep -n \"createUser\" \"web/src/app/admin/users/page.tsx\"; grep -n \"/{user_id}/suspend\" \"backend/src/admin/api/users.py\"",
+        "output_path": ".agent/evidence/20260213T134317Z/task-5-audit-015-020.md",
+        "code_refs": [
+          "web/src/app/admin/users/page.tsx",
+          "backend/src/admin/api/users.py"
+        ],
+        "db_refs": [
+          "users"
+        ],
+        "expected": "All user-management actions have unique API mapping and status persistence semantics.",
+        "actual": "Users page contract mismatch: frontend create payload omits required backend username and update path uses PATCH semantics against PUT route.",
+        "repro_steps": [
+          "Run recorded command",
+          "Inspect referenced FE/BE code paths",
+          "Compare expected vs actual and persist output path"
+        ],
+        "unblock_condition": "Align frontend payload/method with backend contract (`username` + PUT) and add integration assertion for create/update compatibility."
+      },
+      "trace": {
+        "page": "",
+        "button_label": "",
+        "frontend_handler": "",
+        "http_method": "",
+        "api_path": "",
+        "db_table": ""
+      }
+    },
+    {
+      "id": "AUDIT-018",
+      "description": "管理台用户详情页面按钮一致性核查",
+      "verdict": "PASS",
+      "passes": true,
+      "confidence": "medium",
+      "evidence": {
+        "command": "grep -n \"getUserStats\" \"web/src/app/admin/users/[id]/page.tsx\"; grep -n \"/{user_id}/progress\" \"backend/src/admin/api/users.py\"",
+        "output_path": ".agent/evidence/20260213T134317Z/task-5-audit-015-020.md",
+        "code_refs": [
+          "web/src/app/admin/users/[id]/page.tsx",
+          "backend/src/admin/api/users.py"
+        ],
+        "db_refs": [
+          "users, practice_sessions"
+        ],
+        "expected": "User detail statistics/session/progress tabs map to backend endpoints with same filters.",
+        "actual": "Detail page requests stats/sessions/progress; backend exposes matching parameterized routes.",
+        "repro_steps": [
+          "Run recorded command",
+          "Inspect referenced FE/BE code paths",
+          "Compare expected vs actual and persist output path"
+        ],
+        "unblock_condition": ""
+      },
+      "trace": {
+        "page": "",
+        "button_label": "",
+        "frontend_handler": "",
+        "http_method": "",
+        "api_path": "",
+        "db_table": ""
+      }
+    },
+    {
+      "id": "AUDIT-019",
+      "description": "管理台训练记录页面按钮一致性核查",
+      "verdict": "FAIL",
+      "passes": false,
+      "confidence": "high",
+      "evidence": {
+        "command": "grep -n \"getTrainingRecords\" \"web/src/app/admin/records/page.tsx\"; grep -n \"/admin/training-records\" \"backend/src/admin/api/training_records.py\"",
+        "output_path": ".agent/evidence/20260213T134317Z/task-5-audit-015-020.md",
+        "code_refs": [
+          "web/src/app/admin/records/page.tsx",
+          "backend/src/admin/api/training_records.py"
+        ],
+        "db_refs": [
+          "practice_sessions, scenarios, users"
+        ],
+        "expected": "Records list/search/pagination/delete actions map to backend record endpoints.",
+        "actual": "Records page exposes export/advanced filter controls that are not backed by equivalent backend routes/query params.",
+        "repro_steps": [
+          "Run recorded command",
+          "Inspect referenced FE/BE code paths",
+          "Compare expected vs actual and persist output path"
+        ],
+        "unblock_condition": "Implement backend export/filter endpoints used by UI controls, or remove unsupported controls to match backend capability."
+      },
+      "trace": {
+        "page": "",
+        "button_label": "",
+        "frontend_handler": "",
+        "http_method": "",
+        "api_path": "",
+        "db_table": ""
+      }
+    },
+    {
+      "id": "AUDIT-020",
+      "description": "管理台分析页面按钮一致性核查",
+      "verdict": "FAIL",
+      "passes": false,
+      "confidence": "medium",
+      "evidence": {
+        "command": "grep -n \"api.analytics.getOverview\" \"web/src/app/admin/analytics/page.tsx\"; grep -n \"/export\" \"backend/src/admin/api/analytics.py\"",
+        "output_path": ".agent/evidence/20260213T134317Z/task-5-audit-015-020.md",
+        "code_refs": [
+          "web/src/app/admin/analytics/page.tsx",
+          "backend/src/admin/api/analytics.py"
+        ],
+        "db_refs": [
+          "practice_sessions, users, leaderboard_entries"
+        ],
+        "expected": "Analytics filters and export action map to backend analytics routes.",
+        "actual": "Analytics page applies global scenario filter, but backend support is partial across metrics endpoints, producing inconsistent filter behavior.",
+        "repro_steps": [
+          "Run recorded command",
+          "Inspect referenced FE/BE code paths",
+          "Compare expected vs actual and persist output path"
+        ],
+        "unblock_condition": "Standardize scenario filter support across overview/trends/agents/leaderboard/export or scope UI filter to supported endpoints only."
+      },
+      "trace": {
+        "page": "",
+        "button_label": "",
+        "frontend_handler": "",
+        "http_method": "",
+        "api_path": "",
+        "db_table": ""
+      }
+    },
+    {
+      "id": "AUDIT-021",
+      "description": "管理台智能体列表页面按钮一致性核查",
+      "verdict": "PASS",
+      "passes": true,
+      "confidence": "medium",
+      "evidence": {
+        "command": "grep -n \"publishAgent\" \"web/src/app/admin/agents/page.tsx\"; grep -n \"/{agent_id}/publish\" \"backend/src/agent/api/agents.py\"",
+        "output_path": ".agent/evidence/20260213T134317Z/task-6-audit-021-028.md",
+        "code_refs": [
+          "web/src/app/admin/agents/page.tsx",
+          "backend/src/agent/api/agents.py"
+        ],
+        "db_refs": [
+          "agents"
+        ],
+        "expected": "Agent list actions map to draft/publish/archive/unpublish/delete state transitions.",
+        "actual": "Frontend uses all state-transition APIs; backend exposes publish/archive/unpublish/delete routes.",
+        "repro_steps": [
+          "Run recorded command",
+          "Inspect referenced FE/BE code paths",
+          "Compare expected vs actual and persist output path"
+        ],
+        "unblock_condition": ""
+      },
+      "trace": {
+        "page": "",
+        "button_label": "",
+        "frontend_handler": "",
+        "http_method": "",
+        "api_path": "",
+        "db_table": ""
+      }
+    },
+    {
+      "id": "AUDIT-022",
+      "description": "管理台智能体详情页面按钮一致性核查",
+      "verdict": "PASS",
+      "passes": true,
+      "confidence": "medium",
+      "evidence": {
+        "command": "grep -n \"updateAgentVoicePolicy\" \"web/src/app/admin/agents/[id]/page.tsx\"; grep -n \"/voice-runtime/agents/{agent_id}/policy\" \"backend/src/admin/api/voice_runtime.py\"",
+        "output_path": ".agent/evidence/20260213T134317Z/task-6-audit-021-028.md",
+        "code_refs": [
+          "web/src/app/admin/agents/[id]/page.tsx",
+          "backend/src/agent/api/agent_personas.py",
+          "backend/src/admin/api/voice_runtime.py"
+        ],
+        "db_refs": [
+          "agent_personas, agent_voice_policies, voice_runtime_profiles"
+        ],
+        "expected": "Agent detail bindings (persona + voice policy) persist through dedicated endpoints.",
+        "actual": "Agent detail page calls persona binding and voice policy APIs; backend provides matching routes.",
+        "repro_steps": [
+          "Run recorded command",
+          "Inspect referenced FE/BE code paths",
+          "Compare expected vs actual and persist output path"
+        ],
+        "unblock_condition": ""
+      },
+      "trace": {
+        "page": "",
+        "button_label": "",
+        "frontend_handler": "",
+        "http_method": "",
+        "api_path": "",
+        "db_table": ""
+      }
+    },
+    {
+      "id": "AUDIT-023",
+      "description": "管理台人设模块按钮一致性核查",
+      "verdict": "PASS",
+      "passes": true,
+      "confidence": "medium",
+      "evidence": {
+        "command": "grep -n \"createPersona\" \"web/src/app/admin/personas/page.tsx\"; grep -n \"/admin/personas\" \"backend/src/agent/api/personas.py\"",
+        "output_path": ".agent/evidence/20260213T134317Z/task-6-audit-021-028.md",
+        "code_refs": [
+          "web/src/app/admin/personas/page.tsx",
+          "web/src/app/admin/personas/[id]/page.tsx",
+          "backend/src/agent/api/personas.py"
+        ],
+        "db_refs": [
+          "personas"
+        ],
+        "expected": "Persona module supports create/update/delete and detail retrieval with DB persistence.",
+        "actual": "Frontend persona list/detail pages call persona APIs; backend personas router provides CRUD routes.",
+        "repro_steps": [
+          "Run recorded command",
+          "Inspect referenced FE/BE code paths",
+          "Compare expected vs actual and persist output path"
+        ],
+        "unblock_condition": ""
+      },
+      "trace": {
+        "page": "",
+        "button_label": "",
+        "frontend_handler": "",
+        "http_method": "",
+        "api_path": "",
+        "db_table": ""
+      }
+    },
+    {
+      "id": "AUDIT-024",
+      "description": "管理台知识库模块按钮一致性核查",
+      "verdict": "PASS",
+      "passes": true,
+      "confidence": "medium",
+      "evidence": {
+        "command": "grep -n \"uploadDocument\" \"web/src/app/admin/knowledge/[id]/page.tsx\"; grep -n \"/admin/knowledge/{kb_id}/documents\" \"backend/src/common/knowledge/api.py\"",
+        "output_path": ".agent/evidence/20260213T134317Z/task-6-audit-021-028.md",
+        "code_refs": [
+          "web/src/app/admin/knowledge/page.tsx",
+          "web/src/app/admin/knowledge/[id]/page.tsx",
+          "backend/src/common/knowledge/api.py"
+        ],
+        "db_refs": [
+          "knowledge_bases, knowledge_documents"
+        ],
+        "expected": "Knowledge base and document actions map to upload/list/delete/preview backend APIs.",
+        "actual": "Frontend triggers knowledge CRUD and document operations; backend knowledge API exposes matching routes.",
+        "repro_steps": [
+          "Run recorded command",
+          "Inspect referenced FE/BE code paths",
+          "Compare expected vs actual and persist output path"
+        ],
+        "unblock_condition": ""
+      },
+      "trace": {
+        "page": "",
+        "button_label": "",
+        "frontend_handler": "",
+        "http_method": "",
+        "api_path": "",
+        "db_table": ""
+      }
+    },
+    {
+      "id": "AUDIT-025",
+      "description": "管理台演示文稿模块按钮一致性核查",
+      "verdict": "PASS",
+      "passes": true,
+      "confidence": "medium",
+      "evidence": {
+        "command": "grep -n \"api.presentations.upload\" \"web/src/app/admin/presentations/page.tsx\"; grep -n \"/presentations\" \"backend/src/presentation_coach/api/presentations.py\"",
+        "output_path": ".agent/evidence/20260213T134317Z/task-6-audit-021-028.md",
+        "code_refs": [
+          "web/src/app/admin/presentations/page.tsx",
+          "web/src/app/admin/presentations/[id]/page.tsx",
+          "backend/src/presentation_coach/api/presentations.py"
+        ],
+        "db_refs": [
+          "presentations, pages, required_talking_points, forbidden_words"
+        ],
+        "expected": "Presentation upload/delete/point/forbidden-word actions are end-to-end mapped.",
+        "actual": "Frontend list/detail pages call presentation CRUD and point/word APIs; backend routes implement them.",
+        "repro_steps": [
+          "Run recorded command",
+          "Inspect referenced FE/BE code paths",
+          "Compare expected vs actual and persist output path"
+        ],
+        "unblock_condition": ""
+      },
+      "trace": {
+        "page": "",
+        "button_label": "",
+        "frontend_handler": "",
+        "http_method": "",
+        "api_path": "",
+        "db_table": ""
+      }
+    },
+    {
+      "id": "AUDIT-026",
+      "description": "管理台提示词模块按钮一致性核查",
+      "verdict": "PASS",
+      "passes": true,
+      "confidence": "medium",
+      "evidence": {
+        "command": "grep -n \"createPromptTemplate\" \"web/src/app/admin/prompts/new/page.tsx\"; grep -n \"prompt-templates\" \"backend/src/prompt_templates/api/routes.py\"",
+        "output_path": ".agent/evidence/20260213T134317Z/task-6-audit-021-028.md",
+        "code_refs": [
+          "web/src/app/admin/prompts/page.tsx",
+          "web/src/app/admin/prompts/new/page.tsx",
+          "web/src/app/admin/prompts/[id]/edit/page.tsx",
+          "backend/src/prompt_templates/api/routes.py"
+        ],
+        "db_refs": [
+          "prompt_templates, scenario_prompts"
+        ],
+        "expected": "Prompt module supports list/create/edit/delete/render with scenario binding routes.",
+        "actual": "Frontend prompt pages invoke list/create/edit/render/delete; backend prompt template routes cover CRUD + render.",
+        "repro_steps": [
+          "Run recorded command",
+          "Inspect referenced FE/BE code paths",
+          "Compare expected vs actual and persist output path"
+        ],
+        "unblock_condition": ""
+      },
+      "trace": {
+        "page": "",
+        "button_label": "",
+        "frontend_handler": "",
+        "http_method": "",
+        "api_path": "",
+        "db_table": ""
+      }
+    },
+    {
+      "id": "AUDIT-027",
+      "description": "管理台模型设置页面按钮一致性核查",
+      "verdict": "PASS",
+      "passes": true,
+      "confidence": "medium",
+      "evidence": {
+        "command": "grep -n \"createModelConfig\" \"web/src/app/admin/settings/page.tsx\"; grep -n \"/model-configs\" \"backend/src/admin/api/model_configs.py\"",
+        "output_path": ".agent/evidence/20260213T134317Z/task-6-audit-021-028.md",
+        "code_refs": [
+          "web/src/app/admin/settings/page.tsx",
+          "backend/src/admin/api/model_configs.py",
+          "docs/api-contract/model-configs.md"
+        ],
+        "db_refs": [
+          "model_configs"
+        ],
+        "expected": "Model settings page buttons map to create/test/update/delete model config APIs.",
+        "actual": "Settings page invokes model-config APIs and backend model-config router includes create/update/delete/test/preview endpoints.",
+        "repro_steps": [
+          "Run recorded command",
+          "Inspect referenced FE/BE code paths",
+          "Compare expected vs actual and persist output path"
+        ],
+        "unblock_condition": ""
+      },
+      "trace": {
+        "page": "",
+        "button_label": "",
+        "frontend_handler": "",
+        "http_method": "",
+        "api_path": "",
+        "db_table": ""
+      }
+    },
+    {
+      "id": "AUDIT-028",
+      "description": "管理台语音运行策略页面按钮一致性核查",
+      "verdict": "PASS",
+      "passes": true,
+      "confidence": "medium",
+      "evidence": {
+        "command": "grep -n \"getVoiceRuntimeProfiles\" \"web/src/app/admin/voice-runtime/page.tsx\"; grep -n \"/voice-runtime/profiles\" \"backend/src/admin/api/voice_runtime.py\"",
+        "output_path": ".agent/evidence/20260213T134317Z/task-6-audit-021-028.md",
+        "code_refs": [
+          "web/src/app/admin/voice-runtime/page.tsx",
+          "backend/src/admin/api/voice_runtime.py",
+          "docs/api-contract/voice-runtime.md",
+          ".agent/evidence/20260213T134317Z/task-9-contract-drift.md"
+        ],
+        "db_refs": [
+          "voice_runtime_profiles, agent_voice_policies"
+        ],
+        "expected": "Voice runtime profiles and per-agent policy mapping are persisted via dedicated APIs.",
+        "actual": "Voice runtime page calls profile CRUD APIs; backend defines profile CRUD and agent-policy resolve/update routes. Task-9 drift check confirms runtime profile mapping chain and highlights canonical naming alignment action.",
+        "repro_steps": [
+          "Run recorded command",
+          "Inspect referenced FE/BE code paths",
+          "Compare expected vs actual and persist output path"
+        ],
+        "unblock_condition": ""
+      },
+      "trace": {
+        "page": "",
+        "button_label": "",
+        "frontend_handler": "",
+        "http_method": "",
+        "api_path": "",
+        "db_table": ""
+      }
+    },
+    {
+      "id": "AUDIT-029",
+      "description": "全量问题汇总、优先级排序、二次复测",
+      "verdict": "PASS",
+      "passes": true,
+      "confidence": "high",
+      "evidence": {
+        "command": "jq \".tasks | length\" .agent/evidence/20260213T134317Z/audit-index.json; grep -c \"AUDIT-\" docs/audit-report-20260213T134317Z.md",
+        "output_path": "docs/audit-report-20260213T134317Z.md",
+        "code_refs": [
+          ".agent/evidence/20260213T134317Z/audit-index.json",
+          ".agent/evidence/20260213T134317Z/audit-regression-matrix.md",
+          "docs/audit-report-20260213T134317Z.md"
+        ],
+        "db_refs": [
+          "n/a (summary task)"
+        ],
+        "expected": "Produce prioritized remediation queue and retest checklist tied to all FAIL/BLOCKED findings.",
+        "actual": "Report generated with priority queue, retest plan, and per-ID evidence links.",
+        "repro_steps": [
+          "Regenerate report from current audit-index and evidence artifacts",
+          "Run grep coverage check on report AUDIT entries",
+          "Validate FAIL/BLOCKED issues are included in priority and retest sections"
+        ],
+        "unblock_condition": ""
+      },
+      "trace": {
+        "page": "",
+        "button_label": "",
+        "frontend_handler": "",
+        "http_method": "",
+        "api_path": "",
+        "db_table": ""
+      }
+    }
+  ]
+}

@@ -9,6 +9,7 @@ import { AudioVisualizer } from "@/components/ui/audio-visualizer";
 import { AudioWaveform } from "@/components/ui/audio-waveform";
 import { GlassSheet } from "@/components/ui/glass-sheet";
 import { cn } from "@/lib/utils";
+import { debug } from "@/lib/debug";
 import { usePracticeWebSocket } from "@/hooks/use-practice-websocket";
 import type { ConnectionState, SessionStatus } from "@/hooks/use-practice-websocket";
 import { useAudioRecorder } from "@/hooks/use-audio-recorder";
@@ -19,6 +20,7 @@ interface SessionRuntimeMeta {
     voice_mode?: "legacy" | "stepfun_realtime" | null;
     agent_id?: string | null;
     persona_id?: string | null;
+    presentation_id?: string | null;
 }
 
 const SESSION_STATUS_LABELS: Record<SessionStatus, string> = {
@@ -44,6 +46,7 @@ export default function PracticeSessionPage() {
     const sessionId = params.sessionId as string;
     const queryAgentId = searchParams.get("agent_id") || undefined;
     const queryPersonaId = searchParams.get("persona_id") || undefined;
+    const queryPresentationId = searchParams.get("presentation_id") || undefined;
     const queryScenarioType = (searchParams.get("scenario_type") as "sales" | "presentation") || "sales";
     const queryVoiceMode = (searchParams.get("voice_mode") as "legacy" | "stepfun_realtime") || "legacy";
 
@@ -51,6 +54,7 @@ export default function PracticeSessionPage() {
     const [lockedVoiceMode, setLockedVoiceMode] = React.useState<"legacy" | "stepfun_realtime">(queryVoiceMode);
     const [lockedAgentId, setLockedAgentId] = React.useState<string | undefined>(queryAgentId);
     const [lockedPersonaId, setLockedPersonaId] = React.useState<string | undefined>(queryPersonaId);
+    const [lockedPresentationId, setLockedPresentationId] = React.useState<string | undefined>(queryPresentationId);
     const [sessionMetaError, setSessionMetaError] = React.useState<string | null>(null);
 
     const [isPanelOpen, setIsPanelOpen] = React.useState(false);
@@ -86,6 +90,7 @@ export default function PracticeSessionPage() {
         sendAudioEnd,
         sendControl,
         startSpeaking,
+        sendInterrupt,
         unlockAudio,
         sendMessage,
         connect,
@@ -126,6 +131,9 @@ export default function PracticeSessionPage() {
         },
         onSpeakingChange: (speaking) => {
             if (isConnected && speaking) {
+                if (aiIsBusyRef.current) {
+                    sendInterrupt("user_speaking");
+                }
                 // 只在开始说话时发送信号
                 startSpeaking();
             }
@@ -145,18 +153,31 @@ export default function PracticeSessionPage() {
                 const persistedVoiceMode = session.voice_mode || queryVoiceMode;
                 const persistedAgentId = session.agent_id || undefined;
                 const persistedPersonaId = session.persona_id || undefined;
+                const persistedPresentationId = session.presentation_id || queryPresentationId;
 
                 setLockedScenarioType(persistedScenario);
                 setLockedVoiceMode(persistedVoiceMode);
                 setLockedAgentId(persistedAgentId);
                 setLockedPersonaId(persistedPersonaId);
+                setLockedPresentationId(persistedPresentationId || undefined);
                 setSessionMetaError(null);
 
                 const shouldRewriteQuery =
                     persistedScenario !== queryScenarioType
                     || persistedVoiceMode !== queryVoiceMode
                     || (persistedAgentId || "") !== (queryAgentId || "")
-                    || (persistedPersonaId || "") !== (queryPersonaId || "");
+                    || (persistedPersonaId || "") !== (queryPersonaId || "")
+                    || (persistedPresentationId || "") !== (queryPresentationId || "");
+
+                debug.log("[PracticeSession] Runtime lock synced", {
+                    sessionId,
+                    scenarioType: persistedScenario,
+                    voiceMode: persistedVoiceMode,
+                    agentId: persistedAgentId || null,
+                    personaId: persistedPersonaId || null,
+                    presentationId: persistedPresentationId || null,
+                    shouldRewriteQuery,
+                });
 
                 if (shouldRewriteQuery) {
                     const runtimeParams = new URLSearchParams(searchParams.toString());
@@ -175,11 +196,20 @@ export default function PracticeSessionPage() {
                         runtimeParams.delete("persona_id");
                     }
 
+                    if (persistedPresentationId) {
+                        runtimeParams.set("presentation_id", persistedPresentationId);
+                    } else {
+                        runtimeParams.delete("presentation_id");
+                    }
+
                     router.replace(`/practice/${sessionId}?${runtimeParams.toString()}`);
                 }
             } catch (error) {
                 if (isCancelled) return;
-                console.warn("[PracticeSession] Failed to sync runtime lock:", error);
+                debug.warn("[PracticeSession] Failed to sync runtime lock", {
+                    sessionId,
+                    error,
+                });
                 setSessionMetaError("会话配置加载失败，已使用入口参数尝试连接。");
             }
         };
@@ -194,6 +224,7 @@ export default function PracticeSessionPage() {
         queryVoiceMode,
         queryAgentId,
         queryPersonaId,
+        queryPresentationId,
         router,
         searchParams,
     ]);
@@ -249,13 +280,24 @@ export default function PracticeSessionPage() {
 
         hasSentStartRef.current = true;
         sendControl("start");
-    }, [connectionState, sendControl, sessionStatus]);
+
+        void (async () => {
+            try {
+                const { api } = await import("@/lib/api/client");
+                await api.practice.startSession(sessionId);
+            } catch (error) {
+                debug.warn("[PracticeSession] Failed to start session via REST lifecycle", {
+                    sessionId,
+                    error,
+                });
+            }
+        })();
+    }, [connectionState, sendControl, sessionId, sessionStatus]);
 
     // AI 是否正在忙碌（说话或思考中），用于一来一回交互模式
     const aiIsBusy = isPlayingAudio || aiState === "thinking" || aiState === "speaking";
     const canToggleRecordingBase =
         connectionState === "connected"
-        && !aiIsBusy
         && sessionStatus === "in_progress"
         && pendingLifecycleAction === null;
     const canRecord = canToggleRecordingBase && hasPermission !== false;
@@ -274,12 +316,11 @@ export default function PracticeSessionPage() {
         if (connectionState !== "connected") return;
         if (sessionStatus !== "in_progress") return;
         if (pendingLifecycleAction) return;
-        if (aiIsBusyRef.current) return;
 
         if (hasPermission === false) {
             void requestPermission().then((granted) => {
                 if (!granted) return;
-                if (isRecordingRef.current || aiIsBusyRef.current) return;
+                if (isRecordingRef.current) return;
                 unlockAudio();
                 startRecording();
             });
@@ -363,7 +404,6 @@ export default function PracticeSessionPage() {
 
             if (isConnected) {
                 sendControl(action);
-                return;
             }
 
             const { api } = await import("@/lib/api/client");
@@ -380,8 +420,11 @@ export default function PracticeSessionPage() {
         setIsEndingSession(true);
 
         try {
-            // 1. Send end control via WebSocket (triggers backend cleanup + report gen)
-            sendControl("end");
+            if (isConnected) {
+                sendControl("end");
+            }
+            const { api } = await import("@/lib/api/client");
+            await api.practice.endSession(sessionId);
 
             // 2. Stop recording if active
             if (isRecordingRef.current) {
@@ -390,7 +433,6 @@ export default function PracticeSessionPage() {
 
             // 3. Generate comprehensive report via REST API (fallback + ensure report exists)
             try {
-                const { api } = await import("@/lib/api/client");
                 await api.admin.generateComprehensiveReport(sessionId);
             } catch {
                 // Report generation may fail if backend already generated it via WS,
@@ -680,7 +722,7 @@ export default function PracticeSessionPage() {
                                         : sessionStatus !== "in_progress"
                                         ? "会话不可录音"
                                         : aiIsBusy
-                                        ? "等待AI回复"
+                                        ? "打断AI并开始录音"
                                         : "开始录音"
                                 }
                                 aria-pressed={isRecording}
@@ -690,6 +732,8 @@ export default function PracticeSessionPage() {
                                     isRecording
                                         ? "bg-red-500 hover:bg-red-600 scale-110"
                                         : canRequestPermission
+                                        ? "bg-amber-500 hover:bg-amber-600"
+                                        : aiIsBusy
                                         ? "bg-amber-500 hover:bg-amber-600"
                                         : !canRecord
                                         ? "bg-slate-300 cursor-not-allowed opacity-60"
@@ -725,9 +769,9 @@ export default function PracticeSessionPage() {
                                 : isSessionPaused
                                 ? "会话已暂停，点击顶部继续按钮恢复"
                                 : isPlayingAudio
-                                ? "AI 正在说话..."
+                                ? "AI 正在说话，点击麦克风可打断"
                                 : aiState === "thinking"
-                                ? "AI 思考中..."
+                                ? "AI 思考中，点击麦克风可打断并发言"
                                 : isRecording
                                 ? "再次点击或按空格结束录音"
                                 : "点击或按空格开始说话"}
@@ -740,6 +784,7 @@ export default function PracticeSessionPage() {
             <div className="hidden md:block w-80 lg:w-96 border-l border-white/40 bg-white/30 backdrop-blur-xl p-6 overflow-y-auto">
                 <RightPanelContent
                     scenarioType={scenarioType}
+                    presentationId={lockedPresentationId}
                     currentSlide={currentSlide}
                     points={points}
                     forbiddenWords={forbiddenWords}
@@ -761,6 +806,7 @@ export default function PracticeSessionPage() {
                     <h2 className="text-lg font-bold mb-6 text-slate-800">实时分析面板</h2>
                     <RightPanelContent
                     scenarioType={scenarioType}
+                    presentationId={lockedPresentationId}
                     currentSlide={currentSlide}
                     points={points}
                     forbiddenWords={forbiddenWords}

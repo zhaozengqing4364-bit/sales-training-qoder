@@ -1,0 +1,18 @@
+[Unit]
+Description=AI Practice Frontend Service
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/ai-practice/web
+Environment=NODE_ENV=production
+ExecStart=/usr/bin/npm run start -- -p 3445 -H 127.0.0.1
+Restart=always
+RestartSec=5
+TimeoutStartSec=120
+TimeoutStopSec=30
+
+[Install]
+WantedBy=multi-user.target

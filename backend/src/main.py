@@ -2,6 +2,7 @@
 FastAPI Main Application
 Entry point for the AI Practice System backend
 """
+
 import os
 import sys
 import uuid
@@ -10,6 +11,7 @@ from contextlib import asynccontextmanager
 from dotenv import load_dotenv
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, Query, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.routing import APIRoute
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -22,6 +24,7 @@ from admin.api.system_logs import router as admin_system_logs_router
 from admin.api.training_records import router as admin_training_records_router
 from admin.api.analytics import router as admin_analytics_router
 from admin.api.voice_runtime import router as voice_runtime_router
+from admin.api.presentation_ai import router as presentation_ai_router
 from admin.api.release_verification import router as release_verification_router
 
 # Admin API (users, training records, system logs)
@@ -75,6 +78,33 @@ configure_logging(os.getenv("LOG_LEVEL", "INFO"))
 logger = get_logger(__name__)
 
 
+DEV_CORS_ORIGINS = [
+    "http://localhost:3445",
+    "http://localhost:3000",
+    "http://localhost:5173",
+    "http://127.0.0.1:3445",
+    "http://127.0.0.1:3000",
+    "http://127.0.0.1:5173",
+]
+
+
+def _resolve_cors_origins() -> list[str]:
+    configured = os.getenv("CORS_ORIGINS", "")
+    configured_origins = [
+        origin.strip() for origin in configured.split(",") if origin.strip()
+    ]
+
+    resolved_origins = (
+        configured_origins[:] if configured_origins else DEV_CORS_ORIGINS[:]
+    )
+
+    for origin in DEV_CORS_ORIGINS:
+        if origin not in resolved_origins:
+            resolved_origins.append(origin)
+
+    return resolved_origins
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan events"""
@@ -84,11 +114,19 @@ async def lifespan(app: FastAPI):
     # P0-1: Validate JWT secret in non-development environments
     from common.config import settings
     from common.auth.service import JWT_SECRET
+
     env = settings.ENVIRONMENT
     if env != "development" and (not settings.SECRET_KEY or settings.SECRET_KEY == ""):
-        raise RuntimeError("SECRET_KEY must be set in production via environment variable")
-    if env != "development" and JWT_SECRET == "your-super-secret-key-change-in-production-min-32-chars":
-        raise RuntimeError("JWT_SECRET must be set in production via environment variable")
+        raise RuntimeError(
+            "SECRET_KEY must be set in production via environment variable"
+        )
+    if (
+        env != "development"
+        and JWT_SECRET == "your-super-secret-key-change-in-production-min-32-chars"
+    ):
+        raise RuntimeError(
+            "JWT_SECRET must be set in production via environment variable"
+        )
 
     await init_db()
 
@@ -114,6 +152,7 @@ async def lifespan(app: FastAPI):
     # Initialize ConfigManager for AI model configurations
     try:
         from common.ai.config_manager import initialize_config_manager
+
         await initialize_config_manager()
         logger.info("ConfigManager initialized")
     except (RuntimeError, ValueError, OSError) as e:
@@ -121,22 +160,34 @@ async def lifespan(app: FastAPI):
 
     # Optional: Preload critical services
     from common.config import settings
+
     if settings.PRELOAD_SERVICES:
         logger.info("Preloading critical services (PRELOAD_SERVICES=true)")
         try:
             from common.audio.asr_service import get_asr_service
+
             get_asr_service()  # Trigger ASR initialization
             logger.info("Service preloading complete")
         except (RuntimeError, ValueError, OSError) as e:
             logger.warning(f"Service preloading failed: {str(e)}")
 
     # Start SessionManager for WebSocket session timeout/heartbeat
-    from common.websocket.session_manager import init_session_manager, shutdown_session_manager
+    from common.websocket.session_manager import (
+        init_session_manager,
+        shutdown_session_manager,
+    )
+    from common.websocket.session_state_service import (
+        init_session_state_service,
+        shutdown_session_state_service,
+    )
+
     await init_session_manager()
+    await init_session_state_service()
 
     yield
 
     # Shutdown
+    await shutdown_session_state_service()
     await shutdown_session_manager()
     logger.info("Shutting down AI Practice System backend")
 
@@ -168,13 +219,13 @@ Real-time voice-based AI training platform with Agent Platform support.
 - `/api/v1/sessions/{id}/replay` - Conversation replay
 """,
     version="2.0.0",
-    lifespan=lifespan
+    lifespan=lifespan,
 )
 
 # Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=os.getenv("CORS_ORIGINS", "http://localhost:3445,http://localhost:3000,http://localhost:5173").split(","),
+    allow_origins=_resolve_cors_origins(),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -193,10 +244,11 @@ app.exception_handler(Exception)(global_exception_handler)
 async def health_check():
     """Health check endpoint"""
     from datetime import UTC, datetime
+
     return {
         "status": "healthy",
         "timestamp": datetime.now(UTC).isoformat(),
-        "version": "1.0.0"
+        "version": "1.0.0",
     }
 
 
@@ -209,6 +261,7 @@ async def dev_login(db: AsyncSession = Depends(get_db)):
     """
     if os.getenv("ENVIRONMENT") != "development":
         from fastapi import HTTPException
+
         raise HTTPException(status_code=403, detail="Development mode only")
 
     # Get or create dev user
@@ -225,9 +278,9 @@ async def dev_login(db: AsyncSession = Depends(get_db)):
             "user": {
                 "user_id": str(user.user_id),
                 "email": user.email,
-                "name": user.name
-            }
-        }
+                "name": user.name,
+            },
+        },
     }
 
 
@@ -273,7 +326,9 @@ app.include_router(auth_router, prefix="/api/v1", tags=["auth"])
 app.include_router(agent_admin_router, prefix="/api/v1", tags=["admin-agents"])
 app.include_router(agent_user_router, prefix="/api/v1", tags=["agents"])
 app.include_router(persona_admin_router, prefix="/api/v1", tags=["admin-personas"])
-app.include_router(agent_persona_admin_router, prefix="/api/v1", tags=["admin-agent-personas"])
+app.include_router(
+    agent_persona_admin_router, prefix="/api/v1", tags=["admin-agent-personas"]
+)
 
 # Knowledge API routes
 app.include_router(
@@ -282,25 +337,32 @@ app.include_router(
     tags=["admin-knowledge"],
     dependencies=[Depends(get_current_admin_user)],
 )
-app.include_router(knowledge_internal_router, prefix="/api/v1", tags=["internal-knowledge"])
+app.include_router(
+    knowledge_internal_router, prefix="/api/v1", tags=["internal-knowledge"]
+)
 
 # v1-18 Fix: Knowledge API alias via automatic route mirroring
 # Provides /admin/knowledge-bases path compatibility for frontend
-knowledge_bases_alias_router = APIRouter(prefix="/admin/knowledge-bases", tags=["admin-knowledge-bases"])
+knowledge_bases_alias_router = APIRouter(
+    prefix="/admin/knowledge-bases", tags=["admin-knowledge-bases"]
+)
 
 # Mirror all routes from the source knowledge router automatically
 for route in knowledge_admin_router.routes:
-    if hasattr(route, "endpoint") and hasattr(route, "methods"):
-        # Remap path: /admin/knowledge/* -> /*
-        alias_path = getattr(route, "path", "")
-        if alias_path.startswith("/admin/knowledge"):
-            alias_path = alias_path.replace("/admin/knowledge", "", 1)
-        knowledge_bases_alias_router.add_api_route(
-            alias_path,
-            route.endpoint,
-            methods=route.methods,
-            status_code=getattr(route, "status_code", None),
-        )
+    if not isinstance(route, APIRoute):
+        continue
+
+    # Remap path: /admin/knowledge/* -> /*
+    alias_path = route.path
+    if alias_path.startswith("/admin/knowledge"):
+        alias_path = alias_path.replace("/admin/knowledge", "", 1)
+
+    knowledge_bases_alias_router.add_api_route(
+        alias_path,
+        route.endpoint,
+        methods=route.methods,
+        status_code=route.status_code,
+    )
 
 app.include_router(
     knowledge_bases_alias_router,
@@ -347,8 +409,15 @@ app.include_router(
 )
 
 # Model Config API routes
-app.include_router(model_configs_router, prefix="/api/v1/admin", tags=["admin-model-configs"])
-app.include_router(voice_runtime_router, prefix="/api/v1/admin", tags=["admin-voice-runtime"])
+app.include_router(
+    model_configs_router, prefix="/api/v1/admin", tags=["admin-model-configs"]
+)
+app.include_router(
+    voice_runtime_router, prefix="/api/v1/admin", tags=["admin-voice-runtime"]
+)
+app.include_router(
+    presentation_ai_router, prefix="/api/v1/admin", tags=["admin-presentation-ai"]
+)
 
 # Prompt Templates API routes
 app.include_router(prompt_templates_router, tags=["prompt-templates"])
@@ -369,7 +438,9 @@ def _parse_session_id(session_id: str | None) -> str | None:
         return None
 
 
-async def _reject_invalid_presentation_session(websocket: WebSocket, session_id: str | None):
+async def _reject_invalid_presentation_session(
+    websocket: WebSocket, session_id: str | None
+):
     logger.warning(
         "Rejected /ws/presentation connection due to invalid session_id",
         session_id=session_id,
@@ -382,17 +453,25 @@ async def _handle_presentation_websocket(
     websocket: WebSocket,
     session_id: str | None,
     token: str,
+    voice_mode: str | None = None,
 ):
     from presentation_coach.websocket.presentation_handler import (
         PresentationWebSocketHandler,
     )
+    from presentation_coach.websocket.presentation_stepfun_realtime_handler import (
+        PresentationStepFunRealtimeHandler,
+    )
+    from common.websocket.session_manager import get_session_manager
+    from common.auth.service import verify_token
 
     resolved_session_id = _parse_session_id(session_id)
     if not resolved_session_id:
         await _reject_invalid_presentation_session(websocket, session_id)
         return
 
-    scenario_type = await _resolve_session_scenario_type(resolved_session_id)
+    scenario_type, persisted_voice_mode = await _resolve_presentation_runtime(
+        resolved_session_id
+    )
     if scenario_type and scenario_type != "presentation":
         logger.warning(
             "Rejected /ws/presentation connection due to scenario mismatch",
@@ -408,8 +487,41 @@ async def _handle_presentation_websocket(
     if auth_header.lower().startswith("bearer "):
         token = auth_header[7:].strip()
 
-    handler = PresentationWebSocketHandler()
-    await handler.handle_connection(websocket, resolved_session_id, token)
+    requested_mode = _normalize_requested_voice_mode(voice_mode)
+    if requested_mode and requested_mode != persisted_voice_mode:
+        logger.warning(
+            "Ignoring mismatched presentation ws voice_mode override",
+            session_id=resolved_session_id,
+            requested=requested_mode,
+            persisted=persisted_voice_mode,
+        )
+
+    effective_voice_mode = persisted_voice_mode
+    if effective_voice_mode == "stepfun_realtime":
+        handler = PresentationStepFunRealtimeHandler()
+    else:
+        handler = PresentationWebSocketHandler()
+
+    session_manager = get_session_manager()
+    user_id: str | None = None
+    try:
+        payload = verify_token(token)
+        if payload and isinstance(payload.get("sub"), str):
+            user_id = payload["sub"]
+        elif payload and isinstance(payload.get("user_id"), str):
+            user_id = payload["user_id"]
+    except (RuntimeError, ValueError, OSError):
+        user_id = None
+
+    await session_manager.register_session(
+        resolved_session_id,
+        handler,
+        user_id=user_id,
+    )
+    try:
+        await handler.handle_connection(websocket, resolved_session_id, token)
+    finally:
+        await session_manager.unregister_session(resolved_session_id)
 
 
 @app.websocket("/ws/presentation")
@@ -417,9 +529,10 @@ async def presentation_websocket(
     websocket: WebSocket,
     session_id: str | None = Query(None),
     token: str = Query(""),
+    voice_mode: str | None = Query(None, description="Voice mode: legacy | stepfun_realtime"),
 ):
     """WebSocket endpoint for PPT presentation coaching (query session_id)."""
-    await _handle_presentation_websocket(websocket, session_id, token)
+    await _handle_presentation_websocket(websocket, session_id, token, voice_mode)
 
 
 @app.websocket("/ws/presentation/{session_id}")
@@ -427,30 +540,56 @@ async def presentation_websocket_with_path(
     websocket: WebSocket,
     session_id: str,
     token: str = Query(""),
+    voice_mode: str | None = Query(None, description="Voice mode: legacy | stepfun_realtime"),
 ):
     """WebSocket endpoint for PPT presentation coaching (path session_id)."""
-    await _handle_presentation_websocket(websocket, session_id, token)
+    await _handle_presentation_websocket(websocket, session_id, token, voice_mode)
 
 
-async def _resolve_session_scenario_type(session_id: str) -> str | None:
+def _normalize_requested_voice_mode(voice_mode: str | None) -> str | None:
+    mode = (voice_mode or "").strip().lower()
+    if mode in {"legacy", "stepfun_realtime"}:
+        return mode
+    return None
+
+
+def _default_voice_mode() -> str:
+    default_mode = os.getenv("DEFAULT_VOICE_MODE", "legacy").strip().lower()
+    if default_mode not in {"legacy", "stepfun_realtime"}:
+        default_mode = "legacy"
+    return default_mode
+
+
+async def _resolve_presentation_runtime(
+    session_id: str,
+) -> tuple[str | None, str]:
+    default_mode = _default_voice_mode()
     try:
         async with AsyncSessionLocal() as db:
             result = await db.execute(
-                select(Scenario.scenario_type)
+                select(
+                    Scenario.scenario_type,
+                    PracticeSession.voice_mode,
+                )
                 .join(
-                    PracticeSession,
-                    PracticeSession.scenario_id == Scenario.scenario_id,
+                    Scenario,
+                    Scenario.scenario_id == PracticeSession.scenario_id,
+                    isouter=True,
                 )
                 .where(PracticeSession.session_id == session_id)
             )
-            scenario_type = result.scalar_one_or_none()
-            if scenario_type:
-                return str(scenario_type).lower()
+            row = result.first()
+            if row:
+                scenario_type, resolved_mode = row
+                mode = str(resolved_mode or "").strip().lower()
+                if mode not in {"legacy", "stepfun_realtime"}:
+                    mode = default_mode
+                return str(scenario_type or "").lower() or None, mode
     except (RuntimeError, ValueError, OSError) as exc:
         logger.warning(
-            f"Failed to resolve session scenario type for {session_id}: {exc}"
+            f"Failed to resolve presentation runtime for {session_id}: {exc}"
         )
-    return None
+    return None, default_mode
 
 
 app.include_router(sales_ws_router, tags=["sales-websocket"])
@@ -458,10 +597,5 @@ app.include_router(sales_ws_router, tags=["sales-websocket"])
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(
-        "main:app",
-        host="0.0.0.0",
-        port=3444,
-        reload=True,
-        log_level="info"
-    )
+
+    uvicorn.run("main:app", host="0.0.0.0", port=3444, reload=True, log_level="info")

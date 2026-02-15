@@ -7,7 +7,6 @@ import { api } from "@/lib/api/client";
 import { TrainingCategory } from "@/lib/api/types";
 import {
     ArrowRight,
-    Headphones,
     Layers,
     Mic,
     Presentation,
@@ -48,12 +47,6 @@ const CATEGORY_UI_META: Record<
         href: "/training/presentation",
         defaultTags: ["融资路演", "产品发布", "季度汇报"],
     },
-    customer_service: {
-        icon: Headphones,
-        color: "bg-amber-50 text-amber-600",
-        href: "/training/customer-service",
-        defaultTags: ["情绪安抚", "投诉处理"],
-    },
 };
 
 const FALLBACK_CATEGORIES: TrainingCategory[] = [
@@ -76,16 +69,6 @@ const FALLBACK_CATEGORIES: TrainingCategory[] = [
         agent_count: 0,
         tags: ["融资路演", "产品发布", "季度汇报"],
         status: "active",
-    },
-    {
-        id: "customer_service",
-        title: "客户服务训练",
-        description: "模拟应对愤怒客户、复杂投诉等高压场景，提升共情能力和问题解决效率。",
-        icon_key: "Headphones",
-        color_theme: "bg-amber-50 text-amber-600",
-        agent_count: 0,
-        tags: ["情绪安抚", "投诉处理"],
-        status: "coming_soon",
     },
 ];
 
@@ -160,9 +143,9 @@ export default function TrainingCategoriesPage() {
                 </div>
             </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 {isLoading
-                    ? Array.from({ length: 3 }).map((_, index) => (
+                    ? Array.from({ length: 2 }).map((_, index) => (
                           <div key={index} className="h-[360px] rounded-3xl bg-white/50 animate-pulse border border-white/60" />
                       ))
                     : viewModels.map((category) => {

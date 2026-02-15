@@ -7,6 +7,7 @@ References:
 - Requirements: R5 (Knowledge Base management)
 - Design: Section 27 (Document Processing)
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -24,7 +25,9 @@ logger = get_logger(__name__)
 
 # 允许的文件上传目录（安全边界）
 # 与 document.py 中的 DOCUMENT_STORAGE_PATH 保持一致
-ALLOWED_UPLOAD_DIR = os.path.abspath(os.getenv("DOCUMENT_STORAGE_PATH", "./data/documents"))
+ALLOWED_UPLOAD_DIR = os.path.abspath(
+    os.getenv("DOCUMENT_STORAGE_PATH", "./data/documents")
+)
 
 
 class DocumentProcessor:
@@ -80,7 +83,7 @@ class DocumentProcessor:
                 return {
                     "status": DocumentStatus.FAILED.value,
                     "chunk_count": 0,
-                    "error_message": "Failed to read document content"
+                    "error_message": "Failed to read document content",
                 }
 
             # Step 2: Split into chunks
@@ -89,7 +92,7 @@ class DocumentProcessor:
                 return {
                     "status": DocumentStatus.FAILED.value,
                     "chunk_count": 0,
-                    "error_message": "No content to process"
+                    "error_message": "No content to process",
                 }
 
             logger.info(f"Document {doc_id}: {len(chunks)} chunks created")
@@ -97,12 +100,13 @@ class DocumentProcessor:
             # Step 3: Generate embeddings
             embedding_service = get_embedding_service()
             if not embedding_service.is_configured:
-                logger.warning("Embedding service not configured, skipping vectorization")
-                # Still mark as ready, but without vectors
+                logger.error(
+                    "Embedding service not configured, cannot build searchable vectors"
+                )
                 return {
-                    "status": DocumentStatus.READY.value,
-                    "chunk_count": len(chunks),
-                    "error_message": "Embedding service not configured"
+                    "status": DocumentStatus.FAILED.value,
+                    "chunk_count": 0,
+                    "error_message": "[EMBEDDING_NOT_CONFIGURED] Embedding service not configured",
                 }
 
             all_embeddings = []
@@ -110,7 +114,7 @@ class DocumentProcessor:
 
             # Process in batches
             for i in range(0, len(chunk_texts), self.batch_size):
-                batch = chunk_texts[i:i + self.batch_size]
+                batch = chunk_texts[i : i + self.batch_size]
                 result = await embedding_service.embed_batch(batch)
 
                 if not result.is_success:
@@ -118,12 +122,14 @@ class DocumentProcessor:
                     return {
                         "status": DocumentStatus.FAILED.value,
                         "chunk_count": 0,
-                        "error_message": f"Embedding failed: {result.error}"
+                        "error_message": f"Embedding failed: {result.error}",
                     }
 
                 all_embeddings.extend(result.value)
 
-            logger.info(f"Document {doc_id}: {len(all_embeddings)} embeddings generated")
+            logger.info(
+                f"Document {doc_id}: {len(all_embeddings)} embeddings generated"
+            )
 
             # Step 4: Store in vector database
             vector_store = get_knowledge_vector_store()
@@ -139,14 +145,16 @@ class DocumentProcessor:
                 return {
                     "status": DocumentStatus.FAILED.value,
                     "chunk_count": 0,
-                    "error_message": f"Vector storage failed: {store_result.error}"
+                    "error_message": f"Vector storage failed: {store_result.error}",
                 }
 
-            logger.info(f"Document {doc_id} processed successfully: {len(chunks)} chunks")
+            logger.info(
+                f"Document {doc_id} processed successfully: {len(chunks)} chunks"
+            )
             return {
                 "status": DocumentStatus.READY.value,
                 "chunk_count": len(chunks),
-                "error_message": None
+                "error_message": None,
             }
 
         except Exception as e:
@@ -154,7 +162,7 @@ class DocumentProcessor:
             return {
                 "status": DocumentStatus.FAILED.value,
                 "chunk_count": 0,
-                "error_message": str(e)
+                "error_message": str(e),
             }
 
     async def _read_document(self, file_path: str, file_type: str) -> str | None:
@@ -163,7 +171,9 @@ class DocumentProcessor:
             # 安全检查：确保文件路径在允许的目录内
             abs_path = os.path.abspath(file_path)
             if not abs_path.startswith(ALLOWED_UPLOAD_DIR):
-                logger.error(f"Security: file path outside allowed directory: {file_path}")
+                logger.error(
+                    f"Security: file path outside allowed directory: {file_path}"
+                )
                 return None
 
             if file_type in ("txt", "md"):
@@ -284,7 +294,9 @@ class DocumentProcessor:
             for rel in rels.values():
                 target_part = getattr(rel, "target_part", None)
                 content_type = getattr(target_part, "content_type", "")
-                if not isinstance(content_type, str) or not content_type.startswith("image/"):
+                if not isinstance(content_type, str) or not content_type.startswith(
+                    "image/"
+                ):
                     continue
 
                 image_bytes = getattr(target_part, "blob", None)
@@ -332,7 +344,9 @@ class DocumentProcessor:
                         if clean_text:
                             return clean_text
                     except Exception as ocr_error:
-                        logger.debug(f"OCR attempt failed ({source}, lang={lang}): {ocr_error}")
+                        logger.debug(
+                            f"OCR attempt failed ({source}, lang={lang}): {ocr_error}"
+                        )
         except Exception as e:
             logger.warning(f"Failed OCR for {source}: {e}")
 
@@ -378,19 +392,18 @@ class DocumentProcessor:
                 break_point = max(last_period_cn, last_period_en, last_newline)
 
                 if break_point > self.chunk_size // 2:
-                    chunk_text = chunk_text[:break_point + 1]
+                    chunk_text = chunk_text[: break_point + 1]
                     end = start + break_point + 1
 
             chunk_content = chunk_text.strip()
             if chunk_content:  # Only add non-empty chunks
-                chunks.append({
-                    "index": index,
-                    "content": chunk_content,
-                    "metadata": {
-                        "start_char": start,
-                        "end_char": end
+                chunks.append(
+                    {
+                        "index": index,
+                        "content": chunk_content,
+                        "metadata": {"start_char": start, "end_char": end},
                     }
-                })
+                )
                 index += 1
 
             start = end - self.chunk_overlap
@@ -419,8 +432,7 @@ class DocumentProcessor:
         try:
             vector_store = get_knowledge_vector_store()
             result = await vector_store.delete_document_chunks(
-                collection_name=vector_collection,
-                document_id=doc_id
+                collection_name=vector_collection, document_id=doc_id
             )
             return result.is_success
         except Exception as e:

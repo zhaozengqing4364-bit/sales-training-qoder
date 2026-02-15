@@ -71,6 +71,9 @@ interface AgentVoicePolicyConfig {
         enable_web_search?: boolean;
         enable_internal_retrieval?: boolean;
         retrieval_priority?: "kb_only" | "kb_first" | "web_first" | "balanced";
+        network_access_mode?: "off" | "controlled";
+        enforcement_level?: "strict" | "best_effort";
+        allow_web_search_without_kb?: boolean;
     };
 }
 
@@ -158,6 +161,9 @@ export default function AgentEditPage({ params }: { params: Promise<{ id: string
             enable_web_search: false,
             enable_internal_retrieval: true,
             retrieval_priority: "kb_first",
+            network_access_mode: "off",
+            enforcement_level: "strict",
+            allow_web_search_without_kb: false,
         },
     });
     const [isSavingVoicePolicy, setIsSavingVoicePolicy] = useState(false);
@@ -191,6 +197,12 @@ export default function AgentEditPage({ params }: { params: Promise<{ id: string
                             (voicePolicy as AgentVoicePolicyConfig).tool_policy_override?.enable_internal_retrieval ?? true,
                         retrieval_priority:
                             (voicePolicy as AgentVoicePolicyConfig).tool_policy_override?.retrieval_priority || "kb_first",
+                        network_access_mode:
+                            (voicePolicy as AgentVoicePolicyConfig).tool_policy_override?.network_access_mode || "off",
+                        enforcement_level:
+                            (voicePolicy as AgentVoicePolicyConfig).tool_policy_override?.enforcement_level || "strict",
+                        allow_web_search_without_kb:
+                            (voicePolicy as AgentVoicePolicyConfig).tool_policy_override?.allow_web_search_without_kb ?? false,
                     },
                 });
 
@@ -248,6 +260,10 @@ export default function AgentEditPage({ params }: { params: Promise<{ id: string
                     enable_web_search: agentVoicePolicy.tool_policy_override?.enable_web_search ?? false,
                     enable_internal_retrieval: agentVoicePolicy.tool_policy_override?.enable_internal_retrieval ?? true,
                     retrieval_priority: agentVoicePolicy.tool_policy_override?.retrieval_priority || "kb_first",
+                    network_access_mode: agentVoicePolicy.tool_policy_override?.network_access_mode || "off",
+                    enforcement_level: agentVoicePolicy.tool_policy_override?.enforcement_level || "strict",
+                    allow_web_search_without_kb:
+                        agentVoicePolicy.tool_policy_override?.allow_web_search_without_kb ?? false,
                 },
             });
             toast.success("语音策略已保存");
@@ -477,7 +493,7 @@ export default function AgentEditPage({ params }: { params: Promise<{ id: string
                         <label className="text-xs font-bold text-slate-400 uppercase tracking-widest">描述</label>
                         <textarea
                             className="flex min-h-[120px] w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-                            value={agent.description}
+                            value={agent.description ?? ""}
                             onChange={(e) => setAgent({ ...agent, description: e.target.value })}
                         />
                     </div>
@@ -772,6 +788,67 @@ export default function AgentEditPage({ params }: { params: Promise<{ id: string
                                     <option value="kb_first">知识库优先</option>
                                     <option value="web_first">联网优先</option>
                                     <option value="balanced">均衡</option>
+                                </select>
+                            </div>
+                            <div className="space-y-2">
+                                <label className="text-[10px] font-bold text-slate-400 uppercase">网络访问模式</label>
+                                <select
+                                    className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm outline-none"
+                                    value={agentVoicePolicy.tool_policy_override?.network_access_mode || "off"}
+                                    onChange={(e) =>
+                                        setAgentVoicePolicy((prev) => ({
+                                            ...prev,
+                                            tool_policy_override: {
+                                                ...(prev.tool_policy_override || {}),
+                                                network_access_mode: e.target.value as "off" | "controlled",
+                                            },
+                                        }))
+                                    }
+                                >
+                                    <option value="off">禁止联网</option>
+                                    <option value="controlled">受控联网</option>
+                                </select>
+                            </div>
+                            <div className="space-y-2">
+                                <label className="text-[10px] font-bold text-slate-400 uppercase">执行级别</label>
+                                <select
+                                    className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm outline-none"
+                                    value={agentVoicePolicy.tool_policy_override?.enforcement_level || "strict"}
+                                    onChange={(e) =>
+                                        setAgentVoicePolicy((prev) => ({
+                                            ...prev,
+                                            tool_policy_override: {
+                                                ...(prev.tool_policy_override || {}),
+                                                enforcement_level: e.target.value as "strict" | "best_effort",
+                                            },
+                                        }))
+                                    }
+                                >
+                                    <option value="strict">严格</option>
+                                    <option value="best_effort">尽力</option>
+                                </select>
+                            </div>
+                            <div className="space-y-2">
+                                <label className="text-[10px] font-bold text-slate-400 uppercase">无知识库时允许联网</label>
+                                <select
+                                    className="w-full rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm outline-none"
+                                    value={
+                                        agentVoicePolicy.tool_policy_override?.allow_web_search_without_kb
+                                            ? "true"
+                                            : "false"
+                                    }
+                                    onChange={(e) =>
+                                        setAgentVoicePolicy((prev) => ({
+                                            ...prev,
+                                            tool_policy_override: {
+                                                ...(prev.tool_policy_override || {}),
+                                                allow_web_search_without_kb: e.target.value === "true",
+                                            },
+                                        }))
+                                    }
+                                >
+                                    <option value="false">否</option>
+                                    <option value="true">是</option>
                                 </select>
                             </div>
 

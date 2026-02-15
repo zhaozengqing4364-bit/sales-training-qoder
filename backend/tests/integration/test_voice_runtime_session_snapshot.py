@@ -1,6 +1,7 @@
 """
 Integration tests for session voice policy snapshot persistence.
 """
+
 from __future__ import annotations
 
 import os
@@ -20,7 +21,9 @@ from common.db.models import PracticeSession, Presentation, Scenario, User
 os.environ["ENVIRONMENT"] = "development"
 
 
-async def _create_runtime_entities(test_db: AsyncSession) -> tuple[VoiceRuntimeProfile, Agent, Persona]:
+async def _create_runtime_entities(
+    test_db: AsyncSession,
+) -> tuple[VoiceRuntimeProfile, Agent, Persona]:
     profile = VoiceRuntimeProfile(
         id=str(uuid.uuid4()),
         name="测试默认实时配置",
@@ -70,6 +73,8 @@ def _snapshot_ref(snapshot: Any) -> dict[str, Any] | None:
     ref: dict[str, Any] = {
         "voice_mode": snapshot.get("voice_mode"),
         "runtime_profile_id": snapshot.get("runtime_profile_id"),
+        "instruction_contract_hash": snapshot.get("instruction_contract_hash"),
+        "network_access_mode": snapshot.get("network_access_mode"),
         "resolved_at": snapshot.get("resolved_at"),
         "tool_policy": tool_policy if isinstance(tool_policy, dict) else {},
         "knowledge_base_ids": [
@@ -77,7 +82,9 @@ def _snapshot_ref(snapshot: Any) -> dict[str, Any] | None:
             for item in (snapshot.get("knowledge_base_ids") or [])
             if item is not None
         ],
-        "source": {str(k): str(v) for k, v in source.items()} if isinstance(source, dict) else {},
+        "source": {str(k): str(v) for k, v in source.items()}
+        if isinstance(source, dict)
+        else {},
     }
     association_override = snapshot.get("agent_persona_override_config")
     if isinstance(association_override, dict):
@@ -124,8 +131,13 @@ async def test_start_session_persists_voice_policy_snapshot(
     assert session.voice_mode == "stepfun_realtime"
     assert session.voice_policy_snapshot is not None
     assert session.voice_policy_snapshot.get("voice_mode") == "stepfun_realtime"
-    assert set(session.voice_policy_snapshot.get("knowledge_base_ids", [])) == {"kb_test_1", "kb_test_2"}
-    assert payload["data"]["voice_policy_snapshot_ref"] == _snapshot_ref(session.voice_policy_snapshot)
+    assert set(session.voice_policy_snapshot.get("knowledge_base_ids", [])) == {
+        "kb_test_1",
+        "kb_test_2",
+    }
+    assert payload["data"]["voice_policy_snapshot_ref"] == _snapshot_ref(
+        session.voice_policy_snapshot
+    )
 
 
 @pytest.mark.asyncio
@@ -360,7 +372,74 @@ async def test_runtime_metrics_append_keeps_snapshot_reference_baseline(
     assert detail_body["data"]["voice_policy_snapshot_ref"] == baseline_ref
     assert report_body["data"]["voice_policy_snapshot_ref"] == baseline_ref
     assert replay_body["data"]["voice_policy_snapshot_ref"] == baseline_ref
-    assert detail_body["data"]["voice_policy_snapshot"]["runtime_metrics"]["knowledge_retrieval"]["attempt_count"] == 3
+    assert (
+        detail_body["data"]["voice_policy_snapshot"]["runtime_metrics"][
+            "knowledge_retrieval"
+        ]["attempt_count"]
+        == 3
+    )
+
+
+@pytest.mark.asyncio
+async def test_knowledge_check_reports_kb_not_ready_status(
+    async_client: AsyncClient,
+    auth_headers: dict,
+    test_db: AsyncSession,
+):
+    """Knowledge-check diagnostics should surface kb_not_ready status from runtime metrics."""
+    _, agent, persona = await _create_runtime_entities(test_db)
+
+    create_resp = await async_client.post(
+        "/api/v1/practice/sessions",
+        headers=auth_headers,
+        json={
+            "scenario_type": "sales",
+            "agent_id": agent.id,
+            "persona_id": persona.id,
+            "voice_mode": "stepfun_realtime",
+        },
+    )
+    assert create_resp.status_code == 201
+    session_id = create_resp.json()["data"]["session_id"]
+
+    session_result = await test_db.execute(
+        select(PracticeSession).where(PracticeSession.session_id == session_id)
+    )
+    session = session_result.scalar_one()
+    snapshot = deepcopy(session.voice_policy_snapshot)
+    snapshot["tool_policy"] = {
+        "enable_internal_retrieval": True,
+    }
+    snapshot["knowledge_base_ids"] = ["kb_test_1"]
+    snapshot["runtime_metrics"] = {
+        "knowledge_retrieval": {
+            "attempt_count": 2,
+            "hit_query_count": 0,
+            "total_results": 0,
+            "last_result_count": 0,
+            "hit_rate": 0.0,
+            "last_query": "石犀产品目录",
+            "last_status": "kb_not_ready",
+            "recent_queries": ["石犀产品目录"],
+        }
+    }
+    session.voice_policy_snapshot = snapshot
+    session.status = "completed"
+    await test_db.commit()
+
+    resp = await async_client.get(
+        f"/api/v1/practice/sessions/{session_id}/knowledge-check",
+        headers=auth_headers,
+    )
+
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["success"] is True
+    assert body["data"]["status"] == "kb_not_ready"
+    assert body["data"]["summary"] == "知识库文档尚未处理完成"
+    assert body["data"]["last_status"] == "kb_not_ready"
+    assert body["data"]["attempt_count"] == 2
+    assert body["data"]["knowledge_base_ids"] == ["kb_test_1"]
 
 
 @pytest.mark.asyncio

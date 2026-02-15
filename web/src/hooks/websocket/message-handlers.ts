@@ -28,6 +28,17 @@ export interface MessageHandlerDeps {
     flushLocalAudioBuffer: () => void;
     scheduleInterimTranscriptUpdate: (text: string) => void;
     clearInterimTranscriptThrottle: () => void;
+    sendMessage?: (type: string, data: unknown) => void;
+}
+
+const MAX_CHAT_MESSAGES = 200;
+
+function appendMessageCapped(
+    existing: ChatMessage[],
+    message: ChatMessage,
+): ChatMessage[] {
+    const next = [...existing, message];
+    return next.length > MAX_CHAT_MESSAGES ? next.slice(-MAX_CHAT_MESSAGES) : next;
 }
 
 function isSameSalesStage(current: SalesStage | null, incoming: SalesStage): boolean {
@@ -63,6 +74,7 @@ export function handleWebSocketMessage(
         isBackpressureActiveRef, audioQueueRef, isPlayingRef,
         flushLocalAudioBuffer, scheduleInterimTranscriptUpdate,
         clearInterimTranscriptThrottle,
+        sendMessage,
     } = deps;
 
     try {
@@ -71,6 +83,9 @@ export function handleWebSocketMessage(
 
         switch (message.type) {
             case "connected":
+                debug.log("[PracticeWS] Connected event received", {
+                    traceId: message.trace_id || null,
+                });
                 setState(prev => ({
                     ...prev,
                     connectionState: "connected",
@@ -96,7 +111,7 @@ export function handleWebSocketMessage(
                         };
                         setState(prev => ({
                             ...prev,
-                            messages: [...prev.messages, newMsg],
+                            messages: appendMessageCapped(prev.messages, newMsg),
                             interimTranscript: "",
                         }));
                     } else {
@@ -123,9 +138,28 @@ export function handleWebSocketMessage(
                 };
                 setState(prev => ({
                     ...prev,
-                    messages: [...prev.messages, newMsg],
+                    messages: appendMessageCapped(prev.messages, newMsg),
                     aiState: "speaking",
                 }));
+                break;
+            }
+
+            case "interruption": {
+                const data = message.data as {
+                    ai_message?: string;
+                    message?: string;
+                    reason?: string;
+                };
+                const aiMessage = (data.ai_message || data.message || "").trim();
+
+                if (aiMessage) {
+                    addAiMessageIfNew(aiMessage, { aiState: "speaking" });
+                } else {
+                    setState(prev => ({
+                        ...prev,
+                        aiState: "speaking",
+                    }));
+                }
                 break;
             }
 
@@ -242,6 +276,12 @@ export function handleWebSocketMessage(
                     session_status?: string;
                     connection_state?: string;
                 };
+                debug.log("[PracticeWS] Status update", {
+                    traceId: message.trace_id || null,
+                    aiState: data.ai_state || null,
+                    sessionStatus: data.session_status || null,
+                    connectionState: data.connection_state || null,
+                });
                 setState(prev => {
                     const next: PracticeState = { ...prev };
                     if (data.ai_state) {
@@ -273,6 +313,10 @@ export function handleWebSocketMessage(
 
             case "session_ended": {
                 const data = message.data as { session_status?: string };
+                debug.log("[PracticeWS] Session ended", {
+                    traceId: message.trace_id || null,
+                    sessionStatus: data.session_status || "completed",
+                });
                 setState(prev => ({
                     ...prev,
                     sessionStatus: (data.session_status || "completed") as SessionStatus,
@@ -393,16 +437,27 @@ export function handleWebSocketMessage(
 
             case "error": {
                 const data = message.data as { message: string };
+                debug.error("[PracticeWS] Backend error message", {
+                    traceId: message.trace_id || null,
+                    errorMessage: data.message,
+                });
                 setState(prev => ({ ...prev, error: data.message }));
                 onError?.(data.message);
                 break;
             }
 
             case "slide_update": {
-                const data = message.data as SlideUpdate;
+                const raw = message.data as SlideUpdate;
                 setState(prev => ({
                     ...prev,
-                    currentSlide: data,
+                    currentSlide: {
+                        current_page: raw.current_page ?? raw.page_number ?? prev.currentSlide?.current_page ?? 1,
+                        page_number: raw.page_number ?? raw.current_page ?? prev.currentSlide?.page_number,
+                        total_pages: raw.total_pages ?? prev.currentSlide?.total_pages ?? null,
+                        content: raw.content ?? raw.page_content ?? prev.currentSlide?.content,
+                        page_content: raw.page_content ?? raw.content ?? prev.currentSlide?.page_content,
+                        image_url: raw.image_url ?? prev.currentSlide?.image_url,
+                    },
                 }));
                 break;
             }
@@ -421,6 +476,16 @@ export function handleWebSocketMessage(
                 break;
             }
 
+            case "points_reset": {
+                setState(prev => {
+                    if (prev.points.length === 0) {
+                        return prev;
+                    }
+                    return { ...prev, points: [] };
+                });
+                break;
+            }
+
             case "forbidden_word": {
                 const data = message.data as { detections: ForbiddenWordDetection[] };
                 // NEW-12 Fix: Cap forbiddenWords to last 10 entries to prevent unbounded growth
@@ -435,7 +500,44 @@ export function handleWebSocketMessage(
             }
 
             case "heartbeat":
+                sendMessage?.("heartbeat_ack", { client_ts: new Date().toISOString() });
                 break;
+
+            case "reconnected": {
+                const data = message.data as {
+                    restored_state?: {
+                        session_status?: SessionStatus;
+                        ai_state?: PracticeState["aiState"];
+                    };
+                };
+                const restored = data?.restored_state;
+                setState(prev => ({
+                    ...prev,
+                    connectionState: "connected",
+                    isConnected: true,
+                    isConnecting: false,
+                    error: null,
+                    sessionStatus: (restored?.session_status || prev.sessionStatus) as SessionStatus,
+                    aiState: (restored?.ai_state || prev.aiState) as PracticeState["aiState"],
+                }));
+                break;
+            }
+
+            case "session_timeout": {
+                const data = message.data as { message?: string };
+                setState(prev => ({
+                    ...prev,
+                    connectionState: "failed",
+                    isConnected: false,
+                    isConnecting: false,
+                    aiState: "idle",
+                    isPlayingAudio: false,
+                    isStreamingTTS: false,
+                    error: data?.message || "会话超时，请重新开始",
+                }));
+                onError?.(data?.message || "会话超时，请重新开始");
+                break;
+            }
 
             /**
              * Handle backpressure signal from backend

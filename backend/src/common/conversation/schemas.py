@@ -14,7 +14,6 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
-
 # ========== Type Aliases for API ==========
 MessageRoleType = str  # "user" | "assistant"
 HighlightTypeType = str  # "good" | "bad" | "neutral"
@@ -76,6 +75,14 @@ class VoicePolicySnapshotReferenceSchema(BaseModel):
 
     voice_mode: str | None = Field(None, description="Resolved voice mode")
     runtime_profile_id: str | None = Field(None, description="Resolved runtime profile ID")
+    instruction_contract_hash: str | None = Field(
+        None,
+        description="Hash of compiled instruction contract captured at session start",
+    )
+    network_access_mode: str | None = Field(
+        None,
+        description="Tool network access mode resolved at session start",
+    )
     tool_policy: dict[str, Any] = Field(default_factory=dict, description="Resolved tool policy")
     knowledge_base_ids: list[str] = Field(default_factory=list, description="Bound knowledge base IDs")
     source: dict[str, str] = Field(default_factory=dict, description="Policy resolution source map")

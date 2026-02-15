@@ -9,7 +9,7 @@ function createMessageEvent(payload: unknown): MessageEvent {
     });
 }
 
-function createDeps(initialState: PracticeState & { connectionState?: string }) {
+function createDeps(initialState: PracticeState) {
     let state = initialState;
 
     const setState = vi.fn((updater: unknown) => {
@@ -48,6 +48,7 @@ function createDeps(initialState: PracticeState & { connectionState?: string }) 
             flushLocalAudioBuffer: vi.fn(),
             scheduleInterimTranscriptUpdate: vi.fn(),
             clearInterimTranscriptThrottle: vi.fn(),
+            sendMessage: vi.fn(),
         },
     };
 }
@@ -72,7 +73,7 @@ describe("handleWebSocketMessage connection/status behavior", () => {
     });
 
     it("does not create new state object for duplicate status payload", () => {
-        const initial = {
+        const initial: PracticeState = {
             ...INITIAL_PRACTICE_STATE,
             sessionStatus: "in_progress" as const,
             aiState: "thinking" as const,
@@ -97,7 +98,7 @@ describe("handleWebSocketMessage connection/status behavior", () => {
     });
 
     it("does not create new state object for duplicate stage_update payload", () => {
-        const initial = {
+        const initial: PracticeState = {
             ...INITIAL_PRACTICE_STATE,
             salesStage: {
                 current_stage: "opening",
@@ -126,5 +127,298 @@ describe("handleWebSocketMessage connection/status behavior", () => {
         );
 
         expect(getState()).toBe(previousStateRef);
+    });
+
+    it("handles interrupted event by resetting playback flags to listening", () => {
+        const { deps, getState } = createDeps({
+            ...INITIAL_PRACTICE_STATE,
+            aiState: "speaking",
+            isPlayingAudio: true,
+            isStreamingTTS: true,
+        });
+
+        handleWebSocketMessage(
+            createMessageEvent({
+                type: "interrupted",
+                timestamp: new Date().toISOString(),
+                data: { reason: "user_speaking" },
+            }),
+            deps as never,
+        );
+
+        expect(getState().aiState).toBe("listening");
+        expect(getState().isPlayingAudio).toBe(false);
+        expect(getState().isStreamingTTS).toBe(false);
+    });
+
+    it("maps interruption ai_message into AI chat flow", () => {
+        const { deps } = createDeps(INITIAL_PRACTICE_STATE);
+
+        handleWebSocketMessage(
+            createMessageEvent({
+                type: "interruption",
+                timestamp: new Date().toISOString(),
+                data: {
+                    reason: "missing_point",
+                    ai_message: "请补充本页核心价值点。",
+                },
+            }),
+            deps as never,
+        );
+
+        expect(deps.addAiMessageIfNew).toHaveBeenCalledWith(
+            "请补充本页核心价值点。",
+            { aiState: "speaking" },
+        );
+    });
+
+    it("ignores interrupted event for stale stream_id", () => {
+        const { deps, getState } = createDeps({
+            ...INITIAL_PRACTICE_STATE,
+            aiState: "speaking",
+            isPlayingAudio: true,
+            isStreamingTTS: true,
+        });
+        const streamingPlayer = deps.streamingPlayer as { interrupt: ReturnType<typeof vi.fn> };
+        deps.currentStreamIdRef.current = "stream-live";
+
+        handleWebSocketMessage(
+            createMessageEvent({
+                type: "interrupted",
+                stream_id: "stream-stale",
+                timestamp: new Date().toISOString(),
+                data: { reason: "user_speaking" },
+            }),
+            deps as never,
+        );
+
+        expect(getState().aiState).toBe("speaking");
+        expect(getState().isPlayingAudio).toBe(true);
+        expect(getState().isStreamingTTS).toBe(true);
+        expect(streamingPlayer.interrupt).not.toHaveBeenCalled();
+    });
+
+    it("clears currentStreamIdRef when interrupted stream_id matches", () => {
+        const { deps } = createDeps({
+            ...INITIAL_PRACTICE_STATE,
+            aiState: "speaking",
+            isPlayingAudio: true,
+            isStreamingTTS: true,
+        });
+        const streamingPlayer = deps.streamingPlayer as { interrupt: ReturnType<typeof vi.fn> };
+        deps.currentStreamIdRef.current = "stream-live";
+
+        handleWebSocketMessage(
+            createMessageEvent({
+                type: "interrupted",
+                stream_id: "stream-live",
+                timestamp: new Date().toISOString(),
+                data: { reason: "user_speaking" },
+            }),
+            deps as never,
+        );
+
+        expect(deps.currentStreamIdRef.current).toBeNull();
+        expect(streamingPlayer.interrupt).toHaveBeenCalledTimes(1);
+    });
+
+    it("updates slide and point state for presentation events", () => {
+        const { deps, getState } = createDeps(INITIAL_PRACTICE_STATE);
+
+        handleWebSocketMessage(
+            createMessageEvent({
+                type: "slide_update",
+                timestamp: new Date().toISOString(),
+                data: {
+                    current_page: 2,
+                    page_number: 2,
+                    total_pages: 8,
+                    content: "Slide content",
+                    page_content: "Slide content",
+                    image_url: "/api/v1/presentations/ppt-1/pages/2/thumbnail",
+                },
+            }),
+            deps as never,
+        );
+
+        handleWebSocketMessage(
+            createMessageEvent({
+                type: "point_covered",
+                timestamp: new Date().toISOString(),
+                data: {
+                    point_id: "p-1",
+                    is_covered: true,
+                    content: "Key point",
+                },
+            }),
+            deps as never,
+        );
+
+        expect(getState().currentSlide?.current_page).toBe(2);
+        expect(getState().points).toHaveLength(1);
+        expect(getState().points[0]).toMatchObject({
+            point_id: "p-1",
+            is_covered: true,
+        });
+        expect(getState().currentSlide?.image_url).toBe("/api/v1/presentations/ppt-1/pages/2/thumbnail");
+        expect(getState().currentSlide?.page_content).toBe("Slide content");
+    });
+
+    it("clears stale points when receiving points_reset", () => {
+        const { deps, getState } = createDeps({
+            ...INITIAL_PRACTICE_STATE,
+            points: [
+                {
+                    point_id: "old-point-1",
+                    is_covered: true,
+                    content: "旧页面要点",
+                },
+            ],
+        });
+
+        handleWebSocketMessage(
+            createMessageEvent({
+                type: "points_reset",
+                timestamp: new Date().toISOString(),
+                data: { current_page: 2 },
+            }),
+            deps as never,
+        );
+
+        expect(getState().points).toHaveLength(0);
+    });
+
+    it("maps feedback message to fuzzyDetections for realtime panel", () => {
+        const { deps, getState } = createDeps(INITIAL_PRACTICE_STATE);
+
+        handleWebSocketMessage(
+            createMessageEvent({
+                type: "feedback",
+                timestamp: new Date().toISOString(),
+                data: {
+                    feedback_type: "missing_point",
+                    message: "请补充客户收益",
+                    suggestions: ["补充一个量化案例"],
+                    current_page: 1,
+                },
+            }),
+            deps as never,
+        );
+
+        expect(getState().fuzzyDetections).toHaveLength(1);
+        expect(getState().fuzzyDetections[0]).toMatchObject({
+            category: "feedback",
+            suggestion: "请补充客户收益",
+        });
+    });
+
+    it("updates session state on session_ended event", () => {
+        const { deps, getState } = createDeps({
+            ...INITIAL_PRACTICE_STATE,
+            sessionStatus: "in_progress",
+            aiState: "speaking",
+            isPlayingAudio: true,
+            isStreamingTTS: true,
+        });
+
+        handleWebSocketMessage(
+            createMessageEvent({
+                type: "session_ended",
+                timestamp: new Date().toISOString(),
+                data: { session_status: "completed" },
+            }),
+            deps as never,
+        );
+
+        expect(getState().sessionStatus).toBe("completed");
+        expect(getState().aiState).toBe("idle");
+        expect(getState().isPlayingAudio).toBe(false);
+        expect(getState().isStreamingTTS).toBe(false);
+    });
+
+    it("responds to heartbeat with heartbeat_ack", () => {
+        const { deps } = createDeps(INITIAL_PRACTICE_STATE);
+
+        handleWebSocketMessage(
+            createMessageEvent({
+                type: "heartbeat",
+                timestamp: new Date().toISOString(),
+                data: {},
+            }),
+            deps as never,
+        );
+
+        expect(deps.sendMessage).toHaveBeenCalledTimes(1);
+        expect(deps.sendMessage).toHaveBeenCalledWith(
+            "heartbeat_ack",
+            expect.objectContaining({
+                client_ts: expect.any(String),
+            }),
+        );
+    });
+
+    it("restores connected runtime state on reconnected event", () => {
+        const { deps, getState } = createDeps({
+            ...INITIAL_PRACTICE_STATE,
+            connectionState: "reconnecting",
+            isConnected: false,
+            isConnecting: true,
+            sessionStatus: "paused",
+            aiState: "idle",
+            error: "temporary error",
+        });
+
+        handleWebSocketMessage(
+            createMessageEvent({
+                type: "reconnected",
+                timestamp: new Date().toISOString(),
+                data: {
+                    restored_state: {
+                        session_status: "in_progress",
+                        ai_state: "listening",
+                    },
+                },
+            }),
+            deps as never,
+        );
+
+        expect(getState().connectionState).toBe("connected");
+        expect(getState().isConnected).toBe(true);
+        expect(getState().isConnecting).toBe(false);
+        expect(getState().sessionStatus).toBe("in_progress");
+        expect(getState().aiState).toBe("listening");
+        expect(getState().error).toBeNull();
+    });
+
+    it("marks connection failed on session_timeout and surfaces error callback", () => {
+        const { deps, getState } = createDeps({
+            ...INITIAL_PRACTICE_STATE,
+            connectionState: "connected",
+            isConnected: true,
+            isConnecting: false,
+            aiState: "speaking",
+            isPlayingAudio: true,
+            isStreamingTTS: true,
+        });
+
+        handleWebSocketMessage(
+            createMessageEvent({
+                type: "session_timeout",
+                timestamp: new Date().toISOString(),
+                data: {
+                    message: "会话超时，请重新开始",
+                },
+            }),
+            deps as never,
+        );
+
+        expect(getState().connectionState).toBe("failed");
+        expect(getState().isConnected).toBe(false);
+        expect(getState().isConnecting).toBe(false);
+        expect(getState().aiState).toBe("idle");
+        expect(getState().isPlayingAudio).toBe(false);
+        expect(getState().isStreamingTTS).toBe(false);
+        expect(getState().error).toBe("会话超时，请重新开始");
+        expect(deps.onError).toHaveBeenCalledWith("会话超时，请重新开始");
     });
 });

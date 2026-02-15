@@ -118,6 +118,18 @@ class TestAgentServiceCreate:
         assert agent.capabilities_config == {}
         assert agent.default_knowledge_base_ids == []
 
+    async def test_create_agent_rejects_unsupported_category(self, agent_service):
+        """Should reject creating unsupported category agents"""
+        data = CreateAgentRequest(
+            name="客服训练",
+            category="customer_service"
+        )
+
+        result = await agent_service.create(data)
+
+        assert not result.is_success
+        assert result.fallback == "[AGENT_CATEGORY_RESTRICTED]"
+
 
 class TestAgentServiceList:
     """Tests for Agent listing - R1.2, R2.1"""
@@ -261,6 +273,19 @@ class TestAgentServiceUpdate:
         
         assert not result.is_success
         assert result.fallback == "[AGENT_NOT_FOUND]"
+
+    async def test_update_agent_rejects_unsupported_category(
+        self, agent_service, sample_agent_data
+    ):
+        """Should reject updating to unsupported categories"""
+        create_result = await agent_service.create(sample_agent_data)
+        agent_id = create_result.value.id
+
+        update_data = UpdateAgentRequest(category="interview")
+        result = await agent_service.update(agent_id, update_data)
+
+        assert not result.is_success
+        assert result.fallback == "[AGENT_CATEGORY_RESTRICTED]"
 
 
 class TestAgentServiceDelete:

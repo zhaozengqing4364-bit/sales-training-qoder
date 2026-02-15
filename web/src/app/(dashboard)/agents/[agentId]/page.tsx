@@ -5,7 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { GlassCard } from "@/components/ui/glass-card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Sparkles, Play, User } from "lucide-react";
+import { ArrowLeft, Sparkles, Play, User, Presentation } from "lucide-react";
 import { api, getApiErrorMessage } from "@/lib/api/client";
 import { cn } from "@/lib/utils";
 import { KnowledgeBaseSelector } from "@/components/knowledge/KnowledgeBaseSelector";
@@ -38,6 +38,12 @@ interface AgentDetail {
     personas: Persona[];
 }
 
+interface PresentationOption {
+    presentation_id: string;
+    title: string;
+    page_count: number;
+}
+
 type VoiceMode = "legacy" | "stepfun_realtime";
 
 export default function AgentPersonaSelectPage() {
@@ -53,6 +59,10 @@ export default function AgentPersonaSelectPage() {
     const [startError, setStartError] = useState<string | null>(null);
     const [isSavingKnowledgeBases, setIsSavingKnowledgeBases] = useState(false);
     const [knowledgeBaseSaveError, setKnowledgeBaseSaveError] = useState<string | null>(null);
+    const [availablePresentations, setAvailablePresentations] = useState<PresentationOption[]>([]);
+    const [selectedPresentationId, setSelectedPresentationId] = useState<string>("");
+    const [isLoadingPresentations, setIsLoadingPresentations] = useState(false);
+    const [presentationLoadError, setPresentationLoadError] = useState<string | null>(null);
     const hasHydratedKnowledgeBaseSelection = useRef(false);
 
     const {
@@ -123,6 +133,53 @@ export default function AgentPersonaSelectPage() {
         loadAgent();
     }, [agentId]);
 
+    useEffect(() => {
+        let cancelled = false;
+
+        const loadPresentations = async () => {
+            if (!agent || agent.category !== "presentation") {
+                setAvailablePresentations([]);
+                setSelectedPresentationId("");
+                setPresentationLoadError(null);
+                return;
+            }
+
+            setIsLoadingPresentations(true);
+            setPresentationLoadError(null);
+
+            try {
+                const readyPresentations = await api.presentations.list({
+                    status: "ready",
+                    limit: 100,
+                });
+
+                if (cancelled) {
+                    return;
+                }
+
+                setAvailablePresentations(readyPresentations);
+                setSelectedPresentationId((prev) => prev || readyPresentations[0]?.presentation_id || "");
+            } catch (error) {
+                if (cancelled) {
+                    return;
+                }
+                setAvailablePresentations([]);
+                setSelectedPresentationId("");
+                setPresentationLoadError(getApiErrorMessage(error));
+            } finally {
+                if (!cancelled) {
+                    setIsLoadingPresentations(false);
+                }
+            }
+        };
+
+        void loadPresentations();
+
+        return () => {
+            cancelled = true;
+        };
+    }, [agent]);
+
     const handleStartPractice = async () => {
         if (!selectedPersona || !agent) return;
 
@@ -130,17 +187,27 @@ export default function AgentPersonaSelectPage() {
         setStartError(null);
         try {
             const scenarioType = agent.category === "presentation" ? "presentation" : "sales";
+            if (scenarioType === "presentation" && !selectedPresentationId) {
+                setStartError("请先选择一个可用的演练PPT");
+                setIsStarting(false);
+                return;
+            }
 
             // 创建练习会话
             const session = await api.practice.createSession({
                 agent_id: agentId,
                 persona_id: selectedPersona,
                 scenario_type: scenarioType,
+                presentation_id: scenarioType === "presentation" ? selectedPresentationId : undefined,
                 voice_mode: voiceMode,
             });
             // 跳转到练习页面
+            const presentationParam =
+                scenarioType === "presentation" && selectedPresentationId
+                    ? `&presentation_id=${encodeURIComponent(selectedPresentationId)}`
+                    : "";
             router.push(
-                `/practice/${session.session_id}?agent_id=${agentId}&persona_id=${selectedPersona}&scenario_type=${scenarioType}&voice_mode=${voiceMode}`
+                `/practice/${session.session_id}?agent_id=${agentId}&persona_id=${selectedPersona}&scenario_type=${scenarioType}&voice_mode=${voiceMode}${presentationParam}`
             );
         } catch (error) {
             console.error("Failed to create session:", error);
@@ -263,6 +330,48 @@ export default function AgentPersonaSelectPage() {
                 )}
             </div>
 
+            {agent.category === "presentation" && (
+                <div>
+                    <h2 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
+                        <Presentation className="w-5 h-5" />
+                        选择演练PPT
+                    </h2>
+                    <p className="text-sm text-slate-500 mb-4">
+                        开始前请选择要演练的演示文稿。仅展示状态为“可用”的PPT。
+                    </p>
+                    <GlassCard className="p-5 space-y-3">
+                        {isLoadingPresentations ? (
+                            <p className="text-sm text-slate-500">正在加载可用PPT...</p>
+                        ) : presentationLoadError ? (
+                            <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+                                加载演练PPT失败：{presentationLoadError}
+                            </div>
+                        ) : availablePresentations.length === 0 ? (
+                            <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">
+                                当前没有可用于演练的PPT，请先到管理后台上传并处理为可用状态。
+                            </div>
+                        ) : (
+                            <label className="block space-y-2">
+                                <span className="text-xs font-bold text-slate-500 uppercase tracking-wide">
+                                    演练文稿
+                                </span>
+                                <select
+                                    value={selectedPresentationId}
+                                    onChange={(event) => setSelectedPresentationId(event.target.value)}
+                                    className="w-full h-11 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/30"
+                                >
+                                    {availablePresentations.map((presentation) => (
+                                        <option key={presentation.presentation_id} value={presentation.presentation_id}>
+                                            {presentation.title}（{presentation.page_count || 0} 页）
+                                        </option>
+                                    ))}
+                                </select>
+                            </label>
+                        )}
+                    </GlassCard>
+                </div>
+            )}
+
             {/* 知识库选择 */}
             <div>
                 <KnowledgeBaseSelector
@@ -333,7 +442,12 @@ export default function AgentPersonaSelectPage() {
                         ) : null}
                         <Button
                             size="lg"
-                            disabled={!selectedPersona || isStarting || isSavingKnowledgeBases}
+                            disabled={
+                                !selectedPersona
+                                || isStarting
+                                || isSavingKnowledgeBases
+                                || (agent.category === "presentation" && !selectedPresentationId)
+                            }
                             onClick={handleStartPractice}
                             className="w-full md:w-auto rounded-full bg-indigo-600 hover:bg-indigo-700 text-white py-6 px-8 text-lg font-semibold shadow-lg"
                         >

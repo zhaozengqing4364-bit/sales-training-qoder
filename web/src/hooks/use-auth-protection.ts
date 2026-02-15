@@ -23,6 +23,12 @@ interface AuthRuntimeState {
     user: UserInfo | null;
 }
 
+const INITIAL_AUTH_RUNTIME_STATE: AuthRuntimeState = {
+    hydrated: false,
+    token: null,
+    user: null,
+};
+
 function readAuthRuntimeState(): AuthRuntimeState {
     if (typeof window === "undefined") {
         return {
@@ -54,7 +60,7 @@ function readAuthRuntimeState(): AuthRuntimeState {
 export function useAuthProtection(options?: AuthProtectionOptions) {
     const router = useRouter();
     const pathname = usePathname();
-    const [authState, setAuthState] = useState<AuthRuntimeState>(() => readAuthRuntimeState());
+    const [authState, setAuthState] = useState<AuthRuntimeState>(INITIAL_AUTH_RUNTIME_STATE);
 
     const requiredRoles = options?.requiredRoles || (options?.requiredRole ? [options.requiredRole] : undefined);
     const isLoginPath = pathname === "/login";
@@ -78,11 +84,16 @@ export function useAuthProtection(options?: AuthProtectionOptions) {
             return;
         }
 
+        const syncTimer = window.setTimeout(() => {
+            syncAuthState();
+        }, 0);
+
         const handleStorage = () => syncAuthState();
         const unsubscribe = authHandler.subscribe(() => syncAuthState());
 
         window.addEventListener("storage", handleStorage);
         return () => {
+            window.clearTimeout(syncTimer);
             window.removeEventListener("storage", handleStorage);
             unsubscribe();
         };

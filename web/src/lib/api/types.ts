@@ -26,6 +26,8 @@ export interface DashboardStats {
 export interface VoicePolicySnapshotReference {
     voice_mode?: string | null;
     runtime_profile_id?: string | null;
+    instruction_contract_hash?: string | null;
+    network_access_mode?: "off" | "controlled" | string | null;
     tool_policy: Record<string, unknown>;
     knowledge_base_ids: string[];
     source: Record<string, string>;
@@ -63,19 +65,18 @@ export interface SessionItem {
     title: string;
     scenario_type: "sales" | "presentation";
     overall_score: number;
-    score_trend?: string;
     duration_seconds: number;
     start_time: string;
     status: SessionStatus;
     user_id?: string;
-    user_name?: string;
+    username?: string;
     session_id?: string;
     agent_id?: string | null;
     persona_id?: string | null;
     agent_name?: string;
     persona_name?: string;
     voice_mode?: "legacy" | "stepfun_realtime";
-    voice_runtime_profile_id?: string | null;
+    runtime_profile_id?: string | null;
     voice_policy_snapshot?: Record<string, unknown> | null;
     voice_policy_snapshot_ref?: VoicePolicySnapshotReference | null;
     feedback_summary?: string;
@@ -192,7 +193,7 @@ export interface AnalyticsAgents {
 export interface LeaderboardEntry {
     rank: number;
     user_id: string;
-    user_name: string;
+    username: string;
     department: string | null;
     total_sessions: number;
     average_score: number;
@@ -300,7 +301,7 @@ export interface AdminPersona {
     status: string;
     icon?: string;
     system_prompt: string;
-    personality_traits?: string[];
+    traits?: Record<string, string>;
     agent_id?: string;
     agent_name?: string;
     knowledge_bases?: AdminKnowledgeBase[];
@@ -364,6 +365,72 @@ export interface AdminKnowledgeSearchResult {
 export interface AdminKnowledgeSearchResponse {
     results: AdminKnowledgeSearchResult[];
     total: number;
+}
+
+export type PresentationAIScopeType = "global" | "scenario" | "presentation";
+
+export interface PresentationAIPolicy {
+    enabled: boolean;
+    prompt_config: {
+        enable_prompt_first: boolean;
+        interruption_template_id?: string | null;
+    };
+    rule_config: {
+        similarity_threshold: number;
+        point_tracker_cooldown_seconds: number;
+        feedback_cooldown_seconds: number;
+        allow_critical_forbidden_interrupt: boolean;
+        allow_regular_forbidden_interrupt: boolean;
+        missing_points_interrupt_ratio_threshold: number;
+        missing_points_min_count: number;
+        missing_points_preview_count: number;
+    };
+    fallback_config: {
+        enable_interruption_detector_fallback: boolean;
+        allow_scenario_prompt_fallback: boolean;
+        fallback_when_template_missing: boolean;
+        fallback_when_render_error: boolean;
+    };
+}
+
+export interface PresentationAIPolicyScopeResponse {
+    scope_type: PresentationAIScopeType;
+    scope_id?: string | null;
+    exists: boolean;
+    policy: PresentationAIPolicy;
+    meta?: {
+        id?: string | null;
+        updated_at?: string | null;
+        updated_by?: string | null;
+    };
+}
+
+export interface PresentationAIPolicyPreviewResponse {
+    effective_policy: PresentationAIPolicy & {
+        source?: Record<string, unknown>;
+        resolved_at?: string;
+    };
+    result: {
+        should_interrupt: boolean;
+        reason?: string;
+        message?: string;
+        point_coverage: {
+            total: number;
+            covered: number;
+            missing: number;
+        };
+        forbidden_matches: Array<{
+            word: string;
+            suggestion?: string;
+            severity?: string;
+        }>;
+    };
+}
+
+export interface PresentationAIPolicyEffectiveResponse extends PresentationAIPolicy {
+    source?: Record<string, unknown>;
+    resolved_at?: string;
+    session_id?: string;
 }
 
 // User Detail types
@@ -721,7 +788,7 @@ export interface PracticeSessionReport {
 export interface KnowledgeCheckDiagnostics {
     session_id: string;
     voice_mode?: "legacy" | "stepfun_realtime" | string;
-    status: "disabled" | "no_knowledge_base" | "not_triggered" | "hit" | "miss";
+    status: "disabled" | "no_knowledge_base" | "not_triggered" | "kb_not_ready" | "hit" | "miss";
     summary: string;
     internal_retrieval_enabled: boolean;
     knowledge_base_ids: string[];
@@ -735,6 +802,8 @@ export interface KnowledgeCheckDiagnostics {
     last_status: string;
     last_top_k?: number | null;
     last_similarity_threshold?: number | null;
+    last_error?: string;
+    last_retrieval_mode?: string;
     recent_queries: string[];
     updated_at?: string | null;
 }

@@ -55,12 +55,26 @@ class PresentationCoachService:
 
             # Get scenario ID
             result = await self.db.execute(
-                select(Scenario).where(Scenario.scenario_type == "presentation")
+                select(Scenario).where(
+                    Scenario.scenario_type == "presentation",
+                    Scenario.is_active.is_(True),
+                )
             )
             scenario = result.scalar_one_or_none()
 
             if not scenario:
-                return Result.fail("Presentation scenario not configured")
+                scenario = Scenario(
+                    scenario_type="presentation",
+                    name="presentation_default",
+                    description="Default presentation coaching scenario",
+                    is_active=True,
+                )
+                self.db.add(scenario)
+                await self.db.flush()
+                logger.info(
+                    "Created default presentation scenario",
+                    scenario_id=scenario.scenario_id,
+                )
 
             # Create session
             session = PracticeSession(

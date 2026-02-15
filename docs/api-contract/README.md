@@ -14,6 +14,9 @@ docs/api-contract/
 ├── support-runtime.md  # 支持角色运行状态只读 API 契约
 ├── sessions.md         # 会话管理 API 契约 (增强)
 ├── replay.md           # 对话回放 API 契约
+├── model-configs.md    # 模型配置 API 契约
+├── voice-runtime.md    # 语音运行时策略 API 契约
+├── release-verification.md # 发布验收 API 契约
 └── websocket.md        # WebSocket 消息契约
 ```
 
@@ -98,3 +101,4 @@ docs/api-contract/
 | 2026-02-11 | 补充 Agent 归档状态会话创建保护说明 | agents |
 | 2026-02-11 | 补充 Agent/Persona 增强模式参数配对约束 | agents |
 | 2026-02-11 | 新增 sessions 契约并补齐创建会话策略快照、报告/回放快照引用字段 | sessions, replay |
+| 2026-02-13 | 补充 model-configs / voice-runtime / release-verification 三类契约文档 | model-configs, voice-runtime, release-verification |

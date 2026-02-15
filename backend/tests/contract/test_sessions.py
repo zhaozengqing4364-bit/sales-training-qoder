@@ -2,6 +2,7 @@
 Contract Tests for Practice Sessions API
 Tests API contracts for creating and managing practice sessions
 """
+
 import uuid
 
 import pytest
@@ -120,8 +121,14 @@ class TestSessionsContract:
         assert body.get("trace_id")
         assert body["success"] is True
         data = body["data"]
-        snapshot = _require_dict(data.get("voice_policy_snapshot"), "voice_policy_snapshot")
-        snapshot_ref = _require_dict(data.get("voice_policy_snapshot_ref"), "voice_policy_snapshot_ref")
+        assert data["agent_id"] == agent.id
+        assert data["persona_id"] == persona.id
+        snapshot = _require_dict(
+            data.get("voice_policy_snapshot"), "voice_policy_snapshot"
+        )
+        snapshot_ref = _require_dict(
+            data.get("voice_policy_snapshot_ref"), "voice_policy_snapshot_ref"
+        )
         assert snapshot_ref.get("voice_mode") == snapshot.get("voice_mode")
         assert "runtime_profile_id" in snapshot_ref
 
@@ -189,7 +196,7 @@ class TestSessionsContract:
         """Test GET /api/v1/practice/sessions/{id} returns session details"""
         response = await async_client.get(
             f"/api/v1/practice/sessions/{test_session_id}",
-            headers=contract_auth_headers
+            headers=contract_auth_headers,
         )
         assert response.status_code == 404
         assert response.json().get("trace_id")
@@ -203,7 +210,7 @@ class TestSessionsContract:
         """Test DELETE /api/v1/practice/sessions/{id} deletes session"""
         response = await async_client.delete(
             f"/api/v1/practice/sessions/{test_session_id}",
-            headers=contract_auth_headers
+            headers=contract_auth_headers,
         )
         assert response.status_code == 404
         assert response.json().get("trace_id")
@@ -356,7 +363,9 @@ class TestSessionsContract:
             body["data"].get("voice_policy_snapshot_ref"),
             "voice_policy_snapshot_ref",
         )
-        source = _require_dict(snapshot_ref.get("source"), "voice_policy_snapshot_ref.source")
+        source = _require_dict(
+            snapshot_ref.get("source"), "voice_policy_snapshot_ref.source"
+        )
         assert snapshot_ref.get("voice_mode") == "legacy"
         assert source.get("base") == "env"
 

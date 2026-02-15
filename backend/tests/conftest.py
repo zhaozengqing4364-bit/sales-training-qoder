@@ -2,6 +2,7 @@
 Pytest Configuration and Fixtures
 Shared fixtures for all tests
 """
+
 import asyncio
 import os
 import sys
@@ -9,19 +10,24 @@ import uuid
 
 import pytest
 import pytest_asyncio
-from httpx import AsyncClient, ASGITransport
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
+from httpx import ASGITransport, AsyncClient
+from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 
 # Add src to path for imports
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
-from main import app
 from common.db.models import Base, User
-
+from main import app
 
 # Test database URL (SQLite for testing)
 TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
+
+
+@pytest.fixture(autouse=True)
+def test_feature_flags(monkeypatch):
+    """Keep compatibility for legacy presentation test fixtures."""
+    monkeypatch.setenv("PRESENTATION_REQUIRE_AGENT_PERSONA", "false")
 
 
 @pytest.fixture(scope="session")
@@ -54,9 +60,7 @@ async def test_engine():
 async def test_db(test_engine):
     """Create test database session"""
     async_session = sessionmaker(
-        test_engine,
-        class_=AsyncSession,
-        expire_on_commit=False
+        test_engine, class_=AsyncSession, expire_on_commit=False
     )
 
     async with async_session() as session:
@@ -79,8 +83,6 @@ async def async_client(test_db):
         yield client
 
     app.dependency_overrides.clear()
-
-
 
 
 @pytest_asyncio.fixture
@@ -107,6 +109,7 @@ async def another_user(test_db: AsyncSession):
     await test_db.commit()
     await test_db.refresh(user)
     return user
+
 
 @pytest_asyncio.fixture
 async def auth_headers(async_client):

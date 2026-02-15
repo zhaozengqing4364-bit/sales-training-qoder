@@ -40,9 +40,7 @@ import {
     SalesPersonaOption,
     ReplayData,
     ReplayMessagesResponse,
-    ReplayHighlight,
     HighlightsResponse,
-    HighlightItem,
     SessionStats,
     PracticeSessionReport,
     KnowledgeCheckDiagnostics,
@@ -54,24 +52,70 @@ import {
     SessionLifecycleAction,
     SessionLifecycleRequest,
     SessionLifecycleResponse,
+    PresentationAIPolicyScopeResponse,
+    PresentationAIPolicyPreviewResponse,
+    PresentationAIPolicyEffectiveResponse,
+    PresentationAIScopeType,
 } from "./types";
 import { authHandler } from "@/lib/auth-handler";
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3444/api/v1";
+const LOOPBACK_HOST_FALLBACK_MAP: Record<string, string> = {
+    "localhost": "127.0.0.1",
+    "127.0.0.1": "localhost",
+    "::1": "127.0.0.1",
+};
+
+const API_BASE_URL = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:3444/api/v1").replace(/\/+$/, "");
+
+function getLoopbackFallbackUrl(url: string): string | null {
+    try {
+        const parsed = new URL(url);
+        const fallbackHost = LOOPBACK_HOST_FALLBACK_MAP[parsed.hostname];
+        if (!fallbackHost) {
+            return null;
+        }
+
+        parsed.hostname = fallbackHost;
+        return parsed.toString();
+    } catch {
+        return null;
+    }
+}
+
+async function fetchWithLoopbackRetry(url: string, options: RequestInit): Promise<Response> {
+    try {
+        return await fetch(url, options);
+    } catch (error) {
+        if (!(error instanceof TypeError)) {
+            throw error;
+        }
+
+        const fallbackUrl = getLoopbackFallbackUrl(url);
+        if (!fallbackUrl) {
+            throw error;
+        }
+
+        return fetch(fallbackUrl, options);
+    }
+}
 
 // Active request tracking for cancellation on page transitions
 const activeRequests = new Map<string, AbortController>();
 let requestCounter = 0;
 
 const API_ERROR_MESSAGE_MAP: Record<string, string> = {
+    "[NETWORK_ERROR]": "网络连接失败，请检查后端服务或网络设置后重试。",
     "[AGENT_PERSONA_PAIR_REQUIRED]": "请选择智能体与角色后再开始训练。",
     "[AGENT_ARCHIVED]": "该智能体已归档，暂时无法创建训练会话。",
     "[AGENT_NOT_PUBLISHED]": "该智能体尚未发布，请选择可用智能体。",
     "[PERSONA_INACTIVE]": "该角色已停用，请更换角色。",
     "[PERSONA_NOT_LINKED_TO_AGENT]": "所选角色未关联当前智能体，请重新选择。",
+    "[AGENT_CATEGORY_RESTRICTED]": "当前仅支持创建「销售」与「演讲」两类智能体。",
     "[SALES_PERSONA_REQUIRED]": "请先选择销售角色。",
     "[SESSION_NOT_FOUND]": "未找到目标会话，请刷新后重试。",
     "[ACCESS_DENIED]": "你没有权限访问该会话。",
+    "[PROMPT_TEMPLATE_EDIT_ADMIN_ONLY]": "仅管理员可编辑提示词正文，运营角色仅可启停与绑定。",
+    "[ROLE_REQUIRED]": "当前账号权限不足，无法执行该操作。",
 };
 
 type NormalizedApiErrorPayload = {
@@ -268,6 +312,23 @@ type AgentVoicePolicy = {
     updated_at?: string | null;
 };
 
+type PresentationAIPolicyUpsertPayload = {
+    scope_type: PresentationAIScopeType;
+    scope_id?: string | null;
+    enabled?: boolean;
+    prompt_config?: Record<string, unknown>;
+    rule_config?: Record<string, unknown>;
+    fallback_config?: Record<string, unknown>;
+};
+
+type PresentationAIPolicyPreviewPayload = {
+    scope_type: PresentationAIScopeType;
+    scope_id?: string | null;
+    transcript: string;
+    required_points?: string[];
+    forbidden_words?: Array<string | Record<string, unknown>>;
+};
+
 type PresentationStatus = "processing" | "ready" | "error";
 
 type PresentationPage = {
@@ -442,7 +503,7 @@ async function apiFetch<T>(
     activeRequests.set(requestId, controller);
 
     try {
-        const response = await fetch(url, {
+        const response = await fetchWithLoopbackRetry(url, {
             ...options,
             signal,
             headers: {
@@ -469,6 +530,24 @@ async function apiFetch<T>(
         }
 
         return responseJson.data !== undefined ? responseJson.data : responseJson;
+    } catch (error) {
+        if (error instanceof ApiRequestError) {
+            throw error;
+        }
+
+        if (error instanceof Error && error.name === "AbortError") {
+            throw error;
+        }
+
+        const message = error instanceof Error && error.message.trim()
+            ? error.message
+            : "请求失败，请稍后重试。";
+
+        throw new ApiRequestError({
+            status: 0,
+            errorCode: "[NETWORK_ERROR]",
+            message,
+        });
     } finally {
         activeRequests.delete(requestId);
     }
@@ -492,7 +571,7 @@ async function apiUpload<T>(
     activeRequests.set(requestId, controller);
 
     try {
-        const response = await fetch(url, {
+        const response = await fetchWithLoopbackRetry(url, {
             method: "POST",
             headers: token ? { Authorization: `Bearer ${token}` } : {},
             body: formData,
@@ -513,6 +592,24 @@ async function apiUpload<T>(
         }
 
         return responseJson.data !== undefined ? responseJson.data : responseJson;
+    } catch (error) {
+        if (error instanceof ApiRequestError) {
+            throw error;
+        }
+
+        if (error instanceof Error && error.name === "AbortError") {
+            throw error;
+        }
+
+        const message = error instanceof Error && error.message.trim()
+            ? error.message
+            : "请求失败，请稍后重试。";
+
+        throw new ApiRequestError({
+            status: 0,
+            errorCode: "[NETWORK_ERROR]",
+            message,
+        });
     } finally {
         activeRequests.delete(requestId);
     }
@@ -674,9 +771,19 @@ export const api = {
                 start_time: typeof item.start_time === "string" ? item.start_time : new Date(0).toISOString(),
                 status: normalizeSessionStatus(item.status),
                 user_id: typeof item.user_id === "string" ? item.user_id : undefined,
-                user_name: typeof item.user_name === "string" ? item.user_name : undefined,
+                username: typeof item.username === "string"
+                    ? item.username
+                    : typeof item.user_name === "string"
+                        ? item.user_name
+                        : undefined,
                 agent_name: typeof item.agent_name === "string" ? item.agent_name : undefined,
                 persona_name: typeof item.persona_name === "string" ? item.persona_name : undefined,
+                runtime_profile_id:
+                    typeof item.runtime_profile_id === "string"
+                        ? item.runtime_profile_id
+                        : typeof item.voice_runtime_profile_id === "string"
+                            ? item.voice_runtime_profile_id
+                            : undefined,
             }));
         },
 
@@ -833,6 +940,7 @@ export const api = {
 
         createSession: async (data: {
             scenario_type: "sales" | "presentation";
+            presentation_id?: string;
             agent_id?: string;
             persona_id?: string;
             sales_persona?: string;
@@ -850,6 +958,7 @@ export const api = {
     practice: {
         createSession: async (data: {
             scenario_type: "sales" | "presentation";
+            presentation_id?: string;
             agent_id?: string;
             persona_id?: string;
             sales_persona?: string;
@@ -957,8 +1066,11 @@ export const api = {
             return apiFetch<ScenarioSummary[]>(`/scenarios${query}`);
         },
 
-        getSalesPersonas: async () => {
-            return apiFetch<SalesPersonaOption[]>("/scenarios/sales/personas");
+        getSalesPersonas: async (agentId?: string) => {
+            const query = agentId
+                ? `?agent_id=${encodeURIComponent(agentId)}`
+                : "";
+            return apiFetch<SalesPersonaOption[]>(`/scenarios/sales/personas${query}`);
         },
 
         getById: async (scenarioId: string) => {
@@ -1029,7 +1141,26 @@ export const api = {
             if (params?.time_range) searchParams.set("time_range", params.time_range);
             if (params?.limit) searchParams.set("limit", params.limit.toString());
 
-            return apiFetch<AnalyticsLeaderboard>(`/admin/analytics/leaderboard?${searchParams}`);
+            const payload = await apiFetch<{
+                leaderboard: Array<{
+                    rank: number;
+                    user_id: string;
+                    username?: string;
+                    user_name?: string;
+                    department: string | null;
+                    total_sessions: number;
+                    average_score: number;
+                    best_score: number;
+                    total_duration_minutes: number;
+                }>;
+            }>(`/admin/analytics/leaderboard?${searchParams}`);
+
+            return {
+                leaderboard: (payload.leaderboard || []).map((entry) => ({
+                    ...entry,
+                    username: entry.username || entry.user_name || "-",
+                })),
+            } as AnalyticsLeaderboard;
         },
 
         exportReport: async (params?: { time_range?: string; format?: string }) => {
@@ -1481,6 +1612,48 @@ export const api = {
             return apiFetch<Record<string, unknown>>(`/admin/voice-runtime/agents/${agentId}/effective${query}`);
         },
 
+        getPresentationAIPolicy: async (params?: {
+            scope_type?: PresentationAIScopeType;
+            scope_id?: string;
+        }) => {
+            const queryParams = new URLSearchParams();
+            if (params?.scope_type) queryParams.set("scope_type", params.scope_type);
+            if (params?.scope_id) queryParams.set("scope_id", params.scope_id);
+            const query = queryParams.toString() ? `?${queryParams.toString()}` : "";
+            return apiFetch<PresentationAIPolicyScopeResponse>(
+                `/admin/presentation-ai/policy${query}`,
+            );
+        },
+
+        updatePresentationAIPolicy: async (data: PresentationAIPolicyUpsertPayload) => {
+            return apiFetch<PresentationAIPolicyScopeResponse>("/admin/presentation-ai/policy", {
+                method: "PUT",
+                body: JSON.stringify(data),
+            });
+        },
+
+        previewPresentationAIPolicy: async (data: PresentationAIPolicyPreviewPayload) => {
+            return apiFetch<PresentationAIPolicyPreviewResponse>("/admin/presentation-ai/policy/preview", {
+                method: "POST",
+                body: JSON.stringify(data),
+            });
+        },
+
+        getEffectivePresentationAIPolicy: async (params?: {
+            session_id?: string;
+            scenario_id?: string;
+            presentation_id?: string;
+        }) => {
+            const queryParams = new URLSearchParams();
+            if (params?.session_id) queryParams.set("session_id", params.session_id);
+            if (params?.scenario_id) queryParams.set("scenario_id", params.scenario_id);
+            if (params?.presentation_id) queryParams.set("presentation_id", params.presentation_id);
+            const query = queryParams.toString() ? `?${queryParams.toString()}` : "";
+            return apiFetch<PresentationAIPolicyEffectiveResponse>(
+                `/admin/presentation-ai/policy/effective${query}`,
+            );
+        },
+
         // Prompt Templates (B10)
         getPromptTemplates: async (params?: { prompt_type?: string; category?: string; is_active?: boolean }) => {
             const queryParams = new URLSearchParams();
@@ -1693,6 +1866,20 @@ export const api = {
         getPages: async (presentationId: string) => {
             const result = await apiFetch<Array<Record<string, unknown>>>(`/presentations/${presentationId}/pages`);
             return result.map(normalizePresentationPage);
+        },
+
+        getThumbnailBlob: async (presentationId: string, pageNumber: number) => {
+            const response = await fetchWithLoopbackRetry(
+                `${API_BASE_URL}/presentations/${presentationId}/pages/${pageNumber}/thumbnail`,
+                {
+                    method: "GET",
+                    headers: createHeaders(false),
+                },
+            );
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}`);
+            }
+            return response.blob();
         },
 
         getTalkingPoints: async (presentationId: string, pageNumber: number) => {

@@ -5,20 +5,77 @@ import { ChevronLeft, ChevronRight, Presentation } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { motion } from "framer-motion";
+import { api } from "@/lib/api/client";
 
 export interface SlideViewerProps {
+    presentationId?: string;
     currentPage: number;
     totalPages: number;
     slideContent?: string;
+    slideImageUrl?: string;
     onPageChange: (page: number) => void;
 }
 
 export function SlideViewer({
+    presentationId,
     currentPage,
     totalPages,
     slideContent,
+    slideImageUrl,
     onPageChange,
 }: SlideViewerProps) {
+    const [thumbnailUrl, setThumbnailUrl] = React.useState<string | null>(null);
+    const [isThumbnailLoading, setIsThumbnailLoading] = React.useState(false);
+
+    React.useEffect(() => {
+        let active = true;
+        let localObjectUrl: string | null = null;
+
+        setThumbnailUrl(null);
+
+        if (!presentationId || currentPage < 1) {
+            setIsThumbnailLoading(false);
+            return () => {
+                active = false;
+            };
+        }
+
+        setIsThumbnailLoading(true);
+
+        const loadThumbnail = async () => {
+            try {
+                const blob = await api.presentations.getThumbnailBlob(
+                    presentationId,
+                    currentPage,
+                );
+                if (!active) {
+                    return;
+                }
+                localObjectUrl = URL.createObjectURL(blob);
+                setThumbnailUrl(localObjectUrl);
+            } catch {
+                if (active) {
+                    setThumbnailUrl(null);
+                }
+            } finally {
+                if (active) {
+                    setIsThumbnailLoading(false);
+                }
+            }
+        };
+
+        void loadThumbnail();
+
+        return () => {
+            active = false;
+            if (localObjectUrl) {
+                URL.revokeObjectURL(localObjectUrl);
+            }
+        };
+    }, [presentationId, currentPage]);
+
+    const resolvedSlideImage = thumbnailUrl || slideImageUrl || null;
+
     const handlePrev = () => {
         if (currentPage > 1) {
             onPageChange(currentPage - 1);
@@ -45,9 +102,24 @@ export function SlideViewer({
 
             {/* 幻灯片内容区域 */}
             <div className="relative bg-white rounded-xl border border-slate-200 overflow-hidden min-h-[180px] md:min-h-[200px] flex items-center justify-center">
-                {slideContent ? (
+                {resolvedSlideImage ? (
                     <motion.div
-                        key={currentPage}
+                        key={`${currentPage}-image`}
+                        initial={{ opacity: 0, x: 20 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        exit={{ opacity: 0, x: -20 }}
+                        transition={{ duration: 0.3 }}
+                        className="w-full h-full"
+                    >
+                        <img
+                            src={resolvedSlideImage}
+                            alt={`第${currentPage}页幻灯片`}
+                            className="w-full h-full object-contain"
+                        />
+                    </motion.div>
+                ) : slideContent ? (
+                    <motion.div
+                        key={`${currentPage}-text`}
                         initial={{ opacity: 0, x: 20 }}
                         animate={{ opacity: 1, x: 0 }}
                         exit={{ opacity: 0, x: -20 }}
@@ -61,7 +133,9 @@ export function SlideViewer({
                 ) : (
                     <div className="text-center p-4">
                         <Presentation className="w-12 h-12 text-slate-300 mx-auto mb-2" />
-                        <p className="text-xs text-slate-400">幻灯片内容加载中...</p>
+                        <p className="text-xs text-slate-400">
+                            {isThumbnailLoading ? "幻灯片加载中..." : "幻灯片内容加载中..."}
+                        </p>
                     </div>
                 )}
 

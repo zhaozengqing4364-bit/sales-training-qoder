@@ -5,7 +5,8 @@ Uses python-pptx for parsing
 
 import io
 import os
-import uuid
+import textwrap
+from pathlib import Path
 from typing import Any
 
 from common.error_handling.result import Result
@@ -16,12 +17,23 @@ logger = get_logger(__name__)
 # Try to import python-pptx
 try:
     from pptx import Presentation as PptxPresentation
-    from pptx.util import Inches, Pt
 
     PPTX_AVAILABLE = True
 except ImportError:
     PPTX_AVAILABLE = False
+    PptxPresentation = None
     logger.warning("python-pptx not installed. PPT parsing will be limited.")
+
+try:
+    from PIL import Image, ImageDraw, ImageFont
+
+    PILLOW_AVAILABLE = True
+except ImportError:
+    PILLOW_AVAILABLE = False
+    Image = None
+    ImageDraw = None
+    ImageFont = None
+    logger.warning("Pillow not installed. PPT thumbnail generation will be limited.")
 
 
 class PPTParserService:
@@ -43,7 +55,7 @@ class PPTParserService:
         Returns:
             Result containing parsed data with pages list
         """
-        if not PPTX_AVAILABLE:
+        if not PPTX_AVAILABLE or PptxPresentation is None:
             return Result.fail("[PPTX_NOT_AVAILABLE] python-pptx library not installed")
 
         # Check file format
@@ -101,7 +113,7 @@ class PPTParserService:
             "text_length": len(full_text),
         }
 
-    def _extract_title(self, prs: "PptxPresentation") -> str:
+    def _extract_title(self, prs: Any) -> str:
         """Extract presentation title from first slide or properties"""
         # Try to get from core properties
         if prs.core_properties and prs.core_properties.title:
@@ -123,25 +135,73 @@ class PPTParserService:
         page_number: int = 1,
         output_dir: str = "./data/ppts/thumbnails",
     ) -> Result[str]:
-        """
-        Generate thumbnail for a specific page
-        Note: This requires additional libraries like pdf2image or unoconv
-        For now, returns a placeholder
-        """
-        # TODO: Implement actual thumbnail generation
-        # This would require:
-        # 1. Convert PPT to PDF (using LibreOffice/unoconv)
-        # 2. Convert PDF page to image (using pdf2image)
+        if (
+            not PILLOW_AVAILABLE
+            or Image is None
+            or ImageDraw is None
+            or ImageFont is None
+        ):
+            return Result.fail(
+                "[PILLOW_NOT_AVAILABLE] Pillow is required for thumbnail generation"
+            )
 
-        thumbnail_id = str(uuid.uuid4())
-        thumbnail_path = os.path.join(output_dir, f"{thumbnail_id}.png")
+        if page_number < 1:
+            return Result.fail("[INVALID_PAGE_NUMBER] page_number must be >= 1")
 
-        # Ensure directory exists
-        os.makedirs(output_dir, exist_ok=True)
+        slide_title = ""
+        slide_text = ""
 
-        # Placeholder: return empty path
-        logger.info(f"Thumbnail generation not implemented yet, would save to: {thumbnail_path}")
-        return Result.ok("")
+        if PPTX_AVAILABLE and PptxPresentation is not None:
+            try:
+                presentation = PptxPresentation(io.BytesIO(file_content))
+                slide_count = len(presentation.slides)
+                if 1 <= page_number <= slide_count:
+                    slide = presentation.slides[page_number - 1]
+                    extracted = self._extract_slide_content(slide, page_number)
+                    slide_text = extracted.get("extracted_text", "")
+                slide_title = self._extract_title(presentation)
+            except Exception as exc:
+                logger.warning(f"Thumbnail text extraction fallback: {exc}")
+
+        output_path = Path(output_dir)
+        output_path.mkdir(parents=True, exist_ok=True)
+        thumbnail_path = output_path / f"page-{page_number}.png"
+
+        image = Image.new("RGB", (1280, 720), "#f8fafc")
+        draw = ImageDraw.Draw(image)
+
+        try:
+            title_font = ImageFont.truetype("Arial.ttf", 40)
+            body_font = ImageFont.truetype("Arial.ttf", 28)
+            footer_font = ImageFont.truetype("Arial.ttf", 24)
+        except Exception:
+            title_font = ImageFont.load_default()
+            body_font = ImageFont.load_default()
+            footer_font = ImageFont.load_default()
+
+        draw.rectangle((0, 0, 1280, 120), fill="#1e293b")
+        draw.text((36, 36), f"Slide {page_number}", fill="#f8fafc", font=title_font)
+
+        if slide_title:
+            draw.text((36, 140), slide_title[:80], fill="#0f172a", font=title_font)
+
+        normalized_text = " ".join((slide_text or "").split())
+        wrapped = textwrap.wrap(normalized_text, width=48)
+        if not wrapped:
+            wrapped = ["No text extracted from this slide."]
+
+        y = 220
+        for line in wrapped[:10]:
+            draw.text((36, y), line, fill="#334155", font=body_font)
+            y += 46
+
+        draw.rectangle((0, 660, 1280, 720), fill="#e2e8f0")
+        draw.text(
+            (36, 676), "AI Presentation Practice", fill="#475569", font=footer_font
+        )
+
+        image.save(thumbnail_path, format="PNG", optimize=True)
+        return Result.ok(str(thumbnail_path))
 
 
 class PageContextService:
@@ -150,7 +210,9 @@ class PageContextService:
     def __init__(self):
         self._session_pages: dict[str, dict[str, Any]] = {}
 
-    def set_current_page(self, session_id: str, page_number: int, context: dict[str, Any]) -> None:
+    def set_current_page(
+        self, session_id: str, page_number: int, context: dict[str, Any]
+    ) -> None:
         """Set current page context for a session"""
         if session_id not in self._session_pages:
             self._session_pages[session_id] = {}
@@ -163,7 +225,9 @@ class PageContextService:
             "forbidden_words": context.get("forbidden_words", []),
         }
 
-        logger.debug(f"Updated page context for session {session_id}: page {page_number}")
+        logger.debug(
+            f"Updated page context for session {session_id}: page {page_number}"
+        )
 
     def get_current_page(self, session_id: str) -> dict[str, Any] | None:
         """Get current page context for a session"""

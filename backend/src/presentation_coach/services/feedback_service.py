@@ -4,6 +4,7 @@ Orchestrates real-time feedback for PPT presentations
 Combines point tracking and forbidden word detection
 """
 
+import json
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
@@ -34,6 +35,98 @@ class PresentationFeedback:
     timestamp: datetime
 
 
+@dataclass
+class PresentationFeedbackRuleConfig:
+    """Configurable rule thresholds for real-time interruption decisions."""
+
+    similarity_threshold: float = 0.75
+    point_tracker_cooldown_seconds: int = 30
+    feedback_cooldown_seconds: int = 30
+    allow_critical_forbidden_interrupt: bool = True
+    allow_regular_forbidden_interrupt: bool = True
+    missing_points_interrupt_ratio_threshold: float = 0.3
+    missing_points_min_count: int = 1
+    missing_points_preview_count: int = 2
+
+    @classmethod
+    def from_payload(cls, payload: dict[str, Any] | None) -> "PresentationFeedbackRuleConfig":
+        raw = payload if isinstance(payload, dict) else {}
+        return cls(
+            similarity_threshold=_to_float(
+                raw.get("similarity_threshold"),
+                0.75,
+                minimum=0.1,
+                maximum=0.99,
+            ),
+            point_tracker_cooldown_seconds=_to_int(
+                raw.get("point_tracker_cooldown_seconds"),
+                30,
+                minimum=0,
+                maximum=600,
+            ),
+            feedback_cooldown_seconds=_to_int(
+                raw.get("feedback_cooldown_seconds"),
+                30,
+                minimum=0,
+                maximum=600,
+            ),
+            allow_critical_forbidden_interrupt=_to_bool(
+                raw.get("allow_critical_forbidden_interrupt"),
+                True,
+            ),
+            allow_regular_forbidden_interrupt=_to_bool(
+                raw.get("allow_regular_forbidden_interrupt"),
+                True,
+            ),
+            missing_points_interrupt_ratio_threshold=_to_float(
+                raw.get("missing_points_interrupt_ratio_threshold"),
+                0.3,
+                minimum=0.0,
+                maximum=1.0,
+            ),
+            missing_points_min_count=_to_int(
+                raw.get("missing_points_min_count"),
+                1,
+                minimum=1,
+                maximum=50,
+            ),
+            missing_points_preview_count=_to_int(
+                raw.get("missing_points_preview_count"),
+                2,
+                minimum=1,
+                maximum=10,
+            ),
+        )
+
+
+def _to_bool(value: Any, default: bool) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        lowered = value.strip().lower()
+        if lowered in {"true", "1", "yes", "on"}:
+            return True
+        if lowered in {"false", "0", "no", "off"}:
+            return False
+    return default
+
+
+def _to_int(value: Any, default: int, minimum: int, maximum: int) -> int:
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return default
+    return max(minimum, min(maximum, parsed))
+
+
+def _to_float(value: Any, default: float, minimum: float, maximum: float) -> float:
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError):
+        return default
+    return max(minimum, min(maximum, parsed))
+
+
 class PresentationFeedbackService:
     """
     Service for generating real-time presentation feedback
@@ -44,7 +137,41 @@ class PresentationFeedbackService:
         self._trackers: dict[str, SemanticPointTracker] = {}
         self._deduplicators: dict[str, FeedbackDeduplicator] = {}
         self._forbidden_matchers: dict[str, Any] = {}
+        self._rule_configs: dict[str, PresentationFeedbackRuleConfig] = {}
         self._page_contexts: dict[str, dict[str, Any]] = {}
+
+    @staticmethod
+    def _build_page_signature(
+        *,
+        page_number: int,
+        required_points: list[str],
+        forbidden_words: list[dict[str, Any]],
+        rule_config: PresentationFeedbackRuleConfig,
+    ) -> str:
+        payload = {
+            "page_number": page_number,
+            "required_points": required_points,
+            "forbidden_words": forbidden_words,
+            "rule_config": {
+                "similarity_threshold": rule_config.similarity_threshold,
+                "point_tracker_cooldown_seconds": (
+                    rule_config.point_tracker_cooldown_seconds
+                ),
+                "feedback_cooldown_seconds": rule_config.feedback_cooldown_seconds,
+                "allow_critical_forbidden_interrupt": (
+                    rule_config.allow_critical_forbidden_interrupt
+                ),
+                "allow_regular_forbidden_interrupt": (
+                    rule_config.allow_regular_forbidden_interrupt
+                ),
+                "missing_points_interrupt_ratio_threshold": (
+                    rule_config.missing_points_interrupt_ratio_threshold
+                ),
+                "missing_points_min_count": rule_config.missing_points_min_count,
+                "missing_points_preview_count": rule_config.missing_points_preview_count,
+            },
+        }
+        return json.dumps(payload, ensure_ascii=False, sort_keys=True)
 
     async def initialize_page(
         self,
@@ -52,6 +179,7 @@ class PresentationFeedbackService:
         page_number: int,
         required_points: list[str],
         forbidden_words: list[dict[str, Any]],
+        rule_config: dict[str, Any] | None = None,
     ) -> Result[bool]:
         """
         Initialize tracking for a new page
@@ -66,11 +194,25 @@ class PresentationFeedbackService:
             Result indicating success
         """
         try:
+            normalized_rule_config = PresentationFeedbackRuleConfig.from_payload(
+                rule_config
+            )
+            next_signature = self._build_page_signature(
+                page_number=page_number,
+                required_points=required_points,
+                forbidden_words=forbidden_words,
+                rule_config=normalized_rule_config,
+            )
+            prev_context = self._page_contexts.get(session_id)
+            if prev_context and prev_context.get("signature") == next_signature:
+                self._rule_configs[session_id] = normalized_rule_config
+                return Result.ok(True)
+
             # Create new tracker for this page
             tracker = SemanticPointTracker(
                 required_points=required_points,
-                similarity_threshold=0.75,
-                cooldown_seconds=30,
+                similarity_threshold=normalized_rule_config.similarity_threshold,
+                cooldown_seconds=normalized_rule_config.point_tracker_cooldown_seconds,
             )
 
             # Pre-compute embeddings
@@ -79,7 +221,10 @@ class PresentationFeedbackService:
             self._trackers[session_id] = tracker
 
             # Create deduplicator
-            self._deduplicators[session_id] = FeedbackDeduplicator(cooldown_seconds=30)
+            self._deduplicators[session_id] = FeedbackDeduplicator(
+                cooldown_seconds=normalized_rule_config.feedback_cooldown_seconds
+            )
+            self._rule_configs[session_id] = normalized_rule_config
 
             # Initialize forbidden word matcher
             matcher = get_hybrid_matcher()
@@ -92,6 +237,7 @@ class PresentationFeedbackService:
                 "page_number": page_number,
                 "required_points": required_points,
                 "forbidden_words": forbidden_words,
+                "signature": next_signature,
             }
 
             logger.info(
@@ -124,6 +270,10 @@ class PresentationFeedbackService:
             tracker = self._trackers.get(session_id)
             matcher = self._forbidden_matchers.get(session_id)
             dedup = self._deduplicators.get(session_id)
+            rule_config = self._rule_configs.get(
+                session_id,
+                PresentationFeedbackRuleConfig(),
+            )
 
             if not tracker or not matcher:
                 return Result.fail("[NOT_INITIALIZED] Page not initialized")
@@ -139,6 +289,7 @@ class PresentationFeedbackService:
                 point_results,
                 forbidden_matches,
                 dedup,
+                rule_config,
             )
 
             feedback = PresentationFeedback(
@@ -161,6 +312,7 @@ class PresentationFeedbackService:
         point_results: list[PointCoverageResult],
         forbidden_matches: list[ForbiddenWordMatch],
         dedup: FeedbackDeduplicator | None,
+        rule_config: PresentationFeedbackRuleConfig,
     ) -> tuple[bool, str, str]:
         """
         Determine if AI should interrupt based on feedback
@@ -169,27 +321,29 @@ class PresentationFeedbackService:
             Tuple of (should_interrupt, reason, message)
         """
         # Priority 1: Critical forbidden words
-        for match in forbidden_matches:
-            if match.severity == "critical":
+        if rule_config.allow_critical_forbidden_interrupt:
+            for match in forbidden_matches:
+                if match.severity == "critical":
+                    feedback_key = f"forbidden_{match.word}"
+                    if dedup and dedup.should_send(feedback_key):
+                        dedup.record_feedback("forbidden_word", match.word)
+                        return (
+                            True,
+                            "forbidden_word",
+                            f"请避免使用'{match.word}'。{match.suggestion}",
+                        )
+
+        # Priority 2: Regular forbidden words
+        if rule_config.allow_regular_forbidden_interrupt:
+            for match in forbidden_matches:
                 feedback_key = f"forbidden_{match.word}"
                 if dedup and dedup.should_send(feedback_key):
                     dedup.record_feedback("forbidden_word", match.word)
                     return (
                         True,
                         "forbidden_word",
-                        f"请避免使用'{match.word}'。{match.suggestion}",
+                        f"检测到不规范用语'{match.word}'。{match.suggestion}",
                     )
-
-        # Priority 2: Regular forbidden words
-        for match in forbidden_matches:
-            feedback_key = f"forbidden_{match.word}"
-            if dedup and dedup.should_send(feedback_key):
-                dedup.record_feedback("forbidden_word", match.word)
-                return (
-                    True,
-                    "forbidden_word",
-                    f"检测到不规范用语'{match.word}'。{match.suggestion}",
-                )
 
         # Priority 3: Missing critical points (only if many points are missing)
         missing_points = [p for p in point_results if not p.is_covered]
@@ -197,11 +351,19 @@ class PresentationFeedbackService:
         total_count = len(point_results)
 
         # Only interrupt if coverage is very low (< 30%) and there are points to cover
-        if total_count > 0 and covered_count / total_count < 0.3 and missing_points:
+        coverage_ratio = covered_count / total_count if total_count > 0 else 1.0
+        if (
+            total_count > 0
+            and coverage_ratio < rule_config.missing_points_interrupt_ratio_threshold
+            and len(missing_points) >= rule_config.missing_points_min_count
+        ):
             feedback_key = "missing_points"
             if dedup and dedup.should_send(feedback_key):
                 dedup.record_feedback("missing_point", f"Missing {len(missing_points)} points")
-                missing_names = [p.point_content[:20] for p in missing_points[:2]]
+                missing_names = [
+                    p.point_content[:20]
+                    for p in missing_points[: rule_config.missing_points_preview_count]
+                ]
                 return (
                     True,
                     "missing_point",
@@ -245,6 +407,8 @@ class PresentationFeedbackService:
             del self._deduplicators[session_id]
         if session_id in self._forbidden_matchers:
             del self._forbidden_matchers[session_id]
+        if session_id in self._rule_configs:
+            del self._rule_configs[session_id]
         if session_id in self._page_contexts:
             del self._page_contexts[session_id]
 

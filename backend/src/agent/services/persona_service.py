@@ -10,15 +10,15 @@ References:
 """
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import func, select
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from common.db.models import PracticeSession
 from common.error_handling.result import Result
 from common.monitoring.logger import get_logger
-
-from sqlalchemy.exc import SQLAlchemyError
 
 from ..models import AgentPersona, Persona, PersonaStatus
 from ..schemas import (
@@ -106,25 +106,49 @@ class PersonaService:
         result = await self.db.execute(stmt)
         personas = result.scalars().all()
 
-        items = []
-        for persona in personas:
-            agent_count_stmt = select(func.count()).where(
-                AgentPersona.persona_id == persona.id
-            )
-            agent_count = (await self.db.execute(agent_count_stmt)).scalar() or 0
+        persona_ids = [persona.id for persona in personas]
+        agent_counts: dict[str, int] = {}
+        usage_counts: dict[str, int] = {}
 
-            items.append(PersonaListItem(
-                id=persona.id,
-                name=persona.name,
-                description=persona.description,
-                icon=persona.icon,
-                category=persona.category,
-                difficulty=persona.difficulty,
-                status=persona.status,
-                is_public=persona.is_public,
-                usage_count=0,
-                agent_count=agent_count
-            ))
+        if persona_ids:
+            agent_count_rows = await self.db.execute(
+                select(AgentPersona.persona_id, func.count().label("agent_count"))
+                .where(AgentPersona.persona_id.in_(persona_ids))
+                .group_by(AgentPersona.persona_id)
+            )
+            agent_counts = {
+                str(row.persona_id): int(row.agent_count or 0)
+                for row in agent_count_rows.all()
+            }
+
+            usage_count_rows = await self.db.execute(
+                select(PracticeSession.persona_id, func.count().label("usage_count"))
+                .where(PracticeSession.persona_id.in_(persona_ids))
+                .group_by(PracticeSession.persona_id)
+            )
+            usage_counts = {
+                str(row.persona_id): int(row.usage_count or 0)
+                for row in usage_count_rows.all()
+                if row.persona_id is not None
+            }
+
+        items: list[PersonaListItem] = []
+        for persona in personas:
+            persona_id = str(persona.id)
+            items.append(
+                PersonaListItem(
+                    id=persona.id,
+                    name=persona.name,
+                    description=persona.description,
+                    icon=persona.icon,
+                    category=persona.category,
+                    difficulty=persona.difficulty,
+                    status=persona.status,
+                    is_public=persona.is_public,
+                    usage_count=usage_counts.get(persona_id, 0),
+                    agent_count=agent_counts.get(persona_id, 0),
+                )
+            )
 
         return items, total
 
@@ -160,7 +184,7 @@ class PersonaService:
                     value = value.model_dump()
                 setattr(persona, field, value)
 
-        persona.updated_at = datetime.now(timezone.utc)
+        persona.updated_at = datetime.now(UTC)
 
         await self.db.flush()
         await self.db.refresh(persona)

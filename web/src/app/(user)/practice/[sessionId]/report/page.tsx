@@ -13,6 +13,7 @@ import { StatusIndicator } from "@/components/ui/status-indicator";
 import { HighlightList } from "@/components/highlights";
 import { api, ApiRequestError, getApiErrorMessage } from "@/lib/api/client";
 import { ComprehensiveReport, KnowledgeCheckDiagnostics, HighlightsResponse } from "@/lib/api/types";
+import { debug } from "@/lib/debug";
 import { cn } from "@/lib/utils";
 
 function formatSnapshotTime(value?: string | null): string {
@@ -79,6 +80,10 @@ export default function ComprehensiveReportPage() {
             // 优先走综合评测报告，失败时再回退到基础报告。
             const data = await api.admin.getComprehensiveReport(sessionId);
             setReport(data);
+            debug.log("[Report] Loaded comprehensive report", {
+                sessionId,
+                overallScore: data.overall_score,
+            });
         } catch (err) {
             const isNotFound = err instanceof ApiRequestError
                 ? err.errorCode === "[REPORT_NOT_FOUND]" || err.errorCode === "[SESSION_NOT_FOUND]" || err.status === 404
@@ -87,9 +92,14 @@ export default function ComprehensiveReportPage() {
                 try {
                     const generated = await api.admin.generateComprehensiveReport(sessionId);
                     setReport(generated);
+                    debug.log("[Report] Generated comprehensive report on demand", {
+                        sessionId,
+                        overallScore: generated.overall_score,
+                    });
                 } catch {
                     try {
                         await loadQuickReportFallback();
+                        debug.warn("[Report] Fallback to quick report after generate failure", { sessionId });
                     } catch (quickErr) {
                         setError(getApiErrorMessage(quickErr));
                     }
@@ -97,6 +107,7 @@ export default function ComprehensiveReportPage() {
             } else {
                 try {
                     await loadQuickReportFallback();
+                    debug.warn("[Report] Fallback to quick report", { sessionId });
                 } catch (quickErr) {
                     setError(getApiErrorMessage(quickErr) || getApiErrorMessage(err));
                 }
@@ -117,11 +128,25 @@ export default function ComprehensiveReportPage() {
             .then((data) => {
                 if (!cancelled) {
                     setKnowledgeCheck(data);
+                    debug.log("[Report] Knowledge-check", {
+                        sessionId,
+                        status: data.status,
+                        summary: data.summary,
+                        attemptCount: data.attempt_count,
+                        hitRate: data.hit_rate,
+                        kbCount: data.knowledge_base_count,
+                        lastStatus: data.last_status,
+                        lastResultCount: data.last_result_count,
+                    });
                 }
             })
-            .catch(() => {
+            .catch((err) => {
                 if (!cancelled) {
                     setKnowledgeCheck(null);
+                    debug.warn("[Report] Knowledge-check load failed", {
+                        sessionId,
+                        error: err,
+                    });
                 }
             });
 
@@ -182,6 +207,8 @@ export default function ComprehensiveReportPage() {
     const getScoreColor = (score: number) => score >= 80 ? "text-green-600" : score >= 60 ? "text-yellow-600" : "text-red-600";
     const knowledgeStatusTone = knowledgeCheck?.status === "hit"
         ? "text-green-700 bg-green-50 border-green-200"
+        : knowledgeCheck?.status === "kb_not_ready"
+            ? "text-amber-700 bg-amber-50 border-amber-200"
         : knowledgeCheck?.status === "miss"
             ? "text-amber-700 bg-amber-50 border-amber-200"
             : knowledgeCheck?.status === "disabled" || knowledgeCheck?.status === "no_knowledge_base"
@@ -223,6 +250,8 @@ export default function ComprehensiveReportPage() {
                         <span className={cn("text-xs font-semibold px-3 py-1 rounded-full border", knowledgeStatusTone)}>
                             {knowledgeCheck.status === "hit"
                                 ? "已命中"
+                                : knowledgeCheck.status === "kb_not_ready"
+                                    ? "知识库处理中"
                                 : knowledgeCheck.status === "miss"
                                     ? "未命中"
                                     : knowledgeCheck.status === "not_triggered"
