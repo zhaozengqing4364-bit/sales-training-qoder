@@ -28,6 +28,7 @@ import base64
 import json
 import time
 import uuid
+from contextlib import suppress
 from datetime import datetime, timezone
 from typing import Any
 
@@ -56,6 +57,10 @@ class BaseSalesHandler(BaseWebSocketHandler):
 
     # 会话历史最大长度，防止内存泄漏
     MAX_CONVERSATION_HISTORY = 50
+    MAX_MESSAGE_QUEUE_SIZE = 300
+    ASR_QUEUE_MAX_SIZE = 200
+    ASR_HIGH_WATERMARK = 80
+    ASR_LOW_WATERMARK = 50
 
     def __init__(self, scenario: str = "sales"):
         super().__init__(scenario)
@@ -99,6 +104,9 @@ class BaseSalesHandler(BaseWebSocketHandler):
         self.session_scenario_type = scenario
         self._greeting_sent = False
         self._voice_policy_snapshot: dict[str, Any] = {}
+        self._backpressure_active = False
+        self._client_runtime_options: dict[str, Any] = {}
+        self._response_task: asyncio.Task | None = None
 
     # ========== Connection Lifecycle ==========
 
@@ -120,7 +128,7 @@ class BaseSalesHandler(BaseWebSocketHandler):
         await self.manager.connect(websocket, self.scenario, session_id)
 
         # Initialize message queue
-        self.message_queue = asyncio.Queue()
+        self.message_queue = asyncio.Queue(maxsize=self.MAX_MESSAGE_QUEUE_SIZE)
         self.running = True
 
         # Start message processing task
@@ -146,7 +154,18 @@ class BaseSalesHandler(BaseWebSocketHandler):
                     )
                     if "text" in raw:
                         data = json.loads(raw["text"])
-                        await self.message_queue.put(data)
+                        try:
+                            self.message_queue.put_nowait(data)
+                        except asyncio.QueueFull:
+                            logger.warning(
+                                "Message queue overflow, dropping message: session=%s type=%s",
+                                session_id,
+                                data.get("type"),
+                            )
+                            await self._send_error(
+                                "[WS_QUEUE_OVERFLOW]",
+                                "当前请求过于频繁，请稍后重试",
+                            )
                     elif "bytes" in raw:
                         await self._handle_binary_frame(raw["bytes"])
                 except TimeoutError:
@@ -158,8 +177,14 @@ class BaseSalesHandler(BaseWebSocketHandler):
             logger.error(f"Sales WebSocket error: {str(e)}")
         finally:
             self.running = False
-            self.manager.disconnect(self.scenario, session_id)
+            await self.manager.disconnect(self.scenario, session_id)
             processing_task.cancel()
+            with suppress(asyncio.CancelledError):
+                await processing_task
+            if self._response_task and not self._response_task.done():
+                self._response_task.cancel()
+                with suppress(asyncio.CancelledError):
+                    await self._response_task
             await self._on_connection_closed()
 
     async def _on_connection_established(self, **kwargs):
@@ -168,7 +193,17 @@ class BaseSalesHandler(BaseWebSocketHandler):
 
     async def _on_connection_closed(self):
         """Hook for subclass-specific cleanup on disconnect."""
-        pass
+        if not self.session_id:
+            return
+
+        if self.session_status in {"completed", "scoring"}:
+            result = await self.state_service.delete_state(self.session_id)
+            if not result.is_success:
+                logger.warning(
+                    "Failed to cleanup terminal session state",
+                    session_id=self.session_id,
+                    fallback=result.fallback,
+                )
 
     async def _sync_session_state(self):
         """Load current persisted session lifecycle state."""
@@ -219,6 +254,7 @@ class BaseSalesHandler(BaseWebSocketHandler):
                     return None
 
                 await db.commit()
+                await lifecycle_service.trigger_report_generation_if_needed(transition)
                 self.session_status = transition.to_status
                 return transition
         except (RuntimeError, ValueError, OSError) as exc:
@@ -303,7 +339,7 @@ class BaseSalesHandler(BaseWebSocketHandler):
                 if text:
                     if not await self._ensure_input_allowed("text"):
                         return
-                    await self._process_user_text(text)
+                    await self._launch_response_task(text, source="text")
 
             elif msg_type == "interrupt":
                 reason = data.get("reason", "manual")
@@ -346,6 +382,23 @@ class BaseSalesHandler(BaseWebSocketHandler):
 
             elif msg_type == "heartbeat_ack":
                 pass
+
+            elif msg_type == "negotiate":
+                self._client_runtime_options = data if isinstance(data, dict) else {}
+                await self.manager.send_json(
+                    self.websocket,
+                    {
+                        "type": "negotiate_ack",
+                        "timestamp": datetime.now(timezone.utc).isoformat(),
+                        "trace_id": get_trace_id(),
+                        "data": {
+                            "accepted": True,
+                            "prefer_binary": bool(
+                                self._client_runtime_options.get("prefer_binary", False)
+                            ),
+                        },
+                    },
+                )
 
             else:
                 await self._handle_custom_message(msg_type, data, message)
@@ -469,13 +522,49 @@ class BaseSalesHandler(BaseWebSocketHandler):
         if not audio_bytes:
             return
 
-        if not self.asr_queue:
+        need_start = False
+        async with self._state_lock:
+            if self.asr_queue is None:
+                need_start = True
+
+        if need_start:
             logger.info("Auto-starting ASR on first audio chunk")
             await self._start_streaming_asr()
 
-        if self.asr_queue:
-            self.audio_buffer_size += len(audio_bytes)
-            await self.asr_queue.put(audio_bytes)
+        backpressure_action: str | None = None
+        queue_size = 0
+        dropped_for_overflow = False
+        async with self._state_lock:
+            queue = self.asr_queue
+            if queue is None:
+                logger.warning("Dropping audio chunk: ASR queue unavailable")
+                return
+
+            queue_size = queue.qsize()
+            if queue_size >= self.ASR_QUEUE_MAX_SIZE:
+                dropped_for_overflow = True
+            else:
+                try:
+                    queue.put_nowait(audio_bytes)
+                    self.audio_buffer_size += len(audio_bytes)
+                    queue_size = queue.qsize()
+                except asyncio.QueueFull:
+                    dropped_for_overflow = True
+                    queue_size = self.ASR_QUEUE_MAX_SIZE
+
+            if queue_size >= self.ASR_HIGH_WATERMARK and not self._backpressure_active:
+                self._backpressure_active = True
+                backpressure_action = "slow_down"
+            elif queue_size <= self.ASR_LOW_WATERMARK and self._backpressure_active:
+                self._backpressure_active = False
+                backpressure_action = "resume"
+
+        if dropped_for_overflow:
+            logger.warning(f"[BACKPRESSURE] Queue full ({queue_size}), dropping audio chunk")
+            await self._send_audio_drop_notice(queue_size=queue_size, dropped_chunks=1)
+
+        if backpressure_action is not None:
+            await self._send_backpressure(backpressure_action, queue_size)
 
     async def _handle_audio_chunk(self, data: dict):
         """Handle JSON audio_chunk message (legacy Base64 path, kept for backward compatibility)."""
@@ -502,7 +591,7 @@ class BaseSalesHandler(BaseWebSocketHandler):
             self.is_user_speaking = True
             self.current_transcript = ""
             self.audio_buffer_size = 0  # 重置音频大小计数
-            self.asr_queue = asyncio.Queue()
+            self.asr_queue = asyncio.Queue(maxsize=self.ASR_QUEUE_MAX_SIZE)
 
             # 启动 ASR 处理任务
             self.asr_task = asyncio.create_task(self._run_streaming_asr())
@@ -513,6 +602,7 @@ class BaseSalesHandler(BaseWebSocketHandler):
     async def _stop_streaming_asr(self):
         """Stop streaming ASR session and process the result."""
         # 使用状态锁防止并发调用导致的竞争条件
+        should_send_resume = False
         async with self._state_lock:
             # 防止重复调用
             if not self.is_user_speaking and self.asr_task is None and self.asr_queue is None:
@@ -528,31 +618,45 @@ class BaseSalesHandler(BaseWebSocketHandler):
                 self.asr_task = None
                 self.asr_queue = None
                 self.audio_buffer_size = 0
-                await self._send_status("listening")
-                return
+                if self._backpressure_active:
+                    self._backpressure_active = False
+                    should_send_resume = True
+                final_transcript = ""
+            else:
+                if self.asr_queue:
+                    # 发送结束标记；若队列已满则腾挪一个最旧块后再放入终止标记
+                    try:
+                        self.asr_queue.put_nowait(None)
+                    except asyncio.QueueFull:
+                        with suppress(asyncio.QueueEmpty):
+                            self.asr_queue.get_nowait()
+                        with suppress(asyncio.QueueFull):
+                            self.asr_queue.put_nowait(None)
 
-            if self.asr_queue:
-                # 发送结束标记
-                await self.asr_queue.put(None)
+                if self.asr_task and not self.asr_task.done():
+                    try:
+                        # 等待 ASR 任务完成（最多 5 秒）
+                        await asyncio.wait_for(self.asr_task, timeout=5.0)
+                    except TimeoutError:
+                        logger.warning("ASR task timeout, cancelling")
+                        self.asr_task.cancel()
+                    except (RuntimeError, ValueError, OSError, asyncio.CancelledError) as e:
+                        logger.error(f"Error waiting for ASR task: {e}")
 
-            if self.asr_task and not self.asr_task.done():
-                try:
-                    # 等待 ASR 任务完成（最多 5 秒）
-                    await asyncio.wait_for(self.asr_task, timeout=5.0)
-                except TimeoutError:
-                    logger.warning("ASR task timeout, cancelling")
-                    self.asr_task.cancel()
-                except (RuntimeError, ValueError, OSError, asyncio.CancelledError) as e:
-                    logger.error(f"Error waiting for ASR task: {e}")
+                # 保存当前转录结果并立即清空，防止重复处理
+                final_transcript = self.current_transcript
+                self.current_transcript = ""  # 清空，防止重复处理
 
-            # 保存当前转录结果并立即清空，防止重复处理
-            final_transcript = self.current_transcript
-            self.current_transcript = ""  # 清空，防止重复处理
+                # 清理状态
+                self.asr_task = None
+                self.asr_queue = None
+                self.audio_buffer_size = 0
+                if self._backpressure_active:
+                    self._backpressure_active = False
+                    should_send_resume = True
 
-            # 清理状态
-            self.asr_task = None
-            self.asr_queue = None
-            self.audio_buffer_size = 0
+        if should_send_resume:
+            await self._send_backpressure("resume", 0)
 
         # ASR 完成后，处理 LLM 响应（在锁外执行，避免长时间持有锁）
         # CRITICAL FIX: Fire-and-forget to keep message loop responsive.
@@ -560,7 +664,7 @@ class BaseSalesHandler(BaseWebSocketHandler):
         # causing subsequent recording messages to pile up and ASR to only produce "嗯".
         if final_transcript and len(final_transcript.strip()) > 0:
             logger.info(f"Processing transcript (non-blocking): {final_transcript[:30]}...")
-            asyncio.create_task(self._process_user_text(final_transcript))
+            await self._launch_response_task(final_transcript, source="asr_final")
         else:
             logger.info("No transcript to process")
             await self._send_status("listening")
@@ -670,7 +774,35 @@ class BaseSalesHandler(BaseWebSocketHandler):
             self.current_stream_id = str(self.uuid.uuid4())
             await self._send_tts_response(fallback, current_req_id)
 
-        await self._send_status("listening")
+            await self._send_status("listening")
+
+    async def _launch_response_task(self, text: str, source: str) -> bool:
+        """Launch one background response task; reject parallel pipelines."""
+        if self._response_task and not self._response_task.done():
+            logger.warning(f"Rejecting concurrent response task from {source}: pipeline busy")
+            await self._send_error(
+                "[RESPONSE_BUSY]",
+                "系统正在处理上一轮回复，请稍后再试。",
+            )
+            return False
+
+        self._response_task = asyncio.create_task(self._process_user_text_safe(text))
+        return True
+
+    async def _process_user_text_safe(self, text: str):
+        """Background wrapper for _process_user_text to avoid unhandled task exceptions."""
+        try:
+            await self._process_user_text(text)
+        except asyncio.CancelledError:
+            logger.info("Background response task cancelled")
+            raise
+        except (RuntimeError, ValueError, OSError) as e:
+            logger.error(f"Background response task error: {e}", exc_info=True)
+            await self._send_status("listening")
+        finally:
+            current_task = asyncio.current_task()
+            if self._response_task is current_task:
+                self._response_task = None
 
     def _is_duplicate_text(self, text: str) -> bool:
         """Check if text is a duplicate of the last user message."""
@@ -841,3 +973,47 @@ class BaseSalesHandler(BaseWebSocketHandler):
                 "turn_count": self.turn_count,
             }
         })
+
+    async def _send_backpressure(self, action: str, queue_size: int):
+        """Send backpressure signal to client."""
+        payload = {
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "trace_id": get_trace_id(),
+            "data": {
+                "action": action,
+                "queue_size": queue_size,
+                "high_watermark": self.ASR_HIGH_WATERMARK,
+                "low_watermark": self.ASR_LOW_WATERMARK,
+            },
+        }
+        await self.manager.send_json(
+            self.websocket,
+            {
+                "type": "backpressure",
+                **payload,
+            },
+        )
+        # Legacy alias for old clients during transition window.
+        await self.manager.send_json(
+            self.websocket,
+            {
+                "type": "system_backpressure",
+                **payload,
+            },
+        )
+
+    async def _send_audio_drop_notice(self, queue_size: int, dropped_chunks: int):
+        """Notify client when audio chunk is dropped due to queue overflow."""
+        await self.manager.send_json(
+            self.websocket,
+            {
+                "type": "audio_drop_notice",
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "trace_id": get_trace_id(),
+                "data": {
+                    "reason": "queue_overflow",
+                    "queue_size": queue_size,
+                    "dropped_chunks": dropped_chunks,
+                },
+            },
+        )

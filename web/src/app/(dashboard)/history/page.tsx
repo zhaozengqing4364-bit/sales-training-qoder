@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { GlassCard } from "@/components/ui/glass-card";
@@ -87,42 +87,53 @@ export default function HistoryPage() {
     const [trends, setTrends] = useState<TrendPoint[]>([]);
     const [analyticsSnapshotCount, setAnalyticsSnapshotCount] = useState(0);
     const [isLoading, setIsLoading] = useState(true);
+    const [loadError, setLoadError] = useState<string | null>(null);
 
-    useEffect(() => {
-        let cancelled = false;
+    const loadData = useCallback(async () => {
+        setIsLoading(true);
+        setLoadError(null);
 
-        const loadData = async () => {
-            setIsLoading(true);
+        const [historyResult, statsResult, trendsResult] = await Promise.allSettled([
+            api.user.getMyHistory({
+                page: 1,
+                page_size: 50,
+                scenario_type: scenarioFilter === "all" ? undefined : scenarioFilter,
+            }),
+            api.dashboard.getHistoryStatistics(),
+            api.dashboard.getHistoryTrends(30),
+        ]);
 
-            const [historyResult, statsResult, trendsResult] = await Promise.allSettled([
-                api.user.getMyHistory({
-                    page: 1,
-                    page_size: 50,
-                    scenario_type: scenarioFilter === "all" ? undefined : scenarioFilter,
-                }),
-                api.dashboard.getHistoryStatistics(),
-                api.dashboard.getHistoryTrends(30),
-            ]);
+        const failedSections: string[] = [];
 
-            if (cancelled) return;
-
-            // Extract sessions from new API response format
-            const historyData = historyResult.status === "fulfilled"
-                ? (historyResult.value?.sessions as HistoryItem[]) || []
-                : [];
+        if (historyResult.status === "fulfilled") {
+            const historyData = ((historyResult.value?.sessions as HistoryItem[]) || []);
             setHistory(historyData);
             setAnalyticsSnapshotCount(historyData.length);
-            setStats(statsResult.status === "fulfilled" ? statsResult.value : DEFAULT_STATS);
-            setTrends(trendsResult.status === "fulfilled" ? (trendsResult.value as TrendPoint[]) : []);
-            setIsLoading(false);
-        };
+        } else {
+            failedSections.push("训练记录");
+        }
 
-        loadData();
+        if (statsResult.status === "fulfilled") {
+            setStats(statsResult.value);
+        } else {
+            failedSections.push("统计数据");
+        }
 
-        return () => {
-            cancelled = true;
-        };
+        if (trendsResult.status === "fulfilled") {
+            setTrends(trendsResult.value as TrendPoint[]);
+        } else {
+            failedSections.push("趋势数据");
+        }
+
+        if (failedSections.length > 0) {
+            setLoadError(`部分历史数据加载失败（${failedSections.join("、")}），请重试。`);
+        }
+        setIsLoading(false);
     }, [scenarioFilter]);
+
+    useEffect(() => {
+        void loadData();
+    }, [loadData]);
 
     const trendDelta = useMemo(() => {
         if (trends.length < 2) return null;
@@ -162,8 +173,23 @@ export default function HistoryPage() {
                         <option value="sales">销售对练</option>
                         <option value="presentation">PPT 演讲</option>
                     </select>
+                    <Button
+                        variant="outline"
+                        onClick={() => {
+                            void loadData();
+                        }}
+                        disabled={isLoading}
+                    >
+                        重试
+                    </Button>
                 </div>
             </header>
+
+            {loadError && (
+                <GlassCard className="p-4 border border-amber-200 bg-amber-50/80">
+                    <p className="text-sm text-amber-800">{loadError}</p>
+                </GlassCard>
+            )}
 
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                 <GlassCard className="p-4">
@@ -200,7 +226,13 @@ export default function HistoryPage() {
                 </GlassCard>
             ) : history.length === 0 ? (
                 <GlassCard className="p-10 text-center text-slate-500">
-                    暂无训练记录，去 <Link href="/training" className="text-blue-600 font-semibold">训练大厅</Link> 开始第一次练习吧。
+                    {loadError ? (
+                        "历史记录加载失败，请点击右上角“重试”。"
+                    ) : (
+                        <>
+                            暂无训练记录，去 <Link href="/training" className="text-blue-600 font-semibold">训练大厅</Link> 开始第一次练习吧。
+                        </>
+                    )}
                 </GlassCard>
             ) : (
                 <div className="space-y-4">

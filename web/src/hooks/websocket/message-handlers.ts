@@ -4,7 +4,7 @@ import { debug } from "@/lib/debug";
 import type {
     WSMessage, ChatMessage, PracticeState, TTSAudioData,
     FuzzyDetection, SalesStage, ScoreUpdate, SlideUpdate,
-    PointCovered, ForbiddenWordDetection, TTSChunkMessage, SessionStatus, ConnectionState,
+    PointCovered, ForbiddenWordDetection, TTSChunkMessage, SessionStatus, ConnectionState, ActionCard,
 } from "./types";
 
 /**
@@ -55,6 +55,112 @@ function isSameSalesStage(current: SalesStage | null, incoming: SalesStage): boo
         return false;
     }
     return current.key_actions.every((action, index) => action === incoming.key_actions[index]);
+}
+
+type EvaluationFeedbackPayload = {
+    feedback_type?: "stage_feedback" | "milestone" | "comprehensive_report" | string;
+    stage_number?: number;
+    scores?: Record<string, number>;
+    suggestions?: string[];
+    message?: string;
+    summary?: string;
+    key_improvements?: string[];
+    key_strengths?: string[];
+    overall_score?: number;
+    dimension_scores?: Array<{ name?: string; score?: number }>;
+};
+
+type BackendErrorPayload = {
+    message?: unknown;
+    code?: unknown;
+    reason?: unknown;
+    error?: unknown;
+    detail?: unknown;
+};
+
+function normalizeBackendErrorMessage(data: unknown): string {
+    if (typeof data === "string" && data.trim()) {
+        return data.trim();
+    }
+    if (!data || typeof data !== "object") {
+        return "后端返回错误（无详细信息）";
+    }
+
+    const payload = data as BackendErrorPayload;
+    const directMessage =
+        (typeof payload.message === "string" && payload.message.trim()) ? payload.message.trim() : "";
+    if (directMessage) {
+        return directMessage;
+    }
+    const detailMessage =
+        (typeof payload.detail === "string" && payload.detail.trim()) ? payload.detail.trim() : "";
+    if (detailMessage) {
+        return detailMessage;
+    }
+    const reasonMessage =
+        (typeof payload.reason === "string" && payload.reason.trim()) ? payload.reason.trim() : "";
+    if (reasonMessage) {
+        return reasonMessage;
+    }
+    if (payload.error && typeof payload.error === "object") {
+        const nestedMessage = (payload.error as { message?: unknown }).message;
+        if (typeof nestedMessage === "string" && nestedMessage.trim()) {
+            return nestedMessage.trim();
+        }
+    }
+    if (typeof payload.code === "string" && payload.code.trim()) {
+        return `后端返回错误：${payload.code.trim()}`;
+    }
+    return "后端返回错误（无详细信息）";
+}
+
+function toEvaluationDimensionScores(
+    payload: EvaluationFeedbackPayload,
+): Record<string, number> {
+    if (payload.scores && typeof payload.scores === "object") {
+        return Object.entries(payload.scores).reduce<Record<string, number>>((acc, [name, score]) => {
+            if (typeof score === "number" && Number.isFinite(score)) {
+                acc[name] = score;
+            }
+            return acc;
+        }, {});
+    }
+
+    if (Array.isArray(payload.dimension_scores)) {
+        return payload.dimension_scores.reduce<Record<string, number>>((acc, item) => {
+            const key = String(item?.name || "").trim();
+            const value = item?.score;
+            if (key && typeof value === "number" && Number.isFinite(value)) {
+                acc[key] = value;
+            }
+            return acc;
+        }, {});
+    }
+
+    return {};
+}
+
+function toEvaluationSuggestions(payload: EvaluationFeedbackPayload): string[] {
+    const suggestions: string[] = [];
+    if (Array.isArray(payload.suggestions)) {
+        suggestions.push(...payload.suggestions.filter((item): item is string => typeof item === "string" && item.trim().length > 0));
+    }
+    if (Array.isArray(payload.key_improvements)) {
+        suggestions.push(...payload.key_improvements.filter((item): item is string => typeof item === "string" && item.trim().length > 0));
+    }
+    return suggestions.slice(0, 3);
+}
+
+function toEvaluationHint(payload: EvaluationFeedbackPayload): string | null {
+    const candidates: Array<string | undefined> = [
+        payload.message,
+        payload.summary,
+        ...(Array.isArray(payload.suggestions) ? payload.suggestions : []),
+        ...(Array.isArray(payload.key_improvements) ? payload.key_improvements : []),
+        ...(Array.isArray(payload.key_strengths) ? payload.key_strengths : []),
+    ];
+    const firstNonEmpty = candidates.find((item) => typeof item === "string" && item.trim().length > 0);
+    return firstNonEmpty ? firstNonEmpty.trim() : null;
 }
 
 /**
@@ -419,6 +525,15 @@ export function handleWebSocketMessage(
                 break;
             }
 
+            case "action_card": {
+                const data = message.data as ActionCard;
+                setState(prev => ({
+                    ...prev,
+                    actionCard: data,
+                }));
+                break;
+            }
+
             case "feedback": {
                 const data = message.data as { message?: string };
                 if (data.message) {
@@ -435,14 +550,62 @@ export function handleWebSocketMessage(
                 break;
             }
 
-            case "error": {
-                const data = message.data as { message: string };
-                debug.error("[PracticeWS] Backend error message", {
-                    traceId: message.trace_id || null,
-                    errorMessage: data.message,
+            case "evaluation_feedback": {
+                const data = message.data as EvaluationFeedbackPayload;
+                const dimensionScores = toEvaluationDimensionScores(data);
+                const suggestions = toEvaluationSuggestions(data);
+                const stageLabel = typeof data.stage_number === "number" ? `阶段 ${data.stage_number}` : undefined;
+                const hint = toEvaluationHint(data);
+
+                setState(prev => {
+                    let nextScores = prev.scores;
+                    if (Object.keys(dimensionScores).length > 0) {
+                        const values = Object.values(dimensionScores);
+                        const fallbackOverall = values.length > 0
+                            ? values.reduce((sum, value) => sum + value, 0) / values.length
+                            : 0;
+                        nextScores = {
+                            session_id: prev.scores?.session_id,
+                            turn_count: prev.scores?.turn_count,
+                            overall_score: typeof data.overall_score === "number" ? data.overall_score : fallbackOverall,
+                            dimension_scores: dimensionScores,
+                            suggestions: suggestions.length > 0 ? suggestions : (prev.scores?.suggestions || []),
+                            stage_name: stageLabel || prev.scores?.stage_name,
+                        };
+                    }
+
+                    const nextFuzzyDetections = hint
+                        ? [{
+                            category: "feedback",
+                            matched: [],
+                            suggestion: hint,
+                            severity: "medium" as const,
+                        }]
+                        : prev.fuzzyDetections;
+
+                    if (nextScores === prev.scores && nextFuzzyDetections === prev.fuzzyDetections) {
+                        return prev;
+                    }
+
+                    return {
+                        ...prev,
+                        scores: nextScores,
+                        fuzzyDetections: nextFuzzyDetections,
+                    };
                 });
-                setState(prev => ({ ...prev, error: data.message }));
-                onError?.(data.message);
+                break;
+            }
+
+            case "error": {
+                const data = message.data;
+                const errorMessage = normalizeBackendErrorMessage(data);
+                debug.warn("[PracticeWS] Backend error message", {
+                    traceId: message.trace_id || null,
+                    errorMessage,
+                    rawData: data,
+                });
+                setState(prev => ({ ...prev, error: errorMessage }));
+                onError?.(errorMessage);
                 break;
             }
 
@@ -546,7 +709,8 @@ export function handleWebSocketMessage(
              * - slow_down: Pause sending audio, buffer locally
              * - resume: Flush local buffer and resume normal sending
              */
-            case "backpressure": {
+            case "backpressure":
+            case "system_backpressure": {
                 const data = message.data as { action: string; queue_size: number };
                 const isSlowDown = data.action === "slow_down";
                 
@@ -560,6 +724,24 @@ export function handleWebSocketMessage(
                     // Flush local buffer when backpressure is released
                     flushLocalAudioBuffer();
                 }
+                break;
+            }
+
+            case "audio_drop_notice": {
+                const data = message.data as {
+                    reason?: string;
+                    queue_size?: number;
+                    dropped_chunks?: number;
+                };
+                debug.warn("[Backpressure] Audio chunk dropped by server", {
+                    reason: data.reason || "unknown",
+                    queueSize: data.queue_size ?? null,
+                    droppedChunks: data.dropped_chunks ?? 1,
+                });
+                setState(prev => ({
+                    ...prev,
+                    isNetworkSlow: true,
+                }));
                 break;
             }
 

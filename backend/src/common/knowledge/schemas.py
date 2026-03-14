@@ -153,6 +153,7 @@ class KnowledgeDocumentListItem(BaseModel):
     file_size: int
     status: DocumentStatusType
     chunk_count: int = 0
+    error_message: str | None = None
     created_at: datetime
 
 

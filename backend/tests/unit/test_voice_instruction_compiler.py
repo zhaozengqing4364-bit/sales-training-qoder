@@ -8,13 +8,14 @@ from sales_bot.services.voice_instruction_compiler import VoiceInstructionCompil
 
 
 def test_compile_base_contract_contains_role_and_network_constraints():
-    agent = SimpleNamespace(system_prompt="你是企业采购决策者。")
     persona = SimpleNamespace(
-        system_prompt="你关注预算和风险。",
+        system_prompt="兜底旧字段",
         traits={"决策风格": "谨慎", "关注点": "ROI"},
     )
     policy = {
-        "system_instruction_template": "你正在进行高压销售演练。",
+        "persona_policy": {
+            "system_prompt": "你是企业采购决策者，关注预算和风险。",
+        },
         "tool_policy": {
             "network_access_mode": "off",
             "enable_internal_retrieval": True,
@@ -26,13 +27,11 @@ def test_compile_base_contract_contains_role_and_network_constraints():
 
     compiled = VoiceInstructionCompiler.compile_base_contract(
         policy=policy,
-        agent=agent,
         persona=persona,
     )
 
-    assert "高压销售演练" in compiled.base_instructions
     assert "企业采购决策者" in compiled.base_instructions
-    assert "你关注预算和风险" in compiled.base_instructions
+    assert "关注预算和风险" in compiled.base_instructions
     assert "禁止联网检索" in compiled.base_instructions
     assert isinstance(compiled.contract_hash, str)
     assert len(compiled.contract_hash) == 16
@@ -61,3 +60,4 @@ def test_compile_base_contract_adds_kb_lock_directive():
     )
 
     assert "知识库强制模式" in compiled.base_instructions
+    assert "以命中片段为准" in compiled.base_instructions

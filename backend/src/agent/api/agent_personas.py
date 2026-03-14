@@ -17,6 +17,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.exc import SQLAlchemyError
 
+from common.api.server_error import build_server_error
 from common.auth.service import get_current_admin_user
 from common.db.models import User
 from common.db.session import get_db
@@ -35,14 +36,19 @@ logger = get_logger(__name__)
 admin_router = APIRouter(prefix="/admin/agents", tags=["admin-agent-personas"])
 
 
-async def commit_or_500(db: AsyncSession, action: str) -> None:
-    """Persist transaction and convert DB failures to HTTP 500."""
+async def commit_or_500(db: AsyncSession, action: str) -> JSONResponse | None:
+    """Persist transaction and return normalized 500 response on failure."""
     try:
         await db.commit()
     except SQLAlchemyError as exc:
         await db.rollback()
-        logger.error(f"Database commit failed during {action}: {exc}")
-        raise HTTPException(status_code=500, detail="[DB_COMMIT_FAILED]") from exc
+        return build_server_error(
+            "[DB_COMMIT_FAILED]",
+            message="Database commit failed",
+            exc=exc,
+            action=action,
+        )
+    return None
 
 
 def error_response(error_code: str, status_code: int = 400) -> JSONResponse:
@@ -83,7 +89,9 @@ async def add_persona_to_agent(
         raise HTTPException(status_code=400, detail=result.fallback)
     
     link = result.value
-    await commit_or_500(db, "add_persona_to_agent")
+    commit_error = await commit_or_500(db, "add_persona_to_agent")
+    if commit_error is not None:
+        return commit_error
     return {
         "success": True,
         "data": AgentPersonaResponse(
@@ -145,7 +153,9 @@ async def update_agent_persona(
         raise HTTPException(status_code=400, detail=result.fallback)
     
     link = result.value
-    await commit_or_500(db, "update_agent_persona")
+    commit_error = await commit_or_500(db, "update_agent_persona")
+    if commit_error is not None:
+        return commit_error
     return {
         "success": True,
         "data": AgentPersonaResponse(
@@ -174,7 +184,9 @@ async def remove_persona_from_agent(
     if not result.is_success:
         raise HTTPException(status_code=404, detail=result.fallback)
     
-    await commit_or_500(db, "remove_persona_from_agent")
+    commit_error = await commit_or_500(db, "remove_persona_from_agent")
+    if commit_error is not None:
+        return commit_error
     return {
         "success": True,
         "data": {"removed": True}

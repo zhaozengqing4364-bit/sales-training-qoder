@@ -135,6 +135,15 @@ class KnowledgeVectorStore:
                         **chunk.get("metadata", {})
                     })
 
+                # Best-effort pre-cleanup for idempotent retries.
+                try:
+                    collection.delete(where={"document_id": document_id})
+                except Exception as cleanup_error:
+                    logger.warning(
+                        f"Pre-cleanup before vector add failed: {cleanup_error}",
+                        document_id=document_id,
+                    )
+
                 collection.add(
                     ids=ids,
                     embeddings=embeddings,
@@ -148,7 +157,15 @@ class KnowledgeVectorStore:
                 )
                 return Result.ok(len(chunks))
 
-            except (RuntimeError, ValueError, OSError) as e:
+            except Exception as e:
+                try:
+                    # Chroma has no transaction; compensate partial writes by document_id.
+                    collection.delete(where={"document_id": document_id})
+                except Exception as cleanup_error:
+                    logger.error(
+                        f"Failed vector compensation cleanup: {cleanup_error}",
+                        document_id=document_id,
+                    )
                 logger.error(f"Failed to add chunks: {e}")
                 return Result.fail(f"[VECTOR_ADD_FAILED] {str(e)}")
 

@@ -50,6 +50,7 @@ class DashboardStats(BaseModel):
     """Dashboard statistics response"""
     weekly_activity: WeeklyActivity
     last_session: LastSession
+    effectiveness: dict[str, float] | None = None
 
 
 class Recommendation(BaseModel):
@@ -252,9 +253,66 @@ async def get_dashboard_stats(
         
         stats = DashboardStats(
             weekly_activity=weekly_activity,
-            last_session=last_session_info
+            last_session=last_session_info,
         )
-        
+
+        # 80/20 communication effectiveness metrics (last 30 days, evaluable snapshots only)
+        effect_cutoff = now - timedelta(days=30)
+        effect_result = await db.execute(
+            select(PracticeSession.start_time, PracticeSession.effectiveness_snapshot)
+            .where(PracticeSession.user_id == user_id)
+            .where(PracticeSession.status == "completed")
+            .where(PracticeSession.start_time >= effect_cutoff)
+            .order_by(PracticeSession.start_time.asc())
+        )
+        effect_rows = effect_result.all()
+
+        pass_3 = 0
+        pass_5 = 0
+        pass_4 = 0
+        evaluable_count = 0
+        evaluable_times: list[datetime] = []
+        for row_item in effect_rows:
+            snapshot = row_item.effectiveness_snapshot
+            if not isinstance(snapshot, dict) or not bool(snapshot.get("evaluable", False)):
+                continue
+            pass_flags = snapshot.get("pass_flags")
+            if not isinstance(pass_flags, dict):
+                continue
+            evaluable_count += 1
+            evaluable_times.append(row_item.start_time)
+            if bool(pass_flags.get("pass_3min_flow", False)):
+                pass_3 += 1
+            if bool(pass_flags.get("pass_5turn_defense", False)):
+                pass_5 += 1
+            if bool(pass_flags.get("pass_4step_structure", False)):
+                pass_4 += 1
+
+        next_day_retry_hits = 0
+        for idx, base_time in enumerate(evaluable_times):
+            for candidate_time in evaluable_times[idx + 1 :]:
+                delta_seconds = (candidate_time - base_time).total_seconds()
+                if delta_seconds < 24 * 3600:
+                    continue
+                if delta_seconds <= 48 * 3600:
+                    next_day_retry_hits += 1
+                break
+
+        if evaluable_count > 0:
+            stats.effectiveness = {
+                "pass_rate_3min_flow": round((pass_3 / evaluable_count) * 100, 2),
+                "pass_rate_5turn_defense": round((pass_5 / evaluable_count) * 100, 2),
+                "pass_rate_4step_structure": round((pass_4 / evaluable_count) * 100, 2),
+                "next_day_retry_rate": round((next_day_retry_hits / evaluable_count) * 100, 2),
+            }
+        else:
+            stats.effectiveness = {
+                "pass_rate_3min_flow": 0.0,
+                "pass_rate_5turn_defense": 0.0,
+                "pass_rate_4step_structure": 0.0,
+                "next_day_retry_rate": 0.0,
+            }
+
         return success_response(stats.model_dump())
         
     except Exception as e:

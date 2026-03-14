@@ -459,27 +459,21 @@ class TestSessionCreationWithAgentPlatform:
         assert body["message"] == "[PERSONA_INACTIVE]"
         assert "trace_id" in body
 
-    async def test_create_session_legacy_mode_still_works(
+    async def test_create_session_legacy_mode_is_rejected(
         self, async_client, auth_headers
     ):
-        """Should still support legacy sales_persona mode"""
-        try:
-            response = await async_client.post(
-                "/api/v1/practice/sessions",
-                json={"scenario_type": "sales", "sales_persona": "impatient_ceo"},
-                headers=auth_headers,
-            )
+        """Should reject legacy sales_persona mode in persona-centered runtime."""
+        response = await async_client.post(
+            "/api/v1/practice/sessions",
+            json={"scenario_type": "sales", "sales_persona": "impatient_ceo"},
+            headers=auth_headers,
+        )
 
-            # May fail due to bot service not being available in test
-            # but should not fail due to validation
-            assert response.status_code in [201, 500]
-        except Exception as exc:
-            # Legacy path may raise from optional external dependencies in CI env.
-            assert (
-                "impatient_ceo" in str(exc)
-                or "bot" in str(exc).lower()
-                or "create_session" in str(exc)
-            )
+        assert response.status_code == 400
+        body = response.json()
+        assert body["success"] is False
+        assert body["error"] == "[FIELD_DEPRECATED_PERSONA_CENTERED]"
+        assert "sales_persona" in body["message"]
 
 
 class TestSessionStats:

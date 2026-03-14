@@ -17,6 +17,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from agent.models import Agent, AgentVoicePolicy, Persona, VoiceRuntimeProfile
+from agent.services.persona_policy import (
+    PERSONA_OWNED_TOOL_POLICY_KEYS,
+    resolve_persona_policy,
+)
 from common.monitoring.logger import get_logger
 from sales_bot.services.voice_instruction_compiler import VoiceInstructionCompiler
 
@@ -46,7 +50,7 @@ DEFAULT_TOOL_POLICY: dict[str, Any] = {
     "enable_internal_retrieval": True,
     "retrieval_priority": "kb_first",
     "retrieval_top_k": 5,
-    "retrieval_similarity_threshold": 0.65,
+    "retrieval_similarity_threshold": 0.58,
     "retrieval_enable_hybrid": True,
     "retrieval_keyword_candidate_limit": 32,
     "strict_instruction_following": True,
@@ -56,6 +60,9 @@ DEFAULT_TOOL_POLICY: dict[str, Any] = {
     "allow_web_search_without_kb": False,
     "require_kb_grounding": False,
 }
+
+DEPRECATED_RUNTIME_PROFILE_FIELDS = {"system_instruction_template"}
+DEPRECATED_AGENT_POLICY_FIELDS = {"instructions_override"}
 
 
 def _as_dict(value: Any) -> dict[str, Any]:
@@ -100,6 +107,11 @@ def _to_float(
         return max(minimum, min(maximum, parsed))
     except (TypeError, ValueError):
         return default
+
+
+def _is_true_env(name: str, default: str = "false") -> bool:
+    value = os.getenv(name, default)
+    return str(value).strip().lower() in {"1", "true", "yes", "on"}
 
 
 class VoiceRuntimePolicyService:
@@ -217,6 +229,7 @@ class VoiceRuntimePolicyService:
         return result.scalar_one_or_none()
 
     async def create_profile(self, payload: dict[str, Any]) -> dict[str, Any]:
+        self._assert_no_deprecated_profile_fields(payload)
         if payload.get("is_default"):
             await self._clear_default_profile()
 
@@ -255,7 +268,8 @@ class VoiceRuntimePolicyService:
                 minimum=8000,
             ),
             turn_detection=payload.get("turn_detection"),
-            system_instruction_template=payload.get("system_instruction_template"),
+            # Deprecated: keep DB column for compatibility but disallow writes.
+            system_instruction_template=None,
             tool_policy=self._normalize_tool_policy(
                 _as_dict(payload.get("tool_policy"))
             ),
@@ -269,6 +283,7 @@ class VoiceRuntimePolicyService:
     async def update_profile(
         self, profile_id: str, payload: dict[str, Any]
     ) -> dict[str, Any] | None:
+        self._assert_no_deprecated_profile_fields(payload)
         profile = await self.get_profile(profile_id)
         if not profile:
             return None
@@ -313,10 +328,6 @@ class VoiceRuntimePolicyService:
             )
         if "turn_detection" in payload:
             profile.turn_detection = payload.get("turn_detection")
-        if "system_instruction_template" in payload:
-            profile.system_instruction_template = payload.get(
-                "system_instruction_template"
-            )
         if "tool_policy" in payload:
             profile.tool_policy = self._normalize_tool_policy(
                 _as_dict(payload.get("tool_policy"))
@@ -361,7 +372,6 @@ class VoiceRuntimePolicyService:
                 "model_override": None,
                 "voice_override": None,
                 "temperature_override": None,
-                "instructions_override": None,
                 "tool_policy_override": {},
             }
         return self._serialize_agent_policy(policy)
@@ -369,6 +379,7 @@ class VoiceRuntimePolicyService:
     async def upsert_agent_policy(
         self, agent_id: str, payload: dict[str, Any]
     ) -> dict[str, Any]:
+        self._assert_no_deprecated_agent_policy_fields(payload)
         agent_result = await self.db.execute(select(Agent).where(Agent.id == agent_id))
         agent = agent_result.scalar_one_or_none()
         if not agent:
@@ -418,13 +429,11 @@ class VoiceRuntimePolicyService:
                 None if value is None else _to_float(value, 0.7)
             )
 
-        if "instructions_override" in payload:
-            value = payload.get("instructions_override")
-            policy.instructions_override = str(value) if value else None
-
         if "tool_policy_override" in payload:
             policy.tool_policy_override = self._normalize_tool_policy(
-                _as_dict(payload.get("tool_policy_override"))
+                self._sanitize_agent_tool_policy_override(
+                    _as_dict(payload.get("tool_policy_override"))
+                )
             )
 
         policy.updated_at = datetime.now(UTC)
@@ -463,6 +472,7 @@ class VoiceRuntimePolicyService:
                 select(Persona).where(Persona.id == persona_id)
             )
             persona = persona_result.scalar_one_or_none()
+        persona_policy = resolve_persona_policy(persona)
 
         if runtime_profile_override:
             runtime_profile = await self.get_profile(runtime_profile_override)
@@ -511,8 +521,6 @@ class VoiceRuntimePolicyService:
                         minimum=8000,
                     ),
                     "turn_detection": runtime_profile.turn_detection,
-                    "system_instruction_template": runtime_profile.system_instruction_template
-                    or "",
                 }
             )
             profile_tool_policy = self._normalize_tool_policy(
@@ -537,17 +545,28 @@ class VoiceRuntimePolicyService:
                 policy["temperature"] = _to_float(
                     agent_policy.temperature_override, policy["temperature"]
                 )
-            if agent_policy.instructions_override:
-                policy["agent_instructions_override"] = (
-                    agent_policy.instructions_override
-                )
             policy["tool_policy"] = {
                 **policy["tool_policy"],
                 **self._normalize_tool_policy(
-                    _as_dict(agent_policy.tool_policy_override)
+                    self._sanitize_agent_tool_policy_override(
+                        _as_dict(agent_policy.tool_policy_override)
+                    )
                 ),
             }
             source["agent_policy"] = "enabled"
+
+        if persona is not None:
+            raw_persona_tool_policy = _as_dict(persona_policy.get("tool_policy"))
+            persona_tool_policy = self._normalize_tool_policy(
+                raw_persona_tool_policy
+            )
+            policy["tool_policy"] = {
+                **policy["tool_policy"],
+                **persona_tool_policy,
+            }
+            source["tool_policy_source"] = "persona_policy"
+        else:
+            raw_persona_tool_policy = {}
 
         if voice_mode_override:
             policy["voice_mode"] = self._normalize_voice_mode(
@@ -555,9 +574,28 @@ class VoiceRuntimePolicyService:
             )
             source["voice_mode"] = "session_override"
 
-        knowledge_base_ids = self._merge_knowledge_base_ids(agent, persona)
+        knowledge_base_ids = self._merge_knowledge_base_ids(persona, persona_policy)
+        if not knowledge_base_ids and agent is not None:
+            knowledge_base_ids = self._legacy_agent_kb_fallback_ids(agent)
+            if knowledge_base_ids:
+                source["knowledge_base_source"] = (
+                    "agent_default_knowledge_base_ids_legacy_fallback"
+                )
         tool_policy = self._normalize_tool_policy(_as_dict(policy.get("tool_policy")))
         has_bound_knowledge_base = bool(knowledge_base_ids)
+        auto_require_kb_grounding = _is_true_env(
+            "PERSONA_AUTO_REQUIRE_KB_GROUNDING_WHEN_BOUND",
+            "true",
+        )
+        has_explicit_kb_lock_flag = "require_kb_grounding" in raw_persona_tool_policy
+        if (
+            has_bound_knowledge_base
+            and auto_require_kb_grounding
+            and not has_explicit_kb_lock_flag
+        ):
+            tool_policy["require_kb_grounding"] = True
+            source["kb_lock_default"] = "auto_enabled_when_kb_bound"
+
         if not has_bound_knowledge_base:
             tool_policy["enable_internal_retrieval"] = False
             if not tool_policy["allow_web_search_without_kb"]:
@@ -585,6 +623,7 @@ class VoiceRuntimePolicyService:
             tool_policy["enable_web_search"] = False
             source["network_access_enforcement"] = "network_off"
         policy["tool_policy"] = tool_policy
+        policy["persona_policy"] = persona_policy
         policy["knowledge_base_ids"] = knowledge_base_ids
         policy["network_access_mode"] = tool_policy["network_access_mode"]
         policy["agent_id"] = agent.id if agent else agent_id
@@ -721,10 +760,6 @@ class VoiceRuntimePolicyService:
                 minimum=8000,
             ),
             "turn_detection": None,
-            "system_instruction_template": os.getenv(
-                "STEPFUN_REALTIME_INSTRUCTIONS", ""
-            ),
-            "agent_instructions_override": "",
             "tool_policy": self._normalize_tool_policy(DEFAULT_TOOL_POLICY),
         }
 
@@ -839,11 +874,13 @@ class VoiceRuntimePolicyService:
         }
 
     def _merge_knowledge_base_ids(
-        self, agent: Agent | None, persona: Persona | None
+        self,
+        persona: Persona | None,
+        persona_policy: dict[str, Any] | None = None,
     ) -> list[str]:
         merged: list[str] = []
-        if agent:
-            merged.extend(_as_list(agent.default_knowledge_base_ids))
+        normalized_policy = _as_dict(persona_policy)
+        merged.extend(_as_list(normalized_policy.get("knowledge_base_ids")))
         if persona:
             merged.extend(_as_list(persona.knowledge_base_ids))
 
@@ -856,6 +893,52 @@ class VoiceRuntimePolicyService:
             seen.add(normalized)
             deduped.append(normalized)
         return deduped
+
+    def _legacy_agent_kb_fallback_ids(self, agent: Agent) -> list[str]:
+        """Read-only compatibility fallback for historical agent-level KB config."""
+        merged = _as_list(getattr(agent, "default_knowledge_base_ids", []))
+        deduped: list[str] = []
+        seen: set[str] = set()
+        for kb_id in merged:
+            normalized = str(kb_id).strip()
+            if not normalized or normalized in seen:
+                continue
+            seen.add(normalized)
+            deduped.append(normalized)
+        return deduped
+
+    def _assert_no_deprecated_profile_fields(self, payload: dict[str, Any]) -> None:
+        for field in DEPRECATED_RUNTIME_PROFILE_FIELDS:
+            if field in payload:
+                raise ValueError(
+                    f"[FIELD_DEPRECATED_PERSONA_CENTERED] {field} moved_to=persona_policy"
+                )
+
+    def _assert_no_deprecated_agent_policy_fields(
+        self, payload: dict[str, Any]
+    ) -> None:
+        for field in DEPRECATED_AGENT_POLICY_FIELDS:
+            if field in payload:
+                raise ValueError(
+                    f"[FIELD_DEPRECATED_PERSONA_CENTERED] {field} moved_to=persona_policy"
+                )
+
+        tool_policy_override = _as_dict(payload.get("tool_policy_override"))
+        for key in sorted(tool_policy_override.keys()):
+            if key in PERSONA_OWNED_TOOL_POLICY_KEYS:
+                raise ValueError(
+                    "[FIELD_DEPRECATED_PERSONA_CENTERED] "
+                    f"tool_policy_override.{key} moved_to=persona_policy"
+                )
+
+    def _sanitize_agent_tool_policy_override(
+        self, raw_policy: dict[str, Any]
+    ) -> dict[str, Any]:
+        return {
+            key: value
+            for key, value in raw_policy.items()
+            if key not in PERSONA_OWNED_TOOL_POLICY_KEYS
+        }
 
     def _compose_instructions(
         self,
@@ -884,7 +967,6 @@ class VoiceRuntimePolicyService:
             "output_audio_format": profile.output_audio_format,
             "output_sample_rate": profile.output_sample_rate,
             "turn_detection": profile.turn_detection,
-            "system_instruction_template": profile.system_instruction_template,
             "tool_policy": self._normalize_tool_policy(_as_dict(profile.tool_policy)),
             "created_at": profile.created_at.isoformat()
             if profile.created_at
@@ -904,7 +986,6 @@ class VoiceRuntimePolicyService:
             "model_override": policy.model_override,
             "voice_override": policy.voice_override,
             "temperature_override": policy.temperature_override,
-            "instructions_override": policy.instructions_override,
             "tool_policy_override": self._normalize_tool_policy(
                 _as_dict(policy.tool_policy_override)
             ),

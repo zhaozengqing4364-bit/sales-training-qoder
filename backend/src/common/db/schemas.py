@@ -170,7 +170,11 @@ class ForbiddenWordResponse(ForbiddenWordBase):
 class SessionBase(BaseModel):
     scenario_type: ScenarioType = ScenarioType.SALES
     presentation_id: UUID | None = None  # Required for presentation scenario
-    sales_persona: str | None = None  # For sales bot scenario
+    sales_persona: str | None = Field(
+        default=None,
+        description="Deprecated legacy field. Use agent_id + persona_id instead.",
+        deprecated=True,
+    )
     scenario_id: UUID | None = None  # Optional scenario ID
 
 
@@ -178,7 +182,7 @@ class SessionCreate(SessionBase):
     # Agent Platform fields (R12: Session Management Enhancement)
     agent_id: UUID | None = None  # Optional Agent ID for enhanced sessions
     persona_id: UUID | None = None  # Optional Persona ID for enhanced sessions
-    voice_mode: str | None = Field(
+    voice_mode: Literal["legacy", "stepfun_realtime"] | None = Field(
         None, description="Voice mode override: legacy | stepfun_realtime"
     )
     runtime_profile_id: UUID | None = Field(
@@ -220,9 +224,9 @@ class SessionResponse(BaseModel):
     persona_id: UUID | None = None
     voice_mode: str | None = None
     runtime_profile_id: UUID | None = None
-    voice_runtime_profile_id: UUID | None = Field(default=None, exclude=True)
     voice_policy_snapshot: dict[str, Any] | None = None
     voice_policy_snapshot_ref: "VoicePolicySnapshotReference | None" = None
+    effectiveness_snapshot: dict[str, Any] | None = None
     status: SessionStatus
     start_time: datetime
     end_time: datetime | None = None
@@ -275,6 +279,13 @@ class SessionReport(BaseModel):
     audio_url: str | None = None
     transcript_url: str | None = None
     voice_policy_snapshot_ref: VoicePolicySnapshotReference | None = None
+    effectiveness_snapshot: dict[str, Any] | None = None
+    pass_flags: dict[str, bool] | None = None
+    main_capability_passed: bool | None = None
+    overall_result: Literal["pass", "strong_pass", "fail"] | None = None
+    main_issue: dict[str, Any] | None = None
+    next_goal: dict[str, Any] | None = None
+    retry_entry: dict[str, Any] | None = None
 
 
 # ========== Enhanced Session Report Schema (R12) ==========

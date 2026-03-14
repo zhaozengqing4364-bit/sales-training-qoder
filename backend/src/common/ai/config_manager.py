@@ -233,14 +233,34 @@ class ConfigManager:
                 }
 
         elif model_type == ModelType.EMBEDDING:
-            api_key = os.getenv("OPENAI_API_KEY")
-            if api_key:
+            embedding_api_key = os.getenv("EMBEDDING_API_KEY")
+            dashscope_api_key = os.getenv("DASHSCOPE_API_KEY")
+            legacy_openai_api_key = os.getenv("OPENAI_API_KEY")
+
+            if embedding_api_key or dashscope_api_key:
                 return {
-                    "provider": "openai",
-                    "base_url": os.getenv(
-                        "OPENAI_BASE_URL", "https://api.openai.com/v1"
+                    "provider": os.getenv(
+                        "EMBEDDING_PROVIDER", ModelProvider.OPENAI.value
                     ),
-                    "api_key": api_key,
+                    "base_url": os.getenv(
+                        "EMBEDDING_BASE_URL",
+                        "https://dashscope.aliyuncs.com/compatible-mode/v1",
+                    ),
+                    "api_key": embedding_api_key or dashscope_api_key,
+                    "model_name": os.getenv("EMBEDDING_MODEL", "text-embedding-v4"),
+                    "extra_config": {},
+                }
+
+            if legacy_openai_api_key:
+                return {
+                    "provider": os.getenv(
+                        "EMBEDDING_PROVIDER", ModelProvider.OPENAI.value
+                    ),
+                    "base_url": os.getenv(
+                        "EMBEDDING_BASE_URL"
+                    )
+                    or os.getenv("OPENAI_BASE_URL", "https://api.openai.com/v1"),
+                    "api_key": legacy_openai_api_key,
                     "model_name": os.getenv(
                         "EMBEDDING_MODEL", "text-embedding-3-small"
                     ),

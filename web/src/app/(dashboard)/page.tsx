@@ -10,7 +10,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { cn } from "@/lib/utils";
 import {
     TrendingUp, Filter, MoreHorizontal,
-    Calendar, CheckCircle2, Zap, BarChart3, ArrowRight, Presentation
+    Calendar, CheckCircle2, Zap, ArrowRight, Presentation
 } from "lucide-react";
 import Link from "next/link";
 import {
@@ -41,7 +41,8 @@ const formatTimeAgo = (isoString: string) => {
     if (diffInSeconds < 60) return "刚刚";
     if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)}分钟前`;
     if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)}小时前`;
-    return "昨天"; // Simplified for mock
+    if (diffInSeconds < 172800) return "昨天";
+    return `${Math.floor(diffInSeconds / 86400)}天前`;
 };
 
 export default function HomePage() {
@@ -54,6 +55,12 @@ export default function HomePage() {
     const defaultStats: DashboardStats = {
         weekly_activity: { total_duration_minutes: 0, session_count: 0, trend_direction: "flat", trend_percentage: 0 },
         last_session: { score: 0, percentile: 50, trend: "stable" },
+        effectiveness: {
+            pass_rate_3min_flow: 0,
+            pass_rate_5turn_defense: 0,
+            pass_rate_4step_structure: 0,
+            next_day_retry_rate: 0,
+        },
     };
     const defaultRecommendation: Recommendation = {
         title: "开始练习",
@@ -183,14 +190,37 @@ export default function HomePage() {
                                     <div className="text-xs text-slate-500 font-bold mt-1">平均 {stats.weekly_activity.session_count > 0 ? Math.round(stats.weekly_activity.total_duration_minutes / stats.weekly_activity.session_count) : 0}分钟 / 场</div>
                                 </div>
                                 <div className="p-4 bg-slate-50 rounded-2xl">
-                                    <div className="text-xs font-bold text-slate-400 uppercase">重点领域</div>
-                                    <div className="text-xl font-black text-blue-600 mt-1">异议处理</div>
+                                    <div className="text-xs font-bold text-slate-400 uppercase">次日复练率</div>
+                                    <div className="text-xl font-black text-blue-600 mt-1">
+                                        {(stats.effectiveness?.next_day_retry_rate ?? 0).toFixed(1)}%
+                                    </div>
                                 </div>
                             </div>
-                            <div className="h-48 bg-slate-50 rounded-2xl flex items-center justify-center border border-dashed border-slate-200">
-                                <span className="text-slate-400 font-medium flex items-center gap-2">
-                                    <BarChart3 className="w-4 h-4" /> 活动图表可视化占位符
-                                </span>
+                            <div className="grid grid-cols-2 gap-3">
+                                <div className="rounded-xl bg-blue-50 border border-blue-100 p-3">
+                                    <p className="text-[11px] text-blue-700 font-semibold">3分钟连续表达通过率</p>
+                                    <p className="text-xl font-black text-blue-900 mt-1">
+                                        {(stats.effectiveness?.pass_rate_3min_flow ?? 0).toFixed(1)}%
+                                    </p>
+                                </div>
+                                <div className="rounded-xl bg-emerald-50 border border-emerald-100 p-3">
+                                    <p className="text-[11px] text-emerald-700 font-semibold">5轮追问稳定通过率</p>
+                                    <p className="text-xl font-black text-emerald-900 mt-1">
+                                        {(stats.effectiveness?.pass_rate_5turn_defense ?? 0).toFixed(1)}%
+                                    </p>
+                                </div>
+                                <div className="rounded-xl bg-amber-50 border border-amber-100 p-3">
+                                    <p className="text-[11px] text-amber-700 font-semibold">四段结构完整率</p>
+                                    <p className="text-xl font-black text-amber-900 mt-1">
+                                        {(stats.effectiveness?.pass_rate_4step_structure ?? 0).toFixed(1)}%
+                                    </p>
+                                </div>
+                                <div className="rounded-xl bg-violet-50 border border-violet-100 p-3">
+                                    <p className="text-[11px] text-violet-700 font-semibold">次日复练率</p>
+                                    <p className="text-xl font-black text-violet-900 mt-1">
+                                        {(stats.effectiveness?.next_day_retry_rate ?? 0).toFixed(1)}%
+                                    </p>
+                                </div>
                             </div>
                             <DialogFooter>
                                 <Button variant="outline" className="rounded-full">下载报告</Button>
@@ -200,6 +230,35 @@ export default function HomePage() {
                     </Dialog>
                 </div>
             </header>
+
+            {stats.effectiveness && (
+                <section className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+                    <GlassCard className="p-5">
+                        <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">3分钟连续表达通过率</p>
+                        <p className="text-2xl font-black text-slate-900 mt-2">
+                            {stats.effectiveness.pass_rate_3min_flow.toFixed(1)}%
+                        </p>
+                    </GlassCard>
+                    <GlassCard className="p-5">
+                        <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">5轮追问稳定通过率</p>
+                        <p className="text-2xl font-black text-slate-900 mt-2">
+                            {stats.effectiveness.pass_rate_5turn_defense.toFixed(1)}%
+                        </p>
+                    </GlassCard>
+                    <GlassCard className="p-5">
+                        <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">四段结构完整率</p>
+                        <p className="text-2xl font-black text-slate-900 mt-2">
+                            {stats.effectiveness.pass_rate_4step_structure.toFixed(1)}%
+                        </p>
+                    </GlassCard>
+                    <GlassCard className="p-5">
+                        <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">次日复练率</p>
+                        <p className="text-2xl font-black text-slate-900 mt-2">
+                            {stats.effectiveness.next_day_retry_rate.toFixed(1)}%
+                        </p>
+                    </GlassCard>
+                </section>
+            )}
 
             {/* Dashboard Highlights / Call to Action */}
             <section className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -341,7 +400,6 @@ export default function HomePage() {
                                         <div className="grid grid-cols-2 gap-6 py-4">
                                             <div className="space-y-4">
                                                 <h4 className="font-bold text-slate-900 border-b pb-2">得分详情</h4>
-                                                {/* Simplified placeholder for breakdown */}
                                                 <div className="space-y-3">
                                                     <div className="flex justify-between items-center">
                                                         <span className="text-sm text-slate-600">综合得分</span>
@@ -350,6 +408,26 @@ export default function HomePage() {
                                                         </div>
                                                         <span className="text-sm font-bold text-emerald-600">{item.overall_score}</span>
                                                     </div>
+                                                    {(() => {
+                                                        const snapshot = item.effectiveness_snapshot as
+                                                            | { pass_flags?: { pass_3min_flow?: boolean; pass_5turn_defense?: boolean; pass_4step_structure?: boolean } }
+                                                            | undefined;
+                                                        const passFlags = snapshot?.pass_flags;
+                                                        if (!passFlags) return null;
+                                                        return (
+                                                            <div className="grid grid-cols-3 gap-2 text-xs">
+                                                                <div className="rounded-lg bg-slate-100 px-2 py-1 text-center">
+                                                                    连续表达 {passFlags.pass_3min_flow ? "✓" : "×"}
+                                                                </div>
+                                                                <div className="rounded-lg bg-slate-100 px-2 py-1 text-center">
+                                                                    抗追问 {passFlags.pass_5turn_defense ? "✓" : "×"}
+                                                                </div>
+                                                                <div className="rounded-lg bg-slate-100 px-2 py-1 text-center">
+                                                                    结构化 {passFlags.pass_4step_structure ? "✓" : "×"}
+                                                                </div>
+                                                            </div>
+                                                        );
+                                                    })()}
                                                 </div>
                                             </div>
                                             <div className="space-y-4">

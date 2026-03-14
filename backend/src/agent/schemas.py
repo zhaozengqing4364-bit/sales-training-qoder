@@ -83,13 +83,19 @@ class AgentBase(BaseModel):
 class CreateAgentRequest(AgentBase):
     """Request schema for creating an Agent - R1.1"""
 
-    system_prompt: str | None = Field(None, description="System prompt for AI")
+    system_prompt: str | None = Field(
+        None,
+        description="Deprecated: persona-centered mode rejects writes to this field",
+        deprecated=True,
+    )
     welcome_message: str | None = Field(None, description="Welcome message for users")
     capabilities_config: dict[str, Any] = Field(
         default_factory=dict, description="Capability module configurations"
     )
     default_knowledge_base_ids: list[str] = Field(
-        default_factory=list, description="Default knowledge base IDs"
+        default_factory=list,
+        description="Deprecated: persona-centered mode rejects writes to this field",
+        deprecated=True,
     )
 
 
@@ -100,10 +106,18 @@ class UpdateAgentRequest(BaseModel):
     description: str | None = Field(None, max_length=500)
     icon: str | None = Field(None, max_length=50)
     category: AgentCategoryType | None = None
-    system_prompt: str | None = None
+    system_prompt: str | None = Field(
+        default=None,
+        description="Deprecated: persona-centered mode rejects writes to this field",
+        deprecated=True,
+    )
     welcome_message: str | None = None
     capabilities_config: dict[str, Any] | None = None
-    default_knowledge_base_ids: list[str] | None = None
+    default_knowledge_base_ids: list[str] | None = Field(
+        default=None,
+        description="Deprecated: persona-centered mode rejects writes to this field",
+        deprecated=True,
+    )
 
 
 class AgentResponse(AgentBase):
@@ -211,6 +225,10 @@ class CreatePersonaRequest(PersonaBase):
     knowledge_base_ids: list[str] = Field(
         default_factory=list, description="Persona-specific knowledge base IDs"
     )
+    persona_policy: dict[str, Any] | None = Field(
+        default=None,
+        description="Persona-centered policy (source-of-truth for prompt/KB/tool strategy)",
+    )
     behavior_config: BehaviorConfigSchema = Field(
         default_factory=BehaviorConfigSchema, description="Behavior configuration"
     )
@@ -234,6 +252,7 @@ class UpdatePersonaRequest(BaseModel):
     system_prompt: str | None = None
     traits: dict[str, str] | None = None
     knowledge_base_ids: list[str] | None = None
+    persona_policy: dict[str, Any] | None = None
     behavior_config: BehaviorConfigSchema | None = None
     scoring_weights: dict[str, float] | None = None
     tts_config: TTSConfigSchema | None = None
@@ -250,6 +269,7 @@ class PersonaResponse(PersonaBase):
     system_prompt: str
     traits: dict[str, str] = Field(default_factory=dict)
     knowledge_base_ids: list[str] = Field(default_factory=list)
+    persona_policy: dict[str, Any] = Field(default_factory=dict)
     behavior_config: dict[str, Any] = Field(default_factory=dict)
     scoring_weights: dict[str, float] | None = None
     tts_config: dict[str, Any] | None = None

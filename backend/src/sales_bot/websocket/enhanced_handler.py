@@ -22,6 +22,7 @@ References:
 
 import asyncio
 import base64
+import contextlib
 import uuid
 from datetime import datetime, timezone
 from typing import Any
@@ -45,6 +46,7 @@ from common.knowledge.kb_lock_guard import evaluate_kb_lock_decision
 from common.knowledge.service import KnowledgeService
 from common.monitoring.latency_tracker import LatencyTracker, get_latency_tracker
 from common.monitoring.logger import get_logger
+from sales_bot.services.voice_instruction_compiler import VoiceInstructionCompiler
 from sales_bot.websocket.base_sales_handler import BaseSalesHandler
 from sales_bot.websocket.components import (
     TTSComponent,
@@ -101,6 +103,7 @@ class EnhancedSalesHandler(BaseSalesHandler):
         self._llm_override_service: object | None = None
         self._llm_override_config_id: str | None = None
         self._voice_policy_snapshot: dict[str, Any] = {}
+        self._base_instructions: str = ""
 
         # Internal state for current turn
         self._current_turn_initialized: bool = False
@@ -167,16 +170,26 @@ class EnhancedSalesHandler(BaseSalesHandler):
             return False
 
         persona = persona_result.value
+        snapshot_persona_policy = (
+            self._voice_policy_snapshot.get("persona_policy")
+            if isinstance(self._voice_policy_snapshot.get("persona_policy"), dict)
+            else {}
+        )
+        snapshot_system_prompt = str(
+            snapshot_persona_policy.get("system_prompt") or ""
+        ).strip()
+        snapshot_kb_ids = self._snapshot_knowledge_base_ids()
         self.persona_config = {
             "id": persona.id,
             "name": persona.name,
-            "system_prompt": persona.system_prompt,
+            "system_prompt": snapshot_system_prompt or persona.system_prompt,
             "traits": persona.traits or {},
             "behavior_config": persona.behavior_config or {},
             "scoring_weights": persona.scoring_weights,
-            "knowledge_base_ids": persona.knowledge_base_ids or [],
+            "knowledge_base_ids": snapshot_kb_ids or (persona.knowledge_base_ids or []),
             "tts_config": persona.tts_config or {},
         }
+        self._base_instructions = self._resolve_base_instructions()
 
         # Initialize AgentContext
         self.context = AgentContext(
@@ -193,10 +206,12 @@ class EnhancedSalesHandler(BaseSalesHandler):
 
         # Initialize CapabilityRunner
         capabilities_config = self.agent_config.setdefault("capabilities_config", {})
-        merged_kb_ids = list(dict.fromkeys([
-            *self.agent_config.get("default_knowledge_base_ids", []),
-            *self.persona_config.get("knowledge_base_ids", []),
-        ]))
+        merged_kb_ids = self._snapshot_knowledge_base_ids()
+        if not merged_kb_ids:
+            merged_kb_ids = list(dict.fromkeys([
+                *self.agent_config.get("default_knowledge_base_ids", []),
+                *self.persona_config.get("knowledge_base_ids", []),
+            ]))
         if merged_kb_ids:
             knowledge_cfg = capabilities_config.get("knowledge_retrieval", {})
             if not isinstance(knowledge_cfg, dict):
@@ -242,6 +257,32 @@ class EnhancedSalesHandler(BaseSalesHandler):
 
         return True
 
+    def _snapshot_knowledge_base_ids(self) -> list[str]:
+        raw_ids = self._voice_policy_snapshot.get("knowledge_base_ids")
+        if not isinstance(raw_ids, list):
+            return []
+        deduped: list[str] = []
+        seen: set[str] = set()
+        for item in raw_ids:
+            normalized = str(item).strip()
+            if not normalized or normalized in seen:
+                continue
+            seen.add(normalized)
+            deduped.append(normalized)
+        return deduped
+
+    def _resolve_base_instructions(self) -> str:
+        snapshot_instructions = str(
+            self._voice_policy_snapshot.get("instructions") or ""
+        ).strip()
+        if snapshot_instructions:
+            return snapshot_instructions
+
+        legacy_prompt = str(self.persona_config.get("system_prompt") or "").strip()
+        if legacy_prompt:
+            return legacy_prompt
+        return str(self.agent_config.get("system_prompt") or "你是一个销售教练。").strip()
+
     # ========== Connection lifecycle hooks ==========
 
     async def _on_connection_established(self, **kwargs):
@@ -260,6 +301,7 @@ class EnhancedSalesHandler(BaseSalesHandler):
                 await self.capability_runner.on_session_end(self.context)
             except (RuntimeError, ValueError) as e:
                 logger.error(f"Error ending capability session: {e}")
+        await super()._on_connection_closed()
 
     async def _handle_session_end(self):
         """Handle session end with capability cleanup and report generation."""
@@ -398,56 +440,38 @@ class EnhancedSalesHandler(BaseSalesHandler):
             return
 
         if audio_base64:
-            if not self.asr_queue:
-                logger.info("Auto-starting ASR on first audio chunk")
-                if self._greeting_task and not self._greeting_task.done():
+            try:
+                audio_bytes = base64.b64decode(audio_base64)
+
+                # Latency tracking
+                trace_id = self._get_trace_id()
+                if trace_id:
+                    latency_tracker = get_latency_tracker()
+                    latency_tracker.record(
+                        trace_id,
+                        LatencyTracker.STAGE_AUDIO_RECEIVED,
+                        {"audio_size": len(audio_bytes)},
+                    )
+
+                async with self._state_lock:
+                    should_start = self.asr_queue is None
+                if should_start and self._greeting_task and not self._greeting_task.done():
                     self._greeting_task.cancel()
-                await self._start_streaming_asr()
 
-            if self.asr_queue:
-                try:
-                    audio_bytes = base64.b64decode(audio_base64)
-
-                    # Latency tracking
-                    trace_id = self._get_trace_id()
-                    if trace_id:
-                        latency_tracker = get_latency_tracker()
-                        latency_tracker.record(
-                            trace_id,
-                            LatencyTracker.STAGE_AUDIO_RECEIVED,
-                            {"audio_size": len(audio_bytes)},
-                        )
-
-                    # Backpressure control
-                    queue_size = self.asr_queue.qsize()
-
-                    if queue_size >= self.ASR_HIGH_WATERMARK and not self._backpressure_active:
-                        self._backpressure_active = True
-                        await self._send_backpressure("slow_down", queue_size)
-                        logger.warning(f"[BACKPRESSURE] Activated - queue size: {queue_size}")
-                    elif queue_size <= self.ASR_LOW_WATERMARK and self._backpressure_active:
-                        self._backpressure_active = False
-                        await self._send_backpressure("resume", queue_size)
-                        logger.info(f"[BACKPRESSURE] Deactivated - queue size: {queue_size}")
-
-                    if queue_size >= self.ASR_QUEUE_MAX_SIZE:
-                        logger.warning(f"[BACKPRESSURE] Queue full ({queue_size}), dropping audio chunk")
-                        return
-
-                    await self.asr_queue.put(audio_bytes)
-                except (ValueError, OSError) as e:
-                    logger.error(f"Failed to decode audio: {e}")
+                await self._enqueue_audio_bytes(audio_bytes)
+            except (ValueError, OSError) as e:
+                logger.error(f"Failed to decode audio: {e}")
 
     async def _start_streaming_asr(self):
         """Start streaming ASR session with turn tracking."""
         await self._stop_streaming_asr()
 
-        self.is_user_speaking = True
-        self.current_transcript = ""
-        self.asr_queue = asyncio.Queue()
-
         await self._start_new_turn(interaction_type="audio")
-        self.asr_task = asyncio.create_task(self._run_streaming_asr())
+        async with self._state_lock:
+            self.is_user_speaking = True
+            self.current_transcript = ""
+            self.asr_queue = asyncio.Queue(maxsize=self.ASR_QUEUE_MAX_SIZE)
+            self.asr_task = asyncio.create_task(self._run_streaming_asr())
 
         await self._send_status("listening")
         logger.info("Started streaming ASR session")
@@ -461,34 +485,48 @@ class EnhancedSalesHandler(BaseSalesHandler):
         audio_chunk, audio_end) to pile up. When they finally processed sequentially,
         ASR would start and immediately stop — producing only "嗯".
         """
-        self.is_user_speaking = False
         final_transcript = ""
+        should_send_resume = False
+        async with self._state_lock:
+            self.is_user_speaking = False
 
-        if self.asr_queue:
-            await self.asr_queue.put(None)
+            if self.asr_queue:
+                try:
+                    self.asr_queue.put_nowait(None)
+                except asyncio.QueueFull:
+                    try:
+                        self.asr_queue.get_nowait()
+                    except asyncio.QueueEmpty:
+                        pass
+                    with contextlib.suppress(asyncio.QueueFull):
+                        self.asr_queue.put_nowait(None)
 
-        if self.asr_task and not self.asr_task.done():
-            try:
-                final_transcript = await asyncio.wait_for(self.asr_task, timeout=15.0)
-            except TimeoutError:
-                logger.warning("ASR task timeout, cancelling")
-                self.asr_task.cancel()
-                if self.current_transcript and len(self.current_transcript.strip()) > 0:
-                    final_transcript = self.current_transcript
-                    logger.info(f"[ASR] Using current transcript after timeout: {final_transcript[:50]}...")
-            except (RuntimeError, OSError) as e:
-                logger.error(f"Error waiting for ASR task: {e}")
+            if self.asr_task and not self.asr_task.done():
+                try:
+                    final_transcript = await asyncio.wait_for(self.asr_task, timeout=15.0)
+                except TimeoutError:
+                    logger.warning("ASR task timeout, cancelling")
+                    self.asr_task.cancel()
+                    if self.current_transcript and len(self.current_transcript.strip()) > 0:
+                        final_transcript = self.current_transcript
+                        logger.info(f"[ASR] Using current transcript after timeout: {final_transcript[:50]}...")
+                except (RuntimeError, OSError) as e:
+                    logger.error(f"Error waiting for ASR task: {e}")
 
-        self.asr_task = None
-        self.asr_queue = None
+            self.asr_task = None
+            self.asr_queue = None
+            if self._backpressure_active:
+                self._backpressure_active = False
+                should_send_resume = True
+
+        if should_send_resume:
+            await self._send_backpressure("resume", 0)
 
         if final_transcript and len(final_transcript.strip()) > 0:
             logger.info(f"[ASR] Processing final transcript (non-blocking): {final_transcript[:50]}...")
             # Fire-and-forget: run LLM+TTS pipeline in background so the message
             # processing loop stays responsive for the next recording session.
-            self._response_task = asyncio.create_task(
-                self._process_user_text_safe(final_transcript)
-            )
+            await self._launch_response_task(final_transcript, source="asr_final")
 
     async def _run_streaming_asr(self):
         """Run streaming ASR with latency tracking."""
@@ -569,6 +607,10 @@ class EnhancedSalesHandler(BaseSalesHandler):
         except (RuntimeError, ValueError, OSError) as e:
             logger.error(f"[RESPONSE] Background response task error: {e}", exc_info=True)
             await self._send_status("listening")
+        finally:
+            current_task = asyncio.current_task()
+            if self._response_task is current_task:
+                self._response_task = None
 
     # ========== Turn tracking ==========
 
@@ -776,17 +818,13 @@ class EnhancedSalesHandler(BaseSalesHandler):
 
             llm_service = self._resolve_llm_service()
 
-            system_prompt = self.persona_config.get("system_prompt", "")
-            if not system_prompt:
-                system_prompt = self.agent_config.get("system_prompt", "你是一个销售教练。")
-
-            if knowledge_context:
-                system_prompt = (
-                    f"{system_prompt}\n\n"
-                    f"## 参考知识\n"
-                    f"以下是与用户问题相关的知识库内容，请在回答时参考：\n\n"
-                    f"{knowledge_context}"
-                )
+            base_instructions = self._base_instructions or self._resolve_base_instructions()
+            if not base_instructions:
+                base_instructions = "你是一个销售教练。"
+            system_prompt = VoiceInstructionCompiler.compose_turn_instructions(
+                base_instructions=base_instructions,
+                grounding_context=knowledge_context,
+            )
 
             context = {"scenario": "sales", "history": self.conversation_history[-10:]}
 
@@ -861,6 +899,8 @@ class EnhancedSalesHandler(BaseSalesHandler):
                 trace_id=trace_id,
                 stream_id=self.current_stream_id,
                 request_id=self.current_request_id,
+                is_interrupted_fn=lambda: self._is_interrupted,
+                current_stream_id_fn=lambda: self.current_stream_id,
             )
         await self._send_status("listening")
 
@@ -891,6 +931,8 @@ class EnhancedSalesHandler(BaseSalesHandler):
                 trace_id=self._get_trace_id(),
                 stream_id=self.current_stream_id,
                 request_id=request_id,
+                is_interrupted_fn=lambda: self._is_interrupted,
+                current_stream_id_fn=lambda: self.current_stream_id,
             )
         else:
             await super()._send_tts_response(text, request_id)
@@ -910,8 +952,7 @@ class EnhancedSalesHandler(BaseSalesHandler):
 
     async def _send_backpressure(self, action: str, queue_size: int):
         """Send backpressure signal to client."""
-        await self.manager.send_json(self.websocket, {
-            "type": "backpressure",
+        payload = {
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "trace_id": self._get_trace_id(),
             "data": {
@@ -920,6 +961,15 @@ class EnhancedSalesHandler(BaseSalesHandler):
                 "high_watermark": self.ASR_HIGH_WATERMARK,
                 "low_watermark": self.ASR_LOW_WATERMARK,
             },
+        }
+        await self.manager.send_json(self.websocket, {
+            "type": "backpressure",
+            **payload,
+        })
+        # Legacy alias for old clients during transition window.
+        await self.manager.send_json(self.websocket, {
+            "type": "system_backpressure",
+            **payload,
         })
 
     async def _send_error(self, code: str, message: str):

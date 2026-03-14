@@ -11,15 +11,16 @@ Response Format:
 Requirements: 3.1, 3.2, 3.3
 """
 from datetime import datetime, timezone
-from typing import Literal, Optional
+from typing import Literal
 
 from fastapi import APIRouter, Depends, Query
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from common.auth.service import get_current_user
-from common.db.models import PracticeSession, Scenario, User
+from common.db.models import PracticeSession, User
 from common.db.session import get_db
 from common.monitoring.logger import get_logger, get_trace_id
 from sqlalchemy.exc import SQLAlchemyError
@@ -181,12 +182,20 @@ async def get_sessions(
         sort_dir = sort_parts[1] if len(sort_parts) > 1 else "desc"
         
         # Build base query
-        base_query = select(PracticeSession).where(
+        base_query = (
+            select(PracticeSession)
+            .options(
+                selectinload(PracticeSession.scenario),
+                selectinload(PracticeSession.agent),
+                selectinload(PracticeSession.persona),
+            )
+            .where(PracticeSession.user_id == user_id)
+        )
+
+        # Get total count
+        count_query = select(func.count()).select_from(PracticeSession).where(
             PracticeSession.user_id == user_id
         )
-        
-        # Get total count
-        count_query = select(func.count()).select_from(base_query.subquery())
         total = (await db.execute(count_query)).scalar() or 0
         
         # Apply sorting
@@ -239,38 +248,23 @@ async def get_sessions(
             agent_type = "sales_bot"  # Default
             title = "练习会话"
             
-            # Try to get scenario type
-            if session.scenario_id:
-                scenario_result = await db.execute(
-                    select(Scenario).where(Scenario.scenario_id == session.scenario_id)
-                )
-                scenario = scenario_result.scalar_one_or_none()
-                if scenario:
-                    agent_type = scenario.scenario_type
-                    if scenario.scenario_type == "presentation":
-                        title = "演讲练习"
-                    elif scenario.scenario_type == "sales":
-                        title = "销售对练"
-            
-            # Try to get agent/persona names for better title
-            if session.agent_id:
-                from agent.models import Agent
-                agent_result = await db.execute(
-                    select(Agent).where(Agent.id == session.agent_id)
-                )
-                agent = agent_result.scalar_one_or_none()
-                if agent:
-                    title = agent.name
-                    agent_type = agent.category
-            
-            if session.persona_id:
-                from agent.models import Persona
-                persona_result = await db.execute(
-                    select(Persona).where(Persona.id == session.persona_id)
-                )
-                persona = persona_result.scalar_one_or_none()
-                if persona:
-                    title = f"{title} - {persona.name}"
+            # Use preloaded relations to avoid N+1 queries
+            scenario = session.scenario
+            if scenario:
+                agent_type = scenario.scenario_type
+                if scenario.scenario_type == "presentation":
+                    title = "演讲练习"
+                elif scenario.scenario_type == "sales":
+                    title = "销售对练"
+
+            agent = session.agent
+            if agent:
+                title = agent.name
+                agent_type = agent.category
+
+            persona = session.persona
+            if persona:
+                title = f"{title} - {persona.name}"
             
             items.append(SessionItem(
                 id=str(session.session_id),

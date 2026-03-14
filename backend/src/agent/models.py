@@ -158,6 +158,7 @@ class Persona(Base):
     system_prompt = Column(Text, nullable=False)
     traits = Column(JSON, default=dict)  # {"性格": "怀疑", "关注点": "证据"}
     knowledge_base_ids = Column(JSON, default=list)  # Persona-specific knowledge bases
+    persona_policy = Column(JSON, default=dict)  # Persona-centered runtime policy
     behavior_config = Column(JSON, default=dict)  # BehaviorConfig
     scoring_weights = Column(JSON, nullable=True)  # Override Agent default weights
 

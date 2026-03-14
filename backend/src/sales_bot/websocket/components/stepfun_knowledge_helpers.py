@@ -7,7 +7,7 @@ import re
 from typing import Any
 
 DEFAULT_TOP_K = 5
-DEFAULT_SIMILARITY_THRESHOLD = 0.65
+DEFAULT_SIMILARITY_THRESHOLD = 0.58
 ENTITY_TOKEN_RE = re.compile(
     r"(?:[a-z]+\d+[a-z0-9-]*|v?\d+(?:\.\d+){0,2})", re.IGNORECASE
 )

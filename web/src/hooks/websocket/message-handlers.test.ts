@@ -312,6 +312,64 @@ describe("handleWebSocketMessage connection/status behavior", () => {
         });
     });
 
+    it("maps evaluation_feedback(stage_feedback) to score panel and realtime hint", () => {
+        const { deps, getState } = createDeps(INITIAL_PRACTICE_STATE);
+
+        handleWebSocketMessage(
+            createMessageEvent({
+                type: "evaluation_feedback",
+                timestamp: new Date().toISOString(),
+                data: {
+                    feedback_type: "stage_feedback",
+                    stage_number: 2,
+                    scores: {
+                        communication: 86,
+                        product_fit: 82,
+                    },
+                    summary: "进入需求挖掘阶段，继续追问预算与决策链。",
+                    suggestions: ["下一轮聚焦预算与时间线"],
+                },
+            }),
+            deps as never,
+        );
+
+        expect(getState().scores).toMatchObject({
+            overall_score: 84,
+            dimension_scores: {
+                communication: 86,
+                product_fit: 82,
+            },
+            stage_name: "阶段 2",
+            suggestions: ["下一轮聚焦预算与时间线"],
+        });
+        expect(getState().fuzzyDetections[0]).toMatchObject({
+            category: "feedback",
+            suggestion: "进入需求挖掘阶段，继续追问预算与决策链。",
+        });
+    });
+
+    it("maps evaluation_feedback(milestone) to realtime hint only", () => {
+        const { deps, getState } = createDeps(INITIAL_PRACTICE_STATE);
+
+        handleWebSocketMessage(
+            createMessageEvent({
+                type: "evaluation_feedback",
+                timestamp: new Date().toISOString(),
+                data: {
+                    feedback_type: "milestone",
+                    message: "你已完成 50% 关键阶段，保持节奏。",
+                },
+            }),
+            deps as never,
+        );
+
+        expect(getState().scores).toBeNull();
+        expect(getState().fuzzyDetections[0]).toMatchObject({
+            category: "feedback",
+            suggestion: "你已完成 50% 关键阶段，保持节奏。",
+        });
+    });
+
     it("updates session state on session_ended event", () => {
         const { deps, getState } = createDeps({
             ...INITIAL_PRACTICE_STATE,

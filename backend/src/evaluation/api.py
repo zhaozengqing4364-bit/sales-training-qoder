@@ -8,6 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.ai.llm_service import LLMService
+from common.api.server_error import build_server_error
 from common.auth.service import get_current_user
 from common.db.models import PracticeSession, User
 from common.db.session import get_db
@@ -108,8 +109,13 @@ async def get_comprehensive_report(
 
     if not report_result.is_success or report_result.value is None:
         detail = report_result.fallback or "Report not found"
-        status_code = 404 if "REPORT_NOT_FOUND" in detail else 500
-        raise HTTPException(status_code=status_code, detail=detail)
+        if "REPORT_NOT_FOUND" in detail:
+            raise HTTPException(status_code=404, detail=detail)
+        return build_server_error(
+            "[REPORT_FETCH_FAILED]",
+            message=detail,
+            session_id=session_id,
+        )
 
     return _build_response(report_result.value)
 
@@ -129,7 +135,12 @@ async def generate_comprehensive_report(
     result = await service.generate_report(session_id)
 
     if not result.is_success:
-        raise HTTPException(status_code=500, detail=f"Report generation failed: {result.fallback}")
+        message = result.fallback or "Report generation failed"
+        return build_server_error(
+            "[REPORT_GENERATION_FAILED]",
+            message=message,
+            session_id=session_id,
+        )
 
     return _build_response(result.value)
 

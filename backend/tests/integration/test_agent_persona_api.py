@@ -125,7 +125,6 @@ async def test_agent(async_client, auth_headers):
         json={
             "name": "Test Agent",
             "category": "sales",
-            "system_prompt": "Test prompt"
         },
         headers=auth_headers
     )
@@ -169,6 +168,22 @@ class TestAgentPersonaAPI:
         assert data["success"] is True
         assert data["data"]["agent_id"] == test_agent["id"]
         assert data["data"]["persona_id"] == test_persona["id"]
+
+    async def test_get_persona_policy_health(
+        self, async_client, auth_headers
+    ):
+        """Should expose persona policy health report for admin governance."""
+        response = await async_client.get(
+            "/api/v1/admin/personas/policy-health",
+            headers=auth_headers,
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["success"] is True
+        assert "summary" in data["data"]
+        assert "issue_type_counts" in data["data"]
+        assert "sample_issues" in data["data"]
 
     async def test_admin_routes_require_admin_role(
         self,

@@ -10,10 +10,11 @@ Requirements: Story 2.9 - WebSocket Exception Recovery
 """
 
 import asyncio
+import json
+import os
 import time
-from dataclasses import dataclass, asdict, field
-from typing import Dict, Optional
-from datetime import datetime, timezone
+from dataclasses import asdict, dataclass, field
+from typing import Any, Optional
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -38,12 +39,12 @@ class SessionStateSnapshot:
     last_activity: float = field(default_factory=time.time)
     user_id: Optional[str] = None
 
-    def to_dict(self) -> Dict:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for JSON serialization"""
         return asdict(self)
 
     @classmethod
-    def from_dict(cls, data: Dict) -> "SessionStateSnapshot":
+    def from_dict(cls, data: dict[str, Any]) -> "SessionStateSnapshot":
         """Create from dictionary"""
         return cls(**data)
 
@@ -53,39 +54,91 @@ class SessionStateService:
     Session state persistence service for WebSocket reconnection.
 
     Features:
-    - Save session state snapshots in memory for fast access
-    - Optional database persistence for durability
-    - Automatic cleanup of expired states (30 minutes)
+    - Save session state snapshots in Redis for distributed deployments
+    - Automatic expiration by Redis TTL
     - Thread-safe access with asyncio locks
 
     Configuration:
     - state_ttl: 1800 seconds (30 minutes)
-    - cleanup_interval: 300 seconds (5 minutes)
+    - cleanup_interval: 300 seconds (5 minutes, Redis health check)
     """
 
     def __init__(
         self,
         state_ttl: int = 1800,  # 30 minutes
         cleanup_interval: int = 300,  # 5 minutes
+        redis_url: str | None = None,
+        key_prefix: str | None = None,
     ):
-        self.states: Dict[str, SessionStateSnapshot] = {}
         self.state_ttl = state_ttl
         self.cleanup_interval = cleanup_interval
+        self.redis_url = (
+            redis_url
+            or os.getenv("SESSION_STATE_REDIS_URL")
+            or os.getenv("REDIS_URL", "redis://localhost:6379/0")
+        )
+        self.key_prefix = key_prefix or os.getenv(
+            "SESSION_STATE_KEY_PREFIX", "ws:session_state:"
+        )
+
         self._lock = asyncio.Lock()
         self._cleanup_task: Optional[asyncio.Task] = None
         self._running = False
+        self._redis: Any | None = None
+
+    def _state_key(self, session_id: str) -> str:
+        return f"{self.key_prefix}{session_id}"
+
+    def _require_redis(self):
+        if self._redis is None:
+            raise RuntimeError("Session state Redis client is not initialized")
+        return self._redis
 
     async def start(self):
-        """Start the background cleanup task"""
+        """Start Redis-backed session state service"""
         if self._running:
             return
 
-        self._running = True
-        self._cleanup_task = asyncio.create_task(self._cleanup_loop())
-        logger.info("Session state service started")
+        try:
+            import redis.asyncio as redis
+        except ImportError as exc:
+            raise RuntimeError(
+                "redis package is required for SessionStateService"
+            ) from exc
+
+        async with self._lock:
+            if self._running:
+                return
+
+            client = redis.from_url(
+                self.redis_url,
+                encoding="utf-8",
+                decode_responses=True,
+            )
+            try:
+                await client.ping()
+            except Exception as exc:
+                try:
+                    await client.aclose()
+                except Exception:
+                    pass
+                raise RuntimeError(
+                    f"Failed to connect Redis for session state: {exc}"
+                ) from exc
+
+            self._redis = client
+            self._running = True
+            self._cleanup_task = asyncio.create_task(self._cleanup_loop())
+
+        logger.info(
+            "Session state service started",
+            redis_url=self.redis_url,
+            key_prefix=self.key_prefix,
+            state_ttl=self.state_ttl,
+        )
 
     async def stop(self):
-        """Stop the background cleanup task"""
+        """Stop background task and close Redis connection"""
         self._running = False
 
         if self._cleanup_task:
@@ -94,6 +147,14 @@ class SessionStateService:
                 await self._cleanup_task
             except asyncio.CancelledError:
                 pass
+
+        redis_client = self._redis
+        self._redis = None
+        if redis_client is not None:
+            try:
+                await redis_client.aclose()
+            except Exception as exc:
+                logger.warning(f"Failed to close Redis client cleanly: {exc}")
 
         logger.info("Session state service stopped")
 
@@ -108,8 +169,14 @@ class SessionStateService:
             Result[None]: Success or failure
         """
         try:
-            async with self._lock:
-                self.states[state.session_id] = state
+            state.last_activity = time.time()
+            payload = json.dumps(state.to_dict(), ensure_ascii=False)
+            redis_client = self._require_redis()
+            await redis_client.set(
+                self._state_key(state.session_id),
+                payload,
+                ex=self.state_ttl,
+            )
 
             logger.info(
                 f"Saved session state: {state.session_id}",
@@ -121,7 +188,6 @@ class SessionStateService:
                     "ai_state": state.ai_state,
                 },
             )
-
             return Result.ok(None)
 
         except Exception as e:
@@ -139,21 +205,14 @@ class SessionStateService:
             Result[Optional[SessionStateSnapshot]]: State or None if not found
         """
         try:
-            async with self._lock:
-                state = self.states.get(session_id)
-
-            if not state:
+            redis_client = self._require_redis()
+            raw_state = await redis_client.get(self._state_key(session_id))
+            if not raw_state:
                 logger.info(f"Session state not found: {session_id}")
                 return Result.ok(None)
 
-            # Check if state has expired
-            now = time.time()
-            age = now - state.last_activity
-            if age > self.state_ttl:
-                logger.info(f"Session state expired: {session_id}, age={age}s")
-                await self.delete_state(session_id)
-                return Result.ok(None)
-
+            data = json.loads(raw_state)
+            state = SessionStateSnapshot.from_dict(data)
             logger.info(f"Retrieved session state: {session_id}")
             return Result.ok(state)
 
@@ -172,10 +231,8 @@ class SessionStateService:
             Result[None]: Success or failure
         """
         try:
-            async with self._lock:
-                if session_id in self.states:
-                    del self.states[session_id]
-
+            redis_client = self._require_redis()
+            await redis_client.delete(self._state_key(session_id))
             logger.info(f"Deleted session state: {session_id}")
             return Result.ok(None)
 
@@ -187,7 +244,7 @@ class SessionStateService:
         self,
         db: AsyncSession,
         session_id: str,
-        limit: int = 10
+        limit: int = 10,
     ) -> Result[list[ConversationMessage]]:
         """
         Get recent conversation messages for reconnection.
@@ -224,49 +281,25 @@ class SessionStateService:
             return Result.fail(f"[MESSAGES_GET_FAILED] {str(e)}")
 
     async def _cleanup_loop(self):
-        """Background task to clean up expired states"""
+        """Background task used as Redis health checker."""
         while self._running:
             try:
                 await asyncio.sleep(self.cleanup_interval)
-                await self._cleanup_expired_states()
+                redis_client = self._require_redis()
+                await redis_client.ping()
             except asyncio.CancelledError:
                 break
             except Exception as e:
-                logger.error(f"Cleanup loop error: {e}")
+                logger.error(f"Session state Redis health check failed: {e}")
 
-    async def _cleanup_expired_states(self):
-        """Clean up states that have exceeded TTL"""
-        now = time.time()
-        expired_sessions = []
-
-        async with self._lock:
-            for session_id, state in list(self.states.items()):
-                age = now - state.last_activity
-                if age > self.state_ttl:
-                    expired_sessions.append((session_id, age))
-
-        for session_id, age in expired_sessions:
-            await self.delete_state(session_id)
-            logger.info(f"Cleaned up expired session state: {session_id}, age={int(age)}s")
-
-    def get_stats(self) -> dict:
-        """Get session state service statistics"""
-        now = time.time()
-
-        # Count states by age
-        active_last_5min = sum(
-            1 for s in self.states.values() if now - s.last_activity < 300
-        )
-        active_last_hour = sum(
-            1 for s in self.states.values() if now - s.last_activity < 3600
-        )
-
+    def get_stats(self) -> dict[str, Any]:
+        """Get session state service statistics."""
         return {
-            "total_states": len(self.states),
-            "active_last_5min": active_last_5min,
-            "active_last_hour": active_last_hour,
             "state_ttl": self.state_ttl,
             "cleanup_interval": self.cleanup_interval,
+            "redis_connected": self._redis is not None,
+            "running": self._running,
+            "key_prefix": self.key_prefix,
         }
 
 
@@ -278,7 +311,12 @@ def get_session_state_service() -> SessionStateService:
     """Get or create global session state service instance"""
     global _session_state_service
     if _session_state_service is None:
-        _session_state_service = SessionStateService()
+        ttl = int(os.getenv("SESSION_STATE_TTL_SECONDS", "1800"))
+        cleanup_interval = int(os.getenv("SESSION_STATE_CLEANUP_INTERVAL_SECONDS", "300"))
+        _session_state_service = SessionStateService(
+            state_ttl=ttl,
+            cleanup_interval=cleanup_interval,
+        )
     return _session_state_service
 
 

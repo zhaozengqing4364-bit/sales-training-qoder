@@ -11,6 +11,7 @@ docs/api-contract/
 ├── analytics.md        # 分析与排行榜 API 契约
 ├── personas.md         # Persona 管理 API 契约
 ├── knowledge.md        # 知识库管理 API 契约
+├── prompt-templates.md # 提示词与场景绑定 API 契约
 ├── support-runtime.md  # 支持角色运行状态只读 API 契约
 ├── sessions.md         # 会话管理 API 契约 (增强)
 ├── replay.md           # 对话回放 API 契约
@@ -102,3 +103,6 @@ docs/api-contract/
 | 2026-02-11 | 补充 Agent/Persona 增强模式参数配对约束 | agents |
 | 2026-02-11 | 新增 sessions 契约并补齐创建会话策略快照、报告/回放快照引用字段 | sessions, replay |
 | 2026-02-13 | 补充 model-configs / voice-runtime / release-verification 三类契约文档 | model-configs, voice-runtime, release-verification |
+| 2026-02-16 | 收敛角色策略入口并同步弃用写入约束（Persona Centered） | agents, personas, voice-runtime |
+| 2026-02-16 | 提示词治理域收敛为 admin-only，补充独立契约文档 | prompt-templates |
+| 2026-02-16 | 新增 Persona 策略健康审计接口与 Voice Runtime 旧写入字段移除说明 | personas, voice-runtime |

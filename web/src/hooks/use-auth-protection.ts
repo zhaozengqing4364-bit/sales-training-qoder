@@ -67,7 +67,8 @@ export function useAuthProtection(options?: AuthProtectionOptions) {
     const token = authState.token;
     const user = authState.user;
     const isLoading = !authState.hydrated;
-    const isDevBypass = process.env.NODE_ENV === "development" && Boolean(token) && Boolean(user);
+    const hasRoleAccess = !requiredRoles || requiredRoles.includes((user?.role || "user") as "admin" | "user" | "support");
+    const isDevBypass = process.env.NODE_ENV === "development" && Boolean(token) && Boolean(user) && hasRoleAccess;
     const roleMismatch = Boolean(
         requiredRoles &&
         !requiredRoles.includes((user?.role || "user") as "admin" | "user" | "support")

@@ -3,16 +3,18 @@ Presentations API - CRUD operations for PPT presentations
 """
 
 import os
+import tempfile
 import uuid
 from pathlib import Path
 from typing import Any, cast
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import FileResponse, JSONResponse
-from sqlalchemy import delete, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from common.api.server_error import build_server_error
 from common.auth.service import get_current_user
 from common.db.models import (
     ForbiddenWord,
@@ -69,6 +71,33 @@ def _hydrate_page_thumbnail_url(page: Page, presentation_id: str) -> None:
         setattr(page, "image_url", _thumbnail_api_url(presentation_id, page_number))
 
 
+def _atomic_write_bytes(file_path: Path, content: bytes) -> None:
+    """Write file atomically to avoid partial/corrupted uploads."""
+    file_path.parent.mkdir(parents=True, exist_ok=True)
+    tmp_file = tempfile.NamedTemporaryFile(
+        mode="wb",
+        delete=False,
+        dir=str(file_path.parent),
+        prefix=f".{file_path.name}.",
+    )
+    try:
+        tmp_file.write(content)
+        tmp_file.flush()
+        os.fsync(tmp_file.fileno())
+        tmp_file.close()
+        os.replace(tmp_file.name, file_path)
+    except Exception:
+        try:
+            tmp_file.close()
+        except Exception:
+            pass
+        try:
+            os.unlink(tmp_file.name)
+        except OSError:
+            pass
+        raise
+
+
 @router.get("/presentations", response_model=list[PresentationResponse])
 async def list_presentations(
     status: str | None = None,
@@ -98,6 +127,8 @@ async def upload_presentation(
     db: AsyncSession = Depends(get_db),
 ):
     """Upload a new PPT presentation with automatic parsing"""
+    presentation: Presentation | None = None
+    file_path: Path | None = None
     try:
         upload_dir = _presentation_storage_root()
         upload_dir.mkdir(parents=True, exist_ok=True)
@@ -114,8 +145,7 @@ async def upload_presentation(
         file_path = upload_dir / f"{file_id}.{file_extension}"
 
         content = await file.read()
-        with file_path.open("wb") as buffer:
-            buffer.write(content)
+        _atomic_write_bytes(file_path, content)
 
         # Create presentation record
         presentation = Presentation(
@@ -198,7 +228,28 @@ async def upload_presentation(
     except (RuntimeError, ValueError, OSError) as e:
         logger.error(f"Failed to upload presentation: {str(e)}")
         await db.rollback()
-        raise HTTPException(status_code=500, detail="Upload failed")
+        if presentation is not None:
+            try:
+                setattr(presentation, "status", "failed")
+                db.add(presentation)
+                await db.commit()
+            except Exception as mark_error:
+                await db.rollback()
+                logger.error(
+                    "Failed to mark presentation as failed after upload error",
+                    error=str(mark_error),
+                )
+        elif file_path and file_path.exists():
+            try:
+                file_path.unlink()
+            except OSError:
+                pass
+        return build_server_error(
+            "[PRESENTATION_UPLOAD_FAILED]",
+            message="Upload failed",
+            exc=e,
+            title=title,
+        )
 
 
 @router.get("/presentations/{presentation_id}", response_model=PresentationDetail)
@@ -232,8 +283,21 @@ async def delete_presentation(
 ):
     """Delete a presentation"""
     result = await db.execute(
-        delete(Presentation).where(Presentation.presentation_id == presentation_id)
+        select(Presentation).where(Presentation.presentation_id == presentation_id)
     )
+    presentation = result.scalar_one_or_none()
+    if not presentation:
+        raise HTTPException(status_code=404, detail="Presentation not found")
+
+    is_uploader = presentation.uploaded_by_admin_id == current_user.user_id
+    is_admin = getattr(current_user, "role", "") == "admin"
+    if not is_uploader and not is_admin:
+        raise HTTPException(
+            status_code=403,
+            detail="No permission to delete this presentation",
+        )
+
+    await db.delete(presentation)
     await db.commit()
 
     return JSONResponse(status_code=204, content=None)

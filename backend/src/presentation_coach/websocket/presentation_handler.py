@@ -13,9 +13,11 @@ import uuid
 from typing import Any, cast
 
 from fastapi import WebSocket, WebSocketDisconnect
+from jose import JWTError
 from sqlalchemy import select
 
 from agent.models import Agent, Persona
+from agent.services.persona_policy import normalize_persona_policy
 from common.audio.asr_service import get_asr_service
 from common.audio.tts_service import get_tts_service
 from common.auth.service import verify_token
@@ -311,7 +313,7 @@ class PresentationWebSocketHandler(BaseWebSocketHandler):
             payload = verify_token(token)
             set_trace_id(payload.get("trace_id", ""))
             self.user_id = payload.get("user_id")
-        except (RuntimeError, ValueError, OSError) as e:
+        except (JWTError, RuntimeError, ValueError, OSError) as e:
             logger.warning(f"Token verification failed: {str(e)}")
             set_trace_id("")
 
@@ -382,7 +384,7 @@ class PresentationWebSocketHandler(BaseWebSocketHandler):
             self.feedback_service.clear_session(self.session_id)
             await self._save_session_state()
             self.running = False
-            self.manager.disconnect(self.scenario, session_id)
+            await self.manager.disconnect(self.scenario, session_id)
             processing_task.cancel()
 
     async def _handle_binary_frame(self, data: bytes):
@@ -915,41 +917,53 @@ class PresentationWebSocketHandler(BaseWebSocketHandler):
                             PracticeSession.agent_id,
                             PracticeSession.persona_id,
                             PracticeSession.scenario_id,
+                            PracticeSession.voice_policy_snapshot,
                         ).where(PracticeSession.session_id == self.session_id)
                     )
                     session_identity = session_identity_result.first()
                     if session_identity:
                         agent_id = cast(str | None, session_identity[0])
+                        session_snapshot = cast(dict[str, Any] | None, session_identity[3])
+                        if isinstance(session_snapshot, dict):
+                            snapshot_instructions = str(
+                                session_snapshot.get("instructions") or ""
+                            ).strip()
+                            if snapshot_instructions:
+                                context.agent_system_prompt = snapshot_instructions
                         if agent_id:
                             agent_result = await db.execute(
-                                select(Agent.name, Agent.system_prompt).where(
-                                    Agent.id == agent_id
-                                )
+                                select(Agent.name).where(Agent.id == agent_id)
                             )
                             agent = agent_result.first()
                             if agent:
                                 context.agent_name = cast(str | None, agent[0])
-                                context.agent_system_prompt = cast(str | None, agent[1])
 
                         persona_id = cast(str | None, session_identity[1])
                         if persona_id:
                             persona_result = await db.execute(
                                 select(
                                     Persona.name,
+                                    Persona.persona_policy,
                                     Persona.system_prompt,
+                                    Persona.knowledge_base_ids,
                                     Persona.traits,
                                 ).where(Persona.id == persona_id)
                             )
                             persona = persona_result.first()
                             if persona:
                                 context.persona_name = cast(str | None, persona[0])
+                                resolved_persona_policy = normalize_persona_policy(
+                                    cast(dict[str, Any] | None, persona[1]),
+                                    fallback_system_prompt=cast(str | None, persona[2]),
+                                    fallback_kb_ids=cast(list[str] | None, persona[3]),
+                                )
                                 context.persona_system_prompt = cast(
                                     str | None,
-                                    persona[1],
+                                    resolved_persona_policy.get("system_prompt"),
                                 )
                                 context.persona_traits = (
-                                    dict(persona[2])
-                                    if isinstance(persona[2], dict)
+                                    dict(persona[4])
+                                    if isinstance(persona[4], dict)
                                     else {}
                                 )
 

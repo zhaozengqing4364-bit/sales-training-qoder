@@ -97,3 +97,95 @@ async def test_evaluate_kb_lock_decision_passes_with_grounding_context(monkeypat
     assert decision.status == "pass"
     assert "企业版支持按席位扩容" in decision.grounding_context
     assert decision.retrieval_mode == "hybrid"
+
+
+@pytest.mark.asyncio
+async def test_evaluate_kb_lock_decision_auto_enables_lock_for_legacy_snapshot(
+    monkeypatch,
+):
+    monkeypatch.setenv("PERSONA_AUTO_REQUIRE_KB_GROUNDING_WHEN_BOUND", "true")
+    monkeypatch.setattr(
+        guard_module,
+        "search_internal_knowledge",
+        AsyncMock(
+            return_value={
+                "count": 1,
+                "retrieval_mode": "hybrid",
+                "results": [{"snippet": "合同条款以企业采购协议为准"}],
+            }
+        ),
+    )
+
+    decision = await evaluate_kb_lock_decision(
+        query="合同条款按什么执行",
+        effective_policy={
+            # Legacy snapshot: no explicit require_kb_grounding key.
+            "tool_policy": {"retrieval_top_k": 3},
+            "knowledge_base_ids": ["kb-legacy-1"],
+        },
+    )
+
+    assert decision.lock_required is True
+    assert decision.allow_generation is True
+    assert decision.status == "pass"
+    assert "合同条款以企业采购协议为准" in decision.grounding_context
+
+
+@pytest.mark.asyncio
+async def test_evaluate_kb_lock_decision_auto_enables_lock_for_legacy_false_snapshot(
+    monkeypatch,
+):
+    monkeypatch.setenv("PERSONA_AUTO_REQUIRE_KB_GROUNDING_WHEN_BOUND", "true")
+    monkeypatch.setattr(
+        guard_module,
+        "search_internal_knowledge",
+        AsyncMock(
+            return_value={
+                "count": 1,
+                "retrieval_mode": "hybrid",
+                "results": [{"snippet": "企业版报价需按采购清单审批"}],
+            }
+        ),
+    )
+
+    decision = await evaluate_kb_lock_decision(
+        query="企业版报价审批流程是什么",
+        effective_policy={
+            # Legacy snapshot persisted profile default `false` without persona intent.
+            "tool_policy": {
+                "require_kb_grounding": False,
+                "retrieval_top_k": 3,
+            },
+            "knowledge_base_ids": ["kb-legacy-2"],
+            "persona_policy": {"tool_policy": {}},
+        },
+    )
+
+    assert decision.lock_required is True
+    assert decision.allow_generation is True
+    assert decision.status == "pass"
+    assert "企业版报价需按采购清单审批" in decision.grounding_context
+
+
+@pytest.mark.asyncio
+async def test_evaluate_kb_lock_decision_respects_explicit_persona_disable(
+    monkeypatch,
+):
+    monkeypatch.setenv("PERSONA_AUTO_REQUIRE_KB_GROUNDING_WHEN_BOUND", "true")
+
+    decision = await evaluate_kb_lock_decision(
+        query="介绍产品",
+        effective_policy={
+            "tool_policy": {"require_kb_grounding": False},
+            "knowledge_base_ids": ["kb-explicit-disable-1"],
+            "persona_policy": {
+                "tool_policy": {
+                    "require_kb_grounding": False,
+                }
+            },
+        },
+    )
+
+    assert decision.lock_required is False
+    assert decision.allow_generation is True
+    assert decision.status == "pass"

@@ -50,7 +50,7 @@ class TestConnectionManager:
         """Verify connection is removed after disconnect"""
         manager.active_connections["presentation"]["test-session"] = mock_websocket
 
-        manager.disconnect("presentation", "test-session")
+        await manager.disconnect("presentation", "test-session")
 
         assert "test-session" not in manager.active_connections["presentation"]
         assert manager.get_connection_count("presentation") == 0
@@ -362,4 +362,4 @@ class TestConnectionManagerSingleton:
         assert manager2.get_connection_count("presentation") == 1
 
         # Cleanup
-        manager2.disconnect("presentation", "test-session")
+        await manager2.disconnect("presentation", "test-session")

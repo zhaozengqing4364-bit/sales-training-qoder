@@ -10,9 +10,6 @@ import { api } from "@/lib/api/client";
 import { Loader2, Plus, Save, Trash2, RefreshCw, Sparkles } from "lucide-react";
 
 type VoiceMode = "legacy" | "stepfun_realtime";
-type RetrievalPriority = "kb_only" | "kb_first" | "web_first" | "balanced";
-type NetworkAccessMode = "off" | "controlled";
-type EnforcementLevel = "strict" | "best_effort";
 
 interface RuntimeProfile {
     id: string;
@@ -28,21 +25,45 @@ interface RuntimeProfile {
     output_audio_format: string;
     output_sample_rate: number;
     turn_detection?: string | null;
-    system_instruction_template?: string | null;
     tool_policy: {
-        enable_web_search?: boolean;
         web_search_top_k?: number;
         web_search_timeout_seconds?: number;
-        enable_internal_retrieval?: boolean;
-        retrieval_priority?: RetrievalPriority;
         retrieval_top_k?: number;
         retrieval_similarity_threshold?: number;
-        strict_instruction_following?: boolean;
-        require_grounding?: boolean;
-        network_access_mode?: NetworkAccessMode;
-        enforcement_level?: EnforcementLevel;
-        allow_web_search_without_kb?: boolean;
+        retrieval_enable_hybrid?: boolean;
+        retrieval_keyword_candidate_limit?: number;
     };
+}
+
+const ALLOWED_RUNTIME_TOOL_POLICY_KEYS = [
+    "web_search_top_k",
+    "web_search_timeout_seconds",
+    "retrieval_top_k",
+    "retrieval_similarity_threshold",
+    "retrieval_enable_hybrid",
+    "retrieval_keyword_candidate_limit",
+] as const;
+
+const DEFAULT_RUNTIME_TOOL_POLICY: RuntimeProfile["tool_policy"] = {
+    web_search_top_k: 5,
+    web_search_timeout_seconds: 3,
+    retrieval_top_k: 5,
+    retrieval_similarity_threshold: 0.65,
+    retrieval_enable_hybrid: true,
+    retrieval_keyword_candidate_limit: 32,
+};
+
+function sanitizeRuntimeToolPolicy(input: Record<string, unknown> | undefined) {
+    const output: RuntimeProfile["tool_policy"] = { ...DEFAULT_RUNTIME_TOOL_POLICY };
+    if (!input || typeof input !== "object") {
+        return output;
+    }
+    for (const key of ALLOWED_RUNTIME_TOOL_POLICY_KEYS) {
+        if (key in input) {
+            (output as Record<string, unknown>)[key] = input[key];
+        }
+    }
+    return output;
 }
 
 const EMPTY_FORM: Omit<RuntimeProfile, "id"> = {
@@ -58,21 +79,7 @@ const EMPTY_FORM: Omit<RuntimeProfile, "id"> = {
     output_audio_format: "pcm16",
     output_sample_rate: 24000,
     turn_detection: null,
-    system_instruction_template: "",
-    tool_policy: {
-        enable_web_search: false,
-        web_search_top_k: 5,
-        web_search_timeout_seconds: 3,
-        enable_internal_retrieval: true,
-        retrieval_priority: "kb_first",
-        retrieval_top_k: 5,
-        retrieval_similarity_threshold: 0.65,
-        strict_instruction_following: true,
-        require_grounding: true,
-        network_access_mode: "off",
-        enforcement_level: "strict",
-        allow_web_search_without_kb: false,
-    },
+    tool_policy: { ...DEFAULT_RUNTIME_TOOL_POLICY },
 };
 
 export default function VoiceRuntimePage() {
@@ -100,7 +107,7 @@ export default function VoiceRuntimePage() {
                 setForm({
                     ...EMPTY_FORM,
                     ...initial,
-                    tool_policy: { ...EMPTY_FORM.tool_policy, ...(initial.tool_policy || {}) },
+                    tool_policy: sanitizeRuntimeToolPolicy(initial.tool_policy as Record<string, unknown>),
                 });
             } else {
                 setSelectedProfileId(null);
@@ -124,7 +131,7 @@ export default function VoiceRuntimePage() {
         setForm({
             ...EMPTY_FORM,
             ...profile,
-            tool_policy: { ...EMPTY_FORM.tool_policy, ...(profile.tool_policy || {}) },
+            tool_policy: sanitizeRuntimeToolPolicy(profile.tool_policy as Record<string, unknown>),
         });
     };
 
@@ -146,10 +153,7 @@ export default function VoiceRuntimePage() {
         try {
             const payload = {
                 ...form,
-                tool_policy: {
-                    ...EMPTY_FORM.tool_policy,
-                    ...(form.tool_policy || {}),
-                },
+                tool_policy: sanitizeRuntimeToolPolicy(form.tool_policy as Record<string, unknown>),
             };
             if (selectedProfileId) {
                 await api.admin.updateVoiceRuntimeProfile(selectedProfileId, payload);
@@ -187,7 +191,7 @@ export default function VoiceRuntimePage() {
             <div className="flex items-center justify-between">
                 <div>
                     <h1 className="text-3xl font-black text-slate-900 tracking-tight">语音运行时策略</h1>
-                    <p className="text-slate-500 mt-1">管理 Realtime / 经典模式、工具策略与默认模型参数。</p>
+                    <p className="text-slate-500 mt-1">管理 Realtime / 经典模式与底层运行参数。业务提示词已迁移到角色中心。</p>
                 </div>
                 <div className="flex gap-2">
                     <Button variant="outline" className="rounded-full" onClick={() => void loadProfiles()} disabled={isLoading}>
@@ -316,131 +320,127 @@ export default function VoiceRuntimePage() {
                             />
                         </div>
                         <div className="space-y-2">
-                            <label className="text-xs font-bold text-slate-500 uppercase">启用内部检索</label>
-                            <select
-                                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
-                                value={form.tool_policy.enable_internal_retrieval ? "true" : "false"}
+                            <label className="text-xs font-bold text-slate-500 uppercase">内部检索 TopK</label>
+                            <Input
+                                name="voice_runtime_retrieval_top_k"
+                                autoComplete="section-voice-runtime off"
+                                type="number"
+                                min={1}
+                                step={1}
+                                value={form.tool_policy.retrieval_top_k || 5}
                                 onChange={(event) =>
                                     setForm((prev) => ({
                                         ...prev,
                                         tool_policy: {
                                             ...prev.tool_policy,
-                                            enable_internal_retrieval: event.target.value === "true",
+                                            retrieval_top_k: Number(event.target.value || 5),
                                         },
                                     }))
                                 }
-                            >
-                                <option value="true">开启</option>
-                                <option value="false">关闭</option>
-                            </select>
-                        </div>
-                        <div className="space-y-2">
-                            <label className="text-xs font-bold text-slate-500 uppercase">启用联网搜索</label>
-                            <select
-                                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
-                                value={form.tool_policy.enable_web_search ? "true" : "false"}
-                                onChange={(event) =>
-                                    setForm((prev) => ({
-                                        ...prev,
-                                        tool_policy: {
-                                            ...prev.tool_policy,
-                                            enable_web_search: event.target.value === "true",
-                                        },
-                                    }))
-                                }
-                            >
-                                <option value="false">关闭</option>
-                                <option value="true">开启</option>
-                            </select>
-                        </div>
-                        <div className="space-y-2">
-                            <label className="text-xs font-bold text-slate-500 uppercase">检索优先级</label>
-                            <select
-                                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
-                                value={form.tool_policy.retrieval_priority || "kb_first"}
-                                onChange={(event) =>
-                                    setForm((prev) => ({
-                                        ...prev,
-                                        tool_policy: {
-                                            ...prev.tool_policy,
-                                            retrieval_priority: event.target.value as RetrievalPriority,
-                                        },
-                                    }))
-                                }
-                            >
-                                <option value="kb_only">仅知识库</option>
-                                <option value="kb_first">知识库优先</option>
-                                <option value="web_first">联网优先</option>
-                                <option value="balanced">均衡模式</option>
-                            </select>
-                        </div>
-                        <div className="space-y-2">
-                            <label className="text-xs font-bold text-slate-500 uppercase">网络访问模式</label>
-                            <select
-                                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
-                                value={form.tool_policy.network_access_mode || "off"}
-                                onChange={(event) =>
-                                    setForm((prev) => ({
-                                        ...prev,
-                                        tool_policy: {
-                                            ...prev.tool_policy,
-                                            network_access_mode: event.target.value as NetworkAccessMode,
-                                        },
-                                    }))
-                                }
-                            >
-                                <option value="off">禁止联网</option>
-                                <option value="controlled">受控联网</option>
-                            </select>
-                        </div>
-                        <div className="space-y-2">
-                            <label className="text-xs font-bold text-slate-500 uppercase">执行级别</label>
-                            <select
-                                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
-                                value={form.tool_policy.enforcement_level || "strict"}
-                                onChange={(event) =>
-                                    setForm((prev) => ({
-                                        ...prev,
-                                        tool_policy: {
-                                            ...prev.tool_policy,
-                                            enforcement_level: event.target.value as EnforcementLevel,
-                                        },
-                                    }))
-                                }
-                            >
-                                <option value="strict">严格</option>
-                                <option value="best_effort">尽力而为</option>
-                            </select>
-                        </div>
-                        <div className="space-y-2 md:col-span-2">
-                            <label className="text-xs font-bold text-slate-500 uppercase">无知识库时允许联网</label>
-                            <select
-                                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
-                                value={form.tool_policy.allow_web_search_without_kb ? "true" : "false"}
-                                onChange={(event) =>
-                                    setForm((prev) => ({
-                                        ...prev,
-                                        tool_policy: {
-                                            ...prev.tool_policy,
-                                            allow_web_search_without_kb: event.target.value === "true",
-                                        },
-                                    }))
-                                }
-                            >
-                                <option value="false">否</option>
-                                <option value="true">是</option>
-                            </select>
-                        </div>
-                        <div className="space-y-2 md:col-span-2">
-                            <label className="text-xs font-bold text-slate-500 uppercase">系统指令模板</label>
-                            <textarea
-                                className="w-full min-h-[140px] rounded-xl border border-slate-200 p-3 text-sm outline-none focus:ring-2 focus:ring-indigo-500"
-                                value={form.system_instruction_template || ""}
-                                onChange={(event) =>
-                                    setForm((prev) => ({ ...prev, system_instruction_template: event.target.value }))
-                                }
-                                placeholder="在这里配置该模式下的统一行为约束和角色执行要求"
                             />
+                        </div>
+                        <div className="space-y-2">
+                            <label className="text-xs font-bold text-slate-500 uppercase">检索相似度阈值</label>
+                            <Input
+                                name="voice_runtime_retrieval_similarity_threshold"
+                                autoComplete="section-voice-runtime off"
+                                type="number"
+                                min={0}
+                                max={1}
+                                step={0.01}
+                                value={form.tool_policy.retrieval_similarity_threshold || 0.65}
+                                onChange={(event) =>
+                                    setForm((prev) => ({
+                                        ...prev,
+                                        tool_policy: {
+                                            ...prev.tool_policy,
+                                            retrieval_similarity_threshold: Number(event.target.value || 0.65),
+                                        },
+                                    }))
+                                }
+                            />
+                        </div>
+                        <div className="space-y-2">
+                            <label className="text-xs font-bold text-slate-500 uppercase">候选关键词上限</label>
+                            <Input
+                                name="voice_runtime_retrieval_keyword_candidate_limit"
+                                autoComplete="section-voice-runtime off"
+                                type="number"
+                                min={8}
+                                step={1}
+                                value={form.tool_policy.retrieval_keyword_candidate_limit || 32}
+                                onChange={(event) =>
+                                    setForm((prev) => ({
+                                        ...prev,
+                                        tool_policy: {
+                                            ...prev.tool_policy,
+                                            retrieval_keyword_candidate_limit: Number(event.target.value || 32),
+                                        },
+                                    }))
+                                }
+                            />
+                        </div>
+                        <div className="space-y-2">
+                            <label className="text-xs font-bold text-slate-500 uppercase">检索混合召回</label>
+                            <select
+                                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                                value={form.tool_policy.retrieval_enable_hybrid ? "true" : "false"}
+                                onChange={(event) =>
+                                    setForm((prev) => ({
+                                        ...prev,
+                                        tool_policy: {
+                                            ...prev.tool_policy,
+                                            retrieval_enable_hybrid: event.target.value === "true",
+                                        },
+                                    }))
+                                }
+                            >
+                                <option value="true">开启</option>
+                                <option value="false">关闭</option>
+                            </select>
+                        </div>
+                        <div className="space-y-2">
+                            <label className="text-xs font-bold text-slate-500 uppercase">联网搜索 TopK</label>
+                            <Input
+                                name="voice_runtime_web_search_top_k"
+                                autoComplete="section-voice-runtime off"
+                                type="number"
+                                min={1}
+                                step={1}
+                                value={form.tool_policy.web_search_top_k || 5}
+                                onChange={(event) =>
+                                    setForm((prev) => ({
+                                        ...prev,
+                                        tool_policy: {
+                                            ...prev.tool_policy,
+                                            web_search_top_k: Number(event.target.value || 5),
+                                        },
+                                    }))
+                                }
+                            />
+                        </div>
+                        <div className="space-y-2">
+                            <label className="text-xs font-bold text-slate-500 uppercase">联网超时秒数</label>
+                            <Input
+                                name="voice_runtime_web_search_timeout"
+                                autoComplete="section-voice-runtime off"
+                                type="number"
+                                min={1}
+                                step={1}
+                                value={form.tool_policy.web_search_timeout_seconds || 3}
+                                onChange={(event) =>
+                                    setForm((prev) => ({
+                                        ...prev,
+                                        tool_policy: {
+                                            ...prev.tool_policy,
+                                            web_search_timeout_seconds: Number(event.target.value || 3),
+                                        },
+                                    }))
+                                }
+                            />
+                        </div>
+                        <div className="md:col-span-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
+                            角色中心已接管策略锁：联网开关、内部检索开关、检索优先级、知识库强制模式等能力请前往角色中心配置。
                         </div>
                     </div>
 

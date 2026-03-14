@@ -53,6 +53,8 @@ class TTSComponent:
         trace_id: str | None,
         stream_id: str | None,
         request_id: int,
+        is_interrupted_fn: Callable[[], bool] | None = None,
+        current_stream_id_fn: Callable[[], str | None] | None = None,
     ) -> None:
         """
         Send TTS response.
@@ -66,6 +68,10 @@ class TTSComponent:
 
         # Prefer service-level streaming path
         if hasattr(self.tts_service, "synthesize_streaming"):
+            effective_is_interrupted_fn = is_interrupted_fn or (lambda: False)
+            effective_current_stream_id_fn = (
+                current_stream_id_fn or (lambda: effective_stream_id)
+            )
             await self.send_response_streaming(
                 text=text,
                 request_id=request_id,
@@ -73,8 +79,8 @@ class TTSComponent:
                 websocket=websocket,
                 manager=manager,
                 trace_id=trace_id,
-                is_interrupted_fn=lambda: False,
-                current_stream_id_fn=lambda: effective_stream_id,
+                is_interrupted_fn=effective_is_interrupted_fn,
+                current_stream_id_fn=effective_current_stream_id_fn,
             )
             return
 

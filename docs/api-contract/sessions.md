@@ -1,6 +1,6 @@
 # 会话管理 API 契约
 
-> 状态: ✅ 已实现（2026-02-11 更新）
+> 状态: ✅ 已实现（2026-02-22 更新）
 >
 > 后端实现: `backend/src/common/api/practice.py`
 >
@@ -11,7 +11,7 @@
 - 统一会话创建入口: `POST /api/v1/practice/sessions`
 - 创建时固化 `voice_policy_snapshot`，后续读取统一引用该快照基线
 - 策略优先级固定: `会话覆盖 > Agent 策略 > 系统默认配置档`
-- 兼容 legacy 创建方式（`sales_persona`）
+- 销售场景统一采用 `agent_id + persona_id` 配对创建
 
 ---
 
@@ -46,7 +46,6 @@
 interface SessionCreate {
   scenario_type: "sales" | "presentation";
   presentation_id?: string;
-  sales_persona?: string; // legacy 模式兼容字段
   scenario_id?: string;
   agent_id?: string;
   persona_id?: string;
@@ -54,6 +53,8 @@ interface SessionCreate {
   runtime_profile_id?: string;
 }
 ```
+
+> 说明: `sales_persona` 字段已废弃，若继续传入将返回 `[FIELD_DEPRECATED_PERSONA_CENTERED]`。
 
 ### `SessionLifecycleRequest`
 
@@ -69,6 +70,8 @@ interface SessionLifecycleRequest {
 interface VoicePolicySnapshotReference {
   voice_mode?: string | null;
   runtime_profile_id?: string | null;
+  instruction_contract_hash?: string | null;
+  network_access_mode?: "off" | "controlled" | string | null;
   tool_policy: Record<string, unknown>;
   knowledge_base_ids: string[];
   source: Record<string, string>;
@@ -86,14 +89,44 @@ interface SessionResponse {
   scenario_id: string;
   scenario_type?: "sales" | "presentation";
   voice_mode?: string;
-  voice_runtime_profile_id?: string | null;
+  runtime_profile_id?: string | null;
   voice_policy_snapshot?: Record<string, unknown> | null;
   voice_policy_snapshot_ref?: VoicePolicySnapshotReference | null;
+  effectiveness_snapshot?: {
+    pass_flags: {
+      pass_3min_flow: boolean;
+      pass_5turn_defense: boolean;
+      pass_4step_structure: boolean;
+    };
+    main_capability_passed: boolean;
+    overall_result: "pass" | "strong_pass" | "fail";
+    main_issue: {
+      issue_type: string;
+      issue_text: string;
+      recovery_rule: string;
+    };
+    metrics: {
+      continuous_speech_seconds: number;
+      filler_rate_per_100_words: number;
+      offtopic_turn_count: number;
+      offtopic_max_streak: number;
+      structure_coverage: number;
+    };
+    next_goal: {
+      goal_type: string;
+      goal_text: string;
+      rule: string;
+    };
+    version: string;
+    evaluable: boolean;
+  } | null;
   status: "preparing" | "in_progress" | "paused" | "completed" | "scoring";
   start_time: string;
   end_time?: string | null;
 }
 ```
+
+> 兼容说明：`voice_runtime_profile_id` 已停止对外返回，请统一使用 `runtime_profile_id`。
 
 ### `SessionLifecycleResponse`
 
@@ -144,6 +177,24 @@ interface SessionLifecycleResponse {
 
 > 说明: lifecycle 动作被处理后，后端会向同会话 WebSocket 广播 `status`，若进入终态还会追加 `session_ended` 事件。
 
+### 报告字段补充（沟通闭环）
+
+`GET /api/v1/practice/sessions/{session_id}/report` 额外返回：
+
+- `effectiveness_snapshot`: 会话效果快照（统一真值源）
+- `pass_flags`: 三项硬指标通过情况
+- `overall_result`: `pass | strong_pass | fail`
+- `main_issue`: 本场唯一主问题（用于报告页直达修正）
+- `next_goal`: 下一轮唯一目标
+- `retry_entry`: 报告页一键再练参数（scenario/agent/persona/presentation）
+
+### 历史列表字段补充（首页最近记录）
+
+`GET /api/v1/practice/history` 的 `items[]` 额外返回：
+
+- `effectiveness_snapshot`: 本次会话效果快照（若已生成）
+- `feedback_summary`: 快速反馈摘要（优先取 `main_issue.issue_text`，缺失时回退 `next_goal.goal_text`）
+
 ---
 
 ## 创建会话契约要点
@@ -151,7 +202,7 @@ interface SessionLifecycleResponse {
 ### 1) 入参约束
 
 - `agent_id` 与 `persona_id` 必须成对提供
-- `sales` 场景在未使用增强模式时必须传 `sales_persona`
+- `sales` 场景必须传 `agent_id + persona_id`
 - `presentation` 场景需要传 `presentation_id`
 - 若传入 `scenario_id`，系统会校验该场景存在、启用且与 `scenario_type` 一致，并以该 `scenario_id` 作为会话事实持久化
 
@@ -203,7 +254,7 @@ Content-Type: application/json
     "user_id": "user-uuid",
     "scenario_id": "scenario-uuid",
     "voice_mode": "stepfun_realtime",
-    "voice_runtime_profile_id": "profile-uuid",
+    "runtime_profile_id": "profile-uuid",
     "voice_policy_snapshot": {
       "voice_mode": "stepfun_realtime",
       "runtime_profile_id": "profile-uuid",
@@ -222,6 +273,8 @@ Content-Type: application/json
     "voice_policy_snapshot_ref": {
       "voice_mode": "stepfun_realtime",
       "runtime_profile_id": "profile-uuid",
+      "instruction_contract_hash": "sha256:xxxx",
+      "network_access_mode": "off",
       "tool_policy": {
         "enable_internal_retrieval": true,
         "enable_web_search": false
@@ -350,15 +403,15 @@ WebSocket 同步事件（由 lifecycle 触发）:
 | `[SCENARIO_NOT_FOUND]` | `404` | 传入的 `scenario_id` 不存在 |
 | `[SCENARIO_TYPE_MISMATCH]` | `400` | `scenario_id` 与 `scenario_type` 不匹配 |
 | `[SCENARIO_INACTIVE]` | `400` | 传入的 `scenario_id` 已停用 |
-| `[SALES_PERSONA_REQUIRED]` | `400` | legacy 销售模式缺少 `sales_persona` |
-| `[INVALID_PERSONA]` | `400` | legacy `sales_persona` 非法 |
+| `[PRESENTATION_ID_REQUIRED]` | `400` | `presentation` 场景未传 `presentation_id` |
+| `[FIELD_DEPRECATED_PERSONA_CENTERED]` | `400` | 请求中仍传入已废弃的 `sales_persona` |
 | `[SESSION_CREATE_FAILED]` | `500` | 建会话失败 |
 
 ---
 
 ## 向后兼容说明
 
-- 继续支持 legacy `sales_persona` 创建路径
+- `sales_persona` 仅保留为兼容入参占位，不再支持创建路径
 - 新增字段全部为 additive（不会破坏既有消费方）
 - 契约回归覆盖:
   - `backend/tests/contract/test_sessions.py`
@@ -370,6 +423,7 @@ WebSocket 同步事件（由 lifecycle 触发）:
 
 | 日期 | 变更 | 说明 |
 |------|------|------|
+| 2026-02-22 | 收敛销售建会话入参 | `sales` 场景必须使用 `agent_id + persona_id`，`sales_persona` 标记废弃并返回明确错误码 |
 | 2026-02-11 | 补充生命周期状态机细节 | 明确 start/pause/resume/end 允许来源状态、幂等语义、终态差异（sales=scoring、presentation=completed） |
 | 2026-02-11 | 补充 lifecycle 对应 WS 契约 | 增加 `status` / `session_ended` 广播事件结构，统一 REST 与实时通道语义 |
 | 2026-02-11 | 新增 lifecycle 契约 | 补齐 `POST /practice/sessions/{session_id}/lifecycle` 请求/响应与错误语义 |

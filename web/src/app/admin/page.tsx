@@ -21,11 +21,11 @@ import {
     DialogTrigger,
 } from "@/components/ui/glass-modal";
 
-function extractNumberField(payload: unknown, key: string): number | null {
-    if (!payload || typeof payload !== "object") return null;
-    const value = (payload as Record<string, unknown>)[key];
-    if (typeof value === "number" && Number.isFinite(value)) return value;
-    return null;
+function toPercent(value: unknown): number {
+    if (typeof value === "number" && Number.isFinite(value)) {
+        return Math.max(0, Math.min(100, value));
+    }
+    return 0;
 }
 
 export default function AdminDashboardPage() {
@@ -33,49 +33,40 @@ export default function AdminDashboardPage() {
     const [searchTerm, setSearchTerm] = useState("");
     const [liveMetrics, setLiveMetrics] = useState({
         backendStatus: "unknown" as "unknown" | "online" | "offline",
-        totalUsers: 0,
-        weeklySessions: 0,
-        totalSessions: 0,
-        systemLogs: 0,
-        storageTracked: 0,
+        passRate3minFlow: 0,
+        passRate5turnDefense: 0,
+        passRate4stepStructure: 0,
+        nextDayRetryRate: 0,
     });
 
     useEffect(() => {
         let cancelled = false;
 
         const loadLiveMetrics = async () => {
-            const [healthResult, dashboardResult, usersResult, logsResult, storageResult] = await Promise.allSettled([
+            const [healthResult, dashboardResult] = await Promise.allSettled([
                 api.internal.health(),
                 api.analyticsOpen.getDashboard({ days: 7 }),
-                api.admin.getUsers({ page: 1, page_size: 1 }),
-                api.adminTools.getSystemLogs({ page: 1, page_size: 1 }),
-                api.analyticsOpen.getStorageStats(),
             ]);
 
             if (cancelled) return;
 
+            const effect = (
+                dashboardResult.status === "fulfilled"
+                    ? dashboardResult.value.effectiveness
+                    : undefined
+            ) || {
+                pass_rate_3min_flow: 0,
+                pass_rate_5turn_defense: 0,
+                pass_rate_4step_structure: 0,
+                next_day_retry_rate: 0,
+            };
+
             const next = {
                 backendStatus: healthResult.status === "fulfilled" ? "online" as const : "offline" as const,
-                totalUsers:
-                    usersResult.status === "fulfilled"
-                        ? Number(usersResult.value.total || 0)
-                        : 0,
-                weeklySessions:
-                    dashboardResult.status === "fulfilled"
-                        ? Number(dashboardResult.value.total_sessions || 0)
-                        : 0,
-                totalSessions:
-                    dashboardResult.status === "fulfilled"
-                        ? Number(dashboardResult.value.completed_sessions || 0)
-                        : 0,
-                systemLogs:
-                    logsResult.status === "fulfilled"
-                        ? Number(extractNumberField(logsResult.value, "total") || 0)
-                        : 0,
-                storageTracked:
-                    storageResult.status === "fulfilled"
-                        ? Number(extractNumberField(storageResult.value, "total_files") || extractNumberField(storageResult.value, "total_records") || 0)
-                        : 0,
+                passRate3minFlow: toPercent(effect.pass_rate_3min_flow),
+                passRate5turnDefense: toPercent(effect.pass_rate_5turn_defense),
+                passRate4stepStructure: toPercent(effect.pass_rate_4step_structure),
+                nextDayRetryRate: toPercent(effect.next_day_retry_rate),
             };
 
             setLiveMetrics(next);
@@ -145,31 +136,27 @@ export default function AdminDashboardPage() {
 
             <GlassCard className="p-5 border border-blue-100/60 bg-blue-50/40">
                 <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
-                    <h2 className="text-sm font-bold text-slate-800 uppercase tracking-wider">实时系统快照</h2>
+                    <h2 className="text-sm font-bold text-slate-800 uppercase tracking-wider">训练效果核心看板（近7天）</h2>
                     <Badge variant={liveMetrics.backendStatus === "online" ? "green" : liveMetrics.backendStatus === "offline" ? "red" : "secondary"}>
                         {liveMetrics.backendStatus === "online" ? "后端在线" : liveMetrics.backendStatus === "offline" ? "后端离线" : "状态未知"}
                     </Badge>
                 </div>
-                <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                     <div>
-                        <div className="text-xs text-slate-500">注册用户</div>
-                        <div className="text-xl font-black text-slate-900 mt-1">{liveMetrics.totalUsers}</div>
+                        <div className="text-xs text-slate-500">3分钟连续表达通过率</div>
+                        <div className="text-xl font-black text-slate-900 mt-1">{liveMetrics.passRate3minFlow.toFixed(1)}%</div>
                     </div>
                     <div>
-                        <div className="text-xs text-slate-500">近7天会话</div>
-                        <div className="text-xl font-black text-slate-900 mt-1">{liveMetrics.weeklySessions}</div>
+                        <div className="text-xs text-slate-500">5轮追问稳定通过率</div>
+                        <div className="text-xl font-black text-slate-900 mt-1">{liveMetrics.passRate5turnDefense.toFixed(1)}%</div>
                     </div>
                     <div>
-                        <div className="text-xs text-slate-500">完成会话</div>
-                        <div className="text-xl font-black text-slate-900 mt-1">{liveMetrics.totalSessions}</div>
+                        <div className="text-xs text-slate-500">四段结构完整率</div>
+                        <div className="text-xl font-black text-slate-900 mt-1">{liveMetrics.passRate4stepStructure.toFixed(1)}%</div>
                     </div>
                     <div>
-                        <div className="text-xs text-slate-500">系统日志数</div>
-                        <div className="text-xl font-black text-slate-900 mt-1">{liveMetrics.systemLogs}</div>
-                    </div>
-                    <div>
-                        <div className="text-xs text-slate-500">存储记录</div>
-                        <div className="text-xl font-black text-slate-900 mt-1">{liveMetrics.storageTracked}</div>
+                        <div className="text-xs text-slate-500">次日复练率</div>
+                        <div className="text-xl font-black text-slate-900 mt-1">{liveMetrics.nextDayRetryRate.toFixed(1)}%</div>
                     </div>
                 </div>
             </GlassCard>
@@ -622,5 +609,3 @@ export default function AdminDashboardPage() {
         </div>
     )
 }
-
-

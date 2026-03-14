@@ -22,6 +22,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from common.ai.config_manager import get_config_manager
 from common.ai.encryption import decrypt_api_key, encrypt_api_key, mask_api_key
 from common.ai.models import ModelConfig, ModelProvider, ModelType
+from common.api.server_error import build_server_error
 from common.ai.schemas import (
     CreateModelConfigRequest,
     ModelConfigCreateResponse,
@@ -1000,14 +1001,8 @@ async def preview_tts(
         )
 
     except (ConnectionError, TimeoutError, ValueError, RuntimeError, OSError) as e:
-        logger.error(f"TTS preview failed: {e}")
-        # Return standard error response format
-        return JSONResponse(
-            status_code=500,
-            content={
-                "success": False,
-                "error": "[TTS_PREVIEW_FAILED]",
-                "message": f"TTS preview failed: {str(e)}",
-                "trace_id": get_trace_id()
-            }
+        return build_server_error(
+            "[TTS_PREVIEW_FAILED]",
+            message=f"TTS preview failed: {str(e)}",
+            exc=e,
         )

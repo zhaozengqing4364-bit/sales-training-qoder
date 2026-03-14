@@ -7,13 +7,14 @@ Manages:
 """
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from common.api.server_error import build_server_error
 from common.auth.service import get_current_admin_user
 from common.db.models import User
 from common.db.session import get_db
@@ -24,11 +25,15 @@ logger = get_logger(__name__)
 
 
 class RuntimeProfilePayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     name: str = Field(..., max_length=100)
     description: str | None = Field(None, max_length=500)
     is_default: bool = False
     is_active: bool = True
-    voice_mode: str = Field(default="stepfun_realtime")
+    voice_mode: Literal["legacy", "stepfun_realtime"] = Field(
+        default="stepfun_realtime"
+    )
     model_name: str = Field(default="step-audio-2", max_length=100)
     voice_name: str = Field(default="qingchunshaonv", max_length=100)
     temperature: float = Field(default=0.7, ge=0, le=2)
@@ -36,16 +41,17 @@ class RuntimeProfilePayload(BaseModel):
     output_audio_format: str = Field(default="pcm16", max_length=20)
     output_sample_rate: int = Field(default=24000, ge=8000, le=48000)
     turn_detection: str | None = Field(default=None)
-    system_instruction_template: str | None = None
     tool_policy: dict[str, Any] = Field(default_factory=dict)
 
 
 class RuntimeProfileUpdatePayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     name: str | None = Field(default=None, max_length=100)
     description: str | None = Field(default=None, max_length=500)
     is_default: bool | None = None
     is_active: bool | None = None
-    voice_mode: str | None = None
+    voice_mode: Literal["legacy", "stepfun_realtime"] | None = None
     model_name: str | None = Field(default=None, max_length=100)
     voice_name: str | None = Field(default=None, max_length=100)
     temperature: float | None = Field(default=None, ge=0, le=2)
@@ -53,18 +59,18 @@ class RuntimeProfileUpdatePayload(BaseModel):
     output_audio_format: str | None = Field(default=None, max_length=20)
     output_sample_rate: int | None = Field(default=None, ge=8000, le=48000)
     turn_detection: str | None = Field(default=None)
-    system_instruction_template: str | None = None
     tool_policy: dict[str, Any] | None = None
 
 
 class AgentVoicePolicyPayload(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     enabled: bool = True
     runtime_profile_id: str | None = None
-    voice_mode_override: str | None = None
+    voice_mode_override: Literal["legacy", "stepfun_realtime"] | None = None
     model_override: str | None = None
     voice_override: str | None = None
     temperature_override: float | None = Field(default=None, ge=0, le=2)
-    instructions_override: str | None = None
     tool_policy_override: dict[str, Any] = Field(default_factory=dict)
 
 
@@ -98,13 +104,19 @@ async def create_runtime_profile(
     del current_user
     service = VoiceRuntimePolicyService(db)
     try:
-        created = await service.create_profile(payload.model_dump())
+        created = await service.create_profile(payload.model_dump(exclude_unset=True))
         await db.commit()
         return _success(created)
+    except ValueError as exc:
+        await db.rollback()
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     except SQLAlchemyError as exc:
         await db.rollback()
-        logger.error(f"Failed to create runtime profile: {exc}")
-        raise HTTPException(status_code=500, detail="[VOICE_RUNTIME_PROFILE_CREATE_FAILED]") from exc
+        return build_server_error(
+            "[VOICE_RUNTIME_PROFILE_CREATE_FAILED]",
+            message="Failed to create runtime profile",
+            exc=exc,
+        )
 
 
 @router.put("/profiles/{profile_id}")
@@ -124,10 +136,17 @@ async def update_runtime_profile(
         return _success(updated)
     except HTTPException:
         raise
+    except ValueError as exc:
+        await db.rollback()
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     except SQLAlchemyError as exc:
         await db.rollback()
-        logger.error(f"Failed to update runtime profile: {exc}")
-        raise HTTPException(status_code=500, detail="[VOICE_RUNTIME_PROFILE_UPDATE_FAILED]") from exc
+        return build_server_error(
+            "[VOICE_RUNTIME_PROFILE_UPDATE_FAILED]",
+            message="Failed to update runtime profile",
+            exc=exc,
+            profile_id=profile_id,
+        )
 
 
 @router.delete("/profiles/{profile_id}")
@@ -148,8 +167,12 @@ async def delete_runtime_profile(
         raise
     except SQLAlchemyError as exc:
         await db.rollback()
-        logger.error(f"Failed to delete runtime profile: {exc}")
-        raise HTTPException(status_code=500, detail="[VOICE_RUNTIME_PROFILE_DELETE_FAILED]") from exc
+        return build_server_error(
+            "[VOICE_RUNTIME_PROFILE_DELETE_FAILED]",
+            message="Failed to delete runtime profile",
+            exc=exc,
+            profile_id=profile_id,
+        )
 
 
 @router.get("/agents/{agent_id}/policy")
@@ -179,19 +202,23 @@ async def upsert_agent_voice_policy(
         await db.rollback()
         message = str(exc)
         if "not found" in message.lower():
-            raise HTTPException(status_code=404, detail=f"[{message}]") from exc
-        raise HTTPException(status_code=400, detail=f"[{message}]") from exc
+            raise HTTPException(status_code=404, detail=message) from exc
+        raise HTTPException(status_code=400, detail=message) from exc
     except SQLAlchemyError as exc:
         await db.rollback()
-        logger.error(f"Failed to upsert agent voice policy: {exc}")
-        raise HTTPException(status_code=500, detail="[AGENT_VOICE_POLICY_UPSERT_FAILED]") from exc
+        return build_server_error(
+            "[AGENT_VOICE_POLICY_UPSERT_FAILED]",
+            message="Failed to upsert agent voice policy",
+            exc=exc,
+            agent_id=agent_id,
+        )
 
 
 @router.get("/agents/{agent_id}/effective")
 async def preview_effective_agent_policy(
     agent_id: str,
     persona_id: str | None = Query(None),
-    voice_mode_override: str | None = Query(None),
+    voice_mode_override: Literal["legacy", "stepfun_realtime"] | None = Query(None),
     runtime_profile_id: str | None = Query(None),
     db: AsyncSession = Depends(get_db),
 ):

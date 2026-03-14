@@ -11,8 +11,9 @@ References:
 
 from __future__ import annotations
 
+import builtins
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, cast
 
 from sqlalchemy import func, select
 from sqlalchemy.exc import SQLAlchemyError
@@ -33,6 +34,7 @@ from ..schemas import (
 logger = get_logger(__name__)
 
 SUPPORTED_AGENT_CATEGORIES = {"sales", "presentation"}
+DEPRECATED_AGENT_WRITE_FIELDS = ("system_prompt", "default_knowledge_base_ids")
 
 
 class AgentService:
@@ -57,16 +59,22 @@ class AgentService:
         try:
             if data.category not in SUPPORTED_AGENT_CATEGORIES:
                 return Result.fail("[AGENT_CATEGORY_RESTRICTED]")
+            if data.system_prompt is not None:
+                return Result.fail("[FIELD_DEPRECATED_PERSONA_CENTERED] system_prompt")
+            if data.default_knowledge_base_ids:
+                return Result.fail(
+                    "[FIELD_DEPRECATED_PERSONA_CENTERED] default_knowledge_base_ids"
+                )
 
             agent = Agent(
                 name=data.name,
                 description=data.description,
                 icon=data.icon,
                 category=data.category,
-                system_prompt=data.system_prompt,
+                system_prompt=None,
                 welcome_message=data.welcome_message,
                 capabilities_config=data.capabilities_config or {},
-                default_knowledge_base_ids=data.default_knowledge_base_ids or [],
+                default_knowledge_base_ids=[],
                 status=AgentStatus.DRAFT.value,
                 created_by=user_id,
             )
@@ -121,14 +129,28 @@ class AgentService:
         result = await self.db.execute(stmt)
         agents = result.scalars().all()
 
+        # Batch load persona counts to avoid N+1 queries
+        agent_ids = [str(agent.id) for agent in agents]
+        persona_count_map: dict[str, int] = {}
+        if agent_ids:
+            persona_counts_stmt = (
+                select(
+                    AgentPersona.agent_id,
+                    func.count().label("persona_count"),
+                )
+                .where(AgentPersona.agent_id.in_(agent_ids))
+                .group_by(AgentPersona.agent_id)
+            )
+            persona_counts_result = await self.db.execute(persona_counts_stmt)
+            persona_count_map = {
+                str(row.agent_id): int(row.persona_count or 0)
+                for row in persona_counts_result
+            }
+
         # Build list items with persona count
         items = []
         for agent in agents:
-            # Count associated personas
-            persona_count_stmt = select(func.count()).where(
-                AgentPersona.agent_id == agent.id
-            )
-            persona_count = (await self.db.execute(persona_count_stmt)).scalar() or 0
+            persona_count = persona_count_map.get(str(agent.id), 0)
 
             items.append(
                 AgentListItem(
@@ -168,7 +190,11 @@ class AgentService:
             return Result.ok(agent)
 
         # Build user response (without system_prompt)
-        capabilities = self._extract_capability_names(agent.capabilities_config)
+        capabilities_config = cast(
+            dict[str, Any] | None,
+            getattr(agent, "capabilities_config", None),
+        )
+        capabilities = self._extract_capability_names(capabilities_config)
         user_response = AgentUserResponse(
             id=agent.id,
             name=agent.name,
@@ -202,12 +228,17 @@ class AgentService:
             and update_data["category"] not in SUPPORTED_AGENT_CATEGORIES
         ):
             return Result.fail("[AGENT_CATEGORY_RESTRICTED]")
+        for deprecated_field in DEPRECATED_AGENT_WRITE_FIELDS:
+            if deprecated_field in update_data:
+                return Result.fail(
+                    f"[FIELD_DEPRECATED_PERSONA_CENTERED] {deprecated_field}"
+                )
 
         for field, value in update_data.items():
             if value is not None:
                 setattr(agent, field, value)
 
-        agent.updated_at = datetime.now(UTC)
+        setattr(agent, "updated_at", datetime.now(UTC))
 
         await self.db.flush()
         await self.db.refresh(agent)
@@ -261,9 +292,9 @@ class AgentService:
         if agent.status == AgentStatus.PUBLISHED.value:
             return Result.fail("[AGENT_ALREADY_PUBLISHED]")
 
-        agent.status = AgentStatus.PUBLISHED.value
-        agent.published_at = datetime.now(UTC)
-        agent.updated_at = datetime.now(UTC)
+        setattr(agent, "status", AgentStatus.PUBLISHED.value)
+        setattr(agent, "published_at", datetime.now(UTC))
+        setattr(agent, "updated_at", datetime.now(UTC))
 
         await self.db.flush()
         await self.db.refresh(agent)
@@ -284,8 +315,8 @@ class AgentService:
         if not agent:
             return Result.fail("[AGENT_NOT_FOUND]")
 
-        agent.status = AgentStatus.ARCHIVED.value
-        agent.updated_at = datetime.now(UTC)
+        setattr(agent, "status", AgentStatus.ARCHIVED.value)
+        setattr(agent, "updated_at", datetime.now(UTC))
 
         await self.db.flush()
         await self.db.refresh(agent)
@@ -309,9 +340,9 @@ class AgentService:
         if agent.status == AgentStatus.DRAFT.value:
             return Result.fail("[AGENT_ALREADY_DRAFT]")
 
-        agent.status = AgentStatus.DRAFT.value
-        agent.published_at = None
-        agent.updated_at = datetime.now(UTC)
+        setattr(agent, "status", AgentStatus.DRAFT.value)
+        setattr(agent, "published_at", None)
+        setattr(agent, "updated_at", datetime.now(UTC))
 
         await self.db.flush()
         await self.db.refresh(agent)
@@ -363,7 +394,7 @@ class AgentService:
 
     def _extract_capability_names(
         self, capabilities_config: dict[str, Any] | None
-    ) -> list[str]:
+    ) -> builtins.list[str]:
         """Extract enabled capability display names from config"""
         if not capabilities_config:
             return []
@@ -379,7 +410,7 @@ class AgentService:
             "knowledge_retrieval": "知识库检索",
         }
 
-        enabled = []
+        enabled: builtins.list[str] = []
         for cap_id, config in capabilities_config.items():
             if isinstance(config, dict) and config.get("enabled"):
                 name = capability_names.get(cap_id, cap_id)

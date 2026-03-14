@@ -12,6 +12,7 @@ from dotenv import load_dotenv
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, Query, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.routing import APIRoute
+from jose import JWTError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -23,6 +24,7 @@ from admin.api.model_configs import router as model_configs_router
 from admin.api.system_logs import router as admin_system_logs_router
 from admin.api.training_records import router as admin_training_records_router
 from admin.api.analytics import router as admin_analytics_router
+from admin.api.interventions import router as admin_interventions_router
 from admin.api.voice_runtime import router as voice_runtime_router
 from admin.api.presentation_ai import router as presentation_ai_router
 from admin.api.release_verification import router as release_verification_router
@@ -56,6 +58,7 @@ from common.error_handling.middleware import (
     global_exception_handler,
     http_exception_handler,
 )
+from common.knowledge.kb_lock_guard import is_kb_lock_unbound_snapshot
 
 # Knowledge API
 from common.knowledge.api import admin_router as knowledge_admin_router
@@ -85,7 +88,19 @@ DEV_CORS_ORIGINS = [
     "http://127.0.0.1:3445",
     "http://127.0.0.1:3000",
     "http://127.0.0.1:5173",
+    "http://0.0.0.0:3445",
+    "http://[::1]:3445",
 ]
+
+DEV_CORS_ALLOW_ORIGIN_REGEX = (
+    r"^https?://("
+    r"localhost|127\.0\.0\.1|0\.0\.0\.0|\[::1\]|"
+    r"10\.\d{1,3}\.\d{1,3}\.\d{1,3}|"
+    r"192\.168\.\d{1,3}\.\d{1,3}|"
+    r"172\.(1[6-9]|2\d|3[0-1])\.\d{1,3}\.\d{1,3}|"
+    r"[a-zA-Z0-9-]+\.local"
+    r")(:\d+)?$"
+)
 
 
 def _resolve_cors_origins() -> list[str]:
@@ -103,6 +118,18 @@ def _resolve_cors_origins() -> list[str]:
             resolved_origins.append(origin)
 
     return resolved_origins
+
+
+def _resolve_cors_origin_regex() -> str | None:
+    configured_regex = os.getenv("CORS_ALLOW_ORIGIN_REGEX", "").strip()
+    if configured_regex:
+        return configured_regex
+
+    env = os.getenv("ENVIRONMENT", "development").strip().lower()
+    if env == "development":
+        return DEV_CORS_ALLOW_ORIGIN_REGEX
+
+    return None
 
 
 @asynccontextmanager
@@ -131,6 +158,17 @@ async def lifespan(app: FastAPI):
     await init_db()
 
     auth_config = get_auth_config_diagnostics()
+    if env != "development":
+        if not auth_config["user_overrides_valid"]:
+            raise RuntimeError(
+                "AUTH_USER_PASSWORDS_JSON is invalid in non-development environment"
+            )
+        if not auth_config["credentials_ready"]:
+            raise RuntimeError(
+                "Auth credentials are not configured. Set AUTH_SHARED_PASSWORD "
+                "or AUTH_USER_PASSWORDS_JSON before startup."
+            )
+
     if auth_config["credentials_ready"] and auth_config["user_overrides_valid"]:
         logger.info(
             "Auth credentials configured",
@@ -226,6 +264,7 @@ Real-time voice-based AI training platform with Agent Platform support.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_resolve_cors_origins(),
+    allow_origin_regex=_resolve_cors_origin_regex(),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -394,6 +433,12 @@ app.include_router(
     dependencies=[Depends(get_current_admin_user)],
 )
 app.include_router(
+    admin_interventions_router,
+    prefix="/api/v1",
+    tags=["admin-interventions"],
+    dependencies=[Depends(get_current_admin_user)],
+)
+app.include_router(
     admin_system_logs_router,
     prefix="/api/v1",
     tags=["admin-system-logs"],
@@ -483,6 +528,18 @@ async def _handle_presentation_websocket(
         await websocket.close(code=4409, reason="SESSION_SCENARIO_MISMATCH")
         return
 
+    kb_lock_unbound = await _is_presentation_kb_lock_unbound_session(
+        resolved_session_id
+    )
+    if kb_lock_unbound:
+        logger.warning(
+            "Rejected /ws/presentation connection due to KB lock without bound knowledge base",
+            session_id=resolved_session_id,
+        )
+        await websocket.accept()
+        await websocket.close(code=4410, reason="KB_LOCK_UNBOUND")
+        return
+
     auth_header = websocket.headers.get("authorization", "")
     if auth_header.lower().startswith("bearer "):
         token = auth_header[7:].strip()
@@ -510,7 +567,11 @@ async def _handle_presentation_websocket(
             user_id = payload["sub"]
         elif payload and isinstance(payload.get("user_id"), str):
             user_id = payload["user_id"]
-    except (RuntimeError, ValueError, OSError):
+    except (JWTError, RuntimeError, ValueError, OSError):
+        logger.warning(
+            "Failed to resolve websocket user from token",
+            session_id=resolved_session_id,
+        )
         user_id = None
 
     await session_manager.register_session(
@@ -590,6 +651,25 @@ async def _resolve_presentation_runtime(
             f"Failed to resolve presentation runtime for {session_id}: {exc}"
         )
     return None, default_mode
+
+
+async def _is_presentation_kb_lock_unbound_session(session_id: str) -> bool:
+    try:
+        async with AsyncSessionLocal() as db:
+            result = await db.execute(
+                select(PracticeSession.voice_policy_snapshot).where(
+                    PracticeSession.session_id == session_id
+                )
+            )
+            snapshot = result.scalar_one_or_none()
+            return is_kb_lock_unbound_snapshot(snapshot)
+    except (RuntimeError, ValueError, OSError) as exc:
+        logger.warning(
+            "Failed to evaluate presentation KB lock binding before websocket connect",
+            session_id=session_id,
+            error=str(exc),
+        )
+        return False
 
 
 app.include_router(sales_ws_router, tags=["sales-websocket"])

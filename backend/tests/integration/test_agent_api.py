@@ -128,14 +128,12 @@ async def sample_agent_data():
         "description": "帮助销售人员提升沟通技巧的 AI 教练",
         "icon": "🎯",
         "category": "sales",
-        "system_prompt": "你是一位资深销售教练...",
         "welcome_message": "你好！准备好练习了吗？",
         "capabilities_config": {
             "asr": {"enabled": True, "mode": "manual"},
             "tts": {"enabled": True, "voice": "zh-CN-YunxiNeural"},
             "fuzzy_detection": {"enabled": True}
-        },
-        "default_knowledge_base_ids": ["kb-001"]
+        }
     }
 
 
@@ -253,8 +251,20 @@ class TestAdminAgentAPI:
         assert response.status_code == 200
         data = response.json()
         assert data["success"] is True
-        assert data["data"]["system_prompt"] == "你是一位资深销售教练..."
+        assert data["data"]["system_prompt"] is None
         assert data["data"]["capabilities_config"]["asr"]["enabled"] is True
+
+    async def test_create_agent_rejects_deprecated_fields(
+        self, async_client, auth_headers, sample_agent_data
+    ):
+        response = await async_client.post(
+            "/api/v1/admin/agents",
+            json={**sample_agent_data, "default_knowledge_base_ids": ["kb-001"]},
+            headers=auth_headers,
+        )
+
+        assert response.status_code == 400
+        assert "[FIELD_DEPRECATED_PERSONA_CENTERED]" in response.text
     
     async def test_update_agent(self, async_client, auth_headers, sample_agent_data):
         """Should update agent partially - R1.4"""

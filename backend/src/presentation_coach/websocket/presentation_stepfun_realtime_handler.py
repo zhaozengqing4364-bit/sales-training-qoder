@@ -18,6 +18,7 @@ from agent.capabilities.fuzzy_detection import FuzzyDetectionCapability
 from agent.capabilities.realtime_scoring import RealtimeScoringCapability
 from agent.capabilities.sales_stage import SalesStageCapability
 from agent.models import Agent, Persona
+from agent.services.persona_policy import normalize_persona_policy
 from common.db.models import PracticeSession
 from common.db.session import AsyncSessionLocal
 from common.monitoring.logger import get_logger
@@ -383,6 +384,7 @@ class PresentationStepFunRealtimeHandler(StepFunRealtimeHandler):
                             PracticeSession.scenario_id,
                             PracticeSession.agent_id,
                             PracticeSession.persona_id,
+                            PracticeSession.voice_policy_snapshot,
                         ).where(PracticeSession.session_id == self.session_id)
                     )
                     session_identity = session_result.first()
@@ -390,31 +392,50 @@ class PresentationStepFunRealtimeHandler(StepFunRealtimeHandler):
                         scenario_id = str(session_identity[0]) if session_identity[0] else None
                         agent_id = str(session_identity[1]) if session_identity[1] else None
                         persona_id = str(session_identity[2]) if session_identity[2] else None
+                        session_snapshot = (
+                            dict(session_identity[3])
+                            if isinstance(session_identity[3], dict)
+                            else None
+                        )
+                        if session_snapshot:
+                            snapshot_instructions = str(
+                                session_snapshot.get("instructions") or ""
+                            ).strip()
+                            if snapshot_instructions:
+                                context.agent_system_prompt = snapshot_instructions
 
                         if agent_id:
                             agent_result = await db.execute(
-                                select(Agent.name, Agent.system_prompt).where(Agent.id == agent_id)
+                                select(Agent.name).where(Agent.id == agent_id)
                             )
                             agent = agent_result.first()
                             if agent:
                                 context.agent_name = agent[0]
-                                context.agent_system_prompt = agent[1]
 
                         if persona_id:
                             persona_result = await db.execute(
                                 select(
                                     Persona.name,
+                                    Persona.persona_policy,
                                     Persona.system_prompt,
+                                    Persona.knowledge_base_ids,
                                     Persona.traits,
                                 ).where(Persona.id == persona_id)
                             )
                             persona = persona_result.first()
                             if persona:
                                 context.persona_name = persona[0]
-                                context.persona_system_prompt = persona[1]
+                                resolved_persona_policy = normalize_persona_policy(
+                                    dict(persona[1]) if isinstance(persona[1], dict) else None,
+                                    fallback_system_prompt=str(persona[2]) if persona[2] else None,
+                                    fallback_kb_ids=list(persona[3]) if isinstance(persona[3], list) else None,
+                                )
+                                context.persona_system_prompt = str(
+                                    resolved_persona_policy.get("system_prompt") or ""
+                                )
                                 context.persona_traits = (
-                                    dict(persona[2])
-                                    if isinstance(persona[2], dict)
+                                    dict(persona[4])
+                                    if isinstance(persona[4], dict)
                                     else {}
                                 )
 

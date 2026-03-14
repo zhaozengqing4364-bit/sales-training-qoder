@@ -13,9 +13,11 @@ from __future__ import annotations
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.exc import SQLAlchemyError
 
+from common.api.server_error import build_server_error
 from common.auth.service import get_current_admin_user, get_current_user
 from common.db.models import User
 from common.db.session import get_db
@@ -43,14 +45,19 @@ admin_router = APIRouter(prefix="/admin/agents", tags=["admin-agents"])
 user_router = APIRouter(prefix="/agents", tags=["agents"])
 
 
-async def commit_or_500(db: AsyncSession, action: str) -> None:
-    """Persist transaction and convert DB failures to HTTP 500."""
+async def commit_or_500(db: AsyncSession, action: str) -> JSONResponse | None:
+    """Persist transaction and return normalized 500 response on failure."""
     try:
         await db.commit()
     except SQLAlchemyError as exc:
         await db.rollback()
-        logger.error(f"Database commit failed during {action}: {exc}")
-        raise HTTPException(status_code=500, detail="[DB_COMMIT_FAILED]") from exc
+        return build_server_error(
+            "[DB_COMMIT_FAILED]",
+            message="Database commit failed",
+            exc=exc,
+            action=action,
+        )
+    return None
 
 
 # =============================================================================
@@ -76,7 +83,9 @@ async def create_agent(
         raise HTTPException(status_code=400, detail=result.fallback)
     
     agent = result.value
-    await commit_or_500(db, "create_agent")
+    commit_error = await commit_or_500(db, "create_agent")
+    if commit_error is not None:
+        return commit_error
     return {
         "success": True,
         "data": AgentCreateResponse(
@@ -164,10 +173,14 @@ async def update_agent(
     if not result.is_success:
         if result.fallback == "[AGENT_CATEGORY_RESTRICTED]":
             raise HTTPException(status_code=400, detail=result.fallback)
+        if str(result.fallback).startswith("[FIELD_DEPRECATED_PERSONA_CENTERED]"):
+            raise HTTPException(status_code=400, detail=result.fallback)
         raise HTTPException(status_code=404, detail=result.fallback)
     
     agent = result.value
-    await commit_or_500(db, "update_agent")
+    commit_error = await commit_or_500(db, "update_agent")
+    if commit_error is not None:
+        return commit_error
     return {
         "success": True,
         "data": {
@@ -200,7 +213,9 @@ async def delete_agent(
             )
         raise HTTPException(status_code=404, detail=result.fallback)
     
-    await commit_or_500(db, "delete_agent")
+    commit_error = await commit_or_500(db, "delete_agent")
+    if commit_error is not None:
+        return commit_error
     return {
         "success": True,
         "data": {"deleted": True}
@@ -227,7 +242,9 @@ async def publish_agent(
         raise HTTPException(status_code=404, detail=result.fallback)
     
     agent = result.value
-    await commit_or_500(db, "publish_agent")
+    commit_error = await commit_or_500(db, "publish_agent")
+    if commit_error is not None:
+        return commit_error
     return {
         "success": True,
         "data": AgentPublishResponse(
@@ -256,7 +273,9 @@ async def archive_agent(
         raise HTTPException(status_code=404, detail=result.fallback)
     
     agent = result.value
-    await commit_or_500(db, "archive_agent")
+    commit_error = await commit_or_500(db, "archive_agent")
+    if commit_error is not None:
+        return commit_error
     return {
         "success": True,
         "data": {
@@ -284,7 +303,9 @@ async def unpublish_agent(
         raise HTTPException(status_code=404, detail=result.fallback)
     
     agent = result.value
-    await commit_or_500(db, "unpublish_agent")
+    commit_error = await commit_or_500(db, "unpublish_agent")
+    if commit_error is not None:
+        return commit_error
     return {
         "success": True,
         "data": {

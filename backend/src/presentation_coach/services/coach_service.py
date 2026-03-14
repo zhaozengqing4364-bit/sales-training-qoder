@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from sqlalchemy import func, select, update
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.db.models import (
@@ -54,11 +55,27 @@ class PresentationCoachService:
                 return Result.fail("Presentation not found or not ready")
 
             # Get scenario ID
-            result = await self.db.execute(
-                select(Scenario).where(
+            active_count_result = await self.db.execute(
+                select(func.count(Scenario.scenario_id)).where(
                     Scenario.scenario_type == "presentation",
                     Scenario.is_active.is_(True),
                 )
+            )
+            active_count = int(active_count_result.scalar() or 0)
+            if active_count > 1:
+                logger.warning(
+                    "Multiple active presentation scenarios detected; selecting latest",
+                    active_count=active_count,
+                )
+
+            result = await self.db.execute(
+                select(Scenario)
+                .where(
+                    Scenario.scenario_type == "presentation",
+                    Scenario.is_active.is_(True),
+                )
+                .order_by(Scenario.created_at.desc(), Scenario.scenario_id.desc())
+                .limit(1)
             )
             scenario = result.scalar_one_or_none()
 
@@ -91,7 +108,7 @@ class PresentationCoachService:
             logger.info(f"Created session: {session.session_id}")
             return Result.ok(session)
 
-        except (RuntimeError, ValueError, OSError) as e:
+        except (SQLAlchemyError, RuntimeError, ValueError, OSError) as e:
             logger.error(f"Failed to create session: {str(e)}")
             await self.db.rollback()
             return Result.fail("[USE_KEYWORD_SEARCH]")
@@ -114,7 +131,12 @@ class PresentationCoachService:
             await self.db.rollback()
             return Result.fail("[START_FAILED]")
 
-    async def end_session(self, session_id: str) -> Result[SessionDetail]:
+    async def end_session(
+        self,
+        session_id: str,
+        *,
+        commit: bool = True,
+    ) -> Result[SessionDetail]:
         """End session and generate report"""
         try:
             session_result = await self.db.execute(
@@ -137,10 +159,13 @@ class PresentationCoachService:
                     int((session.end_time - session.start_time).total_seconds()),
                 )
 
-            await self.db.commit()
+            if commit:
+                await self.db.commit()
+            else:
+                await self.db.flush()
 
             # Generate scores
-            await self._calculate_scores(session)
+            await self._calculate_scores(session, commit=commit)
             await self.db.refresh(session)
 
             return Result.ok(session)
@@ -261,7 +286,7 @@ class PresentationCoachService:
             await self.db.rollback()
             return Result.fail("[LOG_FAILED]")
 
-    async def _calculate_scores(self, session: PracticeSession):
+    async def _calculate_scores(self, session: PracticeSession, *, commit: bool = True):
         """Calculate session scores (logic, accuracy, completeness)"""
         # Get interruption events
         result = await self.db.execute(
@@ -301,4 +326,7 @@ class PresentationCoachService:
         # Mark as completed
         session.status = "completed"
 
-        await self.db.commit()
+        if commit:
+            await self.db.commit()
+        else:
+            await self.db.flush()

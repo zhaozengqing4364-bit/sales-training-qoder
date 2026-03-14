@@ -1,29 +1,25 @@
 """
-Sales Bot WebSocket Router
+Sales Bot WebSocket Router.
 
-Routes WebSocket connections to appropriate handlers based on parameters.
-Supports both SimpleSalesHandler (backward compatible) and EnhancedSalesHandler
-(with Agent Platform integration).
-
-References:
-- Requirements: R11 (WebSocket Enhancement)
-- Design: Section 20 (WebSocket Router)
-- API Contract: docs/api-contract/websocket.md
+Routes WebSocket connections for persona-centered sales sessions.
+Legacy simple-handler mode is disabled to prevent policy bypass.
 """
 import os
 import uuid
 from typing import Optional
 
 from fastapi import APIRouter, Query, WebSocket
+from jose import JWTError
 from sqlalchemy import select
 
 from common.db.models import PracticeSession, Scenario
 from common.db.session import AsyncSessionLocal
+from common.knowledge.kb_lock_guard import is_kb_lock_unbound_snapshot
 from common.monitoring.logger import get_logger
 from common.websocket.session_manager import get_session_manager
+from sales_bot.services.voice_runtime_policy import VoiceRuntimePolicyService
 
-from .enhanced_handler import EnhancedSalesHandler, create_enhanced_sales_handler
-from .simple_handler import SimpleSalesHandler, create_sales_handler
+from .enhanced_handler import create_enhanced_sales_handler
 from .stepfun_realtime_handler import create_stepfun_realtime_handler
 
 logger = get_logger(__name__)
@@ -97,15 +93,9 @@ async def _handle_sales_websocket(
     """
     WebSocket endpoint for sales practice.
 
-    Supports two modes:
-    1. Simple mode (backward compatible): No agent_id/persona_id
-       - Uses SimpleSalesHandler with hardcoded personas
-       - For existing integrations
-
-    2. Enhanced mode: With agent_id and persona_id
-       - Uses EnhancedSalesHandler with Agent Platform integration
-       - Supports capability modules (fuzzy detection, sales stage, scoring)
-       - Stores messages for replay
+    Supports:
+    1. Realtime mode: With persisted session voice_mode = stepfun_realtime
+    2. Enhanced mode: With persisted Agent + Persona runtime lock
 
     Query Parameters:
         session_id: Practice session UUID (path parameter)
@@ -179,7 +169,17 @@ async def _handle_sales_websocket(
     resolved_agent_id = persisted_agent_id or agent_id
     resolved_persona_id = persisted_persona_id or persona_id
 
-    use_enhanced = resolved_agent_id is not None and resolved_persona_id is not None
+    if not (resolved_agent_id and resolved_persona_id):
+        logger.warning(
+            "Rejected /ws/sales connection due to missing agent/persona runtime lock",
+            session_id=resolved_session_id,
+            persisted_agent_id=persisted_agent_id,
+            persisted_persona_id=persisted_persona_id,
+        )
+        await websocket.accept()
+        await websocket.close(code=4411, reason="AGENT_PERSONA_REQUIRED")
+        return
+
     auth_token = _resolve_ws_token(websocket, token)
 
     if normalized_voice_mode == "stepfun_realtime":
@@ -188,19 +188,13 @@ async def _handle_sales_websocket(
             session_id=resolved_session_id,
             token=auth_token,
         )
-    elif use_enhanced:
+    else:
         await _handle_enhanced_connection(
             websocket=websocket,
             session_id=resolved_session_id,
             token=auth_token,
             agent_id=resolved_agent_id,
             persona_id=resolved_persona_id,
-        )
-    else:
-        await _handle_simple_connection(
-            websocket=websocket,
-            session_id=resolved_session_id,
-            token=auth_token,
         )
 
 
@@ -265,31 +259,42 @@ async def _resolve_session_runtime(
     return None, default_mode, None, None
 
 
-def _is_kb_lock_unbound_snapshot(snapshot: object) -> bool:
-    if not isinstance(snapshot, dict):
-        return False
-    tool_policy = snapshot.get("tool_policy")
-    if not isinstance(tool_policy, dict):
-        return False
-    if not bool(tool_policy.get("require_kb_grounding", False)):
-        return False
-    knowledge_base_ids = snapshot.get("knowledge_base_ids")
-    if not isinstance(knowledge_base_ids, list):
-        return True
-    return not bool([item for item in knowledge_base_ids if str(item).strip()])
-
-
 async def _is_kb_lock_unbound_session(session_id: str) -> bool:
     try:
         async with AsyncSessionLocal() as db:
             result = await db.execute(
-                select(PracticeSession.voice_policy_snapshot).where(
+                select(PracticeSession).where(
                     PracticeSession.session_id == session_id
                 )
             )
-            snapshot = result.scalar_one_or_none()
-            return _is_kb_lock_unbound_snapshot(snapshot)
-    except (RuntimeError, ValueError, OSError) as exc:
+            session = result.scalar_one_or_none()
+            if not session:
+                return False
+
+            snapshot = (
+                session.voice_policy_snapshot
+                if isinstance(session.voice_policy_snapshot, dict)
+                else None
+            )
+            if snapshot and not is_kb_lock_unbound_snapshot(snapshot):
+                return False
+
+            policy_service = VoiceRuntimePolicyService(db)
+            resolved_policy = await policy_service.resolve_effective_policy(
+                agent_id=session.agent_id,
+                persona_id=session.persona_id,
+                voice_mode_override=session.voice_mode,
+                runtime_profile_override=session.voice_runtime_profile_id,
+            )
+            refreshed_policy = _merge_snapshot_runtime_overlays(
+                resolved_policy=resolved_policy,
+                snapshot=snapshot,
+            )
+            if snapshot != refreshed_policy:
+                session.voice_policy_snapshot = refreshed_policy
+                await db.commit()
+            return is_kb_lock_unbound_snapshot(refreshed_policy)
+    except Exception as exc:  # noqa: BLE001
         logger.warning(
             "Failed to evaluate KB lock binding before websocket connect",
             session_id=session_id,
@@ -298,39 +303,23 @@ async def _is_kb_lock_unbound_session(session_id: str) -> bool:
         return False
 
 
-async def _handle_simple_connection(
-    websocket: WebSocket,
-    session_id: str,
-    token: str,
-):
-    """Handle connection with SimpleSalesHandler (backward compatible)."""
-    logger.info(
-        f"Using SimpleSalesHandler for session {session_id}",
-        session_id=session_id,
-    )
+def _merge_snapshot_runtime_overlays(
+    *,
+    resolved_policy: dict,
+    snapshot: dict | None,
+) -> dict:
+    merged = dict(resolved_policy)
+    if not isinstance(snapshot, dict):
+        return merged
 
-    handler = create_sales_handler()
-
-    # Default persona for backward compatibility
-    handler.set_persona("impatient_ceo")
-
-    # Try to link to existing bot session
-    try:
-        session_uuid = uuid.UUID(session_id)
-        from sales_bot.services.bot_service import sales_bot_service
-
-        if session_uuid in sales_bot_service.active_sessions:
-            handler.set_bot_session(session_uuid)
-    except (ValueError, KeyError):
-        pass
-
-    # Register with SessionManager for timeout/heartbeat tracking
-    session_manager = get_session_manager()
-    await session_manager.register_session(session_id, handler)
-    try:
-        await handler.handle_connection(websocket, session_id, token)
-    finally:
-        await session_manager.unregister_session(session_id)
+    runtime_metrics = snapshot.get("runtime_metrics")
+    if isinstance(runtime_metrics, dict):
+        merged["runtime_metrics"] = runtime_metrics
+    if "agent_persona_override_config" in snapshot:
+        merged["agent_persona_override_config"] = snapshot.get(
+            "agent_persona_override_config"
+        )
+    return merged
 
 
 async def _handle_stepfun_realtime_connection(
@@ -427,7 +416,7 @@ def _extract_user_id_from_token(token: str) -> str | None:
         payload = verify_token(token)
         if payload and "sub" in payload:
             return payload["sub"]
-    except (RuntimeError, ValueError, OSError) as e:
+    except (JWTError, RuntimeError, ValueError, OSError) as e:
         logger.warning(f"Failed to decode token: {e}")
 
     # Only allow fallback in development environment

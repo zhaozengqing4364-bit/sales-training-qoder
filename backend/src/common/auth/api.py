@@ -14,7 +14,7 @@ import os
 from datetime import UTC, datetime
 from typing import Any
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Request, status
 from pydantic import BaseModel, EmailStr
 from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
@@ -182,13 +182,19 @@ async def login(
     """
     try:
         configured_password = _get_auth_shared_password()
-        configured_user_passwords = _get_auth_user_passwords()
+        try:
+            configured_user_passwords = _get_auth_user_passwords()
+        except ValueError:
+            logger.warning(
+                "AUTH_USER_PASSWORDS_JSON is invalid; falling back to shared password"
+            )
+            configured_user_passwords = None
         if configured_password is None and configured_user_passwords is None:
             logger.error("Login rejected: auth credentials are not configured")
             return error_response(
                 "[AUTH_SERVICE_UNAVAILABLE]",
                 "认证服务暂不可用",
-                status_code=503,
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             )
 
         # Find user by email
@@ -241,13 +247,6 @@ async def login(
         logger.info(f"User logged in: {user.user_id}")
         return success_response(login_response.model_dump())
 
-    except ValueError as e:
-        logger.error(f"Login auth config invalid: {str(e)}")
-        return error_response(
-            "[AUTH_SERVICE_UNAVAILABLE]",
-            "认证服务暂不可用",
-            status_code=503,
-        )
     except SQLAlchemyError as e:
         logger.error(f"Login failed: {str(e)}")
         return error_response("[LOGIN_FAILED]", "登录失败，请稍后重试")

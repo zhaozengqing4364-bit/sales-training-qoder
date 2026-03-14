@@ -24,6 +24,7 @@ export interface WSMessage {
     trace_id?: string;
     stream_id?: string;  // TTS流ID，用于识别消息属于哪个流
     request_id?: number;  // 请求ID，用于识别消息属于哪个请求
+    priority?: "high" | "normal"; // 客户端发送优先级（兼容扩展字段）
     data: unknown;
 }
 
@@ -63,6 +64,12 @@ export interface ScoreUpdate {
     dimension_scores: Record<string, number>;
     suggestions: string[];
     stage_name?: string;
+}
+
+export interface ActionCard {
+    issue: string;
+    replacement: string;
+    next_turn_rule: string;
 }
 
 export interface SlideUpdate {
@@ -131,6 +138,7 @@ export interface PracticeState {
     fuzzyDetections: FuzzyDetection[];
     salesStage: SalesStage | null;
     scores: ScoreUpdate | null;
+    actionCard: ActionCard | null;
     error: string | null;
     isPlayingAudio: boolean;
     interimTranscript: string;
@@ -164,7 +172,8 @@ export interface UsePracticeWebSocketOptions {
     useStreamingTTS?: boolean;
 }
 
-export const WS_BASE_URL = process.env.NEXT_PUBLIC_WS_URL || "ws://localhost:3444";
+const RAW_WS_BASE_URL = process.env.NEXT_PUBLIC_WS_URL || "ws://localhost:3444";
+export const WS_BASE_URL = RAW_WS_BASE_URL.replace(/\/+$/, "").replace(/\/ws$/i, "");
 
 export const INITIAL_PRACTICE_STATE: PracticeState = {
     connectionState: "connecting",
@@ -176,6 +185,7 @@ export const INITIAL_PRACTICE_STATE: PracticeState = {
     fuzzyDetections: [],
     salesStage: null,
     scores: null,
+    actionCard: null,
     error: null,
     isPlayingAudio: false,
     interimTranscript: "",

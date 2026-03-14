@@ -12,6 +12,7 @@ References:
 
 from __future__ import annotations
 
+import hashlib
 from typing import Any
 
 from fastapi import (
@@ -24,8 +25,10 @@ from fastapi import (
     Query,
     UploadFile,
 )
+from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from common.api.server_error import build_server_error
 from common.auth.service import get_current_user
 from common.db.models import User
 from common.db.session import get_db
@@ -61,16 +64,21 @@ ALLOWED_FILE_TYPES = {"pdf", "docx", "txt", "md"}
 MAX_FILE_SIZE = 50 * 1024 * 1024  # 50MB
 
 
-async def _commit_or_raise(
+async def _commit_or_error(
     db: AsyncSession, detail: str = "[DATABASE_COMMIT_FAILED]"
-) -> None:
-    """Commit current transaction and raise HTTPException on failure."""
+) -> JSONResponse | None:
+    """Commit current transaction and return standardized 500 response on failure."""
     try:
         await db.commit()
     except Exception as e:
         await db.rollback()
         logger.error(f"Knowledge API database commit failed: {e}")
-        raise HTTPException(status_code=500, detail=detail) from e
+        return build_server_error(
+            detail,
+            message="Database commit failed",
+            exc=e,
+        )
+    return None
 
 
 def _format_search_results(rows: list[dict[str, Any]]) -> list[SearchResult]:
@@ -183,7 +191,9 @@ async def create_knowledge_base(
         raise HTTPException(status_code=400, detail=result.fallback)
 
     kb = result.value
-    await _commit_or_raise(db)
+    commit_error = await _commit_or_error(db)
+    if commit_error is not None:
+        return commit_error
     return {
         "success": True,
         "data": KnowledgeBaseCreateResponse(
@@ -253,7 +263,9 @@ async def update_knowledge_base(
         raise HTTPException(status_code=404, detail=result.fallback)
 
     kb = result.value
-    await _commit_or_raise(db)
+    commit_error = await _commit_or_error(db)
+    if commit_error is not None:
+        return commit_error
     return {
         "success": True,
         "data": KnowledgeBaseResponse.model_validate(kb).model_dump(),
@@ -283,7 +295,9 @@ async def delete_knowledge_base(
             raise HTTPException(status_code=400, detail=result.fallback)
         raise HTTPException(status_code=404, detail=result.fallback)
 
-    await _commit_or_raise(db)
+    commit_error = await _commit_or_error(db)
+    if commit_error is not None:
+        return commit_error
     return {"success": True, "data": {"deleted": True}}
 
 
@@ -331,6 +345,28 @@ async def upload_document(
         raise HTTPException(status_code=404, detail="[KNOWLEDGE_BASE_NOT_FOUND]")
 
     kb = kb_result.value
+    content_hash = hashlib.sha256(content).hexdigest()
+
+    # Deduplicate by content hash in same KB.
+    existing_doc = await service.get_document_by_content_hash(kb_id, content_hash)
+    if existing_doc is not None:
+        logger.info(
+            "Skipped duplicate knowledge document upload",
+            kb_id=kb_id,
+            existing_doc_id=existing_doc.id,
+            content_hash=content_hash,
+        )
+        return {
+            "success": True,
+            "data": KnowledgeDocumentUploadResponse(
+                id=existing_doc.id,
+                title=existing_doc.title,
+                file_type=existing_doc.file_type,
+                file_size=existing_doc.file_size,
+                status=existing_doc.status,
+                created_at=existing_doc.created_at,
+            ).model_dump(),
+        }
 
     # Generate document ID first
     doc_id = str(uuid.uuid4())
@@ -345,7 +381,11 @@ async def upload_document(
     )
 
     if not file_path:
-        raise HTTPException(status_code=500, detail="[FILE_SAVE_FAILED]")
+        return build_server_error(
+            "[FILE_SAVE_FAILED]",
+            message="Failed to save document file",
+            kb_id=kb_id,
+        )
 
     # Create document record with pre-generated ID
     doc_title = title or file.filename
@@ -356,6 +396,7 @@ async def upload_document(
         file_type=file_ext,
         file_url=file_path,
         file_size=file_size,
+        content_hash=content_hash,
     )
 
     if not result.is_success:
@@ -372,7 +413,13 @@ async def upload_document(
         logger.error(
             f"Document upload commit failed, rolled back and cleaned file: {e}"
         )
-        raise HTTPException(status_code=500, detail="[DOCUMENT_SAVE_FAILED]") from e
+        return build_server_error(
+            "[DOCUMENT_SAVE_FAILED]",
+            message="Failed to persist uploaded document",
+            exc=e,
+            kb_id=kb_id,
+            doc_id=doc_id,
+        )
 
     # Get database URL for background task
     from common.db.session import get_database_url
@@ -497,7 +544,9 @@ async def delete_document(
     if not result.is_success:
         raise HTTPException(status_code=404, detail=result.fallback)
 
-    await _commit_or_raise(db)
+    commit_error = await _commit_or_error(db)
+    if commit_error is not None:
+        return commit_error
     return {"success": True, "data": {"deleted": True}}
 
 
@@ -647,7 +696,9 @@ async def reprocess_document(
         chunk_count=0,
         error_message=None,
     )
-    await _commit_or_raise(db)
+    commit_error = await _commit_or_error(db)
+    if commit_error is not None:
+        return commit_error
 
     # Get database URL for background task
     from common.db.session import get_database_url

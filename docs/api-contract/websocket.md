@@ -645,6 +645,30 @@ PPT 页上下文更新（翻页或重连恢复时发送）。
 | dimensions[].delta | number | 变化值 |
 | feedback | string | 反馈建议 |
 
+### action_card (✅ 已实现，沟通闭环)
+
+每轮仅下发一条“可执行动作卡”，用于替代泛化建议堆叠。
+该消息在 `stepfun_realtime_handler` 与 `enhanced_handler/capability_processor` 两条链路均会下发，字段结构保持一致。
+
+```json
+{
+  "type": "action_card",
+  "timestamp": "2026-02-21T10:00:00Z",
+  "trace_id": "abc123",
+  "data": {
+    "issue": "检测到表达问题：大概、可能",
+    "replacement": "请问您当前最优先要解决的业务问题是什么？",
+    "next_turn_rule": "下一轮先问1个具体需求问题，再给出价值表达。"
+  }
+}
+```
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| issue | string | 本轮唯一问题 |
+| replacement | string | 一句替换话术 |
+| next_turn_rule | string | 下一轮判定条件 |
+
 ### knowledge_context (调试用)
 
 知识库检索结果

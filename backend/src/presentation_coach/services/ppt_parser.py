@@ -65,20 +65,21 @@ class PPTParserService:
 
         try:
             # Load presentation from bytes
-            prs = PptxPresentation(io.BytesIO(file_content))
+            with io.BytesIO(file_content) as stream:
+                prs = PptxPresentation(stream)
 
-            pages = []
-            total_slides = len(prs.slides)
+                pages = []
+                total_slides = len(prs.slides)
 
-            for idx, slide in enumerate(prs.slides, start=1):
-                page_data = self._extract_slide_content(slide, idx)
-                pages.append(page_data)
+                for idx, slide in enumerate(prs.slides, start=1):
+                    page_data = self._extract_slide_content(slide, idx)
+                    pages.append(page_data)
 
-            result = {
-                "total_pages": total_slides,
-                "pages": pages,
-                "title": self._extract_title(prs),
-            }
+                result = {
+                    "total_pages": total_slides,
+                    "pages": pages,
+                    "title": self._extract_title(prs),
+                }
 
             logger.info(f"Parsed presentation: {total_slides} slides")
             return Result.ok(result)
@@ -153,13 +154,14 @@ class PPTParserService:
 
         if PPTX_AVAILABLE and PptxPresentation is not None:
             try:
-                presentation = PptxPresentation(io.BytesIO(file_content))
-                slide_count = len(presentation.slides)
-                if 1 <= page_number <= slide_count:
-                    slide = presentation.slides[page_number - 1]
-                    extracted = self._extract_slide_content(slide, page_number)
-                    slide_text = extracted.get("extracted_text", "")
-                slide_title = self._extract_title(presentation)
+                with io.BytesIO(file_content) as stream:
+                    presentation = PptxPresentation(stream)
+                    slide_count = len(presentation.slides)
+                    if 1 <= page_number <= slide_count:
+                        slide = presentation.slides[page_number - 1]
+                        extracted = self._extract_slide_content(slide, page_number)
+                        slide_text = extracted.get("extracted_text", "")
+                    slide_title = self._extract_title(presentation)
             except Exception as exc:
                 logger.warning(f"Thumbnail text extraction fallback: {exc}")
 

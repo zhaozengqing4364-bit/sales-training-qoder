@@ -15,6 +15,7 @@ import type {
     FuzzyDetection,
     SalesStage,
     ScoreUpdate,
+    ActionCard,
     SlideUpdate,
     PointCovered,
     ForbiddenWordDetection,
@@ -27,6 +28,7 @@ interface RightPanelContentProps {
     points: PointCovered[];
     forbiddenWords: ForbiddenWordDetection[];
     scores: ScoreUpdate | null;
+    actionCard: ActionCard | null;
     fuzzyDetections: FuzzyDetection[];
     salesStage: SalesStage | null;
     sendMessage: (type: string, data: unknown) => void;
@@ -39,6 +41,7 @@ export const RightPanelContent = React.memo(function RightPanelContent({
     points,
     forbiddenWords,
     scores,
+    actionCard,
     fuzzyDetections,
     salesStage,
     sendMessage,
@@ -87,6 +90,29 @@ export const RightPanelContent = React.memo(function RightPanelContent({
 
     return (
         <div className="space-y-6">
+            {actionCard && (
+                <div className="bg-white/60 backdrop-blur-sm rounded-2xl p-4 border border-white/70 shadow-[0_8px_30px_rgb(0,0,0,0.04)]">
+                    <h3 className="text-sm font-semibold text-slate-700 mb-3 flex items-center gap-2">
+                        <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                        本轮唯一动作
+                    </h3>
+                    <div className="space-y-2 text-xs">
+                        <div className="rounded-lg border border-emerald-100 bg-emerald-50 p-3">
+                            <p className="font-bold text-emerald-700 mb-1">问题</p>
+                            <p className="text-emerald-800">{actionCard.issue}</p>
+                        </div>
+                        <div className="rounded-lg border border-blue-100 bg-blue-50 p-3">
+                            <p className="font-bold text-blue-700 mb-1">替换句</p>
+                            <p className="text-blue-800">{actionCard.replacement}</p>
+                        </div>
+                        <div className="rounded-lg border border-amber-100 bg-amber-50 p-3">
+                            <p className="font-bold text-amber-700 mb-1">下一轮判定条件</p>
+                            <p className="text-amber-800">{actionCard.next_turn_rule}</p>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {fuzzyDetections.length > 0 && (
                 <div className="bg-white/50 backdrop-blur-sm rounded-2xl p-4 border border-white/60 shadow-[0_8px_30px_rgb(0,0,0,0.04)]">
                     <h3 className="text-sm font-semibold text-slate-700 mb-3 flex items-center gap-2">

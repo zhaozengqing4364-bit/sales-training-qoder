@@ -65,6 +65,8 @@ pnpm-lock.yaml
 # Logs
 *.log
 logs/
+!web/src/app/admin/logs/
+!web/src/app/admin/logs/page.tsx
 *.log.*
 
 # IDEs and Editors

@@ -1,6 +1,6 @@
 # 语音运行时契约（`voice-runtime`）
 
-> 状态：✅ 已实现  
+> 状态：✅ 已实现（2026-02-16 更新）  
 > 前缀：`/api/v1/admin/voice-runtime`
 
 ## 1) Runtime Profile（`VoiceRuntimeProfile`）
@@ -14,7 +14,7 @@ interface VoiceRuntimeProfile {
   description?: string | null;
   is_default: boolean;
   is_active: boolean;
-  voice_mode: 'legacy' | 'stepfun_realtime' | string;
+  voice_mode: 'legacy' | 'stepfun_realtime';
   model_name: string;
   voice_name: string;
   temperature: number;
@@ -22,7 +22,6 @@ interface VoiceRuntimeProfile {
   output_audio_format: string;
   output_sample_rate: number;
   turn_detection?: string | null;
-  system_instruction_template?: string | null;
   tool_policy: Record<string, unknown>;
 }
 ```
@@ -42,12 +41,14 @@ interface ToolPolicy {
 ```
 
 约束规则：
+- `voice_mode` 仅允许 `legacy | stepfun_realtime`，非法值会触发请求校验失败（`422`）
 - `network_access_mode=off` 时必须禁用 `web_search`（与是否绑定知识库无关）
 - 绑定知识库时，系统会强制 `retrieval_priority=kb_only`
 - 未绑定知识库且 `allow_web_search_without_kb=false` 时，同样禁用 `web_search`
 - `require_kb_grounding=true` 时进入知识库硬锁模式：
   - 每轮必须先检索内部知识并命中可引用片段，才允许生成回答
   - 未绑定知识库 / 文档未就绪 / 检索失败 / 未命中都会触发阻断回复
+- `system_instruction_template` 已收敛到角色中心，不允许继续通过 Runtime Profile 写入。
 
 ### 接口
 
@@ -75,14 +76,24 @@ interface ToolPolicy {
 interface AgentVoicePolicy {
   enabled: boolean;
   runtime_profile_id?: string | null;
-  voice_mode_override?: string | null;
+  voice_mode_override?: 'legacy' | 'stepfun_realtime' | null;
   model_override?: string | null;
   voice_override?: string | null;
   temperature_override?: number | null;
-  instructions_override?: string | null;
   tool_policy_override: Record<string, unknown>;
 }
 ```
+
+`tool_policy_override` 仅允许技术运行时相关键，以下键位于 Persona 侧并被禁止在 Agent 侧覆盖：
+- `enable_web_search`
+- `enable_internal_retrieval`
+- `retrieval_priority`
+- `strict_instruction_following`
+- `require_grounding`
+- `network_access_mode`
+- `enforcement_level`
+- `allow_web_search_without_kb`
+- `require_kb_grounding`
 
 ### 接口
 
@@ -94,6 +105,8 @@ interface AgentVoicePolicy {
 生效策略新增审计字段：
 - `instruction_contract_hash`：系统角色契约哈希，用于验证每轮是否沿用同一角色约束
 - `network_access_mode`：当前会话网络访问模式（`off` / `controlled`）
+- `persona_policy`：当前会话生效的角色中心策略（提示词/知识库/工具策略）
+- `knowledge_base_ids`：从角色策略解析后的知识库绑定列表
 
 ## 3) 错误码（常见）
 
@@ -102,3 +115,8 @@ interface AgentVoicePolicy {
 - `[VOICE_RUNTIME_PROFILE_UPDATE_FAILED]`
 - `[VOICE_RUNTIME_PROFILE_DELETE_FAILED]`
 - `[AGENT_VOICE_POLICY_UPSERT_FAILED]`
+- `[FIELD_DEPRECATED_PERSONA_CENTERED]`（尝试覆盖 Persona 所有权工具策略键）
+
+兼容收敛说明：
+- `system_instruction_template` 与 `instructions_override` 已从 API 写入契约移除。
+- 请求体若继续携带上述旧字段，会触发 FastAPI 请求校验失败（`422`，`extra_forbidden`）。

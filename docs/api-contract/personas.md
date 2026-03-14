@@ -1,6 +1,6 @@
 # Persona 管理 API 契约
 
-> 状态: ✅ 已实现（2026-02-10 更新）
+> 状态: ✅ 已实现（2026-02-16 更新）
 >
 > 后端实现: `backend/src/agent/api/personas.py`
 >
@@ -34,6 +34,13 @@ interface PersonaResponse {
   system_prompt: string;
   traits: Record<string, string>;
   knowledge_base_ids: string[];
+  persona_policy: {
+    version: number;
+    system_prompt: string;
+    knowledge_base_ids: string[];
+    tool_policy: Record<string, unknown>;
+    [key: string]: unknown;
+  };
   behavior_config: Record<string, unknown>;
   scoring_weights?: Record<string, number>;
   tts_config?: Record<string, unknown>;
@@ -80,6 +87,7 @@ interface AgentPersonaResponse {
 |------|------|------|
 | `POST` | `/api/v1/admin/personas` | 创建 Persona |
 | `GET` | `/api/v1/admin/personas` | 分页查询 Persona |
+| `GET` | `/api/v1/admin/personas/policy-health` | 角色策略健康审计报告 |
 | `GET` | `/api/v1/admin/personas/{persona_id}` | 查询 Persona 详情 |
 | `PUT` | `/api/v1/admin/personas/{persona_id}` | 更新 Persona |
 | `DELETE` | `/api/v1/admin/personas/{persona_id}` | 删除 Persona |
@@ -95,6 +103,14 @@ interface AgentPersonaResponse {
 | `DELETE` | `/api/v1/admin/agents/{agent_id}/personas/{persona_id}` | 删除关联 |
 
 ---
+
+## 角色中心策略约束
+
+- Persona 的 `persona_policy` 是角色提示词与知识库绑定的单一事实源（source-of-truth）。
+- 兼容字段 `system_prompt`、`knowledge_base_ids` 仍会返回，但后端会与 `persona_policy` 同步。
+- 推荐写法：
+  - 始终在 `POST /admin/personas`、`PUT /admin/personas/{persona_id}` 显式提交 `persona_policy`。
+  - `persona_policy.system_prompt` 与 `persona_policy.knowledge_base_ids` 作为生效值。
 
 ## 生命周期约束（1.7 新增）
 
@@ -129,6 +145,15 @@ Content-Type: application/json
     "关注点": "ROI、案例、风控"
   },
   "knowledge_base_ids": ["kb-product-001"],
+  "persona_policy": {
+    "version": 1,
+    "system_prompt": "你是一个重视证据的客户...",
+    "knowledge_base_ids": ["kb-product-001"],
+    "tool_policy": {
+      "retrieval_priority": "kb_only",
+      "require_kb_grounding": true
+    }
+  },
   "behavior_config": {
     "response_length": "medium",
     "challenge_frequency": 0.8,
@@ -197,6 +222,40 @@ Authorization: Bearer <token>
     "name": "怀疑型客户 (副本)",
     "status": "active",
     "created_at": "2026-02-10T11:00:00Z"
+  }
+}
+```
+
+### 查询 Persona 策略健康报告
+
+```http
+GET /api/v1/admin/personas/policy-health?sample_limit=50
+Authorization: Bearer <token>
+```
+
+```json
+{
+  "success": true,
+  "data": {
+    "generated_at": "2026-02-16T12:00:00+00:00",
+    "summary": {
+      "total": 18,
+      "healthy": 16,
+      "with_issues": 2
+    },
+    "issue_type_counts": {
+      "missing_policy": 1,
+      "kb_lock_unbound": 1
+    },
+    "sample_issues": [
+      {
+        "persona_id": "persona-uuid-001",
+        "persona_name": "怀疑型客户",
+        "issue_types": ["kb_lock_unbound"],
+        "policy_version": 1,
+        "require_kb_grounding": true
+      }
+    ]
   }
 }
 ```
@@ -300,3 +359,5 @@ Authorization: Bearer <token>
 | 2026-02-10 | 清理历史规划引用 | 移除已废弃 roadmap 引用与旧示例 |
 | 2026-02-11 | 补充 Persona 生命周期约束 | 新增 `[PERSONA_INACTIVE]` 拒绝语义，明确停用 Persona 不可新建关联/会话 |
 | 2026-02-11 | 补充关联可用性与会话应用约束 | 新增 `[AGENT_ARCHIVED]`，并约定会话快照写入 `agent_persona_override_config` |
+| 2026-02-16 | 收敛角色策略到 `persona_policy` | 明确 `persona_policy` 为角色提示词/知识库/工具策略唯一事实源 |
+| 2026-02-16 | 新增 Persona 策略健康审计接口 | 提供 `/admin/personas/policy-health` 统计缺失策略、漂移与 KB 锁未绑定问题 |

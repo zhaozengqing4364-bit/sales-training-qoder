@@ -92,6 +92,20 @@ def ensure_knowledge_runtime_metrics(policy: dict[str, Any]) -> dict[str, Any]:
     knowledge_metrics.setdefault("kb_lock_block_count", 0)
     knowledge_metrics.setdefault("kb_lock_last_status", "not_required")
     knowledge_metrics.setdefault("kb_lock_updated_at", None)
+    knowledge_metrics.setdefault("last_decision_id", "")
+    knowledge_metrics.setdefault("last_decision_duration_ms", 0.0)
+    knowledge_metrics.setdefault("last_decision_phase_breakdown", None)
+    knowledge_metrics.setdefault("timeout_rate_5m", 0.0)
+    knowledge_metrics.setdefault("kb_lock_decision_timestamps", [])
+    knowledge_metrics.setdefault("kb_lock_timeout_timestamps", [])
+    knowledge_metrics.setdefault("upstream_disconnect_count_5m", 0)
+    knowledge_metrics.setdefault("upstream_disconnect_timestamps", [])
+    knowledge_metrics.setdefault("upstream_unstable", False)
+    knowledge_metrics.setdefault("upstream_disconnect_last_code", None)
+    knowledge_metrics.setdefault("upstream_disconnect_last_reason", "")
+    knowledge_metrics.setdefault("upstream_disconnect_last_event_type", "")
+    knowledge_metrics.setdefault("upstream_disconnect_last_ws_lifetime_ms", None)
+    knowledge_metrics.setdefault("upstream_disconnect_last_at", None)
 
     runtime_metrics["knowledge_retrieval"] = knowledge_metrics
     return knowledge_metrics

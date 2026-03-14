@@ -61,3 +61,22 @@ def error_response(
         "message": message or error_code,
         "trace_id": trace_id or get_trace_id()
     }
+
+
+def server_error_response(
+    error_code: str,
+    message: str | None = None,
+    trace_id: str | None = None,
+) -> dict[str, Any]:
+    """
+    Create unified 5xx server error response.
+
+    Args:
+        error_code: Stable backend error code (e.g., "[DB_COMMIT_FAILED]")
+        message: Optional message for display/log correlation
+        trace_id: Optional trace ID for request tracking
+
+    Returns:
+        Dict payload for 500-class responses
+    """
+    return error_response(error_code=error_code, message=message, trace_id=trace_id)

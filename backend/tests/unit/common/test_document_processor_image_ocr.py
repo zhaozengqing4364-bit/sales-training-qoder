@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock
 import pytest
 
 import common.knowledge.processor as processor_module
+from common.error_handling.result import Result
 from common.knowledge.models import DocumentStatus
 from common.knowledge.processor import DocumentProcessor
 
@@ -105,6 +106,54 @@ async def test_read_docx_combines_paragraph_text_and_image_ocr(monkeypatch, tmp_
 
 
 @pytest.mark.asyncio
+async def test_read_docx_extracts_text_from_tables(monkeypatch, tmp_path):
+    file_path = tmp_path / "table_doc.docx"
+    file_path.write_bytes(b"PK\x03\x04 fake")
+
+    fake_doc = SimpleNamespace(
+        paragraphs=[SimpleNamespace(text="   ")],
+        tables=[
+            SimpleNamespace(
+                rows=[
+                    SimpleNamespace(
+                        cells=[
+                            SimpleNamespace(text="客户名称"),
+                            SimpleNamespace(text="业务需求"),
+                        ]
+                    ),
+                    SimpleNamespace(
+                        cells=[
+                            SimpleNamespace(text="深圳市宝安区石岩人民医院"),
+                            SimpleNamespace(text="API资产梳理和风险监测"),
+                        ]
+                    ),
+                ]
+            )
+        ],
+    )
+
+    monkeypatch.setitem(
+        sys.modules,
+        "docx",
+        SimpleNamespace(Document=lambda _: fake_doc),
+    )
+
+    processor = DocumentProcessor()
+    monkeypatch.setattr(
+        processor,
+        "_extract_text_from_docx_images",
+        lambda doc: [],
+    )
+
+    content = await processor._read_docx(str(file_path))
+
+    assert content is not None
+    assert "客户名称" in content
+    assert "深圳市宝安区石岩人民医院" in content
+    assert "API资产梳理和风险监测" in content
+
+
+@pytest.mark.asyncio
 async def test_process_document_fails_when_embedding_service_not_configured(
     monkeypatch,
 ):
@@ -145,3 +194,99 @@ async def test_process_document_fails_when_embedding_service_not_configured(
     assert result["status"] == DocumentStatus.FAILED.value
     assert result["chunk_count"] == 0
     assert "[EMBEDDING_NOT_CONFIGURED]" in str(result["error_message"])
+
+
+@pytest.mark.asyncio
+async def test_process_document_surfaces_embedding_result_fallback(monkeypatch):
+    processor = DocumentProcessor()
+    monkeypatch.setattr(
+        processor,
+        "_read_document",
+        AsyncMock(return_value="企业产品资料：A系列、B系列。"),
+    )
+    monkeypatch.setattr(
+        processor,
+        "_split_into_chunks",
+        lambda _content: [
+            {
+                "index": 0,
+                "content": "企业产品资料：A系列、B系列。",
+                "metadata": {"start_char": 0, "end_char": 15},
+            }
+        ],
+    )
+
+    embedding_service = SimpleNamespace(
+        is_configured=True,
+        embed_batch=AsyncMock(return_value=Result.fail("[EMBEDDING_API_ERROR] insufficient")),
+    )
+    monkeypatch.setattr(
+        processor_module,
+        "get_embedding_service",
+        lambda: embedding_service,
+    )
+
+    result = await processor.process_document(
+        doc_id="doc-1",
+        file_path="/tmp/dummy.txt",
+        file_type="txt",
+        document_title="产品文档",
+        knowledge_base_id="kb-1",
+        vector_collection="kb_collection_1",
+    )
+
+    assert result["status"] == DocumentStatus.FAILED.value
+    assert result["chunk_count"] == 0
+    assert "[EMBEDDING_API_ERROR] insufficient" in str(result["error_message"])
+
+
+@pytest.mark.asyncio
+async def test_process_document_surfaces_vector_store_result_fallback(monkeypatch):
+    processor = DocumentProcessor()
+    monkeypatch.setattr(
+        processor,
+        "_read_document",
+        AsyncMock(return_value="企业产品资料：A系列、B系列。"),
+    )
+    monkeypatch.setattr(
+        processor,
+        "_split_into_chunks",
+        lambda _content: [
+            {
+                "index": 0,
+                "content": "企业产品资料：A系列、B系列。",
+                "metadata": {"start_char": 0, "end_char": 15},
+            }
+        ],
+    )
+
+    embedding_service = SimpleNamespace(
+        is_configured=True,
+        embed_batch=AsyncMock(return_value=Result.ok([[0.1, 0.2, 0.3]])),
+    )
+    vector_store = SimpleNamespace(
+        add_chunks=AsyncMock(return_value=Result.fail("[VECTOR_STORAGE_FAILED] boom")),
+    )
+    monkeypatch.setattr(
+        processor_module,
+        "get_embedding_service",
+        lambda: embedding_service,
+    )
+    monkeypatch.setattr(
+        processor_module,
+        "get_knowledge_vector_store",
+        lambda: vector_store,
+    )
+
+    result = await processor.process_document(
+        doc_id="doc-1",
+        file_path="/tmp/dummy.txt",
+        file_type="txt",
+        document_title="产品文档",
+        knowledge_base_id="kb-1",
+        vector_collection="kb_collection_1",
+    )
+
+    assert result["status"] == DocumentStatus.FAILED.value
+    assert result["chunk_count"] == 0
+    assert "[VECTOR_STORAGE_FAILED] boom" in str(result["error_message"])

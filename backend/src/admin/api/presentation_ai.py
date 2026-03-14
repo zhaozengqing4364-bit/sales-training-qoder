@@ -9,6 +9,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from common.api.server_error import build_server_error
 from common.auth.service import get_current_admin_user
 from common.db.models import User
 from common.db.session import get_db
@@ -100,10 +101,13 @@ async def upsert_scope_policy(
     except SQLAlchemyError as exc:
         await db.rollback()
         logger.error(f"Failed to upsert presentation AI policy: {exc}")
-        raise HTTPException(
-            status_code=500,
-            detail="[PRESENTATION_AI_POLICY_UPSERT_FAILED]",
-        ) from exc
+        return build_server_error(
+            "[PRESENTATION_AI_POLICY_UPSERT_FAILED]",
+            message="Failed to upsert presentation AI policy",
+            exc=exc,
+            scope_type=payload.scope_type,
+            scope_id=payload.scope_id,
+        )
 
 
 @router.post("/policy/preview")

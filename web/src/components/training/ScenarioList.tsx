@@ -10,7 +10,7 @@ import { AgentCard } from "@/components/ui/agent-card";
 import { GlassCard } from "@/components/ui/glass-card";
 
 export interface ScenarioListProps {
-  category: "sales" | "presentation" | "customer-service";
+  category: "sales" | "presentation";
   title: string;
   description: string;
   actionText: string;

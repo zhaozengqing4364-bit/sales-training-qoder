@@ -105,7 +105,17 @@ async def _create_template(async_client: AsyncClient, admin_headers: dict[str, s
 
 
 class TestPromptTemplateRBAC:
-    async def test_support_can_toggle_activation(self, async_client, auth_headers):
+    async def test_support_cannot_list_templates(self, async_client, auth_headers):
+        response = await async_client.get(
+            "/api/v1/prompt-templates",
+            headers=auth_headers["support"],
+        )
+
+        assert response.status_code == 403
+        detail = response.json().get("detail", {})
+        assert detail.get("error") == "[PROMPT_TEMPLATE_EDIT_ADMIN_ONLY]"
+
+    async def test_support_cannot_toggle_activation(self, async_client, auth_headers):
         created = await _create_template(async_client, auth_headers["admin"])
 
         response = await async_client.put(
@@ -114,8 +124,9 @@ class TestPromptTemplateRBAC:
             json={"is_active": False},
         )
 
-        assert response.status_code == 200
-        assert response.json()["is_active"] is False
+        assert response.status_code == 403
+        detail = response.json().get("detail", {})
+        assert detail.get("error") == "[PROMPT_TEMPLATE_EDIT_ADMIN_ONLY]"
 
     async def test_support_cannot_edit_template_body(self, async_client, auth_headers):
         created = await _create_template(async_client, auth_headers["admin"])
@@ -146,3 +157,40 @@ class TestPromptTemplateRBAC:
         assert response.status_code == 403
         detail = response.json().get("detail", {})
         assert detail.get("error") == "[PROMPT_TEMPLATE_EDIT_ADMIN_ONLY]"
+
+    async def test_support_cannot_list_scenario_prompts(self, async_client, auth_headers):
+        response = await async_client.get(
+            "/api/v1/scenario-prompts",
+            headers=auth_headers["support"],
+        )
+
+        assert response.status_code == 403
+        detail = response.json().get("detail", {})
+        assert detail.get("error") == "[PROMPT_TEMPLATE_EDIT_ADMIN_ONLY]"
+
+    async def test_support_cannot_create_scenario_prompt(self, async_client, auth_headers):
+        created = await _create_template(async_client, auth_headers["admin"])
+        response = await async_client.post(
+            "/api/v1/scenario-prompts",
+            headers=auth_headers["support"],
+            json={
+                "scenario_type": "presentation",
+                "prompt_type": "interruption",
+                "template_id": created["id"],
+                "is_active": True,
+            },
+        )
+
+        assert response.status_code == 403
+        detail = response.json().get("detail", {})
+        assert detail.get("error") == "[PROMPT_TEMPLATE_EDIT_ADMIN_ONLY]"
+
+    async def test_admin_get_template_with_invalid_id_returns_400(self, async_client, auth_headers):
+        response = await async_client.get(
+            "/api/v1/prompt-templates/undefined",
+            headers=auth_headers["admin"],
+        )
+
+        assert response.status_code == 400
+        detail = response.json().get("detail", {})
+        assert detail.get("error") == "[PROMPT_TEMPLATE_ID_INVALID]"

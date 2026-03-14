@@ -21,6 +21,12 @@ export interface DashboardStats {
         percentile: number;
         trend: "up" | "down" | "stable";
     };
+    effectiveness?: {
+        pass_rate_3min_flow: number;
+        pass_rate_5turn_defense: number;
+        pass_rate_4step_structure: number;
+        next_day_retry_rate: number;
+    };
 }
 
 export interface VoicePolicySnapshotReference {
@@ -64,6 +70,7 @@ export interface SessionItem {
     id: string;
     title: string;
     scenario_type: "sales" | "presentation";
+    presentation_id?: string | null;
     overall_score: number;
     duration_seconds: number;
     start_time: string;
@@ -79,7 +86,20 @@ export interface SessionItem {
     runtime_profile_id?: string | null;
     voice_policy_snapshot?: Record<string, unknown> | null;
     voice_policy_snapshot_ref?: VoicePolicySnapshotReference | null;
+    effectiveness_snapshot?: Record<string, unknown> | null;
     feedback_summary?: string;
+}
+
+export interface PracticeSessionRuntime {
+    session_id: string;
+    scenario_type?: "sales" | "presentation";
+    voice_mode?: "legacy" | "stepfun_realtime" | string;
+    agent_id?: string | null;
+    persona_id?: string | null;
+    presentation_id?: string | null;
+    runtime_profile_id?: string | null;
+    status?: SessionStatus;
+    start_time?: string;
 }
 
 export interface TrainingCategory {
@@ -110,7 +130,6 @@ export interface Agent {
     status: string;
     role?: string;
     difficulty?: string;
-    system_prompt?: string;
     welcome_message?: string;
     ui_metadata?: {
         icon_key?: string;
@@ -272,7 +291,6 @@ export interface AdminAgent {
     category: string;
     status: string;
     icon?: string;
-    system_prompt?: string;
     welcome_message?: string;
     voice_config?: {
         voice_id?: string;
@@ -289,7 +307,6 @@ export interface AdminAgent {
     persona_count?: number;
     knowledge_base_count?: number;
     capabilities_config?: Record<string, unknown>;
-    default_knowledge_base_ids?: string[];
 }
 
 export interface AdminPersona {
@@ -309,6 +326,13 @@ export interface AdminPersona {
     updated_at: string;
     usage_count?: number;
     knowledge_base_ids?: string[];
+    persona_policy?: {
+        version?: number;
+        system_prompt?: string;
+        knowledge_base_ids?: string[];
+        tool_policy?: Record<string, unknown>;
+        [key: string]: unknown;
+    };
     tts_config?: {
         voice?: string;
         rate?: string;
@@ -350,6 +374,24 @@ export interface AdminKnowledgeDocumentPreviewChunk {
 export interface AdminKnowledgeDocumentPreviewResponse {
     chunks: AdminKnowledgeDocumentPreviewChunk[];
     total_chunks: number;
+}
+
+export interface AdminSystemLog {
+    id: string;
+    action: string;
+    user_identifier: string;
+    ip_address?: string | null;
+    status: "success" | "failed" | "warning" | string;
+    created_at: string;
+    details?: string | null;
+}
+
+export interface AdminSystemLogListResponse {
+    items: AdminSystemLog[];
+    total: number;
+    page: number;
+    page_size: number;
+    has_more: boolean;
 }
 
 export interface AdminKnowledgeSearchResult {
@@ -783,6 +825,30 @@ export interface PracticeSessionReport {
     audio_url?: string | null;
     transcript_url?: string | null;
     voice_policy_snapshot_ref?: VoicePolicySnapshotReference | null;
+    effectiveness_snapshot?: Record<string, unknown> | null;
+    pass_flags?: {
+        pass_3min_flow: boolean;
+        pass_5turn_defense: boolean;
+        pass_4step_structure: boolean;
+    } | null;
+    main_capability_passed?: boolean | null;
+    overall_result?: "pass" | "strong_pass" | "fail" | null;
+    main_issue?: {
+        issue_type: string;
+        issue_text: string;
+        recovery_rule: string;
+    } | null;
+    next_goal?: {
+        goal_type: string;
+        goal_text: string;
+        rule: string;
+    } | null;
+    retry_entry?: {
+        scenario_type: "sales" | "presentation" | string;
+        agent_id?: string | null;
+        persona_id?: string | null;
+        presentation_id?: string | null;
+    } | null;
 }
 
 export interface KnowledgeCheckDiagnostics {
@@ -828,6 +894,44 @@ export interface OpenAnalyticsDashboard {
         sessions_with_high_vagueness: number;
         sessions_with_forbidden_words: number;
     };
+    effectiveness?: {
+        pass_rate_3min_flow: number;
+        pass_rate_5turn_defense: number;
+        pass_rate_4step_structure: number;
+        next_day_retry_rate: number;
+    };
+}
+
+export interface ManagerLiteListsResponse {
+    not_passed: Array<{
+        user_id: string;
+        user_name: string;
+        department?: string | null;
+        overall_result: string;
+        session_id: string;
+        session_start_time: string;
+    }>;
+    inactive_streak: Array<{
+        user_id: string;
+        user_name: string;
+        department?: string | null;
+        last_session_at: string;
+        inactive_days: number;
+    }>;
+    improving: Array<{
+        user_id: string;
+        user_name: string;
+        department?: string | null;
+        pass_gain: number;
+        baseline_pass_rate: number;
+        current_pass_rate: number;
+    }>;
+}
+
+export interface ManagerLiteRemindResponse {
+    sent: boolean;
+    reminder_id: string;
+    user_id: string;
 }
 
 export interface OpenScoreDistribution {

@@ -206,6 +206,7 @@ class PracticeSession(Base):
     voice_mode = Column(String(32), nullable=False, default="legacy", index=True)
     voice_runtime_profile_id = Column(String(36), ForeignKey("voice_runtime_profiles.id", ondelete="SET NULL"), nullable=True, index=True)
     voice_policy_snapshot = Column(JSON, nullable=True)
+    effectiveness_snapshot = Column(JSON, nullable=True)
 
     start_time = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), index=True)
     end_time = Column(DateTime(timezone=True))

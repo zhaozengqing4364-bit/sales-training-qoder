@@ -39,6 +39,17 @@ const formatFileSize = (bytes: number): string => {
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 };
 
+const formatDocumentError = (message?: string): string => {
+    if (!message) return "";
+    if (message.includes("Insufficient credits") || (message.includes("402") && message.includes("EMBEDDING_API_ERROR"))) {
+        return "文档文本已解析，但向量化失败：当前 Embedding 提供商额度不足，请补充额度或切换可用的 Embedding 配置后重试。";
+    }
+    if (message.includes("[EMBEDDING_NOT_CONFIGURED]")) {
+        return "文档文本已解析，但未配置 Embedding 服务，暂时无法建立知识检索索引。";
+    }
+    return message;
+};
+
 type PreviewChunk = { index: number; content: string };
 
 const normalizePreviewChunks = (chunks: unknown): PreviewChunk[] => {
@@ -163,8 +174,8 @@ export default function KnowledgeDetailPage() {
     };
 
     const handlePreview = async (doc: AdminKnowledgeDocument) => {
-        if (doc.status !== "ready") {
-            toast.error("文档尚未处理完成，无法预览");
+        if (doc.status === "processing" || doc.status === "pending") {
+            toast.error("文档尚未处理完成，暂时无法预览");
             return;
         }
 
@@ -371,6 +382,11 @@ export default function KnowledgeDetailPage() {
                                                     <span>{doc.chunk_count} 分块</span>
                                                 )}
                                             </div>
+                                            {doc.status === "failed" && doc.error_message && (
+                                                <div className="mt-2 max-w-3xl text-xs leading-5 text-red-600">
+                                                    {formatDocumentError(doc.error_message)}
+                                                </div>
+                                            )}
                                         </div>
                                     </div>
                                     <div className="flex items-center gap-3">
@@ -382,7 +398,7 @@ export default function KnowledgeDetailPage() {
                                             size="sm"
                                             className="rounded-full text-slate-500 hover:text-blue-600"
                                             onClick={() => handlePreview(doc)}
-                                            disabled={doc.status !== "ready"}
+                                            disabled={doc.status === "processing" || doc.status === "pending"}
                                         >
                                             <Eye className="w-4 h-4 mr-1" /> 预览
                                         </Button>

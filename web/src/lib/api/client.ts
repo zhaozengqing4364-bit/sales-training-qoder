@@ -8,6 +8,7 @@
 import {
     DashboardStats,
     SessionItem,
+    PracticeSessionRuntime,
     Recommendation,
     TrainingCategory,
     Agent,
@@ -24,6 +25,8 @@ import {
     AdminKnowledgeDocument,
     AdminKnowledgeDocumentPreviewResponse,
     AdminKnowledgeSearchResponse,
+    AdminSystemLog,
+    AdminSystemLogListResponse,
     UserDetailStats,
     UserSessionsResponse,
     UserProgressResponse,
@@ -56,6 +59,8 @@ import {
     PresentationAIPolicyPreviewResponse,
     PresentationAIPolicyEffectiveResponse,
     PresentationAIScopeType,
+    ManagerLiteListsResponse,
+    ManagerLiteRemindResponse,
 } from "./types";
 import { authHandler } from "@/lib/auth-handler";
 
@@ -65,7 +70,38 @@ const LOOPBACK_HOST_FALLBACK_MAP: Record<string, string> = {
     "::1": "127.0.0.1",
 };
 
-const API_BASE_URL = (process.env.NEXT_PUBLIC_API_URL || "http://localhost:3444/api/v1").replace(/\/+$/, "");
+const DEFAULT_API_BASE_URL = "http://localhost:3444/api/v1";
+const CONFIGURED_API_BASE_URL = (
+    process.env.NEXT_PUBLIC_API_URL || DEFAULT_API_BASE_URL
+).replace(/\/+$/, "");
+
+function isLoopbackHost(hostname: string): boolean {
+    return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1";
+}
+
+function resolveApiBaseUrl(): string {
+    if (typeof window === "undefined") {
+        return CONFIGURED_API_BASE_URL;
+    }
+
+    try {
+        const parsed = new URL(CONFIGURED_API_BASE_URL);
+        if (!isLoopbackHost(parsed.hostname)) {
+            return parsed.toString().replace(/\/+$/, "");
+        }
+
+        const pageHost = window.location.hostname;
+        if (!pageHost || isLoopbackHost(pageHost)) {
+            return parsed.toString().replace(/\/+$/, "");
+        }
+
+        // When frontend is opened via LAN hostname/IP, keep API host aligned to avoid localhost misrouting.
+        parsed.hostname = pageHost;
+        return parsed.toString().replace(/\/+$/, "");
+    } catch {
+        return CONFIGURED_API_BASE_URL;
+    }
+}
 
 function getLoopbackFallbackUrl(url: string): string | null {
     try {
@@ -102,19 +138,33 @@ async function fetchWithLoopbackRetry(url: string, options: RequestInit): Promis
 // Active request tracking for cancellation on page transitions
 const activeRequests = new Map<string, AbortController>();
 let requestCounter = 0;
+let lastSessionExpiredAt = 0;
+const SESSION_EXPIRED_NOTIFY_COOLDOWN_MS = 1500;
+
+function triggerSessionExpiredOnce(): void {
+    const now = Date.now();
+    if (now - lastSessionExpiredAt < SESSION_EXPIRED_NOTIFY_COOLDOWN_MS) {
+        return;
+    }
+    lastSessionExpiredAt = now;
+    authHandler.sessionExpired();
+}
 
 const API_ERROR_MESSAGE_MAP: Record<string, string> = {
     "[NETWORK_ERROR]": "网络连接失败，请检查后端服务或网络设置后重试。",
+    "[INVALID_CLIENT_PAYLOAD]": "请求参数无效，请刷新页面后重试。",
     "[AGENT_PERSONA_PAIR_REQUIRED]": "请选择智能体与角色后再开始训练。",
     "[AGENT_ARCHIVED]": "该智能体已归档，暂时无法创建训练会话。",
     "[AGENT_NOT_PUBLISHED]": "该智能体尚未发布，请选择可用智能体。",
     "[PERSONA_INACTIVE]": "该角色已停用，请更换角色。",
     "[PERSONA_NOT_LINKED_TO_AGENT]": "所选角色未关联当前智能体，请重新选择。",
     "[AGENT_CATEGORY_RESTRICTED]": "当前仅支持创建「销售」与「演讲」两类智能体。",
+    "[FIELD_DEPRECATED_PERSONA_CENTERED]": "该配置入口已下线，请改为在角色中心（Persona）配置。",
+    "[PROMPT_SCOPE_VIOLATION]": "销售场景仅允许评估/报告相关模板。",
     "[SALES_PERSONA_REQUIRED]": "请先选择销售角色。",
     "[SESSION_NOT_FOUND]": "未找到目标会话，请刷新后重试。",
     "[ACCESS_DENIED]": "你没有权限访问该会话。",
-    "[PROMPT_TEMPLATE_EDIT_ADMIN_ONLY]": "仅管理员可编辑提示词正文，运营角色仅可启停与绑定。",
+    "[PROMPT_TEMPLATE_EDIT_ADMIN_ONLY]": "仅管理员可访问提示词治理接口。",
     "[ROLE_REQUIRED]": "当前账号权限不足，无法执行该操作。",
 };
 
@@ -181,6 +231,22 @@ export function getApiErrorMessage(error: unknown): string {
     return "请求失败，请稍后重试。";
 }
 
+function normalizeRequiredId(
+    id: string,
+    options: { fieldName: string },
+): string {
+    const { fieldName } = options;
+    const normalized = typeof id === "string" ? id.trim() : "";
+    if (!normalized || normalized === "undefined" || normalized === "null") {
+        throw new ApiRequestError({
+            status: 400,
+            errorCode: "[INVALID_CLIENT_PAYLOAD]",
+            message: `${fieldName} is invalid`,
+        });
+    }
+    return normalized;
+}
+
 
 type HistoryApiItem = {
     session_id?: string;
@@ -194,6 +260,8 @@ type HistoryApiItem = {
     total_duration_seconds?: number;
     start_time?: string;
     status?: string;
+    effectiveness_snapshot?: Record<string, unknown> | null;
+    feedback_summary?: string;
     [key: string]: unknown;
 };
 
@@ -274,7 +342,6 @@ type VoiceRuntimeProfile = {
     output_audio_format: string;
     output_sample_rate: number;
     turn_detection?: string | null;
-    system_instruction_template?: string | null;
     tool_policy: Record<string, unknown>;
     created_at?: string | null;
     updated_at?: string | null;
@@ -293,7 +360,6 @@ type VoiceRuntimeProfilePayload = {
     output_audio_format?: string;
     output_sample_rate?: number;
     turn_detection?: string | null;
-    system_instruction_template?: string | null;
     tool_policy?: Record<string, unknown>;
 };
 
@@ -306,10 +372,28 @@ type AgentVoicePolicy = {
     model_override?: string | null;
     voice_override?: string | null;
     temperature_override?: number | null;
-    instructions_override?: string | null;
     tool_policy_override?: Record<string, unknown>;
     created_at?: string | null;
     updated_at?: string | null;
+};
+
+type AgentVoicePolicyUpsertPayload = {
+    enabled?: boolean;
+    runtime_profile_id?: string | null;
+    voice_mode_override?: string | null;
+    model_override?: string | null;
+    voice_override?: string | null;
+    temperature_override?: number | null;
+    tool_policy_override?: Record<string, unknown>;
+};
+
+type AgentWritePayload = {
+    name?: string;
+    description?: string;
+    icon?: string;
+    category?: string;
+    welcome_message?: string;
+    capabilities_config?: Record<string, unknown>;
 };
 
 type PresentationAIPolicyUpsertPayload = {
@@ -486,7 +570,7 @@ async function apiFetch<T>(
     endpoint: string,
     options: RequestInit & { signal?: AbortSignal } = {}
 ): Promise<T> {
-    const url = `${API_BASE_URL}${endpoint}`;
+    const url = `${resolveApiBaseUrl()}${endpoint}`;
     const requestId = `req_${++requestCounter}`;
     const hadToken = Boolean(getAuthToken());
 
@@ -518,7 +602,7 @@ async function apiFetch<T>(
             const normalized = normalizeApiErrorPayload(response.status, responseJson);
 
             if (response.status === 401 && hadToken) {
-                authHandler.sessionExpired();
+                triggerSessionExpiredOnce();
             }
 
             throw new ApiRequestError(normalized);
@@ -559,7 +643,7 @@ async function apiUpload<T>(
     formData: FormData,
     signal?: AbortSignal
 ): Promise<T> {
-    const url = `${API_BASE_URL}${endpoint}`;
+    const url = `${resolveApiBaseUrl()}${endpoint}`;
     const token = getAuthToken();
     const requestId = `upload_${++requestCounter}`;
     const controller = new AbortController();
@@ -582,7 +666,7 @@ async function apiUpload<T>(
 
         if (!response.ok) {
             if (response.status === 401 && token) {
-                authHandler.sessionExpired();
+                triggerSessionExpiredOnce();
             }
             throw new ApiRequestError(normalizeApiErrorPayload(response.status, responseJson));
         }
@@ -778,6 +862,12 @@ export const api = {
                         : undefined,
                 agent_name: typeof item.agent_name === "string" ? item.agent_name : undefined,
                 persona_name: typeof item.persona_name === "string" ? item.persona_name : undefined,
+                effectiveness_snapshot:
+                    item.effectiveness_snapshot && typeof item.effectiveness_snapshot === "object"
+                        ? item.effectiveness_snapshot
+                        : null,
+                feedback_summary:
+                    typeof item.feedback_summary === "string" ? item.feedback_summary : undefined,
                 runtime_profile_id:
                     typeof item.runtime_profile_id === "string"
                         ? item.runtime_profile_id
@@ -933,17 +1023,11 @@ export const api = {
             return result.agents || [];
         },
 
-        getCustomerAgents: async () => {
-            const result = await apiFetch<{ agents: Agent[]; total: number }>("/agents?category=customer_service&status=published");
-            return result.agents || [];
-        },
-
         createSession: async (data: {
             scenario_type: "sales" | "presentation";
             presentation_id?: string;
             agent_id?: string;
             persona_id?: string;
-            sales_persona?: string;
             voice_mode?: "legacy" | "stepfun_realtime";
             runtime_profile_id?: string;
         }) => {
@@ -961,7 +1045,6 @@ export const api = {
             presentation_id?: string;
             agent_id?: string;
             persona_id?: string;
-            sales_persona?: string;
             scenario_id?: string;
             voice_mode?: "legacy" | "stepfun_realtime";
             runtime_profile_id?: string;
@@ -973,7 +1056,7 @@ export const api = {
         },
 
         getSession: async (sessionId: string) => {
-            return apiFetch<SessionItem>(`/practice/sessions/${sessionId}`);
+            return apiFetch<PracticeSessionRuntime>(`/practice/sessions/${sessionId}`);
         },
 
         controlLifecycle: async (sessionId: string, action: SessionLifecycleAction) => {
@@ -1046,7 +1129,7 @@ export const api = {
 
         getAudioBlobUrl: async (sessionId: string, messageId: string) => {
             const token = getAuthToken();
-            const response = await fetch(`${API_BASE_URL}/sessions/${sessionId}/audio/${messageId}`, {
+            const response = await fetch(`${resolveApiBaseUrl()}/sessions/${sessionId}/audio/${messageId}`, {
                 headers: token ? { Authorization: `Bearer ${token}` } : {},
             });
 
@@ -1168,7 +1251,7 @@ export const api = {
             if (params?.time_range) searchParams.set("time_range", params.time_range);
             if (params?.format) searchParams.set("format", params.format);
 
-            const url = `${API_BASE_URL}/admin/analytics/export?${searchParams}`;
+            const url = `${resolveApiBaseUrl()}/admin/analytics/export?${searchParams}`;
             const token = getAuthToken();
 
             const response = await fetch(url, {
@@ -1188,6 +1271,23 @@ export const api = {
             a.click();
             document.body.removeChild(a);
             window.URL.revokeObjectURL(downloadUrl);
+        },
+
+        getManagerLiteLists: async (params?: { time_range?: string; limit?: number; inactive_days?: number }) => {
+            const searchParams = new URLSearchParams();
+            if (params?.time_range) searchParams.set("time_range", params.time_range);
+            if (typeof params?.limit === "number") searchParams.set("limit", String(params.limit));
+            if (typeof params?.inactive_days === "number") {
+                searchParams.set("inactive_days", String(params.inactive_days));
+            }
+            return apiFetch<ManagerLiteListsResponse>(`/admin/interventions/lists?${searchParams}`);
+        },
+
+        remindFromManagerLite: async (data: { user_id: string; note?: string }) => {
+            return apiFetch<ManagerLiteRemindResponse>(`/admin/interventions/remind`, {
+                method: "POST",
+                body: JSON.stringify(data),
+            });
         },
     },
 
@@ -1287,7 +1387,7 @@ export const api = {
             if (params?.search) searchParams.set("search", params.search);
             if (params?.status) searchParams.set("status", params.status);
 
-            const url = `${API_BASE_URL}/admin/users/export?${searchParams}`;
+            const url = `${resolveApiBaseUrl()}/admin/users/export?${searchParams}`;
             const token = getAuthToken();
 
             const response = await fetch(url, {
@@ -1327,14 +1427,14 @@ export const api = {
             return apiFetch<AdminAgent>(`/admin/agents/${id}`);
         },
 
-        createAgent: async (data: Partial<AdminAgent>) => {
+        createAgent: async (data: AgentWritePayload) => {
             return apiFetch<AdminAgent>("/admin/agents", {
                 method: "POST",
                 body: JSON.stringify(data),
             });
         },
 
-        updateAgent: async (id: string, data: Partial<AdminAgent>) => {
+        updateAgent: async (id: string, data: AgentWritePayload) => {
             return apiFetch<AdminAgent>(`/admin/agents/${id}`, {
                 method: "PUT",
                 body: JSON.stringify(data),
@@ -1592,7 +1692,7 @@ export const api = {
             return apiFetch<AgentVoicePolicy>(`/admin/voice-runtime/agents/${agentId}/policy`);
         },
 
-        updateAgentVoicePolicy: async (agentId: string, data: Partial<AgentVoicePolicy>) => {
+        updateAgentVoicePolicy: async (agentId: string, data: AgentVoicePolicyUpsertPayload) => {
             return apiFetch<AgentVoicePolicy>(`/admin/voice-runtime/agents/${agentId}/policy`, {
                 method: "PUT",
                 body: JSON.stringify(data),
@@ -1665,7 +1765,8 @@ export const api = {
         },
 
         getPromptTemplate: async (id: string) => {
-            return apiFetch<PromptTemplate>(`/prompt-templates/${id}`);
+            const normalizedId = normalizeRequiredId(id, { fieldName: "prompt_template_id" });
+            return apiFetch<PromptTemplate>(`/prompt-templates/${normalizedId}`);
         },
 
         createPromptTemplate: async (data: PromptTemplateCreate) => {
@@ -1676,28 +1777,32 @@ export const api = {
         },
 
         updatePromptTemplate: async (id: string, data: PromptTemplateUpdate) => {
-            return apiFetch<PromptTemplate>(`/prompt-templates/${id}`, {
+            const normalizedId = normalizeRequiredId(id, { fieldName: "prompt_template_id" });
+            return apiFetch<PromptTemplate>(`/prompt-templates/${normalizedId}`, {
                 method: "PUT",
                 body: JSON.stringify(data),
             });
         },
 
         deletePromptTemplate: async (id: string) => {
-            return apiFetch<void>(`/prompt-templates/${id}`, {
+            const normalizedId = normalizeRequiredId(id, { fieldName: "prompt_template_id" });
+            return apiFetch<void>(`/prompt-templates/${normalizedId}`, {
                 method: "DELETE",
             });
         },
 
         renderPromptTemplate: async (id: string, variables: Record<string, unknown>) => {
-            const request: PromptRenderRequest = { template_id: id, variables };
-            return apiFetch<PromptRenderResponse>(`/prompt-templates/${id}/render`, {
+            const normalizedId = normalizeRequiredId(id, { fieldName: "prompt_template_id" });
+            const request: PromptRenderRequest = { template_id: normalizedId, variables };
+            return apiFetch<PromptRenderResponse>(`/prompt-templates/${normalizedId}/render`, {
                 method: "POST",
                 body: JSON.stringify(request),
             });
         },
 
         setDefaultPromptTemplate: async (id: string, promptType: string) => {
-            return apiFetch<PromptTemplate>(`/prompt-templates/${id}/set-default?prompt_type=${promptType}`, {
+            const normalizedId = normalizeRequiredId(id, { fieldName: "prompt_template_id" });
+            return apiFetch<PromptTemplate>(`/prompt-templates/${normalizedId}/set-default?prompt_type=${promptType}`, {
                 method: "POST",
             });
         },
@@ -1748,17 +1853,17 @@ export const api = {
 
     // Admin toolchain and lower-level capabilities
     adminTools: {
-        getSystemLogs: async (params?: { level?: string; search?: string; page?: number; page_size?: number }) => {
+        getSystemLogs: async (params?: { status?: string; search?: string; page?: number; page_size?: number }) => {
             const searchParams = new URLSearchParams();
-            if (params?.level) searchParams.set("level", params.level);
+            if (params?.status) searchParams.set("status", params.status);
             if (params?.search) searchParams.set("search", params.search);
             if (params?.page) searchParams.set("page", String(params.page));
             if (params?.page_size) searchParams.set("page_size", String(params.page_size));
-            return apiFetch<Record<string, unknown>>(`/admin/system-logs?${searchParams}`);
+            return apiFetch<AdminSystemLogListResponse>(`/admin/system-logs?${searchParams}`);
         },
 
         getSystemLog: async (logId: string) => {
-            return apiFetch<Record<string, unknown>>(`/admin/system-logs/${logId}`);
+            return apiFetch<AdminSystemLog>(`/admin/system-logs/${logId}`);
         },
 
         duplicatePersona: async (personaId: string, name?: string) => {
@@ -1786,7 +1891,7 @@ export const api = {
             if (params?.format) searchParams.set("format", params.format);
             if (params?.include_inactive !== undefined) searchParams.set("include_inactive", String(params.include_inactive));
 
-            const response = await fetch(`${API_BASE_URL}/admin/users/export?${searchParams}`, {
+            const response = await fetch(`${resolveApiBaseUrl()}/admin/users/export?${searchParams}`, {
                 headers: {
                     ...createHeaders(false),
                 },
@@ -1802,7 +1907,7 @@ export const api = {
             if (params?.time_range) searchParams.set("time_range", params.time_range);
             if (params?.format) searchParams.set("format", params.format);
 
-            const response = await fetch(`${API_BASE_URL}/admin/analytics/export?${searchParams}`, {
+            const response = await fetch(`${resolveApiBaseUrl()}/admin/analytics/export?${searchParams}`, {
                 headers: {
                     ...createHeaders(false),
                 },
@@ -1870,7 +1975,7 @@ export const api = {
 
         getThumbnailBlob: async (presentationId: string, pageNumber: number) => {
             const response = await fetchWithLoopbackRetry(
-                `${API_BASE_URL}/presentations/${presentationId}/pages/${pageNumber}/thumbnail`,
+                `${resolveApiBaseUrl()}/presentations/${presentationId}/pages/${pageNumber}/thumbnail`,
                 {
                     method: "GET",
                     headers: createHeaders(false),
@@ -1985,7 +2090,7 @@ export const api = {
         },
 
         health: async () => {
-            const root = API_BASE_URL.replace(/\/api\/v1$/, "");
+            const root = resolveApiBaseUrl().replace(/\/api\/v1$/, "");
             const response = await fetch(`${root}/health`);
             if (!response.ok) {
                 throw new Error(`HTTP ${response.status}`);

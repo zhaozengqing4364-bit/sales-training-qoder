@@ -228,10 +228,6 @@ class SessionLifecycleService:
         if changed:
             await self.db.flush()
 
-        # Trigger report generation when session ends (Story 3.1)
-        if action == "end" and changed:
-            await self._trigger_report_generation(session.session_id, resolved_scenario_type)
-
         return SessionLifecycleTransition(
             session=session,
             scenario_type=resolved_scenario_type,
@@ -239,6 +235,23 @@ class SessionLifecycleService:
             from_status=from_status,
             to_status=to_status,
             changed=changed,
+        )
+
+    async def trigger_report_generation_if_needed(
+        self,
+        transition: SessionLifecycleTransition,
+    ) -> None:
+        """
+        Trigger report generation after transaction commit.
+
+        This method is intentionally separate from `transition` so callers can
+        control transaction boundaries and avoid state/report non-atomic windows.
+        """
+        if transition.action != "end" or not transition.changed:
+            return
+        await self._trigger_report_generation(
+            transition.session.session_id,
+            transition.scenario_type,
         )
 
     async def _trigger_report_generation(

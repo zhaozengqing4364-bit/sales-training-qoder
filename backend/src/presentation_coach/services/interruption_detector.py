@@ -43,8 +43,21 @@ class InterruptionDetector:
             if keyword_result:
                 return Result.ok(keyword_result)
 
+            required_points = context.get("required_points", [])
+            if not required_points:
+                return Result.ok(None)
+
+            covered_points = self._check_points_covered(transcript, required_points)
+            if covered_points >= len(required_points):
+                return Result.ok(None)
+
             # Stage 2: Semantic analysis (only if keyword didn't match)
-            semantic_result = await self._check_semantic(transcript, context)
+            semantic_result = await self._check_semantic(
+                transcript,
+                context,
+                required_points=required_points,
+                covered_points=covered_points,
+            )
             return Result.ok(semantic_result)
 
         except (RuntimeError, ValueError, OSError) as e:
@@ -99,20 +112,27 @@ class InterruptionDetector:
     async def _check_semantic(
         self,
         transcript: str,
-        context: dict[str, Any]
+        context: dict[str, Any],
+        *,
+        required_points: list[str] | None = None,
+        covered_points: int | None = None,
     ) -> dict[str, Any] | None:
         """
         Stage 2: Semantic analysis via LLM
         Checks for vague responses, off-topic content, etc.
         """
         try:
-            required_points = context.get("required_points", [])
+            if required_points is None:
+                required_points = context.get("required_points", [])
 
             if not required_points:
                 # No requirements, no need to interrupt
                 return None
 
-            covered_points = self._check_points_covered(transcript, required_points)
+            if covered_points is None:
+                covered_points = self._check_points_covered(
+                    transcript, required_points
+                )
             if covered_points >= len(required_points):
                 return None
 

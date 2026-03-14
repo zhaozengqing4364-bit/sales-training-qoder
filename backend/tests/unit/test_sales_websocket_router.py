@@ -23,9 +23,6 @@ async def test_enhanced_connection_init_failure_does_not_fallback_to_simple(monk
     monkeypatch.setattr(sales_router, "create_enhanced_sales_handler", lambda: handler)
     monkeypatch.setattr(sales_router, "_extract_user_id_from_token", lambda _token: "user-1")
 
-    fallback_to_simple = AsyncMock()
-    monkeypatch.setattr(sales_router, "_handle_simple_connection", fallback_to_simple)
-
     import common.db.session as db_session
 
     class DummyDbSessionContext:
@@ -46,7 +43,6 @@ async def test_enhanced_connection_init_failure_does_not_fallback_to_simple(monk
     )
 
     handler.initialize.assert_awaited_once()
-    fallback_to_simple.assert_not_awaited()
     websocket.accept.assert_awaited_once()
     websocket.close.assert_awaited_once_with(code=4502, reason="ENHANCED_INIT_FAILED")
 

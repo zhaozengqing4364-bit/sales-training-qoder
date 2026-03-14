@@ -19,11 +19,13 @@ from __future__ import annotations
 from typing import Any
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi.responses import JSONResponse
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from common.auth.service import get_current_user, require_role
+from common.api.server_error import build_server_error
+from common.auth.service import get_current_user
 from common.db.models import User
 from common.db.session import get_db
 from common.monitoring.logger import get_logger
@@ -39,12 +41,38 @@ from prompt_templates.models import (
 )
 from prompt_templates.service import PromptTemplateService
 
+def _is_admin(user: User) -> bool:
+    return str(getattr(user, "role", "")).lower() == "admin"
+
+
+def _require_prompt_admin(current_user: User) -> None:
+    if _is_admin(current_user):
+        return
+    raise HTTPException(
+        status_code=403,
+        detail={
+            "error": "[PROMPT_TEMPLATE_EDIT_ADMIN_ONLY]",
+            "message": "仅管理员可访问提示词治理接口。",
+        },
+    )
+
+
+def require_prompt_admin_user(
+    current_user: User = Depends(get_current_user),
+) -> User:
+    _require_prompt_admin(current_user)
+    return current_user
+
+
 router = APIRouter(
     prefix="/api/v1/prompt-templates",
     tags=["prompt-templates"],
-    dependencies=[Depends(require_role(["admin", "support"]))],
+    dependencies=[Depends(require_prompt_admin_user)],
 )
 logger = get_logger(__name__)
+
+HTTP_500_INTERNAL_SERVER_ERROR = status.HTTP_500_INTERNAL_SERVER_ERROR
+HTTP_503_SERVICE_UNAVAILABLE = status.HTTP_503_SERVICE_UNAVAILABLE
 
 
 def get_prompt_service(
@@ -60,7 +88,16 @@ def _raise_prompt_http_error(
     error_code: str,
     message: str,
     exc: Exception | None = None,
-) -> None:
+) -> JSONResponse:
+    if status_code >= 500:
+        return build_server_error(
+            error_code,
+            status_code=status_code,
+            message=message,
+            exc=exc,
+            source="prompt_templates_api",
+        )
+
     if exc is not None:
         logger.error(
             "Prompt API request failed",
@@ -77,45 +114,37 @@ def _raise_prompt_http_error(
     )
 
 
-def _is_admin(user: User) -> bool:
-    return str(getattr(user, "role", "")).lower() == "admin"
-
-
-def _require_admin_editor(user: User) -> None:
-    if _is_admin(user):
-        return
+def _raise_scope_violation(exc: ValueError) -> None:
+    message = str(exc)
     raise HTTPException(
-        status_code=403,
+        status_code=400,
         detail={
-            "error": "[PROMPT_TEMPLATE_EDIT_ADMIN_ONLY]",
-            "message": "仅管理员可编辑提示词正文与元信息。",
+            "error": "[PROMPT_SCOPE_VIOLATION]",
+            "message": message,
         },
-    )
+    ) from exc
 
 
-def _require_operator_safe_update(
-    *,
-    user: User,
-    data: PromptTemplateUpdate,
-) -> None:
-    if _is_admin(user):
-        return
-
-    changed_fields = set(data.model_dump(exclude_unset=True).keys())
-    if not changed_fields:
-        return
-
-    allowed_fields = {"is_active", "is_default"}
-    if changed_fields.issubset(allowed_fields):
-        return
-
-    raise HTTPException(
-        status_code=403,
-        detail={
-            "error": "[PROMPT_TEMPLATE_EDIT_ADMIN_ONLY]",
-            "message": "运营角色仅可启停模板与切换默认，不可修改模板正文。",
-        },
-    )
+def _parse_template_id_or_400(template_id: str) -> UUID:
+    normalized = str(template_id or "").strip()
+    if not normalized or normalized.lower() in {"undefined", "null"}:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": "[PROMPT_TEMPLATE_ID_INVALID]",
+                "message": "模板ID无效，请检查请求参数。",
+            },
+        )
+    try:
+        return UUID(normalized)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": "[PROMPT_TEMPLATE_ID_INVALID]",
+                "message": "模板ID无效，请检查请求参数。",
+            },
+        ) from exc
 
 
 @router.get("", response_model=list[PromptTemplate])
@@ -137,15 +166,17 @@ async def list_prompt_templates(
             limit=limit,
         )
     except SQLAlchemyError as exc:
-        _raise_prompt_http_error(
-            status_code=503,
+        return _raise_prompt_http_error(
+            status_code=HTTP_503_SERVICE_UNAVAILABLE,
             error_code="[PROMPT_DB_UNAVAILABLE]",
             message="提示词服务暂不可用，请稍后重试。",
             exc=exc,
         )
     except ValueError as exc:
-        _raise_prompt_http_error(
-            status_code=500,
+        if str(exc).startswith("[PROMPT_SCOPE_VIOLATION]"):
+            _raise_scope_violation(exc)
+        return _raise_prompt_http_error(
+            status_code=HTTP_500_INTERNAL_SERVER_ERROR,
             error_code="[PROMPT_DATA_INVALID]",
             message="提示词数据异常，请联系管理员。",
             exc=exc,
@@ -167,15 +198,15 @@ async def get_template_for_scenario(
             scenario_id=scenario_id,
         )
     except SQLAlchemyError as exc:
-        _raise_prompt_http_error(
-            status_code=503,
+        return _raise_prompt_http_error(
+            status_code=HTTP_503_SERVICE_UNAVAILABLE,
             error_code="[PROMPT_DB_UNAVAILABLE]",
             message="提示词服务暂不可用，请稍后重试。",
             exc=exc,
         )
     except ValueError as exc:
-        _raise_prompt_http_error(
-            status_code=500,
+        return _raise_prompt_http_error(
+            status_code=HTTP_500_INTERNAL_SERVER_ERROR,
             error_code="[PROMPT_DATA_INVALID]",
             message="提示词数据异常，请联系管理员。",
             exc=exc,
@@ -185,22 +216,20 @@ async def get_template_for_scenario(
 @router.post("", response_model=PromptTemplate, status_code=201)
 async def create_prompt_template(
     data: PromptTemplateCreate,
-    current_user: User = Depends(get_current_user),
     service: PromptTemplateService = Depends(get_prompt_service),
 ) -> PromptTemplate:
     """Create a new prompt template."""
-    _require_admin_editor(current_user)
     try:
         return await service.create_template(data)
     except SQLAlchemyError as exc:
-        _raise_prompt_http_error(
-            status_code=503,
+        return _raise_prompt_http_error(
+            status_code=HTTP_503_SERVICE_UNAVAILABLE,
             error_code="[PROMPT_DB_UNAVAILABLE]",
             message="提示词服务暂不可用，请稍后重试。",
             exc=exc,
         )
     except ValueError as exc:
-        _raise_prompt_http_error(
+        return _raise_prompt_http_error(
             status_code=400,
             error_code="[PROMPT_DATA_INVALID]",
             message="提示词数据无效，请检查后重试。",
@@ -210,12 +239,13 @@ async def create_prompt_template(
 
 @router.get("/{template_id}", response_model=PromptTemplate)
 async def get_prompt_template(
-    template_id: UUID,
+    template_id: str,
     service: PromptTemplateService = Depends(get_prompt_service),
 ) -> PromptTemplate:
     """Get a prompt template by ID."""
+    template_uuid = _parse_template_id_or_400(template_id)
     try:
-        template = await service.get_template(template_id)
+        template = await service.get_template(template_uuid)
         if not template:
             raise HTTPException(
                 status_code=404,
@@ -223,15 +253,15 @@ async def get_prompt_template(
             )
         return template
     except SQLAlchemyError as exc:
-        _raise_prompt_http_error(
-            status_code=503,
+        return _raise_prompt_http_error(
+            status_code=HTTP_503_SERVICE_UNAVAILABLE,
             error_code="[PROMPT_DB_UNAVAILABLE]",
             message="提示词服务暂不可用，请稍后重试。",
             exc=exc,
         )
     except ValueError as exc:
-        _raise_prompt_http_error(
-            status_code=500,
+        return _raise_prompt_http_error(
+            status_code=HTTP_500_INTERNAL_SERVER_ERROR,
             error_code="[PROMPT_DATA_INVALID]",
             message="提示词数据异常，请联系管理员。",
             exc=exc,
@@ -240,15 +270,14 @@ async def get_prompt_template(
 
 @router.put("/{template_id}", response_model=PromptTemplate)
 async def update_prompt_template(
-    template_id: UUID,
+    template_id: str,
     data: PromptTemplateUpdate,
-    current_user: User = Depends(get_current_user),
     service: PromptTemplateService = Depends(get_prompt_service),
 ) -> PromptTemplate:
     """Update a prompt template."""
-    _require_operator_safe_update(user=current_user, data=data)
+    template_uuid = _parse_template_id_or_400(template_id)
     try:
-        template = await service.update_template(template_id, data)
+        template = await service.update_template(template_uuid, data)
         if not template:
             raise HTTPException(
                 status_code=404,
@@ -256,14 +285,14 @@ async def update_prompt_template(
             )
         return template
     except SQLAlchemyError as exc:
-        _raise_prompt_http_error(
-            status_code=503,
+        return _raise_prompt_http_error(
+            status_code=HTTP_503_SERVICE_UNAVAILABLE,
             error_code="[PROMPT_DB_UNAVAILABLE]",
             message="提示词服务暂不可用，请稍后重试。",
             exc=exc,
         )
     except ValueError as exc:
-        _raise_prompt_http_error(
+        return _raise_prompt_http_error(
             status_code=400,
             error_code="[PROMPT_DATA_INVALID]",
             message="提示词数据无效，请检查后重试。",
@@ -273,20 +302,21 @@ async def update_prompt_template(
 
 @router.delete("/{template_id}", status_code=204)
 async def delete_prompt_template(
-    template_id: UUID,
+    template_id: str,
     service: PromptTemplateService = Depends(get_prompt_service),
 ) -> None:
     """Delete (deactivate) a prompt template."""
+    template_uuid = _parse_template_id_or_400(template_id)
     try:
-        success = await service.delete_template(template_id)
+        success = await service.delete_template(template_uuid)
         if not success:
             raise HTTPException(
                 status_code=404,
                 detail={"error": "[PROMPT_TEMPLATE_NOT_FOUND]", "message": "模板不存在"},
             )
     except SQLAlchemyError as exc:
-        _raise_prompt_http_error(
-            status_code=503,
+        return _raise_prompt_http_error(
+            status_code=HTTP_503_SERVICE_UNAVAILABLE,
             error_code="[PROMPT_DB_UNAVAILABLE]",
             message="提示词服务暂不可用，请稍后重试。",
             exc=exc,
@@ -295,13 +325,14 @@ async def delete_prompt_template(
 
 @router.post("/{template_id}/render", response_model=PromptRenderResponse)
 async def render_prompt_template(
-    template_id: UUID,
+    template_id: str,
     request: PromptRenderRequest,
     service: PromptTemplateService = Depends(get_prompt_service),
 ) -> PromptRenderResponse:
     """Render a prompt template with variables."""
+    template_uuid = _parse_template_id_or_400(template_id)
     # Ensure template_id in path matches request
-    if request.template_id != template_id:
+    if request.template_id != template_uuid:
         raise HTTPException(
             status_code=400,
             detail={
@@ -312,14 +343,14 @@ async def render_prompt_template(
     try:
         return await service.render_prompt(request)
     except SQLAlchemyError as exc:
-        _raise_prompt_http_error(
-            status_code=503,
+        return _raise_prompt_http_error(
+            status_code=HTTP_503_SERVICE_UNAVAILABLE,
             error_code="[PROMPT_DB_UNAVAILABLE]",
             message="提示词服务暂不可用，请稍后重试。",
             exc=exc,
         )
     except ValueError as exc:
-        _raise_prompt_http_error(
+        return _raise_prompt_http_error(
             status_code=400,
             error_code="[PROMPT_RENDER_FAILED]",
             message="提示词渲染失败，请检查变量配置。",
@@ -329,20 +360,21 @@ async def render_prompt_template(
 
 @router.post("/{template_id}/set-default", response_model=PromptTemplate)
 async def set_default_template(
-    template_id: UUID,
+    template_id: str,
     prompt_type: PromptType,
     service: PromptTemplateService = Depends(get_prompt_service),
 ) -> PromptTemplate:
     """Set a template as the default for its type."""
+    template_uuid = _parse_template_id_or_400(template_id)
     try:
-        success = await service.set_default_template(template_id, prompt_type)
+        success = await service.set_default_template(template_uuid, prompt_type)
         if not success:
             raise HTTPException(
                 status_code=404,
                 detail={"error": "[PROMPT_TEMPLATE_NOT_FOUND]", "message": "模板不存在"},
             )
 
-        template = await service.get_template(template_id)
+        template = await service.get_template(template_uuid)
         if not template:
             raise HTTPException(
                 status_code=404,
@@ -350,14 +382,14 @@ async def set_default_template(
             )
         return template
     except SQLAlchemyError as exc:
-        _raise_prompt_http_error(
-            status_code=503,
+        return _raise_prompt_http_error(
+            status_code=HTTP_503_SERVICE_UNAVAILABLE,
             error_code="[PROMPT_DB_UNAVAILABLE]",
             message="提示词服务暂不可用，请稍后重试。",
             exc=exc,
         )
     except ValueError as exc:
-        _raise_prompt_http_error(
+        return _raise_prompt_http_error(
             status_code=400,
             error_code="[PROMPT_DATA_INVALID]",
             message="提示词数据无效，请检查后重试。",
@@ -369,7 +401,7 @@ async def set_default_template(
 scenario_router = APIRouter(
     prefix="/api/v1/scenario-prompts",
     tags=["scenario-prompts"],
-    dependencies=[Depends(require_role(["admin", "support"]))],
+    dependencies=[Depends(require_prompt_admin_user)],
 )
 
 
@@ -388,8 +420,8 @@ async def list_scenario_prompts(
             is_active=is_active,
         )
     except SQLAlchemyError as exc:
-        _raise_prompt_http_error(
-            status_code=503,
+        return _raise_prompt_http_error(
+            status_code=HTTP_503_SERVICE_UNAVAILABLE,
             error_code="[PROMPT_DB_UNAVAILABLE]",
             message="提示词服务暂不可用，请稍后重试。",
             exc=exc,
@@ -405,14 +437,16 @@ async def create_scenario_prompt(
     try:
         return await service.assign_template_to_scenario(data)
     except SQLAlchemyError as exc:
-        _raise_prompt_http_error(
-            status_code=503,
+        return _raise_prompt_http_error(
+            status_code=HTTP_503_SERVICE_UNAVAILABLE,
             error_code="[PROMPT_DB_UNAVAILABLE]",
             message="提示词服务暂不可用，请稍后重试。",
             exc=exc,
         )
     except ValueError as exc:
-        _raise_prompt_http_error(
+        if str(exc).startswith("[PROMPT_SCOPE_VIOLATION]"):
+            _raise_scope_violation(exc)
+        return _raise_prompt_http_error(
             status_code=400,
             error_code="[SCENARIO_PROMPT_INVALID]",
             message="场景提示词配置无效，请检查后重试。",
@@ -435,8 +469,8 @@ async def get_scenario_prompt(
             )
         return assignment
     except SQLAlchemyError as exc:
-        _raise_prompt_http_error(
-            status_code=503,
+        return _raise_prompt_http_error(
+            status_code=HTTP_503_SERVICE_UNAVAILABLE,
             error_code="[PROMPT_DB_UNAVAILABLE]",
             message="提示词服务暂不可用，请稍后重试。",
             exc=exc,
@@ -464,14 +498,16 @@ async def update_scenario_prompt(
             )
         return assignment
     except SQLAlchemyError as exc:
-        _raise_prompt_http_error(
-            status_code=503,
+        return _raise_prompt_http_error(
+            status_code=HTTP_503_SERVICE_UNAVAILABLE,
             error_code="[PROMPT_DB_UNAVAILABLE]",
             message="提示词服务暂不可用，请稍后重试。",
             exc=exc,
         )
     except ValueError as exc:
-        _raise_prompt_http_error(
+        if str(exc).startswith("[PROMPT_SCOPE_VIOLATION]"):
+            _raise_scope_violation(exc)
+        return _raise_prompt_http_error(
             status_code=400,
             error_code="[SCENARIO_PROMPT_INVALID]",
             message="场景提示词配置无效，请检查后重试。",
@@ -493,8 +529,8 @@ async def delete_scenario_prompt(
                 detail={"error": "[SCENARIO_PROMPT_NOT_FOUND]", "message": "场景提示词绑定不存在"},
             )
     except SQLAlchemyError as exc:
-        _raise_prompt_http_error(
-            status_code=503,
+        return _raise_prompt_http_error(
+            status_code=HTTP_503_SERVICE_UNAVAILABLE,
             error_code="[PROMPT_DB_UNAVAILABLE]",
             message="提示词服务暂不可用，请稍后重试。",
             exc=exc,

@@ -132,7 +132,6 @@ async def test_start_session_persists_voice_policy_snapshot(
     assert session.voice_policy_snapshot is not None
     assert session.voice_policy_snapshot.get("voice_mode") == "stepfun_realtime"
     assert set(session.voice_policy_snapshot.get("knowledge_base_ids", [])) == {
-        "kb_test_1",
         "kb_test_2",
     }
     assert payload["data"]["voice_policy_snapshot_ref"] == _snapshot_ref(

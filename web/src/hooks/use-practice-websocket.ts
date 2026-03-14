@@ -17,7 +17,7 @@ import { debug } from "@/lib/debug";
 // ── Re-export every public type so existing consumers stay untouched ──
 export type {
     InterruptReason, InterruptMessageData, WSMessage, ChatMessage,
-    FuzzyDetection, SalesStage, ScoreDimension, ScoreUpdate,
+    FuzzyDetection, SalesStage, ScoreDimension, ScoreUpdate, ActionCard,
     SlideUpdate, PointCovered, ForbiddenWordDetection,
     TTSAudioData, TTSChunkMessage, PracticeState, SessionStatus, ConnectionState,
     UsePracticeWebSocketOptions, TTSChunkData,
@@ -37,10 +37,12 @@ const MAX_RECONNECT_ATTEMPTS = 5;
 const MAX_LOCAL_BUFFER_SIZE = 200; // ~4 seconds of audio at 20ms chunks
 const INTERIM_TRANSCRIPT_THROTTLE_MS = 80;
 const MAX_CHAT_MESSAGES = 200;
+const MAX_PENDING_OUTGOING_MESSAGES = 80;
 
 // v1-13: Binary frame type constants (must match backend)
 const BINARY_AUDIO_CHUNK = 0x01;
 const BINARY_AUDIO_INTERRUPT = 0x02;
+type OutgoingMessagePriority = "high" | "normal";
 
 function deriveConnectionFlags(connectionState: ConnectionState): {
     isConnected: boolean;
@@ -54,6 +56,20 @@ function deriveConnectionFlags(connectionState: ConnectionState): {
 
 function maskWsUrlToken(url: string): string {
     return url.replace(/([?&]token=)[^&]+/i, "$1***");
+}
+
+function toCloseReasonMessage(reason: string): string | null {
+    const normalized = reason.trim().toLowerCase();
+    if (!normalized) {
+        return null;
+    }
+    if (
+        normalized.includes("too long without operation")
+        || normalized.includes("too long without operatio")
+    ) {
+        return "Realtime 上游连接空闲超时，请继续提问或点击“重新连接”。";
+    }
+    return reason.trim();
 }
 
 /** v1-13: Convert Int16Array PCM to Base64 string (used only during backpressure fallback). */
@@ -76,6 +92,7 @@ export function usePracticeWebSocket(options: UsePracticeWebSocketOptions) {
     const reconnectAttempts = useRef(0);
     const isConnectingRef = useRef(false);
     const manualDisconnectRef = useRef(false);
+    const pendingMessagesRef = useRef<WSMessage[]>([]);
 
     // ── State ──
     const [state, setState] = useState<PracticeState>(INITIAL_PRACTICE_STATE);
@@ -179,6 +196,7 @@ export function usePracticeWebSocket(options: UsePracticeWebSocketOptions) {
     const isBackpressureActiveRef = useRef(false);
     const localAudioBufferRef = useRef<string[]>([]);
     const isFlushingRef = useRef(false); // Critical Fix #4
+    const flushSessionRef = useRef(0); // Abort stale flush loops safely
 
     const flushInterimTranscript = useCallback(() => {
         interimTranscriptTimerRef.current = null;
@@ -234,6 +252,7 @@ export function usePracticeWebSocket(options: UsePracticeWebSocketOptions) {
         isBackpressureActiveRef.current = false;
         localAudioBufferRef.current = [];
         isFlushingRef.current = false;
+        flushSessionRef.current = 0;
         audioQueueRef.current = [];
         isPlayingRef.current = false;
         clearInterimTranscriptThrottle();
@@ -264,18 +283,52 @@ export function usePracticeWebSocket(options: UsePracticeWebSocketOptions) {
     }, [audioQueueRef, clearInterimTranscriptThrottle, interruptStreamingPlayback, isPlayingRef]);
 
     // ── Send helpers ──
-    const sendMessage = useCallback((type: string, data: unknown) => {
-        if (wsRef.current?.readyState === WebSocket.OPEN) {
-            const message: WSMessage = { type, timestamp: new Date().toISOString(), data };
-            wsRef.current.send(JSON.stringify(message));
-        }
-    }, []);
-
-    const sendText = useCallback((content: string) => {
-        if (wsRef.current?.readyState !== WebSocket.OPEN) {
+    const flushPendingMessages = useCallback(() => {
+        const ws = wsRef.current;
+        if (!ws || ws.readyState !== WebSocket.OPEN) {
             return;
         }
-        if (state.sessionStatus !== "in_progress" || state.connectionState !== "connected") {
+        if (pendingMessagesRef.current.length === 0) {
+            return;
+        }
+
+        const queuedMessages = pendingMessagesRef.current.splice(0);
+        queuedMessages.forEach((message) => {
+            ws.send(JSON.stringify(message));
+        });
+    }, []);
+
+    const sendMessage = useCallback((type: string, data: unknown, options?: { priority?: OutgoingMessagePriority }) => {
+        const message: WSMessage = {
+            type,
+            timestamp: new Date().toISOString(),
+            data,
+        };
+        if (options?.priority) {
+            message.priority = options.priority;
+        }
+
+        const ws = wsRef.current;
+        if (ws?.readyState === WebSocket.OPEN) {
+            flushPendingMessages();
+            ws.send(JSON.stringify(message));
+            return;
+        }
+
+        // Avoid building an ever-growing queue for high-frequency audio frames.
+        const shouldQueue = type !== "audio_chunk" && type !== "audio_end";
+        if (!shouldQueue) {
+            return;
+        }
+
+        if (pendingMessagesRef.current.length >= MAX_PENDING_OUTGOING_MESSAGES) {
+            pendingMessagesRef.current.shift();
+        }
+        pendingMessagesRef.current.push(message);
+    }, [flushPendingMessages]);
+
+    const sendText = useCallback((content: string) => {
+        if (state.sessionStatus !== "in_progress") {
             return;
         }
         debug.log("[PracticeWS] Send text", {
@@ -299,7 +352,7 @@ export function usePracticeWebSocket(options: UsePracticeWebSocketOptions) {
                         : nextMessages,
             };
         });
-    }, [sendMessage, state.connectionState, state.sessionStatus]);
+    }, [sendMessage, state.sessionStatus]);
 
     /**
      * Flush local audio buffer when backpressure is released.
@@ -313,16 +366,34 @@ export function usePracticeWebSocket(options: UsePracticeWebSocketOptions) {
             return;
         }
 
+        const flushSessionId = ++flushSessionRef.current;
         isFlushingRef.current = true;
         const chunksToSend = localAudioBufferRef.current.splice(0);
         debug.log(`[Backpressure] Flushing ${chunksToSend.length} buffered audio chunks`);
 
         let index = 0;
         const sendNext = () => {
+            if (flushSessionRef.current !== flushSessionId) {
+                // Flush was explicitly aborted (e.g. interrupt): do not requeue old chunks.
+                isFlushingRef.current = false;
+                debug.log("[Backpressure] Flush aborted by newer session");
+                return;
+            }
+
             if (index < chunksToSend.length && !isBackpressureActiveRef.current) {
                 sendMessage("audio_chunk", { audio: chunksToSend[index], sample_rate: 16000, interrupt: false });
                 index++;
                 setTimeout(sendNext, 10);
+            } else if (index < chunksToSend.length && isBackpressureActiveRef.current) {
+                // Backpressure re-activated during flush: put unsent chunks back at queue head.
+                const unsentChunks = chunksToSend.slice(index);
+                if (unsentChunks.length > 0) {
+                    localAudioBufferRef.current = [...unsentChunks, ...localAudioBufferRef.current];
+                }
+                isFlushingRef.current = false;
+                debug.warn(
+                    `[Backpressure] Flush paused by slow_down, re-queued ${unsentChunks.length} chunks`,
+                );
             } else {
                 isFlushingRef.current = false;
                 if (index >= chunksToSend.length) {
@@ -482,7 +553,7 @@ export function usePracticeWebSocket(options: UsePracticeWebSocketOptions) {
             }));
         }
 
-        sendMessage("control", { action });
+        sendMessage("control", { action }, { priority: "normal" });
     }, [
         audioQueueRef,
         clearInterimTranscriptThrottle,
@@ -584,6 +655,8 @@ export function usePracticeWebSocket(options: UsePracticeWebSocketOptions) {
             reconnectAttempts.current = 0;
             isConnectingRef.current = false;
             applyConnectionState("connected", null);
+            flushPendingMessages();
+            sendMessage("negotiate", { prefer_binary: true }, { priority: "normal" });
         };
 
         // NEW-10/11 Fix: Use ref to always get latest handleMessage
@@ -598,14 +671,15 @@ export function usePracticeWebSocket(options: UsePracticeWebSocketOptions) {
                 reconnectAttempt: reconnectAttempts.current,
             });
             isConnectingRef.current = false;
-            if (ws.readyState !== WebSocket.CLOSED) {
-                setState(prev => ({
-                    ...prev,
-                    error: reconnectAttempts.current > 0
-                        ? "连接中断，正在尝试恢复..."
-                        : "连接错误",
-                }));
+            if (ws.readyState === WebSocket.CLOSED) {
+                return;
             }
+
+            const shouldRetry = reconnectAttempts.current < MAX_RECONNECT_ATTEMPTS;
+            applyConnectionState(
+                shouldRetry ? "reconnecting" : "failed",
+                shouldRetry ? "连接中断，正在尝试恢复..." : "连接失败，请点击“重新连接”",
+            );
         };
 
         ws.onclose = (event) => {
@@ -618,6 +692,7 @@ export function usePracticeWebSocket(options: UsePracticeWebSocketOptions) {
                 return;
             }
 
+            const closeReasonText = toCloseReasonMessage(event.reason || "");
             const shouldRetry =
                 reconnectAttempts.current < MAX_RECONNECT_ATTEMPTS
                 && event.code !== 1000
@@ -627,6 +702,7 @@ export function usePracticeWebSocket(options: UsePracticeWebSocketOptions) {
                 sessionId,
                 code: event.code,
                 reason: event.reason,
+                reasonHint: closeReasonText,
                 wasClean: event.wasClean,
                 shouldRetry,
                 reconnectAttempt: reconnectAttempts.current,
@@ -634,7 +710,10 @@ export function usePracticeWebSocket(options: UsePracticeWebSocketOptions) {
 
             if (shouldRetry) {
                 resetRealtimeRuntimeState();
-                applyConnectionState("reconnecting", "连接中断，正在重连...");
+                applyConnectionState(
+                    "reconnecting",
+                    closeReasonText || "连接中断，正在重连...",
+                );
                 const delay = Math.min(1000 * Math.pow(2, reconnectAttempts.current), 30000);
                 reconnectAttempts.current++;
                 debug.log(`[PracticeWS] Reconnecting in ${delay}ms (attempt ${reconnectAttempts.current})`);
@@ -647,7 +726,10 @@ export function usePracticeWebSocket(options: UsePracticeWebSocketOptions) {
             }
 
             resetRealtimeRuntimeState();
-            applyConnectionState("failed", "连接失败，请点击“重新连接”");
+            applyConnectionState(
+                "failed",
+                closeReasonText || "连接失败，请点击“重新连接”",
+            );
         };
 
         wsRef.current = ws;
@@ -656,8 +738,10 @@ export function usePracticeWebSocket(options: UsePracticeWebSocketOptions) {
         applyConnectionState,
         buildWsUrl,
         personaId,
+        flushPendingMessages,
         resetRealtimeRuntimeState,
         scenarioType,
+        sendMessage,
         sessionId,
         voiceMode,
     ]);
@@ -669,6 +753,7 @@ export function usePracticeWebSocket(options: UsePracticeWebSocketOptions) {
         reconnectAttempts.current = 0;
         clearInterimTranscriptThrottle();
         resetRealtimeRuntimeState();
+        pendingMessagesRef.current = [];
         applyConnectionState("failed", null);
         if (wsRef.current) {
             wsRef.current.close(1000, "User disconnected");
@@ -684,6 +769,13 @@ export function usePracticeWebSocket(options: UsePracticeWebSocketOptions) {
      * Validates: Requirements 3.1, 3.2
      */
     const sendInterrupt = useCallback((reason: InterruptReason = 'user_speaking'): { wasPlaying: boolean; clearedChunks: number } => {
+        // Abort any in-flight flush before clearing buffers.
+        flushSessionRef.current += 1;
+        isFlushingRef.current = false;
+
+        const bufferedAudioChunks = localAudioBufferRef.current.length;
+        localAudioBufferRef.current = [];
+
         const { wasPlaying, clearedChunks } = interruptStreamingPlayback();
 
         if (isPlayingRef.current) isPlayingRef.current = false;
@@ -697,9 +789,9 @@ export function usePracticeWebSocket(options: UsePracticeWebSocketOptions) {
         setState(prev => ({ ...prev, isPlayingAudio: false, aiState: "listening", isStreamingTTS: false }));
 
         const interruptData: InterruptMessageData = { reason, timestamp: Date.now() };
-        sendMessage("interrupt", interruptData);
+        sendMessage("interrupt", interruptData, { priority: "high" });
 
-        const totalCleared = clearedChunks + nonStreamingQueueLength;
+        const totalCleared = clearedChunks + nonStreamingQueueLength + bufferedAudioChunks;
         debug.log(`[Interrupt] Sent interrupt signal (reason: ${reason}, wasPlaying: ${wasPlaying}, clearedChunks: ${totalCleared})`);
         return { wasPlaying, clearedChunks: totalCleared };
     }, [interruptStreamingPlayback, sendMessage, audioQueueRef, isPlayingRef]);

@@ -41,13 +41,14 @@ const PROMPT_TYPE_COLORS: Record<PromptType, string> = {
   evaluation: "bg-teal-100 text-teal-700",
   report: "bg-zinc-200 text-zinc-700",
 };
+const SALES_ALLOWED_PROMPT_TYPES: PromptType[] = ["evaluation", "report", "stage", "scoring"];
 
 function getRoleLabel(role: string): string {
   if (role === "admin") {
     return "管理员";
   }
   if (role === "support") {
-    return "运营";
+    return "运营（只读）";
   }
   return "只读";
 }
@@ -73,7 +74,7 @@ export default function AdminPromptsPage() {
   const [bindingScenarioId, setBindingScenarioId] = useState("");
 
   const isAdmin = userRole === "admin";
-  const canOperate = userRole === "admin" || userRole === "support";
+  const canOperate = isAdmin;
 
   const loadData = async () => {
     setLoading(true);
@@ -244,8 +245,8 @@ export default function AdminPromptsPage() {
     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-3">
         <div>
-          <h1 className="text-3xl font-black text-slate-900 tracking-tight">提示词管理</h1>
-          <p className="text-slate-500 mt-1">默认展示业务操作。模板正文编辑收敛到开发者模式。</p>
+          <h1 className="text-3xl font-black text-slate-900 tracking-tight">评估/报告提示词管理</h1>
+          <p className="text-slate-500 mt-1">销售实时角色提示词已迁移到角色中心；本页仅用于评估与报告模板治理。</p>
         </div>
         <div className="flex gap-2 items-center">
           <Badge className="bg-slate-100 text-slate-700">当前角色：{getRoleLabel(userRole)}</Badge>
@@ -266,6 +267,9 @@ export default function AdminPromptsPage() {
       </div>
 
       <GlassCard className="p-4 space-y-4">
+        <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
+          销售场景仅允许绑定评估/报告类模板。业务角色提示词与知识库策略请在角色中心配置。
+        </div>
         <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
           <div className="md:col-span-2 relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-400" />
@@ -467,7 +471,14 @@ export default function AdminPromptsPage() {
             onChange={(event) => setBindingPromptType(event.target.value as PromptType)}
             className="rounded-lg border border-zinc-200 bg-stone-50 px-3 py-2 text-sm"
           >
-            {Object.entries(PROMPT_TYPE_LABELS).map(([type, label]) => (
+            {Object.entries(PROMPT_TYPE_LABELS)
+              .filter(([type]) => {
+                if (bindingScenarioType !== "sales") {
+                  return true;
+                }
+                return SALES_ALLOWED_PROMPT_TYPES.includes(type as PromptType);
+              })
+              .map(([type, label]) => (
               <option key={type} value={type}>
                 {label}
               </option>

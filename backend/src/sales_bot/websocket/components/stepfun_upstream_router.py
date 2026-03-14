@@ -27,13 +27,29 @@ _IGNORED_EVENT_TYPES = frozenset({"session.created", "session.updated"})
 _TRANSCRIPTION_DELTA_EVENT_TYPES = frozenset(
     {
         "conversation.item.input_audio_transcription.delta",
+        "conversation.item.input_audio_transcription.text",
+        "conversation.item.input_audio_transcript.delta",
+        "conversation.item.input_audio_transcript.text",
         "input_audio_buffer.transcription.delta",
+        "input_audio_buffer.transcription.text",
+        "input_audio_buffer.transcript.delta",
+        "input_audio_buffer.transcript.text",
     }
 )
 _TRANSCRIPTION_COMPLETED_EVENT_TYPES = frozenset(
     {
         "conversation.item.input_audio_transcription.completed",
+        "conversation.item.input_audio_transcription.done",
+        "conversation.item.input_audio_transcription.final",
+        "conversation.item.input_audio_transcript.completed",
+        "conversation.item.input_audio_transcript.done",
+        "conversation.item.input_audio_transcript.final",
         "input_audio_buffer.transcription.completed",
+        "input_audio_buffer.transcription.done",
+        "input_audio_buffer.transcription.final",
+        "input_audio_buffer.transcript.completed",
+        "input_audio_buffer.transcript.done",
+        "input_audio_buffer.transcript.final",
     }
 )
 _RESPONSE_TEXT_DELTA_EVENT_TYPES = frozenset(
@@ -114,6 +130,11 @@ def extract_response_done_function_calls(
 
 def extract_error_message(event: dict[str, Any]) -> str:
     """Extract fallback-safe error message from upstream error event."""
+    error_obj = event.get("error")
+    if isinstance(error_obj, dict):
+        nested_detail = error_obj.get("message")
+        if isinstance(nested_detail, str) and nested_detail.strip():
+            return nested_detail
     detail = event.get("message")
     if isinstance(detail, str) and detail.strip():
         return detail

@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from typing import Optional
 
 from fastapi import WebSocket, WebSocketDisconnect
+from jose import JWTError
 from starlette.websockets import WebSocketState
 
 from common.monitoring.logger import get_logger, set_trace_id, get_trace_id
@@ -27,14 +28,15 @@ class ConnectionManager:
             "presentation": {},
             "sales": {}
         }
+        self._lock = asyncio.Lock()
 
     async def connect(self, websocket: WebSocket, scenario: str, session_id: str):
         """Accept and track connection"""
         await websocket.accept()
-        if scenario not in self.active_connections:
-            self.active_connections[scenario] = {}
-
-        self.active_connections[scenario][session_id] = websocket
+        async with self._lock:
+            if scenario not in self.active_connections:
+                self.active_connections[scenario] = {}
+            self.active_connections[scenario][session_id] = websocket
         logger.info(f"WebSocket connected: scenario={scenario}, session={session_id}")
 
         # Send acknowledgment
@@ -44,10 +46,11 @@ class ConnectionManager:
             "data": {"session_id": session_id}
         })
 
-    def disconnect(self, scenario: str, session_id: str):
+    async def disconnect(self, scenario: str, session_id: str):
         """Remove connection from tracking"""
-        if scenario in self.active_connections:
-            self.active_connections[scenario].pop(session_id, None)
+        async with self._lock:
+            if scenario in self.active_connections:
+                self.active_connections[scenario].pop(session_id, None)
         logger.info(f"WebSocket disconnected: scenario={scenario}, session={session_id}")
 
     async def send_json(self, websocket: WebSocket, message: dict):
@@ -59,10 +62,11 @@ class ConnectionManager:
 
     async def broadcast_to_session(self, scenario: str, session_id: str, message: dict):
         """Send message to specific session"""
-        if scenario in self.active_connections:
-            websocket = self.active_connections[scenario].get(session_id)
-            if websocket:
-                await self.send_json(websocket, message)
+        websocket = None
+        async with self._lock:
+            websocket = self.active_connections.get(scenario, {}).get(session_id)
+        if websocket:
+            await self.send_json(websocket, message)
 
     def get_connection_count(self, scenario: str | None = None) -> int:
         """Get count of active connections"""
@@ -113,7 +117,7 @@ class BaseWebSocketHandler:
             payload = verify_token(token)
             set_trace_id(payload.get("trace_id", ""))
             self.user_id = payload.get("user_id")
-        except (RuntimeError, ValueError, OSError) as e:
+        except (JWTError, RuntimeError, ValueError, OSError) as e:
             logger.warning(f"Token verification failed: {str(e)}")
             set_trace_id("")
 
@@ -166,7 +170,7 @@ class BaseWebSocketHandler:
             await self._save_session_state()
             # Cleanup
             self.running = False
-            self.manager.disconnect(self.scenario, session_id)
+            await self.manager.disconnect(self.scenario, session_id)
             processing_task.cancel()
 
     async def send_message(self, message: dict):

@@ -7,6 +7,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from agent.models import Agent, AgentPersona, Persona
+from common.api.server_error import build_server_error
 from common.auth.service import get_current_user
 from common.db.models import Scenario, User
 from common.db.session import get_db
@@ -170,4 +171,9 @@ async def get_scenario(
         raise
     except (RuntimeError, ValueError, OSError) as e:
         logger.error(f"Failed to get scenario: {str(e)}")
-        raise HTTPException(status_code=500, detail="Failed to load scenario")
+        return build_server_error(
+            "[SCENARIO_LOAD_FAILED]",
+            message="Failed to load scenario",
+            exc=e,
+            scenario_id=scenario_id,
+        )

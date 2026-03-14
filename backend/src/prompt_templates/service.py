@@ -35,6 +35,7 @@ from prompt_templates.renderer import render_template
 from prompt_templates.loader import get_loader
 
 logger = get_logger(__name__)
+SALES_PROMPT_SCOPE_ALLOWED_TYPES = {"evaluation", "report", "stage", "scoring"}
 
 
 class PromptTemplateService:
@@ -275,6 +276,11 @@ class PromptTemplateService:
         Returns:
             Best matching PromptTemplate or None
         """
+        self._assert_scenario_prompt_scope(
+            prompt_type=prompt_type,
+            scenario_type=scenario_type,
+            operation="resolve",
+        )
         from common.db.models import (
             PromptTemplate as PromptTemplateDB,
             ScenarioPrompt as ScenarioPromptDB,
@@ -386,6 +392,11 @@ class PromptTemplateService:
         Returns:
             Created ScenarioPrompt
         """
+        self._assert_scenario_prompt_scope(
+            prompt_type=data.prompt_type,
+            scenario_type=data.scenario_type,
+            operation="assign",
+        )
         from common.db.models import ScenarioPrompt as ScenarioPromptDB
 
         assignment_id = str(uuid4())
@@ -579,3 +590,24 @@ class PromptTemplateService:
         await self.db.refresh(assignment)
 
         return ScenarioPrompt.model_validate(assignment)
+
+    def _assert_scenario_prompt_scope(
+        self,
+        *,
+        prompt_type: str,
+        scenario_type: str | None,
+        operation: str,
+    ) -> None:
+        normalized_scenario_type = str(scenario_type or "").strip().lower()
+        if normalized_scenario_type != "sales":
+            return
+
+        normalized_prompt_type = str(prompt_type or "").strip().lower()
+        if normalized_prompt_type in SALES_PROMPT_SCOPE_ALLOWED_TYPES:
+            return
+
+        raise ValueError(
+            "[PROMPT_SCOPE_VIOLATION] "
+            f"sales.{operation}.{normalized_prompt_type} "
+            "only_evaluation_report_templates_allowed"
+        )

@@ -29,6 +29,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from common.api.server_error import build_server_error
 from common.auth.service import get_current_user
 from common.db.models import PracticeSession, Scenario, User
 from common.db.schemas import (
@@ -46,10 +47,11 @@ from common.db.session_lifecycle import (
     SessionLifecycleService,
 )
 from common.db.voice_policy_snapshot import build_voice_policy_snapshot_ref
+from common.effectiveness import evaluate_effectiveness_snapshot
 from common.monitoring.logger import get_logger, get_trace_id
 from common.websocket.base_handler import get_connection_manager
 from presentation_coach.services.coach_service import PresentationCoachService
-from sales_bot.services.bot_service import Persona, sales_bot_service
+from sales_bot.services.bot_service import sales_bot_service
 from sales_bot.services.summary_service import summary_service
 from sales_bot.services.voice_runtime_policy import VoiceRuntimePolicyService
 
@@ -61,6 +63,24 @@ router = APIRouter()
 def _is_true_env(name: str, default: str = "false") -> bool:
     value = os.getenv(name, default)
     return str(value).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _coerce_utc_timestamp(value: datetime) -> datetime:
+    """Normalize datetime values to UTC for safe arithmetic."""
+    if value.tzinfo is None:
+        return value.replace(tzinfo=UTC)
+    return value.astimezone(UTC)
+
+
+def _duration_seconds_between(
+    start_time: datetime | None, end_time: datetime | None
+) -> int | None:
+    """Calculate non-negative duration seconds between two datetimes."""
+    if start_time is None or end_time is None:
+        return None
+    start_time_utc = _coerce_utc_timestamp(start_time)
+    end_time_utc = _coerce_utc_timestamp(end_time)
+    return max(0, int((end_time_utc - start_time_utc).total_seconds()))
 
 
 def success_response(data, trace_id: str = None):
@@ -178,6 +198,128 @@ def _build_ws_session_ended_payload(transition) -> dict[str, Any]:
     }
 
 
+def _derive_effectiveness_metrics(session: PracticeSession) -> tuple[dict[str, Any], bool, bool, str | None]:
+    """Derive 80/20 effectiveness metrics from persisted session fields."""
+    logic = float(session.logic_score or 0.0)
+    accuracy = float(session.accuracy_score or 0.0)
+    completeness = float(session.completeness_score or 0.0)
+    duration_seconds = int(session.total_duration_seconds or 0)
+    if (
+        duration_seconds <= 0
+        and session.start_time is not None
+        and session.end_time is not None
+    ):
+        derived_duration_seconds = _duration_seconds_between(
+            session.start_time, session.end_time
+        )
+        if derived_duration_seconds is not None:
+            duration_seconds = derived_duration_seconds
+
+    has_scores = any(score > 0 for score in (logic, accuracy, completeness))
+    evaluable = has_scores and duration_seconds > 0
+    not_evaluable_reason = None if evaluable else "INSUFFICIENT_SESSION_METRICS"
+
+    # Minimal heuristic mapping for closed-loop v1 (kept deterministic and explainable).
+    metrics = {
+        "continuous_speech_seconds": float(max(duration_seconds, int((logic + completeness) * 0.9))),
+        "filler_rate_per_100_words": round(max(0.0, min(30.0, (100.0 - logic) / 4.0)), 2),
+        "offtopic_turn_count": float(max(0, round((100.0 - accuracy) / 25.0))),
+        "offtopic_max_streak": float(2 if accuracy < 55 else (1 if accuracy < 80 else 0)),
+        "structure_coverage": round(max(0.0, min(1.0, completeness / 100.0)), 4),
+    }
+    overall_score = (logic + accuracy + completeness) / 3.0
+    main_capability_passed = overall_score >= 70.0
+    return metrics, main_capability_passed, evaluable, not_evaluable_reason
+
+
+def _ensure_effectiveness_snapshot(session: PracticeSession) -> dict[str, Any]:
+    """Ensure session has effectiveness snapshot, creating one if absent."""
+    if isinstance(session.effectiveness_snapshot, dict) and session.effectiveness_snapshot:
+        existing_snapshot = session.effectiveness_snapshot
+        has_required_keys = all(
+            key in existing_snapshot
+            for key in ("pass_flags", "overall_result", "main_issue", "next_goal")
+        )
+        if has_required_keys:
+            return existing_snapshot
+
+        fallback_metrics, fallback_main_passed, fallback_evaluable, fallback_reason = (
+            _derive_effectiveness_metrics(session)
+        )
+        metrics = existing_snapshot.get("metrics")
+        if not isinstance(metrics, dict):
+            metrics = fallback_metrics
+        else:
+            filler_rate_raw = metrics.get(
+                "filler_rate_per_100_words",
+                fallback_metrics.get("filler_rate_per_100_words", 0.0),
+            )
+            try:
+                filler_rate = float(filler_rate_raw)
+            except (TypeError, ValueError):
+                filler_rate = float(
+                    fallback_metrics.get("filler_rate_per_100_words", 0.0)
+                )
+            metrics = {
+                **metrics,
+                "filler_rate_per_100_words": filler_rate,
+            }
+        main_capability_passed = existing_snapshot.get("main_capability_passed")
+        if not isinstance(main_capability_passed, bool):
+            main_capability_passed = fallback_main_passed
+        evaluable = existing_snapshot.get("evaluable")
+        if not isinstance(evaluable, bool):
+            evaluable = fallback_evaluable
+        not_evaluable_reason = existing_snapshot.get("not_evaluable_reason")
+        if not isinstance(not_evaluable_reason, str):
+            not_evaluable_reason = fallback_reason
+
+        merged_snapshot = {
+            **existing_snapshot,
+            **evaluate_effectiveness_snapshot(
+                metrics=metrics,
+                main_capability_passed=main_capability_passed,
+                evaluable=evaluable,
+                not_evaluable_reason=not_evaluable_reason,
+            ),
+        }
+        session.effectiveness_snapshot = merged_snapshot
+        return merged_snapshot
+
+    metrics, main_capability_passed, evaluable, not_evaluable_reason = (
+        _derive_effectiveness_metrics(session)
+    )
+    snapshot = evaluate_effectiveness_snapshot(
+        metrics=metrics,
+        main_capability_passed=main_capability_passed,
+        evaluable=evaluable,
+        not_evaluable_reason=not_evaluable_reason,
+    )
+    session.effectiveness_snapshot = snapshot
+    return snapshot
+
+
+def _session_has_persisted_scores(session: PracticeSession) -> bool:
+    return all(
+        score is not None
+        for score in (
+            session.logic_score,
+            session.accuracy_score,
+            session.completeness_score,
+        )
+    )
+
+
+def _apply_sales_summary_scores_if_missing(session: PracticeSession, summary: Any) -> None:
+    """Idempotent score assignment for sales summary."""
+    if session.logic_score is None:
+        session.logic_score = summary.score_confidence
+    if session.accuracy_score is None:
+        session.accuracy_score = summary.score_persuasion
+    if session.completeness_score is None:
+        session.completeness_score = summary.score_clarity
+
+
 async def _broadcast_lifecycle_events(transition) -> None:
     manager = get_connection_manager()
     scenario_key = _resolve_ws_scenario(getattr(transition, "scenario_type", None))
@@ -208,7 +350,7 @@ async def start_session(
 
     Supports:
     - presentation: PPT coaching session
-    - sales: Sales practice with persona (sales_persona required)
+    - sales: Sales practice session (agent_id + persona_id required)
 
     Enhanced (R12):
     - agent_id + persona_id: Enhanced session with Agent Platform
@@ -227,6 +369,13 @@ async def start_session(
             if session_data.runtime_profile_id
             else None
         )
+        raw_session_payload = session_data.model_dump(exclude_unset=True)
+        if raw_session_payload.get("sales_persona"):
+            return error_response(
+                "[FIELD_DEPRECATED_PERSONA_CENTERED]",
+                status_code=400,
+                message="sales_persona 已废弃，请改用 agent_id + persona_id（并在角色中心配置策略）",
+            )
         association_override_config = None
         requested_scenario: Scenario | None = None
 
@@ -259,6 +408,8 @@ async def start_session(
             and _is_true_env("PRESENTATION_REQUIRE_AGENT_PERSONA", "true")
             and not (agent_id_str and persona_id_str)
         ):
+            return error_response("[AGENT_PERSONA_PAIR_REQUIRED]", status_code=400)
+        if scenario_type_value == "sales" and not (agent_id_str and persona_id_str):
             return error_response("[AGENT_PERSONA_PAIR_REQUIRED]", status_code=400)
 
         if agent_id_str and persona_id_str:
@@ -316,6 +467,9 @@ async def start_session(
         effective_runtime_profile_id = effective_voice_policy.get("runtime_profile_id")
 
         if scenario_type_value == "presentation":
+            if not session_data.presentation_id:
+                return error_response("[PRESENTATION_ID_REQUIRED]", status_code=400)
+
             coach_service = PresentationCoachService(db)
 
             result = await coach_service.create_session(
@@ -332,10 +486,10 @@ async def start_session(
                         status_code=400,
                         message="演练PPT不存在或尚未就绪",
                     )
-                return error_response(
+                return build_server_error(
                     "[SESSION_CREATE_FAILED]",
-                    status_code=500,
                     message=fallback or "会话创建失败",
+                    session_id=str(getattr(session_data, "session_id", "") or "") or None,
                 )
 
             session = result.value
@@ -354,108 +508,43 @@ async def start_session(
             await db.refresh(session)
 
         elif scenario_type_value == "sales":
-            # Sales bot session - support both legacy and enhanced modes
+            scenario = requested_scenario
+            if not scenario:
+                # Keep compatibility with clients that do not pass scenario_id yet.
+                scenario_result = await db.execute(
+                    select(Scenario).where(
+                        Scenario.scenario_type == "sales",
+                        Scenario.name == f"agent_{agent_id_str}",
+                    )
+                )
+                scenario = scenario_result.scalar_one_or_none()
 
-            # Enhanced mode: use agent_id + persona_id
-            if agent_id_str and persona_id_str:
-                scenario = requested_scenario
                 if not scenario:
-                    # Keep compatibility with clients that do not pass scenario_id yet.
-                    scenario_result = await db.execute(
-                        select(Scenario).where(
-                            Scenario.scenario_type == "sales",
-                            Scenario.name == f"agent_{agent_id_str}",
-                        )
+                    scenario = Scenario(
+                        scenario_id=str(uuid.uuid4()),
+                        scenario_type="sales",
+                        name=f"agent_{agent_id_str}",
+                        description="Sales practice with Agent Platform",
+                        is_active=True,
                     )
-                    scenario = scenario_result.scalar_one_or_none()
+                    db.add(scenario)
+                    await db.flush()
 
-                    if not scenario:
-                        scenario = Scenario(
-                            scenario_id=str(uuid.uuid4()),
-                            scenario_type="sales",
-                            name=f"agent_{agent_id_str}",
-                            description="Sales practice with Agent Platform",
-                            is_active=True,
-                        )
-                        db.add(scenario)
-                        await db.flush()
-
-                # Create practice session with agent/persona
-                session = PracticeSession(
-                    session_id=str(uuid.uuid4()),
-                    user_id=str(current_user.user_id),
-                    scenario_id=scenario.scenario_id,
-                    agent_id=agent_id_str,
-                    persona_id=persona_id_str,
-                    voice_mode=effective_voice_mode,
-                    voice_runtime_profile_id=effective_runtime_profile_id,
-                    voice_policy_snapshot=deepcopy(session_policy_snapshot),
-                    status="preparing",
-                )
-                db.add(session)
-                await db.commit()
-                await db.refresh(session)
-
-            else:
-                # Legacy mode: use sales_persona
-                if not session_data.sales_persona:
-                    return error_response("[SALES_PERSONA_REQUIRED]", status_code=400)
-
-                # Validate persona
-                try:
-                    persona = Persona(session_data.sales_persona)
-                except ValueError:
-                    return error_response("[INVALID_PERSONA]", status_code=400)
-
-                scenario = requested_scenario
-                if not scenario:
-                    # Find or create sales scenario
-                    scenario_result = await db.execute(
-                        select(Scenario).where(
-                            Scenario.scenario_type == "sales",
-                            Scenario.name == f"sales_{session_data.sales_persona}",
-                        )
-                    )
-                    scenario = scenario_result.scalar_one_or_none()
-
-                    if not scenario:
-                        scenario = Scenario(
-                            scenario_id=str(uuid.uuid4()),
-                            scenario_type="sales",
-                            name=f"sales_{session_data.sales_persona}",
-                            description=f"Sales practice with {session_data.sales_persona} persona",
-                            is_active=True,
-                        )
-                        db.add(scenario)
-                        await db.flush()
-
-                # Create bot session
-                user_id_uuid = uuid.UUID(str(current_user.user_id))
-                scenario_id_uuid = uuid.UUID(scenario.scenario_id)
-
-                result = await sales_bot_service.create_session(
-                    user_id=user_id_uuid, persona=persona, scenario_id=scenario_id_uuid
-                )
-
-                if not result.is_success:
-                    return error_response(
-                        "[BOT_SESSION_CREATE_FAILED]", status_code=500
-                    )
-
-                # Create practice session record
-                session = PracticeSession(
-                    session_id=str(result.value),
-                    user_id=str(current_user.user_id),
-                    scenario_id=scenario.scenario_id,
-                    voice_mode=effective_voice_mode,
-                    voice_runtime_profile_id=effective_runtime_profile_id,
-                    voice_policy_snapshot=deepcopy(session_policy_snapshot),
-                    status="preparing",
-                )
-
-                db.add(session)
-                await db.commit()
-                await db.refresh(session)
+            # Create practice session with agent/persona
+            session = PracticeSession(
+                session_id=str(uuid.uuid4()),
+                user_id=str(current_user.user_id),
+                scenario_id=scenario.scenario_id,
+                agent_id=agent_id_str,
+                persona_id=persona_id_str,
+                voice_mode=effective_voice_mode,
+                voice_runtime_profile_id=effective_runtime_profile_id,
+                voice_policy_snapshot=deepcopy(session_policy_snapshot),
+                status="preparing",
+            )
+            db.add(session)
+            await db.commit()
+            await db.refresh(session)
 
         else:
             return error_response("[INVALID_SCENARIO_TYPE]", status_code=400)
@@ -467,8 +556,11 @@ async def start_session(
         return response_payload
 
     except (SQLAlchemyError, ValueError) as e:
-        logger.error(f"Failed to start session: {str(e)}")
-        return error_response("[SESSION_CREATE_FAILED]", status_code=500)
+        return build_server_error(
+            "[SESSION_CREATE_FAILED]",
+            message="会话创建失败",
+            exc=e,
+        )
 
 
 @router.get("/practice/sessions/{session_id}")
@@ -534,9 +626,13 @@ async def control_session_lifecycle(
             current_status=exc.from_status,
         )
 
+    if payload.action.value == "end":
+        _ensure_effectiveness_snapshot(session)
+
     await db.commit()
     await db.refresh(session)
     transition.session = session
+    await lifecycle_service.trigger_report_generation_if_needed(transition)
     await _broadcast_lifecycle_events(transition)
 
     return success_response(_build_lifecycle_response_payload(transition))
@@ -594,6 +690,7 @@ async def update_session(
     await db.refresh(session)
     if transition:
         transition.session = session
+        await lifecycle_service.trigger_report_generation_if_needed(transition)
         await _broadcast_lifecycle_events(transition)
 
     scenario_type_value = None
@@ -649,35 +746,91 @@ async def end_session(
         return error_response("[SCENARIO_NOT_FOUND]", status_code=404)
 
     lifecycle_service = SessionLifecycleService(db)
+    summary = None
+    snapshot: dict[str, Any] | None = None
     try:
         transition = await lifecycle_service.transition(
             session=session,
             scenario_type=scenario.scenario_type,
             action="end",
         )
+
+        if not transition.changed:
+            snapshot = _ensure_effectiveness_snapshot(session)
+        elif scenario.scenario_type == "presentation":
+            coach_service = PresentationCoachService(db)
+            coach_result = await coach_service.end_session(session_id, commit=False)
+            if not coach_result.is_success:
+                await db.rollback()
+                return build_server_error(
+                    "[SESSION_END_FAILED]",
+                    message="会话结束失败",
+                    session_id=session_id,
+                )
+
+            session = coach_result.value
+            snapshot = _ensure_effectiveness_snapshot(session)
+
+        elif scenario.scenario_type == "sales":
+            has_existing_scores = _session_has_persisted_scores(session)
+            if not has_existing_scores:
+                summary_result = await summary_service.generate_summary(
+                    uuid.UUID(session_id)
+                )
+                if not summary_result.is_success:
+                    await db.rollback()
+                    return build_server_error(
+                        "[SUMMARY_GENERATION_FAILED]",
+                        message="总结生成失败",
+                        session_id=session_id,
+                    )
+                summary = summary_result.value
+                _apply_sales_summary_scores_if_missing(session, summary)
+            else:
+                logger.info(
+                    "Skip sales summary regeneration because scores already exist",
+                    session_id=session_id,
+                )
+
+            snapshot = _ensure_effectiveness_snapshot(session)
+
+            # Keep compatibility with realtime runtime cleanup.
+            end_result = await sales_bot_service.end_session(uuid.UUID(session_id))
+            if not end_result.is_success:
+                logger.warning(
+                    "Sales bot end_session returned non-success",
+                    session_id=session_id,
+                    fallback=end_result.fallback,
+                )
+        else:
+            await db.rollback()
+            return error_response("[INVALID_SCENARIO_TYPE]", status_code=400)
     except InvalidSessionTransitionError as exc:
         await db.rollback()
         return _invalid_transition_response(
             exc=exc,
             current_status=exc.from_status,
         )
+    except (RuntimeError, ValueError, OSError) as exc:
+        await db.rollback()
+        return build_server_error(
+            "[SESSION_END_FAILED]",
+            message="会话结束失败",
+            exc=exc,
+            session_id=session_id,
+        )
 
     await db.commit()
     await db.refresh(session)
     transition.session = session
+    await lifecycle_service.trigger_report_generation_if_needed(transition)
     await _broadcast_lifecycle_events(transition)
 
+    if snapshot is None:
+        snapshot = _ensure_effectiveness_snapshot(session)
+        await db.commit()
+
     if scenario.scenario_type == "presentation":
-        # PPT coaching session
-        coach_service = PresentationCoachService(db)
-        result = await coach_service.end_session(session_id)
-
-        if not result.is_success:
-            return error_response("[SESSION_END_FAILED]", status_code=500)
-
-        session = result.value
-
-        # Generate report
         report = SessionReport(
             session_id=session.session_id,
             logic_score=session.logic_score or 0,
@@ -695,20 +848,22 @@ async def end_session(
             voice_policy_snapshot_ref=build_voice_policy_snapshot_ref(
                 session.voice_policy_snapshot
             ),
+            effectiveness_snapshot=snapshot,
+            pass_flags=snapshot.get("pass_flags"),
+            main_capability_passed=snapshot.get("main_capability_passed"),
+            overall_result=snapshot.get("overall_result"),
+            main_issue=snapshot.get("main_issue"),
+            next_goal=snapshot.get("next_goal"),
+            retry_entry={
+                "scenario_type": "presentation",
+                "agent_id": str(session.agent_id) if session.agent_id else None,
+                "persona_id": str(session.persona_id) if session.persona_id else None,
+                "presentation_id": str(session.presentation_id)
+                if session.presentation_id
+                else None,
+            },
         )
-
-    elif scenario.scenario_type == "sales":
-        # Sales bot session - generate summary
-        summary_result = await summary_service.generate_summary(uuid.UUID(session_id))
-
-        if not summary_result.is_success:
-            return error_response("[SUMMARY_GENERATION_FAILED]", status_code=500)
-
-        summary = summary_result.value
-
-        # End bot session
-        await sales_bot_service.end_session(uuid.UUID(session_id))
-
+    else:
         # Generate comprehensive report using AI evaluation
         try:
             from common.ai.llm_service import LLMService
@@ -741,31 +896,42 @@ async def end_session(
         except (RuntimeError, ValueError, OSError, ImportError) as e:
             logger.warning(f"Comprehensive report generation skipped: {str(e)}")
 
-        # Generate basic report from summary
-        report = SessionReport(
-            session_id=session_id,
-            logic_score=summary.score_confidence,
-            accuracy_score=summary.score_persuasion,
-            completeness_score=summary.score_clarity,
-            overall_score=(
-                summary.score_confidence
-                + summary.score_persuasion
-                + summary.score_clarity
-            )
-            / 3,
-            suggestions=[
+        suggestions = ["会话已结束，可查看历史反馈并继续练习。"]
+        if summary is not None:
+            suggestions = [
                 *summary.strengths,
                 f"Improvement: {summary.actionable_feedback}",
-            ],
+            ]
+
+        report = SessionReport(
+            session_id=session_id,
+            logic_score=session.logic_score or 0,
+            accuracy_score=session.accuracy_score or 0,
+            completeness_score=session.completeness_score or 0,
+            overall_score=(
+                (session.logic_score or 0)
+                + (session.accuracy_score or 0)
+                + (session.completeness_score or 0)
+            )
+            / 3,
+            suggestions=suggestions,
             audio_url=None,
             transcript_url=None,
             voice_policy_snapshot_ref=build_voice_policy_snapshot_ref(
                 session.voice_policy_snapshot
             ),
+            effectiveness_snapshot=snapshot,
+            pass_flags=snapshot.get("pass_flags"),
+            main_capability_passed=snapshot.get("main_capability_passed"),
+            overall_result=snapshot.get("overall_result"),
+            main_issue=snapshot.get("main_issue"),
+            next_goal=snapshot.get("next_goal"),
+            retry_entry={
+                "scenario_type": "sales",
+                "agent_id": str(session.agent_id) if session.agent_id else None,
+                "persona_id": str(session.persona_id) if session.persona_id else None,
+            },
         )
-
-    else:
-        return error_response("[INVALID_SCENARIO_TYPE]", status_code=400)
 
     return success_response(report)
 
@@ -789,6 +955,17 @@ async def get_session_report(
     if not _can_read_session(session, current_user):
         return error_response("[ACCESS_DENIED]", status_code=403)
 
+    scenario_type_result = await db.execute(
+        select(Scenario.scenario_type).where(Scenario.scenario_id == session.scenario_id)
+    )
+    scenario_type_value = scenario_type_result.scalar_one_or_none()
+    normalized_scenario_type = (
+        str(scenario_type_value) if scenario_type_value else "sales"
+    )
+
+    snapshot = _ensure_effectiveness_snapshot(session)
+    await db.commit()
+
     # Generate report
     report = SessionReport(
         session_id=session.session_id,
@@ -807,6 +984,20 @@ async def get_session_report(
         voice_policy_snapshot_ref=build_voice_policy_snapshot_ref(
             session.voice_policy_snapshot
         ),
+        effectiveness_snapshot=snapshot,
+        pass_flags=snapshot.get("pass_flags"),
+        main_capability_passed=snapshot.get("main_capability_passed"),
+        overall_result=snapshot.get("overall_result"),
+        main_issue=snapshot.get("main_issue"),
+        next_goal=snapshot.get("next_goal"),
+        retry_entry={
+            "scenario_type": normalized_scenario_type,
+            "agent_id": str(session.agent_id) if session.agent_id else None,
+            "persona_id": str(session.persona_id) if session.persona_id else None,
+            "presentation_id": str(session.presentation_id)
+            if session.presentation_id
+            else None,
+        },
     )
 
     return success_response(report)
@@ -886,6 +1077,55 @@ async def get_session_knowledge_check(
     kb_lock_last_status = str(
         knowledge_metrics.get("kb_lock_last_status") or "not_required"
     )
+    last_decision_id = str(knowledge_metrics.get("last_decision_id") or "")
+    try:
+        last_decision_duration_ms = float(
+            knowledge_metrics.get("last_decision_duration_ms") or 0.0
+        )
+    except (TypeError, ValueError):
+        last_decision_duration_ms = 0.0
+    last_decision_phase_breakdown = knowledge_metrics.get(
+        "last_decision_phase_breakdown"
+    )
+    if not isinstance(last_decision_phase_breakdown, dict):
+        last_decision_phase_breakdown = None
+    try:
+        timeout_rate_5m = float(knowledge_metrics.get("timeout_rate_5m") or 0.0)
+    except (TypeError, ValueError):
+        timeout_rate_5m = 0.0
+    kb_lock_decision_timestamps = knowledge_metrics.get("kb_lock_decision_timestamps")
+    has_recent_kb_lock_decisions = isinstance(kb_lock_decision_timestamps, list) and bool(
+        kb_lock_decision_timestamps
+    )
+    upstream_disconnect_count_5m = int(
+        knowledge_metrics.get("upstream_disconnect_count_5m") or 0
+    )
+    upstream_unstable = bool(knowledge_metrics.get("upstream_unstable", False))
+    kb_lock_timeout_budget_ms_raw = os.getenv(
+        "STEPFUN_KB_LOCK_DECISION_TIMEOUT_MS", "2200"
+    )
+    try:
+        kb_lock_timeout_budget_ms = int(kb_lock_timeout_budget_ms_raw)
+    except (TypeError, ValueError):
+        kb_lock_timeout_budget_ms = 2200
+    kb_lock_timeout_budget_ms = max(100, min(8000, kb_lock_timeout_budget_ms))
+    kb_lock_min_pass_score_raw = os.getenv(
+        "KNOWLEDGE_KB_LOCK_MIN_PASS_SCORE", "0.62"
+    )
+    try:
+        kb_lock_min_pass_score = float(kb_lock_min_pass_score_raw)
+    except (TypeError, ValueError):
+        kb_lock_min_pass_score = 0.62
+    kb_lock_min_pass_score = max(0.0, min(1.0, kb_lock_min_pass_score))
+    kb_lock_min_pass_score_keyword_raw = os.getenv(
+        "KNOWLEDGE_KB_LOCK_MIN_PASS_SCORE_KEYWORD",
+        str(min(kb_lock_min_pass_score, 0.55)),
+    )
+    try:
+        kb_lock_min_pass_score_keyword = float(kb_lock_min_pass_score_keyword_raw)
+    except (TypeError, ValueError):
+        kb_lock_min_pass_score_keyword = min(kb_lock_min_pass_score, 0.55)
+    kb_lock_min_pass_score_keyword = max(0.0, min(1.0, kb_lock_min_pass_score_keyword))
     kb_lock_status = "pass"
     if kb_lock_required:
         if not kb_bound:
@@ -956,6 +1196,17 @@ async def get_session_knowledge_check(
         "kb_lock_block_count": kb_lock_block_count,
         "kb_lock_last_status": kb_lock_last_status,
         "kb_lock_updated_at": knowledge_metrics.get("kb_lock_updated_at"),
+        "kb_lock_timeout_budget_ms": kb_lock_timeout_budget_ms,
+        "kb_lock_min_pass_score": round(kb_lock_min_pass_score, 4),
+        "kb_lock_min_pass_score_keyword": round(kb_lock_min_pass_score_keyword, 4),
+        "last_decision_id": last_decision_id,
+        "last_decision_duration_ms": round(max(0.0, last_decision_duration_ms), 1),
+        "last_decision_phase_breakdown": last_decision_phase_breakdown,
+        "timeout_rate_5m": round(max(0.0, timeout_rate_5m), 4)
+        if has_recent_kb_lock_decisions
+        else None,
+        "upstream_disconnect_count_5m": upstream_disconnect_count_5m,
+        "upstream_unstable": upstream_unstable,
     }
 
     return success_response(diagnostics)
@@ -1014,8 +1265,8 @@ async def get_practice_history(
 
         duration_seconds = session.total_duration_seconds
         if duration_seconds is None and session.end_time and session.start_time:
-            duration_seconds = int(
-                (session.end_time - session.start_time).total_seconds()
+            duration_seconds = _duration_seconds_between(
+                session.start_time, session.end_time
             )
 
         scenario_value = (
@@ -1044,6 +1295,29 @@ async def get_practice_history(
                 "agent_name": getattr(session.agent, "name", None),
                 "persona_name": getattr(session.persona, "name", None),
                 "title": title,
+                "effectiveness_snapshot": session.effectiveness_snapshot
+                if isinstance(session.effectiveness_snapshot, dict)
+                else None,
+                "feedback_summary": (
+                    (
+                        session.effectiveness_snapshot.get("main_issue", {}).get(
+                            "issue_text"
+                        )
+                        if isinstance(
+                            session.effectiveness_snapshot.get("main_issue"), dict
+                        )
+                        else None
+                    )
+                    or session.effectiveness_snapshot.get("next_goal", {}).get(
+                        "goal_text"
+                    )
+                    if isinstance(session.effectiveness_snapshot, dict)
+                    and (
+                        isinstance(session.effectiveness_snapshot.get("main_issue"), dict)
+                        or isinstance(session.effectiveness_snapshot.get("next_goal"), dict)
+                    )
+                    else None
+                ),
             }
         )
 
@@ -1291,7 +1565,9 @@ async def get_enhanced_session_report(
     # Calculate duration
     duration_seconds = None
     if session.end_time and session.start_time:
-        duration_seconds = int((session.end_time - session.start_time).total_seconds())
+        duration_seconds = _duration_seconds_between(
+            session.start_time, session.end_time
+        )
     elif session.total_duration_seconds:
         duration_seconds = session.total_duration_seconds
 
@@ -1417,8 +1693,12 @@ async def get_comprehensive_report(
         )
 
     except Exception as e:
-        logger.error(f"Failed to get comprehensive report: {str(e)}")
-        return error_response("[REPORT_RETRIEVAL_FAILED]", status_code=500)
+        return build_server_error(
+            "[REPORT_RETRIEVAL_FAILED]",
+            message="报告获取失败",
+            exc=e,
+            session_id=session_id,
+        )
 
 
 @router.get("/practice/sessions/{session_id}/report-status")

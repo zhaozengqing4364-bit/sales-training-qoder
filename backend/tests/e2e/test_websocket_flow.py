@@ -27,13 +27,13 @@ class TestWebSocketFlow:
         handler.manager = MagicMock()
         handler.manager.send_json = AsyncMock()
 
-        with patch.object(handler, "_process_user_text") as mock_process:
-            mock_process.return_value = None
+        with patch.object(handler, "_launch_response_task", new=AsyncMock()) as mock_launch:
+            mock_launch.return_value = True
             await handler.handle_message({
                 "type": "text",
                 "data": {"text": "Hello"},
             })
-            mock_process.assert_called_once_with("Hello")
+            mock_launch.assert_awaited_once_with("Hello", source="text")
 
     @pytest.mark.asyncio
     async def test_should_handle_pause_message(self, handler, session_id):

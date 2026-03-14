@@ -118,6 +118,13 @@ export default function PersonasPage() {
                 category: newPersona.category,
                 difficulty: newPersona.difficulty,
                 system_prompt: newPersona.system_prompt,
+                knowledge_base_ids: [],
+                persona_policy: {
+                    version: 1,
+                    system_prompt: newPersona.system_prompt,
+                    knowledge_base_ids: [],
+                    tool_policy: {},
+                },
             });
             setIsCreateOpen(false);
             setNewPersona({
@@ -256,13 +263,16 @@ export default function PersonasPage() {
                                     </select>
                                 </div>
                                 <div className="space-y-2">
-                                    <label className="text-xs font-bold text-slate-500 uppercase">系统提示词</label>
+                                    <label className="text-xs font-bold text-slate-500 uppercase">角色核心设定</label>
                                     <textarea
                                         className="w-full h-24 rounded-lg border border-slate-200 px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none resize-none"
                                         placeholder="定义角色的行为和性格..."
                                         value={newPersona.system_prompt}
                                         onChange={(e) => setNewPersona(prev => ({ ...prev, system_prompt: e.target.value }))}
                                     />
+                                    <p className="text-xs text-slate-500">
+                                        角色提示词与知识库策略已收敛到角色中心。创建后可在角色详情页继续绑定知识库与策略。
+                                    </p>
                                 </div>
                             </div>
                             <DialogFooter>

@@ -1,15 +1,13 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { GlassCard } from "@/components/ui/glass-card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, Sparkles, Play, User, Presentation } from "lucide-react";
-import { api, getApiErrorMessage } from "@/lib/api/client";
+import { ApiRequestError, api, getApiErrorMessage } from "@/lib/api/client";
 import { cn } from "@/lib/utils";
-import { KnowledgeBaseSelector } from "@/components/knowledge/KnowledgeBaseSelector";
-import { useKnowledgeBaseLinker } from "@/hooks/use-knowledge-base-linker";
 
 // 难度配置
 const DIFFICULTY_CONFIG: Record<string, { label: string; className: string }> = {
@@ -45,6 +43,14 @@ interface PresentationOption {
 }
 
 type VoiceMode = "legacy" | "stepfun_realtime";
+const CREATE_SESSION_RETRY_DELAYS_MS = [200, 500, 1200] as const;
+
+function isRetryableCreateSessionError(error: unknown): boolean {
+    if (error instanceof ApiRequestError) {
+        return error.status === 0 || error.status >= 500;
+    }
+    return true;
+}
 
 export default function AgentPersonaSelectPage() {
     const params = useParams();
@@ -57,61 +63,10 @@ export default function AgentPersonaSelectPage() {
     const [isLoading, setIsLoading] = useState(true);
     const [isStarting, setIsStarting] = useState(false);
     const [startError, setStartError] = useState<string | null>(null);
-    const [isSavingKnowledgeBases, setIsSavingKnowledgeBases] = useState(false);
-    const [knowledgeBaseSaveError, setKnowledgeBaseSaveError] = useState<string | null>(null);
     const [availablePresentations, setAvailablePresentations] = useState<PresentationOption[]>([]);
     const [selectedPresentationId, setSelectedPresentationId] = useState<string>("");
     const [isLoadingPresentations, setIsLoadingPresentations] = useState(false);
     const [presentationLoadError, setPresentationLoadError] = useState<string | null>(null);
-    const hasHydratedKnowledgeBaseSelection = useRef(false);
-
-    const {
-        availableKBs,
-        selectedIds: selectedKnowledgeBaseIds,
-        setSelectedIds: setSelectedKnowledgeBaseIds,
-        isLoading: isLoadingKBs,
-        error: kbError,
-    } = useKnowledgeBaseLinker(agentId);
-
-    useEffect(() => {
-        hasHydratedKnowledgeBaseSelection.current = false;
-        setKnowledgeBaseSaveError(null);
-    }, [agentId]);
-
-    useEffect(() => {
-        if (isLoadingKBs) {
-            return;
-        }
-
-        if (!hasHydratedKnowledgeBaseSelection.current) {
-            hasHydratedKnowledgeBaseSelection.current = true;
-            return;
-        }
-
-        let cancelled = false;
-        const timer = window.setTimeout(async () => {
-            setIsSavingKnowledgeBases(true);
-            setKnowledgeBaseSaveError(null);
-            try {
-                await api.admin.updateAgent(agentId, {
-                    default_knowledge_base_ids: selectedKnowledgeBaseIds,
-                });
-            } catch (error) {
-                if (!cancelled) {
-                    setKnowledgeBaseSaveError(getApiErrorMessage(error));
-                }
-            } finally {
-                if (!cancelled) {
-                    setIsSavingKnowledgeBases(false);
-                }
-            }
-        }, 300);
-
-        return () => {
-            cancelled = true;
-            window.clearTimeout(timer);
-        };
-    }, [agentId, isLoadingKBs, selectedKnowledgeBaseIds]);
 
     useEffect(() => {
         const loadAgent = async () => {
@@ -194,13 +149,34 @@ export default function AgentPersonaSelectPage() {
             }
 
             // 创建练习会话
-            const session = await api.practice.createSession({
+            const sessionPayload = {
                 agent_id: agentId,
                 persona_id: selectedPersona,
                 scenario_type: scenarioType,
                 presentation_id: scenarioType === "presentation" ? selectedPresentationId : undefined,
                 voice_mode: voiceMode,
-            });
+            } as const;
+
+            let session: Awaited<ReturnType<typeof api.practice.createSession>> | null = null;
+            let lastError: unknown = null;
+            for (let attempt = 0; attempt <= CREATE_SESSION_RETRY_DELAYS_MS.length; attempt += 1) {
+                try {
+                    session = await api.practice.createSession(sessionPayload);
+                    break;
+                } catch (error) {
+                    lastError = error;
+                    const retryable = isRetryableCreateSessionError(error);
+                    if (!retryable || attempt === CREATE_SESSION_RETRY_DELAYS_MS.length) {
+                        throw error;
+                    }
+                    const delayMs = CREATE_SESSION_RETRY_DELAYS_MS[attempt];
+                    await new Promise((resolve) => setTimeout(resolve, delayMs));
+                }
+            }
+
+            if (!session) {
+                throw lastError ?? new Error("创建会话失败");
+            }
             // 跳转到练习页面
             const presentationParam =
                 scenarioType === "presentation" && selectedPresentationId
@@ -372,29 +348,8 @@ export default function AgentPersonaSelectPage() {
                 </div>
             )}
 
-            {/* 知识库选择 */}
-            <div>
-                <KnowledgeBaseSelector
-                    availableKBs={availableKBs}
-                    selectedIds={selectedKnowledgeBaseIds}
-                    onChange={setSelectedKnowledgeBaseIds}
-                    isLoading={isLoadingKBs}
-                    error={kbError}
-                    maxSelections={5}
-                />
-                {!kbError && (
-                    <div className="mt-3">
-                        {knowledgeBaseSaveError ? (
-                            <div className="rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">
-                                知识库绑定保存失败：{knowledgeBaseSaveError}
-                            </div>
-                        ) : (
-                            <p className="text-xs text-slate-500">
-                                {isSavingKnowledgeBases ? "正在自动保存知识库绑定..." : "知识库绑定将自动保存到智能体配置"}
-                            </p>
-                        )}
-                    </div>
-                )}
+            <div className="rounded-2xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-700">
+                知识库绑定已迁移到角色中心。请在角色页选择并维护知识库，当前页不再编辑智能体级知识库。
             </div>
 
             {/* 语音链路模式选择 */}
@@ -445,7 +400,6 @@ export default function AgentPersonaSelectPage() {
                             disabled={
                                 !selectedPersona
                                 || isStarting
-                                || isSavingKnowledgeBases
                                 || (agent.category === "presentation" && !selectedPresentationId)
                             }
                             onClick={handleStartPractice}

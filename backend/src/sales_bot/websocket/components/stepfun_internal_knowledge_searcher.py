@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Awaitable, Callable
+import time
 from typing import Any, cast
 
 from sales_bot.websocket.components.stepfun_knowledge_helpers import (
@@ -28,6 +29,28 @@ async def search_internal_knowledge(
     record_metric: Callable[..., Awaitable[None]],
 ) -> dict[str, Any]:
     """Execute knowledge retrieval with consistent metrics recording."""
+    started_at = time.monotonic()
+    health_ms = 0.0
+    search_ms = 0.0
+    phase_vector_ms = 0.0
+    phase_keyword_ms = 0.0
+    cache_hit_health = False
+    cache_hit_ready_docs = False
+
+    def _build_diagnostics(extra: dict[str, Any] | None = None) -> dict[str, Any]:
+        diagnostics: dict[str, Any] = {
+            "phase_health_ms": round(health_ms, 1),
+            "phase_search_ms": round(search_ms, 1),
+            "phase_vector_ms": round(phase_vector_ms, 1),
+            "phase_keyword_ms": round(phase_keyword_ms, 1),
+            "phase_total_ms": round((time.monotonic() - started_at) * 1000, 1),
+            "cache_hit_health": cache_hit_health,
+            "cache_hit_ready_docs": cache_hit_ready_docs,
+        }
+        if isinstance(extra, dict):
+            diagnostics.update(extra)
+        return diagnostics
+
     query = normalize_query(arguments_obj)
     kb_ids = normalize_knowledge_base_ids(effective_policy)
 
@@ -38,7 +61,9 @@ async def search_internal_knowledge(
             status="missing_query",
             knowledge_base_ids=kb_ids,
         )
-        return build_missing_query_payload()
+        payload = build_missing_query_payload()
+        payload["_diagnostics"] = _build_diagnostics({"status": "missing_query"})
+        return payload
 
     if not kb_ids:
         await record_metric(
@@ -47,7 +72,9 @@ async def search_internal_knowledge(
             status="no_kb_bound",
             knowledge_base_ids=[],
         )
-        return build_no_kb_payload(query)
+        payload = build_no_kb_payload(query)
+        payload["_diagnostics"] = _build_diagnostics({"status": "no_kb_bound"})
+        return payload
 
     tool_policy = effective_policy.get("tool_policy")
     if not isinstance(tool_policy, dict):
@@ -57,6 +84,12 @@ async def search_internal_knowledge(
         tool_policy,
         query=query,
     )
+    embedding_timeout_ms_raw = arguments_obj.get("embedding_timeout_ms")
+    try:
+        embedding_timeout_ms = int(embedding_timeout_ms_raw)
+    except (TypeError, ValueError):
+        embedding_timeout_ms = 0
+    embedding_timeout_ms = max(0, min(10000, embedding_timeout_ms))
     metadata_filter = resolve_metadata_filter(arguments_obj, tool_policy)
 
     try:
@@ -66,11 +99,16 @@ async def search_internal_knowledge(
             search_health: dict[str, Any] | None = None
             get_search_health = getattr(knowledge_service, "get_search_health", None)
             if callable(get_search_health):
+                health_started_at = time.monotonic()
                 maybe_health = get_search_health(kb_ids=kb_ids)
                 if asyncio.iscoroutine(maybe_health):
                     maybe_health = await cast(Awaitable[Any], maybe_health)
                 if isinstance(maybe_health, dict):
                     search_health = maybe_health
+                health_ms = (time.monotonic() - health_started_at) * 1000
+                cache_hit_health = bool(
+                    getattr(knowledge_service, "_last_search_health_cache_hit", False)
+                )
 
             kb_ready = True
             if search_health:
@@ -108,8 +146,16 @@ async def search_internal_knowledge(
                     similarity_threshold=threshold,
                     error_message=f"[KB_NOT_READY] {health_info}",
                 )
-                return build_kb_not_ready_payload(query)
+                payload = build_kb_not_ready_payload(query)
+                payload["_diagnostics"] = _build_diagnostics(
+                    {
+                        "status": "kb_not_ready",
+                        "search_health": search_health or {},
+                    }
+                )
+                return payload
 
+            search_started_at = time.monotonic()
             search_result = await knowledge_service.search_multiple(
                 kb_ids=kb_ids,
                 query=query,
@@ -118,7 +164,25 @@ async def search_internal_knowledge(
                 metadata_filter=metadata_filter,
                 enable_hybrid=enable_hybrid,
                 keyword_candidate_limit=keyword_candidate_limit,
+                embedding_timeout_ms=embedding_timeout_ms,
             )
+            search_ms = (time.monotonic() - search_started_at) * 1000
+            if callable(getattr(knowledge_service, "get_last_search_timing", None)):
+                timing = knowledge_service.get_last_search_timing()
+                if isinstance(timing, dict):
+                    try:
+                        phase_vector_ms = float(timing.get("phase_vector_ms") or 0.0)
+                    except (TypeError, ValueError):
+                        phase_vector_ms = 0.0
+                    try:
+                        phase_keyword_ms = float(
+                            timing.get("phase_keyword_ms") or 0.0
+                        )
+                    except (TypeError, ValueError):
+                        phase_keyword_ms = 0.0
+                    cache_hit_ready_docs = bool(
+                        timing.get("cache_hit_ready_docs", False)
+                    )
     except asyncio.CancelledError:
         raise
     except Exception as exc:
@@ -132,7 +196,9 @@ async def search_internal_knowledge(
             similarity_threshold=threshold,
             error_message=error_detail,
         )
-        return build_search_failed_payload(query, error_detail)
+        payload = build_search_failed_payload(query, error_detail)
+        payload["_diagnostics"] = _build_diagnostics({"status": "search_failed"})
+        return payload
 
     if not search_result.is_success:
         error_detail = str(search_result.fallback or "unknown_error")
@@ -145,7 +211,9 @@ async def search_internal_knowledge(
             similarity_threshold=threshold,
             error_message=error_detail,
         )
-        return build_search_failed_payload(query, error_detail)
+        payload = build_search_failed_payload(query, error_detail)
+        payload["_diagnostics"] = _build_diagnostics({"status": "search_failed"})
+        return payload
 
     rows = search_result.value or []
     results, effective_retrieval_mode, status = transform_search_rows(
@@ -164,9 +232,17 @@ async def search_internal_knowledge(
         retrieval_mode=effective_retrieval_mode,
     )
 
-    return {
+    response_payload = {
         "query": query,
         "count": len(results),
         "results": results,
         "retrieval_mode": effective_retrieval_mode,
     }
+    response_payload["_diagnostics"] = _build_diagnostics(
+        {
+            "status": status,
+            "retrieval_mode": effective_retrieval_mode,
+            "result_count": len(results),
+        }
+    )
+    return response_payload

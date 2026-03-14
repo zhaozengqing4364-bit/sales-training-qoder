@@ -118,11 +118,12 @@ class DocumentProcessor:
                 result = await embedding_service.embed_batch(batch)
 
                 if not result.is_success:
-                    logger.error(f"Embedding failed for batch {i}: {result.error}")
+                    failure_message = result.fallback or "[EMBEDDING_FAILED]"
+                    logger.error(f"Embedding failed for batch {i}: {failure_message}")
                     return {
                         "status": DocumentStatus.FAILED.value,
                         "chunk_count": 0,
-                        "error_message": f"Embedding failed: {result.error}",
+                        "error_message": f"Embedding failed: {failure_message}",
                     }
 
                 all_embeddings.extend(result.value)
@@ -142,10 +143,11 @@ class DocumentProcessor:
             )
 
             if not store_result.is_success:
+                failure_message = store_result.fallback or "[VECTOR_STORAGE_FAILED]"
                 return {
                     "status": DocumentStatus.FAILED.value,
                     "chunk_count": 0,
-                    "error_message": f"Vector storage failed: {store_result.error}",
+                    "error_message": f"Vector storage failed: {failure_message}",
                 }
 
             logger.info(
@@ -250,13 +252,52 @@ class DocumentProcessor:
                 if para.text.strip():
                     text_parts.append(para.text)
 
+            table_text_parts = self._extract_text_from_docx_tables(doc)
             image_text_parts = self._extract_text_from_docx_images(doc)
-            merged_parts = text_parts + image_text_parts
+            merged_parts = text_parts + table_text_parts + image_text_parts
             merged_content = "\n\n".join(part for part in merged_parts if part).strip()
             return merged_content or None
         except Exception as e:
             logger.error(f"Failed to read DOCX: {e}")
             return None
+
+    def _extract_text_from_docx_tables(self, doc: Any) -> list[str]:
+        """Extract text from DOCX tables for table-centric business documents."""
+        table_texts: list[str] = []
+        seen_rows: set[str] = set()
+
+        try:
+            for table in getattr(doc, "tables", []) or []:
+                for row in getattr(table, "rows", []) or []:
+                    row_parts: list[str] = []
+                    for cell in getattr(row, "cells", []) or []:
+                        cell_text = self._normalize_docx_cell_text(
+                            getattr(cell, "text", "")
+                        )
+                        if cell_text:
+                            row_parts.append(cell_text)
+
+                    if not row_parts:
+                        continue
+
+                    row_text = " | ".join(row_parts)
+                    if row_text in seen_rows:
+                        continue
+
+                    seen_rows.add(row_text)
+                    table_texts.append(row_text)
+        except Exception as e:
+            logger.warning(f"DOCX table text extraction skipped: {e}")
+
+        return table_texts
+
+    def _normalize_docx_cell_text(self, text: str) -> str:
+        """Normalize DOCX table cell text without dropping short but meaningful labels."""
+        if not text:
+            return ""
+
+        lines = [line.strip() for line in text.splitlines()]
+        return "\n".join(line for line in lines if line).strip()
 
     def _extract_text_from_pdf_images(self, page: Any, page_index: int) -> list[str]:
         """Extract OCR text from images embedded in a PDF page."""

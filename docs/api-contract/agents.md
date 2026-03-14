@@ -1,6 +1,6 @@
 # Agent 管理 API 契约
 
-> 状态: ✅ 已实现（2026-02-10 更新）
+> 状态: ✅ 已实现（2026-02-16 更新）
 >
 > 后端实现: `backend/src/agent/api/agents.py`
 >
@@ -25,11 +25,11 @@ interface AgentResponse {
   name: string;
   description?: string;
   icon?: string;
-  category: "sales" | "presentation" | "interview" | "customer_service";
-  system_prompt?: string;
+  category: "sales" | "presentation";
+  system_prompt?: string; // 兼容只读字段，已废弃写入
   welcome_message?: string;
   capabilities_config: Record<string, unknown>;
-  default_knowledge_base_ids: string[];
+  default_knowledge_base_ids: string[]; // 兼容只读字段，已废弃写入
   status: "draft" | "published" | "archived";
   version: number;
   created_by?: string;
@@ -47,7 +47,7 @@ interface AgentUserResponse {
   name: string;
   description?: string;
   icon?: string;
-  category: "sales" | "presentation" | "interview" | "customer_service";
+  category: "sales" | "presentation";
   welcome_message?: string;
   capabilities: string[];
 }
@@ -93,6 +93,14 @@ interface PersonaUserListItem {
 
 ---
 
+## 写入约束（角色中心收敛）
+
+- Agent 仅允许写入基础元信息与能力开关，不再作为提示词/知识库策略入口。
+- 管理端 `POST /admin/agents` 与 `PUT /admin/agents/{agent_id}` 若请求体包含以下字段，将返回 `400`：
+  - `system_prompt`
+  - `default_knowledge_base_ids`
+- 角色提示词与知识库绑定统一迁移到 Persona 的 `persona_policy`。
+
 ## 典型请求与响应
 
 ### 创建 Agent
@@ -109,13 +117,11 @@ Content-Type: application/json
   "description": "帮助销售人员提升沟通技巧的 AI 教练",
   "icon": "🎯",
   "category": "sales",
-  "system_prompt": "你是一位资深销售教练...",
   "welcome_message": "你好！准备好练习了吗？",
   "capabilities_config": {
     "asr": {"enabled": true},
     "tts": {"enabled": true}
-  },
-  "default_knowledge_base_ids": ["kb-product-001"]
+  }
 }
 ```
 
@@ -236,6 +242,8 @@ Authorization: Bearer <token>
 | 错误码 | HTTP 状态 | 场景 |
 |--------|-----------|------|
 | `[AGENT_NOT_FOUND]` | `404` | Agent 不存在 |
+| `[AGENT_CATEGORY_RESTRICTED]` | `400` | 分类不在允许集合（当前仅支持 `sales` / `presentation`） |
+| `[FIELD_DEPRECATED_PERSONA_CENTERED]` | `400` | 写入了已废弃入口（`system_prompt` / `default_knowledge_base_ids`） |
 | `[AGENT_CANNOT_DELETE]` | `400` | Agent 存在关联会话，无法删除 |
 | `[AGENT_ALREADY_PUBLISHED]` | `400` | 重复发布 |
 | `[AGENT_ALREADY_DRAFT]` | `400` | 已是草稿状态，再次下线 |
@@ -257,3 +265,4 @@ Authorization: Bearer <token>
 | 2026-02-10 | 清理历史规划引用 | 移除已废弃 roadmap 引用与旧示例 |
 | 2026-02-11 | 补充归档场景会话保护约束 | 记录 `archived` Agent 在会话创建入口的拒绝语义 `[AGENT_ARCHIVED]` |
 | 2026-02-11 | 补充增强模式参数配对约束 | 记录 `agent_id/persona_id` 需成对传入，错误码 `[AGENT_PERSONA_PAIR_REQUIRED]` |
+| 2026-02-16 | 收敛 Agent 写入口到角色中心 | 新增废弃写入拦截错误码 `[FIELD_DEPRECATED_PERSONA_CENTERED]`，并限制 Agent 分类集合 |

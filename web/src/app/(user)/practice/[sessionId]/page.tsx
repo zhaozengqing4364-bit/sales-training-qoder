@@ -14,14 +14,7 @@ import { usePracticeWebSocket } from "@/hooks/use-practice-websocket";
 import type { ConnectionState, SessionStatus } from "@/hooks/use-practice-websocket";
 import { useAudioRecorder } from "@/hooks/use-audio-recorder";
 import { RightPanelContent } from "@/components/practice/RightPanelContent";
-
-interface SessionRuntimeMeta {
-    scenario_type?: "sales" | "presentation" | null;
-    voice_mode?: "legacy" | "stepfun_realtime" | null;
-    agent_id?: string | null;
-    persona_id?: string | null;
-    presentation_id?: string | null;
-}
+import type { PracticeSessionRuntime } from "@/lib/api/types";
 
 const SESSION_STATUS_LABELS: Record<SessionStatus, string> = {
     preparing: "准备中",
@@ -38,6 +31,10 @@ const CONNECTION_STATUS_LABELS: Record<ConnectionState, string> = {
     failed: "连接失败",
 };
 
+function normalizeVoiceMode(value: string | null | undefined): "legacy" | "stepfun_realtime" {
+    return value === "stepfun_realtime" ? "stepfun_realtime" : "legacy";
+}
+
 export default function PracticeSessionPage() {
     const params = useParams();
     const router = useRouter();
@@ -48,7 +45,7 @@ export default function PracticeSessionPage() {
     const queryPersonaId = searchParams.get("persona_id") || undefined;
     const queryPresentationId = searchParams.get("presentation_id") || undefined;
     const queryScenarioType = (searchParams.get("scenario_type") as "sales" | "presentation") || "sales";
-    const queryVoiceMode = (searchParams.get("voice_mode") as "legacy" | "stepfun_realtime") || "legacy";
+    const queryVoiceMode = normalizeVoiceMode(searchParams.get("voice_mode"));
 
     const [lockedScenarioType, setLockedScenarioType] = React.useState<"sales" | "presentation">(queryScenarioType);
     const [lockedVoiceMode, setLockedVoiceMode] = React.useState<"legacy" | "stepfun_realtime">(queryVoiceMode);
@@ -77,6 +74,7 @@ export default function PracticeSessionPage() {
         fuzzyDetections,
         salesStage,
         scores,
+        actionCard,
         error: wsError,
         isPlayingAudio,
         interimTranscript,
@@ -146,11 +144,11 @@ export default function PracticeSessionPage() {
         const syncSessionRuntimeLock = async () => {
             try {
                 const { api } = await import("@/lib/api/client");
-                const session = await api.practice.getSession(sessionId) as SessionRuntimeMeta;
+                const session = await api.practice.getSession(sessionId) as PracticeSessionRuntime;
                 if (isCancelled) return;
 
                 const persistedScenario = session.scenario_type || queryScenarioType;
-                const persistedVoiceMode = session.voice_mode || queryVoiceMode;
+                const persistedVoiceMode = normalizeVoiceMode(session.voice_mode || queryVoiceMode);
                 const persistedAgentId = session.agent_id || undefined;
                 const persistedPersonaId = session.persona_id || undefined;
                 const persistedPresentationId = session.presentation_id || queryPresentationId;
@@ -248,13 +246,6 @@ export default function PracticeSessionPage() {
     React.useEffect(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
     }, [messages]);
-
-    // 请求麦克风权限
-    React.useEffect(() => {
-        if (hasPermission === null) {
-            requestPermission();
-        }
-    }, [hasPermission, requestPermission]);
 
     const scenarioType = lockedScenarioType;
     const voiceMode = lockedVoiceMode;
@@ -760,6 +751,14 @@ export default function PracticeSessionPage() {
                                 ? "网络波动，正在自动重连..."
                                 : connectionState === "connecting"
                                 ? "正在建立连接..."
+                                : audioError
+                                ? audioError.includes("HTTP/IP")
+                                    ? "当前地址不是安全上下文，请改用 HTTPS 域名访问"
+                                    : audioError.includes("未检测到可用麦克风")
+                                    ? "未检测到可用麦克风设备"
+                                    : audioError.includes("被其他应用占用")
+                                    ? "麦克风被其他应用占用"
+                                    : "请先处理麦克风访问问题"
                                 : hasPermission === false
                                 ? "请允许麦克风权限"
                                 : pendingLifecycleAction
@@ -789,6 +788,7 @@ export default function PracticeSessionPage() {
                     points={points}
                     forbiddenWords={forbiddenWords}
                     scores={scores}
+                    actionCard={actionCard}
                     fuzzyDetections={fuzzyDetections}
                     salesStage={salesStage}
                     sendMessage={sendMessage}
@@ -811,6 +811,7 @@ export default function PracticeSessionPage() {
                     points={points}
                     forbiddenWords={forbiddenWords}
                     scores={scores}
+                    actionCard={actionCard}
                     fuzzyDetections={fuzzyDetections}
                     salesStage={salesStage}
                     sendMessage={sendMessage}

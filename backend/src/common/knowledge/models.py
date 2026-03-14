@@ -21,6 +21,7 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
+    UniqueConstraint,
 )
 from sqlalchemy.orm import relationship
 
@@ -135,6 +136,7 @@ class KnowledgeDocument(Base):
     file_type = Column(String(20), nullable=False)  # pdf|docx|txt|md
     file_url = Column(String(500), nullable=False)
     file_size = Column(Integer, nullable=False)  # bytes
+    content_hash = Column(String(64), nullable=True, index=True)
 
     # Processing status
     status = Column(String(20), default="pending", index=True)  # pending|processing|ready|failed
@@ -152,6 +154,11 @@ class KnowledgeDocument(Base):
         CheckConstraint(
             "file_type IN ('pdf', 'docx', 'txt', 'md')",
             name="ck_knowledge_document_file_type"
+        ),
+        UniqueConstraint(
+            "knowledge_base_id",
+            "content_hash",
+            name="uq_knowledge_document_kb_content_hash",
         ),
         Index("idx_knowledge_documents_status", "status"),
         Index("idx_knowledge_documents_knowledge_base", "knowledge_base_id"),

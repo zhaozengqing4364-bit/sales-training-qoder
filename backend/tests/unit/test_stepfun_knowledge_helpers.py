@@ -30,7 +30,7 @@ def test_normalize_query_and_kb_ids():
 def test_resolve_retrieval_params_with_defaults_and_invalid_values():
     top_k, threshold, enable_hybrid, keyword_limit = resolve_retrieval_params({}, {})
     assert top_k == 5
-    assert threshold == 0.65
+    assert threshold == 0.58
     assert enable_hybrid is True
     assert keyword_limit == 32
 
@@ -43,7 +43,7 @@ def test_resolve_retrieval_params_with_defaults_and_invalid_values():
         },
     )
     assert top_k == 5
-    assert threshold == 0.65
+    assert threshold == 0.58
     assert enable_hybrid is False
     assert keyword_limit == 32
 

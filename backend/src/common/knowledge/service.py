@@ -12,13 +12,19 @@ References:
 
 from __future__ import annotations
 
+import asyncio
+from difflib import SequenceMatcher
+import inspect
+import os
 import re
+import time
 import uuid
 from datetime import datetime, timezone
 from hashlib import md5
 from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.ai.embedding_service import get_embedding_service
@@ -83,15 +89,108 @@ QUERY_STOPWORDS: set[str] = {
 }
 
 VERSION_TOKEN_RE = re.compile(r"\bv?\d+(?:\.\d+){0,2}[a-z]?\b", re.IGNORECASE)
+SEARCH_TERM_RE = re.compile(r"[a-z0-9]+|[\u4e00-\u9fff]{2,12}")
+
+
+def _resolve_cache_ttl_seconds(
+    env_name: str,
+    default_ms: int,
+    *,
+    min_ms: int = 0,
+    max_ms: int = 60000,
+) -> float:
+    raw_value = os.getenv(env_name, str(default_ms))
+    try:
+        timeout_ms = int(raw_value)
+    except (TypeError, ValueError):
+        timeout_ms = default_ms
+    timeout_ms = max(min_ms, min(max_ms, timeout_ms))
+    return timeout_ms / 1000.0
+
+
+def _resolve_bool_env(name: str, default: bool) -> bool:
+    raw_value = os.getenv(name, "true" if default else "false")
+    normalized = str(raw_value).strip().lower()
+    if normalized in {"1", "true", "yes", "on"}:
+        return True
+    if normalized in {"0", "false", "no", "off"}:
+        return False
+    return default
+
+
+def _resolve_bounded_int_env(
+    name: str,
+    default: int,
+    *,
+    minimum: int,
+    maximum: int,
+) -> int:
+    raw_value = os.getenv(name, str(default))
+    try:
+        parsed = int(raw_value)
+    except (TypeError, ValueError):
+        parsed = default
+    return max(minimum, min(maximum, parsed))
+
+
+SEARCH_HEALTH_CACHE_TTL_SECONDS = _resolve_cache_ttl_seconds(
+    "KNOWLEDGE_SEARCH_HEALTH_CACHE_TTL_MS",
+    default_ms=8000,
+)
+READY_DOC_IDS_CACHE_TTL_SECONDS = _resolve_cache_ttl_seconds(
+    "KNOWLEDGE_READY_DOC_IDS_CACHE_TTL_MS",
+    default_ms=8000,
+)
+_runtime_cache_max_entries_raw = os.getenv("KNOWLEDGE_RUNTIME_CACHE_MAX_ENTRIES", "512")
+try:
+    _runtime_cache_max_entries = int(_runtime_cache_max_entries_raw)
+except (TypeError, ValueError):
+    _runtime_cache_max_entries = 512
+RUNTIME_CACHE_MAX_ENTRIES = max(32, min(4096, _runtime_cache_max_entries))
+KNOWLEDGE_VECTOR_SEARCH_CONCURRENCY = _resolve_bounded_int_env(
+    "KNOWLEDGE_VECTOR_SEARCH_CONCURRENCY",
+    default=4,
+    minimum=1,
+    maximum=16,
+)
+KNOWLEDGE_EMBED_BATCH_ENABLED = _resolve_bool_env(
+    "KNOWLEDGE_EMBED_BATCH_ENABLED",
+    default=True,
+)
+KNOWLEDGE_STRICT_KEYWORD_FALLBACK_ON_EMPTY_VECTOR = _resolve_bool_env(
+    "KNOWLEDGE_STRICT_KEYWORD_FALLBACK_ON_EMPTY_VECTOR",
+    default=True,
+)
 
 
 class KnowledgeService:
     """Knowledge Base management service."""
 
+    _search_health_cache: dict[str, tuple[float, dict[str, int]]] = {}
+    _ready_document_ids_cache: dict[str, tuple[float, dict[str, list[str]]]] = {}
+
     def __init__(self, db: AsyncSession):
         self.db = db
+        self._last_search_timing: dict[str, Any] = {}
+        self._last_search_health_cache_hit = False
+        self._last_ready_doc_ids_cache_hit = False
+
+    @staticmethod
+    def _build_kb_cache_key(kb_ids: list[str]) -> str:
+        unique_ids = sorted({str(kb_id).strip() for kb_id in kb_ids if str(kb_id).strip()})
+        return ",".join(unique_ids)
+
+    @staticmethod
+    def _is_cache_valid(expires_at: float) -> bool:
+        return expires_at > time.monotonic()
+
+    def get_last_search_timing(self) -> dict[str, Any]:
+        if not isinstance(self._last_search_timing, dict):
+            return {}
+        return dict(self._last_search_timing)
 
     async def get_search_health(self, kb_ids: list[str]) -> dict[str, int]:
+        self._last_search_health_cache_hit = False
         normalized_ids = [str(kb_id).strip() for kb_id in kb_ids if str(kb_id).strip()]
         if not normalized_ids:
             return {
@@ -101,6 +200,13 @@ class KnowledgeService:
                 "vector_chunk_count": 0,
                 "is_ready": False,
             }
+
+        cache_key = self._build_kb_cache_key(normalized_ids)
+        if SEARCH_HEALTH_CACHE_TTL_SECONDS > 0:
+            cached = self._search_health_cache.get(cache_key)
+            if cached and self._is_cache_valid(cached[0]):
+                self._last_search_health_cache_hit = True
+                return dict(cached[1])
 
         stmt = (
             select(
@@ -138,21 +244,37 @@ class KnowledgeService:
             and vector_chunk_count > 0
         )
 
-        return {
+        payload = {
             "knowledge_base_count": len(normalized_ids),
             "ready_document_count": ready_document_count,
             "ready_chunk_count": ready_chunk_count_value,
             "vector_chunk_count": vector_chunk_count,
             "is_ready": is_ready,
         }
+        if SEARCH_HEALTH_CACHE_TTL_SECONDS > 0:
+            if len(self._search_health_cache) >= RUNTIME_CACHE_MAX_ENTRIES:
+                self._search_health_cache.clear()
+            self._search_health_cache[cache_key] = (
+                time.monotonic() + SEARCH_HEALTH_CACHE_TTL_SECONDS,
+                dict(payload),
+            )
+        return payload
 
     async def _get_ready_document_ids_by_kb(
         self,
         kb_ids: list[str],
     ) -> dict[str, list[str]]:
+        self._last_ready_doc_ids_cache_hit = False
         normalized_ids = [str(kb_id).strip() for kb_id in kb_ids if str(kb_id).strip()]
         if not normalized_ids:
             return {}
+
+        cache_key = self._build_kb_cache_key(normalized_ids)
+        if READY_DOC_IDS_CACHE_TTL_SECONDS > 0:
+            cached = self._ready_document_ids_cache.get(cache_key)
+            if cached and self._is_cache_valid(cached[0]):
+                self._last_ready_doc_ids_cache_hit = True
+                return {kb_id: list(doc_ids) for kb_id, doc_ids in cached[1].items()}
 
         stmt = (
             select(KnowledgeDocument.knowledge_base_id, KnowledgeDocument.id)
@@ -165,6 +287,13 @@ class KnowledgeService:
         ready_docs: dict[str, list[str]] = {}
         for kb_id, doc_id in rows:
             ready_docs.setdefault(str(kb_id), []).append(str(doc_id))
+        if READY_DOC_IDS_CACHE_TTL_SECONDS > 0:
+            if len(self._ready_document_ids_cache) >= RUNTIME_CACHE_MAX_ENTRIES:
+                self._ready_document_ids_cache.clear()
+            self._ready_document_ids_cache[cache_key] = (
+                time.monotonic() + READY_DOC_IDS_CACHE_TTL_SECONDS,
+                {kb_id: list(doc_ids) for kb_id, doc_ids in ready_docs.items()},
+            )
         return ready_docs
 
     # ========== KnowledgeBase CRUD ==========
@@ -355,7 +484,13 @@ class KnowledgeService:
     # ========== Document Operations ==========
 
     async def create_document(
-        self, kb_id: str, title: str, file_type: str, file_url: str, file_size: int
+        self,
+        kb_id: str,
+        title: str,
+        file_type: str,
+        file_url: str,
+        file_size: int,
+        content_hash: str | None = None,
     ) -> Result[KnowledgeDocument]:
         """Create a document record (called after file upload) - R5.3"""
         doc_id = str(uuid.uuid4())
@@ -366,6 +501,7 @@ class KnowledgeService:
             file_type=file_type,
             file_url=file_url,
             file_size=file_size,
+            content_hash=content_hash,
         )
 
     async def create_document_with_id(
@@ -376,6 +512,7 @@ class KnowledgeService:
         file_type: str,
         file_url: str,
         file_size: int,
+        content_hash: str | None = None,
     ) -> Result[KnowledgeDocument]:
         """Create a document record with pre-generated ID - R5.3"""
         kb_result = await self.get_by_id(kb_id)
@@ -390,6 +527,7 @@ class KnowledgeService:
                 file_type=file_type,
                 file_url=file_url,
                 file_size=file_size,
+                content_hash=content_hash,
                 status=DocumentStatus.PENDING.value,
                 chunk_count=0,
             )
@@ -406,9 +544,34 @@ class KnowledgeService:
             logger.info(f"Created document: {doc.id} in KB {kb_id}")
             return Result.ok(doc)
 
+        except IntegrityError as e:
+            await self.db.rollback()
+            logger.warning(
+                "Duplicate document content hash detected",
+                kb_id=kb_id,
+                content_hash=content_hash,
+                error=str(e),
+            )
+            return Result.fail("[DOCUMENT_DUPLICATE_CONTENT]")
         except (RuntimeError, ValueError, OSError) as e:
             logger.error(f"Failed to create document: {e}")
             return Result.fail(f"[DOCUMENT_CREATE_FAILED] {str(e)}")
+
+    async def get_document_by_content_hash(
+        self,
+        kb_id: str,
+        content_hash: str,
+    ) -> KnowledgeDocument | None:
+        """Find existing document by content hash in the same knowledge base."""
+        if not content_hash:
+            return None
+
+        stmt = select(KnowledgeDocument).where(
+            KnowledgeDocument.knowledge_base_id == kb_id,
+            KnowledgeDocument.content_hash == content_hash,
+        )
+        result = await self.db.execute(stmt)
+        return result.scalar_one_or_none()
 
     async def list_documents(
         self, kb_id: str, page: int = 1, page_size: int = 20
@@ -443,6 +606,7 @@ class KnowledgeService:
                 file_size=doc.file_size,
                 status=doc.status,
                 chunk_count=doc.chunk_count,
+                error_message=doc.error_message,
                 created_at=doc.created_at,
             )
             for doc in docs
@@ -572,6 +736,7 @@ class KnowledgeService:
         metadata_filter: dict[str, Any] | None = None,
         enable_hybrid: bool = True,
         keyword_candidate_limit: int = 32,
+        embedding_timeout_ms: int = 0,
     ) -> Result[list[dict[str, Any]]]:
         """
         Search multiple knowledge bases.
@@ -585,10 +750,24 @@ class KnowledgeService:
         Returns:
             Result with merged and sorted results
         """
+        search_started_at = time.monotonic()
+        embedding_ms = 0.0
+        vector_ms = 0.0
+        keyword_ms = 0.0
+        self._last_search_timing = {}
+
         normalized_kb_ids = [
             str(kb_id).strip() for kb_id in kb_ids if str(kb_id).strip()
         ]
         if not normalized_kb_ids:
+            self._last_search_timing = {
+                "phase_total_ms": round((time.monotonic() - search_started_at) * 1000, 1),
+                "phase_embedding_ms": 0.0,
+                "phase_vector_ms": 0.0,
+                "phase_keyword_ms": 0.0,
+                "cache_hit_health": self._last_search_health_cache_hit,
+                "cache_hit_ready_docs": self._last_ready_doc_ids_cache_hit,
+            }
             return Result.ok([])
 
         ready_document_ids_by_kb = await self._get_ready_document_ids_by_kb(
@@ -602,9 +781,23 @@ class KnowledgeService:
                 "No searchable ready documents in bound knowledge bases",
                 knowledge_base_ids=normalized_kb_ids,
             )
+            self._last_search_timing = {
+                "phase_total_ms": round((time.monotonic() - search_started_at) * 1000, 1),
+                "phase_embedding_ms": 0.0,
+                "phase_vector_ms": 0.0,
+                "phase_keyword_ms": 0.0,
+                "cache_hit_health": self._last_search_health_cache_hit,
+                "cache_hit_ready_docs": self._last_ready_doc_ids_cache_hit,
+            }
             return Result.ok([])
 
         query_variants = self._build_query_variants(query)
+        resolved_embedding_timeout_ms = max(0, min(10000, int(embedding_timeout_ms or 0)))
+        embedding_timeout_seconds = (
+            resolved_embedding_timeout_ms / 1000.0
+            if resolved_embedding_timeout_ms > 0
+            else 0.0
+        )
 
         embedding_service = get_embedding_service()
         vector_results: list[dict[str, Any]] = []
@@ -619,28 +812,87 @@ class KnowledgeService:
             kb_contexts[kb_id] = kb_result.value
 
         if not kb_contexts:
+            self._last_search_timing = {
+                "phase_total_ms": round((time.monotonic() - search_started_at) * 1000, 1),
+                "phase_embedding_ms": 0.0,
+                "phase_vector_ms": 0.0,
+                "phase_keyword_ms": 0.0,
+                "cache_hit_health": self._last_search_health_cache_hit,
+                "cache_hit_ready_docs": self._last_ready_doc_ids_cache_hit,
+            }
             return Result.ok([])
 
         if embedding_service.is_configured:
-            for variant in query_variants:
-                embed_result = await embedding_service.embed(variant)
-                if embed_result.is_success and embed_result.value:
-                    query_embeddings.append((variant, embed_result.value))
-                    continue
+            embedding_started_at = time.monotonic()
+            async def _collect_query_embeddings() -> tuple[list[tuple[str, list[float]]], str | None]:
+                collected_embeddings: list[tuple[str, list[float]]] = []
+                failure_reason: str | None = None
+                should_use_batch = KNOWLEDGE_EMBED_BATCH_ENABLED
+                if should_use_batch:
+                    embed_batch = getattr(embedding_service, "embed_batch", None)
+                    if not callable(embed_batch):
+                        should_use_batch = False
+                    else:
+                        batch_candidate = embed_batch(query_variants)
+                        if not inspect.isawaitable(batch_candidate):
+                            should_use_batch = False
+                        else:
+                            batch_result = await batch_candidate
+                            if batch_result.is_success and isinstance(
+                                batch_result.value, list
+                            ):
+                                for variant, embedding in zip(
+                                    query_variants, batch_result.value
+                                ):
+                                    if isinstance(embedding, list) and embedding:
+                                        collected_embeddings.append((variant, embedding))
+                            else:
+                                failure_reason = (
+                                    batch_result.fallback or "[EMBEDDING_FAILED]"
+                                )
+                if not should_use_batch:
+                    for variant in query_variants:
+                        embed_result = await embedding_service.embed(variant)
+                        if embed_result.is_success and embed_result.value:
+                            collected_embeddings.append((variant, embed_result.value))
+                            continue
+                        if failure_reason is None:
+                            failure_reason = embed_result.fallback or "[EMBEDDING_FAILED]"
+                return collected_embeddings, failure_reason
 
-                if embedding_failure is None:
-                    embedding_failure = embed_result.fallback or "[EMBEDDING_FAILED]"
+            try:
+                if embedding_timeout_seconds > 0:
+                    query_embeddings, embedding_failure = await asyncio.wait_for(
+                        _collect_query_embeddings(),
+                        timeout=embedding_timeout_seconds,
+                    )
+                else:
+                    query_embeddings, embedding_failure = (
+                        await _collect_query_embeddings()
+                    )
+            except asyncio.TimeoutError:
+                embedding_failure = "[EMBEDDING_TIMEOUT]"
+                logger.warning(
+                    "Embedding stage timeout in multi-knowledge search, fallback to keyword matching",
+                    timeout_ms=resolved_embedding_timeout_ms,
+                )
+            embedding_ms = (time.monotonic() - embedding_started_at) * 1000
 
             if query_embeddings:
+                vector_started_at = time.monotonic()
                 vector_store = get_knowledge_vector_store()
                 vector_top_k = max(6, top_k * 2)
+                semaphore = asyncio.Semaphore(KNOWLEDGE_VECTOR_SEARCH_CONCURRENCY)
 
-                for kb_id, kb in kb_contexts.items():
-                    ready_document_ids = ready_document_ids_by_kb.get(kb_id, [])
-                    if not ready_document_ids:
-                        continue
-
-                    for variant, query_embedding in query_embeddings:
+                async def _search_one_variant(
+                    *,
+                    kb_id: str,
+                    kb: Any,
+                    ready_document_ids: list[str],
+                    variant: str,
+                    query_embedding: list[float],
+                ) -> list[dict[str, Any]]:
+                    async with semaphore:
                         adaptive_threshold = self._adapt_similarity_threshold(
                             query=variant,
                             base_threshold=similarity_threshold,
@@ -653,15 +905,43 @@ class KnowledgeService:
                             document_ids=ready_document_ids,
                             metadata_filter=metadata_filter,
                         )
+                    if not search_result.is_success:
+                        return []
+                    if not isinstance(search_result.value, list):
+                        return []
 
-                        if not search_result.is_success:
-                            continue
+                    enriched_rows: list[dict[str, Any]] = []
+                    for row in search_result.value:
+                        normalized_row = dict(row)
+                        normalized_row["knowledge_base_id"] = kb_id
+                        normalized_row["knowledge_base_name"] = kb.name
+                        normalized_row.setdefault("matched_query", variant)
+                        enriched_rows.append(normalized_row)
+                    return enriched_rows
 
-                        for row in search_result.value:
-                            row["knowledge_base_id"] = kb_id
-                            row["knowledge_base_name"] = kb.name
-                            row.setdefault("matched_query", variant)
-                        vector_results.extend(search_result.value)
+                vector_tasks: list[asyncio.Task[list[dict[str, Any]]]] = []
+                for kb_id, kb in kb_contexts.items():
+                    ready_document_ids = ready_document_ids_by_kb.get(kb_id, [])
+                    if not ready_document_ids:
+                        continue
+                    for variant, query_embedding in query_embeddings:
+                        vector_tasks.append(
+                            asyncio.create_task(
+                                _search_one_variant(
+                                    kb_id=kb_id,
+                                    kb=kb,
+                                    ready_document_ids=ready_document_ids,
+                                    variant=variant,
+                                    query_embedding=query_embedding,
+                                )
+                            )
+                        )
+
+                if vector_tasks:
+                    vector_task_rows = await asyncio.gather(*vector_tasks)
+                    for rows in vector_task_rows:
+                        vector_results.extend(rows)
+                vector_ms = (time.monotonic() - vector_started_at) * 1000
             elif embedding_failure:
                 logger.warning(
                     "Embedding failed for multi-knowledge search, fallback to keyword matching",
@@ -673,15 +953,38 @@ class KnowledgeService:
                 "Embedding service not configured, fallback to keyword matching"
             )
 
-        keyword_results = await self._search_multiple_by_keywords(
-            kb_ids=list(kb_contexts.keys()),
-            query=query,
-            top_k=max(6, top_k * 2),
-            metadata_filter=metadata_filter,
-            candidate_limit=max(8, min(128, int(keyword_candidate_limit))),
-            query_variants=query_variants,
-            ready_document_ids_by_kb=ready_document_ids_by_kb,
-        )
+        keyword_results: list[dict[str, Any]] = []
+        should_run_keyword_fallback = False
+        if enable_hybrid:
+            should_run_keyword_fallback = True
+        elif not vector_results:
+            should_run_keyword_fallback = (
+                KNOWLEDGE_STRICT_KEYWORD_FALLBACK_ON_EMPTY_VECTOR
+            )
+
+        if should_run_keyword_fallback:
+            keyword_started_at = time.monotonic()
+            keyword_results = await self._search_multiple_by_keywords(
+                kb_ids=list(kb_contexts.keys()),
+                query=query,
+                top_k=max(6, top_k * 2),
+                metadata_filter=metadata_filter,
+                candidate_limit=max(8, min(128, int(keyword_candidate_limit))),
+                query_variants=query_variants,
+                ready_document_ids_by_kb=ready_document_ids_by_kb,
+            )
+            keyword_ms = (time.monotonic() - keyword_started_at) * 1000
+
+        self._last_search_timing = {
+            "phase_total_ms": round((time.monotonic() - search_started_at) * 1000, 1),
+            "phase_embedding_ms": round(embedding_ms, 1),
+            "phase_vector_ms": round(vector_ms, 1),
+            "phase_keyword_ms": round(keyword_ms, 1),
+            "cache_hit_health": self._last_search_health_cache_hit,
+            "cache_hit_ready_docs": self._last_ready_doc_ids_cache_hit,
+            "vector_result_count": len(vector_results),
+            "keyword_result_count": len(keyword_results),
+        }
 
         if enable_hybrid:
             fused_results = self._fuse_retrieval_results(
@@ -732,6 +1035,8 @@ class KnowledgeService:
             if not value or value in seen:
                 return
             if len(value) < 2:
+                return
+            if value in QUERY_STOPWORDS:
                 return
             seen.add(value)
             candidates.append(value)
@@ -962,6 +1267,7 @@ class KnowledgeService:
         normalized_content: str,
         normalized_query: str,
         candidates: list[str],
+        hint_terms: list[str] | None = None,
     ) -> float:
         """Score keyword overlap for fallback search."""
         if not normalized_content:
@@ -983,10 +1289,147 @@ class KnowledgeService:
                     score += 0.8
 
         if matched_count <= 0:
-            return 0.0
+            fuzzy_bonus = KnowledgeService._keyword_fuzzy_bonus(
+                normalized_content=normalized_content,
+                candidates=candidates,
+                hint_terms=hint_terms,
+            )
+            if fuzzy_bonus <= 0:
+                return 0.0
+            score += fuzzy_bonus
 
         coverage = matched_count / max(1, len(candidates))
         return score + coverage
+
+    @staticmethod
+    def _extract_fuzzy_terms(text: str, max_terms: int = 48) -> list[str]:
+        terms: list[str] = []
+        seen: set[str] = set()
+        for token in SEARCH_TERM_RE.findall(text.lower()):
+            term = token.strip()
+            if len(term) < 2:
+                continue
+            if term in seen:
+                continue
+            seen.add(term)
+            terms.append(term)
+            if len(terms) >= max_terms:
+                break
+            if re.fullmatch(r"[\u4e00-\u9fff]+", term) and len(term) >= 4:
+                for ngram_size in (4, 3, 2):
+                    if len(term) < ngram_size:
+                        continue
+                    for index in range(0, len(term) - ngram_size + 1):
+                        ngram = term[index : index + ngram_size]
+                        if ngram in seen:
+                            continue
+                        seen.add(ngram)
+                        terms.append(ngram)
+                        if len(terms) >= max_terms:
+                            break
+                    if len(terms) >= max_terms:
+                        break
+        return terms
+
+    @staticmethod
+    def _levenshtein_distance_limited(a: str, b: str, max_distance: int) -> int:
+        if a == b:
+            return 0
+        if abs(len(a) - len(b)) > max_distance:
+            return max_distance + 1
+        if not a or not b:
+            return max(len(a), len(b))
+
+        previous = list(range(len(b) + 1))
+        for i, ca in enumerate(a, start=1):
+            current = [i]
+            row_min = i
+            for j, cb in enumerate(b, start=1):
+                substitution_cost = 0 if ca == cb else 1
+                distance = min(
+                    previous[j] + 1,
+                    current[j - 1] + 1,
+                    previous[j - 1] + substitution_cost,
+                )
+                current.append(distance)
+                if distance < row_min:
+                    row_min = distance
+            if row_min > max_distance:
+                return max_distance + 1
+            previous = current
+        return previous[-1]
+
+    @staticmethod
+    def _is_fuzzy_term_match(candidate: str, term: str) -> bool:
+        if not candidate or not term:
+            return False
+        if candidate == term:
+            return True
+        if abs(len(candidate) - len(term)) > 1:
+            return False
+
+        max_distance = 1 if min(len(candidate), len(term)) <= 6 else 2
+        distance = KnowledgeService._levenshtein_distance_limited(
+            candidate,
+            term,
+            max_distance=max_distance,
+        )
+        if distance <= max_distance:
+            return True
+
+        ratio = SequenceMatcher(None, candidate, term).ratio()
+        return ratio >= 0.82
+
+    @staticmethod
+    def _keyword_fuzzy_bonus(
+        *,
+        normalized_content: str,
+        candidates: list[str],
+        hint_terms: list[str] | None = None,
+    ) -> float:
+        fuzzy_terms = KnowledgeService._extract_fuzzy_terms(
+            normalized_content, max_terms=24
+        )
+        if isinstance(hint_terms, list):
+            for term in hint_terms:
+                value = str(term).strip().lower()
+                if len(value) >= 2:
+                    fuzzy_terms.append(value)
+        if not fuzzy_terms:
+            return 0.0
+
+        unique_terms: list[str] = []
+        seen_terms: set[str] = set()
+        for term in fuzzy_terms:
+            if term in seen_terms:
+                continue
+            seen_terms.add(term)
+            unique_terms.append(term)
+            if len(unique_terms) >= 48:
+                break
+
+        bonus = 0.0
+        matched = 0
+        for candidate in candidates:
+            token = str(candidate).strip().lower()
+            if len(token) < 2:
+                continue
+            for term in unique_terms:
+                if not KnowledgeService._is_fuzzy_term_match(token, term):
+                    continue
+                matched += 1
+                if len(token) <= 4:
+                    bonus += 1.35
+                elif len(token) <= 8:
+                    bonus += 1.0
+                else:
+                    bonus += 0.7
+                break
+
+        if matched <= 0:
+            return 0.0
+
+        return bonus + matched / max(1, len(candidates))
 
     async def _search_multiple_by_keywords(
         self,
@@ -1073,20 +1516,26 @@ class KnowledgeService:
                 if not snippet_source:
                     continue
 
-                normalized_content = snippet_source.lower()
-                raw_score = self._keyword_match_score(
-                    normalized_content=normalized_content,
-                    normalized_query=normalized_query,
-                    candidates=merged_candidates,
-                )
-                if raw_score < 1.2:
-                    continue
-
                 metadata: dict[str, Any] = {}
                 if isinstance(metadatas, list) and index < len(metadatas):
                     metadata_candidate = metadatas[index]
                     if isinstance(metadata_candidate, dict):
                         metadata = metadata_candidate
+
+                title_terms: list[str] = []
+                title_text = str(metadata.get("document_title") or "").strip().lower()
+                if title_text:
+                    title_terms = self._extract_fuzzy_terms(title_text, max_terms=20)
+
+                normalized_content = snippet_source.lower()
+                raw_score = self._keyword_match_score(
+                    normalized_content=normalized_content,
+                    normalized_query=normalized_query,
+                    candidates=merged_candidates,
+                    hint_terms=title_terms,
+                )
+                if raw_score < 1.2:
+                    continue
 
                 if not self._metadata_matches(metadata, metadata_filter):
                     continue

@@ -4,8 +4,8 @@
  * Edit Prompt Template Page (B10)
  */
 
-import { useState, useEffect, useCallback } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useEffect, useCallback, useMemo } from "react";
+import { useParams, useRouter } from "next/navigation";
 import { ArrowLeft, Save, AlertCircle, Play } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -31,13 +31,17 @@ const PROMPT_TYPE_LABELS: Record<PromptType, string> = {
     evaluation: "实时评价",
     report: "综合报告",
 };
+const SALES_ALLOWED_PROMPT_TYPES: PromptType[] = ["evaluation", "report", "stage", "scoring"];
 
-interface PageProps {
-    params: { id: string };
-}
-
-export default function EditPromptTemplatePage({ params }: PageProps) {
+export default function EditPromptTemplatePage() {
+    const params = useParams();
     const router = useRouter();
+    const rawTemplateId = params?.id;
+    const templateId = Array.isArray(rawTemplateId) ? rawTemplateId[0] : rawTemplateId;
+    const isValidTemplateId =
+        typeof templateId === "string"
+        && templateId.trim().length > 0
+        && templateId !== "undefined";
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -56,13 +60,27 @@ export default function EditPromptTemplatePage({ params }: PageProps) {
     const [testResult, setTestResult] = useState<string | null>(null);
     const [testing, setTesting] = useState(false);
     const [showTestModal, setShowTestModal] = useState(false);
+    const normalizedCategory = category.trim().toLowerCase();
+
+    const selectablePromptTypes = useMemo(() => {
+        const entries = Object.entries(PROMPT_TYPE_LABELS) as [PromptType, string][];
+        if (normalizedCategory !== "sales") {
+            return entries;
+        }
+        return entries.filter(([type]) => SALES_ALLOWED_PROMPT_TYPES.includes(type));
+    }, [normalizedCategory]);
 
     // Load template
     const loadTemplate = useCallback(async () => {
+        if (!isValidTemplateId || !templateId) {
+            setError("模板ID无效，请返回列表后重试。");
+            setLoading(false);
+            return;
+        }
         setLoading(true);
         setError(null);
         try {
-            const data = await api.admin.getPromptTemplate(params.id);
+            const data = await api.admin.getPromptTemplate(templateId);
             setOriginalTemplate(data);
             setName(data.name);
             setPromptType(data.prompt_type);
@@ -82,11 +100,17 @@ export default function EditPromptTemplatePage({ params }: PageProps) {
         } finally {
             setLoading(false);
         }
-    }, [params.id]);
+    }, [isValidTemplateId, templateId]);
 
     useEffect(() => {
         loadTemplate();
     }, [loadTemplate]);
+
+    const effectivePromptType = (
+        selectablePromptTypes.some(([type]) => type === promptType)
+            ? promptType
+            : (selectablePromptTypes[0]?.[0] ?? promptType)
+    );
 
     // Extract variables from template
     const extractVariables = (tpl: string): string[] => {
@@ -105,9 +129,12 @@ export default function EditPromptTemplatePage({ params }: PageProps) {
         setError(null);
 
         try {
-            await api.admin.updatePromptTemplate(params.id, {
+            if (!isValidTemplateId || !templateId) {
+                throw new Error("模板ID无效，无法保存");
+            }
+            await api.admin.updatePromptTemplate(templateId, {
                 name,
-                prompt_type: promptType,
+                prompt_type: effectivePromptType,
                 category,
                 template,
                 variables: extractedVars,
@@ -125,8 +152,11 @@ export default function EditPromptTemplatePage({ params }: PageProps) {
         setTesting(true);
         setTestResult(null);
         try {
+            if (!isValidTemplateId || !templateId) {
+                throw new Error("模板ID无效，无法测试渲染");
+            }
             const variables = JSON.parse(testVariables);
-            const result = await api.admin.renderPromptTemplate(params.id, variables);
+            const result = await api.admin.renderPromptTemplate(templateId, variables);
             setTestResult(result.rendered);
         } catch (err) {
             setTestResult(`错误: ${err instanceof Error ? err.message : "渲染失败"}`);
@@ -195,13 +225,13 @@ export default function EditPromptTemplatePage({ params }: PageProps) {
                                 提示词类型 <span className="text-red-500">*</span>
                             </label>
                             <select
-                                value={promptType}
+                                value={effectivePromptType}
                                 onChange={(e) => setPromptType(e.target.value as PromptType)}
                                 className="w-full px-3 py-2 rounded-lg border border-zinc-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
                                 required
                                 disabled={originalTemplate?.is_system}
                             >
-                                {Object.entries(PROMPT_TYPE_LABELS).map(([type, label]) => (
+                                {selectablePromptTypes.map(([type, label]) => (
                                     <option key={type} value={type}>
                                         {label}
                                     </option>
@@ -212,7 +242,25 @@ export default function EditPromptTemplatePage({ params }: PageProps) {
                         {/* Category */}
                         <div>
                             <label className="block text-sm font-medium text-zinc-700 mb-2">分类</label>
-                            <Input value={category} onChange={(e) => setCategory(e.target.value)} />
+                            <Input
+                                value={category}
+                                onChange={(e) => {
+                                    const nextCategory = e.target.value;
+                                    const nextNormalized = nextCategory.trim().toLowerCase();
+                                    if (
+                                        nextNormalized === "sales" &&
+                                        !SALES_ALLOWED_PROMPT_TYPES.includes(promptType)
+                                    ) {
+                                        setPromptType(SALES_ALLOWED_PROMPT_TYPES[0]);
+                                    }
+                                    setCategory(nextCategory);
+                                }}
+                            />
+                            {normalizedCategory === "sales" && (
+                                <p className="mt-1 text-xs text-amber-600">
+                                    销售场景仅允许评估/报告相关模板类型。
+                                </p>
+                            )}
                         </div>
 
                         {/* Status */}

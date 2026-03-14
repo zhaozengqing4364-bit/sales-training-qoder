@@ -292,6 +292,7 @@ async def test_prepare_grounding_context_short_query_still_retrieves_knowledge()
     )
     assert "用户问题：价" in handler._pending_grounding_context
     assert "标准版报价可按年付费" in handler._pending_grounding_context
+    assert "以命中片段为准" in handler._pending_grounding_context
 
 
 @pytest.mark.asyncio
@@ -421,10 +422,98 @@ async def test_prepare_grounding_context_sets_blocked_response_when_kb_lock_bloc
 
     assert handler._pending_blocked_response_text == "知识库未命中，请补充关键词"
     assert handler._pending_grounding_context == ""
-    handler._record_kb_lock_decision.assert_awaited_once_with(
-        status="blocked_empty",
-        blocked=True,
+    assert handler._record_kb_lock_decision.await_count == 1
+    decision_kwargs = handler._record_kb_lock_decision.await_args.kwargs
+    assert decision_kwargs["status"] == "blocked_empty"
+    assert decision_kwargs["blocked"] is True
+
+
+def test_enforce_tool_policy_guardrails_auto_enables_kb_lock_for_legacy_snapshot(
+    monkeypatch,
+):
+    handler = StepFunRealtimeHandler()
+    handler._effective_policy = {
+        "knowledge_base_ids": ["kb-1"],
+        "tool_policy": {
+            "network_access_mode": "off",
+            "enable_internal_retrieval": True,
+            "enable_web_search": False,
+        },
+        "source": {},
+        "instructions": "角色设定",
+    }
+    monkeypatch.setenv("PERSONA_AUTO_REQUIRE_KB_GROUNDING_WHEN_BOUND", "true")
+
+    changed = handler._enforce_tool_policy_guardrails()
+
+    assert changed is True
+    tool_policy = handler._effective_policy["tool_policy"]
+    assert tool_policy["require_kb_grounding"] is True
+    assert tool_policy["retrieval_priority"] == "kb_only"
+    assert tool_policy["enable_web_search"] is False
+    assert handler._effective_policy["source"]["kb_lock_default"] == "auto_enabled_when_kb_bound"
+
+
+def test_enforce_tool_policy_guardrails_backfills_legacy_false_kb_lock(
+    monkeypatch,
+):
+    handler = StepFunRealtimeHandler()
+    handler._effective_policy = {
+        "knowledge_base_ids": ["kb-legacy-false-1"],
+        "turn_detection": "server_vad",
+        "tool_policy": {
+            "require_kb_grounding": False,
+            "network_access_mode": "off",
+            "enable_internal_retrieval": True,
+            "enable_web_search": False,
+        },
+        "persona_policy": {"tool_policy": {}},
+        "source": {},
+        "instructions": "角色设定",
+    }
+    monkeypatch.setenv("PERSONA_AUTO_REQUIRE_KB_GROUNDING_WHEN_BOUND", "true")
+
+    changed = handler._enforce_tool_policy_guardrails()
+
+    assert changed is True
+    tool_policy = handler._effective_policy["tool_policy"]
+    assert tool_policy["require_kb_grounding"] is True
+    assert handler._effective_policy["turn_detection"] is None
+    assert (
+        handler._effective_policy["source"]["kb_lock_legacy_snapshot_backfill"]
+        == "require_kb_grounding_false_to_true"
     )
+    assert (
+        handler._effective_policy["source"]["turn_detection_enforcement"]
+        == "manual_commit_required_by_kb_lock"
+    )
+
+
+def test_enforce_tool_policy_guardrails_respects_explicit_persona_disable(
+    monkeypatch,
+):
+    handler = StepFunRealtimeHandler()
+    handler._effective_policy = {
+        "knowledge_base_ids": ["kb-explicit-disable-1"],
+        "tool_policy": {
+            "require_kb_grounding": False,
+            "network_access_mode": "off",
+            "enable_internal_retrieval": True,
+            "enable_web_search": False,
+        },
+        "persona_policy": {
+            "tool_policy": {"require_kb_grounding": False},
+        },
+        "source": {},
+        "instructions": "角色设定",
+    }
+    monkeypatch.setenv("PERSONA_AUTO_REQUIRE_KB_GROUNDING_WHEN_BOUND", "true")
+
+    changed = handler._enforce_tool_policy_guardrails()
+
+    assert changed is True
+    assert handler._effective_policy["tool_policy"]["require_kb_grounding"] is False
+    assert "kb_lock_legacy_snapshot_backfill" not in handler._effective_policy["source"]
 
 
 @pytest.mark.asyncio
@@ -743,6 +832,50 @@ async def test_pending_response_timeout_fallback_skips_stale_generation(monkeypa
     await handler._pending_response_timeout_fallback(expected_generation=3)
 
     handler._create_response_from_pending_commit.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_pending_response_timeout_fallback_blocks_when_transcription_missing_under_kb_lock(
+    monkeypatch,
+):
+    handler = StepFunRealtimeHandler()
+    handler._effective_policy = {
+        "knowledge_base_ids": ["kb-1"],
+        "tool_policy": {"require_kb_grounding": True},
+    }
+    handler._awaiting_transcription_after_commit = True
+    handler._pending_response_after_commit = True
+    handler._record_kb_lock_decision = AsyncMock()
+    handler._create_response_from_pending_commit = AsyncMock(return_value=True)
+
+    monkeypatch.setattr(stepfun_module, "PENDING_RESPONSE_FALLBACK_SECONDS", 0.0)
+    monkeypatch.setattr(stepfun_module, "TRANSCRIPTION_WAIT_GRACE_SECONDS", 0.0)
+    monkeypatch.setattr(stepfun_module, "GROUNDING_WAIT_GRACE_SECONDS", 0.0)
+
+    await handler._pending_response_timeout_fallback()
+
+    assert "知识库强制模式" in handler._pending_blocked_response_text
+    assert "语音转写尚未完成" in handler._pending_blocked_response_text
+    handler._record_kb_lock_decision.assert_awaited_once_with(
+        status="blocked_transcription_timeout",
+        blocked=True,
+    )
+    handler._create_response_from_pending_commit.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_handle_upstream_response_created_cancels_unexpected_response_when_kb_lock_required():
+    handler = StepFunRealtimeHandler()
+    handler._effective_policy = {
+        "tool_policy": {"require_kb_grounding": True},
+    }
+    handler._send_upstream = AsyncMock()
+
+    await handler._handle_upstream_response_created(
+        {"type": "response.created", "response": {"id": "resp-auto-1"}}
+    )
+
+    handler._send_upstream.assert_awaited_once_with({"type": "response.cancel"})
 
 
 @pytest.mark.asyncio

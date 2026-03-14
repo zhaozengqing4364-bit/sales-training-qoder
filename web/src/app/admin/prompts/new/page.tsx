@@ -4,7 +4,7 @@
  * Create New Prompt Template Page (B10)
  */
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Save, AlertCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -13,7 +13,6 @@ import { GlassCard } from "@/components/ui/glass-card";
 import { StatusIndicator } from "@/components/ui/status-indicator";
 import { api } from "@/lib/api/client";
 import { PromptType } from "@/lib/api/types";
-import { cn } from "@/lib/utils";
 
 const PROMPT_TYPE_LABELS: Record<PromptType, string> = {
     summary: "总结",
@@ -29,6 +28,7 @@ const PROMPT_TYPE_LABELS: Record<PromptType, string> = {
     evaluation: "实时评价",
     report: "综合报告",
 };
+const SALES_ALLOWED_PROMPT_TYPES: PromptType[] = ["evaluation", "report", "stage", "scoring"];
 
 export default function NewPromptTemplatePage() {
     const router = useRouter();
@@ -40,8 +40,22 @@ export default function NewPromptTemplatePage() {
     const [promptType, setPromptType] = useState<PromptType>("summary");
     const [category, setCategory] = useState("common");
     const [template, setTemplate] = useState("");
-    const [variables, setVariables] = useState("");
     const [isDefault, setIsDefault] = useState(false);
+    const normalizedCategory = category.trim().toLowerCase();
+
+    const selectablePromptTypes = useMemo(() => {
+        const entries = Object.entries(PROMPT_TYPE_LABELS) as [PromptType, string][];
+        if (normalizedCategory !== "sales") {
+            return entries;
+        }
+        return entries.filter(([type]) => SALES_ALLOWED_PROMPT_TYPES.includes(type));
+    }, [normalizedCategory]);
+
+    const effectivePromptType = (
+        selectablePromptTypes.some(([type]) => type === promptType)
+            ? promptType
+            : (selectablePromptTypes[0]?.[0] ?? promptType)
+    );
 
     // Extract variables from template
     const extractVariables = (tpl: string): string[] => {
@@ -62,7 +76,7 @@ export default function NewPromptTemplatePage() {
         try {
             await api.admin.createPromptTemplate({
                 name,
-                prompt_type: promptType,
+                prompt_type: effectivePromptType,
                 category,
                 template,
                 variables: extractedVars,
@@ -126,7 +140,7 @@ export default function NewPromptTemplatePage() {
                                 className="w-full px-3 py-2 rounded-lg border border-zinc-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-zinc-900"
                                 required
                             >
-                                {Object.entries(PROMPT_TYPE_LABELS).map(([type, label]) => (
+                                {selectablePromptTypes.map(([type, label]) => (
                                     <option key={type} value={type}>
                                         {label}
                                     </option>
@@ -141,9 +155,24 @@ export default function NewPromptTemplatePage() {
                             </label>
                             <Input
                                 value={category}
-                                onChange={(e) => setCategory(e.target.value)}
+                                onChange={(e) => {
+                                    const nextCategory = e.target.value;
+                                    const nextNormalized = nextCategory.trim().toLowerCase();
+                                    if (
+                                        nextNormalized === "sales" &&
+                                        !SALES_ALLOWED_PROMPT_TYPES.includes(promptType)
+                                    ) {
+                                        setPromptType(SALES_ALLOWED_PROMPT_TYPES[0]);
+                                    }
+                                    setCategory(nextCategory);
+                                }}
                                 placeholder="例如：sales, presentation, common"
                             />
+                            {normalizedCategory === "sales" && (
+                                <p className="mt-1 text-xs text-amber-600">
+                                    销售场景仅允许评估/报告相关模板类型。
+                                </p>
+                            )}
                         </div>
 
                         {/* Is Default */}

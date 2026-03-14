@@ -24,7 +24,6 @@ async def test_resolve_effective_policy_precedence(test_db: AsyncSession):
         description="测试智能体",
         category="sales",
         status="published",
-        default_knowledge_base_ids=["kb_agent_1"],
     )
     persona = Persona(
         id=str(uuid.uuid4()),
@@ -81,14 +80,16 @@ async def test_resolve_effective_policy_precedence(test_db: AsyncSession):
     assert effective["runtime_profile_id"] == agent_profile.id
     assert effective["voice_mode"] == "legacy"
     assert effective["model_name"] == "step-audio-2"
-    assert set(effective["knowledge_base_ids"]) == {"kb_agent_1", "kb_persona_1"}
+    assert set(effective["knowledge_base_ids"]) == {"kb_persona_1"}
     assert effective["tool_policy"]["enable_web_search"] is False
     assert effective["tool_policy"]["retrieval_priority"] == "kb_only"
-    assert effective["source"]["tool_policy_enforcement"] == "kb_internal_only"
+    assert effective["source"]["tool_policy_enforcement"] == "kb_lock_enforced"
+    assert effective["source"]["kb_lock_default"] == "auto_enabled_when_kb_bound"
+    assert effective["tool_policy"]["require_kb_grounding"] is True
     assert effective["tool_policy"]["network_access_mode"] == "off"
     assert isinstance(effective["instruction_contract_hash"], str)
     assert effective["instruction_contract_hash"]
-    assert "角色设定" in effective["instructions"]
+    assert "角色核心设定" in effective["instructions"]
 
 
 @pytest.mark.asyncio
@@ -130,7 +131,16 @@ async def test_resolve_effective_policy_kb_only_disables_web_search(
         description="测试 kb_only 策略",
         category="sales",
         status="published",
-        default_knowledge_base_ids=["kb_agent_only_1"],
+    )
+    persona = Persona(
+        id=str(uuid.uuid4()),
+        name="知识库角色",
+        description="绑定知识库",
+        category="customer",
+        difficulty="medium",
+        status="active",
+        system_prompt="你是采购负责人。",
+        knowledge_base_ids=["kb_persona_only_1"],
     )
     profile = VoiceRuntimeProfile(
         id=str(uuid.uuid4()),
@@ -147,16 +157,19 @@ async def test_resolve_effective_policy_kb_only_disables_web_search(
             "retrieval_priority": "kb_only",
         },
     )
-    test_db.add_all([agent, profile])
+    test_db.add_all([agent, persona, profile])
     await test_db.commit()
 
     service = VoiceRuntimePolicyService(test_db)
-    effective = await service.resolve_effective_policy(agent_id=agent.id)
+    effective = await service.resolve_effective_policy(
+        agent_id=agent.id,
+        persona_id=persona.id,
+    )
 
     assert effective["tool_policy"]["retrieval_priority"] == "kb_only"
     assert effective["tool_policy"]["enable_internal_retrieval"] is True
     assert effective["tool_policy"]["enable_web_search"] is False
-    assert "仅使用内部知识库检索" in effective["instructions"]
+    assert "知识库强制模式" in effective["instructions"]
 
 
 @pytest.mark.asyncio
@@ -170,7 +183,16 @@ async def test_resolve_effective_policy_disables_web_search_when_kb_bound_even_i
         description="测试 KB 绑定时禁用联网",
         category="sales",
         status="published",
-        default_knowledge_base_ids=["kb_enterprise_1"],
+    )
+    persona = Persona(
+        id=str(uuid.uuid4()),
+        name="企业知识角色",
+        description="绑定企业知识",
+        category="customer",
+        difficulty="medium",
+        status="active",
+        system_prompt="你是采购总监。",
+        knowledge_base_ids=["kb_enterprise_1"],
     )
     profile = VoiceRuntimeProfile(
         id=str(uuid.uuid4()),
@@ -187,16 +209,157 @@ async def test_resolve_effective_policy_disables_web_search_when_kb_bound_even_i
             "retrieval_priority": "web_first",
         },
     )
-    test_db.add_all([agent, profile])
+    test_db.add_all([agent, persona, profile])
     await test_db.commit()
 
     service = VoiceRuntimePolicyService(test_db)
-    effective = await service.resolve_effective_policy(agent_id=agent.id)
+    effective = await service.resolve_effective_policy(
+        agent_id=agent.id,
+        persona_id=persona.id,
+    )
 
     assert effective["tool_policy"]["enable_internal_retrieval"] is True
     assert effective["tool_policy"]["enable_web_search"] is False
     assert effective["tool_policy"]["retrieval_priority"] == "kb_only"
+    assert effective["source"]["tool_policy_enforcement"] == "kb_lock_enforced"
+    assert effective["source"]["kb_lock_default"] == "auto_enabled_when_kb_bound"
+    assert effective["tool_policy"]["require_kb_grounding"] is True
+
+
+@pytest.mark.asyncio
+async def test_resolve_effective_policy_respects_explicit_disable_kb_lock(
+    test_db: AsyncSession,
+):
+    """When persona explicitly disables KB lock, auto-default lock must not override it."""
+    agent = Agent(
+        id=str(uuid.uuid4()),
+        name="显式关闭锁测试",
+        description="验证显式策略优先",
+        category="sales",
+        status="published",
+    )
+    persona = Persona(
+        id=str(uuid.uuid4()),
+        name="显式关闭锁角色",
+        description="绑定知识库但显式允许非严格模式",
+        category="customer",
+        difficulty="medium",
+        status="active",
+        system_prompt="你是采购总监。",
+        knowledge_base_ids=["kb_enterprise_2"],
+        persona_policy={
+            "version": 1,
+            "system_prompt": "你是采购总监。",
+            "knowledge_base_ids": ["kb_enterprise_2"],
+            "tool_policy": {
+                "require_kb_grounding": False,
+                "network_access_mode": "off",
+                "enable_web_search": False,
+            },
+        },
+    )
+    profile = VoiceRuntimeProfile(
+        id=str(uuid.uuid4()),
+        name="显式关闭锁档位",
+        is_default=True,
+        is_active=True,
+        voice_mode="stepfun_realtime",
+        model_name="step-audio-2",
+        voice_name="qingchunshaonv",
+        temperature=0.7,
+    )
+    test_db.add_all([agent, persona, profile])
+    await test_db.commit()
+
+    service = VoiceRuntimePolicyService(test_db)
+    effective = await service.resolve_effective_policy(
+        agent_id=agent.id,
+        persona_id=persona.id,
+    )
+
+    assert effective["tool_policy"]["require_kb_grounding"] is False
     assert effective["source"]["tool_policy_enforcement"] == "kb_internal_only"
+    assert "kb_lock_default" not in effective["source"]
+
+
+@pytest.mark.asyncio
+async def test_resolve_effective_policy_legacy_agent_kb_fallback_keeps_kb_lock(
+    test_db: AsyncSession,
+):
+    """Compatibility: agent-level KB binding should still be readable during migration."""
+    agent = Agent(
+        id=str(uuid.uuid4()),
+        name="旧版智能体KB",
+        description="agent-level KB fallback",
+        category="sales",
+        status="published",
+        default_knowledge_base_ids=["kb_agent_legacy_1"],
+    )
+    persona = Persona(
+        id=str(uuid.uuid4()),
+        name="无KB角色",
+        description="persona policy 未配置KB",
+        category="customer",
+        difficulty="medium",
+        status="active",
+        system_prompt="你是采购总监。",
+        knowledge_base_ids=[],
+        persona_policy={
+            "version": 1,
+            "system_prompt": "你是采购总监。",
+            "knowledge_base_ids": [],
+            "tool_policy": {},
+        },
+    )
+    profile = VoiceRuntimeProfile(
+        id=str(uuid.uuid4()),
+        name="兼容回退档位",
+        is_default=True,
+        is_active=True,
+        voice_mode="stepfun_realtime",
+        model_name="step-audio-2",
+        voice_name="qingchunshaonv",
+        temperature=0.7,
+    )
+    test_db.add_all([agent, persona, profile])
+    await test_db.commit()
+
+    service = VoiceRuntimePolicyService(test_db)
+    effective = await service.resolve_effective_policy(
+        agent_id=agent.id,
+        persona_id=persona.id,
+    )
+
+    assert set(effective["knowledge_base_ids"]) == {"kb_agent_legacy_1"}
+    assert (
+        effective["source"]["knowledge_base_source"]
+        == "agent_default_knowledge_base_ids_legacy_fallback"
+    )
+    assert effective["tool_policy"]["require_kb_grounding"] is True
+    assert effective["source"]["tool_policy_enforcement"] == "kb_lock_enforced"
+
+
+@pytest.mark.asyncio
+async def test_resolve_effective_policy_uses_lower_default_similarity_threshold(
+    test_db: AsyncSession,
+):
+    profile = VoiceRuntimeProfile(
+        id=str(uuid.uuid4()),
+        name="默认检索阈值档位",
+        is_default=True,
+        is_active=True,
+        voice_mode="stepfun_realtime",
+        model_name="step-audio-2",
+        voice_name="qingchunshaonv",
+        temperature=0.7,
+    )
+    test_db.add(profile)
+    await test_db.commit()
+
+    service = VoiceRuntimePolicyService(test_db)
+    effective = await service.resolve_effective_policy()
+
+    assert effective["tool_policy"]["retrieval_similarity_threshold"] == 0.58
 
 
 @pytest.mark.asyncio
@@ -343,3 +506,65 @@ async def test_create_profile_should_switch_default_flag(test_db: AsyncSession):
     )
     old_profile = result.scalar_one()
     assert old_profile.is_default is False
+
+
+@pytest.mark.asyncio
+async def test_create_profile_rejects_deprecated_instruction_template(
+    test_db: AsyncSession,
+):
+    service = VoiceRuntimePolicyService(test_db)
+    with pytest.raises(ValueError) as exc_info:
+        await service.create_profile(
+            {
+                "name": "非法配置",
+                "voice_mode": "stepfun_realtime",
+                "system_instruction_template": "legacy",
+            }
+        )
+    assert "[FIELD_DEPRECATED_PERSONA_CENTERED]" in str(exc_info.value)
+
+
+@pytest.mark.asyncio
+async def test_upsert_agent_policy_rejects_deprecated_instruction_override(
+    test_db: AsyncSession,
+):
+    agent = Agent(
+        id=str(uuid.uuid4()),
+        name="策略测试智能体",
+        description="test",
+        category="sales",
+        status="draft",
+    )
+    test_db.add(agent)
+    await test_db.commit()
+
+    service = VoiceRuntimePolicyService(test_db)
+    with pytest.raises(ValueError) as exc_info:
+        await service.upsert_agent_policy(
+            agent.id,
+            {"instructions_override": "legacy override"},
+        )
+    assert "[FIELD_DEPRECATED_PERSONA_CENTERED]" in str(exc_info.value)
+
+
+@pytest.mark.asyncio
+async def test_upsert_agent_policy_rejects_persona_owned_tool_keys(
+    test_db: AsyncSession,
+):
+    agent = Agent(
+        id=str(uuid.uuid4()),
+        name="策略测试智能体2",
+        description="test",
+        category="sales",
+        status="draft",
+    )
+    test_db.add(agent)
+    await test_db.commit()
+
+    service = VoiceRuntimePolicyService(test_db)
+    with pytest.raises(ValueError) as exc_info:
+        await service.upsert_agent_policy(
+            agent.id,
+            {"tool_policy_override": {"enable_web_search": True}},
+        )
+    assert "[FIELD_DEPRECATED_PERSONA_CENTERED]" in str(exc_info.value)

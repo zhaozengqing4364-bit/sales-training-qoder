@@ -12,7 +12,7 @@ import { GlassCard } from "@/components/ui/glass-card";
 import { StatusIndicator } from "@/components/ui/status-indicator";
 import { HighlightList } from "@/components/highlights";
 import { api, ApiRequestError, getApiErrorMessage } from "@/lib/api/client";
-import { ComprehensiveReport, KnowledgeCheckDiagnostics, HighlightsResponse } from "@/lib/api/types";
+import { ComprehensiveReport, KnowledgeCheckDiagnostics, HighlightsResponse, PracticeSessionReport } from "@/lib/api/types";
 import { debug } from "@/lib/debug";
 import { cn } from "@/lib/utils";
 
@@ -39,6 +39,20 @@ export default function ComprehensiveReportPage() {
     const [knowledgeCheck, setKnowledgeCheck] = useState<KnowledgeCheckDiagnostics | null>(null);
     const [highlightsData, setHighlightsData] = useState<HighlightsResponse | null>(null);
     const [highlightsLoading, setHighlightsLoading] = useState(false);
+    const [quickLoopData, setQuickLoopData] = useState<PracticeSessionReport | null>(null);
+    const [retryHint, setRetryHint] = useState<string | null>(null);
+    const retryEntry = quickLoopData?.retry_entry;
+    const retryBlockedHint = (
+        retryEntry?.scenario_type === "sales"
+        && (!retryEntry.agent_id || !retryEntry.persona_id)
+    )
+        ? "当前销售会话缺少角色配置，请在训练页重新选择智能体与角色。"
+        : (
+            retryEntry?.scenario_type === "presentation"
+            && !retryEntry.presentation_id
+        )
+            ? "当前演讲会话缺少课件配置，请返回训练页重新选择演示文稿。"
+            : null;
 
     const loadReport = useCallback(async () => {
         const loadQuickReportFallback = async () => {
@@ -123,6 +137,28 @@ export default function ComprehensiveReportPage() {
 
     useEffect(() => {
         let cancelled = false;
+        api.sessions
+            .getReport(sessionId)
+            .then((data) => {
+                if (!cancelled) {
+                    setQuickLoopData(data);
+                    setRetryHint(null);
+                }
+            })
+            .catch(() => {
+                if (!cancelled) {
+                    setQuickLoopData(null);
+                    setRetryHint(null);
+                }
+            });
+
+        return () => {
+            cancelled = true;
+        };
+    }, [sessionId]);
+
+    useEffect(() => {
+        let cancelled = false;
 
         api.sessions.getKnowledgeCheck(sessionId)
             .then((data) => {
@@ -185,6 +221,46 @@ export default function ComprehensiveReportPage() {
         router.push("/");
     };
 
+    const handleRetryFromGoal = async () => {
+        const retry = retryEntry;
+        setRetryHint(null);
+        if (retryBlockedHint) {
+            setRetryHint(retryBlockedHint);
+            return;
+        }
+        if (!retry?.scenario_type) {
+            setRetryHint("当前报告缺少再练配置，请先返回训练页重新创建会话。");
+            return;
+        }
+        if (
+            retry.scenario_type === "sales"
+            && (!retry.agent_id || !retry.persona_id)
+        ) {
+            setRetryHint("当前销售会话缺少角色配置，请在训练页重新选择智能体与角色。");
+            return;
+        }
+
+        try {
+            const created = await api.practice.createSession({
+                scenario_type: retry.scenario_type as "sales" | "presentation",
+                agent_id: retry.agent_id || undefined,
+                persona_id: retry.persona_id || undefined,
+                presentation_id: retry.presentation_id || undefined,
+            });
+            const nextParams = new URLSearchParams();
+            nextParams.set("scenario_type", retry.scenario_type);
+            if (retry.agent_id) nextParams.set("agent_id", retry.agent_id);
+            if (retry.persona_id) nextParams.set("persona_id", retry.persona_id);
+            if (retry.presentation_id) {
+                nextParams.set("presentation_id", retry.presentation_id);
+            }
+            router.push(`/practice/${created.session_id}?${nextParams.toString()}`);
+        } catch (err) {
+            debug.warn("[Report] Retry session creation failed", { sessionId, err });
+            setRetryHint(getApiErrorMessage(err));
+        }
+    };
+
     if (loading) {
         return (
             <div className="container mx-auto px-4 py-12 text-center">
@@ -205,6 +281,21 @@ export default function ComprehensiveReportPage() {
     }
 
     const getScoreColor = (score: number) => score >= 80 ? "text-green-600" : score >= 60 ? "text-yellow-600" : "text-red-600";
+    const overallResult = quickLoopData?.overall_result || null;
+    const overallResultLabel = overallResult === "strong_pass"
+        ? "Strong Pass"
+        : overallResult === "pass"
+            ? "Pass"
+            : overallResult === "fail"
+                ? "Fail"
+                : "未判定";
+    const overallResultTone = overallResult === "strong_pass"
+        ? "text-emerald-700 bg-emerald-50 border-emerald-200"
+        : overallResult === "pass"
+            ? "text-blue-700 bg-blue-50 border-blue-200"
+            : overallResult === "fail"
+                ? "text-rose-700 bg-rose-50 border-rose-200"
+                : "text-slate-700 bg-slate-50 border-slate-200";
     const knowledgeStatusTone = knowledgeCheck?.status === "hit"
         ? "text-green-700 bg-green-50 border-green-200"
         : knowledgeCheck?.status === "kb_not_ready"
@@ -242,6 +333,107 @@ export default function ComprehensiveReportPage() {
                     </p>
                 </div>
             </GlassCard>
+
+            {(quickLoopData?.overall_result || quickLoopData?.main_issue) && (
+                <GlassCard className="p-6 mb-6">
+                    <div className="flex items-center justify-between gap-3 mb-4 flex-wrap">
+                        <h2 className="text-lg font-semibold text-zinc-900">沟通闭环结果</h2>
+                        <span className={cn("text-xs font-semibold px-3 py-1 rounded-full border", overallResultTone)}>
+                            {overallResultLabel}
+                        </span>
+                    </div>
+                    {quickLoopData?.main_issue ? (
+                        <div className="rounded-xl border border-amber-100 bg-amber-50 p-4">
+                            <p className="text-xs font-semibold text-amber-700 mb-1">本场唯一主问题</p>
+                            <p className="text-sm text-amber-900">{quickLoopData.main_issue.issue_text}</p>
+                            <p className="text-xs text-amber-700 mt-2">
+                                修正动作：{quickLoopData.main_issue.recovery_rule}
+                            </p>
+                        </div>
+                    ) : (
+                        <p className="text-sm text-zinc-600">本场未产生主问题诊断结果。</p>
+                    )}
+                </GlassCard>
+            )}
+
+            {quickLoopData?.next_goal && (
+                <GlassCard className="p-6 mb-6">
+                    <div className="flex items-start justify-between gap-4 flex-wrap">
+                        <div>
+                            <h2 className="text-lg font-semibold text-zinc-900 mb-2 flex items-center gap-2">
+                                <Target className="w-5 h-5 text-blue-600" />
+                                下一轮唯一目标
+                            </h2>
+                            <p className="text-sm text-zinc-700 mb-2">
+                                {quickLoopData.next_goal.goal_text}
+                            </p>
+                            <p className="text-xs text-zinc-500">
+                                判定条件：{quickLoopData.next_goal.rule}
+                            </p>
+                            {retryBlockedHint && (
+                                <p className="text-xs text-amber-700 mt-2">
+                                    {retryBlockedHint}
+                                </p>
+                            )}
+                            {retryHint && (
+                                <p className="text-xs text-amber-700 mt-2">
+                                    {retryHint}
+                                </p>
+                            )}
+                        </div>
+                        <Button
+                            variant="primary"
+                            size="sm"
+                            onClick={handleRetryFromGoal}
+                            className="whitespace-nowrap"
+                            disabled={Boolean(retryBlockedHint)}
+                        >
+                            按目标再练一轮
+                        </Button>
+                    </div>
+                </GlassCard>
+            )}
+
+            {quickLoopData?.pass_flags && (
+                <GlassCard className="p-6 mb-6">
+                    <h2 className="text-lg font-semibold text-zinc-900 mb-3">统一通关标准</h2>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                        <div className={cn(
+                            "rounded-xl border p-3",
+                            quickLoopData.pass_flags.pass_3min_flow
+                                ? "bg-emerald-50 border-emerald-200"
+                                : "bg-amber-50 border-amber-200"
+                        )}>
+                            <p className="text-xs font-semibold text-zinc-700">3分钟连续表达</p>
+                            <p className="text-sm mt-1 font-bold">
+                                {quickLoopData.pass_flags.pass_3min_flow ? "已达标" : "未达标"}
+                            </p>
+                        </div>
+                        <div className={cn(
+                            "rounded-xl border p-3",
+                            quickLoopData.pass_flags.pass_5turn_defense
+                                ? "bg-emerald-50 border-emerald-200"
+                                : "bg-amber-50 border-amber-200"
+                        )}>
+                            <p className="text-xs font-semibold text-zinc-700">5轮追问不跑题</p>
+                            <p className="text-sm mt-1 font-bold">
+                                {quickLoopData.pass_flags.pass_5turn_defense ? "已达标" : "未达标"}
+                            </p>
+                        </div>
+                        <div className={cn(
+                            "rounded-xl border p-3",
+                            quickLoopData.pass_flags.pass_4step_structure
+                                ? "bg-emerald-50 border-emerald-200"
+                                : "bg-amber-50 border-amber-200"
+                        )}>
+                            <p className="text-xs font-semibold text-zinc-700">四段结构完整</p>
+                            <p className="text-sm mt-1 font-bold">
+                                {quickLoopData.pass_flags.pass_4step_structure ? "已达标" : "未达标"}
+                            </p>
+                        </div>
+                    </div>
+                </GlassCard>
+            )}
 
             {knowledgeCheck && (
                 <GlassCard className="p-6 mb-6">

@@ -221,7 +221,7 @@ class TestPromptTemplateService:
 
         data = ScenarioPromptCreate(
             scenario_type="sales",
-            prompt_type="summary",
+            prompt_type="report",
             template_id=uuid4(),
         )
 
@@ -229,7 +229,7 @@ class TestPromptTemplateService:
             result = await service.assign_template_to_scenario(data)
 
         assert result.scenario_type == "sales"
-        assert result.prompt_type == "summary"
+        assert result.prompt_type == "report"
         mock_db.add.assert_called_once()
 
     @pytest.mark.asyncio
@@ -295,7 +295,7 @@ class TestGetTemplateForScenario:
         mock_db.execute.return_value = mock_result
 
         result = await service.get_template_for_scenario(
-            prompt_type="summary",
+            prompt_type="report",
             scenario_type="sales",
             scenario_id="scenario_123",
         )
@@ -314,7 +314,7 @@ class TestGetTemplateForScenario:
         mock_db.execute.side_effect = mock_results
 
         result = await service.get_template_for_scenario(
-            prompt_type="summary",
+            prompt_type="evaluation",
             scenario_type="sales",
         )
 
@@ -347,3 +347,13 @@ class TestGetTemplateForScenario:
         )
 
         assert result is None
+
+    @pytest.mark.asyncio
+    async def test_sales_scope_violation_raises(self, service):
+        with pytest.raises(ValueError) as exc_info:
+            await service.get_template_for_scenario(
+                prompt_type="summary",
+                scenario_type="sales",
+            )
+
+        assert "[PROMPT_SCOPE_VIOLATION]" in str(exc_info.value)

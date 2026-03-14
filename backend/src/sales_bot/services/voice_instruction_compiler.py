@@ -38,17 +38,17 @@ class VoiceInstructionCompiler:
         persona: Any | None = None,
     ) -> CompiledInstructionContract:
         sections: list[str] = []
-        template = str(policy.get("system_instruction_template", "") or "").strip()
-        if template:
-            sections.append(f"【系统总指令】\n{template}")
+        persona_policy = policy.get("persona_policy")
+        if not isinstance(persona_policy, dict):
+            persona_policy = {}
 
-        agent_prompt = str(getattr(agent, "system_prompt", "") or "").strip()
-        if agent_prompt:
-            sections.append(f"【智能体角色设定】\n{agent_prompt}")
-
-        persona_prompt = str(getattr(persona, "system_prompt", "") or "").strip()
+        persona_prompt = str(
+            persona_policy.get("system_prompt")
+            or getattr(persona, "system_prompt", "")
+            or ""
+        ).strip()
         if persona_prompt:
-            sections.append(f"【对话角色设定】\n{persona_prompt}")
+            sections.append(f"【角色核心设定】\n{persona_prompt}")
 
         persona_traits = getattr(persona, "traits", None)
         if isinstance(persona_traits, dict) and persona_traits:
@@ -68,12 +68,6 @@ class VoiceInstructionCompiler:
             sections.append(
                 "【执行约束】\n" + "\n".join(f"- {item}" for item in directives)
             )
-
-        agent_override = str(
-            policy.get("agent_instructions_override", "") or ""
-        ).strip()
-        if agent_override:
-            sections.append(f"【管理员附加指令】\n{agent_override}")
 
         instructions = "\n\n".join(section for section in sections if section).strip()
         return CompiledInstructionContract(
@@ -127,6 +121,9 @@ class VoiceInstructionCompiler:
             if require_kb_grounding:
                 directives.append(
                     "当会话启用知识库强制模式时，必须先检索内部知识库并仅依据命中内容回答；未命中时明确告知并拒绝推断。"
+                )
+                directives.append(
+                    "回答中不得补充证据片段以外的新事实；若证据不足，仅返回“知识库暂无依据”；若命中片段与模型既有知识冲突，必须以命中片段为准。"
                 )
             elif retrieval_priority == "kb_only":
                 directives.append("仅使用内部知识库检索，不调用联网搜索。")

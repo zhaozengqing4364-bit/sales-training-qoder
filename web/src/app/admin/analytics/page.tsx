@@ -7,6 +7,8 @@ import {
     AnalyticsTrends,
     AnalyticsAgents,
     AnalyticsLeaderboard,
+    ManagerLiteListsResponse,
+    OpenAnalyticsDashboard,
 } from "@/lib/api/types";
 import { GlassCard } from "@/components/ui/glass-card";
 import { Button } from "@/components/ui/button";
@@ -15,14 +17,26 @@ import { TrendsChart } from "@/components/analytics/TrendsChart";
 import { ScoreDistributionChart } from "@/components/analytics/ScoreDistributionChart";
 import { AgentRankingChart } from "@/components/analytics/AgentRankingChart";
 import { LeaderboardTable } from "@/components/analytics/LeaderboardTable";
+import { ManagerLitePanel } from "@/components/admin/manager-lite-panel";
 import {
     Download,
     RefreshCw,
-    Calendar,
     Filter,
 } from "lucide-react";
 
 type TimeRange = "7d" | "30d" | "90d" | "all_time";
+type CoreEffectiveness = NonNullable<OpenAnalyticsDashboard["effectiveness"]>;
+const DEFAULT_EFFECTIVENESS: CoreEffectiveness = {
+    pass_rate_3min_flow: 0,
+    pass_rate_5turn_defense: 0,
+    pass_rate_4step_structure: 0,
+    next_day_retry_rate: 0,
+};
+const EMPTY_MANAGER_LITE: ManagerLiteListsResponse = {
+    not_passed: [],
+    inactive_streak: [],
+    improving: [],
+};
 
 export default function AnalyticsPage() {
     // Filter states
@@ -34,6 +48,8 @@ export default function AnalyticsPage() {
     const [trends, setTrends] = useState<AnalyticsTrends | null>(null);
     const [agents, setAgents] = useState<AnalyticsAgents | null>(null);
     const [leaderboard, setLeaderboard] = useState<AnalyticsLeaderboard | null>(null);
+    const [managerLite, setManagerLite] = useState<ManagerLiteListsResponse | null>(null);
+    const [effectiveness, setEffectiveness] = useState<CoreEffectiveness>(DEFAULT_EFFECTIVENESS);
 
     // Loading states
     const [isLoading, setIsLoading] = useState(true);
@@ -42,29 +58,73 @@ export default function AnalyticsPage() {
     // Load all analytics data
     const loadData = useCallback(async () => {
         setIsLoading(true);
-        try {
-            const params = {
-                time_range: timeRange,
+        const params = {
+            time_range: timeRange,
+            scenario_type: scenarioType || undefined,
+        };
+
+        // Keep page usable even if one endpoint is temporarily unavailable.
+        const [overviewResult, trendsResult, agentsResult, leaderboardResult, managerLiteResult, effectivenessResult] = await Promise.allSettled([
+            api.analytics.getOverview(params),
+            api.analytics.getTrends(params),
+            api.analytics.getAgents(params),
+            api.analytics.getLeaderboard({ time_range: timeRange, limit: 50 }),
+            api.analytics.getManagerLiteLists({ time_range: timeRange, limit: 20, inactive_days: 7 }),
+            api.analyticsOpen.getDashboard({
                 scenario_type: scenarioType || undefined,
-            };
+                days: timeRange === "7d"
+                    ? 7
+                    : timeRange === "90d"
+                        ? 90
+                        : timeRange === "all_time"
+                            ? 365
+                            : 30,
+            }),
+        ]);
 
-            // Parallel API calls
-            const [overviewData, trendsData, agentsData, leaderboardData] = await Promise.all([
-                api.analytics.getOverview(params),
-                api.analytics.getTrends(params),
-                api.analytics.getAgents(params),
-                api.analytics.getLeaderboard({ time_range: timeRange, limit: 50 }),
-            ]);
-
-            setOverview(overviewData);
-            setTrends(trendsData);
-            setAgents(agentsData);
-            setLeaderboard(leaderboardData);
-        } catch (err) {
-            console.error("Failed to load analytics:", err);
-        } finally {
-            setIsLoading(false);
+        if (overviewResult.status === "fulfilled") {
+            setOverview(overviewResult.value);
+        } else {
+            console.error("Failed to load analytics overview:", overviewResult.reason);
+            setOverview(null);
         }
+
+        if (trendsResult.status === "fulfilled") {
+            setTrends(trendsResult.value);
+        } else {
+            console.error("Failed to load analytics trends:", trendsResult.reason);
+            setTrends(null);
+        }
+
+        if (agentsResult.status === "fulfilled") {
+            setAgents(agentsResult.value);
+        } else {
+            console.error("Failed to load analytics agents:", agentsResult.reason);
+            setAgents(null);
+        }
+
+        if (leaderboardResult.status === "fulfilled") {
+            setLeaderboard(leaderboardResult.value);
+        } else {
+            console.error("Failed to load analytics leaderboard:", leaderboardResult.reason);
+            setLeaderboard(null);
+        }
+
+        if (managerLiteResult.status === "fulfilled") {
+            setManagerLite(managerLiteResult.value);
+        } else {
+            console.error("Failed to load manager-lite lists:", managerLiteResult.reason);
+            setManagerLite(EMPTY_MANAGER_LITE);
+        }
+
+        if (effectivenessResult.status === "fulfilled") {
+            setEffectiveness(effectivenessResult.value.effectiveness || DEFAULT_EFFECTIVENESS);
+        } else {
+            console.error("Failed to load effectiveness metrics:", effectivenessResult.reason);
+            setEffectiveness(DEFAULT_EFFECTIVENESS);
+        }
+
+        setIsLoading(false);
     }, [timeRange, scenarioType]);
 
     useEffect(() => {
@@ -80,6 +140,18 @@ export default function AnalyticsPage() {
             console.error("Export failed:", err);
         } finally {
             setIsExporting(false);
+        }
+    };
+
+    const handleManagerRemind = async (userId: string) => {
+        try {
+            await api.analytics.remindFromManagerLite({
+                user_id: userId,
+                note: "请按本周训练目标完成一次练习并提交结果。",
+            });
+            await loadData();
+        } catch (err) {
+            console.error("Manager remind failed:", err);
         }
     };
 
@@ -190,6 +262,40 @@ export default function AnalyticsPage() {
 
             {/* Core Metrics Cards */}
             {overview && <MetricsCards data={overview} />}
+
+            <GlassCard className="p-6">
+                <h3 className="text-lg font-bold text-slate-900 mb-4">训练效果核心指标</h3>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                        <p className="text-xs text-slate-500">3分钟连续表达通过率</p>
+                        <p className="text-2xl font-black text-slate-900 mt-2">
+                            {effectiveness.pass_rate_3min_flow.toFixed(1)}%
+                        </p>
+                    </div>
+                    <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                        <p className="text-xs text-slate-500">5轮追问稳定通过率</p>
+                        <p className="text-2xl font-black text-slate-900 mt-2">
+                            {effectiveness.pass_rate_5turn_defense.toFixed(1)}%
+                        </p>
+                    </div>
+                    <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                        <p className="text-xs text-slate-500">四段结构完整率</p>
+                        <p className="text-2xl font-black text-slate-900 mt-2">
+                            {effectiveness.pass_rate_4step_structure.toFixed(1)}%
+                        </p>
+                    </div>
+                    <div className="rounded-2xl border border-slate-200 bg-white p-4">
+                        <p className="text-xs text-slate-500">次日复练率</p>
+                        <p className="text-2xl font-black text-slate-900 mt-2">
+                            {effectiveness.next_day_retry_rate.toFixed(1)}%
+                        </p>
+                    </div>
+                </div>
+            </GlassCard>
+
+            {managerLite && (
+                <ManagerLitePanel data={managerLite} onRemind={handleManagerRemind} />
+            )}
 
             {/* Charts Row 1: Trends + Score Distribution */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

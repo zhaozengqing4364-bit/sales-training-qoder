@@ -11,7 +11,7 @@ import pytest_asyncio
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 
-from agent.models import Agent, AgentPersona, PersonaStatus
+from agent.models import Agent, AgentPersona, Persona, PersonaStatus
 from agent.schemas import (
     BehaviorConfigSchema,
     CreatePersonaRequest,
@@ -114,6 +114,28 @@ class TestPersonaServiceCreate:
         assert persona.name == "Minimal Persona"
         assert persona.difficulty == "medium"
         assert persona.is_public is True
+
+    async def test_should_create_persona_with_persona_policy(
+        self, persona_service
+    ):
+        data = CreatePersonaRequest(
+            name="Policy Persona",
+            category="customer",
+            system_prompt="legacy",
+            persona_policy={
+                "system_prompt": "persona policy prompt",
+                "knowledge_base_ids": ["kb-p1"],
+                "tool_policy": {"require_kb_grounding": True},
+            },
+        )
+
+        result = await persona_service.create(data)
+
+        assert result.is_success
+        persona = result.value
+        assert persona.system_prompt == "persona policy prompt"
+        assert persona.knowledge_base_ids == ["kb-p1"]
+        assert persona.persona_policy["tool_policy"]["require_kb_grounding"] is True
 
 
 class TestPersonaServiceList:
@@ -378,3 +400,53 @@ class TestPersonaServiceDuplicate:
 
         assert not result.is_success
         assert result.fallback == "[PERSONA_NOT_FOUND]"
+
+
+class TestPersonaPolicyHealthAudit:
+    """Tests for persona policy health audit."""
+
+    async def test_should_report_missing_policy_issue(self, persona_service, db_session):
+        legacy_persona = Persona(
+            name="Legacy Persona",
+            category="customer",
+            difficulty="medium",
+            status="active",
+            system_prompt="legacy prompt",
+            persona_policy=None,
+            knowledge_base_ids=[],
+        )
+        db_session.add(legacy_persona)
+        await db_session.flush()
+
+        report = await persona_service.audit_policy_health(sample_limit=10)
+
+        assert report["summary"]["total"] >= 1
+        assert report["issue_type_counts"]["missing_policy"] >= 1
+        assert any(
+            issue["persona_id"] == legacy_persona.id
+            and "missing_policy" in issue["issue_types"]
+            for issue in report["sample_issues"]
+        )
+
+    async def test_should_report_kb_lock_unbound_issue(self, persona_service):
+        create_result = await persona_service.create(
+            CreatePersonaRequest(
+                name="KB Lock Persona",
+                category="customer",
+                system_prompt="policy prompt",
+                persona_policy={
+                    "system_prompt": "policy prompt",
+                    "knowledge_base_ids": [],
+                    "tool_policy": {"require_kb_grounding": True},
+                },
+            )
+        )
+        assert create_result.is_success
+
+        report = await persona_service.audit_policy_health(sample_limit=10)
+        assert report["issue_type_counts"]["kb_lock_unbound"] >= 1
+        assert any(
+            issue["persona_id"] == create_result.value.id
+            and "kb_lock_unbound" in issue["issue_types"]
+            for issue in report["sample_issues"]
+        )

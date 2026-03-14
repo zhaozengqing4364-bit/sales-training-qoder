@@ -317,7 +317,11 @@ class VersionManager:
                 return presentation.version if presentation else 0
 
             return asyncio.run(_get())
-        except:
+        except Exception as e:
+            logger.warning(
+                "Failed to resolve current presentation version",
+                extra={"presentation_id": str(presentation_id), "error": str(e)},
+            )
             return 0
 
 

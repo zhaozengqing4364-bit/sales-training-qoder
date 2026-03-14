@@ -5,6 +5,7 @@
 """
 
 import asyncio
+import concurrent.futures
 import uuid
 from collections.abc import Awaitable, Callable
 
@@ -191,6 +192,11 @@ class StreamCallbackHandler(ResultCallback):
         self.total_duration_ms = 0
         self.completion_event = asyncio.Event()
         self.error: Exception | None = None
+        try:
+            self._loop = asyncio.get_running_loop()
+        except RuntimeError:
+            self._loop = None
+        self._pending_futures: list[concurrent.futures.Future[None]] = []
 
         # 估算参数 (MP3 @ 16kHz, ~128kbps)
         self.BYTES_PER_MS = 16
@@ -206,8 +212,7 @@ class StreamCallbackHandler(ResultCallback):
             chunk_duration_ms = max(1, len(data) // self.BYTES_PER_MS)
             self.total_duration_ms += chunk_duration_ms
 
-            # 异步调用回调
-            asyncio.create_task(self.on_chunk(data, self.chunk_index, False))
+            self._submit_chunk(data, self.chunk_index, False)
 
             self.chunk_index += 1
 
@@ -225,7 +230,7 @@ class StreamCallbackHandler(ResultCallback):
         """连接关闭"""
         try:
             # 发送最终标记
-            asyncio.create_task(self.on_chunk(b"", self.chunk_index, True))
+            self._submit_chunk(b"", self.chunk_index, True)
 
             logger.info(
                 f"TTS stream closed: stream_id={self.stream_id}, "
@@ -248,8 +253,45 @@ class StreamCallbackHandler(ResultCallback):
     async def wait_completion(self):
         """等待合成完成"""
         await self.completion_event.wait()
+
+        # Ensure all scheduled chunk callbacks are completed before returning.
+        pending = list(self._pending_futures)
+        self._pending_futures.clear()
+        for future in pending:
+            try:
+                await asyncio.wrap_future(future)
+            except Exception as exc:  # noqa: BLE001
+                if self.error is None:
+                    self.error = exc
+
         if self.error:
             raise self.error
+
+    def _submit_chunk(self, data: bytes, chunk_index: int, is_final: bool) -> None:
+        """Schedule async chunk callback with ordering/error tracking."""
+        if self._loop is None:
+            try:
+                self._loop = asyncio.get_running_loop()
+            except RuntimeError:
+                asyncio.run(self.on_chunk(data, chunk_index, is_final))
+                return
+
+        future = asyncio.run_coroutine_threadsafe(
+            self.on_chunk(data, chunk_index, is_final),
+            self._loop,
+        )
+        self._pending_futures.append(future)
+
+        def _capture_result(done: concurrent.futures.Future[None]) -> None:
+            try:
+                done.result()
+            except Exception as exc:  # noqa: BLE001
+                logger.error(f"TTS chunk callback failed: {exc}")
+                if self.error is None:
+                    self.error = exc
+                self.completion_event.set()
+
+        future.add_done_callback(_capture_result)
 
 
 # 单例实例

@@ -14,6 +14,7 @@ from fastapi import WebSocket
 
 from agent.capabilities.runner import CapabilityRunner
 from agent.context import AgentContext
+from common.effectiveness import build_action_card, evaluate_pass_flags
 from common.monitoring.logger import get_logger
 from common.websocket.base_handler import ConnectionManager
 
@@ -58,6 +59,9 @@ class CapabilityProcessor:
         """
         analysis_data: dict[str, Any] = {}
         knowledge_context: str = ""
+        detections_for_card: list[dict[str, Any]] = []
+        suggestions_for_card: list[str] = []
+        pass_flags_for_card: dict[str, bool] | None = None
 
         logger.info("[CAPABILITY] Running capability modules...")
 
@@ -73,14 +77,20 @@ class CapabilityProcessor:
             cap = self.capability_runner.capabilities[i]
 
             if cap.capability_id == "fuzzy_detection" and result.data:
-                detections = result.data.get("detections", [])
+                fuzzy_payload = result.data if isinstance(result.data, dict) else {}
+                detections = fuzzy_payload.get("detections", [])
                 if detections:
                     await self._send_fuzzy_detection(
                         detections, websocket, manager, trace_id
                     )
                     analysis_data["fuzzy_words"] = detections
+                    detections_for_card = [
+                        item for item in detections if isinstance(item, dict)
+                    ]
 
             elif cap.capability_id == "sales_stage" and result.data:
+                if not isinstance(result.data, dict):
+                    continue
                 stage_data = result.data
                 current_stage = stage_data.get("current_stage")
                 stage_changed = bool(stage_data.get("stage_changed", False))
@@ -99,17 +109,83 @@ class CapabilityProcessor:
                     analysis_data["sales_stage"] = current_stage
 
             elif cap.capability_id == "realtime_scoring" and result.data:
+                score_payload = result.data if isinstance(result.data, dict) else {}
                 await self._send_score_update(
-                    result.data, websocket, manager, trace_id
+                    score_payload, websocket, manager, trace_id
                 )
-                analysis_data["score_snapshot"] = result.data
+                analysis_data["score_snapshot"] = score_payload
+                feedback_message = score_payload.get("feedback")
+                if isinstance(feedback_message, str) and feedback_message.strip():
+                    suggestions_for_card = [feedback_message.strip()]
+
+                dimensions = score_payload.get("dimensions")
+                dimension_scores: dict[str, float] = {}
+                if isinstance(dimensions, list):
+                    for item in dimensions:
+                        if not isinstance(item, dict):
+                            continue
+                        name = item.get("name")
+                        score = item.get("score")
+                        if isinstance(name, str) and isinstance(score, (int, float)):
+                            dimension_scores[name] = max(0.0, min(100.0, float(score)))
+
+                overall_raw = score_payload.get("overall")
+                if not isinstance(overall_raw, (int, float)):
+                    overall_raw = (
+                        sum(dimension_scores.values()) / len(dimension_scores)
+                        if dimension_scores
+                        else 0.0
+                    )
+                overall_score = max(0.0, min(100.0, float(overall_raw)))
+                communication_score = (
+                    dimension_scores.get("沟通技巧")
+                    or dimension_scores.get("communication")
+                    or overall_score
+                )
+                structure_score = (
+                    dimension_scores.get("销售流程")
+                    or dimension_scores.get("discovery")
+                    or dimension_scores.get("closing")
+                    or overall_score
+                )
+                turn_count = max(1, int(context.turn_count or 1))
+                pass_flags_for_card = evaluate_pass_flags(
+                    {
+                        "continuous_speech_seconds": float(
+                            max(turn_count * 45, int(overall_score * 2.2))
+                        ),
+                        "offtopic_turn_count": float(
+                            max(0, round((100.0 - float(communication_score)) / 25.0))
+                        ),
+                        "offtopic_max_streak": float(
+                            2
+                            if float(communication_score) < 55
+                            else (1 if float(communication_score) < 80 else 0)
+                        ),
+                        "structure_coverage": max(
+                            0.0, min(1.0, float(structure_score) / 100.0)
+                        ),
+                    }
+                )
 
             elif cap.capability_id == "knowledge_retrieval" and result.data:
-                knowledge_context = result.data.get("context", "")
+                knowledge_payload = (
+                    result.data if isinstance(result.data, dict) else {}
+                )
+                knowledge_context = str(knowledge_payload.get("context") or "")
                 if knowledge_context:
                     logger.info(
-                        f"Knowledge retrieval returned {len(result.data.get('results', []))} results"
+                        f"Knowledge retrieval returned {len(knowledge_payload.get('results', []))} results"
                     )
+
+        action_card = build_action_card(
+            fuzzy_detections=detections_for_card,
+            suggestions=suggestions_for_card,
+            pass_flags=pass_flags_for_card,
+        )
+        if action_card:
+            await self._send_action_card(action_card, websocket, manager, trace_id)
+            analysis_data["ai_feedback"] = action_card.get("replacement", "")
 
         return analysis_data, knowledge_context
 
@@ -166,5 +242,23 @@ class CapabilityProcessor:
                 "timestamp": datetime.now(UTC).isoformat(),
                 "trace_id": trace_id,
                 "data": score_data,
+            },
+        )
+
+    async def _send_action_card(
+        self,
+        action_card: dict[str, str],
+        websocket: WebSocket,
+        manager: ConnectionManager,
+        trace_id: str | None,
+    ) -> None:
+        """Send one actionable card for the next turn."""
+        await manager.send_json(
+            websocket,
+            {
+                "type": "action_card",
+                "timestamp": datetime.now(UTC).isoformat(),
+                "trace_id": trace_id,
+                "data": action_card,
             },
         )
