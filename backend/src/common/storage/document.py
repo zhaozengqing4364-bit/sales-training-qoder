@@ -73,7 +73,7 @@ class DocumentStorageService:
             knowledge_base_id: Knowledge base UUID
             document_id: Document UUID
             file_data: Raw file bytes
-            file_type: File extension (pdf, docx, txt, md)
+            file_type: File extension (pdf, docx, txt, md, xlsx, xls)
 
         Returns:
             Path to the saved file, or None if save failed.

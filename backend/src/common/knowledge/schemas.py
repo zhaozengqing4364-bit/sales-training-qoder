@@ -18,7 +18,7 @@ from pydantic import BaseModel, ConfigDict, Field
 KnowledgeBaseCategoryType = str  # "product" | "competitor" | "faq" | "policy"
 KnowledgeBaseStatusType = str  # "active" | "archived"
 DocumentStatusType = str  # "pending" | "processing" | "ready" | "failed"
-DocumentFileTypeType = str  # "pdf" | "docx" | "txt" | "md"
+DocumentFileTypeType = str  # "pdf" | "docx" | "txt" | "md" | "xlsx" | "xls"
 
 
 # ========== KnowledgeBase Schemas ==========
@@ -130,7 +130,7 @@ class KnowledgeDocumentResponse(KnowledgeDocumentBase):
     id: str
     knowledge_base_id: str
     file_type: DocumentFileTypeType = Field(
-        ..., description="File type: pdf|docx|txt|md"
+        ..., description="File type: pdf|docx|txt|md|xlsx|xls"
     )
     file_url: str = Field(..., description="File storage URL")
     file_size: int = Field(..., description="File size in bytes")

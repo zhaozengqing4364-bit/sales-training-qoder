@@ -139,3 +139,58 @@ async def test_upload_document_visible_in_followup_list_request(
     assert any(
         doc["id"] == uploaded_doc_id for doc in list_data["data"]["documents"]
     )
+
+
+async def test_upload_xlsx_document_visible_in_followup_list_request(
+    async_client,
+    session_factory,
+    monkeypatch,
+):
+    user_id, kb_id = await _seed_user_and_kb(session_factory)
+    token = create_access_token(data={"sub": user_id})
+    headers = {"Authorization": f"Bearer {token}"}
+
+    async def _noop_process_document_background(**kwargs):
+        return None
+
+    monkeypatch.setattr(
+        "common.knowledge.api.get_document_storage_service",
+        lambda: _StorageStub(),
+    )
+    monkeypatch.setattr(
+        "common.knowledge.api.process_document_background",
+        _noop_process_document_background,
+    )
+
+    upload_response = await async_client.post(
+        f"/api/v1/admin/knowledge/{kb_id}/documents",
+        headers=headers,
+        files={
+            "file": (
+                "签约案例.xlsx",
+                b"PK\x03\x04 fake-xlsx",
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            )
+        },
+        data={"title": "签约案例"},
+    )
+
+    assert upload_response.status_code == 202
+    upload_data = upload_response.json()
+    assert upload_data["success"] is True
+    assert upload_data["data"]["file_type"] == "xlsx"
+    uploaded_doc_id = upload_data["data"]["id"]
+
+    list_response = await async_client.get(
+        f"/api/v1/admin/knowledge/{kb_id}/documents",
+        headers=headers,
+    )
+
+    assert list_response.status_code == 200
+    list_data = list_response.json()
+    assert list_data["success"] is True
+    assert list_data["data"]["total"] == 1
+    assert any(
+        doc["id"] == uploaded_doc_id and doc["file_type"] == "xlsx"
+        for doc in list_data["data"]["documents"]
+    )

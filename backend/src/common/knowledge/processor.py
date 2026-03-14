@@ -19,6 +19,8 @@ import re
 from tempfile import NamedTemporaryFile
 import time
 from typing import Any
+from xml.etree import ElementTree as ET
+from zipfile import BadZipFile, ZipFile
 
 from common.ai.embedding_service import get_embedding_service
 from common.monitoring.logger import get_logger
@@ -123,7 +125,7 @@ class DocumentProcessor:
         Args:
             doc_id: Document UUID
             file_path: Local file path
-            file_type: File extension (txt, md, pdf, docx)
+            file_type: File extension (txt, md, pdf, docx, xlsx, xls)
             document_title: Document title for metadata
             knowledge_base_id: Knowledge base UUID
             vector_collection: ChromaDB collection name
@@ -311,6 +313,10 @@ class DocumentProcessor:
                 return await self._parse_pdf(file_path)
             if file_type == "docx":
                 return await self._parse_docx(file_path)
+            if file_type == "xlsx":
+                return await self._parse_xlsx(file_path)
+            if file_type == "xls":
+                return await self._parse_xls(file_path)
 
             logger.error(f"Unsupported file type: {file_type}")
             return None
@@ -342,6 +348,20 @@ class DocumentProcessor:
     async def _read_docx(self, file_path: str) -> str | None:
         """Read DOCX file and return merged text content."""
         parse_result = await self._parse_docx(file_path)
+        if parse_result is None:
+            return None
+        return parse_result.content or None
+
+    async def _read_xlsx(self, file_path: str) -> str | None:
+        """Read XLSX file and return merged text content."""
+        parse_result = await self._parse_xlsx(file_path)
+        if parse_result is None:
+            return None
+        return parse_result.content or None
+
+    async def _read_xls(self, file_path: str) -> str | None:
+        """Read XLS file and return merged text content."""
+        parse_result = await self._parse_xls(file_path)
         if parse_result is None:
             return None
         return parse_result.content or None
@@ -515,6 +535,106 @@ class DocumentProcessor:
             logger.error(f"Failed to parse DOCX: {e}")
             return None
 
+    async def _parse_xlsx(self, file_path: str) -> ParseResult | None:
+        """Parse XLSX workbook into sheet-scoped table rows."""
+        try:
+            if not os.path.exists(file_path):
+                return None
+
+            elements: list[ParsedElement] = []
+            warnings: list[str] = []
+            metrics: dict[str, Any] = {
+                "sheet_count": 0,
+                "paragraph_count": 0,
+                "heading_count": 0,
+                "table_row_count": 0,
+                "ocr_block_count": 0,
+            }
+
+            with ZipFile(file_path) as workbook_zip:
+                shared_strings = self._load_xlsx_shared_strings(workbook_zip)
+                sheets = self._load_xlsx_sheet_refs(workbook_zip)
+                metrics["sheet_count"] = len(sheets)
+
+                for sheet_index, (sheet_name, sheet_path) in enumerate(sheets, start=1):
+                    normalized_sheet_name = (
+                        self._normalize_text_block(sheet_name) or f"Sheet{sheet_index}"
+                    )
+                    sheet_elements = self._extract_xlsx_sheet_elements(
+                        workbook_zip,
+                        sheet_path=sheet_path,
+                        shared_strings=shared_strings,
+                        sheet_name=normalized_sheet_name,
+                        sheet_index=sheet_index,
+                    )
+                    elements.extend(sheet_elements)
+                    metrics["table_row_count"] += len(sheet_elements)
+
+            if metrics["table_row_count"] > 0:
+                warnings.append("[SPREADSHEET_ONLY_CONTENT]")
+
+            return self._finalize_parse_result(elements, warnings, metrics)
+        except (BadZipFile, KeyError, ET.ParseError) as e:
+            logger.error(f"Failed to parse XLSX structure: {e}")
+            return None
+        except Exception as e:
+            logger.error(f"Failed to parse XLSX: {e}")
+            return None
+
+    async def _parse_xls(self, file_path: str) -> ParseResult | None:
+        """Parse legacy XLS workbook into sheet-scoped table rows."""
+        try:
+            try:
+                import xlrd
+            except ImportError:
+                logger.warning("xlrd not installed, XLS reading disabled")
+                return None
+
+            if not os.path.exists(file_path):
+                return None
+
+            workbook = xlrd.open_workbook(file_path, on_demand=True)
+            elements: list[ParsedElement] = []
+            warnings: list[str] = []
+            metrics: dict[str, Any] = {
+                "sheet_count": workbook.nsheets,
+                "paragraph_count": 0,
+                "heading_count": 0,
+                "table_row_count": 0,
+                "ocr_block_count": 0,
+            }
+
+            for sheet_index in range(workbook.nsheets):
+                worksheet = workbook.sheet_by_index(sheet_index)
+                sheet_name = (
+                    self._normalize_text_block(worksheet.name)
+                    or f"Sheet{sheet_index + 1}"
+                )
+                for row_index in range(worksheet.nrows):
+                    row_values = [
+                        worksheet.cell_value(row_index, col_index)
+                        for col_index in range(worksheet.ncols)
+                    ]
+                    element = self._build_spreadsheet_row_element(
+                        row_values=row_values,
+                        sheet_name=sheet_name,
+                        sheet_index=sheet_index + 1,
+                        row_index=row_index + 1,
+                    )
+                    if element is None:
+                        continue
+                    elements.append(element)
+                    metrics["table_row_count"] += 1
+
+            workbook.release_resources()
+            if metrics["table_row_count"] > 0:
+                warnings.append("[SPREADSHEET_ONLY_CONTENT]")
+
+            return self._finalize_parse_result(elements, warnings, metrics)
+        except Exception as e:
+            logger.error(f"Failed to parse XLS: {e}")
+            return None
+
     def _finalize_parse_result(
         self,
         elements: list[ParsedElement],
@@ -616,6 +736,165 @@ class DocumentProcessor:
 
         lines = [line.strip() for line in text.splitlines()]
         return "\n".join(line for line in lines if line).strip()
+
+    def _load_xlsx_shared_strings(self, workbook_zip: ZipFile) -> list[str]:
+        """Load XLSX shared strings, preserving rich text content."""
+        try:
+            shared_strings_xml = workbook_zip.read("xl/sharedStrings.xml")
+        except KeyError:
+            return []
+
+        namespace = {"main": "http://schemas.openxmlformats.org/spreadsheetml/2006/main"}
+        root = ET.fromstring(shared_strings_xml)
+        shared_strings: list[str] = []
+
+        for item in root.findall("main:si", namespace):
+            texts = [
+                text_node.text or ""
+                for text_node in item.findall(".//main:t", namespace)
+                if text_node.text
+            ]
+            shared_strings.append(self._normalize_text_block("".join(texts)))
+
+        return shared_strings
+
+    def _load_xlsx_sheet_refs(self, workbook_zip: ZipFile) -> list[tuple[str, str]]:
+        """Resolve worksheet names to their ZIP paths inside the workbook package."""
+        namespace = {
+            "main": "http://schemas.openxmlformats.org/spreadsheetml/2006/main",
+            "rel": "http://schemas.openxmlformats.org/officeDocument/2006/relationships",
+            "pkg": "http://schemas.openxmlformats.org/package/2006/relationships",
+        }
+        workbook_root = ET.fromstring(workbook_zip.read("xl/workbook.xml"))
+        rels_root = ET.fromstring(workbook_zip.read("xl/_rels/workbook.xml.rels"))
+        rel_targets = {
+            rel.attrib.get("Id", ""): rel.attrib.get("Target", "")
+            for rel in rels_root.findall("pkg:Relationship", namespace)
+        }
+
+        sheets: list[tuple[str, str]] = []
+        relationship_attr = f"{{{namespace['rel']}}}id"
+        for sheet in workbook_root.findall("main:sheets/main:sheet", namespace):
+            rel_id = sheet.attrib.get(relationship_attr, "")
+            target = rel_targets.get(rel_id)
+            if not target:
+                continue
+            if target.startswith("/"):
+                sheet_path = target.lstrip("/")
+            elif target.startswith("xl/"):
+                sheet_path = target
+            else:
+                sheet_path = f"xl/{target}"
+            sheets.append((sheet.attrib.get("name", ""), sheet_path))
+
+        return sheets
+
+    def _extract_xlsx_sheet_elements(
+        self,
+        workbook_zip: ZipFile,
+        *,
+        sheet_path: str,
+        shared_strings: list[str],
+        sheet_name: str,
+        sheet_index: int,
+    ) -> list[ParsedElement]:
+        """Extract structured row elements from one XLSX worksheet."""
+        namespace = {"main": "http://schemas.openxmlformats.org/spreadsheetml/2006/main"}
+        sheet_root = ET.fromstring(workbook_zip.read(sheet_path))
+        elements: list[ParsedElement] = []
+
+        for row in sheet_root.findall("main:sheetData/main:row", namespace):
+            row_index = int(row.attrib.get("r") or (len(elements) + 1))
+            row_values = [
+                self._extract_xlsx_cell_value(cell, shared_strings)
+                for cell in row.findall("main:c", namespace)
+            ]
+            element = self._build_spreadsheet_row_element(
+                row_values=row_values,
+                sheet_name=sheet_name,
+                sheet_index=sheet_index,
+                row_index=row_index,
+            )
+            if element is not None:
+                elements.append(element)
+
+        return elements
+
+    def _extract_xlsx_cell_value(
+        self,
+        cell: ET.Element,
+        shared_strings: list[str],
+    ) -> str:
+        """Extract a normalized cell value from XLSX XML."""
+        namespace = {"main": "http://schemas.openxmlformats.org/spreadsheetml/2006/main"}
+        cell_type = cell.attrib.get("t", "")
+        raw_value = cell.findtext("main:v", default="", namespaces=namespace)
+
+        if cell_type == "s":
+            try:
+                shared_index = int(raw_value)
+            except (TypeError, ValueError):
+                return ""
+            if 0 <= shared_index < len(shared_strings):
+                return shared_strings[shared_index]
+            return ""
+
+        if cell_type == "inlineStr":
+            inline_text = "".join(
+                text_node.text or ""
+                for text_node in cell.findall(".//main:is//main:t", namespace)
+                if text_node.text
+            )
+            return self._normalize_text_block(inline_text)
+
+        if cell_type == "b":
+            return "TRUE" if raw_value == "1" else "FALSE"
+
+        return self._normalize_spreadsheet_cell_value(raw_value)
+
+    def _build_spreadsheet_row_element(
+        self,
+        *,
+        row_values: list[Any],
+        sheet_name: str,
+        sheet_index: int,
+        row_index: int,
+    ) -> ParsedElement | None:
+        """Normalize one spreadsheet row into a structured table-row element."""
+        row_parts = [
+            text
+            for value in row_values
+            if (text := self._normalize_spreadsheet_cell_value(value))
+        ]
+        if not row_parts:
+            return None
+
+        return ParsedElement(
+            element_type="table_row",
+            text=" | ".join(row_parts),
+            metadata={
+                "sheet_name": sheet_name,
+                "sheet_index": sheet_index,
+                "row_index": row_index,
+                "column_count": len(row_parts),
+                "source_mode": "table",
+            },
+        )
+
+    def _normalize_spreadsheet_cell_value(self, value: Any) -> str:
+        """Normalize spreadsheet cells without losing short header labels."""
+        if value is None:
+            return ""
+        if isinstance(value, bool):
+            return "TRUE" if value else "FALSE"
+        if isinstance(value, int):
+            return str(value)
+        if isinstance(value, float):
+            if value.is_integer():
+                return str(int(value))
+            return format(value, "g")
+
+        return self._normalize_text_block(str(value))
 
     def _extract_text_from_pdf_images(self, page: Any, page_index: int) -> list[str]:
         """Extract OCR text from images embedded in a PDF page."""

@@ -46,7 +46,7 @@ interface KnowledgeDocumentResponse {
   id: string;
   knowledge_base_id: string;
   title: string;
-  file_type: "pdf" | "docx" | "txt" | "md";
+  file_type: "pdf" | "docx" | "txt" | "md" | "xlsx" | "xls";
   file_url: string;
   file_size: number;
   status: "pending" | "processing" | "ready" | "failed";
@@ -153,7 +153,7 @@ Content-Type: multipart/form-data
 - `title`（可选，默认文件名）
 
 上传限制:
-- 允许类型: `pdf` / `docx` / `txt` / `md`
+- 允许类型: `pdf` / `docx` / `txt` / `md` / `xlsx` / `xls`
 - 单文件大小: 最大 `50MB`
 - 非法文件内容会返回 `400`
 

@@ -60,7 +60,7 @@ logger = get_logger(__name__)
 
 admin_router = APIRouter(prefix="/admin/knowledge", tags=["admin-knowledge"])
 
-ALLOWED_FILE_TYPES = {"pdf", "docx", "txt", "md"}
+ALLOWED_FILE_TYPES = {"pdf", "docx", "txt", "md", "xlsx", "xls"}
 MAX_FILE_SIZE = 50 * 1024 * 1024  # 50MB
 
 
@@ -466,6 +466,8 @@ def _validate_file_content(content: bytes, file_ext: str) -> bool:
     magic_bytes = {
         "pdf": b"%PDF",
         "docx": b"PK\x03\x04",  # ZIP format (DOCX is a ZIP)
+        "xlsx": b"PK\x03\x04",  # ZIP format (XLSX is a ZIP)
+        "xls": b"\xD0\xCF\x11\xE0",  # Compound File Binary Format
         # txt and md don't have magic bytes, accept any content
     }
 

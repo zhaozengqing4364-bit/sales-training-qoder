@@ -56,6 +56,8 @@ class DocumentFileType(str, enum.Enum):
     DOCX = "docx"
     TXT = "txt"
     MD = "md"
+    XLSX = "xlsx"
+    XLS = "xls"
 
 
 class KnowledgeBase(Base):
@@ -116,7 +118,7 @@ class KnowledgeDocument(Base):
     """
     KnowledgeDocument - Document within a knowledge base
 
-    A KnowledgeDocument represents a single document (PDF, DOCX, TXT, MD)
+    A KnowledgeDocument represents a single document (PDF, DOCX, TXT, MD, XLSX, XLS)
     that has been uploaded to a knowledge base for processing and vectorization.
 
     Requirements: R5
@@ -133,7 +135,7 @@ class KnowledgeDocument(Base):
 
     # Document metadata
     title = Column(String(200), nullable=False)
-    file_type = Column(String(20), nullable=False)  # pdf|docx|txt|md
+    file_type = Column(String(20), nullable=False)  # pdf|docx|txt|md|xlsx|xls
     file_url = Column(String(500), nullable=False)
     file_size = Column(Integer, nullable=False)  # bytes
     content_hash = Column(String(64), nullable=True, index=True)
@@ -152,7 +154,7 @@ class KnowledgeDocument(Base):
             name="ck_knowledge_document_status"
         ),
         CheckConstraint(
-            "file_type IN ('pdf', 'docx', 'txt', 'md')",
+            "file_type IN ('pdf', 'docx', 'txt', 'md', 'xlsx', 'xls')",
             name="ck_knowledge_document_file_type"
         ),
         UniqueConstraint(
