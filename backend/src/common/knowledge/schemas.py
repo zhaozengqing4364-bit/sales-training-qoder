@@ -184,9 +184,18 @@ class ChunkMetadata(BaseModel):
     """Metadata for a document chunk"""
 
     page: int | None = Field(None, description="Page number (for PDF)")
+    page_end: int | None = Field(None, description="Last page number covered by the chunk")
     section: str | None = Field(None, description="Section name")
     start_char: int | None = Field(None, description="Start character position")
     end_char: int | None = Field(None, description="End character position")
+    source_mode: str | None = Field(None, description="Chunk source mode")
+    element_types: list[str] | None = Field(
+        None, description="Structured element types included in the chunk"
+    )
+    parser_version: str | None = Field(None, description="Parser version used to build the chunk")
+    warning_codes: list[str] | None = Field(
+        None, description="Warnings observed while parsing the source document"
+    )
 
 
 class DocumentChunk(BaseModel):

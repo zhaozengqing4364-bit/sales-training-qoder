@@ -9,7 +9,7 @@ import pytest
 import common.knowledge.processor as processor_module
 from common.error_handling.result import Result
 from common.knowledge.models import DocumentStatus
-from common.knowledge.processor import DocumentProcessor
+from common.knowledge.processor import DocumentProcessor, ParsedElement, ParseResult
 
 
 def test_extract_text_from_docx_images_deduplicates_same_blob(monkeypatch):
@@ -154,25 +154,78 @@ async def test_read_docx_extracts_text_from_tables(monkeypatch, tmp_path):
 
 
 @pytest.mark.asyncio
+async def test_parse_docx_returns_structured_elements_and_metrics(monkeypatch, tmp_path):
+    file_path = tmp_path / "structured_doc.docx"
+    file_path.write_bytes(b"PK\x03\x04 fake")
+
+    fake_doc = SimpleNamespace(
+        paragraphs=[SimpleNamespace(text="签约案例"), SimpleNamespace(text="  ")],
+        tables=[
+            SimpleNamespace(
+                rows=[
+                    SimpleNamespace(
+                        cells=[
+                            SimpleNamespace(text="客户名称"),
+                            SimpleNamespace(text="项目内容"),
+                        ]
+                    ),
+                    SimpleNamespace(
+                        cells=[
+                            SimpleNamespace(text="石犀科技"),
+                            SimpleNamespace(text="销售训练系统"),
+                        ]
+                    ),
+                ]
+            )
+        ],
+    )
+
+    monkeypatch.setitem(
+        sys.modules,
+        "docx",
+        SimpleNamespace(Document=lambda _: fake_doc),
+    )
+
+    processor = DocumentProcessor()
+    monkeypatch.setattr(processor, "_extract_text_from_docx_images", lambda doc: [])
+    monkeypatch.setattr(processor_module, "ALLOWED_UPLOAD_DIR", str(tmp_path))
+
+    parsed = await processor._parse_document(str(file_path), "docx")
+
+    assert parsed is not None
+    assert parsed.metrics["paragraph_count"] == 1
+    assert parsed.metrics["table_row_count"] == 2
+    assert [element.element_type for element in parsed.elements] == [
+        "paragraph",
+        "table_row",
+        "table_row",
+    ]
+    assert parsed.elements[1].metadata["source_mode"] == "table"
+    assert "石犀科技" in parsed.content
+
+
+@pytest.mark.asyncio
 async def test_process_document_fails_when_embedding_service_not_configured(
     monkeypatch,
 ):
     processor = DocumentProcessor()
     monkeypatch.setattr(
         processor,
-        "_read_document",
-        AsyncMock(return_value="企业产品资料：A系列、B系列。"),
-    )
-    monkeypatch.setattr(
-        processor,
-        "_split_into_chunks",
-        lambda _content: [
-            {
-                "index": 0,
-                "content": "企业产品资料：A系列、B系列。",
-                "metadata": {"start_char": 0, "end_char": 15},
-            }
-        ],
+        "_parse_document",
+        AsyncMock(
+            return_value=ParseResult(
+                content="企业产品资料：A系列、B系列。",
+                elements=[
+                    ParsedElement(
+                        element_type="paragraph",
+                        text="企业产品资料：A系列、B系列。",
+                        metadata={"source_mode": "native_text"},
+                    )
+                ],
+                warnings=[],
+                metrics={"paragraph_count": 1, "table_row_count": 0},
+            )
+        ),
     )
 
     embedding_service = SimpleNamespace(is_configured=False)
@@ -201,19 +254,21 @@ async def test_process_document_surfaces_embedding_result_fallback(monkeypatch):
     processor = DocumentProcessor()
     monkeypatch.setattr(
         processor,
-        "_read_document",
-        AsyncMock(return_value="企业产品资料：A系列、B系列。"),
-    )
-    monkeypatch.setattr(
-        processor,
-        "_split_into_chunks",
-        lambda _content: [
-            {
-                "index": 0,
-                "content": "企业产品资料：A系列、B系列。",
-                "metadata": {"start_char": 0, "end_char": 15},
-            }
-        ],
+        "_parse_document",
+        AsyncMock(
+            return_value=ParseResult(
+                content="企业产品资料：A系列、B系列。",
+                elements=[
+                    ParsedElement(
+                        element_type="paragraph",
+                        text="企业产品资料：A系列、B系列。",
+                        metadata={"source_mode": "native_text"},
+                    )
+                ],
+                warnings=[],
+                metrics={"paragraph_count": 1, "table_row_count": 0},
+            )
+        ),
     )
 
     embedding_service = SimpleNamespace(
@@ -245,19 +300,21 @@ async def test_process_document_surfaces_vector_store_result_fallback(monkeypatc
     processor = DocumentProcessor()
     monkeypatch.setattr(
         processor,
-        "_read_document",
-        AsyncMock(return_value="企业产品资料：A系列、B系列。"),
-    )
-    monkeypatch.setattr(
-        processor,
-        "_split_into_chunks",
-        lambda _content: [
-            {
-                "index": 0,
-                "content": "企业产品资料：A系列、B系列。",
-                "metadata": {"start_char": 0, "end_char": 15},
-            }
-        ],
+        "_parse_document",
+        AsyncMock(
+            return_value=ParseResult(
+                content="企业产品资料：A系列、B系列。",
+                elements=[
+                    ParsedElement(
+                        element_type="paragraph",
+                        text="企业产品资料：A系列、B系列。",
+                        metadata={"source_mode": "native_text"},
+                    )
+                ],
+                warnings=[],
+                metrics={"paragraph_count": 1, "table_row_count": 0},
+            )
+        ),
     )
 
     embedding_service = SimpleNamespace(
@@ -290,3 +347,33 @@ async def test_process_document_surfaces_vector_store_result_fallback(monkeypatc
     assert result["status"] == DocumentStatus.FAILED.value
     assert result["chunk_count"] == 0
     assert "[VECTOR_STORAGE_FAILED] boom" in str(result["error_message"])
+
+
+@pytest.mark.asyncio
+async def test_process_document_surfaces_structured_parse_empty_error(monkeypatch):
+    processor = DocumentProcessor()
+    monkeypatch.setattr(
+        processor,
+        "_parse_document",
+        AsyncMock(
+            return_value=ParseResult(
+                content="",
+                elements=[],
+                warnings=["only empty cells"],
+                metrics={"paragraph_count": 0, "table_row_count": 0},
+            )
+        ),
+    )
+
+    result = await processor.process_document(
+        doc_id="doc-empty",
+        file_path="/tmp/empty.docx",
+        file_type="docx",
+        document_title="空文档",
+        knowledge_base_id="kb-1",
+        vector_collection="kb_collection_1",
+    )
+
+    assert result["status"] == DocumentStatus.FAILED.value
+    assert result["chunk_count"] == 0
+    assert "[PARSE_EMPTY_STRUCTURED_DOC]" in str(result["error_message"])

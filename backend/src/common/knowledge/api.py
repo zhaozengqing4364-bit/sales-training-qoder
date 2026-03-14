@@ -150,7 +150,14 @@ async def process_document_background(
             await session.commit()
 
             logger.info(
-                f"Document processing completed: {doc_id}, status={result['status']}"
+                "Document processing completed",
+                document_id=doc_id,
+                status=result["status"],
+                chunk_count=result.get("chunk_count", 0),
+                phase_timings=result.get("phase_timings", {}),
+                parse_metrics=result.get("parse_metrics", {}),
+                parse_warnings=result.get("parse_warnings", []),
+                artifact_path=result.get("artifact_path"),
             )
 
     except (RuntimeError, ValueError, OSError) as e:
@@ -688,6 +695,9 @@ async def reprocess_document(
     # Delete existing vectors if any
     vector_store = get_knowledge_vector_store()
     await vector_store.delete_document_chunks(kb.vector_collection, doc_id)
+
+    storage = get_document_storage_service()
+    storage.delete_parse_artifact(doc.file_url)
 
     # Reset status
     await service.update_document_status(

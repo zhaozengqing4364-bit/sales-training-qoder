@@ -30,6 +30,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from common.ai.embedding_service import get_embedding_service
 from common.error_handling.result import Result
 from common.monitoring.logger import get_logger
+from common.storage import get_document_storage_service
 
 from .models import (
     DocumentStatus,
@@ -1587,6 +1588,10 @@ class KnowledgeService:
 
         kb = kb_result.value
 
+        artifact_preview = self._get_document_chunks_from_artifact(doc, page, page_size)
+        if artifact_preview is not None:
+            return Result.ok(artifact_preview)
+
         # Get chunks from vector store
         vector_store = get_knowledge_vector_store()
         collection = vector_store._get_collection(kb.vector_collection)
@@ -1628,6 +1633,12 @@ class KnowledgeService:
                         "metadata": {
                             "start_char": metadata.get("start_char"),
                             "end_char": metadata.get("end_char"),
+                            "element_types": metadata.get("element_types"),
+                            "source_mode": metadata.get("source_mode"),
+                            "page": metadata.get("page"),
+                            "page_end": metadata.get("page_end"),
+                            "parser_version": metadata.get("parser_version"),
+                            "warning_codes": metadata.get("warning_codes"),
                         },
                     }
                 )
@@ -1657,11 +1668,11 @@ class KnowledgeService:
         """Fallback preview by reading original source file and splitting into chunks."""
         try:
             processor = get_document_processor()
-            content = await processor._read_document(doc.file_url, doc.file_type)  # noqa: SLF001
-            if not content:
+            parse_result = await processor._parse_document(doc.file_url, doc.file_type)  # noqa: SLF001
+            if not parse_result:
                 return ([], 0)
 
-            chunks = processor._split_into_chunks(content)  # noqa: SLF001
+            chunks = processor._build_chunks_from_parse_result(parse_result)  # noqa: SLF001
             if not chunks:
                 return ([], 0)
 
@@ -1682,3 +1693,40 @@ class KnowledgeService:
         except Exception as exc:  # noqa: BLE001
             logger.warning(f"Fallback source preview failed: {exc}")
             return ([], 0)
+
+    def _get_document_chunks_from_artifact(
+        self,
+        doc: KnowledgeDocument,
+        page: int,
+        page_size: int,
+    ) -> tuple[list[dict[str, Any]], int] | None:
+        """Primary preview path based on the stored structured parse artifact."""
+        try:
+            storage = get_document_storage_service()
+            artifact = storage.load_parse_artifact(doc.file_url)
+            if not isinstance(artifact, dict):
+                return None
+
+            raw_chunks = artifact.get("chunks")
+            if not isinstance(raw_chunks, list) or not raw_chunks:
+                return None
+
+            formatted = [
+                {
+                    "index": chunk.get("index", index),
+                    "content": chunk.get("content", ""),
+                    "metadata": chunk.get("metadata", {}),
+                }
+                for index, chunk in enumerate(raw_chunks)
+                if isinstance(chunk, dict)
+            ]
+            if not formatted:
+                return None
+
+            total = len(formatted)
+            start = (page - 1) * page_size
+            end = start + page_size
+            return (formatted[start:end], total)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(f"Artifact preview failed: {exc}")
+            return None
