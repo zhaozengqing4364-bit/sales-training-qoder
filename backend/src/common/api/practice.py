@@ -40,6 +40,7 @@ from common.db.schemas import (
     SessionReport,
     SessionResponse,
     SessionUpdate,
+    ScenarioType,
 )
 from common.db.session import get_db
 from common.db.session_lifecycle import (
@@ -50,10 +51,12 @@ from common.db.voice_policy_snapshot import build_voice_policy_snapshot_ref
 from common.effectiveness import evaluate_effectiveness_snapshot
 from common.monitoring.logger import get_logger, get_trace_id
 from common.websocket.base_handler import get_connection_manager
+from common.websocket.session_manager import get_session_manager
 from presentation_coach.services.coach_service import PresentationCoachService
 from sales_bot.services.bot_service import sales_bot_service
 from sales_bot.services.summary_service import summary_service
 from sales_bot.services.voice_runtime_policy import VoiceRuntimePolicyService
+from training_runtime.service import build_training_runtime_descriptor
 
 logger = get_logger(__name__)
 
@@ -128,8 +131,20 @@ def _build_session_response(
     if not resolved_scenario_type and getattr(session, "scenario", None) is not None:
         resolved_scenario_type = getattr(session.scenario, "scenario_type", None)
 
-    payload.scenario_type = resolved_scenario_type or "sales"
-    payload.runtime_profile_id = getattr(session, "voice_runtime_profile_id", None)
+    try:
+        payload.scenario_type = ScenarioType(resolved_scenario_type or "sales")
+    except ValueError:
+        payload.scenario_type = ScenarioType.SALES
+    runtime_descriptor = build_training_runtime_descriptor(
+        session,
+        scenario_type=payload.scenario_type.value,
+    )
+    payload.runtime_subject = runtime_descriptor.subject
+    payload.runtime_descriptor = runtime_descriptor
+    runtime_profile_id = getattr(session, "voice_runtime_profile_id", None)
+    payload.runtime_profile_id = (
+        uuid.UUID(str(runtime_profile_id)) if runtime_profile_id else None
+    )
     payload.voice_policy_snapshot_ref = build_voice_policy_snapshot_ref(
         payload.voice_policy_snapshot
     )
@@ -145,6 +160,7 @@ def _build_lifecycle_response_payload(transition) -> SessionLifecycleResponse:
         ai_state=transition.ai_state,
         changed=transition.changed,
         scenario_type=transition.scenario_type,
+        runtime_subject="training_scenario_runtime",
         start_time=start_time,
         end_time=transition.session.end_time,
         total_duration_seconds=transition.session.total_duration_seconds,
@@ -337,6 +353,24 @@ async def _broadcast_lifecycle_events(transition) -> None:
             session_id,
             _build_ws_session_ended_payload(transition),
         )
+
+
+async def _sync_live_handler_after_lifecycle_transition(transition) -> None:
+    """Keep the live websocket handler aligned with DB-backed lifecycle state."""
+
+    session_manager = get_session_manager()
+    await session_manager.update_activity(str(transition.session.session_id))
+    await session_manager.sync_lifecycle_transition(transition)
+
+
+async def _close_live_handler_if_terminal(transition) -> None:
+    if not transition.session_ended:
+        return
+
+    await get_session_manager().close_session_connection(
+        str(transition.session.session_id),
+        reason="Session ended",
+    )
 
 
 @router.post("/practice/sessions", status_code=201)
@@ -633,7 +667,9 @@ async def control_session_lifecycle(
     await db.refresh(session)
     transition.session = session
     await lifecycle_service.trigger_report_generation_if_needed(transition)
+    await _sync_live_handler_after_lifecycle_transition(transition)
     await _broadcast_lifecycle_events(transition)
+    await _close_live_handler_if_terminal(transition)
 
     return success_response(_build_lifecycle_response_payload(transition))
 
@@ -691,7 +727,9 @@ async def update_session(
     if transition:
         transition.session = session
         await lifecycle_service.trigger_report_generation_if_needed(transition)
+        await _sync_live_handler_after_lifecycle_transition(transition)
         await _broadcast_lifecycle_events(transition)
+        await _close_live_handler_if_terminal(transition)
 
     scenario_type_value = None
     if transition and getattr(transition, "scenario_type", None):
@@ -824,7 +862,9 @@ async def end_session(
     await db.refresh(session)
     transition.session = session
     await lifecycle_service.trigger_report_generation_if_needed(transition)
+    await _sync_live_handler_after_lifecycle_transition(transition)
     await _broadcast_lifecycle_events(transition)
+    await _close_live_handler_if_terminal(transition)
 
     if snapshot is None:
         snapshot = _ensure_effectiveness_snapshot(session)

@@ -72,6 +72,12 @@ docs/api-contract/
 }
 ```
 
+## 认证模型（2026-03-14 收敛）
+
+- 浏览器端 Web 应用默认使用 `HttpOnly` session cookie，并通过服务端边界调用后端接口。
+- 脚本、移动端或非浏览器调用仍可使用 `Authorization: Bearer <token>`。
+- 契约文档中的 `Authorization` 示例表示“Bearer 示例写法”，不排斥等价的 cookie 会话认证。
+
 ## 分页规范
 
 ```json
@@ -106,3 +112,4 @@ docs/api-contract/
 | 2026-02-16 | 收敛角色策略入口并同步弃用写入约束（Persona Centered） | agents, personas, voice-runtime |
 | 2026-02-16 | 提示词治理域收敛为 admin-only，补充独立契约文档 | prompt-templates |
 | 2026-02-16 | 新增 Persona 策略健康审计接口与 Voice Runtime 旧写入字段移除说明 | personas, voice-runtime |
+| 2026-03-14 | 统一契约认证语义为 “Bearer 或 HttpOnly session cookie”，补充训练运行时主语说明 | sessions, replay, agents, personas, analytics, knowledge, support-runtime |

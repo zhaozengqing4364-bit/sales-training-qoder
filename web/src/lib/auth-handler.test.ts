@@ -4,21 +4,17 @@ import { authHandler } from "./auth-handler";
 
 describe("authHandler", () => {
     beforeEach(() => {
-        localStorage.clear();
         vi.restoreAllMocks();
     });
 
-    it("clears local session when session expires", () => {
-        localStorage.setItem("token", "token-value");
-        localStorage.setItem("user", JSON.stringify({ id: "user-1" }));
-
+    it("notifies listeners when session expires without touching browser storage", () => {
         const listener = vi.fn();
         const unsubscribe = authHandler.subscribe(listener);
+        const removeItemSpy = vi.spyOn(Storage.prototype, "removeItem");
 
         authHandler.sessionExpired();
 
-        expect(localStorage.getItem("token")).toBeNull();
-        expect(localStorage.getItem("user")).toBeNull();
+        expect(removeItemSpy).not.toHaveBeenCalled();
         expect(listener).toHaveBeenCalledWith("登录已过期，请重新登录");
 
         unsubscribe();
@@ -35,17 +31,14 @@ describe("authHandler", () => {
         unsubscribe();
     });
 
-    it("supports silent logout without emitting toast event", () => {
-        localStorage.setItem("token", "token-value");
-        localStorage.setItem("user", JSON.stringify({ id: "user-1" }));
-
+    it("supports silent logout without emitting toast event or clearing local storage", () => {
         const listener = vi.fn();
         const unsubscribe = authHandler.subscribe(listener);
+        const removeItemSpy = vi.spyOn(Storage.prototype, "removeItem");
 
         authHandler.logout("silent", { notify: false });
 
-        expect(localStorage.getItem("token")).toBeNull();
-        expect(localStorage.getItem("user")).toBeNull();
+        expect(removeItemSpy).not.toHaveBeenCalled();
         expect(listener).not.toHaveBeenCalled();
 
         unsubscribe();

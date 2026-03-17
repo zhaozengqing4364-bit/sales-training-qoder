@@ -13,19 +13,12 @@
 
 import React from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { TrendingUp, TrendingDown, Minus, Lightbulb, Award, BarChart3 } from "lucide-react";
+import { TrendingUp, Lightbulb, Award, BarChart3 } from "lucide-react";
 import type { ScoreUpdate } from "@/hooks/use-practice-websocket";
 
 interface ScorePanelProps {
     scores: ScoreUpdate | null;
     className?: string;
-}
-
-interface DimensionDisplay {
-    name: string;
-    score: number;
-    color: string;
-    icon: React.ReactNode;
 }
 
 const DIMENSION_CONFIG: Record<string, { color: string; icon: React.ReactNode }> = {

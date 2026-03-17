@@ -52,24 +52,13 @@ class AuthHandler {
         });
     }
 
-    private clearLocalSession(): void {
-        if (typeof window === "undefined") {
-            return;
-        }
-
-        localStorage.removeItem("token");
-        localStorage.removeItem("user");
-    }
-
     /**
-     * Handle logout - clear storage and redirect
+     * Handle logout side effects and redirect.
      */
     logout(message: string = "已退出登录", options: LogoutOptions = {}): void {
         const { redirectTo = null, notify = true } = options;
 
         if (typeof window !== "undefined") {
-            this.clearLocalSession();
-
             if (notify) {
                 this.notify(message);
             }

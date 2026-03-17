@@ -15,6 +15,7 @@ from typing import Optional
 from common.audio.asr_service import ASRService, get_asr_service
 from common.error_handling.result import Result
 from common.monitoring.logger import get_logger
+from common.resilience.backoff import compute_jitter_backoff_seconds
 from common.resilience.circuit_breaker import get_circuit_registry, CircuitBreaker
 
 logger = get_logger(__name__)
@@ -144,7 +145,13 @@ class ASRServiceWithFallback:
 
             # Wait before retry (exponential backoff)
             if attempt < self.retry_count - 1:
-                delay = self.base_retry_delay * (2**attempt)
+                delay = compute_jitter_backoff_seconds(
+                    attempt=attempt + 1,
+                    base_delay_seconds=self.base_retry_delay,
+                    max_delay_seconds=(
+                        self.base_retry_delay * (2 ** max(self.retry_count - 1, 0))
+                    ),
+                )
                 logger.info(
                     f"Retrying ASR in {delay}s",
                     extra={"delay": delay, "attempt": attempt + 1},

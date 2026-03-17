@@ -11,7 +11,7 @@
 ## 概览
 
 - 基础路径: `/api/v1`
-- 认证方式: `Authorization: Bearer <token>`
+- 认证方式: `Authorization: Bearer <token>` 或 `HttpOnly` session cookie
 - 响应包裹: 统一为 `{ "success": true, "data": ... }`
 - 本文覆盖两组接口：
   - Persona 本体管理（`/admin/personas`）

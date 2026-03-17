@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useEffectEvent, useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { GlassCard } from "@/components/ui/glass-card";
@@ -131,9 +131,13 @@ export default function HistoryPage() {
         setIsLoading(false);
     }, [scenarioFilter]);
 
-    useEffect(() => {
+    const handleLoadData = useEffectEvent(() => {
         void loadData();
-    }, [loadData]);
+    });
+
+    useEffect(() => {
+        handleLoadData();
+    }, [scenarioFilter]);
 
     const trendDelta = useMemo(() => {
         if (trends.length < 2) return null;

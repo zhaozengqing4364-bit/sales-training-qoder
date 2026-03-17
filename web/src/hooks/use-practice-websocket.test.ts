@@ -253,4 +253,43 @@ describe("usePracticeWebSocket reconnect lifecycle", () => {
 
         expect(MockWebSocket.instances).toHaveLength(1);
     });
+
+    it("does not append auth token query params to websocket url", () => {
+        localStorage.setItem("token", "legacy-token");
+
+        renderHook(() =>
+            usePracticeWebSocket({
+                sessionId: "session-7",
+                scenarioType: "sales",
+                agentId: "agent-1",
+                personaId: "persona-1",
+                voiceMode: "legacy",
+            }),
+        );
+
+        const ws = MockWebSocket.instances.at(-1);
+        expect(ws).toBeDefined();
+        expect(ws?.url).toContain("session_id=session-7");
+        expect(ws?.url).toContain("agent_id=agent-1");
+        expect(ws?.url).toContain("persona_id=persona-1");
+        expect(ws?.url).toContain("voice_mode=legacy");
+        expect(ws?.url).not.toContain("token=");
+    });
+
+    it("includes a request trace id in the websocket url", () => {
+        renderHook(() =>
+            usePracticeWebSocket({
+                sessionId: "session-trace",
+                scenarioType: "sales",
+            }),
+        );
+
+        const ws = MockWebSocket.instances.at(-1);
+        expect(ws).toBeDefined();
+
+        const url = new URL(ws!.url);
+        const traceId = url.searchParams.get("trace_id");
+        expect(typeof traceId).toBe("string");
+        expect(traceId).toMatch(/^[a-f0-9]{32}$/);
+    });
 });

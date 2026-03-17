@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import * as React from "react";
 import { ChevronLeft, ChevronRight, Presentation } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -111,11 +112,15 @@ export function SlideViewer({
                         transition={{ duration: 0.3 }}
                         className="w-full h-full"
                     >
-                        <img
-                            src={resolvedSlideImage}
-                            alt={`第${currentPage}页幻灯片`}
-                            className="w-full h-full object-contain"
-                        />
+                        <div className="relative w-full h-full">
+                            <Image
+                                src={resolvedSlideImage}
+                                alt={`第${currentPage}页幻灯片`}
+                                fill
+                                unoptimized
+                                className="object-contain"
+                            />
+                        </div>
                     </motion.div>
                 ) : slideContent ? (
                     <motion.div

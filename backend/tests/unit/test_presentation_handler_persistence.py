@@ -102,6 +102,52 @@ async def test_save_conversation_message_tracks_turns(
 
 
 @pytest.mark.asyncio
+async def test_sync_lifecycle_transition_restores_page_context_on_start(
+    handler: PresentationWebSocketHandler,
+):
+    """REST start/resume should rehydrate page context for cookie-auth flows."""
+    handler._restore_page_context = AsyncMock()
+    handler._stop_streaming_asr = AsyncMock()
+
+    transition = SimpleNamespace(
+        action="start",
+        to_status="in_progress",
+        ai_state="listening",
+        scenario_type="presentation",
+    )
+
+    await handler.sync_lifecycle_transition(transition)
+
+    assert handler.session_status == "in_progress"
+    assert handler.ai_state == "listening"
+    handler._restore_page_context.assert_awaited_once()
+    handler._stop_streaming_asr.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_sync_lifecycle_transition_stops_asr_on_pause(
+    handler: PresentationWebSocketHandler,
+):
+    """REST pause/end should quiet the live ASR loop without replaying transcripts."""
+    handler._restore_page_context = AsyncMock()
+    handler._stop_streaming_asr = AsyncMock()
+
+    transition = SimpleNamespace(
+        action="pause",
+        to_status="paused",
+        ai_state="idle",
+        scenario_type="presentation",
+    )
+
+    await handler.sync_lifecycle_transition(transition)
+
+    assert handler.session_status == "paused"
+    assert handler.ai_state == "idle"
+    handler._restore_page_context.assert_not_awaited()
+    handler._stop_streaming_asr.assert_awaited_once_with(process_transcript=False)
+
+
+@pytest.mark.asyncio
 async def test_check_and_interrupt_updates_user_feedback(
     handler: PresentationWebSocketHandler,
 ):

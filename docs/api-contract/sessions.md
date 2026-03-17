@@ -13,6 +13,12 @@
 - 策略优先级固定: `会话覆盖 > Agent 策略 > 系统默认配置档`
 - 销售场景统一采用 `agent_id + persona_id` 配对创建
 
+## 领域语言收敛
+
+- 管理面仍保留 `Scenario`、`Agent`、`Presentation` 等配置实体。
+- 运行时对外统一主语为 `training_scenario_runtime`，避免会话接口、权限校验、统计口径继续按实体类型分叉。
+- `PracticeSession` 是运行时事实锚点；配置实体只负责提供运行参数，不直接充当运行时主语。
+
 ---
 
 ## 统一响应格式
@@ -64,6 +70,21 @@ interface SessionLifecycleRequest {
 }
 ```
 
+### `TrainingRuntimeDescriptor`
+
+```typescript
+interface TrainingRuntimeDescriptor {
+  subject: "training_scenario_runtime";
+  session_id: string;
+  scenario_type: "sales" | "presentation";
+  agent_id?: string | null;
+  persona_id?: string | null;
+  presentation_id?: string | null;
+  voice_mode?: string | null;
+  runtime_profile_id?: string | null;
+}
+```
+
 ### `voice_policy_snapshot_ref`
 
 ```typescript
@@ -89,6 +110,8 @@ interface SessionResponse {
   scenario_id: string;
   scenario_type?: "sales" | "presentation";
   voice_mode?: string;
+  runtime_subject: "training_scenario_runtime";
+  runtime_descriptor?: TrainingRuntimeDescriptor | null;
   runtime_profile_id?: string | null;
   voice_policy_snapshot?: Record<string, unknown> | null;
   voice_policy_snapshot_ref?: VoicePolicySnapshotReference | null;
@@ -127,6 +150,8 @@ interface SessionResponse {
 ```
 
 > 兼容说明：`voice_runtime_profile_id` 已停止对外返回，请统一使用 `runtime_profile_id`。
+>
+> 认证说明：浏览器场景推荐使用 `HttpOnly` session cookie；下文 `Authorization: Bearer <token>` 仅作为脚本/非浏览器调用示例。
 
 ### `SessionLifecycleResponse`
 
@@ -254,6 +279,17 @@ Content-Type: application/json
     "user_id": "user-uuid",
     "scenario_id": "scenario-uuid",
     "voice_mode": "stepfun_realtime",
+    "runtime_subject": "training_scenario_runtime",
+    "runtime_descriptor": {
+      "subject": "training_scenario_runtime",
+      "session_id": "session-uuid",
+      "scenario_type": "sales",
+      "agent_id": "agent-uuid",
+      "persona_id": "persona-uuid",
+      "presentation_id": null,
+      "voice_mode": "stepfun_realtime",
+      "runtime_profile_id": "profile-uuid"
+    },
     "runtime_profile_id": "profile-uuid",
     "voice_policy_snapshot": {
       "voice_mode": "stepfun_realtime",
@@ -353,6 +389,7 @@ WebSocket 同步事件（由 lifecycle 触发）:
     "ai_state": "idle",
     "changed": true,
     "scenario_type": "sales",
+    "runtime_subject": "training_scenario_runtime",
     "start_time": "2026-02-11T12:00:00+00:00",
     "end_time": null,
     "total_duration_seconds": null
@@ -381,7 +418,7 @@ WebSocket 同步事件（由 lifecycle 触发）:
 
 ## 访问控制
 
-- 所有会话接口需要 JWT
+- 所有会话接口要求有效登录态，支持 `Authorization: Bearer <token>` 或 `HttpOnly` session cookie
 - 会话详情/报告/回放: 仅 owner 或 admin 可访问
 - 未认证返回 `401`
 - 越权返回 `403`（`[ACCESS_DENIED]`）

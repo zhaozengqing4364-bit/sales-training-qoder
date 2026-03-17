@@ -1,23 +1,17 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 import {
     Home,
     BarChart2,
     Activity,
-    History,
     Settings,
     User,
     Sparkles,
-    Command,
-    ChevronLeft,
-    ChevronRight,
     PanelLeftClose,
     PanelLeftOpen,
     LayoutGrid,
-    FileText,
-    Bot,
     LogOut,
     type LucideIcon,
 } from "lucide-react";
@@ -39,8 +33,9 @@ import {
     TooltipProvider,
     TooltipTrigger,
 } from "@/components/ui/glass-tooltip";
-import { useEffect, useState } from "react";
 import { api } from "@/lib/api/client";
+import { authHandler } from "@/lib/auth-handler";
+import type { CurrentUser } from "@/lib/auth/current-user";
 
 interface UserInfo {
     id: string;
@@ -51,46 +46,13 @@ interface UserInfo {
     department?: string;
 }
 
-function getCachedSidebarUser(): UserInfo | null {
-    if (typeof window === "undefined") {
-        return null;
-    }
-
-    const storedUser = localStorage.getItem("user");
-    if (!storedUser) {
-        return null;
-    }
-
-    try {
-        const parsed = JSON.parse(storedUser) as {
-            id?: string;
-            user_id?: string;
-            name?: string;
-            display_name?: string;
-            email?: string;
-            role?: string;
-            department?: string;
-        };
-        return {
-            id: parsed.id || parsed.user_id || "",
-            name: parsed.name,
-            display_name: parsed.display_name || parsed.name,
-            email: parsed.email,
-            role: parsed.role || "user",
-            department: parsed.department,
-        };
-    } catch {
-        return null;
-    }
-}
-
 export const navItems = [
     { label: "首页", icon: Home, href: "/" },
     { label: "训练模式", icon: LayoutGrid, href: "/training" },
     { label: "排行榜", icon: BarChart2, href: "/leaderboard" },
 ];
 
-export function Sidebar() {
+export function Sidebar({ currentUser }: { currentUser: CurrentUser }) {
     const { isCollapsed, toggleSidebar } = useSidebarStore();
 
     return (
@@ -100,41 +62,32 @@ export function Sidebar() {
                 isCollapsed ? "w-20 px-3" : "w-72 px-5"
             )}
         >
-            <SidebarContent isCollapsed={isCollapsed} toggleSidebar={toggleSidebar} showToggle={true} />
+            <SidebarContent
+                currentUser={currentUser}
+                isCollapsed={isCollapsed}
+                toggleSidebar={toggleSidebar}
+                showToggle={true}
+            />
         </aside>
     );
 }
 
 interface SidebarContentProps {
+    currentUser: UserInfo | null;
     isCollapsed?: boolean;
     toggleSidebar?: () => void;
     showToggle?: boolean;
 }
 
-export function SidebarContent({ isCollapsed = false, toggleSidebar, showToggle = false }: SidebarContentProps) {
+export function SidebarContent({
+    currentUser,
+    isCollapsed = false,
+    toggleSidebar,
+    showToggle = false,
+}: SidebarContentProps) {
     const pathname = usePathname();
-    const [userInfo, setUserInfo] = useState<UserInfo | null>(() => getCachedSidebarUser());
-
-    useEffect(() => {
-        // Fetch fresh user info from API
-        api.user.getMe().then((data) => {
-            const nextUserInfo: UserInfo = {
-                id: data.user_id,
-                name: data.name,
-                display_name: data.name,
-                email: data.email,
-                role: data.role,
-                department: data.department,
-            };
-            setUserInfo(nextUserInfo);
-            localStorage.setItem("user", JSON.stringify(nextUserInfo));
-        }).catch(() => {
-            // Ignore errors
-        });
-    }, []);
-
-    const isAdmin = userInfo?.role === "admin";
-    const isSupport = userInfo?.role === "support";
+    const isAdmin = currentUser?.role === "admin";
+    const isSupport = currentUser?.role === "support";
     const canViewRuntime = isAdmin || isSupport;
 
     return (
@@ -202,7 +155,7 @@ export function SidebarContent({ isCollapsed = false, toggleSidebar, showToggle 
             {/* Bottom Actions - Fixed */}
             <div className="mt-auto flex flex-col gap-4 pt-4 shrink-0">
                 {/* User Card */}
-                <SidebarUser isCollapsed={isCollapsed} userInfo={userInfo} />
+                <SidebarUser isCollapsed={isCollapsed} userInfo={currentUser} />
 
                 {/* Collapse Trigger - Only shown on Desktop Sidebar */}
                 {showToggle && toggleSidebar && (
@@ -277,16 +230,17 @@ function SidebarUser({ isCollapsed, userInfo }: { isCollapsed: boolean; userInfo
 }
 
 function UserProfileModal({ userInfo }: { userInfo: UserInfo | null }) {
-    const router = useRouter();
-
-    const handleLogout = () => {
-        // Clear token
-        localStorage.removeItem("token");
-        // Clear any other user data
-        localStorage.removeItem("user");
-
-        // Redirect to login
-        router.push("/login");
+    const handleLogout = async () => {
+        try {
+            await api.auth.logout();
+        } catch {
+            // Ignore logout API failures and still leave the current session shell.
+        } finally {
+            authHandler.logout("已退出登录", {
+                redirectTo: "/login",
+                notify: false,
+            });
+        }
     };
 
     const displayName = userInfo?.display_name || userInfo?.name || "用户";

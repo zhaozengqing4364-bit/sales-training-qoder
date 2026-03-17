@@ -63,6 +63,8 @@ import {
     ManagerLiteRemindResponse,
 } from "./types";
 import { authHandler } from "@/lib/auth-handler";
+import { normalizeCurrentUser } from "@/lib/auth/current-user";
+import { buildTraceHeaders } from "@/lib/observability/trace-context";
 
 const LOOPBACK_HOST_FALLBACK_MAP: Record<string, string> = {
     "localhost": "127.0.0.1",
@@ -229,6 +231,19 @@ export function getApiErrorMessage(error: unknown): string {
         return error.message;
     }
     return "请求失败，请稍后重试。";
+}
+
+export function isAuthenticationError(error: unknown): boolean {
+    if (error instanceof ApiRequestError) {
+        return error.status === 401 || error.status === 403;
+    }
+
+    if (typeof error === "object" && error !== null && "status" in error) {
+        const status = Number((error as { status?: number }).status);
+        return status === 401 || status === 403;
+    }
+
+    return false;
 }
 
 function normalizeRequiredId(
@@ -543,23 +558,35 @@ export function cancelAllRequests(): void {
     activeRequests.clear();
 }
 
-// Get auth token from localStorage
-function getAuthToken(): string | null {
-    if (typeof window === "undefined") return null;
-    return localStorage.getItem("token");
-}
+type ApiFetchOptions = RequestInit & {
+    signal?: AbortSignal;
+    skipSessionExpiredHandling?: boolean;
+};
 
-// Create headers with auth
-function createHeaders(includeContentType = true): HeadersInit {
-    const headers: HeadersInit = {};
+function createHeaders(
+    existingHeaders: HeadersInit | undefined,
+    includeContentType = true,
+): Headers {
+    const headers = new Headers(existingHeaders);
 
-    if (includeContentType) {
-        headers["Content-Type"] = "application/json";
+    if (includeContentType && !headers.has("Content-Type")) {
+        headers.set("Content-Type", "application/json");
     }
 
-    const token = getAuthToken();
-    if (token) {
-        headers["Authorization"] = `Bearer ${token}`;
+    const traceHeaders = buildTraceHeaders({
+        traceId: headers.get("X-Trace-ID") ?? headers.get("x-trace-id"),
+        traceparent: headers.get("traceparent"),
+        tracestate: headers.get("tracestate"),
+    });
+
+    if (!headers.has("X-Trace-ID")) {
+        headers.set("X-Trace-ID", traceHeaders["X-Trace-ID"]);
+    }
+    if (!headers.has("traceparent")) {
+        headers.set("traceparent", traceHeaders.traceparent);
+    }
+    if (!headers.has("tracestate") && traceHeaders.tracestate) {
+        headers.set("tracestate", traceHeaders.tracestate);
     }
 
     return headers;
@@ -568,15 +595,15 @@ function createHeaders(includeContentType = true): HeadersInit {
 // Generic fetch wrapper with AbortController support
 async function apiFetch<T>(
     endpoint: string,
-    options: RequestInit & { signal?: AbortSignal } = {}
+    options: ApiFetchOptions = {},
 ): Promise<T> {
     const url = `${resolveApiBaseUrl()}${endpoint}`;
     const requestId = `req_${++requestCounter}`;
-    const hadToken = Boolean(getAuthToken());
+    const { skipSessionExpiredHandling = false, ...requestOptions } = options;
 
     // Create AbortController if caller didn't provide a signal
     const controller = new AbortController();
-    const externalSignal = options.signal;
+    const externalSignal = requestOptions.signal;
     const signal = externalSignal || controller.signal;
 
     // If caller provided their own signal, link it to our controller
@@ -588,12 +615,10 @@ async function apiFetch<T>(
 
     try {
         const response = await fetchWithLoopbackRetry(url, {
-            ...options,
+            ...requestOptions,
             signal,
-            headers: {
-                ...createHeaders(),
-                ...options.headers,
-            },
+            credentials: requestOptions.credentials || "include",
+            headers: createHeaders(requestOptions.headers),
         });
 
         const responseJson = await response.json().catch(() => ({}));
@@ -601,7 +626,7 @@ async function apiFetch<T>(
         if (!response.ok) {
             const normalized = normalizeApiErrorPayload(response.status, responseJson);
 
-            if (response.status === 401 && hadToken) {
+            if (response.status === 401 && !skipSessionExpiredHandling) {
                 triggerSessionExpiredOnce();
             }
 
@@ -641,12 +666,13 @@ async function apiFetch<T>(
 async function apiUpload<T>(
     endpoint: string,
     formData: FormData,
-    signal?: AbortSignal
+    signal?: AbortSignal,
+    options: { skipSessionExpiredHandling?: boolean } = {},
 ): Promise<T> {
     const url = `${resolveApiBaseUrl()}${endpoint}`;
-    const token = getAuthToken();
     const requestId = `upload_${++requestCounter}`;
     const controller = new AbortController();
+    const { skipSessionExpiredHandling = false } = options;
 
     if (signal) {
         signal.addEventListener("abort", () => controller.abort(), { once: true });
@@ -657,15 +683,16 @@ async function apiUpload<T>(
     try {
         const response = await fetchWithLoopbackRetry(url, {
             method: "POST",
-            headers: token ? { Authorization: `Bearer ${token}` } : {},
             body: formData,
             signal: signal || controller.signal,
+            credentials: "include",
+            headers: createHeaders(undefined, false),
         });
 
         const responseJson = await response.json().catch(() => ({}));
 
         if (!response.ok) {
-            if (response.status === 401 && token) {
+            if (response.status === 401 && !skipSessionExpiredHandling) {
                 triggerSessionExpiredOnce();
             }
             throw new ApiRequestError(normalizeApiErrorPayload(response.status, responseJson));
@@ -707,17 +734,22 @@ export const api = {
             return apiFetch<{ token?: string; access_token?: string; user: User & { id?: string } }>("/auth/login", {
                 method: "POST",
                 body: JSON.stringify(credentials),
+                skipSessionExpiredHandling: true,
             });
         },
 
         devLogin: async () => {
             return apiFetch<{ access_token: string; token_type: string; user: User }>("/auth/dev-login", {
                 method: "POST",
+                skipSessionExpiredHandling: true,
             });
         },
 
         logout: async () => {
-            return apiFetch<void>("/auth/logout", { method: "POST" });
+            return apiFetch<void>("/auth/logout", {
+                method: "POST",
+                skipSessionExpiredHandling: true,
+            });
         },
     },
 
@@ -732,21 +764,7 @@ export const api = {
                 department?: string | null;
                 email?: string | null;
             }>("/users/me");
-
-            const normalizedName = profile.display_name || "用户";
-
-            return {
-                user_id: profile.id,
-                id: profile.id,
-                name: normalizedName,
-                display_name: normalizedName,
-                email: profile.email || "",
-                role: profile.role || "user",
-                department: profile.department || undefined,
-                is_active: true,
-                created_at: "",
-                avatar_url: profile.avatar_url || undefined,
-            };
+            return normalizeCurrentUser(profile);
         },
 
         updateProfile: async (data: Partial<User> & { display_name?: string }) => {
@@ -780,21 +798,7 @@ export const api = {
                 method: "PATCH",
                 body: JSON.stringify(payload),
             });
-
-            const normalizedName = profile.display_name || "用户";
-
-            return {
-                user_id: profile.id,
-                id: profile.id,
-                name: normalizedName,
-                display_name: normalizedName,
-                email: profile.email || "",
-                role: profile.role || "user",
-                department: profile.department || undefined,
-                is_active: true,
-                created_at: "",
-                avatar_url: profile.avatar_url || undefined,
-            };
+            return normalizeCurrentUser(profile);
         },
 
         // Story 3.2: Get user history with report summary
@@ -1128,9 +1132,8 @@ export const api = {
         },
 
         getAudioBlobUrl: async (sessionId: string, messageId: string) => {
-            const token = getAuthToken();
             const response = await fetch(`${resolveApiBaseUrl()}/sessions/${sessionId}/audio/${messageId}`, {
-                headers: token ? { Authorization: `Bearer ${token}` } : {},
+                credentials: "include",
             });
 
             if (!response.ok) {
@@ -1252,10 +1255,9 @@ export const api = {
             if (params?.format) searchParams.set("format", params.format);
 
             const url = `${resolveApiBaseUrl()}/admin/analytics/export?${searchParams}`;
-            const token = getAuthToken();
 
             const response = await fetch(url, {
-                headers: token ? { Authorization: `Bearer ${token}` } : {},
+                credentials: "include",
             });
 
             if (!response.ok) {
@@ -1388,10 +1390,9 @@ export const api = {
             if (params?.status) searchParams.set("status", params.status);
 
             const url = `${resolveApiBaseUrl()}/admin/users/export?${searchParams}`;
-            const token = getAuthToken();
 
             const response = await fetch(url, {
-                headers: token ? { Authorization: `Bearer ${token}` } : {},
+                credentials: "include",
             });
 
             if (!response.ok) throw new Error("Export failed");
@@ -1892,9 +1893,8 @@ export const api = {
             if (params?.include_inactive !== undefined) searchParams.set("include_inactive", String(params.include_inactive));
 
             const response = await fetch(`${resolveApiBaseUrl()}/admin/users/export?${searchParams}`, {
-                headers: {
-                    ...createHeaders(false),
-                },
+                headers: createHeaders(undefined, false),
+                credentials: "include",
             });
             if (!response.ok) {
                 throw new Error(`HTTP ${response.status}`);
@@ -1908,9 +1908,8 @@ export const api = {
             if (params?.format) searchParams.set("format", params.format);
 
             const response = await fetch(`${resolveApiBaseUrl()}/admin/analytics/export?${searchParams}`, {
-                headers: {
-                    ...createHeaders(false),
-                },
+                headers: createHeaders(undefined, false),
+                credentials: "include",
             });
             if (!response.ok) {
                 throw new Error(`HTTP ${response.status}`);
@@ -1978,7 +1977,8 @@ export const api = {
                 `${resolveApiBaseUrl()}/presentations/${presentationId}/pages/${pageNumber}/thumbnail`,
                 {
                     method: "GET",
-                    headers: createHeaders(false),
+                    headers: createHeaders(undefined, false),
+                    credentials: "include",
                 },
             );
             if (!response.ok) {

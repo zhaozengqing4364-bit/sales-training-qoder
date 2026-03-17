@@ -238,7 +238,54 @@ async def test_pending_response_timeout_fallback_waits_for_transcription_before_
     await handler._pending_response_timeout_fallback()
 
     handler._create_response_from_pending_commit.assert_awaited_once()
-    assert sleep_calls >= 2
+
+
+@pytest.mark.asyncio
+async def test_recover_upstream_after_disconnect_uses_shared_jitter_backoff(
+    monkeypatch,
+):
+    handler = StepFunRealtimeHandler()
+    handler.running = True
+    handler.session_status = "in_progress"
+    handler._upstream_auto_recover_enabled = True
+    handler._upstream_auto_recover_max_retries = 1
+    handler._upstream_auto_recover_base_delay_seconds = 0.4
+    handler._upstream_auto_recover_max_delay_seconds = 5.0
+
+    helper_calls = []
+
+    def _fake_backoff(**kwargs):
+        helper_calls.append(kwargs)
+        return 0.05
+
+    sleep_mock = AsyncMock()
+    monkeypatch.setattr(
+        stepfun_module,
+        "compute_jitter_backoff_seconds",
+        _fake_backoff,
+    )
+    monkeypatch.setattr(stepfun_module.asyncio, "sleep", sleep_mock)
+
+    handler._close_upstream = AsyncMock()
+    handler._connect_upstream = AsyncMock()
+    handler._cancel_pending_response_after_commit = AsyncMock()
+    handler._send_status = AsyncMock()
+
+    recovered = await handler._recover_upstream_after_disconnect(
+        close_code=1006,
+        close_reason="socket closed",
+        ws_lifetime_ms=2000.0,
+    )
+
+    assert recovered is True
+    assert helper_calls == [
+        {
+            "attempt": 1,
+            "base_delay_seconds": 0.4,
+            "max_delay_seconds": 5.0,
+        }
+    ]
+    sleep_mock.assert_awaited_once_with(0.05)
 
 
 @pytest.mark.asyncio

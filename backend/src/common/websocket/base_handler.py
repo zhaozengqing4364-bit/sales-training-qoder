@@ -3,6 +3,7 @@ Base WebSocket Handler with connection lifecycle management
 Constitution Principle I: No error popups, graceful degradation
 """
 import asyncio
+from collections.abc import Mapping
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -10,13 +11,34 @@ from fastapi import WebSocket, WebSocketDisconnect
 from jose import JWTError
 from starlette.websockets import WebSocketState
 
+from common.auth.service import resolve_websocket_token
 from common.monitoring.logger import get_logger, set_trace_id, get_trace_id
+from common.monitoring.trace_context import normalize_trace_id
 from common.websocket.session_state_service import (
     SessionStateSnapshot,
     get_session_state_service,
 )
 
 logger = get_logger(__name__)
+
+
+def _get_websocket_header_value(websocket: WebSocket, header_name: str) -> str:
+    """Return a string header value, tolerating simplified test doubles."""
+    headers = getattr(websocket, "headers", None)
+
+    if isinstance(headers, Mapping):
+        value = headers.get(header_name, "")
+        return value if isinstance(value, str) else ""
+
+    getter = getattr(headers, "get", None)
+    if callable(getter):
+        try:
+            value = getter(header_name, "")
+        except TypeError:
+            return ""
+        return value if isinstance(value, str) else ""
+
+    return ""
 
 
 class ConnectionManager:
@@ -104,22 +126,38 @@ class BaseWebSocketHandler:
         self,
         websocket: WebSocket,
         session_id: str,
-        token: str
+        token: str,
+        trace_id: str | None = None,
     ):
         """
         Main connection handler
         Override in subclasses for scenario-specific logic
         """
         # Set trace_id from token or generate new
+        resolved_token = resolve_websocket_token(
+            query_token=token,
+            authorization_header=_get_websocket_header_value(
+                websocket,
+                "authorization",
+            ),
+            cookie_header=_get_websocket_header_value(
+                websocket,
+                "cookie",
+            ),
+        )
         try:
             # Verify token and extract trace_id
             from common.auth.service import verify_token
-            payload = verify_token(token)
-            set_trace_id(payload.get("trace_id", ""))
+            payload = verify_token(resolved_token)
+            set_trace_id(
+                normalize_trace_id(trace_id)
+                or normalize_trace_id(payload.get("trace_id", ""))
+                or ""
+            )
             self.user_id = payload.get("user_id")
         except (JWTError, RuntimeError, ValueError, OSError) as e:
             logger.warning(f"Token verification failed: {str(e)}")
-            set_trace_id("")
+            set_trace_id(normalize_trace_id(trace_id) or "")
 
         # Check for existing session state (reconnection scenario)
         existing_state = await self.state_service.get_state(session_id)
@@ -189,6 +227,13 @@ class BaseWebSocketHandler:
                 await self.websocket.close(code=code, reason=reason)
         except (RuntimeError, ValueError, OSError) as e:
             logger.warning(f"Failed to close websocket: {e}")
+
+    async def sync_lifecycle_transition(self, transition) -> None:
+        """Apply persisted lifecycle state pushed from REST controls."""
+        if hasattr(self, "session_status"):
+            self.session_status = transition.to_status
+        if hasattr(self, "ai_state"):
+            self.ai_state = transition.ai_state
 
     async def _process_messages(self):
         """

@@ -84,6 +84,24 @@ async def test_emit_current_page_context_uses_presentation_event_contract(handle
 
 
 @pytest.mark.asyncio
+async def test_sync_lifecycle_transition_start_emits_page_context(handler):
+    handler._emit_current_page_context = AsyncMock()
+
+    transition = SimpleNamespace(
+        action="start",
+        to_status="in_progress",
+        ai_state="listening",
+        scenario_type="presentation",
+    )
+
+    await handler.sync_lifecycle_transition(transition)
+
+    assert handler.session_status == "in_progress"
+    assert handler.ai_state == "listening"
+    handler._emit_current_page_context.assert_awaited_once()
+
+
+@pytest.mark.asyncio
 async def test_evaluate_presentation_feedback_interrupt_path(handler):
     feedback = SimpleNamespace(
         point_results=[

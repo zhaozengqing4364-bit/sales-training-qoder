@@ -51,7 +51,6 @@ export interface AgentCardProps {
 }
 
 export function AgentCard({
-    id,
     name,
     description,
     role,

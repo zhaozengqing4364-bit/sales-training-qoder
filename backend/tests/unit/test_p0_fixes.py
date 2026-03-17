@@ -243,6 +243,57 @@ class TestASRWithFallback:
         assert "state" in stats
         assert stats["name"] == "asr_service"
 
+    def test_jitter_backoff_helper_caps_delay(self):
+        """Should keep jittered delay within max cap."""
+        from common.resilience.backoff import compute_jitter_backoff_seconds
+
+        delay = compute_jitter_backoff_seconds(
+            attempt=4,
+            base_delay_seconds=0.5,
+            max_delay_seconds=1.0,
+            jitter_ratio=0.2,
+        )
+
+        assert 0.0 <= delay <= 1.0
+
+    @pytest.mark.asyncio
+    async def test_transcribe_uses_shared_jitter_backoff_helper(self, monkeypatch):
+        """ASR fallback retries should delegate delay calculation to shared helper."""
+        import common.audio.asr_with_fallback as asr_module
+        from common.audio.asr_with_fallback import ASRServiceWithFallback
+        from common.error_handling.result import Result
+
+        service = ASRServiceWithFallback(
+            retry_count=2,
+            base_retry_delay=0.1,
+            request_timeout=0.2,
+        )
+        service._transcribe_once = AsyncMock(
+            side_effect=[Result.fail("[ASR_STREAMING_ERROR]"), Result.fail("[ASR_STREAMING_ERROR]")]
+        )
+
+        helper_calls = []
+
+        def _fake_backoff(**kwargs):
+            helper_calls.append(kwargs)
+            return 0.01
+
+        sleep_mock = AsyncMock()
+        monkeypatch.setattr(asr_module, "compute_jitter_backoff_seconds", _fake_backoff)
+        monkeypatch.setattr(asr_module.asyncio, "sleep", sleep_mock)
+
+        result = await service.transcribe(b"audio-bytes")
+
+        assert result.is_success is False
+        assert helper_calls == [
+            {
+                "attempt": 1,
+                "base_delay_seconds": 0.1,
+                "max_delay_seconds": 0.2,
+            }
+        ]
+        sleep_mock.assert_awaited_once_with(0.01)
+
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

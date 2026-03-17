@@ -72,15 +72,6 @@ interface UseAudioRecorderOptions {
     forceScriptProcessor?: boolean;
 }
 
-interface AudioRecorderState {
-    isRecording: boolean;
-    hasPermission: boolean | null;
-    error: string | null;
-    stream: MediaStream | null;
-    /** Whether AudioWorklet is supported and being used */
-    isWorkletSupported: boolean;
-}
-
 export function useAudioRecorder(options: UseAudioRecorderOptions = {}) {
     const { 
         onAudioData,
@@ -210,6 +201,36 @@ export function useAudioRecorder(options: UseAudioRecorderOptions = {}) {
     }, [resolveEnvironmentError]);
 
     /**
+     * Linear interpolation resampling (fallback method)
+     * 
+     * Used when OfflineAudioContext is not available or fails.
+     * Lower quality but synchronous and widely supported.
+     */
+    const resampleLinear = useCallback((
+        inputData: Float32Array, 
+        inputSampleRate: number, 
+        outputSampleRate: number
+    ): Float32Array => {
+        if (inputSampleRate === outputSampleRate) {
+            return inputData;
+        }
+        
+        const ratio = inputSampleRate / outputSampleRate;
+        const outputLength = Math.round(inputData.length / ratio);
+        const output = new Float32Array(outputLength);
+        
+        for (let i = 0; i < outputLength; i++) {
+            const srcIndex = i * ratio;
+            const srcIndexFloor = Math.floor(srcIndex);
+            const srcIndexCeil = Math.min(srcIndexFloor + 1, inputData.length - 1);
+            const t = srcIndex - srcIndexFloor;
+            output[i] = inputData[srcIndexFloor] * (1 - t) + inputData[srcIndexCeil] * t;
+        }
+        
+        return output;
+    }, []);
+
+    /**
      * High-quality audio resampling using OfflineAudioContext
      * 
      * Uses Web Audio API's built-in resampling which applies proper
@@ -256,37 +277,7 @@ export function useAudioRecorder(options: UseAudioRecorderOptions = {}) {
             // Fallback to linear interpolation if OfflineAudioContext fails
             return resampleLinear(inputData, inputSampleRate, outputSampleRate);
         }
-    }, []);
-
-    /**
-     * Linear interpolation resampling (fallback method)
-     * 
-     * Used when OfflineAudioContext is not available or fails.
-     * Lower quality but synchronous and widely supported.
-     */
-    const resampleLinear = useCallback((
-        inputData: Float32Array, 
-        inputSampleRate: number, 
-        outputSampleRate: number
-    ): Float32Array => {
-        if (inputSampleRate === outputSampleRate) {
-            return inputData;
-        }
-        
-        const ratio = inputSampleRate / outputSampleRate;
-        const outputLength = Math.round(inputData.length / ratio);
-        const output = new Float32Array(outputLength);
-        
-        for (let i = 0; i < outputLength; i++) {
-            const srcIndex = i * ratio;
-            const srcIndexFloor = Math.floor(srcIndex);
-            const srcIndexCeil = Math.min(srcIndexFloor + 1, inputData.length - 1);
-            const t = srcIndex - srcIndexFloor;
-            output[i] = inputData[srcIndexFloor] * (1 - t) + inputData[srcIndexCeil] * t;
-        }
-        
-        return output;
-    }, []);
+    }, [resampleLinear]);
 
     const enableHQResample = process.env.NEXT_PUBLIC_ENABLE_HQ_RESAMPLE === "true";
 

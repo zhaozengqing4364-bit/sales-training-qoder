@@ -44,7 +44,9 @@ from common.db.session_lifecycle import (
 )
 from common.knowledge.kb_lock_guard import evaluate_kb_lock_decision
 from common.knowledge.service import KnowledgeService
-from common.monitoring.logger import get_logger, get_trace_id
+from common.monitoring.logger import get_logger, get_trace_id, set_trace_id
+from common.monitoring.trace_context import normalize_trace_id
+from common.resilience.backoff import compute_jitter_backoff_seconds
 from common.websocket.base_handler import BaseWebSocketHandler
 from sales_bot.services.voice_instruction_compiler import (
     VoiceInstructionCompiler,
@@ -430,8 +432,13 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
         websocket: WebSocket,
         session_id: str,
         token: str,
+        trace_id: str | None = None,
     ):
         """Main lifecycle for frontend WS + upstream StepFun WS."""
+        incoming_trace_id = normalize_trace_id(trace_id)
+        if incoming_trace_id:
+            set_trace_id(incoming_trace_id)
+
         self.websocket = websocket
         self.session_id = session_id
 
@@ -2436,10 +2443,10 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
             return False
 
         for attempt in range(1, self._upstream_auto_recover_max_retries + 1):
-            backoff_seconds = min(
-                self._upstream_auto_recover_max_delay_seconds,
-                self._upstream_auto_recover_base_delay_seconds
-                * (2 ** (attempt - 1)),
+            backoff_seconds = compute_jitter_backoff_seconds(
+                attempt=attempt,
+                base_delay_seconds=self._upstream_auto_recover_base_delay_seconds,
+                max_delay_seconds=self._upstream_auto_recover_max_delay_seconds,
             )
             try:
                 await asyncio.sleep(backoff_seconds)
@@ -2488,6 +2495,28 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
                 )
 
         return False
+
+    async def sync_lifecycle_transition(self, transition) -> None:
+        """Mirror REST lifecycle transitions into the live StepFun runtime."""
+        await super().sync_lifecycle_transition(transition)
+        self.session_scenario_type = transition.scenario_type or self.scenario
+
+        if transition.action in {"pause", "end"}:
+            await self._cancel_pending_response_after_commit()
+            self._pending_grounding_context = ""
+            self._pending_blocked_response_text = ""
+            self._latest_input_transcript_delta = ""
+            if self.upstream_ws is not None:
+                try:
+                    await self._send_upstream({"type": "response.cancel"})
+                    await self._send_upstream({"type": "input_audio_buffer.clear"})
+                except Exception as exc:  # noqa: BLE001
+                    logger.warning(
+                        "Failed to sync StepFun upstream after REST lifecycle change",
+                        session_id=self.session_id,
+                        action=transition.action,
+                        error=str(exc),
+                    )
 
     async def _receive_upstream_events(self):
         """Receive events from StepFun and map them to frontend messages."""

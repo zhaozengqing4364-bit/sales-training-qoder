@@ -10,6 +10,7 @@ from contextlib import asynccontextmanager
 
 from dotenv import load_dotenv
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, Query, WebSocket
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.routing import APIRoute
 from jose import JWTError
@@ -43,6 +44,8 @@ from common.auth.api import get_auth_config_diagnostics
 
 # Development mode auth (for testing without WeChat SSO)
 from common.auth.service import (
+    resolve_websocket_token,
+    set_auth_session_cookie,
     create_access_token,
     get_current_admin_user,
     get_dev_user,
@@ -64,6 +67,8 @@ from common.knowledge.kb_lock_guard import is_kb_lock_unbound_snapshot
 from common.knowledge.api import admin_router as knowledge_admin_router
 from common.knowledge.api import internal_router as knowledge_internal_router
 from common.monitoring.logger import configure_logging, get_logger
+from common.monitoring.otel import initialize_otel
+from common.monitoring.trace_context import normalize_trace_id
 from presentation_coach.api import presentations
 
 # Prompt Templates API
@@ -137,6 +142,7 @@ async def lifespan(app: FastAPI):
     """Application lifespan events"""
     # Startup
     logger.info("Starting AI Practice System backend")
+    initialize_otel(app)
 
     # P0-1: Validate JWT secret in non-development environments
     from common.config import settings
@@ -309,18 +315,23 @@ async def dev_login(db: AsyncSession = Depends(get_db)):
     # Create JWT token
     token = create_access_token(data={"sub": str(user.user_id)})
 
-    return {
-        "success": True,
-        "data": {
-            "access_token": token,
-            "token_type": "bearer",
-            "user": {
-                "user_id": str(user.user_id),
-                "email": user.email,
-                "name": user.name,
+    response = JSONResponse(
+        status_code=200,
+        content={
+            "success": True,
+            "data": {
+                "access_token": token,
+                "token_type": "bearer",
+                "user": {
+                    "user_id": str(user.user_id),
+                    "email": user.email,
+                    "name": user.name,
+                },
             },
         },
-    }
+    )
+    set_auth_session_cookie(response, token)
+    return response
 
 
 # Include routers
@@ -499,6 +510,7 @@ async def _handle_presentation_websocket(
     session_id: str | None,
     token: str,
     voice_mode: str | None = None,
+    trace_id: str = "",
 ):
     from presentation_coach.websocket.presentation_handler import (
         PresentationWebSocketHandler,
@@ -540,9 +552,11 @@ async def _handle_presentation_websocket(
         await websocket.close(code=4410, reason="KB_LOCK_UNBOUND")
         return
 
-    auth_header = websocket.headers.get("authorization", "")
-    if auth_header.lower().startswith("bearer "):
-        token = auth_header[7:].strip()
+    token = resolve_websocket_token(
+        query_token=token,
+        authorization_header=websocket.headers.get("authorization", ""),
+        cookie_header=websocket.headers.get("cookie", ""),
+    )
 
     requested_mode = _normalize_requested_voice_mode(voice_mode)
     if requested_mode and requested_mode != persisted_voice_mode:
@@ -560,13 +574,14 @@ async def _handle_presentation_websocket(
         handler = PresentationWebSocketHandler()
 
     session_manager = get_session_manager()
-    user_id: str | None = None
     try:
         payload = verify_token(token)
         if payload and isinstance(payload.get("sub"), str):
             user_id = payload["sub"]
         elif payload and isinstance(payload.get("user_id"), str):
             user_id = payload["user_id"]
+        else:
+            user_id = None
     except (JWTError, RuntimeError, ValueError, OSError):
         logger.warning(
             "Failed to resolve websocket user from token",
@@ -574,13 +589,23 @@ async def _handle_presentation_websocket(
         )
         user_id = None
 
+    if user_id is None:
+        await websocket.accept()
+        await websocket.close(code=4001, reason="Unauthorized")
+        return
+
     await session_manager.register_session(
         resolved_session_id,
         handler,
         user_id=user_id,
     )
     try:
-        await handler.handle_connection(websocket, resolved_session_id, token)
+        await handler.handle_connection(
+            websocket,
+            resolved_session_id,
+            token,
+            trace_id=normalize_trace_id(trace_id),
+        )
     finally:
         await session_manager.unregister_session(resolved_session_id)
 
@@ -591,9 +616,16 @@ async def presentation_websocket(
     session_id: str | None = Query(None),
     token: str = Query(""),
     voice_mode: str | None = Query(None, description="Voice mode: legacy | stepfun_realtime"),
+    trace_id: str = Query("", description="Request trace id for observability"),
 ):
     """WebSocket endpoint for PPT presentation coaching (query session_id)."""
-    await _handle_presentation_websocket(websocket, session_id, token, voice_mode)
+    await _handle_presentation_websocket(
+        websocket,
+        session_id,
+        token,
+        voice_mode,
+        trace_id,
+    )
 
 
 @app.websocket("/ws/presentation/{session_id}")
@@ -602,9 +634,16 @@ async def presentation_websocket_with_path(
     session_id: str,
     token: str = Query(""),
     voice_mode: str | None = Query(None, description="Voice mode: legacy | stepfun_realtime"),
+    trace_id: str = Query("", description="Request trace id for observability"),
 ):
     """WebSocket endpoint for PPT presentation coaching (path session_id)."""
-    await _handle_presentation_websocket(websocket, session_id, token, voice_mode)
+    await _handle_presentation_websocket(
+        websocket,
+        session_id,
+        token,
+        voice_mode,
+        trace_id,
+    )
 
 
 def _normalize_requested_voice_mode(voice_mode: str | None) -> str | None:

@@ -57,7 +57,7 @@ type TabsListProps = React.HTMLAttributes<HTMLDivElement>;
 
 export function TabsList({ className, children, ...props }: TabsListProps) {
     return (
-        <div className={cn("inline-flex items-center gap-1", className)} {...props}>
+        <div role="tablist" className={cn("inline-flex items-center gap-1", className)} {...props}>
             {children}
         </div>
     );
@@ -74,6 +74,7 @@ export function TabsTrigger({ value, className, children, ...props }: TabsTrigge
     return (
         <button
             type="button"
+            role="tab"
             aria-selected={isActive}
             data-state={isActive ? "active" : "inactive"}
             onClick={() => onValueChange(value)}

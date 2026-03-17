@@ -13,7 +13,7 @@ from datetime import datetime
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -31,6 +31,8 @@ router = APIRouter(prefix="/admin/training-records", tags=["admin-training-recor
 # Response schemas
 class TrainingRecordResponse(BaseModel):
     """Training record response for admin API"""
+    model_config = ConfigDict(from_attributes=True)
+
     id: str
     scenario_type: str
     title: str
@@ -42,9 +44,6 @@ class TrainingRecordResponse(BaseModel):
     status: str
     agent_name: str | None = None
     persona_name: str | None = None
-
-    class Config:
-        from_attributes = True
 
 
 class TrainingRecordListResponse(BaseModel):

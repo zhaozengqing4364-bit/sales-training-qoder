@@ -9,6 +9,7 @@ from typing import Any, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
+from training_runtime.models import TrainingRuntimeDescriptor, TrainingRuntimeSubject
 
 
 class ScenarioType(StrEnum):
@@ -206,6 +207,9 @@ class SessionLifecycleResponse(BaseModel):
     ai_state: Literal["listening", "idle"]
     changed: bool
     scenario_type: ScenarioType
+    runtime_subject: TrainingRuntimeSubject = (
+        TrainingRuntimeSubject.TRAINING_SCENARIO_RUNTIME
+    )
     start_time: datetime
     end_time: datetime | None = None
     total_duration_seconds: int | None = None
@@ -223,6 +227,10 @@ class SessionResponse(BaseModel):
     agent_id: UUID | None = None
     persona_id: UUID | None = None
     voice_mode: str | None = None
+    runtime_subject: TrainingRuntimeSubject = (
+        TrainingRuntimeSubject.TRAINING_SCENARIO_RUNTIME
+    )
+    runtime_descriptor: TrainingRuntimeDescriptor | None = None
     runtime_profile_id: UUID | None = None
     voice_policy_snapshot: dict[str, Any] | None = None
     voice_policy_snapshot_ref: "VoicePolicySnapshotReference | None" = None

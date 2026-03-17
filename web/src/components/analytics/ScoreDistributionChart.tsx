@@ -54,7 +54,7 @@ export function ScoreDistributionChart({ data }: ScoreDistributionChartProps) {
                         dataKey="value"
                         labelLine={false}
                     >
-                        {chartData.map((entry, index) => (
+                        {chartData.map((entry) => (
                             <Cell
                                 key={entry.key}
                                 fill={COLORS[["excellent", "good", "fair", "poor"].indexOf(entry.key)]}

@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 import {
     LayoutDashboard,
     Users,
@@ -42,8 +42,10 @@ import {
     TooltipProvider,
     TooltipTrigger,
 } from "@/components/ui/glass-tooltip";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { api } from "@/lib/api/client";
+import { authHandler } from "@/lib/auth-handler";
+import type { CurrentUser } from "@/lib/auth/current-user";
 
 interface UserInfo {
     id: string;
@@ -53,37 +55,7 @@ interface UserInfo {
     department?: string;
 }
 
-function getCachedAdminUser(): UserInfo | null {
-    if (typeof window === "undefined") {
-        return null;
-    }
-
-    const storedUser = localStorage.getItem("user");
-    if (!storedUser) {
-        return null;
-    }
-
-    try {
-        const parsed = JSON.parse(storedUser) as {
-            id?: string;
-            user_id?: string;
-            name?: string;
-            display_name?: string;
-            role?: string;
-            department?: string;
-        };
-        return {
-            id: parsed.id || parsed.user_id || "",
-            display_name: parsed.name || parsed.display_name || "用户",
-            role: parsed.role || "user",
-            department: parsed.department,
-        };
-    } catch {
-        return null;
-    }
-}
-
-export function AdminSidebar() {
+export function AdminSidebar({ currentUser }: { currentUser: CurrentUser }) {
     const { isCollapsed, toggleSidebar } = useSidebarStore();
 
     return (
@@ -93,12 +65,18 @@ export function AdminSidebar() {
                 isCollapsed ? "w-20 px-3" : "w-72 px-5"
             )}
         >
-            <AdminSidebarContent isCollapsed={isCollapsed} toggleSidebar={toggleSidebar} showToggle={true} />
+            <AdminSidebarContent
+                currentUser={currentUser}
+                isCollapsed={isCollapsed}
+                toggleSidebar={toggleSidebar}
+                showToggle={true}
+            />
         </aside>
     );
 }
 
 interface AdminSidebarContentProps {
+    currentUser: UserInfo | null;
     isCollapsed?: boolean;
     toggleSidebar?: () => void;
     showToggle?: boolean;
@@ -192,7 +170,12 @@ function resolveActiveSectionKey(pathname: string): string | null {
     return null;
 }
 
-export function AdminSidebarContent({ isCollapsed = false, toggleSidebar, showToggle = false }: AdminSidebarContentProps) {
+export function AdminSidebarContent({
+    currentUser,
+    isCollapsed = false,
+    toggleSidebar,
+    showToggle = false,
+}: AdminSidebarContentProps) {
     const pathname = usePathname();
     const [openSectionKeys, setOpenSectionKeys] = useState<Record<string, boolean>>({});
     const activeSectionKey = resolveActiveSectionKey(pathname);
@@ -243,7 +226,7 @@ export function AdminSidebarContent({ isCollapsed = false, toggleSidebar, showTo
                 {/* Back to User Portal */}
                 <BackToUserLink isCollapsed={isCollapsed} />
                 {/* Admin User Card */}
-                <AdminUserCard isCollapsed={isCollapsed} />
+                <AdminUserCard currentUser={currentUser} isCollapsed={isCollapsed} />
 
                 {/* Collapse Trigger */}
                 {showToggle && toggleSidebar && (
@@ -269,26 +252,14 @@ export function AdminSidebarContent({ isCollapsed = false, toggleSidebar, showTo
     );
 }
 
-function AdminUserCard({ isCollapsed }: { isCollapsed: boolean }) {
-    const [userInfo, setUserInfo] = useState<UserInfo | null>(() => getCachedAdminUser());
-
-    useEffect(() => {
-        // Fetch fresh user info from API
-        api.user.getMe().then((data) => {
-            const nextUserInfo: UserInfo = {
-                id: data.user_id,
-                display_name: data.name,
-                role: data.role,
-                department: data.department,
-            };
-            setUserInfo(nextUserInfo);
-            // Update localStorage
-            localStorage.setItem("user", JSON.stringify(nextUserInfo));
-        }).catch(() => {
-            // Ignore errors, use cached data
-        });
-    }, []);
-
+function AdminUserCard({
+    currentUser,
+    isCollapsed,
+}: {
+    currentUser: UserInfo | null;
+    isCollapsed: boolean;
+}) {
+    const userInfo = currentUser;
     const displayName = userInfo?.display_name || "管理员";
     const roleLabel = userInfo?.role === "admin" ? "超级用户" : "普通用户";
 
@@ -336,16 +307,17 @@ function AdminUserCard({ isCollapsed }: { isCollapsed: boolean }) {
 }
 
 function AdminProfileModal({ userInfo }: { userInfo: UserInfo | null }) {
-    const router = useRouter();
-
-    const handleLogout = () => {
-        // Clear token
-        localStorage.removeItem("token");
-        // Clear any other user data
-        localStorage.removeItem("user");
-        
-        // Redirect to login
-        router.push("/login");
+    const handleLogout = async () => {
+        try {
+            await api.auth.logout();
+        } catch {
+            // Ignore logout API failures and still navigate away from the protected shell.
+        } finally {
+            authHandler.logout("已退出登录", {
+                redirectTo: "/login",
+                notify: false,
+            });
+        }
     };
 
     const displayName = userInfo?.display_name || "管理员";

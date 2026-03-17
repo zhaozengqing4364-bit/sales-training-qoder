@@ -7,7 +7,7 @@
 ## 概览
 
 - 基础路径: `/api/v1/support/runtime`
-- 认证方式: `Authorization: Bearer <token>`
+- 认证方式: `Authorization: Bearer <token>` 或 `HttpOnly` session cookie
 - 角色要求: `support` 或 `admin`
 - 能力边界: **只读**（不包含任何策略变更、发布、回滚写操作）
 

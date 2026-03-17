@@ -62,6 +62,13 @@ class TestSessionsContract:
         assert "session_id" in body["data"]
         assert "voice_policy_snapshot" in body["data"]
         assert "voice_policy_snapshot_ref" in body["data"]
+        assert body["data"]["runtime_subject"] == "training_scenario_runtime"
+        runtime_descriptor = _require_dict(
+            body["data"].get("runtime_descriptor"), "runtime_descriptor"
+        )
+        assert runtime_descriptor["subject"] == "training_scenario_runtime"
+        assert runtime_descriptor["scenario_type"] == "presentation"
+        assert runtime_descriptor["presentation_id"] == presentation.presentation_id
 
     async def test_create_sales_session_contract_includes_snapshot_reference(
         self,
@@ -123,6 +130,14 @@ class TestSessionsContract:
         data = body["data"]
         assert data["agent_id"] == agent.id
         assert data["persona_id"] == persona.id
+        assert data["runtime_subject"] == "training_scenario_runtime"
+        runtime_descriptor = _require_dict(
+            data.get("runtime_descriptor"), "runtime_descriptor"
+        )
+        assert runtime_descriptor["subject"] == "training_scenario_runtime"
+        assert runtime_descriptor["scenario_type"] == "sales"
+        assert runtime_descriptor["agent_id"] == agent.id
+        assert runtime_descriptor["persona_id"] == persona.id
         snapshot = _require_dict(
             data.get("voice_policy_snapshot"), "voice_policy_snapshot"
         )

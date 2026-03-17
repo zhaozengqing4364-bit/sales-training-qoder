@@ -7,13 +7,11 @@ import {
     UserDetailStats,
     UserSessionsResponse,
     UserProgressResponse,
-    UserSessionItem,
 } from "@/lib/api/types";
 import { GlassCard } from "@/components/ui/glass-card";
 import { Button } from "@/components/ui/button";
 import {
     ArrowLeft,
-    User,
     Calendar,
     Clock,
     Target,
@@ -32,8 +30,6 @@ import {
     CartesianGrid,
     Tooltip,
     ResponsiveContainer,
-    BarChart,
-    Bar,
     Legend,
 } from "recharts";
 

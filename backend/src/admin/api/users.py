@@ -18,7 +18,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel, EmailStr, field_validator
+from pydantic import BaseModel, ConfigDict, EmailStr, field_validator
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -141,6 +141,8 @@ class UserAuditReasonRequest(BaseModel):
 # Response schemas
 class AdminUserResponse(BaseModel):
     """User response for admin API"""
+    model_config = ConfigDict(from_attributes=True)
+
     id: str
     username: str
     display_name: str
@@ -150,9 +152,6 @@ class AdminUserResponse(BaseModel):
     last_active_at: str | None
     department: str | None
     created_at: str | None
-
-    class Config:
-        from_attributes = True
 
 
 class UserListResponse(BaseModel):

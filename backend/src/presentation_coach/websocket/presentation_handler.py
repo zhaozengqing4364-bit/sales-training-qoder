@@ -26,6 +26,7 @@ from common.db.models import PracticeSession
 from common.db.schemas import InterruptionType
 from common.db.session import AsyncSessionLocal
 from common.monitoring.logger import get_logger, set_trace_id
+from common.monitoring.trace_context import normalize_trace_id
 from common.websocket.base_handler import BaseWebSocketHandler
 from common.websocket.session_manager import get_session_manager
 from common.websocket.session_state_service import SessionStateSnapshot
@@ -301,21 +302,36 @@ class PresentationWebSocketHandler(BaseWebSocketHandler):
             logger.error(f"Failed to restore page context: {str(e)}")
             # Continue without page context to avoid blocking reconnection
 
+    async def sync_lifecycle_transition(self, transition) -> None:
+        """Mirror REST lifecycle writes into the live presentation runtime."""
+        await super().sync_lifecycle_transition(transition)
+
+        if transition.action in {"pause", "end"}:
+            await self._stop_streaming_asr(process_transcript=False)
+
+        if transition.action in {"start", "resume"} and self.session_status == "in_progress":
+            await self._restore_page_context()
+
     async def handle_connection(
         self,
         websocket: WebSocket,
         session_id: str,
         token: str,
+        trace_id: str | None = None,
     ):
         """Handle presentation websocket with text + binary audio frames."""
         # Set trace_id from token or generate new
         try:
             payload = verify_token(token)
-            set_trace_id(payload.get("trace_id", ""))
+            set_trace_id(
+                normalize_trace_id(trace_id)
+                or normalize_trace_id(payload.get("trace_id", ""))
+                or ""
+            )
             self.user_id = payload.get("user_id")
         except (JWTError, RuntimeError, ValueError, OSError) as e:
             logger.warning(f"Token verification failed: {str(e)}")
-            set_trace_id("")
+            set_trace_id(normalize_trace_id(trace_id) or "")
 
         existing_state = await self.state_service.get_state(session_id)
         is_reconnection = existing_state.is_success and existing_state.value is not None

@@ -42,7 +42,8 @@ from common.db.session_lifecycle import (
     SessionLifecycleService,
 )
 from common.knowledge.kb_lock_guard import evaluate_kb_lock_decision
-from common.monitoring.logger import get_logger, get_trace_id
+from common.monitoring.logger import get_logger, get_trace_id, set_trace_id
+from common.monitoring.trace_context import normalize_trace_id
 from common.websocket.base_handler import BaseWebSocketHandler
 from common.websocket.session_manager import get_session_manager
 
@@ -118,6 +119,10 @@ class BaseSalesHandler(BaseWebSocketHandler):
         **kwargs,
     ):
         """Handle WebSocket connection for sales practice."""
+        incoming_trace_id = normalize_trace_id(kwargs.get("trace_id"))
+        if incoming_trace_id:
+            set_trace_id(incoming_trace_id)
+
         self.websocket = websocket
         self.session_id = session_id
 
@@ -289,6 +294,17 @@ class BaseSalesHandler(BaseWebSocketHandler):
             return
         self._greeting_sent = True
         await self._send_greeting()
+
+    async def sync_lifecycle_transition(self, transition) -> None:
+        """Mirror REST lifecycle transitions into the live handler state."""
+        await super().sync_lifecycle_transition(transition)
+        self.session_scenario_type = transition.scenario_type or self.scenario
+
+        if transition.action == "start" and not self._greeting_sent and self.websocket:
+            asyncio.create_task(self._send_delayed_greeting())
+
+        if transition.action in {"pause", "end"}:
+            await self._stop_streaming_asr()
 
     async def _process_messages(self):
         """Process messages from queue."""

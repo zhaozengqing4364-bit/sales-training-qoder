@@ -1,11 +1,14 @@
 "use client";
 
+import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
-import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { GlassCard } from "@/components/ui/glass-card";
 import { Input } from "@/components/ui/input";
 import { api } from "@/lib/api/client";
+import type { CurrentUser } from "@/lib/auth/current-user";
+import { authHandler } from "@/lib/auth-handler";
+import { currentUserQueryKey } from "@/lib/query/auth";
 import { Bell, Briefcase, Loader2, LogOut, Mail, Settings, Volume2 } from "lucide-react";
 
 type ProfileForm = {
@@ -47,7 +50,7 @@ const DEFAULT_SESSION_STATS: SessionStats = {
 };
 
 export default function ProfilePage() {
-    const router = useRouter();
+    const queryClient = useQueryClient();
     const [isLoading, setIsLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
     const [isEditing, setIsEditing] = useState(false);
@@ -139,22 +142,17 @@ export default function ProfilePage() {
 
             setProfile(normalized);
             setIsEditing(false);
-
-            if (typeof window !== "undefined") {
-                const raw = localStorage.getItem("user");
-                const parsed = raw ? JSON.parse(raw) : {};
-                localStorage.setItem(
-                    "user",
-                    JSON.stringify({
-                        ...parsed,
-                        ...updated,
+            queryClient.setQueryData<CurrentUser | undefined>(currentUserQueryKey, (current) => (
+                current
+                    ? {
+                        ...current,
                         name: normalized.display_name,
                         display_name: normalized.display_name,
                         email: normalized.email,
-                        department: normalized.department,
-                    }),
-                );
-            }
+                        department: normalized.department || undefined,
+                    }
+                    : current
+            ));
         } catch (err) {
             const message = err instanceof Error ? err.message : "保存失败，请稍后重试";
             setError(message);
@@ -183,13 +181,12 @@ export default function ProfilePage() {
         try {
             await api.auth.logout();
         } catch {
-            // ignore logout API failure and still clear local session
+            // Ignore logout API failure and still leave the protected session shell.
         } finally {
-            if (typeof window !== "undefined") {
-                localStorage.removeItem("token");
-                localStorage.removeItem("user");
-            }
-            router.push("/login");
+            authHandler.logout("已退出登录", {
+                redirectTo: "/login",
+                notify: false,
+            });
         }
     };
 

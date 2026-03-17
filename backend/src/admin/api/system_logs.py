@@ -13,7 +13,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -30,6 +30,8 @@ router = APIRouter(prefix="/admin/system-logs", tags=["admin-system-logs"])
 # Response schemas
 class SystemLogResponse(BaseModel):
     """System log response for admin API"""
+    model_config = ConfigDict(from_attributes=True)
+
     id: str
     action: str
     user_identifier: str
@@ -37,9 +39,6 @@ class SystemLogResponse(BaseModel):
     status: str
     created_at: str
     details: str | None = None
-
-    class Config:
-        from_attributes = True
 
 
 class SystemLogListResponse(BaseModel):

@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/components/ui/toast";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-import { Search, Filter, Plus, FileText, Edit2, Trash2, ChevronDown, Presentation } from "lucide-react";
+import { Search, Filter, Plus, Edit2, Trash2, Presentation } from "lucide-react";
 import {
     Dialog,
     DialogContent,
@@ -42,11 +42,6 @@ const STATUS_OPTIONS: { value: PresentationStatus; label: string; color: string;
     { value: "error", label: "错误", color: "text-red-600", dotColor: "bg-red-500" },
 ];
 
-function getStatusLabel(status: string) {
-    const option = STATUS_OPTIONS.find(o => o.value === status);
-    return option?.label || status;
-}
-
 function getStatusStyle(status: string) {
     const option = STATUS_OPTIONS.find(o => o.value === status);
     return option || STATUS_OPTIONS[1];
@@ -62,7 +57,6 @@ export default function PresentationsPage() {
     const toast = useToast();
     const [presentations, setPresentations] = useState<PresentationItem[]>([]);
     const [isLoading, setIsLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
 
     // Filter & Search States
     const [searchQuery, setSearchQuery] = useState("");
@@ -82,7 +76,6 @@ export default function PresentationsPage() {
 
     const loadData = async () => {
         setIsLoading(true);
-        setError(null);
         try {
             // Use the presentations API
             const data = await api.presentations.list({
@@ -92,7 +85,6 @@ export default function PresentationsPage() {
             setPresentations(data || []);
         } catch (err) {
             console.error("Failed to load presentations:", err);
-            setError(err instanceof Error ? err.message : "加载失败");
             setPresentations([]);
         } finally {
             setIsLoading(false);

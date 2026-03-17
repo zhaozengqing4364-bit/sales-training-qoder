@@ -63,9 +63,15 @@ class PresentationStepFunRealtimeHandler(StepFunRealtimeHandler):
         websocket,
         session_id: str,
         token: str,
+        trace_id: str | None = None,
     ):
         try:
-            await super().handle_connection(websocket, session_id, token)
+            await super().handle_connection(
+                websocket,
+                session_id,
+                token,
+                trace_id=trace_id,
+            )
         finally:
             self.feedback_service.clear_session(session_id)
 
@@ -228,6 +234,13 @@ class PresentationStepFunRealtimeHandler(StepFunRealtimeHandler):
     async def _handle_page_change(self, page_number: int) -> None:
         self.current_page = max(1, page_number)
         await self._emit_current_page_context()
+
+    async def sync_lifecycle_transition(self, transition) -> None:
+        """Mirror REST lifecycle writes into the live presentation realtime handler."""
+        await super().sync_lifecycle_transition(transition)
+
+        if transition.action in {"start", "resume"} and self.session_status == "in_progress":
+            await self._emit_current_page_context()
 
     async def _handle_client_text(self, raw_text: str):
         """Extend base client routing with PPT page context semantics."""

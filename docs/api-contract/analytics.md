@@ -7,7 +7,7 @@
 ## 概览
 
 - 基础路径: `/api/v1`
-- 认证方式: `Authorization: Bearer <token>`
+- 认证方式: `Authorization: Bearer <token>` 或 `HttpOnly` session cookie
 - `/analytics/*` 接口返回为**直接 JSON 对象**（非 `{ success, data }` 包裹）
 - `/admin/interventions/*` 接口返回为 `{ success, data, trace_id }` 包裹
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { api } from "@/lib/api/client";
 import { AdminUser } from "@/lib/api/types";
@@ -132,7 +132,7 @@ export default function UsersPage() {
     // Action states
     const [actionLoading, setActionLoading] = useState<string | null>(null);
 
-    const loadData = async () => {
+    const loadData = useCallback(async () => {
         setIsLoading(true);
         try {
             const data = await api.admin.getUsers({
@@ -148,7 +148,7 @@ export default function UsersPage() {
         } finally {
             setIsLoading(false);
         }
-    };
+    }, [page, roleFilter, searchQuery, statusFilter]);
 
     // Create user handler
     const handleCreateUser = async () => {
@@ -321,7 +321,7 @@ export default function UsersPage() {
 
     useEffect(() => {
         loadData();
-    }, [page, statusFilter, roleFilter, searchQuery]);
+    }, [loadData]);
 
     if (isLoading) {
         return <div className="p-8 text-center text-slate-500">加载中...</div>;

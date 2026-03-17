@@ -41,6 +41,19 @@ export interface VoicePolicySnapshotReference {
     agent_persona_override_config?: Record<string, unknown> | null;
 }
 
+export type TrainingRuntimeSubject = "training_scenario_runtime";
+
+export interface TrainingRuntimeDescriptor {
+    subject: TrainingRuntimeSubject;
+    session_id: string;
+    scenario_type: "sales" | "presentation";
+    agent_id?: string | null;
+    persona_id?: string | null;
+    presentation_id?: string | null;
+    voice_mode?: "legacy" | "stepfun_realtime" | string | null;
+    runtime_profile_id?: string | null;
+}
+
 export type SessionStatus =
     | "preparing"
     | "in_progress"
@@ -61,6 +74,7 @@ export interface SessionLifecycleResponse {
     ai_state: "listening" | "idle";
     changed: boolean;
     scenario_type?: "sales" | "presentation" | null;
+    runtime_subject?: TrainingRuntimeSubject;
     start_time: string;
     end_time?: string | null;
     total_duration_seconds?: number | null;
@@ -83,6 +97,8 @@ export interface SessionItem {
     agent_name?: string;
     persona_name?: string;
     voice_mode?: "legacy" | "stepfun_realtime";
+    runtime_subject?: TrainingRuntimeSubject;
+    runtime_descriptor?: TrainingRuntimeDescriptor | null;
     runtime_profile_id?: string | null;
     voice_policy_snapshot?: Record<string, unknown> | null;
     voice_policy_snapshot_ref?: VoicePolicySnapshotReference | null;
@@ -97,6 +113,8 @@ export interface PracticeSessionRuntime {
     agent_id?: string | null;
     persona_id?: string | null;
     presentation_id?: string | null;
+    runtime_subject?: TrainingRuntimeSubject;
+    runtime_descriptor?: TrainingRuntimeDescriptor | null;
     runtime_profile_id?: string | null;
     status?: SessionStatus;
     start_time?: string;

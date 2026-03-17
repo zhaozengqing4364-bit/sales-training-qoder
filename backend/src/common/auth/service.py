@@ -5,9 +5,11 @@ Constitution Principle VI: Data Privacy & Compliance
 import os
 import uuid
 from datetime import UTC, datetime, timedelta
+from http.cookies import SimpleCookie
+from typing import Any
 
 from dotenv import load_dotenv
-from fastapi import Depends, HTTPException
+from fastapi import Cookie, Depends, HTTPException, Request, Response
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError, jwt
 from passlib.context import CryptContext
@@ -26,9 +28,91 @@ logger = get_logger(__name__)
 JWT_SECRET = os.getenv("JWT_SECRET", "your-super-secret-key-change-in-production-min-32-chars")
 JWT_ALGORITHM = os.getenv("JWT_ALGORITHM", "HS256")
 JWT_EXPIRATION_HOURS = int(os.getenv("JWT_EXPIRATION_HOURS", "24"))
+AUTH_SESSION_COOKIE_NAME = os.getenv("AUTH_SESSION_COOKIE_NAME", "app_session")
+AUTH_SESSION_COOKIE_SECURE = (
+    os.getenv("AUTH_SESSION_COOKIE_SECURE", "").strip().lower() in {"1", "true", "yes", "on"}
+)
+AUTH_SESSION_COOKIE_SAMESITE = os.getenv("AUTH_SESSION_COOKIE_SAMESITE", "lax").strip().lower() or "lax"
 
 security = HTTPBearer(auto_error=False)
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+
+def get_session_cookie_name() -> str:
+    return AUTH_SESSION_COOKIE_NAME
+
+
+def get_session_cookie_max_age_seconds() -> int:
+    return max(1, JWT_EXPIRATION_HOURS * 3600)
+
+
+def get_session_cookie_options() -> dict[str, Any]:
+    return {
+        "key": get_session_cookie_name(),
+        "httponly": True,
+        "secure": AUTH_SESSION_COOKIE_SECURE,
+        "samesite": AUTH_SESSION_COOKIE_SAMESITE,
+        "path": "/",
+        "max_age": get_session_cookie_max_age_seconds(),
+    }
+
+
+def set_auth_session_cookie(response: Response, token: str) -> None:
+    response.set_cookie(
+        value=token,
+        **get_session_cookie_options(),
+    )
+
+
+def clear_auth_session_cookie(response: Response) -> None:
+    response.delete_cookie(
+        key=get_session_cookie_name(),
+        path="/",
+        samesite=AUTH_SESSION_COOKIE_SAMESITE,
+    )
+
+
+def resolve_bearer_or_cookie_token(
+    *,
+    credentials: HTTPAuthorizationCredentials | None = None,
+    request: Request | None = None,
+    cookie_token: str | None = None,
+) -> str | None:
+    if credentials is not None and credentials.credentials:
+        return credentials.credentials
+
+    if cookie_token:
+        return cookie_token
+
+    if request is not None:
+        request_cookie_token = request.cookies.get(get_session_cookie_name())
+        if request_cookie_token:
+            return request_cookie_token
+
+    return None
+
+
+def resolve_websocket_token(
+    *,
+    query_token: str | None,
+    authorization_header: str | None = None,
+    cookie_header: str | None = None,
+) -> str:
+    if authorization_header and authorization_header.lower().startswith("bearer "):
+        return authorization_header[7:].strip()
+
+    normalized_query_token = (query_token or "").strip()
+    if normalized_query_token:
+        return normalized_query_token
+
+    if cookie_header:
+        cookies = SimpleCookie()
+        cookies.load(cookie_header)
+        morsel = cookies.get(get_session_cookie_name())
+        if morsel and morsel.value:
+            return morsel.value.strip()
+
+    return ""
 
 
 def create_access_token(data: dict, expires_delta: timedelta | None = None) -> str:
@@ -55,14 +139,19 @@ def verify_token(token: str) -> dict:
 
 
 async def get_current_user(
+    request: Request,
     credentials: HTTPAuthorizationCredentials = Depends(security),
+    cookie_token: str | None = Cookie(default=None, alias=AUTH_SESSION_COOKIE_NAME),
     db: AsyncSession = Depends(get_db)
 ) -> User:
     """Get current authenticated user from JWT token"""
-    if credentials is None:
+    token = resolve_bearer_or_cookie_token(
+        credentials=credentials,
+        request=request,
+        cookie_token=cookie_token,
+    )
+    if token is None:
         raise HTTPException(status_code=401, detail="Not authenticated")
-
-    token = credentials.credentials
 
     try:
         payload = verify_token(token)
@@ -187,7 +276,9 @@ async def get_dev_user(db: AsyncSession) -> User:
 
 
 async def get_current_user_optional(
+    request: Request,
     credentials: HTTPAuthorizationCredentials = Depends(security),
+    cookie_token: str | None = Cookie(default=None, alias=AUTH_SESSION_COOKIE_NAME),
     db: AsyncSession = Depends(get_db)
 ) -> User | None:
     """
@@ -204,6 +295,6 @@ async def get_current_user_optional(
             pass
 
     try:
-        return await get_current_user(credentials, db)
+        return await get_current_user(request, credentials, cookie_token, db)
     except HTTPException:
         return None

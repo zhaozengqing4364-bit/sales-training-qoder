@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { cn } from "@/lib/utils";
-import { CheckCircle, AlertCircle, MessageCircle, ChevronRight, Play, Pause, Volume2, Target } from "lucide-react";
+import { CheckCircle, AlertCircle, MessageCircle, ChevronRight, Play, Pause, Volume2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 interface HighlightCardProps {

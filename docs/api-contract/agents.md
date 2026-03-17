@@ -9,7 +9,7 @@
 ## 概览
 
 - 基础路径: `/api/v1`
-- 认证方式: `Authorization: Bearer <token>`
+- 认证方式: `Authorization: Bearer <token>` 或 `HttpOnly` session cookie
 - 响应包裹: 统一为 `{ "success": true, "data": ... }`
 - 管理端接口要求管理员身份（`get_current_admin_user`）
 

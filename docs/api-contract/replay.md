@@ -6,7 +6,7 @@
 
 ## 访问控制
 
-- 所有回放接口都要求 JWT
+- 所有回放接口要求有效登录态，支持 `Authorization: Bearer <token>` 或 `HttpOnly` session cookie
 - 仅会话 owner 或 admin 可访问
 - 未认证返回 `401`
 - 越权返回 `403`（`[ACCESS_DENIED]`）

@@ -9,12 +9,13 @@ import { AudioVisualizer } from "@/components/ui/audio-visualizer";
 import { AudioWaveform } from "@/components/ui/audio-waveform";
 import { GlassSheet } from "@/components/ui/glass-sheet";
 import { cn } from "@/lib/utils";
-import { debug } from "@/lib/debug";
 import { usePracticeWebSocket } from "@/hooks/use-practice-websocket";
 import type { ConnectionState, SessionStatus } from "@/hooks/use-practice-websocket";
 import { useAudioRecorder } from "@/hooks/use-audio-recorder";
 import { RightPanelContent } from "@/components/practice/RightPanelContent";
-import type { PracticeSessionRuntime } from "@/lib/api/types";
+import { usePracticeRuntimeLock, normalizeVoiceMode } from "./runtime-lock";
+import { usePracticeRecordingHotkeys } from "./use-practice-recording-hotkeys";
+import { usePracticeSessionLifecycle } from "./use-practice-session-lifecycle";
 
 const SESSION_STATUS_LABELS: Record<SessionStatus, string> = {
     preparing: "准备中",
@@ -31,10 +32,6 @@ const CONNECTION_STATUS_LABELS: Record<ConnectionState, string> = {
     failed: "连接失败",
 };
 
-function normalizeVoiceMode(value: string | null | undefined): "legacy" | "stepfun_realtime" {
-    return value === "stepfun_realtime" ? "stepfun_realtime" : "legacy";
-}
-
 export default function PracticeSessionPage() {
     const params = useParams();
     const router = useRouter();
@@ -46,20 +43,21 @@ export default function PracticeSessionPage() {
     const queryPresentationId = searchParams.get("presentation_id") || undefined;
     const queryScenarioType = (searchParams.get("scenario_type") as "sales" | "presentation") || "sales";
     const queryVoiceMode = normalizeVoiceMode(searchParams.get("voice_mode"));
+    const searchParamsString = searchParams.toString();
+    const runtimeSearchParams = React.useMemo(
+        () => new URLSearchParams(searchParamsString),
+        [searchParamsString],
+    );
 
     const [lockedScenarioType, setLockedScenarioType] = React.useState<"sales" | "presentation">(queryScenarioType);
     const [lockedVoiceMode, setLockedVoiceMode] = React.useState<"legacy" | "stepfun_realtime">(queryVoiceMode);
     const [lockedAgentId, setLockedAgentId] = React.useState<string | undefined>(queryAgentId);
     const [lockedPersonaId, setLockedPersonaId] = React.useState<string | undefined>(queryPersonaId);
     const [lockedPresentationId, setLockedPresentationId] = React.useState<string | undefined>(queryPresentationId);
-    const [sessionMetaError, setSessionMetaError] = React.useState<string | null>(null);
 
     const [isPanelOpen, setIsPanelOpen] = React.useState(false);
     const [sessionTime, setSessionTime] = React.useState(0);
-    const [isEndingSession, setIsEndingSession] = React.useState(false);
-    const [pendingLifecycleAction, setPendingLifecycleAction] = React.useState<"pause" | "resume" | null>(null);
     const messagesEndRef = React.useRef<HTMLDivElement>(null);
-    const hasSentStartRef = React.useRef(false);
     
     // 防止快速点击导致多个录音会话 (Critical Fix #1)
     const isStartingRef = React.useRef(false);
@@ -86,7 +84,6 @@ export default function PracticeSessionPage() {
         sendAudio,
         sendAudioBinary,
         sendAudioEnd,
-        sendControl,
         startSpeaking,
         sendInterrupt,
         unlockAudio,
@@ -138,98 +135,45 @@ export default function PracticeSessionPage() {
         },
     });
 
-    React.useEffect(() => {
-        let isCancelled = false;
-
-        const syncSessionRuntimeLock = async () => {
-            try {
-                const { api } = await import("@/lib/api/client");
-                const session = await api.practice.getSession(sessionId) as PracticeSessionRuntime;
-                if (isCancelled) return;
-
-                const persistedScenario = session.scenario_type || queryScenarioType;
-                const persistedVoiceMode = normalizeVoiceMode(session.voice_mode || queryVoiceMode);
-                const persistedAgentId = session.agent_id || undefined;
-                const persistedPersonaId = session.persona_id || undefined;
-                const persistedPresentationId = session.presentation_id || queryPresentationId;
-
-                setLockedScenarioType(persistedScenario);
-                setLockedVoiceMode(persistedVoiceMode);
-                setLockedAgentId(persistedAgentId);
-                setLockedPersonaId(persistedPersonaId);
-                setLockedPresentationId(persistedPresentationId || undefined);
-                setSessionMetaError(null);
-
-                const shouldRewriteQuery =
-                    persistedScenario !== queryScenarioType
-                    || persistedVoiceMode !== queryVoiceMode
-                    || (persistedAgentId || "") !== (queryAgentId || "")
-                    || (persistedPersonaId || "") !== (queryPersonaId || "")
-                    || (persistedPresentationId || "") !== (queryPresentationId || "");
-
-                debug.log("[PracticeSession] Runtime lock synced", {
-                    sessionId,
-                    scenarioType: persistedScenario,
-                    voiceMode: persistedVoiceMode,
-                    agentId: persistedAgentId || null,
-                    personaId: persistedPersonaId || null,
-                    presentationId: persistedPresentationId || null,
-                    shouldRewriteQuery,
-                });
-
-                if (shouldRewriteQuery) {
-                    const runtimeParams = new URLSearchParams(searchParams.toString());
-                    runtimeParams.set("scenario_type", persistedScenario);
-                    runtimeParams.set("voice_mode", persistedVoiceMode);
-
-                    if (persistedAgentId) {
-                        runtimeParams.set("agent_id", persistedAgentId);
-                    } else {
-                        runtimeParams.delete("agent_id");
-                    }
-
-                    if (persistedPersonaId) {
-                        runtimeParams.set("persona_id", persistedPersonaId);
-                    } else {
-                        runtimeParams.delete("persona_id");
-                    }
-
-                    if (persistedPresentationId) {
-                        runtimeParams.set("presentation_id", persistedPresentationId);
-                    } else {
-                        runtimeParams.delete("presentation_id");
-                    }
-
-                    router.replace(`/practice/${sessionId}?${runtimeParams.toString()}`);
-                }
-            } catch (error) {
-                if (isCancelled) return;
-                debug.warn("[PracticeSession] Failed to sync runtime lock", {
-                    sessionId,
-                    error,
-                });
-                setSessionMetaError("会话配置加载失败，已使用入口参数尝试连接。");
-            }
-        };
-
-        void syncSessionRuntimeLock();
-        return () => {
-            isCancelled = true;
-        };
-    }, [
+    const {
+        lockedScenarioType: runtimeScenarioType,
+        lockedVoiceMode: runtimeVoiceMode,
+        lockedAgentId: runtimeAgentId,
+        lockedPersonaId: runtimePersonaId,
+        lockedPresentationId: runtimePresentationId,
+        sessionMetaError,
+    } = usePracticeRuntimeLock({
         sessionId,
-        queryScenarioType,
-        queryVoiceMode,
-        queryAgentId,
-        queryPersonaId,
-        queryPresentationId,
-        router,
-        searchParams,
-    ]);
+        query: {
+            scenarioType: queryScenarioType,
+            voiceMode: queryVoiceMode,
+            agentId: queryAgentId,
+            personaId: queryPersonaId,
+            presentationId: queryPresentationId,
+        },
+        searchParams: runtimeSearchParams,
+        onRewriteQuery: router.replace,
+    });
 
     React.useEffect(() => {
-        hasSentStartRef.current = false;
-    }, [sessionId]);
+        setLockedScenarioType(runtimeScenarioType);
+    }, [runtimeScenarioType]);
+
+    React.useEffect(() => {
+        setLockedVoiceMode(runtimeVoiceMode);
+    }, [runtimeVoiceMode]);
+
+    React.useEffect(() => {
+        setLockedAgentId(runtimeAgentId);
+    }, [runtimeAgentId]);
+
+    React.useEffect(() => {
+        setLockedPersonaId(runtimePersonaId);
+    }, [runtimePersonaId]);
+
+    React.useEffect(() => {
+        setLockedPresentationId(runtimePresentationId);
+    }, [runtimePresentationId]);
 
     // 计时器
     React.useEffect(() => {
@@ -249,56 +193,43 @@ export default function PracticeSessionPage() {
 
     const scenarioType = lockedScenarioType;
     const voiceMode = lockedVoiceMode;
-    const isSessionTerminal = sessionStatus === "completed" || sessionStatus === "scoring";
-    const isSessionPaused = sessionStatus === "paused";
-    const canToggleLifecycle =
-        !isSessionTerminal
-        && (sessionStatus === "in_progress" || sessionStatus === "paused")
-        && !isEndingSession
-        && pendingLifecycleAction === null;
-
-    React.useEffect(() => {
-        if (connectionState !== "connected") {
-            hasSentStartRef.current = false;
-            return;
-        }
-        if (sessionStatus !== "preparing") {
-            return;
-        }
-        if (hasSentStartRef.current) {
-            return;
-        }
-
-        hasSentStartRef.current = true;
-        sendControl("start");
-
-        void (async () => {
-            try {
-                const { api } = await import("@/lib/api/client");
-                await api.practice.startSession(sessionId);
-            } catch (error) {
-                debug.warn("[PracticeSession] Failed to start session via REST lifecycle", {
-                    sessionId,
-                    error,
-                });
-            }
-        })();
-    }, [connectionState, sendControl, sessionId, sessionStatus]);
 
     // AI 是否正在忙碌（说话或思考中），用于一来一回交互模式
     const aiIsBusy = isPlayingAudio || aiState === "thinking" || aiState === "speaking";
+    // 使用 ref 保持最新值，避免闭包过时问题
+    const aiIsBusyRef = React.useRef(aiIsBusy);
+    const isRecordingRef = React.useRef(isRecording);
+    const recordBtnRef = React.useRef<HTMLButtonElement>(null);
+
+    React.useEffect(() => {
+        aiIsBusyRef.current = aiIsBusy;
+    }, [aiIsBusy]);
+
+    React.useEffect(() => {
+        isRecordingRef.current = isRecording;
+    }, [isRecording]);
+
+    const {
+        canToggleLifecycle,
+        handleEndSession,
+        handleTogglePauseResume,
+        isEndingSession,
+        isSessionPaused,
+        isSessionTerminal,
+        pendingLifecycleAction,
+    } = usePracticeSessionLifecycle({
+        sessionId,
+        connectionState,
+        sessionStatus,
+        isRecordingRef,
+        stopRecording,
+    });
     const canToggleRecordingBase =
         connectionState === "connected"
         && sessionStatus === "in_progress"
         && pendingLifecycleAction === null;
     const canRecord = canToggleRecordingBase && hasPermission !== false;
     const canRequestPermission = canToggleRecordingBase && hasPermission === false;
-    // 使用 ref 保持最新值，避免闭包过时问题
-    const aiIsBusyRef = React.useRef(aiIsBusy);
-    aiIsBusyRef.current = aiIsBusy;
-    const isRecordingRef = React.useRef(isRecording);
-    isRecordingRef.current = isRecording;
-    const recordBtnRef = React.useRef<HTMLButtonElement>(null);
 
     // 统一的录音切换函数 - 点击一次开始，再点击一次结束
     const toggleRecording = React.useCallback(() => {
@@ -338,107 +269,11 @@ export default function PracticeSessionPage() {
         }
     }, [connectionState, hasPermission, isConnected, pendingLifecycleAction, requestPermission, sessionStatus, unlockAudio, startRecording, stopRecording]);
 
-    // 空格键切换录音：按一次开始，再按一次结束（按住不放松开也会结束）
-    const spaceHeldRef = React.useRef(false);
-
-    React.useEffect(() => {
-        const handleKeyDown = (e: KeyboardEvent) => {
-            const target = e.target as HTMLElement;
-            if (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable) {
-                return;
-            }
-            if (e.code === "Space") {
-                e.preventDefault();
-                e.stopPropagation();
-                if (e.repeat) return;
-                spaceHeldRef.current = true;
-                toggleRecording();
-            }
-        };
-
-        const handleKeyUp = (e: KeyboardEvent) => {
-            const target = e.target as HTMLElement;
-            if (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable) {
-                return;
-            }
-            if (e.code === "Space") {
-                e.preventDefault();
-                e.stopPropagation();
-                // 按住不放松开时也停止录音
-                if (spaceHeldRef.current && isRecordingRef.current) {
-                    stopRecording();
-                }
-                spaceHeldRef.current = false;
-            }
-        };
-
-        // 使用 capture 阶段确保优先于按钮的事件处理
-        window.addEventListener("keydown", handleKeyDown, true);
-        window.addEventListener("keyup", handleKeyUp, true);
-
-        return () => {
-            window.removeEventListener("keydown", handleKeyDown, true);
-            window.removeEventListener("keyup", handleKeyUp, true);
-        };
-    }, [toggleRecording, stopRecording]);
-
-    const handleTogglePauseResume = React.useCallback(async () => {
-        if (!canToggleLifecycle) return;
-
-        const action = sessionStatus === "paused" ? "resume" : "pause";
-        setPendingLifecycleAction(action);
-
-        try {
-            if (action === "pause" && isRecordingRef.current) {
-                stopRecording();
-            }
-
-            if (isConnected) {
-                sendControl(action);
-            }
-
-            const { api } = await import("@/lib/api/client");
-            await api.practice.controlLifecycle(sessionId, action);
-        } catch (error) {
-            console.warn(`[PracticeSession] Failed to ${action} session lifecycle:`, error);
-        } finally {
-            setPendingLifecycleAction(null);
-        }
-    }, [canToggleLifecycle, isConnected, sendControl, sessionId, sessionStatus, stopRecording]);
-
-    const handleEndSession = async () => {
-        if (isEndingSession) return;
-        setIsEndingSession(true);
-
-        try {
-            if (isConnected) {
-                sendControl("end");
-            }
-            const { api } = await import("@/lib/api/client");
-            await api.practice.endSession(sessionId);
-
-            // 2. Stop recording if active
-            if (isRecordingRef.current) {
-                stopRecording();
-            }
-
-            // 3. Generate comprehensive report via REST API (fallback + ensure report exists)
-            try {
-                await api.admin.generateComprehensiveReport(sessionId);
-            } catch {
-                // Report generation may fail if backend already generated it via WS,
-                // or if session has no conversation data. Either way, proceed to report page.
-                console.warn("[EndSession] Report generation via REST skipped or failed");
-            }
-
-            // 4. Navigate to report page
-            router.push(`/practice/${sessionId}/report`);
-        } catch (err) {
-            console.error("[EndSession] Error:", err);
-            // Still navigate to report page even on error
-            router.push(`/practice/${sessionId}/report`);
-        }
-    };
+    usePracticeRecordingHotkeys({
+        onToggleRecording: toggleRecording,
+        onStopRecording: stopRecording,
+        isRecordingRef,
+    });
 
     const formatTime = (seconds: number) => {
         const mins = Math.floor(seconds / 60);

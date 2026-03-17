@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { api } from "@/lib/api/client";
@@ -70,11 +71,15 @@ function PresentationThumbnail({
     }
 
     return (
-        <img
-            src={thumbnailUrl}
-            alt={alt}
-            className="w-full h-full object-cover rounded-lg"
-        />
+        <div className="relative w-full h-full">
+            <Image
+                src={thumbnailUrl}
+                alt={alt}
+                fill
+                unoptimized
+                className="object-cover rounded-lg"
+            />
+        </div>
     );
 }
 

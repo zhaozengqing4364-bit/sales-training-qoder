@@ -21,27 +21,8 @@ export default function LoginPage() {
         setError("");
 
         try {
-            const res = await api.auth.login({ email, password });
-            // Backend returns { token, user: { id, name, email, role } }
-            const token = res.access_token || res.token;
-            if (token) {
-                localStorage.setItem("token", token);
-                // Store user info for sidebar display
-                if (res.user) {
-                    localStorage.setItem("user", JSON.stringify({
-                        id: res.user.user_id || res.user.id,
-                        name: res.user.name,
-                        display_name: res.user.name,
-                        email: res.user.email,
-                        role: res.user.role,
-                    }));
-                }
-
-                // Redirect based on role or default to dashboard
-                router.push("/");
-            } else {
-                setError("登录失败，未获取到令牌");
-            }
+            await api.auth.login({ email, password });
+            router.push("/");
         } catch (err: unknown) {
             setError(getApiErrorMessage(err));
         } finally {

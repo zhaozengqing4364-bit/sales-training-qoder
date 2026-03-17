@@ -19,11 +19,9 @@ describe("API client 401 handling", () => {
     beforeEach(() => {
         vi.restoreAllMocks();
         vi.unstubAllGlobals();
-        localStorage.clear();
     });
 
-    it("triggers session-expired flow when token exists", async () => {
-        localStorage.setItem("token", "expired-token");
+    it("triggers session-expired flow for authenticated endpoints on 401", async () => {
         const sessionExpiredSpy = vi.spyOn(authHandler, "sessionExpired").mockImplementation(() => {});
 
         mockFetchResponse(401, {
@@ -36,7 +34,7 @@ describe("API client 401 handling", () => {
         expect(sessionExpiredSpy).toHaveBeenCalledTimes(1);
     });
 
-    it("does not trigger session-expired flow for login 401 without token", async () => {
+    it("does not trigger session-expired flow for login 401", async () => {
         const sessionExpiredSpy = vi.spyOn(authHandler, "sessionExpired").mockImplementation(() => {});
 
         mockFetchResponse(401, {
@@ -49,6 +47,73 @@ describe("API client 401 handling", () => {
             api.auth.login({ email: "admin@qoder.ai", password: "wrong-password" }),
         ).rejects.toBeInstanceOf(ApiRequestError);
         expect(sessionExpiredSpy).not.toHaveBeenCalled();
+    });
+
+    it("sends credentials for cookie-backed session requests", async () => {
+        const fetchMock = vi.fn().mockResolvedValue(
+            new Response(
+                JSON.stringify({
+                    success: true,
+                    data: {
+                        id: "user-1",
+                        display_name: "Admin",
+                        email: "admin@test.com",
+                        role: "admin",
+                    },
+                }),
+                {
+                    status: 200,
+                    headers: { "Content-Type": "application/json" },
+                },
+            ),
+        );
+
+        vi.stubGlobal("fetch", fetchMock);
+
+        await api.user.getMe();
+
+        expect(fetchMock).toHaveBeenCalledWith(
+            expect.stringContaining("/api/v1/users/me"),
+            expect.objectContaining({
+                credentials: "include",
+            }),
+        );
+    });
+
+    it("attaches W3C trace context headers to API requests", async () => {
+        const fetchMock = vi.fn().mockResolvedValue(
+            new Response(
+                JSON.stringify({
+                    success: true,
+                    data: {
+                        id: "user-1",
+                        display_name: "Admin",
+                        email: "admin@test.com",
+                        role: "admin",
+                    },
+                }),
+                {
+                    status: 200,
+                    headers: { "Content-Type": "application/json" },
+                },
+            ),
+        );
+
+        vi.stubGlobal("fetch", fetchMock);
+
+        await api.user.getMe();
+
+        const requestOptions = fetchMock.mock.calls[0]?.[1] as RequestInit | undefined;
+        const headers = new Headers(requestOptions?.headers);
+        const traceId = headers.get("X-Trace-ID");
+        const traceparent = headers.get("traceparent");
+
+        expect(typeof traceId).toBe("string");
+        expect(typeof traceparent).toBe("string");
+        expect(traceId).toMatch(/^[a-f0-9]{32}$/);
+        expect(traceparent).toMatch(
+            new RegExp(`^00-${traceId}-[a-f0-9]{16}-01$`),
+        );
     });
 
     it("normalizes network failures during login", async () => {
@@ -93,6 +158,8 @@ describe("API client 401 handling", () => {
 
         expect(result.token).toBe("token-1");
         expect(fetchMock).toHaveBeenCalledTimes(2);
+        expect(fetchMock.mock.calls[0]?.[1]).toMatchObject({ credentials: "include" });
+        expect(fetchMock.mock.calls[1]?.[1]).toMatchObject({ credentials: "include" });
 
         const firstUrl = String(fetchMock.mock.calls[0]?.[0] ?? "");
         const secondUrl = String(fetchMock.mock.calls[1]?.[0] ?? "");

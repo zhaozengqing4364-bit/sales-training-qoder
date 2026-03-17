@@ -15,14 +15,17 @@ from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import APIRouter, Depends, Request, status
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, EmailStr
 from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.auth.service import (
+    clear_auth_session_cookie,
     create_access_token,
     get_current_user,
+    set_auth_session_cookie,
     pwd_context,
 )
 from common.db.models import User
@@ -77,8 +80,6 @@ def success_response(data, trace_id: str = None):
 
 def error_response(error_code: str, message: str = None, trace_id: str = None, status_code: int = 400):
     """Create unified error response with explicit HTTP status."""
-    from fastapi.responses import JSONResponse
-
     return JSONResponse(
         status_code=status_code,
         content={
@@ -245,7 +246,12 @@ async def login(
         )
 
         logger.info(f"User logged in: {user.user_id}")
-        return success_response(login_response.model_dump())
+        response = JSONResponse(
+            status_code=status.HTTP_200_OK,
+            content=success_response(login_response.model_dump()),
+        )
+        set_auth_session_cookie(response, token)
+        return response
 
     except SQLAlchemyError as e:
         logger.error(f"Login failed: {str(e)}")
@@ -272,9 +278,14 @@ async def logout(
         # For now, just log the logout event
         logger.info(f"User logged out: {current_user.email}")
 
-        return success_response({
-            "message": "登出成功"
-        })
+        response = JSONResponse(
+            status_code=status.HTTP_200_OK,
+            content=success_response({
+                "message": "登出成功"
+            }),
+        )
+        clear_auth_session_cookie(response)
+        return response
 
     except (SQLAlchemyError, ValueError) as e:
         logger.error(f"Logout failed: {str(e)}")

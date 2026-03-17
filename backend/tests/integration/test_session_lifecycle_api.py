@@ -5,6 +5,8 @@ Integration tests for session lifecycle REST controls.
 from __future__ import annotations
 
 import uuid
+from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import pytest
 from httpx import AsyncClient
@@ -13,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.auth.service import create_access_token
 from common.db.models import PracticeSession, Scenario, User
+from common.websocket.session_manager import get_session_manager
 
 
 def _headers_for_user(user_id: str) -> dict[str, str]:
@@ -197,3 +200,91 @@ async def test_lifecycle_api_enforces_owner_and_admin_access(
     assert admin_body["success"] is True
     assert admin_body["data"]["status"] == "in_progress"
     assert admin_body["data"]["scenario_type"] == "presentation"
+
+
+@pytest.mark.asyncio
+async def test_lifecycle_api_syncs_live_handler_after_rest_transition(
+    async_client: AsyncClient,
+    test_db: AsyncSession,
+    test_user: User,
+):
+    session = await _create_session(test_db, user_id=str(test_user.user_id), scenario_type="sales")
+    session_id = str(session.session_id)
+    headers = _headers_for_user(str(test_user.user_id))
+
+    synced_transitions: list[tuple[str, str, str]] = []
+    close_calls: list[tuple[int, str]] = []
+
+    handler = SimpleNamespace(
+        send_message=AsyncMock(),
+        sync_lifecycle_transition=AsyncMock(
+            side_effect=lambda transition: synced_transitions.append(
+                (transition.action, transition.to_status, transition.ai_state)
+            )
+        ),
+        close=AsyncMock(
+            side_effect=lambda code=1000, reason="": close_calls.append((code, reason))
+        ),
+    )
+
+    session_manager = get_session_manager()
+    await session_manager.register_session(session_id, handler, user_id=str(test_user.user_id))
+    try:
+        for action in ("start", "pause", "resume", "end"):
+            response = await async_client.post(
+                f"/api/v1/practice/sessions/{session_id}/lifecycle",
+                headers=headers,
+                json={"action": action},
+            )
+            assert response.status_code == 200
+
+        assert synced_transitions == [
+            ("start", "in_progress", "listening"),
+            ("pause", "paused", "idle"),
+            ("resume", "in_progress", "listening"),
+            ("end", "scoring", "idle"),
+        ]
+        assert close_calls
+    finally:
+        await session_manager.unregister_session(session_id, reason="test_cleanup")
+
+
+@pytest.mark.asyncio
+async def test_lifecycle_api_refreshes_live_session_activity_after_rest_transition(
+    async_client: AsyncClient,
+    test_db: AsyncSession,
+    test_user: User,
+):
+    session = await _create_session(
+        test_db,
+        user_id=str(test_user.user_id),
+        scenario_type="sales",
+    )
+    session_id = str(session.session_id)
+    headers = _headers_for_user(str(test_user.user_id))
+
+    handler = SimpleNamespace(
+        send_message=AsyncMock(),
+        sync_lifecycle_transition=AsyncMock(),
+        close=AsyncMock(),
+    )
+
+    session_manager = get_session_manager()
+    await session_manager.register_session(
+        session_id,
+        handler,
+        user_id=str(test_user.user_id),
+    )
+    try:
+        session_manager.sessions[session_id].last_activity = 1.0
+
+        response = await async_client.post(
+            f"/api/v1/practice/sessions/{session_id}/lifecycle",
+            headers=headers,
+            json={"action": "start"},
+        )
+
+        assert response.status_code == 200
+        assert session_manager.sessions[session_id].last_activity > 1.0
+    finally:
+        await session_manager.unregister_session(session_id, reason="test_cleanup")

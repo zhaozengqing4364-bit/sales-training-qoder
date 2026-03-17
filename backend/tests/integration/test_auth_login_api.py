@@ -11,7 +11,7 @@ import pytest
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from common.auth.service import verify_token
+from common.auth.service import AUTH_SESSION_COOKIE_NAME, verify_token
 from common.db.models import User
 
 
@@ -67,6 +67,71 @@ async def test_login_success_issues_token_with_role_claim(
     claims = verify_token(token)
     assert claims["sub"] == str(user.user_id)
     assert claims["role"] == "admin"
+
+
+@pytest.mark.asyncio
+async def test_login_sets_http_only_cookie_and_cookie_auth_works(
+    async_client,
+    test_db: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("AUTH_USER_PASSWORDS_JSON", raising=False)
+    monkeypatch.setenv("AUTH_SHARED_PASSWORD", "Password123!")
+    user = await _create_user(
+        test_db,
+        email="auth-cookie@example.com",
+        role="user",
+        is_active=True,
+    )
+
+    response = await async_client.post(
+        "/api/v1/auth/login",
+        json={"email": user.email, "password": "Password123!"},
+    )
+
+    assert response.status_code == 200
+    set_cookie_header = response.headers.get("set-cookie", "")
+    assert f"{AUTH_SESSION_COOKIE_NAME}=" in set_cookie_header
+    assert "HttpOnly" in set_cookie_header
+    assert "Path=/" in set_cookie_header
+
+    me_response = await async_client.get("/api/v1/users/me")
+    assert me_response.status_code == 200
+    me_body = me_response.json()
+    assert me_body["success"] is True
+    assert me_body["data"]["id"] == str(user.user_id)
+    assert me_body["data"]["email"] == user.email
+
+
+@pytest.mark.asyncio
+async def test_logout_clears_session_cookie(
+    async_client,
+    test_db: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("AUTH_USER_PASSWORDS_JSON", raising=False)
+    monkeypatch.setenv("AUTH_SHARED_PASSWORD", "Password123!")
+    user = await _create_user(
+        test_db,
+        email="auth-logout-cookie@example.com",
+        role="user",
+        is_active=True,
+    )
+
+    login_response = await async_client.post(
+        "/api/v1/auth/login",
+        json={"email": user.email, "password": "Password123!"},
+    )
+    assert login_response.status_code == 200
+
+    logout_response = await async_client.post("/api/v1/auth/logout")
+    assert logout_response.status_code == 200
+    logout_cookie_header = logout_response.headers.get("set-cookie", "")
+    assert f"{AUTH_SESSION_COOKIE_NAME}=" in logout_cookie_header
+    assert "Max-Age=0" in logout_cookie_header or "expires=" in logout_cookie_header.lower()
+
+    me_response = await async_client.get("/api/v1/users/me")
+    assert me_response.status_code == 401
 
 
 @pytest.mark.asyncio
@@ -249,3 +314,24 @@ async def test_login_falls_back_to_shared_password_when_user_not_in_override_map
     payload = response.json()
     assert payload["success"] is True
     assert payload["data"]["user"]["role"] == "admin"
+
+
+@pytest.mark.asyncio
+async def test_dev_login_sets_http_only_cookie_and_allows_cookie_auth(
+    async_client,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("ENVIRONMENT", "development")
+
+    response = await async_client.post("/api/v1/auth/dev-login")
+
+    assert response.status_code == 200
+    set_cookie_header = response.headers.get("set-cookie", "")
+    assert f"{AUTH_SESSION_COOKIE_NAME}=" in set_cookie_header
+    assert "HttpOnly" in set_cookie_header
+
+    me_response = await async_client.get("/api/v1/users/me")
+    assert me_response.status_code == 200
+    me_body = me_response.json()
+    assert me_body["success"] is True
+    assert me_body["data"]["email"] == "dev@example.com"

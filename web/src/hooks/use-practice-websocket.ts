@@ -13,6 +13,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useStreamingAudioPlayer } from "./use-streaming-audio-player";
 import { debug } from "@/lib/debug";
+import { getSharedTraceId } from "@/lib/observability/trace-context";
 
 // ── Re-export every public type so existing consumers stay untouched ──
 export type {
@@ -599,22 +600,14 @@ export function usePracticeWebSocket(options: UsePracticeWebSocketOptions) {
     handleMessageRef.current = handleMessage;
 
     // ── Connection management ──
-    const getToken = useCallback(() => {
-        if (typeof window !== "undefined") {
-            return localStorage.getItem("token") || "";
-        }
-        return "";
-    }, []);
-
     const buildWsUrl = useCallback(() => {
-        const token = getToken();
-        const tokenParam = token ? `&token=${encodeURIComponent(token)}` : "";
-        let url = `${WS_BASE_URL}/ws/${scenarioType}?session_id=${sessionId}${tokenParam}`;
+        let url = `${WS_BASE_URL}/ws/${scenarioType}?session_id=${sessionId}`;
         if (agentId) url += `&agent_id=${agentId}`;
         if (personaId) url += `&persona_id=${personaId}`;
         if (voiceMode) url += `&voice_mode=${voiceMode}`;
+        url += `&trace_id=${getSharedTraceId()}`;
         return url;
-    }, [sessionId, scenarioType, agentId, personaId, voiceMode, getToken]);
+    }, [sessionId, scenarioType, agentId, personaId, voiceMode]);
 
     const connect = useCallback(() => {
         if (isConnectingRef.current) return;

@@ -45,6 +45,24 @@ const formatTimeAgo = (isoString: string) => {
     return `${Math.floor(diffInSeconds / 86400)}天前`;
 };
 
+const DEFAULT_STATS: DashboardStats = {
+    weekly_activity: { total_duration_minutes: 0, session_count: 0, trend_direction: "flat", trend_percentage: 0 },
+    last_session: { score: 0, percentile: 50, trend: "stable" },
+    effectiveness: {
+        pass_rate_3min_flow: 0,
+        pass_rate_5turn_defense: 0,
+        pass_rate_4step_structure: 0,
+        next_day_retry_rate: 0,
+    },
+};
+
+const DEFAULT_RECOMMENDATION: Recommendation = {
+    title: "开始练习",
+    reason: "欢迎使用训练系统，开始一次练习来提升您的技能吧！",
+    action_label: "开始训练",
+    target_path: "/training",
+};
+
 export default function HomePage() {
     const router = useRouter();
     // State for modals
@@ -52,25 +70,9 @@ export default function HomePage() {
     const [isFilterOpen, setIsFilterOpen] = useState(false);
     
     // Data State
-    const defaultStats: DashboardStats = {
-        weekly_activity: { total_duration_minutes: 0, session_count: 0, trend_direction: "flat", trend_percentage: 0 },
-        last_session: { score: 0, percentile: 50, trend: "stable" },
-        effectiveness: {
-            pass_rate_3min_flow: 0,
-            pass_rate_5turn_defense: 0,
-            pass_rate_4step_structure: 0,
-            next_day_retry_rate: 0,
-        },
-    };
-    const defaultRecommendation: Recommendation = {
-        title: "开始练习",
-        reason: "欢迎使用训练系统，开始一次练习来提升您的技能吧！",
-        action_label: "开始训练",
-        target_path: "/training",
-    };
     const [isLoading, setIsLoading] = useState(true);
-    const [stats, setStats] = useState<DashboardStats>(defaultStats);
-    const [recommendation, setRecommendation] = useState<Recommendation>(defaultRecommendation);
+    const [stats, setStats] = useState<DashboardStats>(DEFAULT_STATS);
+    const [recommendation, setRecommendation] = useState<Recommendation>(DEFAULT_RECOMMENDATION);
     const [historyItems, setHistoryItems] = useState<SessionItem[]>([]);
 
     const handleDeleteHistory = (id: string) => {
@@ -87,8 +89,8 @@ export default function HomePage() {
                 api.dashboard.getHistory()
             ]);
 
-            setStats(statsResult.status === "fulfilled" ? statsResult.value : defaultStats);
-            setRecommendation(recResult.status === "fulfilled" ? recResult.value : defaultRecommendation);
+            setStats(statsResult.status === "fulfilled" ? statsResult.value : DEFAULT_STATS);
+            setRecommendation(recResult.status === "fulfilled" ? recResult.value : DEFAULT_RECOMMENDATION);
             setHistoryItems(historyResult.status === "fulfilled" ? historyResult.value : []);
             setIsLoading(false);
         };

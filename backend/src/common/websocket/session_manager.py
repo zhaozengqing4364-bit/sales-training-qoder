@@ -10,6 +10,7 @@ Requirements: P0-FIXES.md Issue #10
 """
 
 import asyncio
+import inspect
 import time
 from dataclasses import dataclass, field
 from typing import Dict, Optional
@@ -143,6 +144,47 @@ class SessionManager:
                     "total_sessions": len(self.sessions),
                 },
             )
+
+    async def sync_lifecycle_transition(self, transition) -> bool:
+        """Synchronize a DB lifecycle transition into the live handler."""
+        session_id = str(transition.session.session_id)
+        session_info = self.sessions.get(session_id)
+        if session_info is None:
+            return False
+
+        sync_method = getattr(session_info.handler, "sync_lifecycle_transition", None)
+        if callable(sync_method):
+            maybe_result = sync_method(transition)
+            if inspect.isawaitable(maybe_result):
+                await maybe_result
+            return True
+
+        if hasattr(session_info.handler, "session_status"):
+            session_info.handler.session_status = transition.to_status
+        if hasattr(session_info.handler, "ai_state"):
+            session_info.handler.ai_state = transition.ai_state
+        return True
+
+    async def close_session_connection(
+        self,
+        session_id: str,
+        *,
+        code: int = 1000,
+        reason: str = "Session closed",
+    ) -> bool:
+        """Close the live websocket connection for one tracked session."""
+        session_info = self.sessions.get(session_id)
+        if session_info is None:
+            return False
+
+        close_method = getattr(session_info.handler, "close", None)
+        if not callable(close_method):
+            return False
+
+        maybe_result = close_method(code=code, reason=reason)
+        if inspect.isawaitable(maybe_result):
+            await maybe_result
+        return True
 
     async def _cleanup_loop(self):
         """Background task to clean up expired sessions"""

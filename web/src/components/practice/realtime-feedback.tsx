@@ -4,11 +4,9 @@
  * Real-time Evaluation Feedback Component (C6)
  */
 
-import { useState, useEffect, useCallback } from "react";
-import { CheckCircle, TrendingUp, AlertTriangle, Lightbulb, X } from "lucide-react";
-import { StatusIndicator } from "@/components/ui/status-indicator";
+import { useState } from "react";
+import { CheckCircle, TrendingUp, X } from "lucide-react";
 import { GlassCard } from "@/components/ui/glass-card";
-import { cn } from "@/lib/utils";
 
 export interface EvaluationFeedback {
     feedback_type: "stage_feedback" | "milestone" | "comprehensive_report";
@@ -24,14 +22,9 @@ export interface EvaluationFeedback {
 }
 
 export function RealtimeFeedback() {
-    const [feedbacks, setFeedbacks] = useState<EvaluationFeedback[]>([]);
+    const [feedbacks] = useState<EvaluationFeedback[]>([]);
     const [isExpanded, setIsExpanded] = useState(false);
-    const [unreadCount, setUnreadCount] = useState(0);
-
-    const addFeedback = useCallback((feedback: EvaluationFeedback) => {
-        setFeedbacks((prev) => [...prev, feedback]);
-        setUnreadCount((prev) => prev + 1);
-    }, []);
+    const unreadCount = feedbacks.length;
 
     return (
         <div className="fixed bottom-4 right-4 z-50 flex flex-col items-end gap-2">
