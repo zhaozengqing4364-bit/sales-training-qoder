@@ -161,3 +161,16 @@ wechat_secrets/
 
 # Local one-click dev runtime
 .dev/
+
+# ── GSD baseline (auto-generated) ──
+.gsd/activity/
+.gsd/runtime/
+.gsd/worktrees/
+.gsd/auto.lock
+.gsd/metrics.json
+.gsd/STATE.md
+*.code-workspace
+.next/
+*.pyc
+target/
+vendor/
