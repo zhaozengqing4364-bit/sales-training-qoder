@@ -1,3 +1,4 @@
+import Image from "next/image";
 import * as React from "react";
 import { cn } from "@/lib/utils";
 import { User, Sparkles, AlertCircle, Loader2 } from "lucide-react";
@@ -42,14 +43,20 @@ export function ChatBubble({
                 <div className="shrink-0">
                     <div
                         className={cn(
-                            "w-8 h-8 md:w-10 md:h-10 rounded-full flex items-center justify-center shadow-sm",
+                            "relative overflow-hidden w-8 h-8 md:w-10 md:h-10 rounded-full flex items-center justify-center shadow-sm",
                             isUser
                                 ? "bg-gradient-to-br from-blue-500 to-indigo-600 text-white"
                                 : "bg-white/80 backdrop-blur-md border border-white/40 text-indigo-600"
                         )}
                     >
                         {avatar ? (
-                            <img src={avatar} alt={sender} className="w-full h-full rounded-full object-cover" />
+                            <Image
+                                src={avatar}
+                                alt={sender}
+                                fill
+                                unoptimized
+                                className="rounded-full object-cover"
+                            />
                         ) : isUser ? (
                             <User size={16} className="md:w-5 md:h-5" />
                         ) : (

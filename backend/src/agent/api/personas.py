@@ -13,9 +13,12 @@ from __future__ import annotations
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.exc import SQLAlchemyError
 
-from common.auth.service import get_current_user
+from common.api.server_error import build_server_error
+from common.auth.service import get_current_admin_user
 from common.db.models import User
 from common.db.session import get_db
 from common.monitoring.logger import get_logger
@@ -34,10 +37,25 @@ logger = get_logger(__name__)
 admin_router = APIRouter(prefix="/admin/personas", tags=["admin-personas"])
 
 
+async def commit_or_500(db: AsyncSession, action: str) -> JSONResponse | None:
+    """Persist transaction and return normalized 500 response on failure."""
+    try:
+        await db.commit()
+    except SQLAlchemyError as exc:
+        await db.rollback()
+        return build_server_error(
+            "[DB_COMMIT_FAILED]",
+            message="Database commit failed",
+            exc=exc,
+            action=action,
+        )
+    return None
+
+
 @admin_router.post("", response_model=dict)
 async def create_persona(
     request: CreatePersonaRequest,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_admin_user),
     db: AsyncSession = Depends(get_db)
 ) -> dict[str, Any]:
     """Create a new Persona - R3.1"""
@@ -48,6 +66,9 @@ async def create_persona(
         raise HTTPException(status_code=400, detail=result.fallback)
     
     persona = result.value
+    commit_error = await commit_or_500(db, "create_persona")
+    if commit_error is not None:
+        return commit_error
     return {
         "success": True,
         "data": PersonaCreateResponse(
@@ -66,7 +87,7 @@ async def list_personas(
     category: str | None = Query(None),
     difficulty: str | None = Query(None),
     status: str | None = Query(None),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_admin_user),
     db: AsyncSession = Depends(get_db)
 ) -> dict[str, Any]:
     """Get paginated Persona list - R3.2"""
@@ -90,10 +111,26 @@ async def list_personas(
     }
 
 
+@admin_router.get("/policy-health", response_model=dict)
+async def get_persona_policy_health(
+    sample_limit: int = Query(50, ge=1, le=200),
+    current_user: User = Depends(get_current_admin_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """Audit persona_policy consistency for governance dashboards."""
+    del current_user
+    service = PersonaService(db)
+    report = await service.audit_policy_health(sample_limit=sample_limit)
+    return {
+        "success": True,
+        "data": report,
+    }
+
+
 @admin_router.get("/{persona_id}", response_model=dict)
 async def get_persona(
     persona_id: str,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_admin_user),
     db: AsyncSession = Depends(get_db)
 ) -> dict[str, Any]:
     """Get Persona details - R3.3"""
@@ -114,7 +151,7 @@ async def get_persona(
 async def update_persona(
     persona_id: str,
     request: UpdatePersonaRequest,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_admin_user),
     db: AsyncSession = Depends(get_db)
 ) -> dict[str, Any]:
     """Update Persona - R3.4"""
@@ -125,6 +162,9 @@ async def update_persona(
         raise HTTPException(status_code=404, detail=result.fallback)
     
     persona = result.value
+    commit_error = await commit_or_500(db, "update_persona")
+    if commit_error is not None:
+        return commit_error
     return {
         "success": True,
         "data": PersonaResponse.model_validate(persona).model_dump()
@@ -134,7 +174,7 @@ async def update_persona(
 @admin_router.delete("/{persona_id}", response_model=dict)
 async def delete_persona(
     persona_id: str,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_admin_user),
     db: AsyncSession = Depends(get_db)
 ) -> dict[str, Any]:
     """Delete Persona - R3.5"""
@@ -149,6 +189,9 @@ async def delete_persona(
             )
         raise HTTPException(status_code=404, detail=result.fallback)
     
+    commit_error = await commit_or_500(db, "delete_persona")
+    if commit_error is not None:
+        return commit_error
     return {
         "success": True,
         "data": {"deleted": True}
@@ -158,7 +201,7 @@ async def delete_persona(
 @admin_router.post("/{persona_id}/duplicate", response_model=dict)
 async def duplicate_persona(
     persona_id: str,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_admin_user),
     db: AsyncSession = Depends(get_db)
 ) -> dict[str, Any]:
     """Duplicate Persona - R3.6"""
@@ -169,6 +212,9 @@ async def duplicate_persona(
         raise HTTPException(status_code=404, detail=result.fallback)
     
     persona = result.value
+    commit_error = await commit_or_500(db, "duplicate_persona")
+    if commit_error is not None:
+        return commit_error
     return {
         "success": True,
         "data": PersonaCreateResponse(

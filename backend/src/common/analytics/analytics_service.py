@@ -15,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.db.models import PracticeSession, RequiredTalkingPoint, Scenario
 from common.error_handling.result import Result
+from sqlalchemy.exc import SQLAlchemyError
 
 logger = logging.getLogger(__name__)
 
@@ -40,6 +41,10 @@ class AnalyticsStats:
     # Quality metrics
     sessions_with_high_vagueness: int
     sessions_with_forbidden_words: int
+    pass_rate_3min_flow: float
+    pass_rate_5turn_defense: float
+    pass_rate_4step_structure: float
+    next_day_retry_rate: float
 
 
 @dataclass
@@ -113,6 +118,88 @@ class AnalyticsService:
             total_sessions = row.total_sessions or 0
             completed_sessions = row.completed_sessions or 0
 
+            # Compute effectiveness metrics from persisted session snapshot.
+            effective_sessions_query = (
+                select(
+                    PracticeSession.session_id,
+                    PracticeSession.user_id,
+                    PracticeSession.start_time,
+                    PracticeSession.effectiveness_snapshot,
+                )
+                .join(Scenario, PracticeSession.scenario_id == Scenario.scenario_id)
+                .where(PracticeSession.start_time >= cutoff_time)
+                .where(PracticeSession.status == "completed")
+            )
+            if scenario_type:
+                effective_sessions_query = effective_sessions_query.where(
+                    Scenario.scenario_type == scenario_type
+                )
+
+            effective_rows = (await db.execute(effective_sessions_query)).all()
+
+            evaluable_rows: list[tuple] = []
+            pass_3_count = 0
+            pass_5_count = 0
+            pass_4_count = 0
+
+            for row_item in effective_rows:
+                snapshot = row_item.effectiveness_snapshot
+                if not isinstance(snapshot, dict):
+                    continue
+                if not bool(snapshot.get("evaluable", False)):
+                    continue
+                pass_flags = snapshot.get("pass_flags")
+                if not isinstance(pass_flags, dict):
+                    continue
+
+                evaluable_rows.append(row_item)
+                if bool(pass_flags.get("pass_3min_flow", False)):
+                    pass_3_count += 1
+                if bool(pass_flags.get("pass_5turn_defense", False)):
+                    pass_5_count += 1
+                if bool(pass_flags.get("pass_4step_structure", False)):
+                    pass_4_count += 1
+
+            evaluable_total = len(evaluable_rows)
+
+            # next_day_retry_rate: another completed session by same user between 24h and 48h.
+            next_day_retry_hits = 0
+            if evaluable_rows:
+                user_ids = list({str(item.user_id) for item in evaluable_rows})
+                followup_query = (
+                    select(
+                        PracticeSession.user_id,
+                        PracticeSession.start_time,
+                    )
+                    .join(Scenario, PracticeSession.scenario_id == Scenario.scenario_id)
+                    .where(PracticeSession.user_id.in_(user_ids))
+                    .where(PracticeSession.status == "completed")
+                    .where(PracticeSession.start_time >= cutoff_time)
+                )
+                if scenario_type:
+                    followup_query = followup_query.where(
+                        Scenario.scenario_type == scenario_type
+                    )
+                followup_rows = (await db.execute(followup_query)).all()
+                sessions_by_user: dict[str, list[datetime]] = {}
+                for followup in followup_rows:
+                    sessions_by_user.setdefault(str(followup.user_id), []).append(
+                        followup.start_time
+                    )
+                for session_times in sessions_by_user.values():
+                    session_times.sort()
+
+                for base in evaluable_rows:
+                    base_time = base.start_time
+                    if base_time is None:
+                        continue
+                    candidates = sessions_by_user.get(str(base.user_id), [])
+                    for candidate_time in candidates:
+                        delta_seconds = (candidate_time - base_time).total_seconds()
+                        if 24 * 3600 <= delta_seconds <= 48 * 3600:
+                            next_day_retry_hits += 1
+                            break
+
             stats = AnalyticsStats(
                 total_sessions=total_sessions,
                 completed_sessions=completed_sessions,
@@ -123,8 +210,12 @@ class AnalyticsService:
                 average_overall_score=round(row.avg_overall or 0, 2),
                 average_duration_seconds=0.0,  # Would need end_time
                 average_interruptions_per_session=0.0,  # Would need interruption count
-                sessions_with_high_vagueness=0,  # Would need vagueness tracking
-                sessions_with_forbidden_words=0,  # Would need forbidden word tracking
+                sessions_with_high_vagueness=0,
+                sessions_with_forbidden_words=0,
+                pass_rate_3min_flow=round((pass_3_count / evaluable_total) * 100, 2) if evaluable_total > 0 else 0.0,
+                pass_rate_5turn_defense=round((pass_5_count / evaluable_total) * 100, 2) if evaluable_total > 0 else 0.0,
+                pass_rate_4step_structure=round((pass_4_count / evaluable_total) * 100, 2) if evaluable_total > 0 else 0.0,
+                next_day_retry_rate=round((next_day_retry_hits / evaluable_total) * 100, 2) if evaluable_total > 0 else 0.0,
             )
 
             logger.info(
@@ -138,7 +229,7 @@ class AnalyticsService:
 
             return Result(value=stats)
 
-        except Exception as e:
+        except (SQLAlchemyError, ValueError) as e:
             logger.error(
                 "Failed to calculate dashboard stats",
                 extra={"scenario_type": scenario_type, "error": str(e)},
@@ -202,7 +293,7 @@ class AnalyticsService:
 
             return Result(value=distribution)
 
-        except Exception as e:
+        except (SQLAlchemyError, ValueError) as e:
             logger.error(
                 "Failed to calculate score distribution",
                 extra={"scenario_type": scenario_type, "error": str(e)},
@@ -268,7 +359,7 @@ class AnalyticsService:
 
             return Result(value=gaps)
 
-        except Exception as e:
+        except (SQLAlchemyError, ValueError) as e:
             logger.error(
                 "Failed to calculate common gaps",
                 extra={"scenario_type": scenario_type, "error": str(e)},
@@ -333,7 +424,7 @@ class AnalyticsService:
 
             return Result(value=trend_data)
 
-        except Exception as e:
+        except (SQLAlchemyError, ValueError) as e:
             logger.error(
                 "Failed to calculate trend data",
                 extra={"scenario_type": scenario_type, "error": str(e)},

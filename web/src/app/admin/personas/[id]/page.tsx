@@ -32,6 +32,11 @@ interface TTSConfig {
     pitch: string;
 }
 
+interface ToolPolicyFormState {
+    lockToKnowledgeBase: boolean;
+    allowWebSearch: boolean;
+}
+
 // 可用的中文语音列表
 const VOICE_OPTIONS = [
     { value: "zh-CN-XiaoxiaoNeural", label: "晓晓 (女声-温柔)" },
@@ -62,6 +67,7 @@ export default function EditPersonaPage() {
     const personaId = params.id as string;
 
     const [persona, setPersona] = useState<AdminPersona | null>(null);
+    const [personaPolicy, setPersonaPolicy] = useState<Record<string, unknown> | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -91,6 +97,10 @@ export default function EditPersonaPage() {
         volume: "+0%",
         pitch: "+0Hz",
     });
+    const [toolPolicyForm, setToolPolicyForm] = useState<ToolPolicyFormState>({
+        lockToKnowledgeBase: false,
+        allowWebSearch: false,
+    });
     const [isPreviewingTTS, setIsPreviewingTTS] = useState(false);
     const previewAudioRef = useRef<HTMLAudioElement | null>(null);
 
@@ -108,12 +118,18 @@ export default function EditPersonaPage() {
                 api.admin.getKnowledgeBases({ page_size: 100 }),
             ]);
             setPersona(personaData);
+            setPersonaPolicy((personaData.persona_policy || null) as Record<string, unknown> | null);
             setFormData({
                 name: personaData.name || "",
                 description: personaData.description || "",
-                category: personaData.category || "customer",
-                difficulty: personaData.difficulty || "medium",
-                system_prompt: personaData.system_prompt || "",
+                category: (personaData.category || "customer") as "customer" | "interviewer" | "coach" | "examiner",
+                difficulty: (personaData.difficulty || "medium") as "easy" | "medium" | "hard",
+                system_prompt:
+                    String(
+                        personaData.persona_policy?.system_prompt ||
+                        personaData.system_prompt ||
+                        "",
+                    ),
             });
             
             // Load TTS config
@@ -126,18 +142,48 @@ export default function EditPersonaPage() {
                 });
             }
             
-            setAvailableKnowledgeBases(allKnowledgeBases);
+            setAvailableKnowledgeBases(allKnowledgeBases.items);
 
             // Load linked knowledge bases
-            const kbIds = personaData.knowledge_base_ids || [];
+            const policyKbIds = Array.isArray(personaData.persona_policy?.knowledge_base_ids)
+                ? personaData.persona_policy.knowledge_base_ids
+                : null;
+            const legacyKbIds = Array.isArray(personaData.knowledge_base_ids)
+                ? personaData.knowledge_base_ids
+                : [];
+            const kbIds =
+                policyKbIds !== null && (policyKbIds.length > 0 || legacyKbIds.length === 0)
+                    ? policyKbIds
+                    : legacyKbIds;
+            const rawToolPolicy = (
+                personaData.persona_policy?.tool_policy &&
+                typeof personaData.persona_policy.tool_policy === "object"
+                    ? personaData.persona_policy.tool_policy
+                    : {}
+            ) as Record<string, unknown>;
+            const hasBoundKb = kbIds.length > 0;
+            const lockToKnowledgeBase = typeof rawToolPolicy.require_kb_grounding === "boolean"
+                ? rawToolPolicy.require_kb_grounding
+                : hasBoundKb;
+            const allowWebSearch = lockToKnowledgeBase
+                ? false
+                : (
+                    String(rawToolPolicy.network_access_mode || "").toLowerCase() === "controlled"
+                    || rawToolPolicy.enable_web_search === true
+                );
+            setToolPolicyForm({
+                lockToKnowledgeBase,
+                allowWebSearch,
+            });
+
             if (kbIds.length > 0) {
-                const linkedKBs = allKnowledgeBases.filter(kb => kbIds.includes(kb.id));
+                const linkedKBs = allKnowledgeBases.items.filter((kb: AdminKnowledgeBase) => kbIds.includes(kb.id));
                 setLinkedKnowledgeBases(linkedKBs.map(kb => ({
                     id: kb.id,
                     name: kb.name,
                     description: kb.description,
                     category: kb.category,
-                    document_count: kb.doc_count || 0,
+                    document_count: kb.doc_count || kb.document_count || 0,
                 })));
             }
         } catch (err) {
@@ -146,6 +192,21 @@ export default function EditPersonaPage() {
         } finally {
             setIsLoading(false);
         }
+    };
+
+    const buildPersonaToolPolicyPayload = (): Record<string, unknown> => {
+        const lockToKnowledgeBase = toolPolicyForm.lockToKnowledgeBase;
+        const allowWebSearch = !lockToKnowledgeBase && toolPolicyForm.allowWebSearch;
+        return {
+            enable_internal_retrieval: true,
+            retrieval_priority: lockToKnowledgeBase ? "kb_only" : "kb_first",
+            strict_instruction_following: true,
+            require_grounding: true,
+            require_kb_grounding: lockToKnowledgeBase,
+            network_access_mode: allowWebSearch ? "controlled" : "off",
+            enable_web_search: allowWebSearch,
+            allow_web_search_without_kb: allowWebSearch,
+        };
     };
 
     const handleSave = async () => {
@@ -163,6 +224,13 @@ export default function EditPersonaPage() {
             await api.admin.updatePersona(personaId, {
                 ...formData,
                 knowledge_base_ids: linkedKnowledgeBases.map(kb => kb.id),
+                persona_policy: {
+                    ...(personaPolicy || {}),
+                    version: 1,
+                    system_prompt: formData.system_prompt,
+                    knowledge_base_ids: linkedKnowledgeBases.map((kb) => kb.id),
+                    tool_policy: buildPersonaToolPolicyPayload(),
+                },
                 tts_config: ttsConfig,
             });
             router.push("/admin/personas");
@@ -194,7 +262,7 @@ export default function EditPersonaPage() {
                     name: addedKB.name,
                     description: addedKB.description,
                     category: addedKB.category,
-                    document_count: addedKB.doc_count || 0,
+                    document_count: addedKB.doc_count || addedKB.document_count || 0,
                 }]);
             }
             
@@ -402,6 +470,55 @@ export default function EditPersonaPage() {
                         )}
                     </GlassCard>
 
+                    <GlassCard className="p-6 space-y-4">
+                        <h3 className="text-sm font-bold text-slate-800">知识库回答策略</h3>
+                        <p className="text-xs text-slate-400">
+                            控制是否允许联网，以及是否仅基于知识库回答。此设置会写入角色中心策略并在后端强制执行。
+                        </p>
+
+                        <label className="flex items-start gap-3 cursor-pointer">
+                            <input
+                                type="checkbox"
+                                className="mt-0.5 rounded border-slate-300"
+                                checked={toolPolicyForm.lockToKnowledgeBase}
+                                onChange={(e) => {
+                                    const nextLocked = e.target.checked;
+                                    setToolPolicyForm((prev) => ({
+                                        lockToKnowledgeBase: nextLocked,
+                                        allowWebSearch: nextLocked ? false : prev.allowWebSearch,
+                                    }));
+                                }}
+                            />
+                            <div className="space-y-1">
+                                <div className="text-sm font-semibold text-slate-800">仅根据知识库回答（严格锁）</div>
+                                <div className="text-xs text-slate-500">
+                                    开启后：必须先命中内部知识库才可回答，未命中会明确拒绝猜测；同时禁用联网检索。
+                                </div>
+                            </div>
+                        </label>
+
+                        <label className="flex items-start gap-3 cursor-pointer">
+                            <input
+                                type="checkbox"
+                                className="mt-0.5 rounded border-slate-300"
+                                checked={toolPolicyForm.allowWebSearch}
+                                disabled={toolPolicyForm.lockToKnowledgeBase}
+                                onChange={(e) => {
+                                    setToolPolicyForm((prev) => ({
+                                        ...prev,
+                                        allowWebSearch: e.target.checked,
+                                    }));
+                                }}
+                            />
+                            <div className="space-y-1">
+                                <div className="text-sm font-semibold text-slate-800">允许联网补充</div>
+                                <div className="text-xs text-slate-500">
+                                    关闭时仅允许使用内部知识库。开启后可在知识库不足时联网补充公开信息。
+                                </div>
+                            </div>
+                        </label>
+                    </GlassCard>
+
                     {/* TTS Configuration */}
                     <GlassCard className="p-6">
                         <div className="flex items-center gap-2 mb-4">
@@ -531,7 +648,7 @@ export default function EditPersonaPage() {
                                         });
                                         
                                         const response = await fetch(
-                                            `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"}/admin/model-configs/tts/preview?${params}`,
+                                            `${process.env.NEXT_PUBLIC_API_URL || "http://localhost:3444/api/v1"}/admin/model-configs/tts/preview?${params}`,
                                             { method: "POST" }
                                         );
                                         
@@ -606,7 +723,7 @@ export default function EditPersonaPage() {
                                                 <div className="font-bold text-slate-800">{kb.name}</div>
                                                 <div className="flex items-center gap-2 mt-1">
                                                     <span className="text-xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">
-                                                        {kb.doc_count || 0} 文档
+                                                        {kb.doc_count || kb.document_count || 0} 文档
                                                     </span>
                                                     {kb.description && (
                                                         <span className="text-xs text-slate-400 truncate max-w-[150px]">

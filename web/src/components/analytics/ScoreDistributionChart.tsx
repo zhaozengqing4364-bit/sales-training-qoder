@@ -54,7 +54,7 @@ export function ScoreDistributionChart({ data }: ScoreDistributionChartProps) {
                         dataKey="value"
                         labelLine={false}
                     >
-                        {chartData.map((entry, index) => (
+                        {chartData.map((entry) => (
                             <Cell
                                 key={entry.key}
                                 fill={COLORS[["excellent", "good", "fair", "poor"].indexOf(entry.key)]}
@@ -69,10 +69,13 @@ export function ScoreDistributionChart({ data }: ScoreDistributionChartProps) {
                             boxShadow: "0 4px 20px rgba(0, 0, 0, 0.1)",
                             padding: "12px 16px",
                         }}
-                        formatter={(value: number) => [
-                            `${value} 次 (${((value / total) * 100).toFixed(1)}%)`,
-                            "数量",
-                        ]}
+                        formatter={(value) => {
+                            const numValue = value as number ?? 0;
+                            return [
+                                `${numValue} 次 (${((numValue / total) * 100).toFixed(1)}%)`,
+                                "数量",
+                            ];
+                        }}
                     />
                     <Legend
                         layout="horizontal"

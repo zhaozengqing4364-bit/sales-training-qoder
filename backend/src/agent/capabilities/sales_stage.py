@@ -176,7 +176,7 @@ class SalesStageCapability(BaseCapability):
                 feedback=self._generate_feedback(stage_info, stage_changed)
             )
 
-        except Exception as e:
+        except (RuntimeError, ValueError, KeyError) as e:
             logger.error(
                 f"Sales stage analysis failed: {e}",
                 session_id=context.session_id

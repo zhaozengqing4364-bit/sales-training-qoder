@@ -1,15 +1,16 @@
 
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { GlassCard } from "@/components/ui/glass-card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
-    Users, Activity, HardDrive, Plus, ArrowUp, ArrowRight, TrendingUp, AlertCircle, Search,
-    FileText, Bell, CheckCircle2, Server, Database, Cloud, Shield
+    Users, Activity, HardDrive, Plus, ArrowUp, AlertCircle, Search,
+    Server, Database, Cloud
 } from "lucide-react";
 import Link from "next/link";
+import { api } from "@/lib/api/client";
 import {
     Dialog,
     DialogContent,
@@ -20,9 +21,63 @@ import {
     DialogTrigger,
 } from "@/components/ui/glass-modal";
 
+function toPercent(value: unknown): number {
+    if (typeof value === "number" && Number.isFinite(value)) {
+        return Math.max(0, Math.min(100, value));
+    }
+    return 0;
+}
+
 export default function AdminDashboardPage() {
     // State to manage specific dialogs if needed, or rely on Radix primitives
     const [searchTerm, setSearchTerm] = useState("");
+    const [liveMetrics, setLiveMetrics] = useState({
+        backendStatus: "unknown" as "unknown" | "online" | "offline",
+        passRate3minFlow: 0,
+        passRate5turnDefense: 0,
+        passRate4stepStructure: 0,
+        nextDayRetryRate: 0,
+    });
+
+    useEffect(() => {
+        let cancelled = false;
+
+        const loadLiveMetrics = async () => {
+            const [healthResult, dashboardResult] = await Promise.allSettled([
+                api.internal.health(),
+                api.analyticsOpen.getDashboard({ days: 7 }),
+            ]);
+
+            if (cancelled) return;
+
+            const effect = (
+                dashboardResult.status === "fulfilled"
+                    ? dashboardResult.value.effectiveness
+                    : undefined
+            ) || {
+                pass_rate_3min_flow: 0,
+                pass_rate_5turn_defense: 0,
+                pass_rate_4step_structure: 0,
+                next_day_retry_rate: 0,
+            };
+
+            const next = {
+                backendStatus: healthResult.status === "fulfilled" ? "online" as const : "offline" as const,
+                passRate3minFlow: toPercent(effect.pass_rate_3min_flow),
+                passRate5turnDefense: toPercent(effect.pass_rate_5turn_defense),
+                passRate4stepStructure: toPercent(effect.pass_rate_4step_structure),
+                nextDayRetryRate: toPercent(effect.next_day_retry_rate),
+            };
+
+            setLiveMetrics(next);
+        };
+
+        loadLiveMetrics();
+
+        return () => {
+            cancelled = true;
+        };
+    }, []);
 
     return (
         <div className="space-y-10 animate-in fade-in slide-in-from-bottom-4 duration-500 pb-20">
@@ -78,6 +133,33 @@ export default function AdminDashboardPage() {
                     </Dialog>
                 </div>
             </header>
+
+            <GlassCard className="p-5 border border-blue-100/60 bg-blue-50/40">
+                <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+                    <h2 className="text-sm font-bold text-slate-800 uppercase tracking-wider">训练效果核心看板（近7天）</h2>
+                    <Badge variant={liveMetrics.backendStatus === "online" ? "green" : liveMetrics.backendStatus === "offline" ? "red" : "secondary"}>
+                        {liveMetrics.backendStatus === "online" ? "后端在线" : liveMetrics.backendStatus === "offline" ? "后端离线" : "状态未知"}
+                    </Badge>
+                </div>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div>
+                        <div className="text-xs text-slate-500">3分钟连续表达通过率</div>
+                        <div className="text-xl font-black text-slate-900 mt-1">{liveMetrics.passRate3minFlow.toFixed(1)}%</div>
+                    </div>
+                    <div>
+                        <div className="text-xs text-slate-500">5轮追问稳定通过率</div>
+                        <div className="text-xl font-black text-slate-900 mt-1">{liveMetrics.passRate5turnDefense.toFixed(1)}%</div>
+                    </div>
+                    <div>
+                        <div className="text-xs text-slate-500">四段结构完整率</div>
+                        <div className="text-xl font-black text-slate-900 mt-1">{liveMetrics.passRate4stepStructure.toFixed(1)}%</div>
+                    </div>
+                    <div>
+                        <div className="text-xs text-slate-500">次日复练率</div>
+                        <div className="text-xl font-black text-slate-900 mt-1">{liveMetrics.nextDayRetryRate.toFixed(1)}%</div>
+                    </div>
+                </div>
+            </GlassCard>
 
             {/* Bento Grid Stats */}
             <div className="grid grid-cols-12 gap-6">
@@ -527,5 +609,3 @@ export default function AdminDashboardPage() {
         </div>
     )
 }
-
-

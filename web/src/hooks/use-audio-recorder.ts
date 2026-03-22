@@ -1,9 +1,68 @@
 "use client";
 
 import { useCallback, useRef, useState, useEffect } from "react";
+import { debug } from "@/lib/debug";
+
+// P2-16: Module-level cache for AudioWorklet support detection
+let _workletSupportCached: boolean | null = null;
+
+const INSECURE_MICROPHONE_CONTEXT_ERROR = "当前页面通过 HTTP/IP 访问，浏览器已阻止麦克风。请改用 HTTPS 域名访问。";
+const UNSUPPORTED_MICROPHONE_ENVIRONMENT_ERROR = "当前浏览器环境不支持麦克风采集。";
+const DENIED_MICROPHONE_PERMISSION_ERROR = "麦克风权限已被浏览器拒绝，请在地址栏权限设置中允许后刷新页面。";
+const MISSING_MICROPHONE_DEVICE_ERROR = "未检测到可用麦克风设备，请检查系统输入设备。";
+const BUSY_MICROPHONE_DEVICE_ERROR = "麦克风当前被其他应用占用，请关闭占用后重试。";
+const DEFAULT_MICROPHONE_ACCESS_ERROR = "无法访问麦克风，请检查权限设置";
+
+interface MicrophoneEnvironmentSnapshot {
+    isSecureContext: boolean;
+    hasMediaDevices: boolean;
+    hostname?: string;
+}
+
+function isLocalhostLike(hostname?: string): boolean {
+    return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1";
+}
+
+export function getMicrophoneEnvironmentError(snapshot: MicrophoneEnvironmentSnapshot): string | null {
+    if (!snapshot.hasMediaDevices) {
+        return UNSUPPORTED_MICROPHONE_ENVIRONMENT_ERROR;
+    }
+
+    if (!snapshot.isSecureContext && !isLocalhostLike(snapshot.hostname)) {
+        return INSECURE_MICROPHONE_CONTEXT_ERROR;
+    }
+
+    return null;
+}
+
+export function mapMicrophoneAccessError(error: unknown): string {
+    const domError = error instanceof DOMException ? error : null;
+    const errorName = domError?.name || (error instanceof Error ? error.name : "");
+
+    if (errorName === "NotAllowedError" || errorName === "PermissionDeniedError" || errorName === "SecurityError") {
+        return DENIED_MICROPHONE_PERMISSION_ERROR;
+    }
+
+    if (errorName === "NotFoundError" || errorName === "DevicesNotFoundError") {
+        return MISSING_MICROPHONE_DEVICE_ERROR;
+    }
+
+    if (errorName === "NotReadableError" || errorName === "TrackStartError" || errorName === "AbortError") {
+        return BUSY_MICROPHONE_DEVICE_ERROR;
+    }
+
+    const message = error instanceof Error ? error.message : "";
+    if (message) {
+        return `${DEFAULT_MICROPHONE_ACCESS_ERROR}：${message}`;
+    }
+
+    return DEFAULT_MICROPHONE_ACCESS_ERROR;
+}
 
 interface UseAudioRecorderOptions {
     onAudioData?: (base64Audio: string) => void;
+    /** v1-13: Binary callback — receives raw Int16Array PCM directly (preferred over Base64) */
+    onAudioDataBinary?: (pcmData: Int16Array) => void;
     onAudioEnd?: () => void;
     onSpeakingChange?: (speaking: boolean) => void;
     targetSampleRate?: number;
@@ -13,18 +72,10 @@ interface UseAudioRecorderOptions {
     forceScriptProcessor?: boolean;
 }
 
-interface AudioRecorderState {
-    isRecording: boolean;
-    hasPermission: boolean | null;
-    error: string | null;
-    stream: MediaStream | null;
-    /** Whether AudioWorklet is supported and being used */
-    isWorkletSupported: boolean;
-}
-
 export function useAudioRecorder(options: UseAudioRecorderOptions = {}) {
     const { 
-        onAudioData, 
+        onAudioData,
+        onAudioDataBinary,
         onAudioEnd, 
         onSpeakingChange, 
         targetSampleRate = 16000,
@@ -45,6 +96,7 @@ export function useAudioRecorder(options: UseAudioRecorderOptions = {}) {
     const isRecordingRef = useRef(false);
     const streamRef = useRef<MediaStream | null>(null);
     const onAudioDataRef = useRef(onAudioData);
+    const onAudioDataBinaryRef = useRef(onAudioDataBinary);
     const onAudioEndRef = useRef(onAudioEnd);
     const onSpeakingChangeRef = useRef(onSpeakingChange);
     const inputSampleRateRef = useRef(48000);
@@ -52,17 +104,78 @@ export function useAudioRecorder(options: UseAudioRecorderOptions = {}) {
     // 保持回调引用最新
     useEffect(() => {
         onAudioDataRef.current = onAudioData;
+        onAudioDataBinaryRef.current = onAudioDataBinary;
         onAudioEndRef.current = onAudioEnd;
         onSpeakingChangeRef.current = onSpeakingChange;
-    }, [onAudioData, onAudioEnd, onSpeakingChange]);
+    }, [onAudioData, onAudioDataBinary, onAudioEnd, onSpeakingChange]);
     
     // 同步 stream ref
     useEffect(() => {
         streamRef.current = stream;
     }, [stream]);
 
+    const resolveEnvironmentError = useCallback((): string | null => {
+        if (typeof window === "undefined") {
+            return null;
+        }
+
+        return getMicrophoneEnvironmentError({
+            isSecureContext: window.isSecureContext,
+            hasMediaDevices: typeof navigator !== "undefined" && !!navigator.mediaDevices?.getUserMedia,
+            hostname: window.location.hostname,
+        });
+    }, []);
+
+    useEffect(() => {
+        const environmentError = resolveEnvironmentError();
+        if (environmentError) {
+            setHasPermission(false);
+            setError(environmentError);
+            return;
+        }
+
+        if (typeof navigator === "undefined" || !navigator.permissions?.query) {
+            return;
+        }
+
+        let cancelled = false;
+
+        void navigator.permissions
+            .query({ name: "microphone" as PermissionName })
+            .then((status) => {
+                if (cancelled) {
+                    return;
+                }
+
+                if (status.state === "granted") {
+                    setHasPermission(true);
+                    setError(null);
+                    return;
+                }
+
+                if (status.state === "denied") {
+                    setHasPermission(false);
+                    setError(DENIED_MICROPHONE_PERMISSION_ERROR);
+                }
+            })
+            .catch(() => {
+                // Ignore unsupported Permissions API implementations.
+            });
+
+        return () => {
+            cancelled = true;
+        };
+    }, [resolveEnvironmentError]);
+
     // 请求麦克风权限
     const requestPermission = useCallback(async () => {
+        const environmentError = resolveEnvironmentError();
+        if (environmentError) {
+            setHasPermission(false);
+            setError(environmentError);
+            return false;
+        }
+
         try {
             const testStream = await navigator.mediaDevices.getUserMedia({
                 audio: {
@@ -82,9 +195,39 @@ export function useAudioRecorder(options: UseAudioRecorderOptions = {}) {
         } catch (err) {
             console.error("Failed to get microphone permission:", err);
             setHasPermission(false);
-            setError("无法访问麦克风，请检查权限设置");
+            setError(mapMicrophoneAccessError(err));
             return false;
         }
+    }, [resolveEnvironmentError]);
+
+    /**
+     * Linear interpolation resampling (fallback method)
+     * 
+     * Used when OfflineAudioContext is not available or fails.
+     * Lower quality but synchronous and widely supported.
+     */
+    const resampleLinear = useCallback((
+        inputData: Float32Array, 
+        inputSampleRate: number, 
+        outputSampleRate: number
+    ): Float32Array => {
+        if (inputSampleRate === outputSampleRate) {
+            return inputData;
+        }
+        
+        const ratio = inputSampleRate / outputSampleRate;
+        const outputLength = Math.round(inputData.length / ratio);
+        const output = new Float32Array(outputLength);
+        
+        for (let i = 0; i < outputLength; i++) {
+            const srcIndex = i * ratio;
+            const srcIndexFloor = Math.floor(srcIndex);
+            const srcIndexCeil = Math.min(srcIndexFloor + 1, inputData.length - 1);
+            const t = srcIndex - srcIndexFloor;
+            output[i] = inputData[srcIndexFloor] * (1 - t) + inputData[srcIndexCeil] * t;
+        }
+        
+        return output;
     }, []);
 
     /**
@@ -130,44 +273,13 @@ export function useAudioRecorder(options: UseAudioRecorderOptions = {}) {
             const renderedBuffer = await offlineCtx.startRendering();
             return renderedBuffer.getChannelData(0);
         } catch (err) {
-            console.warn("[AudioRecorder] OfflineAudioContext resampling failed, falling back to linear:", err);
+            debug.warn("[AudioRecorder] OfflineAudioContext resampling failed, falling back to linear:", err);
             // Fallback to linear interpolation if OfflineAudioContext fails
             return resampleLinear(inputData, inputSampleRate, outputSampleRate);
         }
-    }, []);
+    }, [resampleLinear]);
 
-    /**
-     * Linear interpolation resampling (fallback method)
-     * 
-     * Used when OfflineAudioContext is not available or fails.
-     * Lower quality but synchronous and widely supported.
-     */
-    const resampleLinear = useCallback((
-        inputData: Float32Array, 
-        inputSampleRate: number, 
-        outputSampleRate: number
-    ): Float32Array => {
-        if (inputSampleRate === outputSampleRate) {
-            return inputData;
-        }
-        
-        const ratio = inputSampleRate / outputSampleRate;
-        const outputLength = Math.round(inputData.length / ratio);
-        const output = new Float32Array(outputLength);
-        
-        for (let i = 0; i < outputLength; i++) {
-            const srcIndex = i * ratio;
-            const srcIndexFloor = Math.floor(srcIndex);
-            const srcIndexCeil = Math.min(srcIndexFloor + 1, inputData.length - 1);
-            const t = srcIndex - srcIndexFloor;
-            output[i] = inputData[srcIndexFloor] * (1 - t) + inputData[srcIndexCeil] * t;
-        }
-        
-        return output;
-    }, []);
-
-    // Legacy resample function (uses linear interpolation)
-    const resample = resampleLinear;
+    const enableHQResample = process.env.NEXT_PUBLIC_ENABLE_HQ_RESAMPLE === "true";
 
     // Float32 转 16-bit PCM
     const floatTo16BitPCM = useCallback((float32Array: Float32Array): Int16Array => {
@@ -182,10 +294,8 @@ export function useAudioRecorder(options: UseAudioRecorderOptions = {}) {
     // Int16Array 转 Base64
     const int16ArrayToBase64 = useCallback((int16Array: Int16Array): string => {
         const bytes = new Uint8Array(int16Array.buffer);
-        let binary = "";
-        for (let i = 0; i < bytes.byteLength; i++) {
-            binary += String.fromCharCode(bytes[i]);
-        }
+        // NEW-13 Fix: Single spread call instead of O(n²) loop concatenation
+        const binary = String.fromCharCode(...bytes);
         return btoa(binary);
     }, []);
 
@@ -198,17 +308,22 @@ export function useAudioRecorder(options: UseAudioRecorderOptions = {}) {
      */
     const processAudioData = useCallback(async (audioData: Float32Array, chunkCount: number) => {
         try {
-            // High-quality resampling using OfflineAudioContext
-            const resampledData = await resampleHQ(audioData, inputSampleRateRef.current, targetSampleRate);
+            // Default keeps low-latency linear path; HQ path is feature-flagged for controlled rollout.
+            const resampledData = enableHQResample
+                ? await resampleHQ(audioData, inputSampleRateRef.current, targetSampleRate)
+                : resampleLinear(audioData, inputSampleRateRef.current, targetSampleRate);
             
             // 转换为 PCM
             const pcmData = floatTo16BitPCM(resampledData);
             
-            // 转换为 base64
-            const base64 = int16ArrayToBase64(pcmData);
-            
-            // 发送
-            onAudioDataRef.current?.(base64);
+            // v1-13: Prefer binary callback (skips Base64 entirely)
+            if (onAudioDataBinaryRef.current) {
+                onAudioDataBinaryRef.current(pcmData);
+            } else {
+                // Legacy Base64 path
+                const base64 = int16ArrayToBase64(pcmData);
+                onAudioDataRef.current?.(base64);
+            }
             
             // 每 20 个块记录一次
             if (chunkCount % 20 === 0) {
@@ -217,21 +332,27 @@ export function useAudioRecorder(options: UseAudioRecorderOptions = {}) {
                     const abs = Math.abs(audioData[i]);
                     if (abs > maxAmp) maxAmp = abs;
                 }
-                console.log(`[AudioRecorder] Chunk #${chunkCount}: max=${maxAmp.toFixed(4)}`);
+                debug.log(`[AudioRecorder] Chunk #${chunkCount}: max=${maxAmp.toFixed(4)}`);
             }
         } catch (err) {
             console.error("[AudioRecorder] Failed to process audio data:", err);
         }
-    }, [targetSampleRate, resampleHQ, floatTo16BitPCM, int16ArrayToBase64]);
+    }, [enableHQResample, targetSampleRate, resampleHQ, resampleLinear, floatTo16BitPCM, int16ArrayToBase64]);
 
-    // 检测 AudioWorklet 支持
+    // P2-16: Cached AudioWorklet support detection (module-level cache)
     const checkWorkletSupport = useCallback((): boolean => {
         if (forceScriptProcessor) {
             return false;
         }
         
+        // Return cached result if available
+        if (_workletSupportCached !== null) {
+            return _workletSupportCached;
+        }
+        
         // Check if AudioWorklet is available
         if (typeof AudioWorkletNode === 'undefined') {
+            _workletSupportCached = false;
             return false;
         }
         
@@ -240,8 +361,10 @@ export function useAudioRecorder(options: UseAudioRecorderOptions = {}) {
             const testContext = new AudioContext();
             const hasWorklet = 'audioWorklet' in testContext;
             testContext.close();
+            _workletSupportCached = hasWorklet;
             return hasWorklet;
         } catch {
+            _workletSupportCached = false;
             return false;
         }
     }, [forceScriptProcessor]);
@@ -278,10 +401,10 @@ export function useAudioRecorder(options: UseAudioRecorderOptions = {}) {
             // Note: We don't connect to destination to avoid feedback
             // workletNode.connect(audioContext.destination);
             
-            console.log("[AudioRecorder] AudioWorklet setup complete");
+            debug.log("[AudioRecorder] AudioWorklet setup complete");
             return true;
         } catch (err) {
-            console.warn("[AudioRecorder] AudioWorklet setup failed, falling back to ScriptProcessorNode:", err);
+            debug.warn("[AudioRecorder] AudioWorklet setup failed, falling back to ScriptProcessorNode:", err);
             return false;
         }
     }, [processAudioData]);
@@ -292,7 +415,7 @@ export function useAudioRecorder(options: UseAudioRecorderOptions = {}) {
         source: MediaStreamAudioSourceNode,
         processorBufferSize: number
     ): void => {
-        console.warn("[AudioRecorder] Using ScriptProcessorNode (deprecated) - AudioWorklet not available");
+        debug.warn("[AudioRecorder] Using ScriptProcessorNode (deprecated) - AudioWorklet not available");
         
         const processor = audioContext.createScriptProcessor(processorBufferSize, 1, 1);
         processorRef.current = processor;
@@ -318,7 +441,7 @@ export function useAudioRecorder(options: UseAudioRecorderOptions = {}) {
         source.connect(processor);
         processor.connect(audioContext.destination);
         
-        console.log("[AudioRecorder] ScriptProcessorNode setup complete");
+        debug.log("[AudioRecorder] ScriptProcessorNode setup complete");
     }, [processAudioData]);
 
     // 开始录音
@@ -326,7 +449,14 @@ export function useAudioRecorder(options: UseAudioRecorderOptions = {}) {
         if (isRecordingRef.current) return;
 
         try {
-            console.log("[AudioRecorder] Starting...");
+            debug.log("[AudioRecorder] Starting...");
+
+            const environmentError = resolveEnvironmentError();
+            if (environmentError) {
+                setHasPermission(false);
+                setError(environmentError);
+                return;
+            }
             
             // Check AudioWorklet support
             const workletSupported = checkWorkletSupport();
@@ -344,7 +474,7 @@ export function useAudioRecorder(options: UseAudioRecorderOptions = {}) {
             
             const audioTrack = newStream.getAudioTracks()[0];
             if (audioTrack) {
-                console.log("[AudioRecorder] Track:", {
+                debug.log("[AudioRecorder] Track:", {
                     label: audioTrack.label,
                     enabled: audioTrack.enabled,
                     readyState: audioTrack.readyState,
@@ -363,11 +493,11 @@ export function useAudioRecorder(options: UseAudioRecorderOptions = {}) {
             audioContextRef.current = audioContext;
             inputSampleRateRef.current = audioContext.sampleRate;
             
-            console.log(`[AudioRecorder] AudioContext: state=${audioContext.state}, sampleRate=${audioContext.sampleRate}`);
+            debug.log(`[AudioRecorder] AudioContext: state=${audioContext.state}, sampleRate=${audioContext.sampleRate}`);
 
             if (audioContext.state === 'suspended') {
                 await audioContext.resume();
-                console.log("[AudioRecorder] AudioContext resumed");
+                debug.log("[AudioRecorder] AudioContext resumed");
             }
 
             // 创建音频源
@@ -395,14 +525,15 @@ export function useAudioRecorder(options: UseAudioRecorderOptions = {}) {
             setIsRecording(true);
             setError(null);
             
-            console.log(`[AudioRecorder] Recording started (using ${workletSetupSuccess ? 'AudioWorklet' : 'ScriptProcessorNode'})`);
+            debug.log(`[AudioRecorder] Recording started (using ${workletSetupSuccess ? 'AudioWorklet' : 'ScriptProcessorNode'})`);
 
         } catch (err) {
             console.error("[AudioRecorder] Failed to start:", err);
-            setError("无法开始录音: " + (err as Error).message);
+            setHasPermission(false);
+            setError(mapMicrophoneAccessError(err));
             onSpeakingChangeRef.current?.(false);
         }
-    }, [bufferSize, checkWorkletSupport, setupAudioWorklet, setupScriptProcessor]);
+    }, [bufferSize, checkWorkletSupport, resolveEnvironmentError, setupAudioWorklet, setupScriptProcessor]);
 
     // 停止录音
     const stopRecording = useCallback(async (): Promise<void> => {
@@ -410,7 +541,7 @@ export function useAudioRecorder(options: UseAudioRecorderOptions = {}) {
             return;
         }
 
-        console.log("[AudioRecorder] Stopping...");
+        debug.log("[AudioRecorder] Stopping...");
 
         isRecordingRef.current = false;
         setIsRecording(false);
@@ -450,7 +581,7 @@ export function useAudioRecorder(options: UseAudioRecorderOptions = {}) {
         onAudioEndRef.current?.();
         onSpeakingChangeRef.current?.(false);
         
-        console.log("[AudioRecorder] Recording stopped");
+        debug.log("[AudioRecorder] Recording stopped");
     }, []); // 无依赖，函数引用稳定
 
     // 清理资源

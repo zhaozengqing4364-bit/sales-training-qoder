@@ -3,12 +3,13 @@ Structured JSON logging with trace_id
 Constitution Principle VII: Observability
 """
 import logging
-import uuid
 from contextvars import ContextVar
 from pathlib import Path
 from typing import Any
 
 import structlog
+
+from common.monitoring.trace_context import generate_trace_id
 
 # Context variable for trace_id
 trace_id_var: ContextVar[str] = ContextVar("trace_id", default="")
@@ -18,7 +19,7 @@ def get_trace_id() -> str:
     """Get current trace_id from context"""
     tid = trace_id_var.get()
     if not tid:
-        tid = str(uuid.uuid4())[:8]
+        tid = generate_trace_id()
         trace_id_var.set(tid)
     return tid
 

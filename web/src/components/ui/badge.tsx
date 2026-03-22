@@ -3,7 +3,7 @@ import { ReactNode, HTMLAttributes } from "react";
 
 interface BadgeProps extends HTMLAttributes<HTMLSpanElement> {
     children: ReactNode;
-    variant?: "blue" | "purple" | "green" | "orange" | "gray" | "red" | "neutral" | "secondary";
+    variant?: "blue" | "purple" | "green" | "orange" | "gray" | "red" | "neutral" | "secondary" | "outline" | "destructive";
     className?: string;
 }
 
@@ -17,6 +17,8 @@ export function Badge({ children, variant = "blue", className, ...props }: Badge
         red: "bg-red-50 text-red-700 border-red-100",
         neutral: "bg-white border-gray-200 text-gray-900",
         secondary: "bg-slate-100 text-slate-600 border-slate-200",
+        outline: "bg-white text-slate-700 border-slate-300",
+        destructive: "bg-red-50 text-red-700 border-red-100",
     };
 
     return (

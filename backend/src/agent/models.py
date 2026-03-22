@@ -10,13 +10,14 @@ References:
 """
 import enum
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy import (
     Boolean,
     CheckConstraint,
     Column,
     DateTime,
+    Float,
     ForeignKey,
     Index,
     Integer,
@@ -96,9 +97,9 @@ class Agent(Base):
 
     # Audit
     created_by = Column(String(36), ForeignKey("users.user_id"), nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    published_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+    published_at = Column(DateTime(timezone=True), nullable=True)
 
     __table_args__ = (
         CheckConstraint(
@@ -126,6 +127,12 @@ class Agent(Base):
         back_populates="agent",
         foreign_keys="PracticeSession.agent_id"
     )
+    voice_policy = relationship(
+        "AgentVoicePolicy",
+        back_populates="agent",
+        uselist=False,
+        cascade="all, delete-orphan",
+    )
 
 
 class Persona(Base):
@@ -151,6 +158,7 @@ class Persona(Base):
     system_prompt = Column(Text, nullable=False)
     traits = Column(JSON, default=dict)  # {"性格": "怀疑", "关注点": "证据"}
     knowledge_base_ids = Column(JSON, default=list)  # Persona-specific knowledge bases
+    persona_policy = Column(JSON, default=dict)  # Persona-centered runtime policy
     behavior_config = Column(JSON, default=dict)  # BehaviorConfig
     scoring_weights = Column(JSON, nullable=True)  # Override Agent default weights
 
@@ -164,8 +172,8 @@ class Persona(Base):
 
     # Audit
     created_by = Column(String(36), ForeignKey("users.user_id"), nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
     __table_args__ = (
         CheckConstraint(
@@ -228,7 +236,7 @@ class AgentPersona(Base):
     override_config = Column(JSON, nullable=True)  # Override Persona configuration
 
     # Audit
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     __table_args__ = (
         UniqueConstraint("agent_id", "persona_id", name="uq_agent_persona"),
@@ -239,3 +247,169 @@ class AgentPersona(Base):
     # Relationships
     agent = relationship("Agent", back_populates="personas")
     persona = relationship("Persona", back_populates="agent_personas")
+
+
+class VoiceRuntimeProfile(Base):
+    """
+    VoiceRuntimeProfile - Realtime voice runtime profile
+
+    Stores reusable runtime presets for voice mode routing, StepFun model
+    parameters, and tool policies (web search / internal retrieval).
+    """
+    __tablename__ = "voice_runtime_profiles"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    name = Column(String(100), nullable=False, unique=True)
+    description = Column(String(500), nullable=True)
+
+    # Lifecycle
+    is_default = Column(Boolean, default=False, index=True)
+    is_active = Column(Boolean, default=True, index=True)
+
+    # Runtime mode and model settings
+    voice_mode = Column(String(32), nullable=False, default="stepfun_realtime")
+    model_name = Column(String(100), nullable=False, default="step-audio-r1.1")
+    voice_name = Column(String(100), nullable=False, default="qingchunshaonv")
+    temperature = Column(Float, nullable=False, default=0.7)
+    input_audio_format = Column(String(20), nullable=False, default="pcm16")
+    output_audio_format = Column(String(20), nullable=False, default="pcm16")
+    output_sample_rate = Column(Integer, nullable=False, default=24000)
+    turn_detection = Column(String(32), nullable=True, default=None)  # null | server_vad
+
+    # Prompt/tool policies
+    system_instruction_template = Column(Text, nullable=True)
+    tool_policy = Column(JSON, default=dict)
+
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+
+    __table_args__ = (
+        CheckConstraint(
+            "voice_mode IN ('legacy', 'stepfun_realtime')",
+            name="ck_voice_runtime_profile_mode",
+        ),
+        CheckConstraint(
+            "temperature >= 0 AND temperature <= 2",
+            name="ck_voice_runtime_profile_temperature",
+        ),
+        CheckConstraint(
+            "output_sample_rate > 0",
+            name="ck_voice_runtime_profile_sample_rate",
+        ),
+        Index("idx_voice_runtime_profiles_default", "is_default"),
+        Index("idx_voice_runtime_profiles_active", "is_active"),
+        Index("idx_voice_runtime_profiles_mode", "voice_mode"),
+    )
+
+    agent_policies = relationship(
+        "AgentVoicePolicy",
+        back_populates="runtime_profile",
+    )
+
+
+class AgentVoicePolicy(Base):
+    """
+    AgentVoicePolicy - Per-agent runtime policy overrides
+
+    Defines which runtime profile the Agent uses by default and optional
+    per-agent overrides for voice mode, model params, and tool policies.
+    """
+    __tablename__ = "agent_voice_policies"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    agent_id = Column(
+        String(36),
+        ForeignKey("agents.id", ondelete="CASCADE"),
+        nullable=False,
+        unique=True,
+    )
+    runtime_profile_id = Column(
+        String(36),
+        ForeignKey("voice_runtime_profiles.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+
+    enabled = Column(Boolean, nullable=False, default=True)
+    voice_mode_override = Column(String(32), nullable=True)
+    model_override = Column(String(100), nullable=True)
+    voice_override = Column(String(100), nullable=True)
+    temperature_override = Column(Float, nullable=True)
+    instructions_override = Column(Text, nullable=True)
+    tool_policy_override = Column(JSON, default=dict)
+
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+
+    __table_args__ = (
+        CheckConstraint(
+            "voice_mode_override IS NULL OR voice_mode_override IN ('legacy', 'stepfun_realtime')",
+            name="ck_agent_voice_policy_mode",
+        ),
+        CheckConstraint(
+            "temperature_override IS NULL OR (temperature_override >= 0 AND temperature_override <= 2)",
+            name="ck_agent_voice_policy_temperature",
+        ),
+        Index("idx_agent_voice_policy_agent", "agent_id"),
+        Index("idx_agent_voice_policy_profile", "runtime_profile_id"),
+    )
+
+    agent = relationship("Agent", back_populates="voice_policy")
+    runtime_profile = relationship("VoiceRuntimeProfile", back_populates="agent_policies")
+
+
+class PresentationAIPolicy(Base):
+    """
+    PresentationAIPolicy - Scope-based AI policy for PPT coaching.
+
+    Scope priority:
+    global < scenario < presentation
+    """
+
+    __tablename__ = "presentation_ai_policies"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    scope_type = Column(String(20), nullable=False, default="global")
+    scope_id = Column(String(64), nullable=True)
+    enabled = Column(Boolean, nullable=False, default=True)
+
+    # Prompt-first configuration (template binding)
+    prompt_config = Column(JSON, nullable=False, default=dict)
+    # Rule engine configuration (thresholds/cooldowns)
+    rule_config = Column(JSON, nullable=False, default=dict)
+    # Hard guardrail fallback toggles
+    fallback_config = Column(JSON, nullable=False, default=dict)
+
+    created_at = Column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+    updated_at = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
+    updated_by = Column(String(36), ForeignKey("users.user_id"), nullable=True)
+
+    __table_args__ = (
+        CheckConstraint(
+            "scope_type IN ('global', 'scenario', 'presentation')",
+            name="ck_presentation_ai_policy_scope_type",
+        ),
+        CheckConstraint(
+            "((scope_type = 'global' AND scope_id IS NULL) "
+            "OR (scope_type IN ('scenario', 'presentation') AND scope_id IS NOT NULL))",
+            name="ck_presentation_ai_policy_scope_id",
+        ),
+        UniqueConstraint(
+            "scope_type",
+            "scope_id",
+            name="uq_presentation_ai_policy_scope",
+        ),
+        Index(
+            "idx_presentation_ai_policy_scope",
+            "scope_type",
+            "scope_id",
+        ),
+        Index("idx_presentation_ai_policy_enabled", "enabled"),
+    )
+
+    updater = relationship("User", foreign_keys=[updated_by])

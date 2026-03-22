@@ -7,8 +7,16 @@
 
 type AuthListener = (message: string) => void;
 
+interface LogoutOptions {
+    redirectTo?: string | null;
+    notify?: boolean;
+}
+
 class AuthHandler {
     private listeners: Set<AuthListener> = new Set();
+    private lastNotifyMessage: string | null = null;
+    private lastNotifyTime = 0;
+    private readonly notifyCooldownMs = 1200;
 
     /**
      * Subscribe to auth events
@@ -25,6 +33,16 @@ class AuthHandler {
      * Notify all listeners of an auth event
      */
     notify(message: string): void {
+        const now = Date.now();
+        if (
+            this.lastNotifyMessage === message
+            && now - this.lastNotifyTime < this.notifyCooldownMs
+        ) {
+            return;
+        }
+        this.lastNotifyMessage = message;
+        this.lastNotifyTime = now;
+
         this.listeners.forEach(listener => {
             try {
                 listener(message);
@@ -35,18 +53,19 @@ class AuthHandler {
     }
 
     /**
-     * Handle logout - clear storage and redirect
+     * Handle logout side effects and redirect.
      */
-    logout(message: string = "已退出登录"): void {
+    logout(message: string = "已退出登录", options: LogoutOptions = {}): void {
+        const { redirectTo = null, notify = true } = options;
+
         if (typeof window !== "undefined") {
-            localStorage.removeItem("token");
-            localStorage.removeItem("user");
-            this.notify(message);
-            
-            // Redirect to login after a short delay
-            setTimeout(() => {
-                window.location.href = "/login";
-            }, 500);
+            if (notify) {
+                this.notify(message);
+            }
+
+            if (redirectTo) {
+                window.location.assign(redirectTo);
+            }
         }
     }
 
@@ -54,15 +73,14 @@ class AuthHandler {
      * Handle session expired
      */
     sessionExpired(): void {
-        this.logout("登录已过期，请重新登录");
+        this.logout("登录已过期，请重新登录", { redirectTo: null });
     }
 
     /**
      * Handle unauthorized access
      */
     unauthorized(): void {
-        this.notify("权限不足，请重新登录");
-        this.logout("权限不足");
+        this.logout("权限不足，请重新登录", { redirectTo: null });
     }
 }
 

@@ -8,6 +8,7 @@ Documentation:
 """
 import asyncio
 import base64
+import contextlib
 import json
 from collections.abc import AsyncIterator
 
@@ -90,6 +91,7 @@ class AlibabaASRProvider(ASRProvider):
             return
 
         ws_connection = None
+        receive_task: asyncio.Task | None = None
         try:
             # Connect to WebSocket
             headers = {
@@ -138,7 +140,7 @@ class AlibabaASRProvider(ASRProvider):
                 logger.warning("Timeout waiting for session response, continuing...")
 
             # Start receiving task
-            transcript_queue = asyncio.Queue()
+            transcript_queue = asyncio.Queue(maxsize=64)
             final_event = asyncio.Event()
             accumulated_text = []
             
@@ -166,12 +168,13 @@ class AlibabaASRProvider(ASRProvider):
 
                     await ws_connection.send(json.dumps(event))
 
-                    # Check for intermediate transcriptions
-                    try:
-                        transcript = transcript_queue.get_nowait()
-                        yield Result.ok(transcript)
-                    except asyncio.QueueEmpty:
-                        pass
+                    # Drain intermediate transcriptions to keep realtime feedback smooth
+                    while True:
+                        try:
+                            transcript = transcript_queue.get_nowait()
+                            yield Result.ok(transcript)
+                        except asyncio.QueueEmpty:
+                            break
 
             audio_duration = total_bytes / (sample_rate * 2)
             logger.info(f"Sent {chunk_count} audio chunks, total {total_bytes} bytes ({audio_duration:.2f}s)")
@@ -207,13 +210,6 @@ class AlibabaASRProvider(ASRProvider):
                 except asyncio.QueueEmpty:
                     pass
 
-            # Cancel receive task
-            receive_task.cancel()
-            try:
-                await receive_task
-            except asyncio.CancelledError:
-                pass
-
         except asyncio.TimeoutError:
             logger.error("ASR WebSocket connection timeout")
             yield Result.fail("[USE_BROWSER_ASR]")
@@ -222,11 +218,17 @@ class AlibabaASRProvider(ASRProvider):
             logger.error(f"ASR WebSocket closed: {e}")
             yield Result.fail("[USE_BROWSER_ASR]")
 
-        except Exception as e:
+        except (ConnectionError, OSError, RuntimeError, ValueError) as e:
             logger.error(f"ASR streaming error: {str(e)}", exc_info=True)
             yield Result.fail("[USE_BROWSER_ASR]")
 
         finally:
+            if receive_task and not receive_task.done():
+                receive_task.cancel()
+                try:
+                    await receive_task
+                except asyncio.CancelledError:
+                    pass
             if ws_connection:
                 await ws_connection.close()
 
@@ -238,6 +240,20 @@ class AlibabaASRProvider(ASRProvider):
         accumulated_text: list
     ):
         """Receive transcription events from WebSocket"""
+        def _offer_transcript(transcript: str) -> None:
+            if not transcript:
+                return
+            try:
+                transcript_queue.put_nowait(transcript)
+            except asyncio.QueueFull:
+                # Keep the queue bounded: drop oldest stale item first.
+                try:
+                    transcript_queue.get_nowait()
+                except asyncio.QueueEmpty:
+                    pass
+                with contextlib.suppress(asyncio.QueueFull):
+                    transcript_queue.put_nowait(transcript)
+
         try:
             async for message in ws_connection:
                 data = json.loads(message)
@@ -250,7 +266,7 @@ class AlibabaASRProvider(ASRProvider):
                     transcript = data.get("transcript", "")
                     if transcript:
                         accumulated_text.append(transcript)
-                        await transcript_queue.put(transcript)
+                        _offer_transcript(transcript)
                         logger.info(f"ASR completed transcript: {transcript}")
                         final_event.set()  # 标记完成
 
@@ -265,6 +281,7 @@ class AlibabaASRProvider(ASRProvider):
                     stash = data.get("stash", "")
                     if stash:
                         accumulated_text.append(stash)
+                        _offer_transcript(stash)
                         logger.info(f"ASR stash: {stash}")
 
                 elif event_type == "input_audio_buffer.speech_started":
@@ -346,6 +363,6 @@ class AlibabaASRProvider(ASRProvider):
 
             return Result.ok(True)
 
-        except Exception as e:
+        except (ConnectionError, OSError, RuntimeError, ValueError) as e:
             logger.error(f"Alibaba ASR health check failed: {str(e)}")
             return Result.fail(False)

@@ -100,7 +100,7 @@ class LocalStreamingASRProvider(ASRProvider):
             self._loaded = True
             logger.info("Paraformer-zh-streaming model loaded successfully")
 
-        except Exception as e:
+        except (ConnectionError, OSError, RuntimeError, ValueError) as e:
             logger.error(f"Failed to load streaming ASR model: {str(e)}")
             # Fall back to CPU if CUDA fails
             if self.device == "cuda":
@@ -224,7 +224,7 @@ class LocalStreamingASRProvider(ASRProvider):
             tracker.record(trace_id, "ASR_STREAM_CANCELLED")
             raise
 
-        except Exception as e:
+        except (ConnectionError, OSError, RuntimeError, ValueError) as e:
             logger.error(f"Streaming ASR error: {str(e)}", extra={"trace_id": trace_id})
             tracker.record(trace_id, "ASR_STREAM_ERROR", {"error": str(e)})
             yield Result.fail("[USE_BROWSER_ASR]")
@@ -280,7 +280,7 @@ class LocalStreamingASRProvider(ASRProvider):
 
             return None
 
-        except Exception as e:
+        except (ConnectionError, OSError, RuntimeError, ValueError) as e:
             logger.warning(f"Chunk processing error: {str(e)}")
             return None
 
@@ -308,7 +308,7 @@ class LocalStreamingASRProvider(ASRProvider):
 
             return None
 
-        except Exception as e:
+        except (ConnectionError, OSError, RuntimeError, ValueError) as e:
             logger.warning(f"Stream finalization error: {str(e)}")
             return None
 
@@ -344,7 +344,7 @@ class LocalStreamingASRProvider(ASRProvider):
 
             return Result.fail("[USE_BROWSER_ASR]")
 
-        except Exception as e:
+        except (ConnectionError, OSError, RuntimeError, ValueError) as e:
             logger.error(f"File transcription error: {str(e)}")
             return Result.fail("[USE_BROWSER_ASR]")
 
@@ -358,7 +358,7 @@ class LocalStreamingASRProvider(ASRProvider):
         try:
             self._ensure_loaded()
             return Result.ok(self._loaded and self._model is not None)
-        except Exception as e:
+        except (ConnectionError, OSError, RuntimeError, ValueError) as e:
             logger.error(f"Health check failed: {str(e)}")
             return Result.fail(False)
 

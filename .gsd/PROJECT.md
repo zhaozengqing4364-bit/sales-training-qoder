@@ -1,0 +1,39 @@
+# Project
+
+## What This Is
+
+这是一个企业内部 AI 智能演练平台，当前已经具备销售对练、PPT 对练、Agent / Persona / 知识库管理、实时语音交互、报告与回放等基础骨架。现阶段的核心工作不是继续堆新功能，而是把“偏演示、偏娱乐化”的销售训练能力收敛成一个真正可持续使用的训练系统：训练材料来自真实知识库，训练过程尽量稳定，训练后报告可信，主管可以据此做线下辅导，用户能在“训练 → 反馈 → 复盘 → 再训练”中持续改进。
+
+## Core Value
+
+把真实销售训练做成稳定、可信、可持续复用的能力闭环：让销售围绕公司真实产品和标准 PPT 练出“会讲价值、会处理异议、会顺畅多轮沟通”的能力，而不是只完成一场好看的 AI 对话演示。
+
+## Current State
+
+- 已有双场景产品骨架：销售对练（sales）与 PPT 对练（presentation）。
+- 已有前后端主链路：Next.js 用户侧与管理侧、FastAPI API、WebSocket 实时交互、PracticeSession 会话模型、报告与回放入口。
+- 已有训练资产治理骨架：Agent、Persona、知识库、提示词、语音 runtime policy、管理端列表与编辑页面。
+- 已有部分能力模块：模糊词检测、销售阶段识别、实时评分、回放 API、会话状态服务、知识库服务。
+- M001/S01 已完成：销售训练终态现在统一走单一后端 lifecycle 写入口；StepFun runtime 已接回最小可恢复快照与 `reconnected` 协议；训练页只信服务端 lifecycle 事件，并在结束失败时留在训练页暴露 `重试结束` 与 trace 诊断。
+- 当前主风险已从“第二轮就坏 / 结束乱跳 / 重连丢状态”转向“训练事实如何稳定落库并成为报告、回放、趋势的同一事实源”。
+- 真实首发目标已明确：先把桌面端稳定性做满，不在第一阶段绑定移动端 / 企业微信 / 外部系统集成。
+
+## Architecture / Key Patterns
+
+- 前端：Next.js 16 + React 19 + TypeScript，用户侧训练页位于 `web/src/app/(user)/practice/[sessionId]/`，管理侧位于 `web/src/app/admin/*`。
+- 后端：FastAPI + SQLAlchemy Async + WebSocket，核心域包含 `common`、`sales_bot`、`presentation_coach`、`agent`、`evaluation`。
+- 实时交互：销售与 PPT 场景分离，各自使用独立 WebSocket handler；桌面端训练页通过统一消息协议接收 `asr_transcript`、`fuzzy_detection`、`stage_update`、`score_update`、`action_card` 等事件。
+- 数据闭环：`PracticeSession` 作为事实锚点，`ConversationMessage` 承载逐轮消息、评分快照、销售阶段、高光与回放数据；报告、回放、趋势判断应尽量引用同一事实源。
+- 训练资产：知识库、PPT、Agent / Persona 配置是长期运营资产；M001 不把材料写死在 prompt，而是要求管理员更新知识库 / PPT 后能影响下一次训练。
+
+## Capability Contract
+
+See `.gsd/REQUIREMENTS.md` for the explicit capability contract, requirement status, and coverage mapping.
+
+## Milestone Sequence
+
+- [ ] M001: 桌面端销售训练闭环可用化 — 把桌面端客户演练、PPT 会后复盘、知识生效、单次报告与连续变化做成可真实使用的训练闭环。
+- [ ] M002: 实时教练闭环 — 把训练中的实时建议、阶段引导、即时评分和下一轮动作建议做成稳定可用的教练体验。
+- [ ] M003: 知识与角色真实性 — 让 AI 客户围绕真实产品、价格、竞品、证据进行可信追问，并保持 Persona 行为一致性。
+- [ ] M004: 复盘与学习闭环增强 — 强化回放、高光、逐轮点评、PPT 纠偏与学习证据，让训练后改进路径更清晰。
+- [ ] M005: 后台治理与规模化运营 — 完成长期运营所需的后台治理、管理动作、趋势分析、集成边界与后续扩展能力。

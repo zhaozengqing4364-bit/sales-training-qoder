@@ -65,6 +65,8 @@ pnpm-lock.yaml
 # Logs
 *.log
 logs/
+!web/src/app/admin/logs/
+!web/src/app/admin/logs/page.tsx
 *.log.*
 
 # IDEs and Editors
@@ -156,3 +158,19 @@ wechat_secrets/
 !(example*.key)
 !(example*.pem)
 !(example*.crt)
+
+# Local one-click dev runtime
+.dev/
+
+# ── GSD baseline (auto-generated) ──
+.gsd/activity/
+.gsd/runtime/
+.gsd/worktrees/
+.gsd/auto.lock
+.gsd/metrics.json
+.gsd/STATE.md
+*.code-workspace
+.next/
+*.pyc
+target/
+vendor/

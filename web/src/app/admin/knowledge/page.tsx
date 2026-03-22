@@ -55,7 +55,7 @@ export default function KnowledgePage() {
         setError(null);
         try {
             const data = await api.admin.getKnowledgeBases();
-            setKbs(data);
+            setKbs(data.items);
         } catch (err) {
             console.error("Failed to load knowledge bases:", err);
             setError(err instanceof Error ? err.message : "加载失败");

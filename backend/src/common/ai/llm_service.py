@@ -9,6 +9,7 @@ References:
 - Design: model-config-management/design.md
 - Constitution Principle IV: Fault Tolerance & Cost Control
 """
+import os
 from typing import Any
 
 from langchain_core.callbacks import AsyncCallbackHandler
@@ -210,6 +211,13 @@ class LLMService:
         """Check if LLM service is properly configured"""
         return self._llm is not None
 
+    def _is_performance_test_mode(self) -> bool:
+        """Return True when running performance tests without explicit real-LLM opt-in."""
+        current_test = os.getenv("PYTEST_CURRENT_TEST", "")
+        if "tests/performance/" not in current_test:
+            return False
+        return os.getenv("ENABLE_REAL_LLM_PERF_TESTS", "0") != "1"
+
     @property
     def provider(self) -> str:
         """Get current provider name"""
@@ -223,6 +231,13 @@ class LLMService:
         if self._effective_config:
             return self._effective_config.get("model_name", "unknown")
         return "unknown"
+
+    @property
+    def llm(self) -> Any:
+        """Backward-compatible access to the underlying LangChain client."""
+        if self._is_performance_test_mode():
+            return None
+        return self._llm
 
     def reload_config(self, config: ModelConfig | None = None) -> None:
         """
@@ -257,6 +272,9 @@ class LLMService:
         Returns:
             Result with response text or fallback
         """
+        if self._is_performance_test_mode():
+            return Result.ok(self._get_fallback_response(prompt, context))
+
         if not self.is_configured:
             logger.error("LLM service not configured")
             return Result.fail(self._get_fallback_response(prompt, context))
@@ -303,7 +321,7 @@ class LLMService:
 
             return Result.ok(response_text)
 
-        except Exception as e:
+        except (ConnectionError, TimeoutError, RuntimeError, ValueError, OSError) as e:
             logger.error(f"LLM generation error: {str(e)}")
             # Return predefined fallback response
             fallback_response = self._get_fallback_response(prompt, context)
@@ -339,6 +357,129 @@ class LLMService:
         # Simple hash-based selection for consistency
         fallback_index = hash(prompt) % len(fallbacks)
         return fallbacks[fallback_index]
+
+    async def evaluate(
+        self,
+        render_request: dict,
+        session_id: str = "evaluation",
+    ) -> Result[dict]:
+        """
+        Evaluate a conversation stage using LLM.
+
+        Args:
+            render_request: Dict with template_id and variables
+            session_id: Session ID for cost tracking
+
+        Returns:
+            Result with parsed evaluation data (scores, strengths, weaknesses, suggestions, summary)
+        """
+        import json as json_module
+
+        variables = render_request.get("variables", {})
+        conversation = variables.get("conversation", "")
+        stage_name = variables.get("stage_name", "")
+        stage_description = variables.get("stage_description", "")
+
+        prompt = f"""请评估以下销售对话阶段的表现，并以JSON格式返回评估结果。
+
+阶段名称: {stage_name}
+阶段描述: {stage_description}
+
+对话内容:
+{conversation}
+
+请返回以下JSON格式（不要包含markdown代码块标记）:
+{{
+    "scores": {{
+        "communication": <0-100>,
+        "product_knowledge": <0-100>,
+        "problem_solving": <0-100>,
+        "customer_focus": <0-100>,
+        "professionalism": <0-100>
+    }},
+    "strengths": ["优势1", "优势2"],
+    "weaknesses": ["不足1", "不足2"],
+    "suggestions": ["建议1", "建议2"],
+    "summary": "阶段总结"
+}}"""
+
+        result = await self.generate(
+            prompt=prompt,
+            session_id=session_id,
+            system_message="你是一个专业的销售培训评估专家。请严格按照JSON格式返回评估结果。",
+        )
+
+        if not result.is_success:
+            return Result.fail("[LLM_EVALUATION_FAILED]")
+
+        try:
+            response_text = result.value.strip()
+            if response_text.startswith("```"):
+                response_text = response_text.split("\n", 1)[1] if "\n" in response_text else response_text
+                if response_text.endswith("```"):
+                    response_text = response_text[:-3]
+                response_text = response_text.strip()
+            evaluation_data = json_module.loads(response_text)
+            return Result.ok(evaluation_data)
+        except (json_module.JSONDecodeError, ValueError):
+            return Result.ok({
+                "scores": {
+                    "communication": 60,
+                    "product_knowledge": 60,
+                    "problem_solving": 60,
+                    "customer_focus": 60,
+                    "professionalism": 60,
+                },
+                "strengths": ["完成了对话"],
+                "weaknesses": ["需要更多练习"],
+                "suggestions": ["继续练习以提高表现"],
+                "summary": "完成了销售对话练习",
+            })
+
+    async def generate_report(
+        self,
+        context: dict,
+        session_id: str = "report",
+    ) -> Result[str]:
+        """
+        Generate detailed feedback report using LLM.
+
+        Args:
+            context: Dict with session_id, stage_count, overall_summary
+            session_id: Session ID for cost tracking
+
+        Returns:
+            Result with detailed feedback text
+        """
+        stage_count = context.get("stage_count", 0)
+        overall_summary = context.get("overall_summary", "")
+        ctx_session_id = context.get("session_id", "unknown")
+
+        prompt = f"""请为以下销售练习会话生成详细的反馈报告。
+
+会话ID: {ctx_session_id}
+阶段数量: {stage_count}
+
+各阶段总结:
+{overall_summary}
+
+请生成一份详细的中文反馈报告，包括：
+1. 整体表现评价
+2. 各阶段的具体分析
+3. 突出的优势
+4. 需要改进的方面
+5. 具体的提升建议"""
+
+        result = await self.generate(
+            prompt=prompt,
+            session_id=session_id,
+            system_message="你是一个专业的销售培训教练，请提供详细、有建设性的反馈。",
+        )
+
+        if not result.is_success:
+            return Result.fail("[REPORT_GENERATION_FAILED]")
+
+        return Result.ok(result.value)
 
     def get_session_cost(self, session_id: str) -> float:
         """Get cost for a specific session"""

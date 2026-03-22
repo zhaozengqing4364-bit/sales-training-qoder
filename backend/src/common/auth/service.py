@@ -4,14 +4,16 @@ Constitution Principle VI: Data Privacy & Compliance
 """
 import os
 import uuid
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
+from http.cookies import SimpleCookie
+from typing import Any
 
 from dotenv import load_dotenv
-from fastapi import Depends, HTTPException
+from fastapi import Cookie, Depends, HTTPException, Request, Response
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError, jwt
 from passlib.context import CryptContext
-from sqlalchemy import cast, select
+from sqlalchemy import cast, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.types import String as SQLAlchemyString
 
@@ -26,18 +28,100 @@ logger = get_logger(__name__)
 JWT_SECRET = os.getenv("JWT_SECRET", "your-super-secret-key-change-in-production-min-32-chars")
 JWT_ALGORITHM = os.getenv("JWT_ALGORITHM", "HS256")
 JWT_EXPIRATION_HOURS = int(os.getenv("JWT_EXPIRATION_HOURS", "24"))
+AUTH_SESSION_COOKIE_NAME = os.getenv("AUTH_SESSION_COOKIE_NAME", "app_session")
+AUTH_SESSION_COOKIE_SECURE = (
+    os.getenv("AUTH_SESSION_COOKIE_SECURE", "").strip().lower() in {"1", "true", "yes", "on"}
+)
+AUTH_SESSION_COOKIE_SAMESITE = os.getenv("AUTH_SESSION_COOKIE_SAMESITE", "lax").strip().lower() or "lax"
 
-security = HTTPBearer()
+security = HTTPBearer(auto_error=False)
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+
+def get_session_cookie_name() -> str:
+    return AUTH_SESSION_COOKIE_NAME
+
+
+def get_session_cookie_max_age_seconds() -> int:
+    return max(1, JWT_EXPIRATION_HOURS * 3600)
+
+
+def get_session_cookie_options() -> dict[str, Any]:
+    return {
+        "key": get_session_cookie_name(),
+        "httponly": True,
+        "secure": AUTH_SESSION_COOKIE_SECURE,
+        "samesite": AUTH_SESSION_COOKIE_SAMESITE,
+        "path": "/",
+        "max_age": get_session_cookie_max_age_seconds(),
+    }
+
+
+def set_auth_session_cookie(response: Response, token: str) -> None:
+    response.set_cookie(
+        value=token,
+        **get_session_cookie_options(),
+    )
+
+
+def clear_auth_session_cookie(response: Response) -> None:
+    response.delete_cookie(
+        key=get_session_cookie_name(),
+        path="/",
+        samesite=AUTH_SESSION_COOKIE_SAMESITE,
+    )
+
+
+def resolve_bearer_or_cookie_token(
+    *,
+    credentials: HTTPAuthorizationCredentials | None = None,
+    request: Request | None = None,
+    cookie_token: str | None = None,
+) -> str | None:
+    if credentials is not None and credentials.credentials:
+        return credentials.credentials
+
+    if cookie_token:
+        return cookie_token
+
+    if request is not None:
+        request_cookie_token = request.cookies.get(get_session_cookie_name())
+        if request_cookie_token:
+            return request_cookie_token
+
+    return None
+
+
+def resolve_websocket_token(
+    *,
+    query_token: str | None,
+    authorization_header: str | None = None,
+    cookie_header: str | None = None,
+) -> str:
+    if authorization_header and authorization_header.lower().startswith("bearer "):
+        return authorization_header[7:].strip()
+
+    normalized_query_token = (query_token or "").strip()
+    if normalized_query_token:
+        return normalized_query_token
+
+    if cookie_header:
+        cookies = SimpleCookie()
+        cookies.load(cookie_header)
+        morsel = cookies.get(get_session_cookie_name())
+        if morsel and morsel.value:
+            return morsel.value.strip()
+
+    return ""
 
 
 def create_access_token(data: dict, expires_delta: timedelta | None = None) -> str:
     """Create JWT access token"""
     to_encode = data.copy()
     if expires_delta:
-        expire = datetime.utcnow() + expires_delta
+        expire = datetime.now(UTC) + expires_delta
     else:
-        expire = datetime.utcnow() + timedelta(hours=JWT_EXPIRATION_HOURS)
+        expire = datetime.now(UTC) + timedelta(hours=JWT_EXPIRATION_HOURS)
 
     to_encode.update({"exp": expire})
     encoded_jwt = jwt.encode(to_encode, JWT_SECRET, algorithm=JWT_ALGORITHM)
@@ -55,11 +139,19 @@ def verify_token(token: str) -> dict:
 
 
 async def get_current_user(
+    request: Request,
     credentials: HTTPAuthorizationCredentials = Depends(security),
+    cookie_token: str | None = Cookie(default=None, alias=AUTH_SESSION_COOKIE_NAME),
     db: AsyncSession = Depends(get_db)
 ) -> User:
     """Get current authenticated user from JWT token"""
-    token = credentials.credentials
+    token = resolve_bearer_or_cookie_token(
+        credentials=credentials,
+        request=request,
+        cookie_token=cookie_token,
+    )
+    if token is None:
+        raise HTTPException(status_code=401, detail="Not authenticated")
 
     try:
         payload = verify_token(token)
@@ -136,12 +228,6 @@ async def authenticate_wechat(code: str) -> User | None:
     return None
 
 
-def get_db():
-    """Dependency to get database session"""
-    import common.db.session as db_module
-    return db_module.get_db()
-
-
 async def get_dev_user(db: AsyncSession) -> User:
     """
     Development mode: Get or create a mock user for testing
@@ -152,28 +238,47 @@ async def get_dev_user(db: AsyncSession) -> User:
     if os.getenv("ENVIRONMENT") != "development":
         raise HTTPException(status_code=401, detail="Development mode only")
 
-    # Try to find existing dev user
-    result = await db.execute(select(User).where(User.email == "dev@example.com"))
-    user = result.scalar_one_or_none()
+    # Try to find existing dev user by either stable email or stable WeChat ID.
+    # This prevents unique-key conflicts when email was edited in dev mode.
+    result = await db.execute(
+        select(User).where(
+            or_(
+                User.email == "dev@example.com",
+                User.wechat_user_id == "dev_wechat_user",
+            )
+        )
+    )
+    user = result.scalars().first()
 
     if not user:
-        # Create dev user (only use fields that exist in User model)
         user = User(
             user_id=str(uuid.uuid4()),
             wechat_user_id="dev_wechat_user",
             email="dev@example.com",
             name="Developer",
-            department="Development"
+            department="Development",
         )
         db.add(user)
         await db.commit()
         await db.refresh(user)
+        return user
+
+    # Keep dev account identity fields canonical for predictable local testing.
+    user.wechat_user_id = "dev_wechat_user"
+    if not user.email:
+        user.email = "dev@example.com"
+    if not user.name:
+        user.name = "Developer"
+    await db.commit()
+    await db.refresh(user)
 
     return user
 
 
 async def get_current_user_optional(
+    request: Request,
     credentials: HTTPAuthorizationCredentials = Depends(security),
+    cookie_token: str | None = Cookie(default=None, alias=AUTH_SESSION_COOKIE_NAME),
     db: AsyncSession = Depends(get_db)
 ) -> User | None:
     """
@@ -186,10 +291,10 @@ async def get_current_user_optional(
     if os.getenv("ENVIRONMENT") == "development":
         try:
             return await get_dev_user(db)
-        except Exception:
+        except (RuntimeError, ValueError, OSError):
             pass
 
     try:
-        return await get_current_user(credentials, db)
+        return await get_current_user(request, credentials, cookie_token, db)
     except HTTPException:
         return None

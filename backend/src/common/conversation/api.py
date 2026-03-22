@@ -9,10 +9,10 @@ References:
 - API Contract: docs/api-contract/replay.md
 """
 import os
-from typing import Optional
 
-from fastapi import APIRouter, Depends, Query, HTTPException
-from fastapi.responses import FileResponse, RedirectResponse
+from fastapi import APIRouter, Depends, Query
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.auth.service import get_current_user
@@ -31,11 +31,35 @@ from common.conversation.schemas import (
     ConversationErrorResponse,
 )
 from common.db.session import get_db
-from common.monitoring.logger import get_logger
+from common.db.models import PracticeSession, User
+from common.monitoring.logger import get_logger, get_trace_id
 
 logger = get_logger(__name__)
 
 router = APIRouter(prefix="/sessions", tags=["replay"])
+
+
+async def _ensure_session_access(
+    session_id: str,
+    current_user: User,
+    db: AsyncSession,
+) -> JSONResponse | None:
+    """Ensure caller can access the target session replay data."""
+    if str(getattr(current_user, "role", "user")).lower() == "admin":
+        return None
+
+    result = await db.execute(
+        select(PracticeSession).where(PracticeSession.session_id == session_id)
+    )
+    session = result.scalar_one_or_none()
+
+    # Keep existing not-found semantics in downstream service.
+    if session is None:
+        return None
+
+    if str(session.user_id) != str(current_user.user_id):
+        return _error_response(403, "[ACCESS_DENIED]", "Access denied")
+    return None
 
 
 @router.get(
@@ -50,7 +74,7 @@ async def get_messages(
     session_id: str,
     page: int = Query(1, ge=1, description="Page number"),
     page_size: int = Query(50, ge=1, le=100, description="Items per page"),
-    current_user=Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
     """
@@ -66,6 +90,10 @@ async def get_messages(
 
     Requirements: R10.1
     """
+    access_error = await _ensure_session_access(session_id, current_user, db)
+    if access_error:
+        return access_error
+
     service = ReplayService(db)
     result = await service.get_messages(session_id, page, page_size)
 
@@ -76,14 +104,12 @@ async def get_messages(
 
     messages, total = result.value
 
-    return {
-        "success": True,
-        "data": {
-            "messages": [_message_to_response(m) for m in messages],
-            "total": total
-        },
-        "trace_id": None
-    }
+    return _success_response(
+        {
+            "messages": [_message_to_response(m, index + 1) for index, m in enumerate(messages)],
+            "total": total,
+        }
+    )
 
 
 @router.get(
@@ -97,7 +123,7 @@ async def get_messages(
 async def get_message_detail(
     session_id: str,
     message_id: str,
-    current_user=Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
     """
@@ -112,6 +138,10 @@ async def get_message_detail(
 
     Requirements: R10.1
     """
+    access_error = await _ensure_session_access(session_id, current_user, db)
+    if access_error:
+        return access_error
+
     service = ReplayService(db)
 
     # First check session is completed
@@ -137,11 +167,7 @@ async def get_message_detail(
     if message.session_id != session_id:
         return _error_response(404, "[MESSAGE_NOT_FOUND]", "Message not found in this session")
 
-    return {
-        "success": True,
-        "data": _message_to_detail_response(message, service),
-        "trace_id": None
-    }
+    return _success_response(_message_to_detail_response(message, service))
 
 
 @router.get(
@@ -154,7 +180,7 @@ async def get_message_detail(
 )
 async def get_replay_data(
     session_id: str,
-    current_user=Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
     """
@@ -169,6 +195,10 @@ async def get_replay_data(
 
     Requirements: R10.2
     """
+    access_error = await _ensure_session_access(session_id, current_user, db)
+    if access_error:
+        return access_error
+
     service = ReplayService(db)
     result = await service.get_replay_data(session_id)
 
@@ -177,11 +207,7 @@ async def get_replay_data(
         status_code = _get_status_code(error_code)
         return _error_response(status_code, error_code, result.fallback)
 
-    return {
-        "success": True,
-        "data": result.value,
-        "trace_id": None
-    }
+    return _success_response(result.value)
 
 
 @router.get(
@@ -194,21 +220,36 @@ async def get_replay_data(
 )
 async def get_highlights(
     session_id: str,
-    current_user=Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
     """
     Get highlighted messages (key moments) from a session.
 
-    Returns only messages marked as highlights with suggested responses.
+    Story 3.4: 高光片段与原因可解释呈现
+
+    Returns messages marked as highlights with:
+    - Highlight type (good/bad) classification
+    - Reason annotations
+    - Sales stage association
+    - Message context (prev/next)
+    - Suggested improvements for bad highlights
+
     Requires the session to be completed.
 
     - **session_id**: Practice session UUID
 
-    Returns list of highlight messages.
+    Returns:
+    - highlights: List of highlight messages
+    - total_good: Count of good highlights
+    - total_bad: Count of bad highlights
 
     Requirements: R10.3
     """
+    access_error = await _ensure_session_access(session_id, current_user, db)
+    if access_error:
+        return access_error
+
     service = ReplayService(db)
     result = await service.get_highlights(session_id)
 
@@ -217,13 +258,12 @@ async def get_highlights(
         status_code = _get_status_code(error_code)
         return _error_response(status_code, error_code, result.fallback)
 
-    return {
-        "success": True,
-        "data": {
-            "highlights": result.value
-        },
-        "trace_id": None
-    }
+    data = result.value
+    return _success_response({
+        "highlights": data["highlights"],
+        "total_good": data["total_good"],
+        "total_bad": data["total_bad"],
+    })
 
 
 @router.get(
@@ -237,7 +277,7 @@ async def get_highlights(
 async def get_audio(
     session_id: str,
     message_id: str,
-    current_user=Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
     """
@@ -253,15 +293,20 @@ async def get_audio(
 
     Requirements: R10.4
     """
+    access_error = await _ensure_session_access(session_id, current_user, db)
+    if access_error:
+        return access_error
+
     service = ReplayService(db)
 
     # Check session is completed
     session_result = await service._check_session_completed(session_id)
     if not session_result.is_success:
         error_code = _extract_error_code(session_result.fallback)
-        raise HTTPException(
-            status_code=_get_status_code(error_code),
-            detail={"error": error_code, "message": session_result.fallback}
+        return _error_response(
+            _get_status_code(error_code),
+            error_code,
+            session_result.fallback,
         )
 
     # Get message
@@ -270,26 +315,17 @@ async def get_audio(
     message_result = await storage.get_message_by_id(message_id)
 
     if not message_result.is_success:
-        raise HTTPException(
-            status_code=404,
-            detail={"error": "[MESSAGE_NOT_FOUND]", "message": "Message not found"}
-        )
+        return _error_response(404, "[MESSAGE_NOT_FOUND]", "Message not found")
 
     message = message_result.value
 
     # Verify message belongs to session
     if message.session_id != session_id:
-        raise HTTPException(
-            status_code=404,
-            detail={"error": "[MESSAGE_NOT_FOUND]", "message": "Message not found in this session"}
-        )
+        return _error_response(404, "[MESSAGE_NOT_FOUND]", "Message not found in this session")
 
     # Check audio URL exists
     if not message.audio_url:
-        raise HTTPException(
-            status_code=404,
-            detail={"error": "[AUDIO_NOT_AVAILABLE]", "message": "Audio not available for this message"}
-        )
+        return _error_response(404, "[AUDIO_NOT_AVAILABLE]", "Audio not available for this message")
 
     # If it's a remote URL, redirect
     if message.audio_url.startswith("http://") or message.audio_url.startswith("https://"):
@@ -303,10 +339,7 @@ async def get_audio(
             filename=f"message_{message_id}.mp3"
         )
 
-    raise HTTPException(
-        status_code=404,
-        detail={"error": "[AUDIO_NOT_AVAILABLE]", "message": "Audio file not found"}
-    )
+    return _error_response(404, "[AUDIO_NOT_AVAILABLE]", "Audio file not found")
 
 
 # ========== Helper Functions ==========
@@ -331,26 +364,41 @@ def _get_status_code(error_code: str) -> int:
     return status_map.get(error_code, 500)
 
 
-def _error_response(status_code: int, error_code: str, message: str):
-    """Create error response - raises HTTPException"""
-    raise HTTPException(
+def _success_response(data: dict) -> dict[str, object]:
+    return {
+        "success": True,
+        "data": data,
+        "trace_id": get_trace_id(),
+    }
+
+
+def _error_response(status_code: int, error_code: str, message: str) -> JSONResponse:
+    """Create unified error response with top-level fields."""
+    return JSONResponse(
         status_code=status_code,
-        detail={
+        content={
             "success": False,
             "error": error_code,
             "error_code": error_code,
             "message": message,
-            "trace_id": None
-        }
+            "trace_id": get_trace_id(),
+        },
     )
 
 
-def _message_to_response(message) -> dict:
+def _normalize_turn_number(raw_turn_number: int | None, fallback_turn_number: int = 1) -> int:
+    """Normalize legacy turn numbers to satisfy response contract (>=1)."""
+    if isinstance(raw_turn_number, int) and raw_turn_number >= 1:
+        return raw_turn_number
+    return max(1, fallback_turn_number)
+
+
+def _message_to_response(message, fallback_turn_number: int = 1) -> dict:
     """Convert message model to response dict"""
     return {
         "id": message.id,
         "session_id": message.session_id,
-        "turn_number": message.turn_number,
+        "turn_number": _normalize_turn_number(message.turn_number, fallback_turn_number),
         "role": message.role,
         "content": message.content,
         "audio_url": message.audio_url,

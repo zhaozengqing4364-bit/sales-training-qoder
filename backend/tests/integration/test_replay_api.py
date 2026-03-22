@@ -9,7 +9,7 @@ References:
 - API Contract: docs/api-contract/replay.md
 """
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 
 import pytest
 import pytest_asyncio
@@ -66,7 +66,8 @@ async def test_user(db_session):
     user = User(
         wechat_user_id="test_wechat_id",
         name="Test User",
-        email="test@example.com"
+        email="test@example.com",
+        role="admin",
     )
     db_session.add(user)
     await db_session.commit()
@@ -90,18 +91,12 @@ async def async_client(db_session, test_user):
 
 
 @pytest_asyncio.fixture
-async def auth_headers(async_client):
-    """Get authentication headers"""
-    try:
-        response = await async_client.post("/api/v1/auth/dev-login")
-        if response.status_code == 200:
-            data = response.json()
-            token = data.get("data", {}).get("access_token")
-            if token:
-                return {"Authorization": f"Bearer {token}"}
-    except Exception:
-        pass
-    return {"Authorization": "Bearer dev_test_token"}
+async def auth_headers(test_user):
+    """Get authentication headers for fixture user."""
+    from common.auth.service import create_access_token
+
+    token = create_access_token(data={"sub": str(test_user.user_id)})
+    return {"Authorization": f"Bearer {token}"}
 
 
 @pytest_asyncio.fixture
@@ -120,13 +115,36 @@ async def completed_session(db_session, test_user):
         user_id=test_user.user_id,
         scenario_id=scenario.scenario_id,
         status=SessionStatus.COMPLETED.value,
-        start_time=datetime.utcnow(),
-        end_time=datetime.utcnow()
+        start_time=datetime.now(timezone.utc),
+        end_time=datetime.now(timezone.utc)
     )
     db_session.add(session)
     await db_session.commit()
     await db_session.refresh(session)
     return session
+
+
+@pytest_asyncio.fixture
+async def other_user(db_session):
+    """Create a second user for access-control tests."""
+    user = User(
+        wechat_user_id="other_wechat_id",
+        name="Other User",
+        email="other@example.com"
+    )
+    db_session.add(user)
+    await db_session.commit()
+    await db_session.refresh(user)
+    return user
+
+
+@pytest_asyncio.fixture
+async def other_user_headers(db_session, other_user):
+    """JWT auth header for other user."""
+    from common.auth.service import create_access_token
+
+    token = create_access_token(data={"sub": str(other_user.user_id)})
+    return {"Authorization": f"Bearer {token}"}
 
 
 @pytest_asyncio.fixture
@@ -144,7 +162,7 @@ async def in_progress_session(db_session, test_user):
         user_id=test_user.user_id,
         scenario_id=scenario.scenario_id,
         status=SessionStatus.IN_PROGRESS.value,
-        start_time=datetime.utcnow()
+        start_time=datetime.now(timezone.utc)
     )
     db_session.add(session)
     await db_session.commit()
@@ -163,7 +181,7 @@ async def sample_messages(db_session, completed_session):
             role="user" if i % 2 == 0 else "assistant",
             content=f"Test message {i + 1}",
             audio_url=f"https://storage.example.com/audio/msg-{i + 1}.mp3" if i == 0 else None,
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
             duration_ms=3000 + i * 500,
             sales_stage="opening" if i < 2 else "discovery",
             is_highlight=i == 1,
@@ -226,6 +244,11 @@ class TestReplayAPI:
         
         # Assert
         assert response.status_code == 400
+        body = response.json()
+        assert body["success"] is False
+        assert body["error"] == "[SESSION_NOT_COMPLETED]"
+        assert body.get("trace_id")
+        assert "detail" not in body
 
     @pytest.mark.asyncio
     async def test_should_return_404_when_session_not_found(
@@ -346,6 +369,44 @@ class TestReplayAPI:
         assert "timeline_markers" in data["data"]
 
     @pytest.mark.asyncio
+    async def test_should_normalize_legacy_zero_turn_number_for_messages_and_replay(
+        self,
+        async_client,
+        auth_headers,
+        completed_session,
+        db_session
+    ):
+        """Legacy records with turn_number=0 should be normalized to 1+ in API responses."""
+        legacy_msg = ConversationMessage(
+            session_id=completed_session.session_id,
+            turn_number=0,
+            role="user",
+            content="legacy turn zero",
+            timestamp=datetime.now(timezone.utc),
+            is_highlight=False,
+        )
+        db_session.add(legacy_msg)
+        await db_session.commit()
+
+        messages_resp = await async_client.get(
+            f"/api/v1/sessions/{completed_session.session_id}/messages",
+            headers=auth_headers,
+        )
+        assert messages_resp.status_code == 200
+        messages_body = messages_resp.json()
+        assert messages_body["success"] is True
+        assert messages_body["data"]["messages"][0]["turn_number"] >= 1
+
+        replay_resp = await async_client.get(
+            f"/api/v1/sessions/{completed_session.session_id}/replay",
+            headers=auth_headers,
+        )
+        assert replay_resp.status_code == 200
+        replay_body = replay_resp.json()
+        assert replay_body["success"] is True
+        assert replay_body["data"]["messages"][0]["turn_number"] >= 1
+
+    @pytest.mark.asyncio
     async def test_should_return_400_for_replay_when_session_not_completed(
         self,
         async_client,
@@ -389,6 +450,8 @@ class TestReplayAPI:
         assert data["success"] is True
         assert len(data["data"]["highlights"]) == 1
         assert data["data"]["highlights"][0]["highlight_type"] == "good"
+        assert data["data"]["total_good"] == 1
+        assert data["data"]["total_bad"] == 0
 
     @pytest.mark.asyncio
     async def test_should_return_empty_highlights_when_none_exist(
@@ -405,7 +468,7 @@ class TestReplayAPI:
             turn_number=1,
             role="user",
             content="No highlight message",
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
             is_highlight=False
         )
         db_session.add(msg)
@@ -422,6 +485,8 @@ class TestReplayAPI:
         data = response.json()
         assert data["success"] is True
         assert len(data["data"]["highlights"]) == 0
+        assert data["data"]["total_good"] == 0
+        assert data["data"]["total_bad"] == 0
 
     # ========== GET /sessions/{session_id}/audio/{message_id} tests ==========
 
@@ -488,3 +553,63 @@ class TestReplayAPI:
         
         # Assert
         assert response.status_code == 404
+
+    @pytest.mark.asyncio
+    async def test_should_return_403_for_messages_of_other_user_session(
+        self,
+        async_client,
+        other_user_headers,
+        completed_session,
+    ):
+        """Should deny access to another user's replay messages."""
+        response = await async_client.get(
+            f"/api/v1/sessions/{completed_session.session_id}/messages",
+            headers=other_user_headers,
+        )
+
+        assert response.status_code == 403
+        body = response.json()
+        assert body["success"] is False
+        assert body["error"] == "[ACCESS_DENIED]"
+        assert body.get("trace_id")
+        assert "detail" not in body
+
+    @pytest.mark.asyncio
+    async def test_should_return_403_for_replay_of_other_user_session(
+        self,
+        async_client,
+        other_user_headers,
+        completed_session,
+    ):
+        """Should deny access to another user's replay data."""
+        response = await async_client.get(
+            f"/api/v1/sessions/{completed_session.session_id}/replay",
+            headers=other_user_headers,
+        )
+
+        assert response.status_code == 403
+        body = response.json()
+        assert body["success"] is False
+        assert body["error"] == "[ACCESS_DENIED]"
+        assert body.get("trace_id")
+        assert "detail" not in body
+
+    @pytest.mark.asyncio
+    async def test_should_return_403_for_highlights_of_other_user_session(
+        self,
+        async_client,
+        other_user_headers,
+        completed_session,
+    ):
+        """Should deny access to another user's highlights."""
+        response = await async_client.get(
+            f"/api/v1/sessions/{completed_session.session_id}/highlights",
+            headers=other_user_headers,
+        )
+
+        assert response.status_code == 403
+        body = response.json()
+        assert body["success"] is False
+        assert body["error"] == "[ACCESS_DENIED]"
+        assert body.get("trace_id")
+        assert "detail" not in body

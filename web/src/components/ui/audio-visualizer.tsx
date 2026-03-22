@@ -22,7 +22,6 @@ export function AudioVisualizer({
     className,
     color = "bg-indigo-500",
 }: AudioVisualizerProps) {
-    const canvasRef = React.useRef<HTMLCanvasElement>(null);
     const audioContextRef = React.useRef<AudioContext | null>(null);
     const analyserRef = React.useRef<AnalyserNode | null>(null);
     const sourceRef = React.useRef<MediaStreamAudioSourceNode | null>(null);

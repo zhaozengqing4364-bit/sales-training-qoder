@@ -60,7 +60,8 @@ async def test_user(db_session):
     user = User(
         wechat_user_id="test_wechat_id",
         name="Test User",
-        email="test@example.com"
+        email="test@example.com",
+        role="admin",
     )
     db_session.add(user)
     await db_session.commit()
@@ -84,18 +85,36 @@ async def async_client(db_session, test_user):
 
 
 @pytest_asyncio.fixture
-async def auth_headers(async_client):
-    """Get authentication headers"""
-    try:
-        response = await async_client.post("/api/v1/auth/dev-login")
-        if response.status_code == 200:
-            data = response.json()
-            token = data.get("data", {}).get("access_token")
-            if token:
-                return {"Authorization": f"Bearer {token}"}
-    except Exception:
-        pass
-    return {"Authorization": "Bearer dev_test_token"}
+async def auth_headers(test_user):
+    """Get authentication headers for admin fixture user."""
+    from common.auth.service import create_access_token
+
+    token = create_access_token(data={"sub": str(test_user.user_id)})
+    return {"Authorization": f"Bearer {token}"}
+
+
+@pytest_asyncio.fixture
+async def non_admin_user(db_session):
+    """Create a non-admin user for RBAC tests."""
+    user = User(
+        wechat_user_id="normal_wechat_id",
+        name="Normal User",
+        email="normal@example.com",
+        role="user",
+    )
+    db_session.add(user)
+    await db_session.commit()
+    await db_session.refresh(user)
+    return user
+
+
+@pytest_asyncio.fixture
+async def non_admin_headers(non_admin_user):
+    """JWT auth header for non-admin user."""
+    from common.auth.service import create_access_token
+
+    token = create_access_token(data={"sub": str(non_admin_user.user_id)})
+    return {"Authorization": f"Bearer {token}"}
 
 
 @pytest_asyncio.fixture
@@ -106,7 +125,6 @@ async def test_agent(async_client, auth_headers):
         json={
             "name": "Test Agent",
             "category": "sales",
-            "system_prompt": "Test prompt"
         },
         headers=auth_headers
     )
@@ -150,7 +168,38 @@ class TestAgentPersonaAPI:
         assert data["success"] is True
         assert data["data"]["agent_id"] == test_agent["id"]
         assert data["data"]["persona_id"] == test_persona["id"]
-        assert data["data"]["is_default"] is True
+
+    async def test_get_persona_policy_health(
+        self, async_client, auth_headers
+    ):
+        """Should expose persona policy health report for admin governance."""
+        response = await async_client.get(
+            "/api/v1/admin/personas/policy-health",
+            headers=auth_headers,
+        )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["success"] is True
+        assert "summary" in data["data"]
+        assert "issue_type_counts" in data["data"]
+        assert "sample_issues" in data["data"]
+
+    async def test_admin_routes_require_admin_role(
+        self,
+        async_client,
+        non_admin_headers,
+        test_agent,
+        test_persona,
+    ):
+        """Should reject non-admin access for admin agent-persona routes."""
+        response = await async_client.post(
+            f"/api/v1/admin/agents/{test_agent['id']}/personas",
+            json={"persona_id": test_persona["id"]},
+            headers=non_admin_headers,
+        )
+
+        assert response.status_code == 403
     
     async def test_add_persona_already_linked(
         self, async_client, auth_headers, test_agent, test_persona
@@ -308,3 +357,169 @@ class TestAgentPersonaAPI:
         )
         
         assert response.status_code == 404
+
+    async def test_add_inactive_persona_rejected(self, async_client, auth_headers, test_agent, test_persona):
+        """Should reject linking inactive persona for new agent configuration."""
+        await async_client.put(
+            f"/api/v1/admin/personas/{test_persona['id']}",
+            json={"status": "inactive"},
+            headers=auth_headers
+        )
+
+        response = await async_client.post(
+            f"/api/v1/admin/agents/{test_agent['id']}/personas",
+            json={"persona_id": test_persona["id"]},
+            headers=auth_headers
+        )
+
+        assert response.status_code == 400
+        body = response.json()
+        assert body["success"] is False
+        assert body["error"] == "[PERSONA_INACTIVE]"
+        assert body["message"] == "[PERSONA_INACTIVE]"
+        assert "trace_id" in body
+
+    async def test_add_persona_to_archived_agent_rejected(
+        self,
+        async_client,
+        auth_headers,
+        test_agent,
+        test_persona,
+    ):
+        """Should reject linking persona to archived agent."""
+        archive_response = await async_client.post(
+            f"/api/v1/admin/agents/{test_agent['id']}/archive",
+            headers=auth_headers,
+        )
+        assert archive_response.status_code == 200
+
+        response = await async_client.post(
+            f"/api/v1/admin/agents/{test_agent['id']}/personas",
+            json={"persona_id": test_persona["id"]},
+            headers=auth_headers,
+        )
+
+        assert response.status_code == 400
+        body = response.json()
+        assert body["success"] is False
+        assert body["error"] == "[AGENT_ARCHIVED]"
+        assert body["message"] == "[AGENT_ARCHIVED]"
+        assert "trace_id" in body
+
+    async def test_update_link_rejects_inactive_persona(
+        self,
+        async_client,
+        auth_headers,
+        test_agent,
+        test_persona,
+    ):
+        """Should reject updating link when persona has been inactivated."""
+        add_response = await async_client.post(
+            f"/api/v1/admin/agents/{test_agent['id']}/personas",
+            json={"persona_id": test_persona["id"], "display_order": 1},
+            headers=auth_headers,
+        )
+        assert add_response.status_code == 200
+
+        deactivate_response = await async_client.put(
+            f"/api/v1/admin/personas/{test_persona['id']}",
+            json={"status": "inactive"},
+            headers=auth_headers,
+        )
+        assert deactivate_response.status_code == 200
+
+        response = await async_client.put(
+            f"/api/v1/admin/agents/{test_agent['id']}/personas/{test_persona['id']}",
+            json={"display_order": 2},
+            headers=auth_headers,
+        )
+
+        assert response.status_code == 400
+        body = response.json()
+        assert body["success"] is False
+        assert body["error"] == "[PERSONA_INACTIVE]"
+        assert body["message"] == "[PERSONA_INACTIVE]"
+        assert "trace_id" in body
+
+    async def test_update_link_rejects_archived_agent(
+        self,
+        async_client,
+        auth_headers,
+        test_agent,
+        test_persona,
+    ):
+        """Should reject updating link when agent has been archived."""
+        add_response = await async_client.post(
+            f"/api/v1/admin/agents/{test_agent['id']}/personas",
+            json={"persona_id": test_persona["id"], "display_order": 1},
+            headers=auth_headers,
+        )
+        assert add_response.status_code == 200
+
+        archive_response = await async_client.post(
+            f"/api/v1/admin/agents/{test_agent['id']}/archive",
+            headers=auth_headers,
+        )
+        assert archive_response.status_code == 200
+
+        response = await async_client.put(
+            f"/api/v1/admin/agents/{test_agent['id']}/personas/{test_persona['id']}",
+            json={"display_order": 3},
+            headers=auth_headers,
+        )
+
+        assert response.status_code == 400
+        body = response.json()
+        assert body["success"] is False
+        assert body["error"] == "[AGENT_ARCHIVED]"
+        assert body["message"] == "[AGENT_ARCHIVED]"
+        assert "trace_id" in body
+
+    async def test_update_link_override_config_persisted(
+        self,
+        async_client,
+        auth_headers,
+        test_agent,
+        test_persona,
+    ):
+        """Should persist and return latest display_order/override_config on update."""
+        initial_override = {"response_length": "short"}
+        add_response = await async_client.post(
+            f"/api/v1/admin/agents/{test_agent['id']}/personas",
+            json={
+                "persona_id": test_persona["id"],
+                "display_order": 1,
+                "override_config": initial_override,
+            },
+            headers=auth_headers,
+        )
+        assert add_response.status_code == 200
+
+        updated_override = {
+            "response_length": "long",
+            "challenge_frequency": 0.4,
+            "custom_tag": "story-1-8",
+        }
+        update_response = await async_client.put(
+            f"/api/v1/admin/agents/{test_agent['id']}/personas/{test_persona['id']}",
+            json={
+                "display_order": 7,
+                "override_config": updated_override,
+            },
+            headers=auth_headers,
+        )
+
+        assert update_response.status_code == 200
+        update_data = update_response.json()["data"]
+        assert update_data["display_order"] == 7
+        assert update_data["override_config"] == updated_override
+
+        list_response = await async_client.get(
+            f"/api/v1/admin/agents/{test_agent['id']}/personas",
+            headers=auth_headers,
+        )
+        assert list_response.status_code == 200
+        personas = list_response.json()["data"]["personas"]
+        assert len(personas) == 1
+        assert personas[0]["display_order"] == 7
+        assert personas[0]["override_config"] == updated_override

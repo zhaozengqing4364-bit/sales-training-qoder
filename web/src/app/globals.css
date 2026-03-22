@@ -20,6 +20,8 @@
   --color-accent-blue-soft: #EFF6FF;
   --color-accent-purple: #8B5CF6;
   --color-accent-purple-soft: #F5F3FF;
+  --font-jakarta: "Avenir Next", "Segoe UI", "PingFang SC", "Microsoft YaHei",
+    "Heiti SC", system-ui, sans-serif;
 
   /* Glass tokens */
   --glass-bg: rgba(255, 255, 255, 0.65);

@@ -2,6 +2,7 @@
 Pytest Configuration and Fixtures
 Shared fixtures for all tests
 """
+
 import asyncio
 import os
 import sys
@@ -9,19 +10,24 @@ import uuid
 
 import pytest
 import pytest_asyncio
-from httpx import AsyncClient, ASGITransport
-from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
+from httpx import ASGITransport, AsyncClient
+from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 
 # Add src to path for imports
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'src'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
+from common.db.models import Base, User
 from main import app
-from common.db.models import Base
-
 
 # Test database URL (SQLite for testing)
 TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
+
+
+@pytest.fixture(autouse=True)
+def test_feature_flags(monkeypatch):
+    """Keep compatibility for legacy presentation test fixtures."""
+    monkeypatch.setenv("PRESENTATION_REQUIRE_AGENT_PERSONA", "false")
 
 
 @pytest.fixture(scope="session")
@@ -54,9 +60,7 @@ async def test_engine():
 async def test_db(test_engine):
     """Create test database session"""
     async_session = sessionmaker(
-        test_engine,
-        class_=AsyncSession,
-        expire_on_commit=False
+        test_engine, class_=AsyncSession, expire_on_commit=False
     )
 
     async with async_session() as session:
@@ -82,15 +86,46 @@ async def async_client(test_db):
 
 
 @pytest_asyncio.fixture
+async def test_user(test_db: AsyncSession):
+    """Create or return canonical development test user."""
+    from common.auth.service import get_dev_user
+
+    os.environ.setdefault("ENVIRONMENT", "development")
+    return await get_dev_user(test_db)
+
+
+@pytest_asyncio.fixture
+async def another_user(test_db: AsyncSession):
+    """Create a second user for duplicate-email tests."""
+    user = User(
+        user_id=str(uuid.uuid4()),
+        wechat_user_id=f"another_{uuid.uuid4().hex[:8]}",
+        name="Another User",
+        department="QA",
+        email=f"another_{uuid.uuid4().hex[:6]}@example.com",
+        role="user",
+    )
+    test_db.add(user)
+    await test_db.commit()
+    await test_db.refresh(user)
+    return user
+
+
+@pytest_asyncio.fixture
 async def auth_headers(async_client):
     """Return authentication headers for testing with valid JWT token"""
     try:
         # Call dev login endpoint to get valid JWT token
         response = await async_client.post("/api/v1/auth/dev-login")
         if response.status_code == 200:
-            data = response.json()
-            token = data.get("access_token")
-            return {"Authorization": f"Bearer {token}"}
+            payload = response.json()
+            token = (
+                payload.get("access_token")
+                or payload.get("token")
+                or (payload.get("data") or {}).get("access_token")
+            )
+            if token:
+                return {"Authorization": f"Bearer {token}"}
     except Exception:
         pass
     # Fallback for when dev endpoint is disabled or fails
@@ -128,3 +163,9 @@ def test_file_path(tmp_path):
     # Create a minimal PDF-like content (just for testing)
     test_file.write_bytes(b"%PDF-1.4\n%test content\n%%EOF")
     return str(test_file)
+
+
+@pytest.fixture
+def test_pdf_file(test_file_path):
+    """Backward-compatible alias for integration tests expecting test_pdf_file."""
+    return test_file_path

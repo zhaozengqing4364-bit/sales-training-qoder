@@ -58,7 +58,7 @@ export function LeaderboardTable({ data }: LeaderboardTableProps) {
                             {/* User Info */}
                             <div className="flex-1 min-w-0">
                                 <p className="font-bold text-slate-900 truncate">
-                                    {entry.user_name}
+                                    {entry.username}
                                 </p>
                                 <p className="text-xs text-slate-500 truncate">
                                     {entry.department || "未分配部门"}

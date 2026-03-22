@@ -12,7 +12,7 @@
  * Validates: Requirements 2.2, 2.3, 2.5
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect } from 'vitest'
 import * as fc from 'fast-check'
 
 // ============================================================================
@@ -231,8 +231,7 @@ describe('Property 4: Streaming Playback Initialization', () => {
     fc.assert(
       fc.property(
         fc.integer({ min: 1, max: 100 }), // total chunks
-        fc.array(fc.integer({ min: 0, max: 255 }), { minLength: 10, maxLength: 1000 }), // audio data
-        (totalChunks, audioData) => {
+        (totalChunks) => {
           let state: StreamingPlayerState = {
             isPlaying: false,
             isBuffering: false,
@@ -1505,11 +1504,9 @@ describe('Property 7: Interrupt Queue Clearing - Comprehensive Tests', () => {
           ),
           (chunkSizes) => {
             const chunks = chunkSizes.map(size => new ArrayBuffer(size));
-            const totalBytes = chunkSizes.reduce((sum, size) => sum + size, 0);
-            
             const state: InterruptOperationState = {
-              chunkQueue: chunks,
-              isPlaying: true,
+                chunkQueue: chunks,
+                isPlaying: true,
               operationLog: [],
             };
             
@@ -1684,7 +1681,7 @@ describe('Property 7: Interrupt Queue Clearing - Comprehensive Tests', () => {
     it('should handle multiple consecutive interrupts', () => {
       const chunks = generateChunks(20, [100, 500]);
       
-      let state: InterruptOperationState = {
+      const state: InterruptOperationState = {
         chunkQueue: chunks,
         isPlaying: true,
         operationLog: [],

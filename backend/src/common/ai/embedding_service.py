@@ -8,6 +8,8 @@ References:
 - Requirements: R6.2 (Embedding Service Abstraction)
 - Design: model-config-management/design.md
 """
+
+import os
 from typing import Any
 
 import httpx
@@ -69,19 +71,27 @@ class EmbeddingService:
             }
         else:
             # Get from ConfigManager (database or env fallback)
-            self._effective_config = self._config_manager.get_effective_config(ModelType.EMBEDDING)
+            self._effective_config = self._config_manager.get_effective_config(
+                ModelType.EMBEDDING
+            )
 
         if self._effective_config:
             provider = self._effective_config.get("provider", "openai")
-            model_name = self._effective_config.get("model_name", "text-embedding-3-small")
-            logger.info(f"Embedding service initialized with provider: {provider}, model: {model_name}")
+            model_name = self._effective_config.get(
+                "model_name", "text-embedding-3-small"
+            )
+            logger.info(
+                f"Embedding service initialized with provider: {provider}, model: {model_name}"
+            )
         else:
             logger.warning("No Embedding configuration available")
 
     @property
     def is_configured(self) -> bool:
         """Check if Embedding service is properly configured"""
-        return self._effective_config is not None and bool(self._effective_config.get("api_key"))
+        return self._effective_config is not None and bool(
+            self._effective_config.get("api_key")
+        )
 
     @property
     def provider(self) -> str:
@@ -117,7 +127,12 @@ class EmbeddingService:
     async def _get_client(self) -> httpx.AsyncClient:
         """Get or create HTTP client"""
         if self._http_client is None:
-            self._http_client = httpx.AsyncClient(timeout=30.0)
+            trust_env = os.getenv("EMBEDDING_TRUST_ENV", "false").lower() == "true"
+            logger.info(
+                "Creating embedding HTTP client",
+                trust_env=trust_env,
+            )
+            self._http_client = httpx.AsyncClient(timeout=30.0, trust_env=trust_env)
         return self._http_client
 
     async def embed(self, text: str) -> Result[list[float]]:
@@ -133,7 +148,7 @@ class EmbeddingService:
         result = await self.embed_batch([text])
         if result.is_success and result.value:
             return Result.ok(result.value[0])
-        return Result.fail(result.error if hasattr(result, 'error') else "[EMBEDDING_FAILED]")
+        return Result.fail(result.fallback or "[EMBEDDING_FAILED]")
 
     async def embed_batch(self, texts: list[str]) -> Result[list[list[float]]]:
         """
@@ -152,7 +167,8 @@ class EmbeddingService:
         if not texts:
             return Result.ok([])
 
-        provider = self._effective_config.get("provider", "openai")
+        config = self._effective_config or {}
+        provider = config.get("provider", "openai")
 
         if provider == ModelProvider.AZURE.value or provider == "azure":
             return await self._embed_azure(texts)
@@ -163,10 +179,11 @@ class EmbeddingService:
     async def _embed_openai(self, texts: list[str]) -> Result[list[list[float]]]:
         """Generate embeddings using OpenAI-compatible API"""
         try:
-            base_url = self._effective_config.get("base_url", "https://api.openai.com/v1")
-            api_key = self._effective_config.get("api_key", "")
-            model_name = self._effective_config.get("model_name", "text-embedding-3-small")
-            extra_config = self._effective_config.get("extra_config", {})
+            config = self._effective_config or {}
+            base_url = config.get("base_url", "https://api.openai.com/v1")
+            api_key = config.get("api_key", "")
+            model_name = config.get("model_name", "text-embedding-3-small")
+            extra_config = config.get("extra_config", {})
 
             # Build request
             headers = {
@@ -192,30 +209,42 @@ class EmbeddingService:
             )
 
             if response.status_code != 200:
-                error_msg = f"OpenAI API error: {response.status_code} - {response.text[:200]}"
+                error_msg = (
+                    f"OpenAI API error: {response.status_code} - {response.text[:200]}"
+                )
                 logger.error(error_msg)
                 return Result.fail(f"[EMBEDDING_API_ERROR] {error_msg}")
 
             data = response.json()
             embeddings = [item["embedding"] for item in data.get("data", [])]
 
-            logger.debug(f"Generated {len(embeddings)} embeddings, dim={len(embeddings[0]) if embeddings else 0}")
+            logger.debug(
+                f"Generated {len(embeddings)} embeddings, dim={len(embeddings[0]) if embeddings else 0}"
+            )
             return Result.ok(embeddings)
 
         except httpx.TimeoutException:
             logger.error("Embedding request timeout")
             return Result.fail("[EMBEDDING_TIMEOUT]")
-        except Exception as e:
+        except httpx.RequestError as e:
+            logger.error(
+                "Embedding request failed",
+                error_type=e.__class__.__name__,
+                error=str(e),
+            )
+            return Result.fail(f"[EMBEDDING_ERROR] {e.__class__.__name__}: {str(e)}")
+        except (ConnectionError, TimeoutError, RuntimeError, ValueError, OSError) as e:
             logger.error(f"Embedding error: {str(e)}")
             return Result.fail(f"[EMBEDDING_ERROR] {str(e)}")
 
     async def _embed_azure(self, texts: list[str]) -> Result[list[list[float]]]:
         """Generate embeddings using Azure OpenAI API"""
         try:
-            base_url = self._effective_config.get("base_url", "")
-            api_key = self._effective_config.get("api_key", "")
-            model_name = self._effective_config.get("model_name", "text-embedding-ada-002")
-            extra_config = self._effective_config.get("extra_config", {})
+            config = self._effective_config or {}
+            base_url = config.get("base_url", "")
+            api_key = config.get("api_key", "")
+            model_name = config.get("model_name", "text-embedding-ada-002")
+            extra_config = config.get("extra_config", {})
 
             api_version = extra_config.get("api_version", "2024-02-15-preview")
             deployment_name = extra_config.get("deployment_name", model_name)
@@ -245,7 +274,9 @@ class EmbeddingService:
             )
 
             if response.status_code != 200:
-                error_msg = f"Azure API error: {response.status_code} - {response.text[:200]}"
+                error_msg = (
+                    f"Azure API error: {response.status_code} - {response.text[:200]}"
+                )
                 logger.error(error_msg)
                 return Result.fail(f"[EMBEDDING_API_ERROR] {error_msg}")
 
@@ -258,7 +289,14 @@ class EmbeddingService:
         except httpx.TimeoutException:
             logger.error("Azure embedding request timeout")
             return Result.fail("[EMBEDDING_TIMEOUT]")
-        except Exception as e:
+        except httpx.RequestError as e:
+            logger.error(
+                "Azure embedding request failed",
+                error_type=e.__class__.__name__,
+                error=str(e),
+            )
+            return Result.fail(f"[EMBEDDING_ERROR] {e.__class__.__name__}: {str(e)}")
+        except (ConnectionError, TimeoutError, RuntimeError, ValueError, OSError) as e:
             logger.error(f"Azure embedding error: {str(e)}")
             return Result.fail(f"[EMBEDDING_ERROR] {str(e)}")
 

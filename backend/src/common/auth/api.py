@@ -8,16 +8,24 @@ Implements Constitution Principles:
 Response Format:
 - All endpoints return {"success": true/false, "data": ..., "trace_id": ...}
 """
+import hmac
+import json
 import os
+from datetime import UTC, datetime
+from typing import Any
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Request, status
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, EmailStr
 from sqlalchemy import select
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.auth.service import (
+    clear_auth_session_cookie,
     create_access_token,
     get_current_user,
+    set_auth_session_cookie,
     pwd_context,
 )
 from common.db.models import User
@@ -28,8 +36,8 @@ logger = get_logger(__name__)
 
 router = APIRouter()
 
-# 允许开发模式认证的主机列表
-ALLOWED_DEV_HOSTS = {"localhost", "127.0.0.1", "::1"}
+AUTH_SHARED_PASSWORD_ENV = "AUTH_SHARED_PASSWORD"
+AUTH_USER_PASSWORDS_ENV = "AUTH_USER_PASSWORDS_JSON"
 
 
 # ========== Schemas ==========
@@ -71,13 +79,83 @@ def success_response(data, trace_id: str = None):
 
 
 def error_response(error_code: str, message: str = None, trace_id: str = None, status_code: int = 400):
-    """Create unified error response"""
-    return {
-        "success": False,
-        "error": error_code,
-        "message": message or error_code,
-        "trace_id": trace_id or get_trace_id()
+    """Create unified error response with explicit HTTP status."""
+    return JSONResponse(
+        status_code=status_code,
+        content={
+            "success": False,
+            "error": error_code,
+            "message": message or error_code,
+            "trace_id": trace_id or get_trace_id(),
+        },
+    )
+
+
+def _invalid_credentials_response():
+    """Return secure, non-enumerable auth failure response."""
+    return error_response(
+        "[INVALID_CREDENTIALS]",
+        "账号或凭证无效",
+        status_code=401,
+    )
+
+
+def _get_auth_shared_password() -> str | None:
+    """Read configured shared login password for controlled auth."""
+    configured = os.getenv(AUTH_SHARED_PASSWORD_ENV, "").strip()
+    return configured or None
+
+
+def _get_auth_user_passwords() -> dict[str, str] | None:
+    """Read optional per-user password mapping from env."""
+    raw = os.getenv(AUTH_USER_PASSWORDS_ENV, "").strip()
+    if not raw:
+        return None
+
+    try:
+        parsed = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise ValueError("invalid AUTH_USER_PASSWORDS_JSON") from exc
+
+    if not isinstance(parsed, dict):
+        raise ValueError("invalid AUTH_USER_PASSWORDS_JSON")
+
+    normalized: dict[str, str] = {}
+    for key, value in parsed.items():
+        email_key = str(key).strip().lower()
+        password_value = str(value).strip()
+        if email_key and password_value:
+            normalized[email_key] = password_value
+    return normalized
+
+
+def get_auth_config_diagnostics() -> dict[str, Any]:
+    """Return non-sensitive auth configuration diagnostics for startup logs."""
+    shared_password = _get_auth_shared_password()
+    diagnostics: dict[str, Any] = {
+        "shared_password_configured": bool(shared_password),
+        "user_override_count": 0,
+        "user_overrides_valid": True,
+        "credentials_ready": bool(shared_password),
     }
+
+    try:
+        user_passwords = _get_auth_user_passwords()
+    except ValueError:
+        diagnostics["user_overrides_valid"] = False
+        diagnostics["credentials_ready"] = bool(shared_password)
+        return diagnostics
+
+    if user_passwords:
+        diagnostics["user_override_count"] = len(user_passwords)
+        diagnostics["credentials_ready"] = True
+
+    return diagnostics
+
+
+def _is_valid_password(provided_password: str, expected_password: str) -> bool:
+    """Constant-time password comparison for configured credentials."""
+    return hmac.compare_digest(provided_password, expected_password)
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
@@ -99,89 +177,62 @@ async def login(
     db: AsyncSession = Depends(get_db)
 ):
     """
-    User login endpoint
-    
-    Accepts email and password, returns JWT token and user info.
-    
-    For development mode, accepts any password for existing users.
-    In production, would validate against stored password hash.
-    
-    Request:
-    - email: User's email address
-    - password: User's password
-    
-    Returns:
-    - token: JWT access token
-    - user: User info (id, name, email, role)
-    
-    Requirements: 1.1, 1.2, 1.3
+    Controlled login endpoint.
+    Validates existing active account and configured credentials,
+    then issues JWT with role claim.
     """
     try:
+        configured_password = _get_auth_shared_password()
+        try:
+            configured_user_passwords = _get_auth_user_passwords()
+        except ValueError:
+            logger.warning(
+                "AUTH_USER_PASSWORDS_JSON is invalid; falling back to shared password"
+            )
+            configured_user_passwords = None
+        if configured_password is None and configured_user_passwords is None:
+            logger.error("Login rejected: auth credentials are not configured")
+            return error_response(
+                "[AUTH_SERVICE_UNAVAILABLE]",
+                "认证服务暂不可用",
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+
         # Find user by email
         result = await db.execute(
             select(User).where(User.email == credentials.email)
         )
         user = result.scalar_one_or_none()
 
-        # 开发模式安全检查
-        is_dev_mode = os.getenv("ENVIRONMENT") == "development"
-        allow_dev_auth = os.getenv("ALLOW_DEV_AUTH", "false").lower() == "true"
-        
-        # 获取客户端 IP
-        client_host = request.client.host if request.client else ""
-        is_local_request = client_host in ALLOWED_DEV_HOSTS
+        # Secure failure response to prevent user/account state enumeration
+        if user is None:
+            return _invalid_credentials_response()
+        if not getattr(user, "is_active", False):
+            return _invalid_credentials_response()
+        user_email = (user.email or "").strip().lower()
+        expected_password = None
+        if configured_user_passwords is not None:
+            expected_password = configured_user_passwords.get(user_email)
+        if expected_password is None:
+            expected_password = configured_password
 
-        if not user:
-            # 开发模式下自动创建用户（需要双重检查）
-            if is_dev_mode and (allow_dev_auth or is_local_request):
-                import uuid
-                user = User(
-                    user_id=str(uuid.uuid4()),
-                    wechat_user_id=f"dev_{credentials.email}",
-                    email=credentials.email,
-                    name=credentials.email.split("@")[0],
-                    department="Development",
-                    role="user"  # Default role for new users
-                )
-                db.add(user)
-                await db.commit()
-                await db.refresh(user)
-                logger.info(f"Created dev user: {credentials.email} from {client_host}")
-            else:
-                return error_response(
-                    "[INVALID_CREDENTIALS]",
-                    "邮箱或密码错误",
-                    status_code=401
-                )
+        if expected_password is None:
+            return _invalid_credentials_response()
+        if not _is_valid_password(credentials.password, expected_password):
+            return _invalid_credentials_response()
 
-        # 开发模式下跳过密码验证（需要安全检查）
-        if not is_dev_mode or (not allow_dev_auth and not is_local_request):
-            # 生产模式或非本地请求：需要验证密码
-            # TODO: Add password field to User model and verify
-            return error_response(
-                "[AUTH_NOT_CONFIGURED]",
-                "认证服务未配置",
-                status_code=401
-            )
-
-        # Check if user is active
-        if hasattr(user, 'is_active') and not user.is_active:
-            return error_response(
-                "[USER_DISABLED]",
-                "用户已被禁用",
-                status_code=401
-            )
-
-        # Create JWT token
-        token = create_access_token(data={"sub": str(user.user_id)})
+        # Create JWT token with role claim
+        user_role = getattr(user, "role", None) or "user"
+        token = create_access_token(
+            data={
+                "sub": str(user.user_id),
+                "role": user_role,
+            }
+        )
 
         # Update last login
-        from datetime import datetime
-        user.last_login = datetime.utcnow()
+        user.last_login = datetime.now(UTC)
         await db.commit()
-
-        # Get actual role from database, default to 'user' if not set
-        user_role = getattr(user, 'role', None) or 'user'
 
         # Build response
         login_response = LoginResponse(
@@ -194,10 +245,15 @@ async def login(
             )
         )
 
-        logger.info(f"User logged in: {user.email}")
-        return success_response(login_response.model_dump())
+        logger.info(f"User logged in: {user.user_id}")
+        response = JSONResponse(
+            status_code=status.HTTP_200_OK,
+            content=success_response(login_response.model_dump()),
+        )
+        set_auth_session_cookie(response, token)
+        return response
 
-    except Exception as e:
+    except SQLAlchemyError as e:
         logger.error(f"Login failed: {str(e)}")
         return error_response("[LOGIN_FAILED]", "登录失败，请稍后重试")
 
@@ -209,10 +265,10 @@ async def logout(
 ):
     """
     User logout endpoint
-    
+
     Clears server-side token state (if any).
     Client should also clear the stored token.
-    
+
     Requirements: 1.2
     """
     try:
@@ -222,10 +278,15 @@ async def logout(
         # For now, just log the logout event
         logger.info(f"User logged out: {current_user.email}")
 
-        return success_response({
-            "message": "登出成功"
-        })
+        response = JSONResponse(
+            status_code=status.HTTP_200_OK,
+            content=success_response({
+                "message": "登出成功"
+            }),
+        )
+        clear_auth_session_cookie(response)
+        return response
 
-    except Exception as e:
+    except (SQLAlchemyError, ValueError) as e:
         logger.error(f"Logout failed: {str(e)}")
         return error_response("[LOGOUT_FAILED]", "登出失败")

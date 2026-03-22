@@ -15,7 +15,7 @@ export function SwipeableItem({ children, onDelete, className }: SwipeableItemPr
     const controls = useAnimation();
     const [isDeleting, setIsDeleting] = useState(false);
 
-    const handleDragEnd = async (event: any, info: PanInfo) => {
+    const handleDragEnd = async (_event: MouseEvent | TouchEvent | PointerEvent, info: PanInfo) => {
         const offset = info.offset.x;
         const velocity = info.velocity.x;
 

@@ -5,8 +5,8 @@ import { useParams, useRouter } from "next/navigation";
 import { GlassCard } from "@/components/ui/glass-card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Sparkles, Play, User } from "lucide-react";
-import { api } from "@/lib/api/client";
+import { ArrowLeft, Sparkles, Play, User, Presentation } from "lucide-react";
+import { ApiRequestError, api, getApiErrorMessage } from "@/lib/api/client";
 import { cn } from "@/lib/utils";
 
 // 难度配置
@@ -21,7 +21,7 @@ interface Persona {
     id: string;
     name: string;
     description: string;
-    icon: string;
+    icon?: string;
     difficulty: string;
     is_default?: boolean;
 }
@@ -30,10 +30,26 @@ interface AgentDetail {
     id: string;
     name: string;
     description: string;
-    icon: string;
+    icon?: string;
     category: string;
     welcome_message?: string;
     personas: Persona[];
+}
+
+interface PresentationOption {
+    presentation_id: string;
+    title: string;
+    page_count: number;
+}
+
+type VoiceMode = "legacy" | "stepfun_realtime";
+const CREATE_SESSION_RETRY_DELAYS_MS = [200, 500, 1200] as const;
+
+function isRetryableCreateSessionError(error: unknown): boolean {
+    if (error instanceof ApiRequestError) {
+        return error.status === 0 || error.status >= 500;
+    }
+    return true;
 }
 
 export default function AgentPersonaSelectPage() {
@@ -43,8 +59,14 @@ export default function AgentPersonaSelectPage() {
 
     const [agent, setAgent] = useState<AgentDetail | null>(null);
     const [selectedPersona, setSelectedPersona] = useState<string | null>(null);
+    const [voiceMode, setVoiceMode] = useState<VoiceMode>("stepfun_realtime");
     const [isLoading, setIsLoading] = useState(true);
     const [isStarting, setIsStarting] = useState(false);
+    const [startError, setStartError] = useState<string | null>(null);
+    const [availablePresentations, setAvailablePresentations] = useState<PresentationOption[]>([]);
+    const [selectedPresentationId, setSelectedPresentationId] = useState<string>("");
+    const [isLoadingPresentations, setIsLoadingPresentations] = useState(false);
+    const [presentationLoadError, setPresentationLoadError] = useState<string | null>(null);
 
     useEffect(() => {
         const loadAgent = async () => {
@@ -66,22 +88,107 @@ export default function AgentPersonaSelectPage() {
         loadAgent();
     }, [agentId]);
 
+    useEffect(() => {
+        let cancelled = false;
+
+        const loadPresentations = async () => {
+            if (!agent || agent.category !== "presentation") {
+                setAvailablePresentations([]);
+                setSelectedPresentationId("");
+                setPresentationLoadError(null);
+                return;
+            }
+
+            setIsLoadingPresentations(true);
+            setPresentationLoadError(null);
+
+            try {
+                const readyPresentations = await api.presentations.list({
+                    status: "ready",
+                    limit: 100,
+                });
+
+                if (cancelled) {
+                    return;
+                }
+
+                setAvailablePresentations(readyPresentations);
+                setSelectedPresentationId((prev) => prev || readyPresentations[0]?.presentation_id || "");
+            } catch (error) {
+                if (cancelled) {
+                    return;
+                }
+                setAvailablePresentations([]);
+                setSelectedPresentationId("");
+                setPresentationLoadError(getApiErrorMessage(error));
+            } finally {
+                if (!cancelled) {
+                    setIsLoadingPresentations(false);
+                }
+            }
+        };
+
+        void loadPresentations();
+
+        return () => {
+            cancelled = true;
+        };
+    }, [agent]);
+
     const handleStartPractice = async () => {
         if (!selectedPersona || !agent) return;
-        
+
         setIsStarting(true);
+        setStartError(null);
         try {
-            // 创建练习会话
             const scenarioType = agent.category === "presentation" ? "presentation" : "sales";
-            const session = await api.practice.createSession({
-                scenario_type: scenarioType,
+            if (scenarioType === "presentation" && !selectedPresentationId) {
+                setStartError("请先选择一个可用的演练PPT");
+                setIsStarting(false);
+                return;
+            }
+
+            // 创建练习会话
+            const sessionPayload = {
                 agent_id: agentId,
                 persona_id: selectedPersona,
-            });
+                scenario_type: scenarioType,
+                presentation_id: scenarioType === "presentation" ? selectedPresentationId : undefined,
+                voice_mode: voiceMode,
+            } as const;
+
+            let session: Awaited<ReturnType<typeof api.practice.createSession>> | null = null;
+            let lastError: unknown = null;
+            for (let attempt = 0; attempt <= CREATE_SESSION_RETRY_DELAYS_MS.length; attempt += 1) {
+                try {
+                    session = await api.practice.createSession(sessionPayload);
+                    break;
+                } catch (error) {
+                    lastError = error;
+                    const retryable = isRetryableCreateSessionError(error);
+                    if (!retryable || attempt === CREATE_SESSION_RETRY_DELAYS_MS.length) {
+                        throw error;
+                    }
+                    const delayMs = CREATE_SESSION_RETRY_DELAYS_MS[attempt];
+                    await new Promise((resolve) => setTimeout(resolve, delayMs));
+                }
+            }
+
+            if (!session) {
+                throw lastError ?? new Error("创建会话失败");
+            }
             // 跳转到练习页面
-            router.push(`/practice/${session.session_id}?agent_id=${agentId}&persona_id=${selectedPersona}`);
+            const presentationParam =
+                scenarioType === "presentation" && selectedPresentationId
+                    ? `&presentation_id=${encodeURIComponent(selectedPresentationId)}`
+                    : "";
+            router.push(
+                `/practice/${session.session_id}?agent_id=${agentId}&persona_id=${selectedPersona}&scenario_type=${scenarioType}&voice_mode=${voiceMode}${presentationParam}`
+            );
         } catch (error) {
             console.error("Failed to create session:", error);
+            setStartError(getApiErrorMessage(error));
+        } finally {
             setIsStarting(false);
         }
     };
@@ -133,7 +240,7 @@ export default function AgentPersonaSelectPage() {
                         <h1 className="text-2xl font-bold text-slate-900">{agent.name}</h1>
                         <p className="text-slate-500 mt-1">{agent.description}</p>
                         {agent.welcome_message && (
-                            <p className="text-sm text-slate-400 mt-2 italic">"{agent.welcome_message}"</p>
+                            <p className="text-sm text-slate-400 mt-2 italic">&ldquo;{agent.welcome_message}&rdquo;</p>
                         )}
                     </div>
                 </div>
@@ -199,13 +306,102 @@ export default function AgentPersonaSelectPage() {
                 )}
             </div>
 
+            {agent.category === "presentation" && (
+                <div>
+                    <h2 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">
+                        <Presentation className="w-5 h-5" />
+                        选择演练PPT
+                    </h2>
+                    <p className="text-sm text-slate-500 mb-4">
+                        开始前请选择要演练的演示文稿。仅展示状态为“可用”的PPT。
+                    </p>
+                    <GlassCard className="p-5 space-y-3">
+                        {isLoadingPresentations ? (
+                            <p className="text-sm text-slate-500">正在加载可用PPT...</p>
+                        ) : presentationLoadError ? (
+                            <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+                                加载演练PPT失败：{presentationLoadError}
+                            </div>
+                        ) : availablePresentations.length === 0 ? (
+                            <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-700">
+                                当前没有可用于演练的PPT，请先到管理后台上传并处理为可用状态。
+                            </div>
+                        ) : (
+                            <label className="block space-y-2">
+                                <span className="text-xs font-bold text-slate-500 uppercase tracking-wide">
+                                    演练文稿
+                                </span>
+                                <select
+                                    value={selectedPresentationId}
+                                    onChange={(event) => setSelectedPresentationId(event.target.value)}
+                                    className="w-full h-11 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/30"
+                                >
+                                    {availablePresentations.map((presentation) => (
+                                        <option key={presentation.presentation_id} value={presentation.presentation_id}>
+                                            {presentation.title}（{presentation.page_count || 0} 页）
+                                        </option>
+                                    ))}
+                                </select>
+                            </label>
+                        )}
+                    </GlassCard>
+                </div>
+            )}
+
+            <div className="rounded-2xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-700">
+                知识库绑定已迁移到角色中心。请在角色页选择并维护知识库，当前页不再编辑智能体级知识库。
+            </div>
+
+            {/* 语音链路模式选择 */}
+            <div>
+                <h2 className="text-lg font-bold text-slate-800 mb-3">语音模式</h2>
+                <p className="text-sm text-slate-500 mb-4">可在“经典链路”和“StepFun Realtime 端到端”之间切换。</p>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <button
+                        type="button"
+                        onClick={() => setVoiceMode("legacy")}
+                        className={cn(
+                            "rounded-2xl border p-4 text-left transition-all",
+                            voiceMode === "legacy"
+                                ? "border-indigo-500 bg-indigo-50/40"
+                                : "border-slate-200 bg-white hover:border-slate-300"
+                        )}
+                    >
+                        <div className="font-semibold text-slate-900">经典模式</div>
+                        <div className="text-sm text-slate-500 mt-1">ASR → LLM → TTS，稳定兼容现有能力模块。</div>
+                    </button>
+                    <button
+                        type="button"
+                        onClick={() => setVoiceMode("stepfun_realtime")}
+                        className={cn(
+                            "rounded-2xl border p-4 text-left transition-all",
+                            voiceMode === "stepfun_realtime"
+                                ? "border-indigo-500 bg-indigo-50/40"
+                                : "border-slate-200 bg-white hover:border-slate-300"
+                        )}
+                    >
+                        <div className="font-semibold text-slate-900">Realtime 模式（默认推荐）</div>
+                        <div className="text-sm text-slate-500 mt-1">StepFun 端到端语音模型，适合对话真实感测试。</div>
+                    </button>
+                </div>
+            </div>
+
             {/* 开始按钮 */}
             {agent.personas.length > 0 && (
                 <div className="fixed bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-slate-50 via-slate-50/95 to-transparent md:static md:bg-none md:p-0">
                     <div className="max-w-md mx-auto md:max-w-none">
+                        {startError ? (
+                            <div className="mb-3 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+                                {startError}
+                            </div>
+                        ) : null}
                         <Button
                             size="lg"
-                            disabled={!selectedPersona || isStarting}
+                            disabled={
+                                !selectedPersona
+                                || isStarting
+                                || (agent.category === "presentation" && !selectedPresentationId)
+                            }
                             onClick={handleStartPractice}
                             className="w-full md:w-auto rounded-full bg-indigo-600 hover:bg-indigo-700 text-white py-6 px-8 text-lg font-semibold shadow-lg"
                         >

@@ -7,7 +7,7 @@ class AudioProcessor extends AudioWorkletProcessor {
         this.bufferIndex = 0;
     }
 
-    process(inputs, outputs, parameters) {
+    process(inputs) {
         const input = inputs[0];
         if (!input || !input[0]) {
             return true;

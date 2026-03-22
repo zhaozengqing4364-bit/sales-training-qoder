@@ -229,7 +229,7 @@ class RealtimeScoringCapability(BaseCapability):
                 feedback=feedback
             )
 
-        except Exception as e:
+        except (RuntimeError, ValueError, KeyError) as e:
             logger.error(f"Realtime scoring failed: {e}", session_id=context.session_id)
             return CapabilityResult(success=False, fallback="[SCORING_FAILED]")
 

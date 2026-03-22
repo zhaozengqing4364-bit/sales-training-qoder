@@ -1,23 +1,19 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 import {
     Home,
     BarChart2,
-    History,
+    Activity,
     Settings,
     User,
     Sparkles,
-    Command,
-    ChevronLeft,
-    ChevronRight,
     PanelLeftClose,
     PanelLeftOpen,
     LayoutGrid,
-    FileText,
-    Bot,
-    LogOut
+    LogOut,
+    type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -37,8 +33,9 @@ import {
     TooltipProvider,
     TooltipTrigger,
 } from "@/components/ui/glass-tooltip";
-import { useEffect, useState } from "react";
 import { api } from "@/lib/api/client";
+import { authHandler } from "@/lib/auth-handler";
+import type { CurrentUser } from "@/lib/auth/current-user";
 
 interface UserInfo {
     id: string;
@@ -55,15 +52,8 @@ export const navItems = [
     { label: "排行榜", icon: BarChart2, href: "/leaderboard" },
 ];
 
-export function Sidebar() {
+export function Sidebar({ currentUser }: { currentUser: CurrentUser }) {
     const { isCollapsed, toggleSidebar } = useSidebarStore();
-    // Prevent hydration mismatch
-    const [mounted, setMounted] = useState(false);
-    useEffect(() => {
-        setMounted(true);
-    }, []);
-
-    if (!mounted) return null;
 
     return (
         <aside
@@ -72,42 +62,33 @@ export function Sidebar() {
                 isCollapsed ? "w-20 px-3" : "w-72 px-5"
             )}
         >
-            <SidebarContent isCollapsed={isCollapsed} toggleSidebar={toggleSidebar} showToggle={true} />
+            <SidebarContent
+                currentUser={currentUser}
+                isCollapsed={isCollapsed}
+                toggleSidebar={toggleSidebar}
+                showToggle={true}
+            />
         </aside>
     );
 }
 
 interface SidebarContentProps {
+    currentUser: UserInfo | null;
     isCollapsed?: boolean;
     toggleSidebar?: () => void;
     showToggle?: boolean;
 }
 
-export function SidebarContent({ isCollapsed = false, toggleSidebar, showToggle = false }: SidebarContentProps) {
+export function SidebarContent({
+    currentUser,
+    isCollapsed = false,
+    toggleSidebar,
+    showToggle = false,
+}: SidebarContentProps) {
     const pathname = usePathname();
-    const [userInfo, setUserInfo] = useState<UserInfo | null>(null);
-
-    useEffect(() => {
-        // Get user info from localStorage
-        const storedUser = localStorage.getItem("user");
-        if (storedUser) {
-            try {
-                setUserInfo(JSON.parse(storedUser));
-            } catch {
-                // Ignore parse errors
-            }
-        }
-
-        // Fetch fresh user info from API
-        api.user.getMe().then((data) => {
-            setUserInfo(data);
-            localStorage.setItem("user", JSON.stringify(data));
-        }).catch(() => {
-            // Ignore errors
-        });
-    }, []);
-
-    const isAdmin = userInfo?.role === "admin";
+    const isAdmin = currentUser?.role === "admin";
+    const isSupport = currentUser?.role === "support";
+    const canViewRuntime = isAdmin || isSupport;
 
     return (
         <div className="flex flex-col h-full w-full overflow-hidden">
@@ -124,40 +105,48 @@ export function SidebarContent({ isCollapsed = false, toggleSidebar, showToggle 
                     isCollapsed ? "w-0 opacity-0 hidden" : "w-auto opacity-100"
                 )}>
                     <span className="font-bold text-xl text-slate-900 tracking-tight leading-none whitespace-nowrap">AI 销售教练</span>
-                    <span className="text-xs uppercase tracking-[0.2em] text-slate-400 font-semibold mt-1.5 ml-0.5 whitespace-nowrap">平台</span>
+                    <span className="text-xs uppercase tracking-[0.2em] text-slate-500 font-semibold mt-1.5 ml-0.5 whitespace-nowrap">平台</span>
                 </div>
             </div>
 
             {/* Main Navigation - Scrollable Area */}
             <TooltipProvider delayDuration={0}>
-                <nav className="flex-1 flex flex-col w-full overflow-y-auto scrollbar-hide min-h-0 pb-4">
+                <nav aria-label="主导航" className="flex-1 flex flex-col w-full overflow-y-auto scrollbar-hide min-h-0 pb-4">
                     {!isCollapsed && (
-                        <div className="px-4 mb-3 text-xs font-bold text-slate-400 uppercase tracking-widest whitespace-nowrap transition-opacity duration-300 shrink-0">
+                        <div className="px-4 mb-3 text-xs font-bold text-slate-500 uppercase tracking-widest whitespace-nowrap transition-opacity duration-300 shrink-0">
                             菜单
                         </div>
                     )}
 
-                    <div className="space-y-2 px-1">
+                    <ul role="menubar" className="space-y-2 px-1">
                         {navItems.map((item) => (
-                            <NavLink key={item.href} item={item} pathname={pathname} isCollapsed={isCollapsed} />
+                            <li key={item.href} role="none">
+                                <NavLink item={item} pathname={pathname} isCollapsed={isCollapsed} />
+                            </li>
                         ))}
-                    </div>
+                    </ul>
 
-                    {/* Admin section - only visible to admins */}
-                    {isAdmin && (
+                    {canViewRuntime && (
                         <>
                             <div className="my-6 px-3 shrink-0">
                                 <div className="h-px w-full bg-gradient-to-r from-transparent via-slate-200 to-transparent"></div>
                             </div>
 
                             {!isCollapsed && (
-                                <div className="px-4 mb-3 text-xs font-bold text-slate-400 uppercase tracking-widest whitespace-nowrap transition-opacity duration-300 shrink-0">
+                                <div className="px-4 mb-3 text-xs font-bold text-slate-500 uppercase tracking-widest whitespace-nowrap transition-opacity duration-300 shrink-0">
                                     系统
                                 </div>
                             )}
-                            <div className="space-y-2 px-1">
-                                <NavLink item={{ label: "管理后台", icon: Settings, href: "/admin" }} pathname={pathname} isCollapsed={isCollapsed} />
-                            </div>
+                            <ul role="menubar" className="space-y-2 px-1">
+                                <li role="none">
+                                    <NavLink item={{ label: "运行状态", icon: Activity, href: "/support/runtime" }} pathname={pathname} isCollapsed={isCollapsed} />
+                                </li>
+                                {isAdmin && (
+                                    <li role="none">
+                                        <NavLink item={{ label: "管理后台", icon: Settings, href: "/admin" }} pathname={pathname} isCollapsed={isCollapsed} />
+                                    </li>
+                                )}
+                            </ul>
                         </>
                     )}
                 </nav>
@@ -166,16 +155,17 @@ export function SidebarContent({ isCollapsed = false, toggleSidebar, showToggle 
             {/* Bottom Actions - Fixed */}
             <div className="mt-auto flex flex-col gap-4 pt-4 shrink-0">
                 {/* User Card */}
-                <SidebarUser isCollapsed={isCollapsed} userInfo={userInfo} />
+                <SidebarUser isCollapsed={isCollapsed} userInfo={currentUser} />
 
                 {/* Collapse Trigger - Only shown on Desktop Sidebar */}
                 {showToggle && toggleSidebar && (
                     <Button
                         variant="ghost"
                         size="icon"
+                        aria-label={isCollapsed ? "展开侧边栏" : "折叠侧边栏"}
                         onClick={toggleSidebar}
                         className={cn(
-                            "mx-auto text-slate-400 hover:text-slate-600 hover:bg-black/5 rounded-full transition-all duration-300",
+                            "mx-auto text-slate-500 hover:text-slate-600 hover:bg-black/5 rounded-full transition-all duration-300",
                             isCollapsed ? "w-10 h-10" : "w-full flex gap-2 items-center justify-center h-10 px-4"
                         )}
                     >
@@ -240,21 +230,27 @@ function SidebarUser({ isCollapsed, userInfo }: { isCollapsed: boolean; userInfo
 }
 
 function UserProfileModal({ userInfo }: { userInfo: UserInfo | null }) {
-    const router = useRouter();
-
-    const handleLogout = () => {
-        // Clear token
-        localStorage.removeItem("token");
-        // Clear any other user data
-        localStorage.removeItem("user");
-
-        // Redirect to login
-        router.push("/login");
+    const handleLogout = async () => {
+        try {
+            await api.auth.logout();
+        } catch {
+            // Ignore logout API failures and still leave the current session shell.
+        } finally {
+            authHandler.logout("已退出登录", {
+                redirectTo: "/login",
+                notify: false,
+            });
+        }
     };
 
     const displayName = userInfo?.display_name || userInfo?.name || "用户";
     const email = userInfo?.email || "未设置邮箱";
-    const role = userInfo?.role === "admin" ? "管理员" : "普通用户";
+    const roleMap: Record<string, string> = {
+        admin: "管理员",
+        support: "支持角色",
+        user: "普通用户",
+    };
+    const role = roleMap[userInfo?.role || "user"] || (userInfo?.role || "普通用户");
     const department = userInfo?.department || "未设置部门";
 
     return (
@@ -290,7 +286,13 @@ function UserProfileModal({ userInfo }: { userInfo: UserInfo | null }) {
     );
 }
 
-export function NavLink({ item, pathname, isCollapsed }: { item: any, pathname: string, isCollapsed: boolean }) {
+interface SidebarNavItem {
+    label: string;
+    href: string;
+    icon: LucideIcon;
+}
+
+export function NavLink({ item, pathname, isCollapsed }: { item: SidebarNavItem, pathname: string, isCollapsed: boolean }) {
     // Optimized matching logic:
     // 1. Home matches '/' or '/dashboard' exactly.
     // 2. Training matches '/training' and subpaths.
@@ -305,6 +307,8 @@ export function NavLink({ item, pathname, isCollapsed }: { item: any, pathname: 
     const LinkContent = (
         <Link
             href={item.href}
+            role="menuitem"
+            aria-current={isActive ? 'page' : undefined}
             className={cn(
                 "flex items-center gap-4 py-3.5 rounded-2xl transition-all duration-300 group relative",
                 isCollapsed ? "justify-center px-0 w-12 h-12 mx-auto" : "px-5 w-full",
@@ -321,7 +325,7 @@ export function NavLink({ item, pathname, isCollapsed }: { item: any, pathname: 
                 className={cn(
                     "transition-all duration-300 shrink-0",
                     isCollapsed ? "w-6 h-6" : "w-5 h-5",
-                    isActive ? "text-slate-900 scale-110" : "text-slate-400 group-hover:text-slate-600 group-hover:scale-105"
+                    isActive ? "text-slate-900 scale-110" : "text-slate-500 group-hover:text-slate-600 group-hover:scale-105"
                 )}
             />
             <span className={cn(

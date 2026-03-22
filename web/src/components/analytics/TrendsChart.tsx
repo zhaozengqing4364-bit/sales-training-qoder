@@ -69,15 +69,16 @@ export function TrendsChart({ data }: TrendsChartProps) {
                             padding: "12px 16px",
                         }}
                         labelStyle={{ fontWeight: "bold", marginBottom: "8px" }}
-                        formatter={(value: number, name: string) => {
+                        formatter={(value, name) => {
+                            const numValue = value as number ?? 0;
                             const labels: Record<string, string> = {
                                 sessions_count: "练习次数",
                                 average_score: "平均分",
                                 active_users: "活跃用户",
                             };
                             return [
-                                name === "average_score" ? value.toFixed(1) : value.toLocaleString(),
-                                labels[name] || name,
+                                name === "average_score" ? numValue.toFixed(1) : numValue.toLocaleString(),
+                                labels[name as string] || name,
                             ];
                         }}
                     />

@@ -163,7 +163,7 @@ class TTSService:
                     async for chunk in communicate.stream():
                         if chunk["type"] == "audio":
                             yield chunk["data"]
-                except Exception as e:
+                except (ConnectionError, OSError, RuntimeError) as e:
                     logger.error(f"Audio streaming error: {str(e)}")
                     raise
 

@@ -10,7 +10,7 @@ References:
 - API Contract: docs/api-contract/replay.md
 """
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any
 
 from sqlalchemy import select
@@ -19,6 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from common.conversation.models import ConversationMessage
 from common.error_handling.result import Result
 from common.monitoring.logger import get_logger
+from sqlalchemy.exc import SQLAlchemyError
 
 logger = get_logger(__name__)
 
@@ -89,13 +90,15 @@ class MessageStorageService:
                 content=content,
                 audio_url=audio_url,
                 duration_ms=duration_ms,
-                timestamp=datetime.utcnow()
+                timestamp=datetime.now(timezone.utc)
             )
 
             # Apply analysis data if provided
             if analysis_data:
                 if "fuzzy_words" in analysis_data:
                     message.fuzzy_words = analysis_data["fuzzy_words"]
+                if "transcript_metadata" in analysis_data:
+                    message.transcript_metadata = analysis_data["transcript_metadata"]
                 if "sales_stage" in analysis_data:
                     message.sales_stage = analysis_data["sales_stage"]
                 if "score_snapshot" in analysis_data:
@@ -123,6 +126,7 @@ class MessageStorageService:
         self,
         message_id: str,
         fuzzy_words: list[dict] | None = None,
+        transcript_metadata: dict[str, Any] | None = None,
         sales_stage: str | None = None,
         score_snapshot: dict | None = None,
         ai_feedback: str | None = None
@@ -156,6 +160,8 @@ class MessageStorageService:
             # Update fields if provided
             if fuzzy_words is not None:
                 message.fuzzy_words = fuzzy_words
+            if transcript_metadata is not None:
+                message.transcript_metadata = transcript_metadata
             if sales_stage is not None:
                 # Validate sales stage
                 valid_stages = {"opening", "discovery", "presentation", "objection", "closing"}

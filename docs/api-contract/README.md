@@ -8,10 +8,16 @@
 docs/api-contract/
 ├── README.md           # 本文件 - 契约说明
 ├── agents.md           # Agent 管理 API 契约
+├── analytics.md        # 分析与排行榜 API 契约
 ├── personas.md         # Persona 管理 API 契约
 ├── knowledge.md        # 知识库管理 API 契约
+├── prompt-templates.md # 提示词与场景绑定 API 契约
+├── support-runtime.md  # 支持角色运行状态只读 API 契约
 ├── sessions.md         # 会话管理 API 契约 (增强)
 ├── replay.md           # 对话回放 API 契约
+├── model-configs.md    # 模型配置 API 契约
+├── voice-runtime.md    # 语音运行时策略 API 契约
+├── release-verification.md # 发布验收 API 契约
 └── websocket.md        # WebSocket 消息契约
 ```
 
@@ -47,7 +53,7 @@ docs/api-contract/
 
 ## 响应格式规范
 
-所有 API 使用统一响应格式:
+默认 API 使用统一响应格式（历史兼容接口以模块文档为准，如 `analytics.md`）:
 
 ```json
 // 成功
@@ -65,6 +71,12 @@ docs/api-contract/
   "trace_id": "abc123"
 }
 ```
+
+## 认证模型（2026-03-14 收敛）
+
+- 浏览器端 Web 应用默认使用 `HttpOnly` session cookie，并通过服务端边界调用后端接口。
+- 脚本、移动端或非浏览器调用仍可使用 `Authorization: Bearer <token>`。
+- 契约文档中的 `Authorization` 示例表示“Bearer 示例写法”，不排斥等价的 cookie 会话认证。
 
 ## 分页规范
 
@@ -90,3 +102,14 @@ docs/api-contract/
 | 日期 | 变更 | 影响模块 |
 |------|------|----------|
 | 2025-01-11 | 初始创建 | 全部 |
+| 2026-02-10 | 新增 analytics 契约，补齐排行榜参数归一化与 include_me 能力 | analytics |
+| 2026-02-10 | 规范化 agents/personas/knowledge 契约并切换为“已实现”状态 | agents, personas, knowledge |
+| 2026-02-11 | 新增 support 运行状态只读契约 | support-runtime |
+| 2026-02-11 | 补充 Agent 归档状态会话创建保护说明 | agents |
+| 2026-02-11 | 补充 Agent/Persona 增强模式参数配对约束 | agents |
+| 2026-02-11 | 新增 sessions 契约并补齐创建会话策略快照、报告/回放快照引用字段 | sessions, replay |
+| 2026-02-13 | 补充 model-configs / voice-runtime / release-verification 三类契约文档 | model-configs, voice-runtime, release-verification |
+| 2026-02-16 | 收敛角色策略入口并同步弃用写入约束（Persona Centered） | agents, personas, voice-runtime |
+| 2026-02-16 | 提示词治理域收敛为 admin-only，补充独立契约文档 | prompt-templates |
+| 2026-02-16 | 新增 Persona 策略健康审计接口与 Voice Runtime 旧写入字段移除说明 | personas, voice-runtime |
+| 2026-03-14 | 统一契约认证语义为 “Bearer 或 HttpOnly session cookie”，补充训练运行时主语说明 | sessions, replay, agents, personas, analytics, knowledge, support-runtime |

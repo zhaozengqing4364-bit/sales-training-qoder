@@ -10,7 +10,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { cn } from "@/lib/utils";
 import {
     TrendingUp, Filter, MoreHorizontal,
-    Calendar, CheckCircle2, Zap, BarChart3, ArrowRight, Headphones
+    Calendar, CheckCircle2, Zap, ArrowRight, Presentation
 } from "lucide-react";
 import Link from "next/link";
 import {
@@ -41,7 +41,26 @@ const formatTimeAgo = (isoString: string) => {
     if (diffInSeconds < 60) return "刚刚";
     if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)}分钟前`;
     if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)}小时前`;
-    return "昨天"; // Simplified for mock
+    if (diffInSeconds < 172800) return "昨天";
+    return `${Math.floor(diffInSeconds / 86400)}天前`;
+};
+
+const DEFAULT_STATS: DashboardStats = {
+    weekly_activity: { total_duration_minutes: 0, session_count: 0, trend_direction: "flat", trend_percentage: 0 },
+    last_session: { score: 0, percentile: 50, trend: "stable" },
+    effectiveness: {
+        pass_rate_3min_flow: 0,
+        pass_rate_5turn_defense: 0,
+        pass_rate_4step_structure: 0,
+        next_day_retry_rate: 0,
+    },
+};
+
+const DEFAULT_RECOMMENDATION: Recommendation = {
+    title: "开始练习",
+    reason: "欢迎使用训练系统，开始一次练习来提升您的技能吧！",
+    action_label: "开始训练",
+    target_path: "/training",
 };
 
 export default function HomePage() {
@@ -52,8 +71,8 @@ export default function HomePage() {
     
     // Data State
     const [isLoading, setIsLoading] = useState(true);
-    const [stats, setStats] = useState<DashboardStats | null>(null);
-    const [recommendation, setRecommendation] = useState<Recommendation | null>(null);
+    const [stats, setStats] = useState<DashboardStats>(DEFAULT_STATS);
+    const [recommendation, setRecommendation] = useState<Recommendation>(DEFAULT_RECOMMENDATION);
     const [historyItems, setHistoryItems] = useState<SessionItem[]>([]);
 
     const handleDeleteHistory = (id: string) => {
@@ -63,30 +82,23 @@ export default function HomePage() {
     // Load Data from API
     useEffect(() => {
         const loadDashboardData = async () => {
-            try {
-                setIsLoading(true);
-                // Parallel fetching for better performance
-                const [statsData, recData, historyData] = await Promise.all([
-                    api.dashboard.getStats(),
-                    api.dashboard.getRecommendation(),
-                    api.dashboard.getHistory()
-                ]);
+            setIsLoading(true);
+            const [statsResult, recResult, historyResult] = await Promise.allSettled([
+                api.dashboard.getStats(),
+                api.dashboard.getRecommendation(),
+                api.dashboard.getHistory()
+            ]);
 
-                setStats(statsData);
-                setRecommendation(recData);
-                setHistoryItems(historyData);
-            } catch (error) {
-                console.error("Failed to load dashboard data:", error);
-                // In a real app, you might show a toast error here
-            } finally {
-                setIsLoading(false);
-            }
+            setStats(statsResult.status === "fulfilled" ? statsResult.value : DEFAULT_STATS);
+            setRecommendation(recResult.status === "fulfilled" ? recResult.value : DEFAULT_RECOMMENDATION);
+            setHistoryItems(historyResult.status === "fulfilled" ? historyResult.value : []);
+            setIsLoading(false);
         };
 
         loadDashboardData();
     }, []);
 
-    if (isLoading || !stats || !recommendation) {
+    if (isLoading) {
         return <DashboardSkeleton />;
     }
 
@@ -110,17 +122,17 @@ export default function HomePage() {
                                 </DialogHeader>
                                 <div className="space-y-4 py-4">
                                     <div className="flex gap-3">
-                                        <div className="mt-1 bg-amber-100 p-1 rounded-full h-fit"><Headphones className="w-3 h-3 text-amber-600" /></div>
+                                        <div className="mt-1 bg-violet-100 p-1 rounded-full h-fit"><Presentation className="w-3 h-3 text-violet-600" /></div>
                                         <div>
-                                            <div className="text-sm font-bold text-slate-900">新板块：客户服务训练</div>
-                                            <p className="text-xs text-slate-500">模拟高压投诉场景，提升危机处理能力。</p>
+                                            <div className="text-sm font-bold text-slate-900">PPT 长时演讲稳定性优化</div>
+                                            <p className="text-xs text-slate-500">长时间实时演练支持更稳定，减少中断与角色偏航。</p>
                                         </div>
                                     </div>
                                     <div className="flex gap-3">
                                         <div className="mt-1 bg-blue-100 p-1 rounded-full h-fit"><Zap className="w-3 h-3 text-blue-600" /></div>
                                         <div>
-                                            <div className="text-sm font-bold text-slate-900">新角色：谈判教练</div>
-                                            <p className="text-xs text-slate-500">练习薪资谈判与合同商议。</p>
+                                            <div className="text-sm font-bold text-slate-900">演讲策略配置简化</div>
+                                            <p className="text-xs text-slate-500">策略管理改为最简模式，关键参数更清晰。</p>
                                         </div>
                                     </div>
                                     <div className="flex gap-3">
@@ -133,7 +145,7 @@ export default function HomePage() {
                                 </div>
                                 <DialogFooter>
                                     <Button variant="ghost" onClick={() => setIsWeeklyStatsOpen(false)} className="rounded-full">稍后再说</Button>
-                                    <Button onClick={() => router.push('/training/customer-service')} className="rounded-full bg-slate-900 text-white px-6">立即体验</Button>
+                                    <Button onClick={() => router.push('/training/presentation')} className="rounded-full bg-slate-900 text-white px-6">立即体验</Button>
                                 </DialogFooter>
                             </DialogContent>
                         </Dialog>
@@ -177,17 +189,40 @@ export default function HomePage() {
                                 <div className="p-4 bg-slate-50 rounded-2xl">
                                     <div className="text-xs font-bold text-slate-400 uppercase">训练场次</div>
                                     <div className="text-2xl font-black text-slate-900 mt-1">{stats.weekly_activity.session_count}</div>
-                                    <div className="text-xs text-slate-500 font-bold mt-1">平均 {Math.round(stats.weekly_activity.total_duration_minutes / stats.weekly_activity.session_count)}分钟 / 场</div>
+                                    <div className="text-xs text-slate-500 font-bold mt-1">平均 {stats.weekly_activity.session_count > 0 ? Math.round(stats.weekly_activity.total_duration_minutes / stats.weekly_activity.session_count) : 0}分钟 / 场</div>
                                 </div>
                                 <div className="p-4 bg-slate-50 rounded-2xl">
-                                    <div className="text-xs font-bold text-slate-400 uppercase">重点领域</div>
-                                    <div className="text-xl font-black text-blue-600 mt-1">异议处理</div>
+                                    <div className="text-xs font-bold text-slate-400 uppercase">次日复练率</div>
+                                    <div className="text-xl font-black text-blue-600 mt-1">
+                                        {(stats.effectiveness?.next_day_retry_rate ?? 0).toFixed(1)}%
+                                    </div>
                                 </div>
                             </div>
-                            <div className="h-48 bg-slate-50 rounded-2xl flex items-center justify-center border border-dashed border-slate-200">
-                                <span className="text-slate-400 font-medium flex items-center gap-2">
-                                    <BarChart3 className="w-4 h-4" /> 活动图表可视化占位符
-                                </span>
+                            <div className="grid grid-cols-2 gap-3">
+                                <div className="rounded-xl bg-blue-50 border border-blue-100 p-3">
+                                    <p className="text-[11px] text-blue-700 font-semibold">3分钟连续表达通过率</p>
+                                    <p className="text-xl font-black text-blue-900 mt-1">
+                                        {(stats.effectiveness?.pass_rate_3min_flow ?? 0).toFixed(1)}%
+                                    </p>
+                                </div>
+                                <div className="rounded-xl bg-emerald-50 border border-emerald-100 p-3">
+                                    <p className="text-[11px] text-emerald-700 font-semibold">5轮追问稳定通过率</p>
+                                    <p className="text-xl font-black text-emerald-900 mt-1">
+                                        {(stats.effectiveness?.pass_rate_5turn_defense ?? 0).toFixed(1)}%
+                                    </p>
+                                </div>
+                                <div className="rounded-xl bg-amber-50 border border-amber-100 p-3">
+                                    <p className="text-[11px] text-amber-700 font-semibold">四段结构完整率</p>
+                                    <p className="text-xl font-black text-amber-900 mt-1">
+                                        {(stats.effectiveness?.pass_rate_4step_structure ?? 0).toFixed(1)}%
+                                    </p>
+                                </div>
+                                <div className="rounded-xl bg-violet-50 border border-violet-100 p-3">
+                                    <p className="text-[11px] text-violet-700 font-semibold">次日复练率</p>
+                                    <p className="text-xl font-black text-violet-900 mt-1">
+                                        {(stats.effectiveness?.next_day_retry_rate ?? 0).toFixed(1)}%
+                                    </p>
+                                </div>
                             </div>
                             <DialogFooter>
                                 <Button variant="outline" className="rounded-full">下载报告</Button>
@@ -197,6 +232,35 @@ export default function HomePage() {
                     </Dialog>
                 </div>
             </header>
+
+            {stats.effectiveness && (
+                <section className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
+                    <GlassCard className="p-5">
+                        <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">3分钟连续表达通过率</p>
+                        <p className="text-2xl font-black text-slate-900 mt-2">
+                            {stats.effectiveness.pass_rate_3min_flow.toFixed(1)}%
+                        </p>
+                    </GlassCard>
+                    <GlassCard className="p-5">
+                        <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">5轮追问稳定通过率</p>
+                        <p className="text-2xl font-black text-slate-900 mt-2">
+                            {stats.effectiveness.pass_rate_5turn_defense.toFixed(1)}%
+                        </p>
+                    </GlassCard>
+                    <GlassCard className="p-5">
+                        <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">四段结构完整率</p>
+                        <p className="text-2xl font-black text-slate-900 mt-2">
+                            {stats.effectiveness.pass_rate_4step_structure.toFixed(1)}%
+                        </p>
+                    </GlassCard>
+                    <GlassCard className="p-5">
+                        <p className="text-xs font-bold text-slate-400 uppercase tracking-wider">次日复练率</p>
+                        <p className="text-2xl font-black text-slate-900 mt-2">
+                            {stats.effectiveness.next_day_retry_rate.toFixed(1)}%
+                        </p>
+                    </GlassCard>
+                </section>
+            )}
 
             {/* Dashboard Highlights / Call to Action */}
             <section className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -225,10 +289,10 @@ export default function HomePage() {
                         <TrendingUp className="w-8 h-8" />
                     </div>
                     <div>
-                        <div className="text-3xl font-black text-slate-900">{stats.last_session.score}</div>
+                        <div className="text-3xl font-black text-slate-900">{stats.last_session?.score ?? 0}</div>
                         <div className="text-xs font-bold text-slate-400 uppercase mt-1">上次得分</div>
                     </div>
-                     <p className="text-xs text-slate-500 px-4">您的表现优于 {stats.last_session.percentile}% 的用户，继续保持！</p>
+                     <p className="text-xs text-slate-500 px-4">您的表现优于 {stats.last_session?.percentile ?? 0}% 的用户，继续保持！</p>
                 </GlassCard>
             </section>
 
@@ -292,9 +356,9 @@ export default function HomePage() {
                                                 <div className="flex gap-4">
                                                     <div className={cn("w-12 h-12 rounded-2xl flex items-center justify-center font-bold text-lg group-hover:scale-110 transition-transform",
                                                         // UI mapping logic
-                                                        item.scenario_type === 'sales_bot' ? "bg-blue-50 text-blue-600" : "bg-purple-50 text-purple-600"
+                                                        item.scenario_type === 'sales' ? "bg-blue-50 text-blue-600" : "bg-purple-50 text-purple-600"
                                                     )}>
-                                                        {item.scenario_type === 'sales_bot' ? 'S' : 'P'}
+                                                        {item.scenario_type === 'sales' ? 'S' : 'P'}
                                                     </div>
                                                     <div className="text-left">
                                                         <h4 className="font-bold text-base text-slate-900">{item.title}</h4>
@@ -316,7 +380,7 @@ export default function HomePage() {
                                                     <div className="flex-1 pl-4">
                                                         <div className="text-[10px] uppercase font-bold text-slate-400 mb-1 tracking-wider">趋势</div>
                                                         <div className={cn("text-sm font-bold flex items-center gap-1 text-emerald-600")}>
-                                                            {item.score_trend || "--"}
+                                                            --
                                                         </div>
                                                     </div>
                                                 </div>
@@ -327,18 +391,17 @@ export default function HomePage() {
                                         <DialogHeader>
                                             <DialogTitle className="flex items-center gap-3">
                                                 <div className={cn("w-8 h-8 rounded-lg flex items-center justify-center text-sm",
-                                                    item.scenario_type === 'sales_bot' ? "bg-blue-50 text-blue-600" : "bg-purple-50 text-purple-600"
+                                                    item.scenario_type === 'sales' ? "bg-blue-50 text-blue-600" : "bg-purple-50 text-purple-600"
                                                 )}>
-                                                    {item.scenario_type === 'sales_bot' ? 'S' : 'P'}
+                                                    {item.scenario_type === 'sales' ? 'S' : 'P'}
                                                 </div>
-                                                {item.scenario_type === 'sales_bot' ? '会话分析' : '演示分析'}
+                                                {item.scenario_type === 'sales' ? '会话分析' : '演示分析'}
                                             </DialogTitle>
                                             <DialogDescription>ID: #{item.id} • {formatTimeAgo(item.start_time)}</DialogDescription>
                                         </DialogHeader>
                                         <div className="grid grid-cols-2 gap-6 py-4">
                                             <div className="space-y-4">
                                                 <h4 className="font-bold text-slate-900 border-b pb-2">得分详情</h4>
-                                                {/* Simplified placeholder for breakdown */}
                                                 <div className="space-y-3">
                                                     <div className="flex justify-between items-center">
                                                         <span className="text-sm text-slate-600">综合得分</span>
@@ -347,6 +410,26 @@ export default function HomePage() {
                                                         </div>
                                                         <span className="text-sm font-bold text-emerald-600">{item.overall_score}</span>
                                                     </div>
+                                                    {(() => {
+                                                        const snapshot = item.effectiveness_snapshot as
+                                                            | { pass_flags?: { pass_3min_flow?: boolean; pass_5turn_defense?: boolean; pass_4step_structure?: boolean } }
+                                                            | undefined;
+                                                        const passFlags = snapshot?.pass_flags;
+                                                        if (!passFlags) return null;
+                                                        return (
+                                                            <div className="grid grid-cols-3 gap-2 text-xs">
+                                                                <div className="rounded-lg bg-slate-100 px-2 py-1 text-center">
+                                                                    连续表达 {passFlags.pass_3min_flow ? "✓" : "×"}
+                                                                </div>
+                                                                <div className="rounded-lg bg-slate-100 px-2 py-1 text-center">
+                                                                    抗追问 {passFlags.pass_5turn_defense ? "✓" : "×"}
+                                                                </div>
+                                                                <div className="rounded-lg bg-slate-100 px-2 py-1 text-center">
+                                                                    结构化 {passFlags.pass_4step_structure ? "✓" : "×"}
+                                                                </div>
+                                                            </div>
+                                                        );
+                                                    })()}
                                                 </div>
                                             </div>
                                             <div className="space-y-4">

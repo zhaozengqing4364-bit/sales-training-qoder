@@ -1,12 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/api/client";
 import { SessionItem } from "@/lib/api/types";
 import { GlassCard } from "@/components/ui/glass-card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Search, Filter, MoreHorizontal, Download, FileText, Eye, Activity, Calendar, Trash2 } from "lucide-react";
+import { Search, Filter, Download, FileText, Eye, Activity, Calendar, Trash2 } from "lucide-react";
 import {
     Dialog,
     DialogContent,
@@ -25,7 +25,6 @@ import {
 import {
     MobileTableCard
 } from "@/components/ui/mobile-table-card";
-import { Input } from "@/components/ui/input";
 
 // Helper Functions
 const formatDuration = (seconds: number) => {
@@ -48,7 +47,7 @@ export default function RecordsPage() {
     const [page, setPage] = useState(1);
     const [isFilterOpen, setIsFilterOpen] = useState(false);
 
-    const loadData = async () => {
+    const loadData = useCallback(async () => {
         setIsLoading(true);
         try {
             const data = await api.admin.getTrainingRecords({
@@ -63,7 +62,7 @@ export default function RecordsPage() {
         } finally {
             setIsLoading(false);
         }
-    };
+    }, [categoryFilter, page, searchQuery]);
 
     const handleDelete = async (id: string) => {
         if (!confirm("确定要删除这条训练记录吗？")) return;
@@ -84,7 +83,7 @@ export default function RecordsPage() {
 
     useEffect(() => {
         loadData();
-    }, [page, searchQuery, categoryFilter]);
+    }, [loadData]);
 
     if (isLoading) {
         return <div className="p-8 text-center text-slate-500">加载中...</div>;
@@ -178,7 +177,7 @@ export default function RecordsPage() {
                                     <div className="flex flex-wrap gap-2">
                                         {[
                                             { id: 'all', label: '全部' },
-                                            { id: 'sales_bot', label: '销售对练' },
+                                            { id: 'sales', label: '销售对练' },
                                             { id: 'presentation', label: 'PPT 演示' },
                                         ].map(c => (
                                             <Badge 
@@ -216,7 +215,7 @@ export default function RecordsPage() {
                             }
                             icon={
                                 <div className={`w-10 h-10 rounded-full flex items-center justify-center text-lg font-bold
-                                    ${record.scenario_type === 'sales_bot' ? 'bg-blue-50 text-blue-600' :
+                                    ${record.scenario_type === 'sales' ? 'bg-blue-50 text-blue-600' :
                                         record.scenario_type === 'presentation' ? 'bg-purple-50 text-purple-600' :
                                             'bg-slate-100 text-slate-500'}`}>
                                     <FileText className="w-5 h-5" />
@@ -270,7 +269,7 @@ export default function RecordsPage() {
                                     </td>
                                     <td className="px-6 py-4">
                                         <Badge variant="secondary" className="bg-slate-50 text-slate-600 font-normal border-slate-200">
-                                            {record.scenario_type === 'sales_bot' ? '销售教练' : 'PPT演讲'}
+                                            {record.scenario_type === 'sales' ? '销售教练' : 'PPT演讲'}
                                         </Badge>
                                     </td>
                                     <td className="px-6 py-4">

@@ -11,6 +11,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { getMicrophoneEnvironmentError, mapMicrophoneAccessError } from './use-audio-recorder'
 import * as fc from 'fast-check'
 
 // ============================================================================
@@ -529,5 +530,40 @@ describe('AudioWorklet Fallback Behavior', () => {
         expect(adjusted).toBeGreaterThanOrEqual(1024)
       }
     })
+  })
+})
+
+
+describe('Microphone permission diagnostics', () => {
+  it('should explain insecure HTTP/IP microphone restriction', () => {
+    expect(getMicrophoneEnvironmentError({
+      isSecureContext: false,
+      hasMediaDevices: true,
+      hostname: '115.191.36.90',
+    })).toContain('HTTP/IP')
+  })
+
+  it('should allow localhost during local development', () => {
+    expect(getMicrophoneEnvironmentError({
+      isSecureContext: false,
+      hasMediaDevices: true,
+      hostname: 'localhost',
+    })).toBeNull()
+  })
+
+  it('should explain unsupported mediaDevices environments', () => {
+    expect(getMicrophoneEnvironmentError({
+      isSecureContext: true,
+      hasMediaDevices: false,
+      hostname: 'localhost',
+    })).toContain('不支持麦克风采集')
+  })
+
+  it('should map denied permissions to actionable guidance', () => {
+    expect(mapMicrophoneAccessError(new DOMException('denied', 'NotAllowedError'))).toContain('浏览器拒绝')
+  })
+
+  it('should map missing devices to hardware guidance', () => {
+    expect(mapMicrophoneAccessError(new DOMException('missing', 'NotFoundError'))).toContain('未检测到可用麦克风设备')
   })
 })

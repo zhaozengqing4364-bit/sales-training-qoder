@@ -108,7 +108,7 @@ class OCRProcessor:
         except ImportError:
             logger.error("python-pptx not installed")
             return Result.fail(fallback="[PPTX_NOT_INSTALLED]")
-        except Exception as e:
+        except (RuntimeError, ValueError, OSError) as e:
             logger.error(
                 "Failed to extract text from PPT",
                 extra={"presentation_id": str(presentation_id), "error": str(e)},
@@ -185,7 +185,7 @@ class OCRProcessor:
         except ImportError:
             logger.error("Tesseract OCR not installed")
             return Result.fail(fallback="[OCR_NOT_INSTALLED]")
-        except Exception as e:
+        except (RuntimeError, ValueError, OSError) as e:
             logger.error(
                 "OCR extraction failed",
                 extra={"error": str(e)},

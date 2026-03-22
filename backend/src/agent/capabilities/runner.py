@@ -157,7 +157,7 @@ class CapabilityRunner:
                     capability_id=cap_id,
                     config=merged_config,
                 )
-            except Exception as e:
+            except (RuntimeError, ValueError, KeyError) as e:
                 logger.error(
                     f"Failed to initialize capability '{cap_id}': {e}",
                     capability_id=cap_id,
@@ -213,7 +213,7 @@ class CapabilityRunner:
                     success=False,
                     fallback="[CAPABILITY_TIMEOUT]",
                 )
-            except Exception as e:
+            except (RuntimeError, ValueError, KeyError) as e:
                 error_code = self._get_error_code(e)
                 logger.error(
                     f"Capability '{cap.capability_id}' failed: {e}",
@@ -288,7 +288,7 @@ class CapabilityRunner:
                         success=False,
                         fallback="[CAPABILITY_TIMEOUT]",
                     )
-                except Exception as e:
+                except (RuntimeError, ValueError, KeyError) as e:
                     error_code = self._get_error_code(e)
                     logger.error(
                         f"Capability '{capability_id}' failed: {e}",
@@ -326,7 +326,7 @@ class CapabilityRunner:
         for cap in self.capabilities:
             try:
                 await cap.on_session_start(context)
-            except Exception as e:
+            except (RuntimeError, ValueError, KeyError) as e:
                 logger.error(
                     f"Capability '{cap.capability_id}' on_session_start failed: {e}",
                     capability_id=cap.capability_id,
@@ -366,7 +366,7 @@ class CapabilityRunner:
             try:
                 cap_stats = await cap.on_session_end(context)
                 stats[cap.capability_id] = cap_stats
-            except Exception as e:
+            except (RuntimeError, ValueError, KeyError) as e:
                 logger.error(
                     f"Capability '{cap.capability_id}' on_session_end failed: {e}",
                     capability_id=cap.capability_id,

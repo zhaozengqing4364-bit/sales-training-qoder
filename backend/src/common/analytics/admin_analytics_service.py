@@ -20,6 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.db.models import PracticeSession, Scenario, User
 from common.error_handling.result import Result
+from sqlalchemy.exc import SQLAlchemyError
 
 logger = logging.getLogger(__name__)
 
@@ -278,7 +279,7 @@ class AdminAnalyticsService:
 
             return Result(value=stats)
 
-        except Exception as e:
+        except (SQLAlchemyError, ValueError) as e:
             logger.error(
                 "Failed to calculate overview stats",
                 extra={"error": str(e)},
@@ -376,7 +377,7 @@ class AdminAnalyticsService:
                 }
             })
 
-        except Exception as e:
+        except (SQLAlchemyError, ValueError) as e:
             logger.error(
                 "Failed to calculate trends data",
                 extra={"error": str(e)},
@@ -515,7 +516,7 @@ class AdminAnalyticsService:
                 "scenario_distribution": scenario_distribution
             })
 
-        except Exception as e:
+        except (SQLAlchemyError, ValueError) as e:
             logger.error(
                 "Failed to calculate agent stats",
                 extra={"error": str(e)},
@@ -601,7 +602,7 @@ class AdminAnalyticsService:
 
             return Result(value=leaderboard)
 
-        except Exception as e:
+        except (SQLAlchemyError, ValueError) as e:
             logger.error(
                 "Failed to calculate leaderboard",
                 extra={"error": str(e)},

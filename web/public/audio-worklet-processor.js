@@ -28,7 +28,7 @@ class AudioProcessor extends AudioWorkletProcessor {
    * @param {Record<string, Float32Array>} parameters - Audio parameters (unused)
    * @returns {boolean} - Return true to keep the processor alive
    */
-  process(inputs, outputs, parameters) {
+  process(inputs) {
     const input = inputs[0];
     
     // No input available, keep processor alive

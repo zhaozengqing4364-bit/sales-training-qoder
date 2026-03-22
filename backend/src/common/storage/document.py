@@ -12,8 +12,10 @@ Environment Variables:
 - DOCUMENT_STORAGE_PATH: Base path for document storage (default: ./data/documents)
 - DOCUMENT_BASE_URL: Base URL for document file access (optional, for CDN)
 """
+import json
 import os
 from pathlib import Path
+from typing import Any
 
 from common.monitoring.logger import get_logger
 
@@ -54,7 +56,7 @@ class DocumentStorageService:
         try:
             self.base_path.mkdir(parents=True, exist_ok=True)
             logger.info(f"Document storage path: {self.base_path}")
-        except Exception as e:
+        except (OSError, ValueError, RuntimeError) as e:
             logger.error(f"Failed to create document storage path: {e}")
 
     async def save_document(
@@ -71,7 +73,7 @@ class DocumentStorageService:
             knowledge_base_id: Knowledge base UUID
             document_id: Document UUID
             file_data: Raw file bytes
-            file_type: File extension (pdf, docx, txt, md)
+            file_type: File extension (pdf, docx, txt, md, xlsx, xls)
 
         Returns:
             Path to the saved file, or None if save failed.
@@ -102,7 +104,7 @@ class DocumentStorageService:
             # Return local path
             return str(file_path)
 
-        except Exception as e:
+        except (OSError, ValueError, RuntimeError) as e:
             logger.error(
                 f"Failed to save document: {e}",
                 knowledge_base_id=knowledge_base_id,
@@ -155,6 +157,50 @@ class DocumentStorageService:
         """
         return self.base_path / knowledge_base_id / f"{document_id}.{file_type}"
 
+    def get_parse_artifact_path(self, file_path: str | Path) -> Path:
+        """Get companion structured parse artifact path for a document."""
+        source_path = Path(file_path)
+        return source_path.with_name(f"{source_path.name}.parsed.json")
+
+    def save_parse_artifact(self, file_path: str | Path, artifact: dict[str, Any]) -> str | None:
+        """Persist structured parse artifact next to the source document."""
+        try:
+            artifact_path = self.get_parse_artifact_path(file_path)
+            artifact_path.parent.mkdir(parents=True, exist_ok=True)
+            artifact_path.write_text(
+                json.dumps(artifact, ensure_ascii=False, indent=2, sort_keys=True),
+                encoding="utf-8",
+            )
+            logger.info("Saved document parse artifact", artifact_path=str(artifact_path))
+            return str(artifact_path)
+        except (OSError, TypeError, ValueError) as e:
+            logger.warning(f"Failed to save parse artifact: {e}", file_path=str(file_path))
+            return None
+
+    def load_parse_artifact(self, file_path: str | Path) -> dict[str, Any] | None:
+        """Load structured parse artifact for a document."""
+        try:
+            artifact_path = self.get_parse_artifact_path(file_path)
+            if not artifact_path.exists():
+                return None
+            return json.loads(artifact_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError, TypeError, ValueError) as e:
+            logger.warning(f"Failed to load parse artifact: {e}", file_path=str(file_path))
+            return None
+
+    def delete_parse_artifact(self, file_path: str | Path) -> bool:
+        """Delete structured parse artifact for a document if present."""
+        try:
+            artifact_path = self.get_parse_artifact_path(file_path)
+            if not artifact_path.exists():
+                return False
+            artifact_path.unlink()
+            logger.info("Deleted document parse artifact", artifact_path=str(artifact_path))
+            return True
+        except (OSError, TypeError, ValueError) as e:
+            logger.warning(f"Failed to delete parse artifact: {e}", file_path=str(file_path))
+            return False
+
     def document_exists(
         self,
         knowledge_base_id: str,
@@ -193,12 +239,13 @@ class DocumentStorageService:
         """
         try:
             file_path = self.get_document_path(knowledge_base_id, document_id, file_type)
+            self.delete_parse_artifact(file_path)
             if file_path.exists():
                 file_path.unlink()
                 logger.info(f"Deleted document file: {file_path}")
                 return True
             return False
-        except Exception as e:
+        except (OSError, ValueError, RuntimeError) as e:
             logger.error(f"Failed to delete document: {e}")
             return False
 
@@ -230,7 +277,7 @@ class DocumentStorageService:
             logger.info(f"Deleted {count} document files for KB {knowledge_base_id}")
             return count
 
-        except Exception as e:
+        except (OSError, ValueError, RuntimeError) as e:
             logger.error(f"Failed to delete KB documents: {e}")
             return 0
 
@@ -256,7 +303,7 @@ class DocumentStorageService:
                         total_files += 1
                         total_size += file_path.stat().st_size
 
-        except Exception as e:
+        except (OSError, ValueError, RuntimeError) as e:
             logger.error(f"Failed to get storage stats: {e}")
 
         return {

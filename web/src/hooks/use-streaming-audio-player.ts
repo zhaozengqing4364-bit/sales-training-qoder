@@ -1,6 +1,7 @@
 "use client";
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { debug } from "@/lib/debug";
 
 /**
  * Streaming Audio Player State
@@ -33,6 +34,8 @@ export interface TTSChunkData {
   is_final: boolean;
   text?: string;
   total_duration_ms?: number;
+  audio_format?: string;
+  sample_rate?: number;
 }
 
 /**
@@ -156,6 +159,7 @@ export function useStreamingAudioPlayer(
     isSupported: checkMediaSourceSupport(mimeType),
     isEnded: false,
   });
+  const stateRef = useRef(state);
 
   // Refs for MediaSource components
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -168,7 +172,16 @@ export function useStreamingAudioPlayer(
 
   // Refs for fallback mode (buffered playback)
   const fallbackChunksRef = useRef<ArrayBuffer[]>([]);
+  const playFallbackAudioRef = useRef<() => void>(() => {});
   const isFallbackModeRef = useRef(false);
+
+  // Refs for PCM16 streaming mode (Web Audio scheduling)
+  const pcmContextRef = useRef<AudioContext | null>(null);
+  const pcmActiveSourcesRef = useRef<Set<AudioBufferSourceNode>>(new Set());
+  const pcmPendingSourcesRef = useRef(0);
+  const pcmNextStartTimeRef = useRef(0);
+  const pcmStreamEndedRef = useRef(false);
+  const pcmPlaybackStartedRef = useRef(false);
 
   // Callback refs to avoid stale closures
   const onPlaybackStartRef = useRef(onPlaybackStart);
@@ -176,9 +189,15 @@ export function useStreamingAudioPlayer(
   const onErrorRef = useRef(onError);
 
   // Update callback refs
-  onPlaybackStartRef.current = onPlaybackStart;
-  onPlaybackEndRef.current = onPlaybackEnd;
-  onErrorRef.current = onError;
+  useEffect(() => {
+    onPlaybackStartRef.current = onPlaybackStart;
+    onPlaybackEndRef.current = onPlaybackEnd;
+    onErrorRef.current = onError;
+  }, [onError, onPlaybackEnd, onPlaybackStart]);
+
+  useEffect(() => {
+    stateRef.current = state;
+  }, [state]);
 
   /**
    * Check if MediaSource API is supported
@@ -186,6 +205,49 @@ export function useStreamingAudioPlayer(
   const isSupported = useCallback((): boolean => {
     return checkMediaSourceSupport(mimeType);
   }, [mimeType]);
+
+  const stopPCMPlayback = useCallback((closeContext: boolean) => {
+    for (const source of pcmActiveSourcesRef.current) {
+      try {
+        source.stop();
+      } catch {
+        // Ignore stale source stop failures
+      }
+      source.disconnect();
+    }
+    pcmActiveSourcesRef.current.clear();
+    pcmPendingSourcesRef.current = 0;
+    pcmNextStartTimeRef.current = 0;
+    pcmStreamEndedRef.current = false;
+    pcmPlaybackStartedRef.current = false;
+
+    if (closeContext && pcmContextRef.current) {
+      pcmContextRef.current.close().catch(() => {});
+      pcmContextRef.current = null;
+    }
+  }, []);
+
+  const ensurePCMContext = useCallback((sampleRate: number): AudioContext | null => {
+    if (typeof window === 'undefined') {
+      return null;
+    }
+
+    if (!pcmContextRef.current || pcmContextRef.current.state === 'closed') {
+      try {
+        pcmContextRef.current = new AudioContext({ sampleRate });
+      } catch {
+        // Safari may reject custom sampleRate; fallback to default context
+        pcmContextRef.current = new AudioContext();
+      }
+      pcmNextStartTimeRef.current = pcmContextRef.current.currentTime;
+    }
+
+    if (pcmContextRef.current.state === 'suspended') {
+      pcmContextRef.current.resume().catch(() => {});
+    }
+
+    return pcmContextRef.current;
+  }, []);
 
   /**
    * Process the chunk queue - append chunks sequentially
@@ -252,7 +314,7 @@ export function useStreamingAudioPlayer(
     }
 
     if (!isSupported()) {
-      console.warn('[StreamingAudioPlayer] MediaSource not supported, using fallback mode');
+      debug.warn('[StreamingAudioPlayer] MediaSource not supported, using fallback mode');
       isFallbackModeRef.current = true;
       return;
     }
@@ -292,7 +354,7 @@ export function useStreamingAudioPlayer(
         mediaSourceRef.current = null;
         sourceBufferRef.current = null;
         isInitializedRef.current = false;
-        console.log('[StreamingAudioPlayer] Playback ended, resources cleaned up');
+        debug.log('[StreamingAudioPlayer] Playback ended, resources cleaned up');
       };
 
       audio.onwaiting = () => {
@@ -339,12 +401,12 @@ export function useStreamingAudioPlayer(
             const playPromise = audio.play();
             if (playPromise) {
               playPromise.catch(err => {
-                console.warn('[StreamingAudioPlayer] Auto-play blocked in onsourceopen:', err);
+                debug.warn('[StreamingAudioPlayer] Auto-play blocked in onsourceopen:', err);
               });
             }
           }
 
-          console.log('[StreamingAudioPlayer] MediaSource initialized, queued chunks:', chunkQueueRef.current.length);
+          debug.log('[StreamingAudioPlayer] MediaSource initialized, queued chunks:', chunkQueueRef.current.length);
         } catch (err) {
           console.error('[StreamingAudioPlayer] Failed to create SourceBuffer:', err);
           onErrorRef.current?.('Failed to initialize audio streaming');
@@ -353,11 +415,11 @@ export function useStreamingAudioPlayer(
       };
 
       mediaSource.onsourceended = () => {
-        console.log('[StreamingAudioPlayer] MediaSource ended');
+        debug.log('[StreamingAudioPlayer] MediaSource ended');
       };
 
       mediaSource.onsourceclose = () => {
-        console.log('[StreamingAudioPlayer] MediaSource closed');
+        debug.log('[StreamingAudioPlayer] MediaSource closed');
       };
 
     } catch (err) {
@@ -372,6 +434,8 @@ export function useStreamingAudioPlayer(
    * IMPORTANT: Always clean up previous stream first to avoid SourceBuffer limit
    */
   const start = useCallback(() => {
+    stopPCMPlayback(true);
+
     // Clean up any previous MediaSource/SourceBuffer to avoid QuotaExceededError
     // This is crucial - browsers limit the number of active SourceBuffers
     if (audioRef.current) {
@@ -414,8 +478,8 @@ export function useStreamingAudioPlayer(
 
     // Now initialize new MediaSource
     initializeMediaSource();
-    console.log('[StreamingAudioPlayer] Started new stream (previous cleaned up)');
-  }, [initializeMediaSource]);
+    debug.log('[StreamingAudioPlayer] Started new stream (previous cleaned up)');
+  }, [initializeMediaSource, stopPCMPlayback]);
 
   /**
    * Append an audio chunk to the buffer
@@ -427,9 +491,98 @@ export function useStreamingAudioPlayer(
    * - For each non-final chunk, appendBuffer is called
    */
   const appendChunk = useCallback((chunk: TTSChunkData) => {
-    const { chunk_index, audio, duration_ms, is_final, total_duration_ms } = chunk;
+    const {
+      chunk_index,
+      audio,
+      duration_ms,
+      is_final,
+      total_duration_ms,
+      audio_format,
+      sample_rate,
+    } = chunk;
+    const normalizedFormat = (audio_format || 'mp3').toLowerCase();
 
-    // Decode base64 audio data
+    // Update total duration if provided
+    if (total_duration_ms) {
+      totalDurationRef.current = total_duration_ms / 1000;
+      setState(prev => ({ ...prev, duration: total_duration_ms / 1000 }));
+    }
+
+    // PCM16 streaming path: schedule each chunk with Web Audio API.
+    if (normalizedFormat === 'pcm16') {
+      if (is_final) {
+        pcmStreamEndedRef.current = true;
+        if (pcmPendingSourcesRef.current === 0) {
+          setState(prev => ({ ...prev, isPlaying: false, isEnded: true }));
+          onPlaybackEndRef.current?.();
+        }
+        return;
+      }
+
+      let pcmBuffer: ArrayBuffer;
+      try {
+        pcmBuffer = base64ToArrayBuffer(audio);
+      } catch (err) {
+        console.error('[StreamingAudioPlayer] Failed to decode PCM chunk:', err);
+        onErrorRef.current?.('Failed to decode PCM data');
+        return;
+      }
+      if (pcmBuffer.byteLength === 0) {
+        return;
+      }
+
+      const chunkSampleRate = sample_rate || 24000;
+      const audioContext = ensurePCMContext(chunkSampleRate);
+      if (!audioContext) {
+        onErrorRef.current?.('PCM playback unavailable');
+        return;
+      }
+
+      const int16Array = new Int16Array(pcmBuffer);
+      const float32Array = new Float32Array(int16Array.length);
+      for (let i = 0; i < int16Array.length; i++) {
+        float32Array[i] = int16Array[i] / 32768;
+      }
+
+      const webAudioBuffer = audioContext.createBuffer(1, float32Array.length, chunkSampleRate);
+      webAudioBuffer.copyToChannel(float32Array, 0);
+
+      const source = audioContext.createBufferSource();
+      source.buffer = webAudioBuffer;
+      source.connect(audioContext.destination);
+
+      const now = audioContext.currentTime;
+      const startTime = Math.max(now, pcmNextStartTimeRef.current || now);
+      source.start(startTime);
+      pcmNextStartTimeRef.current = startTime + webAudioBuffer.duration;
+
+      pcmPendingSourcesRef.current += 1;
+      pcmActiveSourcesRef.current.add(source);
+
+      if (!pcmPlaybackStartedRef.current) {
+        pcmPlaybackStartedRef.current = true;
+        setState(prev => ({ ...prev, isPlaying: true, isBuffering: false, isEnded: false }));
+        onPlaybackStartRef.current?.();
+      }
+
+      source.onended = () => {
+        pcmActiveSourcesRef.current.delete(source);
+        pcmPendingSourcesRef.current = Math.max(0, pcmPendingSourcesRef.current - 1);
+        source.disconnect();
+
+        if (pcmStreamEndedRef.current && pcmPendingSourcesRef.current === 0) {
+          setState(prev => ({ ...prev, isPlaying: false, isEnded: true }));
+          onPlaybackEndRef.current?.();
+        }
+      };
+
+      debug.log(
+        `[StreamingAudioPlayer] PCM chunk ${chunk_index} scheduled (${pcmBuffer.byteLength} bytes, ${duration_ms}ms)`
+      );
+      return;
+    }
+
+    // Decode base64 compressed audio data (e.g., MP3)
     let audioBuffer: ArrayBuffer;
     try {
       audioBuffer = base64ToArrayBuffer(audio);
@@ -439,19 +592,15 @@ export function useStreamingAudioPlayer(
       return;
     }
 
-    // Update total duration if provided
-    if (total_duration_ms) {
-      totalDurationRef.current = total_duration_ms / 1000;
-      setState(prev => ({ ...prev, duration: total_duration_ms / 1000 }));
-    }
-
     // Handle fallback mode (buffered playback)
     if (isFallbackModeRef.current) {
-      fallbackChunksRef.current.push(audioBuffer);
+      if (audioBuffer.byteLength > 0) {
+        fallbackChunksRef.current.push(audioBuffer);
+      }
 
       // In fallback mode, wait for final chunk then play all at once
       if (is_final) {
-        playFallbackAudio();
+        playFallbackAudioRef.current();
       }
       return;
     }
@@ -462,7 +611,9 @@ export function useStreamingAudioPlayer(
     }
 
     // Add chunk to queue
-    chunkQueueRef.current.push(audioBuffer);
+    if (audioBuffer.byteLength > 0) {
+      chunkQueueRef.current.push(audioBuffer);
+    }
 
     // Process queue (will be no-op if SourceBuffer not ready yet)
     processChunkQueue();
@@ -474,15 +625,15 @@ export function useStreamingAudioPlayer(
       const playPromise = audioRef.current.play();
       if (playPromise) {
         playPromise.catch(err => {
-          console.warn('[StreamingAudioPlayer] Auto-play blocked:', err);
+          debug.warn('[StreamingAudioPlayer] Auto-play blocked:', err);
           // Auto-play might be blocked, user interaction required
           setState(prev => ({ ...prev, isBuffering: true }));
         });
       }
     }
 
-    console.log(`[StreamingAudioPlayer] Chunk ${chunk_index} appended (${audioBuffer.byteLength} bytes, duration: ${duration_ms}ms, final: ${is_final}, initialized: ${isInitializedRef.current})`);
-  }, [initializeMediaSource, processChunkQueue]);
+    debug.log(`[StreamingAudioPlayer] Chunk ${chunk_index} appended (${audioBuffer.byteLength} bytes, duration: ${duration_ms}ms, final: ${is_final}, initialized: ${isInitializedRef.current})`);
+  }, [ensurePCMContext, initializeMediaSource, processChunkQueue]);
 
   /**
    * Play audio in fallback mode (buffered playback)
@@ -518,23 +669,36 @@ export function useStreamingAudioPlayer(
       };
 
       audio.play().catch(err => {
-        console.warn('[StreamingAudioPlayer] Fallback auto-play blocked:', err);
+        debug.warn('[StreamingAudioPlayer] Fallback auto-play blocked:', err);
       });
 
-      console.log('[StreamingAudioPlayer] Playing in fallback mode');
+      debug.log('[StreamingAudioPlayer] Playing in fallback mode');
     } catch (err) {
       console.error('[StreamingAudioPlayer] Fallback playback failed:', err);
       onErrorRef.current?.('Failed to play audio');
     }
   }, [mimeType]);
 
+  useEffect(() => {
+    playFallbackAudioRef.current = playFallbackAudio;
+  }, [playFallbackAudio]);
+
   /**
    * Signal that the stream has ended
    */
   const end = useCallback(() => {
+    if (pcmPlaybackStartedRef.current || pcmPendingSourcesRef.current > 0) {
+      pcmStreamEndedRef.current = true;
+      if (pcmPendingSourcesRef.current === 0) {
+        setState(prev => ({ ...prev, isPlaying: false, isEnded: true }));
+        onPlaybackEndRef.current?.();
+      }
+      return;
+    }
+
     if (isFallbackModeRef.current) {
       // In fallback mode, play the buffered audio
-      playFallbackAudio();
+      playFallbackAudioRef.current();
       return;
     }
 
@@ -547,9 +711,9 @@ export function useStreamingAudioPlayer(
         if (!sourceBuffer.updating && mediaSource.readyState === 'open') {
           try {
             mediaSource.endOfStream();
-            console.log('[StreamingAudioPlayer] Stream ended');
+            debug.log('[StreamingAudioPlayer] Stream ended');
           } catch (err) {
-            console.warn('[StreamingAudioPlayer] Failed to end stream:', err);
+            debug.warn('[StreamingAudioPlayer] Failed to end stream:', err);
           }
         }
       };
@@ -560,12 +724,14 @@ export function useStreamingAudioPlayer(
         endStream();
       }
     }
-  }, [playFallbackAudio]);
+  }, []);
 
   /**
    * Stop playback and clean up resources
    */
   const stop = useCallback(() => {
+    stopPCMPlayback(true);
+
     // Stop audio playback
     if (audioRef.current) {
       audioRef.current.pause();
@@ -609,8 +775,8 @@ export function useStreamingAudioPlayer(
       isEnded: false,
     });
 
-    console.log('[StreamingAudioPlayer] Stopped and cleaned up');
-  }, [mimeType]);
+    debug.log('[StreamingAudioPlayer] Stopped and cleaned up');
+  }, [mimeType, stopPCMPlayback]);
 
   /**
    * Reset the player for a new stream
@@ -632,7 +798,7 @@ export function useStreamingAudioPlayer(
     const clearedCount = chunkQueueRef.current.length + fallbackChunksRef.current.length;
     chunkQueueRef.current = [];
     fallbackChunksRef.current = [];
-    console.log(`[StreamingAudioPlayer] Queue cleared (${clearedCount} chunks)`);
+    debug.log(`[StreamingAudioPlayer] Queue cleared (${clearedCount} chunks)`);
     return clearedCount;
   }, []);
 
@@ -650,7 +816,11 @@ export function useStreamingAudioPlayer(
    * Validates: Requirements 3.1, 3.2
    */
   const interrupt = useCallback((): { wasPlaying: boolean; clearedChunks: number } => {
-    const wasPlaying = state.isPlaying || isAppendingRef.current;
+    const wasPlaying =
+      stateRef.current.isPlaying ||
+      isAppendingRef.current ||
+      pcmPlaybackStartedRef.current ||
+      pcmPendingSourcesRef.current > 0;
 
     // Property 6: Immediately stop TTS playback (same event loop tick)
     // Stop audio playback first
@@ -664,6 +834,9 @@ export function useStreamingAudioPlayer(
       }
       audioRef.current = null;
     }
+
+    // Stop PCM playback immediately
+    stopPCMPlayback(true);
 
     // Property 7: Clear the queue before any signal is sent
     const clearedChunks = clearQueue();
@@ -697,19 +870,30 @@ export function useStreamingAudioPlayer(
     totalDurationRef.current = 0;
 
     // Update state immediately
-    setState(prev => ({
-      ...prev,
-      isPlaying: false,
-      isBuffering: false,
-      isEnded: true,
-      currentTime: 0,
-      duration: 0,
-    }));
+    setState(prev => {
+      if (
+        !prev.isPlaying
+        && !prev.isBuffering
+        && prev.isEnded
+        && prev.currentTime === 0
+        && prev.duration === 0
+      ) {
+        return prev;
+      }
+      return {
+        ...prev,
+        isPlaying: false,
+        isBuffering: false,
+        isEnded: true,
+        currentTime: 0,
+        duration: 0,
+      };
+    });
 
-    console.log(`[StreamingAudioPlayer] Interrupted and cleaned up (wasPlaying: ${wasPlaying}, clearedChunks: ${clearedChunks})`);
+    debug.log(`[StreamingAudioPlayer] Interrupted and cleaned up (wasPlaying: ${wasPlaying}, clearedChunks: ${clearedChunks})`);
 
     return { wasPlaying, clearedChunks };
-  }, [state.isPlaying, clearQueue]);
+  }, [clearQueue, stopPCMPlayback]);
 
   return {
     state,

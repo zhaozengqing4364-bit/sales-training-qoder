@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
-import { Mic, Square, FileText, ArrowLeft, AlertCircle, Wifi, WifiOff, Play, MicOff } from "lucide-react";
+import { Mic, Square, FileText, ArrowLeft, AlertCircle, Wifi, WifiOff, Play, MicOff, Pause, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ChatBubble } from "@/components/ui/chat-bubble";
 import { AudioVisualizer } from "@/components/ui/audio-visualizer";
@@ -10,7 +10,27 @@ import { AudioWaveform } from "@/components/ui/audio-waveform";
 import { GlassSheet } from "@/components/ui/glass-sheet";
 import { cn } from "@/lib/utils";
 import { usePracticeWebSocket } from "@/hooks/use-practice-websocket";
+import type { ConnectionState, SessionStatus } from "@/hooks/use-practice-websocket";
 import { useAudioRecorder } from "@/hooks/use-audio-recorder";
+import { RightPanelContent } from "@/components/practice/RightPanelContent";
+import { usePracticeRuntimeLock, normalizeVoiceMode } from "./runtime-lock";
+import { usePracticeRecordingHotkeys } from "./use-practice-recording-hotkeys";
+import { usePracticeSessionLifecycle } from "./use-practice-session-lifecycle";
+
+const SESSION_STATUS_LABELS: Record<SessionStatus, string> = {
+    preparing: "准备中",
+    in_progress: "进行中",
+    paused: "已暂停",
+    completed: "已完成",
+    scoring: "评分中",
+};
+
+const CONNECTION_STATUS_LABELS: Record<ConnectionState, string> = {
+    connecting: "连接中...",
+    connected: "已连接",
+    reconnecting: "重连中...",
+    failed: "连接失败",
+};
 
 export default function PracticeSessionPage() {
     const params = useParams();
@@ -18,55 +38,63 @@ export default function PracticeSessionPage() {
     const searchParams = useSearchParams();
     
     const sessionId = params.sessionId as string;
-    const agentId = searchParams.get("agent_id") || undefined;
-    const personaId = searchParams.get("persona_id") || undefined;
-    
+    const queryAgentId = searchParams.get("agent_id") || undefined;
+    const queryPersonaId = searchParams.get("persona_id") || undefined;
+    const queryPresentationId = searchParams.get("presentation_id") || undefined;
+    const queryScenarioType = (searchParams.get("scenario_type") as "sales" | "presentation") || "sales";
+    const queryVoiceMode = normalizeVoiceMode(searchParams.get("voice_mode"));
+    const searchParamsString = searchParams.toString();
+    const runtimeSearchParams = React.useMemo(
+        () => new URLSearchParams(searchParamsString),
+        [searchParamsString],
+    );
+
+    const [lockedScenarioType, setLockedScenarioType] = React.useState<"sales" | "presentation">(queryScenarioType);
+    const [lockedVoiceMode, setLockedVoiceMode] = React.useState<"legacy" | "stepfun_realtime">(queryVoiceMode);
+    const [lockedAgentId, setLockedAgentId] = React.useState<string | undefined>(queryAgentId);
+    const [lockedPersonaId, setLockedPersonaId] = React.useState<string | undefined>(queryPersonaId);
+    const [lockedPresentationId, setLockedPresentationId] = React.useState<string | undefined>(queryPresentationId);
+
     const [isPanelOpen, setIsPanelOpen] = React.useState(false);
     const [sessionTime, setSessionTime] = React.useState(0);
     const messagesEndRef = React.useRef<HTMLDivElement>(null);
     
-    // 录音模式：'hold' = 按住说话，'toggle' = 点击切换
-    const [recordingMode, setRecordingMode] = React.useState<'hold' | 'toggle'>('hold');
-    // 检测是否为移动端
-    const [isMobile, setIsMobile] = React.useState(false);
-    
     // 防止快速点击导致多个录音会话 (Critical Fix #1)
-    const [isStartingRecording, setIsStartingRecording] = React.useState(false);
     const isStartingRef = React.useRef(false);
-    
-    // 检测移动端
-    React.useEffect(() => {
-        const checkMobile = () => {
-            setIsMobile(window.innerWidth < 768 || 'ontouchstart' in window);
-        };
-        checkMobile();
-        window.addEventListener('resize', checkMobile);
-        return () => window.removeEventListener('resize', checkMobile);
-    }, []);
 
     // WebSocket 连接
     const {
+        connectionState,
         isConnected,
-        isConnecting,
+        sessionStatus,
         aiState,
         messages,
         fuzzyDetections,
         salesStage,
         scores,
+        actionCard,
         error: wsError,
         isPlayingAudio,
         interimTranscript,
         audioUnlocked,
         isNetworkSlow,
+        currentSlide,
+        points,
+        forbiddenWords,
         sendAudio,
+        sendAudioBinary,
         sendAudioEnd,
-        sendControl,
         startSpeaking,
+        sendInterrupt,
         unlockAudio,
+        sendMessage,
+        connect,
     } = usePracticeWebSocket({
         sessionId,
-        agentId,
-        personaId,
+        scenarioType: lockedScenarioType,
+        agentId: lockedAgentId,
+        personaId: lockedPersonaId,
+        voiceMode: lockedVoiceMode,
     });
 
     // 音频录制
@@ -85,6 +113,11 @@ export default function PracticeSessionPage() {
                 sendAudio(base64Audio);
             }
         },
+        onAudioDataBinary: (pcmData) => {
+            if (isConnected) {
+                sendAudioBinary(pcmData);
+            }
+        },
         onAudioEnd: () => {
             if (isConnected) {
                 // 发送音频结束信号
@@ -93,11 +126,54 @@ export default function PracticeSessionPage() {
         },
         onSpeakingChange: (speaking) => {
             if (isConnected && speaking) {
+                if (aiIsBusyRef.current) {
+                    sendInterrupt("user_speaking");
+                }
                 // 只在开始说话时发送信号
                 startSpeaking();
             }
         },
     });
+
+    const {
+        lockedScenarioType: runtimeScenarioType,
+        lockedVoiceMode: runtimeVoiceMode,
+        lockedAgentId: runtimeAgentId,
+        lockedPersonaId: runtimePersonaId,
+        lockedPresentationId: runtimePresentationId,
+        sessionMetaError,
+    } = usePracticeRuntimeLock({
+        sessionId,
+        query: {
+            scenarioType: queryScenarioType,
+            voiceMode: queryVoiceMode,
+            agentId: queryAgentId,
+            personaId: queryPersonaId,
+            presentationId: queryPresentationId,
+        },
+        searchParams: runtimeSearchParams,
+        onRewriteQuery: router.replace,
+    });
+
+    React.useEffect(() => {
+        setLockedScenarioType(runtimeScenarioType);
+    }, [runtimeScenarioType]);
+
+    React.useEffect(() => {
+        setLockedVoiceMode(runtimeVoiceMode);
+    }, [runtimeVoiceMode]);
+
+    React.useEffect(() => {
+        setLockedAgentId(runtimeAgentId);
+    }, [runtimeAgentId]);
+
+    React.useEffect(() => {
+        setLockedPersonaId(runtimePersonaId);
+    }, [runtimePersonaId]);
+
+    React.useEffect(() => {
+        setLockedPresentationId(runtimePresentationId);
+    }, [runtimePresentationId]);
 
     // 计时器
     React.useEffect(() => {
@@ -115,116 +191,91 @@ export default function PracticeSessionPage() {
         messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
     }, [messages]);
 
-    // 请求麦克风权限
-    React.useEffect(() => {
-        if (hasPermission === null) {
-            requestPermission();
-        }
-    }, [hasPermission, requestPermission]);
+    const scenarioType = lockedScenarioType;
+    const voiceMode = lockedVoiceMode;
 
-    // 统一的录音开始处理 - 包含所有业务逻辑检查和防抖
-    // Critical Fix #1: 防止快速点击导致多个录音会话同时运行
-    const handleStartRecording = React.useCallback(async () => {
-        // 防止快速双击 - 使用 ref 进行同步检查
+    // AI 是否正在忙碌（说话或思考中），用于一来一回交互模式
+    const aiIsBusy = isPlayingAudio || aiState === "thinking" || aiState === "speaking";
+    // 使用 ref 保持最新值，避免闭包过时问题
+    const aiIsBusyRef = React.useRef(aiIsBusy);
+    const isRecordingRef = React.useRef(isRecording);
+    const recordBtnRef = React.useRef<HTMLButtonElement>(null);
+
+    React.useEffect(() => {
+        aiIsBusyRef.current = aiIsBusy;
+    }, [aiIsBusy]);
+
+    React.useEffect(() => {
+        isRecordingRef.current = isRecording;
+    }, [isRecording]);
+
+    const {
+        canToggleLifecycle,
+        handleEndSession,
+        handleTogglePauseResume,
+        isEndingSession,
+        isSessionPaused,
+        isSessionTerminal,
+        lifecycleError,
+        pendingLifecycleAction,
+    } = usePracticeSessionLifecycle({
+        sessionId,
+        connectionState,
+        sessionStatus,
+        isRecordingRef,
+        stopRecording,
+    });
+    const practiceError = lifecycleError || wsError || audioError || sessionMetaError;
+    const canToggleRecordingBase =
+        connectionState === "connected"
+        && sessionStatus === "in_progress"
+        && pendingLifecycleAction === null;
+    const canRecord = canToggleRecordingBase && hasPermission !== false;
+    const canRequestPermission = canToggleRecordingBase && hasPermission === false;
+
+    // 统一的录音切换函数 - 点击一次开始，再点击一次结束
+    const toggleRecording = React.useCallback(() => {
+        console.log('[Recording] toggleRecording called, isRecording:', isRecordingRef.current, 'aiIsBusy:', aiIsBusyRef.current, 'isConnected:', isConnected, 'hasPermission:', hasPermission);
+        
+        if (connectionState !== "connected") return;
+        if (sessionStatus !== "in_progress") return;
+        if (pendingLifecycleAction) return;
+
+        if (hasPermission === false) {
+            void requestPermission().then((granted) => {
+                if (!granted) return;
+                if (isRecordingRef.current) return;
+                unlockAudio();
+                startRecording();
+            });
+            return;
+        }
+        
+        // 防止快速双击
         if (isStartingRef.current) {
             console.log('[Recording] Blocked: already starting');
             return;
         }
         
-        // 业务逻辑检查
-        if (!isConnected || hasPermission === false) {
-            return;
-        }
-        
-        // 如果已经在录音，不重复开始
-        if (isRecording) {
-            return;
-        }
-        
-        // 设置防抖标志
-        isStartingRef.current = true;
-        setIsStartingRecording(true);
-        
-        try {
-            // 解锁音频并开始录音
-            unlockAudio();
-            await startRecording();
-        } finally {
-            // 延迟重置防抖标志，防止极快的连续点击
-            setTimeout(() => {
-                isStartingRef.current = false;
-                setIsStartingRecording(false);
-            }, 100);
-        }
-    }, [isConnected, hasPermission, isRecording, unlockAudio, startRecording]);
-
-    // 统一的录音停止处理
-    const handleStopRecording = React.useCallback(() => {
-        if (isRecording) {
-            stopRecording();
-        }
-    }, [isRecording, stopRecording]);
-
-    // 点击切换模式的处理函数
-    const handleToggleRecording = React.useCallback(() => {
-        if (!isConnected || hasPermission === false) {
-            return;
-        }
-        
-        if (isRecording) {
+        if (isRecordingRef.current) {
+            // 正在录音 → 停止
             stopRecording();
         } else {
+            // 没在录音 → 开始
+            isStartingRef.current = true;
             unlockAudio();
             startRecording();
+            setTimeout(() => {
+                isStartingRef.current = false;
+            }, 300);
         }
-    }, [isConnected, hasPermission, isRecording, unlockAudio, startRecording, stopRecording]);
+    }, [connectionState, hasPermission, isConnected, pendingLifecycleAction, requestPermission, sessionStatus, unlockAudio, startRecording, stopRecording]);
 
-    // 空格键按住说话（仅在 hold 模式下生效）
-    React.useEffect(() => {
-        // 点击切换模式下不使用空格键
-        if (recordingMode === 'toggle') {
-            return;
-        }
-        
-        const handleKeyDown = (e: KeyboardEvent) => {
-            // 忽略输入框中的空格
-            const target = e.target as HTMLElement;
-            if (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable) {
-                return;
-            }
-            
-            if (e.code === "Space" && !e.repeat) {
-                e.preventDefault();
-                handleStartRecording();
-            }
-        };
-
-        const handleKeyUp = (e: KeyboardEvent) => {
-            // 忽略输入框中的空格
-            const target = e.target as HTMLElement;
-            if (target.tagName === "INPUT" || target.tagName === "TEXTAREA" || target.isContentEditable) {
-                return;
-            }
-            
-            if (e.code === "Space") {
-                e.preventDefault();
-                handleStopRecording();
-            }
-        };
-
-        window.addEventListener("keydown", handleKeyDown);
-        window.addEventListener("keyup", handleKeyUp);
-
-        return () => {
-            window.removeEventListener("keydown", handleKeyDown);
-            window.removeEventListener("keyup", handleKeyUp);
-        };
-    }, [handleStartRecording, handleStopRecording, recordingMode]);
-
-    const handleEndSession = () => {
-        sendControl("end");
-        router.push(`/practice/${sessionId}/report`);
-    };
+    usePracticeRecordingHotkeys({
+        onToggleRecording: toggleRecording,
+        onStopRecording: stopRecording,
+        isRecordingRef,
+    });
 
     const formatTime = (seconds: number) => {
         const mins = Math.floor(seconds / 60);
@@ -232,124 +283,8 @@ export default function PracticeSessionPage() {
         return `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
     };
 
-    // 右侧面板内容
-    const RightPanelContent = () => (
-        <div className="space-y-6">
-            {/* 模糊词检测 */}
-            {fuzzyDetections.length > 0 && (
-                <div className="bg-white/50 backdrop-blur-sm rounded-2xl p-4 border border-white/60 shadow-[0_8px_30px_rgb(0,0,0,0.04)]">
-                    <h3 className="text-sm font-semibold text-slate-700 mb-3 flex items-center gap-2">
-                        <span className="w-2 h-2 rounded-full bg-amber-500" />
-                        实时提示
-                    </h3>
-                    <div className="space-y-3">
-                        {fuzzyDetections.map((detection, idx) => (
-                            <div
-                                key={idx}
-                                className={cn(
-                                    "p-3 rounded-lg border",
-                                    detection.severity === "high"
-                                        ? "bg-red-50 border-red-100"
-                                        : detection.severity === "medium"
-                                        ? "bg-amber-50 border-amber-100"
-                                        : "bg-blue-50 border-blue-100"
-                                )}
-                            >
-                                <div className={cn(
-                                    "text-xs font-bold mb-1",
-                                    detection.severity === "high"
-                                        ? "text-red-600"
-                                        : detection.severity === "medium"
-                                        ? "text-amber-600"
-                                        : "text-blue-600"
-                                )}>
-                                    {detection.severity === "high" ? "⚠️" : "💡"} {detection.category === "feedback" ? "反馈" : "模糊词检测"}
-                                </div>
-                                {detection.matched.length > 0 && (
-                                    <p className="text-xs text-slate-600 mb-1">
-                                        检测到: {detection.matched.join(", ")}
-                                    </p>
-                                )}
-                                <p className="text-xs text-slate-600">{detection.suggestion}</p>
-                            </div>
-                        ))}
-                    </div>
-                </div>
-            )}
-
-            {/* 销售阶段 */}
-            {salesStage && (
-                <div className="bg-white/50 backdrop-blur-sm rounded-2xl p-4 border border-white/60 shadow-[0_8px_30px_rgb(0,0,0,0.04)]">
-                    <h3 className="text-sm font-semibold text-slate-700 mb-3 flex items-center gap-2">
-                        <span className="w-2 h-2 rounded-full bg-blue-500" />
-                        当前阶段
-                    </h3>
-                    <div className="bg-blue-50 border border-blue-100 p-3 rounded-lg">
-                        <div className="text-xs text-blue-600 font-bold mb-1">
-                            📊 {salesStage.stage_name}
-                        </div>
-                        <div className="w-full h-1.5 bg-blue-100 rounded-full mb-2">
-                            <div
-                                className="h-full bg-blue-500 rounded-full transition-all duration-500"
-                                style={{ width: `${salesStage.progress * 100}%` }}
-                            />
-                        </div>
-                        <ul className="text-xs text-slate-600 list-disc list-inside space-y-1">
-                            {salesStage.key_actions.map((action, idx) => (
-                                <li key={idx}>{action}</li>
-                            ))}
-                        </ul>
-                        {salesStage.guidance && (
-                            <p className="text-xs text-slate-500 mt-2 italic">{salesStage.guidance}</p>
-                        )}
-                    </div>
-                </div>
-            )}
-
-            {/* 实时评分 */}
-            <div className="bg-white/50 backdrop-blur-sm rounded-2xl p-4 border border-white/60 shadow-[0_8px_30px_rgb(0,0,0,0.04)]">
-                <h3 className="text-sm font-semibold text-slate-700 mb-4 flex items-center gap-2">
-                    <span className="w-2 h-2 rounded-full bg-emerald-500" />
-                    实时评分
-                </h3>
-                <div className="space-y-3">
-                    {(scores?.dimensions || [
-                        { name: "专业度", score: 0, trend: "stable" as const, delta: 0 },
-                        { name: "沟通技巧", score: 0, trend: "stable" as const, delta: 0 },
-                        { name: "销售流程", score: 0, trend: "stable" as const, delta: 0 },
-                    ]).map((item) => (
-                        <div key={item.name}>
-                            <div className="flex justify-between text-xs text-slate-600 mb-1">
-                                <span className="flex items-center gap-1">
-                                    {item.name}
-                                    {item.trend === "up" && <span className="text-emerald-500">↑</span>}
-                                    {item.trend === "down" && <span className="text-red-500">↓</span>}
-                                </span>
-                                <span>{item.score}</span>
-                            </div>
-                            <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
-                                <div
-                                    className="h-full rounded-full transition-all duration-500 bg-indigo-500"
-                                    style={{ width: `${item.score}%` }}
-                                />
-                            </div>
-                        </div>
-                    ))}
-                    <div className="pt-2 border-t border-slate-200 mt-2">
-                        <div className="flex justify-between items-center">
-                            <span className="text-sm font-bold text-slate-700">综合评分</span>
-                            <span className="text-lg font-bold text-indigo-600">
-                                {scores?.overall || 0}
-                            </span>
-                        </div>
-                        {scores?.feedback && (
-                            <p className="text-xs text-slate-500 mt-1">{scores.feedback}</p>
-                        )}
-                    </div>
-                </div>
-            </div>
-        </div>
-    );
+    // v1-12 Fix: RightPanelContent extracted to separate component file
+    // See: @/components/practice/RightPanelContent
 
     return (
         <div className="flex h-full w-full">
@@ -380,61 +315,148 @@ export default function PracticeSessionPage() {
                 {/* 头部 */}
                 <header className="h-16 px-4 md:px-6 flex items-center justify-between bg-white/40 backdrop-blur-md border-b border-white/20 z-10">
                     <div className="flex items-center gap-3">
-                        <Button variant="ghost" size="icon" onClick={() => router.back()} className="md:hidden">
+                        <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => router.push("/")}
+                            aria-label="退出练习并返回首页"
+                            className="md:hidden"
+                        >
                             <ArrowLeft className="w-5 h-5" />
                         </Button>
                         <div>
-                            <h1 className="text-base md:text-lg font-bold text-slate-800">销售对练</h1>
+                            <h1 className="text-base md:text-lg font-bold text-slate-800">
+                                {scenarioType === 'presentation' ? 'PPT演讲练习' : '销售对练'}
+                            </h1>
                             <div className="flex items-center gap-2 text-xs text-slate-500">
                                 <span className="flex items-center gap-1">
-                                    {isConnected ? (
+                                    {connectionState === "connected" ? (
                                         <>
                                             <Wifi className="w-3 h-3 text-emerald-500" />
-                                            <span className="text-emerald-600">已连接</span>
+                                            <span className="text-emerald-600">{CONNECTION_STATUS_LABELS[connectionState]}</span>
                                         </>
-                                    ) : isConnecting ? (
+                                    ) : connectionState === "connecting" || connectionState === "reconnecting" ? (
                                         <>
                                             <span className="w-3 h-3 border-2 border-slate-300 border-t-slate-600 rounded-full animate-spin" />
-                                            <span>连接中...</span>
+                                            <span>{CONNECTION_STATUS_LABELS[connectionState]}</span>
                                         </>
                                     ) : (
                                         <>
                                             <WifiOff className="w-3 h-3 text-red-500" />
-                                            <span className="text-red-600">未连接</span>
+                                            <span className="text-red-600">{CONNECTION_STATUS_LABELS[connectionState]}</span>
                                         </>
                                     )}
                                 </span>
                                 <span>•</span>
                                 <span>{formatTime(sessionTime)}</span>
+                                <span>•</span>
+                                <span>{SESSION_STATUS_LABELS[sessionStatus]}</span>
+                                <span>•</span>
+                                <span>{voiceMode === "stepfun_realtime" ? "Realtime 模式" : "经典模式"}</span>
                             </div>
                         </div>
                     </div>
                     <div className="flex items-center gap-2">
                         <Button
+                            variant="secondary"
+                            size="sm"
+                            onClick={handleTogglePauseResume}
+                            disabled={!canToggleLifecycle}
+                            className="hidden md:flex rounded-full"
+                        >
+                            {pendingLifecycleAction ? (
+                                <>
+                                    <span className="w-4 h-4 mr-2 border-2 border-slate-300 border-t-slate-600 rounded-full animate-spin" />
+                                    处理中...
+                                </>
+                            ) : isSessionPaused ? (
+                                <>
+                                    <Play className="w-4 h-4 mr-2 fill-current" />
+                                    继续练习
+                                </>
+                            ) : (
+                                <>
+                                    <Pause className="w-4 h-4 mr-2" />
+                                    暂停
+                                </>
+                            )}
+                        </Button>
+                        <Button
                             variant="destructive"
                             size="sm"
                             onClick={handleEndSession}
+                            disabled={isEndingSession || isSessionTerminal || pendingLifecycleAction !== null}
                             className="hidden md:flex rounded-full"
                         >
-                            <Square className="w-4 h-4 mr-2 fill-current" />
-                            结束练习
+                            {isEndingSession ? (
+                                <>
+                                    <span className="w-4 h-4 mr-2 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                                    生成报告中...
+                                </>
+                            ) : (
+                                <>
+                                    <Square className="w-4 h-4 mr-2 fill-current" />
+                                    结束练习
+                                </>
+                            )}
+                        </Button>
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={handleTogglePauseResume}
+                            disabled={!canToggleLifecycle}
+                            className="md:hidden"
+                        >
+                            {pendingLifecycleAction
+                                ? "处理中..."
+                                : isSessionPaused
+                                ? "继续"
+                                : "暂停"}
                         </Button>
                         <Button
                             variant="ghost"
                             size="sm"
                             onClick={handleEndSession}
+                            disabled={isEndingSession || isSessionTerminal || pendingLifecycleAction !== null}
                             className="md:hidden text-red-500"
                         >
-                            结束
+                            {isEndingSession ? "生成中..." : "结束"}
                         </Button>
                     </div>
                 </header>
 
                 {/* 错误提示 */}
-                {(wsError || audioError) && (
-                    <div className="mx-4 mt-4 p-3 bg-red-50 border border-red-100 rounded-lg flex items-center gap-2 text-sm text-red-600">
-                        <AlertCircle className="w-4 h-4" />
-                        {wsError || audioError}
+                {practiceError && (
+                    <div className="mx-4 mt-4 p-3 bg-red-50 border border-red-100 rounded-lg flex flex-col gap-3 text-sm text-red-600 md:flex-row md:items-center">
+                        <div className="flex items-center gap-2 min-w-0">
+                            <AlertCircle className="w-4 h-4 shrink-0" />
+                            <span className="min-w-0 break-words">{practiceError}</span>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-2 md:ml-auto">
+                            {lifecycleError && !isSessionTerminal && (
+                                <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={handleEndSession}
+                                    disabled={isEndingSession || connectionState !== "connected"}
+                                    className="h-8 rounded-full border-red-200 text-red-700 hover:bg-red-100"
+                                >
+                                    <Square className="w-3 h-3 mr-1 fill-current" />
+                                    重试结束
+                                </Button>
+                            )}
+                            {connectionState === "failed" && (
+                                <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={connect}
+                                    className="h-8 rounded-full border-red-200 text-red-700 hover:bg-red-100"
+                                >
+                                    <RefreshCw className="w-3 h-3 mr-1" />
+                                    重新连接
+                                </Button>
+                            )}
+                        </div>
                     </div>
                 )}
 
@@ -450,8 +472,12 @@ export default function PracticeSessionPage() {
                 <div className="flex-1 overflow-y-auto p-4 md:p-6 pb-[220px] md:pb-[200px]">
                     <div className="max-w-3xl mx-auto">
                         {messages.length === 0 && isConnected && (
-                            <div className="text-center text-slate-400 py-8">
-                                <p>连接成功！按住麦克风按钮开始对话</p>
+                            <div className="text-center text-slate-600 py-8">
+                                <p>
+                                    {isSessionPaused
+                                        ? "会话已暂停，点击“继续”后恢复对话"
+                                        : "连接成功！点击麦克风按钮或按空格键开始对话"}
+                                </p>
                             </div>
                         )}
                         {messages.map((msg) => (
@@ -462,7 +488,7 @@ export default function PracticeSessionPage() {
                                 timestamp={msg.timestamp}
                                 avatar={
                                     msg.sender === "ai"
-                                        ? "https://api.dicebear.com/7.x/avataaars/svg?seed=Felix"
+                                        ? "/ai-avatar.svg"
                                         : undefined
                                 }
                             />
@@ -474,7 +500,6 @@ export default function PracticeSessionPage() {
                 {/* 底部控制区 */}
                 <div className="absolute bottom-0 left-0 right-0 p-4 md:p-6 bg-gradient-to-t from-white via-white/90 to-transparent z-20">
                     <div className="max-w-3xl mx-auto flex flex-col items-center gap-4">
-                        {/* 实时转录显示 */}
                         {interimTranscript && (
                             <div className="w-full max-w-md px-4 py-2 bg-indigo-50 border border-indigo-100 rounded-xl">
                                 <p className="text-sm text-indigo-700 text-center animate-pulse">
@@ -482,9 +507,18 @@ export default function PracticeSessionPage() {
                                 </p>
                             </div>
                         )}
+
+                        <div
+                            role="status"
+                            aria-live="polite"
+                            aria-atomic="true"
+                            className="sr-only"
+                        >
+                            {interimTranscript && `正在识别: ${interimTranscript}`}
+                        </div>
                         
                         {/* 波形显示 - 使用真实音频可视化 */}
-                        <div className="flex items-center gap-2 h-8 text-slate-400">
+                        <div className="flex items-center gap-2 h-8 text-slate-500">
                             {isRecording ? (
                                 <>
                                     <AudioVisualizer stream={stream} isActive={isRecording} barCount={16} />
@@ -499,42 +533,55 @@ export default function PracticeSessionPage() {
                                 <span className="text-xs animate-pulse">AI 思考中...</span>
                             ) : aiState === "speaking" ? (
                                 <span className="text-xs">AI 正在回复...</span>
+                            ) : isSessionPaused ? (
+                                <span className="text-xs">会话已暂停</span>
                             ) : (
                                 <span className="text-xs">等待输入...</span>
                             )}
                         </div>
 
                         <div className="flex items-center gap-4 w-full justify-center relative">
-                            {/* 移动端面板按钮 */}
                             <Button
                                 variant="ghost"
                                 size="icon"
+                                aria-label="打开实时分析面板"
                                 className="md:hidden absolute left-0"
                                 onClick={() => setIsPanelOpen(true)}
                             >
                                 <FileText className="w-5 h-5 text-slate-500" />
                             </Button>
 
-                            {/* 录音按钮 */}
+                            {/* 录音按钮 - 统一 toggle 模式：点击/空格切换录音 */}
                             <Button
+                                ref={recordBtnRef}
                                 size="lg"
-                                disabled={!isConnected || hasPermission === false}
+                                disabled={!(canRecord || canRequestPermission)}
+                                aria-label={
+                                    isRecording
+                                        ? "停止录音"
+                                        : hasPermission === false
+                                        ? "点击重新请求麦克风权限"
+                                        : sessionStatus === "paused"
+                                        ? "会话已暂停"
+                                        : sessionStatus !== "in_progress"
+                                        ? "会话不可录音"
+                                        : aiIsBusy
+                                        ? "打断AI并开始录音"
+                                        : "开始录音"
+                                }
+                                aria-pressed={isRecording}
+                                onClick={toggleRecording}
                                 className={cn(
                                     "rounded-full w-16 h-16 md:w-20 md:h-20 shadow-xl transition-all duration-300",
                                     isRecording
                                         ? "bg-red-500 hover:bg-red-600 scale-110"
+                                        : canRequestPermission
+                                        ? "bg-amber-500 hover:bg-amber-600"
+                                        : aiIsBusy
+                                        ? "bg-amber-500 hover:bg-amber-600"
+                                        : !canRecord
+                                        ? "bg-slate-300 cursor-not-allowed opacity-60"
                                         : "bg-indigo-600 hover:bg-indigo-700"
-                                )}
-                                // 根据模式选择不同的事件处理
-                                {...(recordingMode === 'toggle' 
-                                    ? { onClick: handleToggleRecording }
-                                    : {
-                                        onMouseDown: handleStartRecording,
-                                        onMouseUp: handleStopRecording,
-                                        onMouseLeave: handleStopRecording,
-                                        onTouchStart: handleStartRecording,
-                                        onTouchEnd: handleStopRecording,
-                                    }
                                 )}
                             >
                                 {isRecording ? (
@@ -545,31 +592,41 @@ export default function PracticeSessionPage() {
                             </Button>
 
                             {/* 桌面端：空格键提示 */}
-                            <div className="hidden md:block absolute right-0 text-xs text-slate-400">
-                                {recordingMode === 'hold' ? '按住空格键也可以说话' : '点击切换录音'}
+                            <div className="hidden md:block absolute right-0 text-xs text-slate-500">
+                                空格键 / 点击切换录音
                             </div>
-                            
-                            {/* 移动端：模式切换按钮 */}
-                            <Button
-                                variant="ghost"
-                                size="sm"
-                                className="md:hidden absolute right-0 text-xs text-slate-500"
-                                onClick={() => setRecordingMode(prev => prev === 'hold' ? 'toggle' : 'hold')}
-                            >
-                                {recordingMode === 'hold' ? '切换点击模式' : '切换按住模式'}
-                            </Button>
                         </div>
 
-                        <p className="text-xs text-slate-400 font-medium">
-                            {!isConnected
-                                ? "等待连接..."
+                        <p className="text-xs text-slate-500 font-medium">
+                            {connectionState === "failed"
+                                ? "连接失败，请点击“重新连接”恢复会话"
+                                : connectionState === "reconnecting"
+                                ? "网络波动，正在自动重连..."
+                                : connectionState === "connecting"
+                                ? "正在建立连接..."
+                                : audioError
+                                ? audioError.includes("HTTP/IP")
+                                    ? "当前地址不是安全上下文，请改用 HTTPS 域名访问"
+                                    : audioError.includes("未检测到可用麦克风")
+                                    ? "未检测到可用麦克风设备"
+                                    : audioError.includes("被其他应用占用")
+                                    ? "麦克风被其他应用占用"
+                                    : "请先处理麦克风访问问题"
                                 : hasPermission === false
                                 ? "请允许麦克风权限"
+                                : pendingLifecycleAction
+                                ? "正在更新会话状态..."
+                                : isSessionTerminal
+                                ? "会话已结束，正在生成/查看结果"
+                                : isSessionPaused
+                                ? "会话已暂停，点击顶部继续按钮恢复"
                                 : isPlayingAudio
-                                ? "AI 正在说话..."
+                                ? "AI 正在说话，点击麦克风可打断"
+                                : aiState === "thinking"
+                                ? "AI 思考中，点击麦克风可打断并发言"
                                 : isRecording
-                                ? recordingMode === 'toggle' ? "点击停止录音" : "正在录音..."
-                                : recordingMode === 'toggle' ? "点击开始说话" : "按住说话 / 松开发送"}
+                                ? "再次点击或按空格结束录音"
+                                : "点击或按空格开始说话"}
                         </p>
                     </div>
                 </div>
@@ -577,7 +634,18 @@ export default function PracticeSessionPage() {
 
             {/* 右侧面板 (桌面端) */}
             <div className="hidden md:block w-80 lg:w-96 border-l border-white/40 bg-white/30 backdrop-blur-xl p-6 overflow-y-auto">
-                <RightPanelContent />
+                <RightPanelContent
+                    scenarioType={scenarioType}
+                    presentationId={lockedPresentationId}
+                    currentSlide={currentSlide}
+                    points={points}
+                    forbiddenWords={forbiddenWords}
+                    scores={scores}
+                    actionCard={actionCard}
+                    fuzzyDetections={fuzzyDetections}
+                    salesStage={salesStage}
+                    sendMessage={sendMessage}
+                />
             </div>
 
             {/* 移动端底部面板 */}
@@ -589,7 +657,18 @@ export default function PracticeSessionPage() {
             >
                 <div className="h-full overflow-y-auto pb-8">
                     <h2 className="text-lg font-bold mb-6 text-slate-800">实时分析面板</h2>
-                    <RightPanelContent />
+                    <RightPanelContent
+                    scenarioType={scenarioType}
+                    presentationId={lockedPresentationId}
+                    currentSlide={currentSlide}
+                    points={points}
+                    forbiddenWords={forbiddenWords}
+                    scores={scores}
+                    actionCard={actionCard}
+                    fuzzyDetections={fuzzyDetections}
+                    salesStage={salesStage}
+                    sendMessage={sendMessage}
+                />
                 </div>
             </GlassSheet>
         </div>

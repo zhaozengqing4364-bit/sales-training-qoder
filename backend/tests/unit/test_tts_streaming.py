@@ -15,6 +15,7 @@ Tests that for any TTS generation request:
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+hypothesis = pytest.importorskip("hypothesis")
 from hypothesis import given, settings, strategies as st, HealthCheck
 
 from common.audio.tts_service import TTSService, TTSChunk

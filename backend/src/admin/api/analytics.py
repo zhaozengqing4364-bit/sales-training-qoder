@@ -300,6 +300,161 @@ async def get_leaderboard(
     return success_response({"leaderboard": result.value})
 
 
+@router.get("/runtime-metrics", response_model=dict)
+async def get_runtime_metrics(
+    time_range: Literal["1h", "24h", "7d", "30d", "90d"] = Query("30d", description="Time range filter"),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+) -> dict[str, Any]:
+    """
+    Get key runtime metrics for dashboard (FR39)
+
+    Returns:
+    - Recovery success rate (NFR8: >=99%)
+    - False trigger rate (NFR11: <1%)
+    - Completeness rate (NFR10: >=98%)
+    - Session metrics and voice mode distribution
+    """
+    from common.analytics.runtime_metrics_service import runtime_metrics_service
+    from dataclasses import asdict
+
+    logger.info(
+        "Getting runtime metrics",
+        extra={
+            "time_range": time_range,
+            "user_id": str(current_user.user_id)
+        }
+    )
+
+    result = await runtime_metrics_service.get_runtime_metrics(
+        db=db,
+        time_range=time_range
+    )
+
+    if not result.is_success:
+        return error_response(
+            result.fallback or "[RUNTIME_METRICS_FAILED]",
+            "Failed to load runtime metrics"
+        )
+
+    return success_response(asdict(result.value))
+
+
+@router.get("/policy-effectiveness", response_model=dict)
+async def get_policy_effectiveness(
+    time_range: Literal["7d", "30d", "90d", "all_time"] = Query("30d", description="Time range filter"),
+    limit: int = Query(10, ge=1, le=50, description="Max items to return"),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+) -> dict[str, Any]:
+    """
+    Get policy effectiveness metrics by Agent (FR39)
+
+    Returns metrics comparing different Agents and their policy effectiveness
+    """
+    from common.analytics.runtime_metrics_service import runtime_metrics_service
+    from dataclasses import asdict
+
+    logger.info(
+        "Getting policy effectiveness",
+        extra={
+            "time_range": time_range,
+            "limit": limit,
+            "user_id": str(current_user.user_id)
+        }
+    )
+
+    result = await runtime_metrics_service.get_policy_effectiveness(
+        db=db,
+        time_range=time_range,
+        limit=limit
+    )
+
+    if not result.is_success:
+        return error_response(
+            result.fallback or "[POLICY_EFFECTIVENESS_FAILED]",
+            "Failed to load policy effectiveness"
+        )
+
+    return success_response({
+        "effectiveness": [asdict(item) for item in result.value]
+    })
+
+
+@router.get("/voice-mode-comparison", response_model=dict)
+async def get_voice_mode_comparison(
+    time_range: Literal["7d", "30d", "90d", "all_time"] = Query("30d", description="Time range filter"),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+) -> dict[str, Any]:
+    """
+    Compare performance between voice modes (StepFun vs Legacy) (FR39)
+
+    Returns comparison metrics for different voice modes
+    """
+    from common.analytics.runtime_metrics_service import runtime_metrics_service
+    from dataclasses import asdict
+
+    logger.info(
+        "Getting voice mode comparison",
+        extra={
+            "time_range": time_range,
+            "user_id": str(current_user.user_id)
+        }
+    )
+
+    result = await runtime_metrics_service.get_voice_mode_comparison(
+        db=db,
+        time_range=time_range
+    )
+
+    if not result.is_success:
+        return error_response(
+            result.fallback or "[VOICE_MODE_COMPARISON_FAILED]",
+            "Failed to load voice mode comparison"
+        )
+
+    return success_response({
+        "comparison": [asdict(item) for item in result.value]
+    })
+
+
+@router.get("/fallback-metrics", response_model=dict)
+async def get_fallback_metrics(
+    time_range: Literal["7d", "30d", "90d", "all_time"] = Query("30d", description="Time range filter"),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+) -> dict[str, Any]:
+    """
+    Get fallback and degradation metrics (FR39)
+
+    Returns metrics about TTS/ASR/LLM fallbacks and browser TTS usage
+    """
+    from common.analytics.runtime_metrics_service import runtime_metrics_service
+    from dataclasses import asdict
+
+    logger.info(
+        "Getting fallback metrics",
+        extra={
+            "time_range": time_range,
+            "user_id": str(current_user.user_id)
+        }
+    )
+
+    result = await runtime_metrics_service.get_fallback_metrics(
+        db=db,
+        time_range=time_range
+    )
+
+    if not result.is_success:
+        return error_response(
+            result.fallback or "[FALLBACK_METRICS_FAILED]",
+            "Failed to load fallback metrics"
+        )
+
+    return success_response(asdict(result.value))
+
+
 @router.get("/export")
 async def export_analytics(
     time_range: Literal["7d", "30d", "90d", "all_time"] = Query("30d", description="Time range filter"),

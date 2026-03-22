@@ -1,0 +1,512 @@
+{
+  "meta": {
+    "project_name": "销售训练qoder - 前后端到数据库一致性核查",
+    "total_tasks": 29,
+    "completed_tasks": 0
+  },
+  "tasks": [
+    {
+      "id": "AUDIT-001",
+      "category": "audit",
+      "priority": "high",
+      "description": "建立统一核查模板（按钮→前端函数→后端接口→数据库）",
+      "steps": [
+        "定义核查字段：页面、按钮文案、触发函数、HTTP 方法、接口路径、数据表",
+        "定义结论标签：PASS / FAIL / BLOCKED，并记录复现步骤",
+        "明确每个问题必须附证据路径（前端文件 + 后端文件 + 表名）"
+      ],
+      "acceptance_criteria": [
+        "核查模板可复用于所有模块",
+        "每条问题都可追踪到具体代码与数据库对象"
+      ],
+      "passes": false,
+      "notes": "输出到 .agent 下审计表，作为后续任务统一格式"
+    },
+    {
+      "id": "AUDIT-002",
+      "category": "audit",
+      "priority": "high",
+      "description": "登录鉴权模块按钮一致性核查",
+      "steps": [
+        "盘点登录页全部按钮与交互入口",
+        "核对 api.auth.login/logout 调用与参数",
+        "核对 backend/src/common/auth/api.py 与 users 表读写一致性"
+      ],
+      "acceptance_criteria": [
+        "登录成功/失败路径均可闭环",
+        "前端错误态与后端返回码一致"
+      ],
+      "passes": false,
+      "notes": "FE: web/src/app/(auth)/login/page.tsx; DB: users"
+    },
+    {
+      "id": "AUDIT-003",
+      "category": "audit",
+      "priority": "high",
+      "description": "用户首页 Dashboard 按钮一致性核查",
+      "steps": [
+        "核查首页所有按钮与卡片动作（跳转、筛选、CTA）",
+        "核对 api.dashboard.getStats/getRecommendation/getHistory",
+        "核对 backend/src/common/api/dashboard.py 统计口径与数据来源"
+      ],
+      "acceptance_criteria": [
+        "每个按钮都有类型归类（API/路由跳转/纯前端）",
+        "API 类按钮能追踪到真实后端与数据表"
+      ],
+      "passes": false,
+      "notes": "FE: web/src/app/(dashboard)/page.tsx; DB: practice_sessions, scenarios, users"
+    },
+    {
+      "id": "AUDIT-004",
+      "category": "audit",
+      "priority": "high",
+      "description": "训练大厅主页面按钮一致性核查",
+      "steps": [
+        "核查训练大厅入口按钮与分类切换",
+        "核对 api.training.getCategories 与参数映射",
+        "核对 backend/src/common/api/training.py 与场景实体一致性"
+      ],
+      "acceptance_criteria": [
+        "分类按钮参数传递正确",
+        "前端分类展示与后端返回字段一致"
+      ],
+      "passes": false,
+      "notes": "FE: web/src/app/(dashboard)/training/page.tsx; DB: scenarios"
+    },
+    {
+      "id": "AUDIT-005",
+      "category": "audit",
+      "priority": "high",
+      "description": "销售训练页面按钮一致性核查",
+      "steps": [
+        "核查销售训练页所有按钮",
+        "核对 api.training.getSalesAgents + api.scenarios.list/getSalesPersonas",
+        "核对 sales 场景、智能体、人设三者关联一致性"
+      ],
+      "acceptance_criteria": [
+        "按钮触发的筛选条件能在后端生效",
+        "返回数据可落地到对应智能体/人设"
+      ],
+      "passes": false,
+      "notes": "FE: web/src/app/(dashboard)/training/sales/page.tsx; DB: scenarios, agents, personas, agent_personas"
+    },
+    {
+      "id": "AUDIT-006",
+      "category": "audit",
+      "priority": "medium",
+      "description": "演讲训练页面按钮一致性核查",
+      "steps": [
+        "核查演讲训练页按钮",
+        "核对 api.agents.getList 的请求参数与默认过滤",
+        "核对返回智能体是否与演讲场景配置一致"
+      ],
+      "acceptance_criteria": [
+        "列表按钮交互无断链",
+        "筛选后数据与后端返回保持一致"
+      ],
+      "passes": false,
+      "notes": "FE: web/src/app/(dashboard)/training/presentation/page.tsx; DB: agents, scenarios"
+    },
+    {
+      "id": "AUDIT-007",
+      "category": "audit",
+      "priority": "medium",
+      "description": "客服训练页面按钮一致性核查",
+      "steps": [
+        "核查客服训练页按钮与入口",
+        "核对 api.training.getCustomerAgents 调用链",
+        "核对客服场景数据在后端是否完整返回"
+      ],
+      "acceptance_criteria": [
+        "入口按钮可稳定进入目标流程",
+        "场景数据与前端展示字段对齐"
+      ],
+      "passes": false,
+      "notes": "FE: web/src/app/(dashboard)/training/customer-service/page.tsx; DB: agents, scenarios"
+    },
+    {
+      "id": "AUDIT-008",
+      "category": "audit",
+      "priority": "high",
+      "description": "智能体详情页（开始练习）按钮一致性核查",
+      "steps": [
+        "核查选择人设、语音模式、开始练习等按钮",
+        "核对 api.agents.getAgentWithPersonas + api.practice.createSession",
+        "核对 session 创建后跳转参数与数据库记录一致性"
+      ],
+      "acceptance_criteria": [
+        "开始练习按钮成功创建 session 并跳转",
+        "agent/persona/voice 选择结果正确持久化"
+      ],
+      "passes": false,
+      "notes": "FE: web/src/app/(dashboard)/agents/[agentId]/page.tsx; DB: practice_sessions, agents, personas"
+    },
+    {
+      "id": "AUDIT-009",
+      "category": "audit",
+      "priority": "high",
+      "description": "实时练习会话页按钮一致性核查",
+      "steps": [
+        "核查生命周期按钮（暂停/继续/结束/生成报告等）",
+        "核对 api.practice.getSession/controlLifecycle",
+        "核对会话状态机迁移与 practice_sessions 写入一致性"
+      ],
+      "acceptance_criteria": [
+        "每个生命周期动作都有正确状态变化",
+        "状态变化在前端、后端、数据库一致"
+      ],
+      "passes": false,
+      "notes": "FE: web/src/app/(user)/practice/[sessionId]/page.tsx; DB: practice_sessions, conversation_messages, interruption_events"
+    },
+    {
+      "id": "AUDIT-010",
+      "category": "audit",
+      "priority": "medium",
+      "description": "回放页面按钮一致性核查",
+      "steps": [
+        "核查回放页控制按钮与切换逻辑",
+        "核对 api.sessions.getReplay/getMessages/getHighlights",
+        "核对消息排序、时间线、角色字段与存储一致"
+      ],
+      "acceptance_criteria": [
+        "回放按钮触发数据请求完整成功",
+        "回放数据与 conversation_messages 一致"
+      ],
+      "passes": false,
+      "notes": "FE: web/src/app/(user)/practice/[sessionId]/replay/page.tsx; DB: conversation_messages, practice_sessions"
+    },
+    {
+      "id": "AUDIT-011",
+      "category": "audit",
+      "priority": "high",
+      "description": "报告页面按钮一致性核查",
+      "steps": [
+        "核查报告页按钮（生成报告、查看知识点、查看高亮）",
+        "核对 api.sessions.getReport/getKnowledgeCheck/getHighlights 与综合报告接口",
+        "核对报告结构与 staged_evaluation_results/comprehensive_reports 一致性"
+      ],
+      "acceptance_criteria": [
+        "报告按钮触发路径清晰且可复现",
+        "报告数据字段在前后端命名一致"
+      ],
+      "passes": false,
+      "notes": "FE: web/src/app/(user)/practice/[sessionId]/report/page.tsx; DB: staged_evaluation_results, comprehensive_reports"
+    },
+    {
+      "id": "AUDIT-012",
+      "category": "audit",
+      "priority": "medium",
+      "description": "历史记录页面按钮一致性核查",
+      "steps": [
+        "核查历史页筛选、回放、报告入口按钮",
+        "核对 api.user.getMyHistory + api.dashboard.getHistoryStatistics/getHistoryTrends",
+        "核对列表状态与 report_status、session_status 一致"
+      ],
+      "acceptance_criteria": [
+        "列表按钮可用态与后端状态一致",
+        "历史统计图与列表数据口径一致"
+      ],
+      "passes": false,
+      "notes": "FE: web/src/app/(dashboard)/history/page.tsx; DB: practice_sessions, scenarios"
+    },
+    {
+      "id": "AUDIT-013",
+      "category": "audit",
+      "priority": "medium",
+      "description": "排行榜页面按钮一致性核查",
+      "steps": [
+        "核查时间与场景筛选按钮",
+        "核对 api.dashboard.getPublicLeaderboard/getMyRank 参数映射",
+        "核对排行榜计算口径与 leaderboard_entries 数据一致性"
+      ],
+      "acceptance_criteria": [
+        "筛选按钮参数传递准确",
+        "榜单数据与个人排名逻辑一致"
+      ],
+      "passes": false,
+      "notes": "FE: web/src/app/(dashboard)/leaderboard/page.tsx; DB: leaderboard_entries, users"
+    },
+    {
+      "id": "AUDIT-014",
+      "category": "audit",
+      "priority": "medium",
+      "description": "个人中心页面按钮一致性核查",
+      "steps": [
+        "核查资料保存与退出登录按钮",
+        "核对 api.user.getMe/updateProfile + api.auth.logout",
+        "核对用户信息回显字段与 users 表一致"
+      ],
+      "acceptance_criteria": [
+        "资料更新后前端回显正确",
+        "退出登录后会话状态正确清理"
+      ],
+      "passes": false,
+      "notes": "FE: web/src/app/(dashboard)/profile/page.tsx; DB: users"
+    },
+    {
+      "id": "AUDIT-015",
+      "category": "audit",
+      "priority": "medium",
+      "description": "支持运行态页面按钮一致性核查",
+      "steps": [
+        "核查 support runtime 页面刷新与筛选按钮",
+        "核对 api.supportRuntime.getOverview/getFaults",
+        "核对系统故障与会话健康数据来源一致性"
+      ],
+      "acceptance_criteria": [
+        "故障列表可被正确筛选",
+        "概览指标与数据库查询一致"
+      ],
+      "passes": false,
+      "notes": "FE: web/src/app/(dashboard)/support/runtime/page.tsx; DB: system_logs, practice_sessions"
+    },
+    {
+      "id": "AUDIT-016",
+      "category": "audit",
+      "priority": "medium",
+      "description": "管理台首页按钮一致性核查",
+      "steps": [
+        "核查 admin 首页卡片和入口按钮",
+        "核对 api.admin.getUsers + api.adminTools.getSystemLogs + api.analyticsOpen.*",
+        "核对首页指标计算与实际查询逻辑一致性"
+      ],
+      "acceptance_criteria": [
+        "每个入口按钮都有对应后端能力或路由",
+        "首页关键数字与后端返回一致"
+      ],
+      "passes": false,
+      "notes": "FE: web/src/app/admin/page.tsx; DB: users, system_logs, practice_sessions"
+    },
+    {
+      "id": "AUDIT-017",
+      "category": "audit",
+      "priority": "high",
+      "description": "管理台用户列表页面按钮一致性核查",
+      "steps": [
+        "核查新增、编辑、停用、启用、删除、导出、分页按钮",
+        "核对 api.admin.get/create/update/delete/suspend/activate/exportUsers",
+        "核对用户状态变更在前端列表与 users 表一致性"
+      ],
+      "acceptance_criteria": [
+        "所有操作按钮都有唯一后端接口映射",
+        "状态变更立即反映在列表且与数据库一致"
+      ],
+      "passes": false,
+      "notes": "FE: web/src/app/admin/users/page.tsx; DB: users"
+    },
+    {
+      "id": "AUDIT-018",
+      "category": "audit",
+      "priority": "medium",
+      "description": "管理台用户详情页面按钮一致性核查",
+      "steps": [
+        "核查详情页筛选与查看明细按钮",
+        "核对 api.admin.getUserStats/getUserSessions/getUserProgress",
+        "核对统计与会话列表口径一致性"
+      ],
+      "acceptance_criteria": [
+        "用户详情数据可复现并可追溯",
+        "统计图与会话明细在同一过滤条件下对齐"
+      ],
+      "passes": false,
+      "notes": "FE: web/src/app/admin/users/[id]/page.tsx; DB: users, practice_sessions"
+    },
+    {
+      "id": "AUDIT-019",
+      "category": "audit",
+      "priority": "high",
+      "description": "管理台训练记录页面按钮一致性核查",
+      "steps": [
+        "核查查询、筛选、删除、分页按钮",
+        "核对 api.admin.getTrainingRecords/deleteTrainingRecord",
+        "核对记录删除与 practice_sessions 变化一致性"
+      ],
+      "acceptance_criteria": [
+        "记录页按钮操作无断链",
+        "删除后列表、后端、数据库一致"
+      ],
+      "passes": false,
+      "notes": "FE: web/src/app/admin/records/page.tsx; DB: practice_sessions, scenarios, users"
+    },
+    {
+      "id": "AUDIT-020",
+      "category": "audit",
+      "priority": "medium",
+      "description": "管理台分析页面按钮一致性核查",
+      "steps": [
+        "核查时间切换、维度切换、导出按钮",
+        "核对 api.analytics.getOverview/getTrends/getAgents/getLeaderboard/exportReport",
+        "核对导出数据与页面指标一致性"
+      ],
+      "acceptance_criteria": [
+        "所有筛选条件都被后端正确接收",
+        "导出内容与当前筛选口径一致"
+      ],
+      "passes": false,
+      "notes": "FE: web/src/app/admin/analytics/page.tsx; DB: practice_sessions, users, leaderboard_entries"
+    },
+    {
+      "id": "AUDIT-021",
+      "category": "audit",
+      "priority": "high",
+      "description": "管理台智能体列表页面按钮一致性核查",
+      "steps": [
+        "核查新建、发布、下线、归档、删除按钮",
+        "核对 api.admin.get/create/update/delete/publish/unpublish/archiveAgent",
+        "核对状态流转在 agents 表一致性"
+      ],
+      "acceptance_criteria": [
+        "状态切换按钮均映射正确接口",
+        "状态变更可在数据库中验证"
+      ],
+      "passes": false,
+      "notes": "FE: web/src/app/admin/agents/page.tsx; DB: agents"
+    },
+    {
+      "id": "AUDIT-022",
+      "category": "audit",
+      "priority": "high",
+      "description": "管理台智能体详情页面按钮一致性核查",
+      "steps": [
+        "核查绑定/解绑人设、策略保存、语音策略相关按钮",
+        "核对 api.admin.getAgent/getAgentPersonas/updateAgentPersona/updateAgentVoicePolicy",
+        "核对 agent_personas 与 agent_voice_policies 持久化一致性"
+      ],
+      "acceptance_criteria": [
+        "绑定关系操作后页面回显正确",
+        "策略保存后后端与数据库一致"
+      ],
+      "passes": false,
+      "notes": "FE: web/src/app/admin/agents/[id]/page.tsx; DB: agent_personas, agent_voice_policies, voice_runtime_profiles"
+    },
+    {
+      "id": "AUDIT-023",
+      "category": "audit",
+      "priority": "high",
+      "description": "管理台人设模块按钮一致性核查",
+      "steps": [
+        "核查人设列表与详情页按钮（新建、更新、删除、复制）",
+        "核对 api.admin.get/create/update/deletePersona",
+        "核对人设字段与 personas 表一致性"
+      ],
+      "acceptance_criteria": [
+        "人设所有操作按钮链路闭环",
+        "修改后列表与详情数据一致"
+      ],
+      "passes": false,
+      "notes": "FE: web/src/app/admin/personas/page.tsx, web/src/app/admin/personas/[id]/page.tsx; DB: personas"
+    },
+    {
+      "id": "AUDIT-024",
+      "category": "audit",
+      "priority": "high",
+      "description": "管理台知识库模块按钮一致性核查",
+      "steps": [
+        "核查知识库列表与详情页按钮（新建库、删除库、上传、删除文档、预览）",
+        "核对 api.admin.get/create/deleteKnowledgeBase + 文档接口",
+        "核对 knowledge_bases/knowledge_documents 状态一致性"
+      ],
+      "acceptance_criteria": [
+        "文档操作按钮都可追踪到接口",
+        "文档状态流转与数据库字段一致"
+      ],
+      "passes": false,
+      "notes": "FE: web/src/app/admin/knowledge/page.tsx, web/src/app/admin/knowledge/[id]/page.tsx; DB: knowledge_bases, knowledge_documents"
+    },
+    {
+      "id": "AUDIT-025",
+      "category": "audit",
+      "priority": "high",
+      "description": "管理台演示文稿模块按钮一致性核查",
+      "steps": [
+        "核查文稿列表与详情按钮（上传、删除、要点新增删除、禁用词新增删除）",
+        "核对 api.presentations.* 与 admin presentations 路由",
+        "核对文稿、页、要点、禁用词关联一致性"
+      ],
+      "acceptance_criteria": [
+        "文稿相关按钮全部有后端落点",
+        "前端页面数据与四类表结构一致"
+      ],
+      "passes": false,
+      "notes": "FE: web/src/app/admin/presentations/page.tsx, web/src/app/admin/presentations/[id]/page.tsx; DB: presentations, pages, required_talking_points, forbidden_words"
+    },
+    {
+      "id": "AUDIT-026",
+      "category": "audit",
+      "priority": "high",
+      "description": "管理台提示词模块按钮一致性核查",
+      "steps": [
+        "核查提示词列表、新建、编辑页按钮",
+        "核对 api.admin.get/create/update/deletePromptTemplate + render 相关接口",
+        "核对模板变量、默认模板、场景绑定一致性"
+      ],
+      "acceptance_criteria": [
+        "提示词所有按钮链路闭环",
+        "渲染预览与模板保存内容一致"
+      ],
+      "passes": false,
+      "notes": "FE: web/src/app/admin/prompts/page.tsx, web/src/app/admin/prompts/new/page.tsx, web/src/app/admin/prompts/[id]/edit/page.tsx; DB: prompt_templates, scenario_prompts"
+    },
+    {
+      "id": "AUDIT-027",
+      "category": "audit",
+      "priority": "high",
+      "description": "管理台模型设置页面按钮一致性核查",
+      "steps": [
+        "核查模型配置页按钮（新增、测试、更新、删除）",
+        "核对 api.admin.model config 相关接口入参和状态码",
+        "核对 model_configs 存储与页面回显一致性"
+      ],
+      "acceptance_criteria": [
+        "模型配置操作无断链",
+        "保存后刷新仍可正确回显"
+      ],
+      "passes": false,
+      "notes": "FE: web/src/app/admin/settings/page.tsx; DB: model_configs"
+    },
+    {
+      "id": "AUDIT-028",
+      "category": "audit",
+      "priority": "high",
+      "description": "管理台语音运行策略页面按钮一致性核查",
+      "steps": [
+        "核查语音档位页面按钮（新增、更新、删除、切换）",
+        "核对 api.admin.get/create/update/deleteVoiceRuntimeProfile",
+        "核对策略表与 Agent 覆盖策略一致性"
+      ],
+      "acceptance_criteria": [
+        "语音策略按钮操作可完整闭环",
+        "配置变化可在数据库层验证"
+      ],
+      "passes": false,
+      "notes": "FE: web/src/app/admin/voice-runtime/page.tsx; DB: voice_runtime_profiles, agent_voice_policies"
+    },
+    {
+      "id": "AUDIT-029",
+      "category": "audit",
+      "priority": "high",
+      "description": "全量问题汇总、优先级排序、二次复测",
+      "steps": [
+        "汇总所有 FAIL/BLOCKED 到统一问题清单",
+        "按 P0/P1/P2 排序并给出修复建议",
+        "复测已修复项并更新每个任务 passes 字段"
+      ],
+      "acceptance_criteria": [
+        "形成可执行的整改顺序",
+        "高优先级问题都具备可复现与可验证标准"
+      ],
+      "passes": false,
+      "notes": "最终输出建议写入 .agent/progress.md 或 docs/audit-report.md"
+    }
+  ],
+  "task_template": {
+    "id": "",
+    "category": "functional",
+    "priority": "medium",
+    "description": "",
+    "steps": [],
+    "acceptance_criteria": [],
+    "passes": false,
+    "notes": ""
+  }
+}

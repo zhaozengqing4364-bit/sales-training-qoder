@@ -1,7 +1,7 @@
 # 后端开发需求规范 (Backend API Requirements)
 
 > **文档说明**: 本文档基于前端已完成的功能模块和 Mock 数据结构，定义了后端 API 必须实现的接口规范。前端代码已完全适配以下数据结构和交互逻辑。
-> **最后更新**: 2026-01-11
+> **最后更新**: 2026-03-14
 
 ---
 
@@ -37,7 +37,7 @@
 *   `POST /auth/login`
     *   **Request**: `{ email, password }`
     *   **Response**: `{ token: string, user: { id, name, email, role } }`
-    *   **说明**: 返回 JWT Token，前端将存储在 localStorage 中用于后续请求的 `Authorization` 头。
+    *   **说明**: 返回 JWT Token 以兼容脚本/非浏览器调用；浏览器端默认使用 `HttpOnly` session cookie，并通过服务端边界或带 `credentials: include` 的请求访问后端。
 
 ### 2.2 用户端仪表盘 (User Dashboard)
 

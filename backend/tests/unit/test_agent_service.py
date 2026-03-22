@@ -76,14 +76,12 @@ async def sample_agent_data():
         description="帮助销售人员提升沟通技巧的 AI 教练",
         icon="🎯",
         category="sales",
-        system_prompt="你是一位资深销售教练...",
         welcome_message="你好！准备好练习了吗？",
         capabilities_config={
             "asr": {"enabled": True, "mode": "manual"},
             "tts": {"enabled": True, "voice": "zh-CN-YunxiNeural"},
             "fuzzy_detection": {"enabled": True}
         },
-        default_knowledge_base_ids=["kb-001"]
     )
 
 
@@ -117,6 +115,30 @@ class TestAgentServiceCreate:
         assert agent.status == AgentStatus.DRAFT.value
         assert agent.capabilities_config == {}
         assert agent.default_knowledge_base_ids == []
+
+    async def test_create_agent_rejects_unsupported_category(self, agent_service):
+        """Should reject creating unsupported category agents"""
+        data = CreateAgentRequest(
+            name="客服训练",
+            category="customer_service"
+        )
+
+        result = await agent_service.create(data)
+
+        assert not result.is_success
+        assert result.fallback == "[AGENT_CATEGORY_RESTRICTED]"
+
+    async def test_create_agent_rejects_deprecated_system_prompt(self, agent_service):
+        data = CreateAgentRequest(
+            name="Deprecated Prompt Agent",
+            category="sales",
+            system_prompt="legacy prompt",
+        )
+
+        result = await agent_service.create(data)
+
+        assert not result.is_success
+        assert result.fallback == "[FIELD_DEPRECATED_PERSONA_CENTERED] system_prompt"
 
 
 class TestAgentServiceList:
@@ -189,12 +211,12 @@ class TestAgentServiceGetById:
         """Admin should get full Agent with system_prompt"""
         create_result = await agent_service.create(sample_agent_data)
         agent_id = create_result.value.id
-        
+
         result = await agent_service.get_by_id(agent_id, admin=True)
-        
+
         assert result.is_success
         agent = result.value
-        assert agent.system_prompt == "你是一位资深销售教练..."
+        assert agent.system_prompt is None
     
     async def test_get_agent_user_published(self, agent_service, sample_agent_data):
         """User should get published Agent without system_prompt"""
@@ -261,6 +283,34 @@ class TestAgentServiceUpdate:
         
         assert not result.is_success
         assert result.fallback == "[AGENT_NOT_FOUND]"
+
+    async def test_update_agent_rejects_unsupported_category(
+        self, agent_service, sample_agent_data
+    ):
+        """Should reject updating to unsupported categories"""
+        create_result = await agent_service.create(sample_agent_data)
+        agent_id = create_result.value.id
+
+        update_data = UpdateAgentRequest(category="interview")
+        result = await agent_service.update(agent_id, update_data)
+
+        assert not result.is_success
+        assert result.fallback == "[AGENT_CATEGORY_RESTRICTED]"
+
+    async def test_update_agent_rejects_deprecated_kb_field(
+        self, agent_service, sample_agent_data
+    ):
+        create_result = await agent_service.create(sample_agent_data)
+        agent_id = create_result.value.id
+
+        update_data = UpdateAgentRequest(default_knowledge_base_ids=["kb-1"])
+        result = await agent_service.update(agent_id, update_data)
+
+        assert not result.is_success
+        assert (
+            result.fallback
+            == "[FIELD_DEPRECATED_PERSONA_CENTERED] default_knowledge_base_ids"
+        )
 
 
 class TestAgentServiceDelete:

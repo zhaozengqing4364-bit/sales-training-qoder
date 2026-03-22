@@ -84,7 +84,7 @@ class ContextManager:
 
             return Result(value=context)
 
-        except Exception as e:
+        except (RuntimeError, ValueError, OSError) as e:
             logger.error(
                 "Failed to create context",
                 extra={"session_id": str(session_id), "error": str(e)},
@@ -156,7 +156,7 @@ class ContextManager:
 
             return Result(value=turn)
 
-        except Exception as e:
+        except (RuntimeError, ValueError, OSError) as e:
             logger.error(
                 "Failed to add turn",
                 extra={"session_id": str(session_id), "error": str(e)},
@@ -172,7 +172,7 @@ class ContextManager:
 
             return Result(value=self.active_contexts[session_id])
 
-        except Exception as e:
+        except (RuntimeError, ValueError, OSError) as e:
             logger.error(
                 "Failed to get context",
                 extra={"session_id": str(session_id), "error": str(e)},
@@ -214,7 +214,7 @@ class ContextManager:
 
             return Result(value=summary)
 
-        except Exception as e:
+        except (RuntimeError, ValueError, OSError) as e:
             logger.error(
                 "Failed to generate summary",
                 extra={"session_id": str(session_id), "error": str(e)},
@@ -230,7 +230,7 @@ class ContextManager:
 
             return Result(value=True)
 
-        except Exception as e:
+        except (RuntimeError, ValueError, OSError) as e:
             logger.error(
                 "Failed to cleanup context",
                 extra={"session_id": str(session_id), "error": str(e)},

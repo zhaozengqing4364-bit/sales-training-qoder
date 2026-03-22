@@ -64,7 +64,7 @@ class KnowledgeVectorStore:
             logger.info(f"ChromaDB initialized at {self.persist_dir}")
             return True
 
-        except Exception as e:
+        except (RuntimeError, ValueError, OSError) as e:
             logger.error(f"ChromaDB initialization error: {e}")
             return False
 
@@ -82,7 +82,7 @@ class KnowledgeVectorStore:
                     "hnsw:M": 16
                 }
             )
-        except Exception as e:
+        except (RuntimeError, ValueError, OSError) as e:
             logger.error(f"Failed to get collection {collection_name}: {e}")
             return None
 
@@ -135,6 +135,15 @@ class KnowledgeVectorStore:
                         **chunk.get("metadata", {})
                     })
 
+                # Best-effort pre-cleanup for idempotent retries.
+                try:
+                    collection.delete(where={"document_id": document_id})
+                except Exception as cleanup_error:
+                    logger.warning(
+                        f"Pre-cleanup before vector add failed: {cleanup_error}",
+                        document_id=document_id,
+                    )
+
                 collection.add(
                     ids=ids,
                     embeddings=embeddings,
@@ -149,6 +158,14 @@ class KnowledgeVectorStore:
                 return Result.ok(len(chunks))
 
             except Exception as e:
+                try:
+                    # Chroma has no transaction; compensate partial writes by document_id.
+                    collection.delete(where={"document_id": document_id})
+                except Exception as cleanup_error:
+                    logger.error(
+                        f"Failed vector compensation cleanup: {cleanup_error}",
+                        document_id=document_id,
+                    )
                 logger.error(f"Failed to add chunks: {e}")
                 return Result.fail(f"[VECTOR_ADD_FAILED] {str(e)}")
 
@@ -159,6 +176,7 @@ class KnowledgeVectorStore:
         top_k: int = 3,
         similarity_threshold: float = 0.7,
         document_ids: list[str] | None = None,
+        metadata_filter: dict[str, Any] | None = None,
     ) -> Result[list[dict[str, Any]]]:
         """
         Search for similar chunks.
@@ -179,12 +197,25 @@ class KnowledgeVectorStore:
 
         try:
             # Build where clause
-            where = None
+            where_clauses: list[dict[str, Any]] = []
             if document_ids:
                 if len(document_ids) == 1:
-                    where = {"document_id": document_ids[0]}
+                    where_clauses.append({"document_id": document_ids[0]})
                 else:
-                    where = {"document_id": {"$in": document_ids}}
+                    where_clauses.append({"document_id": {"$in": document_ids}})
+
+            if isinstance(metadata_filter, dict):
+                for key, expected in metadata_filter.items():
+                    if isinstance(expected, list):
+                        where_clauses.append({key: {"$in": [item for item in expected]}})
+                    else:
+                        where_clauses.append({key: expected})
+
+            where = None
+            if len(where_clauses) == 1:
+                where = where_clauses[0]
+            elif len(where_clauses) > 1:
+                where = {"$and": where_clauses}
 
             # Query
             results = collection.query(
@@ -221,7 +252,7 @@ class KnowledgeVectorStore:
             )
             return Result.ok(formatted)
 
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             logger.error(f"Vector search error: {e}")
             return Result.ok([])  # Graceful degradation
 
@@ -261,7 +292,7 @@ class KnowledgeVectorStore:
 
                 return Result.ok(True)
 
-            except Exception as e:
+            except (RuntimeError, ValueError, OSError) as e:
                 logger.error(f"Failed to delete document chunks: {e}")
                 return Result.fail(f"[VECTOR_DELETE_FAILED] {str(e)}")
 
@@ -301,7 +332,7 @@ class KnowledgeVectorStore:
                 "count": collection.count(),
                 "name": collection_name,
             }
-        except Exception as e:
+        except (RuntimeError, ValueError, OSError) as e:
             return {"count": 0, "error": str(e)}
 
 
@@ -361,9 +392,19 @@ class VectorStore:
             logger.info(f"VectorStore initialized at {self.persist_dir}")
             return True
             
-        except Exception as e:
+        except (RuntimeError, ValueError, OSError) as e:
             logger.error(f"VectorStore initialization error: {e}")
             return False
+
+    def _get_legacy_collection(self) -> chromadb.Collection | None:
+        """Get collection for legacy API, allowing test-time mock injection."""
+        if self.collection is not None:
+            return self.collection
+
+        if not self._ensure_initialized():
+            return None
+
+        return self.collection
     
     async def add_documents(
         self,
@@ -372,11 +413,12 @@ class VectorStore:
         ids: list[str],
     ) -> Result[bool]:
         """Add documents to vector store."""
-        if not self._ensure_initialized():
+        collection = self._get_legacy_collection()
+        if not collection:
             return Result.fail("[USE_KEYWORD_SEARCH]")
-        
+
         try:
-            self.collection.add(
+            collection.add(
                 documents=texts,
                 metadatas=metadatas,
                 ids=ids
@@ -394,11 +436,12 @@ class VectorStore:
         metadata: dict[str, Any],
     ) -> Result[bool]:
         """Update a document in vector store."""
-        if not self._ensure_initialized():
+        collection = self._get_legacy_collection()
+        if not collection:
             return Result.fail("[USE_KEYWORD_SEARCH]")
-        
+
         try:
-            self.collection.update(
+            collection.update(
                 ids=[doc_id],
                 documents=[text],
                 metadatas=[metadata]
@@ -417,15 +460,21 @@ class VectorStore:
         **kwargs
     ) -> Result[list[dict[str, Any]]]:
         """Query vector store for similar documents."""
-        if not self._ensure_initialized():
+        collection = self._get_legacy_collection()
+        if not collection:
             return Result.fail("[USE_KEYWORD_SEARCH]")
-        
+
         try:
-            where = {"presentation_id": presentation_id}
+            where: dict[str, Any] = {"presentation_id": presentation_id}
             if page_number is not None:
-                where["page_number"] = page_number
-            
-            results = self.collection.query(
+                where = {
+                    "$and": [
+                        {"presentation_id": presentation_id},
+                        {"page_number": page_number},
+                    ]
+                }
+
+            results = collection.query(
                 query_texts=[query_text],
                 where=where,
                 n_results=n_results
@@ -453,13 +502,14 @@ class VectorStore:
         metadata_filter: dict[str, Any],
     ) -> Result[bool]:
         """Delete documents by metadata filter."""
-        if not self._ensure_initialized():
+        collection = self._get_legacy_collection()
+        if not collection:
             return Result.fail("[USE_KEYWORD_SEARCH]")
-        
+
         try:
-            results = self.collection.get(where=metadata_filter)
+            results = collection.get(where=metadata_filter)
             if results and results["ids"]:
-                self.collection.delete(ids=results["ids"])
+                collection.delete(ids=results["ids"])
             return Result.ok(True)
         except Exception as e:
             logger.error(f"Delete failed: {e}")
@@ -479,12 +529,13 @@ class VectorStore:
         page_number: int | None = None,
     ) -> list[dict[str, Any]]:
         """Fallback keyword search."""
-        if not self._ensure_initialized():
+        collection = self._get_legacy_collection()
+        if not collection:
             return []
-        
+
         try:
             where = {"presentation_id": presentation_id}
-            results = self.collection.get(where=where)
+            results = collection.get(where=where)
             
             matches = []
             if results and results["documents"]:

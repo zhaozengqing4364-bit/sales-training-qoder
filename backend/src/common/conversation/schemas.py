@@ -14,7 +14,6 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
-
 # ========== Type Aliases for API ==========
 MessageRoleType = str  # "user" | "assistant"
 HighlightTypeType = str  # "good" | "bad" | "neutral"
@@ -71,6 +70,29 @@ class StageSummarySchema(BaseModel):
     score: int = Field(..., ge=0, le=100, description="Average score for this stage")
 
 
+class VoicePolicySnapshotReferenceSchema(BaseModel):
+    """Voice policy baseline reference captured at session creation time."""
+
+    voice_mode: str | None = Field(None, description="Resolved voice mode")
+    runtime_profile_id: str | None = Field(None, description="Resolved runtime profile ID")
+    instruction_contract_hash: str | None = Field(
+        None,
+        description="Hash of compiled instruction contract captured at session start",
+    )
+    network_access_mode: str | None = Field(
+        None,
+        description="Tool network access mode resolved at session start",
+    )
+    tool_policy: dict[str, Any] = Field(default_factory=dict, description="Resolved tool policy")
+    knowledge_base_ids: list[str] = Field(default_factory=list, description="Bound knowledge base IDs")
+    source: dict[str, str] = Field(default_factory=dict, description="Policy resolution source map")
+    resolved_at: str | None = Field(None, description="ISO8601 policy resolution timestamp")
+    agent_persona_override_config: dict[str, Any] | None = Field(
+        None,
+        description="Agent-persona association override config snapshot",
+    )
+
+
 # ========== ConversationMessage Schemas ==========
 
 class ConversationMessageBase(BaseModel):
@@ -94,6 +116,10 @@ class ConversationMessageResponse(ConversationMessageBase):
     fuzzy_words: list[FuzzyDetectionSchema] | None = Field(
         None,
         description="Detected fuzzy words"
+    )
+    transcript_metadata: dict[str, Any] | None = Field(
+        None,
+        description="Transcript normalization metadata"
     )
     sales_stage: SalesStageType | None = Field(
         None,
@@ -154,6 +180,8 @@ class HighlightResponse(BaseModel):
 class HighlightsResponse(BaseModel):
     """Highlights list response - R10.3"""
     highlights: list[HighlightResponse]
+    total_good: int = Field(default=0, ge=0, description="Count of good highlights")
+    total_bad: int = Field(default=0, ge=0, description="Count of bad highlights")
 
 
 # ========== ReplayData Schemas ==========
@@ -163,6 +191,10 @@ class ReplayDataResponse(BaseModel):
     session_id: str = Field(..., description="Session UUID")
     agent_name: str | None = Field(None, description="Agent name")
     persona_name: str | None = Field(None, description="Persona name")
+    voice_policy_snapshot_ref: VoicePolicySnapshotReferenceSchema | None = Field(
+        None,
+        description="Session voice policy baseline reference",
+    )
     total_duration_ms: int = Field(..., ge=0, description="Total duration in milliseconds")
     messages: list[ConversationMessageResponse] = Field(
         ...,
@@ -243,4 +275,5 @@ class ConversationErrorResponse(BaseModel):
     success: bool = False
     error: str = Field(..., description="Error code like [SESSION_NOT_FOUND]")
     error_code: str = Field(..., description="Error code for programmatic handling")
+    message: str = Field(..., description="Human-readable error message")
     trace_id: str | None = None

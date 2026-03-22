@@ -10,7 +10,7 @@ References:
 """
 import enum
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy import (
     CheckConstraint,
@@ -21,6 +21,7 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
+    UniqueConstraint,
 )
 from sqlalchemy.orm import relationship
 
@@ -55,6 +56,8 @@ class DocumentFileType(str, enum.Enum):
     DOCX = "docx"
     TXT = "txt"
     MD = "md"
+    XLSX = "xlsx"
+    XLS = "xls"
 
 
 class KnowledgeBase(Base):
@@ -86,8 +89,8 @@ class KnowledgeBase(Base):
     status = Column(String(20), default="active", index=True)
 
     # Audit
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
     __table_args__ = (
         CheckConstraint(
@@ -115,7 +118,7 @@ class KnowledgeDocument(Base):
     """
     KnowledgeDocument - Document within a knowledge base
 
-    A KnowledgeDocument represents a single document (PDF, DOCX, TXT, MD)
+    A KnowledgeDocument represents a single document (PDF, DOCX, TXT, MD, XLSX, XLS)
     that has been uploaded to a knowledge base for processing and vectorization.
 
     Requirements: R5
@@ -132,9 +135,10 @@ class KnowledgeDocument(Base):
 
     # Document metadata
     title = Column(String(200), nullable=False)
-    file_type = Column(String(20), nullable=False)  # pdf|docx|txt|md
+    file_type = Column(String(20), nullable=False)  # pdf|docx|txt|md|xlsx|xls
     file_url = Column(String(500), nullable=False)
     file_size = Column(Integer, nullable=False)  # bytes
+    content_hash = Column(String(64), nullable=True, index=True)
 
     # Processing status
     status = Column(String(20), default="pending", index=True)  # pending|processing|ready|failed
@@ -142,7 +146,7 @@ class KnowledgeDocument(Base):
     error_message = Column(Text, nullable=True)
 
     # Audit
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     __table_args__ = (
         CheckConstraint(
@@ -150,8 +154,13 @@ class KnowledgeDocument(Base):
             name="ck_knowledge_document_status"
         ),
         CheckConstraint(
-            "file_type IN ('pdf', 'docx', 'txt', 'md')",
+            "file_type IN ('pdf', 'docx', 'txt', 'md', 'xlsx', 'xls')",
             name="ck_knowledge_document_file_type"
+        ),
+        UniqueConstraint(
+            "knowledge_base_id",
+            "content_hash",
+            name="uq_knowledge_document_kb_content_hash",
         ),
         Index("idx_knowledge_documents_status", "status"),
         Index("idx_knowledge_documents_knowledge_base", "knowledge_base_id"),
