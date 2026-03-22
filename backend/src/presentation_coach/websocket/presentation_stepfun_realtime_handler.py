@@ -499,7 +499,11 @@ class PresentationStepFunRealtimeHandler(StepFunRealtimeHandler):
             return
 
         turn_number = self._resolve_user_turn_number_for_transcript()
-        normalized_transcript = transcript.strip()
+        normalization_result = self._normalize_transcript(
+            transcript,
+            is_final=True,
+        )
+        normalized_transcript = normalization_result.normalized_text.strip()
         now = asyncio.get_running_loop().time()
         is_duplicate_transcript = (
             bool(normalized_transcript)
@@ -516,11 +520,17 @@ class PresentationStepFunRealtimeHandler(StepFunRealtimeHandler):
         self._last_final_transcript_at = now
         self._awaiting_transcription_after_commit = False
 
-        await self._send_transcript(transcript, is_final=True)
+        await self._send_transcript(normalized_transcript, is_final=True)
         await self._persist_message(
             turn_number=turn_number,
             role="user",
-            content=transcript,
+            content=normalized_transcript,
+            analysis_data={
+                "transcript_metadata": self._build_transcript_metadata(
+                    normalization_result,
+                    extras={"page_number": self.current_page},
+                )
+            },
         )
 
         self._grounding_preparation_in_progress = True
@@ -531,7 +541,7 @@ class PresentationStepFunRealtimeHandler(StepFunRealtimeHandler):
                 requirements=requirements,
             )
             should_interrupt = await self._evaluate_presentation_feedback(
-                transcript,
+                normalized_transcript,
                 requirements=requirements,
             )
             if should_interrupt:
@@ -539,7 +549,7 @@ class PresentationStepFunRealtimeHandler(StepFunRealtimeHandler):
                 await self._cancel_pending_response_after_commit()
                 return
 
-            await self._prepare_grounding_context(transcript)
+            await self._prepare_grounding_context(normalized_transcript)
         finally:
             self._grounding_preparation_in_progress = False
 

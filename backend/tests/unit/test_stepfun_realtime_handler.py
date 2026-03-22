@@ -18,6 +18,16 @@ from sales_bot.websocket.stepfun_realtime_handler import (
 )
 
 
+def test_stepfun_realtime_handler_defaults_to_latest_realtime_model(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.delenv("STEPFUN_REALTIME_MODEL", raising=False)
+
+    handler = StepFunRealtimeHandler()
+
+    assert handler._stepfun_model == "step-audio-r1.1"
+
+
 @pytest.mark.asyncio
 async def test_handle_client_text_persists_user_message_before_create_response():
     handler = StepFunRealtimeHandler()
@@ -159,6 +169,48 @@ async def test_handle_upstream_transcription_completed_persists_user_message_aft
     )
     handler._prepare_grounding_context.assert_awaited_once_with("这是新一轮语音文本")
     handler._create_response_from_pending_commit.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_handle_upstream_transcription_completed_applies_transcript_normalization():
+    handler = StepFunRealtimeHandler()
+    handler.turn_count = 2
+    handler._effective_policy = {
+        "tool_policy": {
+            "transcript_normalization_enabled": True,
+            "transcript_normalization_lexicon": [
+                {
+                    "canonical_term": "石犀",
+                    "aliases": ["石溪"],
+                    "scope": "global",
+                    "replace_on_final_only": True,
+                }
+            ],
+        }
+    }
+
+    handler._send_transcript = AsyncMock()
+    handler._analyze_and_emit_sales_stage = AsyncMock(return_value="discovery")
+    handler._run_realtime_feedback = AsyncMock(return_value={})
+    handler._persist_message = AsyncMock()
+    handler._prepare_grounding_context = AsyncMock()
+    handler._create_response_from_pending_commit = AsyncMock(return_value=True)
+
+    await handler._handle_upstream_event(
+        {
+            "type": "input_audio_buffer.transcription.completed",
+            "transcript": "这是石溪平台的最终识别文本",
+        }
+    )
+
+    handler._send_transcript.assert_awaited_once_with(
+        "这是石犀平台的最终识别文本",
+        is_final=True,
+    )
+    persisted_kwargs = handler._persist_message.await_args.kwargs
+    assert persisted_kwargs["content"] == "这是石犀平台的最终识别文本"
+    assert persisted_kwargs["analysis_data"]["transcript_metadata"]["raw_text"] == "这是石溪平台的最终识别文本"
+    handler._prepare_grounding_context.assert_awaited_once_with("这是石犀平台的最终识别文本")
 
 
 @pytest.mark.asyncio
@@ -473,6 +525,34 @@ async def test_prepare_grounding_context_sets_blocked_response_when_kb_lock_bloc
     decision_kwargs = handler._record_kb_lock_decision.await_args.kwargs
     assert decision_kwargs["status"] == "blocked_empty"
     assert decision_kwargs["blocked"] is True
+
+
+@pytest.mark.asyncio
+async def test_prepare_grounding_context_timeout_degrades_to_coach_mode(monkeypatch):
+    handler = StepFunRealtimeHandler()
+    handler._effective_policy = {
+        "knowledge_base_ids": ["kb-1"],
+        "tool_policy": {
+            "require_kb_grounding": True,
+            "kb_lock_mode": "coach_mode",
+            "retrieval_top_k": 3,
+        },
+    }
+    handler._record_kb_lock_decision = AsyncMock()
+
+    async def _raise_timeout(*_args, **_kwargs):
+        raise stepfun_module.asyncio.TimeoutError
+
+    monkeypatch.setattr(stepfun_module.asyncio, "wait_for", _raise_timeout)
+
+    await handler._prepare_grounding_context("请介绍石溪产品方案")
+
+    assert handler._pending_blocked_response_text == ""
+    assert "训练辅导模式" in handler._pending_grounding_context
+    assert "请介绍石溪产品方案" in handler._pending_grounding_context
+    decision_kwargs = handler._record_kb_lock_decision.await_args.kwargs
+    assert decision_kwargs["status"] == "coach_search_timeout"
+    assert decision_kwargs["blocked"] is False
 
 
 def test_enforce_tool_policy_guardrails_auto_enables_kb_lock_for_legacy_snapshot(

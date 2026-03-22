@@ -13,6 +13,7 @@ from sales_bot.websocket.components.stepfun_knowledge_helpers import (
     normalize_query,
     resolve_grounding_context_limits,
     resolve_metadata_filter,
+    resolve_rerank_params,
     resolve_retrieval_params,
     transform_search_rows,
 )
@@ -182,3 +183,18 @@ def test_entity_query_helpers():
     )
 
     assert resolve_grounding_context_limits("石犀S3价格") == (5, 360)
+
+
+def test_resolve_rerank_params_with_defaults_and_invalid_values():
+    enabled, top_k = resolve_rerank_params({})
+    assert enabled is True
+    assert top_k == 8
+
+    enabled, top_k = resolve_rerank_params(
+        {
+            "retrieval_enable_rerank": False,
+            "retrieval_rerank_top_k": "bad",
+        }
+    )
+    assert enabled is False
+    assert top_k == 8

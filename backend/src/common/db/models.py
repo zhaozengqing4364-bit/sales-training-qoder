@@ -273,6 +273,7 @@ class ConversationMessage(Base):
         nullable=False,
     )
     fuzzy_words = Column(JSON, nullable=True)
+    transcript_metadata = Column(JSON, nullable=True)
     sales_stage = Column(String(50), nullable=True)
     score_snapshot = Column(JSON, nullable=True)
     ai_feedback = Column(Text, nullable=True)

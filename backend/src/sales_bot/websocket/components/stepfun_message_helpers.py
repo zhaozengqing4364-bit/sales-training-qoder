@@ -61,6 +61,11 @@ def extract_analysis_patch_fields(
             if isinstance(analysis_payload.get("ai_feedback"), str)
             else None
         ),
+        "transcript_metadata": (
+            analysis_payload.get("transcript_metadata")
+            if isinstance(analysis_payload.get("transcript_metadata"), dict)
+            else None
+        ),
     }
 
 
@@ -74,6 +79,7 @@ async def patch_existing_message_analysis(
     fuzzy_words: list[dict[str, Any]] | None,
     score_snapshot: dict[str, Any] | None,
     ai_feedback: str | None,
+    transcript_metadata: dict[str, Any] | None,
     db_lock: asyncio.Lock,
 ) -> bool:
     """Patch analysis fields for an already persisted duplicate message."""
@@ -101,6 +107,7 @@ async def patch_existing_message_analysis(
                     fuzzy_words=fuzzy_words,
                     score_snapshot=score_snapshot,
                     ai_feedback=ai_feedback,
+                    transcript_metadata=transcript_metadata,
                 )
                 if not update_result.is_success:
                     logger.warning(

@@ -171,3 +171,46 @@ async def test_transcription_completed_interrupt_short_circuits_response_creatio
     handler._cancel_pending_response_after_commit.assert_awaited_once()
     handler._prepare_grounding_context.assert_not_awaited()
     handler._create_response_from_pending_commit.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_transcription_completed_applies_transcript_normalization(handler):
+    handler._effective_policy = {
+        "tool_policy": {
+            "transcript_normalization_enabled": True,
+            "transcript_normalization_lexicon": [
+                {
+                    "canonical_term": "石犀",
+                    "aliases": ["石溪"],
+                    "scope": "global",
+                    "replace_on_final_only": True,
+                }
+            ],
+        }
+    }
+    handler._resolve_user_turn_number_for_transcript = Mock(return_value=1)
+    handler._send_transcript = AsyncMock()
+    handler._persist_message = AsyncMock()
+    handler._load_page_requirements = AsyncMock(
+        return_value={
+            "required_points": [],
+            "forbidden_words": [],
+            "total_pages": 1,
+            "page_content": "",
+        }
+    )
+    handler._initialize_page_feedback = AsyncMock()
+    handler._evaluate_presentation_feedback = AsyncMock(return_value=False)
+    handler._prepare_grounding_context = AsyncMock()
+    handler._create_response_from_pending_commit = AsyncMock()
+
+    await handler._handle_upstream_transcription_completed(
+        {"transcript": "这页重点介绍石溪平台"}
+    )
+
+    handler._send_transcript.assert_awaited_once_with("这页重点介绍石犀平台", is_final=True)
+    persisted_kwargs = handler._persist_message.await_args.kwargs
+    assert persisted_kwargs["content"] == "这页重点介绍石犀平台"
+    assert persisted_kwargs["analysis_data"]["transcript_metadata"]["raw_text"] == "这页重点介绍石溪平台"
+    assert persisted_kwargs["analysis_data"]["transcript_metadata"]["page_number"] == handler.current_page
+    handler._prepare_grounding_context.assert_awaited_once_with("这页重点介绍石犀平台")

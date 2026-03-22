@@ -161,6 +161,58 @@ class TestComprehensiveReportService:
         assert "NO_STAGE_RESULTS" in result.fallback
 
     @pytest.mark.asyncio
+    async def test_generate_report_presentation_uses_presentation_report_service(
+        self,
+        service,
+        mock_staged_eval_service,
+        monkeypatch: pytest.MonkeyPatch,
+    ):
+        session_id = str(uuid4())
+        mock_staged_eval_service.get_stage_results.return_value = []
+
+        fake_report = ComprehensiveReport(
+            session_id=session_id,
+            generated_at=datetime.now(timezone.utc),
+            overall_score=86.0,
+            dimension_scores=[
+                DimensionScore(name="流畅连贯性", score=88.0, weight=0.2),
+            ],
+            key_strengths=["表达流畅"],
+            key_improvements=["增加互动"],
+            detailed_feedback="这是一份演讲报告",
+            recommendations=["每页增加一个互动问题"],
+            stage_summaries=[
+                {
+                    "stage_number": 1,
+                    "start_turn": 1,
+                    "end_turn": 3,
+                    "average_score": 86.0,
+                    "key_points": ["表达流畅"],
+                    "summary": "第一页讲解稳定",
+                }
+            ],
+        )
+
+        class FakePresentationReportService:
+            def __init__(self, db_session):
+                self.db_session = db_session
+
+            async def build_report(self, report_session_id: str):
+                assert report_session_id == session_id
+                return Result.ok(fake_report)
+
+        monkeypatch.setattr(
+            "evaluation.services.comprehensive_report.PresentationReportService",
+            FakePresentationReportService,
+        )
+
+        result = await service.generate_report(session_id, scenario_type="presentation")
+
+        assert result.is_success
+        assert result.value.overall_score == 86.0
+        assert result.value.dimension_scores[0].name == "流畅连贯性"
+
+    @pytest.mark.asyncio
     async def test_generate_report_database_error(self, service, mock_staged_eval_service, mock_prompt_service, mock_llm_service, mock_db_session, sample_stage_results):
         """Test report generation with database error."""
         # Arrange

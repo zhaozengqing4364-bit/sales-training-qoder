@@ -42,6 +42,7 @@ ALLOWED_VOICE_MODES = {"legacy", "stepfun_realtime"}
 ALLOWED_RETRIEVAL_PRIORITIES = {"kb_only", "kb_first", "web_first", "balanced"}
 ALLOWED_NETWORK_ACCESS_MODES = {"off", "controlled"}
 ALLOWED_ENFORCEMENT_LEVELS = {"strict", "best_effort"}
+ALLOWED_KB_LOCK_MODES = {"strict_audit", "coach_mode"}
 
 DEFAULT_TOOL_POLICY: dict[str, Any] = {
     "enable_web_search": False,
@@ -59,6 +60,13 @@ DEFAULT_TOOL_POLICY: dict[str, Any] = {
     "enforcement_level": "strict",
     "allow_web_search_without_kb": False,
     "require_kb_grounding": False,
+    "kb_lock_mode": "coach_mode",
+    "max_questions_per_turn": 1,
+    "transcript_normalization_enabled": False,
+    "transcript_normalization_apply_to_interim": False,
+    "transcript_normalization_lexicon": [],
+    "retrieval_enable_rerank": True,
+    "retrieval_rerank_top_k": 8,
 }
 
 DEPRECATED_RUNTIME_PROFILE_FIELDS = {"system_instruction_template"}
@@ -112,6 +120,41 @@ def _to_float(
 def _is_true_env(name: str, default: str = "false") -> bool:
     value = os.getenv(name, default)
     return str(value).strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _normalize_transcript_normalization_lexicon(value: Any) -> list[dict[str, Any]]:
+    if not isinstance(value, list):
+        return []
+
+    normalized_entries: list[dict[str, Any]] = []
+    for item in value:
+        if not isinstance(item, dict):
+            continue
+        canonical_term = str(item.get("canonical_term") or "").strip()
+        if not canonical_term:
+            continue
+        aliases_raw = item.get("aliases")
+        if not isinstance(aliases_raw, list):
+            continue
+        aliases = [
+            str(alias).strip()
+            for alias in aliases_raw
+            if str(alias).strip() and str(alias).strip() != canonical_term
+        ]
+        if not aliases:
+            continue
+        normalized_entries.append(
+            {
+                "canonical_term": canonical_term,
+                "aliases": list(dict.fromkeys(aliases)),
+                "scope": str(item.get("scope") or "global").strip() or "global",
+                "replace_on_final_only": _to_bool(
+                    item.get("replace_on_final_only"),
+                    True,
+                ),
+            }
+        )
+    return normalized_entries
 
 
 class VoiceRuntimePolicyService:
@@ -244,7 +287,7 @@ class VoiceRuntimePolicyService:
             ),
             model_name=str(
                 payload.get("model_name")
-                or os.getenv("STEPFUN_REALTIME_MODEL", "step-audio-2")
+                or os.getenv("STEPFUN_REALTIME_MODEL", "step-audio-r1.1")
             ),
             voice_name=str(
                 payload.get("voice_name")
@@ -459,6 +502,9 @@ class VoiceRuntimePolicyService:
         persona: Persona | None = None
         agent_policy: AgentVoicePolicy | None = None
         runtime_profile: VoiceRuntimeProfile | None = None
+        raw_profile_tool_policy: dict[str, Any] = {}
+        raw_agent_tool_policy_override: dict[str, Any] = {}
+        raw_persona_tool_policy: dict[str, Any] = {}
 
         if agent_id:
             agent_result = await self.db.execute(
@@ -523,9 +569,8 @@ class VoiceRuntimePolicyService:
                     "turn_detection": runtime_profile.turn_detection,
                 }
             )
-            profile_tool_policy = self._normalize_tool_policy(
-                _as_dict(runtime_profile.tool_policy)
-            )
+            raw_profile_tool_policy = _as_dict(runtime_profile.tool_policy)
+            profile_tool_policy = self._normalize_tool_policy(raw_profile_tool_policy)
             policy["tool_policy"] = {**policy["tool_policy"], **profile_tool_policy}
         else:
             policy["runtime_profile_id"] = None
@@ -545,11 +590,12 @@ class VoiceRuntimePolicyService:
                 policy["temperature"] = _to_float(
                     agent_policy.temperature_override, policy["temperature"]
                 )
+            raw_agent_tool_policy_override = _as_dict(agent_policy.tool_policy_override)
             policy["tool_policy"] = {
                 **policy["tool_policy"],
                 **self._normalize_tool_policy(
                     self._sanitize_agent_tool_policy_override(
-                        _as_dict(agent_policy.tool_policy_override)
+                        raw_agent_tool_policy_override
                     )
                 ),
             }
@@ -588,6 +634,15 @@ class VoiceRuntimePolicyService:
             "true",
         )
         has_explicit_kb_lock_flag = "require_kb_grounding" in raw_persona_tool_policy
+        has_explicit_kb_lock_mode = any(
+            "kb_lock_mode" in raw_policy
+            for raw_policy in (
+                raw_profile_tool_policy,
+                raw_agent_tool_policy_override,
+                raw_persona_tool_policy,
+            )
+            if isinstance(raw_policy, dict)
+        )
         if (
             has_bound_knowledge_base
             and auto_require_kb_grounding
@@ -595,6 +650,9 @@ class VoiceRuntimePolicyService:
         ):
             tool_policy["require_kb_grounding"] = True
             source["kb_lock_default"] = "auto_enabled_when_kb_bound"
+            if not has_explicit_kb_lock_mode:
+                tool_policy["kb_lock_mode"] = "strict_audit"
+                source["kb_lock_mode_default"] = "legacy_strict_default"
 
         if not has_bound_knowledge_base:
             tool_policy["enable_internal_retrieval"] = False
@@ -743,7 +801,7 @@ class VoiceRuntimePolicyService:
             "voice_mode": env_mode,
             "runtime_profile_id": None,
             "runtime_profile_name": None,
-            "model_name": os.getenv("STEPFUN_REALTIME_MODEL", "step-audio-2"),
+            "model_name": os.getenv("STEPFUN_REALTIME_MODEL", "step-audio-r1.1"),
             "voice_name": os.getenv("STEPFUN_REALTIME_VOICE", "qingchunshaonv"),
             "temperature": _to_float(
                 os.getenv("STEPFUN_REALTIME_TEMPERATURE", 0.7), 0.7
@@ -825,6 +883,12 @@ class VoiceRuntimePolicyService:
         if network_access_mode == "off":
             enable_web_search = False
 
+        kb_lock_mode = str(
+            merged.get("kb_lock_mode", DEFAULT_TOOL_POLICY["kb_lock_mode"])
+        ).strip().lower()
+        if kb_lock_mode not in ALLOWED_KB_LOCK_MODES:
+            kb_lock_mode = str(DEFAULT_TOOL_POLICY["kb_lock_mode"])
+
         return {
             "enable_web_search": enable_web_search,
             "web_search_top_k": _to_int(
@@ -871,6 +935,34 @@ class VoiceRuntimePolicyService:
             "enforcement_level": enforcement_level,
             "allow_web_search_without_kb": allow_web_search_without_kb,
             "require_kb_grounding": require_kb_grounding,
+            "kb_lock_mode": kb_lock_mode,
+            "max_questions_per_turn": _to_int(
+                merged.get("max_questions_per_turn"),
+                DEFAULT_TOOL_POLICY["max_questions_per_turn"],
+                minimum=1,
+            ),
+            "transcript_normalization_enabled": _to_bool(
+                merged.get("transcript_normalization_enabled"),
+                DEFAULT_TOOL_POLICY["transcript_normalization_enabled"],
+            ),
+            "transcript_normalization_apply_to_interim": _to_bool(
+                merged.get("transcript_normalization_apply_to_interim"),
+                DEFAULT_TOOL_POLICY["transcript_normalization_apply_to_interim"],
+            ),
+            "transcript_normalization_lexicon": (
+                _normalize_transcript_normalization_lexicon(
+                    merged.get("transcript_normalization_lexicon")
+                )
+            ),
+            "retrieval_enable_rerank": _to_bool(
+                merged.get("retrieval_enable_rerank"),
+                DEFAULT_TOOL_POLICY["retrieval_enable_rerank"],
+            ),
+            "retrieval_rerank_top_k": _to_int(
+                merged.get("retrieval_rerank_top_k"),
+                DEFAULT_TOOL_POLICY["retrieval_rerank_top_k"],
+                minimum=1,
+            ),
         }
 
     def _merge_knowledge_base_ids(

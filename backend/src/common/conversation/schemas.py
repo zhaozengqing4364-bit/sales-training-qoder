@@ -117,6 +117,10 @@ class ConversationMessageResponse(ConversationMessageBase):
         None,
         description="Detected fuzzy words"
     )
+    transcript_metadata: dict[str, Any] | None = Field(
+        None,
+        description="Transcript normalization metadata"
+    )
     sales_stage: SalesStageType | None = Field(
         None,
         description="Sales stage at this turn"

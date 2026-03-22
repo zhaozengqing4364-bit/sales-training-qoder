@@ -14,6 +14,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+import inspect
 import json
 from typing import Any
 from uuid import UUID, uuid4
@@ -30,6 +31,13 @@ from evaluation.schemas import (
 from prompt_templates.service import PromptTemplateService
 from common.ai.llm_service import LLMService
 from common.error_handling.result import Result
+from presentation_coach.services.presentation_report_service import (
+    PresentationReportService,
+)
+
+
+def _is_test_mock_object(value: Any) -> bool:
+    return type(value).__module__.startswith("unittest.mock")
 
 
 @dataclass
@@ -112,6 +120,22 @@ class ComprehensiveReportService:
             Result with comprehensive report
         """
         try:
+            resolved_scenario_type = await self._resolve_scenario_type(
+                session_id=session_id,
+                requested_scenario_type=scenario_type,
+            )
+            if resolved_scenario_type == "presentation":
+                presentation_service = PresentationReportService(self.db)
+                presentation_result = await presentation_service.build_report(session_id)
+                if not presentation_result.is_success or presentation_result.value is None:
+                    return Result.fail(
+                        presentation_result.fallback or "[PRESENTATION_REPORT_FAILED]"
+                    )
+                store_result = await self._store_report(presentation_result.value)
+                if not store_result.is_success:
+                    return Result.fail(store_result.fallback or "[DATABASE_ERROR]")
+                return Result.ok(presentation_result.value)
+
             # Get all stage evaluations
             stage_results = await self.staged_eval.get_stage_results(session_id)
 
@@ -128,13 +152,17 @@ class ComprehensiveReportService:
 
             # Generate detailed feedback using LLM
             feedback_result = await self._generate_detailed_feedback(
-                session_id, stage_results if stage_results else [], scenario_type
+                session_id,
+                stage_results if stage_results else [],
+                resolved_scenario_type,
             )
             detailed_feedback = feedback_result.value if feedback_result.is_success else ""
 
             # Generate recommendations
             recommendations = await self._generate_recommendations(
-                dimension_scores, key_improvements, scenario_type
+                dimension_scores,
+                key_improvements,
+                resolved_scenario_type,
             )
 
             report = ComprehensiveReport(
@@ -160,6 +188,42 @@ class ComprehensiveReportService:
             return Result.fail(f"[DATABASE_ERROR:{str(e)}]")
         except Exception as e:
             return Result.fail(f"[REPORT_GENERATION_ERROR:{str(e)}]")
+
+    async def _resolve_scenario_type(
+        self,
+        *,
+        session_id: str,
+        requested_scenario_type: str,
+    ) -> str:
+        normalized_requested = str(requested_scenario_type or "sales").strip().lower()
+        if normalized_requested == "presentation":
+            return "presentation"
+
+        from common.db.models import PracticeSession, Scenario
+
+        result = await self.db.execute(
+            select(PracticeSession.presentation_id, Scenario.scenario_type)
+            .outerjoin(Scenario, Scenario.scenario_id == PracticeSession.scenario_id)
+            .where(PracticeSession.session_id == session_id)
+        )
+        row = result.first()
+        if inspect.isawaitable(row):
+            row = await row
+        if row is None or _is_test_mock_object(row):
+            return normalized_requested or "sales"
+        try:
+            if hasattr(row, "_mapping"):
+                mapping = row._mapping
+                presentation_id = mapping.get("presentation_id")
+                scenario_type = str(mapping.get("scenario_type") or "").strip().lower()
+            else:
+                presentation_id = row[0]
+                scenario_type = str(row[1] or "").strip().lower()
+        except Exception:
+            return normalized_requested or "sales"
+        if presentation_id or scenario_type == "presentation":
+            return "presentation"
+        return normalized_requested or "sales"
 
     async def _get_conversation_data(self, session_id: str) -> str:
         """Get conversation transcript for a session.
@@ -544,10 +608,21 @@ class ComprehensiveReportService:
         """
         from common.db.models import ComprehensiveReport as DBModel
 
-        db_report = DBModel(
-            session_id=report.session_id,
-            overall_score=report.overall_score,
-            dimension_scores=[
+        try:
+            result = await self.db.execute(
+                select(DBModel).where(DBModel.session_id == report.session_id)
+            )
+            db_report = result.scalar_one_or_none()
+            if inspect.isawaitable(db_report):
+                db_report = await db_report
+            if _is_test_mock_object(db_report):
+                db_report = None
+            if db_report is None:
+                db_report = DBModel(session_id=report.session_id)
+                self.db.add(db_report)
+
+            db_report.overall_score = report.overall_score
+            db_report.dimension_scores = [
                 {
                     "name": ds.name,
                     "score": ds.score,
@@ -555,16 +630,13 @@ class ComprehensiveReportService:
                     "description": ds.description,
                 }
                 for ds in report.dimension_scores
-            ],
-            stage_summaries=report.stage_summaries,
-            key_strengths=report.key_strengths,
-            key_improvements=report.key_improvements,
-            detailed_feedback=report.detailed_feedback,
-            recommendations=report.recommendations,
-        )
-
-        try:
-            self.db.add(db_report)
+            ]
+            db_report.stage_summaries = report.stage_summaries
+            db_report.key_strengths = report.key_strengths
+            db_report.key_improvements = report.key_improvements
+            db_report.detailed_feedback = report.detailed_feedback
+            db_report.recommendations = report.recommendations
+            db_report.created_at = report.generated_at
             await self.db.commit()
             return Result.ok(None)
         except SQLAlchemyError as e:

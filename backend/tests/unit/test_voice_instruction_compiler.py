@@ -61,3 +61,22 @@ def test_compile_base_contract_adds_kb_lock_directive():
 
     assert "知识库强制模式" in compiled.base_instructions
     assert "以命中片段为准" in compiled.base_instructions
+
+
+def test_compile_base_contract_adds_coach_mode_and_single_question_directives():
+    policy = {
+        "tool_policy": {
+            "enable_internal_retrieval": True,
+            "require_kb_grounding": True,
+            "kb_lock_mode": "coach_mode",
+            "max_questions_per_turn": 1,
+        },
+    }
+
+    compiled = VoiceInstructionCompiler.compile_base_contract(
+        policy=policy,
+    )
+
+    assert "训练辅导模式" in compiled.base_instructions
+    assert "不得直接抛出内部错误" in compiled.base_instructions
+    assert "每轮最多提出1个问题句" in compiled.base_instructions

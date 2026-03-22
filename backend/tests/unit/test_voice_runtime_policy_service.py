@@ -509,6 +509,20 @@ async def test_create_profile_should_switch_default_flag(test_db: AsyncSession):
 
 
 @pytest.mark.asyncio
+async def test_env_fallback_policy_defaults_to_latest_realtime_model(
+    test_db: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    monkeypatch.delenv("STEPFUN_REALTIME_MODEL", raising=False)
+
+    service = VoiceRuntimePolicyService(test_db)
+
+    assert service._env_fallback_policy()["model_name"] == "step-audio-r1.1"
+    assert service._env_fallback_policy()["tool_policy"]["kb_lock_mode"] == "coach_mode"
+    assert service._env_fallback_policy()["tool_policy"]["max_questions_per_turn"] == 1
+
+
+@pytest.mark.asyncio
 async def test_create_profile_rejects_deprecated_instruction_template(
     test_db: AsyncSession,
 ):

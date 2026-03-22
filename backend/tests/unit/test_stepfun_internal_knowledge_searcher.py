@@ -295,3 +295,41 @@ async def test_search_internal_knowledge_passes_hybrid_and_metadata_filter():
         "product_line": "enterprise",
         "regions": ["cn", "sg"],
     }
+
+
+@pytest.mark.asyncio
+async def test_search_internal_knowledge_passes_rerank_params():
+    record_metric = AsyncMock()
+    captured: dict[str, object] = {}
+
+    class DummyDbSessionContext:
+        async def __aenter__(self):
+            return MagicMock()
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+    class DummyKnowledgeService:
+        def __init__(self, _db):
+            pass
+
+        async def search_multiple(self, **kwargs):
+            captured.update(kwargs)
+            return Result.ok([])
+
+    await search_internal_knowledge(
+        arguments_obj={"query": "石犀产品"},
+        effective_policy={
+            "knowledge_base_ids": ["kb-1"],
+            "tool_policy": {
+                "retrieval_enable_rerank": True,
+                "retrieval_rerank_top_k": 10,
+            },
+        },
+        session_factory=lambda: DummyDbSessionContext(),
+        knowledge_service_cls=DummyKnowledgeService,
+        record_metric=record_metric,
+    )
+
+    assert captured["enable_rerank"] is True
+    assert captured["rerank_top_k"] == 10

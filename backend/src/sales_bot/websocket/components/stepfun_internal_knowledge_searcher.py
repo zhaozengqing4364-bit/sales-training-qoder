@@ -15,6 +15,7 @@ from sales_bot.websocket.components.stepfun_knowledge_helpers import (
     normalize_knowledge_base_ids,
     normalize_query,
     resolve_metadata_filter,
+    resolve_rerank_params,
     resolve_retrieval_params,
     transform_search_rows,
 )
@@ -84,6 +85,7 @@ async def search_internal_knowledge(
         tool_policy,
         query=query,
     )
+    enable_rerank, rerank_top_k = resolve_rerank_params(tool_policy)
     embedding_timeout_ms_raw = arguments_obj.get("embedding_timeout_ms")
     try:
         embedding_timeout_ms = int(embedding_timeout_ms_raw)
@@ -165,6 +167,8 @@ async def search_internal_knowledge(
                 enable_hybrid=enable_hybrid,
                 keyword_candidate_limit=keyword_candidate_limit,
                 embedding_timeout_ms=embedding_timeout_ms,
+                enable_rerank=enable_rerank,
+                rerank_top_k=rerank_top_k,
             )
             search_ms = (time.monotonic() - search_started_at) * 1000
             if callable(getattr(knowledge_service, "get_last_search_timing", None)):

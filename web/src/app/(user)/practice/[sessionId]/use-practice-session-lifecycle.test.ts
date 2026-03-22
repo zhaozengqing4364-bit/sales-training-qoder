@@ -1,6 +1,7 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import type { SessionStatus } from "@/lib/api/types";
 import { usePracticeSessionLifecycle } from "./use-practice-session-lifecycle";
 
 const {
@@ -51,7 +52,6 @@ describe("usePracticeSessionLifecycle", () => {
                 sessionId: "session-1",
                 connectionState: "connected",
                 sessionStatus: "preparing",
-                isConnected: true,
                 isRecordingRef: { current: false },
                 stopRecording: vi.fn(),
             }),
@@ -70,13 +70,12 @@ describe("usePracticeSessionLifecycle", () => {
                     sessionId: "session-2",
                     connectionState: "connected",
                     sessionStatus,
-                    isConnected: true,
                     isRecordingRef: { current: false },
                     stopRecording: vi.fn(),
                 }),
             {
                 initialProps: {
-                    sessionStatus: "in_progress" as const,
+                    sessionStatus: "in_progress" as SessionStatus,
                 },
             },
         );
@@ -87,7 +86,7 @@ describe("usePracticeSessionLifecycle", () => {
 
         expect(controlLifecycle).toHaveBeenCalledWith("session-2", "pause");
 
-        rerender({ sessionStatus: "paused" });
+        rerender({ sessionStatus: "paused" as SessionStatus });
 
         await act(async () => {
             await result.current.handleTogglePauseResume();
@@ -103,7 +102,6 @@ describe("usePracticeSessionLifecycle", () => {
                 sessionId: "session-3",
                 connectionState: "connected",
                 sessionStatus: "in_progress",
-                isConnected: true,
                 isRecordingRef: { current: true },
                 stopRecording,
             }),

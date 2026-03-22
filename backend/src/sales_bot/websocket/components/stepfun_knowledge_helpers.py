@@ -90,6 +90,17 @@ def resolve_retrieval_params(
     return top_k, round(threshold, 4), enable_hybrid, keyword_candidate_limit
 
 
+def resolve_rerank_params(tool_policy: dict[str, Any]) -> tuple[bool, int]:
+    """Resolve lightweight rerank stage parameters."""
+    enable_rerank = bool(tool_policy.get("retrieval_enable_rerank", True))
+    rerank_top_k_raw = tool_policy.get("retrieval_rerank_top_k", 8)
+    try:
+        rerank_top_k = max(1, int(rerank_top_k_raw))
+    except (TypeError, ValueError):
+        rerank_top_k = 8
+    return enable_rerank, rerank_top_k
+
+
 def resolve_metadata_filter(
     arguments_obj: dict[str, Any],
     tool_policy: dict[str, Any],

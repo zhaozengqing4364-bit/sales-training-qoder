@@ -93,6 +93,10 @@ VERSION_TOKEN_RE = re.compile(r"\bv?\d+(?:\.\d+){0,2}[a-z]?\b", re.IGNORECASE)
 SEARCH_TERM_RE = re.compile(r"[a-z0-9]+|[\u4e00-\u9fff]{2,12}")
 
 
+def _normalize_text_for_rerank(value: str) -> str:
+    return "".join(re.findall(r"[a-z0-9\u4e00-\u9fff]+", str(value or "").lower()))
+
+
 def _resolve_cache_ttl_seconds(
     env_name: str,
     default_ms: int,
@@ -701,6 +705,8 @@ class KnowledgeService:
         metadata_filter: dict[str, Any] | None = None,
         enable_hybrid: bool = True,
         keyword_candidate_limit: int = 32,
+        enable_rerank: bool = False,
+        rerank_top_k: int = 8,
     ) -> Result[list[dict[str, Any]]]:
         """
         Search knowledge base using vector similarity.
@@ -726,6 +732,8 @@ class KnowledgeService:
             metadata_filter=metadata_filter,
             enable_hybrid=enable_hybrid,
             keyword_candidate_limit=keyword_candidate_limit,
+            enable_rerank=enable_rerank,
+            rerank_top_k=rerank_top_k,
         )
 
     async def search_multiple(
@@ -738,6 +746,8 @@ class KnowledgeService:
         enable_hybrid: bool = True,
         keyword_candidate_limit: int = 32,
         embedding_timeout_ms: int = 0,
+        enable_rerank: bool = False,
+        rerank_top_k: int = 8,
     ) -> Result[list[dict[str, Any]]]:
         """
         Search multiple knowledge bases.
@@ -987,14 +997,25 @@ class KnowledgeService:
             "keyword_result_count": len(keyword_results),
         }
 
+        candidate_top_k = max(1, max(top_k, rerank_top_k))
+
         if enable_hybrid:
             fused_results = self._fuse_retrieval_results(
                 vector_results=vector_results,
                 keyword_results=keyword_results,
-                top_k=top_k,
+                top_k=candidate_top_k,
             )
             if fused_results:
-                return Result.ok(fused_results)
+                if enable_rerank:
+                    return Result.ok(
+                        self._rerank_results(
+                            query=query,
+                            rows=fused_results,
+                            top_k=top_k,
+                            rerank_top_k=rerank_top_k,
+                        )
+                    )
+                return Result.ok(fused_results[: max(1, top_k)])
         elif vector_results:
             deduped_rows: dict[str, dict[str, Any]] = {}
             for row in vector_results:
@@ -1009,10 +1030,30 @@ class KnowledgeService:
                 key=lambda item: float(item.get("score") or 0),
                 reverse=True,
             )
-            return Result.ok(sorted_rows[: max(1, top_k)])
+            candidate_rows = sorted_rows[:candidate_top_k]
+            if enable_rerank:
+                return Result.ok(
+                    self._rerank_results(
+                        query=query,
+                        rows=candidate_rows,
+                        top_k=top_k,
+                        rerank_top_k=rerank_top_k,
+                    )
+                )
+            return Result.ok(candidate_rows[: max(1, top_k)])
 
         if keyword_results:
-            return Result.ok(keyword_results[: max(1, top_k)])
+            candidate_rows = keyword_results[:candidate_top_k]
+            if enable_rerank:
+                return Result.ok(
+                    self._rerank_results(
+                        query=query,
+                        rows=candidate_rows,
+                        top_k=top_k,
+                        rerank_top_k=rerank_top_k,
+                    )
+                )
+            return Result.ok(candidate_rows[: max(1, top_k)])
 
         if embedding_failure:
             return Result.fail(f"[KNOWLEDGE_SEARCH_UNAVAILABLE] {embedding_failure}")
@@ -1262,6 +1303,89 @@ class KnowledgeService:
 
         fused_rows.sort(key=lambda row: float(row.get("score") or 0), reverse=True)
         return fused_rows[: max(1, top_k)]
+
+    def _rerank_results(
+        self,
+        *,
+        query: str,
+        rows: list[dict[str, Any]],
+        top_k: int,
+        rerank_top_k: int,
+    ) -> list[dict[str, Any]]:
+        if not rows:
+            return []
+
+        normalized_query = query.strip().lower()
+        if not normalized_query:
+            return rows[: max(1, top_k)]
+
+        candidate_limit = max(1, max(top_k, rerank_top_k))
+        query_terms = self._build_keyword_candidates(
+            normalized_query,
+            candidate_limit=min(16, max(8, candidate_limit * 2)),
+        )
+        compact_query = "".join(re.findall(r"[a-z0-9\u4e00-\u9fff]+", normalized_query))
+
+        reranked: list[dict[str, Any]] = []
+        for row in rows[:candidate_limit]:
+            content = str(row.get("content") or "")
+            metadata = row.get("metadata") if isinstance(row.get("metadata"), dict) else {}
+            title = str(
+                metadata.get("document_title")
+                or row.get("source")
+                or ""
+            )
+            combined_text = _normalize_text_for_rerank(f"{title} {content}")
+            coverage = self._rerank_coverage_score(
+                combined_text=combined_text,
+                query_terms=query_terms,
+            )
+            phrase_bonus = 0.18 if compact_query and compact_query in combined_text else 0.0
+            title_bonus = self._rerank_title_bonus(title=title, query_terms=query_terms)
+            ratio_bonus = 0.0
+            if compact_query and combined_text:
+                ratio_bonus = SequenceMatcher(
+                    None,
+                    compact_query[:48],
+                    combined_text[: max(64, len(compact_query) * 3)],
+                ).ratio() * 0.08
+
+            base_score = max(0.0, min(1.0, float(row.get("score") or 0.0)))
+            rerank_score = min(
+                0.995,
+                base_score * 0.58 + coverage * 0.26 + phrase_bonus + title_bonus + ratio_bonus,
+            )
+            reranked_row = dict(row)
+            reranked_row["score"] = round(rerank_score, 4)
+            reranked.append(reranked_row)
+
+        reranked.sort(key=lambda item: float(item.get("score") or 0.0), reverse=True)
+        return reranked[: max(1, top_k)]
+
+    @staticmethod
+    def _rerank_title_bonus(title: str, query_terms: list[str]) -> float:
+        normalized_title = _normalize_text_for_rerank(title)
+        if not normalized_title:
+            return 0.0
+        matched_terms = sum(
+            1 for term in query_terms if term and term in normalized_title
+        )
+        if matched_terms <= 0:
+            return 0.0
+        return min(0.12, matched_terms * 0.04)
+
+    @staticmethod
+    def _rerank_coverage_score(
+        *,
+        combined_text: str,
+        query_terms: list[str],
+    ) -> float:
+        if not combined_text or not query_terms:
+            return 0.0
+        matched_terms = sum(
+            1 for term in query_terms if term and term in combined_text
+        )
+        return min(1.0, matched_terms / max(1, len(query_terms)))
 
     @staticmethod
     def _keyword_match_score(

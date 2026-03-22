@@ -42,7 +42,11 @@ from common.db.session_lifecycle import (
     InvalidSessionTransitionError,
     SessionLifecycleService,
 )
-from common.knowledge.kb_lock_guard import evaluate_kb_lock_decision
+from common.knowledge.kb_lock_guard import (
+    build_kb_coach_grounding_context,
+    evaluate_kb_lock_decision,
+    resolve_kb_lock_mode,
+)
 from common.knowledge.service import KnowledgeService
 from common.monitoring.logger import get_logger, get_trace_id, set_trace_id
 from common.monitoring.trace_context import normalize_trace_id
@@ -51,6 +55,11 @@ from common.websocket.base_handler import BaseWebSocketHandler
 from sales_bot.services.voice_instruction_compiler import (
     VoiceInstructionCompiler,
     build_instruction_contract_hash,
+    enforce_question_limit,
+)
+from sales_bot.services.transcript_normalization import (
+    TranscriptNormalizationResult,
+    TranscriptNormalizationService,
 )
 from sales_bot.services.voice_runtime_policy import VoiceRuntimePolicyService
 from sales_bot.websocket.components.stepfun_event_payloads import (
@@ -129,6 +138,7 @@ class RealtimeResponseState:
     chunk_index: int = 0
     total_duration_ms: int = 0
     first_chunk_sent: bool = False
+    question_limit_enforced: bool = False
 
 
 @dataclass
@@ -168,7 +178,7 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
         self._stepfun_url = os.getenv(
             "STEPFUN_REALTIME_URL", "wss://api.stepfun.com/v1/realtime"
         )
-        self._stepfun_model = os.getenv("STEPFUN_REALTIME_MODEL", "step-audio-2")
+        self._stepfun_model = os.getenv("STEPFUN_REALTIME_MODEL", "step-audio-r1.1")
         self._stepfun_voice = os.getenv("STEPFUN_REALTIME_VOICE", "qingchunshaonv")
         self._stepfun_temperature = float(
             os.getenv("STEPFUN_REALTIME_TEMPERATURE", "0.7")
@@ -293,6 +303,7 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
         )
         self._upstream_connected_at: float = 0.0
         self._last_upstream_event_type: str = ""
+        self._transcript_normalization_service = TranscriptNormalizationService()
 
     def _log_grounding_debug(self, event: str, **fields: Any) -> None:
         if not self._grounding_debug_log:
@@ -331,6 +342,46 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
         if not isinstance(tool_policy, dict):
             return False
         return bool(tool_policy.get("require_kb_grounding", False))
+
+    def _get_effective_tool_policy(self) -> dict[str, Any]:
+        tool_policy = self._effective_policy.get("tool_policy")
+        if isinstance(tool_policy, dict):
+            return tool_policy
+        return {}
+
+    def _get_max_questions_per_turn(self) -> int:
+        raw_value = self._get_effective_tool_policy().get("max_questions_per_turn", 1)
+        try:
+            return max(1, int(raw_value))
+        except (TypeError, ValueError):
+            return 1
+
+    def _normalize_transcript(
+        self,
+        text: str,
+        *,
+        is_final: bool,
+    ) -> TranscriptNormalizationResult:
+        return self._transcript_normalization_service.normalize(
+            text=text,
+            tool_policy=self._get_effective_tool_policy(),
+            is_final=is_final,
+        )
+
+    @staticmethod
+    def _build_transcript_metadata(
+        normalization_result: TranscriptNormalizationResult,
+        *,
+        extras: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        metadata: dict[str, Any] = {
+            "raw_text": normalization_result.raw_text,
+            "normalized_text": normalization_result.normalized_text,
+            "replacements": normalization_result.replacements,
+        }
+        if isinstance(extras, dict):
+            metadata.update(extras)
+        return metadata
 
     @staticmethod
     def _resolve_grounding_prefetch_timeout_seconds_from_env() -> float:
@@ -1793,17 +1844,19 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
             decision_id = uuid.uuid4().hex[:12]
             decision_started_at = asyncio.get_running_loop().time()
             kb_lock_timeout_seconds = self._kb_lock_decision_timeout_seconds
+            decision_coro = evaluate_kb_lock_decision(
+                query=normalized_query,
+                effective_policy=self._effective_policy,
+                record_metric=self._record_knowledge_runtime_metric,
+                decision_id=decision_id,
+            )
             try:
                 decision = await asyncio.wait_for(
-                    evaluate_kb_lock_decision(
-                        query=normalized_query,
-                        effective_policy=self._effective_policy,
-                        record_metric=self._record_knowledge_runtime_metric,
-                        decision_id=decision_id,
-                    ),
+                    decision_coro,
                     timeout=kb_lock_timeout_seconds,
                 )
             except asyncio.TimeoutError:
+                decision_coro.close()
                 decision_duration_ms = round(
                     (asyncio.get_running_loop().time() - decision_started_at) * 1000,
                     1,
@@ -1819,14 +1872,26 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
                     "cache_hit_ready_docs": False,
                     "cache_hit_internal_retrieval": False,
                 }
-                self._pending_blocked_response_text = (
-                    "当前会话已开启知识库强制模式，但本轮知识检索超时，"
-                    "请换更具体的关键词后重试。"
-                )
-                self._pending_grounding_context = ""
+                kb_lock_mode = resolve_kb_lock_mode(tool_policy)
+                if kb_lock_mode == "coach_mode":
+                    decision_status = "coach_search_timeout"
+                    blocked = False
+                    self._pending_blocked_response_text = ""
+                    self._pending_grounding_context = build_kb_coach_grounding_context(
+                        normalized_query,
+                        decision_status,
+                    )
+                else:
+                    decision_status = "blocked_search_timeout"
+                    blocked = True
+                    self._pending_blocked_response_text = (
+                        "当前会话已开启知识库强制模式，但本轮知识检索超时，"
+                        "请换更具体的关键词后重试。"
+                    )
+                    self._pending_grounding_context = ""
                 await self._record_kb_lock_decision(
-                    status="blocked_search_timeout",
-                    blocked=True,
+                    status=decision_status,
+                    blocked=blocked,
                     decision_id=decision_id,
                     duration_ms=decision_duration_ms,
                     phase_breakdown=timeout_phase_breakdown,
@@ -1840,6 +1905,7 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
                     kb_count=len(knowledge_base_ids)
                     if isinstance(knowledge_base_ids, list)
                     else 0,
+                    status=decision_status,
                     decision_duration_ms=decision_duration_ms,
                 )
                 logger.info(
@@ -1848,7 +1914,7 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
                     decision_id=decision_id,
                     query_length=len(normalized_query),
                     timeout_budget_ms=int(kb_lock_timeout_seconds * 1000),
-                    decision_status="blocked_search_timeout",
+                    decision_status=decision_status,
                     phase_health_ms=0.0,
                     phase_search_ms=0.0,
                     phase_vector_ms=0.0,
@@ -2635,7 +2701,10 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
         """Forward interim ASR transcript to frontend."""
         transcript = self._extract_transcription_delta_text(event)
         if transcript:
-            normalized_transcript = str(transcript)
+            normalized_transcript = self._normalize_transcript(
+                str(transcript),
+                is_final=False,
+            ).normalized_text
             self._latest_input_transcript_delta = self._merge_transcription_delta_text(
                 self._latest_input_transcript_delta,
                 normalized_transcript,
@@ -2730,7 +2799,11 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
         """Persist one final ASR transcript and continue response chain."""
         turn_started_at = asyncio.get_running_loop().time()
         turn_number = self._resolve_user_turn_number_for_transcript()
-        normalized_transcript = transcript.strip()
+        normalization_result = self._normalize_transcript(
+            transcript,
+            is_final=True,
+        )
+        normalized_transcript = normalization_result.normalized_text.strip()
         if not normalized_transcript:
             return
         now = asyncio.get_running_loop().time()
@@ -2778,6 +2851,17 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
                 turn_number=turn_number,
                 sales_stage=sales_stage,
             )
+            if not isinstance(realtime_analysis, dict):
+                realtime_analysis = {}
+            if self._get_effective_tool_policy().get(
+                "transcript_normalization_enabled", False
+            ) or normalization_result.replacements:
+                realtime_analysis = {
+                    **realtime_analysis,
+                    "transcript_metadata": self._build_transcript_metadata(
+                        normalization_result,
+                    ),
+                }
             await self._persist_message(
                 turn_number=turn_number,
                 role="user",
@@ -2877,12 +2961,29 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
         """Accumulate response text/audio transcript delta for fallback flush."""
         delta = event.get("delta", "")
         if self._active_response and delta:
+            if self._active_response.question_limit_enforced:
+                return
             self._active_response.text_parts.append(delta)
+            composed_text = "".join(self._active_response.text_parts).strip()
+            limited_text = enforce_question_limit(
+                composed_text,
+                self._get_max_questions_per_turn(),
+            )
+            if limited_text != composed_text:
+                self._active_response.text_parts = [limited_text]
+                self._active_response.question_limit_enforced = True
+                self._log_grounding_debug(
+                    "assistant_question_limit_enforced",
+                    question_limit=self._get_max_questions_per_turn(),
+                )
+                await self._send_upstream({"type": "response.cancel"})
 
     async def _handle_upstream_response_audio_delta(self, event: dict) -> None:
         """Forward realtime audio chunk to frontend."""
         delta = event.get("delta", "")
         if self._active_response and delta:
+            if self._active_response.question_limit_enforced:
+                return
             await self._forward_audio_delta_chunk(delta)
 
     async def _handle_upstream_response_done(self, event: dict) -> None:
@@ -2939,6 +3040,10 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
         response_text = self._extract_response_text(response_done_event)
         if not response_text:
             response_text = "".join(response_state.text_parts).strip()
+        response_text = enforce_question_limit(
+            response_text,
+            self._get_max_questions_per_turn(),
+        )
 
         if response_text:
             await self._persist_message(
@@ -3640,6 +3745,7 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
         fuzzy_words: list[dict[str, Any]] | None = None,
         score_snapshot: dict[str, Any] | None = None,
         ai_feedback: str | None = None,
+        transcript_metadata: dict[str, Any] | None = None,
     ) -> None:
         """Patch analysis fields for an already persisted duplicate message."""
         if not self.session_id:
@@ -3654,6 +3760,7 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
             fuzzy_words=fuzzy_words,
             score_snapshot=score_snapshot,
             ai_feedback=ai_feedback,
+            transcript_metadata=transcript_metadata,
             db_lock=self._db_lock,
         )
 
@@ -3685,14 +3792,21 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
         if message_key in self._persisted_message_keys:
             if analysis_payload:
                 patch_fields = extract_analysis_patch_fields(analysis_payload)
+                patch_kwargs: dict[str, Any] = {
+                    "turn_number": normalized_turn,
+                    "role": role,
+                    "content": normalized_content,
+                    "sales_stage": patch_fields["sales_stage"],
+                    "fuzzy_words": patch_fields["fuzzy_words"],
+                    "score_snapshot": patch_fields["score_snapshot"],
+                    "ai_feedback": patch_fields["ai_feedback"],
+                }
+                if patch_fields["transcript_metadata"] is not None:
+                    patch_kwargs["transcript_metadata"] = patch_fields[
+                        "transcript_metadata"
+                    ]
                 await self._update_existing_message_sales_stage(
-                    turn_number=normalized_turn,
-                    role=role,
-                    content=normalized_content,
-                    sales_stage=patch_fields["sales_stage"],
-                    fuzzy_words=patch_fields["fuzzy_words"],
-                    score_snapshot=patch_fields["score_snapshot"],
-                    ai_feedback=patch_fields["ai_feedback"],
+                    **patch_kwargs,
                 )
             return
 

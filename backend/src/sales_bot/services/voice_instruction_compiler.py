@@ -8,6 +8,7 @@ turn-level grounding context without replacing the base role contract.
 from __future__ import annotations
 
 import hashlib
+import re
 from dataclasses import dataclass
 from typing import Any
 
@@ -114,17 +115,26 @@ class VoiceInstructionCompiler:
             tool_policy.get("enable_internal_retrieval", True)
         )
         require_kb_grounding = bool(tool_policy.get("require_kb_grounding", False))
+        kb_lock_mode = str(tool_policy.get("kb_lock_mode") or "strict_audit").lower()
         retrieval_priority = str(
             tool_policy.get("retrieval_priority") or "kb_first"
         ).lower()
         if internal_retrieval_enabled:
             if require_kb_grounding:
-                directives.append(
-                    "当会话启用知识库强制模式时，必须先检索内部知识库并仅依据命中内容回答；未命中时明确告知并拒绝推断。"
-                )
-                directives.append(
-                    "回答中不得补充证据片段以外的新事实；若证据不足，仅返回“知识库暂无依据”；若命中片段与模型既有知识冲突，必须以命中片段为准。"
-                )
+                if kb_lock_mode == "strict_audit":
+                    directives.append(
+                        "当会话启用知识库强制模式时，必须先检索内部知识库并仅依据命中内容回答；未命中时明确告知并拒绝推断。"
+                    )
+                    directives.append(
+                        "回答中不得补充证据片段以外的新事实；若证据不足，仅返回“知识库暂无依据”；若命中片段与模型既有知识冲突，必须以命中片段为准。"
+                    )
+                else:
+                    directives.append(
+                        "当会话启用知识库强制模式但内部知识不足时，按训练辅导模式继续对话：优先指出表达问题或引导澄清，不得直接抛出内部错误，也不得编造具体产品事实。"
+                    )
+                    directives.append(
+                        "训练辅导模式下，如果确需补充信息，只能围绕产品关键词、版本或业务场景提出一个主问题。"
+                    )
             elif retrieval_priority == "kb_only":
                 directives.append("仅使用内部知识库检索，不调用联网搜索。")
             elif retrieval_priority == "kb_first":
@@ -141,4 +151,39 @@ class VoiceInstructionCompiler:
         elif bool(tool_policy.get("enable_web_search", False)):
             directives.append("当问题依赖最新外部信息时可调用联网搜索。")
 
+        max_questions_per_turn = tool_policy.get("max_questions_per_turn", 1)
+        try:
+            normalized_question_limit = max(1, int(max_questions_per_turn))
+        except (TypeError, ValueError):
+            normalized_question_limit = 1
+        directives.append(
+            f"每轮最多提出{normalized_question_limit}个问题句；如需澄清，必须压缩在同一句中，禁止连续抛出多个问题。"
+        )
+
         return directives
+
+
+QUESTION_SENTENCE_RE = re.compile(r"[^。！？!?]*[？?][^。！？!?]*")
+
+
+def enforce_question_limit(text: str, max_questions_per_turn: int = 1) -> str:
+    normalized = str(text or "").strip()
+    if not normalized:
+        return ""
+
+    try:
+        question_limit = max(1, int(max_questions_per_turn))
+    except (TypeError, ValueError):
+        question_limit = 1
+
+    question_matches = list(QUESTION_SENTENCE_RE.finditer(normalized))
+    if len(question_matches) <= question_limit:
+        return normalized
+
+    cutoff = question_matches[question_limit - 1].end()
+    compact = normalized[:cutoff].strip()
+    if compact and compact[-1] not in "。！？!?":
+        compact += "。"
+    if not compact.endswith("先回答这一点即可。"):
+        compact += " 先回答这一点即可。"
+    return compact

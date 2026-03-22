@@ -44,6 +44,15 @@ def is_kb_lock_required(tool_policy: dict[str, Any] | None) -> bool:
     return bool(tool_policy.get("require_kb_grounding", False))
 
 
+def resolve_kb_lock_mode(tool_policy: dict[str, Any] | None) -> str:
+    if not isinstance(tool_policy, dict):
+        return "strict_audit"
+    mode = str(tool_policy.get("kb_lock_mode") or "strict_audit").strip().lower()
+    if mode not in {"strict_audit", "coach_mode"}:
+        return "strict_audit"
+    return mode
+
+
 def is_kb_lock_unbound_snapshot(snapshot: object) -> bool:
     """Return True when snapshot requires KB grounding but has no bound KB ids."""
     if not isinstance(snapshot, dict):
@@ -176,6 +185,50 @@ def _build_blocked_user_message(status: str) -> str:
     )
 
 
+def build_kb_coach_grounding_context(query: str, status: str) -> str:
+    return (
+        "当前轮处于训练辅导模式。\n"
+        "内部知识未能给出足够证据时，你必须继续完成训练，但禁止编造任何具体产品事实、参数、版本或客户案例。\n"
+        "不得直接抛出“知识库强制模式”“检索失败”“内部错误”之类系统报错话术。\n"
+        "请优先给出表达或讲解层面的反馈；如果必须追问，最多提出1个主问题，不得连续抛出多个问题。\n"
+        f"当前状态：{status}\n"
+        f"用户原话：{query}\n"
+        "输出要求：先给一句简短反馈，再在必要时追问一个更具体的产品关键词、版本或业务场景。"
+    )
+
+
+def _build_coach_mode_decision(
+    *,
+    query: str,
+    status: str,
+    started_at: float,
+    decision_id: str,
+    result_count: int = 0,
+    retrieval_mode: str = "",
+    error_detail: str = "",
+    phase_breakdown: dict[str, Any] | None = None,
+) -> KbLockDecision:
+    duration_ms = round((time.monotonic() - started_at) * 1000, 1)
+    if not isinstance(phase_breakdown, dict):
+        phase_breakdown = {"phase_total_ms": duration_ms}
+    else:
+        phase_breakdown = dict(phase_breakdown)
+        phase_breakdown.setdefault("phase_total_ms", duration_ms)
+    return KbLockDecision(
+        lock_required=True,
+        allow_generation=True,
+        status=status,
+        grounding_context=build_kb_coach_grounding_context(query, status),
+        user_message="",
+        result_count=result_count,
+        retrieval_mode=retrieval_mode,
+        error_detail=error_detail,
+        decision_id=decision_id,
+        duration_ms=duration_ms,
+        phase_breakdown=phase_breakdown,
+    )
+
+
 def _build_grounding_context(query: str, retrieval_payload: dict[str, Any]) -> str:
     rows = retrieval_payload.get("results")
     if not isinstance(rows, list):
@@ -220,6 +273,7 @@ async def evaluate_kb_lock_decision(
     normalized_query = str(query or "").strip()
     tool_policy = _normalize_tool_policy(effective_policy)
     lock_required = is_kb_lock_required(tool_policy)
+    kb_lock_mode = resolve_kb_lock_mode(tool_policy)
     if not lock_required and _should_auto_require_kb_grounding(
         effective_policy=effective_policy,
         tool_policy=tool_policy,
@@ -242,6 +296,13 @@ async def evaluate_kb_lock_decision(
 
     kb_ids = _normalize_knowledge_base_ids(effective_policy)
     if not kb_ids:
+        if kb_lock_mode == "coach_mode":
+            return _build_coach_mode_decision(
+                query=normalized_query,
+                status="coach_no_kb",
+                started_at=started_at,
+                decision_id=decision_id,
+            )
         return KbLockDecision(
             lock_required=True,
             allow_generation=False,
@@ -256,6 +317,13 @@ async def evaluate_kb_lock_decision(
         )
 
     if not normalized_query:
+        if kb_lock_mode == "coach_mode":
+            return _build_coach_mode_decision(
+                query="",
+                status="coach_missing_query",
+                started_at=started_at,
+                decision_id=decision_id,
+            )
         return KbLockDecision(
             lock_required=True,
             allow_generation=False,
@@ -338,6 +406,18 @@ async def evaluate_kb_lock_decision(
         "min_pass_score_keyword", round(min_pass_score_keyword, 4)
     )
 
+    def _coach_mode(status: str) -> KbLockDecision:
+        return _build_coach_mode_decision(
+            query=normalized_query,
+            status=status,
+            started_at=started_at,
+            decision_id=decision_id,
+            result_count=result_count,
+            retrieval_mode=retrieval_mode,
+            error_detail=error_detail,
+            phase_breakdown=phase_breakdown,
+        )
+
     if error_detail:
         status = "blocked_search_failed"
     elif has_scored_row and max_score < effective_min_pass_score:
@@ -356,6 +436,14 @@ async def evaluate_kb_lock_decision(
         status = "pass"
 
     if status != "pass":
+        if kb_lock_mode == "coach_mode":
+            coach_status_map = {
+                "blocked_search_failed": "coach_search_failed",
+                "blocked_no_kb": "coach_no_kb",
+                "blocked_not_ready": "coach_not_ready",
+                "blocked_empty": "coach_missing_evidence",
+            }
+            return _coach_mode(coach_status_map.get(status, "coach_missing_evidence"))
         return KbLockDecision(
             lock_required=True,
             allow_generation=False,
@@ -372,6 +460,8 @@ async def evaluate_kb_lock_decision(
 
     grounding_context = _build_grounding_context(normalized_query, payload)
     if not grounding_context:
+        if kb_lock_mode == "coach_mode":
+            return _coach_mode("coach_missing_evidence")
         return KbLockDecision(
             lock_required=True,
             allow_generation=False,

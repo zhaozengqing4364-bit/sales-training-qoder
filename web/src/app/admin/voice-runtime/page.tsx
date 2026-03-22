@@ -26,31 +26,57 @@ interface RuntimeProfile {
     output_sample_rate: number;
     turn_detection?: string | null;
     tool_policy: {
+        kb_lock_mode?: "strict_audit" | "coach_mode";
+        max_questions_per_turn?: number;
         web_search_top_k?: number;
         web_search_timeout_seconds?: number;
         retrieval_top_k?: number;
         retrieval_similarity_threshold?: number;
         retrieval_enable_hybrid?: boolean;
         retrieval_keyword_candidate_limit?: number;
+        retrieval_enable_rerank?: boolean;
+        retrieval_rerank_top_k?: number;
+        transcript_normalization_enabled?: boolean;
+        transcript_normalization_apply_to_interim?: boolean;
+        transcript_normalization_lexicon?: Array<{
+            canonical_term: string;
+            aliases: string[];
+            scope?: string;
+            replace_on_final_only?: boolean;
+        }>;
     };
 }
 
 const ALLOWED_RUNTIME_TOOL_POLICY_KEYS = [
+    "kb_lock_mode",
+    "max_questions_per_turn",
     "web_search_top_k",
     "web_search_timeout_seconds",
     "retrieval_top_k",
     "retrieval_similarity_threshold",
     "retrieval_enable_hybrid",
     "retrieval_keyword_candidate_limit",
+    "retrieval_enable_rerank",
+    "retrieval_rerank_top_k",
+    "transcript_normalization_enabled",
+    "transcript_normalization_apply_to_interim",
+    "transcript_normalization_lexicon",
 ] as const;
 
 const DEFAULT_RUNTIME_TOOL_POLICY: RuntimeProfile["tool_policy"] = {
+    kb_lock_mode: "coach_mode",
+    max_questions_per_turn: 1,
     web_search_top_k: 5,
     web_search_timeout_seconds: 3,
     retrieval_top_k: 5,
     retrieval_similarity_threshold: 0.65,
     retrieval_enable_hybrid: true,
     retrieval_keyword_candidate_limit: 32,
+    retrieval_enable_rerank: true,
+    retrieval_rerank_top_k: 8,
+    transcript_normalization_enabled: false,
+    transcript_normalization_apply_to_interim: false,
+    transcript_normalization_lexicon: [],
 };
 
 function sanitizeRuntimeToolPolicy(input: Record<string, unknown> | undefined) {
@@ -66,13 +92,44 @@ function sanitizeRuntimeToolPolicy(input: Record<string, unknown> | undefined) {
     return output;
 }
 
+function formatLexiconForEditor(lexicon: RuntimeProfile["tool_policy"]["transcript_normalization_lexicon"]) {
+    return JSON.stringify(lexicon || [], null, 2);
+}
+
+function parseLexiconFromEditor(value: string) {
+    const trimmed = value.trim();
+    if (!trimmed) {
+        return [] as NonNullable<RuntimeProfile["tool_policy"]["transcript_normalization_lexicon"]>;
+    }
+
+    const parsed = JSON.parse(trimmed);
+    if (!Array.isArray(parsed)) {
+        throw new Error("词典配置必须是 JSON 数组");
+    }
+
+    return parsed.map((item) => {
+        if (!item || typeof item !== "object") {
+            throw new Error("词典项必须是对象");
+        }
+        const candidate = item as Record<string, unknown>;
+        return {
+            canonical_term: String(candidate.canonical_term || "").trim(),
+            aliases: Array.isArray(candidate.aliases)
+                ? candidate.aliases.map((alias) => String(alias).trim()).filter(Boolean)
+                : [],
+            scope: String(candidate.scope || "global").trim() || "global",
+            replace_on_final_only: candidate.replace_on_final_only !== false,
+        };
+    }).filter((item) => item.canonical_term && item.aliases.length > 0);
+}
+
 const EMPTY_FORM: Omit<RuntimeProfile, "id"> = {
     name: "",
     description: "",
     is_default: false,
     is_active: true,
     voice_mode: "stepfun_realtime",
-    model_name: "step-audio-2",
+    model_name: "step-audio-r1.1",
     voice_name: "qingchunshaonv",
     temperature: 0.7,
     input_audio_format: "pcm16",
@@ -89,6 +146,9 @@ export default function VoiceRuntimePage() {
     const [profiles, setProfiles] = useState<RuntimeProfile[]>([]);
     const [selectedProfileId, setSelectedProfileId] = useState<string | null>(null);
     const [form, setForm] = useState<Omit<RuntimeProfile, "id">>(EMPTY_FORM);
+    const [lexiconDraft, setLexiconDraft] = useState<string>(
+        formatLexiconForEditor(DEFAULT_RUNTIME_TOOL_POLICY.transcript_normalization_lexicon),
+    );
 
     const selectedProfile = useMemo(
         () => profiles.find((profile) => profile.id === selectedProfileId) || null,
@@ -104,14 +164,17 @@ export default function VoiceRuntimePage() {
                 const defaultProfile = (response.items as RuntimeProfile[]).find((profile) => profile.is_default);
                 const initial = defaultProfile || (response.items as RuntimeProfile[])[0];
                 setSelectedProfileId(initial.id);
+                const sanitizedToolPolicy = sanitizeRuntimeToolPolicy(initial.tool_policy as Record<string, unknown>);
                 setForm({
                     ...EMPTY_FORM,
                     ...initial,
-                    tool_policy: sanitizeRuntimeToolPolicy(initial.tool_policy as Record<string, unknown>),
+                    tool_policy: sanitizedToolPolicy,
                 });
+                setLexiconDraft(formatLexiconForEditor(sanitizedToolPolicy.transcript_normalization_lexicon));
             } else {
                 setSelectedProfileId(null);
                 setForm(EMPTY_FORM);
+                setLexiconDraft(formatLexiconForEditor(DEFAULT_RUNTIME_TOOL_POLICY.transcript_normalization_lexicon));
             }
         } catch (error) {
             console.error("Failed to load runtime profiles", error);
@@ -128,11 +191,13 @@ export default function VoiceRuntimePage() {
 
     const selectProfile = (profile: RuntimeProfile) => {
         setSelectedProfileId(profile.id);
+        const sanitizedToolPolicy = sanitizeRuntimeToolPolicy(profile.tool_policy as Record<string, unknown>);
         setForm({
             ...EMPTY_FORM,
             ...profile,
-            tool_policy: sanitizeRuntimeToolPolicy(profile.tool_policy as Record<string, unknown>),
+            tool_policy: sanitizedToolPolicy,
         });
+        setLexiconDraft(formatLexiconForEditor(sanitizedToolPolicy.transcript_normalization_lexicon));
     };
 
     const handleCreateNew = () => {
@@ -141,6 +206,7 @@ export default function VoiceRuntimePage() {
             ...EMPTY_FORM,
             name: `新配置-${new Date().toLocaleDateString("zh-CN")}`,
         });
+        setLexiconDraft(formatLexiconForEditor(DEFAULT_RUNTIME_TOOL_POLICY.transcript_normalization_lexicon));
     };
 
     const handleSave = async () => {
@@ -151,9 +217,13 @@ export default function VoiceRuntimePage() {
 
         setIsSaving(true);
         try {
+            const parsedLexicon = parseLexiconFromEditor(lexiconDraft);
             const payload = {
                 ...form,
-                tool_policy: sanitizeRuntimeToolPolicy(form.tool_policy as Record<string, unknown>),
+                tool_policy: {
+                    ...sanitizeRuntimeToolPolicy(form.tool_policy as Record<string, unknown>),
+                    transcript_normalization_lexicon: parsedLexicon,
+                },
             };
             if (selectedProfileId) {
                 await api.admin.updateVoiceRuntimeProfile(selectedProfileId, payload);
@@ -165,7 +235,7 @@ export default function VoiceRuntimePage() {
             await loadProfiles();
         } catch (error) {
             console.error("Failed to save runtime profile", error);
-            toast.error("保存失败");
+            toast.error(error instanceof Error ? error.message : "保存失败");
         } finally {
             setIsSaving(false);
         }
@@ -320,6 +390,45 @@ export default function VoiceRuntimePage() {
                             />
                         </div>
                         <div className="space-y-2">
+                            <label className="text-xs font-bold text-slate-500 uppercase">KB 锁模式</label>
+                            <select
+                                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                                value={form.tool_policy.kb_lock_mode || "coach_mode"}
+                                onChange={(event) =>
+                                    setForm((prev) => ({
+                                        ...prev,
+                                        tool_policy: {
+                                            ...prev.tool_policy,
+                                            kb_lock_mode: event.target.value as "strict_audit" | "coach_mode",
+                                        },
+                                    }))
+                                }
+                            >
+                                <option value="coach_mode">训练辅导降级</option>
+                                <option value="strict_audit">严格审计阻断</option>
+                            </select>
+                        </div>
+                        <div className="space-y-2">
+                            <label className="text-xs font-bold text-slate-500 uppercase">单轮最多提问句数</label>
+                            <Input
+                                name="voice_runtime_max_questions_per_turn"
+                                autoComplete="section-voice-runtime off"
+                                type="number"
+                                min={1}
+                                step={1}
+                                value={form.tool_policy.max_questions_per_turn || 1}
+                                onChange={(event) =>
+                                    setForm((prev) => ({
+                                        ...prev,
+                                        tool_policy: {
+                                            ...prev.tool_policy,
+                                            max_questions_per_turn: Number(event.target.value || 1),
+                                        },
+                                    }))
+                                }
+                            />
+                        </div>
+                        <div className="space-y-2">
                             <label className="text-xs font-bold text-slate-500 uppercase">内部检索 TopK</label>
                             <Input
                                 name="voice_runtime_retrieval_top_k"
@@ -400,6 +509,45 @@ export default function VoiceRuntimePage() {
                             </select>
                         </div>
                         <div className="space-y-2">
+                            <label className="text-xs font-bold text-slate-500 uppercase">检索重排</label>
+                            <select
+                                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                                value={form.tool_policy.retrieval_enable_rerank ? "true" : "false"}
+                                onChange={(event) =>
+                                    setForm((prev) => ({
+                                        ...prev,
+                                        tool_policy: {
+                                            ...prev.tool_policy,
+                                            retrieval_enable_rerank: event.target.value === "true",
+                                        },
+                                    }))
+                                }
+                            >
+                                <option value="true">开启</option>
+                                <option value="false">关闭</option>
+                            </select>
+                        </div>
+                        <div className="space-y-2">
+                            <label className="text-xs font-bold text-slate-500 uppercase">重排候选上限</label>
+                            <Input
+                                name="voice_runtime_retrieval_rerank_top_k"
+                                autoComplete="section-voice-runtime off"
+                                type="number"
+                                min={1}
+                                step={1}
+                                value={form.tool_policy.retrieval_rerank_top_k || 8}
+                                onChange={(event) =>
+                                    setForm((prev) => ({
+                                        ...prev,
+                                        tool_policy: {
+                                            ...prev.tool_policy,
+                                            retrieval_rerank_top_k: Number(event.target.value || 8),
+                                        },
+                                    }))
+                                }
+                            />
+                        </div>
+                        <div className="space-y-2">
                             <label className="text-xs font-bold text-slate-500 uppercase">联网搜索 TopK</label>
                             <Input
                                 name="voice_runtime_web_search_top_k"
@@ -439,8 +587,55 @@ export default function VoiceRuntimePage() {
                                 }
                             />
                         </div>
+                        <div className="space-y-2">
+                            <label className="text-xs font-bold text-slate-500 uppercase">转写归一化</label>
+                            <select
+                                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                                value={form.tool_policy.transcript_normalization_enabled ? "true" : "false"}
+                                onChange={(event) =>
+                                    setForm((prev) => ({
+                                        ...prev,
+                                        tool_policy: {
+                                            ...prev.tool_policy,
+                                            transcript_normalization_enabled: event.target.value === "true",
+                                        },
+                                    }))
+                                }
+                            >
+                                <option value="true">开启</option>
+                                <option value="false">关闭</option>
+                            </select>
+                        </div>
+                        <div className="space-y-2">
+                            <label className="text-xs font-bold text-slate-500 uppercase">中间转写也应用词典</label>
+                            <select
+                                className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                                value={form.tool_policy.transcript_normalization_apply_to_interim ? "true" : "false"}
+                                onChange={(event) =>
+                                    setForm((prev) => ({
+                                        ...prev,
+                                        tool_policy: {
+                                            ...prev.tool_policy,
+                                            transcript_normalization_apply_to_interim: event.target.value === "true",
+                                        },
+                                    }))
+                                }
+                            >
+                                <option value="false">仅最终转写</option>
+                                <option value="true">中间 + 最终转写</option>
+                            </select>
+                        </div>
+                        <div className="space-y-2 md:col-span-2">
+                            <label className="text-xs font-bold text-slate-500 uppercase">用户词典 JSON</label>
+                            <textarea
+                                className="min-h-40 w-full rounded-lg border border-slate-200 px-3 py-2 text-sm font-mono text-slate-700"
+                                value={lexiconDraft}
+                                onChange={(event) => setLexiconDraft(event.target.value)}
+                                placeholder='[{"canonical_term":"石犀","aliases":["石溪","食犀"],"scope":"global","replace_on_final_only":true}]'
+                            />
+                        </div>
                         <div className="md:col-span-2 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-800">
-                            角色中心已接管策略锁：联网开关、内部检索开关、检索优先级、知识库强制模式等能力请前往角色中心配置。
+                            角色中心仍负责知识库绑定、联网开关和检索优先级；本页补充运行时层的 KB 锁降级、单轮提问上限、转写词典和检索重排参数。
                         </div>
                     </div>
 

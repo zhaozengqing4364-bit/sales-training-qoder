@@ -45,6 +45,16 @@ def _replace_file_type_constraint(constraint_sql: str) -> None:
         _TABLE_NAME,
         _CONSTRAINT_NAME,
     )
+    dialect = str(getattr(bind.dialect, "name", "")).lower()
+
+    # PostgreSQL can update the check constraint in-place. Recreating the table
+    # here may emit UNIQUE NULLS DISTINCT for inherited unique constraints,
+    # which is unsupported on older PostgreSQL versions.
+    if dialect == "postgresql":
+        if has_constraint:
+            op.drop_constraint(_CONSTRAINT_NAME, _TABLE_NAME, type_="check")
+        op.create_check_constraint(_CONSTRAINT_NAME, _TABLE_NAME, constraint_sql)
+        return
 
     with op.batch_alter_table(_TABLE_NAME, recreate="always") as batch_op:
         if has_constraint:
