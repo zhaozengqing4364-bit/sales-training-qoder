@@ -1,13 +1,16 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { api } from "@/lib/api/client";
 import {
     UserDetailStats,
+    UserSessionItem,
     UserSessionsResponse,
     UserProgressResponse,
 } from "@/lib/api/types";
+import { formatNotEvaluableReason } from "@/lib/session-evidence";
 import { GlassCard } from "@/components/ui/glass-card";
 import { Button } from "@/components/ui/button";
 import {
@@ -134,6 +137,35 @@ export default function UserDetailPage() {
         if (score >= 70) return "text-blue-600";
         if (score >= 50) return "text-amber-600";
         return "text-red-600";
+    };
+
+    const getOverallResultLabel = (session: UserSessionItem) => {
+        if (session.evaluable === false) return "不可评估";
+        if (session.overall_result === "strong_pass") return "Strong Pass";
+        if (session.overall_result === "pass") return "Pass";
+        if (session.overall_result === "fail") return "Fail";
+        return "进行中";
+    };
+
+    const getOverallResultTone = (session: UserSessionItem) => {
+        if (session.evaluable === false) return "bg-amber-50 text-amber-700";
+        if (session.overall_result === "strong_pass") return "bg-emerald-50 text-emerald-700";
+        if (session.overall_result === "pass") return "bg-blue-50 text-blue-700";
+        if (session.overall_result === "fail") return "bg-rose-50 text-rose-700";
+        return "bg-slate-50 text-slate-500";
+    };
+
+    const getSessionPreview = (session: UserSessionItem) => {
+        if (session.status !== "completed") {
+            return "练习完成后会显示统一报告预览。";
+        }
+        if (session.evaluable === false) {
+            return formatNotEvaluableReason(session.not_evaluable_reason);
+        }
+        return session.feedback_summary
+            || session.main_issue?.issue_text
+            || session.next_goal?.goal_text
+            || "统一训练证据已生成，可进入报告页查看详情。";
     };
 
     if (isLoading) {
@@ -423,7 +455,7 @@ export default function UserDetailPage() {
                 {sessions && sessions.items.length > 0 ? (
                     <>
                         <div className="overflow-x-auto">
-                            <table className="w-full">
+                            <table className="w-full min-w-[980px]">
                                 <thead>
                                     <tr className="border-b border-slate-100">
                                         <th className="text-left py-3 px-4 text-sm font-medium text-slate-500">
@@ -438,11 +470,17 @@ export default function UserDetailPage() {
                                         <th className="text-left py-3 px-4 text-sm font-medium text-slate-500">
                                             状态
                                         </th>
+                                        <th className="text-left py-3 px-4 text-sm font-medium text-slate-500">
+                                            统一预览
+                                        </th>
                                         <th className="text-right py-3 px-4 text-sm font-medium text-slate-500">
                                             时长
                                         </th>
                                         <th className="text-right py-3 px-4 text-sm font-medium text-slate-500">
                                             得分
+                                        </th>
+                                        <th className="text-right py-3 px-4 text-sm font-medium text-slate-500">
+                                            操作
                                         </th>
                                     </tr>
                                 </thead>
@@ -452,35 +490,55 @@ export default function UserDetailPage() {
                                             key={session.session_id}
                                             className="border-b border-slate-50 hover:bg-slate-50/50 transition-colors"
                                         >
-                                            <td className="py-3 px-4 text-sm text-slate-700">
+                                            <td className="py-3 px-4 text-sm text-slate-700 align-top">
                                                 {formatDate(session.start_time)}
                                             </td>
-                                            <td className="py-3 px-4">
+                                            <td className="py-3 px-4 align-top">
                                                 <span className="text-sm font-medium text-slate-700">
                                                     {session.scenario_name || session.scenario_type || "-"}
                                                 </span>
                                             </td>
-                                            <td className="py-3 px-4 text-sm text-slate-600">
+                                            <td className="py-3 px-4 text-sm text-slate-600 align-top">
                                                 {session.agent_name || "-"}
                                                 {session.persona_name && ` / ${session.persona_name}`}
                                             </td>
-                                            <td className="py-3 px-4">
-                                                <span
-                                                    className={`inline-flex px-2.5 py-1 rounded-full text-xs font-medium ${getStatusColor(
-                                                        session.status
-                                                    )}`}
-                                                >
-                                                    {session.status === "completed"
-                                                        ? "已完成"
-                                                        : session.status === "in_progress"
-                                                        ? "进行中"
-                                                        : session.status}
-                                                </span>
+                                            <td className="py-3 px-4 align-top">
+                                                <div className="space-y-2">
+                                                    <span
+                                                        className={`inline-flex px-2.5 py-1 rounded-full text-xs font-medium ${getStatusColor(
+                                                            session.status
+                                                        )}`}
+                                                    >
+                                                        {session.status === "completed"
+                                                            ? "已完成"
+                                                            : session.status === "in_progress"
+                                                            ? "进行中"
+                                                            : session.status}
+                                                    </span>
+                                                    {session.status === "completed" ? (
+                                                        <span className={`inline-flex px-2.5 py-1 rounded-full text-xs font-medium ${getOverallResultTone(session)}`}>
+                                                            {getOverallResultLabel(session)}
+                                                        </span>
+                                                    ) : null}
+                                                </div>
                                             </td>
-                                            <td className="py-3 px-4 text-sm text-slate-600 text-right">
+                                            <td className="py-3 px-4 align-top">
+                                                <div className="space-y-1 max-w-sm">
+                                                    <p className="text-sm text-slate-700">
+                                                        {getSessionPreview(session)}
+                                                    </p>
+                                                    {session.next_goal?.goal_text ? (
+                                                        <p className="text-xs text-slate-500">
+                                                            <span className="text-slate-400">下一轮：</span>
+                                                            <span>{session.next_goal.goal_text}</span>
+                                                        </p>
+                                                    ) : null}
+                                                </div>
+                                            </td>
+                                            <td className="py-3 px-4 text-sm text-slate-600 text-right align-top">
                                                 {session.duration_minutes.toFixed(1)} 分钟
                                             </td>
-                                            <td className="py-3 px-4 text-right">
+                                            <td className="py-3 px-4 text-right align-top">
                                                 <span
                                                     className={`text-lg font-bold ${getScoreColor(
                                                         session.scores.overall
@@ -488,6 +546,17 @@ export default function UserDetailPage() {
                                                 >
                                                     {session.scores.overall ?? "-"}
                                                 </span>
+                                            </td>
+                                            <td className="py-3 px-4 text-right align-top">
+                                                {session.status === "completed" ? (
+                                                    <Button asChild variant="outline" size="sm" className="rounded-full">
+                                                        <Link href={`/practice/${session.session_id}/report`}>
+                                                            查看报告
+                                                        </Link>
+                                                    </Button>
+                                                ) : (
+                                                    <span className="text-xs text-slate-400">完成后可查看</span>
+                                                )}
                                             </td>
                                         </tr>
                                     ))}

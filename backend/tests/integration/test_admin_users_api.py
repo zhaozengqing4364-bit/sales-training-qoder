@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import uuid
+from datetime import datetime, timedelta, timezone
 
 import pytest
 import pytest_asyncio
@@ -19,7 +20,14 @@ from sqlalchemy.orm import sessionmaker
 
 # Import Agent models so Base.metadata has all FK targets used by common models.
 from agent.models import Agent, AgentPersona, Persona, VoiceRuntimeProfile  # noqa: F401
-from common.db.models import Base, SystemLog, User
+from common.db.models import (
+    Base,
+    ConversationMessage,
+    PracticeSession,
+    Scenario,
+    SystemLog,
+    User,
+)
 from common.db.session import get_db
 from main import app
 
@@ -530,3 +538,149 @@ async def test_promoted_user_can_access_admin_api_immediately_with_same_token(
     after_response = await async_client.get("/api/v1/admin/users", headers=user_headers)
     assert after_response.status_code == 200
     assert after_response.json()["success"] is True
+
+
+@pytest.mark.asyncio
+async def test_user_sessions_completed_rows_expose_projection_backed_preview_fields(
+    async_client: AsyncClient,
+    admin_headers: dict[str, str],
+    db_session: AsyncSession,
+    non_admin_user: User,
+) -> None:
+    """Completed session rows should expose unified evidence preview instead of legacy weighting."""
+    scenario = Scenario(
+        scenario_id=str(uuid.uuid4()),
+        scenario_type="sales",
+        name="大客户销售演练",
+        description="Projection-backed preview test",
+        is_active=True,
+    )
+    db_session.add(scenario)
+    await db_session.flush()
+
+    completed_start = datetime(2026, 3, 23, 9, 0, tzinfo=timezone.utc)
+    completed_session = PracticeSession(
+        session_id=str(uuid.uuid4()),
+        user_id=str(non_admin_user.user_id),
+        scenario_id=str(scenario.scenario_id),
+        status="completed",
+        start_time=completed_start,
+        end_time=completed_start + timedelta(minutes=4),
+        total_duration_seconds=240,
+        logic_score=40,
+        accuracy_score=50,
+        completeness_score=60,
+        interruption_count=1,
+        effectiveness_snapshot={
+            "metrics": {
+                "continuous_speech_seconds": 240,
+                "filler_rate_per_100_words": 8.0,
+                "offtopic_turn_count": 1,
+                "offtopic_max_streak": 0,
+                "structure_coverage": 0.6,
+            },
+            "pass_flags": {
+                "pass_3min_flow": False,
+                "pass_5turn_defense": False,
+                "pass_4step_structure": False,
+            },
+            "main_capability_passed": False,
+            "overall_result": "fail",
+            "main_issue": {
+                "issue_type": "main_capability_not_passed",
+                "issue_text": "关键异议回应不够具体。",
+                "recovery_rule": "先回应风险，再补证据。",
+            },
+            "next_goal": {
+                "goal_type": "single_next_goal",
+                "goal_text": "下一轮先把异议处理说完整。",
+                "rule": "至少完成 1 次完整异议回应。",
+            },
+            "evaluable": True,
+            "not_evaluable_reason": None,
+        },
+    )
+    in_progress_session = PracticeSession(
+        session_id=str(uuid.uuid4()),
+        user_id=str(non_admin_user.user_id),
+        scenario_id=str(scenario.scenario_id),
+        status="in_progress",
+        start_time=completed_start + timedelta(days=1),
+        total_duration_seconds=90,
+        logic_score=None,
+        accuracy_score=None,
+        completeness_score=None,
+        interruption_count=0,
+    )
+    db_session.add_all([completed_session, in_progress_session])
+    await db_session.flush()
+
+    db_session.add_all(
+        [
+            ConversationMessage(
+                session_id=str(completed_session.session_id),
+                turn_number=1,
+                role="user",
+                content="先介绍产品价值。",
+                timestamp=completed_start,
+                duration_ms=45000,
+                sales_stage="opening",
+            ),
+            ConversationMessage(
+                session_id=str(completed_session.session_id),
+                turn_number=2,
+                role="assistant",
+                content="客户追问交付风险。",
+                timestamp=completed_start + timedelta(seconds=45),
+                duration_ms=55000,
+                sales_stage="objection",
+                score_snapshot={
+                    "overall": 55,
+                    "dimensions": [
+                        {"name": "逻辑性", "score": 40},
+                        {"name": "准确性", "score": 50},
+                        {"name": "完整性", "score": 60},
+                    ],
+                },
+            ),
+        ]
+    )
+    await db_session.commit()
+
+    response = await async_client.get(
+        f"/api/v1/admin/users/{non_admin_user.user_id}/sessions",
+        params={"page": 1, "page_size": 10},
+        headers=admin_headers,
+    )
+
+    assert response.status_code == 200
+    payload = response.json()["data"]
+    assert payload["total"] == 2
+    assert payload["page"] == 1
+    assert payload["page_size"] == 10
+    assert payload["has_more"] is False
+
+    completed_row = next(
+        item for item in payload["items"] if item["session_id"] == str(completed_session.session_id)
+    )
+    in_progress_row = next(
+        item for item in payload["items"] if item["session_id"] == str(in_progress_session.session_id)
+    )
+
+    assert completed_row["scores"]["overall"] == 50.0
+    assert completed_row["scores"]["logic"] == 40.0
+    assert completed_row["scores"]["accuracy"] == 50.0
+    assert completed_row["scores"]["completeness"] == 60.0
+    assert completed_row["overall_result"] == "fail"
+    assert completed_row["evaluable"] is True
+    assert completed_row["not_evaluable_reason"] is None
+    assert completed_row["main_issue"]["issue_text"] == "关键异议回应不够具体。"
+    assert completed_row["next_goal"]["goal_text"] == "下一轮先把异议处理说完整。"
+    assert completed_row["feedback_summary"] == "关键异议回应不够具体。"
+    assert completed_row["evidence_completeness"]["message_count"] == 2
+
+    assert in_progress_row["scores"]["overall"] is None
+    assert in_progress_row.get("overall_result") is None
+    assert in_progress_row.get("evaluable") is None
+    assert in_progress_row.get("main_issue") is None
+    assert in_progress_row.get("next_goal") is None

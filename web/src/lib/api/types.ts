@@ -537,6 +537,14 @@ export interface UserSessionItem {
         completeness: number | null;
         overall: number | null;
     };
+    overall_result?: SessionOverallResult | null;
+    evaluable?: boolean | null;
+    not_evaluable_reason?: SessionNotEvaluableReason | null;
+    evidence_completeness?: SessionEvidenceCompleteness | null;
+    main_issue?: SessionMainIssue | null;
+    next_goal?: SessionNextGoal | null;
+    feedback_summary?: string | null;
+    suggestions?: string[];
     interruption_count: number;
 }
 

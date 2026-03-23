@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 import type { ManagerLiteListsResponse } from "@/lib/api/types";
 import { Button } from "@/components/ui/button";
@@ -50,14 +51,19 @@ export function ManagerLitePanel({ data, onRemind }: ManagerLitePanelProps) {
                   <p className="text-sm font-semibold text-slate-900">{item.user_name}</p>
                   <p className="text-xs text-slate-500 mt-1">{item.department || "未分配部门"}</p>
                   <p className="text-xs text-rose-600 mt-1">结果：{item.overall_result}</p>
-                  <Button
-                    size="sm"
-                    className="mt-2 h-8 rounded-full"
-                    onClick={() => handleRemind(item.user_id)}
-                    disabled={remindingUserId === item.user_id}
-                  >
-                    {remindingUserId === item.user_id ? "提醒中..." : "一键提醒"}
-                  </Button>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <Button asChild size="sm" variant="outline" className="h-8 rounded-full">
+                      <Link href={`/practice/${item.session_id}/report`}>查看报告</Link>
+                    </Button>
+                    <Button
+                      size="sm"
+                      className="h-8 rounded-full"
+                      onClick={() => handleRemind(item.user_id)}
+                      disabled={remindingUserId === item.user_id}
+                    >
+                      {remindingUserId === item.user_id ? "提醒中..." : "一键提醒"}
+                    </Button>
+                  </div>
                 </div>
               ))
             )}

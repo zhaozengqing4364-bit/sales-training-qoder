@@ -514,27 +514,33 @@ async def get_user_sessions(
 ) -> dict[str, Any]:
     """
     Get paginated practice sessions for a specific user
-    
+
     Returns detailed session history including:
     - Session ID, start/end time, status, duration
     - Agent and Persona used
-    - Scores (logic, accuracy, completeness, overall)
+    - Projection-backed preview fields for completed rows
     """
-    from common.db.models import PracticeSession, Scenario
+    from collections import defaultdict
+
     from agent.models import Agent, Persona
-    
+    from common.conversation.models import ConversationMessage
+    from common.conversation.session_evidence import SessionEvidenceService
+    from common.db.models import PracticeSession, Scenario, SessionStatus
+
+    del current_user
+
     # Verify user exists
     user_result = await db.execute(select(User).where(User.user_id == user_id))
     if not user_result.scalar_one_or_none():
         raise HTTPException(status_code=404, detail="[USER_NOT_FOUND]")
-    
+
     # Build query
     query = select(
         PracticeSession,
         Agent.name.label("agent_name"),
         Persona.name.label("persona_name"),
         Scenario.name.label("scenario_name"),
-        Scenario.scenario_type
+        Scenario.scenario_type,
     ).outerjoin(
         Agent, PracticeSession.agent_id == Agent.id
     ).outerjoin(
@@ -542,36 +548,80 @@ async def get_user_sessions(
     ).outerjoin(
         Scenario, PracticeSession.scenario_id == Scenario.scenario_id
     ).where(PracticeSession.user_id == user_id)
-    
+
     count_query = select(func.count()).select_from(PracticeSession).where(PracticeSession.user_id == user_id)
-    
+
     if status:
         query = query.where(PracticeSession.status == status)
         count_query = count_query.where(PracticeSession.status == status)
-    
+
     # Get total count
     total = (await db.execute(count_query)).scalar() or 0
-    
+
     # Apply pagination
     query = query.order_by(PracticeSession.start_time.desc())
     query = query.offset((page - 1) * page_size).limit(page_size)
-    
+
     result = await db.execute(query)
     rows = result.all()
-    
+
+    completed_session_ids = [
+        str(row.PracticeSession.session_id)
+        for row in rows
+        if row.PracticeSession.status == SessionStatus.COMPLETED.value
+    ]
+    messages_by_session: dict[str, list[ConversationMessage]] = {}
+    if completed_session_ids:
+        messages_result = await db.execute(
+            select(ConversationMessage)
+            .where(ConversationMessage.session_id.in_(completed_session_ids))
+            .order_by(
+                ConversationMessage.session_id,
+                ConversationMessage.turn_number,
+                ConversationMessage.timestamp,
+            )
+        )
+        grouped_messages: dict[str, list[ConversationMessage]] = defaultdict(list)
+        for message in messages_result.scalars().all():
+            grouped_messages[str(message.session_id)].append(message)
+        messages_by_session = dict(grouped_messages)
+
+    projections_by_session = {
+        session_id: SessionEvidenceService.build_projection(
+            session=row.PracticeSession,
+            messages=list(messages_by_session.get(session_id, [])),
+        )
+        for row in rows
+        for session_id in [str(row.PracticeSession.session_id)]
+        if row.PracticeSession.status == SessionStatus.COMPLETED.value
+    }
+
     sessions = []
     for row in rows:
         session = row.PracticeSession
-        overall_score = None
-        if session.logic_score is not None:
-            overall_score = round(
-                session.logic_score * 0.4 +
-                (session.accuracy_score or 0) * 0.3 +
-                (session.completeness_score or 0) * 0.3, 1
-            )
-        
+        session_id = str(session.session_id)
+        projection = projections_by_session.get(session_id)
+
+        logic_score = projection.logic_score if projection else session.logic_score
+        accuracy_score = projection.accuracy_score if projection else session.accuracy_score
+        completeness_score = projection.completeness_score if projection else session.completeness_score
+        overall_score = projection.overall_score if projection else None
+        main_issue = projection.main_issue if projection else None
+        next_goal = projection.next_goal if projection else None
+        feedback_summary = None
+        if isinstance(main_issue, dict):
+            feedback_summary = main_issue.get("issue_text")
+        if not feedback_summary and isinstance(next_goal, dict):
+            feedback_summary = next_goal.get("goal_text")
+
+        suggestions: list[str] = []
+        if isinstance(main_issue, dict) and main_issue.get("issue_text"):
+            suggestions.append(f"主问题：{main_issue['issue_text']}")
+        if isinstance(next_goal, dict) and next_goal.get("goal_text"):
+            suggestions.append(f"下一轮：{next_goal['goal_text']}")
+
         sessions.append({
-            "session_id": str(session.session_id),
+            "session_id": session_id,
             "start_time": session.start_time.isoformat() if session.start_time else None,
             "end_time": session.end_time.isoformat() if session.end_time else None,
             "status": session.status,
@@ -581,20 +631,28 @@ async def get_user_sessions(
             "agent_name": row.agent_name,
             "persona_name": row.persona_name,
             "scores": {
-                "logic": session.logic_score,
-                "accuracy": session.accuracy_score,
-                "completeness": session.completeness_score,
-                "overall": overall_score
+                "logic": logic_score,
+                "accuracy": accuracy_score,
+                "completeness": completeness_score,
+                "overall": overall_score,
             },
-            "interruption_count": session.interruption_count or 0
+            "interruption_count": session.interruption_count or 0,
+            "overall_result": projection.overall_result if projection else None,
+            "evaluable": projection.evaluable if projection else None,
+            "not_evaluable_reason": projection.not_evaluable_reason if projection else None,
+            "evidence_completeness": projection.evidence_completeness if projection else None,
+            "main_issue": main_issue,
+            "next_goal": next_goal,
+            "feedback_summary": feedback_summary,
+            "suggestions": suggestions,
         })
-    
+
     return success_response({
         "items": sessions,
         "total": total,
         "page": page,
         "page_size": page_size,
-        "has_more": (page * page_size) < total
+        "has_more": (page * page_size) < total,
     })
 
 
