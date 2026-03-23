@@ -5,6 +5,7 @@ Presentations API - CRUD operations for PPT presentations
 import os
 import tempfile
 import uuid
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, cast
 
@@ -14,11 +15,13 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from common.api.response import error_response
 from common.api.server_error import build_server_error
 from common.auth.service import get_current_user
 from common.db.models import (
     ForbiddenWord,
     Page,
+    PracticeSession,
     Presentation,
     RequiredTalkingPoint,
     User,
@@ -36,6 +39,8 @@ from presentation_coach.services.ppt_parser import get_ppt_parser
 logger = get_logger(__name__)
 
 router = APIRouter()
+
+_NON_TERMINAL_PRESENTATION_STATUSES = ("preparing", "in_progress", "paused", "scoring")
 
 
 def _presentation_storage_root() -> Path:
@@ -98,6 +103,188 @@ def _atomic_write_bytes(file_path: Path, content: bytes) -> None:
         raise
 
 
+def _normalize_source_filename(uploaded_name: str | None, fallback_key: str) -> str:
+    if isinstance(uploaded_name, str) and uploaded_name.strip():
+        return uploaded_name.strip()
+    return f"upload-{fallback_key}.pptx"
+
+
+def _storage_file_path(storage_key: str, source_filename: str) -> Path:
+    upload_dir = _presentation_storage_root()
+    upload_dir.mkdir(parents=True, exist_ok=True)
+    extension = source_filename.rsplit(".", 1)[-1] if "." in source_filename else "pptx"
+    return upload_dir / f"{storage_key}.{extension}"
+
+
+async def _load_presentation_detail(
+    db: AsyncSession,
+    presentation_id: str,
+) -> Presentation | None:
+    result = await db.execute(
+        select(Presentation)
+        .options(selectinload(Presentation.pages))
+        .where(Presentation.presentation_id == presentation_id)
+    )
+    presentation = result.scalar_one_or_none()
+    if presentation:
+        for page in presentation.pages:
+            _hydrate_page_thumbnail_url(page, str(presentation.presentation_id))
+    return presentation
+
+
+async def _load_presentation_for_replace(
+    db: AsyncSession,
+    presentation_id: str,
+) -> Presentation | None:
+    result = await db.execute(
+        select(Presentation)
+        .options(
+            selectinload(Presentation.pages).selectinload(Page.required_talking_points),
+            selectinload(Presentation.pages).selectinload(Page.forbidden_words),
+        )
+        .where(Presentation.presentation_id == presentation_id)
+    )
+    return result.scalar_one_or_none()
+
+
+async def _non_terminal_sessions_for_presentation(
+    db: AsyncSession,
+    presentation_id: str,
+) -> list[PracticeSession]:
+    result = await db.execute(
+        select(PracticeSession).where(
+            PracticeSession.presentation_id == presentation_id,
+            PracticeSession.status.in_(_NON_TERMINAL_PRESENTATION_STATUSES),
+        )
+    )
+    return list(result.scalars().all())
+
+
+def _capture_page_level_metadata(
+    pages: list[Page],
+) -> tuple[dict[int, list[dict[str, Any]]], dict[int, list[dict[str, Any]]]]:
+    talking_points_by_page: dict[int, list[dict[str, Any]]] = {}
+    forbidden_words_by_page: dict[int, list[dict[str, Any]]] = {}
+
+    for page in pages:
+        page_number = int(cast(int, getattr(page, "page_number", 0)) or 0)
+        if page_number < 1:
+            continue
+
+        talking_points_by_page[page_number] = [
+            {
+                "description": point.description,
+                "created_by": point.created_by,
+                "is_ai_generated": bool(point.is_ai_generated),
+                "confirmed_by_admin": bool(point.confirmed_by_admin),
+            }
+            for point in list(page.required_talking_points or [])
+        ]
+
+        forbidden_words_by_page[page_number] = [
+            {
+                "phrase": word.phrase,
+                "suggested_alternative": word.suggested_alternative,
+                "is_regex": bool(word.is_regex),
+            }
+            for word in list(page.forbidden_words or [])
+        ]
+
+    return talking_points_by_page, forbidden_words_by_page
+
+
+async def _replace_pages_and_metadata(
+    db: AsyncSession,
+    presentation: Presentation,
+    *,
+    content: bytes,
+    parsed_data: dict[str, Any],
+    parser: Any,
+) -> None:
+    presentation_id = str(presentation.presentation_id)
+    talking_points_by_page, forbidden_words_by_page = _capture_page_level_metadata(
+        list(presentation.pages or [])
+    )
+
+    for page in list(presentation.pages or []):
+        await db.delete(page)
+    await db.flush()
+
+    thumbnail_output_dir = _thumbnail_storage_root() / presentation_id
+    if thumbnail_output_dir.exists():
+        for stale_file in thumbnail_output_dir.glob("*"):
+            if stale_file.is_file():
+                stale_file.unlink()
+
+    new_pages_by_number: dict[int, Page] = {}
+    for page_data in parsed_data.get("pages", []):
+        if not isinstance(page_data, dict):
+            continue
+
+        page_number = int(page_data.get("page_number", 0) or 0)
+        if page_number < 1:
+            continue
+
+        thumbnail_result = await parser.generate_thumbnail(
+            file_content=content,
+            page_number=page_number,
+            output_dir=str(thumbnail_output_dir),
+        )
+
+        image_url: str | None = None
+        if thumbnail_result.is_success and thumbnail_result.value:
+            image_url = _thumbnail_api_url(presentation_id, page_number)
+        elif thumbnail_result.fallback:
+            logger.warning(
+                "Thumbnail generation failed during presentation replace",
+                presentation_id=presentation_id,
+                page_number=page_number,
+                error=thumbnail_result.fallback,
+            )
+
+        page = Page(
+            presentation_id=presentation_id,
+            page_number=page_number,
+            ocr_extracted_text=cast(str, page_data.get("extracted_text", "")),
+            image_url=image_url,
+            extraction_confidence=0.95,
+            needs_manual_review=False,
+        )
+        db.add(page)
+        new_pages_by_number[page_number] = page
+
+    await db.flush()
+
+    for page_number, page in new_pages_by_number.items():
+        for point in talking_points_by_page.get(page_number, []):
+            db.add(
+                RequiredTalkingPoint(
+                    page_id=page.page_id,
+                    description=cast(str, point["description"]),
+                    created_by=cast(str, point["created_by"]),
+                    is_ai_generated=bool(point["is_ai_generated"]),
+                    confirmed_by_admin=bool(point["confirmed_by_admin"]),
+                )
+            )
+
+        for word in forbidden_words_by_page.get(page_number, []):
+            db.add(
+                ForbiddenWord(
+                    page_id=page.page_id,
+                    presentation_id=None,
+                    phrase=cast(str, word["phrase"]),
+                    suggested_alternative=cast(str | None, word["suggested_alternative"]),
+                    is_regex=bool(word["is_regex"]),
+                )
+            )
+
+    presentation.pages = list(new_pages_by_number.values())
+    presentation.total_pages = int(parsed_data.get("total_pages", 0) or 0)
+    presentation.ocr_progress = 1.0
+    presentation.status = "ready"
+    await db.commit()
+
+
 @router.get("/presentations", response_model=list[PresentationResponse])
 async def list_presentations(
     status: str | None = None,
@@ -106,6 +293,7 @@ async def list_presentations(
     db: AsyncSession = Depends(get_db),
 ):
     """List all presentations"""
+    _ = current_user
     query = select(Presentation)
 
     if status:
@@ -130,30 +318,20 @@ async def upload_presentation(
     presentation: Presentation | None = None
     file_path: Path | None = None
     try:
-        upload_dir = _presentation_storage_root()
-        upload_dir.mkdir(parents=True, exist_ok=True)
-
         file_id = str(uuid.uuid4())
-        uploaded_name = file.filename
-        if not isinstance(uploaded_name, str) or not uploaded_name:
-            uploaded_name = f"upload-{file_id}.pptx"
-        source_filename = uploaded_name
-        if "." in source_filename:
-            file_extension = source_filename.split(".")[-1]
-        else:
-            file_extension = "pptx"
-        file_path = upload_dir / f"{file_id}.{file_extension}"
+        source_filename = _normalize_source_filename(file.filename, file_id)
+        file_path = _storage_file_path(file_id, source_filename)
 
         content = await file.read()
         _atomic_write_bytes(file_path, content)
 
-        # Create presentation record
         presentation = Presentation(
             title=title,
             file_url=str(file_path),
             file_size_bytes=len(content),
             uploaded_by_admin_id=current_user.user_id,
             status="processing",
+            ocr_progress=0.0,
         )
 
         db.add(presentation)
@@ -161,22 +339,22 @@ async def upload_presentation(
         await db.refresh(presentation)
         presentation_id_value = str(presentation.presentation_id)
 
-        # Parse PPT and create page records
         parser = get_ppt_parser()
         parse_result = await parser.parse_presentation(content, source_filename)
 
         if parse_result.is_success and isinstance(parse_result.value, dict):
             parsed_data = cast(dict[str, Any], parse_result.value)
 
-            # Update presentation with total pages
             setattr(presentation, "total_pages", int(parsed_data.get("total_pages", 0)))
 
-            # Create page records
             thumbnail_output_dir = _thumbnail_storage_root() / presentation_id_value
             for page_data in parsed_data.get("pages", []):
                 if not isinstance(page_data, dict):
                     continue
-                page_number = page_data["page_number"]
+                page_number = int(page_data.get("page_number", 0) or 0)
+                if page_number < 1:
+                    continue
+
                 thumbnail_result = await parser.generate_thumbnail(
                     file_content=content,
                     page_number=page_number,
@@ -185,10 +363,7 @@ async def upload_presentation(
 
                 image_url: str | None = None
                 if thumbnail_result.is_success and thumbnail_result.value:
-                    image_url = _thumbnail_api_url(
-                        presentation_id_value,
-                        page_number,
-                    )
+                    image_url = _thumbnail_api_url(presentation_id_value, page_number)
                 elif thumbnail_result.fallback:
                     logger.warning(
                         "Thumbnail generation failed",
@@ -197,17 +372,19 @@ async def upload_presentation(
                         error=thumbnail_result.fallback,
                     )
 
-                page = Page(
-                    presentation_id=presentation_id_value,
-                    page_number=page_number,
-                    ocr_extracted_text=page_data.get("extracted_text", ""),
-                    image_url=image_url,
-                    extraction_confidence=0.95,  # PPT parsing has high confidence
-                    needs_manual_review=False,
+                db.add(
+                    Page(
+                        presentation_id=presentation_id_value,
+                        page_number=page_number,
+                        ocr_extracted_text=cast(str, page_data.get("extracted_text", "")),
+                        image_url=image_url,
+                        extraction_confidence=0.95,
+                        needs_manual_review=False,
+                    )
                 )
-                db.add(page)
 
             setattr(presentation, "status", "ready")
+            setattr(presentation, "ocr_progress", 1.0)
             await db.commit()
 
             logger.info(
@@ -215,7 +392,6 @@ async def upload_presentation(
                 f"with {presentation.total_pages} pages"
             )
         else:
-            # Parsing failed, mark for manual review
             setattr(presentation, "status", "failed")
             await db.commit()
             logger.error(
@@ -252,6 +428,149 @@ async def upload_presentation(
         )
 
 
+@router.post(
+    "/presentations/{presentation_id}/replace",
+    response_model=PresentationDetail,
+)
+async def replace_presentation(
+    presentation_id: str,
+    file: UploadFile = File(...),
+    title: str | None = Form(None),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Replace a standard PPT in place while preserving presentation_id."""
+    _ = current_user
+    file_path: Path | None = None
+    try:
+        presentation = await _load_presentation_for_replace(db, presentation_id)
+        if not presentation:
+            raise HTTPException(status_code=404, detail="Presentation not found")
+
+        active_sessions = await _non_terminal_sessions_for_presentation(db, presentation_id)
+        if active_sessions:
+            logger.warning(
+                "Blocked in-place presentation replace because active sessions still reference it",
+                presentation_id=presentation_id,
+                active_session_count=len(active_sessions),
+                active_session_ids=[session.session_id for session in active_sessions],
+            )
+            return JSONResponse(
+                status_code=409,
+                content={
+                    **error_response(
+                        "[PRESENTATION_REPLACE_BLOCKED_ACTIVE_SESSION]",
+                        message="当前有进行中的演练正在使用该标准PPT，请结束后再替换。",
+                    ),
+                    "details": {
+                        "presentation_id": presentation_id,
+                        "active_session_count": len(active_sessions),
+                        "active_sessions": [
+                            {
+                                "session_id": session.session_id,
+                                "status": session.status,
+                            }
+                            for session in active_sessions
+                        ],
+                    },
+                },
+            )
+
+        content = await file.read()
+        source_filename = _normalize_source_filename(
+            file.filename,
+            str(presentation.presentation_id),
+        )
+        next_version = int(cast(int | None, presentation.version_number) or 0) + 1
+        file_path = _storage_file_path(
+            f"{presentation.presentation_id}-v{next_version}",
+            source_filename,
+        )
+        _atomic_write_bytes(file_path, content)
+
+        if isinstance(title, str) and title.strip():
+            presentation.title = title.strip()
+        presentation.file_url = str(file_path)
+        presentation.file_size_bytes = len(content)
+        presentation.upload_date = datetime.now(timezone.utc)
+        presentation.version_number = next_version
+        presentation.status = "processing"
+        presentation.ocr_progress = 0.0
+        await db.commit()
+
+        parser = get_ppt_parser()
+        parse_result = await parser.parse_presentation(content, source_filename)
+
+        if not parse_result.is_success or not isinstance(parse_result.value, dict):
+            failed_presentation = await _load_presentation_detail(db, presentation_id)
+            if failed_presentation:
+                failed_presentation.status = "failed"
+                failed_presentation.ocr_progress = 0.0
+                await db.commit()
+                failed_presentation = await _load_presentation_detail(db, presentation_id)
+            logger.warning(
+                "Presentation replace parse failed",
+                presentation_id=presentation_id,
+                version_number=next_version,
+                error=parse_result.fallback,
+            )
+            if failed_presentation is not None:
+                return failed_presentation
+            raise HTTPException(status_code=404, detail="Presentation not found")
+
+        refreshed = await _load_presentation_for_replace(db, presentation_id)
+        if refreshed is None:
+            raise HTTPException(status_code=404, detail="Presentation not found")
+
+        await _replace_pages_and_metadata(
+            db,
+            refreshed,
+            content=content,
+            parsed_data=cast(dict[str, Any], parse_result.value),
+            parser=parser,
+        )
+
+        logger.info(
+            "Presentation replaced in place",
+            presentation_id=presentation_id,
+            version_number=next_version,
+            total_pages=refreshed.total_pages,
+        )
+        detail = await _load_presentation_detail(db, presentation_id)
+        if detail is None:
+            raise HTTPException(status_code=404, detail="Presentation not found")
+        return detail
+
+    except HTTPException:
+        raise
+    except (RuntimeError, ValueError, OSError) as e:
+        logger.error(
+            "Failed to replace presentation in place",
+            presentation_id=presentation_id,
+            error=str(e),
+        )
+        await db.rollback()
+        try:
+            failed_presentation = await _load_presentation_detail(db, presentation_id)
+            if failed_presentation is not None:
+                failed_presentation.status = "failed"
+                failed_presentation.ocr_progress = 0.0
+                await db.commit()
+        except Exception as mark_error:
+            await db.rollback()
+            logger.error(
+                "Failed to mark presentation as failed after replace error",
+                presentation_id=presentation_id,
+                error=str(mark_error),
+            )
+        return build_server_error(
+            "[PRESENTATION_REPLACE_FAILED]",
+            message="Presentation replace failed",
+            exc=e,
+            presentation_id=presentation_id,
+        )
+
+
 @router.get("/presentations/{presentation_id}", response_model=PresentationDetail)
 async def get_presentation(
     presentation_id: str,
@@ -259,18 +578,11 @@ async def get_presentation(
     db: AsyncSession = Depends(get_db),
 ):
     """Get presentation details"""
-    result = await db.execute(
-        select(Presentation)
-        .options(selectinload(Presentation.pages))
-        .where(Presentation.presentation_id == presentation_id)
-    )
-    presentation = result.scalar_one_or_none()
+    _ = current_user
+    presentation = await _load_presentation_detail(db, presentation_id)
 
     if not presentation:
         raise HTTPException(status_code=404, detail="Presentation not found")
-
-    for page in presentation.pages:
-        _hydrate_page_thumbnail_url(page, str(presentation.presentation_id))
 
     return presentation
 
@@ -310,6 +622,7 @@ async def get_presentation_pages(
     db: AsyncSession = Depends(get_db),
 ):
     """Get presentation pages"""
+    _ = current_user
     result = await db.execute(
         select(Page)
         .where(Page.presentation_id == presentation_id)
@@ -362,7 +675,7 @@ async def get_talking_points(
     db: AsyncSession = Depends(get_db),
 ):
     """Get required talking points for a page"""
-    # Get page
+    _ = current_user
     page_result = await db.execute(
         select(Page).where(
             Page.presentation_id == presentation_id, Page.page_number == page_number
@@ -373,7 +686,6 @@ async def get_talking_points(
     if not page:
         raise HTTPException(status_code=404, detail="Page not found")
 
-    # Get talking points
     points_result = await db.execute(
         select(RequiredTalkingPoint).where(
             RequiredTalkingPoint.page_id == page.page_id,
@@ -394,7 +706,7 @@ async def add_talking_point(
     db: AsyncSession = Depends(get_db),
 ):
     """Add required talking point to a page"""
-    # Get page
+    _ = current_user
     page_result = await db.execute(
         select(Page).where(
             Page.presentation_id == presentation_id, Page.page_number == page_number
@@ -405,7 +717,6 @@ async def add_talking_point(
     if not page:
         raise HTTPException(status_code=404, detail="Page not found")
 
-    # Create talking point
     talking_point = RequiredTalkingPoint(
         page_id=page.page_id,
         description=point.description,
@@ -428,10 +739,11 @@ async def get_forbidden_words(
     db: AsyncSession = Depends(get_db),
 ):
     """Get forbidden words for presentation"""
+    _ = current_user
     result = await db.execute(
         select(ForbiddenWord).where(
             (ForbiddenWord.presentation_id == presentation_id)
-            | (ForbiddenWord.page_id == None)  # Global for presentation
+            | (ForbiddenWord.page_id == None)
         )
     )
     words = result.scalars().all()
@@ -447,6 +759,7 @@ async def add_forbidden_word(
     db: AsyncSession = Depends(get_db),
 ):
     """Add forbidden word to presentation"""
+    _ = current_user
     forbidden_word = ForbiddenWord(
         presentation_id=presentation_id,
         phrase=word.phrase,

@@ -171,6 +171,7 @@ const API_ERROR_MESSAGE_MAP: Record<string, string> = {
     "[ACCESS_DENIED]": "你没有权限访问该会话。",
     "[PROMPT_TEMPLATE_EDIT_ADMIN_ONLY]": "仅管理员可访问提示词治理接口。",
     "[ROLE_REQUIRED]": "当前账号权限不足，无法执行该操作。",
+    "[PRESENTATION_REPLACE_BLOCKED_ACTIVE_SESSION]": "当前有进行中的演练正在使用该标准PPT，请结束后再替换。",
 };
 
 type NormalizedApiErrorPayload = {
@@ -431,7 +432,7 @@ type PresentationAIPolicyPreviewPayload = {
     forbidden_words?: Array<string | Record<string, unknown>>;
 };
 
-type PresentationStatus = "processing" | "ready" | "error";
+type PresentationStatus = "processing" | "ready" | "failed";
 
 type PresentationPage = {
     page_id: string;
@@ -444,8 +445,10 @@ type PresentationListItem = {
     presentation_id: string;
     title: string;
     status: PresentationStatus;
+    version_number: number;
     file_size_bytes: number;
     page_count: number;
+    total_pages?: number;
     uploaded_by_admin_id: string;
     created_at: string;
 };
@@ -492,7 +495,7 @@ function toNumberValue(value: unknown, fallback = 0): number {
 function normalizePresentationStatus(value: unknown): PresentationStatus {
     if (value === "ready") return "ready";
     if (value === "processing") return "processing";
-    if (value === "failed" || value === "error") return "error";
+    if (value === "failed" || value === "error") return "failed";
     return "processing";
 }
 
@@ -509,12 +512,15 @@ function normalizePresentationPage(input: unknown): PresentationPage {
 function normalizePresentationListItem(input: unknown): PresentationListItem {
     const raw = toRecord(input);
     const pages = Array.isArray(raw.pages) ? raw.pages : [];
+    const totalPages = toNumberValue(raw.total_pages, pages.length);
     return {
         presentation_id: toStringValue(raw.presentation_id),
         title: toStringValue(raw.title, "未命名PPT"),
         status: normalizePresentationStatus(raw.status),
+        version_number: toNumberValue(raw.version_number, 1),
         file_size_bytes: toNumberValue(raw.file_size_bytes, 0),
-        page_count: toNumberValue(raw.page_count, toNumberValue(raw.total_pages, pages.length)),
+        page_count: toNumberValue(raw.page_count, totalPages),
+        total_pages: totalPages,
         uploaded_by_admin_id: toStringValue(raw.uploaded_by_admin_id),
         created_at: toStringValue(raw.created_at, toStringValue(raw.upload_date)),
     };
@@ -523,9 +529,11 @@ function normalizePresentationListItem(input: unknown): PresentationListItem {
 function normalizePresentationDetailItem(input: unknown): PresentationDetailItem {
     const raw = toRecord(input);
     const pages = Array.isArray(raw.pages) ? raw.pages.map(normalizePresentationPage) : [];
+    const totalPages = toNumberValue(raw.total_pages, pages.length);
     return {
         ...normalizePresentationListItem(raw),
-        page_count: toNumberValue(raw.page_count, toNumberValue(raw.total_pages, pages.length)),
+        page_count: toNumberValue(raw.page_count, totalPages),
+        total_pages: totalPages,
         pages,
     };
 }
@@ -1914,6 +1922,19 @@ export const api = {
             formData.append("file", file);
             const result = await apiUpload<Record<string, unknown>>("/presentations", formData);
             return normalizePresentationListItem(result);
+        },
+
+        replace: async (presentationId: string, payload: { file: File; title?: string }) => {
+            const formData = new FormData();
+            if (payload.title) {
+                formData.append("title", payload.title);
+            }
+            formData.append("file", payload.file);
+            const result = await apiUpload<Record<string, unknown>>(
+                `/presentations/${presentationId}/replace`,
+                formData,
+            );
+            return normalizePresentationDetailItem(result);
         },
 
         get: async (presentationId: string) => {

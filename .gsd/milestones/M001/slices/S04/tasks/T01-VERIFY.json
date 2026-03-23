@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "taskId": "T01",
+  "unitId": "M001/S04/T01",
+  "timestamp": 1774257195334,
+  "passed": false,
+  "discoverySource": "task-plan",
+  "checks": [
+    {
+      "command": "pytest tests/integration/test_knowledge_api.py tests/integration/test_knowledge_upload_persistence.py tests/integration/test_knowledge_flow.py",
+      "exitCode": 4,
+      "durationMs": 12093,
+      "verdict": "fail"
+    },
+    {
+      "command": "cd ../web",
+      "exitCode": 1,
+      "durationMs": 39,
+      "verdict": "fail"
+    }
+  ],
+  "retryAttempt": 1,
+  "maxRetries": 2
+}

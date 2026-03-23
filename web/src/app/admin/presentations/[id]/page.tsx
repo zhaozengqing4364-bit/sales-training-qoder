@@ -3,7 +3,7 @@
 import Image from "next/image";
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
-import { api } from "@/lib/api/client";
+import { api, getApiErrorMessage } from "@/lib/api/client";
 import { GlassCard } from "@/components/ui/glass-card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -19,7 +19,8 @@ import {
     Trash2,
     Loader2,
     Target,
-    Ban
+    Ban,
+    RefreshCw,
 } from "lucide-react";
 import Link from "next/link";
 
@@ -83,7 +84,6 @@ function PresentationThumbnail({
     );
 }
 
-// Types
 interface PageDetail {
     page_id: string;
     page_number: number;
@@ -108,11 +108,26 @@ interface ForbiddenWord {
 interface PresentationDetail {
     presentation_id: string;
     title: string;
-    status: "processing" | "ready" | "error";
+    status: "processing" | "ready" | "failed";
+    version_number: number;
     file_size_bytes: number;
     page_count: number;
+    total_pages?: number;
     pages: PageDetail[];
     created_at: string;
+}
+
+function getStatusLabel(status: PresentationDetail["status"]): string {
+    switch (status) {
+        case "ready":
+            return "可用";
+        case "processing":
+            return "处理中";
+        case "failed":
+            return "失败";
+        default:
+            return status;
+    }
 }
 
 export default function PresentationDetailPage() {
@@ -123,14 +138,15 @@ export default function PresentationDetailPage() {
     const [presentation, setPresentation] = useState<PresentationDetail | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [activeTab, setActiveTab] = useState("pages");
+    const [replaceFile, setReplaceFile] = useState<File | null>(null);
+    const [isReplacing, setIsReplacing] = useState(false);
+    const [replaceError, setReplaceError] = useState<string | null>(null);
 
-    // Talking points state
     const [talkingPoints, setTalkingPoints] = useState<TalkingPoint[]>([]);
     const [selectedPage, setSelectedPage] = useState<number>(1);
     const [newPointDescription, setNewPointDescription] = useState("");
     const [isAddingPoint, setIsAddingPoint] = useState(false);
 
-    // Forbidden words state
     const [forbiddenWords, setForbiddenWords] = useState<ForbiddenWord[]>([]);
     const [newForbiddenWord, setNewForbiddenWord] = useState("");
     const [newAlternative, setNewAlternative] = useState("");
@@ -140,7 +156,8 @@ export default function PresentationDetailPage() {
         setIsLoading(true);
         try {
             const data = await api.presentations.get(presentationId);
-            setPresentation(data);
+            setPresentation(data as PresentationDetail);
+            setReplaceError(null);
         } catch (err) {
             console.error("Failed to load presentation:", err);
             toast.error("加载PPT详情失败");
@@ -169,18 +186,46 @@ export default function PresentationDetailPage() {
 
     useEffect(() => {
         if (presentationId) {
-            loadPresentation();
-            loadForbiddenWords();
+            void loadPresentation();
+            void loadForbiddenWords();
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [presentationId]);
 
     useEffect(() => {
         if (presentationId && selectedPage) {
-            loadTalkingPoints();
+            void loadTalkingPoints();
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [presentationId, selectedPage]);
+
+    const handleReplacePresentation = async () => {
+        if (!replaceFile) {
+            const message = "请先选择新的PPT文件";
+            setReplaceError(message);
+            toast.error(message);
+            return;
+        }
+        setIsReplacing(true);
+        setReplaceError(null);
+        try {
+            const updated = await api.presentations.replace(presentationId, {
+                file: replaceFile,
+                title: presentation?.title,
+            });
+            setPresentation(updated as PresentationDetail);
+            setSelectedPage(1);
+            setReplaceFile(null);
+            toast.success("标准PPT已提交替换，版本信息已刷新");
+        } catch (err) {
+            console.error("Failed to replace presentation:", err);
+            const message = getApiErrorMessage(err);
+            setReplaceError(message);
+            toast.error(message);
+        } finally {
+            setIsReplacing(false);
+        }
+    };
 
     const handleAddTalkingPoint = async () => {
         if (!newPointDescription.trim()) {
@@ -191,11 +236,11 @@ export default function PresentationDetailPage() {
         setIsAddingPoint(true);
         try {
             await api.presentations.addTalkingPoint(presentationId, selectedPage, {
-                description: newPointDescription
+                description: newPointDescription,
             });
             setNewPointDescription("");
             toast.success("要点添加成功");
-            loadTalkingPoints();
+            await loadTalkingPoints();
         } catch (err) {
             console.error("Failed to add talking point:", err);
             toast.error("添加要点失败");
@@ -208,7 +253,7 @@ export default function PresentationDetailPage() {
         try {
             await api.presentations.deleteTalkingPoint(presentationId, pointId);
             toast.success("要点已删除");
-            loadTalkingPoints();
+            await loadTalkingPoints();
         } catch (err) {
             console.error("Failed to delete talking point:", err);
             toast.error("删除要点失败");
@@ -225,12 +270,12 @@ export default function PresentationDetailPage() {
         try {
             await api.presentations.addForbiddenWord(presentationId, {
                 phrase: newForbiddenWord,
-                suggested_alternative: newAlternative || undefined
+                suggested_alternative: newAlternative || undefined,
             });
             setNewForbiddenWord("");
             setNewAlternative("");
             toast.success("禁忌词添加成功");
-            loadForbiddenWords();
+            await loadForbiddenWords();
         } catch (err) {
             console.error("Failed to add forbidden word:", err);
             toast.error("添加禁忌词失败");
@@ -243,14 +288,14 @@ export default function PresentationDetailPage() {
         try {
             await api.presentations.deleteForbiddenWord(presentationId, wordId);
             toast.success("禁忌词已删除");
-            loadForbiddenWords();
+            await loadForbiddenWords();
         } catch (err) {
             console.error("Failed to delete forbidden word:", err);
             toast.error("删除禁忌词失败");
         }
     };
 
-    const getStatusBadge = (status: string) => {
+    const getStatusBadge = (status: PresentationDetail["status"]) => {
         switch (status) {
             case "ready":
                 return (
@@ -266,12 +311,11 @@ export default function PresentationDetailPage() {
                         处理中
                     </Badge>
                 );
-            case "error":
             case "failed":
                 return (
                     <Badge variant="red" className="bg-red-100 text-red-700 hover:bg-red-100">
                         <AlertCircle className="w-3 h-3 mr-1" />
-                        错误
+                        失败
                     </Badge>
                 );
             default:
@@ -301,10 +345,11 @@ export default function PresentationDetailPage() {
     }
 
     const selectedPageDetail = presentation.pages?.find((page) => page.page_number === selectedPage);
+    const pageCount = presentation.page_count || presentation.total_pages || presentation.pages.length;
+    const statusLabel = getStatusLabel(presentation.status);
 
     return (
         <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-            {/* Header */}
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div className="flex items-center gap-4">
                     <Link href="/admin/presentations">
@@ -318,13 +363,68 @@ export default function PresentationDetailPage() {
                             {getStatusBadge(presentation.status)}
                         </div>
                         <p className="text-slate-500 text-sm mt-1">
-                            {presentation.page_count} 页 · {(presentation.file_size_bytes / 1024 / 1024).toFixed(2)} MB
+                            {pageCount} 页 · {(presentation.file_size_bytes / 1024 / 1024).toFixed(2)} MB
                         </p>
                     </div>
                 </div>
             </div>
 
-            {/* Tabs */}
+            <GlassCard className="p-6 space-y-4">
+                <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
+                    <div className="space-y-3">
+                        <div className="flex flex-wrap items-center gap-2">
+                            <Badge variant="secondary" className="bg-slate-100 text-slate-700">版本 v{presentation.version_number}</Badge>
+                        </div>
+                        <div>
+                            <h2 className="text-lg font-bold text-slate-900">原位替换标准PPT</h2>
+                            <p className="text-sm text-slate-500 mt-1">
+                                使用同一个 presentation_id 替换标准材料；下一次新建演练会读取当前版本的数据。
+                            </p>
+                        </div>
+                        <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
+                            <p className="font-semibold text-slate-900">当前材料状态</p>
+                            <p className="mt-1">版本 v{presentation.version_number} · {statusLabel} · {pageCount} 页</p>
+                        </div>
+                        {presentation.status === "failed" ? (
+                            <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+                                当前版本替换失败，请重新上传修复后的标准PPT，再发起下一次演练。
+                            </div>
+                        ) : null}
+                    </div>
+
+                    <div className="w-full lg:max-w-md space-y-3">
+                        <label className="block space-y-2">
+                            <span className="text-xs font-bold text-slate-500 uppercase tracking-wide">替换文件</span>
+                            <input
+                                aria-label="替换标准PPT文件"
+                                type="file"
+                                accept=".ppt,.pptx"
+                                className="w-full h-11 rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/30 file:mr-4 file:rounded-full file:border-0 file:bg-slate-100 file:px-3 file:py-2 file:text-xs file:font-semibold file:text-slate-700"
+                                onChange={(event) => setReplaceFile(event.target.files?.[0] || null)}
+                            />
+                        </label>
+                        <Button
+                            type="button"
+                            onClick={handleReplacePresentation}
+                            disabled={isReplacing}
+                            className="w-full rounded-full bg-slate-900 text-white"
+                        >
+                            {isReplacing ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <RefreshCw className="w-4 h-4 mr-2" />}
+                            替换标准PPT
+                        </Button>
+                        {replaceError ? (
+                            <div role="alert" className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+                                {replaceError}
+                            </div>
+                        ) : (
+                            <p className="text-xs text-slate-500">
+                                如果存在非终态演练，会明确阻止替换，避免静默覆盖进行中的材料。
+                            </p>
+                        )}
+                    </div>
+                </div>
+            </GlassCard>
+
             <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
                 <TabsList className="bg-slate-100 p-1 rounded-full">
                     <TabsTrigger value="pages" className="rounded-full px-6">
@@ -341,7 +441,6 @@ export default function PresentationDetailPage() {
                     </TabsTrigger>
                 </TabsList>
 
-                {/* Pages Tab */}
                 <TabsContent value="pages" className="space-y-4">
                     <GlassCard className="p-6">
                         <h3 className="text-lg font-bold text-slate-900 mb-4">页面列表</h3>
@@ -392,7 +491,6 @@ export default function PresentationDetailPage() {
                     </GlassCard>
                 </TabsContent>
 
-                {/* Talking Points Tab */}
                 <TabsContent value="talking-points" className="space-y-4">
                     <GlassCard className="p-6">
                         <div className="flex items-center justify-between mb-4">
@@ -410,7 +508,6 @@ export default function PresentationDetailPage() {
                             </select>
                         </div>
 
-                        {/* Add New Point */}
                         <div className="bg-slate-50 rounded-xl p-4 mb-6">
                             <h4 className="text-sm font-bold text-slate-700 mb-3">添加新要点</h4>
                             <div className="flex gap-3">
@@ -436,7 +533,6 @@ export default function PresentationDetailPage() {
                             </div>
                         </div>
 
-                        {/* Points List */}
                         <div className="space-y-3">
                             {talkingPoints.length === 0 ? (
                                 <div className="text-center py-8 text-slate-500">
@@ -478,12 +574,10 @@ export default function PresentationDetailPage() {
                     </GlassCard>
                 </TabsContent>
 
-                {/* Forbidden Words Tab */}
                 <TabsContent value="forbidden-words" className="space-y-4">
                     <GlassCard className="p-6">
                         <h3 className="text-lg font-bold text-slate-900 mb-4">禁忌词配置</h3>
 
-                        {/* Add New Word */}
                         <div className="bg-slate-50 rounded-xl p-4 mb-6">
                             <h4 className="text-sm font-bold text-slate-700 mb-3">添加禁忌词</h4>
                             <div className="flex gap-3">
@@ -516,7 +610,6 @@ export default function PresentationDetailPage() {
                             </div>
                         </div>
 
-                        {/* Words List */}
                         <div className="space-y-3">
                             {forbiddenWords.length === 0 ? (
                                 <div className="text-center py-8 text-slate-500">

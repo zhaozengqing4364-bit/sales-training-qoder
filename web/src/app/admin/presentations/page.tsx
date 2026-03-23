@@ -27,19 +27,19 @@ import Link from "next/link";
 interface PresentationItem {
     presentation_id: string;
     title: string;
-    status: "processing" | "ready" | "error";
+    status: "processing" | "ready" | "failed";
     file_size_bytes: number;
     page_count: number;
     uploaded_by_admin_id: string;
     created_at: string;
 }
 
-type PresentationStatus = "processing" | "ready" | "error";
+type PresentationStatus = "processing" | "ready" | "failed";
 
 const STATUS_OPTIONS: { value: PresentationStatus; label: string; color: string; dotColor: string }[] = [
     { value: "ready", label: "可用", color: "text-emerald-600", dotColor: "bg-emerald-500" },
     { value: "processing", label: "处理中", color: "text-blue-600", dotColor: "bg-blue-500" },
-    { value: "error", label: "错误", color: "text-red-600", dotColor: "bg-red-500" },
+    { value: "failed", label: "失败", color: "text-red-600", dotColor: "bg-red-500" },
 ];
 
 function getStatusStyle(status: string) {

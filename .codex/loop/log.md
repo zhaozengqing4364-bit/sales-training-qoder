@@ -216,3 +216,59 @@ Append one entry per iteration:
   verification results: passed; fresh backend/frontend slice verification succeeded, report-page runtime UAT proved evaluable + not-evaluable first-screen behavior, and admin preview APIs matched the canonical report session ids after upgrading the local DB to Alembic head.
   success signal status: S03 is complete and R005/R006 are now validated; single-session learner/supervisor reads stay on one unified evidence line.
   rollback note: if future work changes single-session reporting again, preserve the explicit no-export-button assertion and keep admin previews sourced from SessionEvidenceService instead of reviving legacy weighting.
+
+
+- time: 2026-03-23T18:16:22+08:00
+  mode: stabilize
+  item id: M001-S04-T02
+  files changed:
+    - backend/src/presentation_coach/api/presentations.py
+    - backend/tests/contract/test_presentations.py
+    - backend/tests/integration/test_presentation_flow.py
+    - web/src/lib/api/client.ts
+    - web/src/app/admin/presentations/[id]/page.tsx
+    - web/src/app/admin/presentations/[id]/page.test.tsx
+    - web/src/app/(dashboard)/agents/[agentId]/page.tsx
+    - web/src/app/(dashboard)/agents/[agentId]/page.test.tsx
+    - web/src/app/admin/presentations/page.tsx
+    - .gsd/DECISIONS.md
+    - .gsd/KNOWLEDGE.md
+    - .gsd/milestones/M001/slices/S04/S04-PLAN.md
+    - .gsd/milestones/M001/slices/S04/tasks/T02-SUMMARY.md
+    - .codex/loop/state.json
+  summary: Added in-place standard PPT replacement on the live presentations API, blocked swaps while active sessions reference the deck, rebuilt page-level coaching metadata for the next session, and surfaced version/status on both admin and learner entry pages.
+  verification commands:
+    - cd backend && pytest tests/integration/test_knowledge_api.py tests/integration/test_knowledge_upload_persistence.py tests/integration/test_knowledge_flow.py
+    - cd backend && pytest tests/contract/test_presentations.py tests/integration/test_presentation_flow.py
+    - cd web && npm test -- --run 'src/app/admin/knowledge/[id]/page.test.tsx' 'src/app/admin/presentations/[id]/page.test.tsx' 'src/app/(dashboard)/agents/[agentId]/page.test.tsx'
+    - local runtime UAT attempt: cd backend && PYTHONPATH=src venv/bin/uvicorn main:app --host 127.0.0.1 --port 3444
+  verification results: all automated S04 slice verification commands passed; local browser/runtime UAT remained blocked because backend startup exits with `redis package is required for SessionStateService` before port 3444 is ready
+  success signal status: admin can replace a standard PPT without changing presentation_id, learner entry shows current version/status, and new presentation sessions read rebuilt page content + rules from the latest version
+  rollback note: if future work revives a dedicated admin presentation API, keep /presentations as the source of truth until the admin surface is schema-aligned and fully verified end-to-end
+
+- time: 2026-03-23T18:51:08+08:00
+  mode: stabilize
+  item id: M001-S04-T02
+  files changed:
+    - backend/src/presentation_coach/api/presentations.py
+    - backend/tests/contract/test_presentations.py
+    - backend/tests/integration/test_presentation_flow.py
+    - web/src/lib/api/client.ts
+    - web/src/app/admin/presentations/[id]/page.tsx
+    - web/src/app/admin/presentations/[id]/page.test.tsx
+    - web/src/app/(dashboard)/agents/[agentId]/page.tsx
+    - web/src/app/(dashboard)/agents/[agentId]/page.test.tsx
+    - .gsd/milestones/M001/slices/S04/S04-PLAN.md
+    - .gsd/milestones/M001/slices/S04/tasks/T02-SUMMARY.md
+    - .codex/loop/state.json
+    - .codex/loop/log.md
+  summary: Recovered the missing T02 task artifact, re-verified the in-place standard PPT replacement feature, proved the live active-session blocker in the browser, and confirmed the user launch flow still carries the stable presentation_id with version/status visibility.
+  verification commands:
+    - cd backend && pytest tests/integration/test_knowledge_api.py tests/integration/test_knowledge_upload_persistence.py tests/integration/test_knowledge_flow.py
+    - cd backend && pytest tests/contract/test_presentations.py tests/integration/test_presentation_flow.py
+    - cd web && npm test -- --run 'src/app/admin/knowledge/[id]/page.test.tsx' 'src/app/admin/presentations/[id]/page.test.tsx' 'src/app/(dashboard)/agents/[agentId]/page.test.tsx'
+    - browser UAT: /admin/presentations/20706b4b-bb22-484a-8f2f-8ecacc43bb3b upload + replace blocker verification
+    - browser UAT: /agents/7199854c-3921-4d9f-9833-fe99ca209c59 version/status selector + new session launch carrying presentation_id=20706b4b-bb22-484a-8f2f-8ecacc43bb3b
+  verification results: passed; automated S04 suites are green, live browser verified the blocker and stable-ID user launch, and the only unresolved destructive live-swap path is intentionally deferred because the ready deck is still referenced by unrelated in-progress sessions while backend integration tests already cover successful replace semantics
+  success signal status: admin sees version/status + replace blocker on the live detail page, and user entry shows the current deck version/status while launching the next presentation practice with the same stable presentation_id
+  rollback note: if later work needs a full browser success-swap UAT, first free or clone a ready presentation deck not referenced by active sessions before rerunning the replace flow
