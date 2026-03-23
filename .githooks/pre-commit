@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+ROOT_DIR="$(git rev-parse --show-toplevel)"
+cd "$ROOT_DIR"
+
+if [ -f ".gsd/completed-units.json" ]; then
+  python3 scripts/normalize_completed_units.py .gsd/completed-units.json
+  git add .gsd/completed-units.json
+fi
+
+python3 scripts/guard_main_branch_slice_writes.py

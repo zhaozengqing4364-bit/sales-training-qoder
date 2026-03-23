@@ -162,6 +162,10 @@ wechat_secrets/
 # Local one-click dev runtime
 .dev/
 
+# Local agent/runtime artifacts
+.bg-shell/
+.artifacts/
+
 # ── GSD baseline (auto-generated) ──
 .gsd/activity/
 .gsd/runtime/

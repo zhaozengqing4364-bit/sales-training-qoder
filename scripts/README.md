@@ -24,6 +24,16 @@ bash scripts/dev-stop.sh
 STOP_INFRA=1 bash scripts/dev-stop.sh
 ```
 
+## 安装仓库级 Git hooks
+
+```bash
+bash scripts/setup-git-hooks.sh
+```
+
+当前会安装 repo 内置 `.githooks/pre-commit`，用于：
+- 把 `.gsd/completed-units.json` 规范化成低冲突的多行 JSON
+- 阻止在默认分支（例如 `001-ai-practice-system` / `main`）直接提交 `.gsd/milestones/*/slices/Sxx/**` slice 文件
+
 ## 常用环境变量
 
 - `BACKEND_PORT` / `FRONTEND_PORT`
