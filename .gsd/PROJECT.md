@@ -18,8 +18,9 @@
 - M001/S02 已完成：逐轮 evidence 与会话级 evaluability / result metadata 已稳定落库，report / replay / history / trends 改为共享 `SessionEvidenceService` 投影，Web 页面也停止本地拼接冲突分数来源。
 - M001/S03 已完成：单次报告首屏现在由 unified evidence 直接给出结论 / 主问题 / 下一轮唯一目标 / 关键证据，主管侧 completed session 预览与 manager-lite drill-in 也统一指向同一 `/practice/{sessionId}/report` 权威页面。
 - M001/S04 已完成：管理员现在可以在知识库详情页自助上传 `xlsx/xls`、重试 failed/pending 文档并运行搜索诊断；新 sales session 会冻结当时的 `knowledge_base_ids` 到 `voice_policy_snapshot`，`/practice/sessions/{id}/knowledge-check` 与 report 能暴露 hit / miss / kb_not_ready / search_failed 证据；标准 PPT 则在 live `/api/v1/presentations` 上支持 stable `presentation_id` 原位替换、`version_number` / `status` 可视化、active-session blocker，以及用户入口对当前版本/状态的展示。
+- M001/S05 已完成：sales StepFun 写入层、persona policy 编译链与 web 消费面现在统一切到“价值表达 / 客户收益连接 / 证据使用 / 异议处理 / 推进下一步”语义；live `score_update`、`ScorePanel`、`/practice/{sessionId}/knowledge-check` 与 canonical `/practice/{sessionId}/report` 会围绕 ROI、价格、竞品、证据追问输出销售主问题、下一轮目标和三类 rollup，而不再沿用旧 generic 沟通标签伪装成销售判断。
 - 本地运行时若要验证 supervisor preview，数据库必须先迁移到 Alembic head（至少包含 `20260317_2310_020`）；否则 admin session preview 读取会因缺少 `conversation_messages.transcript_metadata` 而假性失败。
-- 当前主风险已从“训练材料是否能被后台维护并在下一次训练真实生效”转向：S05 如何把这些最新材料真正转成价值表达 / 异议处理判断基线，以及 S07 如何在最新 PPT 材料之上输出可信的会后统一复盘。
+- 当前主风险已从“训练材料是否能被后台维护并在下一次训练真实生效”转向：S06 如何把这些最新材料真正转成价值表达 / 异议处理判断基线，以及 S07 如何在最新 PPT 材料之上输出可信的会后统一复盘。
 - 真实首发目标已明确：先把桌面端稳定性做满，不在第一阶段绑定移动端 / 企业微信 / 外部系统集成。
 
 ## Architecture / Key Patterns

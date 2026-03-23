@@ -65,7 +65,7 @@ This milestone is complete only when all are true:
 - [x] **S04: 知识库更新即生效链路** `risk:high` `depends:[S01]`
   > After this: 培训负责人 / 管理员更新公司标准 PPT 或产品资料后，下一次新建训练即可使用更新后的内容，并且能看到生效诊断。
 
-- [ ] **S05: 销售价值表达与异议处理基线** `risk:high` `depends:[S02,S04]`
+- [x] **S05: 销售价值表达与异议处理基线** `risk:high` `depends:[S02,S04]`
   > After this: 客户演练不再停留在泛泛闲聊，而是围绕真实产品价值、客户收益、价格 / 竞品 / 证据类追问进行训练和判断。
 
 - [ ] **S06: 连续变化视图（主管判断是否进步）** `risk:medium` `depends:[S02,S03]`

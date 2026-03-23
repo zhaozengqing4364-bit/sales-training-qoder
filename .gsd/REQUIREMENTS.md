@@ -4,17 +4,6 @@ This file is the explicit capability and coverage contract for the project.
 
 ## Active
 
-### R003 — 销售训练需要让学员把公司产品价值点翻译成客户收益，支持真实销售表达，而不是只背公司 PPT 或泛泛陪聊。
-- Class: core-capability
-- Status: active
-- Description: 销售训练需要让学员把公司产品价值点翻译成客户收益，支持真实销售表达，而不是只背公司 PPT 或泛泛陪聊。
-- Why it matters: 用户明确要求训练目标是“讲清价值并处理异议”，不是娱乐性对话；缺少真实价值表达，系统就无法改善销售表现。
-- Source: user
-- Primary owning slice: M001/S05
-- Supporting slices: M001/S04, M001/S07
-- Validation: mapped
-- Notes: 需要和真实产品材料绑定，且训练评价要能区分“背材料”和“讲价值”。
-
 ### R007 — 系统必须让主管看到某人在最近几次训练中的变化趋势，而不是只能看到单次表现。
 - Class: operability
 - Status: active
@@ -104,6 +93,17 @@ This file is the explicit capability and coverage contract for the project.
 - Supporting slices: M001/S08
 - Validation: validated
 - Notes: 需覆盖真实桌面端训练生命周期，不接受只在单元测试层面“看起来可恢复”。
+
+### R003 — 销售训练需要让学员把公司产品价值点翻译成客户收益，支持真实销售表达，而不是只背公司 PPT 或泛泛陪聊。
+- Class: core-capability
+- Status: validated
+- Description: 销售训练需要让学员把公司产品价值点翻译成客户收益，支持真实销售表达，而不是只背公司 PPT 或泛泛陪聊。
+- Why it matters: 用户明确要求训练目标是“讲清价值并处理异议”，不是娱乐性对话；缺少真实价值表达，系统就无法改善销售表现。
+- Source: user
+- Primary owning slice: M001/S05
+- Supporting slices: M001/S04, M001/S07
+- Validation: Validated by S05 slice verification: backend sales baseline/persona/compiler/contract/integration suites passed, web ScorePanel + websocket handler + report focused tests passed, live StepFun sales runtime showed value/price/competitor/evidence prompts driving sales-specific score_update dimensions and knowledge-check queries, and the canonical /practice/{sessionId}/report surfaced sales-specific main_issue, next_goal, pass_flags labels, and value/evidence/objection rollups from the unified evidence contract.
+- Notes: 已证明客户演练会围绕产品价值翻译、客户收益、价格/竞品/证据异议运转；仍依赖 S06/S08 把这套分类继续拉到跨会话趋势与最终发布验收。
 
 ### R004 — 培训负责人或管理员必须能在系统里自己上传、更新、替换公司标准 PPT 与产品资料，且这些材料在下一次新建训练时生效。
 - Class: admin/support
@@ -247,7 +247,7 @@ This file is the explicit capability and coverage contract for the project.
 |---|---|---|---|---|---|
 | R001 | primary-user-loop | validated | M001/S01 | M001/S08 | validated |
 | R002 | failure-visibility | validated | M001/S01 | M001/S08 | validated |
-| R003 | core-capability | active | M001/S05 | M001/S04, M001/S07 | mapped |
+| R003 | core-capability | validated | M001/S05 | M001/S04, M001/S07 | Validated by S05 slice verification: backend sales baseline/persona/compiler/contract/integration suites passed, web ScorePanel + websocket handler + report focused tests passed, live StepFun sales runtime showed value/price/competitor/evidence prompts driving sales-specific score_update dimensions and knowledge-check queries, and the canonical /practice/{sessionId}/report surfaced sales-specific main_issue, next_goal, pass_flags labels, and value/evidence/objection rollups from the unified evidence contract. |
 | R004 | admin/support | validated | M001/S04 | M001/S07 | Validated by S04 slice verification: backend knowledge/presentation integration suites passed, web admin knowledge/admin presentation/agent entry focused tests passed, live runtime/browser checks showed admin knowledge search diagnostics + knowledge-check snapshot fields, and standard PPT replacement exposed stable presentation_id + version/status with explicit 409 active-session blocking while user entry displayed the current deck version/status. |
 | R005 | launchability | validated | M001/S03 | M001/S02, M001/S08 | Validated by S03 slice verification: backend contract/admin integration tests passed, web focused report/admin tests passed, and live runtime report UAT (after alembic head) proved the first screen leads with result, main issue, next goal, and unified evidence without placeholder/export affordances. |
 | R006 | admin/support | validated | M001/S03 | M001/S05, M001/S07 | Validated by S03 slice verification: admin sessions integration contract passed, admin detail + manager-lite focused tests passed, and live runtime admin APIs exposed projection-backed supervisor preview fields and canonical /practice/{sessionId}/report drill-in targets for the same completed sessions. |
@@ -269,7 +269,7 @@ This file is the explicit capability and coverage contract for the project.
 
 ## Coverage Summary
 
-- Active requirements: 7
-- Mapped to slices: 7
-- Validated: 8 (R001, R002, R004, R005, R006, R013, R014, R015)
+- Active requirements: 6
+- Mapped to slices: 6
+- Validated: 9 (R001, R002, R003, R004, R005, R006, R013, R014, R015)
 - Unmapped active requirements: 0

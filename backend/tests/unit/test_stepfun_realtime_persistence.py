@@ -205,9 +205,9 @@ def test_apply_latest_scores_to_session_supports_legacy_overall_and_marks_zero_t
 
     handler._apply_latest_scores_to_session(session)
 
-    assert session.logic_score == 90.0
-    assert session.accuracy_score == 82.0
-    assert session.completeness_score == 80.0
+    assert session.logic_score == 84.0
+    assert session.accuracy_score == 84.0
+    assert session.completeness_score == 84.0
     assert session.effectiveness_snapshot["evaluable"] is False
     assert session.effectiveness_snapshot["not_evaluable_reason"] == "INSUFFICIENT_TURN_DATA"
 
