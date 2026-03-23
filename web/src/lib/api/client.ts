@@ -46,6 +46,9 @@ import {
     HighlightsResponse,
     SessionStats,
     PracticeSessionReport,
+    HistoryListResponse,
+    HistoryStatistics,
+    HistoryTrendPoint,
     KnowledgeCheckDiagnostics,
     OpenAnalyticsDashboard,
     OpenScoreDistribution,
@@ -812,25 +815,7 @@ export const api = {
             if (params?.page_size) queryParams.set("page_size", String(params.page_size));
             if (params?.scenario_type) queryParams.set("scenario_type", params.scenario_type);
 
-            return apiFetch<{
-                sessions: Array<{
-                    session_id: string;
-                    scenario_name: string;
-                    scenario_type: "sales" | "presentation";
-                    persona_name: string | null;
-                    agent_name: string | null;
-                    start_time: string;
-                    duration_seconds: number;
-                    overall_score: number | null;
-                    report_status: "pending" | "processing" | "completed" | "failed";
-                    report_generated_at: string | null;
-                    status: string;
-                }>;
-                total: number;
-                page: number;
-                page_size: number;
-                total_pages: number;
-            }>(`/users/me/history?${queryParams}`);
+            return apiFetch<HistoryListResponse>(`/users/me/history?${queryParams}`);
         },
     },
 
@@ -882,17 +867,11 @@ export const api = {
         },
 
         getHistoryStatistics: async () => {
-            return apiFetch<{
-                total_sessions: number;
-                average_score: number;
-                best_score: number;
-                total_practice_time_seconds: number;
-                total_practice_time_minutes: number;
-            }>("/practice/history/statistics");
+            return apiFetch<HistoryStatistics>("/practice/history/statistics");
         },
 
         getHistoryTrends: async (days = 30) => {
-            const result = await apiFetch<{ trends?: Array<Record<string, unknown>> }>(`/practice/history/trends?days=${days}`);
+            const result = await apiFetch<{ trends?: HistoryTrendPoint[] }>(`/practice/history/trends?days=${days}`);
             return Array.isArray(result?.trends) ? result.trends : [];
         },
 

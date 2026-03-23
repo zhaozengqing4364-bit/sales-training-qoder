@@ -15,7 +15,8 @@
 - 已有训练资产治理骨架：Agent、Persona、知识库、提示词、语音 runtime policy、管理端列表与编辑页面。
 - 已有部分能力模块：模糊词检测、销售阶段识别、实时评分、回放 API、会话状态服务、知识库服务。
 - M001/S01 已完成：销售训练终态现在统一走单一后端 lifecycle 写入口；StepFun runtime 已接回最小可恢复快照与 `reconnected` 协议；训练页只信服务端 lifecycle 事件，并在结束失败时留在训练页暴露 `重试结束` 与 trace 诊断。
-- 当前主风险已从“第二轮就坏 / 结束乱跳 / 重连丢状态”转向“训练事实如何稳定落库并成为报告、回放、趋势的同一事实源”。
+- M001/S02 已完成：逐轮 evidence 与会话级 evaluability / result metadata 已稳定落库，report / replay / history / trends 改为共享 `SessionEvidenceService` 投影，Web 页面也停止本地拼接冲突分数来源。
+- 当前主风险已从“训练事实如何成为同一事实源”转向“如何把统一事实翻译成学员/主管真正可读、可执行的单次报告，以及让最新训练材料在下一次训练真实生效”。
 - 真实首发目标已明确：先把桌面端稳定性做满，不在第一阶段绑定移动端 / 企业微信 / 外部系统集成。
 
 ## Architecture / Key Patterns

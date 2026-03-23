@@ -40,12 +40,30 @@ class ScoreDimensionSchema(BaseModel):
 
 
 class ScoreSnapshotSchema(BaseModel):
-    """Score snapshot at a specific turn - R8"""
-    overall: int = Field(..., ge=0, le=100, description="Overall score 0-100")
+    """Score snapshot at a specific turn - R8."""
+
+    overall: float | None = Field(
+        None,
+        ge=0,
+        le=100,
+        description="Legacy overall score 0-100",
+    )
+    overall_score: float | None = Field(
+        None,
+        ge=0,
+        le=100,
+        description="Canonical overall score 0-100",
+    )
     dimensions: list[ScoreDimensionSchema] = Field(
         default_factory=list,
-        description="Dimension scores"
+        description="Legacy dimension scores",
     )
+    dimension_scores: dict[str, float] | None = Field(
+        default=None,
+        description="Canonical dimension score mapping",
+    )
+    stage_name: str | None = Field(None, description="Stage label for this score snapshot")
+    suggestions: list[str] = Field(default_factory=list, description="Optional score suggestions")
 
 
 class TimelineMarkerSchema(BaseModel):
@@ -196,6 +214,22 @@ class ReplayDataResponse(BaseModel):
         description="Session voice policy baseline reference",
     )
     total_duration_ms: int = Field(..., ge=0, description="Total duration in milliseconds")
+    overall_score: float = Field(..., ge=0, le=100, description="Normalized session overall score")
+    effectiveness_snapshot: dict[str, Any] | None = Field(
+        None,
+        description="Normalized session effectiveness snapshot",
+    )
+    pass_flags: dict[str, bool] | None = Field(None, description="Session pass/fail flags")
+    main_capability_passed: bool | None = Field(None, description="Whether the main capability passed")
+    overall_result: str | None = Field(None, description="Overall result bucket")
+    main_issue: dict[str, Any] | None = Field(None, description="Primary issue surfaced from session evidence")
+    next_goal: dict[str, Any] | None = Field(None, description="Next goal surfaced from session evidence")
+    evaluable: bool | None = Field(None, description="Whether the session evidence is evaluable")
+    not_evaluable_reason: str | None = Field(None, description="Reason when evaluable is false")
+    evidence_completeness: dict[str, Any] | None = Field(
+        None,
+        description="Projection completeness diagnostics",
+    )
     messages: list[ConversationMessageResponse] = Field(
         ...,
         description="All conversation messages"

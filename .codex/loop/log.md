@@ -58,3 +58,139 @@ Append one entry per iteration:
   verification results: passed
   success signal status: training-page end failures are no longer masked by report redirects, and lifecycle UI state is driven by server events instead of optimistic local writes
   rollback note: revert the T03 frontend lifecycle changes together if future work redefines websocket lifecycle contracts; keep D011 unless a new server-authoritative contract replaces it
+
+- time: 2026-03-23T04:32:58+08:00
+  mode: stabilize
+  item id: M001-S02-T01
+  files changed:
+    - backend/src/sales_bot/websocket/components/stepfun_message_helpers.py
+    - backend/src/sales_bot/websocket/components/message_persistence.py
+    - backend/src/sales_bot/websocket/stepfun_realtime_handler.py
+    - backend/src/common/api/practice.py
+    - backend/tests/unit/test_stepfun_message_helpers.py
+    - backend/tests/unit/test_stepfun_realtime_persistence.py
+    - backend/tests/unit/test_sales_message_persistence.py
+    - .gsd/DECISIONS.md
+    - .gsd/completed-units.json
+    - .gsd/milestones/M001/slices/S02/S02-PLAN.md
+    - .gsd/milestones/M001/slices/S02/tasks/T01-SUMMARY.md
+    - .gsd/STATE.md
+    - .codex/loop/state.json
+    - .codex/loop/log.md
+  summary: Stabilized StepFun sales evidence writes around canonical overall_score payloads, synced terminal session scores from runtime/message evidence, and turned zero-turn or thin-evidence endings into explicit not-evaluable facts instead of summary-failure terminal semantics.
+  verification commands:
+    - cd backend && pytest tests/unit/test_stepfun_message_helpers.py -k patch_existing_message_analysis_returns_true_on_success -vv
+    - cd backend && pytest tests/unit/test_stepfun_message_helpers.py tests/unit/test_stepfun_realtime_persistence.py tests/unit/test_sales_message_persistence.py
+    - cd backend && pytest tests/unit/test_session_evidence_service.py tests/unit/test_replay_service.py tests/contract/test_practice_evidence_contract.py tests/integration/test_practice_evidence_flow.py
+    - cd backend && pytest tests/unit/test_history_service_evidence_projection.py tests/unit/common/test_analytics_api_normalization.py tests/integration/test_history_evidence_flow.py
+    - cd web && npm test -- --run 'src/app/(user)/practice/[sessionId]/report/page.test.tsx' 'src/app/(user)/practice/[sessionId]/replay/page.test.tsx' 'src/app/(dashboard)/history/page.test.tsx'
+  verification results: focused T01 backend pytest passed; downstream slice verification commands for T02/T03/T04 currently fail because the referenced test files do not exist yet
+  success signal status: StepFun sales sessions now persist canonical turn/session evidence and explicitly expose INSUFFICIENT_TURN_DATA instead of collapsing thin-evidence terminal paths into [SUMMARY_GENERATION_FAILED]
+  rollback note: revert the T01 StepFun evidence normalization and terminal insufficiency handling together if a future slice replaces the persistence contract; keep D013 unless a broader evidence projection contract supersedes it
+
+- time: 2026-03-23T04:54:55+08:00
+  mode: stabilize
+  item id: M001-S02-T02
+  files changed:
+    - backend/src/common/conversation/session_evidence.py
+    - backend/src/common/conversation/replay.py
+    - backend/src/common/api/practice.py
+    - backend/src/common/conversation/schemas.py
+    - backend/src/common/db/schemas.py
+    - backend/tests/unit/test_session_evidence_service.py
+    - backend/tests/unit/test_replay_service.py
+    - backend/tests/contract/test_practice_evidence_contract.py
+    - backend/tests/integration/test_practice_evidence_flow.py
+    - .gsd/DECISIONS.md
+    - .gsd/milestones/M001/slices/S02/S02-PLAN.md
+    - .gsd/milestones/M001/slices/S02/tasks/T02-SUMMARY.md
+    - .gsd/STATE.md
+    - .codex/loop/state.json
+    - .codex/loop/log.md
+  summary: Added a shared SessionEvidenceService that projects one normalized session evidence view, then switched quick report and replay to read that same projection with aligned overall/evaluable/stage facts and completeness diagnostics.
+  verification commands:
+    - cd backend && pytest tests/unit/test_stepfun_message_helpers.py tests/unit/test_stepfun_realtime_persistence.py tests/unit/test_sales_message_persistence.py
+    - cd backend && pytest tests/unit/test_session_evidence_service.py tests/unit/test_replay_service.py tests/contract/test_practice_evidence_contract.py tests/integration/test_practice_evidence_flow.py
+    - cd backend && pytest tests/unit/test_history_service_evidence_projection.py tests/unit/common/test_analytics_api_normalization.py tests/integration/test_history_evidence_flow.py
+    - cd web && npm test -- --run 'src/app/(user)/practice/[sessionId]/report/page.test.tsx' 'src/app/(user)/practice/[sessionId]/replay/page.test.tsx' 'src/app/(dashboard)/history/page.test.tsx'
+  verification results: T01 backend regression suite passed; T02 focused backend suite passed; T03 backend verification still fails because the referenced history projection tests do not exist yet; T04 web verification still fails because the referenced page tests do not exist yet
+  success signal status: report and replay now return the same overall score, stage summary, main issue / next goal, evaluable flag, not_evaluable_reason, and completeness diagnostics for the same completed session
+  rollback note: revert SessionEvidenceService and the report/replay schema wiring together if downstream slices replace the reader contract; keep D014 unless a versioned projection contract supersedes it
+
+- time: 2026-03-23T08:25:48+08:00
+  mode: stabilize
+  item id: M001-S02-T03
+  files changed:
+    - backend/src/common/analytics/history_service.py
+    - backend/src/common/api/users.py
+    - backend/src/common/api/analytics.py
+    - backend/tests/unit/test_history_service_evidence_projection.py
+    - backend/tests/unit/common/test_analytics_api_normalization.py
+    - backend/tests/integration/test_history_evidence_flow.py
+    - .gsd/DECISIONS.md
+    - .gsd/milestones/M001/slices/S02/S02-PLAN.md
+    - .gsd/milestones/M001/slices/S02/tasks/T03-SUMMARY.md
+    - .gsd/STATE.md
+    - .codex/loop/state.json
+    - .codex/loop/log.md
+  summary: Reworked history/statistics/trends to batch-project completed sessions through the shared session evidence reader, aligned alias filtering and evaluability metadata, and removed dependence on ComprehensiveReport plus the old weighted overall formula.
+  verification commands:
+    - cd backend && pytest tests/unit/test_stepfun_message_helpers.py tests/unit/test_stepfun_realtime_persistence.py tests/unit/test_sales_message_persistence.py
+    - cd backend && pytest tests/unit/test_session_evidence_service.py tests/unit/test_replay_service.py tests/contract/test_practice_evidence_contract.py tests/integration/test_practice_evidence_flow.py
+    - cd backend && pytest tests/unit/test_history_service_evidence_projection.py tests/unit/common/test_analytics_api_normalization.py tests/integration/test_history_evidence_flow.py
+    - cd web && npm test -- --run 'src/app/(user)/practice/[sessionId]/report/page.test.tsx' 'src/app/(user)/practice/[sessionId]/replay/page.test.tsx' 'src/app/(dashboard)/history/page.test.tsx'
+  verification results: all backend slice verification commands passed; the web slice command still fails with `No test files found` because T04's page tests do not exist yet
+  success signal status: users/me/history, analytics/practice/history, practice/history/statistics, and practice/history/trends now return projection-backed overall/evaluable semantics that match report/replay for the same completed sessions
+  rollback note: revert the HistoryService/API wiring together if a later slice replaces the history aggregation contract; keep D015 unless a new explicit non-evaluable trend contract supersedes it
+
+- time: 2026-03-23T09:34:11+08:00
+  mode: stabilize
+  item id: M001-S02-T04
+  files changed:
+    - web/src/lib/api/types.ts
+    - web/src/app/(user)/practice/[sessionId]/report/page.tsx
+    - web/src/app/(user)/practice/[sessionId]/replay/page.tsx
+    - web/src/app/(dashboard)/history/page.tsx
+    - web/src/app/(user)/practice/[sessionId]/report/page.test.tsx
+    - web/src/app/(user)/practice/[sessionId]/replay/page.test.tsx
+    - web/src/app/(dashboard)/history/page.test.tsx
+    - .gsd/DECISIONS.md
+    - .gsd/milestones/M001/slices/S02/S02-PLAN.md
+    - .gsd/milestones/M001/slices/S02/tasks/T04-SUMMARY.md
+    - .gsd/STATE.md
+    - .codex/loop/state.json
+    - .codex/loop/log.md
+  summary: Finalized the web consumer closure so report/replay/history all trust the unified evidence contract, keep comprehensive report/highlights optional, and expose explicit degraded states instead of stitching conflicting scores.
+  verification commands:
+    - cd backend && pytest tests/unit/test_stepfun_message_helpers.py tests/unit/test_stepfun_realtime_persistence.py tests/unit/test_sales_message_persistence.py
+    - cd backend && pytest tests/unit/test_session_evidence_service.py tests/unit/test_replay_service.py tests/contract/test_practice_evidence_contract.py tests/integration/test_practice_evidence_flow.py
+    - cd backend && pytest tests/unit/test_history_service_evidence_projection.py tests/unit/common/test_analytics_api_normalization.py tests/integration/test_history_evidence_flow.py
+    - cd web && npm test -- --run 'src/app/(user)/practice/[sessionId]/report/page.test.tsx' 'src/app/(user)/practice/[sessionId]/replay/page.test.tsx' 'src/app/(dashboard)/history/page.test.tsx'
+    - browser verification: dev-login -> /history asserted heading plus explicit `统一训练证据加载失败` / `重试` UI while local backend returned a schema-drift 500 for missing `conversation_messages.transcript_metadata`
+  verification results: all slice verification commands passed; browser verification confirmed the page-level unified-evidence failure surface stays explicit instead of collapsing to a blank/generic state
+  success signal status: web report/replay/history consumers now share one baseline fact source and preserve clear degraded states when enhanced content or analytics snapshots are missing
+  rollback note: revert the T04 web consumer changes together if a later contract version replaces the unified evidence fields; keep D016 unless a new single-source frontend contract supersedes it
+
+- time: 2026-03-23T09:45:31+08:00
+  mode: stabilize
+  item id: M001-S02
+  files changed:
+    - .gsd/milestones/M001/slices/S02/S02-SUMMARY.md
+    - .gsd/milestones/M001/slices/S02/S02-UAT.md
+    - .gsd/milestones/M001/M001-ROADMAP.md
+    - .gsd/REQUIREMENTS.md
+    - .gsd/PROJECT.md
+    - .gsd/STATE.md
+    - .gsd/completed-units.json
+    - .codex/loop/state.json
+    - .codex/loop/log.md
+  summary: Completed slice S02 by verifying the crash-written task artifacts, writing the slice summary/UAT, marking the roadmap done, and recording that unified session evidence now underpins report/replay/history/trends for downstream slices.
+  verification commands:
+    - reused previously passed slice verification set recorded during T04 before the crash:
+      - cd backend && pytest tests/unit/test_stepfun_message_helpers.py tests/unit/test_stepfun_realtime_persistence.py tests/unit/test_sales_message_persistence.py
+      - cd backend && pytest tests/unit/test_session_evidence_service.py tests/unit/test_replay_service.py tests/contract/test_practice_evidence_contract.py tests/integration/test_practice_evidence_flow.py
+      - cd backend && pytest tests/unit/test_history_service_evidence_projection.py tests/unit/common/test_analytics_api_normalization.py tests/integration/test_history_evidence_flow.py
+      - cd web && npm test -- --run 'src/app/(user)/practice/[sessionId]/report/page.test.tsx' 'src/app/(user)/practice/[sessionId]/replay/page.test.tsx' 'src/app/(dashboard)/history/page.test.tsx'
+  verification results: no rerun during crash recovery per resume instructions; the previously completed slice verification set already passed, and the recorded browser diagnostics already proved the unified-evidence failure surface on /history stays explicit under local DB schema drift
+  success signal status: S02 is now marked complete in roadmap/state artifacts and the project requirement notes explicitly capture that report/replay/history/trends share one evidence baseline for downstream work
+  rollback note: if a later slice versions the evidence contract again, update the slice summary/UAT, roadmap, requirements notes, and loop state together so downstream planning does not drift from filesystem truth

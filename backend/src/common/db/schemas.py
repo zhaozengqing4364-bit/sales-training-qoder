@@ -293,6 +293,10 @@ class SessionReport(BaseModel):
     overall_result: Literal["pass", "strong_pass", "fail"] | None = None
     main_issue: dict[str, Any] | None = None
     next_goal: dict[str, Any] | None = None
+    stage_summary: list[dict[str, Any]] = Field(default_factory=list)
+    evaluable: bool | None = None
+    not_evaluable_reason: str | None = None
+    evidence_completeness: dict[str, Any] | None = None
     retry_entry: dict[str, Any] | None = None
 
 

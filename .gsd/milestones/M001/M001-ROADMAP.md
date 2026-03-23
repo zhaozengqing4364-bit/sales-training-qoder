@@ -56,7 +56,7 @@ This milestone is complete only when all are true:
 - [x] **S01: 多轮会话稳定化与运行时状态收口** `risk:high` `depends:[]`
   > After this: 桌面端客户演练可以稳定完成多轮来回，不再出现第二轮就坏、结束流程混乱、状态丢失等核心问题。
 
-- [ ] **S02: 训练证据落库与报告事实源统一** `risk:high` `depends:[S01]`
+- [x] **S02: 训练证据落库与报告事实源统一** `risk:high` `depends:[S01]`
   > After this: 一次训练的转写、阶段、评分、模糊表达、关键异议等事实能被一致落库，报告与回放引用同一事实源。
 
 - [ ] **S03: 单次报告可读化（学员 + 主管）** `risk:medium` `depends:[S02]`

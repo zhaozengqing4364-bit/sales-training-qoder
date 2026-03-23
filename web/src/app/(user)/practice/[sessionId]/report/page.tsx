@@ -1,19 +1,35 @@
 "use client";
 
-/**
- * Comprehensive Report Display Page (C7)
- */
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useParams, useRouter } from "next/navigation";
+import {
+    AlertTriangle,
+    ArrowLeft,
+    CheckCircle,
+    Download,
+    Home,
+    Lightbulb,
+    Sparkles,
+    Target,
+} from "lucide-react";
 
-import { useCallback, useEffect, useState } from "react";
-import { useRouter, useParams } from "next/navigation";
-import { ArrowLeft, CheckCircle, AlertTriangle, Lightbulb, Target, Download, Home, Sparkles } from "lucide-react";
+import { HighlightList } from "@/components/highlights";
 import { Button } from "@/components/ui/button";
 import { GlassCard } from "@/components/ui/glass-card";
 import { StatusIndicator } from "@/components/ui/status-indicator";
-import { HighlightList } from "@/components/highlights";
 import { api, ApiRequestError, getApiErrorMessage } from "@/lib/api/client";
-import { ComprehensiveReport, KnowledgeCheckDiagnostics, HighlightsResponse, PracticeSessionReport } from "@/lib/api/types";
+import {
+    ComprehensiveReport,
+    HighlightsResponse,
+    KnowledgeCheckDiagnostics,
+    PracticeSessionReport,
+} from "@/lib/api/types";
 import { debug } from "@/lib/debug";
+import {
+    formatEvidenceCompletenessNote,
+    formatNotEvaluableReason,
+    formatSessionStageLabel,
+} from "@/lib/session-evidence";
 import { cn } from "@/lib/utils";
 
 function formatSnapshotTime(value?: string | null): string {
@@ -29,128 +45,158 @@ function formatSnapshotTime(value?: string | null): string {
     });
 }
 
+function getScoreColor(score: number): string {
+    if (score >= 80) return "text-green-600";
+    if (score >= 60) return "text-yellow-600";
+    return "text-red-600";
+}
+
+function getScoreLabel(score: number): string {
+    if (score >= 90) return "优秀";
+    if (score >= 80) return "良好";
+    if (score >= 60) return "及格";
+    return "待改进";
+}
+
+function buildDimensionScores(report: PracticeSessionReport) {
+    return [
+        {
+            name: "逻辑性",
+            score: report.logic_score,
+            description: "结构化表达与论证清晰度",
+        },
+        {
+            name: "准确性",
+            score: report.accuracy_score,
+            description: "信息准确与事实一致性",
+        },
+        {
+            name: "完整性",
+            score: report.completeness_score,
+            description: "要点覆盖与回答完整性",
+        },
+    ];
+}
+
+function isReportNotFound(error: unknown): boolean {
+    if (error instanceof ApiRequestError) {
+        return error.status === 404
+            || error.errorCode === "[REPORT_NOT_FOUND]"
+            || error.errorCode === "[SESSION_NOT_FOUND]";
+    }
+
+    return error instanceof Error && /404|not found/i.test(error.message);
+}
+
+function hasEnhancedInsights(report: ComprehensiveReport | null): boolean {
+    if (!report) {
+        return false;
+    }
+
+    return Boolean(
+        report.key_strengths.length
+        || report.key_improvements.length
+        || report.recommendations.length
+        || report.detailed_feedback?.trim(),
+    );
+}
+
 export default function ComprehensiveReportPage() {
     const router = useRouter();
     const params = useParams();
     const sessionId = params.sessionId as string;
+
     const [loading, setLoading] = useState(true);
-    const [report, setReport] = useState<ComprehensiveReport | null>(null);
+    const [report, setReport] = useState<PracticeSessionReport | null>(null);
+    const [enhancedReport, setEnhancedReport] = useState<ComprehensiveReport | null>(null);
+    const [enhancedUnavailableHint, setEnhancedUnavailableHint] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [knowledgeCheck, setKnowledgeCheck] = useState<KnowledgeCheckDiagnostics | null>(null);
     const [highlightsData, setHighlightsData] = useState<HighlightsResponse | null>(null);
     const [highlightsLoading, setHighlightsLoading] = useState(false);
-    const [quickLoopData, setQuickLoopData] = useState<PracticeSessionReport | null>(null);
+    const [highlightsUnavailableHint, setHighlightsUnavailableHint] = useState<string | null>(null);
     const [retryHint, setRetryHint] = useState<string | null>(null);
-    const retryEntry = quickLoopData?.retry_entry;
-    const retryBlockedHint = (
-        retryEntry?.scenario_type === "sales"
-        && (!retryEntry.agent_id || !retryEntry.persona_id)
-    )
-        ? "当前销售会话缺少角色配置，请在训练页重新选择智能体与角色。"
-        : (
-            retryEntry?.scenario_type === "presentation"
-            && !retryEntry.presentation_id
-        )
-            ? "当前演讲会话缺少课件配置，请返回训练页重新选择演示文稿。"
-            : null;
 
-    const loadReport = useCallback(async () => {
-        const loadQuickReportFallback = async () => {
-            const quickReport = await api.sessions.getReport(sessionId);
-            setReport({
-                session_id: quickReport.session_id,
-                generated_at: new Date().toISOString(),
-                overall_score: quickReport.overall_score,
-                dimension_scores: [
-                    {
-                        name: "逻辑性",
-                        score: quickReport.logic_score,
-                        weight: 0.34,
-                        description: "结构化表达与论证清晰度",
-                    },
-                    {
-                        name: "准确性",
-                        score: quickReport.accuracy_score,
-                        weight: 0.33,
-                        description: "信息准确与事实一致性",
-                    },
-                    {
-                        name: "完整性",
-                        score: quickReport.completeness_score,
-                        weight: 0.33,
-                        description: "要点覆盖与回答完整性",
-                    },
-                ],
-                stage_summaries: [],
-                key_strengths: [],
-                key_improvements: [],
-                detailed_feedback: "",
-                recommendations: quickReport.suggestions || [],
-                voice_policy_snapshot_ref: quickReport.voice_policy_snapshot_ref,
-            });
-        };
+    const loadUnifiedEvidence = useCallback(async () => {
+        setLoading(true);
+        setError(null);
 
         try {
-            // 优先走综合评测报告，失败时再回退到基础报告。
-            const data = await api.admin.getComprehensiveReport(sessionId);
+            const data = await api.sessions.getReport(sessionId);
             setReport(data);
-            debug.log("[Report] Loaded comprehensive report", {
+            debug.log("[Report] Loaded unified evidence contract", {
                 sessionId,
                 overallScore: data.overall_score,
+                evaluable: data.evaluable,
+                notEvaluableReason: data.not_evaluable_reason,
+                evidenceComplete: data.evidence_completeness?.complete,
             });
         } catch (err) {
-            const isNotFound = err instanceof ApiRequestError
-                ? err.errorCode === "[REPORT_NOT_FOUND]" || err.errorCode === "[SESSION_NOT_FOUND]" || err.status === 404
-                : (err instanceof Error && /404|not found/i.test(err.message));
-            if (isNotFound) {
-                try {
-                    const generated = await api.admin.generateComprehensiveReport(sessionId);
-                    setReport(generated);
-                    debug.log("[Report] Generated comprehensive report on demand", {
-                        sessionId,
-                        overallScore: generated.overall_score,
-                    });
-                } catch {
-                    try {
-                        await loadQuickReportFallback();
-                        debug.warn("[Report] Fallback to quick report after generate failure", { sessionId });
-                    } catch (quickErr) {
-                        setError(getApiErrorMessage(quickErr));
-                    }
-                }
-            } else {
-                try {
-                    await loadQuickReportFallback();
-                    debug.warn("[Report] Fallback to quick report", { sessionId });
-                } catch (quickErr) {
-                    setError(getApiErrorMessage(quickErr) || getApiErrorMessage(err));
-                }
-            }
+            setReport(null);
+            setError(`统一训练证据加载失败：${getApiErrorMessage(err)}`);
+            debug.error("[Report] Unified evidence contract load failed", {
+                sessionId,
+                error: err,
+            });
         } finally {
             setLoading(false);
         }
     }, [sessionId]);
 
     useEffect(() => {
-        loadReport();
-    }, [loadReport]);
+        void loadUnifiedEvidence();
+    }, [loadUnifiedEvidence]);
 
     useEffect(() => {
         let cancelled = false;
-        api.sessions
-            .getReport(sessionId)
-            .then((data) => {
-                if (!cancelled) {
-                    setQuickLoopData(data);
-                    setRetryHint(null);
+
+        const loadEnhancedInsights = async () => {
+            setEnhancedReport(null);
+            setEnhancedUnavailableHint(null);
+
+            try {
+                const data = await api.admin.getComprehensiveReport(sessionId);
+                if (cancelled) return;
+                setEnhancedReport(data);
+                debug.log("[Report] Loaded enhanced report", {
+                    sessionId,
+                    hasInsights: hasEnhancedInsights(data),
+                });
+                return;
+            } catch (error) {
+                if (!isReportNotFound(error)) {
+                    if (!cancelled) {
+                        setEnhancedUnavailableHint("综合洞察暂不可用，当前页面仅展示统一训练证据。");
+                        debug.warn("[Report] Enhanced report unavailable; keeping unified evidence", {
+                            sessionId,
+                            source: "load",
+                            error,
+                        });
+                    }
+                    return;
                 }
-            })
-            .catch(() => {
-                if (!cancelled) {
-                    setQuickLoopData(null);
-                    setRetryHint(null);
-                }
-            });
+            }
+
+            try {
+                const generated = await api.admin.generateComprehensiveReport(sessionId);
+                if (cancelled) return;
+                setEnhancedReport(generated);
+                debug.log("[Report] Generated enhanced report on demand", {
+                    sessionId,
+                    hasInsights: hasEnhancedInsights(generated),
+                });
+            } catch (error) {
+                if (cancelled) return;
+                setEnhancedUnavailableHint("综合洞察暂不可用，当前页面仅展示统一训练证据。");
+                debug.warn("[Report] Enhanced report unavailable after generate attempt", {
+                    sessionId,
+                    source: "generate",
+                    error,
+                });
+            }
+        };
+
+        void loadEnhancedInsights();
 
         return () => {
             cancelled = true;
@@ -160,30 +206,26 @@ export default function ComprehensiveReportPage() {
     useEffect(() => {
         let cancelled = false;
 
-        api.sessions.getKnowledgeCheck(sessionId)
+        api.sessions
+            .getKnowledgeCheck(sessionId)
             .then((data) => {
-                if (!cancelled) {
-                    setKnowledgeCheck(data);
-                    debug.log("[Report] Knowledge-check", {
-                        sessionId,
-                        status: data.status,
-                        summary: data.summary,
-                        attemptCount: data.attempt_count,
-                        hitRate: data.hit_rate,
-                        kbCount: data.knowledge_base_count,
-                        lastStatus: data.last_status,
-                        lastResultCount: data.last_result_count,
-                    });
-                }
+                if (cancelled) return;
+                setKnowledgeCheck(data);
+                debug.log("[Report] Knowledge-check", {
+                    sessionId,
+                    status: data.status,
+                    summary: data.summary,
+                    attemptCount: data.attempt_count,
+                    hitRate: data.hit_rate,
+                });
             })
             .catch((err) => {
-                if (!cancelled) {
-                    setKnowledgeCheck(null);
-                    debug.warn("[Report] Knowledge-check load failed", {
-                        sessionId,
-                        error: err,
-                    });
-                }
+                if (cancelled) return;
+                setKnowledgeCheck(null);
+                debug.warn("[Report] Knowledge-check load failed", {
+                    sessionId,
+                    error: err,
+                });
             });
 
         return () => {
@@ -193,18 +235,26 @@ export default function ComprehensiveReportPage() {
 
     useEffect(() => {
         let cancelled = false;
-
         setHighlightsLoading(true);
+        setHighlightsUnavailableHint(null);
+
         api.sessions.getHighlights(sessionId)
             .then((data) => {
-                if (!cancelled) {
-                    setHighlightsData(data);
-                }
+                if (cancelled) return;
+                setHighlightsData(data);
+                debug.log("[Report] Highlights loaded", {
+                    sessionId,
+                    highlightCount: data.highlights.length,
+                });
             })
-            .catch(() => {
-                if (!cancelled) {
-                    setHighlightsData(null);
-                }
+            .catch((err) => {
+                if (cancelled) return;
+                setHighlightsData(null);
+                setHighlightsUnavailableHint("高光片段暂不可用，基础评估结果不受影响。");
+                debug.warn("[Report] Highlights unavailable; keeping unified evidence", {
+                    sessionId,
+                    error: err,
+                });
             })
             .finally(() => {
                 if (!cancelled) {
@@ -217,6 +267,19 @@ export default function ComprehensiveReportPage() {
         };
     }, [sessionId]);
 
+    const retryEntry = report?.retry_entry;
+    const retryBlockedHint = (
+        retryEntry?.scenario_type === "sales"
+        && (!retryEntry.agent_id || !retryEntry.persona_id)
+    )
+        ? "当前销售会话缺少角色配置，请在训练页重新选择智能体与角色。"
+        : (
+            retryEntry?.scenario_type === "presentation"
+            && !retryEntry.presentation_id
+        )
+            ? "当前演讲会话缺少课件配置，请返回训练页重新选择演示文稿。"
+            : null;
+
     const goHome = () => {
         router.push("/");
     };
@@ -224,14 +287,17 @@ export default function ComprehensiveReportPage() {
     const handleRetryFromGoal = async () => {
         const retry = retryEntry;
         setRetryHint(null);
+
         if (retryBlockedHint) {
             setRetryHint(retryBlockedHint);
             return;
         }
+
         if (!retry?.scenario_type) {
             setRetryHint("当前报告缺少再练配置，请先返回训练页重新创建会话。");
             return;
         }
+
         if (
             retry.scenario_type === "sales"
             && (!retry.agent_id || !retry.persona_id)
@@ -251,37 +317,22 @@ export default function ComprehensiveReportPage() {
             nextParams.set("scenario_type", retry.scenario_type);
             if (retry.agent_id) nextParams.set("agent_id", retry.agent_id);
             if (retry.persona_id) nextParams.set("persona_id", retry.persona_id);
-            if (retry.presentation_id) {
-                nextParams.set("presentation_id", retry.presentation_id);
-            }
+            if (retry.presentation_id) nextParams.set("presentation_id", retry.presentation_id);
             router.push(`/practice/${created.session_id}?${nextParams.toString()}`);
         } catch (err) {
-            debug.warn("[Report] Retry session creation failed", { sessionId, err });
+            debug.warn("[Report] Retry session creation failed", { sessionId, error: err });
             setRetryHint(getApiErrorMessage(err));
         }
     };
 
-    if (loading) {
-        return (
-            <div className="container mx-auto px-4 py-12 text-center">
-                <StatusIndicator status="loading" />
-                <p className="mt-4 text-zinc-500">加载报告中...</p>
-            </div>
-        );
-    }
+    const dimensionScores = useMemo(
+        () => (report ? buildDimensionScores(report) : []),
+        [report],
+    );
 
-    if (error || !report) {
-        return (
-            <div className="container mx-auto px-4 py-12 text-center">
-                <AlertTriangle className="w-12 h-12 text-amber-500 mx-auto mb-4" />
-                <p className="text-zinc-600">{error || "报告不存在"}</p>
-                <Button variant="outline" onClick={goHome} className="mt-4">返回首页</Button>
-            </div>
-        );
-    }
-
-    const getScoreColor = (score: number) => score >= 80 ? "text-green-600" : score >= 60 ? "text-yellow-600" : "text-red-600";
-    const overallResult = quickLoopData?.overall_result || null;
+    const evidenceCompletenessNote = formatEvidenceCompletenessNote(report?.evidence_completeness);
+    const notEvaluableReasonText = formatNotEvaluableReason(report?.not_evaluable_reason);
+    const overallResult = report?.overall_result || null;
     const overallResultLabel = overallResult === "strong_pass"
         ? "Strong Pass"
         : overallResult === "pass"
@@ -300,11 +351,30 @@ export default function ComprehensiveReportPage() {
         ? "text-green-700 bg-green-50 border-green-200"
         : knowledgeCheck?.status === "kb_not_ready"
             ? "text-amber-700 bg-amber-50 border-amber-200"
-        : knowledgeCheck?.status === "miss"
-            ? "text-amber-700 bg-amber-50 border-amber-200"
-            : knowledgeCheck?.status === "disabled" || knowledgeCheck?.status === "no_knowledge_base"
-                ? "text-red-700 bg-red-50 border-red-200"
-                : "text-slate-700 bg-slate-50 border-slate-200";
+            : knowledgeCheck?.status === "miss"
+                ? "text-amber-700 bg-amber-50 border-amber-200"
+                : knowledgeCheck?.status === "disabled" || knowledgeCheck?.status === "no_knowledge_base"
+                    ? "text-red-700 bg-red-50 border-red-200"
+                    : "text-slate-700 bg-slate-50 border-slate-200";
+
+    if (loading) {
+        return (
+            <div className="container mx-auto px-4 py-12 text-center">
+                <StatusIndicator status="loading" />
+                <p className="mt-4 text-zinc-500">加载统一训练证据中...</p>
+            </div>
+        );
+    }
+
+    if (error || !report) {
+        return (
+            <div className="container mx-auto px-4 py-12 text-center">
+                <AlertTriangle className="w-12 h-12 text-amber-500 mx-auto mb-4" />
+                <p className="text-zinc-600">{error || "统一训练证据不存在"}</p>
+                <Button variant="outline" onClick={goHome} className="mt-4">返回首页</Button>
+            </div>
+        );
+    }
 
     return (
         <div className="container mx-auto px-4 py-6 max-w-5xl">
@@ -325,16 +395,43 @@ export default function ComprehensiveReportPage() {
             <GlassCard className="p-6 mb-6">
                 <div className="text-center">
                     <div className="inline-flex items-center justify-center w-24 h-24 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 text-white mb-4">
-                        <span className="text-3xl font-bold">{report.overall_score.toFixed(0)}</span>
+                        <span data-testid="report-overall-score" className="text-3xl font-bold">
+                            {report.overall_score.toFixed(0)}
+                        </span>
                     </div>
-                    <h1 className="text-2xl font-bold text-zinc-900 mb-2">综合评估报告</h1>
+                    <h1 className="text-2xl font-bold text-zinc-900 mb-2">训练评估报告</h1>
                     <p className={cn("text-lg font-medium", getScoreColor(report.overall_score))}>
-                        {report.overall_score >= 90 ? "优秀" : report.overall_score >= 80 ? "良好" : report.overall_score >= 60 ? "及格" : "待改进"}
+                        {getScoreLabel(report.overall_score)}
+                    </p>
+                    <p className="text-xs text-zinc-500 mt-2">
+                        Top-line 评分与阶段事实均来自统一训练证据 contract。
                     </p>
                 </div>
             </GlassCard>
 
-            {(quickLoopData?.overall_result || quickLoopData?.main_issue) && (
+            {report.evaluable === false && (
+                <GlassCard className="p-6 mb-6 border border-amber-200 bg-amber-50/80">
+                    <h2 className="text-lg font-semibold text-amber-900 mb-2">当前会话暂不可评估</h2>
+                    <p className="text-sm text-amber-800">{notEvaluableReasonText}</p>
+                    {evidenceCompletenessNote && (
+                        <p className="text-xs text-amber-700 mt-2">{evidenceCompletenessNote}</p>
+                    )}
+                </GlassCard>
+            )}
+
+            {report.evaluable !== false && evidenceCompletenessNote && (
+                <GlassCard className="p-4 mb-6 border border-blue-200 bg-blue-50/80">
+                    <p className="text-sm text-blue-800">{evidenceCompletenessNote}</p>
+                </GlassCard>
+            )}
+
+            {enhancedUnavailableHint && (
+                <GlassCard className="p-4 mb-6 border border-slate-200 bg-slate-50/80">
+                    <p className="text-sm text-slate-700">{enhancedUnavailableHint}</p>
+                </GlassCard>
+            )}
+
+            {(report.overall_result || report.main_issue) && (
                 <GlassCard className="p-6 mb-6">
                     <div className="flex items-center justify-between gap-3 mb-4 flex-wrap">
                         <h2 className="text-lg font-semibold text-zinc-900">沟通闭环结果</h2>
@@ -342,12 +439,12 @@ export default function ComprehensiveReportPage() {
                             {overallResultLabel}
                         </span>
                     </div>
-                    {quickLoopData?.main_issue ? (
+                    {report.main_issue ? (
                         <div className="rounded-xl border border-amber-100 bg-amber-50 p-4">
                             <p className="text-xs font-semibold text-amber-700 mb-1">本场唯一主问题</p>
-                            <p className="text-sm text-amber-900">{quickLoopData.main_issue.issue_text}</p>
+                            <p className="text-sm text-amber-900">{report.main_issue.issue_text}</p>
                             <p className="text-xs text-amber-700 mt-2">
-                                修正动作：{quickLoopData.main_issue.recovery_rule}
+                                修正动作：{report.main_issue.recovery_rule}
                             </p>
                         </div>
                     ) : (
@@ -356,7 +453,7 @@ export default function ComprehensiveReportPage() {
                 </GlassCard>
             )}
 
-            {quickLoopData?.next_goal && (
+            {report.next_goal && (
                 <GlassCard className="p-6 mb-6">
                     <div className="flex items-start justify-between gap-4 flex-wrap">
                         <div>
@@ -364,21 +461,13 @@ export default function ComprehensiveReportPage() {
                                 <Target className="w-5 h-5 text-blue-600" />
                                 下一轮唯一目标
                             </h2>
-                            <p className="text-sm text-zinc-700 mb-2">
-                                {quickLoopData.next_goal.goal_text}
-                            </p>
-                            <p className="text-xs text-zinc-500">
-                                判定条件：{quickLoopData.next_goal.rule}
-                            </p>
+                            <p className="text-sm text-zinc-700 mb-2">{report.next_goal.goal_text}</p>
+                            <p className="text-xs text-zinc-500">判定条件：{report.next_goal.rule}</p>
                             {retryBlockedHint && (
-                                <p className="text-xs text-amber-700 mt-2">
-                                    {retryBlockedHint}
-                                </p>
+                                <p className="text-xs text-amber-700 mt-2">{retryBlockedHint}</p>
                             )}
                             {retryHint && (
-                                <p className="text-xs text-amber-700 mt-2">
-                                    {retryHint}
-                                </p>
+                                <p className="text-xs text-amber-700 mt-2">{retryHint}</p>
                             )}
                         </div>
                         <Button
@@ -394,41 +483,41 @@ export default function ComprehensiveReportPage() {
                 </GlassCard>
             )}
 
-            {quickLoopData?.pass_flags && (
+            {report.pass_flags && (
                 <GlassCard className="p-6 mb-6">
                     <h2 className="text-lg font-semibold text-zinc-900 mb-3">统一通关标准</h2>
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                         <div className={cn(
                             "rounded-xl border p-3",
-                            quickLoopData.pass_flags.pass_3min_flow
+                            report.pass_flags.pass_3min_flow
                                 ? "bg-emerald-50 border-emerald-200"
-                                : "bg-amber-50 border-amber-200"
+                                : "bg-amber-50 border-amber-200",
                         )}>
                             <p className="text-xs font-semibold text-zinc-700">3分钟连续表达</p>
                             <p className="text-sm mt-1 font-bold">
-                                {quickLoopData.pass_flags.pass_3min_flow ? "已达标" : "未达标"}
+                                {report.pass_flags.pass_3min_flow ? "已达标" : "未达标"}
                             </p>
                         </div>
                         <div className={cn(
                             "rounded-xl border p-3",
-                            quickLoopData.pass_flags.pass_5turn_defense
+                            report.pass_flags.pass_5turn_defense
                                 ? "bg-emerald-50 border-emerald-200"
-                                : "bg-amber-50 border-amber-200"
+                                : "bg-amber-50 border-amber-200",
                         )}>
                             <p className="text-xs font-semibold text-zinc-700">5轮追问不跑题</p>
                             <p className="text-sm mt-1 font-bold">
-                                {quickLoopData.pass_flags.pass_5turn_defense ? "已达标" : "未达标"}
+                                {report.pass_flags.pass_5turn_defense ? "已达标" : "未达标"}
                             </p>
                         </div>
                         <div className={cn(
                             "rounded-xl border p-3",
-                            quickLoopData.pass_flags.pass_4step_structure
+                            report.pass_flags.pass_4step_structure
                                 ? "bg-emerald-50 border-emerald-200"
-                                : "bg-amber-50 border-amber-200"
+                                : "bg-amber-50 border-amber-200",
                         )}>
                             <p className="text-xs font-semibold text-zinc-700">四段结构完整</p>
                             <p className="text-sm mt-1 font-bold">
-                                {quickLoopData.pass_flags.pass_4step_structure ? "已达标" : "未达标"}
+                                {report.pass_flags.pass_4step_structure ? "已达标" : "未达标"}
                             </p>
                         </div>
                     </div>
@@ -444,13 +533,13 @@ export default function ComprehensiveReportPage() {
                                 ? "已命中"
                                 : knowledgeCheck.status === "kb_not_ready"
                                     ? "知识库处理中"
-                                : knowledgeCheck.status === "miss"
-                                    ? "未命中"
-                                    : knowledgeCheck.status === "not_triggered"
-                                        ? "未触发检索"
-                                        : knowledgeCheck.status === "no_knowledge_base"
-                                            ? "未绑定知识库"
-                                            : "已关闭检索"}
+                                    : knowledgeCheck.status === "miss"
+                                        ? "未命中"
+                                        : knowledgeCheck.status === "not_triggered"
+                                            ? "未触发检索"
+                                            : knowledgeCheck.status === "no_knowledge_base"
+                                                ? "未绑定知识库"
+                                                : "已关闭检索"}
                         </span>
                     </div>
 
@@ -524,71 +613,59 @@ export default function ComprehensiveReportPage() {
             )}
 
             <GlassCard className="p-6 mb-6">
-                <h2 className="text-lg font-semibold text-zinc-900 mb-4">分项评分</h2>
-                <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-                    {report.dimension_scores.map((dim) => (
-                        <div key={dim.name} className="text-center">
+                <div className="flex items-center justify-between gap-3 mb-4 flex-wrap">
+                    <h2 className="text-lg font-semibold text-zinc-900">统一训练证据评分</h2>
+                    {report.evidence_completeness?.legacy_score_key_used ? (
+                        <span className="text-xs text-zinc-500">兼容了 legacy score key</span>
+                    ) : null}
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    {dimensionScores.map((dimension) => (
+                        <div key={dimension.name} className="rounded-xl bg-zinc-50 p-4">
+                            <div className="flex items-center justify-between gap-3 mb-2">
+                                <p className="text-sm font-semibold text-zinc-700">{dimension.name}</p>
+                                <span className={cn("text-lg font-bold", getScoreColor(dimension.score))}>
+                                    {dimension.score.toFixed(0)}
+                                </span>
+                            </div>
                             <div className="relative w-full h-2 bg-zinc-200 rounded-full mb-2">
                                 <div
-                                    className={cn("absolute top-0 left-0 h-full rounded-full",
-                                        dim.score >= 80 ? "bg-green-500" : dim.score >= 60 ? "bg-yellow-500" : "bg-red-500")}
-                                    style={{ width: `${dim.score}%` }}
+                                    className={cn(
+                                        "absolute top-0 left-0 h-full rounded-full",
+                                        dimension.score >= 80
+                                            ? "bg-green-500"
+                                            : dimension.score >= 60
+                                                ? "bg-yellow-500"
+                                                : "bg-red-500",
+                                    )}
+                                    style={{ width: `${dimension.score}%` }}
                                 />
                             </div>
-                            <p className="text-2xl font-bold text-zinc-900">{dim.score.toFixed(0)}</p>
-                            <p className="text-xs text-zinc-600">{dim.name}</p>
+                            <p className="text-xs text-zinc-500">{dimension.description}</p>
                         </div>
                     ))}
                 </div>
             </GlassCard>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-                <GlassCard className="p-6">
-                    <div className="flex items-center gap-2 mb-4">
-                        <CheckCircle className="w-5 h-5 text-green-500" />
-                        <h3 className="font-semibold text-zinc-900">主要优势</h3>
-                    </div>
-                    <ul className="space-y-2">
-                        {report.key_strengths.map((s, i) => (
-                            <li key={i} className="flex items-start gap-2 text-sm text-zinc-700">
-                                <span className="w-1 h-1 rounded-full bg-green-500 mt-2" />{s}
-                            </li>
-                        ))}
-                    </ul>
-                </GlassCard>
-
-                <GlassCard className="p-6">
-                    <div className="flex items-center gap-2 mb-4">
-                        <AlertTriangle className="w-5 h-5 text-amber-500" />
-                        <h3 className="font-semibold text-zinc-900">改进建议</h3>
-                    </div>
-                    <ul className="space-y-2">
-                        {report.key_improvements.map((imp, i) => (
-                            <li key={i} className="flex items-start gap-2 text-sm text-zinc-700">
-                                <span className="w-1 h-1 rounded-full bg-amber-500 mt-2" />{imp}
-                            </li>
-                        ))}
-                    </ul>
-                </GlassCard>
-            </div>
-
-            {report.stage_summaries.length > 0 && (
+            {report.stage_summary.length > 0 && (
                 <GlassCard className="p-6 mb-6">
-                    <h2 className="text-lg font-semibold text-zinc-900 mb-4">阶段分析</h2>
+                    <h2 className="text-lg font-semibold text-zinc-900 mb-4">阶段事实</h2>
                     <div className="space-y-3">
-                        {report.stage_summaries.map((stage) => (
-                            <div key={stage.stage_number} className="flex items-center gap-4 p-3 bg-zinc-50 rounded-lg">
+                        {report.stage_summary.map((stage) => (
+                            <div key={`${stage.stage}-${stage.duration_ms}`} className="flex items-center gap-4 p-3 bg-zinc-50 rounded-lg">
                                 <div className="w-10 h-10 rounded-full bg-zinc-200 flex items-center justify-center font-semibold text-zinc-700">
-                                    {stage.stage_number}
+                                    {stage.score.toFixed(0)}
                                 </div>
                                 <div className="flex-1">
-                                    <div className="flex justify-between mb-1">
-                                        <span className="text-sm font-medium">第{stage.stage_number}阶段</span>
-                                        <span className={cn("text-sm font-semibold", getScoreColor(stage.average_score))}>
-                                            {stage.average_score.toFixed(0)}分
+                                    <div className="flex justify-between mb-1 gap-3 flex-wrap">
+                                        <span className="text-sm font-medium">{formatSessionStageLabel(stage.stage)}</span>
+                                        <span className={cn("text-sm font-semibold", getScoreColor(stage.score))}>
+                                            {stage.score.toFixed(0)}分
                                         </span>
                                     </div>
-                                    <p className="text-xs text-zinc-600">{stage.summary}</p>
+                                    <p className="text-xs text-zinc-600">
+                                        时长 {(stage.duration_ms / 1000).toFixed(0)} 秒
+                                    </p>
                                 </div>
                             </div>
                         ))}
@@ -596,7 +673,53 @@ export default function ComprehensiveReportPage() {
                 </GlassCard>
             )}
 
-            {/* Highlights Section */}
+            {hasEnhancedInsights(enhancedReport) && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                    {enhancedReport?.key_strengths?.length ? (
+                        <GlassCard className="p-6">
+                            <div className="flex items-center gap-2 mb-4">
+                                <CheckCircle className="w-5 h-5 text-green-500" />
+                                <h3 className="font-semibold text-zinc-900">综合洞察：主要优势</h3>
+                            </div>
+                            <ul className="space-y-2">
+                                {enhancedReport.key_strengths.map((item, index) => (
+                                    <li key={`${item}-${index}`} className="flex items-start gap-2 text-sm text-zinc-700">
+                                        <span className="w-1 h-1 rounded-full bg-green-500 mt-2" />
+                                        {item}
+                                    </li>
+                                ))}
+                            </ul>
+                        </GlassCard>
+                    ) : null}
+
+                    {enhancedReport?.key_improvements?.length ? (
+                        <GlassCard className="p-6">
+                            <div className="flex items-center gap-2 mb-4">
+                                <AlertTriangle className="w-5 h-5 text-amber-500" />
+                                <h3 className="font-semibold text-zinc-900">综合洞察：改进建议</h3>
+                            </div>
+                            <ul className="space-y-2">
+                                {enhancedReport.key_improvements.map((item, index) => (
+                                    <li key={`${item}-${index}`} className="flex items-start gap-2 text-sm text-zinc-700">
+                                        <span className="w-1 h-1 rounded-full bg-amber-500 mt-2" />
+                                        {item}
+                                    </li>
+                                ))}
+                            </ul>
+                        </GlassCard>
+                    ) : null}
+                </div>
+            )}
+
+            {enhancedReport?.detailed_feedback?.trim() && (
+                <GlassCard className="p-6 mb-6">
+                    <h2 className="text-lg font-semibold text-zinc-900 mb-3">综合洞察补充</h2>
+                    <p className="text-sm leading-7 text-zinc-700 whitespace-pre-wrap">
+                        {enhancedReport.detailed_feedback}
+                    </p>
+                </GlassCard>
+            )}
+
             {highlightsLoading ? (
                 <GlassCard className="p-6 mb-6">
                     <div className="flex items-center gap-3">
@@ -604,14 +727,16 @@ export default function ComprehensiveReportPage() {
                         <span className="text-sm text-zinc-500">加载高光片段中...</span>
                     </div>
                 </GlassCard>
+            ) : highlightsUnavailableHint ? (
+                <GlassCard className="p-4 mb-6 border border-slate-200 bg-slate-50/80">
+                    <p className="text-sm text-slate-700">{highlightsUnavailableHint}</p>
+                </GlassCard>
             ) : highlightsData && highlightsData.highlights.length > 0 ? (
                 <GlassCard className="p-6 mb-6">
                     <div className="flex items-center gap-2 mb-6">
                         <Sparkles className="w-5 h-5 text-amber-500" />
                         <h2 className="text-lg font-semibold text-zinc-900">高光片段</h2>
-                        <span className="text-xs text-zinc-500 ml-2">
-                            AI 识别的关键 moments
-                        </span>
+                        <span className="text-xs text-zinc-500 ml-2">AI 识别的关键 moments</span>
                     </div>
                     <HighlightList
                         highlights={highlightsData.highlights}
@@ -619,18 +744,23 @@ export default function ComprehensiveReportPage() {
                         totalBad={highlightsData.total_bad}
                     />
                 </GlassCard>
-            ) : null}
+            ) : (
+                <GlassCard className="p-4 mb-6 border border-zinc-200 bg-zinc-50/70">
+                    <p className="text-sm text-zinc-600">本次训练暂未识别出高光片段。</p>
+                </GlassCard>
+            )}
 
-            {report.recommendations.length > 0 && (
+            {report.suggestions.length > 0 && (
                 <GlassCard className="p-6">
                     <div className="flex items-center gap-2 mb-4">
                         <Lightbulb className="w-5 h-5 text-amber-500" />
                         <h2 className="text-lg font-semibold text-zinc-900">练习建议</h2>
                     </div>
                     <ul className="space-y-2">
-                        {report.recommendations.map((rec, i) => (
-                            <li key={i} className="flex items-start gap-2 text-sm text-zinc-700">
-                                <Target className="w-4 h-4 text-blue-500 flex-shrink-0 mt-0.5" />{rec}
+                        {report.suggestions.map((item, index) => (
+                            <li key={`${item}-${index}`} className="flex items-start gap-2 text-sm text-zinc-700">
+                                <Target className="w-4 h-4 text-blue-500 flex-shrink-0 mt-0.5" />
+                                {item}
                             </li>
                         ))}
                     </ul>

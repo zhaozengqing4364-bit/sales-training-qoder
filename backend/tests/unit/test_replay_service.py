@@ -200,6 +200,39 @@ class TestReplayService:
     async def test_get_replay_data_success(self, service, mock_db, mock_completed_session, mock_messages):
         """Test getting replay data for a completed session"""
         # Arrange
+        mock_completed_session.logic_score = 84.0
+        mock_completed_session.accuracy_score = 82.0
+        mock_completed_session.completeness_score = 79.0
+        mock_completed_session.effectiveness_snapshot = {
+            "pass_flags": {
+                "pass_3min_flow": True,
+                "pass_5turn_defense": True,
+                "pass_4step_structure": False,
+            },
+            "main_capability_passed": True,
+            "overall_result": "pass",
+            "main_issue": {
+                "issue_type": "structure_gap",
+                "issue_text": "还需要更早确认预算。",
+                "recovery_rule": "在 discovery 阶段补预算问题。",
+            },
+            "next_goal": {
+                "goal_type": "budget_probe",
+                "goal_text": "下一轮先确认预算和决策链。",
+                "rule": "在第 2 轮前问出预算区间。",
+            },
+            "metrics": {
+                "continuous_speech_seconds": 120.0,
+                "filler_rate_per_100_words": 3.0,
+                "offtopic_turn_count": 0.0,
+                "offtopic_max_streak": 0.0,
+                "structure_coverage": 0.8,
+            },
+            "version": "rule_v1",
+            "evaluable": True,
+            "not_evaluable_reason": None,
+        }
+
         mock_session_result = MagicMock()
         mock_session_result.scalar_one_or_none.return_value = mock_completed_session
 
@@ -216,9 +249,65 @@ class TestReplayService:
         data = result.value
         assert data["session_id"] == mock_completed_session.session_id
         assert len(data["messages"]) == 3
+        assert data["overall_score"] == pytest.approx(81.67, abs=0.01)
+        assert data["main_issue"] == mock_completed_session.effectiveness_snapshot["main_issue"]
+        assert data["next_goal"] == mock_completed_session.effectiveness_snapshot["next_goal"]
+        assert data["evaluable"] is True
+        assert data["not_evaluable_reason"] is None
         assert "timeline_markers" in data
         assert "stage_summary" in data
         assert "total_duration_ms" in data
+
+    @pytest.mark.asyncio
+    async def test_get_replay_data_normalizes_legacy_message_scores(self, service, mock_db, mock_completed_session):
+        """Replay should expose the shared normalized score_snapshot contract."""
+        mock_completed_session.logic_score = 70.0
+        mock_completed_session.accuracy_score = 70.0
+        mock_completed_session.completeness_score = 70.0
+        mock_completed_session.effectiveness_snapshot = {
+            "pass_flags": {},
+            "main_capability_passed": False,
+            "overall_result": "fail",
+            "main_issue": {"issue_type": "budget", "issue_text": "预算没问到", "recovery_rule": "第二轮补问"},
+            "next_goal": {"goal_type": "budget_probe", "goal_text": "先问预算", "rule": "第二轮前完成"},
+            "metrics": {},
+            "version": "rule_v1",
+            "evaluable": False,
+            "not_evaluable_reason": "INSUFFICIENT_TURN_DATA",
+        }
+
+        legacy_message = MagicMock()
+        legacy_message.id = str(uuid.uuid4())
+        legacy_message.session_id = mock_completed_session.session_id
+        legacy_message.turn_number = 1
+        legacy_message.role = "user"
+        legacy_message.content = "我们先聊聊现状。"
+        legacy_message.audio_url = None
+        legacy_message.timestamp = datetime.now(timezone.utc)
+        legacy_message.duration_ms = 2500
+        legacy_message.fuzzy_words = None
+        legacy_message.transcript_metadata = None
+        legacy_message.sales_stage = "opening"
+        legacy_message.score_snapshot = {"overall": 74}
+        legacy_message.ai_feedback = None
+        legacy_message.is_highlight = False
+        legacy_message.highlight_type = None
+        legacy_message.highlight_reason = None
+
+        mock_session_result = MagicMock()
+        mock_session_result.scalar_one_or_none.return_value = mock_completed_session
+        mock_messages_result = MagicMock()
+        mock_messages_result.scalars.return_value.all.return_value = [legacy_message]
+        mock_db.execute.side_effect = [mock_session_result, mock_messages_result]
+
+        result = await service.get_replay_data(mock_completed_session.session_id)
+
+        assert result.is_success
+        data = result.value
+        assert data["messages"][0]["score_snapshot"] == {"overall_score": 74.0}
+        assert data["stage_summary"] == [{"stage": "opening", "duration_ms": 2500, "score": 74}]
+        assert data["not_evaluable_reason"] == "INSUFFICIENT_TURN_DATA"
+        assert data["evidence_completeness"]["legacy_score_key_used"] is True
 
     @pytest.mark.asyncio
     async def test_get_replay_data_session_not_completed(self, service, mock_db, mock_in_progress_session):

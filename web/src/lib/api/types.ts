@@ -751,21 +751,72 @@ export interface ReplayTimelineMarker {
     highlight_type?: string | null;
 }
 
-export interface ReplayStageSummary {
-    stage: string;
+export type SessionEvidenceStage = "opening" | "discovery" | "objection" | "closing" | string;
+
+export type SessionNotEvaluableReason =
+    | "INSUFFICIENT_TURN_DATA"
+    | "INSUFFICIENT_SESSION_METRICS"
+    | string;
+
+export interface SessionEvidenceCompleteness {
+    complete?: boolean;
+    missing_fields?: string[];
+    message_count?: number;
+    legacy_score_key_used?: boolean;
+    [key: string]: unknown;
+}
+
+export interface SessionStageSummary {
+    stage: SessionEvidenceStage;
     duration_ms: number;
     score: number;
 }
 
-export interface ReplayData {
+export interface SessionPassFlags {
+    pass_3min_flow: boolean;
+    pass_5turn_defense: boolean;
+    pass_4step_structure: boolean;
+}
+
+export type SessionOverallResult = "pass" | "strong_pass" | "fail";
+
+export interface SessionMainIssue {
+    issue_type: string;
+    issue_text: string;
+    recovery_rule: string;
+}
+
+export interface SessionNextGoal {
+    goal_type: string;
+    goal_text: string;
+    rule: string;
+}
+
+export interface SessionEvidenceContract {
+    overall_score: number | null;
+    effectiveness_snapshot?: Record<string, unknown> | null;
+    pass_flags?: SessionPassFlags | null;
+    main_capability_passed?: boolean | null;
+    overall_result?: SessionOverallResult | null;
+    main_issue?: SessionMainIssue | null;
+    next_goal?: SessionNextGoal | null;
+    stage_summary: SessionStageSummary[];
+    evaluable?: boolean | null;
+    not_evaluable_reason?: SessionNotEvaluableReason | null;
+    evidence_completeness?: SessionEvidenceCompleteness | null;
+}
+
+export interface ReplayStageSummary extends SessionStageSummary {}
+
+export interface ReplayData extends SessionEvidenceContract {
     session_id: string;
     agent_name?: string | null;
     persona_name?: string | null;
     voice_policy_snapshot_ref?: VoicePolicySnapshotReference | null;
     total_duration_ms: number;
+    overall_score: number;
     messages: ReplayMessage[];
     timeline_markers: ReplayTimelineMarker[];
-    stage_summary: ReplayStageSummary[];
 }
 
 export interface ReplayMessagesResponse {
@@ -833,7 +884,7 @@ export interface SessionStats {
     total_practice_minutes: number;
 }
 
-export interface PracticeSessionReport {
+export interface PracticeSessionReport extends SessionEvidenceContract {
     session_id: string;
     logic_score: number;
     accuracy_score: number;
@@ -843,30 +894,62 @@ export interface PracticeSessionReport {
     audio_url?: string | null;
     transcript_url?: string | null;
     voice_policy_snapshot_ref?: VoicePolicySnapshotReference | null;
-    effectiveness_snapshot?: Record<string, unknown> | null;
-    pass_flags?: {
-        pass_3min_flow: boolean;
-        pass_5turn_defense: boolean;
-        pass_4step_structure: boolean;
-    } | null;
-    main_capability_passed?: boolean | null;
-    overall_result?: "pass" | "strong_pass" | "fail" | null;
-    main_issue?: {
-        issue_type: string;
-        issue_text: string;
-        recovery_rule: string;
-    } | null;
-    next_goal?: {
-        goal_type: string;
-        goal_text: string;
-        rule: string;
-    } | null;
     retry_entry?: {
         scenario_type: "sales" | "presentation" | string;
         agent_id?: string | null;
         persona_id?: string | null;
         presentation_id?: string | null;
     } | null;
+}
+
+export interface HistorySessionSummary extends SessionEvidenceContract {
+    session_id: string;
+    scenario_name: string;
+    scenario_type: "sales" | "presentation";
+    persona_name: string | null;
+    agent_name: string | null;
+    start_time: string;
+    duration_seconds: number;
+    overall_score: number | null;
+    report_status: "pending" | "processing" | "completed" | "failed";
+    report_generated_at: string | null;
+    status: string;
+    feedback_summary?: string | null;
+}
+
+export interface HistoryListResponse {
+    sessions: HistorySessionSummary[];
+    total: number;
+    page: number;
+    page_size: number;
+    total_pages: number;
+}
+
+export interface HistoryStatistics {
+    total_sessions: number;
+    evaluable_sessions: number;
+    not_evaluable_sessions: number;
+    average_score: number;
+    best_score: number;
+    total_practice_time_seconds: number;
+    total_practice_time_minutes: number;
+}
+
+export interface HistoryTrendPoint extends Pick<SessionEvidenceContract,
+    "overall_score"
+    | "evaluable"
+    | "not_evaluable_reason"
+    | "evidence_completeness"
+    | "stage_summary"
+    | "main_issue"
+    | "next_goal"
+> {
+    session_id: string;
+    date: string;
+    logic_score?: number;
+    accuracy_score?: number;
+    completeness_score?: number;
+    scenario_type?: string;
 }
 
 export interface KnowledgeCheckDiagnostics {

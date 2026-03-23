@@ -1,5 +1,6 @@
-"""Unit tests for analytics API parameter normalization."""
+"""Unit tests for analytics/history API parameter normalization."""
 
+from common.analytics.history_service import history_service
 from common.api.analytics import _normalize_scenario_type, _normalize_time_period
 
 
@@ -12,6 +13,13 @@ def test_normalize_scenario_type_passthrough_and_none() -> None:
     """Other scenario values should pass through; None stays None."""
     assert _normalize_scenario_type("presentation") == "presentation"
     assert _normalize_scenario_type(None) is None
+
+
+def test_history_service_normalize_scenario_type_matches_api_aliases() -> None:
+    """History surfaces should share the same sales alias normalization."""
+    assert history_service.normalize_scenario_type("sales_bot") == "sales"
+    assert history_service.normalize_scenario_type("presentation") == "presentation"
+    assert history_service.normalize_scenario_type(None) is None
 
 
 def test_normalize_time_period_aliases() -> None:

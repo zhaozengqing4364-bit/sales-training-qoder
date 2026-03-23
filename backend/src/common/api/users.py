@@ -213,12 +213,13 @@ async def get_my_history(
     Permission: Current user only (enforced by JWT)
     """
     try:
+        normalized_scenario_type = history_service.normalize_scenario_type(scenario_type)
         result = await history_service.get_user_history_with_report_summary(
             db=db,
             user_id=current_user.user_id,
             page=page,
             page_size=page_size,
-            scenario_type=scenario_type,
+            scenario_type=normalized_scenario_type,
         )
 
         if not result.is_success:
@@ -231,16 +232,30 @@ async def get_my_history(
         for session in data["sessions"]:
             sessions.append({
                 "session_id": session.session_id,
+                "scenario_id": session.scenario_id,
                 "scenario_name": session.scenario_name,
                 "scenario_type": session.scenario_type,
                 "persona_name": session.persona_name,
                 "agent_name": session.agent_name,
+                "title": session.title,
                 "start_time": session.start_time.isoformat() if session.start_time else None,
+                "end_time": session.end_time.isoformat() if session.end_time else None,
                 "duration_seconds": session.duration_seconds,
                 "overall_score": session.overall_score,
+                "logic_score": session.logic_score,
+                "accuracy_score": session.accuracy_score,
+                "completeness_score": session.completeness_score,
                 "report_status": session.report_status,
                 "report_generated_at": session.report_generated_at.isoformat() if session.report_generated_at else None,
                 "status": session.status,
+                "evaluable": session.evaluable,
+                "not_evaluable_reason": session.not_evaluable_reason,
+                "evidence_completeness": session.evidence_completeness,
+                "effectiveness_snapshot": session.effectiveness_snapshot,
+                "feedback_summary": session.feedback_summary,
+                "stage_summary": session.stage_summary,
+                "main_issue": session.main_issue,
+                "next_goal": session.next_goal,
             })
 
         return success_response({

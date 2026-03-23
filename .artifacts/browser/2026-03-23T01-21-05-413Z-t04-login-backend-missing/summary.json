@@ -1,0 +1,77 @@
+{
+  "counts": {
+    "pages": 1,
+    "actions": {
+      "total": 0,
+      "retained": 0,
+      "success": 0,
+      "error": 0,
+      "running": 0
+    },
+    "waits": {
+      "total": 0,
+      "success": 0,
+      "error": 0,
+      "running": 0
+    },
+    "assertions": {
+      "total": 0,
+      "passed": 0,
+      "failed": 0,
+      "running": 0
+    },
+    "consoleErrors": 2,
+    "failedRequests": 2,
+    "dialogs": 0
+  },
+  "activePage": {
+    "id": 1,
+    "title": "AI 智能练习平台",
+    "url": "http://localhost:3445/login"
+  },
+  "caveats": [
+    "bounded console history may hide older console events.",
+    "bounded network history may hide older requests."
+  ],
+  "failureHypothesis": {
+    "hasFailures": true,
+    "categories": [
+      "console",
+      "network"
+    ],
+    "summary": "Recent failure signals detected across console, network.",
+    "signals": [
+      {
+        "category": "console",
+        "source": "error",
+        "detail": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+      },
+      {
+        "category": "console",
+        "source": "error",
+        "detail": "Failed to load resource: net::ERR_CONNECTION_REFUSED"
+      },
+      {
+        "category": "network",
+        "source": "http://localhost:3444/api/v1/auth/login",
+        "detail": "http://localhost:3444/api/v1/auth/login failed"
+      },
+      {
+        "category": "network",
+        "source": "http://127.0.0.1:3444/api/v1/auth/login",
+        "detail": "http://127.0.0.1:3444/api/v1/auth/login failed"
+      }
+    ]
+  },
+  "summary": "Session: 1 page, 0 actions, 0 waits, 0 asserts. bounded console history may hide older console events. bounded network history may hide older requests.",
+  "trace": null,
+  "har": {
+    "enabled": true,
+    "configuredAtContextCreation": true,
+    "path": "/Users/zhaozengqing/github/销售训练qoder/.artifacts/browser/2026-03-23T01-20-04-944Z-session/session.har",
+    "exportCount": 0,
+    "lastExportedPath": null,
+    "lastExportedAt": null
+  },
+  "sessionArtifactDir": "/Users/zhaozengqing/github/销售训练qoder/.artifacts/browser/2026-03-23T01-20-04-944Z-session"
+}

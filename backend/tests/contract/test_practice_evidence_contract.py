@@ -1,0 +1,252 @@
+from __future__ import annotations
+
+import uuid
+from datetime import UTC, datetime
+
+import pytest
+import pytest_asyncio
+from httpx import ASGITransport, AsyncClient
+from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
+from sqlalchemy.orm import sessionmaker
+
+from common.auth.service import create_access_token
+from common.conversation.models import ConversationMessage
+from common.db.models import Base, PracticeSession, Scenario, SessionStatus, User
+from common.db.session import get_db
+from main import app
+
+TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
+
+
+def _make_effectiveness_snapshot(*, evaluable: bool, reason: str | None) -> dict[str, object]:
+    return {
+        "pass_flags": {
+            "pass_3min_flow": False,
+            "pass_5turn_defense": False,
+            "pass_4step_structure": False,
+        },
+        "main_capability_passed": False,
+        "overall_result": "fail",
+        "metrics": {
+            "continuous_speech_seconds": 0.0,
+            "filler_rate_per_100_words": 0.0,
+            "offtopic_turn_count": 0.0,
+            "offtopic_max_streak": 0.0,
+            "structure_coverage": 0.0,
+        },
+        "main_issue": {
+            "issue_type": "main_capability_not_passed",
+            "issue_text": "证据不足，当前无法评估。",
+            "recovery_rule": "请先完成至少一轮有效互动后再结束。",
+        },
+        "next_goal": {
+            "goal_type": "main_capability_focus",
+            "goal_text": "先完成一轮有效互动再评估。",
+            "rule": "补齐用户表达和AI回应后再结束。",
+        },
+        "version": "rule_v1",
+        "evaluable": evaluable,
+        "not_evaluable_reason": reason,
+    }
+
+
+@pytest_asyncio.fixture(scope="function")
+async def test_engine():
+    engine = create_async_engine(TEST_DATABASE_URL, echo=False)
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    yield engine
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.drop_all)
+    await engine.dispose()
+
+
+@pytest_asyncio.fixture(scope="function")
+async def db_session(test_engine):
+    async_session = sessionmaker(test_engine, class_=AsyncSession, expire_on_commit=False)
+    async with async_session() as session:
+        yield session
+
+
+@pytest_asyncio.fixture
+async def owner(db_session: AsyncSession):
+    user = User(
+        wechat_user_id=f"contract-owner-{uuid.uuid4().hex[:8]}",
+        name="Contract Owner",
+        email=f"contract_owner_{uuid.uuid4().hex[:6]}@example.com",
+        role="user",
+    )
+    db_session.add(user)
+    await db_session.commit()
+    await db_session.refresh(user)
+    return user
+
+
+@pytest_asyncio.fixture
+async def outsider(db_session: AsyncSession):
+    user = User(
+        wechat_user_id=f"contract-outsider-{uuid.uuid4().hex[:8]}",
+        name="Contract Outsider",
+        email=f"contract_outsider_{uuid.uuid4().hex[:6]}@example.com",
+        role="user",
+    )
+    db_session.add(user)
+    await db_session.commit()
+    await db_session.refresh(user)
+    return user
+
+
+@pytest_asyncio.fixture
+async def owner_headers(owner: User):
+    token = create_access_token(data={"sub": str(owner.user_id)})
+    return {"Authorization": f"Bearer {token}"}
+
+
+@pytest_asyncio.fixture
+async def outsider_headers(outsider: User):
+    token = create_access_token(data={"sub": str(outsider.user_id)})
+    return {"Authorization": f"Bearer {token}"}
+
+
+@pytest_asyncio.fixture
+async def async_client(db_session: AsyncSession):
+    async def override_get_db():
+        yield db_session
+
+    app.dependency_overrides[get_db] = override_get_db
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        yield client
+    app.dependency_overrides.clear()
+
+
+@pytest.mark.asyncio
+async def test_report_and_replay_contract_share_same_session_evidence_fields(
+    async_client: AsyncClient,
+    db_session: AsyncSession,
+    owner: User,
+    owner_headers: dict[str, str],
+):
+    scenario = Scenario(
+        scenario_id=str(uuid.uuid4()),
+        scenario_type="sales",
+        name="contract evidence scenario",
+        is_active=True,
+    )
+    session = PracticeSession(
+        session_id=str(uuid.uuid4()),
+        user_id=str(owner.user_id),
+        scenario_id=scenario.scenario_id,
+        status=SessionStatus.COMPLETED.value,
+        logic_score=82.0,
+        accuracy_score=80.0,
+        completeness_score=78.0,
+        total_duration_seconds=180,
+        effectiveness_snapshot=_make_effectiveness_snapshot(
+            evaluable=False,
+            reason="INSUFFICIENT_TURN_DATA",
+        ),
+    )
+    db_session.add_all([scenario, session])
+    db_session.add_all(
+        [
+            ConversationMessage(
+                session_id=session.session_id,
+                turn_number=1,
+                role="user",
+                content="我先介绍一下我们现在的跟进流程。",
+                timestamp=datetime.now(UTC),
+                duration_ms=1200,
+                sales_stage="opening",
+                score_snapshot={"overall": 76},
+            ),
+            ConversationMessage(
+                session_id=session.session_id,
+                turn_number=2,
+                role="assistant",
+                content="目前主要痛点是线索流失。",
+                timestamp=datetime.now(UTC),
+                duration_ms=1800,
+                sales_stage="discovery",
+                score_snapshot={"overall_score": 84},
+            ),
+        ]
+    )
+    await db_session.commit()
+
+    report_resp = await async_client.get(
+        f"/api/v1/practice/sessions/{session.session_id}/report",
+        headers=owner_headers,
+    )
+    replay_resp = await async_client.get(
+        f"/api/v1/sessions/{session.session_id}/replay",
+        headers=owner_headers,
+    )
+
+    assert report_resp.status_code == 200
+    assert replay_resp.status_code == 200
+
+    report_data = report_resp.json()["data"]
+    replay_data = replay_resp.json()["data"]
+
+    assert report_data["overall_score"] == replay_data["overall_score"] == pytest.approx(80.0)
+    assert report_data["main_issue"] == replay_data["main_issue"]
+    assert report_data["next_goal"] == replay_data["next_goal"]
+    assert report_data["not_evaluable_reason"] == replay_data["not_evaluable_reason"] == "INSUFFICIENT_TURN_DATA"
+    assert report_data["evaluable"] is False
+    assert replay_data["evaluable"] is False
+    assert report_data["stage_summary"] == replay_data["stage_summary"] == [
+        {"stage": "opening", "duration_ms": 1200, "score": 76},
+        {"stage": "discovery", "duration_ms": 1800, "score": 84},
+    ]
+    assert report_data["evidence_completeness"]["legacy_score_key_used"] is True
+    assert replay_data["evidence_completeness"]["legacy_score_key_used"] is True
+
+
+@pytest.mark.asyncio
+async def test_replay_completion_gate_and_report_access_control_remain_unchanged(
+    async_client: AsyncClient,
+    db_session: AsyncSession,
+    owner: User,
+    owner_headers: dict[str, str],
+    outsider_headers: dict[str, str],
+):
+    scenario = Scenario(
+        scenario_id=str(uuid.uuid4()),
+        scenario_type="sales",
+        name="contract gate scenario",
+        is_active=True,
+    )
+    session = PracticeSession(
+        session_id=str(uuid.uuid4()),
+        user_id=str(owner.user_id),
+        scenario_id=scenario.scenario_id,
+        status=SessionStatus.IN_PROGRESS.value,
+    )
+    db_session.add_all([scenario, session])
+    await db_session.commit()
+
+    owner_report_resp = await async_client.get(
+        f"/api/v1/practice/sessions/{session.session_id}/report",
+        headers=owner_headers,
+    )
+    owner_replay_resp = await async_client.get(
+        f"/api/v1/sessions/{session.session_id}/replay",
+        headers=owner_headers,
+    )
+    outsider_report_resp = await async_client.get(
+        f"/api/v1/practice/sessions/{session.session_id}/report",
+        headers=outsider_headers,
+    )
+    outsider_replay_resp = await async_client.get(
+        f"/api/v1/sessions/{session.session_id}/replay",
+        headers=outsider_headers,
+    )
+
+    assert owner_report_resp.status_code == 200
+    assert owner_replay_resp.status_code == 400
+    assert owner_replay_resp.json()["error"] == "[SESSION_NOT_COMPLETED]"
+    assert outsider_report_resp.status_code == 403
+    assert outsider_report_resp.json()["error"] == "[ACCESS_DENIED]"
+    assert outsider_replay_resp.status_code == 403
+    assert outsider_replay_resp.json()["error"] == "[ACCESS_DENIED]"

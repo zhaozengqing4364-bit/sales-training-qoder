@@ -45,7 +45,7 @@ Guidelines:
 - Primary owning slice: M001/S03
 - Supporting slices: M001/S02, M001/S08
 - Validation: mapped
-- Notes: 报告必须面向“下一次怎么练”服务，而不是只做漂亮展示。
+- Notes: S02 已验证 report / replay / history / trends 共享统一事实基线；S03 继续负责把这套事实翻译成真正可读、可执行的单次报告，而不是只做漂亮展示。
 
 ### R006 — 主管查看单次报告时，能直接看出结论、卡点、说虚/说错内容、未接住的异议、下次训练重点
 - Class: admin/support
@@ -109,9 +109,9 @@ Guidelines:
 - Why it matters: 训练价值来自“做完后知道为什么好/差、下次怎么改”，没有复盘证据链，系统很难形成长期学习闭环。
 - Source: user
 - Primary owning slice: M004 (provisional)
-- Supporting slices: none
+- Supporting slices: M001/S02
 - Validation: mapped
-- Notes: M001 先统一事实源，M004 再强化回放、高光、逐轮点评和学习证据。
+- Notes: M001/S02 已验证 report / replay / history / trends 共享统一 session evidence 基线；M004 继续强化高光、逐轮点评和更强的学习证据体验。
 
 ### R012 — 后台治理能力需要支持长期运营训练资产，而不是一次性配置后写死
 - Class: operability
@@ -267,7 +267,7 @@ Guidelines:
 | R008 | primary-user-loop | active | M001/S07 | M001/S04 | mapped |
 | R009 | differentiator | active | M002 (provisional) | none | mapped |
 | R010 | integration | active | M003 (provisional) | none | mapped |
-| R011 | continuity | active | M004 (provisional) | none | mapped |
+| R011 | continuity | active | M004 (provisional) | M001/S02 | mapped |
 | R012 | operability | active | M005 (provisional) | none | mapped |
 | R013 | primary-user-loop | validated | baseline | none | validated |
 | R014 | admin/support | validated | baseline | none | validated |

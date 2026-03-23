@@ -11,6 +11,9 @@ import asyncio
 from common.conversation.storage import MessageStorageService
 from common.db.session import AsyncSessionLocal
 from common.monitoring.logger import get_logger
+from sales_bot.websocket.components.stepfun_message_helpers import (
+    extract_analysis_patch_fields,
+)
 
 logger = get_logger(__name__)
 
@@ -86,10 +89,18 @@ class MessagePersistence:
         if not analysis_data:
             return
 
+        normalized_analysis = {
+            key: value
+            for key, value in extract_analysis_patch_fields(analysis_data).items()
+            if value is not None
+        }
+        if not normalized_analysis:
+            return
+
         async with db_lock:
             try:
                 async with AsyncSessionLocal() as db:
                     storage = MessageStorageService(db)
-                    await storage.update_analysis(message_id, **analysis_data)
+                    await storage.update_analysis(message_id, **normalized_analysis)
             except (OSError, RuntimeError, ValueError) as e:
                 logger.error(f"Failed to update analysis data: {e}")

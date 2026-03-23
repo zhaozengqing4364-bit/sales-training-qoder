@@ -1,10 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useEffectEvent, useMemo, useState } from "react";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { GlassCard } from "@/components/ui/glass-card";
-import { api } from "@/lib/api/client";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import {
     ArrowRight,
     Calendar,
@@ -15,38 +12,28 @@ import {
     Presentation,
     TrendingUp,
 } from "lucide-react";
-import Link from "next/link";
+
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { GlassCard } from "@/components/ui/glass-card";
+import { api, getApiErrorMessage } from "@/lib/api/client";
+import {
+    HistorySessionSummary,
+    HistoryStatistics,
+    HistoryTrendPoint,
+} from "@/lib/api/types";
+import { debug } from "@/lib/debug";
+import {
+    formatEvidenceCompletenessNote,
+    formatNotEvaluableReason,
+} from "@/lib/session-evidence";
 
 type ScenarioFilter = "all" | "sales" | "presentation";
 
-type HistoryItem = {
-    session_id: string;
-    scenario_name: string;
-    scenario_type: "sales" | "presentation";
-    persona_name: string | null;
-    agent_name: string | null;
-    start_time: string;
-    duration_seconds: number;
-    overall_score: number | null;
-    report_status: "pending" | "processing" | "completed" | "failed";
-    report_generated_at: string | null;
-    status: string;
-};
-
-type HistoryStats = {
-    total_sessions: number;
-    average_score: number;
-    best_score: number;
-    total_practice_time_seconds: number;
-    total_practice_time_minutes: number;
-};
-
-type TrendPoint = {
-    overall_score?: number;
-};
-
-const DEFAULT_STATS: HistoryStats = {
+const DEFAULT_STATS: HistoryStatistics = {
     total_sessions: 0,
+    evaluable_sessions: 0,
+    not_evaluable_sessions: 0,
     average_score: 0,
     best_score: 0,
     total_practice_time_seconds: 0,
@@ -80,18 +67,33 @@ function scoreClass(score: number): string {
     return "text-red-600";
 }
 
+function renderEnhancedStatusBadge(reportStatus: HistorySessionSummary["report_status"]) {
+    if (reportStatus === "pending") {
+        return <Badge variant="secondary" className="text-xs">综合洞察待生成</Badge>;
+    }
+    if (reportStatus === "processing") {
+        return <Badge variant="gray" className="text-xs animate-pulse">综合洞察生成中...</Badge>;
+    }
+    if (reportStatus === "failed") {
+        return <Badge variant="red" className="text-xs">综合洞察生成失败</Badge>;
+    }
+    return null;
+}
+
 export default function HistoryPage() {
     const [scenarioFilter, setScenarioFilter] = useState<ScenarioFilter>("all");
-    const [history, setHistory] = useState<HistoryItem[]>([]);
-    const [stats, setStats] = useState<HistoryStats>(DEFAULT_STATS);
-    const [trends, setTrends] = useState<TrendPoint[]>([]);
+    const [history, setHistory] = useState<HistorySessionSummary[]>([]);
+    const [stats, setStats] = useState<HistoryStatistics>(DEFAULT_STATS);
+    const [trends, setTrends] = useState<HistoryTrendPoint[]>([]);
     const [analyticsSnapshotCount, setAnalyticsSnapshotCount] = useState(0);
     const [isLoading, setIsLoading] = useState(true);
-    const [loadError, setLoadError] = useState<string | null>(null);
+    const [historyLoadError, setHistoryLoadError] = useState<string | null>(null);
+    const [analyticsHint, setAnalyticsHint] = useState<string | null>(null);
 
     const loadData = useCallback(async () => {
         setIsLoading(true);
-        setLoadError(null);
+        setHistoryLoadError(null);
+        setAnalyticsHint(null);
 
         const [historyResult, statsResult, trendsResult] = await Promise.allSettled([
             api.user.getMyHistory({
@@ -103,41 +105,66 @@ export default function HistoryPage() {
             api.dashboard.getHistoryTrends(30),
         ]);
 
-        const failedSections: string[] = [];
+        let historyAvailable = false;
 
         if (historyResult.status === "fulfilled") {
-            const historyData = ((historyResult.value?.sessions as HistoryItem[]) || []);
-            setHistory(historyData);
-            setAnalyticsSnapshotCount(historyData.length);
+            const sessions = Array.isArray(historyResult.value?.sessions)
+                ? historyResult.value.sessions
+                : [];
+            setHistory(sessions);
+            historyAvailable = true;
+            debug.log("[History] Loaded unified evidence list", {
+                scenarioFilter,
+                sessionCount: sessions.length,
+                evaluableCount: sessions.filter((item) => item.evaluable === true).length,
+                notEvaluableCount: sessions.filter((item) => item.evaluable === false).length,
+            });
         } else {
-            failedSections.push("训练记录");
+            setHistory([]);
+            setHistoryLoadError(`统一训练证据加载失败：${getApiErrorMessage(historyResult.reason)}`);
+            debug.error("[History] Unified evidence list load failed", {
+                scenarioFilter,
+                error: historyResult.reason,
+            });
         }
+
+        const degradedSections: string[] = [];
 
         if (statsResult.status === "fulfilled") {
             setStats(statsResult.value);
         } else {
-            failedSections.push("统计数据");
+            setStats(DEFAULT_STATS);
+            degradedSections.push("统计看板");
         }
 
         if (trendsResult.status === "fulfilled") {
-            setTrends(trendsResult.value as TrendPoint[]);
+            const trendPoints = Array.isArray(trendsResult.value) ? trendsResult.value : [];
+            setTrends(trendPoints);
+            setAnalyticsSnapshotCount(trendPoints.length);
         } else {
-            failedSections.push("趋势数据");
+            setTrends([]);
+            degradedSections.push("趋势快照");
+            setAnalyticsSnapshotCount(0);
         }
 
-        if (failedSections.length > 0) {
-            setLoadError(`部分历史数据加载失败（${failedSections.join("、")}），请重试。`);
+        if (historyAvailable && degradedSections.length > 0) {
+            setAnalyticsHint(`${degradedSections.join("、")}暂不可用，训练列表仍基于统一训练证据展示。`);
+            debug.warn("[History] Analytics snapshot unavailable; keeping unified evidence list", {
+                scenarioFilter,
+                degradedSections,
+            });
         }
+
+        if (historyAvailable && degradedSections.length === 0 && historyResult.status === "fulfilled") {
+            setAnalyticsSnapshotCount((current) => current || historyResult.value.sessions.length);
+        }
+
         setIsLoading(false);
     }, [scenarioFilter]);
 
-    const handleLoadData = useEffectEvent(() => {
-        void loadData();
-    });
-
     useEffect(() => {
-        handleLoadData();
-    }, [scenarioFilter]);
+        void loadData();
+    }, [loadData]);
 
     const trendDelta = useMemo(() => {
         if (trends.length < 2) return null;
@@ -165,7 +192,9 @@ export default function HistoryPage() {
             <header className="flex justify-between items-center gap-4 flex-wrap">
                 <div>
                     <h1 className="text-2xl font-bold text-slate-900">训练历史记录</h1>
-                    <p className="text-sm text-slate-500 mt-1">回顾每一次练习，并跟踪你的进步趋势（分析样本 {analyticsSnapshotCount}）</p>
+                    <p className="text-sm text-slate-500 mt-1">
+                        回顾每一次练习，并跟踪你的进步趋势（分析样本 {analyticsSnapshotCount}）
+                    </p>
                 </div>
                 <div className="flex gap-2">
                     <select
@@ -177,21 +206,21 @@ export default function HistoryPage() {
                         <option value="sales">销售对练</option>
                         <option value="presentation">PPT 演讲</option>
                     </select>
-                    <Button
-                        variant="outline"
-                        onClick={() => {
-                            void loadData();
-                        }}
-                        disabled={isLoading}
-                    >
+                    <Button variant="outline" onClick={() => void loadData()} disabled={isLoading}>
                         重试
                     </Button>
                 </div>
             </header>
 
-            {loadError && (
+            {historyLoadError && (
                 <GlassCard className="p-4 border border-amber-200 bg-amber-50/80">
-                    <p className="text-sm text-amber-800">{loadError}</p>
+                    <p className="text-sm text-amber-800">{historyLoadError}</p>
+                </GlassCard>
+            )}
+
+            {analyticsHint && !historyLoadError && (
+                <GlassCard className="p-4 border border-slate-200 bg-slate-50/80">
+                    <p className="text-sm text-slate-700">{analyticsHint}</p>
                 </GlassCard>
             )}
 
@@ -230,8 +259,8 @@ export default function HistoryPage() {
                 </GlassCard>
             ) : history.length === 0 ? (
                 <GlassCard className="p-10 text-center text-slate-500">
-                    {loadError ? (
-                        "历史记录加载失败，请点击右上角“重试”。"
+                    {historyLoadError ? (
+                        "统一训练证据加载失败，请点击右上角“重试”。"
                     ) : (
                         <>
                             暂无训练记录，去 <Link href="/training" className="text-blue-600 font-semibold">训练大厅</Link> 开始第一次练习吧。
@@ -240,87 +269,105 @@ export default function HistoryPage() {
                 </GlassCard>
             ) : (
                 <div className="space-y-4">
-                    {history.map((item) => (
-                        <GlassCard
-                            key={item.session_id}
-                            className="p-6 flex items-center justify-between border border-transparent hover:border-blue-200 transition-all"
-                        >
-                            <div className="flex items-center gap-6">
-                                <div
-                                    className={`w-12 h-12 rounded-2xl flex items-center justify-center ${
-                                        item.scenario_type === "sales" ? "bg-blue-50 text-blue-600" : "bg-purple-50 text-purple-600"
-                                    }`}
-                                >
-                                    {item.scenario_type === "sales" ? <Mic className="w-6 h-6" /> : <Presentation className="w-6 h-6" />}
-                                </div>
-                                <div>
-                                    <h3 className="text-lg font-bold text-slate-900">
-                                        {item.scenario_name || "练习记录"}
-                                        {item.persona_name && (
-                                            <span className="text-sm font-normal text-slate-500 ml-2">
-                                                ({item.persona_name})
+                    {history.map((item) => {
+                        const canOpenReport = item.status === "completed";
+                        const evidenceCompletenessNote = formatEvidenceCompletenessNote(item.evidence_completeness);
+                        const notEvaluableReason = item.evaluable === false
+                            ? formatNotEvaluableReason(item.not_evaluable_reason)
+                            : null;
+
+                        return (
+                            <GlassCard
+                                key={item.session_id}
+                                className="p-6 flex items-center justify-between border border-transparent hover:border-blue-200 transition-all"
+                            >
+                                <div className="flex items-center gap-6">
+                                    <div
+                                        className={`w-12 h-12 rounded-2xl flex items-center justify-center ${
+                                            item.scenario_type === "sales" ? "bg-blue-50 text-blue-600" : "bg-purple-50 text-purple-600"
+                                        }`}
+                                    >
+                                        {item.scenario_type === "sales" ? <Mic className="w-6 h-6" /> : <Presentation className="w-6 h-6" />}
+                                    </div>
+                                    <div>
+                                        <h3 className="text-lg font-bold text-slate-900">
+                                            {item.scenario_name || "练习记录"}
+                                            {item.persona_name && (
+                                                <span className="text-sm font-normal text-slate-500 ml-2">
+                                                    ({item.persona_name})
+                                                </span>
+                                            )}
+                                        </h3>
+                                        <div className="flex items-center gap-4 text-sm text-slate-500 mt-1 flex-wrap">
+                                            <span className="flex items-center gap-1.5">
+                                                <Calendar className="w-4 h-4" />
+                                                {formatDateTime(item.start_time)}
                                             </span>
+                                            <span className="flex items-center gap-1.5">
+                                                <Clock className="w-4 h-4" />
+                                                {formatDuration(item.duration_seconds || 0)}
+                                            </span>
+                                            {renderEnhancedStatusBadge(item.report_status)}
+                                        </div>
+                                        {notEvaluableReason && (
+                                            <div className="mt-2 text-sm text-amber-700">
+                                                {notEvaluableReason}
+                                            </div>
                                         )}
-                                    </h3>
-                                    <div className="flex items-center gap-4 text-sm text-slate-500 mt-1 flex-wrap">
-                                        <span className="flex items-center gap-1.5">
-                                            <Calendar className="w-4 h-4" />
-                                            {formatDateTime(item.start_time)}
-                                        </span>
-                                        <span className="flex items-center gap-1.5">
-                                            <Clock className="w-4 h-4" />
-                                            {formatDuration(item.duration_seconds || 0)}
-                                        </span>
-                                        {/* Report Status Badge */}
-                                        {item.report_status === "pending" && (
-                                            <Badge variant="secondary" className="text-xs">报告待生成</Badge>
-                                        )}
-                                        {item.report_status === "processing" && (
-                                            <Badge variant="gray" className="text-xs animate-pulse">报告生成中...</Badge>
-                                        )}
-                                        {item.report_status === "failed" && (
-                                            <Badge variant="red" className="text-xs">报告生成失败</Badge>
+                                        {!notEvaluableReason && evidenceCompletenessNote && (
+                                            <div className="mt-2 text-xs text-slate-500">
+                                                {evidenceCompletenessNote}
+                                            </div>
                                         )}
                                     </div>
                                 </div>
-                            </div>
 
-                            <div className="flex items-center gap-6 flex-wrap justify-end">
-                                <div className="text-right">
-                                    {item.report_status === "completed" && item.overall_score !== null ? (
-                                        <>
-                                            <div className={`text-2xl font-bold ${scoreClass(item.overall_score)}`}>
-                                                {Math.round(item.overall_score)}
-                                                <span className="text-sm font-normal text-slate-400 ml-1">分</span>
-                                            </div>
-                                            <span className="text-xs text-slate-400 font-medium">综合评分</span>
-                                        </>
-                                    ) : (
-                                        <>
-                                            <div className="text-2xl font-bold text-slate-300">--</div>
-                                            <span className="text-xs text-slate-400 font-medium">
-                                                {item.report_status === "pending" ? "评分中" :
-                                                 item.report_status === "processing" ? "评分中" :
-                                                 item.report_status === "failed" ? "评分失败" : "暂无评分"}
-                                            </span>
-                                        </>
-                                    )}
+                                <div className="flex items-center gap-6 flex-wrap justify-end">
+                                    <div className="text-right">
+                                        {item.evaluable === false ? (
+                                            <>
+                                                <div className="text-lg font-bold text-amber-700">不可评估</div>
+                                                <span className="text-xs text-amber-600 font-medium">统一训练证据不足</span>
+                                            </>
+                                        ) : item.overall_score !== null ? (
+                                            <>
+                                                <div
+                                                    data-testid={`history-score-${item.session_id}`}
+                                                    className={`text-2xl font-bold ${scoreClass(item.overall_score)}`}
+                                                >
+                                                    {Math.round(item.overall_score)}
+                                                    <span className="text-sm font-normal text-slate-400 ml-1">分</span>
+                                                </div>
+                                                <span className="text-xs text-slate-400 font-medium">统一训练证据评分</span>
+                                            </>
+                                        ) : item.status === "completed" ? (
+                                            <>
+                                                <div className="text-2xl font-bold text-slate-300">--</div>
+                                                <span className="text-xs text-slate-400 font-medium">统一证据待同步</span>
+                                            </>
+                                        ) : (
+                                            <>
+                                                <div className="text-2xl font-bold text-slate-300">--</div>
+                                                <span className="text-xs text-slate-400 font-medium">进行中</span>
+                                            </>
+                                        )}
+                                    </div>
+
+                                    <Link href={`/practice/${item.session_id}/replay`}>
+                                        <Button variant="outline" className="gap-1">
+                                            回放
+                                            <ArrowRight className="w-4 h-4" />
+                                        </Button>
+                                    </Link>
+                                    <Link href={`/practice/${item.session_id}/report`}>
+                                        <Button className="gap-1" disabled={!canOpenReport}>
+                                            报告
+                                        </Button>
+                                    </Link>
                                 </div>
-
-                                <Link href={`/practice/${item.session_id}/replay`}>
-                                    <Button variant="outline" className="gap-1">
-                                        回放
-                                        <ArrowRight className="w-4 h-4" />
-                                    </Button>
-                                </Link>
-                                <Link href={`/practice/${item.session_id}/report`}>
-                                    <Button className="gap-1" disabled={item.report_status !== "completed"}>
-                                        报告
-                                    </Button>
-                                </Link>
-                            </div>
-                        </GlassCard>
-                    ))}
+                            </GlassCard>
+                        );
+                    })}
                 </div>
             )}
         </div>

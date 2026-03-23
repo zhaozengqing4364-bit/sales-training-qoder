@@ -32,6 +32,8 @@ from sqlalchemy.orm import selectinload
 
 from common.api.server_error import build_server_error
 from common.auth.service import get_current_user
+from common.conversation.models import ConversationMessage
+from common.conversation.session_evidence import SessionEvidenceService
 from common.db.models import PracticeSession, Scenario, User
 from common.db.schemas import (
     SessionCreate,
@@ -58,6 +60,9 @@ from presentation_coach.services.coach_service import PresentationCoachService
 from sales_bot.services.bot_service import sales_bot_service
 from sales_bot.services.summary_service import summary_service
 from sales_bot.services.voice_runtime_policy import VoiceRuntimePolicyService
+from sales_bot.websocket.components.stepfun_message_helpers import (
+    normalize_score_snapshot,
+)
 from training_runtime.service import build_training_runtime_descriptor
 
 logger = get_logger(__name__)
@@ -238,6 +243,128 @@ def _lifecycle_log_context(transition: SessionLifecycleTransition) -> dict[str, 
     }
 
 
+def _calculate_session_overall_score(session: PracticeSession) -> float | None:
+    scores = (
+        session.logic_score,
+        session.accuracy_score,
+        session.completeness_score,
+    )
+    if any(score is None for score in scores):
+        return None
+    return round(sum(float(score) for score in scores) / 3.0, 2)
+
+
+def _build_sales_realtime_not_evaluable_snapshot(
+    *, reason: str,
+) -> dict[str, Any]:
+    return evaluate_effectiveness_snapshot(
+        metrics={
+            "continuous_speech_seconds": 0.0,
+            "filler_rate_per_100_words": 0.0,
+            "offtopic_turn_count": 0.0,
+            "offtopic_max_streak": 0.0,
+            "structure_coverage": 0.0,
+        },
+        main_capability_passed=False,
+        evaluable=False,
+        not_evaluable_reason=reason,
+    )
+
+
+def _apply_sales_realtime_score_snapshot_to_session(
+    session: PracticeSession,
+    score_snapshot: dict[str, Any] | None,
+) -> bool:
+    normalized_score_snapshot = normalize_score_snapshot(score_snapshot)
+    if normalized_score_snapshot is None:
+        return False
+
+    overall_score = float(normalized_score_snapshot.get("overall_score") or 0.0)
+    dimension_scores = normalized_score_snapshot.get("dimension_scores")
+    if not isinstance(dimension_scores, dict):
+        dimension_scores = {}
+
+    def _pick_score(*keys: str) -> float:
+        for key in keys:
+            value = dimension_scores.get(key)
+            if isinstance(value, (int, float)):
+                return max(0.0, min(100.0, float(value)))
+        return max(0.0, min(100.0, overall_score))
+
+    session.logic_score = _pick_score("专业度", "professional")
+    session.accuracy_score = _pick_score("沟通技巧", "communication")
+    session.completeness_score = _pick_score("销售流程", "discovery", "closing")
+    session.effectiveness_snapshot = None
+    return True
+
+
+async def _sync_sales_realtime_terminal_evidence(
+    *,
+    session_id: str,
+    session: PracticeSession,
+    db: AsyncSession,
+) -> str | None:
+    if str(getattr(session, "voice_mode", "") or "").lower() != "stepfun_realtime":
+        return None
+
+    session_info = get_session_manager().sessions.get(session_id)
+    live_handler = session_info.handler if session_info is not None else None
+    live_score_snapshot = getattr(live_handler, "_latest_score_snapshot", None)
+    if _apply_sales_realtime_score_snapshot_to_session(session, live_score_snapshot):
+        return "stepfun_runtime"
+
+    result = await db.execute(
+        select(ConversationMessage.score_snapshot)
+        .where(ConversationMessage.session_id == session_id)
+        .where(ConversationMessage.score_snapshot.is_not(None))
+        .order_by(
+            ConversationMessage.turn_number.desc(),
+            ConversationMessage.timestamp.desc(),
+        )
+        .limit(1)
+    )
+    row = result.first()
+    persisted_score_snapshot = row[0] if row else None
+    if _apply_sales_realtime_score_snapshot_to_session(session, persisted_score_snapshot):
+        return "stepfun_message_analysis"
+
+    session.effectiveness_snapshot = _build_sales_realtime_not_evaluable_snapshot(
+        reason="INSUFFICIENT_TURN_DATA"
+    )
+    return "stepfun_insufficient_evidence"
+
+
+def _log_sales_terminal_evidence_state(
+    *,
+    session_id: str,
+    session: PracticeSession,
+    snapshot: dict[str, Any] | None,
+    evidence_source: str,
+) -> None:
+    if not isinstance(snapshot, dict):
+        return
+
+    if bool(snapshot.get("evaluable", False)):
+        logger.info(
+            "practice_session_evidence_persisted",
+            session_id=session_id,
+            evidence_source=evidence_source,
+            voice_mode=getattr(session, "voice_mode", None),
+            overall_score=_calculate_session_overall_score(session),
+            evaluable=True,
+        )
+        return
+
+    logger.info(
+        "practice_session_evidence_not_evaluable",
+        session_id=session_id,
+        evidence_source=evidence_source,
+        voice_mode=getattr(session, "voice_mode", None),
+        evaluable=False,
+        not_evaluable_reason=snapshot.get("not_evaluable_reason"),
+    )
+
+
 async def _prepare_terminal_lifecycle_result(
     *,
     session_id: str,
@@ -277,25 +404,45 @@ async def _prepare_terminal_lifecycle_result(
         transition.session = session
         snapshot = _ensure_effectiveness_snapshot(session)
     elif normalized_scenario_type == "sales":
-        if not _session_has_persisted_scores(session):
-            summary_result = await summary_service.generate_summary(uuid.UUID(session_id))
-            if not summary_result.is_success:
-                raise _LifecycleActionAbort(
-                    build_server_error(
-                        "[SUMMARY_GENERATION_FAILED]",
-                        message="总结生成失败",
-                        session_id=session_id,
-                    )
-                )
-            summary = summary_result.value
-            _apply_sales_summary_scores_if_missing(session, summary)
+        evidence_source: str | None = None
+        if _session_has_persisted_scores(session):
+            evidence_source = "session_scores"
         else:
-            logger.info(
-                "Skip sales summary regeneration because scores already exist",
+            evidence_source = await _sync_sales_realtime_terminal_evidence(
                 session_id=session_id,
+                session=session,
+                db=db,
             )
+            if evidence_source is None:
+                summary_result = await summary_service.generate_summary(
+                    uuid.UUID(session_id)
+                )
+                if not summary_result.is_success:
+                    logger.warning(
+                        "practice_session_summary_generation_failed",
+                        session_id=session_id,
+                        voice_mode=getattr(session, "voice_mode", None),
+                        summary_fallback=summary_result.fallback,
+                    )
+                    raise _LifecycleActionAbort(
+                        build_server_error(
+                            "[SUMMARY_GENERATION_FAILED]",
+                            message="总结生成失败",
+                            session_id=session_id,
+                        )
+                    )
+                summary = summary_result.value
+                _apply_sales_summary_scores_if_missing(session, summary)
+                evidence_source = "summary"
 
         snapshot = _ensure_effectiveness_snapshot(session)
+        if evidence_source is not None:
+            _log_sales_terminal_evidence_state(
+                session_id=session_id,
+                session=session,
+                snapshot=snapshot,
+                evidence_source=evidence_source,
+            )
 
         # Keep compatibility with realtime runtime cleanup.
         end_result = await sales_bot_service.end_session(uuid.UUID(session_id))
@@ -1104,33 +1251,38 @@ async def get_session_report(
         str(scenario_type_value) if scenario_type_value else "sales"
     )
 
-    snapshot = _ensure_effectiveness_snapshot(session)
-    await db.commit()
+    projection_result = await SessionEvidenceService(db).get_projection(
+        session_id=session_id,
+        session=session,
+    )
+    if not projection_result.is_success:
+        return error_response("[SESSION_EVIDENCE_FAILED]", status_code=500)
+
+    projection = projection_result.value
 
     # Generate report
     report = SessionReport(
         session_id=session.session_id,
-        logic_score=session.logic_score or 0,
-        accuracy_score=session.accuracy_score or 0,
-        completeness_score=session.completeness_score or 0,
-        overall_score=(
-            (session.logic_score or 0)
-            + (session.accuracy_score or 0)
-            + (session.completeness_score or 0)
-        )
-        / 3,
+        logic_score=projection.logic_score,
+        accuracy_score=projection.accuracy_score,
+        completeness_score=projection.completeness_score,
+        overall_score=projection.overall_score,
         suggestions=["Review your performance and practice again!"],
         audio_url=session.audio_url,
         transcript_url=session.transcript_url,
         voice_policy_snapshot_ref=build_voice_policy_snapshot_ref(
             session.voice_policy_snapshot
         ),
-        effectiveness_snapshot=snapshot,
-        pass_flags=snapshot.get("pass_flags"),
-        main_capability_passed=snapshot.get("main_capability_passed"),
-        overall_result=snapshot.get("overall_result"),
-        main_issue=snapshot.get("main_issue"),
-        next_goal=snapshot.get("next_goal"),
+        effectiveness_snapshot=projection.effectiveness_snapshot,
+        pass_flags=projection.pass_flags,
+        main_capability_passed=projection.main_capability_passed,
+        overall_result=projection.overall_result,
+        main_issue=projection.main_issue,
+        next_goal=projection.next_goal,
+        stage_summary=projection.stage_summary,
+        evaluable=projection.evaluable,
+        not_evaluable_reason=projection.not_evaluable_reason,
+        evidence_completeness=projection.evidence_completeness,
         retry_entry={
             "scenario_type": normalized_scenario_type,
             "agent_id": str(session.agent_id) if session.agent_id else None,

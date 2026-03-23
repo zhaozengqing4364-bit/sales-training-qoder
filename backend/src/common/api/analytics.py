@@ -321,10 +321,11 @@ async def get_analytics_practice_history(
 ):
     """Get current user's practice history snapshot for analytics views."""
     try:
+        normalized_scenario_type = _normalize_scenario_type(scenario_type)
         result = await history_service.get_user_history(
             db=db,
             user_id=current_user.user_id,
-            scenario_type=scenario_type,
+            scenario_type=normalized_scenario_type,
             limit=limit,
             offset=offset,
         )
@@ -333,7 +334,7 @@ async def get_analytics_practice_history(
             return _server_error(
                 "[ANALYTICS_HISTORY_FETCH_FAILED]",
                 "Failed to fetch history",
-                scenario_type=scenario_type,
+                scenario_type=normalized_scenario_type,
                 limit=limit,
                 offset=offset,
             )
@@ -342,16 +343,29 @@ async def get_analytics_practice_history(
 
         items = [
             {
-                "session_id": str(session.session_id),
-                "scenario_id": str(session.scenario_id),
-                "start_time": session.start_time.isoformat(),
+                "session_id": session.session_id,
+                "scenario_id": session.scenario_id,
+                "scenario_name": session.scenario_name,
+                "scenario_type": session.scenario_type,
+                "start_time": session.start_time.isoformat() if session.start_time else None,
                 "end_time": session.end_time.isoformat() if session.end_time else None,
                 "status": session.status,
-                "overall_score": (
-                    (session.logic_score or 0) * 0.4
-                    + (session.accuracy_score or 0) * 0.3
-                    + (session.completeness_score or 0) * 0.3
-                ),
+                "overall_score": session.overall_score,
+                "logic_score": session.logic_score,
+                "accuracy_score": session.accuracy_score,
+                "completeness_score": session.completeness_score,
+                "duration_seconds": session.duration_seconds,
+                "agent_name": session.agent_name,
+                "persona_name": session.persona_name,
+                "title": session.title,
+                "effectiveness_snapshot": session.effectiveness_snapshot,
+                "feedback_summary": session.feedback_summary,
+                "evaluable": session.evaluable,
+                "not_evaluable_reason": session.not_evaluable_reason,
+                "evidence_completeness": session.evidence_completeness,
+                "stage_summary": session.stage_summary,
+                "main_issue": session.main_issue,
+                "next_goal": session.next_goal,
             }
             for session in sessions
         ]

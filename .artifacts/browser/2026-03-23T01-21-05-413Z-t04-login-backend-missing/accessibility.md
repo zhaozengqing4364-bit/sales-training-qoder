@@ -1,0 +1,10 @@
+- text: AI
+- heading "欢迎回来" [level=1]
+- paragraph: 登录 AI 智能练习平台 开始训练
+- button "企业微信登录 (WeCom)"
+- text: 或者使用账号登录 网络连接失败，请检查后端服务或网络设置后重试。
+- textbox "name@company.com": test@example.com
+- textbox "••••••••": Password123!
+- button "登录"
+- paragraph: 仅供内部人员使用，如需帮助请联系管理员
+- alert

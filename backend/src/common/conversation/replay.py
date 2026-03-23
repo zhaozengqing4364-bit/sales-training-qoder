@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from common.conversation.models import ConversationMessage
+from common.conversation.session_evidence import SessionEvidenceService
 from common.db.models import PracticeSession, SessionStatus
 from common.db.voice_policy_snapshot import build_voice_policy_snapshot_ref_payload
 from common.error_handling.result import Result
@@ -177,30 +178,15 @@ class ReplayService:
         Requirements: R10.2
         """
         try:
-            # Check session is completed
-            session_result = await self._check_session_completed(session_id)
-            if not session_result.is_success:
-                return session_result
-
-            session = session_result.value
-
-            # Get all messages (no pagination for replay)
-            stmt = (
-                select(ConversationMessage)
-                .where(ConversationMessage.session_id == session_id)
-                .order_by(ConversationMessage.turn_number)
+            projection_result = await SessionEvidenceService(self.db).get_projection(
+                session_id=session_id,
+                require_completed=True,
             )
-            result = await self.db.execute(stmt)
-            messages = list(result.scalars().all())
+            if not projection_result.is_success:
+                return projection_result
 
-            # Generate timeline markers
-            timeline_markers = self._generate_timeline_markers(messages)
-
-            # Generate stage summary
-            stage_summary = self._generate_stage_summary(messages)
-
-            # Calculate total duration
-            total_duration_ms = self._calculate_total_duration(messages)
+            projection = projection_result.value
+            session = projection.session
 
             # Get agent and persona names (if available)
             agent_name = None
@@ -226,10 +212,20 @@ class ReplayService:
                 "agent_name": agent_name,
                 "persona_name": persona_name,
                 "voice_policy_snapshot_ref": build_voice_policy_snapshot_ref_payload(session.voice_policy_snapshot),
-                "total_duration_ms": total_duration_ms,
-                "messages": [self._message_to_dict(m, index + 1) for index, m in enumerate(messages)],
-                "timeline_markers": timeline_markers,
-                "stage_summary": stage_summary
+                "total_duration_ms": projection.total_duration_ms,
+                "messages": projection.messages,
+                "timeline_markers": projection.timeline_markers,
+                "stage_summary": projection.stage_summary,
+                "overall_score": projection.overall_score,
+                "effectiveness_snapshot": projection.effectiveness_snapshot,
+                "pass_flags": projection.pass_flags,
+                "main_capability_passed": projection.main_capability_passed,
+                "overall_result": projection.overall_result,
+                "main_issue": projection.main_issue,
+                "next_goal": projection.next_goal,
+                "evaluable": projection.evaluable,
+                "not_evaluable_reason": projection.not_evaluable_reason,
+                "evidence_completeness": projection.evidence_completeness,
             }
 
             logger.info(f"Generated replay data for session {session_id}")
@@ -397,54 +393,11 @@ class ReplayService:
         Returns:
             list[dict]: Stage summaries with duration and average score
         """
-        stage_data: dict[str, dict] = {}
-        current_stage = None
-        stage_start_ms = 0
-        cumulative_ms = 0
-
-        for msg in messages:
-            # Track stage changes
-            if msg.sales_stage and msg.sales_stage != current_stage:
-                # Close previous stage
-                if current_stage:
-                    if current_stage not in stage_data:
-                        stage_data[current_stage] = {"duration_ms": 0, "scores": []}
-                    stage_data[current_stage]["duration_ms"] += cumulative_ms - stage_start_ms
-
-                # Start new stage
-                current_stage = msg.sales_stage
-                stage_start_ms = cumulative_ms
-
-            # Collect scores
-            if current_stage and msg.score_snapshot:
-                overall = msg.score_snapshot.get("overall")
-                if overall is not None:
-                    if current_stage not in stage_data:
-                        stage_data[current_stage] = {"duration_ms": 0, "scores": []}
-                    stage_data[current_stage]["scores"].append(overall)
-
-            cumulative_ms += msg.duration_ms or 0
-
-        # Close final stage
-        if current_stage:
-            if current_stage not in stage_data:
-                stage_data[current_stage] = {"duration_ms": 0, "scores": []}
-            stage_data[current_stage]["duration_ms"] += cumulative_ms - stage_start_ms
-
-        # Build summary
-        summary = []
-        for stage_id in ["opening", "discovery", "presentation", "objection", "closing"]:
-            if stage_id in stage_data:
-                data = stage_data[stage_id]
-                scores = data["scores"]
-                avg_score = int(sum(scores) / len(scores)) if scores else 0
-                summary.append({
-                    "stage": stage_id,
-                    "duration_ms": data["duration_ms"],
-                    "score": avg_score
-                })
-
-        return summary
+        normalized_messages = [
+            SessionEvidenceService.serialize_message(message, index + 1)
+            for index, message in enumerate(messages)
+        ]
+        return SessionEvidenceService.build_stage_summary(normalized_messages)
 
     def _calculate_total_duration(self, messages: list[ConversationMessage]) -> int:
         """
@@ -456,7 +409,11 @@ class ReplayService:
         Returns:
             int: Total duration in milliseconds
         """
-        return sum(msg.duration_ms or 0 for msg in messages)
+        normalized_messages = [
+            SessionEvidenceService.serialize_message(message, index + 1)
+            for index, message in enumerate(messages)
+        ]
+        return SessionEvidenceService.calculate_total_duration(normalized_messages)
 
     def _message_to_dict(
         self,
@@ -472,23 +429,10 @@ class ReplayService:
         Returns:
             dict: Message data
         """
-        return {
-            "id": message.id,
-            "session_id": message.session_id,
-            "turn_number": self._normalize_turn_number(message.turn_number, fallback_turn_number),
-            "role": message.role,
-            "content": message.content,
-            "audio_url": message.audio_url,
-            "timestamp": message.timestamp.isoformat() if message.timestamp else None,
-            "duration_ms": message.duration_ms,
-            "fuzzy_words": message.fuzzy_words,
-            "sales_stage": message.sales_stage,
-            "score_snapshot": message.score_snapshot,
-            "ai_feedback": message.ai_feedback,
-            "is_highlight": message.is_highlight,
-            "highlight_type": message.highlight_type,
-            "highlight_reason": message.highlight_reason
-        }
+        return SessionEvidenceService.serialize_message(
+            message,
+            fallback_turn_number=fallback_turn_number,
+        )
 
     def _generate_suggested_response(self, message: ConversationMessage) -> str | None:
         """

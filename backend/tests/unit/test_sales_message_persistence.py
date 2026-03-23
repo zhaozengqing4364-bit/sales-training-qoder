@@ -92,7 +92,7 @@ async def test_save_message_returns_none_on_storage_failure() -> None:
 
 
 @pytest.mark.asyncio
-async def test_update_analysis_passes_unpacked_fields() -> None:
+async def test_update_analysis_passes_normalized_fields() -> None:
     persistence = MessagePersistence(session_id="session-sales-3")
     db_lock = asyncio.Lock()
     storage = Mock()
@@ -113,8 +113,10 @@ async def test_update_analysis_passes_unpacked_fields() -> None:
             analysis_data={
                 "fuzzy_words": [{"matched": "可能"}],
                 "sales_stage": "discovery",
-                "score_snapshot": {"overall": 86},
+                "score_snapshot": {"overall": 86, "dimension_scores": {"沟通技巧": 81}},
                 "ai_feedback": "建议量化价值点。",
+                "transcript_metadata": {"raw_text": "客户说预算偏高"},
+                "ignored": "drop-me",
             },
             db_lock=db_lock,
         )
@@ -123,8 +125,12 @@ async def test_update_analysis_passes_unpacked_fields() -> None:
         "msg-sales-3",
         fuzzy_words=[{"matched": "可能"}],
         sales_stage="discovery",
-        score_snapshot={"overall": 86},
+        score_snapshot={
+            "overall_score": 86.0,
+            "dimension_scores": {"沟通技巧": 81.0},
+        },
         ai_feedback="建议量化价值点。",
+        transcript_metadata={"raw_text": "客户说预算偏高"},
     )
 
 

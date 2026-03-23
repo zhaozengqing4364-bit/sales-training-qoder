@@ -99,6 +99,7 @@ from sales_bot.websocket.components.stepfun_knowledge_helpers import (
 from sales_bot.websocket.components.stepfun_message_helpers import (
     extract_analysis_patch_fields,
     normalize_message_persistence_payload,
+    normalize_score_snapshot,
     patch_existing_message_analysis,
     save_stepfun_message,
 )
@@ -500,9 +501,10 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
             runtime_state["current_request_id"] = self.current_request_id
         if self._last_emitted_stage:
             runtime_state["last_emitted_stage"] = self._last_emitted_stage
-        if self._latest_score_snapshot is not None:
+        normalized_score_snapshot = normalize_score_snapshot(self._latest_score_snapshot)
+        if normalized_score_snapshot is not None:
             runtime_state["latest_score_snapshot"] = copy.deepcopy(
-                self._latest_score_snapshot
+                normalized_score_snapshot
             )
         if self._latest_action_card is not None:
             runtime_state["latest_action_card"] = copy.deepcopy(
@@ -535,11 +537,7 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
         self.current_request_id = int(runtime_state.get("current_request_id") or 0)
         self._last_emitted_stage = runtime_state.get("last_emitted_stage")
         latest_score_snapshot = runtime_state.get("latest_score_snapshot")
-        self._latest_score_snapshot = (
-            copy.deepcopy(latest_score_snapshot)
-            if isinstance(latest_score_snapshot, dict)
-            else None
-        )
+        self._latest_score_snapshot = normalize_score_snapshot(latest_score_snapshot)
         latest_action_card = runtime_state.get("latest_action_card")
         self._latest_action_card = (
             copy.deepcopy(latest_action_card)
@@ -1357,18 +1355,43 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
 
     def _apply_latest_scores_to_session(self, session: PracticeSession) -> None:
         """Sync latest realtime score snapshot into session-level score fields."""
-        if not isinstance(self._latest_score_snapshot, dict):
+        normalized_score_snapshot = normalize_score_snapshot(self._latest_score_snapshot)
+        evaluable = self.turn_count > 0
+        not_evaluable_reason = None if evaluable else "INSUFFICIENT_TURN_DATA"
+
+        if normalized_score_snapshot is None:
+            session.effectiveness_snapshot = evaluate_effectiveness_snapshot(
+                metrics={
+                    "continuous_speech_seconds": 0.0,
+                    "filler_rate_per_100_words": 0.0,
+                    "offtopic_turn_count": 0.0,
+                    "offtopic_max_streak": 0.0,
+                    "structure_coverage": 0.0,
+                },
+                main_capability_passed=False,
+                evaluable=False,
+                not_evaluable_reason="INSUFFICIENT_TURN_DATA",
+            )
+            logger.info(
+                "practice_session_evidence_not_evaluable",
+                session_id=self.session_id,
+                evidence_source="stepfun_runtime",
+                not_evaluable_reason="INSUFFICIENT_TURN_DATA",
+                turn_count=max(0, self.turn_count),
+            )
             return
+
+        self._latest_score_snapshot = normalized_score_snapshot
 
         try:
             overall_score = float(
-                self._latest_score_snapshot.get("overall_score") or 0.0
+                normalized_score_snapshot.get("overall_score") or 0.0
             )
         except (TypeError, ValueError):
             overall_score = 0.0
         overall_score = max(0.0, min(100.0, overall_score))
 
-        dimension_scores = self._latest_score_snapshot.get("dimension_scores")
+        dimension_scores = normalized_score_snapshot.get("dimension_scores")
         if not isinstance(dimension_scores, dict):
             dimension_scores = {}
 
@@ -1392,8 +1415,6 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
         offtopic_turn_count = max(0, round((100.0 - communication_score) / 25.0))
         offtopic_max_streak = 2 if communication_score < 55 else (1 if communication_score < 80 else 0)
         structure_coverage = max(0.0, min(1.0, structure_score / 100.0))
-        evaluable = self.turn_count > 0
-        not_evaluable_reason = None if evaluable else "INSUFFICIENT_TURN_DATA"
 
         snapshot = evaluate_effectiveness_snapshot(
             metrics={
@@ -1410,6 +1431,24 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
             not_evaluable_reason=not_evaluable_reason,
         )
         session.effectiveness_snapshot = snapshot
+
+        if snapshot.get("evaluable", False):
+            logger.info(
+                "practice_session_evidence_persisted",
+                session_id=self.session_id,
+                evidence_scope="session",
+                evidence_source="stepfun_runtime",
+                overall_score=overall_score,
+                turn_count=max(0, self.turn_count),
+            )
+        else:
+            logger.info(
+                "practice_session_evidence_not_evaluable",
+                session_id=self.session_id,
+                evidence_source="stepfun_runtime",
+                not_evaluable_reason=snapshot.get("not_evaluable_reason"),
+                turn_count=max(0, self.turn_count),
+            )
 
     async def _apply_lifecycle_action(self, action: str):
         if not self.session_id:

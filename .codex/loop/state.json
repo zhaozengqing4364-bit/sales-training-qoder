@@ -1,40 +1,40 @@
 {
   "mode": "stabilize",
-  "current_issue_id": "M001-S01-T03",
-  "current_issue_type": "reliability",
+  "current_issue_id": "M001-S02",
+  "current_issue_type": "slice",
   "current_issue_status": "done",
   "pending_issue_ids": [],
   "completed_issue_ids": [
     "M001-S01-T01",
     "M001-S01-T02",
-    "M001-S01-T03"
+    "M001-S01-T03",
+    "M001-S02-T01",
+    "M001-S02-T02",
+    "M001-S02-T03",
+    "M001-S02-T04",
+    "M001-S02"
   ],
   "blocked_issue_ids": [],
   "deferred_issue_ids": [],
   "last_modified_files": [
-    "web/package.json",
-    "web/src/app/(user)/practice/[sessionId]/page.tsx",
-    "web/src/app/(user)/practice/[sessionId]/use-practice-session-lifecycle.ts",
-    "web/src/app/(user)/practice/[sessionId]/use-practice-session-lifecycle.test.ts",
-    "web/src/hooks/use-practice-websocket.ts",
-    "web/src/hooks/use-practice-websocket.test.ts",
-    "web/src/hooks/websocket/message-handlers.ts",
-    "web/src/hooks/websocket/message-handlers.test.ts",
-    ".gsd/DECISIONS.md",
-    ".gsd/completed-units.json",
-    ".gsd/milestones/M001/slices/S01/S01-PLAN.md",
-    ".gsd/milestones/M001/slices/S01/tasks/T03-SUMMARY.md",
+    ".gsd/milestones/M001/slices/S02/S02-SUMMARY.md",
+    ".gsd/milestones/M001/slices/S02/S02-UAT.md",
+    ".gsd/milestones/M001/M001-ROADMAP.md",
+    ".gsd/REQUIREMENTS.md",
+    ".gsd/PROJECT.md",
     ".gsd/STATE.md",
+    ".gsd/completed-units.json",
     ".codex/loop/state.json",
     ".codex/loop/log.md"
   ],
   "last_verification_commands": [
-    "cd backend && pytest tests/integration/test_session_lifecycle_api.py tests/contract/test_sessions.py tests/integration/test_session_flow.py -k \"lifecycle or end\"",
-    "cd backend && pytest tests/unit/test_stepfun_realtime_persistence.py tests/integration/test_sales_realtime_reconnect_flow.py tests/integration/test_websocket_status_contract.py",
-    "cd web && npm test -- --run 'src/app/(user)/practice/[sessionId]/use-practice-session-lifecycle.test.ts' src/hooks/use-practice-websocket.test.ts src/hooks/websocket/message-handlers.test.ts"
+    "cd backend && pytest tests/unit/test_stepfun_message_helpers.py tests/unit/test_stepfun_realtime_persistence.py tests/unit/test_sales_message_persistence.py",
+    "cd backend && pytest tests/unit/test_session_evidence_service.py tests/unit/test_replay_service.py tests/contract/test_practice_evidence_contract.py tests/integration/test_practice_evidence_flow.py",
+    "cd backend && pytest tests/unit/test_history_service_evidence_projection.py tests/unit/common/test_analytics_api_normalization.py tests/integration/test_history_evidence_flow.py",
+    "cd web && npm test -- --run 'src/app/(user)/practice/[sessionId]/report/page.test.tsx' 'src/app/(user)/practice/[sessionId]/replay/page.test.tsx' 'src/app/(dashboard)/history/page.test.tsx'"
   ],
-  "last_verification_result": "passed",
-  "last_success_signal": "Practice page now stays on /practice/{sessionId} when end fails, exposes retry/reconnect UI, and routes to /report only after the server confirms terminal session status.",
+  "last_verification_result": "reused previously passed S02 slice verification results recorded during T04 before the crash; all required slice verification commands passed, and observability/failure-state checks confirmed the unified evidence contract degrades explicitly when local dev DB schema drift blocks happy-path browser data.",
+  "last_success_signal": "S02 is complete: training evidence now persists canonically, projects through one shared reader, powers report/replay/history/trends from the same baseline, and is consumed by web pages without client-side score stitching.",
   "last_growth_scan": null,
-  "next_action": "Reassess the roadmap after S01 completion, then select the next unresolved item."
+  "next_action": "Reassess the roadmap after S02 completion and choose the next slice; S03 is now directly unblocked, while any further browser happy-path verification for history/report/replay should wait until the local dev database is migrated to add conversation_messages.transcript_metadata."
 }
