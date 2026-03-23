@@ -1432,15 +1432,18 @@ async def get_session_knowledge_check(
         elif attempt_count > 0 and hit_query_count <= 0:
             kb_lock_status = "blocked_empty"
 
-    if not internal_retrieval_enabled:
-        status = "disabled"
-        summary = "内部知识检索未启用"
-    elif not knowledge_base_ids:
+    if not knowledge_base_ids:
         status = "no_knowledge_base"
         summary = "当前会话未绑定知识库"
+    elif not internal_retrieval_enabled:
+        status = "disabled"
+        summary = "内部知识检索未启用"
     elif last_status == "kb_not_ready" or "[KB_NOT_READY]" in last_error:
         status = "kb_not_ready"
         summary = "知识库文档尚未处理完成"
+    elif last_status == "search_failed" or "[KNOWLEDGE_SEARCH_UNAVAILABLE]" in last_error:
+        status = "search_failed"
+        summary = "知识检索触发失败，请检查知识库或 Embedding 服务"
     elif attempt_count == 0:
         status = "not_triggered"
         summary = "本次对话尚未触发知识检索"

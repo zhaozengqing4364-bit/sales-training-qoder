@@ -350,11 +350,13 @@ export default function ComprehensiveReportPage() {
         ? "text-green-700 bg-green-50 border-green-200"
         : knowledgeCheck?.status === "kb_not_ready"
             ? "text-amber-700 bg-amber-50 border-amber-200"
-            : knowledgeCheck?.status === "miss"
-                ? "text-amber-700 bg-amber-50 border-amber-200"
-                : knowledgeCheck?.status === "disabled" || knowledgeCheck?.status === "no_knowledge_base"
-                    ? "text-red-700 bg-red-50 border-red-200"
-                    : "text-slate-700 bg-slate-50 border-slate-200";
+            : knowledgeCheck?.status === "search_failed"
+                ? "text-red-700 bg-red-50 border-red-200"
+                : knowledgeCheck?.status === "miss"
+                    ? "text-amber-700 bg-amber-50 border-amber-200"
+                    : knowledgeCheck?.status === "disabled" || knowledgeCheck?.status === "no_knowledge_base"
+                        ? "text-red-700 bg-red-50 border-red-200"
+                        : "text-slate-700 bg-slate-50 border-slate-200";
 
     if (loading) {
         return (
@@ -529,13 +531,15 @@ export default function ComprehensiveReportPage() {
                                 ? "已命中"
                                 : knowledgeCheck.status === "kb_not_ready"
                                     ? "知识库处理中"
-                                    : knowledgeCheck.status === "miss"
-                                        ? "未命中"
-                                        : knowledgeCheck.status === "not_triggered"
-                                            ? "未触发检索"
-                                            : knowledgeCheck.status === "no_knowledge_base"
-                                                ? "未绑定知识库"
-                                                : "已关闭检索"}
+                                    : knowledgeCheck.status === "search_failed"
+                                        ? "检索失败"
+                                        : knowledgeCheck.status === "miss"
+                                            ? "未命中"
+                                            : knowledgeCheck.status === "not_triggered"
+                                                ? "未触发检索"
+                                                : knowledgeCheck.status === "no_knowledge_base"
+                                                    ? "未绑定知识库"
+                                                    : "已关闭检索"}
                         </span>
                     </div>
 

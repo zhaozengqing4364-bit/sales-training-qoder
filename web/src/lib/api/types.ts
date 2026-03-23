@@ -380,7 +380,7 @@ export interface AdminKnowledgeDocument {
     chunk_count: number;
     status: string;
     created_at: string;
-    error_message?: string;
+    error_message?: string | null;
 }
 
 export interface AdminKnowledgeDocumentPreviewChunk {
@@ -963,7 +963,7 @@ export interface HistoryTrendPoint extends Pick<SessionEvidenceContract,
 export interface KnowledgeCheckDiagnostics {
     session_id: string;
     voice_mode?: "legacy" | "stepfun_realtime" | string;
-    status: "disabled" | "no_knowledge_base" | "not_triggered" | "kb_not_ready" | "hit" | "miss";
+    status: "disabled" | "no_knowledge_base" | "not_triggered" | "kb_not_ready" | "search_failed" | "hit" | "miss";
     summary: string;
     internal_retrieval_enabled: boolean;
     knowledge_base_ids: string[];

@@ -9,7 +9,9 @@ References:
 """
 
 import uuid
+from unittest.mock import AsyncMock, MagicMock
 
+import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
@@ -19,6 +21,7 @@ from common.auth.service import create_access_token
 from common.db.models import Base, User
 from common.db.session import get_db
 from common.error_handling.result import Result
+from common.knowledge.models import KnowledgeBase, KnowledgeDocument
 from main import app
 
 TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
@@ -99,6 +102,43 @@ async def sample_kb_data():
         "description": "包含产品功能、定价、技术规格等信息",
         "category": "product",
     }
+
+
+async def _seed_document(
+    db_session: AsyncSession,
+    *,
+    status: str = "failed",
+    error_message: str | None = "向量化失败",
+    file_type: str = "xlsx",
+) -> tuple[KnowledgeBase, KnowledgeDocument]:
+    kb_id = str(uuid.uuid4())
+    kb = KnowledgeBase(
+        id=kb_id,
+        name="重处理测试知识库",
+        description="用于验证知识文档重处理",
+        category="product",
+        vector_collection=f"kb_{kb_id.replace('-', '_')}",
+        embedding_model="text-embedding-v4",
+        document_count=1,
+        total_chunks=0,
+        status="active",
+    )
+    doc = KnowledgeDocument(
+        id=str(uuid.uuid4()),
+        knowledge_base_id=kb_id,
+        title="石犀销售资料",
+        file_type=file_type,
+        file_url=f"/tmp/{kb_id}.{file_type}",
+        file_size=2048,
+        status=status,
+        chunk_count=0,
+        error_message=error_message,
+    )
+    db_session.add_all([kb, doc])
+    await db_session.commit()
+    await db_session.refresh(kb)
+    await db_session.refresh(doc)
+    return kb, doc
 
 
 class TestKnowledgeBaseAPI:
@@ -345,3 +385,112 @@ class TestKnowledgeSearchAPI:
         assert body["success"] is True
         assert body["data"]["total"] == 1
         assert body["data"]["results"][0]["metadata"]["document_title"] == "实施手册.md"
+
+    async def test_admin_search_returns_503_when_retrieval_backend_unavailable(
+        self, async_client, auth_headers, monkeypatch
+    ):
+        """Admin search should expose infrastructure failures as 503 instead of 404."""
+
+        async def fake_search(self, kb_id, query, top_k=3, similarity_threshold=0.7):
+            return Result.fail(
+                "[KNOWLEDGE_SEARCH_UNAVAILABLE] [EMBEDDING_API_ERROR] quota_exhausted"
+            )
+
+        monkeypatch.setattr("common.knowledge.api.KnowledgeService.search", fake_search)
+
+        response = await async_client.post(
+            "/api/v1/admin/knowledge/kb-test-003/search",
+            json={
+                "query": "产品报价",
+                "top_k": 3,
+                "similarity_threshold": 0.6,
+            },
+            headers=auth_headers,
+        )
+
+        assert response.status_code == 503
+        assert (
+            response.json()["detail"]
+            == "[KNOWLEDGE_SEARCH_UNAVAILABLE] [EMBEDDING_API_ERROR] quota_exhausted"
+        )
+
+
+class TestKnowledgeReprocessAPI:
+    """Tests for admin knowledge document reprocess flow."""
+
+    @pytest.mark.parametrize("initial_status", ["failed", "pending"])
+    async def test_reprocess_document_resets_retryable_document(
+        self,
+        async_client,
+        auth_headers,
+        db_session,
+        monkeypatch,
+        initial_status,
+    ):
+        """Failed and pending documents should both be retryable from admin API."""
+        kb, doc = await _seed_document(
+            db_session,
+            status=initial_status,
+            error_message="向量化失败" if initial_status == "failed" else None,
+        )
+
+        vector_store = MagicMock()
+        vector_store.delete_document_chunks = AsyncMock(return_value=True)
+        storage = MagicMock()
+        storage.delete_parse_artifact = MagicMock(return_value=True)
+
+        async def _noop_process_document_background(**kwargs):
+            return None
+
+        monkeypatch.setattr(
+            "common.knowledge.api.get_knowledge_vector_store",
+            lambda: vector_store,
+        )
+        monkeypatch.setattr(
+            "common.knowledge.api.get_document_storage_service",
+            lambda: storage,
+        )
+        monkeypatch.setattr(
+            "common.knowledge.api.process_document_background",
+            _noop_process_document_background,
+        )
+
+        response = await async_client.post(
+            f"/api/v1/admin/knowledge/{kb.id}/documents/{doc.id}/reprocess",
+            headers=auth_headers,
+        )
+
+        assert response.status_code == 202
+        body = response.json()
+        assert body["success"] is True
+        assert body["data"]["document_id"] == doc.id
+
+        await db_session.refresh(doc)
+        assert doc.status == "pending"
+        assert doc.chunk_count == 0
+        assert doc.error_message is None
+        vector_store.delete_document_chunks.assert_awaited_once_with(
+            kb.vector_collection, doc.id
+        )
+        storage.delete_parse_artifact.assert_called_once_with(doc.file_url)
+
+    async def test_reprocess_document_rejects_ready_document(
+        self,
+        async_client,
+        auth_headers,
+        db_session,
+    ):
+        """Ready documents should not expose a retry action that rewinds a healthy index."""
+        kb, doc = await _seed_document(
+            db_session,
+            status="ready",
+            error_message=None,
+        )
+
+        response = await async_client.post(
+            f"/api/v1/admin/knowledge/{kb.id}/documents/{doc.id}/reprocess",
+            headers=auth_headers,
+        )
+
+        assert response.status_code == 400
+        assert response.json()["detail"].startswith("[INVALID_STATUS]")

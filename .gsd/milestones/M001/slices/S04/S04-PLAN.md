@@ -40,7 +40,7 @@
 
 ## Tasks
 
-- [ ] **T01: 补齐知识库更新诊断并证明新 sales session 吃到最新产品资料** `est:4h`
+- [x] **T01: 补齐知识库更新诊断并证明新 sales session 吃到最新产品资料** `est:4h`
   - Why: 产品资料这半条链当前最真实的缺口不是“没有知识库”，而是管理员无法自助恢复 failed/pending 文档，也无法在 UI 里判断 ready / miss / kb_not_ready；同时 S04 必须把“下一次新建 session 才吃到新资料、旧 session 快照不回写”这条权威线锁死。
   - Files: `backend/src/common/knowledge/api.py`, `backend/tests/integration/test_knowledge_api.py`, `backend/tests/integration/test_knowledge_upload_persistence.py`, `backend/tests/integration/test_knowledge_flow.py`, `web/src/lib/api/client.ts`, `web/src/lib/api/types.ts`, `web/src/app/admin/knowledge/[id]/page.tsx`, `web/src/app/admin/knowledge/[id]/page.test.tsx`
   - Do: 对齐知识库上传/search/reprocess 的前后端合同，保持 `xlsx/xls` 可上传并复用现有 reprocess API；在知识库详情页增加 failed/pending 文档重试、ready/not_ready 文案与搜索诊断面板；把 backend integration proof 扩到“persona 绑定 KB -> 上传/重试文档 -> 新建 sales session -> `/knowledge-check` 看到最新状态”，并明确旧 session 不被新资料回写。

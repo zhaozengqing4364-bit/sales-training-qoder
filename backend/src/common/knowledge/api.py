@@ -100,6 +100,15 @@ def _format_search_results(rows: list[dict[str, Any]]) -> list[SearchResult]:
     return formatted_results
 
 
+def _search_failure_status_code(detail: str | None) -> int:
+    normalized_detail = str(detail or "").strip()
+    if "[KNOWLEDGE_BASE_NOT_FOUND]" in normalized_detail:
+        return 404
+    if "[KNOWLEDGE_SEARCH_UNAVAILABLE]" in normalized_detail:
+        return 503
+    return 400
+
+
 async def process_document_background(
     doc_id: str,
     file_path: str,
@@ -615,7 +624,11 @@ async def search_knowledge_base_admin(
     )
 
     if not result.is_success:
-        raise HTTPException(status_code=404, detail=result.fallback)
+        detail = result.fallback or "[KNOWLEDGE_SEARCH_UNAVAILABLE]"
+        raise HTTPException(
+            status_code=_search_failure_status_code(detail),
+            detail=detail,
+        )
 
     search_results = _format_search_results(result.value or [])
     payload = KnowledgeSearchResponse(
@@ -646,7 +659,11 @@ async def search_knowledge_base_internal(
     )
 
     if not result.is_success:
-        raise HTTPException(status_code=404, detail=result.fallback)
+        detail = result.fallback or "[KNOWLEDGE_SEARCH_UNAVAILABLE]"
+        raise HTTPException(
+            status_code=_search_failure_status_code(detail),
+            detail=detail,
+        )
 
     search_results = _format_search_results(result.value or [])
     payload = KnowledgeSearchResponse(
