@@ -684,3 +684,337 @@ async def test_user_sessions_completed_rows_expose_projection_backed_preview_fie
     assert in_progress_row.get("evaluable") is None
     assert in_progress_row.get("main_issue") is None
     assert in_progress_row.get("next_goal") is None
+
+
+@pytest.mark.asyncio
+async def test_admin_progress_and_stats_follow_projection_backed_supervisor_snapshot(
+    async_client: AsyncClient,
+    admin_headers: dict[str, str],
+    db_session: AsyncSession,
+    non_admin_user: User,
+) -> None:
+    """Admin progress/stats should align with projection-backed preview scores and supervisor buckets."""
+    scenario = Scenario(
+        scenario_id=str(uuid.uuid4()),
+        scenario_type="sales",
+        name="重点客户推进",
+        description="Supervisor progress snapshot test",
+        is_active=True,
+    )
+    db_session.add(scenario)
+    await db_session.flush()
+
+    repeated_effectiveness_snapshot = {
+        "metrics": {
+            "continuous_speech_seconds": 240,
+            "filler_rate_per_100_words": 8.0,
+            "offtopic_turn_count": 1,
+            "offtopic_max_streak": 0,
+            "structure_coverage": 0.6,
+        },
+        "pass_flags": {
+            "pass_3min_flow": False,
+            "pass_5turn_defense": False,
+            "pass_4step_structure": False,
+        },
+        "main_capability_passed": False,
+        "overall_result": "fail",
+        "main_issue": {
+            "issue_type": "objection_response",
+            "issue_text": "异议回应不够具体。",
+            "recovery_rule": "先回应风险，再补证据。",
+        },
+        "next_goal": {
+            "goal_type": "objection_response_drill",
+            "goal_text": "下一轮继续把异议回应说完整。",
+            "rule": "至少完成 1 次完整异议回应。",
+        },
+        "evaluable": True,
+        "not_evaluable_reason": None,
+    }
+    not_evaluable_snapshot = {
+        "metrics": {
+            "continuous_speech_seconds": 20,
+            "filler_rate_per_100_words": 0.0,
+            "offtopic_turn_count": 0,
+            "offtopic_max_streak": 0,
+            "structure_coverage": 0.0,
+        },
+        "pass_flags": {
+            "pass_3min_flow": False,
+            "pass_5turn_defense": False,
+            "pass_4step_structure": False,
+        },
+        "main_capability_passed": False,
+        "overall_result": "fail",
+        "main_issue": {
+            "issue_type": "insufficient_turn_data",
+            "issue_text": "当前互动不足，暂时无法判断真实问题。",
+            "recovery_rule": "至少完成一轮用户表达和 AI 回应。",
+        },
+        "next_goal": {
+            "goal_type": "collect_more_evidence",
+            "goal_text": "先补齐有效互动，再继续诊断。",
+            "rule": "至少完成 1 次往返对话。",
+        },
+        "evaluable": False,
+        "not_evaluable_reason": "INSUFFICIENT_TURN_DATA",
+    }
+
+    session_a_start = datetime(2026, 3, 2, 10, 0, tzinfo=timezone.utc)
+    session_b_start = datetime(2026, 3, 5, 14, 0, tzinfo=timezone.utc)
+    session_c_start = datetime(2026, 3, 10, 11, 0, tzinfo=timezone.utc)
+
+    session_a = PracticeSession(
+        session_id=str(uuid.uuid4()),
+        user_id=str(non_admin_user.user_id),
+        scenario_id=str(scenario.scenario_id),
+        status="completed",
+        start_time=session_a_start,
+        end_time=session_a_start + timedelta(minutes=4),
+        total_duration_seconds=240,
+        logic_score=None,
+        accuracy_score=None,
+        completeness_score=None,
+        interruption_count=1,
+        effectiveness_snapshot=repeated_effectiveness_snapshot,
+    )
+    session_b = PracticeSession(
+        session_id=str(uuid.uuid4()),
+        user_id=str(non_admin_user.user_id),
+        scenario_id=str(scenario.scenario_id),
+        status="completed",
+        start_time=session_b_start,
+        end_time=session_b_start + timedelta(minutes=5),
+        total_duration_seconds=300,
+        logic_score=None,
+        accuracy_score=None,
+        completeness_score=None,
+        interruption_count=1,
+        effectiveness_snapshot=repeated_effectiveness_snapshot,
+    )
+    session_c = PracticeSession(
+        session_id=str(uuid.uuid4()),
+        user_id=str(non_admin_user.user_id),
+        scenario_id=str(scenario.scenario_id),
+        status="completed",
+        start_time=session_c_start,
+        end_time=session_c_start + timedelta(minutes=4),
+        total_duration_seconds=240,
+        logic_score=None,
+        accuracy_score=None,
+        completeness_score=None,
+        interruption_count=2,
+        effectiveness_snapshot=repeated_effectiveness_snapshot,
+    )
+    not_evaluable_session = PracticeSession(
+        session_id=str(uuid.uuid4()),
+        user_id=str(non_admin_user.user_id),
+        scenario_id=str(scenario.scenario_id),
+        status="completed",
+        start_time=session_b_start + timedelta(hours=2),
+        end_time=session_b_start + timedelta(hours=2, minutes=1),
+        total_duration_seconds=60,
+        logic_score=None,
+        accuracy_score=None,
+        completeness_score=None,
+        interruption_count=0,
+        effectiveness_snapshot=not_evaluable_snapshot,
+    )
+    in_progress_session = PracticeSession(
+        session_id=str(uuid.uuid4()),
+        user_id=str(non_admin_user.user_id),
+        scenario_id=str(scenario.scenario_id),
+        status="in_progress",
+        start_time=session_c_start + timedelta(days=1),
+        total_duration_seconds=120,
+        logic_score=None,
+        accuracy_score=None,
+        completeness_score=None,
+        interruption_count=0,
+    )
+    db_session.add_all(
+        [
+            session_a,
+            session_b,
+            session_c,
+            not_evaluable_session,
+            in_progress_session,
+        ]
+    )
+    await db_session.flush()
+
+    db_session.add_all(
+        [
+            ConversationMessage(
+                session_id=str(session_a.session_id),
+                turn_number=1,
+                role="user",
+                content="先说明业务背景。",
+                timestamp=session_a_start,
+                duration_ms=45000,
+                sales_stage="opening",
+            ),
+            ConversationMessage(
+                session_id=str(session_a.session_id),
+                turn_number=2,
+                role="assistant",
+                content="客户追问交付风险。",
+                timestamp=session_a_start + timedelta(seconds=45),
+                duration_ms=55000,
+                sales_stage="objection",
+                score_snapshot={
+                    "overall_score": 50,
+                    "dimension_scores": {
+                        "professional": 40,
+                        "communication": 50,
+                        "discovery": 60,
+                    },
+                },
+            ),
+            ConversationMessage(
+                session_id=str(session_b.session_id),
+                turn_number=1,
+                role="user",
+                content="先确认客户现状。",
+                timestamp=session_b_start,
+                duration_ms=50000,
+                sales_stage="discovery",
+            ),
+            ConversationMessage(
+                session_id=str(session_b.session_id),
+                turn_number=2,
+                role="assistant",
+                content="客户继续追问风险控制。",
+                timestamp=session_b_start + timedelta(seconds=50),
+                duration_ms=60000,
+                sales_stage="objection",
+                score_snapshot={
+                    "overall_score": 70,
+                    "dimension_scores": {
+                        "professional": 60,
+                        "communication": 70,
+                        "discovery": 80,
+                    },
+                },
+            ),
+            ConversationMessage(
+                session_id=str(session_c.session_id),
+                turn_number=1,
+                role="user",
+                content="先介绍方案。",
+                timestamp=session_c_start,
+                duration_ms=42000,
+                sales_stage="opening",
+            ),
+            ConversationMessage(
+                session_id=str(session_c.session_id),
+                turn_number=2,
+                role="assistant",
+                content="客户继续担心落地风险。",
+                timestamp=session_c_start + timedelta(seconds=42),
+                duration_ms=58000,
+                sales_stage="objection",
+                score_snapshot={
+                    "overall_score": 40,
+                    "dimension_scores": {
+                        "professional": 30,
+                        "communication": 40,
+                        "discovery": 50,
+                    },
+                },
+            ),
+        ]
+    )
+    await db_session.commit()
+
+    sessions_response = await async_client.get(
+        f"/api/v1/admin/users/{non_admin_user.user_id}/sessions",
+        params={"page": 1, "page_size": 10},
+        headers=admin_headers,
+    )
+    stats_response = await async_client.get(
+        f"/api/v1/admin/users/{non_admin_user.user_id}/stats",
+        params={"time_range": "all_time"},
+        headers=admin_headers,
+    )
+    progress_day_response = await async_client.get(
+        f"/api/v1/admin/users/{non_admin_user.user_id}/progress",
+        params={"time_range": "all_time", "granularity": "day"},
+        headers=admin_headers,
+    )
+    progress_week_response = await async_client.get(
+        f"/api/v1/admin/users/{non_admin_user.user_id}/progress",
+        params={"time_range": "all_time", "granularity": "week"},
+        headers=admin_headers,
+    )
+
+    assert sessions_response.status_code == 200
+    assert stats_response.status_code == 200
+    assert progress_day_response.status_code == 200
+    assert progress_week_response.status_code == 200
+
+    sessions_payload = sessions_response.json()["data"]
+    session_score_map = {
+        item["session_id"]: item["scores"]["overall"]
+        for item in sessions_payload["items"]
+        if item["status"] == "completed" and item.get("evaluable") is True
+    }
+    assert session_score_map == {
+        str(session_c.session_id): 40.0,
+        str(session_b.session_id): 70.0,
+        str(session_a.session_id): 50.0,
+    }
+
+    stats_payload = stats_response.json()["data"]
+    score_values = list(session_score_map.values())
+    assert stats_payload["statistics"]["average_score"] == pytest.approx(
+        round(sum(score_values) / len(score_values), 1)
+    )
+    assert stats_payload["statistics"]["best_score"] == max(score_values)
+    assert stats_payload["statistics"]["worst_score"] == min(score_values)
+    assert stats_payload["statistics"]["total_sessions"] == 5
+    assert stats_payload["statistics"]["completed_sessions"] == 4
+
+    progress_day = progress_day_response.json()["data"]
+    assert progress_day["granularity"] == "day"
+    assert [point["date"][:10] for point in progress_day["trend_data"]] == [
+        "2026-03-02",
+        "2026-03-05",
+        "2026-03-10",
+    ]
+
+    progress_week = progress_week_response.json()["data"]
+    assert progress_week["granularity"] == "week"
+    assert [point["date"][:10] for point in progress_week["trend_data"]] == [
+        "2026-03-02",
+        "2026-03-09",
+    ]
+    assert [point["average_score"] for point in progress_week["trend_data"]] == [60.0, 40.0]
+    assert progress_week["trend_data"][0]["sessions_count"] == 3
+    assert progress_week["trend_data"][0]["evaluable_session_count"] == 2
+    assert progress_week["trend_data"][0]["not_evaluable_session_count"] == 1
+    assert progress_week["trend_data"][0]["overall_result"] == "fail"
+    assert progress_week["trend_data"][0]["main_issue"]["issue_type"] == "objection_response"
+    assert progress_week["trend_data"][0]["next_goal"]["goal_type"] == "objection_response_drill"
+    assert progress_week["not_evaluable_session_count"] == 1
+    assert progress_week["non_completed_session_count"] == 1
+    assert progress_week["repeated_main_issues"] == [
+        {
+            "issue_type": "objection_response",
+            "issue_text": "异议回应不够具体。",
+            "count": 3,
+        }
+    ]
+    assert progress_week["repeated_next_goals"] == [
+        {
+            "goal_type": "objection_response_drill",
+            "goal_text": "下一轮继续把异议回应说完整。",
+            "count": 3,
+        }
+    ]
+    assert progress_week["should_switch_focus"] is True
+    assert progress_week["recommendation"] == {
+        "reason": "stalled_repeated_focus",
+        "summary": "最近多次训练仍卡在同一重点且没有改善，建议切换训练重点或训练方法。",
+    }

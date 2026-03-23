@@ -10,7 +10,19 @@ import pytest
 from common.analytics.history_service import HistoryService
 
 
-def _make_effectiveness_snapshot(*, evaluable: bool, reason: str | None) -> dict[str, object]:
+def _make_effectiveness_snapshot(
+    *,
+    evaluable: bool,
+    reason: str | None,
+    overall_result: str | None = None,
+    issue_type: str = "main_capability_not_passed",
+    issue_text: str | None = None,
+    recovery_rule: str | None = None,
+    goal_type: str = "main_capability_focus",
+    goal_text: str | None = None,
+    goal_rule: str | None = None,
+) -> dict[str, object]:
+    is_not_evaluable = not evaluable
     return {
         "pass_flags": {
             "pass_3min_flow": evaluable,
@@ -18,7 +30,7 @@ def _make_effectiveness_snapshot(*, evaluable: bool, reason: str | None) -> dict
             "pass_4step_structure": evaluable,
         },
         "main_capability_passed": evaluable,
-        "overall_result": "pass" if evaluable else "fail",
+        "overall_result": overall_result or ("pass" if evaluable else "fail"),
         "metrics": {
             "continuous_speech_seconds": 0.0,
             "filler_rate_per_100_words": 0.0,
@@ -27,14 +39,14 @@ def _make_effectiveness_snapshot(*, evaluable: bool, reason: str | None) -> dict
             "structure_coverage": 0.0,
         },
         "main_issue": {
-            "issue_type": "main_capability_not_passed",
-            "issue_text": "证据不足，当前无法评估。" if not evaluable else "继续保持。",
-            "recovery_rule": "补齐有效互动后再结束。" if not evaluable else "保持当前节奏。",
+            "issue_type": issue_type,
+            "issue_text": issue_text or ("证据不足，当前无法评估。" if is_not_evaluable else "继续保持。"),
+            "recovery_rule": recovery_rule or ("补齐有效互动后再结束。" if is_not_evaluable else "保持当前节奏。"),
         },
         "next_goal": {
-            "goal_type": "main_capability_focus",
-            "goal_text": "先完成一轮有效互动再评估。" if not evaluable else "维持当前表现。",
-            "rule": "补齐用户表达和AI回应后再结束。" if not evaluable else "继续按当前节奏推进。",
+            "goal_type": goal_type,
+            "goal_text": goal_text or ("先完成一轮有效互动再评估。" if is_not_evaluable else "维持当前表现。"),
+            "rule": goal_rule or ("补齐用户表达和AI回应后再结束。" if is_not_evaluable else "继续按当前节奏推进。"),
         },
         "version": "rule_v1",
         "evaluable": evaluable,
@@ -291,3 +303,190 @@ def test_build_statistics_and_trends_use_projection_scores_and_skip_not_evaluabl
     assert call.kwargs["evaluable_session_count"] == 2
     assert call.kwargs["not_evaluable_session_count"] == 1
     assert no_evidence_session.session_id in call.kwargs["not_evaluable_session_ids"]
+
+
+def test_build_supervisor_progress_snapshot_groups_truthfully_and_flags_repeated_stalled_focus() -> None:
+    first_session = _make_session(
+        status="completed",
+        start_time=datetime(2026, 3, 9, 10, 0, tzinfo=UTC),
+        scenario_type="sales",
+        scenario_name="销售对练",
+        logic_score=64.0,
+        accuracy_score=62.0,
+        completeness_score=60.0,
+        total_duration_seconds=180,
+        effectiveness_snapshot=_make_effectiveness_snapshot(
+            evaluable=True,
+            reason=None,
+            overall_result="fail",
+            issue_type="objection_response",
+            issue_text="异议回应还不够具体。",
+            recovery_rule="先回应风险，再补证据。",
+            goal_type="objection_response_drill",
+            goal_text="下一轮继续把异议回应说完整。",
+            goal_rule="至少完成 1 次完整异议回应。",
+        ),
+    )
+    second_session = _make_session(
+        status="completed",
+        start_time=datetime(2026, 3, 12, 15, 0, tzinfo=UTC),
+        scenario_type="sales",
+        scenario_name="销售对练",
+        logic_score=60.0,
+        accuracy_score=58.0,
+        completeness_score=56.0,
+        total_duration_seconds=150,
+        effectiveness_snapshot=_make_effectiveness_snapshot(
+            evaluable=True,
+            reason=None,
+            overall_result="fail",
+            issue_type="objection_response",
+            issue_text="异议回应还不够具体。",
+            recovery_rule="先回应风险，再补证据。",
+            goal_type="objection_response_drill",
+            goal_text="下一轮继续把异议回应说完整。",
+            goal_rule="至少完成 1 次完整异议回应。",
+        ),
+    )
+    third_session = _make_session(
+        status="completed",
+        start_time=datetime(2026, 3, 17, 11, 0, tzinfo=UTC),
+        scenario_type="sales",
+        scenario_name="销售对练",
+        logic_score=56.0,
+        accuracy_score=54.0,
+        completeness_score=52.0,
+        total_duration_seconds=165,
+        effectiveness_snapshot=_make_effectiveness_snapshot(
+            evaluable=True,
+            reason=None,
+            overall_result="fail",
+            issue_type="objection_response",
+            issue_text="异议回应还不够具体。",
+            recovery_rule="先回应风险，再补证据。",
+            goal_type="objection_response_drill",
+            goal_text="下一轮继续把异议回应说完整。",
+            goal_rule="至少完成 1 次完整异议回应。",
+        ),
+    )
+    not_evaluable_session = _make_session(
+        status="completed",
+        start_time=datetime(2026, 3, 13, 9, 0, tzinfo=UTC),
+        scenario_type="sales",
+        scenario_name="薄证据会话",
+        logic_score=None,
+        accuracy_score=None,
+        completeness_score=None,
+        total_duration_seconds=30,
+        effectiveness_snapshot=_make_effectiveness_snapshot(
+            evaluable=False,
+            reason="INSUFFICIENT_TURN_DATA",
+            issue_type="insufficient_turn_data",
+            issue_text="当前互动不足，暂时无法判断真实问题。",
+            recovery_rule="至少完成一轮用户表达和AI回应。",
+            goal_type="collect_more_evidence",
+            goal_text="先补齐有效互动，再继续诊断。",
+            goal_rule="至少完成 1 次往返对话。",
+        ),
+    )
+    in_progress_session = _make_session(
+        status="in_progress",
+        start_time=datetime(2026, 3, 18, 10, 0, tzinfo=UTC),
+        scenario_type="sales",
+        scenario_name="进行中会话",
+        logic_score=None,
+        accuracy_score=None,
+        completeness_score=None,
+        total_duration_seconds=None,
+        effectiveness_snapshot=None,
+    )
+
+    summaries = HistoryService.build_history_entries(
+        [
+            first_session,
+            second_session,
+            third_session,
+            not_evaluable_session,
+            in_progress_session,
+        ],
+        messages_by_session={
+            first_session.session_id: [],
+            second_session.session_id: [],
+            third_session.session_id: [],
+            not_evaluable_session.session_id: [],
+            in_progress_session.session_id: [],
+        },
+    )
+
+    day_snapshot = HistoryService.build_supervisor_progress_snapshot(
+        summaries,
+        granularity="day",
+    )
+    week_snapshot = HistoryService.build_supervisor_progress_snapshot(
+        summaries,
+        granularity="week",
+    )
+
+    assert day_snapshot["granularity"] == "day"
+    assert [point["date"][:10] for point in day_snapshot["trend_data"]] == [
+        "2026-03-09",
+        "2026-03-12",
+        "2026-03-17",
+    ]
+
+    assert week_snapshot["granularity"] == "week"
+    assert [point["date"][:10] for point in week_snapshot["trend_data"]] == [
+        "2026-03-09",
+        "2026-03-16",
+    ]
+    assert [point["average_score"] for point in week_snapshot["trend_data"]] == [60.0, 54.0]
+    assert week_snapshot["trend_data"][0]["sessions_count"] == 3
+    assert week_snapshot["trend_data"][0]["evaluable_session_count"] == 2
+    assert week_snapshot["trend_data"][0]["not_evaluable_session_count"] == 1
+    assert week_snapshot["trend_data"][0]["overall_result"] == "fail"
+    assert week_snapshot["trend_data"][0]["main_issue"]["issue_type"] == "objection_response"
+    assert week_snapshot["trend_data"][0]["next_goal"]["goal_type"] == "objection_response_drill"
+
+    assert week_snapshot["evaluable_session_count"] == 3
+    assert week_snapshot["not_evaluable_session_count"] == 1
+    assert week_snapshot["non_completed_session_count"] == 1
+    assert week_snapshot["repeated_main_issues"] == [
+        {
+            "issue_type": "objection_response",
+            "issue_text": "异议回应还不够具体。",
+            "count": 3,
+        }
+    ]
+    assert week_snapshot["repeated_next_goals"] == [
+        {
+            "goal_type": "objection_response_drill",
+            "goal_text": "下一轮继续把异议回应说完整。",
+            "count": 3,
+        }
+    ]
+    assert week_snapshot["should_switch_focus"] is True
+    assert week_snapshot["recommendation"] == {
+        "reason": "stalled_repeated_focus",
+        "summary": "最近多次训练仍卡在同一重点且没有改善，建议切换训练重点或训练方法。",
+    }
+
+    with patch("common.analytics.history_service.logger") as logger:
+        HistoryService()._log_history_query(
+            query_name="admin_user_progress",
+            user_id="user-1",
+            summaries=summaries,
+            filters={"granularity": "week", "time_range": "all_time"},
+            extra_fields={
+                "repeated_main_issues": week_snapshot["repeated_main_issues"],
+                "repeated_next_goals": week_snapshot["repeated_next_goals"],
+                "should_switch_focus": week_snapshot["should_switch_focus"],
+                "recommendation_reason": week_snapshot["recommendation"]["reason"],
+            },
+        )
+
+    logger.info.assert_called_once()
+    logged = logger.info.call_args
+    assert logged.kwargs["repeated_main_issues"] == week_snapshot["repeated_main_issues"]
+    assert logged.kwargs["repeated_next_goals"] == week_snapshot["repeated_next_goals"]
+    assert logged.kwargs["should_switch_focus"] is True
+    assert logged.kwargs["recommendation_reason"] == "stalled_repeated_focus"

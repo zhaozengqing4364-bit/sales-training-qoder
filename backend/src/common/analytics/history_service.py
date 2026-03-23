@@ -8,7 +8,7 @@ report/replay instead of mixing ComprehensiveReport caches and ad-hoc score form
 from __future__ import annotations
 
 import uuid
-from collections import defaultdict
+from collections import Counter, defaultdict
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any
@@ -52,6 +52,7 @@ class HistorySessionSummary:
     not_evaluable_reason: str | None
     evidence_completeness: dict[str, Any] | None
     effectiveness_snapshot: dict[str, Any] | None
+    overall_result: str | None
     feedback_summary: str | None
     stage_summary: list[dict[str, Any]]
     main_issue: dict[str, Any] | None
@@ -192,6 +193,7 @@ class HistoryService:
                         projection.evidence_completeness if projection else None
                     ),
                     effectiveness_snapshot=effectiveness_snapshot,
+                    overall_result=(projection.overall_result if projection else None),
                     feedback_summary=cls._build_feedback_summary(effectiveness_snapshot),
                     stage_summary=(projection.stage_summary if projection else []),
                     main_issue=(projection.main_issue if projection else None),
@@ -210,6 +212,7 @@ class HistoryService:
             for summary in summaries
             if summary.status == SessionStatus.COMPLETED.value
         ]
+        score_summary = HistoryService.build_projection_score_summary(summaries)
         if not completed_sessions:
             return {
                 "total_sessions": 0,
@@ -221,6 +224,29 @@ class HistoryService:
                 "total_practice_time_minutes": 0,
             }
 
+        total_practice_time_seconds = sum(
+            int(summary.duration_seconds) for summary in completed_sessions
+        )
+
+        return {
+            "total_sessions": len(completed_sessions),
+            "evaluable_sessions": int(score_summary["evaluable_sessions"]),
+            "not_evaluable_sessions": int(score_summary["not_evaluable_sessions"]),
+            "average_score": float(score_summary["average_score"]),
+            "best_score": float(score_summary["best_score"]),
+            "total_practice_time_seconds": total_practice_time_seconds,
+            "total_practice_time_minutes": round(total_practice_time_seconds / 60, 1),
+        }
+
+    @staticmethod
+    def build_projection_score_summary(
+        summaries: list[HistorySessionSummary],
+    ) -> dict[str, int | float]:
+        completed_sessions = [
+            summary
+            for summary in summaries
+            if summary.status == SessionStatus.COMPLETED.value
+        ]
         evaluable_sessions = [
             summary
             for summary in completed_sessions
@@ -229,36 +255,24 @@ class HistoryService:
         not_evaluable_sessions = [
             summary for summary in completed_sessions if summary.evaluable is False
         ]
+        if not evaluable_sessions:
+            return {
+                "completed_sessions": len(completed_sessions),
+                "evaluable_sessions": 0,
+                "not_evaluable_sessions": len(not_evaluable_sessions),
+                "average_score": 0,
+                "best_score": 0,
+                "worst_score": 0,
+            }
 
-        average_score = (
-            round(
-                sum(float(summary.overall_score or 0.0) for summary in evaluable_sessions)
-                / len(evaluable_sessions),
-                2,
-            )
-            if evaluable_sessions
-            else 0
-        )
-        best_score = (
-            round(
-                max(float(summary.overall_score or 0.0) for summary in evaluable_sessions),
-                2,
-            )
-            if evaluable_sessions
-            else 0
-        )
-        total_practice_time_seconds = sum(
-            int(summary.duration_seconds) for summary in completed_sessions
-        )
-
+        scores = [float(summary.overall_score or 0.0) for summary in evaluable_sessions]
         return {
-            "total_sessions": len(completed_sessions),
+            "completed_sessions": len(completed_sessions),
             "evaluable_sessions": len(evaluable_sessions),
             "not_evaluable_sessions": len(not_evaluable_sessions),
-            "average_score": average_score,
-            "best_score": best_score,
-            "total_practice_time_seconds": total_practice_time_seconds,
-            "total_practice_time_minutes": round(total_practice_time_seconds / 60, 1),
+            "average_score": round(sum(scores) / len(scores), 2),
+            "best_score": round(max(scores), 2),
+            "worst_score": round(min(scores), 2),
         }
 
     @staticmethod
@@ -285,6 +299,7 @@ class HistoryService:
                 "completeness_score": summary.completeness_score or 0,
                 "overall_score": float(summary.overall_score),
                 "scenario_type": summary.scenario_type,
+                "overall_result": summary.overall_result,
                 "evaluable": True,
                 "not_evaluable_reason": None,
                 "evidence_completeness": summary.evidence_completeness,
@@ -294,6 +309,268 @@ class HistoryService:
             }
             for summary in evaluable_sessions
         ]
+
+    @staticmethod
+    def _normalize_bucket_start(
+        start_time: datetime,
+        *,
+        granularity: str,
+    ) -> datetime:
+        if start_time.tzinfo is None:
+            start_time = start_time.replace(tzinfo=UTC)
+        else:
+            start_time = start_time.astimezone(UTC)
+        bucket_start = start_time.replace(hour=0, minute=0, second=0, microsecond=0)
+        if granularity == "week":
+            bucket_start -= timedelta(days=bucket_start.weekday())
+        return bucket_start
+
+    @staticmethod
+    def _split_completed_projection_groups(
+        summaries: list[HistorySessionSummary],
+    ) -> tuple[
+        list[HistorySessionSummary],
+        list[HistorySessionSummary],
+        list[HistorySessionSummary],
+        list[HistorySessionSummary],
+    ]:
+        completed_sessions = [
+            summary
+            for summary in summaries
+            if summary.status == SessionStatus.COMPLETED.value
+        ]
+        evaluable_sessions = [
+            summary
+            for summary in completed_sessions
+            if summary.evaluable is True and summary.overall_score is not None
+        ]
+        not_evaluable_sessions = [
+            summary for summary in completed_sessions if summary.evaluable is False
+        ]
+        non_completed_sessions = [
+            summary
+            for summary in summaries
+            if summary.status != SessionStatus.COMPLETED.value
+        ]
+        return (
+            completed_sessions,
+            evaluable_sessions,
+            not_evaluable_sessions,
+            non_completed_sessions,
+        )
+
+    @staticmethod
+    def _build_repeated_bucket_summary(
+        summaries: list[HistorySessionSummary],
+        *,
+        field_name: str,
+        type_key: str,
+        text_key: str,
+    ) -> list[dict[str, Any]]:
+        repeated_counts: Counter[str] = Counter()
+        latest_payload_by_type: dict[str, dict[str, Any]] = {}
+        latest_seen_at_by_type: dict[str, datetime] = {}
+
+        for summary in sorted(summaries, key=lambda item: item.start_time):
+            payload = getattr(summary, field_name)
+            if not isinstance(payload, dict):
+                continue
+            bucket_type = payload.get(type_key)
+            if not isinstance(bucket_type, str) or not bucket_type:
+                continue
+            repeated_counts[bucket_type] += 1
+            latest_payload_by_type[bucket_type] = payload
+            latest_seen_at_by_type[bucket_type] = summary.start_time
+
+        ranked_types = sorted(
+            (
+                bucket_type
+                for bucket_type, count in repeated_counts.items()
+                if count >= 2
+            ),
+            key=lambda bucket_type: (
+                -repeated_counts[bucket_type],
+                -HistoryService._normalize_bucket_start(
+                    latest_seen_at_by_type[bucket_type],
+                    granularity="day",
+                ).timestamp(),
+                bucket_type,
+            ),
+        )
+
+        repeated_buckets: list[dict[str, Any]] = []
+        for bucket_type in ranked_types:
+            latest_payload = latest_payload_by_type.get(bucket_type, {})
+            repeated_buckets.append(
+                {
+                    type_key: bucket_type,
+                    text_key: latest_payload.get(text_key),
+                    "count": repeated_counts[bucket_type],
+                }
+            )
+        return repeated_buckets
+
+    @staticmethod
+    def _calculate_improvement_rate(trend_data: list[dict[str, Any]]) -> float:
+        if len(trend_data) < 2:
+            return 0.0
+        first_average = float(trend_data[0].get("average_score") or 0.0)
+        last_average = float(trend_data[-1].get("average_score") or 0.0)
+        if first_average <= 0:
+            return 0.0
+        return round(((last_average - first_average) / first_average) * 100, 1)
+
+    @staticmethod
+    def _build_focus_recommendation(
+        *,
+        evaluable_sessions: list[HistorySessionSummary],
+        not_evaluable_sessions: list[HistorySessionSummary],
+        repeated_main_issues: list[dict[str, Any]],
+        repeated_next_goals: list[dict[str, Any]],
+        improvement_rate: float,
+    ) -> dict[str, Any]:
+        if len(evaluable_sessions) < 2:
+            if not_evaluable_sessions:
+                return {
+                    "reason": "insufficient_evaluable_history",
+                    "summary": "最近完成的训练里仍有证据不足的会话，先补齐有效互动再判断是否切换重点。",
+                }
+            return {
+                "reason": "insufficient_evaluable_history",
+                "summary": "最近可评估的完成会话还不够，先继续积累训练证据再判断是否切换重点。",
+            }
+
+        strongest_repeat_count = max(
+            repeated_main_issues[0]["count"] if repeated_main_issues else 0,
+            repeated_next_goals[0]["count"] if repeated_next_goals else 0,
+        )
+        if strongest_repeat_count >= 2 and improvement_rate <= 0:
+            return {
+                "reason": "stalled_repeated_focus",
+                "summary": "最近多次训练仍卡在同一重点且没有改善，建议切换训练重点或训练方法。",
+            }
+        if strongest_repeat_count >= 2:
+            return {
+                "reason": "repeat_focus_until_stable",
+                "summary": "主要卡点仍在重复出现，但分数还在改善，建议继续围绕同一重点练到稳定。",
+            }
+        return {
+            "reason": "keep_current_focus",
+            "summary": "最近没有持续重复的主问题，先延续当前重点并继续观察。",
+        }
+
+    @classmethod
+    def build_supervisor_progress_snapshot(
+        cls,
+        summaries: list[HistorySessionSummary],
+        *,
+        granularity: str = "day",
+    ) -> dict[str, Any]:
+        normalized_granularity = "week" if granularity == "week" else "day"
+        (
+            completed_sessions,
+            evaluable_sessions,
+            not_evaluable_sessions,
+            non_completed_sessions,
+        ) = cls._split_completed_projection_groups(summaries)
+
+        bucketed_sessions: dict[datetime, list[HistorySessionSummary]] = defaultdict(list)
+        for summary in sorted(completed_sessions, key=lambda item: item.start_time):
+            bucket_start = cls._normalize_bucket_start(
+                summary.start_time,
+                granularity=normalized_granularity,
+            )
+            bucketed_sessions[bucket_start].append(summary)
+
+        trend_data: list[dict[str, Any]] = []
+        for bucket_start in sorted(bucketed_sessions):
+            bucket_sessions = bucketed_sessions[bucket_start]
+            evaluable_bucket = [
+                summary
+                for summary in bucket_sessions
+                if summary.evaluable is True and summary.overall_score is not None
+            ]
+            if not evaluable_bucket:
+                continue
+            not_evaluable_bucket = [
+                summary for summary in bucket_sessions if summary.evaluable is False
+            ]
+            latest_evaluable = max(evaluable_bucket, key=lambda item: item.start_time)
+            average_logic = round(
+                sum(float(summary.logic_score or 0.0) for summary in evaluable_bucket)
+                / len(evaluable_bucket),
+                2,
+            )
+            average_accuracy = round(
+                sum(float(summary.accuracy_score or 0.0) for summary in evaluable_bucket)
+                / len(evaluable_bucket),
+                2,
+            )
+            average_completeness = round(
+                sum(float(summary.completeness_score or 0.0) for summary in evaluable_bucket)
+                / len(evaluable_bucket),
+                2,
+            )
+            average_score = round(
+                sum(float(summary.overall_score or 0.0) for summary in evaluable_bucket)
+                / len(evaluable_bucket),
+                2,
+            )
+            trend_data.append(
+                {
+                    "date": bucket_start.isoformat(),
+                    "sessions_count": len(bucket_sessions),
+                    "evaluable_session_count": len(evaluable_bucket),
+                    "not_evaluable_session_count": len(not_evaluable_bucket),
+                    "average_score": average_score,
+                    "logic_score": average_logic,
+                    "accuracy_score": average_accuracy,
+                    "completeness_score": average_completeness,
+                    "overall_result": latest_evaluable.overall_result,
+                    "evaluable": True,
+                    "not_evaluable_reason": None,
+                    "main_issue": latest_evaluable.main_issue,
+                    "next_goal": latest_evaluable.next_goal,
+                    "stage_summary": latest_evaluable.stage_summary,
+                    "evidence_completeness": latest_evaluable.evidence_completeness,
+                }
+            )
+
+        repeated_main_issues = cls._build_repeated_bucket_summary(
+            evaluable_sessions,
+            field_name="main_issue",
+            type_key="issue_type",
+            text_key="issue_text",
+        )
+        repeated_next_goals = cls._build_repeated_bucket_summary(
+            evaluable_sessions,
+            field_name="next_goal",
+            type_key="goal_type",
+            text_key="goal_text",
+        )
+        improvement_rate = cls._calculate_improvement_rate(trend_data)
+        recommendation = cls._build_focus_recommendation(
+            evaluable_sessions=evaluable_sessions,
+            not_evaluable_sessions=not_evaluable_sessions,
+            repeated_main_issues=repeated_main_issues,
+            repeated_next_goals=repeated_next_goals,
+            improvement_rate=improvement_rate,
+        )
+
+        return {
+            "granularity": normalized_granularity,
+            "trend_data": trend_data,
+            "improvement_rate": improvement_rate,
+            "total_data_points": len(trend_data),
+            "completed_session_count": len(completed_sessions),
+            "evaluable_session_count": len(evaluable_sessions),
+            "not_evaluable_session_count": len(not_evaluable_sessions),
+            "non_completed_session_count": len(non_completed_sessions),
+            "repeated_main_issues": repeated_main_issues,
+            "repeated_next_goals": repeated_next_goals,
+            "should_switch_focus": recommendation["reason"] == "stalled_repeated_focus",
+            "recommendation": recommendation,
+        }
 
     @staticmethod
     def _summarize_projection_state(
@@ -342,6 +619,7 @@ class HistoryService:
         user_id: str,
         summaries: list[HistorySessionSummary],
         filters: dict[str, Any],
+        extra_fields: dict[str, Any] | None = None,
     ) -> None:
         summary = self._summarize_projection_state(summaries)
         logger.info(
@@ -351,6 +629,7 @@ class HistoryService:
             evidence_source="session_evidence_projection",
             filters=filters,
             **summary,
+            **(extra_fields or {}),
         )
 
     async def _query_sessions(
@@ -625,6 +904,90 @@ class HistoryService:
                 error=str(exc),
             )
             return Result.fail(fallback="[STATS_FAILED]")
+
+    async def get_projection_score_summary(
+        self,
+        db: AsyncSession,
+        user_id: uuid.UUID,
+        *,
+        cutoff_time: datetime | None = None,
+    ) -> Result[dict[str, Any]]:
+        try:
+            sessions, _ = await self._query_sessions(
+                db,
+                user_id=user_id,
+                completed_only=True,
+                cutoff_time=cutoff_time,
+                order_desc=True,
+                include_total=False,
+            )
+            summaries = await self._build_history_summaries(db, sessions=sessions)
+            stats = self.build_projection_score_summary(summaries)
+            self._log_history_query(
+                query_name="admin_user_projection_scores",
+                user_id=str(user_id),
+                summaries=summaries,
+                filters={
+                    "cutoff_time": cutoff_time.isoformat() if cutoff_time else None,
+                },
+            )
+            return Result.ok(stats)
+
+        except (SQLAlchemyError, ValueError) as exc:
+            logger.error(
+                "practice_history_projection_failed",
+                query_name="admin_user_projection_scores",
+                user_id=str(user_id),
+                error=str(exc),
+            )
+            return Result.fail(fallback="[ADMIN_STATS_FAILED]")
+
+    async def get_supervisor_progress_snapshot(
+        self,
+        db: AsyncSession,
+        user_id: uuid.UUID,
+        *,
+        cutoff_time: datetime | None = None,
+        granularity: str = "day",
+    ) -> Result[dict[str, Any]]:
+        try:
+            sessions, _ = await self._query_sessions(
+                db,
+                user_id=user_id,
+                cutoff_time=cutoff_time,
+                order_desc=False,
+                include_total=False,
+            )
+            summaries = await self._build_history_summaries(db, sessions=sessions)
+            snapshot = self.build_supervisor_progress_snapshot(
+                summaries,
+                granularity=granularity,
+            )
+            self._log_history_query(
+                query_name="admin_user_progress",
+                user_id=str(user_id),
+                summaries=summaries,
+                filters={
+                    "cutoff_time": cutoff_time.isoformat() if cutoff_time else None,
+                    "granularity": snapshot["granularity"],
+                },
+                extra_fields={
+                    "repeated_main_issues": snapshot["repeated_main_issues"],
+                    "repeated_next_goals": snapshot["repeated_next_goals"],
+                    "should_switch_focus": snapshot["should_switch_focus"],
+                    "recommendation_reason": snapshot["recommendation"]["reason"],
+                },
+            )
+            return Result.ok(snapshot)
+
+        except (SQLAlchemyError, ValueError) as exc:
+            logger.error(
+                "practice_history_projection_failed",
+                query_name="admin_user_progress",
+                user_id=str(user_id),
+                error=str(exc),
+            )
+            return Result.fail(fallback="[ADMIN_PROGRESS_FAILED]")
 
     async def get_user_history_with_report_summary(
         self,

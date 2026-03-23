@@ -20,8 +20,9 @@
 ## Verification
 
 - `cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_history_service_evidence_projection.py tests/integration/test_admin_users_api.py`
+- `cd backend && venv/bin/python -m pytest -c pyproject.toml tests/integration/test_admin_users_api.py -k 'progress or stats'` — 锁住 `/progress` repeated issue/goal、`not_evaluable_session_count`、`should_switch_focus` 与 `/stats` 对齐，并让 failure-path/empty-state 语义在 focused API 断言里可检查。
 - `cd web && npm test -- --run 'src/app/admin/users/[id]/page.test.tsx'`
-- Manual/runtime review — 先执行 `cd backend && venv/bin/alembic upgrade head`，再打开 `/admin/users/{id}`：页面必须能直接回答“有没有进步 / 总卡在哪 / 下一轮继续补同一问题还是切换重点”；如果本地环境因缺少 `conversation_messages.transcript_metadata` 报错，必须把它识别为 migration/blocker 而不是前端 regressions。
+- Manual/runtime review — 先执行 `cd backend && venv/bin/alembic upgrade head`，再打开 `/admin/users/{id}`：页面必须能直接回答“有没有进步 / 总卡在哪 / 下一轮继续补同一问题还是切换重点”；如果 progress 读取失败或没有可评估数据，页面必须显示本地 inline 状态；如果本地环境因缺少 `conversation_messages.transcript_metadata` 报错，必须把它识别为 migration/blocker 而不是前端 regressions。
 
 ## Observability / Diagnostics
 
@@ -38,7 +39,7 @@
 
 ## Tasks
 
-- [ ] **T01: 把主管连续变化聚合收口到 HistoryService 并对齐 admin stats/progress** `est:4h`
+- [x] **T01: 把主管连续变化聚合收口到 HistoryService 并对齐 admin stats/progress** `est:4h`
   - Why: 先把 backend 收成一条 projection-backed 事实线，否则 `/progress`、`/stats` 和已完成 session 预览会继续在同一页面上讲三套不同真相。
   - Files: `backend/src/common/analytics/history_service.py`, `backend/src/admin/api/users.py`, `backend/tests/unit/test_history_service_evidence_projection.py`, `backend/tests/integration/test_admin_users_api.py`
   - Do: 先写 failing unit/integration tests，再在 `HistoryService` 新增 supervisor progress snapshot / grouping helper，基于 completed-session projection 计算 truthful `day/week` trend、evaluable/not-evaluable counts、重复 `main_issue.issue_type` / `next_goal.goal_type`、保守 `should_switch_focus` 与 recommendation；随后把 `/progress` 改读它，并把 `/stats` 的平均/最好/最差分对齐到同一 summaries，同时保留 raw completion/usage 统计。
