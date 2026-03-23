@@ -22,27 +22,30 @@ def _make_effectiveness_snapshot(*, evaluable: bool, reason: str | None) -> dict
     return {
         "pass_flags": {
             "pass_3min_flow": False,
-            "pass_5turn_defense": False,
+            "pass_5turn_defense": True,
             "pass_4step_structure": False,
         },
         "main_capability_passed": False,
         "overall_result": "fail",
         "metrics": {
-            "continuous_speech_seconds": 0.0,
-            "filler_rate_per_100_words": 0.0,
-            "offtopic_turn_count": 0.0,
-            "offtopic_max_streak": 0.0,
-            "structure_coverage": 0.0,
+            "value_expression_score": 78.0,
+            "customer_benefit_score": 72.0,
+            "evidence_usage_score": 54.0,
+            "objection_handling_score": 76.0,
+            "next_step_score": 68.0,
+            "value_articulation_rollup": 75.6,
+            "evidence_benefit_rollup": 62.1,
+            "objection_progress_rollup": 72.8,
         },
         "main_issue": {
-            "issue_type": "main_capability_not_passed",
-            "issue_text": "证据不足，当前无法评估。",
-            "recovery_rule": "请先完成至少一轮有效互动后再结束。",
+            "issue_type": "evidence_gap",
+            "issue_text": "价值主张缺少案例、数据或ROI支撑，客户很难相信收益承诺。",
+            "recovery_rule": "下一轮先给出案例、数据或benchmark，再回应价格/ROI追问。",
         },
         "next_goal": {
-            "goal_type": "main_capability_focus",
-            "goal_text": "先完成一轮有效互动再评估。",
-            "rule": "补齐用户表达和AI回应后再结束。",
+            "goal_type": "evidence_backing",
+            "goal_text": "先用案例、数据或ROI证据支撑主张，再推进下一步。",
+            "rule": "至少补上一条证据和一个明确的下一步动作。",
         },
         "version": "rule_v1",
         "evaluable": evaluable,
@@ -138,9 +141,9 @@ async def test_report_and_replay_contract_share_same_session_evidence_fields(
         user_id=str(owner.user_id),
         scenario_id=scenario.scenario_id,
         status=SessionStatus.COMPLETED.value,
-        logic_score=82.0,
-        accuracy_score=80.0,
-        completeness_score=78.0,
+        logic_score=75.6,
+        accuracy_score=62.1,
+        completeness_score=72.8,
         total_duration_seconds=180,
         effectiveness_snapshot=_make_effectiveness_snapshot(
             evaluable=False,
@@ -189,9 +192,14 @@ async def test_report_and_replay_contract_share_same_session_evidence_fields(
     report_data = report_resp.json()["data"]
     replay_data = replay_resp.json()["data"]
 
-    assert report_data["overall_score"] == replay_data["overall_score"] == pytest.approx(80.0)
+    assert report_data["overall_score"] == replay_data["overall_score"] == pytest.approx(70.2, abs=0.05)
+    assert report_data["logic_score"] == pytest.approx(75.6)
+    assert report_data["accuracy_score"] == pytest.approx(62.1)
+    assert report_data["completeness_score"] == pytest.approx(72.8)
     assert report_data["main_issue"] == replay_data["main_issue"]
     assert report_data["next_goal"] == replay_data["next_goal"]
+    assert report_data["main_issue"]["issue_type"] == "evidence_gap"
+    assert report_data["next_goal"]["goal_type"] == "evidence_backing"
     assert report_data["not_evaluable_reason"] == replay_data["not_evaluable_reason"] == "INSUFFICIENT_TURN_DATA"
     assert report_data["evaluable"] is False
     assert replay_data["evaluable"] is False

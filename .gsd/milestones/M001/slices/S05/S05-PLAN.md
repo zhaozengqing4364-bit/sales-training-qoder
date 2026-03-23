@@ -39,7 +39,7 @@
 
 ## Tasks
 
-- [ ] **T01: 在 StepFun 写入层落地销售价值评分与效果快照基线** `est:4h`
+- [x] **T01: 在 StepFun 写入层落地销售价值评分与效果快照基线** `est:4h`
   - Why: 先把事实写入面改成销售价值 / 异议语义，报告 / 回放 / 历史才能继续沿用 S02 的同一 projection，而不是再造读侧 scorer。
   - Files: `backend/src/agent/capabilities/realtime_scoring.py`, `backend/src/common/effectiveness/evaluator.py`, `backend/src/sales_bot/websocket/stepfun_realtime_handler.py`, `backend/src/common/api/practice.py`, `backend/tests/unit/test_realtime_scoring.py`, `backend/tests/unit/test_effectiveness_sales_baseline.py`, `backend/tests/unit/test_stepfun_realtime_handler.py`, `backend/tests/contract/test_practice_evidence_contract.py`
   - Do: 用新的 5 维销售 rubric 替换 generic keyword scorer，并在 `evaluate_effectiveness_snapshot` / StepFun session flush / terminal fallback 中保留原有顶层 contract，但把 `main_issue` / `next_goal` 和 3 个 session rollup 改成销售价值、证据与异议推进语义；严禁把这套逻辑搬到 `SessionEvidenceService` 或前端重算。

@@ -52,7 +52,11 @@ from common.db.session_lifecycle import (
     SessionLifecycleTransition,
 )
 from common.db.voice_policy_snapshot import build_voice_policy_snapshot_ref
-from common.effectiveness import evaluate_effectiveness_snapshot
+from common.effectiveness import (
+    build_sales_effectiveness_metrics,
+    build_sales_rollup_scores,
+    evaluate_effectiveness_snapshot,
+)
 from common.monitoring.logger import get_logger, get_trace_id
 from common.websocket.base_handler import get_connection_manager
 from common.websocket.session_manager import get_session_manager
@@ -258,13 +262,13 @@ def _build_sales_realtime_not_evaluable_snapshot(
     *, reason: str,
 ) -> dict[str, Any]:
     return evaluate_effectiveness_snapshot(
-        metrics={
-            "continuous_speech_seconds": 0.0,
-            "filler_rate_per_100_words": 0.0,
-            "offtopic_turn_count": 0.0,
-            "offtopic_max_streak": 0.0,
-            "structure_coverage": 0.0,
-        },
+        metrics=build_sales_effectiveness_metrics(
+            overall_score=0.0,
+            logic_score=0.0,
+            accuracy_score=0.0,
+            completeness_score=0.0,
+            duration_seconds=0,
+        ),
         main_capability_passed=False,
         evaluable=False,
         not_evaluable_reason=reason,
@@ -280,20 +284,14 @@ def _apply_sales_realtime_score_snapshot_to_session(
         return False
 
     overall_score = float(normalized_score_snapshot.get("overall_score") or 0.0)
-    dimension_scores = normalized_score_snapshot.get("dimension_scores")
-    if not isinstance(dimension_scores, dict):
-        dimension_scores = {}
+    rollups = build_sales_rollup_scores(
+        overall_score=overall_score,
+        dimension_scores=normalized_score_snapshot.get("dimension_scores"),
+    )
 
-    def _pick_score(*keys: str) -> float:
-        for key in keys:
-            value = dimension_scores.get(key)
-            if isinstance(value, (int, float)):
-                return max(0.0, min(100.0, float(value)))
-        return max(0.0, min(100.0, overall_score))
-
-    session.logic_score = _pick_score("专业度", "professional")
-    session.accuracy_score = _pick_score("沟通技巧", "communication")
-    session.completeness_score = _pick_score("销售流程", "discovery", "closing")
+    session.logic_score = rollups["logic_score"]
+    session.accuracy_score = rollups["accuracy_score"]
+    session.completeness_score = rollups["completeness_score"]
     session.effectiveness_snapshot = None
     return True
 
@@ -538,15 +536,14 @@ def _derive_effectiveness_metrics(session: PracticeSession) -> tuple[dict[str, A
     evaluable = has_scores and duration_seconds > 0
     not_evaluable_reason = None if evaluable else "INSUFFICIENT_SESSION_METRICS"
 
-    # Minimal heuristic mapping for closed-loop v1 (kept deterministic and explainable).
-    metrics = {
-        "continuous_speech_seconds": float(max(duration_seconds, int((logic + completeness) * 0.9))),
-        "filler_rate_per_100_words": round(max(0.0, min(30.0, (100.0 - logic) / 4.0)), 2),
-        "offtopic_turn_count": float(max(0, round((100.0 - accuracy) / 25.0))),
-        "offtopic_max_streak": float(2 if accuracy < 55 else (1 if accuracy < 80 else 0)),
-        "structure_coverage": round(max(0.0, min(1.0, completeness / 100.0)), 4),
-    }
     overall_score = (logic + accuracy + completeness) / 3.0
+    metrics = build_sales_effectiveness_metrics(
+        overall_score=overall_score,
+        logic_score=logic,
+        accuracy_score=accuracy,
+        completeness_score=completeness,
+        duration_seconds=duration_seconds,
+    )
     main_capability_passed = overall_score >= 70.0
     return metrics, main_capability_passed, evaluable, not_evaluable_reason
 

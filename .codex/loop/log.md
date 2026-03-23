@@ -300,3 +300,32 @@ Append one entry per iteration:
   verification results: passed; all three slice-level automated commands are green, local admin knowledge diagnostics and fresh sales-session snapshot/knowledge-check surfaces are live, admin presentation replace correctly blocks with 409 while user entry shows the current deck version/status, and the only intentionally skipped browser path is a destructive success-swap on a deck still occupied by unrelated in-progress sessions
   success signal status: S04 is complete and R004 is now validated; admins can self-serve product materials and standard PPT updates while new sessions consume the frozen latest-material bindings through the live runtime contracts
   rollback note: if later work changes S04 verification again, keep task-level backend/web checks as separate commands and preserve the live `/api/v1/presentations` + `voice_policy_snapshot/knowledge-check` authority lines unless a fully re-verified contract replaces them
+
+- time: 2026-03-23T20:06:53+08:00
+  mode: stabilize
+  item id: M001-S05-T01
+  files changed:
+    - backend/src/agent/capabilities/realtime_scoring.py
+    - backend/src/common/effectiveness/evaluator.py
+    - backend/src/common/effectiveness/__init__.py
+    - backend/src/common/api/practice.py
+    - backend/src/sales_bot/websocket/stepfun_realtime_handler.py
+    - backend/tests/unit/test_realtime_scoring.py
+    - backend/tests/unit/test_effectiveness_sales_baseline.py
+    - backend/tests/unit/test_stepfun_realtime_handler.py
+    - backend/tests/contract/test_practice_evidence_contract.py
+    - .gsd/DECISIONS.md
+    - .gsd/KNOWLEDGE.md
+    - .gsd/milestones/M001/slices/S05/S05-PLAN.md
+    - .gsd/milestones/M001/slices/S05/tasks/T01-SUMMARY.md
+    - .codex/loop/state.json
+  summary: Replaced the generic StepFun sales scorer with a five-dimension value/benefit/evidence/objection/next-step rubric, mapped runtime snapshots into three sales rollups, and kept the unified report/replay contract stable while switching main_issue/next_goal to sales semantics.
+  verification commands:
+    - cd backend && pytest tests/unit/test_realtime_scoring.py tests/unit/test_effectiveness_sales_baseline.py tests/unit/test_stepfun_realtime_handler.py tests/contract/test_practice_evidence_contract.py
+    - cd backend && pytest tests/unit/test_realtime_scoring.py tests/unit/test_effectiveness_sales_baseline.py tests/unit/test_stepfun_realtime_handler.py tests/contract/test_practice_evidence_contract.py -k 'value or objection or report'
+    - cd backend && pytest tests/unit/test_realtime_scoring.py tests/unit/test_effectiveness_sales_baseline.py tests/unit/test_voice_instruction_compiler.py tests/unit/test_stepfun_knowledge_helpers.py tests/unit/test_stepfun_realtime_handler.py tests/contract/test_practice_evidence_contract.py tests/integration/test_sales_value_training_flow.py
+    - cd web && npm test -- --run 'src/components/practice/ScorePanel.test.tsx' 'src/hooks/websocket/message-handlers.test.ts' 'src/app/(user)/practice/[sessionId]/report/page.test.tsx'
+    - cd backend && PYTHONPATH=src venv/bin/python - <<'PY' ...
+  verification results: task-level focused backend suites passed; direct observability check proved new dimension_scores, sales rollups, sales issue/goal, and persisted/not_evaluable logs; slice-level backend verification still fails because tests/integration/test_sales_value_training_flow.py is not present yet; slice-level web command exits 0 but ScorePanel.test.tsx is still absent and belongs to T03.
+  success signal status: write-layer sales sessions now persist value-expression/evidence/objection facts that report/replay can read without changing field names or read-side scoring.
+  rollback note: if later work needs to revisit S05 semantics, keep D024's stable-key contract and adjust only the shared sales rollup/effectiveness helpers instead of introducing a second read-side scorer.

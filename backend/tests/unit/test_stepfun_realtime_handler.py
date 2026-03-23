@@ -1397,14 +1397,17 @@ async def test_persist_message_updates_stage_when_duplicate_key_hit():
     )
 
 
-def test_apply_latest_scores_to_session_maps_dimensions():
+def test_apply_latest_scores_to_session_maps_sales_rollups_and_snapshot():
     handler = StepFunRealtimeHandler()
+    handler.turn_count = 4
     handler._latest_score_snapshot = {
         "overall_score": 84.0,
         "dimension_scores": {
-            "专业度": 90.0,
-            "沟通技巧": 82.0,
-            "销售流程": 80.0,
+            "价值表达": 90.0,
+            "客户收益连接": 84.0,
+            "证据使用": 58.0,
+            "异议处理": 76.0,
+            "推进下一步": 86.0,
         },
     }
 
@@ -1415,9 +1418,12 @@ def test_apply_latest_scores_to_session_maps_dimensions():
 
     handler._apply_latest_scores_to_session(session)
 
-    assert session.logic_score == 90.0
-    assert session.accuracy_score == 82.0
-    assert session.completeness_score == 80.0
+    assert session.logic_score == pytest.approx(87.6)
+    assert session.accuracy_score == pytest.approx(69.7)
+    assert session.completeness_score == pytest.approx(80.0)
+    assert session.effectiveness_snapshot["main_issue"]["issue_type"] == "evidence_gap"
+    assert session.effectiveness_snapshot["next_goal"]["goal_type"] == "evidence_backing"
+    assert session.effectiveness_snapshot["evaluable"] is True
 
 
 @pytest.mark.asyncio

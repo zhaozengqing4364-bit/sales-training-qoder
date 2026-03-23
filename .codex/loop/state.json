@@ -1,7 +1,7 @@
 {
   "mode": "stabilize",
-  "current_issue_id": "M001-S04",
-  "current_issue_type": "slice",
+  "current_issue_id": "M001-S05-T01",
+  "current_issue_type": "task",
   "current_issue_status": "done",
   "pending_issue_ids": [],
   "completed_issue_ids": [
@@ -18,34 +18,37 @@
     "M001-S03",
     "M001-S04-T01",
     "M001-S04-T02",
-    "M001-S04"
+    "M001-S04",
+    "M001-S05-T01"
   ],
   "blocked_issue_ids": [],
   "deferred_issue_ids": [],
   "last_modified_files": [
-    ".gsd/milestones/M001/slices/S04/S04-SUMMARY.md",
-    ".gsd/milestones/M001/slices/S04/S04-UAT.md",
-    ".gsd/milestones/M001/M001-ROADMAP.md",
-    ".gsd/milestones/M001/slices/S04/S04-PLAN.md",
-    ".gsd/milestones/M001/slices/S04/tasks/T01-VERIFY.json",
-    ".gsd/milestones/M001/slices/S04/tasks/T02-VERIFY.json",
-    ".gsd/REQUIREMENTS.md",
+    "backend/src/agent/capabilities/realtime_scoring.py",
+    "backend/src/common/effectiveness/evaluator.py",
+    "backend/src/common/effectiveness/__init__.py",
+    "backend/src/common/api/practice.py",
+    "backend/src/sales_bot/websocket/stepfun_realtime_handler.py",
+    "backend/tests/unit/test_realtime_scoring.py",
+    "backend/tests/unit/test_effectiveness_sales_baseline.py",
+    "backend/tests/unit/test_stepfun_realtime_handler.py",
+    "backend/tests/contract/test_practice_evidence_contract.py",
     ".gsd/DECISIONS.md",
     ".gsd/KNOWLEDGE.md",
-    ".gsd/PROJECT.md",
-    ".gsd/STATE.md",
+    ".gsd/milestones/M001/slices/S05/S05-PLAN.md",
+    ".gsd/milestones/M001/slices/S05/tasks/T01-SUMMARY.md",
     ".codex/loop/state.json",
     ".codex/loop/log.md"
   ],
   "last_verification_commands": [
-    "cd backend && pytest tests/integration/test_knowledge_api.py tests/integration/test_knowledge_upload_persistence.py tests/integration/test_knowledge_flow.py",
-    "cd backend && pytest tests/contract/test_presentations.py tests/integration/test_presentation_flow.py",
-    "cd web && npm test -- --run 'src/app/admin/knowledge/[id]/page.test.tsx' 'src/app/admin/presentations/[id]/page.test.tsx' 'src/app/(dashboard)/agents/[agentId]/page.test.tsx'",
-    "browser/runtime: POST /api/v1/auth/dev-login -> /admin/knowledge/7295703d-d400-4289-baef-62598051ffe7 search diagnostics -> POST /api/v1/practice/sessions for sales session 662543a2-07d0-4d8c-a1f0-1feffc05c23b -> GET /api/v1/practice/sessions/662543a2-07d0-4d8c-a1f0-1feffc05c23b/knowledge-check -> lifecycle start/end cleanup",
-    "browser/runtime: /admin/presentations/20706b4b-bb22-484a-8f2f-8ecacc43bb3b replace attempt with backend/data/ppts/5d63f1d6-1bf5-41b9-81ff-8a8827679225.pptx -> expect 409 blocker, then /agents/7199854c-3921-4d9f-9833-fe99ca209c59 version/status visibility"
+    "cd backend && pytest tests/unit/test_realtime_scoring.py tests/unit/test_effectiveness_sales_baseline.py tests/unit/test_stepfun_realtime_handler.py tests/contract/test_practice_evidence_contract.py",
+    "cd backend && pytest tests/unit/test_realtime_scoring.py tests/unit/test_effectiveness_sales_baseline.py tests/unit/test_stepfun_realtime_handler.py tests/contract/test_practice_evidence_contract.py -k 'value or objection or report'",
+    "cd backend && pytest tests/unit/test_realtime_scoring.py tests/unit/test_effectiveness_sales_baseline.py tests/unit/test_voice_instruction_compiler.py tests/unit/test_stepfun_knowledge_helpers.py tests/unit/test_stepfun_realtime_handler.py tests/contract/test_practice_evidence_contract.py tests/integration/test_sales_value_training_flow.py",
+    "cd web && npm test -- --run 'src/components/practice/ScorePanel.test.tsx' 'src/hooks/websocket/message-handlers.test.ts' 'src/app/(user)/practice/[sessionId]/report/page.test.tsx'",
+    "cd backend && PYTHONPATH=src venv/bin/python - <<'PY' ..."
   ],
-  "last_verification_result": "All slice-level automated S04 commands passed fresh. Live local checks also passed for admin knowledge diagnostics visibility, fresh sales-session snapshot freezing plus knowledge-check observability, admin presentation replace blocker semantics, and user-side presentation version/status visibility. The only browser path intentionally not re-run destructively was a successful ready-deck replace on an unoccupied presentation, because the local ready standard deck remained referenced by unrelated in-progress sessions while backend contract/integration suites already prove the success path.",
-  "last_success_signal": "S04 is complete: admins can self-serve KB upload/reprocess/search diagnostics and standard PPT in-place replacement with blocker/version visibility, while new training sessions consume frozen latest-material bindings through authoritative sales and presentation runtime paths.",
+  "last_verification_result": "T01 focused backend verification passed fresh, including the new scorer, sales-baseline evaluator, StepFun flush mapping, and unified evidence contract. The slice-level backend command still fails because tests/integration/test_sales_value_training_flow.py does not exist yet (planned for T03). The slice-level web command exits 0 but currently only runs the existing message-handlers/report tests because ScorePanel.test.tsx is also a later T03 deliverable. Manual runtime and failure-path slice checks remain open for later tasks.",
+  "last_success_signal": "S05/T01 is complete: StepFun write-layer scoring and effectiveness snapshots now persist sales-specific value/evidence/objection semantics without changing the unified report/replay field shape.",
   "last_growth_scan": null,
-  "next_action": "Start S05 and consume S04's frozen knowledge/PPT material line directly in sales value-expression and objection-handling evaluation instead of adding a new materials source."
+  "next_action": "Continue S05 with T02: extend persona policy and compiled StepFun customer instructions so knowledge-bound sales sessions actively probe ROI, price, competitors, and evidence using the S04 material line."
 }

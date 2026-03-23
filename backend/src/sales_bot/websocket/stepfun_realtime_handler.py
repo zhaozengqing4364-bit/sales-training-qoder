@@ -37,6 +37,8 @@ from common.auth.service import resolve_websocket_token, verify_token
 from common.db.models import PracticeSession
 from common.effectiveness import (
     build_action_card,
+    build_sales_effectiveness_metrics,
+    build_sales_rollup_scores,
     evaluate_effectiveness_snapshot,
     evaluate_pass_flags,
 )
@@ -1361,13 +1363,13 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
 
         if normalized_score_snapshot is None:
             session.effectiveness_snapshot = evaluate_effectiveness_snapshot(
-                metrics={
-                    "continuous_speech_seconds": 0.0,
-                    "filler_rate_per_100_words": 0.0,
-                    "offtopic_turn_count": 0.0,
-                    "offtopic_max_streak": 0.0,
-                    "structure_coverage": 0.0,
-                },
+                metrics=build_sales_effectiveness_metrics(
+                    overall_score=0.0,
+                    logic_score=0.0,
+                    accuracy_score=0.0,
+                    completeness_score=0.0,
+                    turn_count=max(0, self.turn_count),
+                ),
                 main_capability_passed=False,
                 evaluable=False,
                 not_evaluable_reason="INSUFFICIENT_TURN_DATA",
@@ -1384,48 +1386,28 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
         self._latest_score_snapshot = normalized_score_snapshot
 
         try:
-            overall_score = float(
-                normalized_score_snapshot.get("overall_score") or 0.0
-            )
+            overall_score = float(normalized_score_snapshot.get("overall_score") or 0.0)
         except (TypeError, ValueError):
             overall_score = 0.0
         overall_score = max(0.0, min(100.0, overall_score))
 
-        dimension_scores = normalized_score_snapshot.get("dimension_scores")
-        if not isinstance(dimension_scores, dict):
-            dimension_scores = {}
-
-        def _pick_score(*keys: str) -> float:
-            for key in keys:
-                value = dimension_scores.get(key)
-                if isinstance(value, (int, float)):
-                    return max(0.0, min(100.0, float(value)))
-            return overall_score
-
-        session.logic_score = _pick_score("专业度", "professional")
-        session.accuracy_score = _pick_score("沟通技巧", "communication")
-        session.completeness_score = _pick_score("销售流程", "discovery", "closing")
-
-        communication_score = _pick_score("沟通技巧", "communication")
-        structure_score = _pick_score("销售流程", "discovery", "closing")
-        continuous_speech_seconds = max(
-            int(self.turn_count * 45),
-            int(overall_score * 2.4),
+        rollups = build_sales_rollup_scores(
+            overall_score=overall_score,
+            dimension_scores=normalized_score_snapshot.get("dimension_scores"),
         )
-        offtopic_turn_count = max(0, round((100.0 - communication_score) / 25.0))
-        offtopic_max_streak = 2 if communication_score < 55 else (1 if communication_score < 80 else 0)
-        structure_coverage = max(0.0, min(1.0, structure_score / 100.0))
+        session.logic_score = rollups["logic_score"]
+        session.accuracy_score = rollups["accuracy_score"]
+        session.completeness_score = rollups["completeness_score"]
 
         snapshot = evaluate_effectiveness_snapshot(
-            metrics={
-                "continuous_speech_seconds": float(continuous_speech_seconds),
-                "filler_rate_per_100_words": round(
-                    max(0.0, min(30.0, (100.0 - overall_score) / 4.0)), 2
-                ),
-                "offtopic_turn_count": float(offtopic_turn_count),
-                "offtopic_max_streak": float(offtopic_max_streak),
-                "structure_coverage": round(structure_coverage, 4),
-            },
+            metrics=build_sales_effectiveness_metrics(
+                overall_score=overall_score,
+                dimension_scores=normalized_score_snapshot.get("dimension_scores"),
+                logic_score=session.logic_score,
+                accuracy_score=session.accuracy_score,
+                completeness_score=session.completeness_score,
+                turn_count=max(0, self.turn_count),
+            ),
             main_capability_passed=overall_score >= 70.0,
             evaluable=evaluable,
             not_evaluable_reason=not_evaluable_reason,
@@ -1972,27 +1954,32 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
             score_payload = (
                 score_result.data if isinstance(score_result.data, dict) else {}
             )
-            dimensions = (
-                score_payload.get("dimensions")
+            dimension_scores = (
+                score_payload.get("dimension_scores")
                 if isinstance(score_payload, dict)
                 else None
             )
-
-            dimension_scores: dict[str, float] = {}
-            if isinstance(dimensions, list):
-                for item in dimensions:
-                    if not isinstance(item, dict):
-                        continue
-                    name = item.get("name")
-                    score = item.get("score")
-                    if isinstance(name, str) and isinstance(score, (int, float)):
-                        dimension_scores[name] = max(0.0, min(100.0, float(score)))
+            if not isinstance(dimension_scores, dict):
+                dimensions = (
+                    score_payload.get("dimensions") if isinstance(score_payload, dict) else None
+                )
+                dimension_scores = {}
+                if isinstance(dimensions, list):
+                    for item in dimensions:
+                        if not isinstance(item, dict):
+                            continue
+                        name = item.get("name")
+                        score = item.get("score")
+                        if isinstance(name, str) and isinstance(score, (int, float)):
+                            dimension_scores[name] = max(0.0, min(100.0, float(score)))
 
             overall_raw = (
-                score_payload.get("overall")
-                if isinstance(score_payload, dict)
-                else None
+                score_payload.get("overall_score") if isinstance(score_payload, dict) else None
             )
+            if not isinstance(overall_raw, (int, float)):
+                overall_raw = (
+                    score_payload.get("overall") if isinstance(score_payload, dict) else None
+                )
             if not isinstance(overall_raw, (int, float)):
                 overall_raw = (
                     sum(dimension_scores.values()) / len(dimension_scores)
@@ -2002,9 +1989,7 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
             overall_score = max(0.0, min(100.0, float(overall_raw)))
 
             feedback_message = (
-                score_payload.get("feedback")
-                if isinstance(score_payload, dict)
-                else None
+                score_payload.get("feedback") if isinstance(score_payload, dict) else None
             )
             suggestions: list[str] = []
             if isinstance(feedback_message, str) and feedback_message.strip():
@@ -2027,28 +2012,12 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
                     suggestions=suggestions,
                     stage_name=score_snapshot["stage_name"],
                 )
-                communication_score = dimension_scores.get("沟通技巧") or dimension_scores.get("communication") or overall_score
-                structure_score = (
-                    dimension_scores.get("销售流程")
-                    or dimension_scores.get("discovery")
-                    or dimension_scores.get("closing")
-                    or overall_score
-                )
                 pass_flags_for_card = evaluate_pass_flags(
-                    {
-                        "continuous_speech_seconds": float(
-                            max(turn_number * 45, int(overall_score * 2.2))
-                        ),
-                        "offtopic_turn_count": float(
-                            max(0, round((100.0 - float(communication_score)) / 25.0))
-                        ),
-                        "offtopic_max_streak": float(
-                            2 if float(communication_score) < 55 else (1 if float(communication_score) < 80 else 0)
-                        ),
-                        "structure_coverage": max(
-                            0.0, min(1.0, float(structure_score) / 100.0)
-                        ),
-                    }
+                    build_sales_effectiveness_metrics(
+                        overall_score=overall_score,
+                        dimension_scores=dimension_scores,
+                        turn_count=turn_number,
+                    )
                 )
 
         action_card = build_action_card(
