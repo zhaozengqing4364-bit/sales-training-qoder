@@ -5,3 +5,6 @@
 - Report-page focused tests need an explicit assertion that `导出报告` is absent; otherwise the dead affordance can drift back into `web/src/app/(user)/practice/[sessionId]/report/page.tsx` without breaking the existing positive-path assertions.
 - Standard PPT 这条链的 live contract 在 `/api/v1/presentations`，不是旧的 `/api/v1/admin/presentations`：当前 admin 详情页与用户演练入口都直接消费 `api.presentations`，而 legacy admin backend 仍引用过期 schema；做 replace/version_number/status 修复时应扩展 live surface。
 - 本地要跑 S04 presentation/runtime UAT 时，`cd backend && PYTHONPATH=src venv/bin/uvicorn main:app --port 3444` 可能因缺少 `redis` Python 包在启动阶段崩溃并报 `redis package is required for SessionStateService`；先补齐该本地依赖，否则浏览器验证会被环境问题卡住而不是代码回归。
+- S04 的 task-level auto verification 不要把 backend/web 检查串成一条 `Verify: ... && cd ../web && ...`；auto-mode 会把它拆成独立检查，导致裸 `pytest ...` 和 `cd ../web` 从 repo root 运行后误报失败。把 backend 与 web 命令写成两条独立校验更稳。
+- `backend/tests/integration/test_knowledge_flow.py` 依赖 `/api/v1/auth/dev-login` 夹具；若你改用 repo-root `backend/venv/bin/python -m pytest -c backend/pyproject.toml ...` 运行，可能因为 cwd / env 装载差异让 dev-login 变成 `403`、进而把会话创建打成 `401`。这组知识链回归请继续从 `backend/` 目录下按计划命令运行。
+- 本地 `20706b4b-bb22-484a-8f2f-8ecacc43bb3b` 这份 ready standard deck 在 admin 详情页会批量请求缺失 thumbnail 并产生大量 `404 Thumbnail not found` 噪声；它不影响 replace blocker / version/status 合同，但会污染浏览器 console/network 错误列表，排查时别把它误判成 replace 回归。

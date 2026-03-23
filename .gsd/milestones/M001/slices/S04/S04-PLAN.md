@@ -44,13 +44,15 @@
   - Why: 产品资料这半条链当前最真实的缺口不是“没有知识库”，而是管理员无法自助恢复 failed/pending 文档，也无法在 UI 里判断 ready / miss / kb_not_ready；同时 S04 必须把“下一次新建 session 才吃到新资料、旧 session 快照不回写”这条权威线锁死。
   - Files: `backend/src/common/knowledge/api.py`, `backend/tests/integration/test_knowledge_api.py`, `backend/tests/integration/test_knowledge_upload_persistence.py`, `backend/tests/integration/test_knowledge_flow.py`, `web/src/lib/api/client.ts`, `web/src/lib/api/types.ts`, `web/src/app/admin/knowledge/[id]/page.tsx`, `web/src/app/admin/knowledge/[id]/page.test.tsx`
   - Do: 对齐知识库上传/search/reprocess 的前后端合同，保持 `xlsx/xls` 可上传并复用现有 reprocess API；在知识库详情页增加 failed/pending 文档重试、ready/not_ready 文案与搜索诊断面板；把 backend integration proof 扩到“persona 绑定 KB -> 上传/重试文档 -> 新建 sales session -> `/knowledge-check` 看到最新状态”，并明确旧 session 不被新资料回写。
-  - Verify: `cd backend && pytest tests/integration/test_knowledge_api.py tests/integration/test_knowledge_upload_persistence.py tests/integration/test_knowledge_flow.py && cd ../web && npm test -- --run 'src/app/admin/knowledge/[id]/page.test.tsx'`
+  - Backend verify: `cd backend && pytest tests/integration/test_knowledge_api.py tests/integration/test_knowledge_upload_persistence.py tests/integration/test_knowledge_flow.py`
+  - Web verify: `cd web && npm test -- --run 'src/app/admin/knowledge/[id]/page.test.tsx'`
   - Done when: 管理员能在知识库详情页直接上传/重试/搜索产品资料，且 targeted tests 证明新建 sales session 会冻结当时的 KB 绑定并把 hit / miss / kb_not_ready 诊断暴露到会后检查面。
 - [x] **T02: 实现标准 PPT 原位替换并验证下一次演练读取最新页面** `est:5h`
   - Why: 现有 `/presentations` 上传只会生成新的 `presentation_id`，无法满足“标准 PPT 更新后下一次训练直接生效”；S04 需要把标准 PPT 变成一个稳定身份，同时避免正在进行的演练被后台替换 silently 污染。
   - Files: `backend/src/presentation_coach/api/presentations.py`, `backend/tests/contract/test_presentations.py`, `backend/tests/integration/test_presentation_flow.py`, `web/src/lib/api/client.ts`, `web/src/app/admin/presentations/[id]/page.tsx`, `web/src/app/admin/presentations/[id]/page.test.tsx`, `web/src/app/(dashboard)/agents/[agentId]/page.tsx`, `web/src/app/(dashboard)/agents/[agentId]/page.test.tsx`
   - Do: 在 presentations API 中新增“原位替换同一 standard presentation”的入口，保持 `presentation_id` 稳定、递增 `version_number`、重跑解析/缩略图/页面数据，并在存在非终态 session 时阻止替换；替换时显式清理并重建依赖 page_id 的 coaching 数据，再让 admin 详情页显示版本/状态/替换 CTA，用户演练选择器显示当前版本与材料状态，从而让下一次新建 presentation session 读取最新 `Page` / `RequiredTalkingPoint` / `ForbiddenWord`。
-  - Verify: `cd backend && pytest tests/contract/test_presentations.py tests/integration/test_presentation_flow.py && cd ../web && npm test -- --run 'src/app/admin/presentations/[id]/page.test.tsx' 'src/app/(dashboard)/agents/[agentId]/page.test.tsx'`
+  - Backend verify: `cd backend && pytest tests/contract/test_presentations.py tests/integration/test_presentation_flow.py`
+  - Web verify: `cd web && npm test -- --run 'src/app/admin/presentations/[id]/page.test.tsx' 'src/app/(dashboard)/agents/[agentId]/page.test.tsx'`
   - Done when: 管理员可以在同一 presentation 详情页完成标准 PPT 替换并看到版本/状态变化；活跃会话存在时替换会被明确阻止；用户从原有入口新建下一次 presentation 练习时，不需要手工追新 ID 也能读到最新页面内容与规则。
 
 ## Files Likely Touched

@@ -1,7 +1,7 @@
 {
   "mode": "stabilize",
-  "current_issue_id": "M001-S04-T02",
-  "current_issue_type": "task",
+  "current_issue_id": "M001-S04",
+  "current_issue_type": "slice",
   "current_issue_status": "done",
   "pending_issue_ids": [],
   "completed_issue_ids": [
@@ -17,21 +17,23 @@
     "M001-S03-T02",
     "M001-S03",
     "M001-S04-T01",
-    "M001-S04-T02"
+    "M001-S04-T02",
+    "M001-S04"
   ],
   "blocked_issue_ids": [],
   "deferred_issue_ids": [],
   "last_modified_files": [
-    "backend/src/presentation_coach/api/presentations.py",
-    "backend/tests/contract/test_presentations.py",
-    "backend/tests/integration/test_presentation_flow.py",
-    "web/src/lib/api/client.ts",
-    "web/src/app/admin/presentations/[id]/page.tsx",
-    "web/src/app/admin/presentations/[id]/page.test.tsx",
-    "web/src/app/(dashboard)/agents/[agentId]/page.tsx",
-    "web/src/app/(dashboard)/agents/[agentId]/page.test.tsx",
+    ".gsd/milestones/M001/slices/S04/S04-SUMMARY.md",
+    ".gsd/milestones/M001/slices/S04/S04-UAT.md",
+    ".gsd/milestones/M001/M001-ROADMAP.md",
     ".gsd/milestones/M001/slices/S04/S04-PLAN.md",
-    ".gsd/milestones/M001/slices/S04/tasks/T02-SUMMARY.md",
+    ".gsd/milestones/M001/slices/S04/tasks/T01-VERIFY.json",
+    ".gsd/milestones/M001/slices/S04/tasks/T02-VERIFY.json",
+    ".gsd/REQUIREMENTS.md",
+    ".gsd/DECISIONS.md",
+    ".gsd/KNOWLEDGE.md",
+    ".gsd/PROJECT.md",
+    ".gsd/STATE.md",
     ".codex/loop/state.json",
     ".codex/loop/log.md"
   ],
@@ -39,11 +41,11 @@
     "cd backend && pytest tests/integration/test_knowledge_api.py tests/integration/test_knowledge_upload_persistence.py tests/integration/test_knowledge_flow.py",
     "cd backend && pytest tests/contract/test_presentations.py tests/integration/test_presentation_flow.py",
     "cd web && npm test -- --run 'src/app/admin/knowledge/[id]/page.test.tsx' 'src/app/admin/presentations/[id]/page.test.tsx' 'src/app/(dashboard)/agents/[agentId]/page.test.tsx'",
-    "Browser UAT: /admin/presentations/20706b4b-bb22-484a-8f2f-8ecacc43bb3b replace blocker alert + 409 payload",
-    "Browser UAT: /agents/7199854c-3921-4d9f-9833-fe99ca209c59 version/status selector + launched /practice URL carrying presentation_id=20706b4b-bb22-484a-8f2f-8ecacc43bb3b"
+    "browser/runtime: POST /api/v1/auth/dev-login -> /admin/knowledge/7295703d-d400-4289-baef-62598051ffe7 search diagnostics -> POST /api/v1/practice/sessions for sales session 662543a2-07d0-4d8c-a1f0-1feffc05c23b -> GET /api/v1/practice/sessions/662543a2-07d0-4d8c-a1f0-1feffc05c23b/knowledge-check -> lifecycle start/end cleanup",
+    "browser/runtime: /admin/presentations/20706b4b-bb22-484a-8f2f-8ecacc43bb3b replace attempt with backend/data/ppts/5d63f1d6-1bf5-41b9-81ff-8a8827679225.pptx -> expect 409 blocker, then /agents/7199854c-3921-4d9f-9833-fe99ca209c59 version/status visibility"
   ],
-  "last_verification_result": "All automated S04 slice verification commands passed. Local runtime/browser UAT also passed for the admin replace-blocker path and the user-side stable presentation version/status + session-launch path after installing the missing backend redis Python client. A destructive live replace-success browser swap was intentionally not forced because the only ready deck remained occupied by other in-progress sessions, while backend contract/integration tests already prove replace-success + next-session latest-material reads.",
-  "last_success_signal": "Standard PPTs are now replaced in place on the live /presentations surface with stable presentation_id + incremented version_number, explicit active-session blocking, rebuilt page-level coaching metadata, and admin/user version-status visibility; user launches continue to carry the same presentation_id.",
+  "last_verification_result": "All slice-level automated S04 commands passed fresh. Live local checks also passed for admin knowledge diagnostics visibility, fresh sales-session snapshot freezing plus knowledge-check observability, admin presentation replace blocker semantics, and user-side presentation version/status visibility. The only browser path intentionally not re-run destructively was a successful ready-deck replace on an unoccupied presentation, because the local ready standard deck remained referenced by unrelated in-progress sessions while backend contract/integration suites already prove the success path.",
+  "last_success_signal": "S04 is complete: admins can self-serve KB upload/reprocess/search diagnostics and standard PPT in-place replacement with blocker/version visibility, while new training sessions consume frozen latest-material bindings through authoritative sales and presentation runtime paths.",
   "last_growth_scan": null,
-  "next_action": "If a full browser success-swap UAT is needed later, free or clone a ready presentation that is not referenced by other in-progress sessions, then rerun /admin/presentations/[id] replace followed by /agents/[agentId] launch."
+  "next_action": "Start S05 and consume S04's frozen knowledge/PPT material line directly in sales value-expression and objection-handling evaluation instead of adding a new materials source."
 }

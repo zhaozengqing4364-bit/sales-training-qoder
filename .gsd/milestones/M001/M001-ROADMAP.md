@@ -62,7 +62,7 @@ This milestone is complete only when all are true:
 - [x] **S03: 单次报告可读化（学员 + 主管）** `risk:medium` `depends:[S02]`
   > After this: 学员训练完能看懂结论和建议；主管打开单次报告能直接看到好坏结论、卡点、说虚 / 说错内容、没接住的异议、下次训练重点。
 
-- [ ] **S04: 知识库更新即生效链路** `risk:high` `depends:[S01]`
+- [x] **S04: 知识库更新即生效链路** `risk:high` `depends:[S01]`
   > After this: 培训负责人 / 管理员更新公司标准 PPT 或产品资料后，下一次新建训练即可使用更新后的内容，并且能看到生效诊断。
 
 - [ ] **S05: 销售价值表达与异议处理基线** `risk:high` `depends:[S02,S04]`

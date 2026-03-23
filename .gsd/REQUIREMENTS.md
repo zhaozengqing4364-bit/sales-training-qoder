@@ -15,17 +15,6 @@ This file is the explicit capability and coverage contract for the project.
 - Validation: mapped
 - Notes: 需要和真实产品材料绑定，且训练评价要能区分“背材料”和“讲价值”。
 
-### R004 — 培训负责人或管理员必须能在系统里自己上传、更新、替换公司标准 PPT 与产品资料，且这些材料在下一次新建训练时生效。
-- Class: admin/support
-- Status: active
-- Description: 培训负责人或管理员必须能在系统里自己上传、更新、替换公司标准 PPT 与产品资料，且这些材料在下一次新建训练时生效。
-- Why it matters: 训练材料会随着业务变化而更新；如果训练内容无法由业务侧维护，系统很快失真。
-- Source: user
-- Primary owning slice: M001/S04
-- Supporting slices: M001/S07
-- Validation: mapped
-- Notes: M001 第一批硬要求材料是公司标准 PPT 与产品资料 / 功能说明；后续可扩展到更多知识类型。
-
 ### R007 — 系统必须让主管看到某人在最近几次训练中的变化趋势，而不是只能看到单次表现。
 - Class: operability
 - Status: active
@@ -115,6 +104,17 @@ This file is the explicit capability and coverage contract for the project.
 - Supporting slices: M001/S08
 - Validation: validated
 - Notes: 需覆盖真实桌面端训练生命周期，不接受只在单元测试层面“看起来可恢复”。
+
+### R004 — 培训负责人或管理员必须能在系统里自己上传、更新、替换公司标准 PPT 与产品资料，且这些材料在下一次新建训练时生效。
+- Class: admin/support
+- Status: validated
+- Description: 培训负责人或管理员必须能在系统里自己上传、更新、替换公司标准 PPT 与产品资料，且这些材料在下一次新建训练时生效。
+- Why it matters: 训练材料会随着业务变化而更新；如果训练内容无法由业务侧维护，系统很快失真。
+- Source: user
+- Primary owning slice: M001/S04
+- Supporting slices: M001/S07
+- Validation: Validated by S04 slice verification: backend knowledge/presentation integration suites passed, web admin knowledge/admin presentation/agent entry focused tests passed, live runtime/browser checks showed admin knowledge search diagnostics + knowledge-check snapshot fields, and standard PPT replacement exposed stable presentation_id + version/status with explicit 409 active-session blocking while user entry displayed the current deck version/status.
+- Notes: M001 第一批硬要求材料是公司标准 PPT 与产品资料 / 功能说明；后续可扩展到更多知识类型。
 
 ### R005 — 每次训练结束后，学员都能获得结构清晰、建议具体且基于真实训练事实的单次报告，而不是抽象分数或模糊总结。
 - Class: launchability
@@ -248,7 +248,7 @@ This file is the explicit capability and coverage contract for the project.
 | R001 | primary-user-loop | validated | M001/S01 | M001/S08 | validated |
 | R002 | failure-visibility | validated | M001/S01 | M001/S08 | validated |
 | R003 | core-capability | active | M001/S05 | M001/S04, M001/S07 | mapped |
-| R004 | admin/support | active | M001/S04 | M001/S07 | mapped |
+| R004 | admin/support | validated | M001/S04 | M001/S07 | Validated by S04 slice verification: backend knowledge/presentation integration suites passed, web admin knowledge/admin presentation/agent entry focused tests passed, live runtime/browser checks showed admin knowledge search diagnostics + knowledge-check snapshot fields, and standard PPT replacement exposed stable presentation_id + version/status with explicit 409 active-session blocking while user entry displayed the current deck version/status. |
 | R005 | launchability | validated | M001/S03 | M001/S02, M001/S08 | Validated by S03 slice verification: backend contract/admin integration tests passed, web focused report/admin tests passed, and live runtime report UAT (after alembic head) proved the first screen leads with result, main issue, next goal, and unified evidence without placeholder/export affordances. |
 | R006 | admin/support | validated | M001/S03 | M001/S05, M001/S07 | Validated by S03 slice verification: admin sessions integration contract passed, admin detail + manager-lite focused tests passed, and live runtime admin APIs exposed projection-backed supervisor preview fields and canonical /practice/{sessionId}/report drill-in targets for the same completed sessions. |
 | R007 | operability | active | M001/S06 | M001/S03 | mapped |
@@ -269,7 +269,7 @@ This file is the explicit capability and coverage contract for the project.
 
 ## Coverage Summary
 
-- Active requirements: 8
-- Mapped to slices: 8
-- Validated: 7 (R001, R002, R005, R006, R013, R014, R015)
+- Active requirements: 7
+- Mapped to slices: 7
+- Validated: 8 (R001, R002, R004, R005, R006, R013, R014, R015)
 - Unmapped active requirements: 0

@@ -272,3 +272,31 @@ Append one entry per iteration:
   verification results: passed; automated S04 suites are green, live browser verified the blocker and stable-ID user launch, and the only unresolved destructive live-swap path is intentionally deferred because the ready deck is still referenced by unrelated in-progress sessions while backend integration tests already cover successful replace semantics
   success signal status: admin sees version/status + replace blocker on the live detail page, and user entry shows the current deck version/status while launching the next presentation practice with the same stable presentation_id
   rollback note: if later work needs a full browser success-swap UAT, first free or clone a ready presentation deck not referenced by active sessions before rerunning the replace flow
+
+- time: 2026-03-23T19:07:30+08:00
+  mode: stabilize
+  item id: M001-S04
+  files changed:
+    - .gsd/milestones/M001/slices/S04/S04-SUMMARY.md
+    - .gsd/milestones/M001/slices/S04/S04-UAT.md
+    - .gsd/milestones/M001/M001-ROADMAP.md
+    - .gsd/milestones/M001/slices/S04/S04-PLAN.md
+    - .gsd/milestones/M001/slices/S04/tasks/T01-VERIFY.json
+    - .gsd/milestones/M001/slices/S04/tasks/T02-VERIFY.json
+    - .gsd/REQUIREMENTS.md
+    - .gsd/DECISIONS.md
+    - .gsd/KNOWLEDGE.md
+    - .gsd/PROJECT.md
+    - .gsd/STATE.md
+    - .codex/loop/state.json
+    - .codex/loop/log.md
+  summary: Closed S04 by writing the missing slice summary/UAT, validating R004 as shipped, fixing the stale task-level verifier artifacts that had been split into invalid bare commands, and re-proving the knowledge/PPT material-effectiveness surfaces with fresh automated plus local runtime checks.
+  verification commands:
+    - cd backend && pytest tests/integration/test_knowledge_api.py tests/integration/test_knowledge_upload_persistence.py tests/integration/test_knowledge_flow.py
+    - cd backend && pytest tests/contract/test_presentations.py tests/integration/test_presentation_flow.py
+    - cd web && npm test -- --run 'src/app/admin/knowledge/[id]/page.test.tsx' 'src/app/admin/presentations/[id]/page.test.tsx' 'src/app/(dashboard)/agents/[agentId]/page.test.tsx'
+    - browser/runtime: POST /api/v1/auth/dev-login -> /admin/knowledge/7295703d-d400-4289-baef-62598051ffe7 search diagnostics -> POST /api/v1/practice/sessions for sales session 662543a2-07d0-4d8c-a1f0-1feffc05c23b -> GET /api/v1/practice/sessions/662543a2-07d0-4d8c-a1f0-1feffc05c23b/knowledge-check -> lifecycle start/end cleanup
+    - browser/runtime: /admin/presentations/20706b4b-bb22-484a-8f2f-8ecacc43bb3b replace attempt with backend/data/ppts/5d63f1d6-1bf5-41b9-81ff-8a8827679225.pptx -> expect 409 blocker, then /agents/7199854c-3921-4d9f-9833-fe99ca209c59 version/status visibility
+  verification results: passed; all three slice-level automated commands are green, local admin knowledge diagnostics and fresh sales-session snapshot/knowledge-check surfaces are live, admin presentation replace correctly blocks with 409 while user entry shows the current deck version/status, and the only intentionally skipped browser path is a destructive success-swap on a deck still occupied by unrelated in-progress sessions
+  success signal status: S04 is complete and R004 is now validated; admins can self-serve product materials and standard PPT updates while new sessions consume the frozen latest-material bindings through the live runtime contracts
+  rollback note: if later work changes S04 verification again, keep task-level backend/web checks as separate commands and preserve the live `/api/v1/presentations` + `voice_policy_snapshot/knowledge-check` authority lines unless a fully re-verified contract replaces them
