@@ -6,7 +6,6 @@ import {
     AlertTriangle,
     ArrowLeft,
     CheckCircle,
-    Download,
     Home,
     Lightbulb,
     Sparkles,
@@ -383,9 +382,6 @@ export default function ComprehensiveReportPage() {
                     <ArrowLeft className="w-4 h-4 mr-2" />返回首页
                 </Button>
                 <div className="flex items-center gap-2">
-                    <Button variant="outline" size="sm">
-                        <Download className="w-4 h-4 mr-2" />导出报告
-                    </Button>
                     <Button variant="primary" size="sm" onClick={goHome}>
                         <Home className="w-4 h-4 mr-2" />退出到首页
                     </Button>

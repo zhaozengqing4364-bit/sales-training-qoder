@@ -1,6 +1,6 @@
 {
   "mode": "stabilize",
-  "current_issue_id": "M001-S02",
+  "current_issue_id": "M001-S03",
   "current_issue_type": "slice",
   "current_issue_status": "done",
   "pending_issue_ids": [],
@@ -12,29 +12,33 @@
     "M001-S02-T02",
     "M001-S02-T03",
     "M001-S02-T04",
-    "M001-S02"
+    "M001-S02",
+    "M001-S03-T01",
+    "M001-S03-T02",
+    "M001-S03"
   ],
   "blocked_issue_ids": [],
   "deferred_issue_ids": [],
   "last_modified_files": [
-    ".gsd/milestones/M001/slices/S02/S02-SUMMARY.md",
-    ".gsd/milestones/M001/slices/S02/S02-UAT.md",
+    "web/src/app/(user)/practice/[sessionId]/report/page.tsx",
+    "web/src/app/(user)/practice/[sessionId]/report/page.test.tsx",
+    ".gsd/milestones/M001/slices/S03/S03-SUMMARY.md",
+    ".gsd/milestones/M001/slices/S03/S03-UAT.md",
     ".gsd/milestones/M001/M001-ROADMAP.md",
     ".gsd/REQUIREMENTS.md",
     ".gsd/PROJECT.md",
-    ".gsd/STATE.md",
-    ".gsd/completed-units.json",
+    ".gsd/KNOWLEDGE.md",
     ".codex/loop/state.json",
     ".codex/loop/log.md"
   ],
   "last_verification_commands": [
-    "cd backend && pytest tests/unit/test_stepfun_message_helpers.py tests/unit/test_stepfun_realtime_persistence.py tests/unit/test_sales_message_persistence.py",
-    "cd backend && pytest tests/unit/test_session_evidence_service.py tests/unit/test_replay_service.py tests/contract/test_practice_evidence_contract.py tests/integration/test_practice_evidence_flow.py",
-    "cd backend && pytest tests/unit/test_history_service_evidence_projection.py tests/unit/common/test_analytics_api_normalization.py tests/integration/test_history_evidence_flow.py",
-    "cd web && npm test -- --run 'src/app/(user)/practice/[sessionId]/report/page.test.tsx' 'src/app/(user)/practice/[sessionId]/replay/page.test.tsx' 'src/app/(dashboard)/history/page.test.tsx'"
+    "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/contract/test_practice_evidence_contract.py backend/tests/integration/test_admin_users_api.py",
+    "npm --prefix web test -- --run 'src/app/(user)/practice/[sessionId]/report/page.test.tsx' 'src/app/admin/users/[id]/page.test.tsx' 'src/components/admin/manager-lite-panel.test.tsx'",
+    "cd backend && venv/bin/alembic upgrade head",
+    "live runtime UAT: /practice/{fail}/report + /practice/{not-evaluable}/report + /api/v1/admin/users/{id}/sessions + /api/v1/admin/interventions/lists"
   ],
-  "last_verification_result": "reused previously passed S02 slice verification results recorded during T04 before the crash; all required slice verification commands passed, and observability/failure-state checks confirmed the unified evidence contract degrades explicitly when local dev DB schema drift blocks happy-path browser data.",
-  "last_success_signal": "S02 is complete: training evidence now persists canonically, projects through one shared reader, powers report/replay/history/trends from the same baseline, and is consumed by web pages without client-side score stitching.",
+  "last_verification_result": "Fresh S03 slice verification passed (15 backend tests, 4 web tests). Recovery UAT also proved the evaluable and not-evaluable report first-screen states after applying Alembic head, and live admin APIs exposed projection-backed supervisor preview fields and canonical report session ids.",
+  "last_success_signal": "S03 is complete: learner reports now lead with unified-evidence verdicts/issues/next goals, dead export affordance is removed again and test-locked, and supervisor previews/drill-ins now stay on the same canonical /practice/{sessionId}/report evidence line.",
   "last_growth_scan": null,
-  "next_action": "Reassess the roadmap after S02 completion and choose the next slice; S03 is now directly unblocked, while any further browser happy-path verification for history/report/replay should wait until the local dev database is migrated to add conversation_messages.transcript_metadata."
+  "next_action": "Reassess the roadmap after S03 completion. S06 is now directly unblocked, and any future supervisor runtime UAT should start by checking Alembic head so admin preview failures are not misread as frontend regressions."
 }

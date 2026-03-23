@@ -16,7 +16,9 @@
 - 已有部分能力模块：模糊词检测、销售阶段识别、实时评分、回放 API、会话状态服务、知识库服务。
 - M001/S01 已完成：销售训练终态现在统一走单一后端 lifecycle 写入口；StepFun runtime 已接回最小可恢复快照与 `reconnected` 协议；训练页只信服务端 lifecycle 事件，并在结束失败时留在训练页暴露 `重试结束` 与 trace 诊断。
 - M001/S02 已完成：逐轮 evidence 与会话级 evaluability / result metadata 已稳定落库，report / replay / history / trends 改为共享 `SessionEvidenceService` 投影，Web 页面也停止本地拼接冲突分数来源。
-- 当前主风险已从“训练事实如何成为同一事实源”转向“如何把统一事实翻译成学员/主管真正可读、可执行的单次报告，以及让最新训练材料在下一次训练真实生效”。
+- M001/S03 已完成：单次报告首屏现在由 unified evidence 直接给出结论 / 主问题 / 下一轮唯一目标 / 关键证据，主管侧 completed session 预览与 manager-lite drill-in 也统一指向同一 `/practice/{sessionId}/report` 权威页面。
+- 本地运行时若要验证 supervisor preview，数据库必须先迁移到 Alembic head（至少包含 `20260317_2310_020`）；否则 admin session preview 读取会因缺少 `conversation_messages.transcript_metadata` 而假性失败。
+- 当前主风险已从“训练事实如何成为同一事实源”转向“知识库更新后下一次训练是否真实生效，以及连续变化视图如何复用 S03 已稳定的判断维度”。
 - 真实首发目标已明确：先把桌面端稳定性做满，不在第一阶段绑定移动端 / 企业微信 / 外部系统集成。
 
 ## Architecture / Key Patterns

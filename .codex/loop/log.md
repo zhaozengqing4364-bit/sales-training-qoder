@@ -193,4 +193,26 @@ Append one entry per iteration:
       - cd web && npm test -- --run 'src/app/(user)/practice/[sessionId]/report/page.test.tsx' 'src/app/(user)/practice/[sessionId]/replay/page.test.tsx' 'src/app/(dashboard)/history/page.test.tsx'
   verification results: no rerun during crash recovery per resume instructions; the previously completed slice verification set already passed, and the recorded browser diagnostics already proved the unified-evidence failure surface on /history stays explicit under local DB schema drift
   success signal status: S02 is now marked complete in roadmap/state artifacts and the project requirement notes explicitly capture that report/replay/history/trends share one evidence baseline for downstream work
-  rollback note: if a later slice versions the evidence contract again, update the slice summary/UAT, roadmap, requirements notes, and loop state together so downstream planning does not drift from filesystem truth
+- time: 2026-03-23T15:18:00+08:00
+  mode: stabilize
+  item id: M001-S03
+  files changed:
+    - web/src/app/(user)/practice/[sessionId]/report/page.tsx
+    - web/src/app/(user)/practice/[sessionId]/report/page.test.tsx
+    - .gsd/milestones/M001/slices/S03/S03-SUMMARY.md
+    - .gsd/milestones/M001/slices/S03/S03-UAT.md
+    - .gsd/milestones/M001/M001-ROADMAP.md
+    - .gsd/REQUIREMENTS.md
+    - .gsd/PROJECT.md
+    - .gsd/KNOWLEDGE.md
+    - .codex/loop/state.json
+    - .codex/loop/log.md
+  summary: Closed S03 by removing the regressed dead export affordance, writing the slice summary/UAT, validating learner report readability plus supervisor preview contracts against one evidence line, and marking the roadmap slice complete.
+  verification commands:
+    - backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/contract/test_practice_evidence_contract.py backend/tests/integration/test_admin_users_api.py
+    - npm --prefix web test -- --run 'src/app/(user)/practice/[sessionId]/report/page.test.tsx' 'src/app/admin/users/[id]/page.test.tsx' 'src/components/admin/manager-lite-panel.test.tsx'
+    - cd backend && venv/bin/alembic upgrade head
+    - live runtime UAT: /practice/1398bea9-c25a-454f-ad1c-f645edcb3350/report, /practice/eda38292-9b64-4a8a-a271-c8f237477e9c/report, /api/v1/admin/users/0a0af6d4-d7cb-4ec8-be9f-f44288b10be2/sessions, /api/v1/admin/interventions/lists
+  verification results: passed; fresh backend/frontend slice verification succeeded, report-page runtime UAT proved evaluable + not-evaluable first-screen behavior, and admin preview APIs matched the canonical report session ids after upgrading the local DB to Alembic head.
+  success signal status: S03 is complete and R005/R006 are now validated; single-session learner/supervisor reads stay on one unified evidence line.
+  rollback note: if future work changes single-session reporting again, preserve the explicit no-export-button assertion and keep admin previews sourced from SessionEvidenceService instead of reviving legacy weighting.

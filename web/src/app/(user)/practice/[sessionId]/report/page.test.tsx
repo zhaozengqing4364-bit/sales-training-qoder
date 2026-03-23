@@ -148,6 +148,7 @@ describe("ReportPage", () => {
         });
 
         expect((await screen.findByTestId("report-overall-score")).textContent).toContain("72");
+        expect(screen.queryByText("导出报告")).toBeNull();
         expect(screen.getByText("当前会话暂不可评估")).toBeTruthy();
         expect(screen.getByText("开场破冰")).toBeTruthy();
         expect(screen.queryByText("95")).toBeNull();

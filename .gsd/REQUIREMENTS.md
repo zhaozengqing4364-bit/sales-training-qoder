@@ -2,19 +2,9 @@
 
 This file is the explicit capability and coverage contract for the project.
 
-Use it to track what is actively in scope, what has been validated by completed work, what is intentionally deferred, and what is explicitly out of scope.
-
-Guidelines:
-- Keep requirements capability-oriented, not a giant feature wishlist.
-- Requirements should be atomic, testable, and stated in plain language.
-- Every **Active** requirement should be mapped to a slice, deferred, blocked with reason, or moved out of scope.
-- Each requirement should have one accountable primary owner and may have supporting slices.
-- Research may suggest requirements, but research does not silently make them binding.
-- Validation means the requirement was actually proven by completed work and verification, not just discussed.
-
 ## Active
 
-### R003 — 销售训练必须围绕真实产品价值展开，而不是停留在背 PPT
+### R003 — 销售训练需要让学员把公司产品价值点翻译成客户收益，支持真实销售表达，而不是只背公司 PPT 或泛泛陪聊。
 - Class: core-capability
 - Status: active
 - Description: 销售训练需要让学员把公司产品价值点翻译成客户收益，支持真实销售表达，而不是只背公司 PPT 或泛泛陪聊。
@@ -25,7 +15,7 @@ Guidelines:
 - Validation: mapped
 - Notes: 需要和真实产品材料绑定，且训练评价要能区分“背材料”和“讲价值”。
 
-### R004 — 培训负责人/管理员可自助更新公司标准 PPT 与产品资料，并在下一次训练生效
+### R004 — 培训负责人或管理员必须能在系统里自己上传、更新、替换公司标准 PPT 与产品资料，且这些材料在下一次新建训练时生效。
 - Class: admin/support
 - Status: active
 - Description: 培训负责人或管理员必须能在系统里自己上传、更新、替换公司标准 PPT 与产品资料，且这些材料在下一次新建训练时生效。
@@ -36,29 +26,7 @@ Guidelines:
 - Validation: mapped
 - Notes: M001 第一批硬要求材料是公司标准 PPT 与产品资料 / 功能说明；后续可扩展到更多知识类型。
 
-### R005 — 学员每次训练后都能拿到可读、可信、可执行的单次报告
-- Class: launchability
-- Status: active
-- Description: 每次训练结束后，学员都能获得结构清晰、建议具体且基于真实训练事实的单次报告，而不是抽象分数或模糊总结。
-- Why it matters: 如果报告不可读或不可信，学员无法把训练结果转化为下一次行动，首练后就会失去复练动力。
-- Source: user
-- Primary owning slice: M001/S03
-- Supporting slices: M001/S02, M001/S08
-- Validation: mapped
-- Notes: S02 已验证 report / replay / history / trends 共享统一事实基线；S03 继续负责把这套事实翻译成真正可读、可执行的单次报告，而不是只做漂亮展示。
-
-### R006 — 主管查看单次报告时，能直接看出结论、卡点、说虚/说错内容、未接住的异议、下次训练重点
-- Class: admin/support
-- Status: active
-- Description: 单次报告必须支持主管快速判断这次练得好不好、卡在哪个环节、哪些话说错或说虚、哪些异议没接住，以及下一次该重点练什么。
-- Why it matters: 主管是第一版的重要使用者；如果主管看完报告仍不知道怎么带人，管理侧价值就无法成立。
-- Source: user
-- Primary owning slice: M001/S03
-- Supporting slices: M001/S05, M001/S07
-- Validation: mapped
-- Notes: 第一版主管动作先在线下发生，系统先负责提供可执行判断依据。
-
-### R007 — 主管可查看某人最近几次训练的连续变化，判断是否进步、是否总卡在同类问题、是否该换训练重点
+### R007 — 系统必须让主管看到某人在最近几次训练中的变化趋势，而不是只能看到单次表现。
 - Class: operability
 - Status: active
 - Description: 系统必须让主管看到某人在最近几次训练中的变化趋势，而不是只能看到单次表现。
@@ -69,7 +37,7 @@ Guidelines:
 - Validation: mapped
 - Notes: 第一版先做趋势观察，不要求系统内派任务或闭环动作。
 
-### R008 — PPT 对练第一版至少支持完整讲完后统一复盘、评分与建议
+### R008 — PPT 对练第一版必须允许用户完整讲完一轮，并在结束后获得围绕真实 PPT 价值点的统一复盘、评分与建议。
 - Class: primary-user-loop
 - Status: active
 - Description: PPT 对练第一版必须允许用户完整讲完一轮，并在结束后获得围绕真实 PPT 价值点的统一复盘、评分与建议。
@@ -80,7 +48,7 @@ Guidelines:
 - Validation: mapped
 - Notes: 实时打断式 PPT 教练是高价值增强，但不是 M001 上线硬门槛。
 
-### R009 — 客户演练过程中提供实时评分/建议，帮助用户调整下一轮回答
+### R009 — 客户演练在训练过程中应逐步提供可用的实时评分、阶段反馈或下一轮建议，帮助用户边练边调整，而不是只能事后看分。
 - Class: differentiator
 - Status: active
 - Description: 客户演练在训练过程中应逐步提供可用的实时评分、阶段反馈或下一轮建议，帮助用户边练边调整，而不是只能事后看分。
@@ -91,7 +59,7 @@ Guidelines:
 - Validation: mapped
 - Notes: M001 先确保训练后报告可信，M002 再把实时教练体验做扎实。
 
-### R010 — 训练系统能够结合知识库与 Persona，支撑价格/竞品/证据类追问的真实对练
+### R010 — AI 客户必须能基于知识库和 Persona 配置，对价格、竞品、证据等真实销售问题进行持续追问，而不是给出泛泛回答。
 - Class: integration
 - Status: active
 - Description: AI 客户必须能基于知识库和 Persona 配置，对价格、竞品、证据等真实销售问题进行持续追问，而不是给出泛泛回答。
@@ -102,7 +70,7 @@ Guidelines:
 - Validation: mapped
 - Notes: 现有仓库已存在知识库与 Persona 机制，但仍需证明知识真正进入训练、角色行为保持一致。
 
-### R011 — 会话结果需要沉淀为可复盘的数据资产，支持回放/高光/证据链式复盘
+### R011 — 训练会话的逐轮内容、阶段、评分、高光与关键问题需要沉淀为可检索、可回放、可解释的数据资产，支撑后续复盘与学习。
 - Class: continuity
 - Status: active
 - Description: 训练会话的逐轮内容、阶段、评分、高光与关键问题需要沉淀为可检索、可回放、可解释的数据资产，支撑后续复盘与学习。
@@ -113,7 +81,7 @@ Guidelines:
 - Validation: mapped
 - Notes: M001/S02 已验证 report / replay / history / trends 共享统一 session evidence 基线；M004 继续强化高光、逐轮点评和更强的学习证据体验。
 
-### R012 — 后台治理能力需要支持长期运营训练资产，而不是一次性配置后写死
+### R012 — 知识库、PPT、Persona、报告视角和管理使用方式都需要按长期运营来设计，而不是一次配置后固定不变。
 - Class: operability
 - Status: active
 - Description: 知识库、PPT、Persona、报告视角和管理使用方式都需要按长期运营来设计，而不是一次配置后固定不变。
@@ -126,7 +94,7 @@ Guidelines:
 
 ## Validated
 
-### R001 — 桌面端客户演练主链路稳定可连续多轮运行
+### R001 — 桌面端销售客户演练必须能稳定完成多轮来回，不能在第二轮录音、第二轮响应、会话结束或重连时频繁失效。
 - Class: primary-user-loop
 - Status: validated
 - Description: 桌面端销售客户演练必须能稳定完成多轮来回，不能在第二轮录音、第二轮响应、会话结束或重连时频繁失效。
@@ -137,8 +105,7 @@ Guidelines:
 - Validation: validated
 - Notes: 这是 M001 的 P0；若此项未达标，其它增强能力即使存在也不构成可上线训练系统。
 
-
-### R002 — 训练过程中的异常必须可恢复或可降级，不能把用户心流直接打崩
+### R002 — 当 ASR、LLM、TTS、WebSocket、会话状态或知识检索出现失败时，系统必须提供恢复、降级或可诊断路径，而不是直接终止训练或依赖人工猜测问题。
 - Class: failure-visibility
 - Status: validated
 - Description: 当 ASR、LLM、TTS、WebSocket、会话状态或知识检索出现失败时，系统必须提供恢复、降级或可诊断路径，而不是直接终止训练或依赖人工猜测问题。
@@ -149,8 +116,29 @@ Guidelines:
 - Validation: validated
 - Notes: 需覆盖真实桌面端训练生命周期，不接受只在单元测试层面“看起来可恢复”。
 
+### R005 — 每次训练结束后，学员都能获得结构清晰、建议具体且基于真实训练事实的单次报告，而不是抽象分数或模糊总结。
+- Class: launchability
+- Status: validated
+- Description: 每次训练结束后，学员都能获得结构清晰、建议具体且基于真实训练事实的单次报告，而不是抽象分数或模糊总结。
+- Why it matters: 如果报告不可读或不可信，学员无法把训练结果转化为下一次行动，首练后就会失去复练动力。
+- Source: user
+- Primary owning slice: M001/S03
+- Supporting slices: M001/S02, M001/S08
+- Validation: Validated by S03 slice verification: backend contract/admin integration tests passed, web focused report/admin tests passed, and live runtime report UAT (after alembic head) proved the first screen leads with result, main issue, next goal, and unified evidence without placeholder/export affordances.
+- Notes: S02 已验证 report / replay / history / trends 共享统一事实基线；S03 继续负责把这套事实翻译成真正可读、可执行的单次报告，而不是只做漂亮展示。
 
-### R013 — 系统已具备客户演练 + PPT 对练的双模式入口与基础会话骨架
+### R006 — 单次报告必须支持主管快速判断这次练得好不好、卡在哪个环节、哪些话说错或说虚、哪些异议没接住，以及下一次该重点练什么。
+- Class: admin/support
+- Status: validated
+- Description: 单次报告必须支持主管快速判断这次练得好不好、卡在哪个环节、哪些话说错或说虚、哪些异议没接住，以及下一次该重点练什么。
+- Why it matters: 主管是第一版的重要使用者；如果主管看完报告仍不知道怎么带人，管理侧价值就无法成立。
+- Source: user
+- Primary owning slice: M001/S03
+- Supporting slices: M001/S05, M001/S07
+- Validation: Validated by S03 slice verification: admin sessions integration contract passed, admin detail + manager-lite focused tests passed, and live runtime admin APIs exposed projection-backed supervisor preview fields and canonical /practice/{sessionId}/report drill-in targets for the same completed sessions.
+- Notes: 第一版主管动作先在线下发生，系统先负责提供可执行判断依据。
+
+### R013 — 现有仓库已经存在销售与 PPT 双训练模式入口、训练页、会话创建与基础生命周期骨架。
 - Class: primary-user-loop
 - Status: validated
 - Description: 现有仓库已经存在销售与 PPT 双训练模式入口、训练页、会话创建与基础生命周期骨架。
@@ -161,7 +149,7 @@ Guidelines:
 - Validation: validated
 - Notes: 证据来自 `web/src/app/(user)/practice/[sessionId]/page.tsx`、`backend/src/common/api/practice.py`、`backend/src/main.py` 等现有实现检查。
 
-### R014 — 系统已具备知识库管理基础骨架，可作为训练材料治理起点
+### R014 — 现有仓库已存在知识库模型、服务、管理页面和相关 API，可作为管理员维护训练材料的起点。
 - Class: admin/support
 - Status: validated
 - Description: 现有仓库已存在知识库模型、服务、管理页面和相关 API，可作为管理员维护训练材料的起点。
@@ -172,7 +160,7 @@ Guidelines:
 - Validation: validated
 - Notes: 证据来自 `backend/src/common/knowledge/*` 与 `web/src/app/admin/knowledge/*` 的现有代码。
 
-### R015 — 系统已具备报告 / 回放 / 实时反馈协议基础，可作为闭环扩展起点
+### R015 — 现有仓库已经存在报告页、回放 API、实时评分 / 销售阶段 / 模糊词消息协议与前端接收逻辑。
 - Class: continuity
 - Status: validated
 - Description: 现有仓库已经存在报告页、回放 API、实时评分 / 销售阶段 / 模糊词消息协议与前端接收逻辑。
@@ -185,7 +173,7 @@ Guidelines:
 
 ## Deferred
 
-### R016 — PPT 对练中的实时纠偏 / 打断式教练
+### R016 — 在 PPT 对练过程中实时识别讲偏、讲错、讲太多并当场打断纠偏。
 - Class: differentiator
 - Status: deferred
 - Description: 在 PPT 对练过程中实时识别讲偏、讲错、讲太多并当场打断纠偏。
@@ -196,7 +184,7 @@ Guidelines:
 - Validation: unmapped
 - Notes: 用户明确接受“第一版先会后统一总结”，前提是实时纠偏在技术和体验上都成立时再引入。
 
-### R017 — 系统内的主管任务派发、跟进动作、训练任务管理
+### R017 — 主管在系统里给人指定训练重点、派发任务、追踪完成情况并执行管理动作。
 - Class: admin/support
 - Status: deferred
 - Description: 主管在系统里给人指定训练重点、派发任务、追踪完成情况并执行管理动作。
@@ -207,7 +195,7 @@ Guidelines:
 - Validation: unmapped
 - Notes: 第一版先提供趋势与报告判断依据，不做系统内管理闭环动作。
 
-### R018 — 移动端 / 企业微信首发体验
+### R018 — 首发即覆盖移动端与企业微信工作台内使用体验。
 - Class: launchability
 - Status: deferred
 - Description: 首发即覆盖移动端与企业微信工作台内使用体验。
@@ -218,7 +206,7 @@ Guidelines:
 - Validation: unmapped
 - Notes: 桌面端验证通过后再评估移动端和企业微信环境的专项工作。
 
-### R019 — 外部系统集成（SSO / CRM / 外部文档系统）
+### R019 — 与外部登录、CRM、外部文档系统或企业内部账号体系打通。
 - Class: integration
 - Status: deferred
 - Description: 与外部登录、CRM、外部文档系统或企业内部账号体系打通。
@@ -231,7 +219,7 @@ Guidelines:
 
 ## Out of Scope
 
-### R020 — 继续把销售训练做成偏娱乐性的体验，而不是严肃可用的训练系统
+### R020 — 不以“好玩”“看起来有 AI 感”为目标继续扩展娱乐化交互，而忽略主链路稳定、知识真实性、报告可信度和管理可用性。
 - Class: anti-feature
 - Status: out-of-scope
 - Description: 不以“好玩”“看起来有 AI 感”为目标继续扩展娱乐化交互，而忽略主链路稳定、知识真实性、报告可信度和管理可用性。
@@ -242,7 +230,7 @@ Guidelines:
 - Validation: n/a
 - Notes: 用户已明确指出当前系统偏娱乐，升级目标是“真正切实可用、可闭环、较少 bug”。
 
-### R021 — 用堆页面或堆功能替代主链路稳定性、报告可信度和知识有效性建设
+### R021 — 不用新增更多页面、控制台和表层功能去掩盖主训练闭环未成型的问题。
 - Class: anti-feature
 - Status: out-of-scope
 - Description: 不用新增更多页面、控制台和表层功能去掩盖主训练闭环未成型的问题。
@@ -261,8 +249,8 @@ Guidelines:
 | R002 | failure-visibility | validated | M001/S01 | M001/S08 | validated |
 | R003 | core-capability | active | M001/S05 | M001/S04, M001/S07 | mapped |
 | R004 | admin/support | active | M001/S04 | M001/S07 | mapped |
-| R005 | launchability | active | M001/S03 | M001/S02, M001/S08 | mapped |
-| R006 | admin/support | active | M001/S03 | M001/S05, M001/S07 | mapped |
+| R005 | launchability | validated | M001/S03 | M001/S02, M001/S08 | Validated by S03 slice verification: backend contract/admin integration tests passed, web focused report/admin tests passed, and live runtime report UAT (after alembic head) proved the first screen leads with result, main issue, next goal, and unified evidence without placeholder/export affordances. |
+| R006 | admin/support | validated | M001/S03 | M001/S05, M001/S07 | Validated by S03 slice verification: admin sessions integration contract passed, admin detail + manager-lite focused tests passed, and live runtime admin APIs exposed projection-backed supervisor preview fields and canonical /practice/{sessionId}/report drill-in targets for the same completed sessions. |
 | R007 | operability | active | M001/S06 | M001/S03 | mapped |
 | R008 | primary-user-loop | active | M001/S07 | M001/S04 | mapped |
 | R009 | differentiator | active | M002 (provisional) | none | mapped |
@@ -281,7 +269,7 @@ Guidelines:
 
 ## Coverage Summary
 
-- Active requirements: 10
-- Mapped to slices: 12
-- Validated: 5
+- Active requirements: 8
+- Mapped to slices: 8
+- Validated: 7 (R001, R002, R005, R006, R013, R014, R015)
 - Unmapped active requirements: 0

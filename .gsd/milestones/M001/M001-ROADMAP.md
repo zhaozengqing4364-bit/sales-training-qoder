@@ -59,7 +59,7 @@ This milestone is complete only when all are true:
 - [x] **S02: 训练证据落库与报告事实源统一** `risk:high` `depends:[S01]`
   > After this: 一次训练的转写、阶段、评分、模糊表达、关键异议等事实能被一致落库，报告与回放引用同一事实源。
 
-- [ ] **S03: 单次报告可读化（学员 + 主管）** `risk:medium` `depends:[S02]`
+- [x] **S03: 单次报告可读化（学员 + 主管）** `risk:medium` `depends:[S02]`
   > After this: 学员训练完能看懂结论和建议；主管打开单次报告能直接看到好坏结论、卡点、说虚 / 说错内容、没接住的异议、下次训练重点。
 
 - [ ] **S04: 知识库更新即生效链路** `risk:high` `depends:[S01]`
