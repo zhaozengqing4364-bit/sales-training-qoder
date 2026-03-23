@@ -122,6 +122,52 @@ describe("ReportPage", () => {
         createSessionMock.mockResolvedValue({ session_id: "retry-1" });
     });
 
+    it("renders sales rollup cards and sales-specific issue/goal copy from the unified report contract", async () => {
+        getReportMock.mockResolvedValue({
+            ...baseReport,
+            logic_score: 84,
+            accuracy_score: 73,
+            completeness_score: 69,
+            overall_score: 76,
+            evaluable: true,
+            not_evaluable_reason: null,
+            main_issue: {
+                issue_type: "value_gap",
+                issue_text: "功能点说得多，但还没有把产品价值翻译成客户收益。",
+                recovery_rule: "下一轮先用客户收益语言重述价值，再回应价格顾虑。",
+            },
+            next_goal: {
+                goal_type: "objection_progress",
+                goal_text: "先补 ROI 证据，再推进一个明确的下一步动作。",
+                rule: "至少给出一条证据并确认下一步。",
+            },
+        });
+        getComprehensiveReportMock.mockResolvedValue({
+            session_id: "session-1",
+            generated_at: "2026-03-23T00:00:00Z",
+            overall_score: 91,
+            dimension_scores: [],
+            stage_summaries: [],
+            key_strengths: [],
+            key_improvements: [],
+            detailed_feedback: "",
+            recommendations: [],
+            voice_policy_snapshot_ref: null,
+        });
+
+        render(<ReportPage />);
+
+        expect((await screen.findByTestId("report-overall-score")).textContent).toContain("76");
+        expect(screen.getByText("销售能力总览")).toBeTruthy();
+        expect(screen.getByText("价值表达")).toBeTruthy();
+        expect(screen.getByText("证据与收益")).toBeTruthy();
+        expect(screen.getByText("异议推进")).toBeTruthy();
+        expect(screen.getByText("功能点说得多，但还没有把产品价值翻译成客户收益。")).toBeTruthy();
+        expect(screen.getByText("先补 ROI 证据，再推进一个明确的下一步动作。")).toBeTruthy();
+        expect(screen.getByText("综合评分反映价值翻译、证据支撑和异议推进的完成度。"))
+            .toBeTruthy();
+    });
+
     it("trusts the unified evidence contract for overall score and evaluability even when comprehensive data conflicts", async () => {
         getReportMock.mockResolvedValue(baseReport);
         getComprehensiveReportMock.mockResolvedValue({

@@ -380,6 +380,69 @@ describe("handleWebSocketMessage connection/status behavior", () => {
         });
     });
 
+    it("keeps sales-specific score_update dimension vocabulary unchanged in frontend state", () => {
+        const { deps, getState } = createDeps(INITIAL_PRACTICE_STATE);
+
+        handleWebSocketMessage(
+            createMessageEvent({
+                type: "score_update",
+                timestamp: new Date().toISOString(),
+                data: {
+                    overall_score: 83,
+                    turn_count: 4,
+                    stage_name: "异议处理",
+                    suggestions: ["补充案例证据后再回应价格异议"],
+                    dimension_scores: {
+                        价值表达: 87,
+                        客户收益连接: 84,
+                        证据使用: 72,
+                        异议处理: 85,
+                        推进下一步: 78,
+                    },
+                },
+            }),
+            deps as never,
+        );
+
+        expect(getState().scores).toMatchObject({
+            overall_score: 83,
+            turn_count: 4,
+            stage_name: "异议处理",
+            suggestions: ["补充案例证据后再回应价格异议"],
+            dimension_scores: {
+                价值表达: 87,
+                客户收益连接: 84,
+                证据使用: 72,
+                异议处理: 85,
+                推进下一步: 78,
+            },
+        });
+    });
+
+    it("preserves unknown score_update dimensions for ScorePanel fallback rendering", () => {
+        const { deps, getState } = createDeps(INITIAL_PRACTICE_STATE);
+
+        handleWebSocketMessage(
+            createMessageEvent({
+                type: "score_update",
+                timestamp: new Date().toISOString(),
+                data: {
+                    overall_score: 66,
+                    turn_count: 2,
+                    suggestions: [],
+                    dimension_scores: {
+                        自定义维度: 66,
+                    },
+                },
+            }),
+            deps as never,
+        );
+
+        expect(getState().scores?.dimension_scores).toEqual({
+            自定义维度: 66,
+        });
+    });
+
     it("maps evaluation_feedback(milestone) to realtime hint only", () => {
         const { deps, getState } = createDeps(INITIAL_PRACTICE_STATE);
 

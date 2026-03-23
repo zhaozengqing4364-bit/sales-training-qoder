@@ -328,4 +328,30 @@ Append one entry per iteration:
     - cd backend && PYTHONPATH=src venv/bin/python - <<'PY' ...
   verification results: task-level focused backend suites passed; direct observability check proved new dimension_scores, sales rollups, sales issue/goal, and persisted/not_evaluable logs; slice-level backend verification still fails because tests/integration/test_sales_value_training_flow.py is not present yet; slice-level web command exits 0 but ScorePanel.test.tsx is still absent and belongs to T03.
   success signal status: write-layer sales sessions now persist value-expression/evidence/objection facts that report/replay can read without changing field names or read-side scoring.
-  rollback note: if later work needs to revisit S05 semantics, keep D024's stable-key contract and adjust only the shared sales rollup/effectiveness helpers instead of introducing a second read-side scorer.
+- time: 2026-03-23T22:45:07+08:00
+  mode: stabilize
+  item id: M001-S05-T03
+  files changed:
+    - backend/tests/integration/test_sales_value_training_flow.py
+    - web/src/components/practice/ScorePanel.tsx
+    - web/src/components/practice/ScorePanel.test.tsx
+    - web/src/hooks/websocket/message-handlers.test.ts
+    - web/src/app/(user)/practice/[sessionId]/report/page.tsx
+    - web/src/app/(user)/practice/[sessionId]/report/page.test.tsx
+    - .gsd/milestones/M001/slices/S05/tasks/T03-PLAN.md
+    - .gsd/KNOWLEDGE.md
+    - .gsd/milestones/M001/slices/S05/S05-PLAN.md
+    - .gsd/milestones/M001/slices/S05/tasks/T03-SUMMARY.md
+    - .codex/loop/state.json
+    - .codex/loop/log.md
+  summary: Aligned ScorePanel/report consumers to sales semantics, added focused web regressions plus a report API integration proof, and verified the live report page shows sales rollups/main_issue/next_goal/knowledge-hit diagnostics from the unified contract.
+  verification commands:
+    - cd backend && pytest tests/integration/test_sales_value_training_flow.py
+    - cd web && npm test -- --run 'src/components/practice/ScorePanel.test.tsx' 'src/hooks/websocket/message-handlers.test.ts' 'src/app/(user)/practice/[sessionId]/report/page.test.tsx'
+    - cd backend && pytest tests/unit/test_realtime_scoring.py tests/unit/test_effectiveness_sales_baseline.py tests/unit/test_voice_instruction_compiler.py tests/unit/test_stepfun_knowledge_helpers.py tests/unit/test_stepfun_realtime_handler.py tests/contract/test_practice_evidence_contract.py tests/integration/test_sales_value_training_flow.py
+    - cd web && npm test -- --run 'src/components/practice/ScorePanel.test.tsx' 'src/hooks/websocket/message-handlers.test.ts' 'src/app/(user)/practice/[sessionId]/report/page.test.tsx'
+    - browser_assert /practice/6aff04f9-a09e-4956-8abc-07251c597a8f/report
+    - browser runtime spot-check /practice/0661f672-a39a-404e-b4b5-93e396c77fe0
+  verification results: task-level backend/web and full automated S05 slice suites all passed; browser report verification passed against a seeded completed sales session in the real app; live practice runtime reached Realtime in_progress with an enabled recording control, but the four-dialogue microphone UAT remains open due time budget.
+  success signal status: live report/ScorePanel consumers now present value-expression, evidence-benefit, and objection-progression semantics without changing the underlying unified report contract.
+  rollback note: revert the T03 consumer/test changes together if later work redefines S05 sales vocabulary, and keep the `.gsd/KNOWLEDGE.md` python-socks runtime note unless local StepFun proxy handling is solved another way.

@@ -45,13 +45,13 @@
   - Do: 用新的 5 维销售 rubric 替换 generic keyword scorer，并在 `evaluate_effectiveness_snapshot` / StepFun session flush / terminal fallback 中保留原有顶层 contract，但把 `main_issue` / `next_goal` 和 3 个 session rollup 改成销售价值、证据与异议推进语义；严禁把这套逻辑搬到 `SessionEvidenceService` 或前端重算。
   - Backend verify: `cd backend && pytest tests/unit/test_realtime_scoring.py tests/unit/test_effectiveness_sales_baseline.py tests/unit/test_stepfun_realtime_handler.py tests/contract/test_practice_evidence_contract.py`
   - Done when: 实时写入的 `score_snapshot`、session-level score 字段和 report/replay contract 都稳定输出新的销售语义，同时 `main_issue` / `next_goal` 仍通过统一 evidence contract 读取。
-- [ ] **T02: 用 persona policy 与知识库绑定编译真实销售追问契约** `est:3h`
+- [x] **T02: 用 persona policy 与知识库绑定编译真实销售追问契约** `est:3h`
   - Why: 只有评分改了还不够；S05 必须让客户 persona 真正围绕 ROI、价格、竞品、证据发问，并继续消费 S04 已冻结的材料绑定线。
   - Files: `backend/src/agent/services/persona_policy.py`, `backend/src/sales_bot/services/voice_instruction_compiler.py`, `backend/src/sales_bot/websocket/components/stepfun_knowledge_helpers.py`, `backend/tests/unit/test_voice_instruction_compiler.py`, `backend/tests/unit/test_stepfun_knowledge_helpers.py`, `backend/tests/unit/test_voice_runtime_policy_service.py`
   - Do: 规范并消费 `persona_policy` 的销售焦点扩展键（如 `sales_focus`、`value_axes`、`objection_axes`、`expected_customer_questions`），在 `VoiceInstructionCompiler` 中把这些字段编译成单一客户 voice 的价值 / 异议追问准则，并让价格 / 产品 / 竞品 / 证据类 query 继续走 `stepfun_knowledge_helpers` 的实体型检索优化，而不是新增材料读取入口。
   - Backend verify: `cd backend && pytest tests/unit/test_voice_instruction_compiler.py tests/unit/test_stepfun_knowledge_helpers.py tests/unit/test_voice_runtime_policy_service.py`
   - Done when: 绑定知识库的客户 persona 会在编译后的基础契约里持续追问价值、预算、ROI、竞品与证据，且相关 tests 证明这些扩展字段被标准化、透传并用于检索 / 提问行为。
-- [ ] **T03: 对齐 live/report 消费面并补端到端销售语义回归证明** `est:3h`
+- [x] **T03: 对齐 live/report 消费面并补端到端销售语义回归证明** `est:3h`
   - Why: 后端即使已经写入新的销售事实，如果 live score panel 和 report 仍显示旧 generic 标签，用户看到的仍然像“稳定地练错了方向”。
   - Files: `backend/tests/integration/test_sales_value_training_flow.py`, `web/src/components/practice/ScorePanel.tsx`, `web/src/components/practice/ScorePanel.test.tsx`, `web/src/hooks/websocket/message-handlers.test.ts`, `web/src/app/(user)/practice/[sessionId]/report/page.tsx`, `web/src/app/(user)/practice/[sessionId]/report/page.test.tsx`
   - Do: 先写 integration + web failing tests，喂入新的 `score_update` / report payload；再让 `ScorePanel` 的 icon / color / fallback 显示与新销售维度一致，并把 report 顶部 3 张卡与相关文案改成销售语义（保持 comprehensive-report enhancement 可缺失）；最后补一条 backend integration proof，证明真实 report API 会把新的 `main_issue` / `next_goal` 和 rollup 透传到消费面。

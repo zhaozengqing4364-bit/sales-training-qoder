@@ -5,6 +5,7 @@ Persona policy is the single source of truth for:
 - Role core system prompt
 - Bound knowledge base ids
 - KB/network tool strategy
+- Sales-focus behavior extensions used by runtime instruction compilation
 """
 
 from __future__ import annotations
@@ -26,7 +27,6 @@ PERSONA_OWNED_TOOL_POLICY_KEYS: set[str] = {
     "require_kb_grounding",
 }
 
-
 _BOOL_TOOL_POLICY_KEYS = {
     "enable_web_search",
     "enable_internal_retrieval",
@@ -40,6 +40,16 @@ _STRING_TOOL_POLICY_KEYS = {
     "retrieval_priority",
     "network_access_mode",
     "enforcement_level",
+}
+
+_PERSONA_STRING_EXTENSION_KEYS = {
+    "sales_focus",
+}
+
+_PERSONA_LIST_EXTENSION_KEYS = {
+    "value_axes",
+    "objection_axes",
+    "expected_customer_questions",
 }
 
 
@@ -74,6 +84,35 @@ def _dedupe_kb_ids(raw: Any) -> list[str]:
         seen.add(normalized)
         deduped.append(normalized)
     return deduped
+
+
+def _normalize_extension_string(value: Any) -> str:
+    normalized = str(value or "").strip()
+    if not normalized:
+        return ""
+    return normalized.lower()
+
+
+def _normalize_extension_string_list(raw: Any) -> list[str]:
+    if isinstance(raw, str):
+        candidates = [raw]
+    elif isinstance(raw, (list, tuple, set)):
+        candidates = list(raw)
+    else:
+        return []
+
+    normalized_items: list[str] = []
+    seen: set[str] = set()
+    for item in candidates:
+        normalized = str(item or "").strip()
+        if not normalized:
+            continue
+        dedupe_key = normalized.casefold()
+        if dedupe_key in seen:
+            continue
+        seen.add(dedupe_key)
+        normalized_items.append(normalized)
+    return normalized_items
 
 
 def normalize_persona_policy(
@@ -117,11 +156,24 @@ def normalize_persona_policy(
         "system_prompt": system_prompt,
         "knowledge_base_ids": knowledge_base_ids,
         "tool_policy": tool_policy,
+        "sales_focus": _normalize_extension_string(policy.get("sales_focus")),
+        "value_axes": _normalize_extension_string_list(policy.get("value_axes")),
+        "objection_axes": _normalize_extension_string_list(
+            policy.get("objection_axes")
+        ),
+        "expected_customer_questions": _normalize_extension_string_list(
+            policy.get("expected_customer_questions")
+        ),
     }
 
     # Keep non-core extension keys for forward compatibility.
+    reserved_keys = {
+        *normalized.keys(),
+        *_PERSONA_STRING_EXTENSION_KEYS,
+        *_PERSONA_LIST_EXTENSION_KEYS,
+    }
     for key, value in policy.items():
-        if key in normalized:
+        if key in reserved_keys:
             continue
         normalized[key] = value
 

@@ -1,6 +1,6 @@
 {
   "mode": "stabilize",
-  "current_issue_id": "M001-S05-T01",
+  "current_issue_id": "M001-S05-T03",
   "current_issue_type": "task",
   "current_issue_status": "done",
   "pending_issue_ids": [],
@@ -19,36 +19,36 @@
     "M001-S04-T01",
     "M001-S04-T02",
     "M001-S04",
-    "M001-S05-T01"
+    "M001-S05-T01",
+    "M001-S05-T02",
+    "M001-S05-T03"
   ],
   "blocked_issue_ids": [],
   "deferred_issue_ids": [],
   "last_modified_files": [
-    "backend/src/agent/capabilities/realtime_scoring.py",
-    "backend/src/common/effectiveness/evaluator.py",
-    "backend/src/common/effectiveness/__init__.py",
-    "backend/src/common/api/practice.py",
-    "backend/src/sales_bot/websocket/stepfun_realtime_handler.py",
-    "backend/tests/unit/test_realtime_scoring.py",
-    "backend/tests/unit/test_effectiveness_sales_baseline.py",
-    "backend/tests/unit/test_stepfun_realtime_handler.py",
-    "backend/tests/contract/test_practice_evidence_contract.py",
-    ".gsd/DECISIONS.md",
+    "backend/tests/integration/test_sales_value_training_flow.py",
+    "web/src/components/practice/ScorePanel.tsx",
+    "web/src/components/practice/ScorePanel.test.tsx",
+    "web/src/hooks/websocket/message-handlers.test.ts",
+    "web/src/app/(user)/practice/[sessionId]/report/page.tsx",
+    "web/src/app/(user)/practice/[sessionId]/report/page.test.tsx",
+    ".gsd/milestones/M001/slices/S05/tasks/T03-PLAN.md",
     ".gsd/KNOWLEDGE.md",
     ".gsd/milestones/M001/slices/S05/S05-PLAN.md",
-    ".gsd/milestones/M001/slices/S05/tasks/T01-SUMMARY.md",
+    ".gsd/milestones/M001/slices/S05/tasks/T03-SUMMARY.md",
     ".codex/loop/state.json",
     ".codex/loop/log.md"
   ],
   "last_verification_commands": [
-    "cd backend && pytest tests/unit/test_realtime_scoring.py tests/unit/test_effectiveness_sales_baseline.py tests/unit/test_stepfun_realtime_handler.py tests/contract/test_practice_evidence_contract.py",
-    "cd backend && pytest tests/unit/test_realtime_scoring.py tests/unit/test_effectiveness_sales_baseline.py tests/unit/test_stepfun_realtime_handler.py tests/contract/test_practice_evidence_contract.py -k 'value or objection or report'",
+    "cd backend && pytest tests/integration/test_sales_value_training_flow.py",
+    "cd web && npm test -- --run 'src/components/practice/ScorePanel.test.tsx' 'src/hooks/websocket/message-handlers.test.ts' 'src/app/(user)/practice/[sessionId]/report/page.test.tsx'",
     "cd backend && pytest tests/unit/test_realtime_scoring.py tests/unit/test_effectiveness_sales_baseline.py tests/unit/test_voice_instruction_compiler.py tests/unit/test_stepfun_knowledge_helpers.py tests/unit/test_stepfun_realtime_handler.py tests/contract/test_practice_evidence_contract.py tests/integration/test_sales_value_training_flow.py",
     "cd web && npm test -- --run 'src/components/practice/ScorePanel.test.tsx' 'src/hooks/websocket/message-handlers.test.ts' 'src/app/(user)/practice/[sessionId]/report/page.test.tsx'",
-    "cd backend && PYTHONPATH=src venv/bin/python - <<'PY' ..."
+    "browser_assert /practice/6aff04f9-a09e-4956-8abc-07251c597a8f/report",
+    "browser runtime spot-check /practice/0661f672-a39a-404e-b4b5-93e396c77fe0"
   ],
-  "last_verification_result": "T01 focused backend verification passed fresh, including the new scorer, sales-baseline evaluator, StepFun flush mapping, and unified evidence contract. The slice-level backend command still fails because tests/integration/test_sales_value_training_flow.py does not exist yet (planned for T03). The slice-level web command exits 0 but currently only runs the existing message-handlers/report tests because ScorePanel.test.tsx is also a later T03 deliverable. Manual runtime and failure-path slice checks remain open for later tasks.",
-  "last_success_signal": "S05/T01 is complete: StepFun write-layer scoring and effectiveness snapshots now persist sales-specific value/evidence/objection semantics without changing the unified report/replay field shape.",
+  "last_verification_result": "T03 focused backend/web suites and the full S05 automated slice suites passed fresh. Browser verification on a seeded completed sales session confirmed the live report page now shows sales rollups, sales main_issue/next_goal, and knowledge-hit diagnostics. Practice-page browser runtime reached Realtime in_progress with an enabled recording control, but the full four-dialogue microphone UAT remains open due time budget.",
+  "last_success_signal": "S05/T03 is complete: live ScorePanel/report consumers now expose sales value/evidence/objection semantics from the unified contract, backed by focused regressions and a report API integration proof.",
   "last_growth_scan": null,
-  "next_action": "Continue S05 with T02: extend persona policy and compiled StepFun customer instructions so knowledge-bound sales sessions actively probe ROI, price, competitors, and evidence using the S04 material line."
+  "next_action": "Close slice S05 with slice summary/UAT and reassess the next milestone item."
 }

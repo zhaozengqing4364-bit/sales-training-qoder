@@ -59,3 +59,9 @@ skills_used:
 - `web/src/hooks/websocket/message-handlers.test.ts` — 锁住新 `score_update.dimension_scores` 词汇进入前端状态的回归测试。
 - `web/src/app/(user)/practice/[sessionId]/report/page.tsx` — 顶部 3 张总览卡与说明文案切换到 sales rollup 语义，同时继续只消费 unified report contract。
 - `web/src/app/(user)/practice/[sessionId]/report/page.test.tsx` — 锁住 report 页面在 unified contract 下展示新的销售语义并保持 enhancement degradation 行为。
+
+## Observability Impact
+
+- 变更后的显式信号：`score_update.dimension_scores` 必须在前端 state 与 `ScorePanel` 上保留新的销售维度词汇；report 页面必须直接显示 unified report contract 返回的 `logic_score / accuracy_score / completeness_score`、`main_issue`、`next_goal` 销售语义，而不是客户端重算。
+- 后续 agent 的检查入口：`web/src/components/practice/ScorePanel.tsx` 与 `web/src/hooks/websocket/message-handlers.ts` 用于确认 live 维度如何归一化和 fallback；`web/src/app/(user)/practice/[sessionId]/report/page.tsx` 与 `backend/tests/integration/test_sales_value_training_flow.py` 用于确认顶部 3 张卡和问题/目标文案是否直接来自 API contract。
+- 新暴露的失败状态：未知 `dimension_scores` 词汇时 `ScorePanel` 仍应显示可见 fallback 标签；comprehensive report/highlights 缺失时 report 页面仍需保留销售总览卡与降级文案；integration proof 失败时可直接定位是 report contract 未透传 sales rollup、还是前端消费面仍停留在旧 generic label。

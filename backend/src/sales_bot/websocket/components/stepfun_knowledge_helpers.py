@@ -11,12 +11,25 @@ DEFAULT_SIMILARITY_THRESHOLD = 0.58
 ENTITY_TOKEN_RE = re.compile(
     r"(?:[a-z]+\d+[a-z0-9-]*|v?\d+(?:\.\d+){0,2})", re.IGNORECASE
 )
+SALES_OBJECTION_QUERY_RE = re.compile(
+    r"roi|预算|报价|价格|竞品|竞对|对比|替代|实施|落地|风险|案例|证据|收益|回报|proof|evidence|competitor|pricing|price|budget|case",
+    re.IGNORECASE,
+)
+
+
+def is_sales_objection_query(query: str) -> bool:
+    normalized = "".join(re.findall(r"[a-z0-9\u4e00-\u9fff]+", query.lower()))
+    if not normalized:
+        return False
+    return bool(SALES_OBJECTION_QUERY_RE.search(normalized))
 
 
 def is_entity_focused_query(query: str) -> bool:
     normalized = "".join(re.findall(r"[a-z0-9\u4e00-\u9fff]+", query.lower()))
     if not normalized:
         return False
+    if is_sales_objection_query(query):
+        return True
     if len(normalized) <= 12:
         return True
     if ENTITY_TOKEN_RE.search(normalized):
@@ -26,6 +39,8 @@ def is_entity_focused_query(query: str) -> bool:
 
 def resolve_grounding_context_limits(query: str) -> tuple[int, int]:
     compact_query = "".join(re.findall(r"[a-z0-9\u4e00-\u9fff]+", query.lower()))
+    if is_sales_objection_query(query):
+        return 6, 420
     if is_entity_focused_query(query):
         return 5, 360
     if len(compact_query) >= 30:
@@ -69,11 +84,19 @@ def resolve_retrieval_params(
     except (TypeError, ValueError):
         threshold = DEFAULT_SIMILARITY_THRESHOLD
 
-    if "top_k" not in arguments_obj and is_entity_focused_query(query):
-        top_k = min(8, max(top_k, 6))
-
+    sales_objection_query = is_sales_objection_query(query)
+    entity_focused_query = is_entity_focused_query(query)
     compact_query = "".join(re.findall(r"[a-z0-9\u4e00-\u9fff]+", query.lower()))
-    if is_entity_focused_query(query):
+
+    if "top_k" not in arguments_obj:
+        if sales_objection_query:
+            top_k = min(10, max(top_k, 7))
+        elif entity_focused_query:
+            top_k = min(8, max(top_k, 6))
+
+    if sales_objection_query:
+        threshold = max(0.42, threshold - 0.10)
+    elif entity_focused_query:
         threshold = max(0.45, threshold - 0.08)
     elif len(compact_query) >= 30:
         threshold = max(0.5, threshold - 0.05)
@@ -86,6 +109,9 @@ def resolve_retrieval_params(
         keyword_candidate_limit = max(8, int(keyword_candidate_limit_raw))
     except (TypeError, ValueError):
         keyword_candidate_limit = 32
+
+    if sales_objection_query:
+        keyword_candidate_limit = max(keyword_candidate_limit, 48)
 
     return top_k, round(threshold, 4), enable_hybrid, keyword_candidate_limit
 

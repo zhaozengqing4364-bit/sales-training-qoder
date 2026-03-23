@@ -60,19 +60,19 @@ function getScoreLabel(score: number): string {
 function buildDimensionScores(report: PracticeSessionReport) {
     return [
         {
-            name: "逻辑性",
+            name: "价值表达",
             score: report.logic_score,
-            description: "结构化表达与论证清晰度",
+            description: "是否把产品能力翻译成客户收益与业务价值。",
         },
         {
-            name: "准确性",
+            name: "证据与收益",
             score: report.accuracy_score,
-            description: "信息准确与事实一致性",
+            description: "是否用案例、数据或 ROI 证据支撑收益主张。",
         },
         {
-            name: "完整性",
+            name: "异议推进",
             score: report.completeness_score,
-            description: "要点覆盖与回答完整性",
+            description: "是否处理价格/竞品/风险异议并推动下一步。",
         },
     ];
 }
@@ -333,11 +333,11 @@ export default function ComprehensiveReportPage() {
     const notEvaluableReasonText = formatNotEvaluableReason(report?.not_evaluable_reason);
     const overallResult = report?.overall_result || null;
     const overallResultLabel = overallResult === "strong_pass"
-        ? "Strong Pass"
+        ? "销售价值表达优秀"
         : overallResult === "pass"
-            ? "Pass"
+            ? "销售基线通过"
             : overallResult === "fail"
-                ? "Fail"
+                ? "销售基线待加强"
                 : "未判定";
     const overallResultTone = overallResult === "strong_pass"
         ? "text-emerald-700 bg-emerald-50 border-emerald-200"
@@ -402,7 +402,7 @@ export default function ComprehensiveReportPage() {
                         {getScoreLabel(report.overall_score)}
                     </p>
                     <p className="text-xs text-zinc-500 mt-2">
-                        Top-line 评分与阶段事实均来自统一训练证据 contract。
+                        综合评分反映价值翻译、证据支撑和异议推进的完成度。
                     </p>
                 </div>
             </GlassCard>
@@ -432,14 +432,14 @@ export default function ComprehensiveReportPage() {
             {(report.overall_result || report.main_issue) && (
                 <GlassCard className="p-6 mb-6">
                     <div className="flex items-center justify-between gap-3 mb-4 flex-wrap">
-                        <h2 className="text-lg font-semibold text-zinc-900">沟通闭环结果</h2>
+                        <h2 className="text-lg font-semibold text-zinc-900">销售推进结果</h2>
                         <span className={cn("text-xs font-semibold px-3 py-1 rounded-full border", overallResultTone)}>
                             {overallResultLabel}
                         </span>
                     </div>
                     {report.main_issue ? (
                         <div className="rounded-xl border border-amber-100 bg-amber-50 p-4">
-                            <p className="text-xs font-semibold text-amber-700 mb-1">本场唯一主问题</p>
+                            <p className="text-xs font-semibold text-amber-700 mb-1">本场销售主问题</p>
                             <p className="text-sm text-amber-900">{report.main_issue.issue_text}</p>
                             <p className="text-xs text-amber-700 mt-2">
                                 修正动作：{report.main_issue.recovery_rule}
@@ -457,7 +457,7 @@ export default function ComprehensiveReportPage() {
                         <div>
                             <h2 className="text-lg font-semibold text-zinc-900 mb-2 flex items-center gap-2">
                                 <Target className="w-5 h-5 text-blue-600" />
-                                下一轮唯一目标
+                                下一轮销售目标
                             </h2>
                             <p className="text-sm text-zinc-700 mb-2">{report.next_goal.goal_text}</p>
                             <p className="text-xs text-zinc-500">判定条件：{report.next_goal.rule}</p>
@@ -483,7 +483,7 @@ export default function ComprehensiveReportPage() {
 
             {report.pass_flags && (
                 <GlassCard className="p-6 mb-6">
-                    <h2 className="text-lg font-semibold text-zinc-900 mb-3">统一通关标准</h2>
+                    <h2 className="text-lg font-semibold text-zinc-900 mb-3">销售推进基线</h2>
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                         <div className={cn(
                             "rounded-xl border p-3",
@@ -491,7 +491,7 @@ export default function ComprehensiveReportPage() {
                                 ? "bg-emerald-50 border-emerald-200"
                                 : "bg-amber-50 border-amber-200",
                         )}>
-                            <p className="text-xs font-semibold text-zinc-700">3分钟连续表达</p>
+                            <p className="text-xs font-semibold text-zinc-700">价值翻译达标</p>
                             <p className="text-sm mt-1 font-bold">
                                 {report.pass_flags.pass_3min_flow ? "已达标" : "未达标"}
                             </p>
@@ -502,7 +502,7 @@ export default function ComprehensiveReportPage() {
                                 ? "bg-emerald-50 border-emerald-200"
                                 : "bg-amber-50 border-amber-200",
                         )}>
-                            <p className="text-xs font-semibold text-zinc-700">5轮追问不跑题</p>
+                            <p className="text-xs font-semibold text-zinc-700">异议承接达标</p>
                             <p className="text-sm mt-1 font-bold">
                                 {report.pass_flags.pass_5turn_defense ? "已达标" : "未达标"}
                             </p>
@@ -513,7 +513,7 @@ export default function ComprehensiveReportPage() {
                                 ? "bg-emerald-50 border-emerald-200"
                                 : "bg-amber-50 border-amber-200",
                         )}>
-                            <p className="text-xs font-semibold text-zinc-700">四段结构完整</p>
+                            <p className="text-xs font-semibold text-zinc-700">证据推进达标</p>
                             <p className="text-sm mt-1 font-bold">
                                 {report.pass_flags.pass_4step_structure ? "已达标" : "未达标"}
                             </p>
@@ -614,7 +614,7 @@ export default function ComprehensiveReportPage() {
 
             <GlassCard className="p-6 mb-6">
                 <div className="flex items-center justify-between gap-3 mb-4 flex-wrap">
-                    <h2 className="text-lg font-semibold text-zinc-900">统一训练证据评分</h2>
+                    <h2 className="text-lg font-semibold text-zinc-900">销售能力总览</h2>
                     {report.evidence_completeness?.legacy_score_key_used ? (
                         <span className="text-xs text-zinc-500">兼容了 legacy score key</span>
                     ) : null}

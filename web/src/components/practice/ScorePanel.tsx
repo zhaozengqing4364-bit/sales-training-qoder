@@ -13,7 +13,7 @@
 
 import React from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { TrendingUp, Lightbulb, Award, BarChart3 } from "lucide-react";
+import { TrendingUp, Lightbulb, Award, BarChart3, Target } from "lucide-react";
 import type { ScoreUpdate } from "@/hooks/use-practice-websocket";
 
 interface ScorePanelProps {
@@ -21,17 +21,28 @@ interface ScorePanelProps {
     className?: string;
 }
 
-const DIMENSION_CONFIG: Record<string, { color: string; icon: React.ReactNode }> = {
-    "专业度": { color: "#1890FF", icon: <Award className="w-4 h-4" /> },
-    "沟通技巧": { color: "#52C41A", icon: <BarChart3 className="w-4 h-4" /> },
-    "销售流程": { color: "#FAAD14", icon: <TrendingUp className="w-4 h-4" /> },
-    "异议处理": { color: "#722ED1", icon: <Lightbulb className="w-4 h-4" /> },
-    "成交能力": { color: "#EB2F96", icon: <Award className="w-4 h-4" /> },
-    "communication": { color: "#52C41A", icon: <BarChart3 className="w-4 h-4" /> },
-    "discovery": { color: "#FAAD14", icon: <TrendingUp className="w-4 h-4" /> },
-    "objection": { color: "#722ED1", icon: <Lightbulb className="w-4 h-4" /> },
-    "closing": { color: "#EB2F96", icon: <Award className="w-4 h-4" /> },
-    "professional": { color: "#1890FF", icon: <Award className="w-4 h-4" /> },
+type DimensionConfig = {
+    color: string;
+    icon: React.ReactNode;
+    label?: string;
+    order?: number;
+};
+
+const DIMENSION_CONFIG: Record<string, DimensionConfig> = {
+    "价值表达": { color: "#1890FF", icon: <Award className="w-4 h-4" />, order: 10 },
+    "客户收益连接": { color: "#52C41A", icon: <TrendingUp className="w-4 h-4" />, order: 20 },
+    "证据使用": { color: "#FAAD14", icon: <BarChart3 className="w-4 h-4" />, order: 30 },
+    "异议处理": { color: "#722ED1", icon: <Lightbulb className="w-4 h-4" />, order: 40 },
+    "推进下一步": { color: "#EB2F96", icon: <Target className="w-4 h-4" />, order: 50 },
+    "专业度": { color: "#1890FF", icon: <Award className="w-4 h-4" />, order: 110 },
+    "沟通技巧": { color: "#52C41A", icon: <BarChart3 className="w-4 h-4" />, order: 120 },
+    "销售流程": { color: "#FAAD14", icon: <TrendingUp className="w-4 h-4" />, order: 130 },
+    "成交能力": { color: "#EB2F96", icon: <Target className="w-4 h-4" />, order: 140 },
+    "communication": { color: "#52C41A", icon: <BarChart3 className="w-4 h-4" />, order: 210 },
+    "discovery": { color: "#FAAD14", icon: <TrendingUp className="w-4 h-4" />, order: 220 },
+    "objection": { color: "#722ED1", icon: <Lightbulb className="w-4 h-4" />, order: 230 },
+    "closing": { color: "#EB2F96", icon: <Target className="w-4 h-4" />, order: 240 },
+    "professional": { color: "#1890FF", icon: <Award className="w-4 h-4" />, order: 250 },
 };
 
 function getScoreColor(score: number): string {
@@ -99,15 +110,15 @@ function ScoreRing({ score, size = 80 }: { score: number; size?: number }) {
     );
 }
 
-function DimensionBar({ name, score }: { name: string; score: number }) {
-    const config = DIMENSION_CONFIG[name] || { color: "#1890FF", icon: <BarChart3 className="w-4 h-4" /> };
+function DimensionBar({ label, score }: { label: string; score: number }) {
+    const config = DIMENSION_CONFIG[label] || { color: "#1890FF", icon: <BarChart3 className="w-4 h-4" /> };
     const color = getScoreColor(score);
 
     return (
         <div className="flex items-center gap-3 py-2">
             <div className="flex items-center gap-2 w-24 shrink-0">
                 <span style={{ color: config.color }}>{config.icon}</span>
-                <span className="text-sm text-gray-700 truncate">{name}</span>
+                <span className="text-sm text-gray-700 truncate">{label}</span>
             </div>
             <div className="flex-1 h-2 bg-gray-100 rounded-full overflow-hidden">
                 <motion.div
@@ -141,10 +152,20 @@ function SuggestionCard({ suggestion, index }: { suggestion: string; index: numb
 
 export function ScorePanel({ scores, className = "" }: ScorePanelProps) {
     const dimensions = scores?.dimension_scores
-        ? Object.entries(scores.dimension_scores).map(([name, score]) => ({
-            name,
-            score,
-        }))
+        ? Object.entries(scores.dimension_scores)
+            .map(([name, score], index) => ({
+                name,
+                label: DIMENSION_CONFIG[name]?.label ?? name,
+                order: DIMENSION_CONFIG[name]?.order ?? Number.MAX_SAFE_INTEGER,
+                index,
+                score,
+            }))
+            .sort((left, right) => {
+                if (left.order !== right.order) {
+                    return left.order - right.order;
+                }
+                return left.index - right.index;
+            })
         : [];
 
     const overallScore = scores?.overall_score ?? 0;
@@ -208,7 +229,7 @@ export function ScorePanel({ scores, className = "" }: ScorePanelProps) {
                         {dimensions.map((dim) => (
                             <DimensionBar
                                 key={dim.name}
-                                name={dim.name}
+                                label={dim.label}
                                 score={dim.score}
                             />
                         ))}

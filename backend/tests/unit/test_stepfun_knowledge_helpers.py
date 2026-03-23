@@ -181,8 +181,46 @@ def test_entity_query_helpers():
     assert (
         is_entity_focused_query("请你帮我分析今天这段很长的销售对话哪里有问题") is False
     )
+    assert is_entity_focused_query("竞品A价格更低时，你们有什么客户案例证明ROI？") is True
 
-    assert resolve_grounding_context_limits("石犀S3价格") == (5, 360)
+    assert resolve_grounding_context_limits("石犀S3价格") == (6, 420)
+
+
+def test_resolve_retrieval_params_expands_sales_objection_queries():
+    top_k, threshold, _, keyword_limit = resolve_retrieval_params(
+        {},
+        {
+            "retrieval_top_k": 4,
+            "retrieval_similarity_threshold": 0.66,
+            "retrieval_keyword_candidate_limit": 24,
+        },
+        query="竞品A价格更低时，你们有什么客户案例证明ROI？",
+    )
+
+    assert top_k == 7
+    assert threshold == 0.56
+    assert keyword_limit == 48
+
+
+def test_transform_search_rows_uses_wider_snippet_for_sales_objection_query():
+    rows = [
+        {
+            "knowledge_base_id": "kb-1",
+            "knowledge_base_name": "KB1",
+            "content": "C" * 600,
+            "score": 0.91,
+            "retrieval_mode": "hybrid",
+        }
+    ]
+
+    results, _, _ = transform_search_rows(
+        rows,
+        top_k=4,
+        query="竞品A价格更低时，你们有什么客户案例证明ROI？",
+    )
+
+    assert len(results) == 1
+    assert len(results[0]["snippet"]) == 420
 
 
 def test_resolve_rerank_params_with_defaults_and_invalid_values():

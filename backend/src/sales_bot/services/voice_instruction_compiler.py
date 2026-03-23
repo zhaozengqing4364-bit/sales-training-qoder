@@ -13,6 +13,29 @@ from dataclasses import dataclass
 from typing import Any
 
 
+_SALES_FOCUS_LABELS = {
+    "value_translation": "价值翻译",
+    "customer_value": "客户价值",
+    "customer_outcome": "客户收益",
+    "customer_outcomes": "客户收益",
+    "roi": "ROI",
+    "budget": "预算优先级",
+    "budget_priority": "预算优先级",
+    "price": "价格",
+    "pricing": "价格",
+    "competitor": "竞品替代",
+    "competitive": "竞品替代",
+    "competitive_alternative": "竞品替代",
+    "implementation_risk": "实施风险",
+    "delivery_risk": "实施风险",
+    "risk": "实施风险",
+    "proof": "案例证据",
+    "evidence": "案例证据",
+    "case_study": "案例证据",
+    "customer_proof": "案例证据",
+}
+
+
 def build_instruction_contract_hash(instructions: str) -> str:
     """Build a short stable hash for instruction contract auditing."""
     normalized = instructions.strip().encode("utf-8")
@@ -60,9 +83,13 @@ class VoiceInstructionCompiler:
             sections.append(
                 "【角色行为准则】\n"
                 "- 始终以该角色身份对话，保持真实客户语气与决策逻辑。\n"
-                "- 重点围绕预算、风险、收益、落地可行性提出问题或异议。\n"
+                "- 重点围绕客户收益、预算、价格、ROI、竞品差异、实施风险与案例证据提出问题或异议。\n"
                 "- 不直接给销售方答案，优先表达顾虑、条件与澄清需求。"
             )
+
+        sales_focus_section = cls._build_sales_focus_section(persona_policy)
+        if sales_focus_section:
+            sections.append(sales_focus_section)
 
         directives = cls._build_execution_directives(policy)
         if directives:
@@ -90,6 +117,103 @@ class VoiceInstructionCompiler:
         if not normalized_base:
             return normalized_grounding
         return f"{normalized_base}\n\n【当前轮内部知识依据】\n{normalized_grounding}"
+
+    @classmethod
+    def _build_sales_focus_section(cls, persona_policy: dict[str, Any]) -> str:
+        sales_focus = cls._humanize_sales_focus(persona_policy.get("sales_focus"))
+        value_axes = cls._humanize_sales_focus_list(persona_policy.get("value_axes"))
+        objection_axes = cls._humanize_sales_focus_list(
+            persona_policy.get("objection_axes")
+        )
+        expected_questions = cls._normalize_question_list(
+            persona_policy.get("expected_customer_questions")
+        )
+
+        if not any([sales_focus, value_axes, objection_axes, expected_questions]):
+            return ""
+
+        lines: list[str] = [
+            "该客户必须持续把话题拉回客户收益、商业价值与异议验证，避免泛泛寒暄或只重复功能卖点。",
+            "当销售只给口号、功能点或模糊承诺时，必须继续追问量化收益、预算合理性、价格依据、竞品差异、实施风险或案例证据。",
+            "每次只选择一个最关键的主问题继续施压，直到销售给出可验证信息。",
+        ]
+
+        if sales_focus:
+            lines.append(f"当前销售追问主线：{sales_focus}。")
+        if value_axes:
+            lines.append(
+                "必须优先确认销售是否把这些价值维度翻译成客户收益："
+                + "、".join(value_axes)
+                + "。"
+            )
+        if objection_axes:
+            lines.append(
+                "若销售回答仍停留在概念层，优先从这些异议方向继续追问："
+                + "、".join(objection_axes)
+                + "。"
+            )
+        if expected_questions:
+            lines.extend(f"示例追问：{question}" for question in expected_questions)
+
+        return "【销售追问焦点】\n" + "\n".join(f"- {line}" for line in lines)
+
+    @staticmethod
+    def _normalize_question_list(raw: Any) -> list[str]:
+        if isinstance(raw, str):
+            candidates = [raw]
+        elif isinstance(raw, (list, tuple, set)):
+            candidates = list(raw)
+        else:
+            return []
+
+        normalized: list[str] = []
+        seen: set[str] = set()
+        for item in candidates:
+            value = str(item or "").strip()
+            if not value:
+                continue
+            dedupe_key = value.casefold()
+            if dedupe_key in seen:
+                continue
+            seen.add(dedupe_key)
+            normalized.append(value)
+        return normalized
+
+    @classmethod
+    def _humanize_sales_focus_list(cls, raw: Any) -> list[str]:
+        if isinstance(raw, str):
+            candidates = [raw]
+        elif isinstance(raw, (list, tuple, set)):
+            candidates = list(raw)
+        else:
+            return []
+
+        normalized: list[str] = []
+        seen: set[str] = set()
+        for item in candidates:
+            humanized = cls._humanize_sales_focus(item)
+            if not humanized:
+                continue
+            dedupe_key = humanized.casefold()
+            if dedupe_key in seen:
+                continue
+            seen.add(dedupe_key)
+            normalized.append(humanized)
+        return normalized
+
+    @staticmethod
+    def _humanize_sales_focus(value: Any) -> str:
+        normalized = str(value or "").strip()
+        if not normalized:
+            return ""
+
+        lowered = normalized.lower()
+        mapped = _SALES_FOCUS_LABELS.get(lowered)
+        if mapped:
+            return mapped
+        if re.fullmatch(r"[a-z0-9_-]+", lowered):
+            return lowered.replace("_", " ").replace("-", " ")
+        return normalized
 
     @staticmethod
     def _build_execution_directives(policy: dict[str, Any]) -> list[str]:
@@ -133,7 +257,7 @@ class VoiceInstructionCompiler:
                         "当会话启用知识库强制模式但内部知识不足时，按训练辅导模式继续对话：优先指出表达问题或引导澄清，不得直接抛出内部错误，也不得编造具体产品事实。"
                     )
                     directives.append(
-                        "训练辅导模式下，如果确需补充信息，只能围绕产品关键词、版本或业务场景提出一个主问题。"
+                        "训练辅导模式下，如果确需补充信息，只能围绕产品关键词、价格、竞品、案例证据或业务场景提出一个主问题。"
                     )
             elif retrieval_priority == "kb_only":
                 directives.append("仅使用内部知识库检索，不调用联网搜索。")

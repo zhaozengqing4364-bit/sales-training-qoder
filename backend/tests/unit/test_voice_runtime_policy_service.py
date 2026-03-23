@@ -13,6 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from agent.models import Agent, AgentVoicePolicy, Persona, VoiceRuntimeProfile
 from sales_bot.services.voice_runtime_policy import VoiceRuntimePolicyService
+from sales_bot.websocket.stepfun_realtime_handler import StepFunRealtimeHandler
 
 
 @pytest.mark.asyncio
@@ -582,3 +583,96 @@ async def test_upsert_agent_policy_rejects_persona_owned_tool_keys(
             {"tool_policy_override": {"enable_web_search": True}},
         )
     assert "[FIELD_DEPRECATED_PERSONA_CENTERED]" in str(exc_info.value)
+
+
+@pytest.mark.asyncio
+async def test_resolve_effective_policy_normalizes_and_preserves_sales_focus_extensions(
+    test_db: AsyncSession,
+):
+    persona = Persona(
+        id=str(uuid.uuid4()),
+        name="销售焦点角色",
+        description="需要销售价值追问",
+        category="customer",
+        difficulty="medium",
+        status="active",
+        system_prompt="你是采购负责人。",
+        knowledge_base_ids=["kb_sales_focus_1"],
+        persona_policy={
+            "system_prompt": "你是采购负责人。",
+            "knowledge_base_ids": ["kb_sales_focus_1", "", "kb_sales_focus_1"],
+            "sales_focus": " value_translation ",
+            "value_axes": [" 客户收益 ", "ROI", "", "ROI"],
+            "objection_axes": ["价格", "竞品", " 实施风险 ", None],
+            "expected_customer_questions": [
+                " 你怎么证明ROI？ ",
+                "",
+                "如果预算有限怎么办？",
+            ],
+            "custom_extension": {"preserve": True},
+        },
+    )
+    profile = VoiceRuntimeProfile(
+        id=str(uuid.uuid4()),
+        name="销售焦点默认档位",
+        is_default=True,
+        is_active=True,
+        voice_mode="stepfun_realtime",
+        model_name="step-audio-2",
+        voice_name="qingchunshaonv",
+        temperature=0.7,
+    )
+    test_db.add_all([persona, profile])
+    await test_db.commit()
+
+    service = VoiceRuntimePolicyService(test_db)
+    effective = await service.resolve_effective_policy(persona_id=persona.id)
+
+    assert effective["persona_policy"]["sales_focus"] == "value_translation"
+    assert effective["persona_policy"]["value_axes"] == ["客户收益", "ROI"]
+    assert effective["persona_policy"]["objection_axes"] == ["价格", "竞品", "实施风险"]
+    assert effective["persona_policy"]["expected_customer_questions"] == [
+        "你怎么证明ROI？",
+        "如果预算有限怎么办？",
+    ]
+    assert effective["persona_policy"]["custom_extension"] == {"preserve": True}
+    assert "价值翻译" in effective["instructions"]
+    assert "你怎么证明ROI" in effective["instructions"]
+
+
+def test_policy_snapshot_stale_when_sales_focus_extensions_change():
+    snapshot = {
+        "voice_mode": "stepfun_realtime",
+        "runtime_profile_id": "profile-1",
+        "instructions": "旧指令",
+        "instruction_contract_hash": "hash-1",
+        "knowledge_base_ids": ["kb-1"],
+        "tool_policy": {"enable_internal_retrieval": True},
+        "persona_policy": {
+            "version": 1,
+            "system_prompt": "你是采购负责人。",
+            "knowledge_base_ids": ["kb-1"],
+            "tool_policy": {},
+            "sales_focus": "generic_follow_up",
+            "value_axes": ["泛化痛点"],
+        },
+    }
+    resolved_policy = {
+        **snapshot,
+        "instructions": "新指令",
+        "instruction_contract_hash": "hash-2",
+        "persona_policy": {
+            **snapshot["persona_policy"],
+            "sales_focus": "value_translation",
+            "value_axes": ["客户收益", "ROI"],
+            "objection_axes": ["价格", "竞品"],
+        },
+    }
+
+    assert (
+        StepFunRealtimeHandler._is_policy_snapshot_stale(
+            snapshot=snapshot,
+            resolved_policy=resolved_policy,
+        )
+        is True
+    )

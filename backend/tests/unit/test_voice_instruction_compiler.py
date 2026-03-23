@@ -80,3 +80,41 @@ def test_compile_base_contract_adds_coach_mode_and_single_question_directives():
     assert "训练辅导模式" in compiled.base_instructions
     assert "不得直接抛出内部错误" in compiled.base_instructions
     assert "每轮最多提出1个问题句" in compiled.base_instructions
+
+
+def test_compile_base_contract_includes_sales_focus_axes_and_expected_questions():
+    policy = {
+        "persona_policy": {
+            "system_prompt": "你是谨慎采购负责人。",
+            "sales_focus": "value_translation",
+            "value_axes": ["客户收益", "ROI", "预算优先级"],
+            "objection_axes": ["价格", "竞品替代", "实施风险", "案例证据"],
+            "expected_customer_questions": [
+                "如果没有量化收益，我为什么要为这个方案买单？",
+                "你们和竞品相比，ROI 证据在哪里？",
+            ],
+        },
+        "tool_policy": {
+            "enable_internal_retrieval": True,
+            "require_kb_grounding": True,
+            "kb_lock_mode": "coach_mode",
+            "max_questions_per_turn": 1,
+        },
+    }
+
+    compiled = VoiceInstructionCompiler.compile_base_contract(
+        policy=policy,
+    )
+
+    assert "价值翻译" in compiled.base_instructions
+    assert "客户收益" in compiled.base_instructions
+    assert "ROI" in compiled.base_instructions
+    assert "预算优先级" in compiled.base_instructions
+    assert "价格" in compiled.base_instructions
+    assert "竞品替代" in compiled.base_instructions
+    assert "实施风险" in compiled.base_instructions
+    assert "案例证据" in compiled.base_instructions
+    assert "如果没有量化收益" in compiled.base_instructions
+    assert "ROI 证据在哪里" in compiled.base_instructions
+    assert "训练辅导模式" in compiled.base_instructions
+    assert "每轮最多提出1个问题句" in compiled.base_instructions
