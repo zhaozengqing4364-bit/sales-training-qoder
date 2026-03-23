@@ -173,6 +173,7 @@ wechat_secrets/
 .gsd/auto.lock
 .gsd/metrics.json
 .gsd/STATE.md
+.gsd/completed-units.json
 *.code-workspace
 .next/
 *.pyc
