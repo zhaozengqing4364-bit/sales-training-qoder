@@ -23,7 +23,7 @@
 - M001/S07 已完成：presentation session 的 shared `/practice/{sessionId}/report` 现在按 `scenario_type="presentation"` 输出 canonical `presentation_review`，legacy 与 StepFun runtime 都有页码落库基线，旧缺页码 session 会返回显式 degraded PPT contract 而不是退回 sales 语义；shared report page 也会切到 PPT 复盘分支、跳过 knowledge-check/sales-only cards，并保留带 `presentation_id` 的再练入口。
 - M001/S08 已完成：`/support/runtime` 现在基于 persisted session evidence、shared runtime diagnostics 与 canonical report semantics 输出 typed blocking / warning 发布健康，不再把 `status="scoring"` 伪装成 completed；repo-root verification gate 也补齐了 `alembic.ini` / `pyproject.toml` / `tests -> backend/tests` shim 与 backend `.env` fallback，最终 slice-close proof 能同时覆盖 repo-root auto verification、canonical sales report、主管连续变化页、PPT happy/degraded report，以及 support runtime anomaly surfacing。
 - 本地运行时若要验证 supervisor preview，数据库必须先迁移到 Alembic head（至少包含 `20260317_2310_020`）；否则 admin session preview 读取会因缺少 `conversation_messages.transcript_metadata` 而假性失败。
-- M001 的桌面端首发闭环现已完成：sales runtime 生命周期、统一 evidence 报告、销售价值表达基线、主管连续变化、PPT 会后复盘，以及 support/runtime 发布健康面已经在同一 localhost proof 里被重新串起；下一阶段重心转向 M002 的训练中实时教练与过程内反馈，而不是继续补 M001 的首发闭环。
+- M001 已在里程碑级 close-out 中完成并封板：`git diff --stat "$(git merge-base HEAD 001-ai-practice-system)" HEAD -- ':!.gsd/'` 证明本里程碑包含真实实现代码，`M001-VALIDATION.md` 与 8 个 slice summaries 共同证明 6 条成功标准和跨 slice 集成全部通过；下一阶段重心转向 M002 的训练中实时教练与过程内反馈，而不是继续补 M001 的首发闭环。
 - 真实首发目标已明确：先把桌面端稳定性做满，不在第一阶段绑定移动端 / 企业微信 / 外部系统集成。
 
 ## Architecture / Key Patterns
