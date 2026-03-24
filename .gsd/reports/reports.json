@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "projectName": "销售训练qoder",
+  "projectPath": "/Users/zhaozengqing/github/销售训练qoder",
+  "gsdVersion": "2.42.0",
+  "entries": [
+    {
+      "filename": "M001-2026-03-24T10-38-09.html",
+      "generatedAt": "2026-03-24T10:38:09.852Z",
+      "milestoneId": "M001",
+      "milestoneTitle": "桌面端销售训练闭环可用化",
+      "label": "M001: 桌面端销售训练闭环可用化",
+      "kind": "milestone",
+      "totalCost": 0,
+      "totalTokens": 479343070,
+      "totalDuration": 58117199,
+      "doneSlices": 8,
+      "totalSlices": 32,
+      "doneMilestones": 1,
+      "totalMilestones": 5,
+      "phase": "planning"
+    }
+  ]
+}
