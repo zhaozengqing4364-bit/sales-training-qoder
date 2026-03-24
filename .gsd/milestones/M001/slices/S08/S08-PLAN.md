@@ -44,13 +44,13 @@
 
 ## Tasks
 
-- [ ] **T01: 用统一 evidence truth line 重写 support runtime 后端健康读模型** `est:3h`
+- [x] **T01: 用统一 evidence truth line 重写 support runtime 后端健康读模型** `est:3h`
   - Why: S08 的核心风险不是“少一个页面”，而是 support/runtime 现在会把 `scoring` 算成完成、把 `SystemLog` 算成健康真相，导致发布验收可能出现假绿。
   - Files: `backend/src/support/services/runtime_status_service.py`, `backend/src/common/conversation/runtime_diagnostics.py`, `backend/src/support/api/runtime_status.py`, `backend/tests/unit/test_support_runtime_service.py`, `backend/tests/contract/test_support_runtime.py`, `backend/tests/integration/test_support_runtime_api.py`, `backend/tests/integration/test_knowledge_flow.py`
   - Do: 先写 failing backend tests 锁住 release-health summary、typed anomaly severity 与 knowledge/presentation semantics；从 `backend/src/common/api/practice.py` 抽共享 runtime diagnostics helper，复用 knowledge-check 的 `status` / `kb_lock_status` / upstream instability 语义；新增 support runtime service，批量读取 recent sessions + messages，通过 `SessionEvidenceService.build_projection(...)` 与 persisted runtime/report data 分类 `stuck_scoring`、`projection_failed`、`not_evaluable_completed`、`presentation_degraded_missing_page_metadata`、`knowledge_search_failed`、`kb_not_ready`、`kb_lock_blocked_*`、`upstream_unstable`、`optional_report_failed`；最后让 `runtime_status.py` 只做 RBAC + response shaping，并停止把 `status="scoring"` 计为已完成。
   - Verify: `cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_support_runtime_service.py tests/contract/test_support_runtime.py tests/integration/test_support_runtime_api.py && cd backend && venv/bin/python -m pytest -c pyproject.toml tests/integration/test_knowledge_flow.py -k knowledge_check_distinguishes_runtime_statuses`
   - Done when: support runtime overview/faults 改为 evidence-backed typed release health，knowledge-check / presentation degraded 语义不漂移，且 `scoring` 不再伪装成成功完成。
-- [ ] **T02: 把 `/support/runtime` 升级成 blocking/warning 发布健康面板** `est:2h`
+- [x] **T02: 把 `/support/runtime` 升级成 blocking/warning 发布健康面板** `est:2h`
   - Why: backend 即使已经给出可信 anomaly contract，如果 support/admin 页还只显示三张粗粒度卡片和原始 fault list，S08 仍然没有真正可用的运营可观测面。
   - Files: `web/src/lib/api/types.ts`, `web/src/lib/api/client.ts`, `web/src/app/(dashboard)/support/runtime/page.tsx`, `web/src/app/(dashboard)/support/runtime/page.test.tsx`
   - Do: 先写 focused page tests，覆盖 success、blocking-heavy、warning-only、load-failure 与 empty state；再扩展 typed API types/client，按新 contract 在页面上渲染发布健康摘要、blocking/warning 分层卡片、typed anomaly list、局部错误提示与刷新行为，并保持 support/admin 只读定位，不新增会绕过 `_can_read_session(...)` 的 learner report 深链。

@@ -27,7 +27,24 @@ class TestSupportRuntimeContract:
             assert "trace_id" in body
             data = body.get("data", {})
             assert "session_health" in data
-            assert "fault_health" in data
+            assert "release_health" in data
+            assert "anomaly_summary" in data
+
+            session_health = data["session_health"]
+            assert "active_sessions" in session_health
+            assert "completed_sessions_window" in session_health
+            assert "scoring_sessions" in session_health
+            assert "stuck_scoring_sessions" in session_health
+            assert "completion_rate" in session_health
+
+            release_health = data["release_health"]
+            assert release_health.get("status") in {"healthy", "warning", "blocking"}
+            assert isinstance(release_health.get("blocking_count"), int)
+            assert isinstance(release_health.get("warning_count"), int)
+
+            anomaly_summary = data["anomaly_summary"]
+            assert isinstance(anomaly_summary.get("blocking", []), list)
+            assert isinstance(anomaly_summary.get("warning", []), list)
 
     async def test_get_faults_contract(
         self,
@@ -47,13 +64,21 @@ class TestSupportRuntimeContract:
             data = body.get("data", {})
             assert isinstance(data.get("items", []), list)
 
-    async def test_faults_rejects_invalid_status_filter(
+            items = data.get("items", [])
+            if items:
+                item = items[0]
+                assert item.get("severity") in {"blocking", "warning"}
+                assert isinstance(item.get("kind"), str)
+                assert isinstance(item.get("summary"), str)
+                assert "detected_at" in item
+
+    async def test_faults_rejects_invalid_severity_filter(
         self,
         async_client: AsyncClient,
         auth_headers: dict,
     ) -> None:
         response = await async_client.get(
-            "/api/v1/support/runtime/faults?status=success",
+            "/api/v1/support/runtime/faults?severity=critical",
             headers=auth_headers,
         )
         assert response.status_code in [400, 401, 403]

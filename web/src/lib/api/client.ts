@@ -991,13 +991,13 @@ export const api = {
             return apiFetch<SupportRuntimeOverview>(`/support/runtime/overview?${searchParams}`);
         },
 
-        getFaults: async (params?: { limit?: number; status?: "failed" | "warning" }) => {
+        getFaults: async (params?: { limit?: number; severity?: "blocking" | "warning" }) => {
             const searchParams = new URLSearchParams();
             if (typeof params?.limit === "number") {
                 searchParams.set("limit", String(params.limit));
             }
-            if (params?.status) {
-                searchParams.set("status", params.status);
+            if (params?.severity) {
+                searchParams.set("severity", params.severity);
             }
             return apiFetch<SupportRuntimeFaultsResponse>(`/support/runtime/faults?${searchParams}`);
         },

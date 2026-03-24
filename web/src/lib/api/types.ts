@@ -242,6 +242,15 @@ export interface AnalyticsLeaderboard {
     leaderboard: LeaderboardEntry[];
 }
 
+export type SupportRuntimeReleaseHealthStatus = "healthy" | "warning" | "blocking";
+
+export type SupportRuntimeFaultSeverity = "blocking" | "warning";
+
+export interface SupportRuntimeAnomalySummaryItem {
+    kind: string;
+    count: number;
+}
+
 export interface SupportRuntimeOverview {
     generated_at: string;
     window_hours: number;
@@ -249,20 +258,37 @@ export interface SupportRuntimeOverview {
         active_sessions: number;
         total_sessions_window: number;
         completed_sessions_window: number;
+        scoring_sessions: number;
+        stuck_scoring_sessions: number;
+        not_evaluable_completed_sessions_window: number;
         completion_rate: number;
     };
-    fault_health: {
-        failed_or_warning_logs_window: number;
+    release_health: {
+        status: SupportRuntimeReleaseHealthStatus;
+        blocking_count: number;
+        warning_count: number;
+        typed_anomaly_count: number;
+        blocking_sessions_count: number;
+        warning_sessions_count: number;
+        supplemental_warning_log_count: number;
+    };
+    anomaly_summary: {
+        blocking: SupportRuntimeAnomalySummaryItem[];
+        warning: SupportRuntimeAnomalySummaryItem[];
     };
 }
 
 export interface SupportRuntimeFaultItem {
-    log_id: string;
-    action: string;
-    status: string;
-    user_identifier: string;
-    created_at: string | null;
-    details: Record<string, unknown> | string | null;
+    source: "session" | "system_log" | string;
+    severity: SupportRuntimeFaultSeverity;
+    kind: string;
+    summary: string;
+    detected_at: string | null;
+    session_id: string | null;
+    scenario_type: "sales" | "presentation" | string | null;
+    session_status: string | null;
+    report_status: string | null;
+    diagnostics: Record<string, unknown>;
 }
 
 export interface SupportRuntimeFaultsResponse {
@@ -270,6 +296,7 @@ export interface SupportRuntimeFaultsResponse {
     items: SupportRuntimeFaultItem[];
     count: number;
     limit: number;
+    severity?: SupportRuntimeFaultSeverity | null;
 }
 
 // User types

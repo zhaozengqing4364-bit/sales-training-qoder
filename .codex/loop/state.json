@@ -1,7 +1,7 @@
 {
   "mode": "stabilize",
-  "current_issue_id": "M001-S07",
-  "current_issue_type": "slice",
+  "current_issue_id": "M001-S08-T02",
+  "current_issue_type": "task",
   "current_issue_status": "done",
   "pending_issue_ids": [],
   "completed_issue_ids": [
@@ -28,32 +28,31 @@
     "M001-S07-T01",
     "M001-S07-T02",
     "M001-S07-T03",
-    "M001-S07"
+    "M001-S07",
+    "M001-S08-T01",
+    "M001-S08-T02"
   ],
   "blocked_issue_ids": [],
   "deferred_issue_ids": [],
   "last_modified_files": [
-    ".gsd/REQUIREMENTS.md",
+    "web/src/app/(dashboard)/support/runtime/page.tsx",
+    "web/src/app/(dashboard)/support/runtime/page.test.tsx",
+    "web/src/lib/api/types.ts",
+    "web/src/lib/api/client.ts",
     ".gsd/KNOWLEDGE.md",
-    ".gsd/PROJECT.md",
-    ".gsd/milestones/M001/M001-ROADMAP.md",
-    ".gsd/milestones/M001/slices/S07/S07-SUMMARY.md",
-    ".gsd/milestones/M001/slices/S07/S07-UAT.md",
+    ".gsd/milestones/M001/slices/S08/S08-PLAN.md",
+    ".gsd/milestones/M001/slices/S08/tasks/T02-SUMMARY.md",
     ".codex/loop/state.json",
     ".codex/loop/log.md"
   ],
   "last_verification_commands": [
-    "cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/evaluation/test_comprehensive_report_service.py tests/unit/test_presentation_handler_persistence.py tests/unit/test_presentation_stepfun_realtime_handler.py",
-    "cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/evaluation/test_comprehensive_report_service.py -k degrades_without_page_metadata",
-    "cd backend && venv/bin/python -m pytest -c pyproject.toml tests/contract/test_presentation_report_contract.py tests/integration/test_presentation_report_flow.py",
-    "cd backend && venv/bin/python -m pytest -c pyproject.toml tests/integration/test_presentation_report_flow.py -k degraded",
-    "cd web && npm test -- --run 'src/app/(user)/practice/[sessionId]/report/page.test.tsx'",
-    "live runtime: create presentation session with agent 7199854c-3921-4d9f-9833-fe99ca209c59, persona 4c99d4d0-965b-439b-b746-33d2e1c55073, presentation 750be5ad-41b6-4752-b772-b4fce6cb9c16; drive /ws/presentation via real audio chunks + page_change; verify /api/v1/practice/sessions/8531c7f6-50da-4934-9fd4-63784c791edf/report",
-    "browser/runtime: localhost dev-login -> /practice/8531c7f6-50da-4934-9fd4-63784c791edf/report assertions + absent sales-only text + retry continuity preserving presentation_id",
-    "diagnostics: GET /api/v1/practice/sessions/ec5b7b03-a83a-4ee6-bc33-d768ccfec610/report and confirm scenario_type=presentation + degraded reasons + no sales fallback fields"
+    "cd web && npm test -- --run 'src/app/(dashboard)/support/runtime/page.test.tsx'",
+    "cd web && npm test -- --run 'src/app/(user)/practice/[sessionId]/use-practice-session-lifecycle.test.ts' 'src/hooks/use-practice-websocket.test.ts' 'src/hooks/websocket/message-handlers.test.ts'",
+    "cd web && npm test -- --run 'src/app/(user)/practice/[sessionId]/report/page.test.tsx' 'src/app/admin/users/[id]/page.test.tsx' 'src/app/(dashboard)/support/runtime/page.test.tsx'",
+    "cd web && npm test -- --run 'src/app/(user)/practice/[sessionId]/report/page.test.tsx'"
   ],
-  "last_verification_result": "All S07 slice commands passed fresh. Live presentation runtime proof on the real audio/transcription websocket produced a complete page-aware presentation_review for session 8531c7f6-50da-4934-9fd4-63784c791edf, degraded historical report diagnostics stayed presentation-shaped for ec5b7b03-a83a-4ee6-bc33-d768ccfec610, and the shared report page rendered the PPT branch with sales-only sections absent.",
-  "last_success_signal": "PPT post-session review is now canonical on /practice/{sessionId}/report with scenario-aware presentation_review facts, explicit degraded completeness, and presentation_id-preserving retry continuity on the shared learner report page.",
+  "last_verification_result": "Support runtime focused page suite passed, the slice lifecycle/websocket web suite passed, and browser UAT proved live blocking/warning plus mocked empty/error refresh states on /support/runtime. The broader report/admin/support web slice command is still red because report/page.test.tsx already fails alone on the missing enhanced-report degraded copy.",
+  "last_success_signal": "/support/runtime now renders backend-typed release health, blocking/warning counts, and session-scoped anomaly rows with local empty/error degradation instead of coarse completion/log cards.",
   "last_growth_scan": null,
-  "next_action": "Proceed to M001-S08 final assembly / release-closure work; reuse the S07 localhost-aligned audio-websocket verification recipe instead of the misleading text shortcut."
+  "next_action": "Proceed to M001-S08-T03 and rerun the full slice verification/UAT wave, carrying forward that support/runtime UI is green but report/page.test.tsx is already red on enhanced-report degraded copy."
 }

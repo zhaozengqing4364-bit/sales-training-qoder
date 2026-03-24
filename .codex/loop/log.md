@@ -492,3 +492,53 @@ Append one entry per iteration:
   verification results: passed; fresh automated backend/web slice suites are green, the live websocket/audio proof produced complete page-aware presentation evidence on the canonical report route, the degraded historical session stayed presentation-shaped with explicit missing-page diagnostics, and the browser report page showed PPT review content without sales-only sections.
   success signal status: S07 is complete and the shared learner report entrypoint now serves usable PPT postmortems from real page/material evidence instead of sales fallback semantics or optional enhanced-report dependence.
   rollback note: if later work revisits S07 verification, keep localhost/localhost host alignment and use real audio chunks for page-metadata proof; the StepFun text shortcut can complete a session but is not trustworthy evidence for page-number persistence.
+
+
+- time: 2026-03-24T16:52:43+08:00
+  mode: stabilize
+  item id: M001-S08-T01
+  files changed:
+    - backend/src/common/conversation/runtime_diagnostics.py
+    - backend/src/support/services/runtime_status_service.py
+    - backend/src/support/services/__init__.py
+    - backend/src/support/api/runtime_status.py
+    - backend/src/common/api/practice.py
+    - backend/tests/unit/test_support_runtime_service.py
+    - backend/tests/contract/test_support_runtime.py
+    - backend/tests/integration/test_support_runtime_api.py
+    - .gsd/DECISIONS.md
+    - .gsd/milestones/M001/slices/S08/S08-PLAN.md
+    - .gsd/milestones/M001/slices/S08/tasks/T01-SUMMARY.md
+    - .codex/loop/state.json
+    - .codex/loop/log.md
+  summary: Replaced the old SystemLog-based support/runtime reader with an evidence-backed release-health service, extracted shared runtime diagnostics from practice knowledge-check, and classified typed blocking/warning anomalies for scoring, projection, knowledge, and presentation degraded states.
+  verification commands:
+    - cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_support_runtime_service.py tests/contract/test_support_runtime.py tests/integration/test_support_runtime_api.py
+    - cd backend && venv/bin/python -m pytest -c pyproject.toml tests/integration/test_knowledge_flow.py -k knowledge_check_distinguishes_runtime_statuses
+  verification results: passed; the new support-runtime task suite is green and the extracted helper preserved the canonical knowledge-check status semantics.
+  success signal status: /api/v1/support/runtime/overview and /api/v1/support/runtime/faults now expose typed release-health counters plus blocking/warning anomaly items from unified session evidence instead of coarse completion/log counts.
+  rollback note: if later work revisits this reader, keep SystemLog as supplemental warning-only input and preserve the shared runtime diagnostics helper as the single source for knowledge-check/support-runtime status semantics.
+
+- time: 2026-03-24T17:44:00+08:00
+  mode: stabilize
+  item id: M001-S08-T02
+  files changed:
+    - web/src/app/(dashboard)/support/runtime/page.tsx
+    - web/src/app/(dashboard)/support/runtime/page.test.tsx
+    - web/src/lib/api/types.ts
+    - web/src/lib/api/client.ts
+    - .gsd/KNOWLEDGE.md
+    - .gsd/milestones/M001/slices/S08/S08-PLAN.md
+    - .gsd/milestones/M001/slices/S08/tasks/T02-SUMMARY.md
+    - .codex/loop/state.json
+    - .codex/loop/log.md
+  summary: Rebuilt /support/runtime into a typed blocking/warning release-health panel, added focused page coverage, kept overview/fault failures local, and proved the live plus degraded UI states in the browser.
+  verification commands:
+    - cd web && npm test -- --run 'src/app/(dashboard)/support/runtime/page.test.tsx'
+    - cd web && npm test -- --run 'src/app/(user)/practice/[sessionId]/use-practice-session-lifecycle.test.ts' 'src/hooks/use-practice-websocket.test.ts' 'src/hooks/websocket/message-handlers.test.ts'
+    - cd web && npm test -- --run 'src/app/(user)/practice/[sessionId]/report/page.test.tsx' 'src/app/admin/users/[id]/page.test.tsx' 'src/app/(dashboard)/support/runtime/page.test.tsx'
+    - cd web && npm test -- --run 'src/app/(user)/practice/[sessionId]/report/page.test.tsx'
+    - browser/runtime: localhost dev-login -> /support/runtime live blocking/warning assertions + window.fetch override for empty/error refresh assertions
+  verification results: support runtime focused suite passed, the slice lifecycle/websocket web suite passed, and browser UAT proved live blocking/warning plus local empty/error states. The broader report/admin/support web slice command is still red because report/page.test.tsx already fails alone on missing enhanced-report degraded copy.
+  success signal status: support/admin can now see backend-typed release health, scoring separation, blocking/warning counts, and session-scoped anomaly diagnostics directly on /support/runtime instead of coarse completion/log cards.
+  rollback note: if follow-up work revisits browser UAT for support/runtime, avoid cross-origin route mocks for localhost support-runtime endpoints and keep using an in-page window.fetch override plus the page's own 刷新 action.

@@ -33,6 +33,10 @@ from sqlalchemy.orm import selectinload
 from common.api.server_error import build_server_error
 from common.auth.service import get_current_user
 from common.conversation.models import ConversationMessage
+from common.conversation.runtime_diagnostics import (
+    build_session_runtime_diagnostics,
+    extract_voice_policy_snapshot,
+)
 from common.conversation.session_evidence import SessionEvidenceService
 from common.db.models import PracticeSession, Scenario, User
 from common.db.schemas import (
@@ -1372,191 +1376,16 @@ async def get_session_knowledge_check(
     if not _can_read_session(session, current_user):
         return error_response("[ACCESS_DENIED]", status_code=403)
 
-    snapshot = (
-        session.voice_policy_snapshot
-        if isinstance(session.voice_policy_snapshot, dict)
-        else {}
-    )
-    tool_policy = snapshot.get("tool_policy")
-    if not isinstance(tool_policy, dict):
-        tool_policy = {}
-
-    network_access_mode = str(tool_policy.get("network_access_mode") or "off").lower()
-    enforcement_level = str(tool_policy.get("enforcement_level") or "strict").lower()
-    allow_web_search_without_kb = bool(
-        tool_policy.get("allow_web_search_without_kb", False)
-    )
-    require_kb_grounding = bool(tool_policy.get("require_kb_grounding", False))
-    internal_retrieval_enabled = bool(
-        tool_policy.get("enable_internal_retrieval", False)
-    )
-    web_search_enabled = bool(tool_policy.get("enable_web_search", False))
-
-    knowledge_base_ids = snapshot.get("knowledge_base_ids")
-    if not isinstance(knowledge_base_ids, list):
-        knowledge_base_ids = []
-    knowledge_base_ids = [str(kb_id) for kb_id in knowledge_base_ids if kb_id]
-    kb_bound = bool(knowledge_base_ids)
-
+    snapshot = extract_voice_policy_snapshot(session)
     preview_tools = VoiceRuntimePolicyService(db).build_stepfun_tools(snapshot)
     effective_tool_types = [
         str(tool.get("type") or "") for tool in preview_tools if isinstance(tool, dict)
     ]
-
-    runtime_metrics = snapshot.get("runtime_metrics")
-    if not isinstance(runtime_metrics, dict):
-        runtime_metrics = {}
-    knowledge_metrics = runtime_metrics.get("knowledge_retrieval")
-    if not isinstance(knowledge_metrics, dict):
-        knowledge_metrics = {}
-
-    attempt_count = int(knowledge_metrics.get("attempt_count") or 0)
-    hit_query_count = int(knowledge_metrics.get("hit_query_count") or 0)
-    total_results = int(knowledge_metrics.get("total_results") or 0)
-    last_result_count = int(knowledge_metrics.get("last_result_count") or 0)
-    hit_rate = float(knowledge_metrics.get("hit_rate") or 0.0)
-
-    last_status = str(knowledge_metrics.get("last_status") or "not_triggered")
-    last_error = str(knowledge_metrics.get("last_error") or "")
-    kb_lock_required = require_kb_grounding
-    kb_lock_block_count = int(knowledge_metrics.get("kb_lock_block_count") or 0)
-    kb_lock_last_status = str(
-        knowledge_metrics.get("kb_lock_last_status") or "not_required"
+    diagnostics = build_session_runtime_diagnostics(
+        session=session,
+        snapshot=snapshot,
+        effective_tool_types=effective_tool_types,
     )
-    last_decision_id = str(knowledge_metrics.get("last_decision_id") or "")
-    try:
-        last_decision_duration_ms = float(
-            knowledge_metrics.get("last_decision_duration_ms") or 0.0
-        )
-    except (TypeError, ValueError):
-        last_decision_duration_ms = 0.0
-    last_decision_phase_breakdown = knowledge_metrics.get(
-        "last_decision_phase_breakdown"
-    )
-    if not isinstance(last_decision_phase_breakdown, dict):
-        last_decision_phase_breakdown = None
-    try:
-        timeout_rate_5m = float(knowledge_metrics.get("timeout_rate_5m") or 0.0)
-    except (TypeError, ValueError):
-        timeout_rate_5m = 0.0
-    kb_lock_decision_timestamps = knowledge_metrics.get("kb_lock_decision_timestamps")
-    has_recent_kb_lock_decisions = isinstance(kb_lock_decision_timestamps, list) and bool(
-        kb_lock_decision_timestamps
-    )
-    upstream_disconnect_count_5m = int(
-        knowledge_metrics.get("upstream_disconnect_count_5m") or 0
-    )
-    upstream_unstable = bool(knowledge_metrics.get("upstream_unstable", False))
-    kb_lock_timeout_budget_ms_raw = os.getenv(
-        "STEPFUN_KB_LOCK_DECISION_TIMEOUT_MS", "2200"
-    )
-    try:
-        kb_lock_timeout_budget_ms = int(kb_lock_timeout_budget_ms_raw)
-    except (TypeError, ValueError):
-        kb_lock_timeout_budget_ms = 2200
-    kb_lock_timeout_budget_ms = max(100, min(8000, kb_lock_timeout_budget_ms))
-    kb_lock_min_pass_score_raw = os.getenv(
-        "KNOWLEDGE_KB_LOCK_MIN_PASS_SCORE", "0.62"
-    )
-    try:
-        kb_lock_min_pass_score = float(kb_lock_min_pass_score_raw)
-    except (TypeError, ValueError):
-        kb_lock_min_pass_score = 0.62
-    kb_lock_min_pass_score = max(0.0, min(1.0, kb_lock_min_pass_score))
-    kb_lock_min_pass_score_keyword_raw = os.getenv(
-        "KNOWLEDGE_KB_LOCK_MIN_PASS_SCORE_KEYWORD",
-        str(min(kb_lock_min_pass_score, 0.55)),
-    )
-    try:
-        kb_lock_min_pass_score_keyword = float(kb_lock_min_pass_score_keyword_raw)
-    except (TypeError, ValueError):
-        kb_lock_min_pass_score_keyword = min(kb_lock_min_pass_score, 0.55)
-    kb_lock_min_pass_score_keyword = max(0.0, min(1.0, kb_lock_min_pass_score_keyword))
-    kb_lock_status = "pass"
-    if kb_lock_required:
-        if not kb_bound:
-            kb_lock_status = "blocked_no_kb"
-        elif kb_lock_last_status and kb_lock_last_status != "not_required":
-            kb_lock_status = kb_lock_last_status
-        elif last_status == "kb_not_ready" or "[KB_NOT_READY]" in last_error:
-            kb_lock_status = "blocked_not_ready"
-        elif last_status == "search_failed" or last_error:
-            kb_lock_status = "blocked_search_failed"
-        elif attempt_count > 0 and hit_query_count <= 0:
-            kb_lock_status = "blocked_empty"
-
-    if not knowledge_base_ids:
-        status = "no_knowledge_base"
-        summary = "当前会话未绑定知识库"
-    elif not internal_retrieval_enabled:
-        status = "disabled"
-        summary = "内部知识检索未启用"
-    elif last_status == "kb_not_ready" or "[KB_NOT_READY]" in last_error:
-        status = "kb_not_ready"
-        summary = "知识库文档尚未处理完成"
-    elif last_status == "search_failed" or "[KNOWLEDGE_SEARCH_UNAVAILABLE]" in last_error:
-        status = "search_failed"
-        summary = "知识检索触发失败，请检查知识库或 Embedding 服务"
-    elif attempt_count == 0:
-        status = "not_triggered"
-        summary = "本次对话尚未触发知识检索"
-    elif hit_query_count > 0:
-        status = "hit"
-        summary = "知识检索已触发并命中知识库"
-    else:
-        status = "miss"
-        summary = "知识检索已触发，但本次未命中有效内容"
-
-    diagnostics = {
-        "session_id": str(session.session_id),
-        "voice_mode": session.voice_mode,
-        "status": status,
-        "summary": summary,
-        "internal_retrieval_enabled": internal_retrieval_enabled,
-        "web_search_enabled": web_search_enabled,
-        "network_access_mode": network_access_mode,
-        "enforcement_level": enforcement_level,
-        "allow_web_search_without_kb": allow_web_search_without_kb,
-        "require_kb_grounding": require_kb_grounding,
-        "kb_bound": kb_bound,
-        "effective_tool_types": effective_tool_types,
-        "instruction_contract_hash": str(
-            snapshot.get("instruction_contract_hash") or ""
-        ),
-        "knowledge_base_ids": knowledge_base_ids,
-        "knowledge_base_count": len(knowledge_base_ids),
-        "attempt_count": attempt_count,
-        "hit_query_count": hit_query_count,
-        "total_results": total_results,
-        "hit_rate": round(hit_rate, 4),
-        "last_query": str(knowledge_metrics.get("last_query") or ""),
-        "last_result_count": last_result_count,
-        "last_status": last_status,
-        "last_top_k": knowledge_metrics.get("last_top_k"),
-        "last_similarity_threshold": knowledge_metrics.get("last_similarity_threshold"),
-        "last_error": last_error,
-        "last_retrieval_mode": str(knowledge_metrics.get("last_retrieval_mode") or ""),
-        "recent_queries": knowledge_metrics.get("recent_queries")
-        if isinstance(knowledge_metrics.get("recent_queries"), list)
-        else [],
-        "updated_at": knowledge_metrics.get("updated_at"),
-        "kb_lock_required": kb_lock_required,
-        "kb_lock_status": kb_lock_status,
-        "kb_lock_block_count": kb_lock_block_count,
-        "kb_lock_last_status": kb_lock_last_status,
-        "kb_lock_updated_at": knowledge_metrics.get("kb_lock_updated_at"),
-        "kb_lock_timeout_budget_ms": kb_lock_timeout_budget_ms,
-        "kb_lock_min_pass_score": round(kb_lock_min_pass_score, 4),
-        "kb_lock_min_pass_score_keyword": round(kb_lock_min_pass_score_keyword, 4),
-        "last_decision_id": last_decision_id,
-        "last_decision_duration_ms": round(max(0.0, last_decision_duration_ms), 1),
-        "last_decision_phase_breakdown": last_decision_phase_breakdown,
-        "timeout_rate_5m": round(max(0.0, timeout_rate_5m), 4)
-        if has_recent_kb_lock_decisions
-        else None,
-        "upstream_disconnect_count_5m": upstream_disconnect_count_5m,
-        "upstream_unstable": upstream_unstable,
-    }
 
     return success_response(diagnostics)
 
