@@ -56,7 +56,7 @@
   - Do: 先写 focused page tests，覆盖 success、blocking-heavy、warning-only、load-failure 与 empty state；再扩展 typed API types/client，按新 contract 在页面上渲染发布健康摘要、blocking/warning 分层卡片、typed anomaly list、局部错误提示与刷新行为，并保持 support/admin 只读定位，不新增会绕过 `_can_read_session(...)` 的 learner report 深链。
   - Verify: `cd web && npm test -- --run 'src/app/(dashboard)/support/runtime/page.test.tsx'`
   - Done when: support/admin 用户能从 `/support/runtime` 直接判断“是否能发、为什么不能发、是哪类会话/场景出问题”，而不是再去猜 completion rate 或翻系统日志。
-- [ ] **T03: 复用既有 UAT 路径完成桌面端发布波次验收并落盘 S08 证据** `est:2h`
+- [x] **T03: 复用既有 UAT 路径完成桌面端发布波次验收并落盘 S08 证据** `est:2h`
   - Why: S08 是 milestone final-assembly slice；如果不把 S01/S03/S05/S06/S07 的 live proof 重新串起来，support/runtime 再漂亮也不等于真正达到首发门槛。
   - Files: `.gsd/milestones/M001/slices/S01/S01-UAT.md`, `.gsd/milestones/M001/slices/S06/S06-UAT.md`, `.gsd/milestones/M001/slices/S07/S07-UAT.md`, `.gsd/milestones/M001/slices/S08/S08-UAT.md`
   - Do: 基于 S01/S06/S07 的现有 UAT 资产编写 S08 波次脚本，明确前置约束（`alembic upgrade head`、`localhost` host alignment、`python-socks`、presentation 禁用 websocket `type:"text"` shortcut）；按五波顺序重跑 sales runtime reconnect/end-failure、canonical sales report、`/admin/users/{id}`、PPT report happy/degraded、`/support/runtime`；把每波的 expected/actual、关键 session/user IDs、console/network/backend diagnostics、以及 support runtime 是否正确映射 blocking/warning 写入 `S08-UAT.md`。

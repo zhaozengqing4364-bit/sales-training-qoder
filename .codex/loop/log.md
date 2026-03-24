@@ -542,3 +542,24 @@ Append one entry per iteration:
   verification results: support runtime focused suite passed, the slice lifecycle/websocket web suite passed, and browser UAT proved live blocking/warning plus local empty/error states. The broader report/admin/support web slice command is still red because report/page.test.tsx already fails alone on missing enhanced-report degraded copy.
   success signal status: support/admin can now see backend-typed release health, scoring separation, blocking/warning counts, and session-scoped anomaly diagnostics directly on /support/runtime instead of coarse completion/log cards.
   rollback note: if follow-up work revisits browser UAT for support/runtime, avoid cross-origin route mocks for localhost support-runtime endpoints and keep using an in-page window.fetch override plus the page's own 刷新 action.
+
+- time: 2026-03-24T17:58:35+08:00
+  mode: stabilize
+  item id: M001-S08-T03
+  files changed:
+    - .gsd/milestones/M001/slices/S08/tasks/T03-PLAN.md
+    - .gsd/milestones/M001/slices/S08/S08-UAT.md
+    - .gsd/milestones/M001/slices/S08/tasks/T03-SUMMARY.md
+    - .gsd/milestones/M001/slices/S08/S08-PLAN.md
+    - .codex/loop/state.json
+    - .codex/loop/log.md
+  summary: Added the missing observability section to the T03 plan, wrote the S08 release-wave UAT artifact, ran the full automated slice gate, recorded the carried-forward report-page web failure plus current support-runtime blocking/warning evidence, and left exact resume notes for the unfinished localhost browser waves.
+  verification commands:
+    - cd backend && venv/bin/alembic upgrade head
+    - cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_support_runtime_service.py tests/contract/test_support_runtime.py tests/integration/test_support_runtime_api.py
+    - cd backend && venv/bin/python -m pytest -c pyproject.toml tests/integration/test_knowledge_flow.py -k knowledge_check_distinguishes_runtime_statuses
+    - cd backend && venv/bin/python -m pytest -c pyproject.toml tests/integration/test_session_lifecycle_api.py tests/integration/test_sales_realtime_reconnect_flow.py tests/integration/test_websocket_status_contract.py tests/contract/test_practice_evidence_contract.py tests/integration/test_sales_value_training_flow.py tests/integration/test_admin_users_api.py tests/contract/test_presentation_report_contract.py tests/integration/test_presentation_report_flow.py
+    - cd web && npm test -- --run 'src/app/(user)/practice/[sessionId]/use-practice-session-lifecycle.test.ts' 'src/hooks/use-practice-websocket.test.ts' 'src/hooks/websocket/message-handlers.test.ts' 'src/app/(user)/practice/[sessionId]/report/page.test.tsx' 'src/app/admin/users/[id]/page.test.tsx' 'src/app/(dashboard)/support/runtime/page.test.tsx'
+  verification results: backend verification passed fresh; the full web command still fails on the carried-forward sales report degraded-copy expectation in report/page.test.tsx; localhost backend/web were healthy, a fresh realtime sales session was created, and support/runtime currently reports a blocking release state with typed stuck_scoring / kb_lock_blocked_* / projection_failed anomalies plus warning-only upstream_unstable / presentation_degraded_missing_page_metadata.
+  success signal status: S08-UAT is now a usable release-close artifact with actual gate output and precise resume instructions, but the browser-wave proof and final release verdict remain unfinished.
+  rollback note: no product rollback was needed; next context should restart localhost servers and resume the browser waves from S08-UAT instead of redoing the automated gate.
