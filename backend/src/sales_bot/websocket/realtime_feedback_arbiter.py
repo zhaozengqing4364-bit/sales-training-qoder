@@ -91,11 +91,15 @@ class RealtimeFeedbackArbiter:
             action_card = build_action_card(
                 fuzzy_detections=[self._pick_primary_detection(detections)],
                 pass_flags=pass_flags,
+                stage_context=stage_context,
+                score_context=score_context,
             )
         elif primary_source == "score":
             action_card = build_action_card(
                 suggestions=[suggestions[0]],
                 pass_flags=pass_flags,
+                stage_context=stage_context,
+                score_context=score_context,
             )
 
         action_signature = self._build_action_signature(primary_source, action_card)

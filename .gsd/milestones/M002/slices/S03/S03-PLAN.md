@@ -21,6 +21,7 @@
 - `cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_effectiveness_sales_coaching_focus.py tests/unit/test_realtime_feedback_arbiter.py tests/unit/test_capability_processor.py tests/unit/test_stepfun_realtime_handler.py`
 - `cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_effectiveness_sales_coaching_focus.py -vv`
 - `cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_effectiveness_sales_coaching_focus.py -k weakest_dimension_changes_next_turn_rule -vv`
+- `cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_realtime_feedback_arbiter.py -k preserve_context_without_primary_action -vv`
 - `cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_stepfun_realtime_handler.py -vv`
 
 ## Observability / Diagnostics
@@ -44,7 +45,7 @@
   - Do: Add failing unit coverage for discovery/evidence, objection/handling, and closing/next-step cases where changing stage or the weakest/declining dimension changes the next-turn focus; introduce one shared typed coaching-focus helper in `common.effectiveness`; make `build_action_card(...)` derive `issue` / `replacement` / `next_turn_rule` from that helper while keeping the public action-card field names stable and avoiding any replay/report schema change.
   - Verify: `cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_effectiveness_sales_coaching_focus.py`
   - Done when: `common.effectiveness` can compute a stage-aware coaching focus from score/stage context, and `build_action_card(...)` changes its text when stage or weakest dimension changes without renaming existing keys.
-- [ ] **T02: Route classic arbitration through the shared coaching-focus rule** `est:2h`
+- [x] **T02: Route classic arbitration through the shared coaching-focus rule** `est:2h`
   - Why: The classic path already has the richest context surface, but the arbiter ignores it and still builds action cards from pass flags plus one suggestion, so this runtime is the safest place to prove the new rule actually drives live coaching.
   - Files: `backend/src/sales_bot/websocket/realtime_feedback_arbiter.py`, `backend/src/sales_bot/websocket/components/capability_processor.py`, `backend/tests/unit/test_realtime_feedback_arbiter.py`, `backend/tests/unit/test_capability_processor.py`
   - Do: Extend arbiter and classic-path tests to assert that stage context plus weakest/declining dimension can change the primary action-card text while S02 duplicate suppression and context retention still hold; pass raw stage and score context from `CapabilityProcessor` into the arbiter; keep websocket payload shapes stable so the existing practice-page consumer remains a renderer, not a planner.

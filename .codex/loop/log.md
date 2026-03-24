@@ -757,3 +757,28 @@ Append one entry per iteration:
   verification results: passed; all focused T01 checks and the full S03 backend unit gate exited 0. One intermediate parallel pytest-cov attempt hit a local .coverage race, and the affected selector passed when rerun sequentially.
   success signal status: common.effectiveness now exposes one canonical sales coaching-focus seam, and action cards can switch issue/replacement/next-turn guidance when stage or weakest dimension changes without changing the public websocket contract.
   rollback note: if later S03 work rewires action-card generation again, preserve the rich-context gate on build_action_card until every caller actually passes stage/score context through the shared resolver.
+
+- time: 2026-03-24T21:51:30+0800
+  mode: stabilize
+  item id: M002-S03-T02
+  files changed:
+    - backend/src/sales_bot/websocket/realtime_feedback_arbiter.py
+    - backend/tests/unit/test_realtime_feedback_arbiter.py
+    - backend/tests/unit/test_capability_processor.py
+    - .gsd/KNOWLEDGE.md
+    - .gsd/milestones/M002/slices/S03/S03-PLAN.md
+    - .gsd/milestones/M002/slices/S03/tasks/T02-SUMMARY.md
+    - .codex/loop/state.json
+    - .codex/loop/log.md
+  summary: Routed classic realtime action-card arbitration through the shared sales coaching-focus rule, proved stage-aware and declining-dimension classic outputs under focused arbiter/processor tests, and preserved same-turn duplicate suppression plus contextual fuzzy/stage/score messages without changing websocket payload shapes.
+  verification commands:
+    - cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_realtime_feedback_arbiter.py tests/unit/test_capability_processor.py
+    - cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_realtime_feedback_arbiter.py tests/unit/test_capability_processor.py -vv
+    - cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_effectiveness_sales_coaching_focus.py tests/unit/test_realtime_feedback_arbiter.py tests/unit/test_capability_processor.py tests/unit/test_stepfun_realtime_handler.py
+    - cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_effectiveness_sales_coaching_focus.py -vv
+    - cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_effectiveness_sales_coaching_focus.py -k weakest_dimension_changes_next_turn_rule -vv
+    - cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_realtime_feedback_arbiter.py -k preserve_context_without_primary_action -vv
+    - cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_stepfun_realtime_handler.py -vv
+  verification results: the two T02 classic commands passed fresh; the carried-forward coaching-focus focused suites and new arbiter diagnostic selector also passed; the broad S03 backend suite and StepFun verbose suite now fail only on T03-owned StepFun action-card expectation drift in tests/unit/test_stepfun_realtime_handler.py after classic arbitration started emitting shared rich-context coaching-focus text.
+  success signal status: classic runtime now changes action_card issue/replacement/next_turn_rule when stage or weakest/declining dimension changes while keeping fuzzy_detection, stage_update, score_update, and same-turn duplicate suppression intact.
+  rollback note: if T03 revisits this seam, keep the arbiter rich-context handoff and only adapt StepFun context parity/assertions on top; reverting classic back to suggestion-only action cards would reopen the slice gap.

@@ -25,3 +25,4 @@
 - `cd web && npm test -- --run '...RightPanelContent.test.tsx'` 这类 Vitest 命令即使把一个不存在的测试文件路径混进去也可能继续返回 0，只报告实际匹配到的文件；跑 S02/S03 这类 slice gate 时要看输出里的 Test Files 列表，别把“命令绿了”误当成缺失的 targeted file 也被执行了。
 - sales practice 页的新一轮用户 final transcript 到来时，前端 reducer 必须主动清掉上一轮的 `actionCard` / `fuzzyDetections`；否则即使后端 arbiter 已把同轮 coaching 节流住，旧提示也会在 UI 上跨 turn 残留，看起来像 pacing 仍然失效。
 - StepFun sales realtime 的重连快照只该持久化最小 `feedback_pacing_state`（上一条 action 的 signature + turn）；如果 restore 直接重放 `_latest_action_card` 之类读侧诊断字段，会把同一轮动作卡 burst 回放成假回归。
+- S03 classic 路由里如果 `action_card` 还停留在 suggestion/pass-flags 文案，先看 `RealtimeFeedbackArbiter.decide()` 调 `build_action_card(...)` 时有没有把 `stage_context` / `score_context` 继续传下去：`CapabilityProcessor` 已经会原样转发 raw `stage_data` 和 `score_payload`，真正容易漏的是 arbiter 的最后一跳；一旦补上，这个改动也会立刻影响现有 StepFun action-card 断言，属于 T03 预期 carry-forward，不是 classic 回归。
