@@ -51,7 +51,7 @@
   - Do: Extend arbiter and classic-path tests to assert that stage context plus weakest/declining dimension can change the primary action-card text while S02 duplicate suppression and context retention still hold; pass raw stage and score context from `CapabilityProcessor` into the arbiter; keep websocket payload shapes stable so the existing practice-page consumer remains a renderer, not a planner.
   - Verify: `cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_realtime_feedback_arbiter.py tests/unit/test_capability_processor.py`
   - Done when: classic runtime emits stage-aware, dimension-aware `action_card` text under focused tests, and the arbiter still suppresses same-turn duplicates without dropping contextual `fuzzy_detection` / `stage_update` / `score_update` messages.
-- [ ] **T03: Normalize StepFun stage and score context to classic parity** `est:2h`
+- [x] **T03: Normalize StepFun stage and score context to classic parity** `est:2h`
   - Why: StepFun currently strips rich stage guidance and score `trend/delta` data before arbitration, so even a correct shared rule would drift again across runtimes unless this handoff is closed.
   - Files: `backend/src/sales_bot/websocket/stepfun_realtime_handler.py`, `backend/tests/unit/test_stepfun_realtime_handler.py`
   - Do: Add failing handler tests proving that equivalent stage + score inputs now produce the same primary action on StepFun as on classic; retain the latest rich `stage_data` from the StepFun stage-analysis path; feed raw scoring dimensions/trend/delta into the arbiter while keeping emitted `score_update` and persisted `_latest_score_snapshot` / `ai_feedback` shapes unchanged.

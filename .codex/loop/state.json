@@ -1,6 +1,6 @@
 {
   "mode": "stabilize",
-  "current_issue_id": "M002-S03-T02",
+  "current_issue_id": "M002-S03-T03",
   "current_issue_type": "task",
   "current_issue_status": "done",
   "pending_issue_ids": [],
@@ -40,31 +40,30 @@
     "M002-S02-T03",
     "M002-S02",
     "M002-S03-T01",
-    "M002-S03-T02"
+    "M002-S03-T02",
+    "M002-S03-T03"
   ],
   "blocked_issue_ids": [],
   "deferred_issue_ids": [],
   "last_modified_files": [
-    "backend/src/sales_bot/websocket/realtime_feedback_arbiter.py",
-    "backend/tests/unit/test_realtime_feedback_arbiter.py",
-    "backend/tests/unit/test_capability_processor.py",
+    "backend/src/sales_bot/websocket/stepfun_realtime_handler.py",
+    "backend/tests/unit/test_stepfun_realtime_handler.py",
     ".gsd/KNOWLEDGE.md",
     ".gsd/milestones/M002/slices/S03/S03-PLAN.md",
-    ".gsd/milestones/M002/slices/S03/tasks/T02-SUMMARY.md",
+    ".gsd/milestones/M002/slices/S03/tasks/T03-SUMMARY.md",
     ".codex/loop/state.json",
     ".codex/loop/log.md"
   ],
   "last_verification_commands": [
-    "cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_realtime_feedback_arbiter.py tests/unit/test_capability_processor.py",
-    "cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_realtime_feedback_arbiter.py tests/unit/test_capability_processor.py -vv",
     "cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_effectiveness_sales_coaching_focus.py tests/unit/test_realtime_feedback_arbiter.py tests/unit/test_capability_processor.py tests/unit/test_stepfun_realtime_handler.py",
     "cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_effectiveness_sales_coaching_focus.py -vv",
     "cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_effectiveness_sales_coaching_focus.py -k weakest_dimension_changes_next_turn_rule -vv",
     "cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_realtime_feedback_arbiter.py -k preserve_context_without_primary_action -vv",
+    "cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_stepfun_realtime_handler.py",
     "cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_stepfun_realtime_handler.py -vv"
   ],
-  "last_verification_result": "M002/S03/T02 task-level classic verification passed fresh: the focused arbiter+capability_processor suite and its verbose rerun both exited 0, and the carried-forward coaching-focus selectors plus the new arbiter context-preservation diagnostic selector also exited 0. The broad S03 backend suite and the StepFun verbose suite now fail only on T03-owned StepFun action-card expectation drift (3 failures in tests/unit/test_stepfun_realtime_handler.py) after classic arbitration started emitting the shared rich-context coaching-focus text.",
-  "last_success_signal": "Classic sales realtime now routes primary action-card text through the shared coaching-focus rule, so stage and weakest/declining dimension changes alter the emitted issue/replacement/next_turn_rule while fuzzy_detection, stage_update, score_update, and same-turn duplicate suppression remain intact.",
+  "last_verification_result": "All S03 slice verification commands passed fresh after T03. The StepFun handler suite is green, the focused coaching-focus and arbiter diagnostic selectors remain green, and the broad backend slice matrix now shows classic plus StepFun parity on the same shared coaching-focus rule.",
+  "last_success_signal": "StepFun now preserves rich stage guidance and raw scoring deltas for arbitration while keeping the public score_update snapshot stable, so classic and StepFun emit the same sales action_card direction for equivalent stage/score inputs.",
   "last_growth_scan": null,
-  "next_action": "Proceed to M002/S03/T03 to normalize StepFun stage/score context and update StepFun parity assertions against the shared coaching-focus action-card text."
+  "next_action": "Slice S03 is complete; await the next stabilize unit selection."
 }

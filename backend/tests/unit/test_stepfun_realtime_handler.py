@@ -12,6 +12,7 @@ import pytest
 
 import sales_bot.websocket.stepfun_realtime_handler as stepfun_module
 from common.error_handling.result import Result
+from sales_bot.websocket.realtime_feedback_arbiter import RealtimeFeedbackPacingState
 from sales_bot.websocket.stepfun_realtime_handler import (
     RealtimeResponseState,
     StepFunRealtimeHandler,
@@ -1532,12 +1533,12 @@ async def test_run_realtime_feedback_keeps_single_action_card_and_prioritizes_sc
         }
     ]
     assert analysis["score_snapshot"]["overall_score"] == 83.0
-    assert analysis["ai_feedback"] == "补上案例、数据或ROI证据，让价值主张更可信。"
+    assert analysis["ai_feedback"] == "在确认痛点后，补一个同类客户案例、数据或ROI区间。"
     assert len(action_cards) == 1
     assert action_cards[0]["data"] == {
-        "issue": "当前轮次有1个关键改进点",
-        "replacement": "补上案例、数据或ROI证据，让价值主张更可信。",
-        "next_turn_rule": "下一轮先补案例或数据证据，并明确下一步动作。",
+        "issue": "痛点已经聊到，但价值主张还缺少可验证的案例或数据。",
+        "replacement": "在确认痛点后，补一个同类客户案例、数据或ROI区间。",
+        "next_turn_rule": "下一轮先确认痛点影响，再补一个案例或ROI数据。",
     }
 
 
@@ -1580,15 +1581,15 @@ async def test_run_realtime_feedback_suppresses_duplicate_action_card_for_same_t
     )
 
     expected_action_card = {
-        "issue": "当前轮次有1个关键改进点",
-        "replacement": "补上案例、数据或ROI证据，让价值主张更可信。",
-        "next_turn_rule": "下一轮先补案例或数据证据，并明确下一步动作。",
+        "issue": "痛点已经聊到，但价值主张还缺少可验证的案例或数据。",
+        "replacement": "在确认痛点后，补一个同类客户案例、数据或ROI区间。",
+        "next_turn_rule": "下一轮先确认痛点影响，再补一个案例或ROI数据。",
     }
     sent_payloads = [call.args[1] for call in handler.manager.send_json.await_args_list]
     action_cards = [payload for payload in sent_payloads if payload["type"] == "action_card"]
     score_updates = [payload for payload in sent_payloads if payload["type"] == "score_update"]
 
-    assert first_analysis["ai_feedback"] == "补上案例、数据或ROI证据，让价值主张更可信。"
+    assert first_analysis["ai_feedback"] == "在确认痛点后，补一个同类客户案例、数据或ROI区间。"
     assert second_analysis == {
         "score_snapshot": {
             "overall_score": 82.0,
@@ -1655,14 +1656,14 @@ async def test_run_realtime_feedback_emits_canonical_sales_score_and_action_card
         "stage_name": "需求挖掘",
     }
     expected_action_card = {
-        "issue": "当前轮次有1个关键改进点",
-        "replacement": "补上案例、数据或ROI证据，让价值主张更可信。",
-        "next_turn_rule": "下一轮先补案例或数据证据，并明确下一步动作。",
+        "issue": "痛点已经聊到，但价值主张还缺少可验证的案例或数据。",
+        "replacement": "在确认痛点后，补一个同类客户案例、数据或ROI区间。",
+        "next_turn_rule": "下一轮先确认痛点影响，再补一个案例或ROI数据。",
     }
 
     assert analysis == {
         "score_snapshot": expected_snapshot,
-        "ai_feedback": "补上案例、数据或ROI证据，让价值主张更可信。",
+        "ai_feedback": "在确认痛点后，补一个同类客户案例、数据或ROI区间。",
     }
     assert handler._latest_score_snapshot == expected_snapshot
     assert handler._latest_action_card == expected_action_card
@@ -1685,4 +1686,211 @@ async def test_run_realtime_feedback_emits_canonical_sales_score_and_action_card
         "suggestions": ["补上案例、数据或ROI证据，让价值主张更可信。"],
         "stage_name": "需求挖掘",
     }
+    assert action_card["data"] == expected_action_card
+
+
+@pytest.mark.asyncio
+async def test_analyze_and_emit_sales_stage_retains_latest_rich_stage_data_for_followup_feedback():
+    handler = StepFunRealtimeHandler()
+    handler.session_id = "session-stage-rich"
+    handler._ensure_sales_stage_context = AsyncMock()
+    handler._sales_stage_context = MagicMock()
+    handler._sales_stage_context.turn_count = 0
+    handler._sales_stage_context.add_message = MagicMock()
+    handler._send_stage_update = AsyncMock()
+
+    stage_data = {
+        "current_stage": "closing",
+        "stage_name": "成交推进",
+        "key_actions": ["锁定动作"],
+        "guidance": "推动明确下一步",
+        "progress": 0.8,
+        "stage_changed": True,
+    }
+    handler._sales_stage_capability.execute = AsyncMock(
+        return_value=SimpleNamespace(success=True, data=stage_data)
+    )
+
+    latest_stage = await handler._analyze_and_emit_sales_stage(
+        user_text="我们可以约下周确认试点。",
+        turn_number=3,
+    )
+
+    assert latest_stage == "closing"
+    assert getattr(handler, "_latest_stage_data", None) == stage_data
+
+
+@pytest.mark.asyncio
+async def test_run_realtime_feedback_passes_rich_stage_and_raw_score_context_to_arbiter_while_score_update_stays_stable():
+    handler = StepFunRealtimeHandler()
+    handler.session_id = "session-realtime-rich-context"
+    handler.websocket = MagicMock()
+    handler.manager = MagicMock()
+    handler.manager.send_json = AsyncMock()
+    handler._fuzzy_detection_enabled = False
+    handler._realtime_scoring_enabled = True
+    handler._latest_stage_data = {
+        "current_stage": "closing",
+        "stage_name": "成交推进",
+        "key_actions": ["锁定动作"],
+        "guidance": "推动明确下一步",
+        "progress": 0.8,
+        "stage_changed": True,
+    }
+    raw_score_payload = {
+        "overall": 78.0,
+        "overall_score": 78.0,
+        "dimension_scores": {
+            "价值表达": 61.0,
+            "客户收益连接": 63.0,
+            "证据使用": 74.0,
+            "异议处理": 72.0,
+            "推进下一步": 65.0,
+        },
+        "dimensions": [
+            {"name": "推进下一步", "score": 65.0, "delta": -6.0, "trend": "down"},
+            {"name": "证据使用", "score": 74.0, "delta": 1.0, "trend": "up"},
+        ],
+        "feedback": "继续回应客户顾虑。",
+    }
+    handler._realtime_scoring_capability = MagicMock()
+    handler._realtime_scoring_capability.on_session_start = AsyncMock()
+    handler._realtime_scoring_capability.execute = AsyncMock(
+        return_value=SimpleNamespace(data=raw_score_payload)
+    )
+    handler._feedback_arbiter = MagicMock()
+    handler._feedback_arbiter.decide.return_value = SimpleNamespace(
+        action_card=None,
+        state=RealtimeFeedbackPacingState(),
+    )
+
+    analysis = await handler._run_realtime_feedback(
+        user_text="我们可以约下周确认试点。",
+        turn_number=4,
+        sales_stage="closing",
+    )
+
+    expected_snapshot = {
+        "overall_score": 78.0,
+        "dimension_scores": {
+            "价值表达": 61.0,
+            "客户收益连接": 63.0,
+            "证据使用": 74.0,
+            "异议处理": 72.0,
+            "推进下一步": 65.0,
+        },
+        "suggestions": ["继续回应客户顾虑。"],
+        "stage_name": "促成成交",
+    }
+
+    assert analysis == {"score_snapshot": expected_snapshot}
+    assert handler._latest_score_snapshot == expected_snapshot
+
+    handler._feedback_arbiter.decide.assert_called_once()
+    arbiter_kwargs = handler._feedback_arbiter.decide.call_args.kwargs
+    assert arbiter_kwargs["stage_context"] == {
+        "current_stage": "closing",
+        "stage_name": "成交推进",
+        "key_actions": ["锁定动作"],
+        "guidance": "推动明确下一步",
+        "progress": 0.8,
+        "stage_changed": True,
+    }
+    assert arbiter_kwargs["score_context"]["dimensions"] == raw_score_payload["dimensions"]
+    assert arbiter_kwargs["score_context"]["feedback"] == "继续回应客户顾虑。"
+    assert arbiter_kwargs["score_context"]["dimension_scores"] == raw_score_payload["dimension_scores"]
+    assert arbiter_kwargs["score_context"]["stage_name"] == "促成成交"
+
+    sent_payloads = [call.args[1] for call in handler.manager.send_json.await_args_list]
+    score_update = next(payload for payload in sent_payloads if payload["type"] == "score_update")
+    assert score_update["data"] == {
+        "session_id": "session-realtime-rich-context",
+        "turn_count": 4,
+        "overall_score": 78.0,
+        "dimension_scores": {
+            "价值表达": 61.0,
+            "客户收益连接": 63.0,
+            "证据使用": 74.0,
+            "异议处理": 72.0,
+            "推进下一步": 65.0,
+        },
+        "suggestions": ["继续回应客户顾虑。"],
+        "stage_name": "促成成交",
+    }
+    assert "dimensions" not in score_update["data"]
+
+
+@pytest.mark.asyncio
+async def test_run_realtime_feedback_uses_declining_dimension_to_match_classic_action_card():
+    handler = StepFunRealtimeHandler()
+    handler.session_id = "session-realtime-declining-dimension"
+    handler.websocket = MagicMock()
+    handler.manager = MagicMock()
+    handler.manager.send_json = AsyncMock()
+    handler._fuzzy_detection_enabled = False
+    handler._realtime_scoring_enabled = True
+    handler._latest_stage_data = {
+        "current_stage": "objection",
+        "stage_name": "异议处理",
+        "key_actions": ["承接顾虑"],
+        "guidance": "围绕风险与证据回应",
+        "progress": 0.6,
+        "stage_changed": True,
+    }
+    handler._realtime_scoring_capability = MagicMock()
+    handler._realtime_scoring_capability.on_session_start = AsyncMock()
+    handler._realtime_scoring_capability.execute = AsyncMock(
+        return_value=SimpleNamespace(
+            data={
+                "overall": 76.0,
+                "overall_score": 76.0,
+                "dimension_scores": {
+                    "价值表达": 82.0,
+                    "客户收益连接": 79.0,
+                    "证据使用": 66.0,
+                    "异议处理": 72.0,
+                    "推进下一步": 78.0,
+                },
+                "dimensions": [
+                    {"name": "证据使用", "score": 66.0, "delta": 1.0, "trend": "up"},
+                    {"name": "异议处理", "score": 72.0, "delta": -9.0, "trend": "down"},
+                ],
+                "feedback": "继续回应客户顾虑。",
+            }
+        )
+    )
+
+    analysis = await handler._run_realtime_feedback(
+        user_text="客户担心实施风险和价格。",
+        turn_number=5,
+        sales_stage="objection",
+    )
+
+    expected_snapshot = {
+        "overall_score": 76.0,
+        "dimension_scores": {
+            "价值表达": 82.0,
+            "客户收益连接": 79.0,
+            "证据使用": 66.0,
+            "异议处理": 72.0,
+            "推进下一步": 78.0,
+        },
+        "suggestions": ["继续回应客户顾虑。"],
+        "stage_name": "异议处理",
+    }
+    expected_action_card = {
+        "issue": "客户顾虑出现后，承接与重构回应还不够完整。",
+        "replacement": "先复述价格、竞品或风险顾虑，再给收益与证据回应。",
+        "next_turn_rule": "下一轮先复述顾虑，再回应证据，最后给低风险推进方案。",
+    }
+
+    assert analysis == {
+        "score_snapshot": expected_snapshot,
+        "ai_feedback": "先复述价格、竞品或风险顾虑，再给收益与证据回应。",
+    }
+    assert handler._latest_score_snapshot == expected_snapshot
+    assert handler._latest_action_card == expected_action_card
+
+    sent_payloads = [call.args[1] for call in handler.manager.send_json.await_args_list]
+    action_card = next(payload for payload in sent_payloads if payload["type"] == "action_card")
     assert action_card["data"] == expected_action_card

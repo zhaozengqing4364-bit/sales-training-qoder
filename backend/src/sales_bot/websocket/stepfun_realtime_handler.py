@@ -237,6 +237,7 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
         self._sales_stage_context: AgentContext | None = None
         self._sales_stage_lock = asyncio.Lock()
         self._last_emitted_stage: str | None = None
+        self._latest_stage_data: dict[str, Any] | None = None
         self._session_agent_id: str | None = None
         self._session_persona_id: str | None = None
         self._session_user_id: str | None = None
@@ -1936,7 +1937,12 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
         stage_context_for_arbiter: dict[str, Any] | None = None
         score_context_for_arbiter: dict[str, Any] | None = None
 
-        if sales_stage:
+        latest_stage_data = self._latest_stage_data
+        if isinstance(latest_stage_data, dict) and (
+            not sales_stage or latest_stage_data.get("current_stage") == sales_stage
+        ):
+            stage_context_for_arbiter = copy.deepcopy(latest_stage_data)
+        elif sales_stage:
             stage_context_for_arbiter = {
                 "current_stage": sales_stage,
                 "stage_name": self._format_stage_name(sales_stage),
@@ -2025,7 +2031,11 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
                 }
                 self._latest_score_snapshot = score_snapshot
                 analysis_data["score_snapshot"] = score_snapshot
-                score_context_for_arbiter = dict(score_snapshot)
+                score_context_for_arbiter = copy.deepcopy(score_payload)
+                score_context_for_arbiter["overall_score"] = overall_score
+                score_context_for_arbiter["dimension_scores"] = dict(dimension_scores)
+                score_context_for_arbiter["suggestions"] = list(suggestions)
+                score_context_for_arbiter["stage_name"] = score_snapshot["stage_name"]
                 await self._send_score_update(
                     turn_number=turn_number,
                     overall_score=overall_score,
@@ -3926,6 +3936,7 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
                 if not isinstance(current_stage, str) or not current_stage:
                     return None
 
+                self._latest_stage_data = copy.deepcopy(stage_data)
                 stage_changed = bool(stage_data.get("stage_changed", False))
                 should_emit = (
                     self._last_emitted_stage is None
