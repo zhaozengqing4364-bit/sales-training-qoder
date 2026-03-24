@@ -20,6 +20,7 @@
 
 - `cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_effectiveness_sales_report_alignment.py tests/unit/test_session_evidence_service.py tests/unit/test_replay_service.py tests/unit/test_history_service_evidence_projection.py`
 - `cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_session_evidence_service.py -k 'sales_alignment or stale_snapshot or insufficient_sales_evidence' -vv`
+- `cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_effectiveness_sales_report_alignment.py -k 'insufficient_sales_evidence' -vv`
 - `cd backend && venv/bin/python -m pytest -c pyproject.toml tests/contract/test_practice_evidence_contract.py tests/integration/test_practice_evidence_flow.py tests/integration/test_sales_value_training_flow.py`
 - `cd web && npm test -- --run 'src/app/(user)/practice/[sessionId]/report/page.test.tsx' 'src/app/(user)/practice/[sessionId]/replay/page.test.tsx' 'src/app/admin/users/[id]/page.test.tsx'`
 
@@ -38,7 +39,7 @@
 
 ## Tasks
 
-- [ ] **T01: Add a shared sales report-alignment helper in `common.effectiveness`** `est:90m`
+- [x] **T01: Add a shared sales report-alignment helper in `common.effectiveness`** `est:90m`
   - Why: S03 已经有 realtime 的 authoritative coaching seam，但 report-side `main_issue` / `next_goal` 仍主要从 rollup metrics 派生；S04 需要先在 shared effectiveness layer 建立与 realtime 兼容的 read-side 对照规则。
   - Files: `backend/src/common/effectiveness/evaluator.py`, `backend/src/common/effectiveness/schemas.py`, `backend/src/common/effectiveness/__init__.py`, `backend/tests/unit/test_effectiveness_sales_report_alignment.py`
   - Do: 先加 focused failing tests，锁定 discovery/evidence、objection/handling、closing/next-step 三类 sales stage + score 组合应落到什么 `main_issue` / `next_goal`；再新增一个 shared helper，把 persisted stage/score evidence 映射为兼容现有 report contract 的结论，并在证据不足时保留当前 evaluator fallback；不要改 websocket、DB schema 或 report key 名称。

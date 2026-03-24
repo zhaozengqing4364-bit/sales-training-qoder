@@ -9,6 +9,7 @@ from .evaluator import (
     evaluate_pass_flags,
     resolve_next_goal,
     resolve_sales_coaching_focus,
+    resolve_sales_report_alignment,
 )
 
 __all__ = [
@@ -20,4 +21,5 @@ __all__ = [
     "evaluate_pass_flags",
     "resolve_next_goal",
     "resolve_sales_coaching_focus",
+    "resolve_sales_report_alignment",
 ]

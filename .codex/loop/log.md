@@ -827,3 +827,30 @@ Append one entry per iteration:
   verification results: passed; all five slice-plan commands exited 0 fresh, the shared coaching-focus and arbiter context-preservation diagnostics are green, and StepFun verbose coverage still proves rich-stage/raw-score arbitration parity without changing public score_update payload shape.
   success signal status: S03 is complete and R009 is further advanced; realtime stage, weakest/declining dimension changes, and action-card wording now converge on one backend rule across classic + StepFun.
   rollback note: if downstream slices touch coach/report alignment or degraded-state visibility, keep resolve_sales_coaching_focus plus the classic/StepFun rich-context handoff boundary intact; falling back to pass-flags-only action cards or flattening StepFun arbiter context into the public snapshot will reopen S03 drift.
+
+- time: 2026-03-24T23:03:44+08:00
+  mode: stabilize
+  item id: M002-S04-T01
+  files changed:
+    - .gsd/milestones/M002/slices/S04/S04-PLAN.md
+    - .gsd/milestones/M002/slices/S04/tasks/T01-PLAN.md
+    - .gsd/milestones/M002/slices/S04/tasks/T01-SUMMARY.md
+    - backend/src/common/effectiveness/evaluator.py
+    - backend/src/common/effectiveness/schemas.py
+    - backend/src/common/effectiveness/__init__.py
+    - backend/tests/unit/test_effectiveness_sales_report_alignment.py
+    - .gsd/DECISIONS.md
+    - .codex/loop/state.json
+    - .codex/loop/log.md
+  summary: Added a shared persisted-evidence sales report-alignment helper, covered discovery/objection/closing plus insufficient-evidence fallback with focused unit tests, and recorded the internal diagnostic seam needed for later projection logging without changing public report keys.
+  verification commands:
+    - cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_effectiveness_sales_report_alignment.py
+    - cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_effectiveness_sales_report_alignment.py -vv
+    - cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_effectiveness_sales_report_alignment.py tests/unit/test_session_evidence_service.py tests/unit/test_replay_service.py tests/unit/test_history_service_evidence_projection.py
+    - cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_session_evidence_service.py -k 'sales_alignment or stale_snapshot or insufficient_sales_evidence' -vv
+    - cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_effectiveness_sales_report_alignment.py -k 'insufficient_sales_evidence' -vv
+    - cd backend && venv/bin/python -m pytest -c pyproject.toml tests/contract/test_practice_evidence_contract.py tests/integration/test_practice_evidence_flow.py tests/integration/test_sales_value_training_flow.py
+    - cd web && npm test -- --run 'src/app/(user)/practice/[sessionId]/report/page.test.tsx' 'src/app/(user)/practice/[sessionId]/replay/page.test.tsx' 'src/app/admin/users/[id]/page.test.tsx'
+  verification results: task-level helper verification passed, the new insufficient-evidence failure-path check passed, and the backend contract/integration set already passes; slice-level verification is partial because replay unit mocks still fall into presentation review, the focused T02 session-evidence selector currently matches no tests, and the report page web suite still expects older degraded-copy text.
+  success signal status: common.effectiveness now has one stage-aware read-side sales alignment seam with explicit fallback diagnostics, giving T02 a single place to override stale completed-session conclusions.
+  rollback note: if T02+ changes this seam, keep the helper internal-diagnostic fields and shared issue/goal vocabulary map together; reverting to separate read-side heuristics would reopen coach/report drift.

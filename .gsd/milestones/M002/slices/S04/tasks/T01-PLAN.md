@@ -48,3 +48,9 @@ Create the smallest shared backend seam that lets S04 compare realtime coaching 
 - `backend/src/common/effectiveness/schemas.py` — any minimal typing needed for the helper contract.
 - `backend/src/common/effectiveness/__init__.py` — exported helper.
 - `backend/tests/unit/test_effectiveness_sales_report_alignment.py` — focused proof that persisted evidence maps to the expected `main_issue` / `next_goal` pairs.
+
+## Observability Impact
+
+- Signals changed: this task adds one pure read-side helper that deterministically maps persisted `sales_stage` + normalized `score_snapshot.dimension_scores` into the existing report `main_issue` / `next_goal` payload shape, while preserving the current insufficient-evidence fallback semantics.
+- Inspection surfaces: `backend/tests/unit/test_effectiveness_sales_report_alignment.py` becomes the focused inspection surface for exact `issue_type` / `goal_type` outputs across discovery, objection, closing, and insufficient-evidence cases; downstream projection work can call the helper directly without adding new schema keys.
+- Failure visibility: if the read-side alignment drifts from S03 coaching focus, the new focused tests fail with exact mismatched `issue_type` / `goal_type` assertions instead of surfacing later as vague report/replay inconsistency.

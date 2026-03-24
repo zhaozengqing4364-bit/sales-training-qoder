@@ -6,12 +6,14 @@ from typing import Any, Iterable
 
 from common.effectiveness.schemas import (
     ActionCard,
+    MainIssue,
     NextGoal,
     OverallResult,
     PassFlags,
     SalesCoachingDimension,
     SalesCoachingFocus,
     SalesCoachingFocusType,
+    SalesReportAlignment,
     SalesScoreContext,
     SalesStageContext,
     SalesStageKey,
@@ -89,6 +91,52 @@ SALES_COACHING_FOCUS_TEMPLATES: dict[SalesCoachingFocusType, SalesCoachingFocus]
         "issue": "对话快结束了，但下一步动作、时间点和责任人还没定下来。",
         "replacement": "明确试点、会议、报价或负责人确认中的一个动作。",
         "next_turn_rule": "下一轮先锁定动作、时间点和责任人，再结束本轮。",
+    },
+}
+
+SALES_REPORT_MAIN_ISSUES_BY_FOCUS: dict[SalesCoachingFocusType, MainIssue] = {
+    "value_translation_gap": {
+        "issue_type": "value_translation_gap",
+        "issue_text": "还在讲产品功能，未把产品价值翻译成客户收益或业务结果。",
+        "recovery_rule": "下一轮先说客户场景、收益指标和预期变化，再讲方案细节。",
+    },
+    "evidence_gap": {
+        "issue_type": "evidence_gap",
+        "issue_text": "价值主张缺少案例、数据或ROI支撑，客户很难相信收益承诺。",
+        "recovery_rule": "下一轮先给出案例、数据或benchmark，再回应价格/ROI追问。",
+    },
+    "objection_handling_gap": {
+        "issue_type": "objection_handling_gap",
+        "issue_text": "面对价格、竞品或风险顾虑时，承接和重构回应还不够到位。",
+        "recovery_rule": "下一轮先复述顾虑，再用收益、证据和试点方案回应。",
+    },
+    "next_step_gap": {
+        "issue_type": "next_step_gap",
+        "issue_text": "对话结束前没有形成明确的下一步动作、责任人或时间点。",
+        "recovery_rule": "下一轮必须落到试点、会议、报价或负责人确认中的一个动作。",
+    },
+}
+
+SALES_REPORT_NEXT_GOALS_BY_FOCUS: dict[SalesCoachingFocusType, NextGoal] = {
+    "value_translation_gap": {
+        "goal_type": "value_to_benefit_translation",
+        "goal_text": "先把产品价值翻译成客户收益，再进入方案说明。",
+        "rule": "至少说清一个客户场景、一个收益指标、一个量化变化。",
+    },
+    "evidence_gap": {
+        "goal_type": "evidence_backing",
+        "goal_text": "先用案例、数据或ROI证据支撑主张，再推进下一步。",
+        "rule": "至少补上一条证据和一个明确的下一步动作。",
+    },
+    "objection_handling_gap": {
+        "goal_type": "objection_reframe",
+        "goal_text": "下一轮先承接价格/竞品/风险顾虑，再用收益和证据回应。",
+        "rule": "先复述顾虑，再给回应，最后落到低风险推进方案。",
+    },
+    "next_step_gap": {
+        "goal_type": "next_step_commitment",
+        "goal_text": "下一轮必须把试点、会议、报价或责任人确认成明确下一步。",
+        "rule": "每轮结尾至少确认一个动作、一个时间点和一个责任人。",
     },
 }
 
@@ -288,6 +336,164 @@ def _select_sales_focus_type(
     return None
 
 
+def _sales_report_payloads_for_focus(
+    focus_type: SalesCoachingFocusType,
+) -> tuple[MainIssue, NextGoal]:
+    return (
+        dict(SALES_REPORT_MAIN_ISSUES_BY_FOCUS[focus_type]),
+        dict(SALES_REPORT_NEXT_GOALS_BY_FOCUS[focus_type]),
+    )
+
+
+
+def _coerce_main_issue(value: Any) -> MainIssue | None:
+    if not isinstance(value, dict):
+        return None
+    issue_type = value.get("issue_type")
+    issue_text = value.get("issue_text")
+    recovery_rule = value.get("recovery_rule")
+    if not all(isinstance(item, str) and item.strip() for item in (issue_type, issue_text, recovery_rule)):
+        return None
+    return {
+        "issue_type": issue_type.strip(),
+        "issue_text": issue_text.strip(),
+        "recovery_rule": recovery_rule.strip(),
+    }
+
+
+
+def _coerce_next_goal(value: Any) -> NextGoal | None:
+    if not isinstance(value, dict):
+        return None
+    goal_type = value.get("goal_type")
+    goal_text = value.get("goal_text")
+    rule = value.get("rule")
+    if not all(isinstance(item, str) and item.strip() for item in (goal_type, goal_text, rule)):
+        return None
+    return {
+        "goal_type": goal_type.strip(),
+        "goal_text": goal_text.strip(),
+        "rule": rule.strip(),
+    }
+
+
+
+def _has_alignment_dimension_scores(score_snapshot: dict[str, Any] | None) -> bool:
+    if not isinstance(score_snapshot, dict):
+        return False
+    raw_dimension_scores = score_snapshot.get("dimension_scores")
+    if not isinstance(raw_dimension_scores, dict) or not raw_dimension_scores:
+        return False
+
+    resolved_dimensions = {
+        canonical_name
+        for key, value in raw_dimension_scores.items()
+        if isinstance(value, (int, float))
+        for canonical_name in [_canonical_sales_dimension_name(key)]
+        if canonical_name is not None
+    }
+    return len(resolved_dimensions) == len(SALES_DIMENSION_ALIASES)
+
+
+
+def _resolve_sales_report_alignment_fallback(
+    fallback_snapshot: dict[str, Any] | None,
+) -> tuple[MainIssue, NextGoal]:
+    if isinstance(fallback_snapshot, dict):
+        metrics = fallback_snapshot.get("metrics")
+        main_capability_passed = fallback_snapshot.get("main_capability_passed")
+        not_evaluable_reason = fallback_snapshot.get("not_evaluable_reason")
+        if isinstance(metrics, dict) and isinstance(main_capability_passed, bool):
+            refreshed_snapshot = evaluate_effectiveness_snapshot(
+                metrics=metrics,
+                main_capability_passed=main_capability_passed,
+                evaluable=bool(fallback_snapshot.get("evaluable", True)),
+                not_evaluable_reason=(
+                    str(not_evaluable_reason)
+                    if not_evaluable_reason is not None
+                    else None
+                ),
+            )
+            refreshed_issue = _coerce_main_issue(refreshed_snapshot.get("main_issue"))
+            refreshed_goal = _coerce_next_goal(refreshed_snapshot.get("next_goal"))
+            if refreshed_issue is not None and refreshed_goal is not None:
+                return refreshed_issue, refreshed_goal
+
+        existing_issue = _coerce_main_issue(fallback_snapshot.get("main_issue"))
+        existing_goal = _coerce_next_goal(fallback_snapshot.get("next_goal"))
+        if existing_issue is not None and existing_goal is not None:
+            return existing_issue, existing_goal
+
+    generic_snapshot = evaluate_effectiveness_snapshot(
+        metrics={
+            "value_articulation_rollup": 0.0,
+            "evidence_benefit_rollup": 0.0,
+            "objection_progress_rollup": 0.0,
+        },
+        main_capability_passed=False,
+        evaluable=False,
+        not_evaluable_reason="INSUFFICIENT_SALES_ALIGNMENT_EVIDENCE",
+    )
+    generic_issue = _coerce_main_issue(generic_snapshot.get("main_issue"))
+    generic_goal = _coerce_next_goal(generic_snapshot.get("next_goal"))
+    if generic_issue is None or generic_goal is None:
+        raise ValueError("sales alignment fallback should always produce report-compatible payloads")
+    return generic_issue, generic_goal
+
+
+
+def resolve_sales_report_alignment(
+    *,
+    sales_stage: str | None,
+    score_snapshot: dict[str, Any] | None,
+    fallback_snapshot: dict[str, Any] | None = None,
+) -> SalesReportAlignment:
+    stage_context = (
+        {
+            "current_stage": sales_stage,
+            "stage_name": sales_stage,
+        }
+        if isinstance(sales_stage, str) and sales_stage.strip()
+        else None
+    )
+    score_context = score_snapshot if isinstance(score_snapshot, dict) else None
+    stage_key = _normalize_sales_stage_key(stage_context, score_context)
+
+    fallback_reason: str | None = None
+    focus_type: SalesCoachingFocusType | None = None
+    alignment_used = False
+
+    if stage_key is None:
+        fallback_reason = "missing_sales_stage"
+    elif not _has_alignment_dimension_scores(score_context):
+        fallback_reason = "missing_dimension_scores"
+    else:
+        focus_type = _select_sales_focus_type(
+            stage_context=stage_context,
+            score_context=score_context,
+            pass_flags=None,
+        )
+        if focus_type is None:
+            fallback_reason = "missing_focus_type"
+        else:
+            alignment_used = True
+
+    if alignment_used and focus_type is not None:
+        main_issue, next_goal = _sales_report_payloads_for_focus(focus_type)
+    else:
+        main_issue, next_goal = _resolve_sales_report_alignment_fallback(fallback_snapshot)
+
+    return {
+        "alignment_used": alignment_used,
+        "stage_key": stage_key,
+        "focus_type": focus_type,
+        "fallback_reason": fallback_reason,
+        "main_issue": main_issue,
+        "next_goal": next_goal,
+    }
+
+
+
 def build_sales_rollup_scores(
     *,
     overall_score: float,
@@ -435,71 +641,27 @@ def evaluate_pass_flags(metrics: dict[str, Any]) -> PassFlags:
     }
 
 
-def _sales_main_issue(metrics: dict[str, Any]) -> dict[str, str]:
+def _sales_main_issue(metrics: dict[str, Any]) -> MainIssue:
     sales_scores = _resolve_sales_scores(metrics)
-    candidates = [
+    candidates: list[tuple[float, SalesCoachingFocusType]] = [
         (
             min(sales_scores["价值表达"], sales_scores["客户收益连接"]),
-            {
-                "issue_type": "value_translation_gap",
-                "issue_text": "还在讲产品功能，未把产品价值翻译成客户收益或业务结果。",
-                "recovery_rule": "下一轮先说客户场景、收益指标和预期变化，再讲方案细节。",
-            },
+            "value_translation_gap",
         ),
-        (
-            sales_scores["证据使用"],
-            {
-                "issue_type": "evidence_gap",
-                "issue_text": "价值主张缺少案例、数据或ROI支撑，客户很难相信收益承诺。",
-                "recovery_rule": "下一轮先给出案例、数据或benchmark，再回应价格/ROI追问。",
-            },
-        ),
-        (
-            sales_scores["异议处理"],
-            {
-                "issue_type": "objection_handling_gap",
-                "issue_text": "面对价格、竞品或风险顾虑时，承接和重构回应还不够到位。",
-                "recovery_rule": "下一轮先复述顾虑，再用收益、证据和试点方案回应。",
-            },
-        ),
-        (
-            sales_scores["推进下一步"],
-            {
-                "issue_type": "next_step_gap",
-                "issue_text": "对话结束前没有形成明确的下一步动作、责任人或时间点。",
-                "recovery_rule": "下一轮必须落到试点、会议、报价或负责人确认中的一个动作。",
-            },
-        ),
+        (sales_scores["证据使用"], "evidence_gap"),
+        (sales_scores["异议处理"], "objection_handling_gap"),
+        (sales_scores["推进下一步"], "next_step_gap"),
     ]
-    _, issue = min(candidates, key=lambda item: item[0])
-    return issue
+    _, focus_type = min(candidates, key=lambda item: item[0])
+    main_issue, _ = _sales_report_payloads_for_focus(focus_type)
+    return main_issue
+
 
 
 def _sales_next_goal(metrics: dict[str, Any]) -> NextGoal:
     issue_type = _sales_main_issue(metrics)["issue_type"]
-    if issue_type == "value_translation_gap":
-        return {
-            "goal_type": "value_to_benefit_translation",
-            "goal_text": "先把产品价值翻译成客户收益，再进入方案说明。",
-            "rule": "至少说清一个客户场景、一个收益指标、一个量化变化。",
-        }
-    if issue_type == "evidence_gap":
-        return {
-            "goal_type": "evidence_backing",
-            "goal_text": "先用案例、数据或ROI证据支撑主张，再推进下一步。",
-            "rule": "至少补上一条证据和一个明确的下一步动作。",
-        }
-    if issue_type == "objection_handling_gap":
-        return {
-            "goal_type": "objection_reframe",
-            "goal_text": "下一轮先承接价格/竞品/风险顾虑，再用收益和证据回应。",
-            "rule": "先复述顾虑，再给回应，最后落到低风险推进方案。",
-        }
-    return {
-        "goal_type": "next_step_commitment",
-        "goal_text": "下一轮必须把试点、会议、报价或责任人确认成明确下一步。",
-        "rule": "每轮结尾至少确认一个动作、一个时间点和一个责任人。",
-    }
+    _, next_goal = _sales_report_payloads_for_focus(issue_type)  # type: ignore[arg-type]
+    return next_goal
 
 
 def resolve_sales_coaching_focus(

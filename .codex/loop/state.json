@@ -1,7 +1,7 @@
 {
   "mode": "stabilize",
-  "current_issue_id": "M002-S03",
-  "current_issue_type": "slice",
+  "current_issue_id": "M002-S04-T01",
+  "current_issue_type": "task",
   "current_issue_status": "done",
   "pending_issue_ids": [],
   "completed_issue_ids": [
@@ -42,28 +42,34 @@
     "M002-S03-T01",
     "M002-S03-T02",
     "M002-S03-T03",
-    "M002-S03"
+    "M002-S03",
+    "M002-S04-T01"
   ],
   "blocked_issue_ids": [],
   "deferred_issue_ids": [],
   "last_modified_files": [
-    ".gsd/milestones/M002/slices/S03/S03-SUMMARY.md",
-    ".gsd/milestones/M002/slices/S03/S03-UAT.md",
-    ".gsd/milestones/M002/M002-ROADMAP.md",
-    ".gsd/REQUIREMENTS.md",
-    ".gsd/PROJECT.md",
+    ".gsd/milestones/M002/slices/S04/S04-PLAN.md",
+    ".gsd/milestones/M002/slices/S04/tasks/T01-PLAN.md",
+    ".gsd/milestones/M002/slices/S04/tasks/T01-SUMMARY.md",
+    "backend/src/common/effectiveness/evaluator.py",
+    "backend/src/common/effectiveness/schemas.py",
+    "backend/src/common/effectiveness/__init__.py",
+    "backend/tests/unit/test_effectiveness_sales_report_alignment.py",
+    ".gsd/DECISIONS.md",
     ".codex/loop/state.json",
     ".codex/loop/log.md"
   ],
   "last_verification_commands": [
-    "cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_effectiveness_sales_coaching_focus.py tests/unit/test_realtime_feedback_arbiter.py tests/unit/test_capability_processor.py tests/unit/test_stepfun_realtime_handler.py",
-    "cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_effectiveness_sales_coaching_focus.py -vv",
-    "cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_effectiveness_sales_coaching_focus.py -k weakest_dimension_changes_next_turn_rule -vv",
-    "cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_realtime_feedback_arbiter.py -k preserve_context_without_primary_action -vv",
-    "cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_stepfun_realtime_handler.py -vv"
+    "cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_effectiveness_sales_report_alignment.py",
+    "cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_effectiveness_sales_report_alignment.py -vv",
+    "cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_effectiveness_sales_report_alignment.py tests/unit/test_session_evidence_service.py tests/unit/test_replay_service.py tests/unit/test_history_service_evidence_projection.py",
+    "cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_session_evidence_service.py -k 'sales_alignment or stale_snapshot or insufficient_sales_evidence' -vv",
+    "cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_effectiveness_sales_report_alignment.py -k 'insufficient_sales_evidence' -vv",
+    "cd backend && venv/bin/python -m pytest -c pyproject.toml tests/contract/test_practice_evidence_contract.py tests/integration/test_practice_evidence_flow.py tests/integration/test_sales_value_training_flow.py",
+    "cd web && npm test -- --run 'src/app/(user)/practice/[sessionId]/report/page.test.tsx' 'src/app/(user)/practice/[sessionId]/replay/page.test.tsx' 'src/app/admin/users/[id]/page.test.tsx'"
   ],
-  "last_verification_result": "All S03 slice verification commands passed fresh during close-out. The shared coaching-focus suite, the focused arbiter context-preservation selector, and the StepFun verbose parity suite are all green, confirming that classic and StepFun now choose the same stage-aware next-turn action-card direction while public score snapshots stay stable.",
-  "last_success_signal": "M002/S03 is closed: realtime stage, score, and action-card guidance now converge through one shared backend coaching-focus rule across classic + StepFun without changing the public practice-page contract.",
+  "last_verification_result": "T01 task verification passed fresh on the new sales report-alignment suite, the new insufficient-evidence failure-path selector passed, and the backend contract/integration set already passes. Slice-level verification remains partial: the broad replay unit pack still fails on carried-forward presentation-review test fixtures, the focused T02 session-evidence selector currently matches no tests (exit 5), and the web report/replay/admin command still fails on a pre-existing report degraded-copy expectation outside T01 scope.",
+  "last_success_signal": "A shared stage-aware `resolve_sales_report_alignment(...)` seam now converts persisted sales stage + full dimension evidence into report-shaped `main_issue` / `next_goal` payloads while exposing internal fallback diagnostics and preserving existing public contracts.",
   "last_growth_scan": null,
-  "next_action": "Slice S03 is complete; await the next stabilize unit selection."
+  "next_action": "Continue M002-S04 with T02: apply the new alignment helper inside SessionEvidenceService and projection diagnostics."
 }

@@ -27,10 +27,25 @@ class PassFlags(TypedDict):
     pass_4step_structure: bool
 
 
+class MainIssue(TypedDict):
+    issue_type: str
+    issue_text: str
+    recovery_rule: str
+
+
 class NextGoal(TypedDict):
     goal_type: str
     goal_text: str
     rule: str
+
+
+class SalesReportAlignment(TypedDict):
+    alignment_used: bool
+    stage_key: SalesStageKey | None
+    focus_type: SalesCoachingFocusType | None
+    fallback_reason: str | None
+    main_issue: MainIssue
+    next_goal: NextGoal
 
 
 class ActionCard(TypedDict):
