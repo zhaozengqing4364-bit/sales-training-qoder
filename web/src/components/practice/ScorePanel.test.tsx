@@ -34,6 +34,33 @@ describe("ScorePanel", () => {
         expect(panelText.indexOf("推进下一步")).toBeLessThan(panelText.indexOf("新增维度"));
     });
 
+    it("keeps sales and fallback dimensions visible when duplicate suggestions are suppressed", () => {
+        render(
+            <ScorePanel
+                suppressSuggestions
+                scores={{
+                    overall_score: 84,
+                    turn_count: 5,
+                    suggestions: ["先用案例佐证 ROI，再处理价格追问"],
+                    dimension_scores: {
+                        推进下一步: 79,
+                        新增维度: 63,
+                        证据使用: 76,
+                        价值表达: 88,
+                    },
+                }}
+            />,
+        );
+
+        expect(screen.getByText("销售维度得分")).toBeTruthy();
+        expect(screen.getByText("价值表达")).toBeTruthy();
+        expect(screen.getByText("证据使用")).toBeTruthy();
+        expect(screen.getByText("推进下一步")).toBeTruthy();
+        expect(screen.getByText("新增维度")).toBeTruthy();
+        expect(screen.queryByText("改进建议")).toBeNull();
+        expect(screen.queryByText("先用案例佐证 ROI，再处理价格追问")).toBeNull();
+    });
+
     it("keeps unknown dimensions visible instead of dropping them", () => {
         render(
             <ScorePanel

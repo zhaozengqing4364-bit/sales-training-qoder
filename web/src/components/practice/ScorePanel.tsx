@@ -19,6 +19,7 @@ import type { ScoreUpdate } from "@/hooks/use-practice-websocket";
 interface ScorePanelProps {
     scores: ScoreUpdate | null;
     className?: string;
+    suppressSuggestions?: boolean;
 }
 
 type DimensionConfig = {
@@ -150,7 +151,7 @@ function SuggestionCard({ suggestion, index }: { suggestion: string; index: numb
     );
 }
 
-export function ScorePanel({ scores, className = "" }: ScorePanelProps) {
+export function ScorePanel({ scores, className = "", suppressSuggestions = false }: ScorePanelProps) {
     const dimensions = scores?.dimension_scores
         ? Object.entries(scores.dimension_scores)
             .map(([name, score], index) => ({
@@ -170,6 +171,7 @@ export function ScorePanel({ scores, className = "" }: ScorePanelProps) {
 
     const overallScore = scores?.overall_score ?? 0;
     const suggestions = scores?.suggestions ?? [];
+    const visibleSuggestions = suppressSuggestions ? [] : suggestions;
     const stageName = scores?.stage_name ?? "";
 
     if (!scores) {
@@ -238,7 +240,7 @@ export function ScorePanel({ scores, className = "" }: ScorePanelProps) {
             </div>
 
             {/* Suggestions */}
-            {suggestions.length > 0 && (
+            {visibleSuggestions.length > 0 && (
                 <div className="p-4 bg-gray-50">
                     <h4 className="text-sm font-medium text-gray-700 mb-3 flex items-center gap-2">
                         <Lightbulb className="w-4 h-4 text-amber-500" />
@@ -246,7 +248,7 @@ export function ScorePanel({ scores, className = "" }: ScorePanelProps) {
                     </h4>
                     <div className="space-y-2">
                         <AnimatePresence>
-                            {suggestions.map((suggestion, index) => (
+                            {visibleSuggestions.map((suggestion, index) => (
                                 <SuggestionCard
                                     key={`${index}-${suggestion.slice(0, 20)}`}
                                     suggestion={suggestion}

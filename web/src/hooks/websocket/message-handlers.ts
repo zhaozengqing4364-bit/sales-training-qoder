@@ -263,26 +263,37 @@ export function handleWebSocketMessage(
                 
                 if (data.is_final) {
                     clearInterimTranscriptThrottle();
-                    // 最终结果：添加消息（如果有文本）并清空中间结果
-                    if (data.text.trim()) {
-                        const newMsg: ChatMessage = {
-                            id: `user-${Date.now()}`,
-                            sender: "user",
-                            message: data.text,
-                            timestamp: new Date().toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" }),
+                    setState(prev => {
+                        const shouldClearTurnHints = prev.actionCard !== null || prev.fuzzyDetections.length > 0;
+                        const trimmedText = data.text.trim();
+
+                        if (trimmedText) {
+                            const newMsg: ChatMessage = {
+                                id: `user-${Date.now()}`,
+                                sender: "user",
+                                message: trimmedText,
+                                timestamp: new Date().toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" }),
+                            };
+                            return {
+                                ...prev,
+                                messages: appendMessageCapped(prev.messages, newMsg),
+                                interimTranscript: "",
+                                actionCard: null,
+                                fuzzyDetections: shouldClearTurnHints ? [] : prev.fuzzyDetections,
+                            };
+                        }
+
+                        if (!shouldClearTurnHints && !prev.interimTranscript) {
+                            return prev;
+                        }
+
+                        return {
+                            ...prev,
+                            interimTranscript: "",
+                            actionCard: null,
+                            fuzzyDetections: shouldClearTurnHints ? [] : prev.fuzzyDetections,
                         };
-                        setState(prev => ({
-                            ...prev,
-                            messages: appendMessageCapped(prev.messages, newMsg),
-                            interimTranscript: "",
-                        }));
-                    } else {
-                        // 即使最终文本为空，也要清空中间结果
-                        setState(prev => ({
-                            ...prev,
-                            interimTranscript: "",
-                        }));
-                    }
+                    });
                 } else if (data.text) {
                     // 中间结果：节流更新，降低高频渲染压力
                     scheduleInterimTranscriptUpdate(data.text);

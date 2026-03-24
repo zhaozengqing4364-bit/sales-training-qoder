@@ -1,6 +1,6 @@
 {
   "mode": "stabilize",
-  "current_issue_id": "M002-S02-T02",
+  "current_issue_id": "M002-S02-T03",
   "current_issue_type": "task",
   "current_issue_status": "done",
   "pending_issue_ids": [],
@@ -36,31 +36,33 @@
     "M002-S01-T02",
     "M002-S01",
     "M002-S02-T01",
-    "M002-S02-T02"
+    "M002-S02-T02",
+    "M002-S02-T03"
   ],
   "blocked_issue_ids": [],
   "deferred_issue_ids": [],
   "last_modified_files": [
     ".gsd/milestones/M002/slices/S02/S02-PLAN.md",
-    ".gsd/milestones/M002/slices/S02/tasks/T02-SUMMARY.md",
-    ".gsd/DECISIONS.md",
-    ".gsd/KNOWLEDGE.md",
-    "backend/src/sales_bot/websocket/stepfun_realtime_handler.py",
-    "backend/tests/unit/test_stepfun_realtime_handler.py",
-    "backend/tests/unit/test_stepfun_realtime_persistence.py",
+    ".gsd/milestones/M002/slices/S02/tasks/T03-SUMMARY.md",
+    "web/src/hooks/websocket/message-handlers.ts",
+    "web/src/hooks/websocket/message-handlers.test.ts",
+    "web/src/hooks/use-practice-websocket.test.ts",
+    "web/src/components/practice/RightPanelContent.tsx",
+    "web/src/components/practice/RightPanelContent.test.tsx",
+    "web/src/components/practice/ScorePanel.tsx",
+    "web/src/components/practice/ScorePanel.test.tsx",
     ".codex/loop/state.json",
     ".codex/loop/log.md"
   ],
   "last_verification_commands": [
-    "cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_realtime_feedback_arbiter.py tests/unit/test_stepfun_realtime_handler.py tests/unit/test_stepfun_realtime_persistence.py",
+    "cd web && npm test -- --run 'src/hooks/websocket/message-handlers.test.ts' 'src/hooks/use-practice-websocket.test.ts' 'src/components/practice/ScorePanel.test.tsx' 'src/components/practice/RightPanelContent.test.tsx'",
     "cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_realtime_feedback_arbiter.py tests/unit/test_capability_processor.py tests/unit/test_stepfun_realtime_handler.py tests/unit/test_stepfun_realtime_persistence.py",
     "cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_realtime_feedback_arbiter.py -k 'suppress or preserve_context' -vv",
     "cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_stepfun_realtime_handler.py tests/unit/test_stepfun_realtime_persistence.py -k 'suppress or replay' -vv",
-    "cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_fuzzy_detection.py -k cooldown",
-    "cd web && npm test -- --run 'src/hooks/websocket/message-handlers.test.ts' 'src/hooks/use-practice-websocket.test.ts' 'src/components/practice/ScorePanel.test.tsx' 'src/components/practice/RightPanelContent.test.tsx'"
+    "browser smoke: localhost dev-login -> create sales session -> /practice/{sessionId} assert shell + score placeholder"
   ],
-  "last_verification_result": "T02 task verification passed fresh: the StepFun arbiter/persistence backend command is green, the broader slice backend command is green, the arbiter + StepFun diagnostic filters are green, the fuzzy cooldown regression is green, and the existing web slice command still exits 0. Note: Vitest only matched three existing web files; RightPanelContent.test.tsx remains absent for T03.",
-  "last_success_signal": "StepFun realtime coaching now shares the classic arbiter, emits at most one primary action card per turn, and restores minimal pacing state so reconnects do not replay stale action cards.",
+  "last_verification_result": "T03 task verification passed fresh: the focused web gate is green, the broader S02 backend suite is green, the arbiter and StepFun diagnostic filters are green, and a live localhost practice-page smoke path loaded successfully in the browser. The remaining fuzzy cooldown slice command was not rerun in this unit after the context-budget warning; last known result was green from T02.",
+  "last_success_signal": "Final transcripts now clear stale turn-bound hints on the practice page, and an active action card suppresses competing fuzzy/score suggestion text while keeping stage and scoring context visible.",
   "last_growth_scan": null,
-  "next_action": "Proceed to M002-S02-T03 while carrying forward the Vitest missing-file caveat for RightPanelContent.test.tsx."
+  "next_action": "Proceed to M002-S02 slice closeout, and rerun the remaining fuzzy cooldown slice command if a fully fresh all-checks gate is required."
 }

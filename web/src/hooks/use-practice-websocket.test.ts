@@ -440,4 +440,106 @@ describe("usePracticeWebSocket reconnect lifecycle", () => {
         expect(typeof traceId).toBe("string");
         expect(traceId).toMatch(/^[a-f0-9]{32}$/);
     });
+
+    it("clears stale turn hints on final transcripts through the websocket wrapper while keeping stage and score context", async () => {
+        const actualHandlers = await vi.importActual<typeof import("./websocket/message-handlers")>(
+            "./websocket/message-handlers",
+        );
+        vi.mocked(handleWebSocketMessage).mockImplementation((event, deps) =>
+            actualHandlers.handleWebSocketMessage(event, deps),
+        );
+
+        const { result } = renderHook(() =>
+            usePracticeWebSocket({
+                sessionId: "session-turn-reset",
+                scenarioType: "sales",
+            }),
+        );
+
+        const ws = MockWebSocket.instances.at(-1);
+        expect(ws).toBeDefined();
+
+        act(() => {
+            if (!ws) return;
+            ws.readyState = MockWebSocket.OPEN;
+            ws.onopen?.(new Event("open"));
+            emitJsonMessage(ws, {
+                type: "stage_update",
+                timestamp: new Date().toISOString(),
+                data: {
+                    current_stage: "objection",
+                    stage_name: "异议处理",
+                    key_actions: ["先回应风险", "再补证据"],
+                    guidance: "保持问题澄清后再推进下一步",
+                    progress: 0.72,
+                },
+            });
+            emitJsonMessage(ws, {
+                type: "score_update",
+                timestamp: new Date().toISOString(),
+                data: {
+                    overall_score: 83,
+                    turn_count: 4,
+                    stage_name: "异议处理",
+                    suggestions: ["先补一个 ROI 证据，再回应价格异议"],
+                    dimension_scores: {
+                        价值表达: 80,
+                        客户收益连接: 84,
+                        证据使用: 79,
+                        异议处理: 85,
+                        推进下一步: 78,
+                    },
+                },
+            });
+            emitJsonMessage(ws, {
+                type: "action_card",
+                timestamp: new Date().toISOString(),
+                data: {
+                    issue: "直接跳到报价",
+                    replacement: "我先确认预算审批链路，再给你报价区间。",
+                    next_turn_rule: "下一轮先确认预算与决策人。",
+                },
+            });
+            emitJsonMessage(ws, {
+                type: "fuzzy_detection",
+                timestamp: new Date().toISOString(),
+                data: {
+                    detections: [
+                        {
+                            category: "feedback",
+                            matched: [],
+                            suggestion: "先别急着报价。",
+                            severity: "medium",
+                        },
+                    ],
+                },
+            });
+        });
+
+        expect(result.current.actionCard?.issue).toBe("直接跳到报价");
+        expect(result.current.fuzzyDetections).toHaveLength(1);
+        expect(result.current.salesStage?.stage_name).toBe("异议处理");
+        expect(result.current.scores?.overall_score).toBe(83);
+
+        act(() => {
+            if (!ws) return;
+            emitJsonMessage(ws, {
+                type: "transcript",
+                timestamp: new Date().toISOString(),
+                data: {
+                    text: "客户现在担心上线风险和预算审批。",
+                    is_final: true,
+                },
+            });
+        });
+
+        expect(result.current.actionCard).toBeNull();
+        expect(result.current.fuzzyDetections).toEqual([]);
+        expect(result.current.salesStage?.stage_name).toBe("异议处理");
+        expect(result.current.scores?.overall_score).toBe(83);
+        expect(result.current.messages.at(-1)).toMatchObject({
+            sender: "user",
+            message: "客户现在担心上线风险和预算审批。",
+        });
+    });
 });

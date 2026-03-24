@@ -684,3 +684,29 @@ Append one entry per iteration:
   verification results: passed; all backend T02/slice commands are green and the existing web slice command still exits 0, but Vitest only matched the three existing files because RightPanelContent.test.tsx is still missing and remains T03 work.
   success signal status: StepFun now stays on the same single-action pacing line as classic mode and reconnect restore no longer replays stale action cards for the same turn.
   rollback note: if later slices revisit reconnect persistence, keep StepFun snapshot state limited to feedback_pacing_state plus read-side score/action diagnostics unless a broader, fully re-verified recovery contract replaces it.
+
+- time: 2026-03-24T20:31:00+08:00
+  mode: stabilize
+  item id: M002-S02-T03
+  files changed:
+    - .gsd/milestones/M002/slices/S02/S02-PLAN.md
+    - .gsd/milestones/M002/slices/S02/tasks/T03-SUMMARY.md
+    - web/src/hooks/websocket/message-handlers.ts
+    - web/src/hooks/websocket/message-handlers.test.ts
+    - web/src/hooks/use-practice-websocket.test.ts
+    - web/src/components/practice/RightPanelContent.tsx
+    - web/src/components/practice/RightPanelContent.test.tsx
+    - web/src/components/practice/ScorePanel.tsx
+    - web/src/components/practice/ScorePanel.test.tsx
+    - .codex/loop/state.json
+    - .codex/loop/log.md
+  summary: Cleared stale turn-bound hints on final transcripts, made action_card the only primary text coach surface in the sales practice panel, and suppressed duplicate score suggestions without hiding stage or dimension context.
+  verification commands:
+    - cd web && npm test -- --run 'src/hooks/websocket/message-handlers.test.ts' 'src/hooks/use-practice-websocket.test.ts' 'src/components/practice/ScorePanel.test.tsx' 'src/components/practice/RightPanelContent.test.tsx'
+    - cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_realtime_feedback_arbiter.py tests/unit/test_capability_processor.py tests/unit/test_stepfun_realtime_handler.py tests/unit/test_stepfun_realtime_persistence.py
+    - cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_realtime_feedback_arbiter.py -k 'suppress or preserve_context' -vv
+    - cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_stepfun_realtime_handler.py tests/unit/test_stepfun_realtime_persistence.py -k 'suppress or replay' -vv
+    - browser smoke: localhost dev-login -> create sales session -> /practice/adf0d98f-99dd-4127-8904-2ff8cbe8862e assert shell + score placeholder
+  verification results: passed for the focused web gate, the broad S02 backend suite, the arbiter diagnostic filter, the StepFun replay diagnostic filter, and the live localhost practice-page smoke path. The remaining fuzzy cooldown slice command was not rerun in this unit after the context-budget warning; last known result was green from T02.
+  success signal status: the practice page now clears stale hint state when a new user turn closes and no longer renders competing fuzzy/score suggestion text beside an active action card.
+  rollback note: if slice closeout needs a fully fresh all-checks gate, rerun the fuzzy cooldown command before marking S02 complete; otherwise keep the new ScorePanel suppression prop local to RightPanelContent rather than mutating score payloads upstream.

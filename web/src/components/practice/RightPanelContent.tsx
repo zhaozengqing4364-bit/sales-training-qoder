@@ -46,6 +46,9 @@ export const RightPanelContent = React.memo(function RightPanelContent({
     salesStage,
     sendMessage,
 }: RightPanelContentProps) {
+    const suppressCompetingCoaching = Boolean(actionCard);
+    const visibleFuzzyDetections = suppressCompetingCoaching ? [] : fuzzyDetections;
+
     if (scenarioType === "presentation") {
         return (
             <div className="space-y-4">
@@ -113,14 +116,14 @@ export const RightPanelContent = React.memo(function RightPanelContent({
                 </div>
             )}
 
-            {fuzzyDetections.length > 0 && (
+            {visibleFuzzyDetections.length > 0 && (
                 <div className="bg-white/50 backdrop-blur-sm rounded-2xl p-4 border border-white/60 shadow-[0_8px_30px_rgb(0,0,0,0.04)]">
                     <h3 className="text-sm font-semibold text-slate-700 mb-3 flex items-center gap-2">
                         <span className="w-2 h-2 rounded-full bg-amber-500" />
                         实时提示
                     </h3>
                     <div className="space-y-3">
-                        {fuzzyDetections.map((detection, idx) => (
+                        {visibleFuzzyDetections.map((detection, idx) => (
                             <div
                                 key={idx}
                                 className={cn(
@@ -193,7 +196,7 @@ export const RightPanelContent = React.memo(function RightPanelContent({
                 </div>
             )}
 
-            <ScorePanel scores={scores} />
+            <ScorePanel scores={scores} suppressSuggestions={suppressCompetingCoaching} />
         </div>
     );
 });

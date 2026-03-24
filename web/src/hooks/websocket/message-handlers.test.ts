@@ -54,6 +54,127 @@ function createDeps(initialState: PracticeState) {
 }
 
 describe("handleWebSocketMessage connection/status behavior", () => {
+    it.each(["transcript", "asr_transcript"] as const)(
+        "clears stale turn-bound hints on final %s events while preserving score and stage context",
+        (messageType) => {
+            const initialScores = {
+                overall_score: 83,
+                turn_count: 4,
+                stage_name: "异议处理",
+                suggestions: ["先补一个 ROI 证据，再回应价格异议"],
+                dimension_scores: {
+                    价值表达: 80,
+                    客户收益连接: 84,
+                    证据使用: 79,
+                    异议处理: 85,
+                    推进下一步: 78,
+                },
+            };
+            const initialStage = {
+                current_stage: "objection",
+                stage_name: "异议处理",
+                key_actions: ["先回应风险", "再补证据"],
+                guidance: "保持问题澄清后再推进下一步",
+                progress: 0.72,
+            };
+            const { deps, getState } = createDeps({
+                ...INITIAL_PRACTICE_STATE,
+                interimTranscript: "上一轮中间识别",
+                scores: initialScores,
+                salesStage: initialStage,
+                actionCard: {
+                    issue: "直接跳到报价",
+                    replacement: "我先确认预算审批链路，再给你报价区间。",
+                    next_turn_rule: "下一轮先确认预算与决策人。",
+                },
+                fuzzyDetections: [
+                    {
+                        category: "feedback",
+                        matched: [],
+                        suggestion: "先别急着报价。",
+                        severity: "medium",
+                    },
+                ],
+            });
+            const previousScores = getState().scores;
+            const previousStage = getState().salesStage;
+
+            handleWebSocketMessage(
+                createMessageEvent({
+                    type: messageType,
+                    timestamp: new Date().toISOString(),
+                    data: {
+                        text: "客户现在担心上线风险和预算审批。",
+                        is_final: true,
+                    },
+                }),
+                deps as never,
+            );
+
+            expect(getState().messages.at(-1)).toMatchObject({
+                sender: "user",
+                message: "客户现在担心上线风险和预算审批。",
+            });
+            expect(getState().actionCard).toBeNull();
+            expect(getState().fuzzyDetections).toEqual([]);
+            expect(getState().scores).toBe(previousScores);
+            expect(getState().salesStage).toBe(previousStage);
+            expect(getState().interimTranscript).toBe("");
+        },
+    );
+
+    it("clears stale turn-bound hints even when the final transcript text is empty", () => {
+        const { deps, getState } = createDeps({
+            ...INITIAL_PRACTICE_STATE,
+            scores: {
+                overall_score: 72,
+                turn_count: 2,
+                suggestions: ["继续确认客户当前流程"],
+                dimension_scores: {
+                    价值表达: 72,
+                },
+            },
+            salesStage: {
+                current_stage: "discovery",
+                stage_name: "需求挖掘",
+                key_actions: ["确认现状"],
+                guidance: "继续追问流程细节",
+                progress: 0.4,
+            },
+            actionCard: {
+                issue: "动作卡残留",
+                replacement: "下一轮再推进。",
+                next_turn_rule: "等待新的用户回合。",
+            },
+            fuzzyDetections: [
+                {
+                    category: "feedback",
+                    matched: [],
+                    suggestion: "旧提示不应残留。",
+                    severity: "low",
+                },
+            ],
+        });
+
+        handleWebSocketMessage(
+            createMessageEvent({
+                type: "transcript",
+                timestamp: new Date().toISOString(),
+                data: {
+                    text: "",
+                    is_final: true,
+                },
+            }),
+            deps as never,
+        );
+
+        expect(getState().messages).toHaveLength(0);
+        expect(getState().actionCard).toBeNull();
+        expect(getState().fuzzyDetections).toEqual([]);
+        expect(getState().scores?.overall_score).toBe(72);
+        expect(getState().salesStage?.stage_name).toBe("需求挖掘");
+    });
+
     it("promotes connection_state to connected on connected event", () => {
         const { deps, getState } = createDeps({
             ...INITIAL_PRACTICE_STATE,
