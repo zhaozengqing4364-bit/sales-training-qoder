@@ -1,6 +1,6 @@
 {
   "mode": "stabilize",
-  "current_issue_id": "M001-S07-T01",
+  "current_issue_id": "M001-S07-T02",
   "current_issue_type": "task",
   "current_issue_status": "done",
   "pending_issue_ids": [],
@@ -25,31 +25,32 @@
     "M001-S06-T01",
     "M001-S06-T02",
     "M001-S06",
-    "M001-S07-T01"
+    "M001-S07-T01",
+    "M001-S07-T02"
   ],
   "blocked_issue_ids": [],
   "deferred_issue_ids": [],
   "last_modified_files": [
-    "backend/src/presentation_coach/services/presentation_report_service.py",
-    "backend/src/presentation_coach/websocket/presentation_handler.py",
-    "backend/tests/unit/evaluation/test_comprehensive_report_service.py",
-    "backend/tests/unit/test_presentation_handler_persistence.py",
-    "backend/tests/unit/test_presentation_stepfun_realtime_handler.py",
+    "backend/src/common/conversation/session_evidence.py",
+    "backend/src/common/db/schemas.py",
+    "backend/src/common/api/practice.py",
+    "backend/tests/contract/test_presentation_report_contract.py",
+    "backend/tests/integration/test_presentation_report_flow.py",
+    "web/src/lib/api/types.ts",
     ".gsd/milestones/M001/slices/S07/S07-PLAN.md",
-    ".gsd/milestones/M001/slices/S07/tasks/T01-SUMMARY.md",
-    ".gsd/DECISIONS.md",
+    ".gsd/milestones/M001/slices/S07/tasks/T02-SUMMARY.md",
     ".codex/loop/state.json",
     ".codex/loop/log.md"
   ],
   "last_verification_commands": [
     "cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/evaluation/test_comprehensive_report_service.py tests/unit/test_presentation_handler_persistence.py tests/unit/test_presentation_stepfun_realtime_handler.py",
-    "cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_presentation_handler_persistence.py -k page_number",
     "cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/evaluation/test_comprehensive_report_service.py -k degrades_without_page_metadata",
     "cd backend && venv/bin/python -m pytest -c pyproject.toml tests/contract/test_presentation_report_contract.py tests/integration/test_presentation_report_flow.py",
+    "cd backend && venv/bin/python -m pytest -c pyproject.toml tests/integration/test_presentation_report_flow.py -k degraded",
     "cd web && npm test -- --run 'src/app/(user)/practice/[sessionId]/report/page.test.tsx'"
   ],
-  "last_verification_result": "T01 verification passed fresh on the backend unit suites and the explicit degraded-path check; the slice-level contract/integration command still fails because T02's test files do not exist yet, while the existing report page test remains green.",
-  "last_success_signal": "Legacy and StepFun presentation runtimes now share persisted page-number evidence, and PresentationReportService can emit one normalized presentation review payload with explicit degraded diagnostics when historical page metadata is missing.",
+  "last_verification_result": "T02's presentation contract and integration suites passed fresh, and the rest of S07's automated backend/web slice checks also passed. The only remaining slice proof is the real runtime/browser UAT owned by the final page task.",
+  "last_success_signal": "Shared /practice/sessions/{id}/report now returns scenario-aware presentation baselines with canonical presentation_review payloads, explicit degraded page-evidence diagnostics, and retry continuity via presentation_id instead of sales fallbacks.",
   "last_growth_scan": null,
-  "next_action": "Proceed to M001-S07-T02 to wire the normalized presentation_review payload into the shared /practice/sessions/{id}/report contract and add the missing contract/integration tests."
+  "next_action": "Proceed to M001-S07-T03 to finish the shared report page's presentation branch and close the slice runtime/UAT proof."
 }

@@ -35,6 +35,7 @@ STAGE_NAMES = {
 class SessionEvidenceProjection:
     session: PracticeSession
     session_id: str
+    scenario_type: str
     messages: list[dict[str, Any]]
     timeline_markers: list[dict[str, Any]]
     stage_summary: list[dict[str, Any]]
@@ -43,16 +44,17 @@ class SessionEvidenceProjection:
     accuracy_score: float
     completeness_score: float
     overall_score: float
-    effectiveness_snapshot: dict[str, Any]
+    effectiveness_snapshot: dict[str, Any] | None
     pass_flags: dict[str, bool] | None
     main_capability_passed: bool | None
     overall_result: str | None
     main_issue: dict[str, Any] | None
     next_goal: dict[str, Any] | None
-    evaluable: bool
+    evaluable: bool | None
     not_evaluable_reason: str | None
     evidence_completeness: dict[str, Any]
     legacy_score_key_used: bool
+    presentation_review: dict[str, Any] | None = None
 
 
 class SessionEvidenceService:
@@ -67,6 +69,7 @@ class SessionEvidenceService:
         session_id: str,
         session: PracticeSession | None = None,
         require_completed: bool = False,
+        scenario_type: str | None = None,
     ) -> Result[SessionEvidenceProjection]:
         try:
             current_session = session
@@ -75,6 +78,11 @@ class SessionEvidenceService:
                 if not session_result.is_success:
                     return session_result
                 current_session = session_result.value
+
+            resolved_scenario_type = self.resolve_scenario_type(
+                current_session,
+                scenario_type=scenario_type,
+            )
 
             if require_completed and current_session.status != SessionStatus.COMPLETED.value:
                 return Result.fail(
@@ -86,20 +94,45 @@ class SessionEvidenceService:
             if not messages_result.is_success:
                 return messages_result
 
-            projection = self.build_projection(current_session, messages_result.value)
+            projection = self.build_projection(
+                current_session,
+                messages_result.value,
+                scenario_type=resolved_scenario_type,
+            )
+            if resolved_scenario_type == "presentation":
+                presentation_result = await self._attach_presentation_review(
+                    session_id=session_id,
+                    projection=projection,
+                )
+                if not presentation_result.is_success:
+                    return Result.fail(
+                        presentation_result.fallback
+                        or "[PRESENTATION_REVIEW_FAILED]"
+                    )
+                projection = presentation_result.value
+
             logger.info(
                 "practice_session_evidence_projection_built",
                 session_id=projection.session_id,
+                scenario_type=projection.scenario_type,
                 message_count=projection.evidence_completeness["message_count"],
                 legacy_score_key_used=projection.legacy_score_key_used,
                 projection_complete=projection.evidence_completeness["complete"],
                 projection_missing_fields=projection.evidence_completeness["missing_fields"],
+                presentation_review_available=bool(projection.presentation_review),
+                presentation_page_metadata_complete=projection.evidence_completeness.get(
+                    "page_metadata_complete"
+                ),
+                presentation_degraded_reasons=projection.evidence_completeness.get(
+                    "degraded_reasons"
+                ),
             )
             return Result.ok(projection)
         except (SQLAlchemyError, ValueError, OSError) as exc:
             logger.error(
                 "practice_session_evidence_projection_failed",
                 session_id=session_id,
+                scenario_type=scenario_type,
                 error=str(exc),
             )
             return Result.fail(f"[SESSION_EVIDENCE_FAILED] {str(exc)}")
@@ -126,14 +159,164 @@ class SessionEvidenceService:
         )
         return Result.ok(list(result.scalars().all()))
 
+    @staticmethod
+    def resolve_scenario_type(
+        session: PracticeSession,
+        *,
+        scenario_type: str | None = None,
+    ) -> str:
+        scenario_from_relationship = None
+        session_dict = getattr(session, "__dict__", {})
+        scenario_obj = session_dict.get("scenario") if isinstance(session_dict, dict) else None
+        if scenario_obj is not None:
+            scenario_from_relationship = getattr(scenario_obj, "scenario_type", None)
+
+        candidate = scenario_type or scenario_from_relationship
+        normalized = str(candidate or "").lower()
+        if normalized in {"sales", "presentation"}:
+            return normalized
+        return "presentation" if getattr(session, "presentation_id", None) else "sales"
+
+    async def _attach_presentation_review(
+        self,
+        *,
+        session_id: str,
+        projection: SessionEvidenceProjection,
+    ) -> Result[SessionEvidenceProjection]:
+        from presentation_coach.services.presentation_report_service import (
+            PresentationReportService,
+        )
+
+        review_result = await PresentationReportService(self.db).build_presentation_review(
+            session_id
+        )
+        if not review_result.is_success or review_result.value is None:
+            return Result.fail(review_result.fallback or "[PRESENTATION_REVIEW_FAILED]")
+
+        review = review_result.value
+        dimension_scores = review.get("dimension_scores")
+        if not isinstance(dimension_scores, list):
+            dimension_scores = []
+        dimension_values = {
+            str(item.get("name")): float(item.get("score") or 0.0)
+            for item in dimension_scores
+            if isinstance(item, dict)
+        }
+
+        remainder_scores = [
+            dimension_values.get("专业性"),
+            dimension_values.get("生动性"),
+            dimension_values.get("互动问答"),
+            dimension_values.get("其他表现"),
+        ]
+        remainder_scores = [score for score in remainder_scores if score is not None]
+
+        projection.logic_score = float(
+            dimension_values.get("流畅连贯性", projection.logic_score)
+        )
+        projection.accuracy_score = float(
+            dimension_values.get("准确性", projection.accuracy_score)
+        )
+        if remainder_scores:
+            projection.completeness_score = round(
+                sum(remainder_scores) / len(remainder_scores),
+                2,
+            )
+        overall_score = review.get("overall_score")
+        if isinstance(overall_score, (int, float)):
+            projection.overall_score = round(float(overall_score), 2)
+        projection.stage_summary = []
+        projection.effectiveness_snapshot = None
+        projection.pass_flags = None
+        projection.main_capability_passed = None
+        projection.overall_result = None
+        projection.main_issue = None
+        projection.next_goal = None
+        projection.evaluable = None
+        projection.not_evaluable_reason = None
+        projection.presentation_review = review
+        projection.evidence_completeness = self._build_presentation_evidence_completeness(
+            messages=projection.messages,
+            review=review,
+        )
+        return Result.ok(projection)
+
+    @staticmethod
+    def _build_presentation_evidence_completeness(
+        *,
+        messages: list[dict[str, Any]],
+        review: dict[str, Any],
+    ) -> dict[str, Any]:
+        diagnostics = review.get("diagnostics")
+        if not isinstance(diagnostics, dict):
+            diagnostics = {}
+        required_points = review.get("required_talking_points")
+        if not isinstance(required_points, dict):
+            required_points = {}
+        degraded_reasons = diagnostics.get("degraded_reasons")
+        if not isinstance(degraded_reasons, list):
+            degraded_reasons = []
+
+        has_page_metadata = bool(diagnostics.get("has_page_metadata", False))
+        page_summaries = review.get("page_summaries")
+        if not isinstance(page_summaries, list):
+            page_summaries = []
+
+        missing_fields: list[str] = []
+        if not has_page_metadata:
+            missing_fields.append("page_metadata")
+        if not page_summaries:
+            missing_fields.append("page_summaries")
+        if str(required_points.get("status") or "") != "complete":
+            missing_fields.append("required_talking_points")
+
+        return {
+            "scenario_type": "presentation",
+            "complete": not missing_fields,
+            "message_count": len(messages),
+            "message_analysis": sum(
+                1
+                for message in messages
+                if any(
+                    message.get(field) is not None
+                    for field in (
+                        "transcript_metadata",
+                        "score_snapshot",
+                        "ai_feedback",
+                    )
+                )
+            ),
+            "presentation_review_available": True,
+            "page_metadata_complete": has_page_metadata,
+            "page_summary_count": len(page_summaries),
+            "required_talking_points_status": str(
+                required_points.get("status") or "unknown"
+            ),
+            "required_points_total": int(required_points.get("total") or 0),
+            "required_points_covered": int(required_points.get("covered") or 0),
+            "required_points_missing": int(required_points.get("missing") or 0),
+            "required_coverage_ratio": round(
+                float(required_points.get("coverage_ratio") or 0.0),
+                4,
+            ),
+            "degraded_reasons": degraded_reasons,
+            "missing_fields": missing_fields,
+        }
+
     @classmethod
     def build_projection(
         cls,
         session: PracticeSession,
         messages: list[ConversationMessage],
+        *,
+        scenario_type: str | None = None,
     ) -> SessionEvidenceProjection:
         normalized_messages: list[dict[str, Any]] = []
         legacy_score_key_used = False
+        resolved_scenario_type = cls.resolve_scenario_type(
+            session,
+            scenario_type=scenario_type,
+        )
 
         for index, message in enumerate(messages):
             normalized = cls.serialize_message(message, fallback_turn_number=index + 1)
@@ -161,6 +344,7 @@ class SessionEvidenceService:
         return SessionEvidenceProjection(
             session=session,
             session_id=str(session.session_id),
+            scenario_type=resolved_scenario_type,
             messages=normalized_messages,
             timeline_markers=cls.build_timeline_markers(normalized_messages),
             stage_summary=cls.build_stage_summary(normalized_messages),

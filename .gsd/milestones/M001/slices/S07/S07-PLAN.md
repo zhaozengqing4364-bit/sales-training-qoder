@@ -23,6 +23,7 @@
 - `cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/evaluation/test_comprehensive_report_service.py tests/unit/test_presentation_handler_persistence.py tests/unit/test_presentation_stepfun_realtime_handler.py`
 - `cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/evaluation/test_comprehensive_report_service.py -k degrades_without_page_metadata`
 - `cd backend && venv/bin/python -m pytest -c pyproject.toml tests/contract/test_presentation_report_contract.py tests/integration/test_presentation_report_flow.py`
+- `cd backend && venv/bin/python -m pytest -c pyproject.toml tests/integration/test_presentation_report_flow.py -k degraded`
 - `cd web && npm test -- --run 'src/app/(user)/practice/[sessionId]/report/page.test.tsx'`
 - Runtime/UAT — 在本地 stack 完成一次带翻页的 presentation session，打开 `/practice/{sessionId}/report`，确认页面展示 PPT 评分/逐页总结/覆盖提示与建议，隐藏 `销售推进结果`、`销售推进基线`、`知识库命中检测`，且“按目标再练一轮”沿用同一 `presentation_id`。
 
@@ -47,7 +48,7 @@
   - Do: 先写 failing unit tests 锁住 legacy/StepFun page metadata parity 与 presentation review payload shape；在 `PresentationReportService` 中抽出可复用的 normalized review payload builder（六维评分、逐页总结、coverage/forbidden/vague counts、strengths/improvements/recommendations）；然后补 `presentation_handler.py` 把 `transcript_metadata.page_number` 传入 `MessageStorageService.update_analysis(...)`，保持 StepFun 和 legacy 共用同一页级事实前提。
   - Verify: `cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/evaluation/test_comprehensive_report_service.py tests/unit/test_presentation_handler_persistence.py tests/unit/test_presentation_stepfun_realtime_handler.py`
   - Done when: legacy 和 StepFun 两条 presentation runtime 都能稳定持久化页码证据，且 `PresentationReportService` 能产出可被 shared report contract 直接复用的 normalized PPT review payload。
-- [ ] **T02: 把 shared session report contract 扩成 scenario-aware presentation baseline** `est:4h`
+- [x] **T02: 把 shared session report contract 扩成 scenario-aware presentation baseline** `est:4h`
   - Why: 只有把 PPT 复盘事实接入 S02 的 canonical `/practice/sessions/{id}/report`，R005/R011 才是真正前进；否则用户一旦 enhanced report 缺失，页面仍会回到 sales snapshot。
   - Files: `backend/src/common/conversation/session_evidence.py`, `backend/src/common/db/schemas.py`, `backend/src/common/api/practice.py`, `backend/tests/contract/test_presentation_report_contract.py`, `backend/tests/integration/test_presentation_report_flow.py`, `web/src/lib/api/types.ts`
   - Do: 先写 failing contract/integration tests，锁住 presentation happy-path 与 degraded historical-path；随后扩展 `SessionReport` / `PracticeSessionReport` 合同，新增 top-level `scenario_type` 与 `presentation_review` payload，复用 T01 的 builder 在 `SessionEvidenceService` / `practice.py` 中注入 scenario-aware facts，并保持 sales contract 不变；degraded presentation sessions 必须继续返回 presentation-shaped payload，而不是复用 sales `main_issue` / `next_goal` 语义。

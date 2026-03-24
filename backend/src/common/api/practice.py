@@ -1251,35 +1251,77 @@ async def get_session_report(
     projection_result = await SessionEvidenceService(db).get_projection(
         session_id=session_id,
         session=session,
+        scenario_type=normalized_scenario_type,
     )
     if not projection_result.is_success:
         return error_response("[SESSION_EVIDENCE_FAILED]", status_code=500)
 
     projection = projection_result.value
+    scenario_type_enum = (
+        ScenarioType.PRESENTATION
+        if normalized_scenario_type == "presentation"
+        else ScenarioType.SALES
+    )
+    presentation_review = (
+        projection.presentation_review if scenario_type_enum == ScenarioType.PRESENTATION else None
+    )
+    suggestions = ["Review your performance and practice again!"]
+    if scenario_type_enum == ScenarioType.PRESENTATION and isinstance(
+        presentation_review,
+        dict,
+    ):
+        review_recommendations = presentation_review.get("recommendations")
+        if isinstance(review_recommendations, list) and review_recommendations:
+            suggestions = [str(item) for item in review_recommendations]
+        else:
+            suggestions = ["按页回看关键内容，并针对缺失覆盖点再练一轮。"]
 
-    # Generate report
     report = SessionReport(
         session_id=session.session_id,
+        scenario_type=scenario_type_enum,
         logic_score=projection.logic_score,
         accuracy_score=projection.accuracy_score,
         completeness_score=projection.completeness_score,
         overall_score=projection.overall_score,
-        suggestions=["Review your performance and practice again!"],
+        suggestions=suggestions,
         audio_url=session.audio_url,
         transcript_url=session.transcript_url,
         voice_policy_snapshot_ref=build_voice_policy_snapshot_ref(
             session.voice_policy_snapshot
         ),
-        effectiveness_snapshot=projection.effectiveness_snapshot,
-        pass_flags=projection.pass_flags,
-        main_capability_passed=projection.main_capability_passed,
-        overall_result=projection.overall_result,
-        main_issue=projection.main_issue,
-        next_goal=projection.next_goal,
-        stage_summary=projection.stage_summary,
-        evaluable=projection.evaluable,
-        not_evaluable_reason=projection.not_evaluable_reason,
+        effectiveness_snapshot=(
+            None if scenario_type_enum == ScenarioType.PRESENTATION else projection.effectiveness_snapshot
+        ),
+        pass_flags=(
+            None if scenario_type_enum == ScenarioType.PRESENTATION else projection.pass_flags
+        ),
+        main_capability_passed=(
+            None
+            if scenario_type_enum == ScenarioType.PRESENTATION
+            else projection.main_capability_passed
+        ),
+        overall_result=(
+            None if scenario_type_enum == ScenarioType.PRESENTATION else projection.overall_result
+        ),
+        main_issue=(
+            None if scenario_type_enum == ScenarioType.PRESENTATION else projection.main_issue
+        ),
+        next_goal=(
+            None if scenario_type_enum == ScenarioType.PRESENTATION else projection.next_goal
+        ),
+        stage_summary=(
+            [] if scenario_type_enum == ScenarioType.PRESENTATION else projection.stage_summary
+        ),
+        evaluable=(
+            None if scenario_type_enum == ScenarioType.PRESENTATION else projection.evaluable
+        ),
+        not_evaluable_reason=(
+            None
+            if scenario_type_enum == ScenarioType.PRESENTATION
+            else projection.not_evaluable_reason
+        ),
         evidence_completeness=projection.evidence_completeness,
+        presentation_review=presentation_review,
         retry_entry={
             "scenario_type": normalized_scenario_type,
             "agent_id": str(session.agent_id) if session.agent_id else None,
@@ -1288,6 +1330,20 @@ async def get_session_report(
             if session.presentation_id
             else None,
         },
+    )
+
+    logger.info(
+        "practice_session_report_built",
+        session_id=session_id,
+        scenario_type=scenario_type_enum.value,
+        report_overall_score=report.overall_score,
+        evidence_complete=projection.evidence_completeness.get("complete"),
+        presentation_page_metadata_complete=projection.evidence_completeness.get(
+            "page_metadata_complete"
+        ),
+        presentation_degraded_reasons=projection.evidence_completeness.get(
+            "degraded_reasons"
+        ),
     )
 
     return success_response(report)

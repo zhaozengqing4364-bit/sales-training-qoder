@@ -249,6 +249,60 @@ class SessionDetail(SessionResponse):
     interruption_events: list["InterruptionEventResponse"] = []
 
 
+class PresentationReviewDimensionScore(BaseModel):
+    name: str
+    score: float = Field(..., ge=0, le=100)
+    weight: float = Field(..., ge=0, le=1)
+    description: str = ""
+
+
+class PresentationReviewPageSummary(BaseModel):
+    page_number: int
+    stage_number: int
+    start_turn: int
+    end_turn: int
+    average_score: float = Field(..., ge=0, le=100)
+    key_points: list[str] = Field(default_factory=list)
+    matched_required_points: list[str] = Field(default_factory=list)
+    missing_required_points: list[str] = Field(default_factory=list)
+    summary: str
+
+
+class PresentationRequiredTalkingPointCoverage(BaseModel):
+    status: Literal["complete", "degraded"]
+    total: int = 0
+    covered: int = 0
+    missing: int = 0
+    coverage_ratio: float = Field(..., ge=0, le=1)
+
+
+class PresentationReviewDiagnostics(BaseModel):
+    has_page_metadata: bool
+    pages_with_messages: int = 0
+    total_pages: int = 0
+    page_coverage_ratio: float = Field(..., ge=0, le=1)
+    required_points_total: int = 0
+    required_points_covered: int = 0
+    required_points_missing: int = 0
+    required_coverage_ratio: float = Field(..., ge=0, le=1)
+    degraded_reasons: list[str] = Field(default_factory=list)
+
+
+class PresentationReview(BaseModel):
+    overall_score: float = Field(..., ge=0, le=100)
+    dimension_scores: list[PresentationReviewDimensionScore] = Field(default_factory=list)
+    page_summaries: list[PresentationReviewPageSummary] = Field(default_factory=list)
+    required_talking_points: PresentationRequiredTalkingPointCoverage
+    issue_counts: dict[str, int] = Field(default_factory=dict)
+    strengths: list[str] = Field(default_factory=list)
+    improvements: list[str] = Field(default_factory=list)
+    recommendations: list[str] = Field(default_factory=list)
+    detailed_feedback: str
+    has_page_metadata: bool
+    coverage_status: Literal["complete", "degraded"]
+    diagnostics: PresentationReviewDiagnostics
+
+
 # ========== Voice Policy Snapshot Schemas ==========
 class VoicePolicySnapshotReference(BaseModel):
     """Immutable voice policy baseline reference stored at session creation time."""
@@ -279,6 +333,7 @@ class InterruptionEventResponse(BaseModel):
 # ========== Session Report Schema ==========
 class SessionReport(BaseModel):
     session_id: UUID
+    scenario_type: ScenarioType = ScenarioType.SALES
     logic_score: float = Field(..., ge=0, le=100)
     accuracy_score: float = Field(..., ge=0, le=100)
     completeness_score: float = Field(..., ge=0, le=100)
@@ -297,6 +352,7 @@ class SessionReport(BaseModel):
     evaluable: bool | None = None
     not_evaluable_reason: str | None = None
     evidence_completeness: dict[str, Any] | None = None
+    presentation_review: PresentationReview | None = None
     retry_entry: dict[str, Any] | None = None
 
 

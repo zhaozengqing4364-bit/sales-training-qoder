@@ -806,7 +806,71 @@ export interface SessionEvidenceCompleteness {
     missing_fields?: string[];
     message_count?: number;
     legacy_score_key_used?: boolean;
+    scenario_type?: "sales" | "presentation" | string;
+    presentation_review_available?: boolean;
+    page_metadata_complete?: boolean;
+    page_summary_count?: number;
+    required_talking_points_status?: "complete" | "degraded" | string;
+    required_points_total?: number;
+    required_points_covered?: number;
+    required_points_missing?: number;
+    required_coverage_ratio?: number;
+    degraded_reasons?: string[];
     [key: string]: unknown;
+}
+
+export interface PresentationReviewDimensionScore {
+    name: string;
+    score: number;
+    weight: number;
+    description: string;
+}
+
+export interface PresentationReviewPageSummary {
+    page_number: number;
+    stage_number: number;
+    start_turn: number;
+    end_turn: number;
+    average_score: number;
+    key_points: string[];
+    matched_required_points: string[];
+    missing_required_points: string[];
+    summary: string;
+}
+
+export interface PresentationRequiredTalkingPointCoverage {
+    status: "complete" | "degraded";
+    total: number;
+    covered: number;
+    missing: number;
+    coverage_ratio: number;
+}
+
+export interface PresentationReviewDiagnostics {
+    has_page_metadata: boolean;
+    pages_with_messages: number;
+    total_pages: number;
+    page_coverage_ratio: number;
+    required_points_total: number;
+    required_points_covered: number;
+    required_points_missing: number;
+    required_coverage_ratio: number;
+    degraded_reasons: string[];
+}
+
+export interface PresentationReview {
+    overall_score: number;
+    dimension_scores: PresentationReviewDimensionScore[];
+    page_summaries: PresentationReviewPageSummary[];
+    required_talking_points: PresentationRequiredTalkingPointCoverage;
+    issue_counts: Record<string, number>;
+    strengths: string[];
+    improvements: string[];
+    recommendations: string[];
+    detailed_feedback: string;
+    has_page_metadata: boolean;
+    coverage_status: "complete" | "degraded";
+    diagnostics: PresentationReviewDiagnostics;
 }
 
 export interface SessionStageSummary {
@@ -836,6 +900,7 @@ export interface SessionNextGoal {
 }
 
 export interface SessionEvidenceContract {
+    scenario_type?: "sales" | "presentation";
     overall_score: number | null;
     effectiveness_snapshot?: Record<string, unknown> | null;
     pass_flags?: SessionPassFlags | null;
@@ -847,6 +912,7 @@ export interface SessionEvidenceContract {
     evaluable?: boolean | null;
     not_evaluable_reason?: SessionNotEvaluableReason | null;
     evidence_completeness?: SessionEvidenceCompleteness | null;
+    presentation_review?: PresentationReview | null;
 }
 
 export interface ReplayStageSummary extends SessionStageSummary {}
@@ -929,6 +995,7 @@ export interface SessionStats {
 
 export interface PracticeSessionReport extends SessionEvidenceContract {
     session_id: string;
+    scenario_type: "sales" | "presentation";
     logic_score: number;
     accuracy_score: number;
     completeness_score: number;
@@ -937,6 +1004,7 @@ export interface PracticeSessionReport extends SessionEvidenceContract {
     audio_url?: string | null;
     transcript_url?: string | null;
     voice_policy_snapshot_ref?: VoicePolicySnapshotReference | null;
+    presentation_review?: PresentationReview | null;
     retry_entry?: {
         scenario_type: "sales" | "presentation" | string;
         agent_id?: string | null;

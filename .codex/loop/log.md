@@ -422,3 +422,28 @@ Append one entry per iteration:
   verification results: backend T01 unit suites and the explicit degraded-path check passed fresh; the slice-level contract/integration command failed because T02's report contract tests are not in the tree yet; the existing report page test still passes.
   success signal status: both presentation runtimes now write the same page-number evidence fact line, and one reusable presentation review payload is available for the shared report contract with explicit degraded fallback reasons instead of sales-semantic silence.
   rollback note: if S07 contract wiring changes in T02+, keep PresentationReportService as the single PPT review authority and preserve legacy transcript_metadata.page_number persistence unless a fully re-verified storage contract replaces it.
+
+- time: 2026-03-24T11:02:36+08:00
+  mode: stabilize
+  item id: M001-S07-T02
+  files changed:
+    - backend/src/common/conversation/session_evidence.py
+    - backend/src/common/db/schemas.py
+    - backend/src/common/api/practice.py
+    - backend/tests/contract/test_presentation_report_contract.py
+    - backend/tests/integration/test_presentation_report_flow.py
+    - web/src/lib/api/types.ts
+    - .gsd/milestones/M001/slices/S07/S07-PLAN.md
+    - .gsd/milestones/M001/slices/S07/tasks/T02-SUMMARY.md
+    - .codex/loop/state.json
+    - .codex/loop/log.md
+  summary: Verified and carried forward the scenario-aware presentation shared-report baseline so /practice/sessions/{id}/report now returns canonical presentation_review facts, explicit degraded page-evidence diagnostics, and retry presentation_id continuity instead of sales fallback fields.
+  verification commands:
+    - cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/evaluation/test_comprehensive_report_service.py tests/unit/test_presentation_handler_persistence.py tests/unit/test_presentation_stepfun_realtime_handler.py
+    - cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/evaluation/test_comprehensive_report_service.py -k degrades_without_page_metadata
+    - cd backend && venv/bin/python -m pytest -c pyproject.toml tests/contract/test_presentation_report_contract.py tests/integration/test_presentation_report_flow.py
+    - cd backend && venv/bin/python -m pytest -c pyproject.toml tests/integration/test_presentation_report_flow.py -k degraded
+    - cd web && npm test -- --run 'src/app/(user)/practice/[sessionId]/report/page.test.tsx'
+  verification results: passed; the new presentation contract/integration suites are green, the degraded-path unit and integration proofs are green, and the existing report page test still passes. Real runtime/browser UAT remains for final slice closure.
+  success signal status: shared report consumers can now inspect scenario_type=presentation plus presentation_review/evidence_completeness instead of reading PPT sessions through sales main_issue/next_goal semantics.
+  rollback note: if later work needs to revisit S07 contract wiring, preserve the shared report route's scenario-aware presentation payload and keep degraded state inside presentation_review/evidence_completeness rather than reviving sales fallback fields.
