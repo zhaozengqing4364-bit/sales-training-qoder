@@ -1,7 +1,7 @@
 {
   "mode": "stabilize",
-  "current_issue_id": "M002-S01-T02",
-  "current_issue_type": "task",
+  "current_issue_id": "M002-S01",
+  "current_issue_type": "slice",
   "current_issue_status": "done",
   "pending_issue_ids": [],
   "completed_issue_ids": [
@@ -33,21 +33,17 @@
     "M001-S08-T02",
     "M001-S08-T03",
     "M002-S01-T01",
-    "M002-S01-T02"
+    "M002-S01-T02",
+    "M002-S01"
   ],
   "blocked_issue_ids": [],
   "deferred_issue_ids": [],
   "last_modified_files": [
-    "web/src/hooks/websocket/message-handlers.ts",
-    "web/src/hooks/websocket/message-handlers.test.ts",
-    "web/src/components/practice/ScorePanel.tsx",
-    "web/src/components/practice/ScorePanel.test.tsx",
-    "web/src/app/(dashboard)/agents/[agentId]/page.tsx",
-    "web/src/app/(dashboard)/agents/[agentId]/page.test.tsx",
-    ".gsd/DECISIONS.md",
-    ".gsd/KNOWLEDGE.md",
-    ".gsd/milestones/M002/slices/S01/S01-PLAN.md",
-    ".gsd/milestones/M002/slices/S01/tasks/T02-SUMMARY.md",
+    ".gsd/REQUIREMENTS.md",
+    ".gsd/PROJECT.md",
+    ".gsd/milestones/M002/M002-ROADMAP.md",
+    ".gsd/milestones/M002/slices/S01/S01-SUMMARY.md",
+    ".gsd/milestones/M002/slices/S01/S01-UAT.md",
     ".codex/loop/state.json",
     ".codex/loop/log.md"
   ],
@@ -58,8 +54,8 @@
     "cd web && npm test -- --run 'src/hooks/websocket/message-handlers.test.ts' 'src/components/practice/ScorePanel.test.tsx' 'src/app/(dashboard)/agents/[agentId]/page.test.tsx' 'src/app/(user)/practice/[sessionId]/runtime-lock.test.ts'",
     "cd web && npm test -- --run 'src/hooks/use-practice-websocket.test.ts'"
   ],
-  "last_verification_result": "All S01 slice verification commands and the additional websocket-hook task suite passed fresh. Practice-page consumers now keep same-turn sales score refreshes, the ScorePanel stays sales-first while preserving fallback dimensions, and both voice modes describe one shared sales rubric.",
-  "last_success_signal": "The user-facing sales training page now reflects canonical same-turn score/stage/suggestion refreshes and no longer implies that classic voice mode uses a different scoring vocabulary.",
+  "last_verification_result": "Fresh S01 slice closeout verification passed. All slice-plan backend/web commands and the extra websocket-hook diagnostic suite are green, confirming one shared sales realtime contract across StepFun + classic mode, preserved same-turn practice-page score refreshes, and an unchanged report-side three-rollup evidence boundary.",
+  "last_success_signal": "The practice page now keeps one sales rubric across both voice modes and same-turn stage/suggestion/dimension refinements survive to ScorePanel instead of being deduped away.",
   "last_growth_scan": null,
-  "next_action": "Proceed to M002/S01 slice closeout and roadmap reassessment."
+  "next_action": "Proceed to M002 roadmap reassessment."
 }

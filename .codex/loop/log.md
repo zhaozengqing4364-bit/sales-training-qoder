@@ -613,3 +613,25 @@ Append one entry per iteration:
   verification results: passed; all slice-level backend/web commands and the extra websocket-hook task suite are green, so the frontend consumer fix kept the realtime/report contract boundary intact.
   success signal status: same-turn sales guidance now reaches the practice page without being deduped away, fallback dimensions remain visible, and mode selection no longer suggests a different classic-mode scoring rubric.
   rollback note: if later frontend work touches realtime scoring again, keep isSameScoreUpdate aligned with the focused Vitest contract and preserve the explicit fallback-dimension rendering instead of reintroducing overall-score-only dedupe.
+
+- time: 2026-03-24T19:25:11+08:00
+  mode: stabilize
+  item id: M002-S01
+  files changed:
+    - .gsd/REQUIREMENTS.md
+    - .gsd/PROJECT.md
+    - .gsd/milestones/M002/M002-ROADMAP.md
+    - .gsd/milestones/M002/slices/S01/S01-SUMMARY.md
+    - .gsd/milestones/M002/slices/S01/S01-UAT.md
+    - .codex/loop/state.json
+    - .codex/loop/log.md
+  summary: Closed S01 by rerunning the full slice verification set, updating R009 to capture the shipped contract-alignment proof, writing the slice summary/UAT artifacts, marking the roadmap slice complete, and refreshing project state for downstream roadmap reassessment.
+  verification commands:
+    - cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_realtime_scoring.py tests/unit/test_effectiveness_sales_baseline.py tests/unit/test_stepfun_realtime_handler.py tests/unit/test_capability_processor.py
+    - cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_stepfun_realtime_handler.py tests/unit/test_capability_processor.py -k 'action_card or stage_update'
+    - cd backend && venv/bin/python -m pytest -c pyproject.toml tests/contract/test_practice_evidence_contract.py
+    - cd web && npm test -- --run 'src/hooks/websocket/message-handlers.test.ts' 'src/components/practice/ScorePanel.test.tsx' 'src/app/(dashboard)/agents/[agentId]/page.test.tsx' 'src/app/(user)/practice/[sessionId]/runtime-lock.test.ts'
+    - cd web && npm test -- --run 'src/hooks/use-practice-websocket.test.ts'
+  verification results: passed; all slice-level backend/web commands and the extra websocket-hook diagnostic suite passed fresh. The sales realtime contract is now aligned across StepFun and classic mode, same-turn practice-page score refreshes survive dedupe, and the existing report-side three-rollup evidence contract remains unchanged.
+  success signal status: the training page now shows one shared sales rubric across both voice modes, and same-turn stage/suggestion/dimension refinements reach ScorePanel instead of being silently dropped.
+  rollback note: no new product rollback was introduced in the closer turn; if downstream slices touch realtime coaching again, keep the shared sales-effectiveness helper on the backend and full-payload score_update idempotence on the frontend aligned as one contract.

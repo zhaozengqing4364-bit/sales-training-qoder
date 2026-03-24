@@ -24,6 +24,7 @@
 - M001/S08 已完成：`/support/runtime` 现在基于 persisted session evidence、shared runtime diagnostics 与 canonical report semantics 输出 typed blocking / warning 发布健康，不再把 `status="scoring"` 伪装成 completed；repo-root verification gate 也补齐了 `alembic.ini` / `pyproject.toml` / `tests -> backend/tests` shim 与 backend `.env` fallback，最终 slice-close proof 能同时覆盖 repo-root auto verification、canonical sales report、主管连续变化页、PPT happy/degraded report，以及 support runtime anomaly surfacing。
 - 本地运行时若要验证 supervisor preview，数据库必须先迁移到 Alembic head（至少包含 `20260317_2310_020`）；否则 admin session preview 读取会因缺少 `conversation_messages.transcript_metadata` 而假性失败。
 - M001 已在里程碑级 close-out 中完成并封板：`git diff --stat "$(git merge-base HEAD 001-ai-practice-system)" HEAD -- ':!.gsd/'` 证明本里程碑包含真实实现代码，`M001-VALIDATION.md` 与 8 个 slice summaries 共同证明 6 条成功标准和跨 slice 集成全部通过；下一阶段重心转向 M002 的训练中实时教练与过程内反馈，而不是继续补 M001 的首发闭环。
+- M002/S01 已完成：sales 训练页现在在 StepFun 与 classic voice mode 上共用同一套五维销售 rubric；classic action-card pass flags 改走 shared sales effectiveness helper，前端 `score_update` 不再只按 `overall_score + turn_count` 去重，同轮 stage / suggestion / dimension refresh 会更新到 ScorePanel，两个语音模式入口也明确描述同一套销售评分语义，而报告侧继续保持既有三 rollup contract。
 - 真实首发目标已明确：先把桌面端稳定性做满，不在第一阶段绑定移动端 / 企业微信 / 外部系统集成。
 
 ## Architecture / Key Patterns

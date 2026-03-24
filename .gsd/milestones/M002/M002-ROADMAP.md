@@ -67,7 +67,7 @@ This milestone is complete only when all are true:
 
 ## Slices
 
-- [ ] **S01: 实时评分与训练页销售语义对齐** `risk:high` `depends:[]`
+- [x] **S01: 实时评分与训练页销售语义对齐** `risk:high` `depends:[]`
   > After this: 用户在训练页看到的实时评分维度、阶段标签和建议文案已经与当前销售价值表达 / 异议处理 rubric 对齐，而不是旧的泛化评分面板。
 
 - [ ] **S02: 提示节奏收口与单轮唯一动作卡** `risk:high` `depends:[S01]`

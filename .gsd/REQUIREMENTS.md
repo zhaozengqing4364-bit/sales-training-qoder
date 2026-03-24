@@ -10,10 +10,10 @@ This file is the explicit capability and coverage contract for the project.
 - Description: 客户演练在训练过程中应逐步提供可用的实时评分、阶段反馈或下一轮建议，帮助用户边练边调整，而不是只能事后看分。
 - Why it matters: 这是系统从“训练记录工具”升级为“教练系统”的关键能力。
 - Source: user
-- Primary owning slice: M002 (provisional)
-- Supporting slices: none
-- Validation: mapped
-- Notes: M001 先确保训练后报告可信，M002 再把实时教练体验做扎实。
+- Primary owning slice: M002/S01
+- Supporting slices: M002/S02, M002/S03, M002/S04, M002/S05
+- Validation: mapped; advanced by M002/S01 slice verification proving StepFun + classic sales runtime paths now emit the same five-dimension sales `score_update`/`stage_update`/`action_card` contract, the practice page preserves same-turn sales score refreshes instead of deduping by `overall_score + turn_count`, and both voice-mode entry points describe one shared sales rubric without changing the existing report-side three-rollup evidence contract.
+- Notes: S01 locked the realtime transport/UI contract to the current sales rubric. S02-S05 still need to prove prompt pacing, single-turn action prioritization, report/realtime consistency, and degraded-state visibility before R009 can move to validated.
 
 ### R010 — AI 客户必须能基于知识库和 Persona 配置，对价格、竞品、证据等真实销售问题进行持续追问，而不是给出泛泛回答。
 - Class: integration
@@ -253,7 +253,7 @@ This file is the explicit capability and coverage contract for the project.
 | R006 | admin/support | validated | M001/S03 | M001/S05, M001/S07 | Validated by S03 slice verification: admin sessions integration contract passed, admin detail + manager-lite focused tests passed, and live runtime admin APIs exposed projection-backed supervisor preview fields and canonical /practice/{sessionId}/report drill-in targets for the same completed sessions. |
 | R007 | operability | validated | M001/S06 | M001/S03 | Validated by S06 slice verification: backend HistoryService/admin-user projection suites passed, focused /progress and /stats integration assertions stayed aligned with projection-backed /sessions previews, web admin user-detail tests passed, Alembic was upgraded to head, and live browser review on /admin/users/{id} proved the supervisor-readable continuous-change panel answers whether the learner is improving, what keeps repeating, whether focus should change, and how inline empty/error states behave when progress data is unavailable. |
 | R008 | primary-user-loop | validated | M001/S07 | M001/S04 | Validated by S07 slice verification: backend presentation unit/degraded-path/contract/integration suites passed, live report API checks proved both complete and degraded presentation sessions keep `scenario_type="presentation"` plus canonical `presentation_review` without falling back to sales `main_issue`/`next_goal`, a fresh local audio-driven page-turn session (`8531c7f6-50da-4934-9fd4-63784c791edf`) completed through the real StepFun presentation websocket and produced page-aware summaries/coverage on `/api/v1/practice/sessions/{id}/report`, and the shared `/practice/{sessionId}/report` page rendered the PPT branch with sales-only sections absent while retry continuity preserved `presentation_id`. |
-| R009 | differentiator | active | M002 (provisional) | none | mapped |
+| R009 | differentiator | active | M002/S01 | M002/S02, M002/S03, M002/S04, M002/S05 | mapped; advanced by M002/S01 slice verification proving StepFun + classic sales runtime paths now emit the same five-dimension sales `score_update`/`stage_update`/`action_card` contract, the practice page preserves same-turn sales score refreshes instead of deduping by `overall_score + turn_count`, and both voice-mode entry points describe one shared sales rubric without changing the existing report-side three-rollup evidence contract. |
 | R010 | integration | active | M003 (provisional) | none | mapped |
 | R011 | continuity | active | M004 (provisional) | M001/S02, M001/S06, M001/S07, M001/S08 | mapped; reinforced by S06 slice verification proving admin /progress and score-bearing /stats fields now read the same HistoryService/SessionEvidence projection line as completed-session previews and canonical session reports, by S07 slice verification proving presentation sessions now project scenario-aware `presentation_review` facts plus explicit degraded completeness through the same canonical `/practice/{sessionId}/report` entrypoint, and by S08 slice verification proving `/support/runtime` release health now reads persisted session evidence plus shared runtime diagnostics while live localhost UAT kept sales report, supervisor progress, PPT report, and support-runtime anomalies on the same truth line. |
 | R012 | operability | active | M005 (provisional) | none | mapped |
