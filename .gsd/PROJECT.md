@@ -21,8 +21,9 @@
 - M001/S05 已完成：sales StepFun 写入层、persona policy 编译链与 web 消费面现在统一切到“价值表达 / 客户收益连接 / 证据使用 / 异议处理 / 推进下一步”语义；live `score_update`、`ScorePanel`、`/practice/{sessionId}/knowledge-check` 与 canonical `/practice/{sessionId}/report` 会围绕 ROI、价格、竞品、证据追问输出销售主问题、下一轮目标和三类 rollup，而不再沿用旧 generic 沟通标签伪装成销售判断。
 - M001/S06 已完成：`HistoryService` 现在提供 projection-backed supervisor progress snapshot，admin `/progress` 与 `/stats` 的 score-bearing 字段已与 `/sessions` completed preview / canonical report 对齐；`/admin/users/[id]` 会直接给出“最近有没有进步 / 总卡在哪 / 是否该换重点”的连续变化摘要，并在 progress 无可评估数据或加载失败时保留本地 inline empty/error state。
 - M001/S07 已完成：presentation session 的 shared `/practice/{sessionId}/report` 现在按 `scenario_type="presentation"` 输出 canonical `presentation_review`，legacy 与 StepFun runtime 都有页码落库基线，旧缺页码 session 会返回显式 degraded PPT contract 而不是退回 sales 语义；shared report page 也会切到 PPT 复盘分支、跳过 knowledge-check/sales-only cards，并保留带 `presentation_id` 的再练入口。
+- M001/S08 已完成：`/support/runtime` 现在基于 persisted session evidence、shared runtime diagnostics 与 canonical report semantics 输出 typed blocking / warning 发布健康，不再把 `status="scoring"` 伪装成 completed；repo-root verification gate 也补齐了 `alembic.ini` / `pyproject.toml` / `tests -> backend/tests` shim 与 backend `.env` fallback，最终 slice-close proof 能同时覆盖 repo-root auto verification、canonical sales report、主管连续变化页、PPT happy/degraded report，以及 support runtime anomaly surfacing。
 - 本地运行时若要验证 supervisor preview，数据库必须先迁移到 Alembic head（至少包含 `20260317_2310_020`）；否则 admin session preview 读取会因缺少 `conversation_messages.transcript_metadata` 而假性失败。
-- 当前主风险已从“训练材料是否能被后台维护并在下一次训练真实生效”转向：S08 如何把 sales report / supervisor trend / PPT review 一起做成发布级整合验收与可观测性闭环，以及把本地 runtime/browser 证据沉淀成更稳定的上线验收脚本。
+- M001 的桌面端首发闭环现已完成：sales runtime 生命周期、统一 evidence 报告、销售价值表达基线、主管连续变化、PPT 会后复盘，以及 support/runtime 发布健康面已经在同一 localhost proof 里被重新串起；下一阶段重心转向 M002 的训练中实时教练与过程内反馈，而不是继续补 M001 的首发闭环。
 - 真实首发目标已明确：先把桌面端稳定性做满，不在第一阶段绑定移动端 / 企业微信 / 外部系统集成。
 
 ## Architecture / Key Patterns
@@ -39,7 +40,7 @@ See `.gsd/REQUIREMENTS.md` for the explicit capability contract, requirement sta
 
 ## Milestone Sequence
 
-- [ ] M001: 桌面端销售训练闭环可用化 — 把桌面端客户演练、PPT 会后复盘、知识生效、单次报告与连续变化做成可真实使用的训练闭环。
+- [x] M001: 桌面端销售训练闭环可用化 — 把桌面端客户演练、PPT 会后复盘、知识生效、单次报告与连续变化做成可真实使用的训练闭环。
 - [ ] M002: 实时教练闭环 — 把训练中的实时建议、阶段引导、即时评分和下一轮动作建议做成稳定可用的教练体验。
 - [ ] M003: 知识与角色真实性 — 让 AI 客户围绕真实产品、价格、竞品、证据进行可信追问，并保持 Persona 行为一致性。
 - [ ] M004: 复盘与学习闭环增强 — 强化回放、高光、逐轮点评、PPT 纠偏与学习证据，让训练后改进路径更清晰。

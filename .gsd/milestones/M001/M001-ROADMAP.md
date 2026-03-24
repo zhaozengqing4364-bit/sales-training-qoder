@@ -74,7 +74,7 @@ This milestone is complete only when all are true:
 - [x] **S07: PPT 对练会后统一复盘可用化** `risk:medium` `depends:[S02,S04]`
   > After this: 新人完成一轮 PPT 对练后，可以拿到围绕真实 PPT 价值点的统一复盘、评分和建议；先不要求实时打断。
 
-- [ ] **S08: 桌面端发布验收与可观测性收口** `risk:medium` `depends:[S01,S03,S05,S06,S07]`
+- [x] **S08: 桌面端发布验收与可观测性收口** `risk:medium` `depends:[S01,S03,S05,S06,S07]`
   > After this: 关键桌面端路径完成端到端验收，主要失败模式可定位、可回放、可诊断，达到“可以真实给团队用”的上线门槛。
 
 ## Boundary Map
