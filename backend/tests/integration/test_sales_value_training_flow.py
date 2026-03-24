@@ -43,9 +43,9 @@ def _sales_effectiveness_snapshot() -> dict[str, object]:
             "recovery_rule": "下一轮先把价值翻译成客户收益，再回应价格与竞品问题。",
         },
         "next_goal": {
-            "goal_type": "evidence_then_next_step",
-            "goal_text": "补上一条案例或 ROI 证据，并确认下一步动作。",
-            "rule": "至少引用一条证据，并明确约定下一步。",
+            "goal_type": "value_to_benefit_translation",
+            "goal_text": "先把产品价值翻译成客户收益，再进入方案说明。",
+            "rule": "至少说清一个客户场景、一个收益指标、一个量化变化。",
         },
         "version": "rule_v1",
         "evaluable": True,
@@ -150,7 +150,16 @@ async def test_report_api_surfaces_sales_rollups_main_issue_and_next_goal(
                 timestamp=datetime.now(UTC),
                 duration_ms=1600,
                 sales_stage="discovery",
-                score_snapshot={"overall_score": 78},
+                score_snapshot={
+                    "overall_score": 82.0,
+                    "dimension_scores": {
+                        "价值表达": 84.0,
+                        "客户收益连接": 80.0,
+                        "证据使用": 58.0,
+                        "异议处理": 76.0,
+                        "推进下一步": 72.0,
+                    },
+                },
             ),
             ConversationMessage(
                 session_id=session.session_id,
@@ -179,14 +188,14 @@ async def test_report_api_surfaces_sales_rollups_main_issue_and_next_goal(
     assert payload["completeness_score"] == pytest.approx(71.5)
     assert payload["overall_score"] == pytest.approx(73.67, abs=0.05)
     assert payload["main_issue"] == {
-        "issue_type": "value_translation_gap",
-        "issue_text": "产品价值说得太功能化，还没有翻译成客户收益与 ROI。",
-        "recovery_rule": "下一轮先把价值翻译成客户收益，再回应价格与竞品问题。",
+        "issue_type": "evidence_gap",
+        "issue_text": "价值主张缺少案例、数据或ROI支撑，客户很难相信收益承诺。",
+        "recovery_rule": "下一轮先给出案例、数据或benchmark，再回应价格/ROI追问。",
     }
     assert payload["next_goal"] == {
-        "goal_type": "evidence_then_next_step",
-        "goal_text": "补上一条案例或 ROI 证据，并确认下一步动作。",
-        "rule": "至少引用一条证据，并明确约定下一步。",
+        "goal_type": "evidence_backing",
+        "goal_text": "先用案例、数据或ROI证据支撑主张，再推进下一步。",
+        "rule": "至少补上一条证据和一个明确的下一步动作。",
     }
     assert payload["pass_flags"] == {
         "pass_3min_flow": False,
@@ -205,6 +214,6 @@ async def test_report_api_surfaces_sales_rollups_main_issue_and_next_goal(
         "presentation_id": None,
     }
     assert payload["stage_summary"] == [
-        {"stage": "discovery", "duration_ms": 1600, "score": 78},
+        {"stage": "discovery", "duration_ms": 1600, "score": 82},
         {"stage": "objection", "duration_ms": 1900, "score": 83},
     ]

@@ -54,6 +54,42 @@ def _make_effectiveness_snapshot(
     }
 
 
+def _make_stale_sales_snapshot() -> dict[str, object]:
+    return {
+        "pass_flags": {
+            "pass_3min_flow": True,
+            "pass_5turn_defense": True,
+            "pass_4step_structure": False,
+        },
+        "main_capability_passed": False,
+        "overall_result": "fail",
+        "metrics": {
+            "value_expression_score": 82.0,
+            "customer_benefit_score": 78.0,
+            "evidence_usage_score": 61.0,
+            "objection_handling_score": 74.0,
+            "next_step_score": 69.0,
+            "value_articulation_rollup": 80.0,
+            "evidence_benefit_rollup": 69.5,
+            "objection_progress_rollup": 71.5,
+        },
+        "main_issue": {
+            "issue_type": "value_translation_gap",
+            "issue_text": "产品价值说得太功能化，还没有翻译成客户收益与 ROI。",
+            "recovery_rule": "下一轮先把价值翻译成客户收益，再回应价格与竞品问题。",
+        },
+        "next_goal": {
+            "goal_type": "value_to_benefit_translation",
+            "goal_text": "先把产品价值翻译成客户收益，再进入方案说明。",
+            "rule": "至少说清一个客户场景、一个收益指标、一个量化变化。",
+        },
+        "version": "rule_v1",
+        "evaluable": True,
+        "not_evaluable_reason": None,
+    }
+
+
+
 def _make_session(
     *,
     session_id: str | None = None,
@@ -186,6 +222,53 @@ def test_build_history_entries_use_shared_projection_for_completed_sessions_only
     assert in_progress_summary.not_evaluable_reason is None
     assert in_progress_summary.evidence_completeness is None
     assert in_progress_summary.effectiveness_snapshot is None
+
+
+def test_build_history_entries_sales_alignment_overrides_stale_snapshot_feedback_summary() -> None:
+    completed_session = _make_session(
+        status="completed",
+        start_time=datetime(2026, 3, 22, 12, 0, tzinfo=UTC),
+        scenario_type="sales",
+        scenario_name="销售对练",
+        logic_score=80.0,
+        accuracy_score=69.5,
+        completeness_score=71.5,
+        total_duration_seconds=180,
+        effectiveness_snapshot=_make_stale_sales_snapshot(),
+    )
+
+    messages_by_session = {
+        completed_session.session_id: [
+            _make_message(
+                session_id=completed_session.session_id,
+                turn_number=1,
+                timestamp=completed_session.start_time,
+                sales_stage="discovery",
+                score_snapshot={
+                    "overall_score": 82.0,
+                    "dimension_scores": {
+                        "价值表达": 84.0,
+                        "客户收益连接": 80.0,
+                        "证据使用": 58.0,
+                        "异议处理": 76.0,
+                        "推进下一步": 72.0,
+                    },
+                },
+            ),
+        ],
+    }
+
+    summary = HistoryService.build_history_entries(
+        [completed_session],
+        messages_by_session=messages_by_session,
+    )[0]
+
+    assert summary.main_issue["issue_type"] == "evidence_gap"
+    assert summary.next_goal["goal_type"] == "evidence_backing"
+    assert summary.effectiveness_snapshot["main_issue"]["issue_type"] == "evidence_gap"
+    assert summary.effectiveness_snapshot["next_goal"]["goal_type"] == "evidence_backing"
+    assert summary.feedback_summary == "价值主张缺少案例、数据或ROI支撑，客户很难相信收益承诺。"
+    assert completed_session.effectiveness_snapshot["main_issue"]["issue_type"] == "value_translation_gap"
 
 
 def test_build_statistics_and_trends_use_projection_scores_and_skip_not_evaluable_sessions() -> None:

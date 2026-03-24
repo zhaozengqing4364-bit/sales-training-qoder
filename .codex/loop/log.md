@@ -854,3 +854,28 @@ Append one entry per iteration:
   verification results: task-level helper verification passed, the new insufficient-evidence failure-path check passed, and the backend contract/integration set already passes; slice-level verification is partial because replay unit mocks still fall into presentation review, the focused T02 session-evidence selector currently matches no tests, and the report page web suite still expects older degraded-copy text.
   success signal status: common.effectiveness now has one stage-aware read-side sales alignment seam with explicit fallback diagnostics, giving T02 a single place to override stale completed-session conclusions.
   rollback note: if T02+ changes this seam, keep the helper internal-diagnostic fields and shared issue/goal vocabulary map together; reverting to separate read-side heuristics would reopen coach/report drift.
+
+- time: 2026-03-25T07:41:30+08:00
+  mode: stabilize
+  item id: M002-S04-T02
+  files changed:
+    - backend/src/common/conversation/session_evidence.py
+    - backend/tests/unit/test_replay_service.py
+    - backend/tests/integration/test_sales_value_training_flow.py
+    - .gsd/DECISIONS.md
+    - .gsd/KNOWLEDGE.md
+    - .gsd/milestones/M002/slices/S04/tasks/T02-SUMMARY.md
+    - .gsd/milestones/M002/slices/S04/S04-PLAN.md
+    - .codex/loop/state.json
+    - .codex/loop/log.md
+  summary: Projection-backed completed sales readers now override stale main_issue/next_goal from the latest alignable persisted stage+dimension evidence, log concise alignment diagnostics, and keep replay/history/report on one sales-first conclusion baseline.
+  verification commands:
+    - cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_effectiveness_sales_report_alignment.py tests/unit/test_session_evidence_service.py tests/unit/test_replay_service.py tests/unit/test_history_service_evidence_projection.py
+    - cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_session_evidence_service.py -k 'sales_alignment or stale_snapshot or insufficient_sales_evidence' -vv
+    - cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_session_evidence_service.py -k 'insufficient_sales_evidence' -vv
+    - cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_effectiveness_sales_report_alignment.py -k 'insufficient_sales_evidence' -vv
+    - cd backend && venv/bin/python -m pytest -c pyproject.toml tests/contract/test_practice_evidence_contract.py tests/integration/test_practice_evidence_flow.py tests/integration/test_sales_value_training_flow.py
+    - cd web && npm test -- --run 'src/app/(user)/practice/[sessionId]/report/page.test.tsx' 'src/app/(user)/practice/[sessionId]/replay/page.test.tsx' 'src/app/admin/users/[id]/page.test.tsx'
+  verification results: passed; all six slice verification commands exited 0 fresh. The backend packs now prove stale-snapshot override, insufficient-evidence fallback, replay/history/report alignment, and the web focused command still passes after the read-side change.
+  success signal status: completed sales projection now walks backward to the latest alignable persisted sales evidence instead of letting newer partial snapshots disable alignment, so report/replay/history/admin can share one conclusion family while the projection log exposes why override did or did not apply.
+  rollback note: if T03+ revisits sales read-side alignment, preserve the projection-only override boundary plus the minimal log fields; falling back to newest-raw-snapshot selection or omitting `sales_alignment_*` diagnostics will silently reopen stale report/replay drift.

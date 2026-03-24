@@ -20,6 +20,7 @@
 
 - `cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_effectiveness_sales_report_alignment.py tests/unit/test_session_evidence_service.py tests/unit/test_replay_service.py tests/unit/test_history_service_evidence_projection.py`
 - `cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_session_evidence_service.py -k 'sales_alignment or stale_snapshot or insufficient_sales_evidence' -vv`
+- `cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_session_evidence_service.py -k 'insufficient_sales_evidence' -vv`
 - `cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_effectiveness_sales_report_alignment.py -k 'insufficient_sales_evidence' -vv`
 - `cd backend && venv/bin/python -m pytest -c pyproject.toml tests/contract/test_practice_evidence_contract.py tests/integration/test_practice_evidence_flow.py tests/integration/test_sales_value_training_flow.py`
 - `cd web && npm test -- --run 'src/app/(user)/practice/[sessionId]/report/page.test.tsx' 'src/app/(user)/practice/[sessionId]/replay/page.test.tsx' 'src/app/admin/users/[id]/page.test.tsx'`
@@ -45,7 +46,7 @@
   - Do: 先加 focused failing tests，锁定 discovery/evidence、objection/handling、closing/next-step 三类 sales stage + score 组合应落到什么 `main_issue` / `next_goal`；再新增一个 shared helper，把 persisted stage/score evidence 映射为兼容现有 report contract 的结论，并在证据不足时保留当前 evaluator fallback；不要改 websocket、DB schema 或 report key 名称。
   - Verify: `cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_effectiveness_sales_report_alignment.py`
   - Done when: shared helper 能稳定输出与 S03 coaching-focus 同方向的 `main_issue` / `next_goal`，且缺少有效 sales evidence 时仍回退到既有 evaluator 语义。
-- [ ] **T02: Override stale sales conclusions in session evidence projection** `est:2h`
+- [x] **T02: Override stale sales conclusions in session evidence projection** `est:2h`
   - Why: 当前漂移主要发生在读侧：projection 会复用 session 上已有 snapshot，导致旧结论继续穿透到 report / replay / history / admin；必须在 shared projection seam 统一收口。
   - Files: `backend/src/common/conversation/session_evidence.py`, `backend/tests/unit/test_session_evidence_service.py`, `backend/tests/unit/test_replay_service.py`, `backend/tests/unit/test_history_service_evidence_projection.py`, `backend/tests/contract/test_practice_evidence_contract.py`, `backend/tests/integration/test_practice_evidence_flow.py`, `backend/tests/integration/test_sales_value_training_flow.py`
   - Do: 让 `SessionEvidenceService.build_projection(...)` 对 completed sales sessions 使用最新 persisted `sales_stage` + normalized `score_snapshot` 生成 aligned conclusion，并在 snapshot stale 时 override 读侧 `main_issue` / `next_goal`；补一个最小的 projection log signal 说明 alignment 是否应用与为何 fallback；扩展 unit / contract / integration tests 证明 replay / report / history 看到的是同一份结论。后端 pytest 命令必须串行执行，不并行，以避开 repo 现有 `pytest-cov` combine race。

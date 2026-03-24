@@ -17,6 +17,41 @@ from common.conversation.replay import ReplayService, STAGE_NAMES
 from common.db.models import SessionStatus
 
 
+def _make_stale_sales_snapshot() -> dict[str, object]:
+    return {
+        "pass_flags": {
+            "pass_3min_flow": True,
+            "pass_5turn_defense": True,
+            "pass_4step_structure": False,
+        },
+        "main_capability_passed": False,
+        "overall_result": "fail",
+        "metrics": {
+            "value_expression_score": 82.0,
+            "customer_benefit_score": 78.0,
+            "evidence_usage_score": 61.0,
+            "objection_handling_score": 74.0,
+            "next_step_score": 69.0,
+            "value_articulation_rollup": 80.0,
+            "evidence_benefit_rollup": 69.5,
+            "objection_progress_rollup": 71.5,
+        },
+        "main_issue": {
+            "issue_type": "value_translation_gap",
+            "issue_text": "产品价值说得太功能化，还没有翻译成客户收益与 ROI。",
+            "recovery_rule": "下一轮先把价值翻译成客户收益，再回应价格与竞品问题。",
+        },
+        "next_goal": {
+            "goal_type": "value_to_benefit_translation",
+            "goal_text": "先把产品价值翻译成客户收益，再进入方案说明。",
+            "rule": "至少说清一个客户场景、一个收益指标、一个量化变化。",
+        },
+        "version": "rule_v1",
+        "evaluable": True,
+        "not_evaluable_reason": None,
+    }
+
+
 class TestReplayService:
     """Tests for ReplayService"""
 
@@ -45,6 +80,8 @@ class TestReplayService:
         session.status = SessionStatus.COMPLETED.value
         session.agent_id = None
         session.persona_id = None
+        session.presentation_id = None
+        session.voice_policy_snapshot = None
         return session
 
     @pytest.fixture
@@ -257,6 +294,58 @@ class TestReplayService:
         assert "timeline_markers" in data
         assert "stage_summary" in data
         assert "total_duration_ms" in data
+
+    @pytest.mark.asyncio
+    async def test_get_replay_data_sales_alignment_overrides_stale_snapshot(self, service, mock_db, mock_completed_session):
+        """Replay should expose aligned sales conclusions when the persisted snapshot is stale."""
+        mock_completed_session.logic_score = 80.0
+        mock_completed_session.accuracy_score = 69.5
+        mock_completed_session.completeness_score = 71.5
+        mock_completed_session.effectiveness_snapshot = _make_stale_sales_snapshot()
+
+        aligned_message = MagicMock()
+        aligned_message.id = str(uuid.uuid4())
+        aligned_message.session_id = mock_completed_session.session_id
+        aligned_message.turn_number = 1
+        aligned_message.role = "user"
+        aligned_message.content = "ROI 这一块你们有真实案例吗？"
+        aligned_message.audio_url = None
+        aligned_message.timestamp = datetime.now(timezone.utc)
+        aligned_message.duration_ms = 2500
+        aligned_message.fuzzy_words = None
+        aligned_message.transcript_metadata = None
+        aligned_message.sales_stage = "discovery"
+        aligned_message.score_snapshot = {
+            "overall_score": 82.0,
+            "dimension_scores": {
+                "价值表达": 84.0,
+                "客户收益连接": 80.0,
+                "证据使用": 58.0,
+                "异议处理": 76.0,
+                "推进下一步": 72.0,
+            },
+        }
+        aligned_message.ai_feedback = "补充案例和 ROI 数据"
+        aligned_message.is_highlight = False
+        aligned_message.highlight_type = None
+        aligned_message.highlight_reason = None
+
+        mock_session_result = MagicMock()
+        mock_session_result.scalar_one_or_none.return_value = mock_completed_session
+        mock_messages_result = MagicMock()
+        mock_messages_result.scalars.return_value.all.return_value = [aligned_message]
+        mock_db.execute.side_effect = [mock_session_result, mock_messages_result]
+
+        result = await service.get_replay_data(mock_completed_session.session_id)
+
+        assert result.is_success
+        data = result.value
+        assert data["main_issue"]["issue_type"] == "evidence_gap"
+        assert data["next_goal"]["goal_type"] == "evidence_backing"
+        assert data["effectiveness_snapshot"]["main_issue"]["issue_type"] == "evidence_gap"
+        assert data["effectiveness_snapshot"]["next_goal"]["goal_type"] == "evidence_backing"
+        assert mock_completed_session.effectiveness_snapshot["main_issue"]["issue_type"] == "value_translation_gap"
+        assert mock_completed_session.effectiveness_snapshot["next_goal"]["goal_type"] == "value_to_benefit_translation"
 
     @pytest.mark.asyncio
     async def test_get_replay_data_normalizes_legacy_message_scores(self, service, mock_db, mock_completed_session):

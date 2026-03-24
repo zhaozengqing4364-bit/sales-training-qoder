@@ -12,7 +12,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.conversation.models import ConversationMessage
 from common.db.models import PracticeSession, SessionStatus
-from common.effectiveness import evaluate_effectiveness_snapshot
+from common.effectiveness import (
+    evaluate_effectiveness_snapshot,
+    resolve_sales_report_alignment,
+)
 from common.error_handling.result import Result
 from common.monitoring.logger import get_logger
 from sales_bot.websocket.components.stepfun_message_helpers import (
@@ -54,6 +57,10 @@ class SessionEvidenceProjection:
     not_evaluable_reason: str | None
     evidence_completeness: dict[str, Any]
     legacy_score_key_used: bool
+    sales_alignment_used: bool = False
+    sales_alignment_stage_key: str | None = None
+    sales_alignment_focus_type: str | None = None
+    sales_alignment_fallback_reason: str | None = None
     presentation_review: dict[str, Any] | None = None
 
 
@@ -119,6 +126,10 @@ class SessionEvidenceService:
                 legacy_score_key_used=projection.legacy_score_key_used,
                 projection_complete=projection.evidence_completeness["complete"],
                 projection_missing_fields=projection.evidence_completeness["missing_fields"],
+                sales_alignment_used=projection.sales_alignment_used,
+                sales_alignment_stage_key=projection.sales_alignment_stage_key,
+                sales_alignment_focus_type=projection.sales_alignment_focus_type,
+                sales_alignment_fallback_reason=projection.sales_alignment_fallback_reason,
                 presentation_review_available=bool(projection.presentation_review),
                 presentation_page_metadata_complete=projection.evidence_completeness.get(
                     "page_metadata_complete"
@@ -340,6 +351,46 @@ class SessionEvidenceService:
             snapshot=snapshot,
             legacy_score_key_used=legacy_score_key_used,
         )
+        sales_alignment = cls._resolve_sales_projection_alignment(
+            session=session,
+            messages=normalized_messages,
+            scenario_type=resolved_scenario_type,
+            snapshot=snapshot,
+        )
+        projection_snapshot = snapshot
+        main_issue = (
+            snapshot.get("main_issue") if isinstance(snapshot.get("main_issue"), dict) else None
+        )
+        next_goal = (
+            snapshot.get("next_goal") if isinstance(snapshot.get("next_goal"), dict) else None
+        )
+        sales_alignment_used = False
+        sales_alignment_stage_key = None
+        sales_alignment_focus_type = None
+        sales_alignment_fallback_reason = None
+
+        if isinstance(sales_alignment, dict):
+            sales_alignment_used = bool(sales_alignment.get("alignment_used", False))
+            stage_key = sales_alignment.get("stage_key")
+            focus_type = sales_alignment.get("focus_type")
+            fallback_reason = sales_alignment.get("fallback_reason")
+            sales_alignment_stage_key = str(stage_key) if stage_key is not None else None
+            sales_alignment_focus_type = str(focus_type) if focus_type is not None else None
+            sales_alignment_fallback_reason = (
+                str(fallback_reason) if fallback_reason is not None else None
+            )
+
+            if sales_alignment_used:
+                aligned_main_issue = sales_alignment.get("main_issue")
+                aligned_next_goal = sales_alignment.get("next_goal")
+                if isinstance(aligned_main_issue, dict) and isinstance(aligned_next_goal, dict):
+                    projection_snapshot = {
+                        **snapshot,
+                        "main_issue": dict(aligned_main_issue),
+                        "next_goal": dict(aligned_next_goal),
+                    }
+                    main_issue = projection_snapshot["main_issue"]
+                    next_goal = projection_snapshot["next_goal"]
 
         return SessionEvidenceProjection(
             session=session,
@@ -353,34 +404,34 @@ class SessionEvidenceService:
             accuracy_score=accuracy_score,
             completeness_score=completeness_score,
             overall_score=overall_score,
-            effectiveness_snapshot=snapshot,
-            pass_flags=snapshot.get("pass_flags")
-            if isinstance(snapshot.get("pass_flags"), dict)
+            effectiveness_snapshot=projection_snapshot,
+            pass_flags=projection_snapshot.get("pass_flags")
+            if isinstance(projection_snapshot.get("pass_flags"), dict)
             else None,
             main_capability_passed=(
-                snapshot.get("main_capability_passed")
-                if isinstance(snapshot.get("main_capability_passed"), bool)
+                projection_snapshot.get("main_capability_passed")
+                if isinstance(projection_snapshot.get("main_capability_passed"), bool)
                 else None
             ),
             overall_result=(
-                str(snapshot.get("overall_result"))
-                if snapshot.get("overall_result") is not None
+                str(projection_snapshot.get("overall_result"))
+                if projection_snapshot.get("overall_result") is not None
                 else None
             ),
-            main_issue=snapshot.get("main_issue")
-            if isinstance(snapshot.get("main_issue"), dict)
-            else None,
-            next_goal=snapshot.get("next_goal")
-            if isinstance(snapshot.get("next_goal"), dict)
-            else None,
-            evaluable=bool(snapshot.get("evaluable", False)),
+            main_issue=main_issue,
+            next_goal=next_goal,
+            evaluable=bool(projection_snapshot.get("evaluable", False)),
             not_evaluable_reason=(
-                str(snapshot.get("not_evaluable_reason"))
-                if snapshot.get("not_evaluable_reason") is not None
+                str(projection_snapshot.get("not_evaluable_reason"))
+                if projection_snapshot.get("not_evaluable_reason") is not None
                 else None
             ),
             evidence_completeness=evidence_completeness,
             legacy_score_key_used=legacy_score_key_used,
+            sales_alignment_used=sales_alignment_used,
+            sales_alignment_stage_key=sales_alignment_stage_key,
+            sales_alignment_focus_type=sales_alignment_focus_type,
+            sales_alignment_fallback_reason=sales_alignment_fallback_reason,
         )
 
     @staticmethod
@@ -586,6 +637,54 @@ class SessionEvidenceService:
             if isinstance(snapshot, dict):
                 return snapshot
         return None
+
+    @staticmethod
+    def _get_latest_sales_stage(messages: list[dict[str, Any]]) -> str | None:
+        for message in reversed(messages):
+            sales_stage = message.get("sales_stage")
+            if isinstance(sales_stage, str) and sales_stage.strip():
+                return sales_stage.strip()
+        return None
+
+    @classmethod
+    def _resolve_sales_projection_alignment(
+        cls,
+        *,
+        session: PracticeSession,
+        messages: list[dict[str, Any]],
+        scenario_type: str,
+        snapshot: dict[str, Any],
+    ) -> dict[str, Any] | None:
+        if scenario_type != "sales":
+            return None
+        if getattr(session, "status", None) != SessionStatus.COMPLETED.value:
+            return None
+
+        latest_stage = cls._get_latest_sales_stage(messages)
+        latest_score_snapshot = cls._get_latest_score_snapshot(messages)
+
+        for message in reversed(messages):
+            candidate_snapshot = message.get("score_snapshot")
+            if not isinstance(candidate_snapshot, dict):
+                continue
+            candidate_stage = message.get("sales_stage")
+            alignment = resolve_sales_report_alignment(
+                sales_stage=(
+                    candidate_stage.strip()
+                    if isinstance(candidate_stage, str) and candidate_stage.strip()
+                    else latest_stage
+                ),
+                score_snapshot=candidate_snapshot,
+                fallback_snapshot=snapshot,
+            )
+            if alignment.get("alignment_used") is True:
+                return alignment
+
+        return resolve_sales_report_alignment(
+            sales_stage=latest_stage,
+            score_snapshot=latest_score_snapshot,
+            fallback_snapshot=snapshot,
+        )
 
     @classmethod
     def _build_evidence_completeness(
