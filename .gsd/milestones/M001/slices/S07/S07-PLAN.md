@@ -24,6 +24,7 @@
 - `cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/evaluation/test_comprehensive_report_service.py -k degrades_without_page_metadata`
 - `cd backend && venv/bin/python -m pytest -c pyproject.toml tests/contract/test_presentation_report_contract.py tests/integration/test_presentation_report_flow.py`
 - `cd backend && venv/bin/python -m pytest -c pyproject.toml tests/integration/test_presentation_report_flow.py -k degraded`
+- Diagnostics/failure-path check — 对缺页码历史 session 调用 `GET /api/v1/practice/sessions/{id}/report`，确认 `scenario_type="presentation"` 仍保留、`presentation_review.page_summaries_status="degraded"`、`evidence_completeness.degraded_reasons` 非空，且 response 不回落到 sales `main_issue` / `next_goal` 语义。
 - `cd web && npm test -- --run 'src/app/(user)/practice/[sessionId]/report/page.test.tsx'`
 - Runtime/UAT — 在本地 stack 完成一次带翻页的 presentation session，打开 `/practice/{sessionId}/report`，确认页面展示 PPT 评分/逐页总结/覆盖提示与建议，隐藏 `销售推进结果`、`销售推进基线`、`知识库命中检测`，且“按目标再练一轮”沿用同一 `presentation_id`。
 
@@ -54,7 +55,7 @@
   - Do: 先写 failing contract/integration tests，锁住 presentation happy-path 与 degraded historical-path；随后扩展 `SessionReport` / `PracticeSessionReport` 合同，新增 top-level `scenario_type` 与 `presentation_review` payload，复用 T01 的 builder 在 `SessionEvidenceService` / `practice.py` 中注入 scenario-aware facts，并保持 sales contract 不变；degraded presentation sessions 必须继续返回 presentation-shaped payload，而不是复用 sales `main_issue` / `next_goal` 语义。
   - Verify: `cd backend && venv/bin/python -m pytest -c pyproject.toml tests/contract/test_presentation_report_contract.py tests/integration/test_presentation_report_flow.py`
   - Done when: `GET /api/v1/practice/sessions/{id}/report` 对 presentation session 返回 `scenario_type="presentation"` + canonical `presentation_review`，且缺页码历史数据只会触发 presentation-specific degraded contract，不会回退到 sales baseline。
-- [ ] **T03: 让共享 report page 按 scenario_type 渲染 PPT 会后复盘** `est:3h`
+- [x] **T03: 让共享 report page 按 scenario_type 渲染 PPT 会后复盘** `est:3h`
   - Why: backend 即使已经返回 canonical `presentation_review`，如果 report page 继续无条件拉 knowledge-check 并渲染 sales cards，学员实际仍看不到 slice demo。
   - Files: `web/src/lib/api/types.ts`, `web/src/lib/session-evidence.ts`, `web/src/app/(user)/practice/[sessionId]/report/page.tsx`, `web/src/app/(user)/practice/[sessionId]/report/page.test.tsx`
   - Do: 先写 failing presentation-focused page tests，锁住 PPT 评分/逐页总结/coverage/recommendations 展示、sales-only affordances 缺席、retry 继续带 `presentation_id`；再把页面加载/渲染改成基于 `report.scenario_type` 分支，在 presentation 场景跳过 knowledge-check 请求并展示 canonical `presentation_review`，同时保留 existing `GlassCard`/`Button` 体系和 enhanced report/highlights 的 optional layering。

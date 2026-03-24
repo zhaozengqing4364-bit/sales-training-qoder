@@ -1,4 +1,5 @@
 import type {
+    PresentationReview,
     SessionEvidenceCompleteness,
     SessionEvidenceStage,
     SessionNotEvaluableReason,
@@ -37,6 +38,16 @@ const GOAL_TYPE_LABELS: Record<string, string> = {
     objection_progress: "异议推进",
     single_next_goal: "下一轮重点",
     collect_more_evidence: "补齐有效互动",
+};
+
+const PRESENTATION_ISSUE_LABELS: Record<string, string> = {
+    forbidden_word: "禁用词提醒",
+    missing_point: "遗漏要点",
+    vague_response: "表达模糊",
+};
+
+const PRESENTATION_DEGRADED_REASON_LABELS: Record<string, string> = {
+    missing_page_metadata: "当前会话缺少页码证据，逐页总结和要点覆盖仅展示已确认部分。",
 };
 
 export function formatSessionStageLabel(stage?: SessionEvidenceStage | null): string {
@@ -86,4 +97,33 @@ export function formatGoalTypeLabel(goalType?: string | null): string | null {
         return null;
     }
     return GOAL_TYPE_LABELS[String(goalType)] || null;
+}
+
+export function formatPresentationIssueLabel(issueType?: string | null): string | null {
+    if (!issueType) {
+        return null;
+    }
+    return PRESENTATION_ISSUE_LABELS[String(issueType)] || null;
+}
+
+export function formatPresentationDegradedNote(
+    review?: PresentationReview | null,
+    completeness?: SessionEvidenceCompleteness | null,
+): string | null {
+    const reasons = [
+        ...(review?.diagnostics?.degraded_reasons || []),
+        ...(completeness?.degraded_reasons || []),
+    ].filter(Boolean);
+
+    const uniqueReasons = Array.from(new Set(reasons));
+    if (uniqueReasons.length === 0) {
+        if (review?.coverage_status === "degraded" || completeness?.page_metadata_complete === false) {
+            return "当前 PPT 证据不完整，逐页总结和要点覆盖仅展示已确认部分。";
+        }
+        return null;
+    }
+
+    return uniqueReasons
+        .map((reason) => PRESENTATION_DEGRADED_REASON_LABELS[reason] || `当前 PPT 证据存在降级原因：${reason}。`)
+        .join(" ");
 }

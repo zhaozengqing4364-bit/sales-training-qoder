@@ -447,3 +447,22 @@ Append one entry per iteration:
   verification results: passed; the new presentation contract/integration suites are green, the degraded-path unit and integration proofs are green, and the existing report page test still passes. Real runtime/browser UAT remains for final slice closure.
   success signal status: shared report consumers can now inspect scenario_type=presentation plus presentation_review/evidence_completeness instead of reading PPT sessions through sales main_issue/next_goal semantics.
   rollback note: if later work needs to revisit S07 contract wiring, preserve the shared report route's scenario-aware presentation payload and keep degraded state inside presentation_review/evidence_completeness rather than reviving sales fallback fields.
+- time: 2026-03-24T11:38:46+08:00
+  mode: stabilize
+  item id: M001-S07-T03
+  files changed:
+    - web/src/app/(user)/practice/[sessionId]/report/page.tsx
+    - web/src/app/(user)/practice/[sessionId]/report/page.test.tsx
+    - web/src/lib/session-evidence.ts
+    - .gsd/milestones/M001/slices/S07/S07-PLAN.md
+    - .gsd/milestones/M001/slices/S07/tasks/T03-SUMMARY.md
+    - .codex/loop/state.json
+    - .codex/loop/log.md
+  summary: Shared report pages now branch on scenario_type=presentation, render canonical PPT review/page-summary/coverage diagnostics, skip knowledge-check noise for presentation sessions, and keep retry continuity on the same presentation_id.
+  verification commands:
+    - cd web && npm test -- --run 'src/app/(user)/practice/[sessionId]/report/page.test.tsx'
+    - TOKEN=$(curl -s -X POST http://127.0.0.1:3444/api/v1/auth/dev-login | jq -r '.data.access_token'); for SESSION in 8ed2f3d9-9591-4c74-b9cb-1827eabf3b4b ec5b7b03-a83a-4ee6-bc33-d768ccfec610; do curl -s http://127.0.0.1:3444/api/v1/practice/sessions/$SESSION/report -H "Authorization: Bearer $TOKEN" | jq -c '{success,error,scenario_type:.data.scenario_type,overall_score:.data.overall_score,page_summaries:(.data.presentation_review.page_summaries|length),required_status:.data.presentation_review.required_talking_points.status,degraded_reasons:.data.presentation_review.diagnostics.degraded_reasons,main_issue:.data.main_issue,next_goal:.data.next_goal,retry_entry:.data.retry_entry}'; done
+    - browser UAT attempt on http://127.0.0.1:3445/practice/8ed2f3d9-9591-4c74-b9cb-1827eabf3b4b/report after browser-side POST http://127.0.0.1:3444/api/v1/auth/dev-login
+  verification results: focused web regression passed; seeded happy/degraded presentation report API checks passed; live browser page UAT on the fresh :3445 web server remained blocked by local auth cookie/session persistence and returned 401 on the report fetch
+  success signal status: presentation sessions now render PPT-specific postmortems in the shared report page and no longer trigger sales-only knowledge-check/report cards
+  rollback note: if follow-up work revisits S07 runtime proof, reuse the seeded presentation sessions 8ed2f3d9-9591-4c74-b9cb-1827eabf3b4b and ec5b7b03-a83a-4ee6-bc33-d768ccfec610 on :3445 rather than the broken historical local sessions that currently return [SESSION_EVIDENCE_FAILED]
