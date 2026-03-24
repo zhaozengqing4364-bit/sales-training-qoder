@@ -21,6 +21,7 @@
 ## Verification
 
 - `cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/evaluation/test_comprehensive_report_service.py tests/unit/test_presentation_handler_persistence.py tests/unit/test_presentation_stepfun_realtime_handler.py`
+- `cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/evaluation/test_comprehensive_report_service.py -k degrades_without_page_metadata`
 - `cd backend && venv/bin/python -m pytest -c pyproject.toml tests/contract/test_presentation_report_contract.py tests/integration/test_presentation_report_flow.py`
 - `cd web && npm test -- --run 'src/app/(user)/practice/[sessionId]/report/page.test.tsx'`
 - Runtime/UAT — 在本地 stack 完成一次带翻页的 presentation session，打开 `/practice/{sessionId}/report`，确认页面展示 PPT 评分/逐页总结/覆盖提示与建议，隐藏 `销售推进结果`、`销售推进基线`、`知识库命中检测`，且“按目标再练一轮”沿用同一 `presentation_id`。
@@ -40,7 +41,7 @@
 
 ## Tasks
 
-- [ ] **T01: 收稳 PPT 页级证据写入并抽出统一 presentation review builder** `est:3h`
+- [x] **T01: 收稳 PPT 页级证据写入并抽出统一 presentation review builder** `est:3h`
   - Why: 如果 legacy runtime 继续漏写 `page_number`，或者 PPT 评分/逐页总结还散在 report builder 里没有可复用 payload，后面的 canonical report contract 只能继续猜测或退回 StepFun-only。
   - Files: `backend/src/presentation_coach/services/presentation_report_service.py`, `backend/src/presentation_coach/websocket/presentation_handler.py`, `backend/src/common/conversation/storage.py`, `backend/tests/unit/evaluation/test_comprehensive_report_service.py`, `backend/tests/unit/test_presentation_handler_persistence.py`, `backend/tests/unit/test_presentation_stepfun_realtime_handler.py`
   - Do: 先写 failing unit tests 锁住 legacy/StepFun page metadata parity 与 presentation review payload shape；在 `PresentationReportService` 中抽出可复用的 normalized review payload builder（六维评分、逐页总结、coverage/forbidden/vague counts、strengths/improvements/recommendations）；然后补 `presentation_handler.py` 把 `transcript_metadata.page_number` 传入 `MessageStorageService.update_analysis(...)`，保持 StepFun 和 legacy 共用同一页级事实前提。

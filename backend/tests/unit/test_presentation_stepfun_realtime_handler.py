@@ -175,6 +175,7 @@ async def test_transcription_completed_interrupt_short_circuits_response_creatio
 
 @pytest.mark.asyncio
 async def test_transcription_completed_applies_transcript_normalization(handler):
+    handler.current_page = 4
     handler._effective_policy = {
         "tool_policy": {
             "transcript_normalization_enabled": True,

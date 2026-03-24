@@ -17,6 +17,7 @@ Test Coverage:
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, Mock
 from uuid import uuid4
 
@@ -33,6 +34,28 @@ from evaluation.services.comprehensive_report import (
 from evaluation.services.staged_evaluation import StageEvaluationResult
 from evaluation.schemas import ComprehensiveReportResponse
 from common.error_handling.result import Result
+from presentation_coach.services.presentation_report_service import (
+    PresentationReportService,
+)
+
+
+class _ScalarResult:
+    def __init__(self, value):
+        self._value = value
+
+    def scalar_one_or_none(self):
+        return self._value
+
+
+class _ScalarsResult:
+    def __init__(self, values):
+        self._values = values
+
+    def scalars(self):
+        return self
+
+    def all(self):
+        return self._values
 
 
 class TestComprehensiveReportService:
@@ -914,3 +937,241 @@ class TestComprehensiveReportService:
         # Assert - Should still succeed with empty feedback
         assert result.is_success
         assert result.value.detailed_feedback == ""
+
+
+class TestPresentationReportService:
+    @pytest.fixture
+    def presentation_db_session(self):
+        session = AsyncMock(spec=AsyncSession)
+        session.execute = AsyncMock()
+        session.flush = AsyncMock()
+        return session
+
+    @pytest.mark.asyncio
+    async def test_build_presentation_review_includes_page_coverage_and_diagnostics(
+        self,
+        presentation_db_session,
+    ):
+        session_id = str(uuid4())
+        practice_session = SimpleNamespace(
+            session_id=session_id,
+            presentation_id="ppt-001",
+            start_time=datetime(2026, 3, 1, tzinfo=timezone.utc),
+            end_time=datetime(2026, 3, 1, 0, 12, tzinfo=timezone.utc),
+            logic_score=None,
+            accuracy_score=None,
+            completeness_score=None,
+        )
+        user_messages = [
+            SimpleNamespace(
+                content="客户痛点和价值方案介绍很完整",
+                role="user",
+                turn_number=1,
+                timestamp=datetime(2026, 3, 1, 0, 1, tzinfo=timezone.utc),
+                transcript_metadata={"page_number": 1},
+            ),
+            SimpleNamespace(
+                content="这一页补充了实施计划，但没有展开落地细节",
+                role="user",
+                turn_number=2,
+                timestamp=datetime(2026, 3, 1, 0, 2, tzinfo=timezone.utc),
+                transcript_metadata={"page_number": 2},
+            ),
+        ]
+        interruption_events = [
+            SimpleNamespace(interruption_type="forbidden_word"),
+            SimpleNamespace(interruption_type="missing_point"),
+            SimpleNamespace(interruption_type="vague_response"),
+        ]
+        pages = [
+            SimpleNamespace(page_id="page-1", page_number=1),
+            SimpleNamespace(page_id="page-2", page_number=2),
+        ]
+        required_points = [
+            SimpleNamespace(page_id="page-1", description="客户痛点"),
+            SimpleNamespace(page_id="page-1", description="价值方案"),
+            SimpleNamespace(page_id="page-2", description="时间安排"),
+        ]
+        presentation_db_session.execute.side_effect = [
+            _ScalarResult(practice_session),
+            _ScalarsResult(user_messages),
+            _ScalarsResult(interruption_events),
+            _ScalarsResult(pages),
+            _ScalarsResult(required_points),
+        ]
+
+        service = PresentationReportService(presentation_db_session)
+
+        result = await service.build_presentation_review(session_id)
+
+        assert result.is_success
+        review = result.value
+        assert review["has_page_metadata"] is True
+        assert review["coverage_status"] == "complete"
+        assert len(review["dimension_scores"]) == 6
+        assert [summary["page_number"] for summary in review["page_summaries"]] == [1, 2]
+        assert review["required_talking_points"] == {
+            "status": "complete",
+            "total": 3,
+            "covered": 2,
+            "missing": 1,
+            "coverage_ratio": pytest.approx(2 / 3, 0.001),
+        }
+        assert review["issue_counts"] == {
+            "forbidden_word": 1,
+            "missing_point": 1,
+            "vague_response": 1,
+        }
+        assert review["diagnostics"]["degraded_reasons"] == []
+
+    @pytest.mark.asyncio
+    async def test_build_presentation_review_degrades_without_page_metadata(
+        self,
+        presentation_db_session,
+    ):
+        session_id = str(uuid4())
+        practice_session = SimpleNamespace(
+            session_id=session_id,
+            presentation_id="ppt-002",
+            start_time=datetime(2026, 3, 1, tzinfo=timezone.utc),
+            end_time=datetime(2026, 3, 1, 0, 8, tzinfo=timezone.utc),
+            logic_score=None,
+            accuracy_score=None,
+            completeness_score=None,
+        )
+        user_messages = [
+            SimpleNamespace(
+                content="我们先讲客户痛点，再讲价值方案",
+                role="user",
+                turn_number=1,
+                timestamp=datetime(2026, 3, 1, 0, 1, tzinfo=timezone.utc),
+                transcript_metadata=None,
+            ),
+            SimpleNamespace(
+                content="最后补充实施计划",
+                role="user",
+                turn_number=2,
+                timestamp=datetime(2026, 3, 1, 0, 2, tzinfo=timezone.utc),
+                transcript_metadata={},
+            ),
+        ]
+        pages = [
+            SimpleNamespace(page_id="page-1", page_number=1),
+            SimpleNamespace(page_id="page-2", page_number=2),
+        ]
+        required_points = [
+            SimpleNamespace(page_id="page-1", description="客户痛点"),
+            SimpleNamespace(page_id="page-2", description="实施计划"),
+        ]
+        presentation_db_session.execute.side_effect = [
+            _ScalarResult(practice_session),
+            _ScalarsResult(user_messages),
+            _ScalarsResult([]),
+            _ScalarsResult(pages),
+            _ScalarsResult(required_points),
+        ]
+
+        service = PresentationReportService(presentation_db_session)
+
+        result = await service.build_presentation_review(session_id)
+
+        assert result.is_success
+        review = result.value
+        assert review["has_page_metadata"] is False
+        assert review["coverage_status"] == "degraded"
+        assert review["page_summaries"] == []
+        assert review["required_talking_points"]["status"] == "degraded"
+        assert review["required_talking_points"]["total"] == 2
+        assert review["diagnostics"]["degraded_reasons"] == ["missing_page_metadata"]
+
+    @pytest.mark.asyncio
+    async def test_build_report_reuses_normalized_presentation_review_builder(
+        self,
+        presentation_db_session,
+    ):
+        payload = {
+            "overall_score": 88.0,
+            "dimension_scores": [
+                {
+                    "name": "流畅连贯性",
+                    "score": 90.0,
+                    "weight": 0.22,
+                    "description": "讲解节奏、重复情况与口头语控制",
+                },
+                {
+                    "name": "准确性",
+                    "score": 86.0,
+                    "weight": 0.20,
+                    "description": "内容与资料一致性、错误信息控制",
+                },
+            ],
+            "page_summaries": [
+                {
+                    "page_number": 1,
+                    "stage_number": 1,
+                    "start_turn": 1,
+                    "end_turn": 2,
+                    "average_score": 88.0,
+                    "key_points": ["客户痛点"],
+                    "matched_required_points": ["客户痛点"],
+                    "missing_required_points": ["价值方案"],
+                    "summary": "第一页讲解较完整。",
+                }
+            ],
+            "required_talking_points": {
+                "status": "complete",
+                "total": 2,
+                "covered": 1,
+                "missing": 1,
+                "coverage_ratio": 0.5,
+            },
+            "issue_counts": {
+                "forbidden_word": 0,
+                "missing_point": 1,
+                "vague_response": 0,
+            },
+            "strengths": ["表达流畅"],
+            "improvements": ["补齐价值方案"],
+            "recommendations": ["每页准备两个必须讲到的关键词。"],
+            "detailed_feedback": "总体讲解稳定，但第二个关键点覆盖不足。",
+            "has_page_metadata": True,
+            "coverage_status": "complete",
+            "diagnostics": {
+                "has_page_metadata": True,
+                "pages_with_messages": 1,
+                "total_pages": 1,
+                "page_coverage_ratio": 1.0,
+                "required_points_total": 2,
+                "required_points_covered": 1,
+                "required_points_missing": 1,
+                "required_coverage_ratio": 0.5,
+                "degraded_reasons": [],
+            },
+        }
+
+        service = PresentationReportService(presentation_db_session)
+        service.build_presentation_review = AsyncMock(return_value=Result.ok(payload))
+        service._load_report_context = AsyncMock(
+            return_value=Result.ok(
+                {
+                    "session": SimpleNamespace(
+                        logic_score=None,
+                        accuracy_score=None,
+                        completeness_score=None,
+                    )
+                }
+            )
+        )
+
+        result = await service.build_report("session-report-001")
+
+        assert result.is_success
+        report = result.value
+        service.build_presentation_review.assert_awaited_once_with("session-report-001")
+        service._load_report_context.assert_awaited_once_with("session-report-001")
+        assert report.overall_score == 88.0
+        assert report.dimension_scores[0].name == "流畅连贯性"
+        assert report.stage_summaries == payload["page_summaries"]
+        assert report.key_strengths == ["表达流畅"]
+        assert report.key_improvements == ["补齐价值方案"]
+        assert report.recommendations == ["每页准备两个必须讲到的关键词。"]

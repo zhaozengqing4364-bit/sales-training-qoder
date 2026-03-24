@@ -110,108 +110,41 @@ class PresentationReportService:
         )
 
         try:
-            session_result = await self.db.execute(
-                select(PracticeSession).where(PracticeSession.session_id == session_id)
-            )
-            session = session_result.scalar_one_or_none()
-            if session is None or not session.presentation_id:
-                return Result.fail("[PRESENTATION_SESSION_NOT_FOUND]")
-
-            message_result = await self.db.execute(
-                select(ConversationMessage)
-                .where(
-                    ConversationMessage.session_id == session_id,
-                    ConversationMessage.role == "user",
+            review_result = await self.build_presentation_review(session_id)
+            if not review_result.is_success or review_result.value is None:
+                return Result.fail(
+                    review_result.fallback or "[PRESENTATION_REPORT_FAILED]"
                 )
-                .order_by(ConversationMessage.turn_number, ConversationMessage.timestamp)
-            )
-            user_messages = list(message_result.scalars().all())
-            if not user_messages:
-                return Result.fail("[NO_PRESENTATION_TRANSCRIPTS]")
 
-            events_result = await self.db.execute(
-                select(InterruptionEvent)
-                .where(InterruptionEvent.session_id == session_id)
-                .order_by(InterruptionEvent.timestamp)
-            )
-            events = list(events_result.scalars().all())
-
-            pages_result = await self.db.execute(
-                select(Page)
-                .where(Page.presentation_id == session.presentation_id)
-                .order_by(Page.page_number)
-            )
-            pages = list(pages_result.scalars().all())
-            page_ids = [page.page_id for page in pages]
-
-            required_points_by_page: dict[int, list[str]] = defaultdict(list)
-            if page_ids:
-                point_result = await self.db.execute(
-                    select(RequiredTalkingPoint)
-                    .where(RequiredTalkingPoint.page_id.in_(page_ids))
-                    .where(RequiredTalkingPoint.confirmed_by_admin.is_(True))
+            context_result = await self._load_report_context(session_id)
+            if not context_result.is_success or context_result.value is None:
+                return Result.fail(
+                    context_result.fallback or "[PRESENTATION_SESSION_NOT_FOUND]"
                 )
-                points = list(point_result.scalars().all())
-                page_number_by_id = {page.page_id: page.page_number for page in pages}
-                for point in points:
-                    page_number = page_number_by_id.get(point.page_id)
-                    if page_number is None:
-                        continue
-                    required_points_by_page[page_number].append(point.description)
 
-            metrics = self._build_metrics(
-                session=session,
-                user_messages=user_messages,
-                interruption_events=events,
-                total_pages=max(1, len(pages)),
-                required_points_by_page=required_points_by_page,
-            )
-
+            review = review_result.value
+            session: PracticeSession = context_result.value["session"]
             dimension_scores = [
                 DimensionScore(
-                    name=name,
-                    score=metrics["dimension_values"][name],
-                    weight=weight,
-                    description=self._dimension_description(name),
+                    name=item["name"],
+                    score=item["score"],
+                    weight=item["weight"],
+                    description=item["description"],
                 )
-                for name, weight in self.DIMENSION_WEIGHTS
+                for item in review["dimension_scores"]
             ]
+            dimension_values = {
+                item["name"]: item["score"] for item in review["dimension_scores"]
+            }
 
-            overall_score = round(
-                sum(item.score * item.weight for item in dimension_scores)
-                / sum(item.weight for item in dimension_scores),
-                1,
-            )
-
-            stage_summaries = self._build_stage_summaries(
-                user_messages=user_messages,
-                required_points_by_page=required_points_by_page,
-                total_pages=max(1, len(pages)),
-            )
-            key_strengths = self._build_strengths(metrics["dimension_values"], metrics)
-            key_improvements = self._build_improvements(
-                metrics["dimension_values"],
-                metrics,
-            )
-            recommendations = self._build_recommendations(
-                metrics["dimension_values"],
-                metrics,
-            )
-            detailed_feedback = self._build_detailed_feedback(
-                overall_score=overall_score,
-                metrics=metrics,
-                strengths=key_strengths,
-                improvements=key_improvements,
-            )
-
-            session.logic_score = metrics["dimension_values"]["流畅连贯性"]
-            session.accuracy_score = metrics["dimension_values"]["准确性"]
+            session.logic_score = dimension_values.get("流畅连贯性", 0.0)
+            session.accuracy_score = dimension_values.get("准确性", 0.0)
             session.completeness_score = round(
                 (
-                    metrics["dimension_values"]["专业性"]
-                    + metrics["dimension_values"]["生动性"]
-                    + metrics["dimension_values"]["互动问答"]
-                    + metrics["dimension_values"]["其他表现"]
+                    dimension_values.get("专业性", 0.0)
+                    + dimension_values.get("生动性", 0.0)
+                    + dimension_values.get("互动问答", 0.0)
+                    + dimension_values.get("其他表现", 0.0)
                 )
                 / 4,
                 1,
@@ -221,19 +154,94 @@ class PresentationReportService:
             report = ComprehensiveReport(
                 session_id=session_id,
                 generated_at=datetime.now(timezone.utc),
-                overall_score=overall_score,
+                overall_score=review["overall_score"],
                 dimension_scores=dimension_scores,
-                stage_summaries=stage_summaries,
-                key_strengths=key_strengths,
-                key_improvements=key_improvements,
-                detailed_feedback=detailed_feedback,
-                recommendations=recommendations,
+                stage_summaries=review["page_summaries"],
+                key_strengths=review["strengths"],
+                key_improvements=review["improvements"],
+                detailed_feedback=review["detailed_feedback"],
+                recommendations=review["recommendations"],
             )
             return Result.ok(report)
         except Exception as exc:  # noqa: BLE001
             return Result.fail(f"[PRESENTATION_REPORT_BUILD_FAILED:{exc}]")
 
-    def _build_metrics(
+    async def build_presentation_review(
+        self,
+        session_id: str,
+    ) -> Result[dict[str, Any]]:
+        try:
+            context_result = await self._load_report_context(session_id)
+            if not context_result.is_success or context_result.value is None:
+                return Result.fail(
+                    context_result.fallback or "[PRESENTATION_SESSION_NOT_FOUND]"
+                )
+            return Result.ok(
+                self._build_presentation_review_payload(**context_result.value)
+            )
+        except Exception as exc:  # noqa: BLE001
+            return Result.fail(f"[PRESENTATION_REVIEW_BUILD_FAILED:{exc}]")
+
+    async def _load_report_context(self, session_id: str) -> Result[dict[str, Any]]:
+        session_result = await self.db.execute(
+            select(PracticeSession).where(PracticeSession.session_id == session_id)
+        )
+        session = session_result.scalar_one_or_none()
+        if session is None or not session.presentation_id:
+            return Result.fail("[PRESENTATION_SESSION_NOT_FOUND]")
+
+        message_result = await self.db.execute(
+            select(ConversationMessage)
+            .where(
+                ConversationMessage.session_id == session_id,
+                ConversationMessage.role == "user",
+            )
+            .order_by(ConversationMessage.turn_number, ConversationMessage.timestamp)
+        )
+        user_messages = list(message_result.scalars().all())
+        if not user_messages:
+            return Result.fail("[NO_PRESENTATION_TRANSCRIPTS]")
+
+        events_result = await self.db.execute(
+            select(InterruptionEvent)
+            .where(InterruptionEvent.session_id == session_id)
+            .order_by(InterruptionEvent.timestamp)
+        )
+        interruption_events = list(events_result.scalars().all())
+
+        pages_result = await self.db.execute(
+            select(Page)
+            .where(Page.presentation_id == session.presentation_id)
+            .order_by(Page.page_number)
+        )
+        pages = list(pages_result.scalars().all())
+        page_ids = [page.page_id for page in pages]
+
+        required_points_by_page: dict[int, list[str]] = defaultdict(list)
+        if page_ids:
+            points_result = await self.db.execute(
+                select(RequiredTalkingPoint)
+                .where(RequiredTalkingPoint.page_id.in_(page_ids))
+                .where(RequiredTalkingPoint.confirmed_by_admin.is_(True))
+            )
+            page_number_by_id = {page.page_id: page.page_number for page in pages}
+            for point in list(points_result.scalars().all()):
+                page_number = page_number_by_id.get(point.page_id)
+                if page_number is None:
+                    continue
+                required_points_by_page[page_number].append(point.description)
+
+        return Result.ok(
+            {
+                "session": session,
+                "user_messages": user_messages,
+                "interruption_events": interruption_events,
+                "total_pages": max(1, len(pages)),
+                "required_points_by_page": required_points_by_page,
+            }
+        )
+
+    def _build_presentation_review_payload(
         self,
         *,
         session: PracticeSession,
@@ -244,6 +252,165 @@ class PresentationReportService:
     ) -> dict[str, Any]:
         normalized_texts = [_normalize_text(message.content) for message in user_messages]
         combined_text = "".join(normalized_texts)
+
+        message_page_numbers = [
+            self._extract_page_number(
+                message.transcript_metadata
+                if isinstance(message.transcript_metadata, dict)
+                else None
+            )
+            for message in user_messages
+        ]
+        explicit_page_numbers = [
+            page_number for page_number in message_page_numbers if page_number is not None
+        ]
+        has_page_metadata = bool(message_page_numbers) and all(
+            page_number is not None for page_number in message_page_numbers
+        )
+        scoring_page_numbers = [
+            page_number if page_number is not None else 1
+            for page_number in message_page_numbers
+        ] or [1]
+        pages_with_messages = len(set(explicit_page_numbers)) if explicit_page_numbers else 0
+        scoring_page_coverage_ratio = round(
+            len(set(scoring_page_numbers)) / max(1, total_pages),
+            4,
+        )
+        diagnostic_page_coverage_ratio = round(
+            pages_with_messages / max(1, total_pages),
+            4,
+        )
+
+        coverage = self._build_required_point_coverage(
+            normalized_texts=normalized_texts,
+            combined_text=combined_text,
+            user_messages=user_messages,
+            message_page_numbers=message_page_numbers,
+            required_points_by_page=required_points_by_page,
+            has_page_metadata=has_page_metadata,
+        )
+
+        issue_counts = {
+            "forbidden_word": sum(
+                1
+                for event in interruption_events
+                if event.interruption_type == "forbidden_word"
+            ),
+            "missing_point": sum(
+                1
+                for event in interruption_events
+                if event.interruption_type == "missing_point"
+            ),
+            "vague_response": sum(
+                1
+                for event in interruption_events
+                if event.interruption_type == "vague_response"
+            ),
+        }
+        degraded_reasons = [] if has_page_metadata else ["missing_page_metadata"]
+        coverage_status = "complete" if has_page_metadata else "degraded"
+
+        metrics = self._build_metrics(
+            session=session,
+            user_messages=user_messages,
+            normalized_texts=normalized_texts,
+            combined_text=combined_text,
+            page_coverage_ratio=scoring_page_coverage_ratio,
+            required_coverage_ratio=coverage["coverage_ratio"],
+            forbidden_count=issue_counts["forbidden_word"],
+            missing_count=issue_counts["missing_point"],
+            vague_count=issue_counts["vague_response"],
+        )
+
+        dimension_scores = [
+            {
+                "name": name,
+                "score": metrics["dimension_values"][name],
+                "weight": weight,
+                "description": self._dimension_description(name),
+            }
+            for name, weight in self.DIMENSION_WEIGHTS
+        ]
+        overall_score = round(
+            sum(item["score"] * item["weight"] for item in dimension_scores)
+            / sum(item["weight"] for item in dimension_scores),
+            1,
+        )
+
+        page_summaries = self._build_page_summaries(
+            user_messages=user_messages,
+            message_page_numbers=message_page_numbers,
+            total_pages=total_pages,
+            coverage=coverage,
+            has_page_metadata=has_page_metadata,
+        )
+        strengths = self._build_strengths(
+            metrics["dimension_values"],
+            metrics,
+            has_page_metadata=has_page_metadata,
+        )
+        improvements = self._build_improvements(
+            metrics["dimension_values"],
+            metrics,
+            has_page_metadata=has_page_metadata,
+        )
+        recommendations = self._build_recommendations(
+            metrics["dimension_values"],
+            metrics,
+            has_page_metadata=has_page_metadata,
+        )
+        detailed_feedback = self._build_detailed_feedback(
+            overall_score=overall_score,
+            metrics=metrics,
+            strengths=strengths,
+            improvements=improvements,
+            has_page_metadata=has_page_metadata,
+        )
+
+        return {
+            "overall_score": overall_score,
+            "dimension_scores": dimension_scores,
+            "page_summaries": page_summaries,
+            "required_talking_points": {
+                "status": coverage_status,
+                "total": coverage["total"],
+                "covered": coverage["covered"],
+                "missing": coverage["missing"],
+                "coverage_ratio": coverage["coverage_ratio"],
+            },
+            "issue_counts": issue_counts,
+            "strengths": strengths,
+            "improvements": improvements,
+            "recommendations": recommendations,
+            "detailed_feedback": detailed_feedback,
+            "has_page_metadata": has_page_metadata,
+            "coverage_status": coverage_status,
+            "diagnostics": {
+                "has_page_metadata": has_page_metadata,
+                "pages_with_messages": pages_with_messages,
+                "total_pages": total_pages,
+                "page_coverage_ratio": diagnostic_page_coverage_ratio,
+                "required_points_total": coverage["total"],
+                "required_points_covered": coverage["covered"],
+                "required_points_missing": coverage["missing"],
+                "required_coverage_ratio": coverage["coverage_ratio"],
+                "degraded_reasons": degraded_reasons,
+            },
+        }
+
+    def _build_metrics(
+        self,
+        *,
+        session: PracticeSession,
+        user_messages: list[ConversationMessage],
+        normalized_texts: list[str],
+        combined_text: str,
+        page_coverage_ratio: float,
+        required_coverage_ratio: float,
+        forbidden_count: int,
+        missing_count: int,
+        vague_count: int,
+    ) -> dict[str, Any]:
         total_chars = sum(len(text) for text in normalized_texts)
         filler_count = sum(combined_text.count(term) for term in self.FILLER_TERMS)
         professional_hits = sum(
@@ -264,58 +431,6 @@ class PresentationReportService:
             if text and text == previous_text:
                 duplicate_messages += 1
             previous_text = text
-
-        page_numbers: list[int] = []
-        for message in user_messages:
-            metadata = (
-                message.transcript_metadata
-                if isinstance(message.transcript_metadata, dict)
-                else {}
-            )
-            try:
-                page_number = int(metadata.get("page_number") or 1)
-            except (TypeError, ValueError):
-                page_number = 1
-            page_numbers.append(max(1, page_number))
-
-        distinct_pages = len(set(page_numbers)) if page_numbers else 1
-        page_coverage_ratio = distinct_pages / max(1, total_pages)
-
-        matched_required_points = 0
-        total_required_points = 0
-        for page_number, points in required_points_by_page.items():
-            page_text = "".join(
-                normalized_texts[index]
-                for index, candidate_page in enumerate(page_numbers)
-                if candidate_page == page_number
-            )
-            for point in points:
-                normalized_point = _normalize_text(point)
-                if not normalized_point:
-                    continue
-                total_required_points += 1
-                if normalized_point in page_text:
-                    matched_required_points += 1
-                    continue
-                short_anchor = normalized_point[: min(len(normalized_point), 8)]
-                if short_anchor and short_anchor in page_text:
-                    matched_required_points += 1
-
-        required_coverage_ratio = (
-            matched_required_points / total_required_points
-            if total_required_points > 0
-            else 1.0
-        )
-
-        forbidden_count = sum(
-            1 for event in interruption_events if event.interruption_type == "forbidden_word"
-        )
-        missing_count = sum(
-            1 for event in interruption_events if event.interruption_type == "missing_point"
-        )
-        vague_count = sum(
-            1 for event in interruption_events if event.interruption_type == "vague_response"
-        )
 
         duration_minutes = 0.0
         if session.start_time and session.end_time:
@@ -369,8 +484,8 @@ class PresentationReportService:
             "interaction_term_hits": interaction_term_hits,
             "question_count": question_count,
             "duplicate_messages": duplicate_messages,
-            "page_coverage_ratio": round(page_coverage_ratio, 4),
-            "required_coverage_ratio": round(required_coverage_ratio, 4),
+            "page_coverage_ratio": page_coverage_ratio,
+            "required_coverage_ratio": required_coverage_ratio,
             "forbidden_count": forbidden_count,
             "missing_count": missing_count,
             "vague_count": vague_count,
@@ -378,55 +493,109 @@ class PresentationReportService:
             "dimension_values": dimension_values,
         }
 
-    def _build_stage_summaries(
+    def _build_required_point_coverage(
+        self,
+        *,
+        normalized_texts: list[str],
+        combined_text: str,
+        user_messages: list[ConversationMessage],
+        message_page_numbers: list[int | None],
+        required_points_by_page: dict[int, list[str]],
+        has_page_metadata: bool,
+    ) -> dict[str, Any]:
+        total = sum(len(points) for points in required_points_by_page.values())
+        covered = 0
+        matched_by_page: dict[int, list[str]] = defaultdict(list)
+        missing_by_page: dict[int, list[str]] = defaultdict(list)
+
+        if has_page_metadata:
+            page_text_by_page: dict[int, str] = defaultdict(str)
+            for index, page_number in enumerate(message_page_numbers):
+                if page_number is None:
+                    continue
+                page_text_by_page[page_number] += normalized_texts[index]
+
+            for page_number, points in required_points_by_page.items():
+                page_text = page_text_by_page.get(page_number, "")
+                for point in points:
+                    if self._matches_required_point(point, page_text):
+                        covered += 1
+                        matched_by_page[page_number].append(point)
+                    else:
+                        missing_by_page[page_number].append(point)
+        else:
+            for page_number, points in required_points_by_page.items():
+                for point in points:
+                    if self._matches_required_point(point, combined_text):
+                        covered += 1
+                        matched_by_page[page_number].append(point)
+                    else:
+                        missing_by_page[page_number].append(point)
+
+        missing = max(0, total - covered)
+        coverage_ratio = round((covered / total) if total else 1.0, 4)
+        return {
+            "status": "complete" if has_page_metadata else "degraded",
+            "total": total,
+            "covered": covered,
+            "missing": missing,
+            "coverage_ratio": coverage_ratio,
+            "matched_by_page": dict(matched_by_page),
+            "missing_by_page": dict(missing_by_page),
+        }
+
+    def _build_page_summaries(
         self,
         *,
         user_messages: list[ConversationMessage],
-        required_points_by_page: dict[int, list[str]],
+        message_page_numbers: list[int | None],
         total_pages: int,
+        coverage: dict[str, Any],
+        has_page_metadata: bool,
     ) -> list[dict[str, Any]]:
+        if not has_page_metadata:
+            return []
+
         grouped_messages: dict[int, list[ConversationMessage]] = defaultdict(list)
-        for message in user_messages:
-            metadata = (
-                message.transcript_metadata
-                if isinstance(message.transcript_metadata, dict)
-                else {}
-            )
-            try:
-                page_number = int(metadata.get("page_number") or 1)
-            except (TypeError, ValueError):
-                page_number = 1
+        for message, page_number in zip(user_messages, message_page_numbers, strict=False):
+            if page_number is None:
+                continue
             grouped_messages[max(1, page_number)].append(message)
 
         summaries: list[dict[str, Any]] = []
         for page_number in sorted(grouped_messages.keys()):
             messages = grouped_messages[page_number]
-            page_text = "".join(_normalize_text(message.content) for message in messages)
-            matched_points: list[str] = []
-            for point in required_points_by_page.get(page_number, []):
-                normalized_point = _normalize_text(point)
-                if not normalized_point:
-                    continue
-                if normalized_point in page_text or normalized_point[:8] in page_text:
-                    matched_points.append(point)
-
+            matched_points = list(coverage["matched_by_page"].get(page_number, []))
+            missing_points = list(coverage["missing_by_page"].get(page_number, []))
+            combined_page_text = "".join(_normalize_text(message.content) for message in messages)
             avg_score = _clamp_score(
                 58
-                + min(18, len(page_text) / 80)
+                + min(18, len(combined_page_text) / 80)
                 + min(12, len(matched_points) * 6)
-                + (8 if ("?" in "".join(message.content for message in messages) or "？" in "".join(message.content for message in messages)) else 0)
+                + (
+                    8
+                    if (
+                        "?" in "".join(message.content for message in messages)
+                        or "？" in "".join(message.content for message in messages)
+                    )
+                    else 0
+                )
             )
             summaries.append(
                 {
+                    "page_number": min(page_number, total_pages),
                     "stage_number": min(page_number, total_pages),
                     "start_turn": min(message.turn_number for message in messages),
                     "end_turn": max(message.turn_number for message in messages),
                     "average_score": avg_score,
                     "key_points": matched_points[:3],
+                    "matched_required_points": matched_points,
+                    "missing_required_points": missing_points,
                     "summary": self._build_page_summary(
                         page_number=page_number,
                         messages=messages,
                         matched_points=matched_points,
+                        missing_points=missing_points,
                     ),
                 }
             )
@@ -439,11 +608,17 @@ class PresentationReportService:
         page_number: int,
         messages: list[ConversationMessage],
         matched_points: list[str],
+        missing_points: list[str],
     ) -> str:
-        if matched_points:
+        if matched_points and not missing_points:
             return (
                 f"第 {page_number} 页讲解覆盖了 {len(matched_points)} 个核心要点，"
                 "整体表达较完整。"
+            )
+        if matched_points and missing_points:
+            return (
+                f"第 {page_number} 页已覆盖 {len(matched_points)} 个关键点，"
+                f"仍缺少 {len(missing_points)} 个要点可以继续补强。"
             )
         if len(messages) >= 2:
             return f"第 {page_number} 页有连续讲解，但核心要点覆盖仍可继续加强。"
@@ -453,6 +628,8 @@ class PresentationReportService:
         self,
         dimension_values: dict[str, float],
         metrics: dict[str, Any],
+        *,
+        has_page_metadata: bool,
     ) -> list[str]:
         strengths: list[str] = []
         for name, score in sorted(
@@ -466,12 +643,16 @@ class PresentationReportService:
             strengths.append("PPT 核心要点覆盖较完整")
         if metrics["professional_hits"] >= 4:
             strengths.append("讲解中体现出一定产品与技术术语")
+        if not has_page_metadata:
+            strengths.append("整场讲解记录仍可用于保留总分与整体建议")
         return strengths[:5] or ["整体讲解结构较稳定"]
 
     def _build_improvements(
         self,
         dimension_values: dict[str, float],
         metrics: dict[str, Any],
+        *,
+        has_page_metadata: bool,
     ) -> list[str]:
         improvements: list[str] = []
         for name, score in sorted(
@@ -484,12 +665,16 @@ class PresentationReportService:
             improvements.append("需要进一步减少口头语和重复衔接词")
         if metrics["required_coverage_ratio"] < 0.65:
             improvements.append("部分页面的关键点覆盖还不够完整")
+        if not has_page_metadata:
+            improvements.append("历史记录缺少页码元数据，逐页总结与覆盖判断只能降级展示")
         return improvements[:5] or ["可以继续增加更多案例与互动设计"]
 
     def _build_recommendations(
         self,
         dimension_values: dict[str, float],
         metrics: dict[str, Any],
+        *,
+        has_page_metadata: bool,
     ) -> list[str]:
         recommendations: list[str] = []
         if dimension_values["流畅连贯性"] < 80:
@@ -504,6 +689,8 @@ class PresentationReportService:
             recommendations.append("每个主题段主动加入 1 个引导性问题或自问自答，带动听众参与。")
         if metrics["required_coverage_ratio"] < 0.7:
             recommendations.append("给每页整理 2-3 个必须讲到的关键词，演练时逐页打勾确认。")
+        if not has_page_metadata:
+            recommendations.append("后续请沿用支持页码落库的新版运行链路完成一轮翻页演练，补齐逐页证据。")
         return recommendations[:6] or ["保持当前节奏，继续通过整场演练巩固表达稳定性。"]
 
     def _build_detailed_feedback(
@@ -513,20 +700,46 @@ class PresentationReportService:
         metrics: dict[str, Any],
         strengths: list[str],
         improvements: list[str],
+        has_page_metadata: bool,
     ) -> str:
         duration_text = (
             f"本次演讲训练累计约 {metrics['duration_minutes']:.1f} 分钟，"
             if metrics["duration_minutes"] > 0
             else "本次演讲训练已形成完整讲解记录，"
         )
+        coverage_text = (
+            f"关键点命中率约 {metrics['required_coverage_ratio'] * 100:.0f}%，"
+            if has_page_metadata
+            else "由于缺少页码元数据，逐页总结与要点覆盖按降级模式展示，"
+        )
         return (
             f"{duration_text}综合得分 {overall_score:.1f} 分。"
-            f"当前优势集中在：{ '；'.join(strengths[:3]) }。"
-            f"需要优先改进的方向是：{ '；'.join(improvements[:3]) }。"
+            f"当前优势集中在：{'；'.join(strengths[:3])}。"
+            f"需要优先改进的方向是：{'；'.join(improvements[:3])}。"
             f"从过程数据看，你覆盖了约 {metrics['page_coverage_ratio'] * 100:.0f}% 的页面，"
-            f"关键点命中率约 {metrics['required_coverage_ratio'] * 100:.0f}%，"
+            f"{coverage_text}"
             f"口头语/重复触发约 {metrics['filler_count']} 次。"
         )
+
+    @staticmethod
+    def _extract_page_number(transcript_metadata: dict[str, Any] | None) -> int | None:
+        if not isinstance(transcript_metadata, dict):
+            return None
+        try:
+            page_number = int(transcript_metadata.get("page_number"))
+        except (TypeError, ValueError):
+            return None
+        return max(1, page_number)
+
+    @staticmethod
+    def _matches_required_point(point: str, text: str) -> bool:
+        normalized_point = _normalize_text(point)
+        if not normalized_point or not text:
+            return False
+        if normalized_point in text:
+            return True
+        short_anchor = normalized_point[: min(len(normalized_point), 8)]
+        return bool(short_anchor and short_anchor in text)
 
     @staticmethod
     def _dimension_description(name: str) -> str:

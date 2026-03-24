@@ -200,10 +200,50 @@ async def test_check_and_interrupt_updates_user_feedback(
     )
     handler._update_message_analysis.assert_awaited_once_with(
         message_id="user-msg-001",
-        analysis_data={"ai_feedback": "vague_response:有点模糊"},
+        analysis_data={
+            "ai_feedback": "vague_response:有点模糊",
+            "transcript_metadata": {"page_number": 2},
+        },
     )
     handler._send_interruption.assert_awaited_once_with(decision)
     assert handler.transcript_buffer == ""
+
+
+@pytest.mark.asyncio
+async def test_update_message_analysis_passes_transcript_metadata_to_storage(
+    handler: PresentationWebSocketHandler,
+):
+    """Legacy handler should persist current page metadata through storage.update_analysis."""
+    storage = Mock()
+    storage.update_analysis = AsyncMock(return_value=Result.ok(SimpleNamespace()))
+
+    with (
+        patch(
+            "presentation_coach.websocket.presentation_handler.AsyncSessionLocal",
+            _FakeSessionFactory(),
+        ),
+        patch(
+            "presentation_coach.websocket.presentation_handler.MessageStorageService",
+            return_value=storage,
+        ),
+    ):
+        success = await handler._update_message_analysis(
+            message_id="user-msg-002",
+            analysis_data={
+                "ai_feedback": "vague_response:有点模糊",
+                "transcript_metadata": {"page_number": 3},
+            },
+        )
+
+    assert success is True
+    storage.update_analysis.assert_awaited_once_with(
+        message_id="user-msg-002",
+        fuzzy_words=None,
+        transcript_metadata={"page_number": 3},
+        sales_stage=None,
+        score_snapshot=None,
+        ai_feedback="vague_response:有点模糊",
+    )
 
 
 @pytest.mark.asyncio

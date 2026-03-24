@@ -763,6 +763,9 @@ class PresentationWebSocketHandler(BaseWebSocketHandler):
                                     f"{decision.get('type', 'unknown')}:"
                                     f"{decision.get('trigger', '')}"
                                 ),
+                                "transcript_metadata": {
+                                    "page_number": self.current_page,
+                                },
                             },
                         )
                     await self._send_realtime_feedback(decision)
@@ -1385,6 +1388,7 @@ class PresentationWebSocketHandler(BaseWebSocketHandler):
             result = await storage.update_analysis(
                 message_id=message_id,
                 fuzzy_words=analysis_data.get("fuzzy_words"),
+                transcript_metadata=analysis_data.get("transcript_metadata"),
                 sales_stage=analysis_data.get("sales_stage"),
                 score_snapshot=analysis_data.get("score_snapshot"),
                 ai_feedback=analysis_data.get("ai_feedback"),

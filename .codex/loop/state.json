@@ -1,7 +1,7 @@
 {
   "mode": "stabilize",
-  "current_issue_id": "M001-S06",
-  "current_issue_type": "slice",
+  "current_issue_id": "M001-S07-T01",
+  "current_issue_type": "task",
   "current_issue_status": "done",
   "pending_issue_ids": [],
   "completed_issue_ids": [
@@ -24,28 +24,32 @@
     "M001-S05-T03",
     "M001-S06-T01",
     "M001-S06-T02",
-    "M001-S06"
+    "M001-S06",
+    "M001-S07-T01"
   ],
   "blocked_issue_ids": [],
   "deferred_issue_ids": [],
   "last_modified_files": [
-    ".gsd/REQUIREMENTS.md",
-    ".gsd/PROJECT.md",
-    ".gsd/milestones/M001/M001-ROADMAP.md",
-    ".gsd/milestones/M001/slices/S06/S06-SUMMARY.md",
-    ".gsd/milestones/M001/slices/S06/S06-UAT.md",
+    "backend/src/presentation_coach/services/presentation_report_service.py",
+    "backend/src/presentation_coach/websocket/presentation_handler.py",
+    "backend/tests/unit/evaluation/test_comprehensive_report_service.py",
+    "backend/tests/unit/test_presentation_handler_persistence.py",
+    "backend/tests/unit/test_presentation_stepfun_realtime_handler.py",
+    ".gsd/milestones/M001/slices/S07/S07-PLAN.md",
+    ".gsd/milestones/M001/slices/S07/tasks/T01-SUMMARY.md",
+    ".gsd/DECISIONS.md",
     ".codex/loop/state.json",
     ".codex/loop/log.md"
   ],
   "last_verification_commands": [
-    "cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_history_service_evidence_projection.py tests/integration/test_admin_users_api.py",
-    "cd backend && venv/bin/python -m pytest -c pyproject.toml tests/integration/test_admin_users_api.py -k 'progress or stats'",
-    "cd web && npm test -- --run 'src/app/admin/users/[id]/page.test.tsx'",
-    "cd backend && /usr/bin/time -p venv/bin/alembic upgrade head",
-    "browser runtime: POST /api/v1/auth/dev-login -> /admin/users/89e31f06-6393-42b6-877e-5a007803136a success state assertions + direct /progress and /stats checks + injected progress empty/error refresh assertions"
+    "cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/evaluation/test_comprehensive_report_service.py tests/unit/test_presentation_handler_persistence.py tests/unit/test_presentation_stepfun_realtime_handler.py",
+    "cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_presentation_handler_persistence.py -k page_number",
+    "cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/evaluation/test_comprehensive_report_service.py -k degrades_without_page_metadata",
+    "cd backend && venv/bin/python -m pytest -c pyproject.toml tests/contract/test_presentation_report_contract.py tests/integration/test_presentation_report_flow.py",
+    "cd web && npm test -- --run 'src/app/(user)/practice/[sessionId]/report/page.test.tsx'"
   ],
-  "last_verification_result": "S06 slice verification passed fresh: backend projection/admin-user suites are green, the focused admin user-detail page test is green, Alembic is at head, direct /progress and /stats reads match the rendered cards, and live browser review confirmed success plus inline progress empty/error states without collapsing the shell.",
-  "last_success_signal": "S06 is complete: the admin user detail page now exposes projection-backed continuous-change guidance that supervisors can use to judge improvement, repeated issues, and whether focus should change.",
+  "last_verification_result": "T01 verification passed fresh on the backend unit suites and the explicit degraded-path check; the slice-level contract/integration command still fails because T02's test files do not exist yet, while the existing report page test remains green.",
+  "last_success_signal": "Legacy and StepFun presentation runtimes now share persisted page-number evidence, and PresentationReportService can emit one normalized presentation review payload with explicit degraded diagnostics when historical page metadata is missing.",
   "last_growth_scan": null,
-  "next_action": "Reassess the M001 roadmap and choose the next open slice, with S07 now the remaining functional gap before final S08 release closure."
+  "next_action": "Proceed to M001-S07-T02 to wire the normalized presentation_review payload into the shared /practice/sessions/{id}/report contract and add the missing contract/integration tests."
 }

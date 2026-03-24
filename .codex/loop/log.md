@@ -397,3 +397,28 @@ Append one entry per iteration:
   verification results: passed; fresh backend/web slice verification succeeded, Alembic was at head, direct browser-side /progress and /stats reads matched the rendered cards, and the live admin page kept report drill-ins while proving success, empty, and error progress branches.
   success signal status: S06 is complete and the supervisor continuous-change view is now a verified projection-backed part of the M001 training loop rather than a generic chart detached from the canonical report facts.
   rollback note: no product rollback introduced in this closer turn; if future work needs to revisit S06, keep R007 validated unless /progress, /stats, and completed-session previews drift off the shared HistoryService projection line.
+
+- time: 2026-03-24T10:09:23+08:00
+  mode: stabilize
+  item id: M001-S07-T01
+  files changed:
+    - backend/src/presentation_coach/services/presentation_report_service.py
+    - backend/src/presentation_coach/websocket/presentation_handler.py
+    - backend/tests/unit/evaluation/test_comprehensive_report_service.py
+    - backend/tests/unit/test_presentation_handler_persistence.py
+    - backend/tests/unit/test_presentation_stepfun_realtime_handler.py
+    - .gsd/milestones/M001/slices/S07/S07-PLAN.md
+    - .gsd/milestones/M001/slices/S07/tasks/T01-SUMMARY.md
+    - .gsd/DECISIONS.md
+    - .codex/loop/state.json
+    - .codex/loop/log.md
+  summary: Added a normalized PresentationReportService review builder with explicit degraded page-metadata diagnostics, routed the enhanced presentation report through that builder, and made the legacy PPT websocket persist current_page via transcript_metadata on the existing message-analysis update path.
+  verification commands:
+    - cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/evaluation/test_comprehensive_report_service.py tests/unit/test_presentation_handler_persistence.py tests/unit/test_presentation_stepfun_realtime_handler.py
+    - cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_presentation_handler_persistence.py -k page_number
+    - cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/evaluation/test_comprehensive_report_service.py -k degrades_without_page_metadata
+    - cd backend && venv/bin/python -m pytest -c pyproject.toml tests/contract/test_presentation_report_contract.py tests/integration/test_presentation_report_flow.py
+    - cd web && npm test -- --run 'src/app/(user)/practice/[sessionId]/report/page.test.tsx'
+  verification results: backend T01 unit suites and the explicit degraded-path check passed fresh; the slice-level contract/integration command failed because T02's report contract tests are not in the tree yet; the existing report page test still passes.
+  success signal status: both presentation runtimes now write the same page-number evidence fact line, and one reusable presentation review payload is available for the shared report contract with explicit degraded fallback reasons instead of sales-semantic silence.
+  rollback note: if S07 contract wiring changes in T02+, keep PresentationReportService as the single PPT review authority and preserve legacy transcript_metadata.page_number persistence unless a fully re-verified storage contract replaces it.
