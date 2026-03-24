@@ -19,6 +19,7 @@
 ## Verification
 
 - `cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_realtime_feedback_arbiter.py tests/unit/test_capability_processor.py tests/unit/test_stepfun_realtime_handler.py tests/unit/test_stepfun_realtime_persistence.py`
+- `cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_realtime_feedback_arbiter.py -k 'suppress or preserve_context' -vv`
 - `cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_fuzzy_detection.py -k cooldown`
 - `cd web && npm test -- --run 'src/hooks/websocket/message-handlers.test.ts' 'src/hooks/use-practice-websocket.test.ts' 'src/components/practice/ScorePanel.test.tsx' 'src/components/practice/RightPanelContent.test.tsx'`
 
@@ -37,7 +38,7 @@
 
 ## Tasks
 
-- [ ] **T01: Add a shared backend arbiter for single-turn coaching** `est:2h`
+- [x] **T01: Add a shared backend arbiter for single-turn coaching** `est:2h`
   - Why: S02’s main risk is cross-channel competition after fuzzy / stage / score signals are produced; the priority and cooldown rules need one backend seam before both runtime modes can stay aligned.
   - Files: `backend/src/sales_bot/websocket/realtime_feedback_arbiter.py`, `backend/src/sales_bot/websocket/components/capability_processor.py`, `backend/tests/unit/test_realtime_feedback_arbiter.py`, `backend/tests/unit/test_capability_processor.py`, `backend/tests/unit/test_fuzzy_detection.py`
   - Do: Add failing arbiter tests for issue priority, duplicate suppression, and same-turn cooldown behavior; implement a shared helper that normalizes fuzzy detections / score suggestions / stage context into one primary action direction without changing S01 field names; wire classic mode through that helper while keeping `FuzzyDetectionCapability`’s local cooldown behavior intact.

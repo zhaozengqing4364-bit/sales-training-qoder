@@ -15,12 +15,15 @@ from fastapi import WebSocket
 from agent.capabilities.runner import CapabilityRunner
 from agent.context import AgentContext
 from common.effectiveness import (
-    build_action_card,
     build_sales_effectiveness_metrics,
     evaluate_pass_flags,
 )
 from common.monitoring.logger import get_logger
 from common.websocket.base_handler import ConnectionManager
+from sales_bot.websocket.realtime_feedback_arbiter import (
+    RealtimeFeedbackArbiter,
+    RealtimeFeedbackPacingState,
+)
 
 logger = get_logger(__name__)
 
@@ -39,6 +42,8 @@ class CapabilityProcessor:
     def __init__(self, capability_runner: CapabilityRunner):
         self.capability_runner = capability_runner
         self._last_emitted_stage: str | None = None
+        self._feedback_arbiter = RealtimeFeedbackArbiter()
+        self._feedback_state = RealtimeFeedbackPacingState()
 
     async def run_and_send_feedback(
         self,
@@ -66,6 +71,8 @@ class CapabilityProcessor:
         detections_for_card: list[dict[str, Any]] = []
         suggestions_for_card: list[str] = []
         pass_flags_for_card: dict[str, bool] | None = None
+        stage_context_for_arbiter: dict[str, Any] | None = None
+        score_context_for_arbiter: dict[str, Any] | None = None
 
         logger.info("[CAPABILITY] Running capability modules...")
 
@@ -111,6 +118,7 @@ class CapabilityProcessor:
                         )
                         self._last_emitted_stage = current_stage
                     analysis_data["sales_stage"] = current_stage
+                    stage_context_for_arbiter = dict(stage_data)
 
             elif cap.capability_id == "realtime_scoring" and result.data:
                 score_payload = result.data if isinstance(result.data, dict) else {}
@@ -118,6 +126,7 @@ class CapabilityProcessor:
                     score_payload, websocket, manager, trace_id
                 )
                 analysis_data["score_snapshot"] = score_payload
+                score_context_for_arbiter = dict(score_payload)
                 feedback_message = score_payload.get("feedback")
                 if isinstance(feedback_message, str) and feedback_message.strip():
                     suggestions_for_card = [feedback_message.strip()]
@@ -169,14 +178,22 @@ class CapabilityProcessor:
                         f"Knowledge retrieval returned {len(knowledge_payload.get('results', []))} results"
                     )
 
-        action_card = build_action_card(
+        decision = self._feedback_arbiter.decide(
+            turn_number=getattr(context, "turn_count", None),
             fuzzy_detections=detections_for_card,
-            suggestions=suggestions_for_card,
+            score_suggestions=suggestions_for_card,
+            stage_context=stage_context_for_arbiter,
+            score_context=score_context_for_arbiter,
             pass_flags=pass_flags_for_card,
+            prior_state=self._feedback_state,
         )
-        if action_card:
-            await self._send_action_card(action_card, websocket, manager, trace_id)
-            analysis_data["ai_feedback"] = action_card.get("replacement", "")
+        self._feedback_state = decision.state
+
+        if decision.action_card:
+            await self._send_action_card(
+                decision.action_card, websocket, manager, trace_id
+            )
+            analysis_data["ai_feedback"] = decision.action_card.get("replacement", "")
 
         return analysis_data, knowledge_context
 

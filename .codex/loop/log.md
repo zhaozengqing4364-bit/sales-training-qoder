@@ -635,3 +635,27 @@ Append one entry per iteration:
   verification results: passed; all slice-level backend/web commands and the extra websocket-hook diagnostic suite passed fresh. The sales realtime contract is now aligned across StepFun and classic mode, same-turn practice-page score refreshes survive dedupe, and the existing report-side three-rollup evidence contract remains unchanged.
   success signal status: the training page now shows one shared sales rubric across both voice modes, and same-turn stage/suggestion/dimension refinements reach ScorePanel instead of being silently dropped.
   rollback note: no new product rollback was introduced in the closer turn; if downstream slices touch realtime coaching again, keep the shared sales-effectiveness helper on the backend and full-payload score_update idempotence on the frontend aligned as one contract.
+
+- time: 2026-03-24T19:58:10+08:00
+  mode: stabilize
+  item id: M002-S02-T01
+  files changed:
+    - .gsd/milestones/M002/slices/S02/S02-PLAN.md
+    - .gsd/milestones/M002/slices/S02/tasks/T01-SUMMARY.md
+    - .gsd/DECISIONS.md
+    - backend/src/sales_bot/websocket/realtime_feedback_arbiter.py
+    - backend/src/sales_bot/websocket/components/capability_processor.py
+    - backend/tests/unit/test_realtime_feedback_arbiter.py
+    - backend/tests/unit/test_capability_processor.py
+    - .codex/loop/state.json
+    - .codex/loop/log.md
+  summary: Added a shared realtime-feedback arbiter for classic sales coaching, kept fuzzy/stage/score payloads as context, preferred score guidance over low-severity filler detections for the primary action card, and suppressed duplicate action cards when the same signature repeats within the same turn.
+  verification commands:
+    - cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_realtime_feedback_arbiter.py tests/unit/test_capability_processor.py
+    - cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_realtime_feedback_arbiter.py -k 'suppress or preserve_context' -vv
+    - cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_fuzzy_detection.py -k cooldown
+    - cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_realtime_feedback_arbiter.py tests/unit/test_capability_processor.py tests/unit/test_stepfun_realtime_handler.py tests/unit/test_stepfun_realtime_persistence.py
+    - cd web && npm test -- --run 'src/hooks/websocket/message-handlers.test.ts' 'src/hooks/use-practice-websocket.test.ts' 'src/components/practice/ScorePanel.test.tsx' 'src/components/practice/RightPanelContent.test.tsx'
+  verification results: task-level backend arbiter/classic processor suites passed; fuzzy cooldown and the added arbiter diagnostic command passed; slice-level web verification passed; the broader slice backend command still fails on test_sync_sales_realtime_terminal_evidence_uses_latest_message_score_snapshot outside the classic-path seam.
+  success signal status: classic mode now emits one primary action card per turn with score-over-filler priority while preserving low-level context signals for downstream UI and StepFun reuse.
+  rollback note: if T02 revisits arbitration, keep the shared turn+signature pacing state as the only action-card dedupe source and preserve FuzzyDetectionCapability's own cooldown rather than adding a second low-level throttle.

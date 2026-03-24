@@ -189,3 +189,156 @@ async def test_realtime_scoring_action_card_uses_sales_effectiveness_semantics()
 
     assert score_update["data"]["overall_score"] == 82.0
     assert action_card["data"]["next_turn_rule"] == "下一轮先补案例或数据证据，并明确下一步动作。"
+
+
+@pytest.mark.asyncio
+async def test_score_guidance_beats_low_priority_fuzzy_detection_and_keeps_context_messages() -> None:
+    runner = MagicMock()
+    runner.capabilities = [
+        SimpleNamespace(capability_id="fuzzy_detection"),
+        SimpleNamespace(capability_id="sales_stage"),
+        SimpleNamespace(capability_id="realtime_scoring"),
+    ]
+    runner.run_all = AsyncMock(
+        return_value=[
+            SimpleNamespace(
+                success=True,
+                data={
+                    "detections": [
+                        {
+                            "category": "filler",
+                            "matched": ["嗯"],
+                            "suggestion": "减少填充词，保持表达流畅",
+                            "severity": "low",
+                        }
+                    ]
+                },
+            ),
+            SimpleNamespace(
+                success=True,
+                data={
+                    "current_stage": "discovery",
+                    "stage_name": "需求挖掘",
+                    "key_actions": ["继续追问痛点"],
+                    "guidance": "确认影响范围",
+                    "progress": 0.4,
+                    "stage_changed": True,
+                },
+            ),
+            SimpleNamespace(
+                success=True,
+                data={
+                    "overall": 82.0,
+                    "overall_score": 82.0,
+                    "dimension_scores": {
+                        "价值表达": 84.0,
+                        "客户收益连接": 80.0,
+                        "证据使用": 61.0,
+                        "异议处理": 76.0,
+                        "推进下一步": 64.0,
+                    },
+                    "feedback": "补上案例、数据或ROI证据，让价值主张更可信。",
+                },
+            ),
+        ]
+    )
+
+    processor = CapabilityProcessor(runner)
+    context = SimpleNamespace(trace_id="trace-priority-1", turn_count=2)
+    websocket = AsyncMock()
+    manager = MagicMock()
+    manager.send_json = AsyncMock()
+    db_lock = asyncio.Lock()
+
+    analysis, _ = await processor.run_and_send_feedback(
+        text="嗯，我们可以再介绍一下方案。",
+        context=context,
+        websocket=websocket,
+        manager=manager,
+        db_lock=db_lock,
+    )
+
+    assert analysis["ai_feedback"] == "补上案例、数据或ROI证据，让价值主张更可信。"
+    sent_payloads = [call.args[1] for call in manager.send_json.await_args_list]
+    sent_types = [payload["type"] for payload in sent_payloads]
+
+    assert sent_types == [
+        "fuzzy_detection",
+        "stage_update",
+        "score_update",
+        "action_card",
+    ]
+    action_card = next(payload for payload in sent_payloads if payload["type"] == "action_card")
+    assert action_card["data"]["issue"] == "当前轮次有1个关键改进点"
+    assert action_card["data"]["replacement"] == "补上案例、数据或ROI证据，让价值主张更可信。"
+
+
+@pytest.mark.asyncio
+async def test_duplicate_action_card_is_suppressed_for_same_turn_signature() -> None:
+    runner = MagicMock()
+    runner.capabilities = [SimpleNamespace(capability_id="realtime_scoring")]
+    runner.run_all = AsyncMock(
+        side_effect=[
+            [
+                SimpleNamespace(
+                    success=True,
+                    data={
+                        "overall_score": 82.0,
+                        "dimension_scores": {
+                            "价值表达": 84.0,
+                            "客户收益连接": 80.0,
+                            "证据使用": 61.0,
+                            "异议处理": 76.0,
+                            "推进下一步": 64.0,
+                        },
+                        "feedback": "补上案例、数据或ROI证据，让价值主张更可信。",
+                    },
+                )
+            ],
+            [
+                SimpleNamespace(
+                    success=True,
+                    data={
+                        "overall_score": 82.0,
+                        "dimension_scores": {
+                            "价值表达": 84.0,
+                            "客户收益连接": 80.0,
+                            "证据使用": 61.0,
+                            "异议处理": 76.0,
+                            "推进下一步": 64.0,
+                        },
+                        "feedback": "补上案例、数据或ROI证据，让价值主张更可信。",
+                    },
+                )
+            ],
+        ]
+    )
+
+    processor = CapabilityProcessor(runner)
+    context = SimpleNamespace(trace_id="trace-duplicate-1", turn_count=3)
+    websocket = AsyncMock()
+    manager = MagicMock()
+    manager.send_json = AsyncMock()
+    db_lock = asyncio.Lock()
+
+    first_analysis, _ = await processor.run_and_send_feedback(
+        text="我们可以用客户案例说明ROI。",
+        context=context,
+        websocket=websocket,
+        manager=manager,
+        db_lock=db_lock,
+    )
+    second_analysis, _ = await processor.run_and_send_feedback(
+        text="我们可以用客户案例说明ROI。",
+        context=context,
+        websocket=websocket,
+        manager=manager,
+        db_lock=db_lock,
+    )
+
+    assert first_analysis["ai_feedback"] == "补上案例、数据或ROI证据，让价值主张更可信。"
+    assert "ai_feedback" not in second_analysis
+
+    sent_payloads = [call.args[1] for call in manager.send_json.await_args_list]
+    sent_types = [payload["type"] for payload in sent_payloads]
+    assert sent_types == ["score_update", "action_card", "score_update"]
