@@ -71,7 +71,7 @@ This milestone is complete only when all are true:
 - [x] **S06: 连续变化视图（主管判断是否进步）** `risk:medium` `depends:[S02,S03]`
   > After this: 主管能看到某人最近几次训练是否进步、反复卡在哪类问题、是否该切换训练重点。
 
-- [ ] **S07: PPT 对练会后统一复盘可用化** `risk:medium` `depends:[S02,S04]`
+- [x] **S07: PPT 对练会后统一复盘可用化** `risk:medium` `depends:[S02,S04]`
   > After this: 新人完成一轮 PPT 对练后，可以拿到围绕真实 PPT 价值点的统一复盘、评分和建议；先不要求实时打断。
 
 - [ ] **S08: 桌面端发布验收与可观测性收口** `risk:medium` `depends:[S01,S03,S05,S06,S07]`

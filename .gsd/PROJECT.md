@@ -20,8 +20,9 @@
 - M001/S04 已完成：管理员现在可以在知识库详情页自助上传 `xlsx/xls`、重试 failed/pending 文档并运行搜索诊断；新 sales session 会冻结当时的 `knowledge_base_ids` 到 `voice_policy_snapshot`，`/practice/sessions/{id}/knowledge-check` 与 report 能暴露 hit / miss / kb_not_ready / search_failed 证据；标准 PPT 则在 live `/api/v1/presentations` 上支持 stable `presentation_id` 原位替换、`version_number` / `status` 可视化、active-session blocker，以及用户入口对当前版本/状态的展示。
 - M001/S05 已完成：sales StepFun 写入层、persona policy 编译链与 web 消费面现在统一切到“价值表达 / 客户收益连接 / 证据使用 / 异议处理 / 推进下一步”语义；live `score_update`、`ScorePanel`、`/practice/{sessionId}/knowledge-check` 与 canonical `/practice/{sessionId}/report` 会围绕 ROI、价格、竞品、证据追问输出销售主问题、下一轮目标和三类 rollup，而不再沿用旧 generic 沟通标签伪装成销售判断。
 - M001/S06 已完成：`HistoryService` 现在提供 projection-backed supervisor progress snapshot，admin `/progress` 与 `/stats` 的 score-bearing 字段已与 `/sessions` completed preview / canonical report 对齐；`/admin/users/[id]` 会直接给出“最近有没有进步 / 总卡在哪 / 是否该换重点”的连续变化摘要，并在 progress 无可评估数据或加载失败时保留本地 inline empty/error state。
+- M001/S07 已完成：presentation session 的 shared `/practice/{sessionId}/report` 现在按 `scenario_type="presentation"` 输出 canonical `presentation_review`，legacy 与 StepFun runtime 都有页码落库基线，旧缺页码 session 会返回显式 degraded PPT contract 而不是退回 sales 语义；shared report page 也会切到 PPT 复盘分支、跳过 knowledge-check/sales-only cards，并保留带 `presentation_id` 的再练入口。
 - 本地运行时若要验证 supervisor preview，数据库必须先迁移到 Alembic head（至少包含 `20260317_2310_020`）；否则 admin session preview 读取会因缺少 `conversation_messages.transcript_metadata` 而假性失败。
-- 当前主风险已从“训练材料是否能被后台维护并在下一次训练真实生效”转向：S07 如何在最新 PPT 材料之上输出可信的会后统一复盘，以及 S08 如何把 sales report / supervisor trend / PPT review 一起做成发布级整合验收与可观测性闭环。
+- 当前主风险已从“训练材料是否能被后台维护并在下一次训练真实生效”转向：S08 如何把 sales report / supervisor trend / PPT review 一起做成发布级整合验收与可观测性闭环，以及把本地 runtime/browser 证据沉淀成更稳定的上线验收脚本。
 - 真实首发目标已明确：先把桌面端稳定性做满，不在第一阶段绑定移动端 / 企业微信 / 外部系统集成。
 
 ## Architecture / Key Patterns

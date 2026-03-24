@@ -4,17 +4,6 @@ This file is the explicit capability and coverage contract for the project.
 
 ## Active
 
-### R008 — PPT 对练第一版必须允许用户完整讲完一轮，并在结束后获得围绕真实 PPT 价值点的统一复盘、评分与建议。
-- Class: primary-user-loop
-- Status: active
-- Description: PPT 对练第一版必须允许用户完整讲完一轮，并在结束后获得围绕真实 PPT 价值点的统一复盘、评分与建议。
-- Why it matters: 用户明确把 PPT 对练列为并行训练模式；即使实时纠偏后置，会后完整复盘也必须可用。
-- Source: user
-- Primary owning slice: M001/S07
-- Supporting slices: M001/S04
-- Validation: mapped
-- Notes: 实时打断式 PPT 教练是高价值增强，但不是 M001 上线硬门槛。
-
 ### R009 — 客户演练在训练过程中应逐步提供可用的实时评分、阶段反馈或下一轮建议，帮助用户边练边调整，而不是只能事后看分。
 - Class: differentiator
 - Status: active
@@ -44,8 +33,8 @@ This file is the explicit capability and coverage contract for the project.
 - Why it matters: 训练价值来自“做完后知道为什么好/差、下次怎么改”，没有复盘证据链，系统很难形成长期学习闭环。
 - Source: user
 - Primary owning slice: M004 (provisional)
-- Supporting slices: M001/S02, M001/S06
-- Validation: mapped; reinforced by S06 slice verification proving admin /progress and score-bearing /stats fields now read the same HistoryService/SessionEvidence projection line as completed-session previews and canonical session reports.
+- Supporting slices: M001/S02, M001/S06, M001/S07
+- Validation: mapped; reinforced by S06 slice verification proving admin /progress and score-bearing /stats fields now read the same HistoryService/SessionEvidence projection line as completed-session previews and canonical session reports, and by S07 slice verification proving presentation sessions now project scenario-aware `presentation_review` facts plus explicit degraded completeness through the same canonical `/practice/{sessionId}/report` entrypoint.
 - Notes: M001/S02 established the unified report/replay/history/trends evidence baseline; M001/S06 extends that same projection-backed fact line into admin supervisor progress and score summaries so cross-session management views no longer drift from single-session evidence.
 
 ### R012 — 知识库、PPT、Persona、报告视角和管理使用方式都需要按长期运营来设计，而不是一次配置后固定不变。
@@ -137,6 +126,17 @@ This file is the explicit capability and coverage contract for the project.
 - Supporting slices: M001/S03
 - Validation: Validated by S06 slice verification: backend HistoryService/admin-user projection suites passed, focused /progress and /stats integration assertions stayed aligned with projection-backed /sessions previews, web admin user-detail tests passed, Alembic was upgraded to head, and live browser review on /admin/users/{id} proved the supervisor-readable continuous-change panel answers whether the learner is improving, what keeps repeating, whether focus should change, and how inline empty/error states behave when progress data is unavailable.
 - Notes: S06 now proves the first supervisor trend view on top of the same evidence projection used by single-session reports and completed-session previews; system-internal task assignment remains deferred.
+
+### R008 — PPT 对练第一版必须允许用户完整讲完一轮，并在结束后获得围绕真实 PPT 价值点的统一复盘、评分与建议。
+- Class: primary-user-loop
+- Status: validated
+- Description: PPT 对练第一版必须允许用户完整讲完一轮，并在结束后获得围绕真实 PPT 价值点的统一复盘、评分与建议。
+- Why it matters: 用户明确把 PPT 对练列为并行训练模式；即使实时纠偏后置，会后完整复盘也必须可用。
+- Source: user
+- Primary owning slice: M001/S07
+- Supporting slices: M001/S04
+- Validation: Validated by S07 slice verification: backend presentation unit/degraded-path/contract/integration suites passed, live report API checks proved both complete and degraded presentation sessions keep `scenario_type="presentation"` plus canonical `presentation_review` without falling back to sales `main_issue`/`next_goal`, a fresh local audio-driven page-turn session (`8531c7f6-50da-4934-9fd4-63784c791edf`) completed through the real StepFun presentation websocket and produced page-aware summaries/coverage on `/api/v1/practice/sessions/{id}/report`, and the shared `/practice/{sessionId}/report` page rendered the PPT branch with sales-only sections absent while retry continuity preserved `presentation_id`.
+- Notes: S07 proves the first PPT postmortem is now canonical from the shared report entrypoint; realtime interruption coaching remains deferred.
 
 ### R013 — 现有仓库已经存在销售与 PPT 双训练模式入口、训练页、会话创建与基础生命周期骨架。
 - Class: primary-user-loop
@@ -252,10 +252,10 @@ This file is the explicit capability and coverage contract for the project.
 | R005 | launchability | validated | M001/S03 | M001/S02, M001/S08 | Validated by S03 slice verification: backend contract/admin integration tests passed, web focused report/admin tests passed, and live runtime report UAT (after alembic head) proved the first screen leads with result, main issue, next goal, and unified evidence without placeholder/export affordances. |
 | R006 | admin/support | validated | M001/S03 | M001/S05, M001/S07 | Validated by S03 slice verification: admin sessions integration contract passed, admin detail + manager-lite focused tests passed, and live runtime admin APIs exposed projection-backed supervisor preview fields and canonical /practice/{sessionId}/report drill-in targets for the same completed sessions. |
 | R007 | operability | validated | M001/S06 | M001/S03 | Validated by S06 slice verification: backend HistoryService/admin-user projection suites passed, focused /progress and /stats integration assertions stayed aligned with projection-backed /sessions previews, web admin user-detail tests passed, Alembic was upgraded to head, and live browser review on /admin/users/{id} proved the supervisor-readable continuous-change panel answers whether the learner is improving, what keeps repeating, whether focus should change, and how inline empty/error states behave when progress data is unavailable. |
-| R008 | primary-user-loop | active | M001/S07 | M001/S04 | mapped |
+| R008 | primary-user-loop | validated | M001/S07 | M001/S04 | Validated by S07 slice verification: backend presentation unit/degraded-path/contract/integration suites passed, live report API checks proved both complete and degraded presentation sessions keep `scenario_type="presentation"` plus canonical `presentation_review` without falling back to sales `main_issue`/`next_goal`, a fresh local audio-driven page-turn session (`8531c7f6-50da-4934-9fd4-63784c791edf`) completed through the real StepFun presentation websocket and produced page-aware summaries/coverage on `/api/v1/practice/sessions/{id}/report`, and the shared `/practice/{sessionId}/report` page rendered the PPT branch with sales-only sections absent while retry continuity preserved `presentation_id`. |
 | R009 | differentiator | active | M002 (provisional) | none | mapped |
 | R010 | integration | active | M003 (provisional) | none | mapped |
-| R011 | continuity | active | M004 (provisional) | M001/S02, M001/S06 | mapped; reinforced by S06 slice verification proving admin /progress and score-bearing /stats fields now read the same HistoryService/SessionEvidence projection line as completed-session previews and canonical session reports. |
+| R011 | continuity | active | M004 (provisional) | M001/S02, M001/S06, M001/S07 | mapped; reinforced by S06 slice verification proving admin /progress and score-bearing /stats fields now read the same HistoryService/SessionEvidence projection line as completed-session previews and canonical session reports, and by S07 slice verification proving presentation sessions now project scenario-aware `presentation_review` facts plus explicit degraded completeness through the same canonical `/practice/{sessionId}/report` entrypoint. |
 | R012 | operability | active | M005 (provisional) | none | mapped |
 | R013 | primary-user-loop | validated | baseline | none | validated |
 | R014 | admin/support | validated | baseline | none | validated |
@@ -269,7 +269,7 @@ This file is the explicit capability and coverage contract for the project.
 
 ## Coverage Summary
 
-- Active requirements: 5
-- Mapped to slices: 5
-- Validated: 10 (R001, R002, R003, R004, R005, R006, R007, R013, R014, R015)
+- Active requirements: 4
+- Mapped to slices: 4
+- Validated: 11 (R001, R002, R003, R004, R005, R006, R007, R008, R013, R014, R015)
 - Unmapped active requirements: 0
