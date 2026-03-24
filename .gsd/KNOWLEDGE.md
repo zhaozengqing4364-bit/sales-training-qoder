@@ -22,3 +22,4 @@
 - `/support/runtime` 的 authoritative release-health line 必须基于 persisted session evidence + runtime diagnostics 做 blocking / warning 分类，而不是只看 `PracticeSession.status`：`status="scoring"`、optional enhancement 噪声、或 degraded PPT/report 会话如果脱离 canonical evidence 语义去判断，很容易被误报成“已完成且健康”或“核心回归”。
 - 本地/auto-mode 如果并行跑多个 backend `pytest` 命令（尤其带默认 `pytest-cov` 配置），可能在 coverage combine 阶段互相删掉 `.coverage.*` 临时文件，表现成“所有测试都过了但命令最终 INTERNALERROR / FileNotFoundError 退出”；这类 backend suites 需要顺序跑，别把多个 pytest job 并发起来。
 - `web/src/hooks/websocket/message-handlers.ts` 里的 `score_update` 去重不能只看 `overall_score + turn_count`：sales 实时链路会在同一轮内刷新 `dimension_scores`、`stage_name` 和 `suggestions`，如果前端把这些同轮细化更新吞掉，ScorePanel 会静默停留在旧阶段/旧建议。
+- `cd web && npm test -- --run '...RightPanelContent.test.tsx'` 这类 Vitest 命令即使把一个不存在的测试文件路径混进去也可能继续返回 0，只报告实际匹配到的文件；跑 S02/S03 这类 slice gate 时要看输出里的 Test Files 列表，别把“命令绿了”误当成缺失的 targeted file 也被执行了。

@@ -20,6 +20,7 @@
 
 - `cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_realtime_feedback_arbiter.py tests/unit/test_capability_processor.py tests/unit/test_stepfun_realtime_handler.py tests/unit/test_stepfun_realtime_persistence.py`
 - `cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_realtime_feedback_arbiter.py -k 'suppress or preserve_context' -vv`
+- `cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_stepfun_realtime_handler.py tests/unit/test_stepfun_realtime_persistence.py -k 'suppress or replay' -vv`
 - `cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_fuzzy_detection.py -k cooldown`
 - `cd web && npm test -- --run 'src/hooks/websocket/message-handlers.test.ts' 'src/hooks/use-practice-websocket.test.ts' 'src/components/practice/ScorePanel.test.tsx' 'src/components/practice/RightPanelContent.test.tsx'`
 
@@ -44,7 +45,7 @@
   - Do: Add failing arbiter tests for issue priority, duplicate suppression, and same-turn cooldown behavior; implement a shared helper that normalizes fuzzy detections / score suggestions / stage context into one primary action direction without changing S01 field names; wire classic mode through that helper while keeping `FuzzyDetectionCapability`’s local cooldown behavior intact.
   - Verify: `cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_realtime_feedback_arbiter.py tests/unit/test_capability_processor.py && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_fuzzy_detection.py -k cooldown`
   - Done when: classic mode emits at most one primary action card per turn, repeated coaching with the same signature is suppressed by focused tests, and low-level fuzzy cooldown semantics still pass unchanged.
-- [ ] **T02: Wire StepFun feedback pacing and reconnect-safe arbiter state** `est:2h`
+- [x] **T02: Wire StepFun feedback pacing and reconnect-safe arbiter state** `est:2h`
   - Why: StepFun still emits fuzzy/score/action independently and only persists stage / score / action snapshots, so it can drift from classic mode and replay stale coaching after recovery.
   - Files: `backend/src/sales_bot/websocket/realtime_feedback_arbiter.py`, `backend/src/sales_bot/websocket/stepfun_realtime_handler.py`, `backend/tests/unit/test_stepfun_realtime_handler.py`, `backend/tests/unit/test_stepfun_realtime_persistence.py`
   - Do: Extend StepFun tests to prove same-turn single-action behavior and reconnect replay safety; route `_run_realtime_feedback(...)` through the shared arbiter instead of independent fuzzy/score/action sends; persist only the minimal serialized pacing state needed to avoid replay bursts after restore while keeping `_latest_score_snapshot` / `_latest_action_card` as the existing read-side diagnostics.

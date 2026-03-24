@@ -36,7 +36,6 @@ from common.ai.embedding_service import get_embedding_service
 from common.auth.service import resolve_websocket_token, verify_token
 from common.db.models import PracticeSession
 from common.effectiveness import (
-    build_action_card,
     build_sales_effectiveness_metrics,
     build_sales_rollup_scores,
     evaluate_effectiveness_snapshot,
@@ -111,6 +110,10 @@ from sales_bot.websocket.components.stepfun_runtime_metrics_helpers import (
 )
 from sales_bot.websocket.components.stepfun_tool_helpers import (
     build_stepfun_tools_from_policy,
+)
+from sales_bot.websocket.realtime_feedback_arbiter import (
+    RealtimeFeedbackArbiter,
+    RealtimeFeedbackPacingState,
 )
 from sales_bot.websocket.components.stepfun_upstream_router import (
     UpstreamEventRoute,
@@ -254,6 +257,8 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
         )
         self._latest_score_snapshot: dict[str, Any] | None = None
         self._latest_action_card: dict[str, Any] | None = None
+        self._feedback_arbiter = RealtimeFeedbackArbiter()
+        self._feedback_pacing_state = RealtimeFeedbackPacingState()
 
         self._feedback_context: AgentContext | None = None
         self._pending_grounding_context: str = ""
@@ -512,6 +517,9 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
             runtime_state["latest_action_card"] = copy.deepcopy(
                 self._latest_action_card
             )
+        feedback_pacing_state = self._feedback_pacing_state.to_dict()
+        if feedback_pacing_state:
+            runtime_state["feedback_pacing_state"] = feedback_pacing_state
 
         return SessionStateSnapshot(
             session_id=self.session_id or "",
@@ -545,6 +553,9 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
             copy.deepcopy(latest_action_card)
             if isinstance(latest_action_card, dict)
             else None
+        )
+        self._feedback_pacing_state = RealtimeFeedbackPacingState.from_dict(
+            runtime_state.get("feedback_pacing_state")
         )
 
         self._active_response = None
@@ -1337,6 +1348,7 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
         self._feedback_context = None
         self._last_emitted_stage = None
         self._latest_action_card = None
+        self._feedback_pacing_state = RealtimeFeedbackPacingState()
 
     async def _sync_session_state(self):
         if not self.session_id:
@@ -1921,6 +1933,14 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
         detections_for_card: list[dict[str, Any]] = []
         suggestions_for_card: list[str] = []
         pass_flags_for_card: dict[str, bool] | None = None
+        stage_context_for_arbiter: dict[str, Any] | None = None
+        score_context_for_arbiter: dict[str, Any] | None = None
+
+        if sales_stage:
+            stage_context_for_arbiter = {
+                "current_stage": sales_stage,
+                "stage_name": self._format_stage_name(sales_stage),
+            }
 
         await self._ensure_feedback_context()
         if self._feedback_context is None:
@@ -2005,6 +2025,7 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
                 }
                 self._latest_score_snapshot = score_snapshot
                 analysis_data["score_snapshot"] = score_snapshot
+                score_context_for_arbiter = dict(score_snapshot)
                 await self._send_score_update(
                     turn_number=turn_number,
                     overall_score=overall_score,
@@ -2020,15 +2041,21 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
                     )
                 )
 
-        action_card = build_action_card(
+        decision = self._feedback_arbiter.decide(
+            turn_number=turn_number,
             fuzzy_detections=detections_for_card,
-            suggestions=suggestions_for_card,
+            score_suggestions=suggestions_for_card,
+            stage_context=stage_context_for_arbiter,
+            score_context=score_context_for_arbiter,
             pass_flags=pass_flags_for_card,
+            prior_state=self._feedback_pacing_state,
         )
-        if action_card:
-            self._latest_action_card = action_card
-            analysis_data["ai_feedback"] = action_card.get("replacement", "")
-            await self._send_action_card(action_card)
+        self._feedback_pacing_state = decision.state
+
+        if decision.action_card:
+            self._latest_action_card = decision.action_card
+            analysis_data["ai_feedback"] = decision.action_card.get("replacement", "")
+            await self._send_action_card(decision.action_card)
 
         self._feedback_context.add_message(role="user", content=text)
         return analysis_data

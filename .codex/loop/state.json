@@ -1,6 +1,6 @@
 {
   "mode": "stabilize",
-  "current_issue_id": "M002-S02-T01",
+  "current_issue_id": "M002-S02-T02",
   "current_issue_type": "task",
   "current_issue_status": "done",
   "pending_issue_ids": [],
@@ -35,30 +35,32 @@
     "M002-S01-T01",
     "M002-S01-T02",
     "M002-S01",
-    "M002-S02-T01"
+    "M002-S02-T01",
+    "M002-S02-T02"
   ],
   "blocked_issue_ids": [],
   "deferred_issue_ids": [],
   "last_modified_files": [
     ".gsd/milestones/M002/slices/S02/S02-PLAN.md",
-    ".gsd/milestones/M002/slices/S02/tasks/T01-SUMMARY.md",
+    ".gsd/milestones/M002/slices/S02/tasks/T02-SUMMARY.md",
     ".gsd/DECISIONS.md",
-    "backend/src/sales_bot/websocket/realtime_feedback_arbiter.py",
-    "backend/src/sales_bot/websocket/components/capability_processor.py",
-    "backend/tests/unit/test_realtime_feedback_arbiter.py",
-    "backend/tests/unit/test_capability_processor.py",
+    ".gsd/KNOWLEDGE.md",
+    "backend/src/sales_bot/websocket/stepfun_realtime_handler.py",
+    "backend/tests/unit/test_stepfun_realtime_handler.py",
+    "backend/tests/unit/test_stepfun_realtime_persistence.py",
     ".codex/loop/state.json",
     ".codex/loop/log.md"
   ],
   "last_verification_commands": [
-    "cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_realtime_feedback_arbiter.py tests/unit/test_capability_processor.py",
-    "cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_realtime_feedback_arbiter.py -k 'suppress or preserve_context' -vv",
-    "cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_fuzzy_detection.py -k cooldown",
+    "cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_realtime_feedback_arbiter.py tests/unit/test_stepfun_realtime_handler.py tests/unit/test_stepfun_realtime_persistence.py",
     "cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_realtime_feedback_arbiter.py tests/unit/test_capability_processor.py tests/unit/test_stepfun_realtime_handler.py tests/unit/test_stepfun_realtime_persistence.py",
+    "cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_realtime_feedback_arbiter.py -k 'suppress or preserve_context' -vv",
+    "cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_stepfun_realtime_handler.py tests/unit/test_stepfun_realtime_persistence.py -k 'suppress or replay' -vv",
+    "cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_fuzzy_detection.py -k cooldown",
     "cd web && npm test -- --run 'src/hooks/websocket/message-handlers.test.ts' 'src/hooks/use-practice-websocket.test.ts' 'src/components/practice/ScorePanel.test.tsx' 'src/components/practice/RightPanelContent.test.tsx'"
   ],
-  "last_verification_result": "T01 task verification passed fresh: the new arbiter/classic processor suites, the arbiter suppression/context diagnostic command, and the existing fuzzy cooldown regression are green. Slice-level web verification is also green. The broader slice backend command is still red on tests/unit/test_stepfun_realtime_persistence.py::test_sync_sales_realtime_terminal_evidence_uses_latest_message_score_snapshot, which sits outside T01's classic-path seam.",
-  "last_success_signal": "Classic sales coaching now emits one primary action card per turn, prefers scoring guidance over low-severity filler detections, and preserves fuzzy/stage/score payloads as context.",
+  "last_verification_result": "T02 task verification passed fresh: the StepFun arbiter/persistence backend command is green, the broader slice backend command is green, the arbiter + StepFun diagnostic filters are green, the fuzzy cooldown regression is green, and the existing web slice command still exits 0. Note: Vitest only matched three existing web files; RightPanelContent.test.tsx remains absent for T03.",
+  "last_success_signal": "StepFun realtime coaching now shares the classic arbiter, emits at most one primary action card per turn, and restores minimal pacing state so reconnects do not replay stale action cards.",
   "last_growth_scan": null,
-  "next_action": "Proceed to M002-S02-T02 while carrying forward the known StepFun terminal-evidence persistence test failure."
+  "next_action": "Proceed to M002-S02-T03 while carrying forward the Vitest missing-file caveat for RightPanelContent.test.tsx."
 }

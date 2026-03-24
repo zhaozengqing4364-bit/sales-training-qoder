@@ -659,3 +659,28 @@ Append one entry per iteration:
   verification results: task-level backend arbiter/classic processor suites passed; fuzzy cooldown and the added arbiter diagnostic command passed; slice-level web verification passed; the broader slice backend command still fails on test_sync_sales_realtime_terminal_evidence_uses_latest_message_score_snapshot outside the classic-path seam.
   success signal status: classic mode now emits one primary action card per turn with score-over-filler priority while preserving low-level context signals for downstream UI and StepFun reuse.
   rollback note: if T02 revisits arbitration, keep the shared turn+signature pacing state as the only action-card dedupe source and preserve FuzzyDetectionCapability's own cooldown rather than adding a second low-level throttle.
+
+- time: 2026-03-24T20:14:49+08:00
+  mode: stabilize
+  item id: M002-S02-T02
+  files changed:
+    - backend/src/sales_bot/websocket/stepfun_realtime_handler.py
+    - backend/tests/unit/test_stepfun_realtime_handler.py
+    - backend/tests/unit/test_stepfun_realtime_persistence.py
+    - .gsd/milestones/M002/slices/S02/S02-PLAN.md
+    - .gsd/milestones/M002/slices/S02/tasks/T02-SUMMARY.md
+    - .gsd/DECISIONS.md
+    - .gsd/KNOWLEDGE.md
+    - .codex/loop/state.json
+    - .codex/loop/log.md
+  summary: Routed StepFun realtime coaching through the shared arbiter, persisted only minimal reconnect-safe pacing state, restored replay suppression after reconnect, and refreshed the stale legacy terminal-evidence expectation to the current sales-rollup fallback.
+  verification commands:
+    - cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_realtime_feedback_arbiter.py tests/unit/test_stepfun_realtime_handler.py tests/unit/test_stepfun_realtime_persistence.py
+    - cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_realtime_feedback_arbiter.py tests/unit/test_capability_processor.py tests/unit/test_stepfun_realtime_handler.py tests/unit/test_stepfun_realtime_persistence.py
+    - cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_realtime_feedback_arbiter.py -k 'suppress or preserve_context' -vv
+    - cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_stepfun_realtime_handler.py tests/unit/test_stepfun_realtime_persistence.py -k 'suppress or replay' -vv
+    - cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_fuzzy_detection.py -k cooldown
+    - cd web && npm test -- --run 'src/hooks/websocket/message-handlers.test.ts' 'src/hooks/use-practice-websocket.test.ts' 'src/components/practice/ScorePanel.test.tsx' 'src/components/practice/RightPanelContent.test.tsx'
+  verification results: passed; all backend T02/slice commands are green and the existing web slice command still exits 0, but Vitest only matched the three existing files because RightPanelContent.test.tsx is still missing and remains T03 work.
+  success signal status: StepFun now stays on the same single-action pacing line as classic mode and reconnect restore no longer replays stale action cards for the same turn.
+  rollback note: if later slices revisit reconnect persistence, keep StepFun snapshot state limited to feedback_pacing_state plus read-side score/action diagnostics unless a broader, fully re-verified recovery contract replaces it.

@@ -13,6 +13,10 @@ import common.api.practice as practice_api
 from common.db.models import PracticeSession
 from common.error_handling.result import Result
 from common.websocket.session_state_service import SessionStateSnapshot
+from sales_bot.websocket.realtime_feedback_arbiter import (
+    RealtimeFeedbackArbiter,
+    RealtimeFeedbackPacingState,
+)
 from sales_bot.websocket.stepfun_realtime_handler import StepFunRealtimeHandler
 
 
@@ -60,6 +64,10 @@ def test_create_state_snapshot_captures_minimal_runtime_recovery_fields_and_norm
     handler._last_emitted_stage = "discovery"
     handler._latest_score_snapshot = {"overall": 86.0}
     handler._latest_action_card = {"title": "先确认预算"}
+    handler._feedback_pacing_state = RealtimeFeedbackPacingState(
+        last_action_signature="sig-score-1",
+        last_action_turn=4,
+    )
 
     snapshot = handler._create_state_snapshot()
 
@@ -74,6 +82,10 @@ def test_create_state_snapshot_captures_minimal_runtime_recovery_fields_and_norm
         "last_emitted_stage": "discovery",
         "latest_score_snapshot": {"overall_score": 86.0},
         "latest_action_card": {"title": "先确认预算"},
+        "feedback_pacing_state": {
+            "last_action_signature": "sig-score-1",
+            "last_action_turn": 4,
+        },
     }
 
     handler._latest_score_snapshot["overall"] = 20.0
@@ -103,6 +115,10 @@ async def test_restore_session_state_rehydrates_minimal_runtime_and_emits_reconn
             "last_emitted_stage": "qualification",
             "latest_score_snapshot": {"overall": 91.0},
             "latest_action_card": {"title": "先确认关键需求"},
+            "feedback_pacing_state": {
+                "last_action_signature": "sig-score-restore",
+                "last_action_turn": 5,
+            },
         },
     )
 
@@ -115,6 +131,10 @@ async def test_restore_session_state_rehydrates_minimal_runtime_and_emits_reconn
     assert handler._last_emitted_stage == "qualification"
     assert handler._latest_score_snapshot == {"overall_score": 91.0}
     assert handler._latest_action_card == {"title": "先确认关键需求"}
+    assert getattr(handler, "_feedback_pacing_state", None) == RealtimeFeedbackPacingState(
+        last_action_signature="sig-score-restore",
+        last_action_turn=5,
+    )
     assert handler._active_response is None
     assert handler._pending_grounding_context == ""
     assert handler._pending_blocked_response_text == ""
@@ -122,6 +142,112 @@ async def test_restore_session_state_rehydrates_minimal_runtime_and_emits_reconn
     assert handler._awaiting_transcription_after_commit is False
     assert handler._has_uncommitted_audio is False
     handler._send_reconnection_success.assert_awaited_once_with(state)
+
+
+@pytest.mark.asyncio
+async def test_restore_session_state_suppresses_replayed_action_card_for_same_turn() -> None:
+    handler = StepFunRealtimeHandler()
+    handler.session_id = "session-stepfun-replay-001"
+    handler.websocket = MagicMock()
+    handler.manager = MagicMock()
+    handler.manager.send_json = AsyncMock()
+    handler._send_reconnection_success = AsyncMock()
+    handler._fuzzy_detection_enabled = False
+    handler._realtime_scoring_enabled = True
+    handler._realtime_scoring_capability = MagicMock()
+    handler._realtime_scoring_capability.on_session_start = AsyncMock()
+    handler._realtime_scoring_capability.execute = AsyncMock(
+        return_value=SimpleNamespace(
+            data={
+                "overall_score": 82.0,
+                "dimension_scores": {
+                    "价值表达": 84.0,
+                    "客户收益连接": 80.0,
+                    "证据使用": 61.0,
+                    "异议处理": 76.0,
+                    "推进下一步": 64.0,
+                },
+                "feedback": "补上案例、数据或ROI证据，让价值主张更可信。",
+            }
+        )
+    )
+
+    prior_decision = RealtimeFeedbackArbiter().decide(
+        turn_number=5,
+        score_suggestions=["补上案例、数据或ROI证据，让价值主张更可信。"],
+        pass_flags={
+            "pass_3min_flow": True,
+            "pass_5turn_defense": True,
+            "pass_4step_structure": False,
+        },
+        prior_state=RealtimeFeedbackPacingState(),
+    )
+    restored_action_card = dict(prior_decision.action_card or {})
+
+    state = SessionStateSnapshot(
+        session_id="session-stepfun-replay-001",
+        scenario="sales",
+        turn_count=5,
+        session_status="in_progress",
+        ai_state="listening",
+        runtime_state={
+            "latest_score_snapshot": {
+                "overall_score": 82.0,
+                "dimension_scores": {
+                    "价值表达": 84.0,
+                    "客户收益连接": 80.0,
+                    "证据使用": 61.0,
+                    "异议处理": 76.0,
+                    "推进下一步": 64.0,
+                },
+                "suggestions": ["补上案例、数据或ROI证据，让价值主张更可信。"],
+                "stage_name": "需求挖掘",
+            },
+            "latest_action_card": restored_action_card,
+            "feedback_pacing_state": prior_decision.state.to_dict(),
+        },
+    )
+
+    await handler._restore_session_state(state)
+    analysis = await handler._run_realtime_feedback(
+        user_text="我们可以用客户案例说明ROI。",
+        turn_number=5,
+        sales_stage="discovery",
+    )
+
+    sent_payloads = [call.args[1] for call in handler.manager.send_json.await_args_list]
+    action_cards = [payload for payload in sent_payloads if payload["type"] == "action_card"]
+    score_updates = [payload for payload in sent_payloads if payload["type"] == "score_update"]
+
+    assert analysis == {
+        "score_snapshot": {
+            "overall_score": 82.0,
+            "dimension_scores": {
+                "价值表达": 84.0,
+                "客户收益连接": 80.0,
+                "证据使用": 61.0,
+                "异议处理": 76.0,
+                "推进下一步": 64.0,
+            },
+            "suggestions": ["补上案例、数据或ROI证据，让价值主张更可信。"],
+            "stage_name": "需求挖掘",
+        }
+    }
+    assert len(score_updates) == 1
+    assert action_cards == []
+    assert handler._latest_action_card == restored_action_card
+    assert handler._latest_score_snapshot == {
+        "overall_score": 82.0,
+        "dimension_scores": {
+            "价值表达": 84.0,
+            "客户收益连接": 80.0,
+            "证据使用": 61.0,
+            "异议处理": 76.0,
+            "推进下一步": 64.0,
+        },
+        "suggestions": ["补上案例、数据或ROI证据，让价值主张更可信。"],
+        "stage_name": "需求挖掘",
+    }
 
 
 @pytest.mark.asyncio
@@ -245,9 +371,9 @@ async def test_sync_sales_realtime_terminal_evidence_uses_latest_message_score_s
     )
 
     assert source == "stepfun_message_analysis"
-    assert session.logic_score == 91.0
-    assert session.accuracy_score == 86.0
-    assert session.completeness_score == 87.0
+    assert session.logic_score == 88.0
+    assert session.accuracy_score == 88.0
+    assert session.completeness_score == 88.0
     assert session.effectiveness_snapshot is None
 
 

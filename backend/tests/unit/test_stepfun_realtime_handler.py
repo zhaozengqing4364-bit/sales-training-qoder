@@ -1471,6 +1471,145 @@ def test_enforce_tool_policy_guardrails_disables_web_search_without_kb():
 
 
 @pytest.mark.asyncio
+async def test_run_realtime_feedback_keeps_single_action_card_and_prioritizes_score_over_low_severity_fuzzy_detection():
+    handler = StepFunRealtimeHandler()
+    handler.session_id = "session-realtime-priority"
+    handler.websocket = MagicMock()
+    handler.manager = MagicMock()
+    handler.manager.send_json = AsyncMock()
+    handler._fuzzy_detection_enabled = True
+    handler._realtime_scoring_enabled = True
+
+    handler._fuzzy_detection_capability = MagicMock()
+    handler._fuzzy_detection_capability.on_session_start = AsyncMock()
+    handler._fuzzy_detection_capability.execute = AsyncMock(
+        return_value=SimpleNamespace(
+            data={
+                "detections": [
+                    {
+                        "category": "filler",
+                        "matched": ["嗯"],
+                        "suggestion": "减少填充词，保持表达流畅。",
+                        "severity": "low",
+                    }
+                ]
+            }
+        )
+    )
+    handler._realtime_scoring_capability = MagicMock()
+    handler._realtime_scoring_capability.on_session_start = AsyncMock()
+    handler._realtime_scoring_capability.execute = AsyncMock(
+        return_value=SimpleNamespace(
+            data={
+                "overall_score": 83.0,
+                "dimension_scores": {
+                    "价值表达": 83.0,
+                    "客户收益连接": 81.0,
+                    "证据使用": 60.0,
+                    "异议处理": 78.0,
+                    "推进下一步": 67.0,
+                },
+                "feedback": "补上案例、数据或ROI证据，让价值主张更可信。",
+            }
+        )
+    )
+
+    analysis = await handler._run_realtime_feedback(
+        user_text="我们先聊聊产品价值。",
+        turn_number=2,
+        sales_stage="discovery",
+    )
+
+    sent_payloads = [call.args[1] for call in handler.manager.send_json.await_args_list]
+    action_cards = [payload for payload in sent_payloads if payload["type"] == "action_card"]
+
+    assert analysis["fuzzy_words"] == [
+        {
+            "category": "filler",
+            "matched": ["嗯"],
+            "suggestion": "减少填充词，保持表达流畅。",
+            "severity": "low",
+        }
+    ]
+    assert analysis["score_snapshot"]["overall_score"] == 83.0
+    assert analysis["ai_feedback"] == "补上案例、数据或ROI证据，让价值主张更可信。"
+    assert len(action_cards) == 1
+    assert action_cards[0]["data"] == {
+        "issue": "当前轮次有1个关键改进点",
+        "replacement": "补上案例、数据或ROI证据，让价值主张更可信。",
+        "next_turn_rule": "下一轮先补案例或数据证据，并明确下一步动作。",
+    }
+
+
+@pytest.mark.asyncio
+async def test_run_realtime_feedback_suppresses_duplicate_action_card_for_same_turn():
+    handler = StepFunRealtimeHandler()
+    handler.session_id = "session-realtime-suppress"
+    handler.websocket = MagicMock()
+    handler.manager = MagicMock()
+    handler.manager.send_json = AsyncMock()
+    handler._fuzzy_detection_enabled = False
+    handler._realtime_scoring_enabled = True
+    handler._realtime_scoring_capability = MagicMock()
+    handler._realtime_scoring_capability.on_session_start = AsyncMock()
+    handler._realtime_scoring_capability.execute = AsyncMock(
+        return_value=SimpleNamespace(
+            data={
+                "overall_score": 82.0,
+                "dimension_scores": {
+                    "价值表达": 84.0,
+                    "客户收益连接": 80.0,
+                    "证据使用": 61.0,
+                    "异议处理": 76.0,
+                    "推进下一步": 64.0,
+                },
+                "feedback": "补上案例、数据或ROI证据，让价值主张更可信。",
+            }
+        )
+    )
+
+    first_analysis = await handler._run_realtime_feedback(
+        user_text="我们可以用客户案例说明ROI。",
+        turn_number=3,
+        sales_stage="discovery",
+    )
+    second_analysis = await handler._run_realtime_feedback(
+        user_text="我们可以用客户案例说明ROI。",
+        turn_number=3,
+        sales_stage="discovery",
+    )
+
+    expected_action_card = {
+        "issue": "当前轮次有1个关键改进点",
+        "replacement": "补上案例、数据或ROI证据，让价值主张更可信。",
+        "next_turn_rule": "下一轮先补案例或数据证据，并明确下一步动作。",
+    }
+    sent_payloads = [call.args[1] for call in handler.manager.send_json.await_args_list]
+    action_cards = [payload for payload in sent_payloads if payload["type"] == "action_card"]
+    score_updates = [payload for payload in sent_payloads if payload["type"] == "score_update"]
+
+    assert first_analysis["ai_feedback"] == "补上案例、数据或ROI证据，让价值主张更可信。"
+    assert second_analysis == {
+        "score_snapshot": {
+            "overall_score": 82.0,
+            "dimension_scores": {
+                "价值表达": 84.0,
+                "客户收益连接": 80.0,
+                "证据使用": 61.0,
+                "异议处理": 76.0,
+                "推进下一步": 64.0,
+            },
+            "suggestions": ["补上案例、数据或ROI证据，让价值主张更可信。"],
+            "stage_name": "需求挖掘",
+        }
+    }
+    assert len(action_cards) == 1
+    assert len(score_updates) == 2
+    assert action_cards[0]["data"] == expected_action_card
+    assert handler._latest_action_card == expected_action_card
+
+
+@pytest.mark.asyncio
 async def test_run_realtime_feedback_emits_canonical_sales_score_and_action_card():
     handler = StepFunRealtimeHandler()
     handler.session_id = "session-realtime-feedback"
