@@ -133,3 +133,59 @@ async def test_stage_update_emits_again_when_stage_changed() -> None:
 
     assert second_analysis["sales_stage"] == "discovery"
     assert manager.send_json.await_count == 2
+
+
+@pytest.mark.asyncio
+async def test_realtime_scoring_action_card_uses_sales_effectiveness_semantics() -> None:
+    runner = MagicMock()
+    runner.capabilities = [SimpleNamespace(capability_id="realtime_scoring")]
+    runner.run_all = AsyncMock(
+        return_value=[
+            SimpleNamespace(
+                success=True,
+                data={
+                    "overall": 82.0,
+                    "overall_score": 82.0,
+                    "dimension_scores": {
+                        "价值表达": 84.0,
+                        "客户收益连接": 80.0,
+                        "证据使用": 61.0,
+                        "异议处理": 76.0,
+                        "推进下一步": 64.0,
+                    },
+                    "dimensions": [
+                        {"name": "价值表达", "score": 84.0},
+                        {"name": "客户收益连接", "score": 80.0},
+                        {"name": "证据使用", "score": 61.0},
+                        {"name": "异议处理", "score": 76.0},
+                        {"name": "推进下一步", "score": 64.0},
+                    ],
+                    "feedback": "补上案例、数据或ROI证据，让价值主张更可信。",
+                },
+            )
+        ]
+    )
+
+    processor = CapabilityProcessor(runner)
+    context = SimpleNamespace(trace_id="trace-score-1", turn_count=2)
+    websocket = AsyncMock()
+    manager = MagicMock()
+    manager.send_json = AsyncMock()
+    db_lock = asyncio.Lock()
+
+    analysis, _ = await processor.run_and_send_feedback(
+        text="我们可以继续介绍方案。",
+        context=context,
+        websocket=websocket,
+        manager=manager,
+        db_lock=db_lock,
+    )
+
+    assert analysis["ai_feedback"] == "补上案例、数据或ROI证据，让价值主张更可信。"
+
+    sent_payloads = [call.args[1] for call in manager.send_json.await_args_list]
+    score_update = next(payload for payload in sent_payloads if payload["type"] == "score_update")
+    action_card = next(payload for payload in sent_payloads if payload["type"] == "action_card")
+
+    assert score_update["data"]["overall_score"] == 82.0
+    assert action_card["data"]["next_turn_rule"] == "下一轮先补案例或数据证据，并明确下一步动作。"

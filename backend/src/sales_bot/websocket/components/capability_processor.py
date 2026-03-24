@@ -14,7 +14,11 @@ from fastapi import WebSocket
 
 from agent.capabilities.runner import CapabilityRunner
 from agent.context import AgentContext
-from common.effectiveness import build_action_card, evaluate_pass_flags
+from common.effectiveness import (
+    build_action_card,
+    build_sales_effectiveness_metrics,
+    evaluate_pass_flags,
+)
 from common.monitoring.logger import get_logger
 from common.websocket.base_handler import ConnectionManager
 
@@ -118,18 +122,27 @@ class CapabilityProcessor:
                 if isinstance(feedback_message, str) and feedback_message.strip():
                     suggestions_for_card = [feedback_message.strip()]
 
-                dimensions = score_payload.get("dimensions")
                 dimension_scores: dict[str, float] = {}
-                if isinstance(dimensions, list):
-                    for item in dimensions:
-                        if not isinstance(item, dict):
-                            continue
-                        name = item.get("name")
-                        score = item.get("score")
+                canonical_dimension_scores = score_payload.get("dimension_scores")
+                if isinstance(canonical_dimension_scores, dict):
+                    for name, score in canonical_dimension_scores.items():
                         if isinstance(name, str) and isinstance(score, (int, float)):
                             dimension_scores[name] = max(0.0, min(100.0, float(score)))
 
-                overall_raw = score_payload.get("overall")
+                if not dimension_scores:
+                    dimensions = score_payload.get("dimensions")
+                    if isinstance(dimensions, list):
+                        for item in dimensions:
+                            if not isinstance(item, dict):
+                                continue
+                            name = item.get("name")
+                            score = item.get("score")
+                            if isinstance(name, str) and isinstance(score, (int, float)):
+                                dimension_scores[name] = max(0.0, min(100.0, float(score)))
+
+                overall_raw = score_payload.get("overall_score")
+                if not isinstance(overall_raw, (int, float)):
+                    overall_raw = score_payload.get("overall")
                 if not isinstance(overall_raw, (int, float)):
                     overall_raw = (
                         sum(dimension_scores.values()) / len(dimension_scores)
@@ -137,35 +150,13 @@ class CapabilityProcessor:
                         else 0.0
                     )
                 overall_score = max(0.0, min(100.0, float(overall_raw)))
-                communication_score = (
-                    dimension_scores.get("沟通技巧")
-                    or dimension_scores.get("communication")
-                    or overall_score
-                )
-                structure_score = (
-                    dimension_scores.get("销售流程")
-                    or dimension_scores.get("discovery")
-                    or dimension_scores.get("closing")
-                    or overall_score
-                )
                 turn_count = max(1, int(context.turn_count or 1))
                 pass_flags_for_card = evaluate_pass_flags(
-                    {
-                        "continuous_speech_seconds": float(
-                            max(turn_count * 45, int(overall_score * 2.2))
-                        ),
-                        "offtopic_turn_count": float(
-                            max(0, round((100.0 - float(communication_score)) / 25.0))
-                        ),
-                        "offtopic_max_streak": float(
-                            2
-                            if float(communication_score) < 55
-                            else (1 if float(communication_score) < 80 else 0)
-                        ),
-                        "structure_coverage": max(
-                            0.0, min(1.0, float(structure_score) / 100.0)
-                        ),
-                    }
+                    build_sales_effectiveness_metrics(
+                        overall_score=overall_score,
+                        dimension_scores=dimension_scores or None,
+                        turn_count=turn_count,
+                    )
                 )
 
             elif cap.capability_id == "knowledge_retrieval" and result.data:

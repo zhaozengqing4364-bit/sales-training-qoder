@@ -19,6 +19,7 @@
 ## Verification
 
 - `cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_realtime_scoring.py tests/unit/test_effectiveness_sales_baseline.py tests/unit/test_stepfun_realtime_handler.py tests/unit/test_capability_processor.py`
+- `cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_stepfun_realtime_handler.py tests/unit/test_capability_processor.py -k 'action_card or stage_update'`
 - `cd backend && venv/bin/python -m pytest -c pyproject.toml tests/contract/test_practice_evidence_contract.py`
 - `cd web && npm test -- --run 'src/hooks/websocket/message-handlers.test.ts' 'src/components/practice/ScorePanel.test.tsx' 'src/app/(dashboard)/agents/[agentId]/page.test.tsx' 'src/app/(user)/practice/[sessionId]/runtime-lock.test.ts'`
 
@@ -37,7 +38,7 @@
 
 ## Tasks
 
-- [ ] **T01: Align backend realtime contracts across StepFun and classic mode** `est:2h`
+- [x] **T01: Align backend realtime contracts across StepFun and classic mode** `est:2h`
   - Why: StepFun already emits the sales-shaped contract, but classic mode still derives action-card pass flags from generic communication / structure heuristics, leaving a user-reachable drift path.
   - Files: `backend/src/sales_bot/websocket/components/capability_processor.py`, `backend/src/sales_bot/websocket/stepfun_realtime_handler.py`, `backend/tests/unit/test_capability_processor.py`, `backend/tests/unit/test_stepfun_realtime_handler.py`, `backend/tests/unit/test_effectiveness_sales_baseline.py`
   - Do: Extend StepFun handler tests to assert emitted `score_update` + `action_card` payloads keep the five sales dimensions and stage-linked suggestions; refactor classic-mode `CapabilityProcessor` to reuse the shared sales effectiveness/action-card helper instead of `沟通技巧/销售流程` fallback math; keep the report-side three-rollup contract unchanged while locking both runtime paths to the same practice-page semantics.

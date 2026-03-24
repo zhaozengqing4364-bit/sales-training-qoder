@@ -1,6 +1,6 @@
 {
   "mode": "stabilize",
-  "current_issue_id": "M001-S08-T03",
+  "current_issue_id": "M002-S01-T01",
   "current_issue_type": "task",
   "current_issue_status": "done",
   "pending_issue_ids": [],
@@ -31,27 +31,30 @@
     "M001-S07",
     "M001-S08-T01",
     "M001-S08-T02",
-    "M001-S08-T03"
+    "M001-S08-T03",
+    "M002-S01-T01"
   ],
   "blocked_issue_ids": [],
   "deferred_issue_ids": [],
   "last_modified_files": [
-    ".gsd/milestones/M001/slices/S08/tasks/T03-PLAN.md",
-    ".gsd/milestones/M001/slices/S08/S08-UAT.md",
-    ".gsd/milestones/M001/slices/S08/tasks/T03-SUMMARY.md",
-    ".gsd/milestones/M001/slices/S08/S08-PLAN.md",
+    "backend/src/sales_bot/websocket/components/capability_processor.py",
+    "backend/tests/unit/test_capability_processor.py",
+    "backend/tests/unit/test_stepfun_realtime_handler.py",
+    ".gsd/milestones/M002/slices/S01/S01-PLAN.md",
+    ".gsd/DECISIONS.md",
+    ".gsd/KNOWLEDGE.md",
+    ".gsd/milestones/M002/slices/S01/tasks/T01-SUMMARY.md",
     ".codex/loop/state.json",
     ".codex/loop/log.md"
   ],
   "last_verification_commands": [
-    "cd backend && venv/bin/alembic upgrade head",
-    "cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_support_runtime_service.py tests/contract/test_support_runtime.py tests/integration/test_support_runtime_api.py",
-    "cd backend && venv/bin/python -m pytest -c pyproject.toml tests/integration/test_knowledge_flow.py -k knowledge_check_distinguishes_runtime_statuses",
-    "cd backend && venv/bin/python -m pytest -c pyproject.toml tests/integration/test_session_lifecycle_api.py tests/integration/test_sales_realtime_reconnect_flow.py tests/integration/test_websocket_status_contract.py tests/contract/test_practice_evidence_contract.py tests/integration/test_sales_value_training_flow.py tests/integration/test_admin_users_api.py tests/contract/test_presentation_report_contract.py tests/integration/test_presentation_report_flow.py",
-    "cd web && npm test -- --run 'src/app/(user)/practice/[sessionId]/use-practice-session-lifecycle.test.ts' 'src/hooks/use-practice-websocket.test.ts' 'src/hooks/websocket/message-handlers.test.ts' 'src/app/(user)/practice/[sessionId]/report/page.test.tsx' 'src/app/admin/users/[id]/page.test.tsx' 'src/app/(dashboard)/support/runtime/page.test.tsx'"
+    "cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_realtime_scoring.py tests/unit/test_effectiveness_sales_baseline.py tests/unit/test_stepfun_realtime_handler.py tests/unit/test_capability_processor.py",
+    "cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_stepfun_realtime_handler.py tests/unit/test_capability_processor.py -k 'action_card or stage_update'",
+    "cd backend && venv/bin/python -m pytest -c pyproject.toml tests/contract/test_practice_evidence_contract.py",
+    "cd web && npm test -- --run 'src/hooks/websocket/message-handlers.test.ts' 'src/components/practice/ScorePanel.test.tsx' 'src/app/(dashboard)/agents/[agentId]/page.test.tsx' 'src/app/(user)/practice/[sessionId]/runtime-lock.test.ts'"
   ],
-  "last_verification_result": "All S08 backend verification commands passed fresh. The full web slice command is still red on the carried-forward report page degraded-copy expectation in src/app/(user)/practice/[sessionId]/report/page.test.tsx. Local backend/web servers came up clean on localhost, a fresh realtime sales session was created, and S08-UAT now records the blocking support-runtime API snapshot plus exact resume notes for the unfinished browser waves.",
-  "last_success_signal": "S08-UAT now contains the release-wave script, actual automated gate output, current blocking vs warning support-runtime evidence, and enough exact resume context for a fresh unit to finish the browser proof without re-research.",
+  "last_verification_result": "All T01 backend, diagnostic, contract, and slice web verification commands passed fresh. Classic-mode realtime action cards now follow the shared sales effectiveness helper, StepFun payload assertions lock the canonical score_update/action_card contract, and the existing three-rollup practice evidence contract stayed unchanged.",
+  "last_success_signal": "Classic and StepFun user-reachable realtime paths now agree on sales-first action-card semantics while the report-side three-rollup contract remains green.",
   "last_growth_scan": null,
-  "next_action": "Resume from .gsd/milestones/M001/slices/S08/S08-UAT.md in a fresh context: rerun localhost browser waves for sales runtime, canonical sales report, /admin/users/89e31f06-6393-42b6-877e-5a007803136a, PPT happy/degraded reports, and /support/runtime; if investigating the automated blocker, focus on the missing sales degraded enhancement copy in web/src/app/(user)/practice/[sessionId]/report/page.tsx vs page.test.tsx:434-436."
+  "next_action": "Proceed to M002/S01/T02: harden practice-page consumers and voice-mode affordances around the aligned sales contract."
 }

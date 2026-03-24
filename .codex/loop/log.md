@@ -563,3 +563,26 @@ Append one entry per iteration:
   verification results: backend verification passed fresh; the full web command still fails on the carried-forward sales report degraded-copy expectation in report/page.test.tsx; localhost backend/web were healthy, a fresh realtime sales session was created, and support/runtime currently reports a blocking release state with typed stuck_scoring / kb_lock_blocked_* / projection_failed anomalies plus warning-only upstream_unstable / presentation_degraded_missing_page_metadata.
   success signal status: S08-UAT is now a usable release-close artifact with actual gate output and precise resume instructions, but the browser-wave proof and final release verdict remain unfinished.
   rollback note: no product rollback was needed; next context should restart localhost servers and resume the browser waves from S08-UAT instead of redoing the automated gate.
+
+- time: 2026-03-24T19:07:08+0800
+  mode: stabilize
+  item id: M002-S01-T01
+  files changed:
+    - backend/src/sales_bot/websocket/components/capability_processor.py
+    - backend/tests/unit/test_capability_processor.py
+    - backend/tests/unit/test_stepfun_realtime_handler.py
+    - .gsd/milestones/M002/slices/S01/S01-PLAN.md
+    - .gsd/DECISIONS.md
+    - .gsd/KNOWLEDGE.md
+    - .gsd/milestones/M002/slices/S01/tasks/T01-SUMMARY.md
+    - .codex/loop/state.json
+    - .codex/loop/log.md
+  summary: Aligned classic realtime action-card semantics to the shared sales effectiveness helper, added focused StepFun payload assertions for canonical sales score_update/action_card fields, and preserved the existing three-rollup evidence contract.
+  verification commands:
+    - cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_realtime_scoring.py tests/unit/test_effectiveness_sales_baseline.py tests/unit/test_stepfun_realtime_handler.py tests/unit/test_capability_processor.py
+    - cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_stepfun_realtime_handler.py tests/unit/test_capability_processor.py -k 'action_card or stage_update'
+    - cd backend && venv/bin/python -m pytest -c pyproject.toml tests/contract/test_practice_evidence_contract.py
+    - cd web && npm test -- --run 'src/hooks/websocket/message-handlers.test.ts' 'src/components/practice/ScorePanel.test.tsx' 'src/app/(dashboard)/agents/[agentId]/page.test.tsx' 'src/app/(user)/practice/[sessionId]/runtime-lock.test.ts'
+  verification results: passed; backend unit, diagnostic, contract, and slice web commands are green. An earlier parallel pytest attempt hit a pytest-cov .coverage.* combine race, so the main backend suite was rerun sequentially and passed fresh.
+  success signal status: classic and StepFun sales runtime paths now agree on action-card semantics, and the canonical StepFun payload/read-side contract guardrails stay green.
+  rollback note: if later work changes realtime action-card behavior again, keep CapabilityProcessor and StepFun handler tests aligned to the same build_sales_effectiveness_metrics/evaluate_pass_flags line rather than reviving generic communication/structure heuristics.

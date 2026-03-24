@@ -1468,3 +1468,82 @@ def test_enforce_tool_policy_guardrails_disables_web_search_without_kb():
     assert (
         handler._effective_policy["source"]["tool_policy_enforcement"] == "no_kb_no_web"
     )
+
+
+@pytest.mark.asyncio
+async def test_run_realtime_feedback_emits_canonical_sales_score_and_action_card():
+    handler = StepFunRealtimeHandler()
+    handler.session_id = "session-realtime-feedback"
+    handler.websocket = MagicMock()
+    handler.manager = MagicMock()
+    handler.manager.send_json = AsyncMock()
+    handler._fuzzy_detection_enabled = False
+    handler._realtime_scoring_enabled = True
+    handler._realtime_scoring_capability = MagicMock()
+    handler._realtime_scoring_capability.on_session_start = AsyncMock()
+    handler._realtime_scoring_capability.execute = AsyncMock(
+        return_value=SimpleNamespace(
+            data={
+                "overall_score": 82.0,
+                "dimension_scores": {
+                    "价值表达": 84.0,
+                    "客户收益连接": 80.0,
+                    "证据使用": 61.0,
+                    "异议处理": 76.0,
+                    "推进下一步": 64.0,
+                },
+                "feedback": "补上案例、数据或ROI证据，让价值主张更可信。",
+            }
+        )
+    )
+
+    analysis = await handler._run_realtime_feedback(
+        user_text="我们可以用客户案例说明ROI。",
+        turn_number=3,
+        sales_stage="discovery",
+    )
+
+    expected_snapshot = {
+        "overall_score": 82.0,
+        "dimension_scores": {
+            "价值表达": 84.0,
+            "客户收益连接": 80.0,
+            "证据使用": 61.0,
+            "异议处理": 76.0,
+            "推进下一步": 64.0,
+        },
+        "suggestions": ["补上案例、数据或ROI证据，让价值主张更可信。"],
+        "stage_name": "需求挖掘",
+    }
+    expected_action_card = {
+        "issue": "当前轮次有1个关键改进点",
+        "replacement": "补上案例、数据或ROI证据，让价值主张更可信。",
+        "next_turn_rule": "下一轮先补案例或数据证据，并明确下一步动作。",
+    }
+
+    assert analysis == {
+        "score_snapshot": expected_snapshot,
+        "ai_feedback": "补上案例、数据或ROI证据，让价值主张更可信。",
+    }
+    assert handler._latest_score_snapshot == expected_snapshot
+    assert handler._latest_action_card == expected_action_card
+
+    sent_payloads = [call.args[1] for call in handler.manager.send_json.await_args_list]
+    score_update = next(payload for payload in sent_payloads if payload["type"] == "score_update")
+    action_card = next(payload for payload in sent_payloads if payload["type"] == "action_card")
+
+    assert score_update["data"] == {
+        "session_id": "session-realtime-feedback",
+        "turn_count": 3,
+        "overall_score": 82.0,
+        "dimension_scores": {
+            "价值表达": 84.0,
+            "客户收益连接": 80.0,
+            "证据使用": 61.0,
+            "异议处理": 76.0,
+            "推进下一步": 64.0,
+        },
+        "suggestions": ["补上案例、数据或ROI证据，让价值主张更可信。"],
+        "stage_name": "需求挖掘",
+    }
+    assert action_card["data"] == expected_action_card
