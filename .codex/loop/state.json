@@ -1,7 +1,7 @@
 {
   "mode": "stabilize",
-  "current_issue_id": "M002-S02-T03",
-  "current_issue_type": "task",
+  "current_issue_id": "M002-S02",
+  "current_issue_type": "slice",
   "current_issue_status": "done",
   "pending_issue_ids": [],
   "completed_issue_ids": [
@@ -37,32 +37,30 @@
     "M002-S01",
     "M002-S02-T01",
     "M002-S02-T02",
-    "M002-S02-T03"
+    "M002-S02-T03",
+    "M002-S02"
   ],
   "blocked_issue_ids": [],
   "deferred_issue_ids": [],
   "last_modified_files": [
-    ".gsd/milestones/M002/slices/S02/S02-PLAN.md",
-    ".gsd/milestones/M002/slices/S02/tasks/T03-SUMMARY.md",
-    "web/src/hooks/websocket/message-handlers.ts",
-    "web/src/hooks/websocket/message-handlers.test.ts",
-    "web/src/hooks/use-practice-websocket.test.ts",
-    "web/src/components/practice/RightPanelContent.tsx",
-    "web/src/components/practice/RightPanelContent.test.tsx",
-    "web/src/components/practice/ScorePanel.tsx",
-    "web/src/components/practice/ScorePanel.test.tsx",
+    ".gsd/milestones/M002/slices/S02/S02-SUMMARY.md",
+    ".gsd/milestones/M002/slices/S02/S02-UAT.md",
+    ".gsd/milestones/M002/M002-ROADMAP.md",
+    ".gsd/REQUIREMENTS.md",
+    ".gsd/KNOWLEDGE.md",
+    ".gsd/PROJECT.md",
     ".codex/loop/state.json",
     ".codex/loop/log.md"
   ],
   "last_verification_commands": [
-    "cd web && npm test -- --run 'src/hooks/websocket/message-handlers.test.ts' 'src/hooks/use-practice-websocket.test.ts' 'src/components/practice/ScorePanel.test.tsx' 'src/components/practice/RightPanelContent.test.tsx'",
     "cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_realtime_feedback_arbiter.py tests/unit/test_capability_processor.py tests/unit/test_stepfun_realtime_handler.py tests/unit/test_stepfun_realtime_persistence.py",
     "cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_realtime_feedback_arbiter.py -k 'suppress or preserve_context' -vv",
     "cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_stepfun_realtime_handler.py tests/unit/test_stepfun_realtime_persistence.py -k 'suppress or replay' -vv",
-    "browser smoke: localhost dev-login -> create sales session -> /practice/{sessionId} assert shell + score placeholder"
+    "cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_fuzzy_detection.py -k cooldown",
+    "cd web && npm test -- --run 'src/hooks/websocket/message-handlers.test.ts' 'src/hooks/use-practice-websocket.test.ts' 'src/components/practice/ScorePanel.test.tsx' 'src/components/practice/RightPanelContent.test.tsx'"
   ],
-  "last_verification_result": "T03 task verification passed fresh: the focused web gate is green, the broader S02 backend suite is green, the arbiter and StepFun diagnostic filters are green, and a live localhost practice-page smoke path loaded successfully in the browser. The remaining fuzzy cooldown slice command was not rerun in this unit after the context-budget warning; last known result was green from T02.",
-  "last_success_signal": "Final transcripts now clear stale turn-bound hints on the practice page, and an active action card suppresses competing fuzzy/score suggestion text while keeping stage and scoring context visible.",
+  "last_verification_result": "M002/S02 slice verification passed fresh: the broad backend arbiter/classic/StepFun suite, the focused arbiter diagnostic filter, the focused StepFun replay filter, the fuzzy cooldown regression, and the four-file web gate all exited 0. The web command reported Test Files (4), confirming the targeted RightPanelContent coverage actually executed.",
+  "last_success_signal": "Realtime coaching now lands as one primary action per turn across classic + StepFun, reconnect restore no longer replays stale action cards, and new final transcripts clear old action/fuzzy hints before the next turn begins.",
   "last_growth_scan": null,
-  "next_action": "Proceed to M002-S02 slice closeout, and rerun the remaining fuzzy cooldown slice command if a fully fresh all-checks gate is required."
+  "next_action": "Proceed to roadmap reassessment for M002 with S02-SUMMARY.md as the dependency handoff; the next open slice is M002/S03."
 }

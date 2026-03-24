@@ -710,3 +710,26 @@ Append one entry per iteration:
   verification results: passed for the focused web gate, the broad S02 backend suite, the arbiter diagnostic filter, the StepFun replay diagnostic filter, and the live localhost practice-page smoke path. The remaining fuzzy cooldown slice command was not rerun in this unit after the context-budget warning; last known result was green from T02.
   success signal status: the practice page now clears stale hint state when a new user turn closes and no longer renders competing fuzzy/score suggestion text beside an active action card.
   rollback note: if slice closeout needs a fully fresh all-checks gate, rerun the fuzzy cooldown command before marking S02 complete; otherwise keep the new ScorePanel suppression prop local to RightPanelContent rather than mutating score payloads upstream.
+
+- time: 2026-03-24T20:38:55+08:00
+  mode: stabilize
+  item id: M002-S02
+  files changed:
+    - .gsd/milestones/M002/slices/S02/S02-SUMMARY.md
+    - .gsd/milestones/M002/slices/S02/S02-UAT.md
+    - .gsd/milestones/M002/M002-ROADMAP.md
+    - .gsd/REQUIREMENTS.md
+    - .gsd/KNOWLEDGE.md
+    - .gsd/PROJECT.md
+    - .codex/loop/state.json
+    - .codex/loop/log.md
+  summary: Closed M002/S02 after rerunning the full slice gate, recording the slice summary/UAT, marking the roadmap done, and updating requirement/project/knowledge continuity to reflect that realtime coaching now enforces one primary action per turn with reconnect-safe replay suppression and transcript-driven stale-hint clearing.
+  verification commands:
+    - cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_realtime_feedback_arbiter.py tests/unit/test_capability_processor.py tests/unit/test_stepfun_realtime_handler.py tests/unit/test_stepfun_realtime_persistence.py
+    - cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_realtime_feedback_arbiter.py -k 'suppress or preserve_context' -vv
+    - cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_stepfun_realtime_handler.py tests/unit/test_stepfun_realtime_persistence.py -k 'suppress or replay' -vv
+    - cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_fuzzy_detection.py -k cooldown
+    - cd web && npm test -- --run 'src/hooks/websocket/message-handlers.test.ts' 'src/hooks/use-practice-websocket.test.ts' 'src/components/practice/ScorePanel.test.tsx' 'src/components/practice/RightPanelContent.test.tsx'
+  verification results: passed; all slice-level backend and web commands were rerun fresh, including the previously deferred fuzzy cooldown regression, and the web gate reported Test Files (4) so the targeted RightPanelContent coverage actually executed.
+  success signal status: S02 is now closed with one shared realtime-feedback pacing line across classic + StepFun, no same-turn action-card replay burst after restore, and no stale turn-bound action/fuzzy hints leaking into the next practice turn.
+  rollback note: if downstream slices touch coach pacing again, preserve the backend arbiter + minimal feedback_pacing_state + frontend transcript-reset trio together; splitting those seams will recreate either replay bursts or cross-turn stale hints.

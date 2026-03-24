@@ -70,7 +70,7 @@ This milestone is complete only when all are true:
 - [x] **S01: 实时评分与训练页销售语义对齐** `risk:high` `depends:[]`
   > After this: 用户在训练页看到的实时评分维度、阶段标签和建议文案已经与当前销售价值表达 / 异议处理 rubric 对齐，而不是旧的泛化评分面板。
 
-- [ ] **S02: 提示节奏收口与单轮唯一动作卡** `risk:high` `depends:[S01]`
+- [x] **S02: 提示节奏收口与单轮唯一动作卡** `risk:high` `depends:[S01]`
   > After this: 多轮对话里每一轮只保留一个主要动作方向，重复阶段/模糊词/评分提示被节流和去重，不再刷屏。
 
 - [ ] **S03: 阶段推进教练与下一轮规则闭环** `risk:medium` `depends:[S01,S02]`

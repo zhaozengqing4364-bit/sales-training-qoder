@@ -23,3 +23,5 @@
 - 本地/auto-mode 如果并行跑多个 backend `pytest` 命令（尤其带默认 `pytest-cov` 配置），可能在 coverage combine 阶段互相删掉 `.coverage.*` 临时文件，表现成“所有测试都过了但命令最终 INTERNALERROR / FileNotFoundError 退出”；这类 backend suites 需要顺序跑，别把多个 pytest job 并发起来。
 - `web/src/hooks/websocket/message-handlers.ts` 里的 `score_update` 去重不能只看 `overall_score + turn_count`：sales 实时链路会在同一轮内刷新 `dimension_scores`、`stage_name` 和 `suggestions`，如果前端把这些同轮细化更新吞掉，ScorePanel 会静默停留在旧阶段/旧建议。
 - `cd web && npm test -- --run '...RightPanelContent.test.tsx'` 这类 Vitest 命令即使把一个不存在的测试文件路径混进去也可能继续返回 0，只报告实际匹配到的文件；跑 S02/S03 这类 slice gate 时要看输出里的 Test Files 列表，别把“命令绿了”误当成缺失的 targeted file 也被执行了。
+- sales practice 页的新一轮用户 final transcript 到来时，前端 reducer 必须主动清掉上一轮的 `actionCard` / `fuzzyDetections`；否则即使后端 arbiter 已把同轮 coaching 节流住，旧提示也会在 UI 上跨 turn 残留，看起来像 pacing 仍然失效。
+- StepFun sales realtime 的重连快照只该持久化最小 `feedback_pacing_state`（上一条 action 的 signature + turn）；如果 restore 直接重放 `_latest_action_card` 之类读侧诊断字段，会把同一轮动作卡 burst 回放成假回归。
