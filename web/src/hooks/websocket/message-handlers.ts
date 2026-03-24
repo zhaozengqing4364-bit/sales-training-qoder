@@ -78,6 +78,41 @@ function isSameSalesStage(current: SalesStage | null, incoming: SalesStage): boo
     return current.key_actions.every((action, index) => action === incoming.key_actions[index]);
 }
 
+function isSameStringArray(current: string[] | undefined, incoming: string[] | undefined): boolean {
+    const currentValues = current ?? [];
+    const incomingValues = incoming ?? [];
+    if (currentValues.length !== incomingValues.length) {
+        return false;
+    }
+    return currentValues.every((value, index) => value === incomingValues[index]);
+}
+
+function isSameDimensionScores(
+    current: Record<string, number> | undefined,
+    incoming: Record<string, number> | undefined,
+): boolean {
+    const currentEntries = Object.entries(current ?? {});
+    const incomingEntries = Object.entries(incoming ?? {});
+    if (currentEntries.length !== incomingEntries.length) {
+        return false;
+    }
+
+    return currentEntries.every(([key, value]) => incoming?.[key] === value);
+}
+
+function isSameScoreUpdate(current: ScoreUpdate | null, incoming: ScoreUpdate): boolean {
+    if (!current) {
+        return false;
+    }
+
+    return current.session_id === incoming.session_id
+        && current.turn_count === incoming.turn_count
+        && current.overall_score === incoming.overall_score
+        && current.stage_name === incoming.stage_name
+        && isSameStringArray(current.suggestions, incoming.suggestions)
+        && isSameDimensionScores(current.dimension_scores, incoming.dimension_scores);
+}
+
 type EvaluationFeedbackPayload = {
     feedback_type?: "stage_feedback" | "milestone" | "comprehensive_report" | string;
     stage_number?: number;
@@ -538,10 +573,7 @@ export function handleWebSocketMessage(
             case "score_update": {
                 const data = message.data as ScoreUpdate;
                 setState(prev => {
-                    // Idempotent update: only update if score data changed
-                    if (prev.scores &&
-                        prev.scores.overall_score === data.overall_score &&
-                        prev.scores.turn_count === data.turn_count) {
+                    if (isSameScoreUpdate(prev.scores, data)) {
                         return prev;
                     }
                     return {

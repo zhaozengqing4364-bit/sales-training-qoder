@@ -222,7 +222,7 @@ export function ScorePanel({ scores, className = "" }: ScorePanelProps) {
             <div className="p-4 border-b border-gray-100">
                 <h4 className="text-sm font-medium text-gray-700 mb-2 flex items-center gap-2">
                     <BarChart3 className="w-4 h-4" />
-                    维度得分
+                    销售维度得分
                 </h4>
                 <div className="space-y-1">
                     <AnimatePresence>

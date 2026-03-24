@@ -402,7 +402,9 @@ export default function AgentPersonaSelectPage() {
 
             <div>
                 <h2 className="text-lg font-bold text-slate-800 mb-3">语音模式</h2>
-                <p className="text-sm text-slate-500 mb-4">可在“经典链路”和“StepFun Realtime 端到端”之间切换。</p>
+                <p className="text-sm text-slate-500 mb-4">
+                    两种模式都使用同一套销售评分维度与下一轮建议，差异只在语音链路。
+                </p>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     <button
                         type="button"
@@ -415,7 +417,7 @@ export default function AgentPersonaSelectPage() {
                         )}
                     >
                         <div className="font-semibold text-slate-900">经典模式</div>
-                        <div className="text-sm text-slate-500 mt-1">ASR → LLM → TTS，稳定兼容现有能力模块。</div>
+                        <div className="text-sm text-slate-500 mt-1">ASR → LLM → TTS，稳定兼容现有语音链路；练中仍按同一套销售维度评分。</div>
                     </button>
                     <button
                         type="button"
@@ -428,7 +430,7 @@ export default function AgentPersonaSelectPage() {
                         )}
                     >
                         <div className="font-semibold text-slate-900">Realtime 模式（默认推荐）</div>
-                        <div className="text-sm text-slate-500 mt-1">StepFun 端到端语音模型，适合对话真实感测试。</div>
+                        <div className="text-sm text-slate-500 mt-1">StepFun 端到端语音模型；练中同样输出相同的销售维度评分与建议。</div>
                     </button>
                 </div>
             </div>

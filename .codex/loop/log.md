@@ -586,3 +586,30 @@ Append one entry per iteration:
   verification results: passed; backend unit, diagnostic, contract, and slice web commands are green. An earlier parallel pytest attempt hit a pytest-cov .coverage.* combine race, so the main backend suite was rerun sequentially and passed fresh.
   success signal status: classic and StepFun sales runtime paths now agree on action-card semantics, and the canonical StepFun payload/read-side contract guardrails stay green.
   rollback note: if later work changes realtime action-card behavior again, keep CapabilityProcessor and StepFun handler tests aligned to the same build_sales_effectiveness_metrics/evaluate_pass_flags line rather than reviving generic communication/structure heuristics.
+
+- time: 2026-03-24T19:18:31+0800
+  mode: stabilize
+  item id: M002-S01-T02
+  files changed:
+    - web/src/hooks/websocket/message-handlers.ts
+    - web/src/hooks/websocket/message-handlers.test.ts
+    - web/src/components/practice/ScorePanel.tsx
+    - web/src/components/practice/ScorePanel.test.tsx
+    - web/src/app/(dashboard)/agents/[agentId]/page.tsx
+    - web/src/app/(dashboard)/agents/[agentId]/page.test.tsx
+    - .gsd/DECISIONS.md
+    - .gsd/KNOWLEDGE.md
+    - .gsd/milestones/M002/slices/S01/S01-PLAN.md
+    - .gsd/milestones/M002/slices/S01/tasks/T02-SUMMARY.md
+    - .codex/loop/state.json
+    - .codex/loop/log.md
+  summary: Hardened the practice-page sales websocket consumer to keep same-turn score refreshes, kept ScorePanel explicitly sales-first while preserving fallback dimensions, and aligned launch-page voice-mode copy to one shared sales rubric.
+  verification commands:
+    - cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_realtime_scoring.py tests/unit/test_effectiveness_sales_baseline.py tests/unit/test_stepfun_realtime_handler.py tests/unit/test_capability_processor.py
+    - cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_stepfun_realtime_handler.py tests/unit/test_capability_processor.py -k 'action_card or stage_update'
+    - cd backend && venv/bin/python -m pytest -c pyproject.toml tests/contract/test_practice_evidence_contract.py
+    - cd web && npm test -- --run 'src/hooks/websocket/message-handlers.test.ts' 'src/components/practice/ScorePanel.test.tsx' 'src/app/(dashboard)/agents/[agentId]/page.test.tsx' 'src/app/(user)/practice/[sessionId]/runtime-lock.test.ts'
+    - cd web && npm test -- --run 'src/hooks/use-practice-websocket.test.ts'
+  verification results: passed; all slice-level backend/web commands and the extra websocket-hook task suite are green, so the frontend consumer fix kept the realtime/report contract boundary intact.
+  success signal status: same-turn sales guidance now reaches the practice page without being deduped away, fallback dimensions remain visible, and mode selection no longer suggests a different classic-mode scoring rubric.
+  rollback note: if later frontend work touches realtime scoring again, keep isSameScoreUpdate aligned with the focused Vitest contract and preserve the explicit fallback-dimension rendering instead of reintroducing overall-score-only dedupe.

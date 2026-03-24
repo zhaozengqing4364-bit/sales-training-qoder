@@ -419,6 +419,107 @@ describe("handleWebSocketMessage connection/status behavior", () => {
         });
     });
 
+    it("applies same-turn score_update refreshes when sales dimensions or guidance change", () => {
+        const initialScores = {
+            overall_score: 83,
+            turn_count: 4,
+            stage_name: "需求挖掘",
+            suggestions: ["继续确认客户当前流程"],
+            dimension_scores: {
+                价值表达: 80,
+                客户收益连接: 84,
+                证据使用: 72,
+                异议处理: 85,
+                推进下一步: 78,
+            },
+        };
+        const { deps, getState } = createDeps({
+            ...INITIAL_PRACTICE_STATE,
+            scores: initialScores,
+        });
+        const previousScores = getState().scores;
+
+        handleWebSocketMessage(
+            createMessageEvent({
+                type: "score_update",
+                timestamp: new Date().toISOString(),
+                data: {
+                    overall_score: 83,
+                    turn_count: 4,
+                    stage_name: "异议处理",
+                    suggestions: ["先补一个 ROI 证据，再回应价格异议"],
+                    dimension_scores: {
+                        价值表达: 80,
+                        客户收益连接: 84,
+                        证据使用: 79,
+                        异议处理: 85,
+                        推进下一步: 78,
+                    },
+                },
+            }),
+            deps as never,
+        );
+
+        expect(getState().scores).toMatchObject({
+            overall_score: 83,
+            turn_count: 4,
+            stage_name: "异议处理",
+            suggestions: ["先补一个 ROI 证据，再回应价格异议"],
+            dimension_scores: {
+                价值表达: 80,
+                客户收益连接: 84,
+                证据使用: 79,
+                异议处理: 85,
+                推进下一步: 78,
+            },
+        });
+        expect(getState().scores).not.toBe(previousScores);
+    });
+
+    it("keeps score_update idempotent when the full payload is unchanged", () => {
+        const initial: PracticeState = {
+            ...INITIAL_PRACTICE_STATE,
+            scores: {
+                overall_score: 83,
+                turn_count: 4,
+                stage_name: "异议处理",
+                suggestions: ["先补一个 ROI 证据，再回应价格异议"],
+                dimension_scores: {
+                    价值表达: 80,
+                    客户收益连接: 84,
+                    证据使用: 79,
+                    异议处理: 85,
+                    推进下一步: 78,
+                },
+            },
+        };
+        const { deps, getState } = createDeps(initial);
+        const previousStateRef = getState();
+
+        handleWebSocketMessage(
+            createMessageEvent({
+                type: "score_update",
+                timestamp: new Date().toISOString(),
+                data: {
+                    overall_score: 83,
+                    turn_count: 4,
+                    stage_name: "异议处理",
+                    suggestions: ["先补一个 ROI 证据，再回应价格异议"],
+                    dimension_scores: {
+                        价值表达: 80,
+                        客户收益连接: 84,
+                        证据使用: 79,
+                        异议处理: 85,
+                        推进下一步: 78,
+                    },
+                },
+            }),
+            deps as never,
+        );
+
+        expect(getState()).toBe(previousStateRef);
+    });
+
     it("preserves unknown score_update dimensions for ScorePanel fallback rendering", () => {
         const { deps, getState } = createDeps(INITIAL_PRACTICE_STATE);
 

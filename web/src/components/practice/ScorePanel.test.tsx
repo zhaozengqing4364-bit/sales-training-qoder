@@ -4,31 +4,34 @@ import { describe, expect, it } from "vitest";
 import { ScorePanel } from "./ScorePanel";
 
 describe("ScorePanel", () => {
-    it("renders the new sales scoring dimensions with sales-first labels", () => {
+    it("labels the section as sales scoring and keeps fallback dimensions after the five sales dimensions", () => {
         render(
             <ScorePanel
                 scores={{
                     overall_score: 84,
                     turn_count: 5,
-                    stage_name: "异议处理",
                     suggestions: ["先用案例佐证 ROI，再处理价格追问"],
                     dimension_scores: {
+                        推进下一步: 79,
+                        新增维度: 63,
+                        证据使用: 76,
                         价值表达: 88,
                         客户收益连接: 82,
-                        证据使用: 76,
                         异议处理: 85,
-                        推进下一步: 79,
                     },
                 }}
             />,
         );
 
-        expect(screen.getByText("价值表达")).toBeTruthy();
-        expect(screen.getByText("客户收益连接")).toBeTruthy();
-        expect(screen.getByText("证据使用")).toBeTruthy();
-        expect(screen.getAllByText("异议处理").length).toBeGreaterThan(0);
-        expect(screen.getByText("推进下一步")).toBeTruthy();
+        expect(screen.getByText("销售维度得分")).toBeTruthy();
         expect(screen.getByText("先用案例佐证 ROI，再处理价格追问")).toBeTruthy();
+
+        const panelText = document.body.textContent ?? "";
+        expect(panelText.indexOf("价值表达")).toBeLessThan(panelText.indexOf("客户收益连接"));
+        expect(panelText.indexOf("客户收益连接")).toBeLessThan(panelText.indexOf("证据使用"));
+        expect(panelText.indexOf("证据使用")).toBeLessThan(panelText.indexOf("异议处理"));
+        expect(panelText.indexOf("异议处理")).toBeLessThan(panelText.indexOf("推进下一步"));
+        expect(panelText.indexOf("推进下一步")).toBeLessThan(panelText.indexOf("新增维度"));
     });
 
     it("keeps unknown dimensions visible instead of dropping them", () => {

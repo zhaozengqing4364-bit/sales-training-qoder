@@ -100,6 +100,33 @@ describe("AgentPersonaSelectPage", () => {
         createSessionMock.mockResolvedValue({ session_id: "session-123" });
     });
 
+    it("explains that both voice modes use the same sales scoring rubric", async () => {
+        getAgentWithPersonasMock.mockResolvedValueOnce({
+            id: "agent-sales",
+            name: "销售陪练",
+            description: "帮助学员练习销售对话。",
+            category: "sales",
+            personas: [
+                {
+                    id: "persona-sales",
+                    name: "采购经理",
+                    description: "关注 ROI 与实施风险",
+                    difficulty: "medium",
+                    is_default: true,
+                },
+            ],
+        });
+
+        render(<AgentPersonaSelectPage />);
+
+        await screen.findByText("销售陪练");
+
+        expect(screen.getByText(/两种模式都使用同一套销售评分维度与下一轮建议/i)).toBeTruthy();
+        expect(screen.getByText(/经典模式/i)).toBeTruthy();
+        expect(screen.getByText(/练中仍按同一套销售维度评分/i)).toBeTruthy();
+        expect(screen.getByText(/同样输出相同的销售维度评分与建议/i)).toBeTruthy();
+    });
+
     it("shows current version and material status for presentation options", async () => {
         render(<AgentPersonaSelectPage />);
 
