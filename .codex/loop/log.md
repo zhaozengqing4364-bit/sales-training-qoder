@@ -355,3 +355,23 @@ Append one entry per iteration:
   verification results: task-level backend/web and full automated S05 slice suites all passed; browser report verification passed against a seeded completed sales session in the real app; live practice runtime reached Realtime in_progress with an enabled recording control, but the four-dialogue microphone UAT remains open due time budget.
   success signal status: live report/ScorePanel consumers now present value-expression, evidence-benefit, and objection-progression semantics without changing the underlying unified report contract.
   rollback note: revert the T03 consumer/test changes together if later work redefines S05 sales vocabulary, and keep the `.gsd/KNOWLEDGE.md` python-socks runtime note unless local StepFun proxy handling is solved another way.
+
+- time: 2026-03-24T09:08:24+08:00
+  mode: stabilize
+  item id: M001-S06-T02
+  files changed:
+    - .gsd/KNOWLEDGE.md
+    - .gsd/milestones/M001/slices/S06/S06-PLAN.md
+    - .gsd/milestones/M001/slices/S06/tasks/T02-SUMMARY.md
+    - .codex/loop/state.json
+    - .codex/loop/log.md
+  summary: Verified that the admin user-detail page already consumes the projection-backed supervisor progress contract, proved the live success state on a seeded learner, and confirmed inline progress empty/error states through the real refresh path without regressing the surrounding shell or report drill-ins.
+  verification commands:
+    - cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_history_service_evidence_projection.py tests/integration/test_admin_users_api.py
+    - cd backend && venv/bin/python -m pytest -c pyproject.toml tests/integration/test_admin_users_api.py -k 'progress or stats'
+    - cd web && npm test -- --run 'src/app/admin/users/[id]/page.test.tsx'
+    - cd backend && venv/bin/alembic upgrade head
+    - browser runtime: /admin/users/89e31f06-6393-42b6-877e-5a007803136a success + injected progress empty/error refresh assertions
+  verification results: passed; the full S06 backend slice checks, focused web regression, idempotent migration step, and live browser verification all passed fresh. No migration/blocker mismatch surfaced after upgrading to head.
+  success signal status: the supervisor continuous-change page is now verified end-to-end on the same projection-backed fact line as admin stats/progress/sessions, with explicit inline empty/error UX proven in the real app shell.
+  rollback note: no production rollback needed from this turn because execution only completed verification/state artifacts; if future browser UAT needs progress-only degraded states again, reuse the window.fetch override path instead of cross-origin route mocks.

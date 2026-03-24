@@ -1,6 +1,6 @@
 {
   "mode": "stabilize",
-  "current_issue_id": "M001-S05-T03",
+  "current_issue_id": "M001-S06-T02",
   "current_issue_type": "task",
   "current_issue_status": "done",
   "pending_issue_ids": [],
@@ -21,34 +21,28 @@
     "M001-S04",
     "M001-S05-T01",
     "M001-S05-T02",
-    "M001-S05-T03"
+    "M001-S05-T03",
+    "M001-S06-T01",
+    "M001-S06-T02"
   ],
   "blocked_issue_ids": [],
   "deferred_issue_ids": [],
   "last_modified_files": [
-    "backend/tests/integration/test_sales_value_training_flow.py",
-    "web/src/components/practice/ScorePanel.tsx",
-    "web/src/components/practice/ScorePanel.test.tsx",
-    "web/src/hooks/websocket/message-handlers.test.ts",
-    "web/src/app/(user)/practice/[sessionId]/report/page.tsx",
-    "web/src/app/(user)/practice/[sessionId]/report/page.test.tsx",
-    ".gsd/milestones/M001/slices/S05/tasks/T03-PLAN.md",
     ".gsd/KNOWLEDGE.md",
-    ".gsd/milestones/M001/slices/S05/S05-PLAN.md",
-    ".gsd/milestones/M001/slices/S05/tasks/T03-SUMMARY.md",
+    ".gsd/milestones/M001/slices/S06/S06-PLAN.md",
+    ".gsd/milestones/M001/slices/S06/tasks/T02-SUMMARY.md",
     ".codex/loop/state.json",
     ".codex/loop/log.md"
   ],
   "last_verification_commands": [
-    "cd backend && pytest tests/integration/test_sales_value_training_flow.py",
-    "cd web && npm test -- --run 'src/components/practice/ScorePanel.test.tsx' 'src/hooks/websocket/message-handlers.test.ts' 'src/app/(user)/practice/[sessionId]/report/page.test.tsx'",
-    "cd backend && pytest tests/unit/test_realtime_scoring.py tests/unit/test_effectiveness_sales_baseline.py tests/unit/test_voice_instruction_compiler.py tests/unit/test_stepfun_knowledge_helpers.py tests/unit/test_stepfun_realtime_handler.py tests/contract/test_practice_evidence_contract.py tests/integration/test_sales_value_training_flow.py",
-    "cd web && npm test -- --run 'src/components/practice/ScorePanel.test.tsx' 'src/hooks/websocket/message-handlers.test.ts' 'src/app/(user)/practice/[sessionId]/report/page.test.tsx'",
-    "browser_assert /practice/6aff04f9-a09e-4956-8abc-07251c597a8f/report",
-    "browser runtime spot-check /practice/0661f672-a39a-404e-b4b5-93e396c77fe0"
+    "cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_history_service_evidence_projection.py tests/integration/test_admin_users_api.py",
+    "cd backend && venv/bin/python -m pytest -c pyproject.toml tests/integration/test_admin_users_api.py -k 'progress or stats'",
+    "cd web && npm test -- --run 'src/app/admin/users/[id]/page.test.tsx'",
+    "cd backend && venv/bin/alembic upgrade head",
+    "browser runtime: /admin/users/89e31f06-6393-42b6-877e-5a007803136a success + injected progress empty/error refresh assertions"
   ],
-  "last_verification_result": "T03 focused backend/web suites and the full S05 automated slice suites passed fresh. Browser verification on a seeded completed sales session confirmed the live report page now shows sales rollups, sales main_issue/next_goal, and knowledge-hit diagnostics. Practice-page browser runtime reached Realtime in_progress with an enabled recording control, but the full four-dialogue microphone UAT remains open due time budget.",
-  "last_success_signal": "S05/T03 is complete: live ScorePanel/report consumers now expose sales value/evidence/objection semantics from the unified contract, backed by focused regressions and a report API integration proof.",
+  "last_verification_result": "S06 slice verification passed fresh: backend projection/admin-user suites are green, the focused admin user-detail page test is green, Alembic is at head, and live browser review confirmed the page answers supervisor trend questions plus shows inline progress empty/error states without collapsing the shell.",
+  "last_success_signal": "S06/T02 is complete: the admin user detail page is confirmed on the projection-backed progress contract with live success, empty, and error behavior.",
   "last_growth_scan": null,
-  "next_action": "Close slice S05 with slice summary/UAT and reassess the next milestone item."
+  "next_action": "Close slice S06 with slice summary/UAT and reassess the next milestone item."
 }

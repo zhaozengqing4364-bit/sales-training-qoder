@@ -2,6 +2,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import UserDetailPage from "./page";
+import { ApiRequestError } from "@/lib/api/client";
 
 const {
     pushMock,
@@ -58,6 +59,167 @@ vi.mock("@/lib/api/client", async () => {
     };
 });
 
+const baseStatsResponse = {
+    user: {
+        id: "user-1",
+        user_id: "user-1",
+        display_name: "张三",
+        email: "zhangsan@example.com",
+        department: "销售一部",
+        role: "user",
+        is_active: true,
+        status: "active",
+        created_at: "2026-03-01T00:00:00Z",
+        total_sessions: 4,
+        total_duration_minutes: 16,
+        average_score: 55,
+    },
+    statistics: {
+        total_sessions: 4,
+        completed_sessions: 4,
+        completion_rate: 100,
+        average_score: 55,
+        best_score: 70,
+        worst_score: 40,
+        total_duration_minutes: 16,
+        last_practice: "2026-03-23T09:00:00Z",
+        unique_agents_used: 1,
+        unique_personas_used: 1,
+    },
+    agent_usage: [],
+    persona_usage: [],
+};
+
+const baseSessionsResponse = {
+    items: [
+        {
+            session_id: "session-1",
+            start_time: "2026-03-23T09:00:00Z",
+            end_time: "2026-03-23T09:04:00Z",
+            status: "completed",
+            duration_minutes: 4,
+            scenario_name: "大客户销售演练",
+            scenario_type: "sales",
+            agent_name: "销售教练",
+            persona_name: "采购经理",
+            scores: {
+                logic: 40,
+                accuracy: 50,
+                completeness: 60,
+                overall: 50,
+            },
+            interruption_count: 1,
+            overall_result: "fail",
+            evaluable: true,
+            not_evaluable_reason: null,
+            main_issue: {
+                issue_type: "main_capability_not_passed",
+                issue_text: "关键异议回应不够具体。",
+                recovery_rule: "先回应风险，再补证据。",
+            },
+            next_goal: {
+                goal_type: "single_next_goal",
+                goal_text: "下一轮先把异议处理说完整。",
+                rule: "至少完成 1 次完整异议回应。",
+            },
+            feedback_summary: "最近一次报告提示：还要把风险回应说具体。",
+        },
+    ],
+    total: 1,
+    page: 1,
+    page_size: 10,
+    has_more: false,
+};
+
+const richProgressResponse = {
+    granularity: "week",
+    trend_data: [
+        {
+            date: "2026-03-02T00:00:00+00:00",
+            sessions_count: 3,
+            evaluable_session_count: 2,
+            not_evaluable_session_count: 1,
+            average_score: 60,
+            logic_score: 55,
+            accuracy_score: 61,
+            completeness_score: 64,
+            overall_result: "fail",
+            evaluable: true,
+            not_evaluable_reason: null,
+            main_issue: {
+                issue_type: "objection_response",
+                issue_text: "异议回应不够具体。",
+                recovery_rule: "先回应风险，再补证据。",
+            },
+            next_goal: {
+                goal_type: "objection_response_drill",
+                goal_text: "下一轮继续把异议回应说完整。",
+                rule: "至少完成 1 次完整异议回应。",
+            },
+            stage_summary: [],
+            evidence_completeness: {
+                complete: true,
+                missing_fields: [],
+                message_count: 6,
+            },
+        },
+        {
+            date: "2026-03-09T00:00:00+00:00",
+            sessions_count: 1,
+            evaluable_session_count: 1,
+            not_evaluable_session_count: 0,
+            average_score: 40,
+            logic_score: 38,
+            accuracy_score: 42,
+            completeness_score: 40,
+            overall_result: "fail",
+            evaluable: true,
+            not_evaluable_reason: null,
+            main_issue: {
+                issue_type: "objection_response",
+                issue_text: "异议回应不够具体。",
+                recovery_rule: "先回应风险，再补证据。",
+            },
+            next_goal: {
+                goal_type: "objection_response_drill",
+                goal_text: "下一轮继续把异议回应说完整。",
+                rule: "至少完成 1 次完整异议回应。",
+            },
+            stage_summary: [],
+            evidence_completeness: {
+                complete: true,
+                missing_fields: [],
+                message_count: 3,
+            },
+        },
+    ],
+    improvement_rate: -33.3,
+    total_data_points: 2,
+    completed_session_count: 4,
+    evaluable_session_count: 3,
+    not_evaluable_session_count: 1,
+    non_completed_session_count: 1,
+    repeated_main_issues: [
+        {
+            issue_type: "objection_response",
+            issue_text: "异议回应不够具体。",
+            count: 3,
+        },
+    ],
+    repeated_next_goals: [
+        {
+            goal_type: "objection_response_drill",
+            goal_text: "下一轮继续把异议回应说完整。",
+            count: 3,
+        },
+    ],
+    should_switch_focus: true,
+    recommendation: {
+        reason: "stalled_repeated_focus",
+        summary: "最近多次训练仍卡在同一重点且没有改善，建议切换训练重点或训练方法。",
+    },
+};
+
 describe("UserDetailPage", () => {
     beforeEach(() => {
         pushMock.mockReset();
@@ -65,95 +227,75 @@ describe("UserDetailPage", () => {
         getUserSessionsMock.mockReset();
         getUserProgressMock.mockReset();
 
-        getUserStatsMock.mockResolvedValue({
-            user: {
-                id: "user-1",
-                user_id: "user-1",
-                display_name: "张三",
-                email: "zhangsan@example.com",
-                department: "销售一部",
-                role: "user",
-                is_active: true,
-                status: "active",
-                created_at: "2026-03-01T00:00:00Z",
-                total_sessions: 2,
-                total_duration_minutes: 8,
-                average_score: 55,
-            },
-            statistics: {
-                total_sessions: 2,
-                completed_sessions: 2,
-                completion_rate: 100,
-                average_score: 55,
-                best_score: 60,
-                worst_score: 50,
-                total_duration_minutes: 8,
-                last_practice: "2026-03-23T09:00:00Z",
-                unique_agents_used: 1,
-                unique_personas_used: 1,
-            },
-            agent_usage: [],
-            persona_usage: [],
-        });
-        getUserProgressMock.mockResolvedValue({
-            trend_data: [],
-            improvement_rate: 0,
-            total_data_points: 0,
-        });
+        getUserStatsMock.mockResolvedValue(baseStatsResponse);
+        getUserSessionsMock.mockResolvedValue(baseSessionsResponse as any);
+        getUserProgressMock.mockResolvedValue(richProgressResponse as any);
     });
 
-    it("renders unified preview copy and a report CTA for completed sessions", async () => {
-        getUserSessionsMock.mockResolvedValue({
-            items: [
-                {
-                    session_id: "session-1",
-                    start_time: "2026-03-23T09:00:00Z",
-                    end_time: "2026-03-23T09:04:00Z",
-                    status: "completed",
-                    duration_minutes: 4,
-                    scenario_name: "大客户销售演练",
-                    scenario_type: "sales",
-                    agent_name: "销售教练",
-                    persona_name: "采购经理",
-                    scores: {
-                        logic: 40,
-                        accuracy: 50,
-                        completeness: 60,
-                        overall: 50,
-                    },
-                    interruption_count: 1,
-                    overall_result: "fail",
-                    evaluable: true,
-                    not_evaluable_reason: null,
-                    main_issue: {
-                        issue_type: "main_capability_not_passed",
-                        issue_text: "关键异议回应不够具体。",
-                        recovery_rule: "先回应风险，再补证据。",
-                    },
-                    next_goal: {
-                        goal_type: "single_next_goal",
-                        goal_text: "下一轮先把异议处理说完整。",
-                        rule: "至少完成 1 次完整异议回应。",
-                    },
-                    feedback_summary: "关键异议回应不够具体。",
-                },
-            ],
-            total: 1,
-            page: 1,
-            page_size: 10,
-            has_more: false,
-        } as any);
-
+    it("renders supervisor-readable progress summary with repeated blockers, next goal, and switch-focus guidance", async () => {
         render(<UserDetailPage />);
 
         await waitFor(() => {
             expect(getUserSessionsMock).toHaveBeenCalledWith("user-1", { page: 1, page_size: 10 });
         });
 
-        expect(await screen.findByText("关键异议回应不够具体。"))
+        expect(await screen.findByText("连续变化判断")).toBeTruthy();
+        expect(screen.getAllByText("建议切换训练重点").length).toBeGreaterThan(0);
+        expect(screen.getByText("异议回应不够具体。")).toBeTruthy();
+        expect(screen.getByText("下一轮继续把异议回应说完整。")).toBeTruthy();
+        expect(screen.getByText(/已完成训练里有 1 次仍证据不足/)).toBeTruthy();
+        expect(screen.getByText("最近多次训练仍卡在同一重点且没有改善，建议切换训练重点或训练方法。"))
             .toBeTruthy();
-        expect(screen.getByText("下一轮先把异议处理说完整。"))
+
+        const reportLink = screen.getByRole("link", { name: "查看报告" }) as HTMLAnchorElement;
+        expect(reportLink.getAttribute("href")).toBe("/practice/session-1/report");
+    });
+
+    it("renders a local inline empty state when progress has no evaluable sessions", async () => {
+        getUserProgressMock.mockResolvedValue({
+            granularity: "week",
+            trend_data: [],
+            improvement_rate: 0,
+            total_data_points: 0,
+            completed_session_count: 2,
+            evaluable_session_count: 0,
+            not_evaluable_session_count: 2,
+            non_completed_session_count: 0,
+            repeated_main_issues: [],
+            repeated_next_goals: [],
+            should_switch_focus: false,
+            recommendation: {
+                reason: "insufficient_evaluable_history",
+                summary: "最近完成的训练里仍有证据不足的会话，先补齐有效互动再判断是否切换重点。",
+            },
+        } as any);
+
+        render(<UserDetailPage />);
+
+        expect(await screen.findByText("暂无可评估训练数据")).toBeTruthy();
+        expect(screen.getByText(/最近 2 次已完成训练仍证据不足/)).toBeTruthy();
+        expect(screen.getByText("最近完成的训练里仍有证据不足的会话，先补齐有效互动再判断是否切换重点。"))
             .toBeTruthy();
+        expect(screen.queryByText("用户不存在或加载失败")).toBeNull();
+    });
+
+    it("keeps the page shell visible and shows an inline progress error when only progress loading fails", async () => {
+        getUserProgressMock.mockRejectedValue(
+            new ApiRequestError({
+                status: 0,
+                errorCode: "[NETWORK_ERROR]",
+                message: "network down",
+            }),
+        );
+
+        render(<UserDetailPage />);
+
+        expect(await screen.findByText("张三")).toBeTruthy();
+        expect(screen.getAllByText(
+            "连续变化视图加载失败：网络连接失败，请检查后端服务或网络设置后重试。",
+        ).length).toBeGreaterThan(0);
+        expect(screen.queryByText("用户不存在或加载失败")).toBeNull();
+
         const reportLink = screen.getByRole("link", { name: "查看报告" }) as HTMLAnchorElement;
         expect(reportLink.getAttribute("href")).toBe("/practice/session-1/report");
     });

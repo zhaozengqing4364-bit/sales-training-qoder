@@ -24,6 +24,21 @@ const MISSING_FIELD_LABELS: Record<string, string> = {
     messages: "对话消息",
 };
 
+const ISSUE_TYPE_LABELS: Record<string, string> = {
+    objection_response: "异议回应",
+    value_gap: "价值表达",
+    main_capability_not_passed: "核心能力",
+    insufficient_turns: "轮次不足",
+    insufficient_turn_data: "证据不足",
+};
+
+const GOAL_TYPE_LABELS: Record<string, string> = {
+    objection_response_drill: "异议回应训练",
+    objection_progress: "异议推进",
+    single_next_goal: "下一轮重点",
+    collect_more_evidence: "补齐有效互动",
+};
+
 export function formatSessionStageLabel(stage?: SessionEvidenceStage | null): string {
     if (!stage) {
         return "未分阶段";
@@ -57,4 +72,18 @@ export function formatEvidenceCompletenessNote(
 
     const labels = missingFields.map((field) => MISSING_FIELD_LABELS[field] || field);
     return `当前证据仍不完整：${labels.join("、")}。`;
+}
+
+export function formatIssueTypeLabel(issueType?: string | null): string | null {
+    if (!issueType) {
+        return null;
+    }
+    return ISSUE_TYPE_LABELS[String(issueType)] || null;
+}
+
+export function formatGoalTypeLabel(goalType?: string | null): string | null {
+    if (!goalType) {
+        return null;
+    }
+    return GOAL_TYPE_LABELS[String(goalType)] || null;
 }

@@ -559,16 +559,51 @@ export interface UserSessionsResponse {
 export interface UserProgressDataPoint {
     date: string;
     sessions_count: number;
+    evaluable_session_count: number;
+    not_evaluable_session_count: number;
     average_score: number;
     logic_score: number;
     accuracy_score: number;
     completeness_score: number;
+    overall_result?: SessionOverallResult | null;
+    evaluable?: boolean | null;
+    not_evaluable_reason?: SessionNotEvaluableReason | null;
+    evidence_completeness?: SessionEvidenceCompleteness | null;
+    main_issue?: SessionMainIssue | null;
+    next_goal?: SessionNextGoal | null;
+    stage_summary?: SessionStageSummary[] | null;
+}
+
+export interface UserRepeatedMainIssueBucket {
+    issue_type: string;
+    issue_text: string;
+    count: number;
+}
+
+export interface UserRepeatedNextGoalBucket {
+    goal_type: string;
+    goal_text: string;
+    count: number;
+}
+
+export interface UserProgressRecommendation {
+    reason: string;
+    summary: string;
 }
 
 export interface UserProgressResponse {
+    granularity: "day" | "week" | string;
     trend_data: UserProgressDataPoint[];
     improvement_rate: number;
     total_data_points: number;
+    completed_session_count: number;
+    evaluable_session_count: number;
+    not_evaluable_session_count: number;
+    non_completed_session_count: number;
+    repeated_main_issues: UserRepeatedMainIssueBucket[];
+    repeated_next_goals: UserRepeatedNextGoalBucket[];
+    should_switch_focus: boolean;
+    recommendation: UserProgressRecommendation;
 }
 
 // Prompt Template types (B10)

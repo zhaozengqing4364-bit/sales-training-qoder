@@ -45,7 +45,7 @@
   - Do: 先写 failing unit/integration tests，再在 `HistoryService` 新增 supervisor progress snapshot / grouping helper，基于 completed-session projection 计算 truthful `day/week` trend、evaluable/not-evaluable counts、重复 `main_issue.issue_type` / `next_goal.goal_type`、保守 `should_switch_focus` 与 recommendation；随后把 `/progress` 改读它，并把 `/stats` 的平均/最好/最差分对齐到同一 summaries，同时保留 raw completion/usage 统计。
   - Verify: `cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_history_service_evidence_projection.py tests/integration/test_admin_users_api.py`
   - Done when: `/progress` 与 `/stats` 的 score-bearing fields 都来自同一 projection-backed summaries，integration tests 证明 repeated blocker / next goal / not-evaluable semantics 与 `/sessions` preview vocabulary 对齐。
-- [ ] **T02: 把 `/admin/users/[id]` 改成主管可读的连续变化视图** `est:3h`
+- [x] **T02: 把 `/admin/users/[id]` 改成主管可读的连续变化视图** `est:3h`
   - Why: backend 即使已经聚合出正确 snapshot，如果页面仍只显示 improvement 百分比和 generic 曲线，主管仍然无法据此判断是否进步或是否该换训练重点。
   - Files: `web/src/lib/api/types.ts`, `web/src/lib/session-evidence.ts`, `web/src/app/admin/users/[id]/page.tsx`, `web/src/app/admin/users/[id]/page.test.tsx`
   - Do: 扩展 `UserProgressResponse` 到 richer supervisor contract，必要时在 `web/src/lib/session-evidence.ts` 增加 issue/goal label helpers；把 page 的 progress 区域改成“趋势 + 重复卡点 + 重复下一步 + not-evaluable 说明 + switch-focus 建议”的摘要面，并加本地 inline empty/error state；保留现有 session table 与 canonical `查看报告` drill-in。
