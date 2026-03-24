@@ -4,7 +4,18 @@ from __future__ import annotations
 
 from typing import Any, Iterable
 
-from common.effectiveness.schemas import ActionCard, NextGoal, OverallResult, PassFlags
+from common.effectiveness.schemas import (
+    ActionCard,
+    NextGoal,
+    OverallResult,
+    PassFlags,
+    SalesCoachingDimension,
+    SalesCoachingFocus,
+    SalesCoachingFocusType,
+    SalesScoreContext,
+    SalesStageContext,
+    SalesStageKey,
+)
 
 
 RULE_VERSION = "rule_v1"
@@ -15,6 +26,70 @@ SALES_DIMENSION_ALIASES: dict[str, tuple[str, ...]] = {
     "证据使用": ("证据使用", "evidence_usage", "proof_usage"),
     "异议处理": ("异议处理", "objection_handling", "objection_response"),
     "推进下一步": ("推进下一步", "next_step", "advance_next_step"),
+}
+
+SALES_STAGE_ALIASES: dict[SalesStageKey, tuple[str, ...]] = {
+    "discovery": (
+        "opening",
+        "qualification",
+        "discovery",
+        "开场破冰",
+        "需求确认",
+        "需求挖掘",
+    ),
+    "objection": (
+        "objection",
+        "negotiation",
+        "异议处理",
+        "价格博弈",
+    ),
+    "closing": (
+        "closing",
+        "commitment",
+        "促成成交",
+        "成交推进",
+        "成交",
+    ),
+}
+
+SALES_STAGE_PRIORITY_DIMENSIONS: dict[SalesStageKey, tuple[SalesCoachingDimension, ...]] = {
+    "discovery": ("客户收益连接", "价值表达", "证据使用"),
+    "objection": ("异议处理", "证据使用", "推进下一步"),
+    "closing": ("推进下一步", "异议处理", "证据使用"),
+}
+
+SALES_COACHING_FOCUS_BY_DIMENSION: dict[
+    SalesCoachingDimension,
+    SalesCoachingFocusType,
+] = {
+    "价值表达": "value_translation_gap",
+    "客户收益连接": "value_translation_gap",
+    "证据使用": "evidence_gap",
+    "异议处理": "objection_handling_gap",
+    "推进下一步": "next_step_gap",
+}
+
+SALES_COACHING_FOCUS_TEMPLATES: dict[SalesCoachingFocusType, SalesCoachingFocus] = {
+    "value_translation_gap": {
+        "issue": "需求还没被翻译成客户收益，客户暂时感受不到业务价值。",
+        "replacement": "先追问现状损失或关键目标，再用一句话复述客户收益。",
+        "next_turn_rule": "下一轮先问清现状损失或目标，再复述一个客户收益。",
+    },
+    "evidence_gap": {
+        "issue": "痛点已经聊到，但价值主张还缺少可验证的案例或数据。",
+        "replacement": "在确认痛点后，补一个同类客户案例、数据或ROI区间。",
+        "next_turn_rule": "下一轮先确认痛点影响，再补一个案例或ROI数据。",
+    },
+    "objection_handling_gap": {
+        "issue": "客户顾虑出现后，承接与重构回应还不够完整。",
+        "replacement": "先复述价格、竞品或风险顾虑，再给收益与证据回应。",
+        "next_turn_rule": "下一轮先复述顾虑，再回应证据，最后给低风险推进方案。",
+    },
+    "next_step_gap": {
+        "issue": "对话快结束了，但下一步动作、时间点和责任人还没定下来。",
+        "replacement": "明确试点、会议、报价或负责人确认中的一个动作。",
+        "next_turn_rule": "下一轮先锁定动作、时间点和责任人，再结束本轮。",
+    },
 }
 
 
@@ -64,6 +139,153 @@ def _normalize_sales_dimension_scores(
             resolved_score if resolved_score is not None else _clamp_score(overall_score)
         )
     return normalized
+
+
+def _canonical_sales_dimension_name(value: Any) -> SalesCoachingDimension | None:
+    if not isinstance(value, str):
+        return None
+    candidate = value.strip().lower()
+    for canonical_name, aliases in SALES_DIMENSION_ALIASES.items():
+        for alias in aliases:
+            if candidate == alias.strip().lower():
+                return canonical_name  # type: ignore[return-value]
+    return None
+
+
+def _normalize_sales_stage_key(
+    stage_context: SalesStageContext | None,
+    score_context: SalesScoreContext | None,
+) -> SalesStageKey | None:
+    raw_candidates: list[Any] = []
+    if isinstance(stage_context, dict):
+        raw_candidates.extend(
+            [stage_context.get("current_stage"), stage_context.get("stage_name")]
+        )
+    if isinstance(score_context, dict):
+        raw_candidates.append(score_context.get("stage_name"))
+
+    for candidate in raw_candidates:
+        if not isinstance(candidate, str) or not candidate.strip():
+            continue
+        normalized_candidate = candidate.strip().lower()
+        for stage_key, aliases in SALES_STAGE_ALIASES.items():
+            if any(
+                normalized_candidate == alias.strip().lower()
+                or normalized_candidate in alias.strip().lower()
+                or alias.strip().lower() in normalized_candidate
+                for alias in aliases
+            ):
+                return stage_key
+    return None
+
+
+def _extract_sales_dimension_context(
+    score_context: SalesScoreContext | None,
+) -> tuple[
+    dict[SalesCoachingDimension, float],
+    dict[SalesCoachingDimension, float],
+    dict[SalesCoachingDimension, str],
+]:
+    if not isinstance(score_context, dict):
+        return {}, {}, {}
+
+    overall_score = _clamp_score(score_context.get("overall_score"), 0.0)
+    raw_dimension_scores = score_context.get("dimension_scores")
+    normalized_scores = _normalize_sales_dimension_scores(
+        raw_dimension_scores if isinstance(raw_dimension_scores, dict) else None,
+        overall_score,
+    )
+
+    deltas: dict[SalesCoachingDimension, float] = {}
+    trends: dict[SalesCoachingDimension, str] = {}
+    raw_dimensions = score_context.get("dimensions")
+    if isinstance(raw_dimensions, list):
+        for item in raw_dimensions:
+            if not isinstance(item, dict):
+                continue
+            canonical_name = _canonical_sales_dimension_name(item.get("name"))
+            if canonical_name is None:
+                continue
+            delta = item.get("delta")
+            if isinstance(delta, (int, float)):
+                deltas[canonical_name] = float(delta)
+            trend = item.get("trend")
+            if isinstance(trend, str) and trend.strip():
+                trends[canonical_name] = trend.strip().lower()
+            score = item.get("score")
+            if isinstance(score, (int, float)):
+                normalized_scores[canonical_name] = _clamp_score(score)
+
+    return normalized_scores, deltas, trends
+
+
+def _coaching_urgency_score(
+    dimension_name: SalesCoachingDimension,
+    base_score: float,
+    deltas: dict[SalesCoachingDimension, float],
+    trends: dict[SalesCoachingDimension, str],
+) -> float:
+    adjusted_score = base_score
+    delta = deltas.get(dimension_name)
+    if delta is not None and delta < 0:
+        adjusted_score += delta
+
+    trend = trends.get(dimension_name)
+    if trend in {"down", "declining", "negative", "下降", "下滑"}:
+        adjusted_score -= 4.0
+
+    return adjusted_score
+
+
+def _select_sales_focus_type(
+    *,
+    stage_context: SalesStageContext | None,
+    score_context: SalesScoreContext | None,
+    pass_flags: PassFlags | None,
+) -> SalesCoachingFocusType | None:
+    stage_key = _normalize_sales_stage_key(stage_context, score_context)
+    scores, deltas, trends = _extract_sales_dimension_context(score_context)
+
+    if scores:
+        urgency_scores = {
+            dimension_name: _coaching_urgency_score(
+                dimension_name,
+                score,
+                deltas,
+                trends,
+            )
+            for dimension_name, score in scores.items()
+        }
+        weakest_dimension, weakest_score = min(
+            urgency_scores.items(),
+            key=lambda item: item[1],
+        )
+        if stage_key is not None:
+            preferred_dimensions = SALES_STAGE_PRIORITY_DIMENSIONS.get(stage_key, ())
+            near_stage_dimensions = [
+                dimension_name
+                for dimension_name in preferred_dimensions
+                if urgency_scores.get(dimension_name, 101.0) <= weakest_score + 6.0
+            ]
+            if near_stage_dimensions:
+                weakest_dimension = min(
+                    near_stage_dimensions,
+                    key=lambda dimension_name: urgency_scores[dimension_name],
+                )
+        return SALES_COACHING_FOCUS_BY_DIMENSION[weakest_dimension]
+
+    if not pass_flags:
+        return None
+
+    if all(pass_flags.values()):
+        return None
+    if not pass_flags.get("pass_3min_flow", True):
+        return "value_translation_gap"
+    if not pass_flags.get("pass_5turn_defense", True):
+        return "objection_handling_gap"
+    if not pass_flags.get("pass_4step_structure", True):
+        return "next_step_gap" if stage_key == "closing" else "evidence_gap"
+    return None
 
 
 def build_sales_rollup_scores(
@@ -280,6 +502,28 @@ def _sales_next_goal(metrics: dict[str, Any]) -> NextGoal:
     }
 
 
+def resolve_sales_coaching_focus(
+    *,
+    stage_context: SalesStageContext | None = None,
+    score_context: SalesScoreContext | None = None,
+    pass_flags: PassFlags | None = None,
+) -> SalesCoachingFocus | None:
+    focus_type = _select_sales_focus_type(
+        stage_context=stage_context if isinstance(stage_context, dict) else None,
+        score_context=score_context if isinstance(score_context, dict) else None,
+        pass_flags=pass_flags,
+    )
+    if focus_type is None:
+        return None
+
+    focus = SALES_COACHING_FOCUS_TEMPLATES[focus_type]
+    return {
+        "issue": focus["issue"],
+        "replacement": focus["replacement"],
+        "next_turn_rule": focus["next_turn_rule"],
+    }
+
+
 def resolve_next_goal(
     pass_flags: PassFlags,
     *,
@@ -426,10 +670,26 @@ def build_action_card(
     fuzzy_detections: Iterable[dict[str, Any]] | None = None,
     suggestions: Iterable[str] | None = None,
     pass_flags: PassFlags | None = None,
+    stage_context: SalesStageContext | None = None,
+    score_context: SalesScoreContext | None = None,
 ) -> ActionCard | None:
     """Build a single actionable card from realtime signals."""
     detections = [item for item in (fuzzy_detections or []) if isinstance(item, dict)]
     tips = [tip.strip() for tip in (suggestions or []) if isinstance(tip, str) and tip.strip()]
+
+    has_rich_sales_context = isinstance(stage_context, dict) or isinstance(score_context, dict)
+    if has_rich_sales_context:
+        coaching_focus = resolve_sales_coaching_focus(
+            stage_context=stage_context if isinstance(stage_context, dict) else None,
+            score_context=score_context if isinstance(score_context, dict) else None,
+            pass_flags=pass_flags,
+        )
+        if coaching_focus is not None:
+            return {
+                "issue": coaching_focus["issue"],
+                "replacement": coaching_focus["replacement"],
+                "next_turn_rule": coaching_focus["next_turn_rule"],
+            }
 
     issue = ""
     replacement = ""
@@ -441,7 +701,8 @@ def build_action_card(
             issue = f"检测到表达问题：{', '.join(str(x) for x in matched[:3])}"
         else:
             issue = "检测到表达不够具体"
-        replacement = str(first.get("suggestion") or "请改用更具体的业务表达。"
+        replacement = str(
+            first.get("suggestion") or "请改用更具体的业务表达。"
         ).strip()
     elif tips:
         issue = "当前轮次有1个关键改进点"

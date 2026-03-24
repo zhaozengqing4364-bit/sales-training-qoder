@@ -20,6 +20,7 @@
 
 - `cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_effectiveness_sales_coaching_focus.py tests/unit/test_realtime_feedback_arbiter.py tests/unit/test_capability_processor.py tests/unit/test_stepfun_realtime_handler.py`
 - `cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_effectiveness_sales_coaching_focus.py -vv`
+- `cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_effectiveness_sales_coaching_focus.py -k weakest_dimension_changes_next_turn_rule -vv`
 - `cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_stepfun_realtime_handler.py -vv`
 
 ## Observability / Diagnostics
@@ -37,7 +38,7 @@
 
 ## Tasks
 
-- [ ] **T01: Define stage-aware coaching focus in `common.effectiveness`** `est:2h`
+- [x] **T01: Define stage-aware coaching focus in `common.effectiveness`** `est:2h`
   - Why: The split source is in the shared effectiveness layer: `build_action_card(...)`, `resolve_main_issue(...)`, and `resolve_next_goal(...)` reason about the next move differently, so S03 needs one authoritative backend rule before runtime wiring can converge.
   - Files: `backend/src/common/effectiveness/evaluator.py`, `backend/src/common/effectiveness/schemas.py`, `backend/src/common/effectiveness/__init__.py`, `backend/tests/unit/test_effectiveness_sales_coaching_focus.py`
   - Do: Add failing unit coverage for discovery/evidence, objection/handling, and closing/next-step cases where changing stage or the weakest/declining dimension changes the next-turn focus; introduce one shared typed coaching-focus helper in `common.effectiveness`; make `build_action_card(...)` derive `issue` / `replacement` / `next_turn_rule` from that helper while keeping the public action-card field names stable and avoiding any replay/report schema change.

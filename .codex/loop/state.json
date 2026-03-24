@@ -1,7 +1,7 @@
 {
   "mode": "stabilize",
-  "current_issue_id": "M002-S02",
-  "current_issue_type": "slice",
+  "current_issue_id": "M002-S03-T01",
+  "current_issue_type": "task",
   "current_issue_status": "done",
   "pending_issue_ids": [],
   "completed_issue_ids": [
@@ -38,29 +38,31 @@
     "M002-S02-T01",
     "M002-S02-T02",
     "M002-S02-T03",
-    "M002-S02"
+    "M002-S02",
+    "M002-S03-T01"
   ],
   "blocked_issue_ids": [],
   "deferred_issue_ids": [],
   "last_modified_files": [
-    ".gsd/milestones/M002/slices/S02/S02-SUMMARY.md",
-    ".gsd/milestones/M002/slices/S02/S02-UAT.md",
-    ".gsd/milestones/M002/M002-ROADMAP.md",
-    ".gsd/REQUIREMENTS.md",
-    ".gsd/KNOWLEDGE.md",
-    ".gsd/PROJECT.md",
+    "backend/src/common/effectiveness/evaluator.py",
+    "backend/src/common/effectiveness/schemas.py",
+    "backend/src/common/effectiveness/__init__.py",
+    "backend/tests/unit/test_effectiveness_sales_coaching_focus.py",
+    ".gsd/DECISIONS.md",
+    ".gsd/milestones/M002/slices/S03/S03-PLAN.md",
+    ".gsd/milestones/M002/slices/S03/tasks/T01-SUMMARY.md",
     ".codex/loop/state.json",
     ".codex/loop/log.md"
   ],
   "last_verification_commands": [
-    "cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_realtime_feedback_arbiter.py tests/unit/test_capability_processor.py tests/unit/test_stepfun_realtime_handler.py tests/unit/test_stepfun_realtime_persistence.py",
-    "cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_realtime_feedback_arbiter.py -k 'suppress or preserve_context' -vv",
-    "cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_stepfun_realtime_handler.py tests/unit/test_stepfun_realtime_persistence.py -k 'suppress or replay' -vv",
-    "cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_fuzzy_detection.py -k cooldown",
-    "cd web && npm test -- --run 'src/hooks/websocket/message-handlers.test.ts' 'src/hooks/use-practice-websocket.test.ts' 'src/components/practice/ScorePanel.test.tsx' 'src/components/practice/RightPanelContent.test.tsx'"
+    "cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_effectiveness_sales_coaching_focus.py",
+    "cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_effectiveness_sales_coaching_focus.py -vv",
+    "cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_effectiveness_sales_coaching_focus.py -k weakest_dimension_changes_next_turn_rule -vv",
+    "cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_effectiveness_sales_coaching_focus.py tests/unit/test_realtime_feedback_arbiter.py tests/unit/test_capability_processor.py tests/unit/test_stepfun_realtime_handler.py",
+    "cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_stepfun_realtime_handler.py -vv"
   ],
-  "last_verification_result": "M002/S02 slice verification passed fresh: the broad backend arbiter/classic/StepFun suite, the focused arbiter diagnostic filter, the focused StepFun replay filter, the fuzzy cooldown regression, and the four-file web gate all exited 0. The web command reported Test Files (4), confirming the targeted RightPanelContent coverage actually executed.",
-  "last_success_signal": "Realtime coaching now lands as one primary action per turn across classic + StepFun, reconnect restore no longer replays stale action cards, and new final transcripts clear old action/fuzzy hints before the next turn begins.",
+  "last_verification_result": "M002/S03/T01 verification passed fresh: the focused coaching-focus suite, the verbose focused suite, the weakest-dimension selector, the broad S03 backend unit suite, and the StepFun verbose suite all exited 0. One parallel pytest-cov attempt hit a local .coverage race, and the affected selector was rerun sequentially and passed.",
+  "last_success_signal": "common.effectiveness now exposes resolve_sales_coaching_focus, and build_action_card switches to the shared stage-aware issue/replacement/next_turn_rule contract when rich stage/score context is supplied while legacy callers keep the old fallback until T02/T03 wire that context through.",
   "last_growth_scan": null,
-  "next_action": "Proceed to roadmap reassessment for M002 with S02-SUMMARY.md as the dependency handoff; the next open slice is M002/S03."
+  "next_action": "Proceed to M002/S03/T02 to route classic arbiter/capability_processor through the shared coaching-focus rule."
 }

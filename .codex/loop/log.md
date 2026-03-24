@@ -733,3 +733,27 @@ Append one entry per iteration:
   verification results: passed; all slice-level backend and web commands were rerun fresh, including the previously deferred fuzzy cooldown regression, and the web gate reported Test Files (4) so the targeted RightPanelContent coverage actually executed.
   success signal status: S02 is now closed with one shared realtime-feedback pacing line across classic + StepFun, no same-turn action-card replay burst after restore, and no stale turn-bound action/fuzzy hints leaking into the next practice turn.
   rollback note: if downstream slices touch coach pacing again, preserve the backend arbiter + minimal feedback_pacing_state + frontend transcript-reset trio together; splitting those seams will recreate either replay bursts or cross-turn stale hints.
+
+- time: 2026-03-24T21:37:02+0800
+  mode: stabilize
+  item id: M002-S03-T01
+  files changed:
+    - backend/src/common/effectiveness/evaluator.py
+    - backend/src/common/effectiveness/schemas.py
+    - backend/src/common/effectiveness/__init__.py
+    - backend/tests/unit/test_effectiveness_sales_coaching_focus.py
+    - .gsd/DECISIONS.md
+    - .gsd/milestones/M002/slices/S03/S03-PLAN.md
+    - .gsd/milestones/M002/slices/S03/tasks/T01-SUMMARY.md
+    - .codex/loop/state.json
+    - .codex/loop/log.md
+  summary: Added a shared stage-aware sales coaching-focus resolver in common.effectiveness, rewired build_action_card to use it when rich stage/score context is present, and kept the legacy fallback path stable for current callers until T02/T03 wire the richer runtime context through.
+  verification commands:
+    - cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_effectiveness_sales_coaching_focus.py
+    - cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_effectiveness_sales_coaching_focus.py -vv
+    - cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_effectiveness_sales_coaching_focus.py -k weakest_dimension_changes_next_turn_rule -vv
+    - cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_effectiveness_sales_coaching_focus.py tests/unit/test_realtime_feedback_arbiter.py tests/unit/test_capability_processor.py tests/unit/test_stepfun_realtime_handler.py
+    - cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_stepfun_realtime_handler.py -vv
+  verification results: passed; all focused T01 checks and the full S03 backend unit gate exited 0. One intermediate parallel pytest-cov attempt hit a local .coverage race, and the affected selector passed when rerun sequentially.
+  success signal status: common.effectiveness now exposes one canonical sales coaching-focus seam, and action cards can switch issue/replacement/next-turn guidance when stage or weakest dimension changes without changing the public websocket contract.
+  rollback note: if later S03 work rewires action-card generation again, preserve the rich-context gate on build_action_card until every caller actually passes stage/score context through the shared resolver.

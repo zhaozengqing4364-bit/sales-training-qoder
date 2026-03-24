@@ -37,6 +37,14 @@ Create the single backend rule S03 depends on before touching runtime wiring. To
 
 - `cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_effectiveness_sales_coaching_focus.py`
 - `cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_effectiveness_sales_coaching_focus.py -vv`
+- `cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_effectiveness_sales_coaching_focus.py -k weakest_dimension_changes_next_turn_rule -vv`
+
+## Observability Impact
+
+- Signals changed: `common.effectiveness` now exposes one shared coaching-focus decision surface for sales turns, and `build_action_card(...)` becomes a thin projection of that helper instead of a pass-flags-only rule.
+- Inspection surfaces: `backend/tests/unit/test_effectiveness_sales_coaching_focus.py` should pin the canonical `issue` / `replacement` / `next_turn_rule` triples directly, and downstream runtimes will inspect the same helper through existing action-card assertions.
+- Failure visibility: stage-insensitive prompts or weak-dimension drift should fail focused assertions with the expected coaching text diff, especially the `weakest_dimension_changes_next_turn_rule` diagnostic selector added above.
+- Redaction constraints: use synthetic stage names, synthetic score deltas, and synthetic sales utterances only.
 
 ## Inputs
 
