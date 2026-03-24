@@ -4,17 +4,6 @@ This file is the explicit capability and coverage contract for the project.
 
 ## Active
 
-### R007 — 系统必须让主管看到某人在最近几次训练中的变化趋势，而不是只能看到单次表现。
-- Class: operability
-- Status: active
-- Description: 系统必须让主管看到某人在最近几次训练中的变化趋势，而不是只能看到单次表现。
-- Why it matters: 用户明确要求主管判断“有没有进步、总卡在哪类问题、该不该换训练重点”；没有连续变化视图，就无法形成管理判断。
-- Source: user
-- Primary owning slice: M001/S06
-- Supporting slices: M001/S03
-- Validation: mapped
-- Notes: 第一版先做趋势观察，不要求系统内派任务或闭环动作。
-
 ### R008 — PPT 对练第一版必须允许用户完整讲完一轮，并在结束后获得围绕真实 PPT 价值点的统一复盘、评分与建议。
 - Class: primary-user-loop
 - Status: active
@@ -55,9 +44,9 @@ This file is the explicit capability and coverage contract for the project.
 - Why it matters: 训练价值来自“做完后知道为什么好/差、下次怎么改”，没有复盘证据链，系统很难形成长期学习闭环。
 - Source: user
 - Primary owning slice: M004 (provisional)
-- Supporting slices: M001/S02
-- Validation: mapped
-- Notes: M001/S02 已验证 report / replay / history / trends 共享统一 session evidence 基线；M004 继续强化高光、逐轮点评和更强的学习证据体验。
+- Supporting slices: M001/S02, M001/S06
+- Validation: mapped; reinforced by S06 slice verification proving admin /progress and score-bearing /stats fields now read the same HistoryService/SessionEvidence projection line as completed-session previews and canonical session reports.
+- Notes: M001/S02 established the unified report/replay/history/trends evidence baseline; M001/S06 extends that same projection-backed fact line into admin supervisor progress and score summaries so cross-session management views no longer drift from single-session evidence.
 
 ### R012 — 知识库、PPT、Persona、报告视角和管理使用方式都需要按长期运营来设计，而不是一次配置后固定不变。
 - Class: operability
@@ -137,6 +126,17 @@ This file is the explicit capability and coverage contract for the project.
 - Supporting slices: M001/S05, M001/S07
 - Validation: Validated by S03 slice verification: admin sessions integration contract passed, admin detail + manager-lite focused tests passed, and live runtime admin APIs exposed projection-backed supervisor preview fields and canonical /practice/{sessionId}/report drill-in targets for the same completed sessions.
 - Notes: 第一版主管动作先在线下发生，系统先负责提供可执行判断依据。
+
+### R007 — 系统必须让主管看到某人在最近几次训练中的变化趋势，而不是只能看到单次表现。
+- Class: operability
+- Status: validated
+- Description: 系统必须让主管看到某人在最近几次训练中的变化趋势，而不是只能看到单次表现。
+- Why it matters: 用户明确要求主管判断“有没有进步、总卡在哪类问题、该不该换训练重点”；没有连续变化视图，就无法形成管理判断。
+- Source: user
+- Primary owning slice: M001/S06
+- Supporting slices: M001/S03
+- Validation: Validated by S06 slice verification: backend HistoryService/admin-user projection suites passed, focused /progress and /stats integration assertions stayed aligned with projection-backed /sessions previews, web admin user-detail tests passed, Alembic was upgraded to head, and live browser review on /admin/users/{id} proved the supervisor-readable continuous-change panel answers whether the learner is improving, what keeps repeating, whether focus should change, and how inline empty/error states behave when progress data is unavailable.
+- Notes: S06 now proves the first supervisor trend view on top of the same evidence projection used by single-session reports and completed-session previews; system-internal task assignment remains deferred.
 
 ### R013 — 现有仓库已经存在销售与 PPT 双训练模式入口、训练页、会话创建与基础生命周期骨架。
 - Class: primary-user-loop
@@ -251,11 +251,11 @@ This file is the explicit capability and coverage contract for the project.
 | R004 | admin/support | validated | M001/S04 | M001/S07 | Validated by S04 slice verification: backend knowledge/presentation integration suites passed, web admin knowledge/admin presentation/agent entry focused tests passed, live runtime/browser checks showed admin knowledge search diagnostics + knowledge-check snapshot fields, and standard PPT replacement exposed stable presentation_id + version/status with explicit 409 active-session blocking while user entry displayed the current deck version/status. |
 | R005 | launchability | validated | M001/S03 | M001/S02, M001/S08 | Validated by S03 slice verification: backend contract/admin integration tests passed, web focused report/admin tests passed, and live runtime report UAT (after alembic head) proved the first screen leads with result, main issue, next goal, and unified evidence without placeholder/export affordances. |
 | R006 | admin/support | validated | M001/S03 | M001/S05, M001/S07 | Validated by S03 slice verification: admin sessions integration contract passed, admin detail + manager-lite focused tests passed, and live runtime admin APIs exposed projection-backed supervisor preview fields and canonical /practice/{sessionId}/report drill-in targets for the same completed sessions. |
-| R007 | operability | active | M001/S06 | M001/S03 | mapped |
+| R007 | operability | validated | M001/S06 | M001/S03 | Validated by S06 slice verification: backend HistoryService/admin-user projection suites passed, focused /progress and /stats integration assertions stayed aligned with projection-backed /sessions previews, web admin user-detail tests passed, Alembic was upgraded to head, and live browser review on /admin/users/{id} proved the supervisor-readable continuous-change panel answers whether the learner is improving, what keeps repeating, whether focus should change, and how inline empty/error states behave when progress data is unavailable. |
 | R008 | primary-user-loop | active | M001/S07 | M001/S04 | mapped |
 | R009 | differentiator | active | M002 (provisional) | none | mapped |
 | R010 | integration | active | M003 (provisional) | none | mapped |
-| R011 | continuity | active | M004 (provisional) | M001/S02 | mapped |
+| R011 | continuity | active | M004 (provisional) | M001/S02, M001/S06 | mapped; reinforced by S06 slice verification proving admin /progress and score-bearing /stats fields now read the same HistoryService/SessionEvidence projection line as completed-session previews and canonical session reports. |
 | R012 | operability | active | M005 (provisional) | none | mapped |
 | R013 | primary-user-loop | validated | baseline | none | validated |
 | R014 | admin/support | validated | baseline | none | validated |
@@ -269,7 +269,7 @@ This file is the explicit capability and coverage contract for the project.
 
 ## Coverage Summary
 
-- Active requirements: 6
-- Mapped to slices: 6
-- Validated: 9 (R001, R002, R003, R004, R005, R006, R013, R014, R015)
+- Active requirements: 5
+- Mapped to slices: 5
+- Validated: 10 (R001, R002, R003, R004, R005, R006, R007, R013, R014, R015)
 - Unmapped active requirements: 0

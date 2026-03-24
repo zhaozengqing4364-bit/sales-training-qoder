@@ -68,7 +68,7 @@ This milestone is complete only when all are true:
 - [x] **S05: 销售价值表达与异议处理基线** `risk:high` `depends:[S02,S04]`
   > After this: 客户演练不再停留在泛泛闲聊，而是围绕真实产品价值、客户收益、价格 / 竞品 / 证据类追问进行训练和判断。
 
-- [ ] **S06: 连续变化视图（主管判断是否进步）** `risk:medium` `depends:[S02,S03]`
+- [x] **S06: 连续变化视图（主管判断是否进步）** `risk:medium` `depends:[S02,S03]`
   > After this: 主管能看到某人最近几次训练是否进步、反复卡在哪类问题、是否该切换训练重点。
 
 - [ ] **S07: PPT 对练会后统一复盘可用化** `risk:medium` `depends:[S02,S04]`

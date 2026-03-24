@@ -1,7 +1,7 @@
 {
   "mode": "stabilize",
-  "current_issue_id": "M001-S06-T02",
-  "current_issue_type": "task",
+  "current_issue_id": "M001-S06",
+  "current_issue_type": "slice",
   "current_issue_status": "done",
   "pending_issue_ids": [],
   "completed_issue_ids": [
@@ -23,14 +23,17 @@
     "M001-S05-T02",
     "M001-S05-T03",
     "M001-S06-T01",
-    "M001-S06-T02"
+    "M001-S06-T02",
+    "M001-S06"
   ],
   "blocked_issue_ids": [],
   "deferred_issue_ids": [],
   "last_modified_files": [
-    ".gsd/KNOWLEDGE.md",
-    ".gsd/milestones/M001/slices/S06/S06-PLAN.md",
-    ".gsd/milestones/M001/slices/S06/tasks/T02-SUMMARY.md",
+    ".gsd/REQUIREMENTS.md",
+    ".gsd/PROJECT.md",
+    ".gsd/milestones/M001/M001-ROADMAP.md",
+    ".gsd/milestones/M001/slices/S06/S06-SUMMARY.md",
+    ".gsd/milestones/M001/slices/S06/S06-UAT.md",
     ".codex/loop/state.json",
     ".codex/loop/log.md"
   ],
@@ -38,11 +41,11 @@
     "cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_history_service_evidence_projection.py tests/integration/test_admin_users_api.py",
     "cd backend && venv/bin/python -m pytest -c pyproject.toml tests/integration/test_admin_users_api.py -k 'progress or stats'",
     "cd web && npm test -- --run 'src/app/admin/users/[id]/page.test.tsx'",
-    "cd backend && venv/bin/alembic upgrade head",
-    "browser runtime: /admin/users/89e31f06-6393-42b6-877e-5a007803136a success + injected progress empty/error refresh assertions"
+    "cd backend && /usr/bin/time -p venv/bin/alembic upgrade head",
+    "browser runtime: POST /api/v1/auth/dev-login -> /admin/users/89e31f06-6393-42b6-877e-5a007803136a success state assertions + direct /progress and /stats checks + injected progress empty/error refresh assertions"
   ],
-  "last_verification_result": "S06 slice verification passed fresh: backend projection/admin-user suites are green, the focused admin user-detail page test is green, Alembic is at head, and live browser review confirmed the page answers supervisor trend questions plus shows inline progress empty/error states without collapsing the shell.",
-  "last_success_signal": "S06/T02 is complete: the admin user detail page is confirmed on the projection-backed progress contract with live success, empty, and error behavior.",
+  "last_verification_result": "S06 slice verification passed fresh: backend projection/admin-user suites are green, the focused admin user-detail page test is green, Alembic is at head, direct /progress and /stats reads match the rendered cards, and live browser review confirmed success plus inline progress empty/error states without collapsing the shell.",
+  "last_success_signal": "S06 is complete: the admin user detail page now exposes projection-backed continuous-change guidance that supervisors can use to judge improvement, repeated issues, and whether focus should change.",
   "last_growth_scan": null,
-  "next_action": "Close slice S06 with slice summary/UAT and reassess the next milestone item."
+  "next_action": "Reassess the M001 roadmap and choose the next open slice, with S07 now the remaining functional gap before final S08 release closure."
 }

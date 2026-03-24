@@ -2,3 +2,11 @@
 {"ts":"2026-03-24T00:58:47.029Z","flowId":"104c078f-4b7f-4812-9c18-f0cd8a3b2025","seq":2,"eventType":"dispatch-match","rule":"executing → execute-task","data":{"unitType":"execute-task","unitId":"M001/S06/T02"}}
 {"ts":"2026-03-24T00:58:47.043Z","flowId":"104c078f-4b7f-4812-9c18-f0cd8a3b2025","seq":3,"eventType":"unit-start","data":{"unitType":"execute-task","unitId":"M001/S06/T02"}}
 {"ts":"2026-03-24T01:11:00.149Z","flowId":"104c078f-4b7f-4812-9c18-f0cd8a3b2025","seq":4,"eventType":"unit-end","data":{"unitType":"execute-task","unitId":"M001/S06/T02","status":"completed","artifactVerified":true},"causedBy":{"flowId":"104c078f-4b7f-4812-9c18-f0cd8a3b2025","seq":3}}
+{"ts":"2026-03-24T01:11:00.583Z","flowId":"104c078f-4b7f-4812-9c18-f0cd8a3b2025","seq":5,"eventType":"iteration-end","data":{"iteration":1}}
+{"ts":"2026-03-24T01:11:00.583Z","flowId":"e4db5ead-7f7d-4516-af50-27b571df735e","seq":1,"eventType":"iteration-start","data":{"iteration":2}}
+{"ts":"2026-03-24T01:11:00.603Z","flowId":"e4db5ead-7f7d-4516-af50-27b571df735e","seq":2,"eventType":"dispatch-match","rule":"summarizing → complete-slice","data":{"unitType":"complete-slice","unitId":"M001/S06"}}
+{"ts":"2026-03-24T01:11:00.608Z","flowId":"e4db5ead-7f7d-4516-af50-27b571df735e","seq":3,"eventType":"unit-start","data":{"unitType":"complete-slice","unitId":"M001/S06"}}
+{"ts":"2026-03-24T01:30:43.461Z","flowId":"f07f5f89-ad99-4f68-8b00-5595c56239fc","seq":1,"eventType":"iteration-start","data":{"iteration":1}}
+{"ts":"2026-03-24T01:30:43.508Z","flowId":"f07f5f89-ad99-4f68-8b00-5595c56239fc","seq":2,"eventType":"dispatch-match","rule":"planning (no research, not S01) → research-slice","data":{"unitType":"research-slice","unitId":"M001/S07"}}
+{"ts":"2026-03-24T01:30:43.513Z","flowId":"f07f5f89-ad99-4f68-8b00-5595c56239fc","seq":3,"eventType":"unit-start","data":{"unitType":"research-slice","unitId":"M001/S07"}}
+{"ts":"2026-03-24T01:42:30.376Z","flowId":"f07f5f89-ad99-4f68-8b00-5595c56239fc","seq":4,"eventType":"unit-end","data":{"unitType":"research-slice","unitId":"M001/S07","status":"completed","artifactVerified":true},"causedBy":{"flowId":"f07f5f89-ad99-4f68-8b00-5595c56239fc","seq":3}}

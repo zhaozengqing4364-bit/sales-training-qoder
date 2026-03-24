@@ -375,3 +375,25 @@ Append one entry per iteration:
   verification results: passed; the full S06 backend slice checks, focused web regression, idempotent migration step, and live browser verification all passed fresh. No migration/blocker mismatch surfaced after upgrading to head.
   success signal status: the supervisor continuous-change page is now verified end-to-end on the same projection-backed fact line as admin stats/progress/sessions, with explicit inline empty/error UX proven in the real app shell.
   rollback note: no production rollback needed from this turn because execution only completed verification/state artifacts; if future browser UAT needs progress-only degraded states again, reuse the window.fetch override path instead of cross-origin route mocks.
+
+- time: 2026-03-24T09:21:47+08:00
+  mode: stabilize
+  item id: M001-S06
+  files changed:
+    - .gsd/REQUIREMENTS.md
+    - .gsd/PROJECT.md
+    - .gsd/milestones/M001/M001-ROADMAP.md
+    - .gsd/milestones/M001/slices/S06/S06-SUMMARY.md
+    - .gsd/milestones/M001/slices/S06/S06-UAT.md
+    - .codex/loop/state.json
+    - .codex/loop/log.md
+  summary: Closed S06 by rerunning the full slice verification set, re-proving the live admin supervisor progress view against local success/empty/error states, validating R007, reinforcing R011, and writing the slice summary/UAT plus roadmap/project continuity updates.
+  verification commands:
+    - cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_history_service_evidence_projection.py tests/integration/test_admin_users_api.py
+    - cd backend && venv/bin/python -m pytest -c pyproject.toml tests/integration/test_admin_users_api.py -k 'progress or stats'
+    - cd web && npm test -- --run 'src/app/admin/users/[id]/page.test.tsx'
+    - cd backend && /usr/bin/time -p venv/bin/alembic upgrade head
+    - browser runtime: POST /api/v1/auth/dev-login -> /admin/users/89e31f06-6393-42b6-877e-5a007803136a success state assertions + direct /progress and /stats checks + injected progress empty/error refresh assertions
+  verification results: passed; fresh backend/web slice verification succeeded, Alembic was at head, direct browser-side /progress and /stats reads matched the rendered cards, and the live admin page kept report drill-ins while proving success, empty, and error progress branches.
+  success signal status: S06 is complete and the supervisor continuous-change view is now a verified projection-backed part of the M001 training loop rather than a generic chart detached from the canonical report facts.
+  rollback note: no product rollback introduced in this closer turn; if future work needs to revisit S06, keep R007 validated unless /progress, /stats, and completed-session previews drift off the shared HistoryService projection line.
