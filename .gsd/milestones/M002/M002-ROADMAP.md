@@ -73,7 +73,7 @@ This milestone is complete only when all are true:
 - [x] **S02: 提示节奏收口与单轮唯一动作卡** `risk:high` `depends:[S01]`
   > After this: 多轮对话里每一轮只保留一个主要动作方向，重复阶段/模糊词/评分提示被节流和去重，不再刷屏。
 
-- [ ] **S03: 阶段推进教练与下一轮规则闭环** `risk:medium` `depends:[S01,S02]`
+- [x] **S03: 阶段推进教练与下一轮规则闭环** `risk:medium` `depends:[S01,S02]`
   > After this: 实时阶段、分维变化和动作卡能共同指向“下一轮该怎么问 / 怎么答 / 怎么推进”，而不是三套平行提示。
 
 - [ ] **S04: 训练中建议与报告结论一致性** `risk:medium` `depends:[S01,S03]`

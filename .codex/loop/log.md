@@ -805,3 +805,25 @@ Append one entry per iteration:
   verification results: passed; all task-level and slice-level S03 verification commands exited 0 after the StepFun handoff fix.
   success signal status: classic and StepFun now stay on the same shared coaching-focus action-card direction while StepFun still emits the existing stable score snapshot for consumers.
   rollback note: if later work revisits this seam, preserve the split between stable public score snapshots and richer arbiter-only context instead of changing the score_update shape.
+
+- time: 2026-03-24T22:19:01+08:00
+  mode: stabilize
+  item id: M002-S03
+  files changed:
+    - .gsd/milestones/M002/slices/S03/S03-SUMMARY.md
+    - .gsd/milestones/M002/slices/S03/S03-UAT.md
+    - .gsd/milestones/M002/M002-ROADMAP.md
+    - .gsd/REQUIREMENTS.md
+    - .gsd/PROJECT.md
+    - .codex/loop/state.json
+    - .codex/loop/log.md
+  summary: Closed M002/S03 by rerunning the full slice verification set, confirming the coaching-focus diagnostic surfaces, writing the slice summary/UAT, marking the roadmap done, and recording that classic + StepFun now share one stage-aware next-turn coaching rule while keeping the public score snapshot contract stable.
+  verification commands:
+    - cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_effectiveness_sales_coaching_focus.py tests/unit/test_realtime_feedback_arbiter.py tests/unit/test_capability_processor.py tests/unit/test_stepfun_realtime_handler.py
+    - cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_effectiveness_sales_coaching_focus.py -vv
+    - cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_effectiveness_sales_coaching_focus.py -k weakest_dimension_changes_next_turn_rule -vv
+    - cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_realtime_feedback_arbiter.py -k preserve_context_without_primary_action -vv
+    - cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_stepfun_realtime_handler.py -vv
+  verification results: passed; all five slice-plan commands exited 0 fresh, the shared coaching-focus and arbiter context-preservation diagnostics are green, and StepFun verbose coverage still proves rich-stage/raw-score arbitration parity without changing public score_update payload shape.
+  success signal status: S03 is complete and R009 is further advanced; realtime stage, weakest/declining dimension changes, and action-card wording now converge on one backend rule across classic + StepFun.
+  rollback note: if downstream slices touch coach/report alignment or degraded-state visibility, keep resolve_sales_coaching_focus plus the classic/StepFun rich-context handoff boundary intact; falling back to pass-flags-only action cards or flattening StepFun arbiter context into the public snapshot will reopen S03 drift.

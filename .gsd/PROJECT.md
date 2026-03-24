@@ -26,6 +26,7 @@
 - M001 已在里程碑级 close-out 中完成并封板：`git diff --stat "$(git merge-base HEAD 001-ai-practice-system)" HEAD -- ':!.gsd/'` 证明本里程碑包含真实实现代码，`M001-VALIDATION.md` 与 8 个 slice summaries 共同证明 6 条成功标准和跨 slice 集成全部通过；下一阶段重心转向 M002 的训练中实时教练与过程内反馈，而不是继续补 M001 的首发闭环。
 - M002/S01 已完成：sales 训练页现在在 StepFun 与 classic voice mode 上共用同一套五维销售 rubric；classic action-card pass flags 改走 shared sales effectiveness helper，前端 `score_update` 不再只按 `overall_score + turn_count` 去重，同轮 stage / suggestion / dimension refresh 会更新到 ScorePanel，两个语音模式入口也明确描述同一套销售评分语义，而报告侧继续保持既有三 rollup contract。
 - M002/S02 已完成：classic 与 StepFun runtime 现在共用一个 realtime-feedback arbiter 来做单轮唯一动作卡、同轮重复 suppression 与 reconnect-safe pacing；practice 页在新 final transcript 到来时会清掉上一轮 `actionCard` / `fuzzyDetections`，右侧面板把 `action_card` 收口成唯一主文本建议，同时保留 stage/score 作为上下文，不再让多条提示并排打架。
+- M002/S03 已完成：`common.effectiveness.resolve_sales_coaching_focus(...)` 现在把销售阶段、最弱/下滑维度和既有 pass flags 收口成一套共享的下一轮教练规则；classic `CapabilityProcessor` 与 StepFun `_run_realtime_feedback(...)` 都会把 rich stage/score context 送进同一个 arbiter，因此 discovery / objection / closing 场景下的 `action_card` 会按上下文同步变化，而公开 `score_update` / `_latest_score_snapshot` 形状保持不变。
 - 真实首发目标已明确：先把桌面端稳定性做满，不在第一阶段绑定移动端 / 企业微信 / 外部系统集成。
 
 ## Architecture / Key Patterns
