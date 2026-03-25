@@ -29,6 +29,7 @@
 - M002/S03 已完成：`common.effectiveness.resolve_sales_coaching_focus(...)` 现在把销售阶段、最弱/下滑维度和既有 pass flags 收口成一套共享的下一轮教练规则；classic `CapabilityProcessor` 与 StepFun `_run_realtime_feedback(...)` 都会把 rich stage/score context 送进同一个 arbiter，因此 discovery / objection / closing 场景下的 `action_card` 会按上下文同步变化，而公开 `score_update` / `_latest_score_snapshot` 形状保持不变。
 - M002/S04 已完成：completed sales session 的 `SessionEvidenceService` 现在会倒序挑选“最后一条仍可对齐”的 persisted sales stage + dimension evidence，projection-side override stale `main_issue` / `next_goal`，并把同一份 sales-first 结论稳定透传到 `/practice/{sessionId}/report`、`/practice/{sessionId}/replay`、admin/history 读侧；replay 页新增“本场教练结论”区块，admin 词汇映射也覆盖 `evidence_gap` / `evidence_backing` 等新对齐 vocabulary，而 projection log 会显式暴露 `sales_alignment_used/stage_key/focus_type/fallback_reason` 供后续 S05/S06 排查。
 - M002 里程碑 close-out 审计（2026-03-25）未通过：当前仓库只存在 S01-S04 slice summaries，计划中的 S07/S08（教练降级/恢复可观测性、最终 live UAT）仍缺 summary/UAT 证据，因此“coach degraded / resumed 可见”与“同一 session 从 realtime coaching 到最终 report/replay 的 live 闭环证明”尚未退休；R009 继续保持 active，M002 不能宣称完成。
+- M003 规划已按 2026-03-25 hard steer 收口到当前真实业务链路：只接受 `web/src/app/admin/personas/[id]/page.tsx`、`web/src/app/admin/knowledge/[id]/page.tsx`、`backend/src/common/api/practice.py`、`backend/src/agent/services/persona_policy.py`、`backend/src/sales_bot/services/voice_runtime_policy.py`、`backend/src/sales_bot/services/voice_instruction_compiler.py`、当前 practice / knowledge-check / report / replay surfaces 作为里程碑入口和验收面；Silence / Conda / `.env` / lockfile 等环境工件不再单独升格为 M003 scope，除非未来明确改成环境迁移目标。
 - 真实首发目标已明确：先把桌面端稳定性做满，不在第一阶段绑定移动端 / 企业微信 / 外部系统集成。
 
 ## Architecture / Key Patterns
@@ -47,6 +48,6 @@ See `.gsd/REQUIREMENTS.md` for the explicit capability contract, requirement sta
 
 - [x] M001: 桌面端销售训练闭环可用化 — 把桌面端客户演练、PPT 会后复盘、知识生效、单次报告与连续变化做成可真实使用的训练闭环。
 - [ ] M002: 实时教练闭环 — S01-S04 已交付 realtime sales rubric / pacing / shared coaching focus / completed-session alignment，但 close-out 审计仍缺 S07/S08 的教练降级/恢复可观测性与最终 live UAT 证据，暂不能封板。
-- [ ] M003: 知识与角色真实性 — 让 AI 客户围绕真实产品、价格、竞品、证据进行可信追问，并保持 Persona 行为一致性。
+- [ ] M003: 知识与角色真实性 — 沿现有 admin Persona / knowledge → practice runtime → knowledge-check / report / replay 业务链路，证明知识与 Persona 真的改变 objection-heavy 销售训练，而不是只停在 prompt 文案层。
 - [ ] M004: 复盘与学习闭环增强 — 强化回放、高光、逐轮点评、PPT 纠偏与学习证据，让训练后改进路径更清晰。
 - [ ] M005: 后台治理与规模化运营 — 完成长期运营所需的后台治理、管理动作、趋势分析、集成边界与后续扩展能力。
