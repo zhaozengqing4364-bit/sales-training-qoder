@@ -1015,3 +1015,23 @@ Append one entry per iteration:
   verification results: passed; the full slice gate and the observability-surface grep all exited 0, and the refreshed T03-VERIFY artifact removed the stale shell syntax failure from bare `app/(user)` commands.
   success signal status: M003/S01 is now complete with one real admin->practice proof boundary, one locked seven-status knowledge contract, and verifier artifacts that match the hardened shell-safe command form.
   rollback note: If a later M003 gate trips on literal Next.js paths again, inspect the relevant `T##-VERIFY.json` before changing slice docs; keep replay bound to the conversation API/replay service seam and keep environment/tooling work out of M003 unless the milestone is explicitly re-scoped.
+
+- time: 2026-03-25T10:24:42+08:00
+  mode: stabilize
+  item id: M003-S02-T01
+  files changed:
+    - backend/src/agent/services/persona_policy.py
+    - backend/src/agent/services/persona_service.py
+    - backend/tests/unit/test_persona_policy.py
+    - backend/tests/integration/test_persona_api.py
+    - .gsd/DECISIONS.md
+    - .gsd/KNOWLEDGE.md
+    - .gsd/milestones/M003/slices/S02/tasks/T01-SUMMARY.md
+    - .gsd/milestones/M003/slices/S02/S02-PLAN.md
+  summary: Normalized Persona policy into a nested customer-pressure contract, preserved flat sales-focus fields as compatibility projections, and added audit/test coverage that distinguishes raw legacy rows from canonical persisted policy.
+  verification commands:
+    - cd backend && /usr/bin/time -p venv/bin/python -m pytest -c pyproject.toml tests/unit/test_persona_policy.py tests/integration/test_persona_api.py
+    - lsp diagnostics: backend/src/agent/services/persona_policy.py, backend/src/agent/services/persona_service.py, backend/tests/unit/test_persona_policy.py, backend/tests/integration/test_persona_api.py
+  verification results: passed; focused backend pytest finished green with 18 passing tests, and all touched backend files were clean in LSP diagnostics.
+  success signal status: Persona admin/runtime work now has one snapshot-ready customer-pressure shape and one explicit audit signal for rows still stored in legacy flat form.
+  rollback note: if follow-up work revisits Persona pressure storage, keep the nested customer_pressure model canonical and continue using pressure_model_legacy_only only for raw rows that truly lack the nested snapshot.

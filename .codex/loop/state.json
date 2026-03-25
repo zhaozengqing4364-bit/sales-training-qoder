@@ -1,7 +1,7 @@
 {
   "mode": "stabilize",
-  "current_issue_id": "M003-S01",
-  "current_issue_type": "slice",
+  "current_issue_id": "M003-S02-T01",
+  "current_issue_type": "task",
   "current_issue_status": "done",
   "pending_issue_ids": [],
   "completed_issue_ids": [
@@ -50,27 +50,27 @@
     "M003-S01-T01",
     "M003-S01-T02",
     "M003-S01-T03",
-    "M003-S01"
+    "M003-S01",
+    "M003-S02-T01"
   ],
   "blocked_issue_ids": [],
   "deferred_issue_ids": [],
   "last_modified_files": [
-    ".gsd/milestones/M003/slices/S01/tasks/T03-VERIFY.json",
-    ".gsd/REQUIREMENTS.md",
-    ".gsd/PROJECT.md",
-    ".gsd/milestones/M003/slices/S01/S01-SUMMARY.md",
-    ".gsd/milestones/M003/slices/S01/S01-UAT.md",
-    ".gsd/milestones/M003/M003-ROADMAP.md"
+    "backend/src/agent/services/persona_policy.py",
+    "backend/src/agent/services/persona_service.py",
+    "backend/tests/unit/test_persona_policy.py",
+    "backend/tests/integration/test_persona_api.py",
+    ".gsd/DECISIONS.md",
+    ".gsd/KNOWLEDGE.md",
+    ".gsd/milestones/M003/slices/S02/tasks/T01-SUMMARY.md",
+    ".gsd/milestones/M003/slices/S02/S02-PLAN.md"
   ],
   "last_verification_commands": [
-    "test -f backend/src/agent/services/persona_policy.py && test -f backend/src/sales_bot/services/voice_runtime_policy.py && test -f backend/src/sales_bot/services/voice_instruction_compiler.py && test -f backend/src/common/knowledge/kb_lock_guard.py && test -f backend/src/common/conversation/runtime_diagnostics.py && test -f backend/src/common/conversation/api.py && test -f backend/src/common/conversation/replay.py && test -f backend/src/sales_bot/websocket/components/stepfun_knowledge_helpers.py && test -f backend/src/sales_bot/websocket/components/stepfun_internal_knowledge_searcher.py && test -f backend/src/common/api/practice.py && test -f backend/src/common/conversation/session_evidence.py && test -f web/src/app/admin/personas/\\[id\\]/page.tsx && test -f web/src/app/admin/knowledge/\\[id\\]/page.tsx && test -f web/src/app/\\(user\\)/practice/\\[sessionId\\]/page.tsx && test -f web/src/app/\\(user\\)/practice/\\[sessionId\\]/report/page.tsx && test -f web/src/app/\\(user\\)/practice/\\[sessionId\\]/replay/page.tsx",
-    "rg -n \"no_knowledge_base|disabled|not_triggered|kb_not_ready|search_failed|miss|hit|blocked_no_kb|blocked_not_ready|blocked_search_failed|blocked_empty\" backend/src/common/conversation/runtime_diagnostics.py backend/src/common/knowledge/kb_lock_guard.py backend/src/sales_bot/websocket/components/stepfun_internal_knowledge_searcher.py .gsd/milestones/M003/M003-ROADMAP.md .gsd/milestones/M003/slices/S01/S01-PLAN.md .gsd/milestones/M003/slices/S01/tasks/T02-PLAN.md",
-    "rg -n \"Silence|Conda|\\.env|lockfile|inventory/spike|current admin|current product route\" .gsd/milestones/M003/M003-ROADMAP.md .gsd/milestones/M003/slices/S01/S01-PLAN.md .gsd/milestones/M003/slices/S01/tasks/T01-PLAN.md .gsd/milestones/M003/slices/S01/tasks/T03-PLAN.md",
-    "rg -n \"focused backend|focused web|live UAT|/api/v1/practice/sessions/\\{id\\}/report|/api/v1/sessions/\\{id\\}/replay|common/conversation/api.py|common/conversation/replay.py|SessionEvidenceService\" .gsd/milestones/M003/M003-ROADMAP.md .gsd/milestones/M003/slices/S01/S01-PLAN.md .gsd/milestones/M003/slices/S01/tasks/T03-PLAN.md",
-    "rg -n \"knowledge-check\\.status|knowledge-check\\.summary|runtime_metrics\\.knowledge_retrieval|kb_lock_status|kb_lock_last_status|last_query|recent_queries|voice_policy_snapshot_ref\" backend/src/common/conversation/runtime_diagnostics.py backend/src/common/api/practice.py .gsd/milestones/M003/M003-ROADMAP.md .gsd/milestones/M003/slices/S01/S01-PLAN.md"
+    "cd backend && /usr/bin/time -p venv/bin/python -m pytest -c pyproject.toml tests/unit/test_persona_policy.py tests/integration/test_persona_api.py",
+    "lsp diagnostics: backend/src/agent/services/persona_policy.py, backend/src/agent/services/persona_service.py, backend/tests/unit/test_persona_policy.py, backend/tests/integration/test_persona_api.py"
   ],
-  "last_verification_result": "Fresh slice-level verification passed. The full file-existence gate, the live knowledge-status vocabulary grep, the out-of-scope/blocker grep, the focused-backend/focused-web/live-UAT boundary grep, and the observability-surface grep all exited 0. Refreshing .gsd/milestones/M003/slices/S01/tasks/T03-VERIFY.json also retired the stale shell-syntax failure from bare Next.js paths.",
-  "last_success_signal": "M003/S01 is complete and downstream realism work now inherits one real admin->practice proof boundary, one locked seven-status knowledge contract, and a shell-runnable verifier contract.",
+  "last_verification_result": "Fresh T01 verification passed. The focused backend pytest gate for persona policy normalization and admin Persona API behavior exited 0 with 18 passing tests, and LSP diagnostics on the touched backend files returned no diagnostics.",
+  "last_success_signal": "Persona policy now stores a canonical nested customer-pressure model while admin GET/audit surfaces still distinguish raw legacy rows through pressure_model_legacy_only.",
   "last_growth_scan": null,
-  "next_action": "Proceed to M003 roadmap reassessment."
+  "next_action": "Proceed to M003/S02/T02."
 }

@@ -464,3 +464,96 @@ class TestAdminPersonaAPI:
         )
         
         assert response.status_code == 404
+
+    async def test_get_persona_derives_structured_pressure_model_from_legacy_extensions(
+        self,
+        async_client,
+        auth_headers,
+        sample_persona_data,
+    ):
+        """Should expose a structured customer-pressure model for legacy policy rows."""
+        create_response = await async_client.post(
+            "/api/v1/admin/personas",
+            json={
+                **sample_persona_data,
+                "persona_policy": {
+                    "sales_focus": " value_translation ",
+                    "value_axes": [" 客户收益 ", "ROI", "ROI"],
+                    "objection_axes": ["价格", "竞品", ""],
+                    "expected_customer_questions": [
+                        " 你怎么证明 ROI？ ",
+                        "你怎么证明 ROI？",
+                    ],
+                },
+            },
+            headers=auth_headers,
+        )
+        persona_id = create_response.json()["data"]["id"]
+
+        response = await async_client.get(
+            f"/api/v1/admin/personas/{persona_id}",
+            headers=auth_headers,
+        )
+
+        assert response.status_code == 200
+        policy = response.json()["data"]["persona_policy"]
+        assert policy["customer_pressure"] == {
+            "source": "explicit",
+            "pressure_direction": {
+                "sales_focus": "value_translation",
+                "value_axes": ["客户收益", "ROI"],
+                "objection_axes": ["价格", "竞品"],
+            },
+            "follow_up_behavior": {
+                "question_strategy": "single_issue",
+                "revisit_on_evasion": True,
+                "require_evidence": True,
+                "expected_customer_questions": ["你怎么证明 ROI？"],
+            },
+        }
+        assert policy["sales_focus"] == "value_translation"
+        assert policy["value_axes"] == ["客户收益", "ROI"]
+        assert policy["objection_axes"] == ["价格", "竞品"]
+        assert policy["expected_customer_questions"] == ["你怎么证明 ROI？"]
+
+    async def test_persona_policy_health_flags_legacy_pressure_model_rows(
+        self,
+        async_client,
+        auth_headers,
+        db_session,
+    ):
+        """Should surface legacy-only pressure rows as audit issues."""
+        legacy_persona = Persona(
+            name="Legacy Pressure Persona",
+            description="still uses flat sales focus fields",
+            category="customer",
+            difficulty="medium",
+            status="active",
+            system_prompt="legacy prompt",
+            knowledge_base_ids=["kb-legacy"],
+            persona_policy={
+                "version": 1,
+                "system_prompt": "legacy prompt",
+                "knowledge_base_ids": ["kb-legacy"],
+                "sales_focus": " value_translation ",
+                "value_axes": ["客户收益", "ROI"],
+                "objection_axes": ["价格", "竞品"],
+                "expected_customer_questions": ["你怎么证明 ROI？"],
+            },
+        )
+        db_session.add(legacy_persona)
+        await db_session.commit()
+
+        response = await async_client.get(
+            "/api/v1/admin/personas/policy-health",
+            headers=auth_headers,
+        )
+
+        assert response.status_code == 200
+        data = response.json()["data"]
+        assert data["issue_type_counts"]["pressure_model_legacy_only"] >= 1
+        assert any(
+            issue["persona_id"] == legacy_persona.id
+            and "pressure_model_legacy_only" in issue["issue_types"]
+            for issue in data["sample_issues"]
+        )

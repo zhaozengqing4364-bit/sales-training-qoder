@@ -174,6 +174,8 @@ class PersonaService:
         if not persona:
             return Result.fail("[PERSONA_NOT_FOUND]")
 
+        persona.persona_policy = self._build_normalized_policy(persona)
+        sync_legacy_persona_fields(persona, persona.persona_policy)
         return Result.ok(persona)
 
     async def update(
@@ -343,15 +345,7 @@ class PersonaService:
 
         for persona in personas:
             raw_policy = persona.persona_policy if isinstance(persona.persona_policy, dict) else {}
-            normalized_policy = normalize_persona_policy(
-                raw_policy,
-                fallback_system_prompt=str(persona.system_prompt or ""),
-                fallback_kb_ids=(
-                    list(persona.knowledge_base_ids)
-                    if isinstance(persona.knowledge_base_ids, list)
-                    else []
-                ),
-            )
+            normalized_policy = self._build_normalized_policy(persona)
             persona_issues: list[str] = []
 
             if not isinstance(persona.persona_policy, dict) or not persona.persona_policy:
@@ -383,6 +377,15 @@ class PersonaService:
             if require_kb_grounding and not normalized_kb_ids:
                 persona_issues.append("kb_lock_unbound")
 
+            normalized_customer_pressure = normalized_policy.get("customer_pressure")
+            pressure_source = (
+                normalized_customer_pressure.get("source")
+                if isinstance(normalized_customer_pressure, dict)
+                else None
+            )
+            if pressure_source == "legacy_sales_focus_extensions":
+                persona_issues.append("pressure_model_legacy_only")
+
             if not persona_issues:
                 healthy_count += 1
                 continue
@@ -398,6 +401,7 @@ class PersonaService:
                         "issue_types": persona_issues,
                         "policy_version": raw_version,
                         "require_kb_grounding": require_kb_grounding,
+                        "pressure_source": pressure_source,
                     }
                 )
 
@@ -426,3 +430,15 @@ class PersonaService:
             seen.add(normalized)
             deduped.append(normalized)
         return deduped
+
+    @staticmethod
+    def _build_normalized_policy(persona: Persona) -> dict[str, Any]:
+        return normalize_persona_policy(
+            persona.persona_policy if isinstance(persona.persona_policy, dict) else {},
+            fallback_system_prompt=str(persona.system_prompt or ""),
+            fallback_kb_ids=(
+                list(persona.knowledge_base_ids)
+                if isinstance(persona.knowledge_base_ids, list)
+                else []
+            ),
+        )
