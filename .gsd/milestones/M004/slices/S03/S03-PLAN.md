@@ -26,7 +26,7 @@ Reuse current practice creation and learner entrypoints only: `backend/src/commo
   - Files: `backend/src/common/api/practice.py`, `backend/tests/contract/test_practice_evidence_contract.py`, `backend/tests/integration/test_practice_evidence_flow.py`
   - Verify: cd backend && venv/bin/python -m pytest -c pyproject.toml tests/contract/test_practice_evidence_contract.py tests/integration/test_practice_evidence_flow.py
 
-- [ ] **T02: Launch focused retries from the current report and replay pages** `est:75m`
+- [x] **T02: Launch focused retries from the current report and replay pages** `est:75m`
   Update the current report and replay CTAs so they can launch a focused retry using the new retry-entry intent. Reuse existing buttons/routes and keep scenario-specific behavior on the same entrypoints instead of adding a new retry flow.
   - Files: `web/src/app/(user)/practice/[sessionId]/report/page.tsx`, `web/src/app/(user)/practice/[sessionId]/replay/page.tsx`, `web/src/lib/api/client.ts`, `web/src/lib/api/types.ts`, `web/src/app/(user)/practice/[sessionId]/report/page.test.tsx`, `web/src/app/(user)/practice/[sessionId]/replay/page.test.tsx`
   - Verify: cd web && npm test -- --run 'src/app/(user)/practice/[sessionId]/report/page.test.tsx' 'src/app/(user)/practice/[sessionId]/replay/page.test.tsx'
