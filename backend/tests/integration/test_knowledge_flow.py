@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import uuid
 from copy import deepcopy
+from typing import Any
 
 import pytest
 from httpx import AsyncClient
@@ -15,10 +16,41 @@ from common.db.models import PracticeSession
 from common.knowledge.models import KnowledgeBase, KnowledgeDocument
 
 
+def _build_customer_pressure_policy(
+    *,
+    sales_focus: str,
+    value_axes: list[str],
+    objection_axes: list[str],
+    expected_questions: list[str],
+    question_strategy: str = "single_issue",
+    revisit_on_evasion: bool = True,
+    require_evidence: bool = True,
+) -> dict[str, Any]:
+    return {
+        "system_prompt": "你是谨慎型采购经理。",
+        "customer_pressure": {
+            "source": "explicit",
+            "pressure_direction": {
+                "sales_focus": sales_focus,
+                "value_axes": value_axes,
+                "objection_axes": objection_axes,
+            },
+            "follow_up_behavior": {
+                "question_strategy": question_strategy,
+                "revisit_on_evasion": revisit_on_evasion,
+                "require_evidence": require_evidence,
+                "expected_customer_questions": expected_questions,
+            },
+        },
+    }
+
+
 async def _create_runtime_entities(
     test_db: AsyncSession,
     *,
     persona_kb_ids: list[str] | None = None,
+    persona_name: str = "知识链路客户角色",
+    persona_policy: dict[str, Any] | None = None,
 ) -> tuple[VoiceRuntimeProfile, Agent, Persona]:
     profile = VoiceRuntimeProfile(
         id=str(uuid.uuid4()),
@@ -40,13 +72,14 @@ async def _create_runtime_entities(
     )
     persona = Persona(
         id=str(uuid.uuid4()),
-        name="知识链路客户角色",
+        name=persona_name,
         description="用于知识库链路集成测试",
         category="customer",
         difficulty="medium",
         status="active",
         system_prompt="你是谨慎型采购经理。",
         knowledge_base_ids=persona_kb_ids or [],
+        persona_policy=persona_policy,
     )
     agent_persona = AgentPersona(
         id=str(uuid.uuid4()),
@@ -172,6 +205,116 @@ async def test_new_sales_session_freezes_kb_binding_for_next_session_only(
     assert first_check.json()["data"]["status"] == "no_knowledge_base"
     assert second_check.json()["data"]["status"] == "not_triggered"
     assert second_check.json()["data"]["knowledge_base_ids"] == [kb.id]
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_new_sales_session_freezes_customer_pressure_contract_per_persona(
+    async_client: AsyncClient,
+    auth_headers: dict[str, str],
+    test_db: AsyncSession,
+):
+    """Sessions should freeze one explicit customer-pressure contract per persona on the snapshot."""
+    kb, _ = await _create_knowledge_base_with_document(test_db, doc_status="ready")
+    _, agent, proof_persona = await _create_runtime_entities(
+        test_db,
+        persona_kb_ids=[kb.id],
+        persona_name="证据压测角色",
+        persona_policy=_build_customer_pressure_policy(
+            sales_focus="proof",
+            value_axes=["ROI", "客户收益"],
+            objection_axes=["价格", "实施风险"],
+            expected_questions=["你拿什么证明这个 ROI 不是口号？"],
+            revisit_on_evasion=True,
+            require_evidence=True,
+        ),
+    )
+
+    price_persona = Persona(
+        id=str(uuid.uuid4()),
+        name="价格压测角色",
+        description="用于冻结不同 pressure contract",
+        category="customer",
+        difficulty="medium",
+        status="active",
+        system_prompt="你是压价型采购经理。",
+        knowledge_base_ids=[kb.id],
+        persona_policy=_build_customer_pressure_policy(
+            sales_focus="price",
+            value_axes=["预算优先级"],
+            objection_axes=["价格", "竞品替代"],
+            expected_questions=["如果预算卡死，你怎么证明这笔钱值？"],
+            revisit_on_evasion=False,
+            require_evidence=True,
+        ),
+    )
+    test_db.add(
+        AgentPersona(
+            id=str(uuid.uuid4()),
+            agent_id=agent.id,
+            persona_id=price_persona.id,
+            is_default=False,
+            override_config={"challenge_frequency": 0.8},
+        )
+    )
+    test_db.add(price_persona)
+    await test_db.commit()
+
+    proof_session_id = await _create_sales_session(
+        async_client,
+        auth_headers,
+        agent_id=agent.id,
+        persona_id=proof_persona.id,
+    )
+    price_session_id = await _create_sales_session(
+        async_client,
+        auth_headers,
+        agent_id=agent.id,
+        persona_id=price_persona.id,
+    )
+
+    proof_session = (
+        await test_db.execute(
+            select(PracticeSession).where(PracticeSession.session_id == proof_session_id)
+        )
+    ).scalar_one()
+    price_session = (
+        await test_db.execute(
+            select(PracticeSession).where(PracticeSession.session_id == price_session_id)
+        )
+    ).scalar_one()
+
+    proof_snapshot = deepcopy(proof_session.voice_policy_snapshot)
+    price_snapshot = deepcopy(price_session.voice_policy_snapshot)
+
+    assert proof_snapshot["knowledge_base_ids"] == [kb.id]
+    assert price_snapshot["knowledge_base_ids"] == [kb.id]
+    assert proof_snapshot["customer_pressure"]["pressure_direction"]["sales_focus"] == "proof"
+    assert price_snapshot["customer_pressure"]["pressure_direction"]["sales_focus"] == "price"
+    assert proof_snapshot["customer_pressure"]["follow_up_behavior"]["revisit_on_evasion"] is True
+    assert price_snapshot["customer_pressure"]["follow_up_behavior"]["revisit_on_evasion"] is False
+    assert proof_snapshot["source"]["customer_pressure_source"] == "explicit"
+    assert price_snapshot["source"]["customer_pressure_source"] == "explicit"
+    assert proof_snapshot["persona_policy"]["customer_pressure"] == proof_snapshot["customer_pressure"]
+    assert price_snapshot["persona_policy"]["customer_pressure"] == price_snapshot["customer_pressure"]
+    assert proof_snapshot["instruction_contract_hash"] != price_snapshot["instruction_contract_hash"]
+
+    proof_persona.persona_policy = _build_customer_pressure_policy(
+        sales_focus="budget_priority",
+        value_axes=["预算优先级"],
+        objection_axes=["价格"],
+        expected_questions=["预算有限时你凭什么优先拿这笔钱？"],
+        revisit_on_evasion=False,
+        require_evidence=True,
+    )
+    await test_db.commit()
+
+    refreshed_proof_session = (
+        await test_db.execute(
+            select(PracticeSession).where(PracticeSession.session_id == proof_session_id)
+        )
+    ).scalar_one()
+    assert refreshed_proof_session.voice_policy_snapshot["customer_pressure"] == proof_snapshot["customer_pressure"]
 
 
 @pytest.mark.integration

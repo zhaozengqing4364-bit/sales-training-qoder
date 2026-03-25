@@ -803,37 +803,18 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
                 if isinstance(session.voice_policy_snapshot, dict)
                 else None
             )
-            policy_service = VoiceRuntimePolicyService(db)
-            resolved_policy = await policy_service.resolve_effective_policy(
-                agent_id=session.agent_id,
-                persona_id=session.persona_id,
-                voice_mode_override=session.voice_mode,
-                runtime_profile_override=session.voice_runtime_profile_id,
-            )
 
-            policy_source = "resolved"
+            policy_source = "snapshot"
             if snapshot:
-                refreshed_policy = self._merge_resolved_policy_with_snapshot_overlays(
-                    resolved_policy=resolved_policy,
-                    snapshot=snapshot,
-                )
-                if self._is_policy_snapshot_stale(
-                    snapshot=snapshot, resolved_policy=refreshed_policy
-                ):
-                    self._effective_policy = refreshed_policy
-                    session.voice_policy_snapshot = self._effective_policy
-                    session.voice_mode = self._effective_policy.get(
-                        "voice_mode", session.voice_mode or "legacy"
-                    )
-                    session.voice_runtime_profile_id = self._effective_policy.get(
-                        "runtime_profile_id"
-                    )
-                    await db.commit()
-                    policy_source = "snapshot_refreshed"
-                else:
-                    self._effective_policy = snapshot
-                    policy_source = "snapshot"
+                self._effective_policy = snapshot
             else:
+                policy_service = VoiceRuntimePolicyService(db)
+                resolved_policy = await policy_service.resolve_effective_policy(
+                    agent_id=session.agent_id,
+                    persona_id=session.persona_id,
+                    voice_mode_override=session.voice_mode,
+                    runtime_profile_override=session.voice_runtime_profile_id,
+                )
                 self._effective_policy = resolved_policy
                 session.voice_policy_snapshot = self._effective_policy
                 session.voice_mode = self._effective_policy.get(
@@ -843,6 +824,7 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
                     "runtime_profile_id"
                 )
                 await db.commit()
+                policy_source = "resolved"
 
             guardrail_applied = self._enforce_tool_policy_guardrails()
             if guardrail_applied:

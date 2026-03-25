@@ -519,6 +519,7 @@ class VoiceRuntimePolicyService:
             )
             persona = persona_result.scalar_one_or_none()
         persona_policy = resolve_persona_policy(persona)
+        customer_pressure = _as_dict(persona_policy.get("customer_pressure"))
 
         if runtime_profile_override:
             runtime_profile = await self.get_profile(runtime_profile_override)
@@ -682,10 +683,14 @@ class VoiceRuntimePolicyService:
             source["network_access_enforcement"] = "network_off"
         policy["tool_policy"] = tool_policy
         policy["persona_policy"] = persona_policy
+        policy["customer_pressure"] = customer_pressure
         policy["knowledge_base_ids"] = knowledge_base_ids
         policy["network_access_mode"] = tool_policy["network_access_mode"]
         policy["agent_id"] = agent.id if agent else agent_id
         policy["persona_id"] = persona.id if persona else persona_id
+        source["customer_pressure_source"] = str(
+            customer_pressure.get("source") or "none"
+        )
         policy["source"] = source
         policy["resolved_at"] = datetime.now(UTC).isoformat()
         compiled_contract = VoiceInstructionCompiler.compile_base_contract(

@@ -87,9 +87,12 @@ class VoiceInstructionCompiler:
                 "- 不直接给销售方答案，优先表达顾虑、条件与澄清需求。"
             )
 
-        sales_focus_section = cls._build_sales_focus_section(persona_policy)
-        if sales_focus_section:
-            sections.append(sales_focus_section)
+        customer_pressure_section = cls._build_customer_pressure_section(
+            policy=policy,
+            persona_policy=persona_policy,
+        )
+        if customer_pressure_section:
+            sections.append(customer_pressure_section)
 
         directives = cls._build_execution_directives(policy)
         if directives:
@@ -118,26 +121,117 @@ class VoiceInstructionCompiler:
             return normalized_grounding
         return f"{normalized_base}\n\n【当前轮内部知识依据】\n{normalized_grounding}"
 
+    @staticmethod
+    def _as_dict(value: Any) -> dict[str, Any]:
+        if isinstance(value, dict):
+            return value
+        return {}
+
+    @staticmethod
+    def _to_bool(value: Any, default: bool = False) -> bool:
+        if isinstance(value, bool):
+            return value
+        if isinstance(value, str):
+            lowered = value.strip().lower()
+            if lowered in {"true", "1", "yes", "on"}:
+                return True
+            if lowered in {"false", "0", "no", "off"}:
+                return False
+        return default
+
     @classmethod
-    def _build_sales_focus_section(cls, persona_policy: dict[str, Any]) -> str:
-        sales_focus = cls._humanize_sales_focus(persona_policy.get("sales_focus"))
-        value_axes = cls._humanize_sales_focus_list(persona_policy.get("value_axes"))
+    def _build_customer_pressure_section(
+        cls,
+        *,
+        policy: dict[str, Any],
+        persona_policy: dict[str, Any],
+    ) -> str:
+        customer_pressure = cls._as_dict(policy.get("customer_pressure"))
+        if not customer_pressure:
+            customer_pressure = cls._as_dict(persona_policy.get("customer_pressure"))
+
+        pressure_direction = cls._as_dict(customer_pressure.get("pressure_direction"))
+        follow_up_behavior = cls._as_dict(customer_pressure.get("follow_up_behavior"))
+
+        sales_focus = cls._humanize_sales_focus(
+            pressure_direction.get("sales_focus")
+            or customer_pressure.get("sales_focus")
+            or persona_policy.get("sales_focus")
+        )
+        value_axes = cls._humanize_sales_focus_list(
+            pressure_direction.get("value_axes")
+            or customer_pressure.get("value_axes")
+            or persona_policy.get("value_axes")
+        )
         objection_axes = cls._humanize_sales_focus_list(
-            persona_policy.get("objection_axes")
+            pressure_direction.get("objection_axes")
+            or customer_pressure.get("objection_axes")
+            or persona_policy.get("objection_axes")
         )
         expected_questions = cls._normalize_question_list(
-            persona_policy.get("expected_customer_questions")
+            follow_up_behavior.get("expected_customer_questions")
+            or customer_pressure.get("expected_customer_questions")
+            or persona_policy.get("expected_customer_questions")
+        )
+        question_strategy = str(
+            follow_up_behavior.get("question_strategy")
+            or customer_pressure.get("question_strategy")
+            or ""
+        ).strip().lower()
+        has_pressure_context = any(
+            [
+                sales_focus,
+                value_axes,
+                objection_axes,
+                expected_questions,
+                question_strategy,
+                cls._to_bool(
+                    follow_up_behavior.get("revisit_on_evasion")
+                    if "revisit_on_evasion" in follow_up_behavior
+                    else customer_pressure.get("revisit_on_evasion"),
+                    False,
+                ),
+                cls._to_bool(
+                    follow_up_behavior.get("require_evidence")
+                    if "require_evidence" in follow_up_behavior
+                    else customer_pressure.get("require_evidence"),
+                    False,
+                ),
+            ]
         )
 
-        if not any([sales_focus, value_axes, objection_axes, expected_questions]):
+        if not has_pressure_context:
             return ""
+
+        revisit_on_evasion = cls._to_bool(
+            follow_up_behavior.get("revisit_on_evasion")
+            if "revisit_on_evasion" in follow_up_behavior
+            else customer_pressure.get("revisit_on_evasion"),
+            bool(question_strategy or expected_questions or objection_axes),
+        )
+        require_evidence = cls._to_bool(
+            follow_up_behavior.get("require_evidence")
+            if "require_evidence" in follow_up_behavior
+            else customer_pressure.get("require_evidence"),
+            bool(sales_focus or value_axes or expected_questions),
+        )
 
         lines: list[str] = [
             "该客户必须持续把话题拉回客户收益、商业价值与异议验证，避免泛泛寒暄或只重复功能卖点。",
             "当销售只给口号、功能点或模糊承诺时，必须继续追问量化收益、预算合理性、价格依据、竞品差异、实施风险或案例证据。",
-            "每次只选择一个最关键的主问题继续施压，直到销售给出可验证信息。",
         ]
 
+        if question_strategy == "single_issue" or not question_strategy:
+            lines.append("每次只选择一个最关键的主问题继续施压，直到销售给出可验证信息。")
+        else:
+            lines.append("追问要围绕当前阻塞点逐步展开，避免同时切换多个主题。")
+
+        if revisit_on_evasion:
+            lines.append("如果销售回避当前问题，必须回到同一阻塞点继续追问，不接受换题带过。")
+        if require_evidence:
+            lines.append(
+                "除非销售给出可验证证据、案例、数据或明确承诺边界，否则不要视为问题已解决。"
+            )
         if sales_focus:
             lines.append(f"当前销售追问主线：{sales_focus}。")
         if value_axes:

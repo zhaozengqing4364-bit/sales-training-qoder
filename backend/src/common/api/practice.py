@@ -809,6 +809,38 @@ async def start_session(
         session_policy_snapshot = deepcopy(effective_voice_policy)
         effective_voice_mode = effective_voice_policy.get("voice_mode", "legacy")
         effective_runtime_profile_id = effective_voice_policy.get("runtime_profile_id")
+        resolved_kb_ids = effective_voice_policy.get("knowledge_base_ids")
+        if not isinstance(resolved_kb_ids, list):
+            resolved_kb_ids = []
+        customer_pressure = effective_voice_policy.get("customer_pressure")
+        if not isinstance(customer_pressure, dict):
+            customer_pressure = {}
+        pressure_direction = customer_pressure.get("pressure_direction")
+        if not isinstance(pressure_direction, dict):
+            pressure_direction = {}
+        follow_up_behavior = customer_pressure.get("follow_up_behavior")
+        if not isinstance(follow_up_behavior, dict):
+            follow_up_behavior = {}
+        logger.info(
+            "practice_session_voice_policy_resolved",
+            user_id=str(current_user.user_id),
+            scenario_type=scenario_type_value,
+            agent_id=agent_id_str,
+            persona_id=persona_id_str,
+            voice_mode=effective_voice_mode,
+            runtime_profile_id=effective_runtime_profile_id,
+            knowledge_base_count=len(resolved_kb_ids),
+            customer_pressure_source=str(customer_pressure.get("source") or "none"),
+            customer_pressure_focus=str(pressure_direction.get("sales_focus") or ""),
+            question_strategy=str(follow_up_behavior.get("question_strategy") or ""),
+            revisit_on_evasion=bool(
+                follow_up_behavior.get("revisit_on_evasion", False)
+            ),
+            require_evidence=bool(follow_up_behavior.get("require_evidence", False)),
+            instruction_contract_hash=str(
+                effective_voice_policy.get("instruction_contract_hash") or ""
+            ),
+        )
 
         if scenario_type_value == "presentation":
             if not session_data.presentation_id:

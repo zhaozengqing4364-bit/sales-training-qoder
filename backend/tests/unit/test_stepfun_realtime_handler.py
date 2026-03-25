@@ -1061,6 +1061,93 @@ async def test_persist_runtime_metrics_to_session_updates_snapshot_copy(monkeypa
 
 
 @pytest.mark.asyncio
+async def test_load_effective_policy_prefers_frozen_session_snapshot_over_live_resolution(
+    monkeypatch,
+):
+    handler = StepFunRealtimeHandler()
+    handler.session_id = "session-frozen"
+
+    frozen_snapshot = {
+        "voice_mode": "stepfun_realtime",
+        "runtime_profile_id": "profile-frozen",
+        "model_name": "step-audio-r1.1",
+        "voice_name": "qingchunshaonv",
+        "temperature": 0.7,
+        "input_audio_format": "pcm16",
+        "output_audio_format": "pcm16",
+        "output_sample_rate": 24000,
+        "instructions": "frozen pressure instructions",
+        "instruction_contract_hash": "hash-frozen",
+        "knowledge_base_ids": ["kb-1"],
+        "tool_policy": {"enable_internal_retrieval": True},
+        "customer_pressure": {
+            "source": "explicit",
+            "pressure_direction": {"sales_focus": "proof"},
+            "follow_up_behavior": {"require_evidence": True},
+        },
+    }
+    session_obj = SimpleNamespace(
+        session_id="session-frozen",
+        agent_id="agent-1",
+        persona_id="persona-1",
+        user_id="user-1",
+        voice_policy_snapshot=frozen_snapshot,
+        voice_mode="stepfun_realtime",
+        voice_runtime_profile_id="profile-frozen",
+    )
+
+    class DummyResult:
+        def scalar_one_or_none(self):
+            return session_obj
+
+    class DummyDb:
+        def __init__(self):
+            self.commit = AsyncMock()
+
+        async def execute(self, _stmt):
+            return DummyResult()
+
+    dummy_db = DummyDb()
+
+    class DummyDbSessionContext:
+        async def __aenter__(self):
+            return dummy_db
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+    class DummyVoiceRuntimePolicyService:
+        def __init__(self, _db):
+            pass
+
+        async def resolve_effective_policy(self, **_kwargs):
+            raise AssertionError("live voice policy should not be re-resolved")
+
+    monkeypatch.setattr(
+        stepfun_module, "AsyncSessionLocal", lambda: DummyDbSessionContext()
+    )
+    monkeypatch.setattr(
+        stepfun_module,
+        "VoiceRuntimePolicyService",
+        DummyVoiceRuntimePolicyService,
+    )
+
+    handler._refresh_sales_stage_runtime_config = AsyncMock()
+    handler._enforce_tool_policy_guardrails = MagicMock(return_value=False)
+    handler._ensure_knowledge_runtime_metrics = MagicMock()
+
+    await handler._load_effective_policy()
+
+    assert handler._effective_policy == frozen_snapshot
+    assert handler._stepfun_instructions == "frozen pressure instructions"
+    assert handler._instruction_contract_hash == "hash-frozen"
+    handler._refresh_sales_stage_runtime_config.assert_awaited_once()
+    handler._enforce_tool_policy_guardrails.assert_called_once_with()
+    handler._ensure_knowledge_runtime_metrics.assert_called_once_with()
+    dummy_db.commit.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 async def test_tool_search_internal_knowledge_includes_error_detail_on_failure(
     monkeypatch,
 ):

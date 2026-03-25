@@ -118,3 +118,44 @@ def test_compile_base_contract_includes_sales_focus_axes_and_expected_questions(
     assert "ROI 证据在哪里" in compiled.base_instructions
     assert "训练辅导模式" in compiled.base_instructions
     assert "每轮最多提出1个问题句" in compiled.base_instructions
+
+
+def test_compile_base_contract_uses_structured_customer_pressure_contract():
+    policy = {
+        "persona_policy": {
+            "system_prompt": "你是强势采购负责人。",
+        },
+        "customer_pressure": {
+            "source": "explicit",
+            "pressure_direction": {
+                "sales_focus": "proof",
+                "value_axes": ["ROI", "客户收益"],
+                "objection_axes": ["价格", "实施风险"],
+            },
+            "follow_up_behavior": {
+                "question_strategy": "single_issue",
+                "revisit_on_evasion": True,
+                "require_evidence": True,
+                "expected_customer_questions": [
+                    "你拿什么证明这个 ROI 不是口号？",
+                ],
+            },
+        },
+        "tool_policy": {
+            "enable_internal_retrieval": True,
+            "require_kb_grounding": True,
+            "kb_lock_mode": "coach_mode",
+            "max_questions_per_turn": 1,
+        },
+    }
+
+    compiled = VoiceInstructionCompiler.compile_base_contract(policy=policy)
+
+    assert "案例证据" in compiled.base_instructions
+    assert "ROI" in compiled.base_instructions
+    assert "客户收益" in compiled.base_instructions
+    assert "价格" in compiled.base_instructions
+    assert "实施风险" in compiled.base_instructions
+    assert "回到同一阻塞点继续追问" in compiled.base_instructions
+    assert "可验证证据" in compiled.base_instructions
+    assert "你拿什么证明这个 ROI 不是口号" in compiled.base_instructions
