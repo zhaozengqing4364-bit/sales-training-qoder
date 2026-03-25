@@ -2017,6 +2017,186 @@ async def test_run_realtime_feedback_uses_declining_dimension_to_match_classic_a
 
 
 @pytest.mark.asyncio
+async def test_run_realtime_feedback_opens_competitor_objection_ledger_and_keeps_claim_truth_pending() -> None:
+    handler = StepFunRealtimeHandler()
+    handler.session_id = "session-competitor-ledger-open"
+    handler.websocket = MagicMock()
+    handler.manager = MagicMock()
+    handler.manager.send_json = AsyncMock()
+    handler._fuzzy_detection_enabled = False
+    handler._realtime_scoring_enabled = True
+    handler._latest_stage_data = {
+        "current_stage": "objection",
+        "stage_name": "异议处理",
+        "key_actions": ["承接替代方案顾虑"],
+        "guidance": "围绕差异化收益和迁移风险回应",
+        "progress": 0.6,
+        "stage_changed": True,
+    }
+    handler._realtime_scoring_capability = MagicMock()
+    handler._realtime_scoring_capability.on_session_start = AsyncMock()
+    handler._realtime_scoring_capability.execute = AsyncMock(
+        return_value=SimpleNamespace(
+            data={
+                "overall_score": 77.0,
+                "dimension_scores": {
+                    "价值表达": 80.0,
+                    "客户收益连接": 78.0,
+                    "证据使用": 68.0,
+                    "异议处理": 62.0,
+                    "推进下一步": 70.0,
+                },
+                "feedback": "继续回应客户顾虑。",
+            }
+        )
+    )
+    handler._feedback_arbiter = MagicMock()
+    handler._feedback_arbiter.decide.return_value = SimpleNamespace(
+        action_card=None,
+        state=RealtimeFeedbackPacingState(),
+    )
+
+    analysis = await handler._run_realtime_feedback(
+        user_text="竞品A已经能做这个了，你们为什么更稳妥？",
+        turn_number=5,
+        sales_stage="objection",
+    )
+
+    expected_snapshot = {
+        "overall_score": 77.0,
+        "dimension_scores": {
+            "价值表达": 80.0,
+            "客户收益连接": 78.0,
+            "证据使用": 68.0,
+            "异议处理": 62.0,
+            "推进下一步": 70.0,
+        },
+        "suggestions": ["继续回应客户顾虑。"],
+        "stage_name": "异议处理",
+    }
+    expected_ledger = {
+        "objection_family": "competitor_alternative",
+        "promised_proof": "补充竞品差异和替代依据",
+        "next_expected_evidence": "说明为什么比现有方案更稳妥",
+        "closure_state": "open",
+    }
+
+    assert analysis == {
+        "score_snapshot": expected_snapshot,
+        "objection_ledger": expected_ledger,
+    }
+    assert handler._objection_ledger == expected_ledger
+    assert handler._latest_claim_truth == {
+        "status": "evidence_pending",
+        "label": "证据待补齐",
+        "source": "objection_ledger",
+        "reason": "open_objection_ledger",
+        "closure_state": "open",
+    }
+
+    sent_payloads = [call.args[1] for call in handler.manager.send_json.await_args_list]
+    score_update = next(payload for payload in sent_payloads if payload["type"] == "score_update")
+    assert score_update["data"]["claim_truth"] == {
+        "status": "evidence_pending",
+        "label": "证据待补齐",
+        "source": "objection_ledger",
+        "reason": "open_objection_ledger",
+        "closure_state": "open",
+    }
+
+
+@pytest.mark.asyncio
+async def test_run_realtime_feedback_marks_implementation_evidence_verified_after_risk_proof_arrives() -> None:
+    handler = StepFunRealtimeHandler()
+    handler.session_id = "session-implementation-ledger-verified"
+    handler.websocket = MagicMock()
+    handler.manager = MagicMock()
+    handler.manager.send_json = AsyncMock()
+    handler._fuzzy_detection_enabled = False
+    handler._realtime_scoring_enabled = True
+    handler._objection_ledger = {
+        "objection_family": "implementation_risk",
+        "promised_proof": "补充实施排期和服务边界",
+        "next_expected_evidence": "确认试点范围、负责人和风险兜底",
+        "closure_state": "open",
+    }
+    handler._latest_stage_data = {
+        "current_stage": "objection",
+        "stage_name": "异议处理",
+        "key_actions": ["拆解实施风险"],
+        "guidance": "用试点边界、负责人和SLA回应上线顾虑",
+        "progress": 0.7,
+        "stage_changed": True,
+    }
+    handler._realtime_scoring_capability = MagicMock()
+    handler._realtime_scoring_capability.on_session_start = AsyncMock()
+    handler._realtime_scoring_capability.execute = AsyncMock(
+        return_value=SimpleNamespace(
+            data={
+                "overall_score": 84.0,
+                "dimension_scores": {
+                    "价值表达": 82.0,
+                    "客户收益连接": 80.0,
+                    "证据使用": 86.0,
+                    "异议处理": 84.0,
+                    "推进下一步": 79.0,
+                },
+                "feedback": "保持当前节奏，继续确认下一步。",
+            }
+        )
+    )
+    handler._feedback_arbiter = MagicMock()
+    handler._feedback_arbiter.decide.return_value = SimpleNamespace(
+        action_card=None,
+        state=RealtimeFeedbackPacingState(),
+    )
+
+    analysis = await handler._run_realtime_feedback(
+        user_text="我们会安排两周试点、实施负责人和SLA兜底，把上线风险先收敛在试点范围内。",
+        turn_number=6,
+        sales_stage="objection",
+    )
+
+    expected_snapshot = {
+        "overall_score": 84.0,
+        "dimension_scores": {
+            "价值表达": 82.0,
+            "客户收益连接": 80.0,
+            "证据使用": 86.0,
+            "异议处理": 84.0,
+            "推进下一步": 79.0,
+        },
+        "suggestions": ["保持当前节奏，继续确认下一步。"],
+        "stage_name": "异议处理",
+    }
+    expected_ledger = {
+        "objection_family": "implementation_risk",
+        "promised_proof": "补充实施排期和服务边界",
+        "next_expected_evidence": "确认试点范围、负责人和风险兜底",
+        "closure_state": "evidence_provided",
+    }
+    expected_claim_truth = {
+        "status": "evidence_verified",
+        "label": "证据已验证",
+        "source": "objection_ledger",
+        "reason": "evidence_provided",
+        "evidence_score": 86.0,
+        "closure_state": "evidence_provided",
+    }
+
+    assert analysis == {
+        "score_snapshot": expected_snapshot,
+        "objection_ledger": expected_ledger,
+    }
+    assert handler._objection_ledger == expected_ledger
+    assert handler._latest_claim_truth == expected_claim_truth
+
+    sent_payloads = [call.args[1] for call in handler.manager.send_json.await_args_list]
+    score_update = next(payload for payload in sent_payloads if payload["type"] == "score_update")
+    assert score_update["data"]["claim_truth"] == expected_claim_truth
+
+
+@pytest.mark.asyncio
 async def test_run_realtime_feedback_reuses_open_objection_ledger_when_score_focus_drifts() -> None:
     handler = StepFunRealtimeHandler()
     handler.session_id = "session-objection-ledger-drift"

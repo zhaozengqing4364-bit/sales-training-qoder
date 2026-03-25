@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from sales_bot.websocket.components.stepfun_knowledge_helpers import (
     build_kb_not_ready_payload,
     build_missing_query_payload,
@@ -219,6 +221,48 @@ def test_transform_search_rows_uses_wider_snippet_for_sales_objection_query():
         query="竞品A价格更低时，你们有什么客户案例证明ROI？",
     )
 
+    assert len(results) == 1
+    assert len(results[0]["snippet"]) == 420
+
+
+@pytest.mark.parametrize(
+    "query",
+    [
+        "你拿什么证明这个ROI不是口号？",
+        "预算卡死时这笔报价怎么回本？",
+        "竞品A更便宜，为什么还要换你们？",
+        "上线风险这么高，你们怎么保证试点负责人和排期？",
+    ],
+)
+def test_sales_objection_queries_expand_helper_limits_across_roi_price_competitor_and_implementation_cases(
+    query: str,
+):
+    top_k, threshold, _, keyword_limit = resolve_retrieval_params(
+        {},
+        {
+            "retrieval_top_k": 4,
+            "retrieval_similarity_threshold": 0.66,
+            "retrieval_keyword_candidate_limit": 24,
+        },
+        query=query,
+    )
+    results, _, _ = transform_search_rows(
+        [
+            {
+                "knowledge_base_id": "kb-1",
+                "knowledge_base_name": "KB1",
+                "content": "D" * 640,
+                "score": 0.91,
+                "retrieval_mode": "hybrid",
+            }
+        ],
+        top_k=4,
+        query=query,
+    )
+
+    assert top_k == 7
+    assert threshold == 0.56
+    assert keyword_limit == 48
     assert len(results) == 1
     assert len(results[0]["snippet"]) == 420
 

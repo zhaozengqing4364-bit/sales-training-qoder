@@ -1177,3 +1177,20 @@ Append one entry per iteration:
   verification results: passed; fresh slice-close backend and web gates are green, and the runtime diagnostics contract still keeps claim-truth states distinct from kb-lock chain failures.
   success signal status: S04 is complete and the same sales session can now carry unsupported/weak/pending/verified claim truth from runtime diagnostics onto the canonical report/replay surfaces without inventing a second evaluator.
   rollback note: if later work revisits claim-truth surfacing, keep `effectiveness_snapshot.claim_truth` as the shared authority line and preserve the boundary that kb-lock `blocked_*`/chain-failure states stay diagnostic-only unless a fully re-verified contract explicitly replaces it.
+
+- time: 2026-03-25T15:28:42+0800
+  mode: stabilize
+  item id: M003-S05-T01
+  files changed:
+    - backend/tests/unit/test_stepfun_realtime_handler.py
+    - backend/tests/unit/test_stepfun_knowledge_helpers.py
+    - backend/tests/integration/test_knowledge_flow.py
+    - backend/tests/contract/test_practice_evidence_contract.py
+    - .codex/loop/state.json
+    - .codex/loop/log.md
+  summary: Extended the objection-heavy regression net on the current runtime routes so ROI, price, competitor, and implementation-risk cases now freeze distinct pressure contracts, widen knowledge retrieval coverage, and prove pending versus verified claim-truth behavior on the shared report/replay line.
+  verification commands:
+    - cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_stepfun_realtime_handler.py tests/unit/test_stepfun_knowledge_helpers.py tests/integration/test_knowledge_flow.py tests/contract/test_practice_evidence_contract.py
+  verification results: passed; the exact T01 backend gate is 90/90 green and now includes explicit competitor, implementation-risk, verified-evidence, and search-failed assertions alongside the existing ROI/price paths.
+  success signal status: objection-heavy realism is now pinned to the live StepFun/runtime/report contracts instead of a narrower ROI-only proof set.
+  rollback note: if later S05 work rewrites objection-taxonomy semantics, keep these tests on the current `/practice` + shared evidence routes and preserve the existing status names (`weak_evidence`, `evidence_pending`, `evidence_verified`) unless the runtime contract is re-verified end-to-end.

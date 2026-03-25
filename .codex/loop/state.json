@@ -1,7 +1,7 @@
 {
   "mode": "stabilize",
-  "current_issue_id": "M003-S04",
-  "current_issue_type": "slice",
+  "current_issue_id": "M003-S05-T01",
+  "current_issue_type": "task",
   "current_issue_status": "done",
   "pending_issue_ids": [],
   "completed_issue_ids": [
@@ -61,24 +61,24 @@
     "M003-S04-T01",
     "M003-S04-T02",
     "M003-S04-T03",
-    "M003-S04"
+    "M003-S04",
+    "M003-S05-T01"
   ],
   "blocked_issue_ids": [],
   "deferred_issue_ids": [],
   "last_modified_files": [
-    ".gsd/milestones/M003/slices/S04/S04-SUMMARY.md",
-    ".gsd/milestones/M003/slices/S04/S04-UAT.md",
-    ".gsd/milestones/M003/M003-ROADMAP.md",
-    ".gsd/REQUIREMENTS.md",
-    ".gsd/PROJECT.md"
+    "backend/tests/unit/test_stepfun_realtime_handler.py",
+    "backend/tests/unit/test_stepfun_knowledge_helpers.py",
+    "backend/tests/integration/test_knowledge_flow.py",
+    "backend/tests/contract/test_practice_evidence_contract.py",
+    ".codex/loop/state.json",
+    ".codex/loop/log.md"
   ],
   "last_verification_commands": [
-    "cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_effectiveness_sales_report_alignment.py tests/unit/test_session_evidence_service.py",
-    "cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_stepfun_realtime_handler.py tests/contract/test_practice_evidence_contract.py",
-    "cd web && npm test -- --run 'src/app/(user)/practice/[sessionId]/report/page.test.tsx' 'src/app/(user)/practice/[sessionId]/replay/page.test.tsx'"
+    "cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_stepfun_realtime_handler.py tests/unit/test_stepfun_knowledge_helpers.py tests/integration/test_knowledge_flow.py tests/contract/test_practice_evidence_contract.py"
   ],
-  "last_verification_result": "Fresh slice-close verification passed: backend evaluator/session-evidence suite 11/11 green, backend runtime/contract suite 62/62 green, and web report/replay suite 7/7 green. Runtime diagnostics coverage confirmed claim truth stays distinct from kb-lock chain failures.",
-  "last_success_signal": "Slice S04 is complete: evaluator/session evidence, live StepFun diagnostics, knowledge-check, report, and replay now share one canonical claim-truth contract without leaking kb-lock chain-failure copy into learner-facing conclusions.",
+  "last_verification_result": "Passed the exact T01 backend gate: StepFun handler/helper, knowledge-flow integration, and practice-evidence contract suites are 90/90 green, including new competitor, implementation-risk, verified-evidence, and search-failed assertions.",
+  "last_success_signal": "M003-S05-T01 now pins objection-heavy regressions on the live sales runtime routes: ROI, price, competitor, implementation-risk, weak-evidence, verified-evidence, and search-failed paths all have automated proof.",
   "last_growth_scan": null,
-  "next_action": "Proceed to M003/S05 execution or reassessment."
+  "next_action": "Proceed to M003/S05/T02 live objection-heavy same-session evidence capture."
 }

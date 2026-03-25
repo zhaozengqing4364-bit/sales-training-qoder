@@ -319,6 +319,168 @@ async def test_new_sales_session_freezes_customer_pressure_contract_per_persona(
 
 @pytest.mark.integration
 @pytest.mark.asyncio
+async def test_new_sales_session_freezes_competitor_and_implementation_pressure_contracts(
+    async_client: AsyncClient,
+    auth_headers: dict[str, str],
+    test_db: AsyncSession,
+):
+    """Competitor and implementation-risk personas should freeze their own objection contracts."""
+    kb, _ = await _create_knowledge_base_with_document(test_db, doc_status="ready")
+    _, agent, _ = await _create_runtime_entities(test_db, persona_kb_ids=[kb.id])
+
+    competitor_persona = Persona(
+        id=str(uuid.uuid4()),
+        name="竞品替代压测角色",
+        description="用于冻结竞品替代 pressure contract",
+        category="customer",
+        difficulty="medium",
+        status="active",
+        system_prompt="你是保守型采购负责人。",
+        knowledge_base_ids=[kb.id],
+        persona_policy=_build_customer_pressure_policy(
+            sales_focus="replacement_risk",
+            value_axes=["替代成本", "迁移收益"],
+            objection_axes=["竞品替代", "价格"],
+            expected_questions=["如果不换现有方案，损失到底是什么？"],
+            revisit_on_evasion=True,
+            require_evidence=True,
+        ),
+    )
+    implementation_persona = Persona(
+        id=str(uuid.uuid4()),
+        name="实施风险压测角色",
+        description="用于冻结实施风险 pressure contract",
+        category="customer",
+        difficulty="medium",
+        status="active",
+        system_prompt="你是谨慎型项目负责人。",
+        knowledge_base_ids=[kb.id],
+        persona_policy=_build_customer_pressure_policy(
+            sales_focus="implementation_risk",
+            value_axes=["上线稳定性"],
+            objection_axes=["实施风险", "服务边界"],
+            expected_questions=["谁来负责上线、排期和风险兜底？"],
+            revisit_on_evasion=True,
+            require_evidence=True,
+        ),
+    )
+    test_db.add_all(
+        [
+            AgentPersona(
+                id=str(uuid.uuid4()),
+                agent_id=agent.id,
+                persona_id=competitor_persona.id,
+                is_default=False,
+                override_config={"challenge_frequency": 0.8},
+            ),
+            AgentPersona(
+                id=str(uuid.uuid4()),
+                agent_id=agent.id,
+                persona_id=implementation_persona.id,
+                is_default=False,
+                override_config={"challenge_frequency": 0.85},
+            ),
+            competitor_persona,
+            implementation_persona,
+        ]
+    )
+    await test_db.commit()
+
+    competitor_session_id = await _create_sales_session(
+        async_client,
+        auth_headers,
+        agent_id=agent.id,
+        persona_id=competitor_persona.id,
+    )
+    implementation_session_id = await _create_sales_session(
+        async_client,
+        auth_headers,
+        agent_id=agent.id,
+        persona_id=implementation_persona.id,
+    )
+
+    competitor_session = (
+        await test_db.execute(
+            select(PracticeSession).where(
+                PracticeSession.session_id == competitor_session_id
+            )
+        )
+    ).scalar_one()
+    implementation_session = (
+        await test_db.execute(
+            select(PracticeSession).where(
+                PracticeSession.session_id == implementation_session_id
+            )
+        )
+    ).scalar_one()
+
+    competitor_snapshot = deepcopy(competitor_session.voice_policy_snapshot)
+    implementation_snapshot = deepcopy(implementation_session.voice_policy_snapshot)
+
+    assert competitor_snapshot["knowledge_base_ids"] == [kb.id]
+    assert implementation_snapshot["knowledge_base_ids"] == [kb.id]
+    assert (
+        competitor_snapshot["customer_pressure"]["pressure_direction"]["sales_focus"]
+        == "replacement_risk"
+    )
+    assert (
+        implementation_snapshot["customer_pressure"]["pressure_direction"]["sales_focus"]
+        == "implementation_risk"
+    )
+    assert competitor_snapshot["customer_pressure"]["pressure_direction"]["objection_axes"] == [
+        "竞品替代",
+        "价格",
+    ]
+    assert implementation_snapshot["customer_pressure"]["pressure_direction"]["objection_axes"] == [
+        "实施风险",
+        "服务边界",
+    ]
+    assert competitor_snapshot["customer_pressure"]["follow_up_behavior"][
+        "expected_customer_questions"
+    ] == ["如果不换现有方案，损失到底是什么？"]
+    assert implementation_snapshot["customer_pressure"]["follow_up_behavior"][
+        "expected_customer_questions"
+    ] == ["谁来负责上线、排期和风险兜底？"]
+    assert competitor_snapshot["source"]["customer_pressure_source"] == "explicit"
+    assert implementation_snapshot["source"]["customer_pressure_source"] == "explicit"
+    assert (
+        competitor_snapshot["persona_policy"]["customer_pressure"]
+        == competitor_snapshot["customer_pressure"]
+    )
+    assert (
+        implementation_snapshot["persona_policy"]["customer_pressure"]
+        == implementation_snapshot["customer_pressure"]
+    )
+    assert (
+        competitor_snapshot["instruction_contract_hash"]
+        != implementation_snapshot["instruction_contract_hash"]
+    )
+
+    competitor_persona.persona_policy = _build_customer_pressure_policy(
+        sales_focus="budget_priority",
+        value_axes=["预算优先级"],
+        objection_axes=["价格"],
+        expected_questions=["预算冻结时这笔钱为什么要先给你？"],
+        revisit_on_evasion=False,
+        require_evidence=True,
+    )
+    await test_db.commit()
+
+    refreshed_competitor_session = (
+        await test_db.execute(
+            select(PracticeSession).where(
+                PracticeSession.session_id == competitor_session_id
+            )
+        )
+    ).scalar_one()
+    assert (
+        refreshed_competitor_session.voice_policy_snapshot["customer_pressure"]
+        == competitor_snapshot["customer_pressure"]
+    )
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("last_status", "last_error", "attempt_count", "hit_query_count", "expected_status", "expected_summary"),
     [
