@@ -920,3 +920,27 @@ Append one entry per iteration:
   verification results: passed; all six slice-level verification commands exited 0 on the final run. The web gate first exposed a real missing T03 carry-forward plus an async test-timing issue, and the final rerun proved replay/report/admin now stay green on the aligned sales conclusion family.
   success signal status: completed sales sessions now override stale read-side conclusions from the latest alignable persisted sales evidence, replay visibly surfaces the same aligned coach conclusion as report, admin badges remain readable for the new vocabulary, and R009 is further advanced without changing public report/websocket keys.
   rollback note: if later slices revisit S04, preserve the projection-only override boundary, the centralized `session-evidence` vocabulary map, and the replay page’s direct API rendering; reintroducing client heuristics or choosing the newest partial snapshot will silently reopen conclusion drift.
+
+- time: 2026-03-25T09:37:53+08:00
+  mode: stabilize
+  item id: M003-S01-T01
+  files changed:
+    - .gsd/milestones/M003/M003-ROADMAP.md
+    - .gsd/milestones/M003/slices/S01/S01-PLAN.md
+    - .gsd/milestones/M003/slices/S01/tasks/T01-PLAN.md
+    - .gsd/KNOWLEDGE.md
+    - .gsd/milestones/M003/slices/S01/tasks/T01-SUMMARY.md
+    - .codex/loop/state.json
+    - .codex/loop/log.md
+
+  summary: Locked the M003 roadmap/S01/T01 artifacts to the real admin→session→practice chain, fixed unrunnable verification commands for literal Next.js paths, and recorded the shell-quoting gotcha in project knowledge.
+  verification commands:
+    - bash -lc "test -f 'backend/src/agent/services/persona_policy.py' && test -f 'backend/src/sales_bot/services/voice_runtime_policy.py' && test -f 'backend/src/sales_bot/services/voice_instruction_compiler.py' && test -f 'backend/src/common/api/practice.py' && test -f 'web/src/app/admin/personas/[id]/page.tsx' && test -f 'web/src/app/admin/knowledge/[id]/page.tsx' && test -f 'web/src/app/(user)/practice/[sessionId]/page.tsx' && test -f 'web/src/app/(user)/practice/[sessionId]/report/page.tsx' && test -f 'web/src/app/(user)/practice/[sessionId]/replay/page.tsx'"
+    - rg -n \"persona_policy.py|voice_runtime_policy.py|voice_instruction_compiler.py|practice.py|POST /api/v1/practice/sessions|web/src/app/admin/personas/\[id\]/page.tsx|web/src/app/admin/knowledge/\[id\]/page.tsx|web/src/app/\(user\)/practice/\[sessionId\]/page.tsx|web/src/app/\(user\)/practice/\[sessionId\]/report/page.tsx|web/src/app/\(user\)/practice/\[sessionId\]/replay/page.tsx|Silence|Conda|\\.env|lockfile|inventory/spike\" .gsd/milestones/M003/M003-ROADMAP.md .gsd/milestones/M003/slices/S01/S01-PLAN.md .gsd/milestones/M003/slices/S01/tasks/T01-PLAN.md
+    - bash -lc "test -f 'backend/src/agent/services/persona_policy.py' && test -f 'backend/src/sales_bot/services/voice_runtime_policy.py' && test -f 'backend/src/sales_bot/services/voice_instruction_compiler.py' && test -f 'backend/src/common/knowledge/kb_lock_guard.py' && test -f 'backend/src/common/conversation/runtime_diagnostics.py' && test -f 'backend/src/sales_bot/websocket/components/stepfun_knowledge_helpers.py' && test -f 'backend/src/sales_bot/websocket/components/stepfun_internal_knowledge_searcher.py' && test -f 'backend/src/common/api/practice.py' && test -f 'backend/src/common/conversation/session_evidence.py' && test -f 'web/src/app/admin/personas/[id]/page.tsx' && test -f 'web/src/app/admin/knowledge/[id]/page.tsx' && test -f 'web/src/app/(user)/practice/[sessionId]/page.tsx' && test -f 'web/src/app/(user)/practice/[sessionId]/report/page.tsx' && test -f 'web/src/app/(user)/practice/[sessionId]/replay/page.tsx'"
+    - rg -n \"no_knowledge_base|disabled|not_triggered|kb_not_ready|search_failed|miss|hit|blocked_no_kb|blocked_not_ready|blocked_search_failed|blocked_empty\" backend/src/common/conversation/runtime_diagnostics.py backend/src/common/knowledge/kb_lock_guard.py backend/src/sales_bot/websocket/components/stepfun_internal_knowledge_searcher.py .gsd/milestones/M003/M003-ROADMAP.md .gsd/milestones/M003/slices/S01/S01-PLAN.md .gsd/milestones/M003/slices/S01/tasks/T02-PLAN.md
+    - rg -n \"Silence|Conda|\\.env|lockfile|inventory/spike|current admin|current product route\" .gsd/milestones/M003/M003-ROADMAP.md .gsd/milestones/M003/slices/S01/S01-PLAN.md .gsd/milestones/M003/slices/S01/tasks/T01-PLAN.md .gsd/milestones/M003/slices/S01/tasks/T03-PLAN.md
+
+  verification results: passed; all five final verification commands exited 0 after quoting literal Next.js route paths in the doc commands. No blocker or scope change remained.
+  success signal status: M003 planning is now pinned to the confirmed admin Persona/knowledge → POST /api/v1/practice/sessions → learner practice/report/replay chain, and the verification examples no longer false-fail on literal Next.js paths.
+  rollback note: If later planning rewrites M003/S01 again, keep POST /api/v1/practice/sessions plus web/src/app/(user)/practice/[sessionId]/page.tsx as the canonical seam and keep quoted route-path verification commands.

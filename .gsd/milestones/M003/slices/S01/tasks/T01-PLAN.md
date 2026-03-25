@@ -12,24 +12,24 @@ skills_used:
 
 ## Description
 
-Inventory the current routes and modules that already move user value in M003: admin Persona detail, admin knowledge detail, session creation, voice policy freeze, runtime retrieval, and learner report / replay inspection. Rewrite the roadmap and slice plan so they name only those confirmed entrypoints and explicitly exclude environment/tooling-only scope. If any required surface cannot be located in runnable code, the work must stop and be re-scoped to inventory/spike instead of pretending the entrypoint exists.
+Inventory the current routes and modules that already move user value in M003: admin Persona detail, admin knowledge detail, `POST /api/v1/practice/sessions`, `web/src/app/(user)/practice/[sessionId]/page.tsx`, voice policy freeze, runtime retrieval, and learner report / replay inspection. Rewrite the roadmap and slice plan so they name only those confirmed entrypoints and explicitly exclude environment/tooling-only scope. If any required surface cannot be located in runnable code, the work must stop and be re-scoped to inventory/spike instead of pretending the entrypoint exists.
 
 ## Steps
 
 1. Confirm the current admin detail routes that own Persona and knowledge configuration.
 2. Confirm the backend authority modules that freeze Persona / knowledge into `voice_policy_snapshot` and drive runtime retrieval.
-3. Rewrite the M003 roadmap and S01 plan so they reference only confirmed business-code directories and current product routes.
+3. Rewrite the M003 roadmap and S01 plan so they reference only confirmed business-code directories, the current session-create route, and the current learner practice / report / replay routes.
 4. Record the blocker rule and explicit out-of-scope note for Silence / Conda / `.env` / lockfile work.
 
 ## Must-Haves
 
-- [ ] The M003 docs name one confirmed business chain from current admin pages to current learner-visible runtime/read surfaces.
+- [ ] The M003 docs name one confirmed business chain from current admin pages through `POST /api/v1/practice/sessions` to `web/src/app/(user)/practice/[sessionId]/page.tsx`, plus the current learner-visible report / replay read surfaces.
 - [ ] Tooling or environment artifacts are explicitly marked out of scope unless the milestone goal is later changed to environment migration.
 
 ## Verification
 
-- `test -f backend/src/agent/services/persona_policy.py && test -f backend/src/sales_bot/services/voice_runtime_policy.py && test -f backend/src/sales_bot/services/voice_instruction_compiler.py && test -f backend/src/common/api/practice.py && test -f web/src/app/admin/personas/[id]/page.tsx && test -f web/src/app/admin/knowledge/[id]/page.tsx && test -f web/src/app/(user)/practice/[sessionId]/page.tsx && test -f web/src/app/(user)/practice/[sessionId]/report/page.tsx && test -f web/src/app/(user)/practice/[sessionId]/replay/page.tsx`
-- `rg -n "persona_policy.py|voice_runtime_policy.py|voice_instruction_compiler.py|practice.py|web/src/app/admin/personas/\[id\]/page.tsx|web/src/app/admin/knowledge/\[id\]/page.tsx|web/src/app/\(user\)/practice/\[sessionId\]/report/page.tsx|Silence|Conda|\.env|lockfile|inventory/spike" .gsd/milestones/M003/M003-ROADMAP.md .gsd/milestones/M003/slices/S01/S01-PLAN.md .gsd/milestones/M003/slices/S01/tasks/T01-PLAN.md`
+- `test -f 'backend/src/agent/services/persona_policy.py' && test -f 'backend/src/sales_bot/services/voice_runtime_policy.py' && test -f 'backend/src/sales_bot/services/voice_instruction_compiler.py' && test -f 'backend/src/common/api/practice.py' && test -f 'web/src/app/admin/personas/[id]/page.tsx' && test -f 'web/src/app/admin/knowledge/[id]/page.tsx' && test -f 'web/src/app/(user)/practice/[sessionId]/page.tsx' && test -f 'web/src/app/(user)/practice/[sessionId]/report/page.tsx' && test -f 'web/src/app/(user)/practice/[sessionId]/replay/page.tsx'`
+- `rg -n "persona_policy.py|voice_runtime_policy.py|voice_instruction_compiler.py|practice.py|POST /api/v1/practice/sessions|web/src/app/admin/personas/\[id\]/page.tsx|web/src/app/admin/knowledge/\[id\]/page.tsx|web/src/app/\(user\)/practice/\[sessionId\]/page.tsx|web/src/app/\(user\)/practice/\[sessionId\]/report/page.tsx|web/src/app/\(user\)/practice/\[sessionId\]/replay/page.tsx|Silence|Conda|\.env|lockfile|inventory/spike" .gsd/milestones/M003/M003-ROADMAP.md .gsd/milestones/M003/slices/S01/S01-PLAN.md .gsd/milestones/M003/slices/S01/tasks/T01-PLAN.md`
 
 ## Inputs
 

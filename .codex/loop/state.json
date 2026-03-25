@@ -1,7 +1,7 @@
 {
   "mode": "stabilize",
-  "current_issue_id": "M002-S04",
-  "current_issue_type": "slice",
+  "current_issue_id": "M003-S01-T01",
+  "current_issue_type": "task",
   "current_issue_status": "done",
   "pending_issue_ids": [],
   "completed_issue_ids": [
@@ -46,47 +46,29 @@
     "M002-S04-T01",
     "M002-S04-T02",
     "M002-S04-T03",
-    "M002-S04"
+    "M002-S04",
+    "M003-S01-T01"
   ],
   "blocked_issue_ids": [],
   "deferred_issue_ids": [],
   "last_modified_files": [
-    "backend/src/common/effectiveness/evaluator.py",
-    "backend/src/common/effectiveness/schemas.py",
-    "backend/src/common/effectiveness/__init__.py",
-    "backend/src/common/conversation/session_evidence.py",
-    "backend/tests/unit/test_effectiveness_sales_report_alignment.py",
-    "backend/tests/unit/test_session_evidence_service.py",
-    "backend/tests/unit/test_replay_service.py",
-    "backend/tests/unit/test_history_service_evidence_projection.py",
-    "backend/tests/contract/test_practice_evidence_contract.py",
-    "backend/tests/integration/test_practice_evidence_flow.py",
-    "backend/tests/integration/test_sales_value_training_flow.py",
-    "web/src/app/(user)/practice/[sessionId]/replay/page.tsx",
-    "web/src/lib/session-evidence.ts",
-    "web/src/app/(user)/practice/[sessionId]/replay/page.test.tsx",
-    "web/src/app/(user)/practice/[sessionId]/report/page.test.tsx",
-    "web/src/app/admin/users/[id]/page.test.tsx",
-    ".gsd/REQUIREMENTS.md",
+    ".gsd/milestones/M003/M003-ROADMAP.md",
+    ".gsd/milestones/M003/slices/S01/S01-PLAN.md",
+    ".gsd/milestones/M003/slices/S01/tasks/T01-PLAN.md",
     ".gsd/KNOWLEDGE.md",
-    ".gsd/PROJECT.md",
-    ".gsd/milestones/M002/slices/S04/tasks/T03-SUMMARY.md",
-    ".gsd/milestones/M002/slices/S04/S04-SUMMARY.md",
-    ".gsd/milestones/M002/slices/S04/S04-UAT.md",
-    ".gsd/milestones/M002/M002-ROADMAP.md",
+    ".gsd/milestones/M003/slices/S01/tasks/T01-SUMMARY.md",
     ".codex/loop/state.json",
     ".codex/loop/log.md"
   ],
   "last_verification_commands": [
-    "cd backend && /usr/bin/time -p venv/bin/python -m pytest -c pyproject.toml tests/unit/test_effectiveness_sales_report_alignment.py tests/unit/test_session_evidence_service.py tests/unit/test_replay_service.py tests/unit/test_history_service_evidence_projection.py",
-    "cd backend && /usr/bin/time -p venv/bin/python -m pytest -c pyproject.toml tests/unit/test_session_evidence_service.py -k 'sales_alignment or stale_snapshot or insufficient_sales_evidence' -vv",
-    "cd backend && /usr/bin/time -p venv/bin/python -m pytest -c pyproject.toml tests/unit/test_session_evidence_service.py -k 'insufficient_sales_evidence' -vv",
-    "cd backend && /usr/bin/time -p venv/bin/python -m pytest -c pyproject.toml tests/unit/test_effectiveness_sales_report_alignment.py -k 'insufficient_sales_evidence' -vv",
-    "cd backend && /usr/bin/time -p venv/bin/python -m pytest -c pyproject.toml tests/contract/test_practice_evidence_contract.py tests/integration/test_practice_evidence_flow.py tests/integration/test_sales_value_training_flow.py",
-    "cd web && /usr/bin/time -p npm test -- --run 'src/app/(user)/practice/[sessionId]/report/page.test.tsx' 'src/app/(user)/practice/[sessionId]/replay/page.test.tsx' 'src/app/admin/users/[id]/page.test.tsx'"
+    "bash -lc \"test -f 'backend/src/agent/services/persona_policy.py' && test -f 'backend/src/sales_bot/services/voice_runtime_policy.py' && test -f 'backend/src/sales_bot/services/voice_instruction_compiler.py' && test -f 'backend/src/common/api/practice.py' && test -f 'web/src/app/admin/personas/[id]/page.tsx' && test -f 'web/src/app/admin/knowledge/[id]/page.tsx' && test -f 'web/src/app/(user)/practice/[sessionId]/page.tsx' && test -f 'web/src/app/(user)/practice/[sessionId]/report/page.tsx' && test -f 'web/src/app/(user)/practice/[sessionId]/replay/page.tsx'\"",
+    "rg -n \\\"persona_policy.py|voice_runtime_policy.py|voice_instruction_compiler.py|practice.py|POST /api/v1/practice/sessions|web/src/app/admin/personas/\\[id\\]/page.tsx|web/src/app/admin/knowledge/\\[id\\]/page.tsx|web/src/app/\\(user\\)/practice/\\[sessionId\\]/page.tsx|web/src/app/\\(user\\)/practice/\\[sessionId\\]/report/page.tsx|web/src/app/\\(user\\)/practice/\\[sessionId\\]/replay/page.tsx|Silence|Conda|\\\\.env|lockfile|inventory/spike\\\" .gsd/milestones/M003/M003-ROADMAP.md .gsd/milestones/M003/slices/S01/S01-PLAN.md .gsd/milestones/M003/slices/S01/tasks/T01-PLAN.md",
+    "bash -lc \"test -f 'backend/src/agent/services/persona_policy.py' && test -f 'backend/src/sales_bot/services/voice_runtime_policy.py' && test -f 'backend/src/sales_bot/services/voice_instruction_compiler.py' && test -f 'backend/src/common/knowledge/kb_lock_guard.py' && test -f 'backend/src/common/conversation/runtime_diagnostics.py' && test -f 'backend/src/sales_bot/websocket/components/stepfun_knowledge_helpers.py' && test -f 'backend/src/sales_bot/websocket/components/stepfun_internal_knowledge_searcher.py' && test -f 'backend/src/common/api/practice.py' && test -f 'backend/src/common/conversation/session_evidence.py' && test -f 'web/src/app/admin/personas/[id]/page.tsx' && test -f 'web/src/app/admin/knowledge/[id]/page.tsx' && test -f 'web/src/app/(user)/practice/[sessionId]/page.tsx' && test -f 'web/src/app/(user)/practice/[sessionId]/report/page.tsx' && test -f 'web/src/app/(user)/practice/[sessionId]/replay/page.tsx'\"",
+    "rg -n \\\"no_knowledge_base|disabled|not_triggered|kb_not_ready|search_failed|miss|hit|blocked_no_kb|blocked_not_ready|blocked_search_failed|blocked_empty\\\" backend/src/common/conversation/runtime_diagnostics.py backend/src/common/knowledge/kb_lock_guard.py backend/src/sales_bot/websocket/components/stepfun_internal_knowledge_searcher.py .gsd/milestones/M003/M003-ROADMAP.md .gsd/milestones/M003/slices/S01/S01-PLAN.md .gsd/milestones/M003/slices/S01/tasks/T02-PLAN.md",
+    "rg -n \\\"Silence|Conda|\\\\.env|lockfile|inventory/spike|current admin|current product route\\\" .gsd/milestones/M003/M003-ROADMAP.md .gsd/milestones/M003/slices/S01/S01-PLAN.md .gsd/milestones/M003/slices/S01/tasks/T01-PLAN.md .gsd/milestones/M003/slices/S01/tasks/T03-PLAN.md"
   ],
-  "last_verification_result": "S04 verification passed fresh end-to-end. All four backend unit/focused selectors, the backend contract/integration pack, and the exact report/replay/admin web command exited 0 after the replay conclusion carry-forward and async report-fallback assertion fix. Projection diagnostics proved `sales_alignment_used/stage_key/focus_type/fallback_reason`, and the web suite proved replay/report/admin now render the same aligned sales conclusion family.",
-  "last_success_signal": "Completed sales sessions now override stale read-side `main_issue`/`next_goal` from the latest alignable persisted sales evidence, replay visibly surfaces that aligned coach conclusion, and admin/read surfaces keep the new sales vocabulary readable without changing public report or websocket keys.",
+  "last_verification_result": "Passed all five final task/slice verification commands. The gate also exposed and then retired a real docs bug: Next.js literal route paths needed quoting in shell examples, and the final rerun proved the updated commands are runnable.",
+  "last_success_signal": "M003 planning is now pinned to the confirmed admin Persona/knowledge → POST /api/v1/practice/sessions → learner practice/report/replay chain, and the verification examples no longer false-fail on literal Next.js paths.",
   "last_growth_scan": null,
-  "next_action": "Slice S04 is complete. Hand off to roadmap reassessment / proceed to M002-S05 degraded-state visibility work."
+  "next_action": "Proceed to M003-S01-T02 to lock the live knowledge status vocabulary and ownership line."
 }

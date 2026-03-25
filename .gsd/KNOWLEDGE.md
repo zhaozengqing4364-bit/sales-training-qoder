@@ -32,3 +32,4 @@
 - `backend/tests/unit/test_replay_service.py` 这类 `MagicMock` session fixture 如果没显式设 `presentation_id = None`，`resolve_scenario_type(...)` 会把 truthy mock 属性误判成 presentation session，进而掉进 `presentation_review` 分支报 `[PRESENTATION_REVIEW_BUILD_FAILED:]`；写 sales replay 单测时把 `presentation_id` 和 `voice_policy_snapshot` 都显式置空更稳。
 - M002 这类实时教练链路要同时守住“稳定公开 contract”和“更丰富的 backend-only 语义上下文”两条线：classic / StepFun / report / replay / admin 应共享 `resolve_sales_coaching_focus(...)` 与 `resolve_sales_report_alignment(...)` 这类内部 seam，对外尽量继续复用既有 `score_update` / report keys，而不是为了语义对齐扩展 public payload。
 - 这个仓库做里程碑 close-out diff 验证时不要默认写 `main`：当前集成基线分支是 `001-ai-practice-system`。先探测可用 integration branch，再做 `git merge-base` / `git diff --stat`，否则会把不存在的 `main` 误报成“没有实现代码”。
+- 写 GSD 计划里的 shell 校验命令时，凡是引用 `web/src/app/.../[id]/...`、`[sessionId]`、`(user)` 这类 Next.js 字面路径，都要给路径加引号；否则 `bash` 会把 `[]` 当 glob、把 `()` 当语法，任务/切片验证会在真正检查文件前先假性报错。
