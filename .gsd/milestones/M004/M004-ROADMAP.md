@@ -11,7 +11,7 @@
 
 ## Slices
 
-- [ ] **S01: 当前 report/replay/highlight 入口的学习证据 contract** `risk:high` `depends:[]`
+- [x] **S01: 当前 report/replay/highlight 入口的学习证据 contract** `risk:high` `depends:[]`
   > After this: On the existing replay and highlight surfaces, a learner can see which turn mattered, why it mattered, which stage it belongs to, and what a better response looks like — without adding a new learning page.
 
 - [ ] **S02: report 直达 replay 关键片段** `risk:high` `depends:[S01]`
