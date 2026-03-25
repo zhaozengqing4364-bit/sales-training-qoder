@@ -31,7 +31,7 @@ Reuse the existing report/replay routes and supporting authority modules only: `
   - Files: `web/src/app/(user)/practice/[sessionId]/report/page.tsx`, `web/src/lib/api/client.ts`, `web/src/lib/api/types.ts`, `web/src/app/(user)/practice/[sessionId]/report/page.test.tsx`
   - Verify: cd web && npm test -- --run 'src/app/(user)/practice/[sessionId]/report/page.test.tsx'
 
-- [ ] **T03: Land replay on the requested anchor and keep degraded fallback visible** `est:60m`
+- [x] **T03: Land replay on the requested anchor and keep degraded fallback visible** `est:60m`
   Make the current replay page honor deep-link anchors and keep fallback behavior clear when the target highlight/marker does not exist. Stay on the existing replay page and lock the behavior with focused frontend tests.
   - Files: `web/src/app/(user)/practice/[sessionId]/replay/page.tsx`, `web/src/app/(user)/practice/[sessionId]/replay/page.test.tsx`
   - Verify: cd web && npm test -- --run 'src/app/(user)/practice/[sessionId]/replay/page.test.tsx' 'src/app/(user)/practice/[sessionId]/report/page.test.tsx'

@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import {
   AlertTriangle,
   ArrowLeft,
@@ -18,7 +18,7 @@ import { HighlightList } from "@/components/highlights";
 import { Button } from "@/components/ui/button";
 import { GlassCard } from "@/components/ui/glass-card";
 import { api, getApiErrorMessage } from "@/lib/api/client";
-import { HighlightItem, ReplayData, ReplayHighlightContext, ReplayLearningEvidence } from "@/lib/api/types";
+import { HighlightItem, ReplayAnchorStatus, ReplayData, ReplayHighlightContext, ReplayLearningEvidence, ReplayTimelineMarker } from "@/lib/api/types";
 import { debug } from "@/lib/debug";
 import {
   extractSessionClaimTruth,
@@ -88,6 +88,177 @@ function getClaimTruthClasses(tone: SessionClaimTruthTone) {
     badge: "text-blue-700 bg-white/80 border-blue-200",
     text: "text-blue-900",
     note: "text-blue-700",
+  };
+}
+
+type ReplayDeepLinkFocus = "main_issue" | "next_goal" | "learning_evidence";
+type ReplayAnchorNoticeTone = "info" | "warning";
+
+interface ReplayDeepLinkRequest {
+  focus: ReplayDeepLinkFocus | null;
+  messageId: string | null;
+  turnNumber: number | null;
+  anchorStatus: ReplayAnchorStatus | null;
+  anchorReason: string | null;
+  markerType: string | null;
+  markerTimestampMs: number | null;
+}
+
+interface ReplayAnchorNotice {
+  title: string;
+  description: string;
+  tone: ReplayAnchorNoticeTone;
+}
+
+function parseReplayInteger(value?: string | null): number | null {
+  if (!value) return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function parseReplayFocus(value?: string | null): ReplayDeepLinkFocus | null {
+  if (value === "main_issue" || value === "next_goal" || value === "learning_evidence") {
+    return value;
+  }
+  return null;
+}
+
+function parseReplayAnchorStatus(value?: string | null): ReplayAnchorStatus | null {
+  if (value === "resolved" || value === "degraded" || value === "missing") {
+    return value;
+  }
+  return null;
+}
+
+function parseReplayDeepLinkRequest(searchParams: Pick<URLSearchParams, "get">): ReplayDeepLinkRequest {
+  return {
+    focus: parseReplayFocus(searchParams.get("focus")),
+    messageId: searchParams.get("message_id") || null,
+    turnNumber: parseReplayInteger(searchParams.get("turn")),
+    anchorStatus: parseReplayAnchorStatus(searchParams.get("anchor_status")),
+    anchorReason: searchParams.get("anchor_reason") || null,
+    markerType: searchParams.get("marker_type") || null,
+    markerTimestampMs: parseReplayInteger(searchParams.get("marker_timestamp_ms")),
+  };
+}
+
+function getReplayFocusLabel(focus: ReplayDeepLinkFocus | null): string {
+  if (focus === "main_issue") return "主问题片段";
+  if (focus === "next_goal") return "目标片段";
+  if (focus === "learning_evidence") return "高光片段";
+  return "回放片段";
+}
+
+function getReplayAnchorNoticeClasses(tone: ReplayAnchorNoticeTone) {
+  if (tone === "warning") {
+    return {
+      card: "border-amber-200 bg-amber-50/80",
+      eyebrow: "text-amber-700",
+      title: "text-amber-900",
+      body: "text-amber-800",
+      icon: "text-amber-600",
+    };
+  }
+
+  return {
+    card: "border-blue-200 bg-blue-50/80",
+    eyebrow: "text-blue-700",
+    title: "text-blue-900",
+    body: "text-blue-800",
+    icon: "text-blue-600",
+  };
+}
+
+function resolveReplayMarker(
+  markers: ReplayTimelineMarker[],
+  request: ReplayDeepLinkRequest,
+): ReplayTimelineMarker | null {
+  if (!request.markerType || typeof request.markerTimestampMs !== "number") {
+    return null;
+  }
+
+  return markers.find((marker) => (
+    marker.type === request.markerType
+    && marker.timestamp_ms === request.markerTimestampMs
+  )) ?? null;
+}
+
+function buildReplayAnchorNotice(
+  request: ReplayDeepLinkRequest,
+  options: {
+    targetFound: boolean;
+    targetTurnNumber: number | null;
+    marker?: ReplayTimelineMarker | null;
+  },
+): ReplayAnchorNotice | null {
+  if (!request.focus) {
+    return null;
+  }
+
+  const focusLabel = getReplayFocusLabel(request.focus);
+  const turnLabel = typeof options.targetTurnNumber === "number"
+    ? `第 ${options.targetTurnNumber} 轮`
+    : "相关对话片段";
+  const markerLabel = options.marker?.label || null;
+
+  if (options.targetFound) {
+    if (request.anchorStatus === "degraded") {
+      if (request.anchorReason === "no_matching_highlight") {
+        return {
+          title: `已定位到${focusLabel}`,
+          description: markerLabel
+            ? `未找到精确高光，已定位到“${markerLabel}”阶段附近的${turnLabel}。`
+            : `未找到精确高光，已定位到${turnLabel}附近。`,
+          tone: "warning",
+        };
+      }
+
+      if (request.anchorReason === "missing_marker") {
+        return {
+          title: `已定位到${focusLabel}`,
+          description: `高光标记缺失，已直接定位到${turnLabel}。`,
+          tone: "warning",
+        };
+      }
+    }
+
+    if (request.focus === "learning_evidence") {
+      return {
+        title: "已定位到高光片段",
+        description: `已跳转到${turnLabel}。`,
+        tone: "info",
+      };
+    }
+
+    return {
+      title: `已定位到${focusLabel}`,
+      description: `已跳转到${turnLabel}${request.markerType === "highlight" ? "对应的高光片段。" : "。"}`,
+      tone: request.anchorStatus === "resolved" ? "info" : "warning",
+    };
+  }
+
+  if (request.anchorReason === "no_matching_highlight") {
+    return {
+      title: `未找到${focusLabel}`,
+      description: markerLabel
+        ? `报告引用的精确高光已不存在，且“${markerLabel}”阶段也没有可自动定位的回放片段；请结合完整对话继续查看。`
+        : "报告引用的精确高光已不存在，页面保留完整对话供手动查找。",
+      tone: "warning",
+    };
+  }
+
+  if (request.anchorReason === "missing_marker") {
+    return {
+      title: `未找到${focusLabel}`,
+      description: "报告引用的定位标记当前不存在，页面保留完整对话供手动查找。",
+      tone: "warning",
+    };
+  }
+
+  return {
+    title: `未找到${focusLabel}`,
+    description: "请求的回放片段当前不存在，页面保留完整对话供手动查找。",
+    tone: "warning",
   };
 }
 
@@ -204,6 +375,7 @@ function enrichHighlights(
 export default function SessionReplayPage() {
   const router = useRouter();
   const params = useParams();
+  const searchParams = useSearchParams();
   const sessionId = params.sessionId as string;
 
   const [isLoading, setIsLoading] = useState(true);
@@ -211,6 +383,13 @@ export default function SessionReplayPage() {
   const [replayData, setReplayData] = useState<ReplayData | null>(null);
   const [highlights, setHighlights] = useState<HighlightItem[]>([]);
   const [highlightsUnavailableHint, setHighlightsUnavailableHint] = useState<string | null>(null);
+  const [activeTurnNumber, setActiveTurnNumber] = useState<number | null>(null);
+  const [replayAnchorNotice, setReplayAnchorNotice] = useState<ReplayAnchorNotice | null>(null);
+
+  const replayDeepLink = useMemo(
+    () => parseReplayDeepLinkRequest(searchParams),
+    [searchParams],
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -221,6 +400,8 @@ export default function SessionReplayPage() {
       setReplayData(null);
       setHighlights([]);
       setHighlightsUnavailableHint(null);
+      setActiveTurnNumber(null);
+      setReplayAnchorNotice(null);
 
       try {
         const replay = await api.sessions.getReplay(sessionId);
@@ -300,16 +481,63 @@ export default function SessionReplayPage() {
   const claimTruthEvidenceNote = formatClaimTruthEvidenceNote(claimTruth);
   const claimTruthClasses = getClaimTruthClasses(getClaimTruthTone(claimTruth?.status));
 
-  const handleJumpToMessage = (turnNumber: number) => {
+  const handleJumpToMessage = useCallback((turnNumber: number) => {
+    setActiveTurnNumber(turnNumber);
     const messageElement = document.querySelector(`[data-turn-number="${turnNumber}"]`);
-    if (messageElement) {
+    if (messageElement instanceof HTMLElement && typeof messageElement.scrollIntoView === "function") {
       messageElement.scrollIntoView({ behavior: "smooth", block: "center" });
-      messageElement.classList.add("bg-yellow-100");
-      setTimeout(() => {
-        messageElement.classList.remove("bg-yellow-100");
-      }, 2000);
     }
-  };
+  }, []);
+
+  useEffect(() => {
+    if (!replayData) {
+      return;
+    }
+
+    if (!replayDeepLink.focus) {
+      setReplayAnchorNotice(null);
+      return;
+    }
+
+    const targetMessage = (
+      replayDeepLink.messageId
+        ? replayData.messages.find((message) => message.id === replayDeepLink.messageId)
+        : null
+    ) ?? (
+      typeof replayDeepLink.turnNumber === "number"
+        ? replayData.messages.find((message) => message.turn_number === replayDeepLink.turnNumber)
+        : null
+    );
+    const resolvedMarker = resolveReplayMarker(replayData.timeline_markers || [], replayDeepLink);
+    const targetTurnNumber = targetMessage?.turn_number ?? replayDeepLink.turnNumber;
+    const notice = buildReplayAnchorNotice(replayDeepLink, {
+      targetFound: Boolean(targetMessage),
+      targetTurnNumber,
+      marker: resolvedMarker,
+    });
+
+    setReplayAnchorNotice(notice);
+
+    if (targetMessage) {
+      handleJumpToMessage(targetMessage.turn_number);
+    } else {
+      setActiveTurnNumber(null);
+    }
+
+    debug.log("[Replay] Applied report anchor deep link", {
+      sessionId,
+      focus: replayDeepLink.focus,
+      requestedMessageId: replayDeepLink.messageId,
+      requestedTurnNumber: replayDeepLink.turnNumber,
+      anchorStatus: replayDeepLink.anchorStatus,
+      anchorReason: replayDeepLink.anchorReason,
+      markerType: replayDeepLink.markerType,
+      markerTimestampMs: replayDeepLink.markerTimestampMs,
+      targetFound: Boolean(targetMessage),
+      resolvedTurnNumber: targetMessage?.turn_number ?? null,
+      resolvedMarkerLabel: resolvedMarker?.label ?? null,
+    });
+  }, [handleJumpToMessage, replayData, replayDeepLink, sessionId]);
 
   if (isLoading) {
     return (
@@ -421,6 +649,31 @@ export default function SessionReplayPage() {
           <p className="text-sm text-slate-700">{highlightsUnavailableHint}</p>
         </GlassCard>
       )}
+
+      {replayAnchorNotice && (() => {
+        const noticeClasses = getReplayAnchorNoticeClasses(replayAnchorNotice.tone);
+        return (
+          <GlassCard
+            data-testid="replay-anchor-banner"
+            className={cn("p-4 sm:p-5 border", noticeClasses.card)}
+          >
+            <div className="flex items-start gap-3">
+              <Target className={cn("w-5 h-5 mt-0.5", noticeClasses.icon)} />
+              <div>
+                <p className={cn("text-xs font-semibold", noticeClasses.eyebrow)}>
+                  来自报告的定位请求
+                </p>
+                <h2 className={cn("font-semibold mt-1", noticeClasses.title)}>
+                  {replayAnchorNotice.title}
+                </h2>
+                <p className={cn("text-sm mt-1", noticeClasses.body)}>
+                  {replayAnchorNotice.description}
+                </p>
+              </div>
+            </div>
+          </GlassCard>
+        );
+      })()}
 
       {claimTruth && claimTruthSummary && (
         <GlassCard className={cn("p-4 sm:p-5 border", claimTruthClasses.card)}>
@@ -610,7 +863,11 @@ export default function SessionReplayPage() {
                 <div
                   key={message.id}
                   data-turn-number={message.turn_number}
-                  className="rounded-xl border border-slate-100 p-3 sm:p-4 transition-all duration-300"
+                  className={cn(
+                    "rounded-xl border border-slate-100 p-3 sm:p-4 transition-all duration-300",
+                    activeTurnNumber === message.turn_number
+                      && "border-blue-300 bg-blue-50/70 shadow-[0_0_0_1px_rgba(59,130,246,0.2)]",
+                  )}
                 >
                   <div className="flex items-center justify-between gap-2 mb-2 flex-wrap">
                     <div className="flex items-center gap-2 text-xs text-slate-500 flex-wrap">

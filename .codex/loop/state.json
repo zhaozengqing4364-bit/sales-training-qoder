@@ -1,6 +1,6 @@
 {
   "mode": "stabilize",
-  "current_issue_id": "M004-S02-T02",
+  "current_issue_id": "M004-S02-T03",
   "current_issue_type": "task",
   "current_issue_status": "done",
   "pending_issue_ids": [],
@@ -66,24 +66,24 @@
     "M003-S05-T02",
     "M003-S05-T03",
     "M004-S01-T03",
-    "M004-S02-T02"
+    "M004-S02-T02",
+    "M004-S02-T03"
   ],
   "blocked_issue_ids": [],
   "deferred_issue_ids": [],
   "last_modified_files": [
-    "web/src/lib/api/types.ts",
-    "web/src/app/(user)/practice/[sessionId]/report/page.tsx",
-    "web/src/app/(user)/practice/[sessionId]/report/page.test.tsx",
+    "web/src/app/(user)/practice/[sessionId]/replay/page.tsx",
+    "web/src/app/(user)/practice/[sessionId]/replay/page.test.tsx",
     ".gsd/DECISIONS.md",
-    ".gsd/KNOWLEDGE.md",
+    ".gsd/milestones/M004/slices/S02/tasks/T03-SUMMARY.md",
     ".codex/loop/state.json",
     ".codex/loop/log.md"
   ],
   "last_verification_commands": [
-    "cd web && npm test -- --run 'src/app/(user)/practice/[sessionId]/report/page.test.tsx'"
+    "cd web && npm test -- --run 'src/app/(user)/practice/[sessionId]/replay/page.test.tsx' 'src/app/(user)/practice/[sessionId]/report/page.test.tsx'"
   ],
-  "last_verification_result": "Focused report-page Vitest is green: the current report page now renders replay deep-link CTAs for main_issue/next_goal, keeps degraded anchor copy visible, and routes highlight cards into the existing replay path by turn. A live browser pass on the repo web app remained partial because the local login/runtime setup was not completed inside the time budget.",
-  "last_success_signal": "Learners can now leave the current report page and enter the current replay route with anchor context for the surfaced issue, goal, and key evidence instead of manually searching the transcript.",
+  "last_verification_result": "Focused replay/report Vitest is green: the replay page now consumes the report deep-link query contract, auto-focuses the requested turn when it still exists, and keeps degraded or missing anchor fallback copy visible instead of silently failing. A frontend-only browser stub attempt on localhost reproduced the repo's known cross-origin route-mock/CORS noise against :3444, so it was not counted as product proof.",
+  "last_success_signal": "Learners can now leave the report and land inside the current replay route on the requested turn or an explicit degraded fallback state instead of manually searching the transcript.",
   "last_growth_scan": null,
-  "next_action": "Continue M004/S02 with T03 so the replay page consumes the report deep-link query contract and lands on the requested turn/marker while keeping degraded fallback copy visible."
+  "next_action": "Close out M004/S02 slice or continue with the next scheduled unit now that replay anchor landing is complete."
 }

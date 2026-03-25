@@ -1267,3 +1267,20 @@ Append one entry per iteration:
   verification results: focused report-page Vitest passed; local browser verification on the repo web server proved the route exists but stopped short of a fully authenticated live report→replay proof because login/runtime setup did not finish within this task's time budget.
   success signal status: the current report page can now hand off the surfaced issue, next goal, and key evidence into the current replay route instead of forcing manual transcript search.
   rollback note: if T03 changes the landing semantics, keep the query-param handoff tied to replay anchors/turns from the existing replay contract rather than introducing a separate report-only resolver.
+
+- time: 2026-03-26T01:14:18+08:00
+  mode: stabilize
+  item id: M004-S02-T03
+  files changed:
+    - web/src/app/(user)/practice/[sessionId]/replay/page.tsx
+    - web/src/app/(user)/practice/[sessionId]/replay/page.test.tsx
+    - .gsd/DECISIONS.md
+    - .gsd/milestones/M004/slices/S02/tasks/T03-SUMMARY.md
+    - .codex/loop/state.json
+    - .codex/loop/log.md
+  summary: Replay now honors report deep links, auto-focuses the requested turn, and keeps degraded anchor fallback visible.
+  verification commands:
+    - cd web && npm test -- --run 'src/app/(user)/practice/[sessionId]/replay/page.test.tsx' 'src/app/(user)/practice/[sessionId]/report/page.test.tsx'
+  verification results: focused replay/report Vitest passed; a frontend-only browser stub attempt on localhost reproduced the repo's known cross-origin route-mock/CORS noise against :3444, so browser proof was not counted as product verification
+  success signal status: report deep links now land inside the current replay route on the requested turn or an explicit degraded fallback state instead of forcing manual transcript search
+  rollback note: if a later slice changes the report→replay handoff, keep the replay-side banner plus highlighted-turn behavior on the existing route unless a new tested landing contract replaces D066
