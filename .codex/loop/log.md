@@ -1035,3 +1035,24 @@ Append one entry per iteration:
   verification results: passed; focused backend pytest finished green with 18 passing tests, and all touched backend files were clean in LSP diagnostics.
   success signal status: Persona admin/runtime work now has one snapshot-ready customer-pressure shape and one explicit audit signal for rows still stored in legacy flat form.
   rollback note: if follow-up work revisits Persona pressure storage, keep the nested customer_pressure model canonical and continue using pressure_model_legacy_only only for raw rows that truly lack the nested snapshot.
+
+- time: 2026-03-25T11:07:30+08:00
+  mode: stabilize
+  item id: M003-S02
+  files changed:
+    - .gsd/REQUIREMENTS.md
+    - .gsd/PROJECT.md
+    - .gsd/milestones/M003/slices/S02/S02-SUMMARY.md
+    - .gsd/milestones/M003/slices/S02/S02-UAT.md
+    - .gsd/milestones/M003/M003-ROADMAP.md
+    - .codex/loop/state.json
+    - .codex/loop/log.md
+  summary: Closed M003/S02 by rerunning the full planned slice gate, adding an extra snapshot-persistence sanity pass, updating R010 and project continuity, and recording the slice summary/UAT around the frozen Persona pressure contract.
+  verification commands:
+    - cd backend && /usr/bin/time -p venv/bin/python -m pytest -c pyproject.toml tests/unit/test_persona_policy.py tests/integration/test_persona_api.py
+    - cd backend && /usr/bin/time -p venv/bin/python -m pytest -c pyproject.toml tests/unit/test_voice_instruction_compiler.py tests/integration/test_knowledge_flow.py
+    - cd web && /usr/bin/time -p npm test -- --run 'src/app/admin/personas/[id]/page.test.tsx'
+    - cd backend && /usr/bin/time -p venv/bin/python -m pytest -c pyproject.toml tests/integration/test_voice_runtime_session_snapshot.py
+  verification results: passed; the planned backend persona-policy/admin API gate passed with 18 tests, the planned backend runtime-snapshot gate passed with 12 tests, the planned web Persona detail gate matched the intended file and passed with 2 tests, and the extra snapshot-persistence sanity file passed with 8 tests proving the frozen baseline survives later detail/report/replay reads and runtime-metrics appends.
+  success signal status: M003/S02 is now closed with one structured customer_pressure contract on the current admin Persona surfaces and one auditable per-session frozen pressure model in PracticeSession.voice_policy_snapshot.
+  rollback note: if downstream work revisits Persona realism, keep the nested customer_pressure model, the source.customer_pressure_source snapshot tag, and the current policy-health audit together; splitting those seams would bring back prompt-only drift.

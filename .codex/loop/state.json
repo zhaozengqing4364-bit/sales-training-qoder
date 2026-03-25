@@ -1,7 +1,7 @@
 {
   "mode": "stabilize",
-  "current_issue_id": "M003-S02-T01",
-  "current_issue_type": "task",
+  "current_issue_id": "M003-S02",
+  "current_issue_type": "slice",
   "current_issue_status": "done",
   "pending_issue_ids": [],
   "completed_issue_ids": [
@@ -51,26 +51,30 @@
     "M003-S01-T02",
     "M003-S01-T03",
     "M003-S01",
-    "M003-S02-T01"
+    "M003-S02-T01",
+    "M003-S02-T02",
+    "M003-S02-T03",
+    "M003-S02"
   ],
   "blocked_issue_ids": [],
   "deferred_issue_ids": [],
   "last_modified_files": [
-    "backend/src/agent/services/persona_policy.py",
-    "backend/src/agent/services/persona_service.py",
-    "backend/tests/unit/test_persona_policy.py",
-    "backend/tests/integration/test_persona_api.py",
-    ".gsd/DECISIONS.md",
-    ".gsd/KNOWLEDGE.md",
-    ".gsd/milestones/M003/slices/S02/tasks/T01-SUMMARY.md",
-    ".gsd/milestones/M003/slices/S02/S02-PLAN.md"
+    ".gsd/REQUIREMENTS.md",
+    ".gsd/PROJECT.md",
+    ".gsd/milestones/M003/slices/S02/S02-SUMMARY.md",
+    ".gsd/milestones/M003/slices/S02/S02-UAT.md",
+    ".gsd/milestones/M003/M003-ROADMAP.md",
+    ".codex/loop/state.json",
+    ".codex/loop/log.md"
   ],
   "last_verification_commands": [
     "cd backend && /usr/bin/time -p venv/bin/python -m pytest -c pyproject.toml tests/unit/test_persona_policy.py tests/integration/test_persona_api.py",
-    "lsp diagnostics: backend/src/agent/services/persona_policy.py, backend/src/agent/services/persona_service.py, backend/tests/unit/test_persona_policy.py, backend/tests/integration/test_persona_api.py"
+    "cd backend && /usr/bin/time -p venv/bin/python -m pytest -c pyproject.toml tests/unit/test_voice_instruction_compiler.py tests/integration/test_knowledge_flow.py",
+    "cd web && /usr/bin/time -p npm test -- --run 'src/app/admin/personas/[id]/page.test.tsx'",
+    "cd backend && /usr/bin/time -p venv/bin/python -m pytest -c pyproject.toml tests/integration/test_voice_runtime_session_snapshot.py"
   ],
-  "last_verification_result": "Fresh T01 verification passed. The focused backend pytest gate for persona policy normalization and admin Persona API behavior exited 0 with 18 passing tests, and LSP diagnostics on the touched backend files returned no diagnostics.",
-  "last_success_signal": "Persona policy now stores a canonical nested customer-pressure model while admin GET/audit surfaces still distinguish raw legacy rows through pressure_model_legacy_only.",
+  "last_verification_result": "Fresh S02 slice verification passed. The planned backend persona-policy/admin API gate passed with 18 tests, the planned backend runtime-snapshot gate passed with 12 tests, the planned web Persona detail gate passed with 1 matched file / 2 tests, and the extra snapshot-persistence sanity file passed with 8 tests proving the frozen voice-policy baseline stays stable across later detail/report/replay reads and runtime-metrics appends.",
+  "last_success_signal": "Persona pressure behavior is now a structured customer_pressure contract on the current admin Persona surfaces and each new sales session freezes one auditable pressure model into PracticeSession.voice_policy_snapshot.",
   "last_growth_scan": null,
-  "next_action": "Proceed to M003/S02/T02."
+  "next_action": "Proceed to M003/S03."
 }
