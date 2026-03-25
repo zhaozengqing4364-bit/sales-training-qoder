@@ -50,7 +50,7 @@
 
 ## Slices
 
-- [ ] **S01: 真实入口 inventory 与 current knowledge 真值线** `risk:high` `depends:[]`
+- [x] **S01: 真实入口 inventory 与 current knowledge 真值线** `risk:high` `depends:[]`
   > After this: The current admin Persona/knowledge → `POST /api/v1/practice/sessions` → `web/src/app/(user)/practice/[sessionId]/page.tsx` → knowledge-check / report / replay chain and live knowledge status vocabulary are locked against real code, so downstream slices cannot invent parallel surfaces or fake status names.
 
 - [ ] **S02: Persona 压力模型 snapshot 化** `risk:high` `depends:[S01]`

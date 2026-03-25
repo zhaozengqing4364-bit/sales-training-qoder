@@ -992,3 +992,26 @@ Append one entry per iteration:
   verification results: passed; both T03 task checks and the full S01 slice verification set exited 0 after the docs were updated to name the current replay route/modules explicitly.
   success signal status: M003 S01 now forces later proof onto the live admin -> session -> practice -> knowledge-check/report/replay chain, and replay is documented against its real conversation-api ownership instead of an assumed practice.py seam.
   rollback note: If later M003 planning changes the proof boundary again, keep replay anchored to `/api/v1/sessions/{id}/replay` plus `ReplayService`/`SessionEvidenceService`, and keep the inventory/spike blocker explicit whenever a required route cannot be found.
+
+- time: 2026-03-25T10:13:00+08:00
+  mode: stabilize
+  item id: M003-S01
+  files changed:
+    - .gsd/milestones/M003/slices/S01/tasks/T03-VERIFY.json
+    - .gsd/REQUIREMENTS.md
+    - .gsd/PROJECT.md
+    - .gsd/milestones/M003/slices/S01/S01-SUMMARY.md
+    - .gsd/milestones/M003/slices/S01/S01-UAT.md
+    - .gsd/milestones/M003/M003-ROADMAP.md
+    - .codex/loop/state.json
+    - .codex/loop/log.md
+  summary: Closed M003/S01 by refreshing the stale T03 VERIFY artifact that still replayed bare Next.js shell paths, rerunning the full slice gate plus observability grep, updating R010/project continuity, and recording the slice summary/UAT on the locked real-entry-chain proof boundary.
+  verification commands:
+    - test -f backend/src/agent/services/persona_policy.py && test -f backend/src/sales_bot/services/voice_runtime_policy.py && test -f backend/src/sales_bot/services/voice_instruction_compiler.py && test -f backend/src/common/knowledge/kb_lock_guard.py && test -f backend/src/common/conversation/runtime_diagnostics.py && test -f backend/src/common/conversation/api.py && test -f backend/src/common/conversation/replay.py && test -f backend/src/sales_bot/websocket/components/stepfun_knowledge_helpers.py && test -f backend/src/sales_bot/websocket/components/stepfun_internal_knowledge_searcher.py && test -f backend/src/common/api/practice.py && test -f backend/src/common/conversation/session_evidence.py && test -f web/src/app/admin/personas/\[id\]/page.tsx && test -f web/src/app/admin/knowledge/\[id\]/page.tsx && test -f web/src/app/\(user\)/practice/\[sessionId\]/page.tsx && test -f web/src/app/\(user\)/practice/\[sessionId\]/report/page.tsx && test -f web/src/app/\(user\)/practice/\[sessionId\]/replay/page.tsx
+    - rg -n "no_knowledge_base|disabled|not_triggered|kb_not_ready|search_failed|miss|hit|blocked_no_kb|blocked_not_ready|blocked_search_failed|blocked_empty" backend/src/common/conversation/runtime_diagnostics.py backend/src/common/knowledge/kb_lock_guard.py backend/src/sales_bot/websocket/components/stepfun_internal_knowledge_searcher.py .gsd/milestones/M003/M003-ROADMAP.md .gsd/milestones/M003/slices/S01/S01-PLAN.md .gsd/milestones/M003/slices/S01/tasks/T02-PLAN.md
+    - rg -n "Silence|Conda|\.env|lockfile|inventory/spike|current admin|current product route" .gsd/milestones/M003/M003-ROADMAP.md .gsd/milestones/M003/slices/S01/S01-PLAN.md .gsd/milestones/M003/slices/S01/tasks/T01-PLAN.md .gsd/milestones/M003/slices/S01/tasks/T03-PLAN.md
+    - rg -n "focused backend|focused web|live UAT|/api/v1/practice/sessions/\{id\}/report|/api/v1/sessions/\{id\}/replay|common/conversation/api.py|common/conversation/replay.py|SessionEvidenceService" .gsd/milestones/M003/M003-ROADMAP.md .gsd/milestones/M003/slices/S01/S01-PLAN.md .gsd/milestones/M003/slices/S01/tasks/T03-PLAN.md
+    - rg -n "knowledge-check\.status|knowledge-check\.summary|runtime_metrics\.knowledge_retrieval|kb_lock_status|kb_lock_last_status|last_query|recent_queries|voice_policy_snapshot_ref" backend/src/common/conversation/runtime_diagnostics.py backend/src/common/api/practice.py .gsd/milestones/M003/M003-ROADMAP.md .gsd/milestones/M003/slices/S01/S01-PLAN.md
+  verification results: passed; the full slice gate and the observability-surface grep all exited 0, and the refreshed T03-VERIFY artifact removed the stale shell syntax failure from bare `app/(user)` commands.
+  success signal status: M003/S01 is now complete with one real admin->practice proof boundary, one locked seven-status knowledge contract, and verifier artifacts that match the hardened shell-safe command form.
+  rollback note: If a later M003 gate trips on literal Next.js paths again, inspect the relevant `T##-VERIFY.json` before changing slice docs; keep replay bound to the conversation API/replay service seam and keep environment/tooling work out of M003 unless the milestone is explicitly re-scoped.
