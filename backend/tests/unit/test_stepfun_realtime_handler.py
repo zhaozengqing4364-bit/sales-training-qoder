@@ -1785,6 +1785,13 @@ async def test_run_realtime_feedback_emits_canonical_sales_score_and_action_card
         },
         "suggestions": ["补上案例、数据或ROI证据，让价值主张更可信。"],
         "stage_name": "需求挖掘",
+        "claim_truth": {
+            "status": "evidence_pending",
+            "label": "证据待补齐",
+            "source": "objection_ledger",
+            "reason": "open_objection_ledger",
+            "closure_state": "open",
+        },
     }
     assert action_card["data"] == expected_action_card
 
@@ -1916,6 +1923,13 @@ async def test_run_realtime_feedback_passes_rich_stage_and_raw_score_context_to_
         },
         "suggestions": ["继续回应客户顾虑。"],
         "stage_name": "促成成交",
+        "claim_truth": {
+            "status": "weak_evidence",
+            "label": "证据偏弱",
+            "source": "score_snapshot",
+            "reason": "low_evidence_score",
+            "evidence_score": 74.0,
+        },
     }
     assert "dimensions" not in score_update["data"]
 

@@ -38,7 +38,7 @@ from common.conversation.runtime_diagnostics import (
     extract_voice_policy_snapshot,
 )
 from common.conversation.session_evidence import SessionEvidenceService
-from common.db.models import PracticeSession, Scenario, User
+from common.db.models import PracticeSession, Scenario, SessionStatus, User
 from common.db.schemas import (
     SessionCreate,
     SessionDetail,
@@ -1413,10 +1413,42 @@ async def get_session_knowledge_check(
     effective_tool_types = [
         str(tool.get("type") or "") for tool in preview_tools if isinstance(tool, dict)
     ]
+
+    live_claim_truth = None
+    session_info = get_session_manager().sessions.get(session_id)
+    live_handler = session_info.handler if session_info is not None else None
+    if live_handler is not None:
+        live_claim_truth = deepcopy(getattr(live_handler, "_latest_claim_truth", None))
+
+    projection_effectiveness_snapshot = None
+    resolved_scenario_type = SessionEvidenceService.resolve_scenario_type(session)
+    if resolved_scenario_type == "sales" and session.status == SessionStatus.COMPLETED.value:
+        projection_result = await SessionEvidenceService(db).get_projection(
+            session_id=session_id,
+            session=session,
+            scenario_type=resolved_scenario_type,
+        )
+        if projection_result.is_success and isinstance(
+            projection_result.value.effectiveness_snapshot,
+            dict,
+        ):
+            projection_effectiveness_snapshot = deepcopy(
+                projection_result.value.effectiveness_snapshot
+            )
+        elif not projection_result.is_success:
+            logger.warning(
+                "practice_session_knowledge_check_projection_unavailable",
+                session_id=session_id,
+                scenario_type=resolved_scenario_type,
+                projection_error=projection_result.fallback,
+            )
+
     diagnostics = build_session_runtime_diagnostics(
         session=session,
         snapshot=snapshot,
         effective_tool_types=effective_tool_types,
+        live_claim_truth=live_claim_truth,
+        projection_effectiveness_snapshot=projection_effectiveness_snapshot,
     )
 
     return success_response(diagnostics)

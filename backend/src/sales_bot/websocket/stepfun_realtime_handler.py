@@ -41,6 +41,7 @@ from common.effectiveness import (
     build_sales_rollup_scores,
     evaluate_effectiveness_snapshot,
     evaluate_pass_flags,
+    resolve_sales_report_alignment,
 )
 from common.db.session import AsyncSessionLocal
 from common.db.session_lifecycle import (
@@ -262,6 +263,7 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
             self._realtime_scoring_runtime_config
         )
         self._latest_score_snapshot: dict[str, Any] | None = None
+        self._latest_claim_truth: dict[str, Any] | None = None
         self._latest_action_card: dict[str, Any] | None = None
         self._objection_ledger: dict[str, Any] | None = None
         self._feedback_arbiter = RealtimeFeedbackArbiter()
@@ -520,6 +522,8 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
             runtime_state["latest_score_snapshot"] = copy.deepcopy(
                 normalized_score_snapshot
             )
+        if isinstance(self._latest_claim_truth, dict):
+            runtime_state["latest_claim_truth"] = copy.deepcopy(self._latest_claim_truth)
         normalized_objection_ledger = normalize_objection_ledger(self._objection_ledger)
         if normalized_objection_ledger is not None:
             runtime_state["objection_ledger"] = copy.deepcopy(
@@ -556,6 +560,12 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
         self._last_emitted_stage = runtime_state.get("last_emitted_stage")
         latest_score_snapshot = runtime_state.get("latest_score_snapshot")
         self._latest_score_snapshot = normalize_score_snapshot(latest_score_snapshot)
+        latest_claim_truth = runtime_state.get("latest_claim_truth")
+        self._latest_claim_truth = (
+            copy.deepcopy(latest_claim_truth)
+            if isinstance(latest_claim_truth, dict)
+            else None
+        )
         self._latest_action_card = None
         self._objection_ledger = normalize_objection_ledger(
             runtime_state.get("objection_ledger")
@@ -1871,21 +1881,25 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
         dimension_scores: dict[str, float],
         suggestions: list[str],
         stage_name: str = "",
+        claim_truth: dict[str, Any] | None = None,
     ) -> None:
+        payload_data: dict[str, Any] = {
+            "session_id": self.session_id,
+            "turn_count": turn_number,
+            "overall_score": overall_score,
+            "dimension_scores": dimension_scores,
+            "suggestions": suggestions,
+            "stage_name": stage_name,
+        }
+        if isinstance(claim_truth, dict):
+            payload_data["claim_truth"] = copy.deepcopy(claim_truth)
         await self.manager.send_json(
             self.websocket,
             {
                 "type": "score_update",
                 "timestamp": datetime.now(UTC).isoformat(),
                 "trace_id": get_trace_id(),
-                "data": {
-                    "session_id": self.session_id,
-                    "turn_count": turn_number,
-                    "overall_score": overall_score,
-                    "dimension_scores": dimension_scores,
-                    "suggestions": suggestions,
-                    "stage_name": stage_name,
-                },
+                "data": payload_data,
             },
         )
 
@@ -1960,6 +1974,7 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
                 detections_for_card = [item for item in detections if isinstance(item, dict)]
                 analysis_data["fuzzy_words"] = detections
 
+        score_update_payload: dict[str, Any] | None = None
         if self._realtime_scoring_enabled:
             score_result = await self._realtime_scoring_capability.execute(
                 self._feedback_context, text
@@ -2023,13 +2038,13 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
                 score_context_for_arbiter["dimension_scores"] = dict(dimension_scores)
                 score_context_for_arbiter["suggestions"] = list(suggestions)
                 score_context_for_arbiter["stage_name"] = score_snapshot["stage_name"]
-                await self._send_score_update(
-                    turn_number=turn_number,
-                    overall_score=overall_score,
-                    dimension_scores=dimension_scores,
-                    suggestions=suggestions,
-                    stage_name=score_snapshot["stage_name"],
-                )
+                score_update_payload = {
+                    "turn_number": turn_number,
+                    "overall_score": overall_score,
+                    "dimension_scores": dimension_scores,
+                    "suggestions": suggestions,
+                    "stage_name": score_snapshot["stage_name"],
+                }
                 pass_flags_for_card = evaluate_pass_flags(
                     build_sales_effectiveness_metrics(
                         overall_score=overall_score,
@@ -2064,6 +2079,31 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
             stage_context=stage_context_for_arbiter,
             score_context=score_context_for_arbiter,
         )
+
+        live_claim_truth: dict[str, Any] | None = None
+        live_score_snapshot = analysis_data.get("score_snapshot")
+        if isinstance(live_score_snapshot, dict) or resolved_objection_ledger is not None:
+            live_alignment = resolve_sales_report_alignment(
+                sales_stage=sales_stage,
+                score_snapshot=(
+                    live_score_snapshot if isinstance(live_score_snapshot, dict) else None
+                ),
+                objection_ledger=resolved_objection_ledger,
+            )
+            aligned_claim_truth = live_alignment.get("claim_truth")
+            if isinstance(aligned_claim_truth, dict):
+                live_claim_truth = copy.deepcopy(aligned_claim_truth)
+                self._latest_claim_truth = copy.deepcopy(aligned_claim_truth)
+
+        if score_update_payload is not None:
+            await self._send_score_update(
+                turn_number=int(score_update_payload["turn_number"]),
+                overall_score=float(score_update_payload["overall_score"]),
+                dimension_scores=dict(score_update_payload["dimension_scores"]),
+                suggestions=list(score_update_payload["suggestions"]),
+                stage_name=str(score_update_payload["stage_name"]),
+                claim_truth=live_claim_truth,
+            )
 
         decision = self._feedback_arbiter.decide(
             turn_number=turn_number,

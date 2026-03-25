@@ -37,6 +37,25 @@ class KbLockDecision:
     phase_breakdown: dict[str, Any] | None = None
 
 
+KB_LOCK_CHAIN_FAILURE_STATUSES = {
+    "blocked_no_kb",
+    "blocked_not_ready",
+    "blocked_search_failed",
+    "blocked_search_timeout",
+    "coach_no_kb",
+    "coach_not_ready",
+    "coach_search_failed",
+    "coach_search_timeout",
+}
+
+
+def is_kb_lock_chain_failure_status(status: str | None) -> bool:
+    """Return True when KB-lock status reflects infra/setup failure, not weak evidence."""
+    if not isinstance(status, str):
+        return False
+    return status.strip().lower() in KB_LOCK_CHAIN_FAILURE_STATUSES
+
+
 def is_kb_lock_required(tool_policy: dict[str, Any] | None) -> bool:
     """Return True when strict KB grounding lock is enabled."""
     if not isinstance(tool_policy, dict):

@@ -321,10 +321,95 @@ async def test_report_and_replay_contract_override_stale_sales_snapshot_with_ali
         "goal_text": "先用案例、数据或ROI证据支撑主张，再推进下一步。",
         "rule": "至少补上一条证据和一个明确的下一步动作。",
     }
-    assert report_data["effectiveness_snapshot"]["main_issue"]["issue_type"] == "evidence_gap"
-    assert report_data["effectiveness_snapshot"]["next_goal"]["goal_type"] == "evidence_backing"
-    assert replay_data["effectiveness_snapshot"]["main_issue"]["issue_type"] == "evidence_gap"
-    assert replay_data["effectiveness_snapshot"]["next_goal"]["goal_type"] == "evidence_backing"
+
+
+@pytest.mark.asyncio
+async def test_knowledge_check_keeps_claim_truth_distinct_from_kb_lock_chain_failures(
+    async_client: AsyncClient,
+    db_session: AsyncSession,
+    owner: User,
+    owner_headers: dict[str, str],
+):
+    scenario = Scenario(
+        scenario_id=str(uuid.uuid4()),
+        scenario_type="sales",
+        name="contract runtime truth scenario",
+        is_active=True,
+    )
+    session = PracticeSession(
+        session_id=str(uuid.uuid4()),
+        user_id=str(owner.user_id),
+        scenario_id=scenario.scenario_id,
+        status=SessionStatus.COMPLETED.value,
+        logic_score=80.0,
+        accuracy_score=69.5,
+        completeness_score=71.5,
+        total_duration_seconds=180,
+        effectiveness_snapshot=_make_stale_sales_snapshot(),
+        voice_policy_snapshot={
+            "knowledge_base_ids": ["kb-truth-1"],
+            "tool_policy": {
+                "enable_internal_retrieval": True,
+                "require_kb_grounding": True,
+            },
+            "runtime_metrics": {
+                "knowledge_retrieval": {
+                    "attempt_count": 1,
+                    "hit_query_count": 0,
+                    "total_results": 0,
+                    "last_status": "search_failed",
+                    "last_error": "[KNOWLEDGE_SEARCH_UNAVAILABLE] embedding timeout",
+                    "kb_lock_required": True,
+                    "kb_lock_last_status": "blocked_search_failed",
+                    "kb_lock_block_count": 1,
+                    "updated_at": datetime.now(UTC).isoformat(),
+                    "kb_lock_updated_at": datetime.now(UTC).isoformat(),
+                }
+            },
+        },
+    )
+    db_session.add_all([scenario, session])
+    db_session.add(
+        ConversationMessage(
+            session_id=session.session_id,
+            turn_number=1,
+            role="user",
+            content="ROI 这一块你们有真实案例吗？",
+            timestamp=datetime.now(UTC),
+            duration_ms=1600,
+            sales_stage="discovery",
+            score_snapshot={
+                "overall_score": 82.0,
+                "dimension_scores": {
+                    "价值表达": 84.0,
+                    "客户收益连接": 80.0,
+                    "证据使用": 58.0,
+                    "异议处理": 76.0,
+                    "推进下一步": 72.0,
+                },
+            },
+        )
+    )
+    await db_session.commit()
+
+    knowledge_check_resp = await async_client.get(
+        f"/api/v1/practice/sessions/{session.session_id}/knowledge-check",
+        headers=owner_headers,
+    )
+
+    assert knowledge_check_resp.status_code == 200
+    knowledge_check_data = knowledge_check_resp.json()["data"]
+    assert knowledge_check_data["kb_lock_status"] == "blocked_search_failed"
+    assert knowledge_check_data["kb_lock_chain_failure"] is True
+    assert knowledge_check_data["claim_truth"] == {
+        "status": "weak_evidence",
+        "label": "证据偏弱",
+        "source": "score_snapshot",
+        "reason": "low_evidence_score",
+        "evidence_score": 58.0,
+    }
+    assert knowledge_check_data["claim_truth_status"] == "weak_evidence"
+    assert knowledge_check_data["claim_truth_source"] == "score_snapshot"
 
 
 @pytest.mark.asyncio

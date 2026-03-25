@@ -6,6 +6,7 @@ import os
 from typing import Any
 
 from common.db.models import PracticeSession
+from common.knowledge.kb_lock_guard import is_kb_lock_chain_failure_status
 
 
 DEFAULT_KB_LOCK_TIMEOUT_BUDGET_MS = 2200
@@ -17,11 +18,35 @@ def extract_voice_policy_snapshot(session: PracticeSession) -> dict[str, Any]:
     return snapshot if isinstance(snapshot, dict) else {}
 
 
+def _normalize_claim_truth_payload(value: Any) -> dict[str, Any] | None:
+    if not isinstance(value, dict):
+        return None
+    status = value.get("status")
+    source = value.get("source")
+    if not isinstance(status, str) or not status.strip():
+        return None
+    if not isinstance(source, str) or not source.strip():
+        return None
+
+    payload = dict(value)
+    payload["status"] = status.strip()
+    payload["source"] = source.strip()
+    evidence_score = payload.get("evidence_score")
+    try:
+        if evidence_score is not None:
+            payload["evidence_score"] = round(float(evidence_score), 2)
+    except (TypeError, ValueError):
+        payload.pop("evidence_score", None)
+    return payload
+
+
 def build_session_runtime_diagnostics(
     *,
     session: PracticeSession,
     snapshot: dict[str, Any] | None,
     effective_tool_types: list[str] | None = None,
+    live_claim_truth: dict[str, Any] | None = None,
+    projection_effectiveness_snapshot: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     snapshot = snapshot if isinstance(snapshot, dict) else {}
     tool_policy = snapshot.get("tool_policy")
@@ -84,6 +109,22 @@ def build_session_runtime_diagnostics(
     )
     upstream_unstable = bool(knowledge_metrics.get("upstream_unstable", False))
 
+    session_effectiveness_snapshot = getattr(session, "effectiveness_snapshot", None)
+    if not isinstance(session_effectiveness_snapshot, dict):
+        session_effectiveness_snapshot = {}
+    projection_effectiveness_snapshot = (
+        projection_effectiveness_snapshot
+        if isinstance(projection_effectiveness_snapshot, dict)
+        else {}
+    )
+    claim_truth = (
+        _normalize_claim_truth_payload(live_claim_truth)
+        or _normalize_claim_truth_payload(
+            projection_effectiveness_snapshot.get("claim_truth")
+        )
+        or _normalize_claim_truth_payload(session_effectiveness_snapshot.get("claim_truth"))
+    )
+
     kb_lock_timeout_budget_ms = _bounded_int_env(
         "STEPFUN_KB_LOCK_DECISION_TIMEOUT_MS",
         DEFAULT_KB_LOCK_TIMEOUT_BUDGET_MS,
@@ -111,6 +152,7 @@ def build_session_runtime_diagnostics(
             kb_lock_status = "blocked_search_failed"
         elif attempt_count > 0 and hit_query_count <= 0:
             kb_lock_status = "blocked_empty"
+    kb_lock_chain_failure = is_kb_lock_chain_failure_status(kb_lock_status)
 
     if not normalized_kb_ids:
         status = "no_knowledge_base"
@@ -169,12 +211,20 @@ def build_session_runtime_diagnostics(
         "updated_at": knowledge_metrics.get("updated_at"),
         "kb_lock_required": kb_lock_required,
         "kb_lock_status": kb_lock_status,
+        "kb_lock_chain_failure": kb_lock_chain_failure,
         "kb_lock_block_count": kb_lock_block_count,
         "kb_lock_last_status": kb_lock_last_status,
         "kb_lock_updated_at": knowledge_metrics.get("kb_lock_updated_at"),
         "kb_lock_timeout_budget_ms": kb_lock_timeout_budget_ms,
         "kb_lock_min_pass_score": round(kb_lock_min_pass_score, 4),
         "kb_lock_min_pass_score_keyword": round(kb_lock_min_pass_score_keyword, 4),
+        "claim_truth": claim_truth,
+        "claim_truth_status": (
+            str(claim_truth.get("status")) if isinstance(claim_truth, dict) else None
+        ),
+        "claim_truth_source": (
+            str(claim_truth.get("source")) if isinstance(claim_truth, dict) else None
+        ),
         "last_decision_id": last_decision_id,
         "last_decision_duration_ms": round(max(0.0, last_decision_duration_ms), 1),
         "last_decision_phase_breakdown": last_decision_phase_breakdown,

@@ -26,7 +26,7 @@ Reuse the current kb-lock/runtime diagnostics plus evaluator/session-evidence/re
   - Files: `backend/src/common/effectiveness/evaluator.py`, `backend/src/common/conversation/session_evidence.py`, `backend/tests/unit/test_effectiveness_sales_report_alignment.py`, `backend/tests/unit/test_session_evidence_service.py`
   - Verify: cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_effectiveness_sales_report_alignment.py tests/unit/test_session_evidence_service.py
 
-- [ ] **T02: Expose the claim-truth contract on the current runtime diagnostics path** `est:90m`
+- [x] **T02: Expose the claim-truth contract on the current runtime diagnostics path** `est:90m`
   Wire the truth contract into the runtime and diagnostics path so objection handling can distinguish chain failure from weak or unsupported evidence. Reuse current kb-lock/runtime diagnostic helpers and StepFun handler surfaces rather than inventing another debug endpoint.
   - Files: `backend/src/common/knowledge/kb_lock_guard.py`, `backend/src/sales_bot/websocket/stepfun_realtime_handler.py`, `backend/src/common/conversation/runtime_diagnostics.py`, `backend/src/common/api/practice.py`, `backend/tests/unit/test_stepfun_realtime_handler.py`
   - Verify: cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_stepfun_realtime_handler.py tests/contract/test_practice_evidence_contract.py
