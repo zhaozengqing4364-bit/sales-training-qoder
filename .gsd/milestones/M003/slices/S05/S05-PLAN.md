@@ -26,12 +26,12 @@ Exercise the real admin config → practice → report/replay path, not helpers 
   - Files: `backend/tests/unit/test_stepfun_realtime_handler.py`, `backend/tests/unit/test_stepfun_knowledge_helpers.py`, `backend/tests/integration/test_knowledge_flow.py`, `backend/tests/contract/test_practice_evidence_contract.py`
   - Verify: cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_stepfun_realtime_handler.py tests/unit/test_stepfun_knowledge_helpers.py tests/integration/test_knowledge_flow.py tests/contract/test_practice_evidence_contract.py
 
-- [ ] **T02: Capture one live objection-heavy same-session evidence pack on current product surfaces** `est:2h`
+- [x] **T02: Capture one live objection-heavy same-session evidence pack on current product surfaces** `est:2h`
   Run one real admin-configured Persona/knowledge path through the current practice page and capture the same-session evidence pack: runtime behavior, knowledge-check state, report/replay review, and any degraded or fallback signals. Keep host/runtime setup aligned with current local proof rules.
   - Files: `.gsd/milestones/M003/slices/S05/S05-UAT.md`
   - Verify: Manual review — file exists and is non-empty
 
-- [ ] **T03: Write the final stability and acceptance guardrails for M003** `est:45m`
+- [x] **T03: Write the final stability and acceptance guardrails for M003** `est:45m`
   Document the stability and acceptance guardrails for M003 on the same business chain: what counts as acceptable latency, which degraded states are still shippable, and which failures block release. Reuse current support/report/runtime evidence, not a separate checklist tool.
   - Files: `.gsd/milestones/M003/slices/S05/tasks/T03-PLAN.md`
   - Verify: rg -n "latency|degraded|fallback|block" .gsd/milestones/M003/slices/S05/tasks/T03-PLAN.md

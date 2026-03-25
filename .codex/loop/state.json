@@ -1,6 +1,6 @@
 {
   "mode": "stabilize",
-  "current_issue_id": "M003-S05-T01",
+  "current_issue_id": "M003-S05-T03",
   "current_issue_type": "task",
   "current_issue_status": "done",
   "pending_issue_ids": [],
@@ -62,23 +62,25 @@
     "M003-S04-T02",
     "M003-S04-T03",
     "M003-S04",
-    "M003-S05-T01"
+    "M003-S05-T01",
+    "M003-S05-T02",
+    "M003-S05-T03"
   ],
   "blocked_issue_ids": [],
   "deferred_issue_ids": [],
   "last_modified_files": [
-    "backend/tests/unit/test_stepfun_realtime_handler.py",
-    "backend/tests/unit/test_stepfun_knowledge_helpers.py",
-    "backend/tests/integration/test_knowledge_flow.py",
-    "backend/tests/contract/test_practice_evidence_contract.py",
+    ".gsd/milestones/M003/slices/S05/tasks/T03-PLAN.md",
+    ".gsd/DECISIONS.md",
     ".codex/loop/state.json",
     ".codex/loop/log.md"
   ],
   "last_verification_commands": [
-    "cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_stepfun_realtime_handler.py tests/unit/test_stepfun_knowledge_helpers.py tests/integration/test_knowledge_flow.py tests/contract/test_practice_evidence_contract.py"
+    "cd backend && /usr/bin/time -p venv/bin/python -m pytest -c pyproject.toml tests/unit/test_stepfun_realtime_handler.py tests/unit/test_stepfun_knowledge_helpers.py tests/integration/test_knowledge_flow.py tests/contract/test_practice_evidence_contract.py",
+    "/usr/bin/time -p sh -c 'test -s .gsd/milestones/M003/slices/S05/S05-UAT.md && test -f .artifacts/browser/2026-03-25T07-48-56-629Z-session/m003-s05-t02.trace.zip && test -f .artifacts/browser/2026-03-25T07-48-56-629Z-session/s05-timeline.json && test -d .artifacts/browser/2026-03-25T08-32-14-317Z-s05-report && test -d .artifacts/browser/2026-03-25T08-31-00-679Z-s05-replay'",
+    "rg -n \"latency|degraded|fallback|block\" .gsd/milestones/M003/slices/S05/tasks/T03-PLAN.md"
   ],
-  "last_verification_result": "Passed the exact T01 backend gate: StepFun handler/helper, knowledge-flow integration, and practice-evidence contract suites are 90/90 green, including new competitor, implementation-risk, verified-evidence, and search-failed assertions.",
-  "last_success_signal": "M003-S05-T01 now pins objection-heavy regressions on the live sales runtime routes: ROI, price, competitor, implementation-risk, weak-evidence, verified-evidence, and search-failed paths all have automated proof.",
+  "last_verification_result": "Fresh slice-close verification passed: the objection-heavy backend regression suite is still green (90 tests), the live S05 UAT artifacts remain on disk, and the rewritten T03 guardrail document now names the measured latency band, explicit fallback/degraded states, and the replay-blocked-while-scoring release boundary.",
+  "last_success_signal": "M003/S05 now has a written acceptance line tied to the real same-session proof: runtime plus canonical report degradation can ship when they stay truthful and explicit, but replay/highlights blocked behind scoring is the remaining release blocker.",
   "last_growth_scan": null,
-  "next_action": "Proceed to M003/S05/T02 live objection-heavy same-session evidence capture."
+  "next_action": "Use the T03 guardrail plus D060 during S05 close-out: keep the canonical report degradation boundary, and treat same-session replay blocked by scoring as release-blocking until the end-of-session path reaches completed replay surfaces."
 }

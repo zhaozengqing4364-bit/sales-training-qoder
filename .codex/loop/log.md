@@ -1194,3 +1194,36 @@ Append one entry per iteration:
   verification results: passed; the exact T01 backend gate is 90/90 green and now includes explicit competitor, implementation-risk, verified-evidence, and search-failed assertions alongside the existing ROI/price paths.
   success signal status: objection-heavy realism is now pinned to the live StepFun/runtime/report contracts instead of a narrower ROI-only proof set.
   rollback note: if later S05 work rewrites objection-taxonomy semantics, keep these tests on the current `/practice` + shared evidence routes and preserve the existing status names (`weak_evidence`, `evidence_pending`, `evidence_verified`) unless the runtime contract is re-verified end-to-end.
+
+- time: 2026-03-25T16:35:57+0800
+  mode: stabilize
+  item id: M003-S05-T02
+  files changed:
+    - .gsd/milestones/M003/slices/S05/S05-UAT.md
+    - .gsd/KNOWLEDGE.md
+    - .codex/loop/state.json
+    - .codex/loop/log.md
+  summary: Captured one real objection-heavy same-session evidence pack on the live localhost product chain, proving explicit customer-pressure freeze-in, live objection coaching on the practice page, canonical report/knowledge-hit facts for the same session, and the current replay blockage when post-end scoring stalls.
+  verification commands:
+    - browser/runtime proof: localhost dev-login -> /admin/knowledge/c6dad7ec-4673-4e00-acc1-0de190a88198 search diagnostic -> /practice/ef48ed80-0bfa-4a47-82c7-228ac3d468d2 -> /practice/ef48ed80-0bfa-4a47-82c7-228ac3d468d2/report -> /practice/ef48ed80-0bfa-4a47-82c7-228ac3d468d2/replay
+    - /usr/bin/time -p sh -c 'test -s .gsd/milestones/M003/slices/S05/S05-UAT.md && test -f .artifacts/browser/2026-03-25T07-48-56-629Z-session/m003-s05-t02.trace.zip && test -f .artifacts/browser/2026-03-25T07-48-56-629Z-session/s05-timeline.json && test -d .artifacts/browser/2026-03-25T08-32-14-317Z-s05-report && test -d .artifacts/browser/2026-03-25T08-31-00-679Z-s05-replay'
+  verification results: passed for the task gate and artifact capture; the UAT file plus browser artifacts exist on disk, the same session reached a healthy canonical report with `weak_evidence` and `knowledge-check=hit`, and replay remained explicitly blocked with `[SESSION_NOT_COMPLETED]` because the live session stayed `scoring` after backend `report_generation_failed [NO_STAGE_RESULTS]`.
+  success signal status: M003 now has one honest same-session objection-heavy proof pack that shows both the working evidence line (practice -> report -> knowledge-check) and the current degraded boundary (replay/highlights blocked while scoring).
+  rollback note: no product code changed in this turn; if future S05 runtime proof work reuses synthetic microphone automation, keep the delayed post-getUserMedia playback rule and continue treating report-readable / replay-blocked scoring sessions as a real degradation to document, not as a fake green replay pass.
+
+- time: 2026-03-25T16:56:00+0800
+  mode: stabilize
+  item id: M003-S05-T03
+  files changed:
+    - .gsd/milestones/M003/slices/S05/tasks/T03-PLAN.md
+    - .gsd/DECISIONS.md
+    - .codex/loop/state.json
+    - .codex/loop/log.md
+  summary: Wrote the final M003 stability guardrail on the real admin -> practice -> report/replay chain, including measured latency bands from the same-session browser proof, the degraded states that remain shippable when canonical evidence survives, and the replay-blocked-while-scoring condition that still blocks final release acceptance.
+  verification commands:
+    - cd backend && /usr/bin/time -p venv/bin/python -m pytest -c pyproject.toml tests/unit/test_stepfun_realtime_handler.py tests/unit/test_stepfun_knowledge_helpers.py tests/integration/test_knowledge_flow.py tests/contract/test_practice_evidence_contract.py
+    - /usr/bin/time -p sh -c 'test -s .gsd/milestones/M003/slices/S05/S05-UAT.md && test -f .artifacts/browser/2026-03-25T07-48-56-629Z-session/m003-s05-t02.trace.zip && test -f .artifacts/browser/2026-03-25T07-48-56-629Z-session/s05-timeline.json && test -d .artifacts/browser/2026-03-25T08-32-14-317Z-s05-report && test -d .artifacts/browser/2026-03-25T08-31-00-679Z-s05-replay'
+    - rg -n "latency|degraded|fallback|block" .gsd/milestones/M003/slices/S05/tasks/T03-PLAN.md
+  verification results: passed; the exact objection-heavy backend regression suite is green, the live UAT trace/timeline/debug bundles are still present, and the T03 artifact now explicitly records which fallback states remain shippable versus which same-session replay failures block M003 acceptance.
+  success signal status: M003 now has one written release guardrail grounded in the real localhost objection-heavy proof instead of an assumed all-green replay path.
+  rollback note: if future work fixes the scoring -> completed replay path, keep the same business-chain acceptance rule and only relax the replay blocker after the live admin -> practice -> report/replay proof is re-run on the same routes.
