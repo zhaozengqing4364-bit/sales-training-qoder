@@ -23,6 +23,8 @@ import {
     KnowledgeCheckDiagnostics,
     PracticeSessionReport,
     PresentationReview,
+    ReplayAnchor,
+    ReplayData,
 } from "@/lib/api/types";
 import { debug } from "@/lib/debug";
 import {
@@ -155,6 +157,86 @@ function hasEnhancedInsights(report: ComprehensiveReport | null): boolean {
     );
 }
 
+type ReplayDeepLinkFocus = "main_issue" | "next_goal" | "learning_evidence";
+
+function hasReplayAnchorTarget(anchor?: ReplayAnchor | null): boolean {
+    if (!anchor) {
+        return false;
+    }
+
+    return Boolean(
+        (typeof anchor.message_id === "string" && anchor.message_id.trim())
+        || typeof anchor.turn_number === "number",
+    );
+}
+
+function buildReplayDeepLink(
+    sessionId: string,
+    options: {
+        focus: ReplayDeepLinkFocus;
+        anchor?: ReplayAnchor | null;
+        turnNumber?: number | null;
+    },
+): string {
+    const params = new URLSearchParams();
+    params.set("focus", options.focus);
+
+    const anchor = options.anchor;
+    if (anchor) {
+        if (typeof anchor.message_id === "string" && anchor.message_id.trim()) {
+            params.set("message_id", anchor.message_id);
+        }
+        if (typeof anchor.turn_number === "number") {
+            params.set("turn", String(anchor.turn_number));
+        }
+        params.set("anchor_status", anchor.status);
+        if (anchor.degraded_reason) {
+            params.set("anchor_reason", anchor.degraded_reason);
+        }
+        if (anchor.marker?.type) {
+            params.set("marker_type", anchor.marker.type);
+        }
+        if (typeof anchor.marker?.timestamp_ms === "number") {
+            params.set("marker_timestamp_ms", String(anchor.marker.timestamp_ms));
+        }
+    } else if (typeof options.turnNumber === "number") {
+        params.set("turn", String(options.turnNumber));
+    }
+
+    return `/practice/${sessionId}/replay?${params.toString()}`;
+}
+
+function formatReplayAnchorHint(anchor?: ReplayAnchor | null): string {
+    if (!anchor || !hasReplayAnchorTarget(anchor) || anchor.status === "missing") {
+        return "当前暂无可定位的回放片段。";
+    }
+
+    if (anchor.status === "resolved") {
+        if (typeof anchor.turn_number === "number") {
+            return `回放将定位到第 ${anchor.turn_number} 轮高光片段。`;
+        }
+        return "回放将定位到对应高光片段。";
+    }
+
+    if (anchor.degraded_reason === "missing_marker") {
+        if (typeof anchor.turn_number === "number") {
+            return `高光标记缺失，回放将直接定位到第 ${anchor.turn_number} 轮。`;
+        }
+        return "高光标记缺失，回放将直接定位到相关对话片段。";
+    }
+
+    if (anchor.degraded_reason === "no_matching_highlight") {
+        if (anchor.marker?.label) {
+            return `未找到精确高光，回放将定位到“${anchor.marker.label}”阶段。`;
+        }
+        if (typeof anchor.turn_number === "number") {
+            return `未找到精确高光，回放将定位到第 ${anchor.turn_number} 轮附近。`;
+        }
+    }
+
+    return "当前暂无可定位的回放片段。";
+}
+
 export default function ComprehensiveReportPage() {
     const router = useRouter();
     const params = useParams();
@@ -166,6 +248,7 @@ export default function ComprehensiveReportPage() {
     const [enhancedUnavailableHint, setEnhancedUnavailableHint] = useState<string | null>(null);
     const [error, setError] = useState<string | null>(null);
     const [knowledgeCheck, setKnowledgeCheck] = useState<KnowledgeCheckDiagnostics | null>(null);
+    const [replayData, setReplayData] = useState<ReplayData | null>(null);
     const [highlightsData, setHighlightsData] = useState<HighlightsResponse | null>(null);
     const [highlightsLoading, setHighlightsLoading] = useState(false);
     const [highlightsUnavailableHint, setHighlightsUnavailableHint] = useState<string | null>(null);
@@ -174,6 +257,7 @@ export default function ComprehensiveReportPage() {
     const loadUnifiedEvidence = useCallback(async () => {
         setLoading(true);
         setError(null);
+        setReplayData(null);
 
         try {
             const data = await api.sessions.getReport(sessionId);
@@ -264,6 +348,39 @@ export default function ComprehensiveReportPage() {
         };
 
         void loadEnhancedInsights();
+
+        return () => {
+            cancelled = true;
+        };
+    }, [sessionId, report]);
+
+    useEffect(() => {
+        if (!report || (!report.main_issue && !report.next_goal)) {
+            setReplayData(null);
+            return;
+        }
+
+        let cancelled = false;
+
+        api.sessions
+            .getReplay(sessionId)
+            .then((data) => {
+                if (cancelled) return;
+                setReplayData(data);
+                debug.log("[Report] Replay anchors loaded", {
+                    sessionId,
+                    issueAnchorStatus: data.main_issue?.replay_anchor?.status,
+                    goalAnchorStatus: data.next_goal?.replay_anchor?.status,
+                });
+            })
+            .catch((err) => {
+                if (cancelled) return;
+                setReplayData(null);
+                debug.warn("[Report] Replay anchors unavailable; keeping report conclusions local", {
+                    sessionId,
+                    error: err,
+                });
+            });
 
         return () => {
             cancelled = true;
@@ -381,10 +498,24 @@ export default function ComprehensiveReportPage() {
         )
             ? "当前演讲会话缺少课件配置，请返回训练页重新选择演示文稿。"
             : null;
+    const issueReplayAnchor = replayData?.main_issue?.replay_anchor ?? null;
+    const nextGoalReplayAnchor = replayData?.next_goal?.replay_anchor ?? null;
+    const issueReplayHint = formatReplayAnchorHint(issueReplayAnchor);
+    const nextGoalReplayHint = formatReplayAnchorHint(nextGoalReplayAnchor);
+    const issueReplayAvailable = hasReplayAnchorTarget(issueReplayAnchor);
+    const nextGoalReplayAvailable = hasReplayAnchorTarget(nextGoalReplayAnchor);
 
     const goHome = () => {
         router.push("/");
     };
+
+    const openReplayDeepLink = useCallback((options: {
+        focus: ReplayDeepLinkFocus;
+        anchor?: ReplayAnchor | null;
+        turnNumber?: number | null;
+    }) => {
+        router.push(buildReplayDeepLink(sessionId, options));
+    }, [router, sessionId]);
 
     const handleRetryFromGoal = async () => {
         const retry = retryEntry;
@@ -795,6 +926,20 @@ export default function ComprehensiveReportPage() {
                             <p className="text-xs text-amber-700 mt-2">
                                 修正动作：{report.main_issue.recovery_rule}
                             </p>
+                            <div className="mt-3 flex items-center justify-between gap-3 flex-wrap">
+                                <p className="text-xs text-amber-700">{issueReplayHint}</p>
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => openReplayDeepLink({
+                                        focus: "main_issue",
+                                        anchor: issueReplayAnchor,
+                                    })}
+                                    disabled={!issueReplayAvailable}
+                                >
+                                    定位问题片段
+                                </Button>
+                            </div>
                         </div>
                     ) : (
                         <p className="text-sm text-zinc-600">本场未产生主问题诊断结果。</p>
@@ -819,6 +964,7 @@ export default function ComprehensiveReportPage() {
                             </div>
                             <p className="text-sm text-zinc-700 mb-2">{report.next_goal.goal_text}</p>
                             <p className="text-xs text-zinc-500">判定条件：{report.next_goal.rule}</p>
+                            <p className="text-xs text-blue-700 mt-2">{nextGoalReplayHint}</p>
                             {retryBlockedHint && (
                                 <p className="text-xs text-amber-700 mt-2">{retryBlockedHint}</p>
                             )}
@@ -826,15 +972,29 @@ export default function ComprehensiveReportPage() {
                                 <p className="text-xs text-amber-700 mt-2">{retryHint}</p>
                             )}
                         </div>
-                        <Button
-                            variant="primary"
-                            size="sm"
-                            onClick={handleRetryFromGoal}
-                            className="whitespace-nowrap"
-                            disabled={Boolean(retryBlockedHint)}
-                        >
-                            按目标再练一轮
-                        </Button>
+                        <div className="flex flex-col items-stretch gap-2">
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => openReplayDeepLink({
+                                    focus: "next_goal",
+                                    anchor: nextGoalReplayAnchor,
+                                })}
+                                className="whitespace-nowrap"
+                                disabled={!nextGoalReplayAvailable}
+                            >
+                                定位目标片段
+                            </Button>
+                            <Button
+                                variant="primary"
+                                size="sm"
+                                onClick={handleRetryFromGoal}
+                                className="whitespace-nowrap"
+                                disabled={Boolean(retryBlockedHint)}
+                            >
+                                按目标再练一轮
+                            </Button>
+                        </div>
                     </div>
                 </GlassCard>
             )}
@@ -1098,10 +1258,15 @@ export default function ComprehensiveReportPage() {
                         <h2 className="text-lg font-semibold text-zinc-900">高光片段</h2>
                         <span className="text-xs text-zinc-500 ml-2">AI 识别的关键 moments</span>
                     </div>
+                    <p className="text-xs text-zinc-500 mb-4">点击高光卡片可直接跳到当前 replay 中对应的轮次。</p>
                     <HighlightList
                         highlights={highlightsData.highlights}
                         totalGood={highlightsData.total_good}
                         totalBad={highlightsData.total_bad}
+                        onJumpToMessage={(turnNumber) => openReplayDeepLink({
+                            focus: "learning_evidence",
+                            turnNumber,
+                        })}
                     />
                 </GlassCard>
             ) : (

@@ -26,7 +26,7 @@ Reuse the existing report/replay routes and supporting authority modules only: `
   - Files: `backend/src/common/conversation/replay.py`, `backend/src/common/conversation/api.py`, `backend/tests/unit/test_replay_service.py`, `backend/tests/integration/test_replay_api.py`
   - Verify: cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_replay_service.py tests/integration/test_replay_api.py
 
-- [ ] **T02: Deep-link report conclusions into the current replay route** `est:90m`
+- [x] **T02: Deep-link report conclusions into the current replay route** `est:90m`
   Update the current report page so `main_issue`, `next_goal`, and key learning evidence can deep-link into replay using the stable anchors. Reuse the existing report CTA area and current replay route rather than adding a separate learning workflow page.
   - Files: `web/src/app/(user)/practice/[sessionId]/report/page.tsx`, `web/src/lib/api/client.ts`, `web/src/lib/api/types.ts`, `web/src/app/(user)/practice/[sessionId]/report/page.test.tsx`
   - Verify: cd web && npm test -- --run 'src/app/(user)/practice/[sessionId]/report/page.test.tsx'

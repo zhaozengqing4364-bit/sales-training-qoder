@@ -1004,16 +1004,34 @@ export interface SessionPassFlags {
 
 export type SessionOverallResult = "pass" | "strong_pass" | "fail";
 
+export interface ReplayAnchorMarker {
+    type: "highlight" | "stage_change" | string;
+    timestamp_ms: number;
+    label: string;
+}
+
+export type ReplayAnchorStatus = "resolved" | "degraded" | "missing";
+
+export interface ReplayAnchor {
+    status: ReplayAnchorStatus;
+    message_id: string | null;
+    turn_number: number | null;
+    marker?: ReplayAnchorMarker | null;
+    degraded_reason?: "missing_marker" | "no_matching_highlight" | "anchor_target_not_found" | string | null;
+}
+
 export interface SessionMainIssue {
     issue_type: string;
     issue_text: string;
     recovery_rule: string;
+    replay_anchor?: ReplayAnchor | null;
 }
 
 export interface SessionNextGoal {
     goal_type: string;
     goal_text: string;
     rule: string;
+    replay_anchor?: ReplayAnchor | null;
 }
 
 export interface SessionEvidenceContract {

@@ -1,6 +1,6 @@
 {
   "mode": "stabilize",
-  "current_issue_id": "M004-S01-T03",
+  "current_issue_id": "M004-S02-T02",
   "current_issue_type": "task",
   "current_issue_status": "done",
   "pending_issue_ids": [],
@@ -65,27 +65,25 @@
     "M003-S05-T01",
     "M003-S05-T02",
     "M003-S05-T03",
-    "M004-S01-T03"
+    "M004-S01-T03",
+    "M004-S02-T02"
   ],
   "blocked_issue_ids": [],
   "deferred_issue_ids": [],
   "last_modified_files": [
-    "web/src/lib/session-evidence.ts",
+    "web/src/lib/api/types.ts",
     "web/src/app/(user)/practice/[sessionId]/report/page.tsx",
-    "web/src/app/(dashboard)/history/page.tsx",
     "web/src/app/(user)/practice/[sessionId]/report/page.test.tsx",
-    "web/src/app/(dashboard)/history/page.test.tsx",
     ".gsd/DECISIONS.md",
+    ".gsd/KNOWLEDGE.md",
     ".codex/loop/state.json",
     ".codex/loop/log.md"
   ],
   "last_verification_commands": [
-    "cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_replay_service.py tests/integration/test_replay_api.py",
-    "cd web && npm test -- --run 'src/app/(user)/practice/[sessionId]/replay/page.test.tsx' 'src/components/highlights/HighlightList.test.tsx' 'src/components/highlights/HighlightDetailModal.test.tsx'",
-    "cd web && npm test -- --run 'src/app/(user)/practice/[sessionId]/report/page.test.tsx' 'src/app/(dashboard)/history/page.test.tsx' 'src/app/(user)/practice/[sessionId]/replay/page.test.tsx'"
+    "cd web && npm test -- --run 'src/app/(user)/practice/[sessionId]/report/page.test.tsx'"
   ],
-  "last_verification_result": "All M004/S01 slice drift detectors are green: backend replay service/API tests passed, replay/highlight UI tests passed, and the report/history/replay page suite now locks the shared learning vocabulary plus degraded-state copy on the current routes.",
-  "last_success_signal": "Report, history, replay, and highlight entrypoints now use the same issue/goal learning vocabulary while keeping missing highlights, missing enhanced reports, and degraded analytics states explicit instead of collapsing to generic copy.",
+  "last_verification_result": "Focused report-page Vitest is green: the current report page now renders replay deep-link CTAs for main_issue/next_goal, keeps degraded anchor copy visible, and routes highlight cards into the existing replay path by turn. A live browser pass on the repo web app remained partial because the local login/runtime setup was not completed inside the time budget.",
+  "last_success_signal": "Learners can now leave the current report page and enter the current replay route with anchor context for the surfaced issue, goal, and key evidence instead of manually searching the transcript.",
   "last_growth_scan": null,
-  "next_action": "Close slice M004/S01 or continue downstream work from the shared session-evidence helper; keep report/history cues on the current routes rather than introducing a second learning surface."
+  "next_action": "Continue M004/S02 with T03 so the replay page consumes the report deep-link query contract and lands on the requested turn/marker while keeping degraded fallback copy visible."
 }

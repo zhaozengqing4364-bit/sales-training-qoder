@@ -7,6 +7,7 @@ import { ApiRequestError } from "@/lib/api/client";
 const {
     pushMock,
     getReportMock,
+    getReplayMock,
     getKnowledgeCheckMock,
     getHighlightsMock,
     createSessionMock,
@@ -15,6 +16,7 @@ const {
 } = vi.hoisted(() => ({
     pushMock: vi.fn(),
     getReportMock: vi.fn(),
+    getReplayMock: vi.fn(),
     getKnowledgeCheckMock: vi.fn(),
     getHighlightsMock: vi.fn(),
     createSessionMock: vi.fn(),
@@ -32,8 +34,21 @@ vi.mock("next/navigation", () => ({
 }));
 
 vi.mock("@/components/highlights", () => ({
-    HighlightList: ({ highlights }: { highlights: Array<{ id: string }> }) => (
-        <div data-testid="highlight-list">高光数:{highlights.length}</div>
+    HighlightList: ({
+        highlights,
+        onJumpToMessage,
+    }: {
+        highlights: Array<{ id: string; turn_number: number }>;
+        onJumpToMessage?: (turnNumber: number) => void;
+    }) => (
+        <div data-testid="highlight-list">
+            <div>高光数:{highlights.length}</div>
+            {highlights[0] ? (
+                <button type="button" onClick={() => onJumpToMessage?.(highlights[0].turn_number)}>
+                    跳到高光回放
+                </button>
+            ) : null}
+        </div>
     ),
 }));
 
@@ -46,6 +61,7 @@ vi.mock("@/lib/api/client", async () => {
             sessions: {
                 ...actual.api.sessions,
                 getReport: getReportMock,
+                getReplay: getReplayMock,
                 getKnowledgeCheck: getKnowledgeCheckMock,
                 getHighlights: getHighlightsMock,
             },
@@ -109,6 +125,31 @@ const baseReport = {
         agent_id: "agent-1",
         persona_id: "persona-1",
     },
+};
+
+const baseReplayData = {
+    session_id: "session-1",
+    agent_name: "销售教练",
+    persona_name: "采购经理",
+    voice_policy_snapshot_ref: null,
+    total_duration_ms: 180000,
+    overall_score: 72,
+    effectiveness_snapshot: null,
+    pass_flags: null,
+    main_capability_passed: false,
+    overall_result: "fail" as const,
+    main_issue: null,
+    next_goal: null,
+    evaluable: true,
+    not_evaluable_reason: null,
+    evidence_completeness: {
+        complete: true,
+        missing_fields: [],
+        message_count: 6,
+    },
+    messages: [],
+    timeline_markers: [],
+    stage_summary: [],
 };
 
 const basePresentationReview = {
@@ -222,12 +263,14 @@ describe("ReportPage", () => {
     beforeEach(() => {
         pushMock.mockReset();
         getReportMock.mockReset();
+        getReplayMock.mockReset();
         getKnowledgeCheckMock.mockReset();
         getHighlightsMock.mockReset();
         createSessionMock.mockReset();
         getComprehensiveReportMock.mockReset();
         generateComprehensiveReportMock.mockReset();
 
+        getReplayMock.mockResolvedValue(baseReplayData);
         getKnowledgeCheckMock.mockRejectedValue(new Error("knowledge check unavailable"));
         getHighlightsMock.mockResolvedValue({
             highlights: [],
@@ -296,6 +339,190 @@ describe("ReportPage", () => {
         expect(screen.getByText("先补 ROI 证据，再推进一个明确的下一步动作。")).toBeTruthy();
         expect(screen.getByText("综合评分反映价值翻译、证据支撑和异议推进的完成度。"))
             .toBeTruthy();
+    });
+
+    it("deep-links the report issue and goal cards into replay using the stable replay anchors", async () => {
+        getReportMock.mockResolvedValue({
+            ...baseReport,
+            evaluable: true,
+            not_evaluable_reason: null,
+            main_issue: {
+                issue_type: "evidence_gap",
+                issue_text: "功能点说得多，但还没有把产品价值翻译成客户收益。",
+                recovery_rule: "下一轮先用客户收益语言重述价值，再回应价格顾虑。",
+            },
+            next_goal: {
+                goal_type: "evidence_backing",
+                goal_text: "先补 ROI 证据，再推进一个明确的下一步动作。",
+                rule: "至少给出一条证据并确认下一步。",
+            },
+        });
+        getReplayMock.mockResolvedValue({
+            ...baseReplayData,
+            main_issue: {
+                issue_type: "evidence_gap",
+                issue_text: "功能点说得多，但还没有把产品价值翻译成客户收益。",
+                recovery_rule: "下一轮先用客户收益语言重述价值，再回应价格顾虑。",
+                replay_anchor: {
+                    status: "resolved",
+                    message_id: "msg-highlight",
+                    turn_number: 4,
+                    marker: {
+                        type: "highlight",
+                        timestamp_ms: 24000,
+                        label: "客户已经明确要证据，但这轮还没给出任何案例或数字。",
+                    },
+                    degraded_reason: null,
+                },
+            },
+            next_goal: {
+                goal_type: "evidence_backing",
+                goal_text: "先补 ROI 证据，再推进一个明确的下一步动作。",
+                rule: "至少给出一条证据并确认下一步。",
+                replay_anchor: {
+                    status: "resolved",
+                    message_id: "msg-highlight",
+                    turn_number: 4,
+                    marker: {
+                        type: "highlight",
+                        timestamp_ms: 24000,
+                        label: "客户已经明确要证据，但这轮还没给出任何案例或数字。",
+                    },
+                    degraded_reason: null,
+                },
+            },
+        });
+        getComprehensiveReportMock.mockResolvedValue({
+            session_id: "session-1",
+            generated_at: "2026-03-23T00:00:00Z",
+            overall_score: 88,
+            dimension_scores: [],
+            stage_summaries: [],
+            key_strengths: [],
+            key_improvements: [],
+            detailed_feedback: "",
+            recommendations: [],
+            voice_policy_snapshot_ref: null,
+        });
+
+        render(<ReportPage />);
+
+        expect(await screen.findAllByText("回放将定位到第 4 轮高光片段。"))
+            .toHaveLength(2);
+
+        fireEvent.click(screen.getByRole("button", { name: "定位问题片段" }));
+        expect(pushMock).toHaveBeenCalledWith(
+            "/practice/session-1/replay?focus=main_issue&message_id=msg-highlight&turn=4&anchor_status=resolved&marker_type=highlight&marker_timestamp_ms=24000",
+        );
+
+        fireEvent.click(screen.getByRole("button", { name: "定位目标片段" }));
+        expect(pushMock).toHaveBeenCalledWith(
+            "/practice/session-1/replay?focus=next_goal&message_id=msg-highlight&turn=4&anchor_status=resolved&marker_type=highlight&marker_timestamp_ms=24000",
+        );
+    });
+
+    it("keeps degraded replay fallback visible and lets evidence cards jump into replay by turn", async () => {
+        getReportMock.mockResolvedValue({
+            ...baseReport,
+            evaluable: true,
+            not_evaluable_reason: null,
+            main_issue: {
+                issue_type: "objection_handling_gap",
+                issue_text: "价格顾虑已经出现，但还没给出报价逻辑。",
+                recovery_rule: "下一轮先承接价格顾虑，再解释报价依据。",
+            },
+            next_goal: {
+                goal_type: "objection_reframe",
+                goal_text: "下一轮先解释报价逻辑，再推进低风险下一步。",
+                rule: "至少先承接价格顾虑，再说明报价或 ROI 逻辑。",
+            },
+        });
+        getReplayMock.mockResolvedValue({
+            ...baseReplayData,
+            main_issue: {
+                issue_type: "objection_handling_gap",
+                issue_text: "价格顾虑已经出现，但还没给出报价逻辑。",
+                recovery_rule: "下一轮先承接价格顾虑，再解释报价依据。",
+                replay_anchor: {
+                    status: "degraded",
+                    message_id: "msg-objection",
+                    turn_number: 2,
+                    marker: {
+                        type: "stage_change",
+                        timestamp_ms: 1800,
+                        label: "异议处理",
+                    },
+                    degraded_reason: "no_matching_highlight",
+                },
+            },
+            next_goal: {
+                goal_type: "objection_reframe",
+                goal_text: "下一轮先解释报价逻辑，再推进低风险下一步。",
+                rule: "至少先承接价格顾虑，再说明报价或 ROI 逻辑。",
+                replay_anchor: {
+                    status: "degraded",
+                    message_id: "msg-objection",
+                    turn_number: 2,
+                    marker: {
+                        type: "stage_change",
+                        timestamp_ms: 1800,
+                        label: "异议处理",
+                    },
+                    degraded_reason: "no_matching_highlight",
+                },
+            },
+        });
+        getHighlightsMock.mockResolvedValue({
+            highlights: [
+                {
+                    id: "highlight-1",
+                    turn_number: 6,
+                    role: "user",
+                    content: "我们还是担心 ROI。",
+                    timestamp: "2026-03-25T00:00:00Z",
+                    highlight_type: "bad",
+                    highlight_reason: "客户已经明确追问 ROI。",
+                    ai_feedback: null,
+                    suggested_response: null,
+                    sales_stage: "objection",
+                    stage_name: "异议处理",
+                    context: {},
+                    audio_url: null,
+                    score: 62,
+                    learning_evidence: null,
+                },
+            ],
+            total_good: 0,
+            total_bad: 1,
+        });
+        getComprehensiveReportMock.mockResolvedValue({
+            session_id: "session-1",
+            generated_at: "2026-03-23T00:00:00Z",
+            overall_score: 82,
+            dimension_scores: [],
+            stage_summaries: [],
+            key_strengths: [],
+            key_improvements: [],
+            detailed_feedback: "",
+            recommendations: [],
+            voice_policy_snapshot_ref: null,
+        });
+
+        render(<ReportPage />);
+
+        expect(await screen.findAllByText("未找到精确高光，回放将定位到“异议处理”阶段。"))
+            .toHaveLength(2);
+
+        fireEvent.click(screen.getByRole("button", { name: "定位问题片段" }));
+        expect(pushMock).toHaveBeenCalledWith(
+            "/practice/session-1/replay?focus=main_issue&message_id=msg-objection&turn=2&anchor_status=degraded&anchor_reason=no_matching_highlight&marker_type=stage_change&marker_timestamp_ms=1800",
+        );
+
+        pushMock.mockClear();
+        fireEvent.click(screen.getByRole("button", { name: "跳到高光回放" }));
+        expect(pushMock).toHaveBeenCalledWith(
+            "/practice/session-1/replay?focus=learning_evidence&turn=6",
+        );
     });
 
     it("renders unsupported claim truth from the unified evidence snapshot without falling back to diagnostics status copy", async () => {

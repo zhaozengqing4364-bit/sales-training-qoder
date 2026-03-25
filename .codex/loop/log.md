@@ -1249,3 +1249,21 @@ Append one entry per iteration:
   verification results: passed; the backend replay contract is still green, replay/highlight UI drift detectors stayed green, and the report/history/replay page suite now locks the issue/goal labels plus degraded-state copy on the existing user routes.
   success signal status: completed-session learners now see the same evidence-gap / next-goal vocabulary across report, history, replay, and highlights even when highlights or analytics overlays degrade.
   rollback note: if a future slice changes learning-cue wording, keep report/history sourced from the shared session-evidence helper and only expand beyond the current routes after the same drift-detector set is updated together.
+
+- time: 2026-03-26T00:52:43+0800
+  mode: stabilize
+  item id: M004-S02-T02
+  files changed:
+    - web/src/lib/api/types.ts
+    - web/src/app/(user)/practice/[sessionId]/report/page.tsx
+    - web/src/app/(user)/practice/[sessionId]/report/page.test.tsx
+    - .gsd/DECISIONS.md
+    - .gsd/KNOWLEDGE.md
+    - .codex/loop/state.json
+    - .codex/loop/log.md
+  summary: Report conclusions on the current report page now expose replay deep-link CTAs based on the replay anchor contract, keep degraded anchor copy visible, and let highlight cards jump into the existing replay route by turn without adding a second learning page.
+  verification commands:
+    - cd web && npm test -- --run 'src/app/(user)/practice/[sessionId]/report/page.test.tsx'
+  verification results: focused report-page Vitest passed; local browser verification on the repo web server proved the route exists but stopped short of a fully authenticated live report→replay proof because login/runtime setup did not finish within this task's time budget.
+  success signal status: the current report page can now hand off the surfaced issue, next goal, and key evidence into the current replay route instead of forcing manual transcript search.
+  rollback note: if T03 changes the landing semantics, keep the query-param handoff tied to replay anchors/turns from the existing replay contract rather than introducing a separate report-only resolver.
