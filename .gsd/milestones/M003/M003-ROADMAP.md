@@ -59,7 +59,7 @@
 - [x] **S03: 多轮异议 ledger 与持续施压** `risk:high` `depends:[S01,S02]`
   > After this: On the current practice route, an unresolved price / competitor / proof objection survives topic drift and returns until evidence is provided or the gap is acknowledged.
 
-- [ ] **S04: unsupported claim / evidence truth contract** `risk:medium` `depends:[S02,S03]`
+- [x] **S04: unsupported claim / evidence truth contract** `risk:medium` `depends:[S02,S03]`
   > After this: The current realtime / report / replay surfaces can distinguish unsupported, evidence-pending, and evidence-backed claims on the same session without inventing a second evaluator.
 
 - [ ] **S05: objection-heavy live proof 与稳定性护栏** `risk:medium` `depends:[S04]`

@@ -1,7 +1,7 @@
 {
   "mode": "stabilize",
-  "current_issue_id": "M003-S04-T03",
-  "current_issue_type": "task",
+  "current_issue_id": "M003-S04",
+  "current_issue_type": "slice",
   "current_issue_status": "done",
   "pending_issue_ids": [],
   "completed_issue_ids": [
@@ -60,25 +60,25 @@
     "M003-S03-T03",
     "M003-S04-T01",
     "M003-S04-T02",
-    "M003-S04-T03"
+    "M003-S04-T03",
+    "M003-S04"
   ],
   "blocked_issue_ids": [],
   "deferred_issue_ids": [],
   "last_modified_files": [
-    "web/src/lib/session-evidence.ts",
-    "web/src/app/(user)/practice/[sessionId]/report/page.tsx",
-    "web/src/app/(user)/practice/[sessionId]/replay/page.tsx",
-    "web/src/app/(user)/practice/[sessionId]/report/page.test.tsx",
-    "web/src/app/(user)/practice/[sessionId]/replay/page.test.tsx",
-    ".gsd/DECISIONS.md",
-    ".gsd/KNOWLEDGE.md"
+    ".gsd/milestones/M003/slices/S04/S04-SUMMARY.md",
+    ".gsd/milestones/M003/slices/S04/S04-UAT.md",
+    ".gsd/milestones/M003/M003-ROADMAP.md",
+    ".gsd/REQUIREMENTS.md",
+    ".gsd/PROJECT.md"
   ],
   "last_verification_commands": [
-    "cd web && npm test -- --run 'src/app/(user)/practice/[sessionId]/report/page.test.tsx' 'src/app/(user)/practice/[sessionId]/replay/page.test.tsx'",
-    "cd web && npx tsc --noEmit"
+    "cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_effectiveness_sales_report_alignment.py tests/unit/test_session_evidence_service.py",
+    "cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_stepfun_realtime_handler.py tests/contract/test_practice_evidence_contract.py",
+    "cd web && npm test -- --run 'src/app/(user)/practice/[sessionId]/report/page.test.tsx' 'src/app/(user)/practice/[sessionId]/replay/page.test.tsx'"
   ],
-  "last_verification_result": "Focused report/replay Vitest coverage passed. Repo-wide web typecheck still reports the pre-existing admin knowledge page error `api.reprocessKnowledgeDocument` missing in `src/app/admin/knowledge/[id]/page.tsx`; no new type errors remained in the S04 claim-truth files.",
-  "last_success_signal": "Learner report and replay now render the canonical claim-truth line from `effectiveness_snapshot.claim_truth`, so completed-session surfaces can distinguish unsupported, weak, pending, and verified sales claims without borrowing runtime chain-failure copy.",
+  "last_verification_result": "Fresh slice-close verification passed: backend evaluator/session-evidence suite 11/11 green, backend runtime/contract suite 62/62 green, and web report/replay suite 7/7 green. Runtime diagnostics coverage confirmed claim truth stays distinct from kb-lock chain failures.",
+  "last_success_signal": "Slice S04 is complete: evaluator/session evidence, live StepFun diagnostics, knowledge-check, report, and replay now share one canonical claim-truth contract without leaking kb-lock chain-failure copy into learner-facing conclusions.",
   "last_growth_scan": null,
-  "next_action": "Proceed to M003/S04 slice completion."
+  "next_action": "Proceed to M003/S05 execution or reassessment."
 }

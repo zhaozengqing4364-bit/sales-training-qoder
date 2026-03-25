@@ -1159,3 +1159,21 @@ Append one entry per iteration:
   verification results: passed
   success signal status: completed sales projections now expose `effectiveness_snapshot.claim_truth` and preserve objection-ledger closure semantics so open gaps stay pending while acknowledged or supported claims no longer masquerade as the same evidence state
   rollback note: if later S04 work needs to change the truth taxonomy, keep the nested `effectiveness_snapshot.claim_truth` seam and preserve the rule that only open ledgers override main_issue / next_goal while closed ledgers still inform truth-status classification.
+
+- time: 2026-03-25T15:15:42+0800
+  mode: stabilize
+  item id: M003-S04
+  files changed:
+    - .gsd/milestones/M003/slices/S04/S04-SUMMARY.md
+    - .gsd/milestones/M003/slices/S04/S04-UAT.md
+    - .gsd/milestones/M003/M003-ROADMAP.md
+    - .gsd/REQUIREMENTS.md
+    - .gsd/PROJECT.md
+  summary: Closed S04 by rerunning the full slice verification set, recording the canonical claim-truth contract across evaluator/runtime/report/replay surfaces, updating project and requirement continuity, and writing the slice summary/UAT for downstream roadmap reassessment.
+  verification commands:
+    - cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_effectiveness_sales_report_alignment.py tests/unit/test_session_evidence_service.py
+    - cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_stepfun_realtime_handler.py tests/contract/test_practice_evidence_contract.py
+    - cd web && npm test -- --run 'src/app/(user)/practice/[sessionId]/report/page.test.tsx' 'src/app/(user)/practice/[sessionId]/replay/page.test.tsx'
+  verification results: passed; fresh slice-close backend and web gates are green, and the runtime diagnostics contract still keeps claim-truth states distinct from kb-lock chain failures.
+  success signal status: S04 is complete and the same sales session can now carry unsupported/weak/pending/verified claim truth from runtime diagnostics onto the canonical report/replay surfaces without inventing a second evaluator.
+  rollback note: if later work revisits claim-truth surfacing, keep `effectiveness_snapshot.claim_truth` as the shared authority line and preserve the boundary that kb-lock `blocked_*`/chain-failure states stay diagnostic-only unless a fully re-verified contract explicitly replaces it.
