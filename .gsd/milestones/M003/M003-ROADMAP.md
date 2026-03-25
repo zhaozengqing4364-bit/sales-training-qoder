@@ -56,7 +56,7 @@
 - [x] **S02: Persona 压力模型 snapshot 化** `risk:high` `depends:[S01]`
   > After this: A Persona edited on the current admin page leaves a frozen pressure model inside `voice_policy_snapshot`, and the current practice runtime restores it consistently across turns and reconnects.
 
-- [ ] **S03: 多轮异议 ledger 与持续施压** `risk:high` `depends:[S01,S02]`
+- [x] **S03: 多轮异议 ledger 与持续施压** `risk:high` `depends:[S01,S02]`
   > After this: On the current practice route, an unresolved price / competitor / proof objection survives topic drift and returns until evidence is provided or the gap is acknowledged.
 
 - [ ] **S04: unsupported claim / evidence truth contract** `risk:medium` `depends:[S02,S03]`
