@@ -65,6 +65,9 @@
 - [x] **S05: objection-heavy live proof 与稳定性护栏** `risk:medium` `depends:[S04]`
   > After this: One real admin → practice → report/replay run on current routes proves the system feels like a real customer and keeps degraded states inspectable.
 
+- [ ] **S06: scoring 收口与 replay/highlights 解锁** `risk:high` `depends:[S05]`
+  > After this: The same objection-heavy proof chain finalizes `scoring -> completed`, and the accepted replay surface plus sibling highlights endpoint load same-session evidence instead of stopping at `[SESSION_NOT_COMPLETED]`.
+
 ## Boundary Map
 
 ### S01 → S02
@@ -112,3 +115,12 @@ Produces:
 
 Consumes from S03:
 - Multi-turn objection ledger.
+
+### S05 → S06
+
+Produces:
+- One honest same-session proof showing the current objection-heavy chain reaches practice, knowledge-check, and canonical report, plus the concrete scoring-finalization blocker (`status="scoring"`, `[SESSION_NOT_COMPLETED]`, `report_generation_failed [NO_STAGE_RESULTS]`, `no_scoring_context_available`).
+- Browser/runtime artifact paths and guardrail evidence that S06 can reuse to prove the replay/highlights unlock on the same accepted chain.
+
+Consumes from S04:
+- Shared claim-truth contract already aligned across runtime, knowledge-check, report, and replay surfaces.
