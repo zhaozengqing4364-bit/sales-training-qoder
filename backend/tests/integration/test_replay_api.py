@@ -507,6 +507,199 @@ class TestReplayAPI:
         assert highlight["learning_evidence"]["nearby_context"] == highlight["context"]
 
     @pytest.mark.asyncio
+    async def test_should_return_resolved_replay_anchor_contract_for_issue_and_goal(
+        self,
+        async_client,
+        auth_headers,
+        completed_session,
+        db_session,
+    ):
+        """Replay should expose stable issue/goal anchors pointing at the matched highlight marker."""
+        completed_session.logic_score = 74.0
+        completed_session.accuracy_score = 71.0
+        completed_session.completeness_score = 69.0
+        completed_session.effectiveness_snapshot = {
+            "pass_flags": {
+                "pass_3min_flow": False,
+                "pass_5turn_defense": False,
+                "pass_4step_structure": False,
+            },
+            "main_capability_passed": False,
+            "overall_result": "fail",
+            "main_issue": {
+                "issue_type": "evidence_gap",
+                "issue_text": "ROI 证据还没有落到真实案例。",
+                "recovery_rule": "下一轮先补 ROI 案例或量化回收，再推进下一步。",
+            },
+            "next_goal": {
+                "goal_type": "evidence_backing",
+                "goal_text": "下一轮优先补 ROI 证据。",
+                "rule": "至少补一个真实案例或量化回报。",
+            },
+            "metrics": {
+                "continuous_speech_seconds": 180.0,
+                "filler_rate_per_100_words": 2.0,
+                "offtopic_turn_count": 0.0,
+                "offtopic_max_streak": 0.0,
+                "structure_coverage": 0.7,
+            },
+            "version": "rule_v1",
+            "evaluable": True,
+            "not_evaluable_reason": None,
+        }
+        db_session.add(completed_session)
+
+        discovery_message = ConversationMessage(
+            session_id=completed_session.session_id,
+            turn_number=1,
+            role="assistant",
+            content="您现在最需要什么类型的 ROI 证明？",
+            timestamp=datetime.now(timezone.utc),
+            duration_ms=1800,
+            sales_stage="discovery",
+            is_highlight=False,
+        )
+        highlight_message = ConversationMessage(
+            session_id=completed_session.session_id,
+            turn_number=2,
+            role="user",
+            content="我们内部还是想先看同行案例和回收周期。",
+            timestamp=datetime.now(timezone.utc),
+            duration_ms=2400,
+            sales_stage="objection",
+            ai_feedback="先确认对方需要案例，再补 ROI 和回收周期。",
+            is_highlight=True,
+            highlight_type="bad",
+            highlight_reason="客户已经明确要证据，但这轮还没给出任何案例或数字。",
+        )
+        db_session.add_all([discovery_message, highlight_message])
+        await db_session.commit()
+        for message in (discovery_message, highlight_message):
+            await db_session.refresh(message)
+
+        replay_response = await async_client.get(
+            f"/api/v1/sessions/{completed_session.session_id}/replay",
+            headers=auth_headers,
+        )
+        assert replay_response.status_code == 200
+        body = replay_response.json()
+        assert body["success"] is True
+
+        issue_anchor = body["data"]["main_issue"]["replay_anchor"]
+        goal_anchor = body["data"]["next_goal"]["replay_anchor"]
+
+        assert issue_anchor["status"] == "resolved"
+        assert issue_anchor["message_id"] == highlight_message.id
+        assert issue_anchor["turn_number"] == 2
+        assert issue_anchor["marker"] == {
+            "type": "highlight",
+            "timestamp_ms": 1800,
+            "label": "客户已经明确要证据，但这轮还没给出任何案例或数字。",
+        }
+        assert issue_anchor["degraded_reason"] is None
+
+        assert goal_anchor["status"] == "resolved"
+        assert goal_anchor["message_id"] == highlight_message.id
+        assert goal_anchor["turn_number"] == 2
+        assert goal_anchor["marker"]["type"] == "highlight"
+        assert goal_anchor["degraded_reason"] is None
+
+    @pytest.mark.asyncio
+    async def test_should_surface_degraded_replay_anchor_when_no_highlight_matches(
+        self,
+        async_client,
+        auth_headers,
+        completed_session,
+        db_session,
+    ):
+        """Replay should keep the degraded anchor reason visible instead of silently dropping stage fallback."""
+        completed_session.logic_score = 68.0
+        completed_session.accuracy_score = 66.0
+        completed_session.completeness_score = 64.0
+        completed_session.effectiveness_snapshot = {
+            "pass_flags": {
+                "pass_3min_flow": False,
+                "pass_5turn_defense": False,
+                "pass_4step_structure": False,
+            },
+            "main_capability_passed": False,
+            "overall_result": "fail",
+            "main_issue": {
+                "issue_type": "objection_handling_gap",
+                "issue_text": "价格顾虑已经出现，但还没给出报价逻辑。",
+                "recovery_rule": "下一轮先承接价格顾虑，再解释报价依据。",
+            },
+            "next_goal": {
+                "goal_type": "objection_reframe",
+                "goal_text": "下一轮先解释报价逻辑，再推进低风险下一步。",
+                "rule": "至少先承接价格顾虑，再说明报价或 ROI 逻辑。",
+            },
+            "metrics": {
+                "continuous_speech_seconds": 120.0,
+                "filler_rate_per_100_words": 3.0,
+                "offtopic_turn_count": 0.0,
+                "offtopic_max_streak": 0.0,
+                "structure_coverage": 0.5,
+            },
+            "version": "rule_v1",
+            "evaluable": True,
+            "not_evaluable_reason": None,
+        }
+        db_session.add(completed_session)
+
+        discovery_message = ConversationMessage(
+            session_id=completed_session.session_id,
+            turn_number=1,
+            role="assistant",
+            content="您目前更担心预算还是上线周期？",
+            timestamp=datetime.now(timezone.utc),
+            duration_ms=1800,
+            sales_stage="discovery",
+            is_highlight=False,
+        )
+        objection_message = ConversationMessage(
+            session_id=completed_session.session_id,
+            turn_number=2,
+            role="user",
+            content="最大的顾虑还是价格，你们为什么比别人贵？",
+            timestamp=datetime.now(timezone.utc),
+            duration_ms=2400,
+            sales_stage="objection",
+            is_highlight=False,
+        )
+        db_session.add_all([discovery_message, objection_message])
+        await db_session.commit()
+        for message in (discovery_message, objection_message):
+            await db_session.refresh(message)
+
+        replay_response = await async_client.get(
+            f"/api/v1/sessions/{completed_session.session_id}/replay",
+            headers=auth_headers,
+        )
+        assert replay_response.status_code == 200
+        body = replay_response.json()
+        assert body["success"] is True
+
+        issue_anchor = body["data"]["main_issue"]["replay_anchor"]
+        goal_anchor = body["data"]["next_goal"]["replay_anchor"]
+
+        assert issue_anchor["status"] == "degraded"
+        assert issue_anchor["message_id"] == objection_message.id
+        assert issue_anchor["turn_number"] == 2
+        assert issue_anchor["marker"] == {
+            "type": "stage_change",
+            "timestamp_ms": 1800,
+            "label": "异议处理",
+        }
+        assert issue_anchor["degraded_reason"] == "no_matching_highlight"
+
+        assert goal_anchor["status"] == "degraded"
+        assert goal_anchor["message_id"] == objection_message.id
+        assert goal_anchor["turn_number"] == 2
+        assert goal_anchor["marker"]["type"] == "stage_change"
+        assert goal_anchor["degraded_reason"] == "no_matching_highlight"
+
+    @pytest.mark.asyncio
     async def test_should_normalize_legacy_zero_turn_number_for_messages_and_replay(
         self,
         async_client,

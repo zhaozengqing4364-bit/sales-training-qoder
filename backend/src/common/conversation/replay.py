@@ -192,6 +192,28 @@ class ReplayService:
                 projection.messages,
                 projection,
             )
+            timeline_markers = (
+                list(projection.timeline_markers)
+                if isinstance(projection.timeline_markers, list)
+                else []
+            )
+            preferred_stage_key = self._resolve_anchor_stage_key(
+                projection,
+                enriched_messages,
+            )
+            replay_anchor = self._resolve_replay_anchor(
+                messages=enriched_messages,
+                timeline_markers=timeline_markers,
+                preferred_stage_key=preferred_stage_key,
+            )
+            main_issue_with_anchor = self._attach_replay_anchor(
+                projection.main_issue,
+                replay_anchor,
+            )
+            next_goal_with_anchor = self._attach_replay_anchor(
+                projection.next_goal,
+                replay_anchor,
+            )
 
             # Get agent and persona names (if available)
             agent_name = None
@@ -219,15 +241,15 @@ class ReplayService:
                 "voice_policy_snapshot_ref": build_voice_policy_snapshot_ref_payload(session.voice_policy_snapshot),
                 "total_duration_ms": projection.total_duration_ms,
                 "messages": enriched_messages,
-                "timeline_markers": projection.timeline_markers,
+                "timeline_markers": timeline_markers,
                 "stage_summary": projection.stage_summary,
                 "overall_score": projection.overall_score,
                 "effectiveness_snapshot": projection.effectiveness_snapshot,
                 "pass_flags": projection.pass_flags,
                 "main_capability_passed": projection.main_capability_passed,
                 "overall_result": projection.overall_result,
-                "main_issue": projection.main_issue,
-                "next_goal": projection.next_goal,
+                "main_issue": main_issue_with_anchor,
+                "next_goal": next_goal_with_anchor,
                 "evaluable": projection.evaluable,
                 "not_evaluable_reason": projection.not_evaluable_reason,
                 "evidence_completeness": projection.evidence_completeness,
@@ -240,8 +262,28 @@ class ReplayService:
                     1 for message in enriched_messages if message.get("learning_evidence")
                 ),
                 issue_family=(
-                    projection.main_issue.get("issue_type")
-                    if isinstance(projection.main_issue, dict)
+                    main_issue_with_anchor.get("issue_type")
+                    if isinstance(main_issue_with_anchor, dict)
+                    else None
+                ),
+                main_issue_anchor_status=(
+                    main_issue_with_anchor.get("replay_anchor", {}).get("status")
+                    if isinstance(main_issue_with_anchor, dict)
+                    else None
+                ),
+                next_goal_anchor_status=(
+                    next_goal_with_anchor.get("replay_anchor", {}).get("status")
+                    if isinstance(next_goal_with_anchor, dict)
+                    else None
+                ),
+                main_issue_anchor_reason=(
+                    main_issue_with_anchor.get("replay_anchor", {}).get("degraded_reason")
+                    if isinstance(main_issue_with_anchor, dict)
+                    else None
+                ),
+                next_goal_anchor_reason=(
+                    next_goal_with_anchor.get("replay_anchor", {}).get("degraded_reason")
+                    if isinstance(next_goal_with_anchor, dict)
                     else None
                 ),
             )
@@ -462,6 +504,211 @@ class ReplayService:
                 message["learning_evidence"] = learning_evidence
             enriched_messages.append(message)
         return enriched_messages
+
+    @staticmethod
+    def _normalize_stage_key(raw_stage: Any) -> str | None:
+        if not isinstance(raw_stage, str):
+            return None
+        stage_key = raw_stage.strip()
+        return stage_key or None
+
+    @classmethod
+    def _message_matches_stage(
+        cls,
+        message: dict[str, Any],
+        preferred_stage_key: str | None,
+    ) -> bool:
+        if preferred_stage_key is None:
+            return True
+        return cls._normalize_stage_key(message.get("sales_stage")) == preferred_stage_key
+
+    @classmethod
+    def _resolve_anchor_stage_key(
+        cls,
+        projection: Any,
+        messages: list[dict[str, Any]],
+    ) -> str | None:
+        preferred_stage_key = cls._normalize_stage_key(
+            getattr(projection, "sales_alignment_stage_key", None)
+        )
+        if preferred_stage_key is not None:
+            return preferred_stage_key
+
+        for message in reversed(messages):
+            message_stage_key = cls._normalize_stage_key(message.get("sales_stage"))
+            if message_stage_key is not None:
+                return message_stage_key
+        return None
+
+    @classmethod
+    def _find_preferred_highlight_message(
+        cls,
+        messages: list[dict[str, Any]],
+        preferred_stage_key: str | None,
+    ) -> dict[str, Any] | None:
+        matchers = (
+            lambda message: bool(message.get("id"))
+            and bool(message.get("is_highlight"))
+            and message.get("highlight_type") == "bad"
+            and cls._message_matches_stage(message, preferred_stage_key),
+            lambda message: bool(message.get("id"))
+            and bool(message.get("is_highlight"))
+            and cls._message_matches_stage(message, preferred_stage_key),
+            lambda message: bool(message.get("id"))
+            and bool(message.get("is_highlight"))
+            and message.get("highlight_type") == "bad",
+            lambda message: bool(message.get("id")) and bool(message.get("is_highlight")),
+        )
+
+        for matcher in matchers:
+            for message in reversed(messages):
+                if matcher(message):
+                    return message
+        return None
+
+    @classmethod
+    def _find_stage_anchor_message(
+        cls,
+        messages: list[dict[str, Any]],
+        preferred_stage_key: str | None,
+    ) -> dict[str, Any] | None:
+        if preferred_stage_key is None:
+            return None
+
+        for message in messages:
+            if not message.get("id"):
+                continue
+            if cls._message_matches_stage(message, preferred_stage_key):
+                return message
+        return None
+
+    @staticmethod
+    def _find_timeline_marker(
+        timeline_markers: list[dict[str, Any]],
+        *,
+        message_id: Any,
+        marker_type: str,
+    ) -> dict[str, Any] | None:
+        if not isinstance(message_id, str) or not message_id.strip():
+            return None
+
+        for marker in timeline_markers:
+            if not isinstance(marker, dict):
+                continue
+            if marker.get("message_id") != message_id:
+                continue
+            if marker.get("type") != marker_type:
+                continue
+            return marker
+        return None
+
+    @staticmethod
+    def _build_anchor_marker_payload(
+        marker: dict[str, Any] | None,
+    ) -> dict[str, Any] | None:
+        if not isinstance(marker, dict):
+            return None
+
+        marker_type = marker.get("type")
+        label = marker.get("label")
+        if not isinstance(marker_type, str) or not isinstance(label, str):
+            return None
+
+        return {
+            "type": marker_type,
+            "timestamp_ms": int(marker.get("timestamp_ms") or 0),
+            "label": label,
+        }
+
+    def _build_replay_anchor_payload(
+        self,
+        *,
+        message: dict[str, Any] | None,
+        marker: dict[str, Any] | None,
+        status: str,
+        degraded_reason: str | None,
+    ) -> dict[str, Any]:
+        if not isinstance(message, dict):
+            return {
+                "status": "missing",
+                "message_id": None,
+                "turn_number": None,
+                "marker": None,
+                "degraded_reason": degraded_reason or "anchor_target_not_found",
+            }
+
+        return {
+            "status": status,
+            "message_id": message.get("id"),
+            "turn_number": self._normalize_turn_number(message.get("turn_number"), 1),
+            "marker": self._build_anchor_marker_payload(marker),
+            "degraded_reason": degraded_reason,
+        }
+
+    def _resolve_replay_anchor(
+        self,
+        *,
+        messages: list[dict[str, Any]],
+        timeline_markers: list[dict[str, Any]],
+        preferred_stage_key: str | None,
+    ) -> dict[str, Any]:
+        highlight_message = self._find_preferred_highlight_message(
+            messages,
+            preferred_stage_key,
+        )
+        if highlight_message is not None:
+            highlight_marker = self._find_timeline_marker(
+                timeline_markers,
+                message_id=highlight_message.get("id"),
+                marker_type="highlight",
+            )
+            if highlight_marker is not None:
+                return self._build_replay_anchor_payload(
+                    message=highlight_message,
+                    marker=highlight_marker,
+                    status="resolved",
+                    degraded_reason=None,
+                )
+            return self._build_replay_anchor_payload(
+                message=highlight_message,
+                marker=None,
+                status="degraded",
+                degraded_reason="missing_marker",
+            )
+
+        stage_message = self._find_stage_anchor_message(messages, preferred_stage_key)
+        if stage_message is not None:
+            stage_marker = self._find_timeline_marker(
+                timeline_markers,
+                message_id=stage_message.get("id"),
+                marker_type="stage_change",
+            )
+            return self._build_replay_anchor_payload(
+                message=stage_message,
+                marker=stage_marker,
+                status="degraded",
+                degraded_reason="no_matching_highlight",
+            )
+
+        return self._build_replay_anchor_payload(
+            message=None,
+            marker=None,
+            status="missing",
+            degraded_reason="anchor_target_not_found",
+        )
+
+    @staticmethod
+    def _attach_replay_anchor(
+        summary_payload: dict[str, Any] | None,
+        replay_anchor: dict[str, Any],
+    ) -> dict[str, Any] | None:
+        if not isinstance(summary_payload, dict):
+            return summary_payload
+
+        return {
+            **summary_payload,
+            "replay_anchor": replay_anchor,
+        }
 
     def _generate_timeline_markers(
         self,

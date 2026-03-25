@@ -347,8 +347,14 @@ class TestReplayService:
         assert data["session_id"] == mock_completed_session.session_id
         assert len(data["messages"]) == 3
         assert data["overall_score"] == pytest.approx(81.67, abs=0.01)
-        assert data["main_issue"] == mock_completed_session.effectiveness_snapshot["main_issue"]
-        assert data["next_goal"] == mock_completed_session.effectiveness_snapshot["next_goal"]
+        assert data["main_issue"]["issue_type"] == mock_completed_session.effectiveness_snapshot["main_issue"]["issue_type"]
+        assert data["main_issue"]["issue_text"] == mock_completed_session.effectiveness_snapshot["main_issue"]["issue_text"]
+        assert data["main_issue"]["recovery_rule"] == mock_completed_session.effectiveness_snapshot["main_issue"]["recovery_rule"]
+        assert data["main_issue"]["replay_anchor"]["status"] == "degraded"
+        assert data["next_goal"]["goal_type"] == mock_completed_session.effectiveness_snapshot["next_goal"]["goal_type"]
+        assert data["next_goal"]["goal_text"] == mock_completed_session.effectiveness_snapshot["next_goal"]["goal_text"]
+        assert data["next_goal"]["rule"] == mock_completed_session.effectiveness_snapshot["next_goal"]["rule"]
+        assert data["next_goal"]["replay_anchor"]["status"] == "degraded"
         assert data["evaluable"] is True
         assert data["not_evaluable_reason"] is None
         assert "timeline_markers" in data
@@ -526,6 +532,315 @@ class TestReplayService:
             learning_evidence["suggested_response"]
             == "建议改进: 直接给出已验证的 ROI 区间和客户案例"
         )
+
+    @pytest.mark.asyncio
+    async def test_get_replay_data_attaches_resolved_replay_anchor_to_issue_and_goal(
+        self,
+        service,
+        mock_completed_session,
+    ):
+        """Replay should surface stable issue/goal anchors that point at the matched highlight marker."""
+        main_issue = {
+            "issue_type": "evidence_gap",
+            "issue_text": "ROI 证据没有落到真实案例。",
+            "recovery_rule": "下一轮先补真实 ROI / 案例证据，再推进下一步。",
+        }
+        next_goal = {
+            "goal_type": "evidence_backing",
+            "goal_text": "下一轮优先补 ROI 证据。",
+            "rule": "至少给出一个真实案例或量化回报。",
+        }
+        replay_messages = [
+            {
+                "id": "msg-prev",
+                "session_id": mock_completed_session.session_id,
+                "turn_number": 1,
+                "role": "assistant",
+                "content": "您最需要什么类型的 ROI 证明？",
+                "audio_url": None,
+                "timestamp": "2026-03-25T00:00:00+00:00",
+                "duration_ms": 1800,
+                "fuzzy_words": None,
+                "transcript_metadata": None,
+                "sales_stage": "discovery",
+                "score_snapshot": {"overall_score": 78.0},
+                "ai_feedback": None,
+                "is_highlight": False,
+                "highlight_type": None,
+                "highlight_reason": None,
+            },
+            {
+                "id": "msg-highlight",
+                "session_id": mock_completed_session.session_id,
+                "turn_number": 2,
+                "role": "user",
+                "content": "我们内部还是想先看同行案例和回收周期。",
+                "audio_url": None,
+                "timestamp": "2026-03-25T00:00:04+00:00",
+                "duration_ms": 2200,
+                "fuzzy_words": None,
+                "transcript_metadata": None,
+                "sales_stage": "objection",
+                "score_snapshot": {"overall_score": 64.0},
+                "ai_feedback": "先确认对方需要案例，再补 ROI 和回收周期。",
+                "is_highlight": True,
+                "highlight_type": "bad",
+                "highlight_reason": "客户已经明确要证据，但这轮还没给出任何案例或数字。",
+            },
+            {
+                "id": "msg-next",
+                "session_id": mock_completed_session.session_id,
+                "turn_number": 3,
+                "role": "assistant",
+                "content": "我下一轮先给您一个 3 个月回本的同行案例。",
+                "audio_url": None,
+                "timestamp": "2026-03-25T00:00:08+00:00",
+                "duration_ms": 2400,
+                "fuzzy_words": None,
+                "transcript_metadata": None,
+                "sales_stage": "objection",
+                "score_snapshot": {"overall_score": 72.0},
+                "ai_feedback": None,
+                "is_highlight": False,
+                "highlight_type": None,
+                "highlight_reason": None,
+            },
+        ]
+        projection = _make_projection(
+            mock_completed_session,
+            messages=replay_messages,
+            main_issue=main_issue,
+            next_goal=next_goal,
+            overall_score=72.0,
+        )
+        projection.timeline_markers = [
+            {
+                "timestamp_ms": 0,
+                "type": "stage_change",
+                "label": STAGE_NAMES["discovery"],
+                "message_id": "msg-prev",
+                "highlight_type": None,
+            },
+            {
+                "timestamp_ms": 1800,
+                "type": "stage_change",
+                "label": STAGE_NAMES["objection"],
+                "message_id": "msg-highlight",
+                "highlight_type": None,
+            },
+            {
+                "timestamp_ms": 1800,
+                "type": "highlight",
+                "label": "客户已经明确要证据，但这轮还没给出任何案例或数字。",
+                "message_id": "msg-highlight",
+                "highlight_type": "bad",
+            },
+        ]
+        projection.sales_alignment_stage_key = "objection"
+
+        with patch(
+            "common.conversation.replay.SessionEvidenceService.get_projection",
+            new=AsyncMock(return_value=Result.ok(projection)),
+        ):
+            result = await service.get_replay_data(mock_completed_session.session_id)
+
+        assert result.is_success
+        data = result.value
+        issue_anchor = data["main_issue"]["replay_anchor"]
+        goal_anchor = data["next_goal"]["replay_anchor"]
+
+        assert issue_anchor["status"] == "resolved"
+        assert issue_anchor["message_id"] == "msg-highlight"
+        assert issue_anchor["turn_number"] == 2
+        assert issue_anchor["marker"] == {
+            "type": "highlight",
+            "timestamp_ms": 1800,
+            "label": "客户已经明确要证据，但这轮还没给出任何案例或数字。",
+        }
+        assert issue_anchor["degraded_reason"] is None
+
+        assert goal_anchor["status"] == "resolved"
+        assert goal_anchor["message_id"] == "msg-highlight"
+        assert goal_anchor["turn_number"] == 2
+        assert goal_anchor["marker"]["type"] == "highlight"
+        assert goal_anchor["degraded_reason"] is None
+
+    @pytest.mark.asyncio
+    async def test_get_replay_data_marks_replay_anchor_degraded_when_highlight_marker_is_missing(
+        self,
+        service,
+        mock_completed_session,
+    ):
+        """Replay should surface missing-marker degradation instead of silently dropping the anchor."""
+        main_issue = {
+            "issue_type": "evidence_gap",
+            "issue_text": "ROI 证据没有落到真实案例。",
+            "recovery_rule": "下一轮先补真实 ROI / 案例证据，再推进下一步。",
+        }
+        next_goal = {
+            "goal_type": "evidence_backing",
+            "goal_text": "下一轮优先补 ROI 证据。",
+            "rule": "至少给出一个真实案例或量化回报。",
+        }
+        replay_messages = [
+            {
+                "id": "msg-highlight",
+                "session_id": mock_completed_session.session_id,
+                "turn_number": 2,
+                "role": "user",
+                "content": "我们内部还是想先看同行案例和回收周期。",
+                "audio_url": None,
+                "timestamp": "2026-03-25T00:00:04+00:00",
+                "duration_ms": 2200,
+                "fuzzy_words": None,
+                "transcript_metadata": None,
+                "sales_stage": "objection",
+                "score_snapshot": {"overall_score": 64.0},
+                "ai_feedback": "先确认对方需要案例，再补 ROI 和回收周期。",
+                "is_highlight": True,
+                "highlight_type": "bad",
+                "highlight_reason": "客户已经明确要证据，但这轮还没给出任何案例或数字。",
+            },
+        ]
+        projection = _make_projection(
+            mock_completed_session,
+            messages=replay_messages,
+            main_issue=main_issue,
+            next_goal=next_goal,
+            overall_score=64.0,
+        )
+        projection.timeline_markers = []
+        projection.sales_alignment_stage_key = "objection"
+
+        with patch(
+            "common.conversation.replay.SessionEvidenceService.get_projection",
+            new=AsyncMock(return_value=Result.ok(projection)),
+        ):
+            result = await service.get_replay_data(mock_completed_session.session_id)
+
+        assert result.is_success
+        data = result.value
+        issue_anchor = data["main_issue"]["replay_anchor"]
+        goal_anchor = data["next_goal"]["replay_anchor"]
+
+        assert issue_anchor["status"] == "degraded"
+        assert issue_anchor["message_id"] == "msg-highlight"
+        assert issue_anchor["turn_number"] == 2
+        assert issue_anchor["marker"] is None
+        assert issue_anchor["degraded_reason"] == "missing_marker"
+
+        assert goal_anchor["status"] == "degraded"
+        assert goal_anchor["message_id"] == "msg-highlight"
+        assert goal_anchor["turn_number"] == 2
+        assert goal_anchor["marker"] is None
+        assert goal_anchor["degraded_reason"] == "missing_marker"
+
+    @pytest.mark.asyncio
+    async def test_get_replay_data_marks_replay_anchor_degraded_when_falling_back_to_stage(
+        self,
+        service,
+        mock_completed_session,
+    ):
+        """Replay should keep degraded anchor state visible when no highlight matches the aligned stage."""
+        main_issue = {
+            "issue_type": "objection_handling_gap",
+            "issue_text": "价格顾虑已经出现，但还没给出报价逻辑。",
+            "recovery_rule": "下一轮先承接价格顾虑，再解释报价依据。",
+        }
+        next_goal = {
+            "goal_type": "objection_reframe",
+            "goal_text": "下一轮先解释报价逻辑，再推进低风险下一步。",
+            "rule": "至少先承接价格顾虑，再说明报价或 ROI 逻辑。",
+        }
+        replay_messages = [
+            {
+                "id": "msg-discovery",
+                "session_id": mock_completed_session.session_id,
+                "turn_number": 1,
+                "role": "assistant",
+                "content": "您目前更担心预算还是上线周期？",
+                "audio_url": None,
+                "timestamp": "2026-03-25T00:00:00+00:00",
+                "duration_ms": 1800,
+                "fuzzy_words": None,
+                "transcript_metadata": None,
+                "sales_stage": "discovery",
+                "score_snapshot": {"overall_score": 78.0},
+                "ai_feedback": None,
+                "is_highlight": False,
+                "highlight_type": None,
+                "highlight_reason": None,
+            },
+            {
+                "id": "msg-objection",
+                "session_id": mock_completed_session.session_id,
+                "turn_number": 2,
+                "role": "user",
+                "content": "最大的顾虑还是价格，你们为什么比别人贵？",
+                "audio_url": None,
+                "timestamp": "2026-03-25T00:00:04+00:00",
+                "duration_ms": 2200,
+                "fuzzy_words": None,
+                "transcript_metadata": None,
+                "sales_stage": "objection",
+                "score_snapshot": {"overall_score": 60.0},
+                "ai_feedback": None,
+                "is_highlight": False,
+                "highlight_type": None,
+                "highlight_reason": None,
+            },
+        ]
+        projection = _make_projection(
+            mock_completed_session,
+            messages=replay_messages,
+            main_issue=main_issue,
+            next_goal=next_goal,
+            overall_score=69.0,
+        )
+        projection.timeline_markers = [
+            {
+                "timestamp_ms": 0,
+                "type": "stage_change",
+                "label": STAGE_NAMES["discovery"],
+                "message_id": "msg-discovery",
+                "highlight_type": None,
+            },
+            {
+                "timestamp_ms": 1800,
+                "type": "stage_change",
+                "label": STAGE_NAMES["objection"],
+                "message_id": "msg-objection",
+                "highlight_type": None,
+            },
+        ]
+        projection.sales_alignment_stage_key = "objection"
+
+        with patch(
+            "common.conversation.replay.SessionEvidenceService.get_projection",
+            new=AsyncMock(return_value=Result.ok(projection)),
+        ):
+            result = await service.get_replay_data(mock_completed_session.session_id)
+
+        assert result.is_success
+        data = result.value
+        issue_anchor = data["main_issue"]["replay_anchor"]
+        goal_anchor = data["next_goal"]["replay_anchor"]
+
+        assert issue_anchor["status"] == "degraded"
+        assert issue_anchor["message_id"] == "msg-objection"
+        assert issue_anchor["turn_number"] == 2
+        assert issue_anchor["marker"] == {
+            "type": "stage_change",
+            "timestamp_ms": 1800,
+            "label": STAGE_NAMES["objection"],
+        }
+        assert issue_anchor["degraded_reason"] == "no_matching_highlight"
+
+        assert goal_anchor["status"] == "degraded"
+        assert goal_anchor["message_id"] == "msg-objection"
+        assert goal_anchor["turn_number"] == 2
+        assert goal_anchor["marker"]["type"] == "stage_change"
+        assert goal_anchor["degraded_reason"] == "no_matching_highlight"
 
     @pytest.mark.asyncio
     async def test_get_replay_data_normalizes_legacy_message_scores(self, service, mock_db, mock_completed_session):
