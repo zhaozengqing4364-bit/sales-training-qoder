@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import SessionReplayPage from "./page";
@@ -8,6 +8,8 @@ const {
   backMock,
   getReplayMock,
   getHighlightsMock,
+  getReportMock,
+  createSessionMock,
   searchParamsState,
   scrollIntoViewMock,
 } = vi.hoisted(() => ({
@@ -15,6 +17,8 @@ const {
   backMock: vi.fn(),
   getReplayMock: vi.fn(),
   getHighlightsMock: vi.fn(),
+  getReportMock: vi.fn(),
+  createSessionMock: vi.fn(),
   searchParamsState: {
     current: new URLSearchParams(),
   },
@@ -58,6 +62,11 @@ vi.mock("@/lib/api/client", async () => {
         ...actual.api.sessions,
         getReplay: getReplayMock,
         getHighlights: getHighlightsMock,
+        getReport: getReportMock,
+      },
+      practice: {
+        ...actual.api.practice,
+        createSession: createSessionMock,
       },
     },
   };
@@ -270,14 +279,74 @@ function buildHighlightsResponse(overrides: Record<string, unknown> = {}) {
   };
 }
 
+function buildRetryReport(overrides: Record<string, unknown> = {}) {
+  return {
+    session_id: "session-1",
+    scenario_type: "sales",
+    logic_score: 78,
+    accuracy_score: 70,
+    completeness_score: 68,
+    overall_score: 72,
+    suggestions: ["先补 ROI 证据，再继续推进下一步。"],
+    audio_url: null,
+    transcript_url: null,
+    voice_policy_snapshot_ref: null,
+    effectiveness_snapshot: null,
+    pass_flags: null,
+    main_capability_passed: false,
+    overall_result: "fail",
+    main_issue: {
+      issue_type: "evidence_gap",
+      issue_text: "客户收益提到了，但还没有补上可信证据。",
+      recovery_rule: "下一轮至少补一条 ROI 或客户案例证据。",
+    },
+    next_goal: {
+      goal_type: "evidence_backing",
+      goal_text: "先补 ROI 证据，再继续推进下一步。",
+      rule: "至少给出一条证据并确认客户是否认可。",
+    },
+    stage_summary: [],
+    evaluable: true,
+    not_evaluable_reason: null,
+    evidence_completeness: {
+      complete: true,
+      missing_fields: [],
+      message_count: 4,
+    },
+    retry_entry: {
+      scenario_type: "sales",
+      agent_id: "agent-1",
+      persona_id: "persona-1",
+      presentation_id: null,
+      focus_intent: {
+        version: "retry_focus_v1",
+        source_session_id: "session-1",
+        main_issue: {
+          issue_type: "evidence_gap",
+          issue_text: "客户收益提到了，但还没有补上可信证据。",
+          recovery_rule: "下一轮至少补一条 ROI 或客户案例证据。",
+        },
+        next_goal: {
+          goal_type: "evidence_backing",
+          goal_text: "先补 ROI 证据，再继续推进下一步。",
+          rule: "至少给出一条证据并确认客户是否认可。",
+        },
+      },
+    },
+    ...overrides,
+  };
+}
+
 function renderReplayPage(options: {
   search?: string;
   replayOverrides?: Record<string, unknown>;
   highlightsOverrides?: Record<string, unknown>;
+  reportOverrides?: Record<string, unknown>;
 } = {}) {
   searchParamsState.current = new URLSearchParams(options.search ?? "");
   getReplayMock.mockResolvedValue(buildReplayData(options.replayOverrides));
   getHighlightsMock.mockResolvedValue(buildHighlightsResponse(options.highlightsOverrides));
+  getReportMock.mockResolvedValue(buildRetryReport(options.reportOverrides));
   render(<SessionReplayPage />);
 }
 
@@ -287,8 +356,11 @@ describe("SessionReplayPage", () => {
     backMock.mockReset();
     getReplayMock.mockReset();
     getHighlightsMock.mockReset();
+    getReportMock.mockReset();
+    createSessionMock.mockReset();
     scrollIntoViewMock.mockReset();
     searchParamsState.current = new URLSearchParams();
+    createSessionMock.mockResolvedValue({ session_id: "retry-1" });
 
     Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
       configurable: true,
@@ -323,6 +395,38 @@ describe("SessionReplayPage", () => {
     expect(screen.getAllByText("先补一条 ROI 证据，再确认客户是否认可。").length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText("高光学习证据:客户已经追问可信度，这一轮决定能否继续推进。")).toBeTruthy();
     expect(screen.getByText("高光问题家族:evidence_gap")).toBeTruthy();
+  });
+
+  it("launches a focused retry from replay using the report retry_entry focus intent", async () => {
+    renderReplayPage();
+
+    fireEvent.click(await screen.findByRole("button", { name: "按目标再练一轮" }));
+
+    await waitFor(() => {
+      expect(createSessionMock).toHaveBeenCalledWith({
+        scenario_type: "sales",
+        agent_id: "agent-1",
+        persona_id: "persona-1",
+        presentation_id: undefined,
+        focus_intent: {
+          version: "retry_focus_v1",
+          source_session_id: "session-1",
+          main_issue: {
+            issue_type: "evidence_gap",
+            issue_text: "客户收益提到了，但还没有补上可信证据。",
+            recovery_rule: "下一轮至少补一条 ROI 或客户案例证据。",
+          },
+          next_goal: {
+            goal_type: "evidence_backing",
+            goal_text: "先补 ROI 证据，再继续推进下一步。",
+            rule: "至少给出一条证据并确认客户是否认可。",
+          },
+        },
+      });
+    });
+    expect(pushMock).toHaveBeenCalledWith(
+      "/practice/retry-1?scenario_type=sales&agent_id=agent-1&persona_id=persona-1",
+    );
   });
 
   it("lands on the resolved report anchor and keeps the target turn highlighted", async () => {

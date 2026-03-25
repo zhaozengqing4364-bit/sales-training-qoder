@@ -1034,6 +1034,21 @@ export interface SessionNextGoal {
     replay_anchor?: ReplayAnchor | null;
 }
 
+export interface RetryFocusIntent {
+    version: string;
+    source_session_id: string;
+    main_issue?: SessionMainIssue | null;
+    next_goal?: SessionNextGoal | null;
+}
+
+export interface RetryEntry {
+    scenario_type: "sales" | "presentation" | string;
+    agent_id?: string | null;
+    persona_id?: string | null;
+    presentation_id?: string | null;
+    focus_intent?: RetryFocusIntent | null;
+}
+
 export interface SessionEvidenceContract {
     scenario_type?: "sales" | "presentation";
     overall_score: number | null;
@@ -1130,12 +1145,7 @@ export interface PracticeSessionReport extends SessionEvidenceContract {
     transcript_url?: string | null;
     voice_policy_snapshot_ref?: VoicePolicySnapshotReference | null;
     presentation_review?: PresentationReview | null;
-    retry_entry?: {
-        scenario_type: "sales" | "presentation" | string;
-        agent_id?: string | null;
-        persona_id?: string | null;
-        presentation_id?: string | null;
-    } | null;
+    retry_entry?: RetryEntry | null;
 }
 
 export interface HistorySessionSummary extends SessionEvidenceContract {

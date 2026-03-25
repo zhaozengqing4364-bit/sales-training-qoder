@@ -421,6 +421,69 @@ describe("ReportPage", () => {
         );
     });
 
+    it("launches a focused sales retry from the goal card using retry_entry.focus_intent", async () => {
+        const focusIntent = {
+            version: "retry_focus_v1",
+            source_session_id: "session-1",
+            main_issue: {
+                issue_type: "evidence_gap",
+                issue_text: "价值主张缺少案例、数据或ROI支撑，客户很难相信收益承诺。",
+                recovery_rule: "下一轮先给出案例、数据或benchmark，再回应价格/ROI追问。",
+            },
+            next_goal: {
+                goal_type: "evidence_backing",
+                goal_text: "先用案例、数据或ROI证据支撑主张，再推进下一步。",
+                rule: "至少补上一条证据和一个明确的下一步动作。",
+            },
+        };
+        getReportMock.mockResolvedValue({
+            ...baseReport,
+            evaluable: true,
+            not_evaluable_reason: null,
+            retry_entry: {
+                scenario_type: "sales",
+                agent_id: "agent-1",
+                persona_id: "persona-1",
+                presentation_id: null,
+                focus_intent: focusIntent,
+            },
+            next_goal: {
+                goal_type: "evidence_backing",
+                goal_text: "先用案例、数据或ROI证据支撑主张，再推进下一步。",
+                rule: "至少补上一条证据和一个明确的下一步动作。",
+            },
+        });
+        getComprehensiveReportMock.mockResolvedValue({
+            session_id: "session-1",
+            generated_at: "2026-03-23T00:00:00Z",
+            overall_score: 82,
+            dimension_scores: [],
+            stage_summaries: [],
+            key_strengths: [],
+            key_improvements: [],
+            detailed_feedback: "",
+            recommendations: [],
+            voice_policy_snapshot_ref: null,
+        });
+
+        render(<ReportPage />);
+
+        fireEvent.click(await screen.findByRole("button", { name: "按目标再练一轮" }));
+
+        await waitFor(() => {
+            expect(createSessionMock).toHaveBeenCalledWith({
+                scenario_type: "sales",
+                agent_id: "agent-1",
+                persona_id: "persona-1",
+                presentation_id: undefined,
+                focus_intent: focusIntent,
+            });
+        });
+        expect(pushMock).toHaveBeenCalledWith(
+            "/practice/retry-1?scenario_type=sales&agent_id=agent-1&persona_id=persona-1",
+        );
+    });
+
     it("keeps degraded replay fallback visible and lets evidence cards jump into replay by turn", async () => {
         getReportMock.mockResolvedValue({
             ...baseReport,

@@ -61,6 +61,7 @@ import {
     SessionLifecycleAction,
     SessionLifecycleRequest,
     SessionLifecycleResponse,
+    RetryFocusIntent,
     PresentationAIPolicyScopeResponse,
     PresentationAIPolicyPreviewResponse,
     PresentationAIPolicyEffectiveResponse,
@@ -1115,6 +1116,7 @@ export const api = {
             persona_id?: string;
             voice_mode?: "legacy" | "stepfun_realtime";
             runtime_profile_id?: string;
+            focus_intent?: RetryFocusIntent;
         }) => {
             return apiFetch<{ session_id: string }>("/practice/sessions", {
                 method: "POST",
@@ -1133,6 +1135,7 @@ export const api = {
             scenario_id?: string;
             voice_mode?: "legacy" | "stepfun_realtime";
             runtime_profile_id?: string;
+            focus_intent?: RetryFocusIntent;
         }) => {
             return apiFetch<{ session_id: string }>("/practice/sessions", {
                 method: "POST",

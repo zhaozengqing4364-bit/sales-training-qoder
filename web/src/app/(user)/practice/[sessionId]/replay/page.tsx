@@ -18,7 +18,7 @@ import { HighlightList } from "@/components/highlights";
 import { Button } from "@/components/ui/button";
 import { GlassCard } from "@/components/ui/glass-card";
 import { api, getApiErrorMessage } from "@/lib/api/client";
-import { HighlightItem, ReplayAnchorStatus, ReplayData, ReplayHighlightContext, ReplayLearningEvidence, ReplayTimelineMarker } from "@/lib/api/types";
+import { HighlightItem, PracticeSessionReport, ReplayAnchorStatus, ReplayData, ReplayHighlightContext, ReplayLearningEvidence, ReplayTimelineMarker } from "@/lib/api/types";
 import { debug } from "@/lib/debug";
 import {
   extractSessionClaimTruth,
@@ -385,6 +385,8 @@ export default function SessionReplayPage() {
   const [highlightsUnavailableHint, setHighlightsUnavailableHint] = useState<string | null>(null);
   const [activeTurnNumber, setActiveTurnNumber] = useState<number | null>(null);
   const [replayAnchorNotice, setReplayAnchorNotice] = useState<ReplayAnchorNotice | null>(null);
+  const [retryEntry, setRetryEntry] = useState<PracticeSessionReport["retry_entry"]>(null);
+  const [retryHint, setRetryHint] = useState<string | null>(null);
 
   const replayDeepLink = useMemo(
     () => parseReplayDeepLinkRequest(searchParams),
@@ -402,11 +404,22 @@ export default function SessionReplayPage() {
       setHighlightsUnavailableHint(null);
       setActiveTurnNumber(null);
       setReplayAnchorNotice(null);
+      setRetryEntry(null);
+      setRetryHint(null);
 
       try {
-        const replay = await api.sessions.getReplay(sessionId);
+        const [replayResult, retryReportResult] = await Promise.allSettled([
+          api.sessions.getReplay(sessionId),
+          api.sessions.getReport(sessionId),
+        ]);
+
+        if (replayResult.status === "rejected") {
+          throw replayResult.reason;
+        }
+
         if (cancelled) return;
 
+        const replay = replayResult.value;
         setReplayData(replay);
         debug.log("[Replay] Loaded unified evidence contract", {
           sessionId,
@@ -416,6 +429,21 @@ export default function SessionReplayPage() {
           messageCount: replay.messages.length,
           evidenceComplete: replay.evidence_completeness?.complete,
         });
+
+        if (retryReportResult.status === "fulfilled") {
+          setRetryEntry(retryReportResult.value.retry_entry ?? null);
+          debug.log("[Replay] Retry entry loaded", {
+            sessionId,
+            retryScenarioType: retryReportResult.value.retry_entry?.scenario_type ?? null,
+            retryFocusIntentVersion: retryReportResult.value.retry_entry?.focus_intent?.version ?? null,
+          });
+        } else {
+          setRetryEntry(null);
+          debug.warn("[Replay] Retry entry unavailable; keeping replay conclusions read-only", {
+            sessionId,
+            error: retryReportResult.reason,
+          });
+        }
 
         try {
           const highlightsData = await api.sessions.getHighlights(sessionId);
@@ -476,6 +504,17 @@ export default function SessionReplayPage() {
   );
   const mainIssueTypeLabel = formatIssueTypeLabel(replayData?.main_issue?.issue_type);
   const nextGoalTypeLabel = formatGoalTypeLabel(replayData?.next_goal?.goal_type);
+  const retryBlockedHint = (
+    retryEntry?.scenario_type === "sales"
+    && (!retryEntry.agent_id || !retryEntry.persona_id)
+  )
+    ? "当前销售会话缺少角色配置，请在训练页重新选择智能体与角色。"
+    : (
+        retryEntry?.scenario_type === "presentation"
+        && !retryEntry.presentation_id
+      )
+        ? "当前演讲会话缺少课件配置，请返回训练页重新选择演示文稿。"
+        : null;
   const claimTruth = extractSessionClaimTruth(replayData?.effectiveness_snapshot);
   const claimTruthSummary = formatClaimTruthSummary(claimTruth);
   const claimTruthEvidenceNote = formatClaimTruthEvidenceNote(claimTruth);
@@ -488,6 +527,51 @@ export default function SessionReplayPage() {
       messageElement.scrollIntoView({ behavior: "smooth", block: "center" });
     }
   }, []);
+
+  const handleRetryFromGoal = useCallback(async () => {
+    const retry = retryEntry;
+    setRetryHint(null);
+
+    if (retryBlockedHint) {
+      setRetryHint(retryBlockedHint);
+      return;
+    }
+
+    if (!retry?.scenario_type) {
+      setRetryHint("当前回放缺少再练配置，请先返回报告页确认训练目标。");
+      return;
+    }
+
+    if (
+      retry.scenario_type === "sales"
+      && (!retry.agent_id || !retry.persona_id)
+    ) {
+      setRetryHint("当前销售会话缺少角色配置，请在训练页重新选择智能体与角色。");
+      return;
+    }
+
+    try {
+      const created = await api.practice.createSession({
+        scenario_type: retry.scenario_type as "sales" | "presentation",
+        agent_id: retry.agent_id || undefined,
+        persona_id: retry.persona_id || undefined,
+        presentation_id: retry.presentation_id || undefined,
+        focus_intent: retry.focus_intent || undefined,
+      });
+      const nextParams = new URLSearchParams();
+      nextParams.set("scenario_type", retry.scenario_type);
+      if (retry.agent_id) nextParams.set("agent_id", retry.agent_id);
+      if (retry.persona_id) nextParams.set("persona_id", retry.persona_id);
+      if (retry.presentation_id) nextParams.set("presentation_id", retry.presentation_id);
+      router.push(`/practice/${created.session_id}?${nextParams.toString()}`);
+    } catch (retryError) {
+      debug.warn("[Replay] Retry session creation failed", {
+        sessionId,
+        error: retryError,
+      });
+      setRetryHint(getApiErrorMessage(retryError));
+    }
+  }, [retryBlockedHint, retryEntry, router, sessionId]);
 
   useEffect(() => {
     if (!replayData) {
@@ -731,6 +815,32 @@ export default function SessionReplayPage() {
               </div>
             ) : null}
           </div>
+
+          {retryEntry?.scenario_type ? (
+            <div className="mt-4 flex items-start justify-between gap-3 flex-wrap">
+              <div>
+                <p className="text-xs font-semibold text-slate-600">按当前问题线继续再练</p>
+                <p className="text-sm text-slate-500 mt-1">
+                  系统会沿用当前报告里的主问题与下一轮目标，再创建一场新的练习。
+                </p>
+                {retryBlockedHint ? (
+                  <p className="text-xs text-amber-700 mt-2">{retryBlockedHint}</p>
+                ) : null}
+                {retryHint ? (
+                  <p className="text-xs text-amber-700 mt-2">{retryHint}</p>
+                ) : null}
+              </div>
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={handleRetryFromGoal}
+                className="whitespace-nowrap"
+                disabled={Boolean(retryBlockedHint)}
+              >
+                按目标再练一轮
+              </Button>
+            </div>
+          ) : null}
         </GlassCard>
       )}
 

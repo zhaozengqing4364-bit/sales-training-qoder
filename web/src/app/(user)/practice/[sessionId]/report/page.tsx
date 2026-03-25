@@ -545,6 +545,7 @@ export default function ComprehensiveReportPage() {
                 agent_id: retry.agent_id || undefined,
                 persona_id: retry.persona_id || undefined,
                 presentation_id: retry.presentation_id || undefined,
+                focus_intent: retry.focus_intent || undefined,
             });
             const nextParams = new URLSearchParams();
             nextParams.set("scenario_type", retry.scenario_type);
