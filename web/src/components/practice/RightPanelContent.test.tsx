@@ -55,6 +55,7 @@ describe("RightPanelContent", () => {
         expect(screen.getByText("直接跳到报价")).toBeTruthy();
         expect(screen.getByText("我先确认预算审批链路，再给你报价区间。")).toBeTruthy();
         expect(screen.getByText("下一轮先确认预算与决策人。")).toBeTruthy();
+        expect(screen.getByText("先补一个 ROI 证据，再回应价格异议")).toBeTruthy();
 
         expect(screen.getByText("当前阶段")).toBeTruthy();
         expect(screen.getByText("异议处理")).toBeTruthy();
@@ -66,7 +67,6 @@ describe("RightPanelContent", () => {
         expect(screen.queryByText("实时提示")).toBeNull();
         expect(screen.queryByText("改进建议")).toBeNull();
         expect(screen.queryByText("先别急着报价。")).toBeNull();
-        expect(screen.queryByText("先补一个 ROI 证据，再回应价格异议")).toBeNull();
     });
 
     it("shows realtime hints and score suggestions when there is no active action card", () => {

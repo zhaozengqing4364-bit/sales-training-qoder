@@ -407,3 +407,88 @@ class TestSessionEvidenceService:
         assert call.kwargs["sales_alignment_stage_key"] == "discovery"
         assert call.kwargs["sales_alignment_focus_type"] is None
         assert call.kwargs["sales_alignment_fallback_reason"] == "missing_dimension_scores"
+
+    @pytest.mark.asyncio
+    async def test_get_projection_prefers_latest_open_objection_ledger_for_sales_issue_and_next_goal(
+        self,
+        service: SessionEvidenceService,
+        mock_db: AsyncMock,
+        sample_session_id: str,
+    ) -> None:
+        session = SimpleNamespace(
+            session_id=sample_session_id,
+            status="completed",
+            logic_score=80.0,
+            accuracy_score=78.0,
+            completeness_score=74.0,
+            total_duration_seconds=180,
+            start_time=datetime.now(UTC) - timedelta(seconds=180),
+            end_time=datetime.now(UTC),
+            effectiveness_snapshot=_make_stale_sales_snapshot(),
+            voice_policy_snapshot=None,
+        )
+        messages = [
+            SimpleNamespace(
+                id="msg-1",
+                session_id=sample_session_id,
+                turn_number=1,
+                role="user",
+                content="我们后面再看具体案例。",
+                audio_url=None,
+                timestamp=datetime.now(UTC),
+                duration_ms=1600,
+                fuzzy_words=None,
+                transcript_metadata={
+                    "objection_ledger": {
+                        "objection_family": "roi_proof",
+                        "promised_proof": "补充同类客户 ROI 案例",
+                        "next_expected_evidence": "给出 6 个月回本测算",
+                        "closure_state": "open",
+                    }
+                },
+                sales_stage="closing",
+                score_snapshot={
+                    "overall_score": 79.0,
+                    "dimension_scores": {
+                        "价值表达": 83.0,
+                        "客户收益连接": 80.0,
+                        "证据使用": 84.0,
+                        "异议处理": 76.0,
+                        "推进下一步": 58.0,
+                    },
+                    "suggestions": ["先锁定试点时间"],
+                },
+                ai_feedback="先锁定试点时间。",
+                is_highlight=False,
+                highlight_type=None,
+                highlight_reason=None,
+            ),
+        ]
+
+        mock_session_result = MagicMock()
+        mock_session_result.scalar_one_or_none.return_value = session
+        mock_messages_result = MagicMock()
+        mock_messages_result.scalars.return_value.all.return_value = messages
+        mock_db.execute.side_effect = [mock_session_result, mock_messages_result]
+
+        result = await service.get_projection(
+            session_id=sample_session_id,
+            require_completed=True,
+        )
+
+        assert result.is_success
+        projection = result.value
+        assert projection.main_issue == {
+            "issue_type": "evidence_gap",
+            "issue_text": "客户持续追问 ROI / 案例证明，但这条证据直到结束都没有补上。",
+            "recovery_rule": "下一轮先补充同类客户 ROI 案例，再给出 6 个月回本测算。",
+        }
+        assert projection.next_goal == {
+            "goal_type": "evidence_backing",
+            "goal_text": "下一轮优先给出 6 个月回本测算，别让 ROI 证明再次悬空。",
+            "rule": "至少先补一条 ROI / 案例证据；如果暂时给不出，就明确承认缺口。",
+        }
+        assert projection.effectiveness_snapshot["main_issue"] == projection.main_issue
+        assert projection.effectiveness_snapshot["next_goal"] == projection.next_goal
+        assert projection.sales_alignment_used is True
+        assert projection.sales_alignment_focus_type == "evidence_gap"

@@ -375,6 +375,85 @@ describe("usePracticeWebSocket reconnect lifecycle", () => {
         expect(ws?.send).toHaveBeenCalledTimes(1);
     });
 
+    it("clears stale action-card hints on reconnect while preserving the objection proof prompt in scores", async () => {
+        const actualHandlers = await vi.importActual<typeof import("./websocket/message-handlers")>(
+            "./websocket/message-handlers",
+        );
+        vi.mocked(handleWebSocketMessage).mockImplementation((event, deps) =>
+            actualHandlers.handleWebSocketMessage(event, deps),
+        );
+
+        const { result } = renderHook(() =>
+            usePracticeWebSocket({
+                sessionId: "session-reconnect-ledger",
+                scenarioType: "sales",
+            }),
+        );
+
+        const ws = MockWebSocket.instances.at(-1);
+        expect(ws).toBeDefined();
+
+        act(() => {
+            if (!ws) return;
+            ws.readyState = MockWebSocket.OPEN;
+            ws.onopen?.(new Event("open"));
+            emitJsonMessage(ws, {
+                type: "score_update",
+                timestamp: new Date().toISOString(),
+                data: {
+                    overall_score: 79,
+                    turn_count: 5,
+                    stage_name: "异议处理",
+                    suggestions: ["给出 6 个月回本测算"],
+                    dimension_scores: {
+                        价值表达: 84,
+                        客户收益连接: 82,
+                        证据使用: 58,
+                        异议处理: 76,
+                        推进下一步: 68,
+                    },
+                },
+            });
+            emitJsonMessage(ws, {
+                type: "action_card",
+                timestamp: new Date().toISOString(),
+                data: {
+                    issue: "痛点已经聊到，但价值主张还缺少可验证的案例或数据。",
+                    replacement: "在确认痛点后，补一个同类客户案例、数据或ROI区间。",
+                    next_turn_rule: "下一轮先确认痛点影响，再补一个案例或ROI数据。",
+                },
+            });
+            emitJsonMessage(ws, {
+                type: "fuzzy_detection",
+                timestamp: new Date().toISOString(),
+                data: {
+                    detections: [
+                        {
+                            category: "feedback",
+                            matched: [],
+                            suggestion: "先别急着切到报价。",
+                            severity: "medium",
+                        },
+                    ],
+                },
+            });
+        });
+
+        expect(result.current.actionCard?.issue).toContain("价值主张还缺少可验证的案例或数据");
+        expect(result.current.fuzzyDetections).toHaveLength(1);
+        expect(result.current.scores?.suggestions).toEqual(["给出 6 个月回本测算"]);
+
+        act(() => {
+            if (!ws) return;
+            ws.emitClose(1006, "network-drop");
+        });
+
+        expect(result.current.connectionState).toBe("reconnecting");
+        expect(result.current.actionCard).toBeNull();
+        expect(result.current.fuzzyDetections).toEqual([]);
+        expect(result.current.scores?.suggestions).toEqual(["给出 6 个月回本测算"]);
+    });
+
     it("does not reconnect when streaming player reference changes", () => {
         unstableStreamingPlayerMode = true;
 

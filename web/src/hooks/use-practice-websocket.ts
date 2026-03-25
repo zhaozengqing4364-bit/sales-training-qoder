@@ -268,6 +268,8 @@ export function usePracticeWebSocket(options: UsePracticeWebSocketOptions) {
                 && !prev.isNetworkSlow
                 && !prev.interimTranscript
                 && prev.aiState === nextAiState
+                && prev.actionCard === null
+                && prev.fuzzyDetections.length === 0
             ) {
                 return prev;
             }
@@ -279,6 +281,8 @@ export function usePracticeWebSocket(options: UsePracticeWebSocketOptions) {
                 isBackpressureActive: false,
                 isNetworkSlow: false,
                 interimTranscript: "",
+                actionCard: null,
+                fuzzyDetections: [],
             };
         });
     }, [audioQueueRef, clearInterimTranscriptThrottle, interruptStreamingPlayback, isPlayingRef]);

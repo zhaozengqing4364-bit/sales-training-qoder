@@ -1,6 +1,6 @@
 {
   "mode": "stabilize",
-  "current_issue_id": "M003-S03-T02",
+  "current_issue_id": "M003-S03-T03",
   "current_issue_type": "task",
   "current_issue_status": "done",
   "pending_issue_ids": [],
@@ -56,25 +56,26 @@
     "M003-S02-T03",
     "M003-S02",
     "M003-S03-T01",
-    "M003-S03-T02"
+    "M003-S03-T02",
+    "M003-S03-T03"
   ],
   "blocked_issue_ids": [],
   "deferred_issue_ids": [],
   "last_modified_files": [
-    "backend/src/sales_bot/websocket/components/objection_ledger_helpers.py",
-    "backend/src/sales_bot/websocket/stepfun_realtime_handler.py",
-    "backend/src/sales_bot/websocket/components/capability_processor.py",
-    "backend/tests/unit/test_stepfun_realtime_handler.py",
-    "backend/tests/unit/test_stepfun_realtime_persistence.py",
-    "backend/tests/unit/test_capability_processor.py",
+    "backend/src/common/conversation/session_evidence.py",
+    "backend/tests/unit/test_session_evidence_service.py",
+    "web/src/hooks/use-practice-websocket.ts",
+    "web/src/hooks/use-practice-websocket.test.ts",
+    "web/src/components/practice/RightPanelContent.tsx",
+    "web/src/components/practice/RightPanelContent.test.tsx",
     ".gsd/DECISIONS.md"
   ],
   "last_verification_commands": [
-    "cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_stepfun_realtime_handler.py tests/unit/test_stepfun_realtime_persistence.py",
-    "cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_capability_processor.py"
+    "cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_session_evidence_service.py -k 'latest_open_objection_ledger or preserves_insufficient_sales_evidence_fallback'",
+    "cd web && npm test -- --run 'src/hooks/use-practice-websocket.test.ts' 'src/components/practice/RightPanelContent.test.tsx'"
   ],
-  "last_verification_result": "Passed. The StepFun handler/persistence gate passed with 68 tests, and the extra capability-processor regression suite passed with 7 tests covering the classic runtime path.",
-  "last_success_signal": "Both sales runtime paths now carry one unresolved-objection ledger through follow-up coaching, and reconnect restores only reconnect-safe pacing state instead of replaying stale action-card payloads.",
+  "last_verification_result": "Passed. The session-evidence objection-ledger regression passed, and the slice web gate passed with 13 tests covering reconnect cleanup and right-panel proof visibility.",
+  "last_success_signal": "Open objection proof gaps now surface through main_issue/next_goal on read-side consumers, and the practice panel keeps the proof prompt while reconnect drops stale turn hints.",
   "last_growth_scan": null,
-  "next_action": "Proceed to M003/S03/T03."
+  "next_action": "Proceed to M003/S03 slice completion."
 }

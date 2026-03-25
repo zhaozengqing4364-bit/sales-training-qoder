@@ -31,7 +31,7 @@ Reuse the current sales runtime and evidence chain only: `backend/src/sales_bot/
   - Files: `backend/src/sales_bot/websocket/stepfun_realtime_handler.py`, `backend/src/sales_bot/websocket/components/capability_processor.py`, `backend/tests/unit/test_stepfun_realtime_handler.py`, `backend/tests/unit/test_stepfun_realtime_persistence.py`
   - Verify: cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_stepfun_realtime_handler.py tests/unit/test_stepfun_realtime_persistence.py
 
-- [ ] **T03: Carry unresolved objection evidence onto current learner and read-side surfaces** `est:75m`
+- [x] **T03: Carry unresolved objection evidence onto current learner and read-side surfaces** `est:75m`
   Expose the unresolved objection family on the existing learner/read-side surfaces so the user can still see what kept blocking the conversation. Reuse the current practice reducer/right panel and session-evidence/report paths; do not add a separate objection UI.
   - Files: `backend/src/common/conversation/session_evidence.py`, `web/src/hooks/use-practice-websocket.ts`, `web/src/components/practice/RightPanelContent.tsx`, `web/src/hooks/use-practice-websocket.test.ts`, `web/src/components/practice/RightPanelContent.test.tsx`
   - Verify: cd web && npm test -- --run 'src/hooks/use-practice-websocket.test.ts' 'src/components/practice/RightPanelContent.test.tsx'

@@ -1101,3 +1101,22 @@ Append one entry per iteration:
   verification results: passed
   success signal status: unresolved objection families now survive into later turns and reconnect recovery without re-emitting the previous action-card payload on the same turn
   rollback note: if a later slice changes objection-pressure semantics, preserve the reconnect rule that action-card UI state is transient while objection_ledger + feedback_pacing_state remain the durable runtime facts
+
+- time: 2026-03-25T12:17:45+08:00
+  mode: stabilize
+  item id: M003-S03-T03
+  files changed:
+    - backend/src/common/conversation/session_evidence.py
+    - backend/tests/unit/test_session_evidence_service.py
+    - web/src/hooks/use-practice-websocket.ts
+    - web/src/hooks/use-practice-websocket.test.ts
+    - web/src/components/practice/RightPanelContent.tsx
+    - web/src/components/practice/RightPanelContent.test.tsx
+    - .gsd/DECISIONS.md
+  summary: Surfaced unresolved objection proof gaps on the shared session-evidence projection, kept the existing report/replay contract stable by overriding main_issue/next_goal from the latest open ledger, and made the practice panel keep the proof prompt while reconnect drops stale turn hints.
+  verification commands:
+    - cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_session_evidence_service.py -k 'latest_open_objection_ledger or preserves_insufficient_sales_evidence_fallback'
+    - cd web && npm test -- --run 'src/hooks/use-practice-websocket.test.ts' 'src/components/practice/RightPanelContent.test.tsx'
+  verification results: passed
+  success signal status: unresolved objection families now stay visible to learners and read-side consumers without replaying stale reconnect coaching cards
+  rollback note: if later work changes objection carry-forward again, preserve the rule that transcript_metadata objection_ledger overrides generic read-side sales alignment while reconnect cleanup clears only transient action-card/fuzzy state and keeps the score proof prompt.

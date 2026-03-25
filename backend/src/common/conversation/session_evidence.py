@@ -11,6 +11,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.conversation.models import ConversationMessage
+from common.conversation.storage import normalize_objection_ledger
 from common.db.models import PracticeSession, SessionStatus
 from common.effectiveness import (
     evaluate_effectiveness_snapshot,
@@ -31,6 +32,13 @@ STAGE_NAMES = {
     "presentation": "方案呈现",
     "objection": "异议处理",
     "closing": "促成成交",
+}
+
+_OBJECTION_LEDGER_REPORT_FOCUS = {
+    "roi_proof": "evidence_gap",
+    "price_pressure": "objection_handling_gap",
+    "competitor_alternative": "objection_handling_gap",
+    "implementation_risk": "objection_handling_gap",
 }
 
 
@@ -646,6 +654,124 @@ class SessionEvidenceService:
                 return sales_stage.strip()
         return None
 
+    @staticmethod
+    def _resolve_latest_objection_ledger(
+        messages: list[dict[str, Any]],
+    ) -> dict[str, Any] | None:
+        for message in reversed(messages):
+            transcript_metadata = message.get("transcript_metadata")
+            if not isinstance(transcript_metadata, dict):
+                continue
+            normalized = normalize_objection_ledger(
+                transcript_metadata.get("objection_ledger")
+            )
+            if normalized is None:
+                continue
+            if normalized.get("closure_state") == "open":
+                return normalized
+            return None
+        return None
+
+    @staticmethod
+    def _build_objection_ledger_alignment(
+        objection_ledger: dict[str, Any],
+    ) -> dict[str, Any]:
+        family = str(objection_ledger.get("objection_family") or "").strip()
+        promised_proof = str(objection_ledger.get("promised_proof") or "").strip()
+        next_expected_evidence = str(
+            objection_ledger.get("next_expected_evidence") or ""
+        ).strip()
+        focus_type = _OBJECTION_LEDGER_REPORT_FOCUS.get(
+            family,
+            "objection_handling_gap",
+        )
+
+        if family == "roi_proof":
+            main_issue = {
+                "issue_type": "evidence_gap",
+                "issue_text": "客户持续追问 ROI / 案例证明，但这条证据直到结束都没有补上。",
+                "recovery_rule": (
+                    f"下一轮先{promised_proof}，再{next_expected_evidence}。"
+                    if promised_proof and next_expected_evidence
+                    else "下一轮先补案例或 ROI 证明，再给出量化回报测算。"
+                ),
+            }
+            next_goal = {
+                "goal_type": "evidence_backing",
+                "goal_text": (
+                    f"下一轮优先{next_expected_evidence}，别让 ROI 证明再次悬空。"
+                    if next_expected_evidence
+                    else "下一轮优先补 ROI / 案例证据，再推进下一步。"
+                ),
+                "rule": "至少先补一条 ROI / 案例证据；如果暂时给不出，就明确承认缺口。",
+            }
+        elif family == "price_pressure":
+            main_issue = {
+                "issue_type": "objection_handling_gap",
+                "issue_text": "价格和预算顾虑反复出现，但报价依据、折扣边界或回收逻辑一直没讲清。",
+                "recovery_rule": (
+                    f"下一轮先承接价格顾虑，再{next_expected_evidence}。"
+                    if next_expected_evidence
+                    else "下一轮先承接价格顾虑，再说明报价逻辑、回收和折扣边界。"
+                ),
+            }
+            next_goal = {
+                "goal_type": "objection_reframe",
+                "goal_text": "下一轮先说明报价逻辑或预算回收，再推进低风险下一步。",
+                "rule": (
+                    f"至少明确 {next_expected_evidence}，最后确认一个时间点或责任人。"
+                    if next_expected_evidence
+                    else "先复述价格顾虑，再补报价依据，最后确认一个时间点或责任人。"
+                ),
+            }
+        elif family == "competitor_alternative":
+            main_issue = {
+                "issue_type": "objection_handling_gap",
+                "issue_text": "客户持续拿竞品或现有方案比较，但差异化价值和替代依据仍不够具体。",
+                "recovery_rule": (
+                    f"下一轮先承接替代方案顾虑，再{next_expected_evidence}。"
+                    if next_expected_evidence
+                    else "下一轮先承接替代方案顾虑，再讲清差异化收益、迁移风险和案例依据。"
+                ),
+            }
+            next_goal = {
+                "goal_type": "objection_reframe",
+                "goal_text": "下一轮先讲清为什么比现有方案更稳妥，再推进下一步。",
+                "rule": (
+                    f"至少明确 {next_expected_evidence}，最后确认一个试点或评估动作。"
+                    if next_expected_evidence
+                    else "先复述替代方案顾虑，再补差异化依据，最后确认一个试点或评估动作。"
+                ),
+            }
+        else:
+            main_issue = {
+                "issue_type": "objection_handling_gap",
+                "issue_text": "客户持续担心实施或上线风险，但排期、负责人和兜底方案没有被说清。",
+                "recovery_rule": (
+                    f"下一轮先承接实施风险，再{next_expected_evidence}。"
+                    if next_expected_evidence
+                    else "下一轮先承接实施风险，再讲清试点范围、排期、负责人和风险兜底。"
+                ),
+            }
+            next_goal = {
+                "goal_type": "objection_reframe",
+                "goal_text": "下一轮先给实施排期和兜底方案，再推进低风险试点。",
+                "rule": (
+                    f"至少明确 {next_expected_evidence}，最后确认一个试点负责人或时间点。"
+                    if next_expected_evidence
+                    else "先复述实施风险，再补排期和兜底方案，最后确认一个试点负责人或时间点。"
+                ),
+            }
+
+        return {
+            "alignment_used": True,
+            "stage_key": "objection",
+            "focus_type": focus_type,
+            "fallback_reason": None,
+            "main_issue": main_issue,
+            "next_goal": next_goal,
+        }
+
     @classmethod
     def _resolve_sales_projection_alignment(
         cls,
@@ -659,6 +785,10 @@ class SessionEvidenceService:
             return None
         if getattr(session, "status", None) != SessionStatus.COMPLETED.value:
             return None
+
+        latest_objection_ledger = cls._resolve_latest_objection_ledger(messages)
+        if latest_objection_ledger is not None:
+            return cls._build_objection_ledger_alignment(latest_objection_ledger)
 
         latest_stage = cls._get_latest_sales_stage(messages)
         latest_score_snapshot = cls._get_latest_score_snapshot(messages)

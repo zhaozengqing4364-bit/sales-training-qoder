@@ -48,6 +48,9 @@ export const RightPanelContent = React.memo(function RightPanelContent({
 }: RightPanelContentProps) {
     const suppressCompetingCoaching = Boolean(actionCard);
     const visibleFuzzyDetections = suppressCompetingCoaching ? [] : fuzzyDetections;
+    const objectionProofPrompt = actionCard && scores?.suggestions?.length
+        ? scores.suggestions[0]
+        : null;
 
     if (scenarioType === "presentation") {
         return (
@@ -112,6 +115,12 @@ export const RightPanelContent = React.memo(function RightPanelContent({
                             <p className="font-bold text-amber-700 mb-1">下一轮判定条件</p>
                             <p className="text-amber-800">{actionCard.next_turn_rule}</p>
                         </div>
+                        {objectionProofPrompt && (
+                            <div className="rounded-lg border border-violet-100 bg-violet-50 p-3">
+                                <p className="font-bold text-violet-700 mb-1">当前仍卡住的证明</p>
+                                <p className="text-violet-800">{objectionProofPrompt}</p>
+                            </div>
+                        )}
                     </div>
                 </div>
             )}
