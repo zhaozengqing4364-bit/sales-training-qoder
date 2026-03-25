@@ -477,6 +477,7 @@ class SessionEvidenceService:
         fallback_turn_number: int = 1,
     ) -> dict[str, Any]:
         timestamp = getattr(message, "timestamp", None)
+        sales_stage = getattr(message, "sales_stage", None)
         return {
             "id": getattr(message, "id", None),
             "session_id": getattr(message, "session_id", None),
@@ -491,7 +492,8 @@ class SessionEvidenceService:
             "duration_ms": getattr(message, "duration_ms", None),
             "fuzzy_words": getattr(message, "fuzzy_words", None),
             "transcript_metadata": getattr(message, "transcript_metadata", None),
-            "sales_stage": getattr(message, "sales_stage", None),
+            "sales_stage": sales_stage,
+            "stage_name": STAGE_NAMES.get(str(sales_stage), str(sales_stage)) if sales_stage else None,
             "score_snapshot": normalize_score_snapshot(
                 getattr(message, "score_snapshot", None)
             ),

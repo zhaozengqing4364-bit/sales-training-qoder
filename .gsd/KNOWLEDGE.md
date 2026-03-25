@@ -49,3 +49,4 @@
 - 里程碑 close-out 前先把 roadmap 里的 slice ID 和 `.gsd/milestones/<MID>/slices/` 目录、`S##-PLAN.md` / `S##-SUMMARY.md` / `S##-UAT.md` 做一轮文件系统对账；运行上下文里写着“all slices are done”并不能替代这个检查。
 - 如果 roadmap 想把实现严格限制在少数业务代码目录，先把共享 contract seam（例如 `backend/src/common/effectiveness/*`、`web/src/lib/api/*`）写进边界；否则实现虽然沿着真实业务链路落地，close-out 仍会因为字面目录约束而被判成未完全达标。
 - `tests/integration/test_sales_realtime_reconnect_flow.py` 如果还断言 persisted StepFun reconnect snapshot 带 `latest_action_card`，那是过期基线；当前 sales reconnect 合同只保留最小 `feedback_pacing_state` 与必要 runtime context，close-out proof 应改看 `test_stepfun_realtime_persistence.py` 这条事实线。
+- 改 `/api/v1/sessions/{id}/replay` / `highlights` 的 payload 时，别只改 `backend/src/common/conversation/replay.py`：FastAPI 的 `response_model` 会按 `backend/src/common/conversation/schemas.py` 过滤字段，`stage_name`、`context`、`learning_evidence` 这类新增键如果不进 schema，服务里明明构出来了也到不了前端。

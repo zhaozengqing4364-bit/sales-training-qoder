@@ -111,6 +111,66 @@ class VoicePolicySnapshotReferenceSchema(BaseModel):
     )
 
 
+class ReplayContextMessageSchema(BaseModel):
+    """Compact neighboring message preview used by replay/highlight learning evidence."""
+
+    id: str | None = Field(None, description="Neighbor message UUID")
+    role: MessageRoleType | None = Field(None, description="Neighbor message role")
+    content: str | None = Field(None, description="Neighbor message content")
+    timestamp: datetime | None = Field(None, description="Neighbor message timestamp")
+
+
+class ReplayHighlightContextSchema(BaseModel):
+    """Nearby replay context around a highlighted turn."""
+
+    prev_message: ReplayContextMessageSchema | None = Field(
+        None,
+        description="Previous message near the highlighted turn",
+    )
+    next_message: ReplayContextMessageSchema | None = Field(
+        None,
+        description="Next message near the highlighted turn",
+    )
+
+
+class ReplayLearningStageSchema(BaseModel):
+    """Structured stage descriptor for replay learning evidence."""
+
+    key: SalesStageType = Field(..., description="Canonical stage key")
+    name: str = Field(..., description="Display label for the stage")
+
+
+class ReplayLearningEvidenceSchema(BaseModel):
+    """Structured learning evidence attached to replay/highlight turns."""
+
+    reason: str | None = Field(None, description="Why this turn matters")
+    issue_family: str | None = Field(None, description="Linked issue family from session evidence")
+    objection_family: str | None = Field(
+        None,
+        description="Optional raw objection family from transcript metadata",
+    )
+    stage: ReplayLearningStageSchema | None = Field(
+        None,
+        description="Stage associated with this learning moment",
+    )
+    nearby_context: ReplayHighlightContextSchema = Field(
+        default_factory=ReplayHighlightContextSchema,
+        description="Previous/next messages near this turn",
+    )
+    suggested_response: str | None = Field(
+        None,
+        description="Suggested better response derived from existing evidence",
+    )
+    linked_issue: dict[str, Any] | None = Field(
+        None,
+        description="Session-level issue linked to this highlight",
+    )
+    linked_goal: dict[str, Any] | None = Field(
+        None,
+        description="Session-level next goal linked to this highlight",
+    )
+
+
 # ========== ConversationMessage Schemas ==========
 
 class ConversationMessageBase(BaseModel):
@@ -143,6 +203,7 @@ class ConversationMessageResponse(ConversationMessageBase):
         None,
         description="Sales stage at this turn"
     )
+    stage_name: str | None = Field(None, description="Display label for the sales stage")
     score_snapshot: ScoreSnapshotSchema | None = Field(
         None,
         description="Score snapshot at this turn"
@@ -156,6 +217,10 @@ class ConversationMessageResponse(ConversationMessageBase):
         description="Highlight type: good|bad|neutral"
     )
     highlight_reason: str | None = Field(None, description="Reason for highlight")
+    learning_evidence: ReplayLearningEvidenceSchema | None = Field(
+        None,
+        description="Structured learning evidence for highlighted turns",
+    )
 
 
 class ConversationMessageDetailResponse(ConversationMessageResponse):
@@ -192,6 +257,19 @@ class HighlightResponse(BaseModel):
     suggested_response: str | None = Field(
         None,
         description="Suggested better response"
+    )
+    sales_stage: SalesStageType | None = Field(
+        None,
+        description="Sales stage for the highlighted turn",
+    )
+    stage_name: str | None = Field(None, description="Display label for the sales stage")
+    context: ReplayHighlightContextSchema = Field(
+        default_factory=ReplayHighlightContextSchema,
+        description="Previous/next messages around the highlight",
+    )
+    learning_evidence: ReplayLearningEvidenceSchema | None = Field(
+        None,
+        description="Structured learning evidence for this highlight",
     )
 
 

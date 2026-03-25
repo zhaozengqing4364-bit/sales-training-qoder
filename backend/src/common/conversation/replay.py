@@ -18,6 +18,7 @@ from sqlalchemy.orm import selectinload
 
 from common.conversation.models import ConversationMessage
 from common.conversation.session_evidence import SessionEvidenceService
+from common.conversation.storage import normalize_objection_ledger
 from common.db.models import PracticeSession, SessionStatus
 from common.db.voice_policy_snapshot import build_voice_policy_snapshot_ref_payload
 from common.error_handling.result import Result
@@ -187,6 +188,10 @@ class ReplayService:
 
             projection = projection_result.value
             session = projection.session
+            enriched_messages = self._attach_learning_evidence(
+                projection.messages,
+                projection,
+            )
 
             # Get agent and persona names (if available)
             agent_name = None
@@ -213,7 +218,7 @@ class ReplayService:
                 "persona_name": persona_name,
                 "voice_policy_snapshot_ref": build_voice_policy_snapshot_ref_payload(session.voice_policy_snapshot),
                 "total_duration_ms": projection.total_duration_ms,
-                "messages": projection.messages,
+                "messages": enriched_messages,
                 "timeline_markers": projection.timeline_markers,
                 "stage_summary": projection.stage_summary,
                 "overall_score": projection.overall_score,
@@ -228,7 +233,18 @@ class ReplayService:
                 "evidence_completeness": projection.evidence_completeness,
             }
 
-            logger.info(f"Generated replay data for session {session_id}")
+            logger.info(
+                "replay_data_generated",
+                session_id=session_id,
+                highlight_learning_count=sum(
+                    1 for message in enriched_messages if message.get("learning_evidence")
+                ),
+                issue_family=(
+                    projection.main_issue.get("issue_type")
+                    if isinstance(projection.main_issue, dict)
+                    else None
+                ),
+            )
 
             return Result.ok(replay_data)
 
@@ -256,56 +272,75 @@ class ReplayService:
         Requirements: R10.3
         """
         try:
-            # Check session is completed
-            session_result = await self._check_session_completed(session_id)
-            if not session_result.is_success:
-                return session_result
-
-            # Get highlighted messages
-            stmt = (
-                select(ConversationMessage)
-                .where(
-                    ConversationMessage.session_id == session_id,
-                    ConversationMessage.is_highlight == True
-                )
-                .order_by(ConversationMessage.turn_number)
+            projection_result = await SessionEvidenceService(self.db).get_projection(
+                session_id=session_id,
+                require_completed=True,
             )
-            result = await self.db.execute(stmt)
-            messages = list(result.scalars().all())
+            if not projection_result.is_success:
+                return projection_result
+
+            projection = projection_result.value
+            enriched_messages = self._attach_learning_evidence(
+                projection.messages,
+                projection,
+            )
 
             highlights = []
             total_good = 0
             total_bad = 0
 
-            for index, msg in enumerate(messages):
-                # Get message context (prev and next messages)
-                context = await self._get_message_context(msg)
+            for index, message in enumerate(enriched_messages):
+                if not message.get("is_highlight"):
+                    continue
 
+                learning_evidence = message.get("learning_evidence")
+                context = (
+                    learning_evidence.get("nearby_context")
+                    if isinstance(learning_evidence, dict)
+                    else self._build_nearby_context(enriched_messages, index)
+                )
+                stage = (
+                    learning_evidence.get("stage")
+                    if isinstance(learning_evidence, dict)
+                    else None
+                )
                 highlight = {
-                    "id": msg.id,
-                    "turn_number": self._normalize_turn_number(msg.turn_number, index + 1),
-                    "role": msg.role,
-                    "content": msg.content,
-                    "timestamp": msg.timestamp.isoformat() if msg.timestamp else None,
-                    "highlight_type": msg.highlight_type,
-                    "highlight_reason": msg.highlight_reason,
-                    "ai_feedback": msg.ai_feedback,
-                    "suggested_response": self._generate_suggested_response(msg),
-                    "sales_stage": msg.sales_stage,
-                    "stage_name": STAGE_NAMES.get(msg.sales_stage, msg.sales_stage) if msg.sales_stage else None,
-                    "context": context
+                    "id": message.get("id"),
+                    "turn_number": self._normalize_turn_number(
+                        message.get("turn_number"),
+                        index + 1,
+                    ),
+                    "role": message.get("role"),
+                    "content": message.get("content"),
+                    "timestamp": message.get("timestamp"),
+                    "highlight_type": message.get("highlight_type"),
+                    "highlight_reason": message.get("highlight_reason"),
+                    "ai_feedback": message.get("ai_feedback"),
+                    "suggested_response": (
+                        learning_evidence.get("suggested_response")
+                        if isinstance(learning_evidence, dict)
+                        else self._generate_suggested_response_from_payload(message)
+                    ),
+                    "sales_stage": message.get("sales_stage"),
+                    "stage_name": message.get("stage_name")
+                    or (stage.get("name") if isinstance(stage, dict) else None),
+                    "context": context,
+                    "learning_evidence": learning_evidence,
                 }
                 highlights.append(highlight)
 
-                # Count by type
-                if msg.highlight_type == "good":
+                if message.get("highlight_type") == "good":
                     total_good += 1
-                elif msg.highlight_type == "bad":
+                elif message.get("highlight_type") == "bad":
                     total_bad += 1
 
             logger.info(
-                f"Retrieved {len(highlights)} highlights for session {session_id}",
-                extra={"total_good": total_good, "total_bad": total_bad}
+                "session_highlights_generated",
+                session_id=session_id,
+                total_highlights=len(highlights),
+                total_good=total_good,
+                total_bad=total_bad,
+                issue_family=self._resolve_issue_family(projection),
             )
 
             return Result.ok({
@@ -317,6 +352,116 @@ class ReplayService:
         except (SQLAlchemyError, ValueError, OSError) as e:
             logger.error(f"Failed to get highlights: {str(e)}")
             return Result.fail(f"[HIGHLIGHTS_GET_FAILED] {str(e)}")
+
+    @staticmethod
+    def _build_context_preview(message: dict[str, Any] | None) -> dict[str, Any] | None:
+        if not isinstance(message, dict):
+            return None
+        return {
+            "id": message.get("id"),
+            "role": message.get("role"),
+            "content": message.get("content"),
+            "timestamp": message.get("timestamp"),
+        }
+
+    def _build_nearby_context(
+        self,
+        messages: list[dict[str, Any]],
+        index: int,
+    ) -> dict[str, Any]:
+        prev_message = messages[index - 1] if index > 0 else None
+        next_message = messages[index + 1] if index + 1 < len(messages) else None
+        return {
+            "prev_message": self._build_context_preview(prev_message),
+            "next_message": self._build_context_preview(next_message),
+        }
+
+    @staticmethod
+    def _resolve_issue_family(projection: Any) -> str | None:
+        main_issue = getattr(projection, "main_issue", None)
+        if isinstance(main_issue, dict):
+            issue_type = main_issue.get("issue_type")
+            if isinstance(issue_type, str) and issue_type.strip():
+                return issue_type.strip()
+
+        focus_type = getattr(projection, "sales_alignment_focus_type", None)
+        if isinstance(focus_type, str) and focus_type.strip():
+            return focus_type.strip()
+
+        return None
+
+    @staticmethod
+    def _extract_objection_family(message: dict[str, Any]) -> str | None:
+        transcript_metadata = message.get("transcript_metadata")
+        if not isinstance(transcript_metadata, dict):
+            return None
+
+        objection_ledger = normalize_objection_ledger(
+            transcript_metadata.get("objection_ledger")
+        )
+        if not isinstance(objection_ledger, dict):
+            return None
+
+        objection_family = objection_ledger.get("objection_family")
+        if isinstance(objection_family, str) and objection_family.strip():
+            return objection_family.strip()
+        return None
+
+    @staticmethod
+    def _stage_payload(sales_stage: Any) -> dict[str, str] | None:
+        if not isinstance(sales_stage, str) or not sales_stage.strip():
+            return None
+        stage_key = sales_stage.strip()
+        return {
+            "key": stage_key,
+            "name": STAGE_NAMES.get(stage_key, stage_key),
+        }
+
+    def _build_learning_evidence(
+        self,
+        *,
+        message: dict[str, Any],
+        context: dict[str, Any],
+        projection: Any,
+    ) -> dict[str, Any] | None:
+        if not message.get("is_highlight"):
+            return None
+
+        linked_issue = getattr(projection, "main_issue", None)
+        linked_goal = getattr(projection, "next_goal", None)
+        return {
+            "reason": message.get("highlight_reason") or message.get("ai_feedback"),
+            "issue_family": self._resolve_issue_family(projection),
+            "objection_family": self._extract_objection_family(message),
+            "stage": self._stage_payload(message.get("sales_stage")),
+            "nearby_context": context,
+            "suggested_response": self._generate_suggested_response_from_payload(message),
+            "linked_issue": dict(linked_issue) if isinstance(linked_issue, dict) else None,
+            "linked_goal": dict(linked_goal) if isinstance(linked_goal, dict) else None,
+        }
+
+    def _attach_learning_evidence(
+        self,
+        messages: list[dict[str, Any]],
+        projection: Any,
+    ) -> list[dict[str, Any]]:
+        enriched_messages: list[dict[str, Any]] = []
+        for index, raw_message in enumerate(messages):
+            message = dict(raw_message)
+            stage = self._stage_payload(message.get("sales_stage"))
+            if message.get("stage_name") is None and isinstance(stage, dict):
+                message["stage_name"] = stage["name"]
+
+            context = self._build_nearby_context(messages, index)
+            learning_evidence = self._build_learning_evidence(
+                message=message,
+                context=context,
+                projection=projection,
+            )
+            if learning_evidence is not None:
+                message["learning_evidence"] = learning_evidence
+            enriched_messages.append(message)
+        return enriched_messages
 
     def _generate_timeline_markers(
         self,
@@ -434,6 +579,24 @@ class ReplayService:
             fallback_turn_number=fallback_turn_number,
         )
 
+    @staticmethod
+    def _generate_suggested_response_from_fields(
+        highlight_type: Any,
+        fuzzy_words: Any,
+    ) -> str | None:
+        if highlight_type != "bad":
+            return None
+
+        if isinstance(fuzzy_words, list):
+            suggestions = []
+            for fuzzy_word in fuzzy_words:
+                if isinstance(fuzzy_word, dict) and fuzzy_word.get("suggestion"):
+                    suggestions.append(str(fuzzy_word["suggestion"]))
+            if suggestions:
+                return f"建议改进: {'; '.join(suggestions)}"
+
+        return None
+
     def _generate_suggested_response(self, message: ConversationMessage) -> str | None:
         """
         Generate a suggested better response for a highlight.
@@ -447,19 +610,19 @@ class ReplayService:
         Returns:
             str | None: Suggested response or None
         """
-        if message.highlight_type != "bad":
-            return None
+        return self._generate_suggested_response_from_fields(
+            getattr(message, "highlight_type", None),
+            getattr(message, "fuzzy_words", None),
+        )
 
-        # Check for fuzzy words
-        if message.fuzzy_words:
-            suggestions = []
-            for fw in message.fuzzy_words:
-                if fw.get("suggestion"):
-                    suggestions.append(fw["suggestion"])
-            if suggestions:
-                return f"建议改进: {'; '.join(suggestions)}"
-
-        return None
+    def _generate_suggested_response_from_payload(
+        self,
+        message: dict[str, Any],
+    ) -> str | None:
+        return self._generate_suggested_response_from_fields(
+            message.get("highlight_type"),
+            message.get("fuzzy_words"),
+        )
 
     async def _get_message_context(
         self,

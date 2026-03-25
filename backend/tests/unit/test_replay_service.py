@@ -15,6 +15,7 @@ import pytest
 
 from common.conversation.replay import ReplayService, STAGE_NAMES
 from common.db.models import SessionStatus
+from common.error_handling.result import Result
 
 
 def _make_stale_sales_snapshot() -> dict[str, object]:
@@ -50,6 +51,65 @@ def _make_stale_sales_snapshot() -> dict[str, object]:
         "evaluable": True,
         "not_evaluable_reason": None,
     }
+
+
+def _make_projection(
+    session,
+    *,
+    messages: list[dict[str, object]],
+    main_issue: dict[str, object] | None = None,
+    next_goal: dict[str, object] | None = None,
+    overall_score: float = 78.0,
+):
+    projection = MagicMock()
+    projection.session = session
+    projection.session_id = session.session_id
+    projection.scenario_type = "sales"
+    projection.messages = messages
+    projection.timeline_markers = []
+    projection.stage_summary = []
+    projection.total_duration_ms = sum(int(message.get("duration_ms") or 0) for message in messages)
+    projection.logic_score = 78.0
+    projection.accuracy_score = 77.0
+    projection.completeness_score = 79.0
+    projection.overall_score = overall_score
+    projection.effectiveness_snapshot = {
+        "pass_flags": {
+            "pass_3min_flow": False,
+            "pass_5turn_defense": False,
+            "pass_4step_structure": False,
+        },
+        "main_capability_passed": False,
+        "overall_result": "fail",
+        "main_issue": main_issue,
+        "next_goal": next_goal,
+        "version": "rule_v1",
+        "evaluable": True,
+        "not_evaluable_reason": None,
+    }
+    projection.pass_flags = projection.effectiveness_snapshot["pass_flags"]
+    projection.main_capability_passed = False
+    projection.overall_result = "fail"
+    projection.main_issue = main_issue
+    projection.next_goal = next_goal
+    projection.evaluable = True
+    projection.not_evaluable_reason = None
+    projection.evidence_completeness = {
+        "complete": True,
+        "message_count": len(messages),
+        "missing_fields": [],
+    }
+    projection.legacy_score_key_used = False
+    projection.sales_alignment_used = True
+    projection.sales_alignment_stage_key = (
+        str(messages[-1].get("sales_stage")) if messages and messages[-1].get("sales_stage") else None
+    )
+    projection.sales_alignment_focus_type = (
+        str(main_issue.get("issue_type")) if isinstance(main_issue, dict) else None
+    )
+    projection.sales_alignment_fallback_reason = None
+    projection.presentation_review = None
+    return projection
 
 
 class TestReplayService:
@@ -348,6 +408,126 @@ class TestReplayService:
         assert mock_completed_session.effectiveness_snapshot["next_goal"]["goal_type"] == "value_to_benefit_translation"
 
     @pytest.mark.asyncio
+    async def test_get_replay_data_attaches_learning_evidence_to_highlight_messages(
+        self,
+        service,
+        mock_completed_session,
+    ):
+        """Replay messages should expose structured learning evidence from the shared session projection."""
+        main_issue = {
+            "issue_type": "evidence_gap",
+            "issue_text": "ROI 证据没有落到真实案例。",
+            "recovery_rule": "下一轮先补真实 ROI / 案例证据，再推进下一步。",
+        }
+        next_goal = {
+            "goal_type": "evidence_backing",
+            "goal_text": "下一轮优先补 ROI 证据。",
+            "rule": "至少给出一个真实案例或量化回报。",
+        }
+        replay_messages = [
+            {
+                "id": "msg-prev",
+                "session_id": mock_completed_session.session_id,
+                "turn_number": 1,
+                "role": "assistant",
+                "content": "您现在最担心的是 ROI 还是实施复杂度？",
+                "audio_url": None,
+                "timestamp": "2026-03-25T00:00:00+00:00",
+                "duration_ms": 1800,
+                "fuzzy_words": None,
+                "transcript_metadata": None,
+                "sales_stage": "discovery",
+                "score_snapshot": {"overall_score": 78.0},
+                "ai_feedback": None,
+                "is_highlight": False,
+                "highlight_type": None,
+                "highlight_reason": None,
+            },
+            {
+                "id": "msg-highlight",
+                "session_id": mock_completed_session.session_id,
+                "turn_number": 2,
+                "role": "user",
+                "content": "我们内部最关心的是 ROI，最好有同行案例。",
+                "audio_url": None,
+                "timestamp": "2026-03-25T00:00:05+00:00",
+                "duration_ms": 2200,
+                "fuzzy_words": [
+                    {
+                        "category": "uncertain",
+                        "matched": ["应该"],
+                        "suggestion": "直接给出已验证的 ROI 区间和客户案例",
+                        "severity": "high",
+                    }
+                ],
+                "transcript_metadata": {
+                    "objection_ledger": {
+                        "objection_family": "roi_proof",
+                        "closure_state": "open",
+                        "promised_proof": "补 ROI 案例",
+                        "next_expected_evidence": "给出量化回报区间",
+                    }
+                },
+                "sales_stage": "objection",
+                "score_snapshot": {"overall_score": 66.0},
+                "ai_feedback": "先承认对方需要证据，再补案例与 ROI 区间。",
+                "is_highlight": True,
+                "highlight_type": "bad",
+                "highlight_reason": "客户已经明确要 ROI 证据，但这一轮还没有回应到位。",
+            },
+            {
+                "id": "msg-next",
+                "session_id": mock_completed_session.session_id,
+                "turn_number": 3,
+                "role": "assistant",
+                "content": "明白，我下一轮先补一个 3 个月回本的客户案例。",
+                "audio_url": None,
+                "timestamp": "2026-03-25T00:00:08+00:00",
+                "duration_ms": 2400,
+                "fuzzy_words": None,
+                "transcript_metadata": None,
+                "sales_stage": "objection",
+                "score_snapshot": {"overall_score": 72.0},
+                "ai_feedback": None,
+                "is_highlight": False,
+                "highlight_type": None,
+                "highlight_reason": None,
+            },
+        ]
+        projection = _make_projection(
+            mock_completed_session,
+            messages=replay_messages,
+            main_issue=main_issue,
+            next_goal=next_goal,
+            overall_score=72.0,
+        )
+
+        with patch(
+            "common.conversation.replay.SessionEvidenceService.get_projection",
+            new=AsyncMock(return_value=Result.ok(projection)),
+        ):
+            result = await service.get_replay_data(mock_completed_session.session_id)
+
+        assert result.is_success
+        data = result.value
+        highlighted_message = next(
+            message for message in data["messages"] if message["id"] == "msg-highlight"
+        )
+        learning_evidence = highlighted_message["learning_evidence"]
+        assert learning_evidence["reason"] == "客户已经明确要 ROI 证据，但这一轮还没有回应到位。"
+        assert learning_evidence["issue_family"] == "evidence_gap"
+        assert learning_evidence["objection_family"] == "roi_proof"
+        assert learning_evidence["stage"] == {"key": "objection", "name": STAGE_NAMES["objection"]}
+        assert learning_evidence["linked_issue"]["issue_type"] == "evidence_gap"
+        assert learning_evidence["linked_goal"]["goal_type"] == "evidence_backing"
+        assert learning_evidence["nearby_context"]["prev_message"]["id"] == "msg-prev"
+        assert learning_evidence["nearby_context"]["next_message"]["id"] == "msg-next"
+        assert (
+            learning_evidence["suggested_response"]
+            == "建议改进: 直接给出已验证的 ROI 区间和客户案例"
+        )
+
+    @pytest.mark.asyncio
     async def test_get_replay_data_normalizes_legacy_message_scores(self, service, mock_db, mock_completed_session):
         """Replay should expose the shared normalized score_snapshot contract."""
         mock_completed_session.logic_score = 70.0
@@ -416,64 +596,132 @@ class TestReplayService:
     # ========== get_highlights tests ==========
 
     @pytest.mark.asyncio
-    async def test_get_highlights_success(self, service, mock_db, mock_completed_session):
+    async def test_get_highlights_success(self, service, mock_completed_session):
         """Test getting highlights for a completed session"""
-        # Arrange
-        mock_session_result = MagicMock()
-        mock_session_result.scalar_one_or_none.return_value = mock_completed_session
+        main_issue = {
+            "issue_type": "evidence_gap",
+            "issue_text": "ROI 证据没有落到真实案例。",
+            "recovery_rule": "下一轮先补真实 ROI / 案例证据，再推进下一步。",
+        }
+        next_goal = {
+            "goal_type": "evidence_backing",
+            "goal_text": "下一轮优先补 ROI 证据。",
+            "rule": "至少给出一个真实案例或量化回报。",
+        }
+        projection = _make_projection(
+            mock_completed_session,
+            messages=[
+                {
+                    "id": "msg-prev",
+                    "session_id": mock_completed_session.session_id,
+                    "turn_number": 1,
+                    "role": "assistant",
+                    "content": "您最需要什么类型的 ROI 证明？",
+                    "audio_url": None,
+                    "timestamp": "2026-03-25T00:00:00+00:00",
+                    "duration_ms": 1800,
+                    "fuzzy_words": None,
+                    "transcript_metadata": None,
+                    "sales_stage": "discovery",
+                    "score_snapshot": {"overall_score": 78.0},
+                    "ai_feedback": None,
+                    "is_highlight": False,
+                    "highlight_type": None,
+                    "highlight_reason": None,
+                },
+                {
+                    "id": "msg-highlight",
+                    "session_id": mock_completed_session.session_id,
+                    "turn_number": 2,
+                    "role": "user",
+                    "content": "我们内部更想看同行案例和回收周期。",
+                    "audio_url": None,
+                    "timestamp": "2026-03-25T00:00:04+00:00",
+                    "duration_ms": 2200,
+                    "fuzzy_words": [
+                        {
+                            "category": "uncertain",
+                            "matched": ["差不多"],
+                            "suggestion": "直接补同行案例和 ROI 数字",
+                            "severity": "high",
+                        }
+                    ],
+                    "transcript_metadata": {
+                        "objection_ledger": {
+                            "objection_family": "roi_proof",
+                            "closure_state": "open",
+                            "promised_proof": "补同行 ROI 案例",
+                            "next_expected_evidence": "给出回收周期区间",
+                        }
+                    },
+                    "sales_stage": "objection",
+                    "score_snapshot": {"overall_score": 64.0},
+                    "ai_feedback": "先确认对方要看案例，再补 ROI 和回收周期。",
+                    "is_highlight": True,
+                    "highlight_type": "bad",
+                    "highlight_reason": "客户已经明确要证据，但这轮还没给出任何案例或数字。",
+                },
+                {
+                    "id": "msg-next",
+                    "session_id": mock_completed_session.session_id,
+                    "turn_number": 3,
+                    "role": "assistant",
+                    "content": "我下一轮先给您一个 3 个月回本的同行案例。",
+                    "audio_url": None,
+                    "timestamp": "2026-03-25T00:00:08+00:00",
+                    "duration_ms": 2400,
+                    "fuzzy_words": None,
+                    "transcript_metadata": None,
+                    "sales_stage": "objection",
+                    "score_snapshot": {"overall_score": 72.0},
+                    "ai_feedback": None,
+                    "is_highlight": False,
+                    "highlight_type": None,
+                    "highlight_reason": None,
+                },
+            ],
+            main_issue=main_issue,
+            next_goal=next_goal,
+        )
 
-        # Create highlighted messages
-        highlight_msg = MagicMock()
-        highlight_msg.id = str(uuid.uuid4())
-        highlight_msg.turn_number = 2
-        highlight_msg.role = "user"
-        highlight_msg.content = "我们的产品大概能帮您节省30%"
-        highlight_msg.timestamp = datetime.now(timezone.utc)
-        highlight_msg.is_highlight = True
-        highlight_msg.highlight_type = "bad"
-        highlight_msg.highlight_reason = "模糊词使用"
-        highlight_msg.ai_feedback = "建议使用具体数据"
-        highlight_msg.fuzzy_words = [{"category": "uncertain", "matched": ["大概"], "suggestion": "请给出具体数据", "severity": "high"}]
+        with patch(
+            "common.conversation.replay.SessionEvidenceService.get_projection",
+            new=AsyncMock(return_value=Result.ok(projection)),
+        ):
+            result = await service.get_highlights(mock_completed_session.session_id)
 
-        mock_highlights_result = MagicMock()
-        mock_highlights_result.scalars.return_value.all.return_value = [highlight_msg]
-
-        # Mock context messages (prev and next)
-        mock_prev_result = MagicMock()
-        mock_prev_result.scalar_one_or_none.return_value = None
-        mock_next_result = MagicMock()
-        mock_next_result.scalar_one_or_none.return_value = None
-
-        # 4 calls: session check, highlights query, prev context, next context
-        mock_db.execute.side_effect = [mock_session_result, mock_highlights_result, mock_prev_result, mock_next_result]
-
-        # Act
-        result = await service.get_highlights(mock_completed_session.session_id)
-
-        # Assert
         assert result.is_success
         highlights = result.value["highlights"]
         assert len(highlights) == 1
         assert highlights[0]["highlight_type"] == "bad"
-        assert highlights[0]["highlight_reason"] == "模糊词使用"
+        assert highlights[0]["highlight_reason"] == "客户已经明确要证据，但这轮还没给出任何案例或数字。"
+        assert highlights[0]["sales_stage"] == "objection"
+        assert highlights[0]["stage_name"] == STAGE_NAMES["objection"]
+        assert highlights[0]["context"]["prev_message"]["id"] == "msg-prev"
+        assert highlights[0]["context"]["next_message"]["id"] == "msg-next"
+        learning_evidence = highlights[0]["learning_evidence"]
+        assert learning_evidence["issue_family"] == "evidence_gap"
+        assert learning_evidence["objection_family"] == "roi_proof"
+        assert learning_evidence["linked_goal"]["goal_type"] == "evidence_backing"
+        assert learning_evidence["nearby_context"] == highlights[0]["context"]
+        assert learning_evidence["suggested_response"] == "建议改进: 直接补同行案例和 ROI 数字"
 
     @pytest.mark.asyncio
-    async def test_get_highlights_empty(self, service, mock_db, mock_completed_session):
+    async def test_get_highlights_empty(self, service, mock_completed_session):
         """Test getting highlights when none exist"""
-        # Arrange
-        mock_session_result = MagicMock()
-        mock_session_result.scalar_one_or_none.return_value = mock_completed_session
+        projection = _make_projection(
+            mock_completed_session,
+            messages=[],
+            main_issue=None,
+            next_goal=None,
+        )
 
-        mock_highlights_result = MagicMock()
-        mock_highlights_result.scalars.return_value.all.return_value = []
+        with patch(
+            "common.conversation.replay.SessionEvidenceService.get_projection",
+            new=AsyncMock(return_value=Result.ok(projection)),
+        ):
+            result = await service.get_highlights(mock_completed_session.session_id)
 
-        # Only 2 calls when no highlights: session check, highlights query (no context calls needed)
-        mock_db.execute.side_effect = [mock_session_result, mock_highlights_result]
-
-        # Act
-        result = await service.get_highlights(mock_completed_session.session_id)
-
-        # Assert
         assert result.is_success
         assert len(result.value["highlights"]) == 0
         assert result.value["total_good"] == 0
