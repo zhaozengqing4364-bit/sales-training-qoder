@@ -28,7 +28,7 @@ Define the accepted proof surfaces for the rest of M003 using only current produ
 
 ## Verification
 
-- `test -f web/src/app/admin/personas/[id]/page.tsx && test -f web/src/app/admin/knowledge/[id]/page.tsx && test -f web/src/app/(user)/practice/[sessionId]/page.tsx && test -f web/src/app/(user)/practice/[sessionId]/report/page.tsx && test -f web/src/app/(user)/practice/[sessionId]/replay/page.tsx && test -f backend/src/common/api/practice.py && test -f backend/src/common/conversation/session_evidence.py`
+- `test -f web/src/app/admin/personas/\[id\]/page.tsx && test -f web/src/app/admin/knowledge/\[id\]/page.tsx && test -f web/src/app/\(user\)/practice/\[sessionId\]/page.tsx && test -f web/src/app/\(user\)/practice/\[sessionId\]/report/page.tsx && test -f web/src/app/\(user\)/practice/\[sessionId\]/replay/page.tsx && test -f backend/src/common/api/practice.py && test -f backend/src/common/conversation/session_evidence.py`
 - `rg -n "knowledge-check|report|replay|focused backend|focused web|live UAT|inventory/spike|blocking rule|current routes" .gsd/milestones/M003/M003-ROADMAP.md .gsd/milestones/M003/slices/S01/S01-PLAN.md .gsd/milestones/M003/slices/S01/tasks/T03-PLAN.md`
 
 ## Inputs

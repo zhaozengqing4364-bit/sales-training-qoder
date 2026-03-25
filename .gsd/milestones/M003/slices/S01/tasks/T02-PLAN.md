@@ -12,7 +12,7 @@ skills_used:
 
 ## Description
 
-Define the current live knowledge status vocabulary on the actual business chain rather than inventing a future contract. Map each status to the code that owns it and the route where the user can inspect it: learner/admin-visible statuses from `runtime_diagnostics` and report knowledge-check, plus runtime-only KB-lock block states. Reserve richer truth such as unsupported / evidence-pending / evidence-backed for later slices instead of pretending those states already exist on the current product surface.
+Define the current live knowledge status vocabulary on the actual business chain rather than inventing a future contract. Map each status to the code that owns it and the route where the user can inspect it: learner/admin-visible statuses from `runtime_diagnostics` and report knowledge-check, plus runtime-only KB-lock block states. Treat `build_session_runtime_diagnostics(...).status` as the current learner/admin contract; lower-level retrieval detail such as `hit_keyword_fallback` may survive in `runtime_metrics.knowledge_retrieval.last_status`, but it is not a current report status. Reserve richer truth such as unsupported / evidence-pending / evidence-backed for later slices instead of pretending those states already exist on the current product surface.
 
 ## Steps
 
@@ -23,8 +23,9 @@ Define the current live knowledge status vocabulary on the actual business chain
 
 ## Must-Haves
 
-- [ ] The S01 docs use the current learner/admin-visible status vocabulary: `no_knowledge_base`, `disabled`, `not_triggered`, `kb_not_ready`, `search_failed`, `miss`, and `hit`.
+- [ ] The S01 docs use the current learner/admin-visible status vocabulary: `no_knowledge_base`, `disabled`, `not_triggered`, `kb_not_ready`, `search_failed`, and `miss`/`hit` on `knowledge-check.status`.
 - [ ] Runtime-only diagnostics such as `blocked_no_kb`, `blocked_not_ready`, `blocked_search_failed`, and `blocked_empty` are documented as diagnostics, not mislabeled as current user-visible report states.
+- [ ] Retrieval-detail states such as `hit_keyword_fallback` are documented as internal/runtime detail (`runtime_metrics.knowledge_retrieval.last_status`), not as extra learner/admin-visible report statuses.
 
 ## Verification
 

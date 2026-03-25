@@ -33,3 +33,4 @@
 - M002 这类实时教练链路要同时守住“稳定公开 contract”和“更丰富的 backend-only 语义上下文”两条线：classic / StepFun / report / replay / admin 应共享 `resolve_sales_coaching_focus(...)` 与 `resolve_sales_report_alignment(...)` 这类内部 seam，对外尽量继续复用既有 `score_update` / report keys，而不是为了语义对齐扩展 public payload。
 - 这个仓库做里程碑 close-out diff 验证时不要默认写 `main`：当前集成基线分支是 `001-ai-practice-system`。先探测可用 integration branch，再做 `git merge-base` / `git diff --stat`，否则会把不存在的 `main` 误报成“没有实现代码”。
 - 写 GSD 计划里的 shell 校验命令时，凡是引用 `web/src/app/.../[id]/...`、`[sessionId]`、`(user)` 这类 Next.js 字面路径，都要给路径加引号；否则 `bash` 会把 `[]` 当 glob、把 `()` 当语法，任务/切片验证会在真正检查文件前先假性报错。
+- 如果某次 auto-mode gate 已经用坏掉的校验命令生成了 `T##-VERIFY.json`，仅修正文档里的 `Verify:` 行还不够；要同步重写或重跑对应的 VERIFY artifact，否则后续 gate 仍可能继续复用那份陈旧失败记录。

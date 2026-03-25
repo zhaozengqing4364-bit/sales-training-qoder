@@ -5,7 +5,7 @@
 ## Success Criteria
 
 - 管理员在 `web/src/app/admin/personas/[id]/page.tsx` 与 `web/src/app/admin/knowledge/[id]/page.tsx` 的配置，能通过 `POST /api/v1/practice/sessions`（`backend/src/common/api/practice.py`）创建会话时冻结进 `voice_policy_snapshot`，并把同一份 session/runtime 上下文带到 `web/src/app/(user)/practice/[sessionId]/page.tsx`；后续 runtime 继续驱动 `backend/src/agent/services/persona_policy.py`、`backend/src/sales_bot/services/voice_runtime_policy.py` 与 `backend/src/sales_bot/services/voice_instruction_compiler.py`。
-- 在当前 learner surfaces `web/src/app/(user)/practice/[sessionId]/page.tsx`、`web/src/app/(user)/practice/[sessionId]/report/page.tsx`、`web/src/app/(user)/practice/[sessionId]/replay/page.tsx` 与 `GET /api/v1/practice/sessions/{id}/knowledge-check` 上，用户和管理员能区分当前 live contract 的 `no_knowledge_base`、`disabled`、`not_triggered`、`kb_not_ready`、`search_failed`、`miss`、`hit`，而不是统一显示“没命中”。
+- 在当前 learner surfaces `web/src/app/(user)/practice/[sessionId]/page.tsx`、`web/src/app/(user)/practice/[sessionId]/report/page.tsx`、`web/src/app/(user)/practice/[sessionId]/replay/page.tsx` 与 `GET /api/v1/practice/sessions/{id}/knowledge-check` 上，用户和管理员能区分当前 live contract 的 `no_knowledge_base`、`disabled`、`not_triggered`、`kb_not_ready`、`search_failed`、`miss`、`hit`，而不是统一显示“没命中”；`blocked_no_kb`、`blocked_not_ready`、`blocked_search_failed`、`blocked_empty` 与 `hit_keyword_fallback` 继续停留在 runtime diagnostics / retrieval detail 层，不冒充当前 report status。
 - 同一 Persona 在多轮对话和 reconnect 后，压力方向、追问重点和知识使用边界保持稳定，不会中途切回 generic prompt 聊天模式。
 - M003 的所有 slice 都只允许落在当前真实业务代码目录：`backend/src/agent/`、`backend/src/sales_bot/`、`backend/src/common/knowledge/`、`backend/src/common/conversation/`、`backend/src/common/api/`、`web/src/app/admin/`、`web/src/app/(user)/practice/`。Silence / Conda / `.env` / lockfile 等环境工件不单独升格为 milestone，除非未来目标明确变成环境迁移。
 
@@ -35,7 +35,7 @@
 
 ## Acceptance Boundary
 
-- Contract acceptance: focused backend/web verification must assert only on the current routes/modules above and on the live knowledge status vocabulary they already expose.
+- Contract acceptance: focused backend/web verification must assert only on the current routes/modules above and on the live seven-status learner/admin vocabulary (`no_knowledge_base`, `disabled`, `not_triggered`, `kb_not_ready`, `search_failed`, `miss`, `hit`); KB-lock `blocked_*` states and retrieval-detail states such as `hit_keyword_fallback` stay in diagnostic fields like `kb_lock_status`, `kb_lock_last_status`, and `runtime_metrics.knowledge_retrieval.last_status`.
 - Integration acceptance: at least one admin Persona/knowledge change must be traceable through `POST /api/v1/practice/sessions`, `web/src/app/(user)/practice/[sessionId]/page.tsx`, runtime diagnostics, and report/replay inspection on current product routes.
 - Blocking rule: if any required entrypoint cannot be located in runnable code, the work stops and becomes inventory/spike; execution must not continue on assumed or placeholder surfaces.
 - Tooling-only boundary: Silence / Conda / `.env` / lockfile work stays out of scope for M003 unless the milestone goal is explicitly re-scoped to environment migration.
@@ -64,6 +64,7 @@
 Produces:
 - The confirmed admin Persona/knowledge detail → practice session create → `voice_policy_snapshot` authority chain.
 - The current live knowledge status vocabulary on user-visible surfaces: `no_knowledge_base`, `disabled`, `not_triggered`, `kb_not_ready`, `search_failed`, `miss`, `hit`.
+- The ownership line that keeps KB-lock `blocked_no_kb` / `blocked_not_ready` / `blocked_search_failed` / `blocked_empty` plus retrieval detail like `hit_keyword_fallback` inside runtime diagnostics (`kb_lock_status`, `kb_lock_last_status`, `runtime_metrics.knowledge_retrieval.last_status`) instead of promoting them to current report status.
 
 Consumes:
 - nothing (first slice)

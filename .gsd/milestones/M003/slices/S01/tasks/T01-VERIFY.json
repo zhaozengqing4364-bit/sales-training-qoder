@@ -1,0 +1,72 @@
+{
+  "schemaVersion": 1,
+  "taskId": "T01",
+  "unitId": "M003/S01/T01",
+  "timestamp": 1774403187758,
+  "passed": true,
+  "discoverySource": "task-plan",
+  "checks": [
+    {
+      "command": "test -f backend/src/agent/services/persona_policy.py",
+      "exitCode": 0,
+      "durationMs": 1,
+      "verdict": "pass"
+    },
+    {
+      "command": "test -f backend/src/sales_bot/services/voice_runtime_policy.py",
+      "exitCode": 0,
+      "durationMs": 1,
+      "verdict": "pass"
+    },
+    {
+      "command": "test -f backend/src/sales_bot/services/voice_instruction_compiler.py",
+      "exitCode": 0,
+      "durationMs": 1,
+      "verdict": "pass"
+    },
+    {
+      "command": "test -f backend/src/common/knowledge/kb_lock_guard.py",
+      "exitCode": 0,
+      "durationMs": 1,
+      "verdict": "pass"
+    },
+    {
+      "command": "test -f backend/src/sales_bot/websocket/components/stepfun_knowledge_helpers.py",
+      "exitCode": 0,
+      "durationMs": 1,
+      "verdict": "pass"
+    },
+    {
+      "command": "test -f backend/src/sales_bot/websocket/components/stepfun_internal_knowledge_searcher.py",
+      "exitCode": 0,
+      "durationMs": 1,
+      "verdict": "pass"
+    },
+    {
+      "command": "test -f web/src/app/admin/personas/\\[id\\]/page.tsx",
+      "exitCode": 0,
+      "durationMs": 1,
+      "verdict": "pass"
+    },
+    {
+      "command": "test -f web/src/app/admin/knowledge/\\[id\\]/page.tsx",
+      "exitCode": 0,
+      "durationMs": 1,
+      "verdict": "pass"
+    },
+    {
+      "command": "test -f web/src/app/\\(user\\)/practice/\\[sessionId\\]/page.tsx",
+      "exitCode": 0,
+      "durationMs": 1,
+      "verdict": "pass"
+    },
+    {
+      "command": "test -f web/src/app/\\(user\\)/practice/\\[sessionId\\]/report/page.tsx",
+      "exitCode": 0,
+      "durationMs": 1,
+      "verdict": "pass"
+    }
+  ],
+  "retryAttempt": 2,
+  "maxRetries": 2
+}
