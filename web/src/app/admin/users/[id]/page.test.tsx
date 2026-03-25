@@ -201,15 +201,15 @@ const richProgressResponse = {
     non_completed_session_count: 1,
     repeated_main_issues: [
         {
-            issue_type: "objection_response",
-            issue_text: "异议回应不够具体。",
+            issue_type: "evidence_gap",
+            issue_text: "证据支撑还不够具体。",
             count: 3,
         },
     ],
     repeated_next_goals: [
         {
-            goal_type: "objection_response_drill",
-            goal_text: "下一轮继续把异议回应说完整。",
+            goal_type: "evidence_backing",
+            goal_text: "下一轮继续补上 ROI 与客户案例证据。",
             count: 3,
         },
     ],
@@ -241,8 +241,10 @@ describe("UserDetailPage", () => {
 
         expect(await screen.findByText("连续变化判断")).toBeTruthy();
         expect(screen.getAllByText("建议切换训练重点").length).toBeGreaterThan(0);
-        expect(screen.getByText("异议回应不够具体。")).toBeTruthy();
-        expect(screen.getByText("下一轮继续把异议回应说完整。")).toBeTruthy();
+        expect(screen.getByText("证据支撑还不够具体。")).toBeTruthy();
+        expect(screen.getByText("下一轮继续补上 ROI 与客户案例证据。")).toBeTruthy();
+        expect(screen.getByText("证据支撑")).toBeTruthy();
+        expect(screen.getByText("证据补强")).toBeTruthy();
         expect(screen.getByText(/已完成训练里有 1 次仍证据不足/)).toBeTruthy();
         expect(screen.getByText("最近多次训练仍卡在同一重点且没有改善，建议切换训练重点或训练方法。"))
             .toBeTruthy();

@@ -879,3 +879,44 @@ Append one entry per iteration:
   verification results: passed; all six slice verification commands exited 0 fresh. The backend packs now prove stale-snapshot override, insufficient-evidence fallback, replay/history/report alignment, and the web focused command still passes after the read-side change.
   success signal status: completed sales projection now walks backward to the latest alignable persisted sales evidence instead of letting newer partial snapshots disable alignment, so report/replay/history/admin can share one conclusion family while the projection log exposes why override did or did not apply.
   rollback note: if T03+ revisits sales read-side alignment, preserve the projection-only override boundary plus the minimal log fields; falling back to newest-raw-snapshot selection or omitting `sales_alignment_*` diagnostics will silently reopen stale report/replay drift.
+
+- time: 2026-03-25T07:55:00+08:00
+  mode: stabilize
+  item id: M002-S04
+  files changed:
+    - backend/src/common/effectiveness/evaluator.py
+    - backend/src/common/effectiveness/schemas.py
+    - backend/src/common/effectiveness/__init__.py
+    - backend/src/common/conversation/session_evidence.py
+    - backend/tests/unit/test_effectiveness_sales_report_alignment.py
+    - backend/tests/unit/test_session_evidence_service.py
+    - backend/tests/unit/test_replay_service.py
+    - backend/tests/unit/test_history_service_evidence_projection.py
+    - backend/tests/contract/test_practice_evidence_contract.py
+    - backend/tests/integration/test_practice_evidence_flow.py
+    - backend/tests/integration/test_sales_value_training_flow.py
+    - web/src/app/(user)/practice/[sessionId]/replay/page.tsx
+    - web/src/lib/session-evidence.ts
+    - web/src/app/(user)/practice/[sessionId]/replay/page.test.tsx
+    - web/src/app/(user)/practice/[sessionId]/report/page.test.tsx
+    - web/src/app/admin/users/[id]/page.test.tsx
+    - .gsd/REQUIREMENTS.md
+    - .gsd/KNOWLEDGE.md
+    - .gsd/PROJECT.md
+    - .gsd/milestones/M002/slices/S04/tasks/T03-SUMMARY.md
+    - .gsd/milestones/M002/slices/S04/S04-SUMMARY.md
+    - .gsd/milestones/M002/slices/S04/S04-UAT.md
+    - .gsd/milestones/M002/M002-ROADMAP.md
+    - .codex/loop/state.json
+    - .codex/loop/log.md
+  summary: Closed S04 by finishing the missing replay/admin web carry-forward, re-running the full slice verification set, updating requirement/project/knowledge continuity, and recording that completed sales sessions now share one aligned coach conclusion across report/replay/history/admin.
+  verification commands:
+    - cd backend && /usr/bin/time -p venv/bin/python -m pytest -c pyproject.toml tests/unit/test_effectiveness_sales_report_alignment.py tests/unit/test_session_evidence_service.py tests/unit/test_replay_service.py tests/unit/test_history_service_evidence_projection.py
+    - cd backend && /usr/bin/time -p venv/bin/python -m pytest -c pyproject.toml tests/unit/test_session_evidence_service.py -k 'sales_alignment or stale_snapshot or insufficient_sales_evidence' -vv
+    - cd backend && /usr/bin/time -p venv/bin/python -m pytest -c pyproject.toml tests/unit/test_session_evidence_service.py -k 'insufficient_sales_evidence' -vv
+    - cd backend && /usr/bin/time -p venv/bin/python -m pytest -c pyproject.toml tests/unit/test_effectiveness_sales_report_alignment.py -k 'insufficient_sales_evidence' -vv
+    - cd backend && /usr/bin/time -p venv/bin/python -m pytest -c pyproject.toml tests/contract/test_practice_evidence_contract.py tests/integration/test_practice_evidence_flow.py tests/integration/test_sales_value_training_flow.py
+    - cd web && /usr/bin/time -p npm test -- --run 'src/app/(user)/practice/[sessionId]/report/page.test.tsx' 'src/app/(user)/practice/[sessionId]/replay/page.test.tsx' 'src/app/admin/users/[id]/page.test.tsx'
+  verification results: passed; all six slice-level verification commands exited 0 on the final run. The web gate first exposed a real missing T03 carry-forward plus an async test-timing issue, and the final rerun proved replay/report/admin now stay green on the aligned sales conclusion family.
+  success signal status: completed sales sessions now override stale read-side conclusions from the latest alignable persisted sales evidence, replay visibly surfaces the same aligned coach conclusion as report, admin badges remain readable for the new vocabulary, and R009 is further advanced without changing public report/websocket keys.
+  rollback note: if later slices revisit S04, preserve the projection-only override boundary, the centralized `session-evidence` vocabulary map, and the replay page’s direct API rendering; reintroducing client heuristics or choosing the newest partial snapshot will silently reopen conclusion drift.

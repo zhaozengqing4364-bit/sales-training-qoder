@@ -28,16 +28,26 @@ const MISSING_FIELD_LABELS: Record<string, string> = {
 const ISSUE_TYPE_LABELS: Record<string, string> = {
     objection_response: "异议回应",
     value_gap: "价值表达",
+    value_translation_gap: "价值翻译",
+    evidence_gap: "证据支撑",
+    objection_handling_gap: "异议处理",
+    next_step_gap: "推进下一步",
     main_capability_not_passed: "核心能力",
     insufficient_turns: "轮次不足",
     insufficient_turn_data: "证据不足",
+    insufficient_sales_evidence: "销售证据不足",
 };
 
 const GOAL_TYPE_LABELS: Record<string, string> = {
     objection_response_drill: "异议回应训练",
     objection_progress: "异议推进",
+    value_to_benefit_translation: "收益翻译",
+    evidence_backing: "证据补强",
+    objection_reframe: "重构异议回应",
+    next_step_commitment: "下一步承诺",
     single_next_goal: "下一轮重点",
     collect_more_evidence: "补齐有效互动",
+    collect_sales_evidence: "补齐销售证据",
 };
 
 const PRESENTATION_ISSUE_LABELS: Record<string, string> = {

@@ -76,8 +76,16 @@ describe("SessionReplayPage", () => {
             pass_flags: null,
             main_capability_passed: false,
             overall_result: "fail",
-            main_issue: null,
-            next_goal: null,
+            main_issue: {
+                issue_type: "evidence_gap",
+                issue_text: "客户收益提到了，但还没有补上可信证据。",
+                recovery_rule: "下一轮至少补一条 ROI 或客户案例证据。",
+            },
+            next_goal: {
+                goal_type: "evidence_backing",
+                goal_text: "先补 ROI 证据，再继续推进下一步。",
+                rule: "至少给出一条证据并确认客户是否认可。",
+            },
             evaluable: false,
             not_evaluable_reason: "INSUFFICIENT_TURN_DATA",
             evidence_completeness: {
@@ -158,6 +166,11 @@ describe("SessionReplayPage", () => {
         const overallScore = await screen.findByTestId("replay-overall-score");
         expect(overallScore.textContent).toContain("78");
         expect(screen.getByText("当前会话暂不可评估")).toBeTruthy();
+        expect(screen.getByText("本场教练结论")).toBeTruthy();
+        expect(screen.getByText("证据支撑")).toBeTruthy();
+        expect(screen.getByText("客户收益提到了，但还没有补上可信证据。")).toBeTruthy();
+        expect(screen.getByText("先补 ROI 证据，再继续推进下一步。")).toBeTruthy();
+        expect(screen.getByText("证据补强")).toBeTruthy();
         expect(screen.getByText("来自 replay 的统一消息")).toBeTruthy();
         expect(screen.queryByText("来自 /messages 的冲突消息")).toBeNull();
         expect(getMessagesMock).not.toHaveBeenCalled();

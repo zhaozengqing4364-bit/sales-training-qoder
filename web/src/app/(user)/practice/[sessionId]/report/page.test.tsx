@@ -240,12 +240,12 @@ describe("ReportPage", () => {
             evaluable: true,
             not_evaluable_reason: null,
             main_issue: {
-                issue_type: "value_gap",
+                issue_type: "evidence_gap",
                 issue_text: "功能点说得多，但还没有把产品价值翻译成客户收益。",
                 recovery_rule: "下一轮先用客户收益语言重述价值，再回应价格顾虑。",
             },
             next_goal: {
-                goal_type: "objection_progress",
+                goal_type: "evidence_backing",
                 goal_text: "先补 ROI 证据，再推进一个明确的下一步动作。",
                 rule: "至少给出一条证据并确认下一步。",
             },
@@ -431,9 +431,9 @@ describe("ReportPage", () => {
         render(<ReportPage />);
 
         expect((await screen.findByTestId("report-overall-score")).textContent).toContain("61");
-        expect(screen.getByText("综合洞察暂不可用，当前页面仅展示统一训练证据。"))
+        expect(await screen.findByText("综合洞察暂不可用，当前页面仅展示统一训练证据。"))
             .toBeTruthy();
-        expect(screen.getByText("高光片段暂不可用，基础评估结果不受影响。"))
+        expect(await screen.findByText("高光片段暂不可用，基础评估结果不受影响。"))
             .toBeTruthy();
     });
 });

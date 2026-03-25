@@ -1,7 +1,7 @@
 {
   "mode": "stabilize",
-  "current_issue_id": "M002-S04-T02",
-  "current_issue_type": "task",
+  "current_issue_id": "M002-S04",
+  "current_issue_type": "slice",
   "current_issue_status": "done",
   "pending_issue_ids": [],
   "completed_issue_ids": [
@@ -44,31 +44,49 @@
     "M002-S03-T03",
     "M002-S03",
     "M002-S04-T01",
-    "M002-S04-T02"
+    "M002-S04-T02",
+    "M002-S04-T03",
+    "M002-S04"
   ],
   "blocked_issue_ids": [],
   "deferred_issue_ids": [],
   "last_modified_files": [
+    "backend/src/common/effectiveness/evaluator.py",
+    "backend/src/common/effectiveness/schemas.py",
+    "backend/src/common/effectiveness/__init__.py",
     "backend/src/common/conversation/session_evidence.py",
+    "backend/tests/unit/test_effectiveness_sales_report_alignment.py",
+    "backend/tests/unit/test_session_evidence_service.py",
     "backend/tests/unit/test_replay_service.py",
+    "backend/tests/unit/test_history_service_evidence_projection.py",
+    "backend/tests/contract/test_practice_evidence_contract.py",
+    "backend/tests/integration/test_practice_evidence_flow.py",
     "backend/tests/integration/test_sales_value_training_flow.py",
-    ".gsd/DECISIONS.md",
+    "web/src/app/(user)/practice/[sessionId]/replay/page.tsx",
+    "web/src/lib/session-evidence.ts",
+    "web/src/app/(user)/practice/[sessionId]/replay/page.test.tsx",
+    "web/src/app/(user)/practice/[sessionId]/report/page.test.tsx",
+    "web/src/app/admin/users/[id]/page.test.tsx",
+    ".gsd/REQUIREMENTS.md",
     ".gsd/KNOWLEDGE.md",
-    ".gsd/milestones/M002/slices/S04/tasks/T02-SUMMARY.md",
-    ".gsd/milestones/M002/slices/S04/S04-PLAN.md",
+    ".gsd/PROJECT.md",
+    ".gsd/milestones/M002/slices/S04/tasks/T03-SUMMARY.md",
+    ".gsd/milestones/M002/slices/S04/S04-SUMMARY.md",
+    ".gsd/milestones/M002/slices/S04/S04-UAT.md",
+    ".gsd/milestones/M002/M002-ROADMAP.md",
     ".codex/loop/state.json",
     ".codex/loop/log.md"
   ],
   "last_verification_commands": [
-    "cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_effectiveness_sales_report_alignment.py tests/unit/test_session_evidence_service.py tests/unit/test_replay_service.py tests/unit/test_history_service_evidence_projection.py",
-    "cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_session_evidence_service.py -k 'sales_alignment or stale_snapshot or insufficient_sales_evidence' -vv",
-    "cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_session_evidence_service.py -k 'insufficient_sales_evidence' -vv",
-    "cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_effectiveness_sales_report_alignment.py -k 'insufficient_sales_evidence' -vv",
-    "cd backend && venv/bin/python -m pytest -c pyproject.toml tests/contract/test_practice_evidence_contract.py tests/integration/test_practice_evidence_flow.py tests/integration/test_sales_value_training_flow.py",
-    "cd web && npm test -- --run 'src/app/(user)/practice/[sessionId]/report/page.test.tsx' 'src/app/(user)/practice/[sessionId]/replay/page.test.tsx' 'src/app/admin/users/[id]/page.test.tsx'"
+    "cd backend && /usr/bin/time -p venv/bin/python -m pytest -c pyproject.toml tests/unit/test_effectiveness_sales_report_alignment.py tests/unit/test_session_evidence_service.py tests/unit/test_replay_service.py tests/unit/test_history_service_evidence_projection.py",
+    "cd backend && /usr/bin/time -p venv/bin/python -m pytest -c pyproject.toml tests/unit/test_session_evidence_service.py -k 'sales_alignment or stale_snapshot or insufficient_sales_evidence' -vv",
+    "cd backend && /usr/bin/time -p venv/bin/python -m pytest -c pyproject.toml tests/unit/test_session_evidence_service.py -k 'insufficient_sales_evidence' -vv",
+    "cd backend && /usr/bin/time -p venv/bin/python -m pytest -c pyproject.toml tests/unit/test_effectiveness_sales_report_alignment.py -k 'insufficient_sales_evidence' -vv",
+    "cd backend && /usr/bin/time -p venv/bin/python -m pytest -c pyproject.toml tests/contract/test_practice_evidence_contract.py tests/integration/test_practice_evidence_flow.py tests/integration/test_sales_value_training_flow.py",
+    "cd web && /usr/bin/time -p npm test -- --run 'src/app/(user)/practice/[sessionId]/report/page.test.tsx' 'src/app/(user)/practice/[sessionId]/replay/page.test.tsx' 'src/app/admin/users/[id]/page.test.tsx'"
   ],
-  "last_verification_result": "T02 verification passed fresh end-to-end. The broad backend unit pack, focused sales-alignment selector, explicit insufficient-evidence selectors, backend contract/integration pack, and the slice web command all exited 0. Projection logs now surface sales_alignment_used/stage_key/focus_type/fallback_reason, and report/replay/history all return the same aligned completed-sales conclusion when stale snapshots are present.",
-  "last_success_signal": "Completed sales SessionEvidenceService projections now scan backward for the latest alignable persisted sales evidence, override stale read-side main_issue/next_goal without mutating the stored snapshot, and emit minimal diagnostics that prove when alignment applied versus when fallback kept the existing evaluator path.",
+  "last_verification_result": "S04 verification passed fresh end-to-end. All four backend unit/focused selectors, the backend contract/integration pack, and the exact report/replay/admin web command exited 0 after the replay conclusion carry-forward and async report-fallback assertion fix. Projection diagnostics proved `sales_alignment_used/stage_key/focus_type/fallback_reason`, and the web suite proved replay/report/admin now render the same aligned sales conclusion family.",
+  "last_success_signal": "Completed sales sessions now override stale read-side `main_issue`/`next_goal` from the latest alignable persisted sales evidence, replay visibly surfaces that aligned coach conclusion, and admin/read surfaces keep the new sales vocabulary readable without changing public report or websocket keys.",
   "last_growth_scan": null,
-  "next_action": "Continue M002-S04 with T03: surface the aligned coach conclusion on replay and admin read surfaces."
+  "next_action": "Slice S04 is complete. Hand off to roadmap reassessment / proceed to M002-S05 degraded-state visibility work."
 }

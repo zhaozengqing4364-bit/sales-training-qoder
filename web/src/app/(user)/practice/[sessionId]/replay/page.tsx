@@ -22,6 +22,8 @@ import { HighlightItem, ReplayData } from "@/lib/api/types";
 import { debug } from "@/lib/debug";
 import {
   formatEvidenceCompletenessNote,
+  formatGoalTypeLabel,
+  formatIssueTypeLabel,
   formatNotEvaluableReason,
   formatSessionStageLabel,
 } from "@/lib/session-evidence";
@@ -159,6 +161,8 @@ export default function SessionReplayPage() {
   const notEvaluableReasonText = formatNotEvaluableReason(
     replayData?.not_evaluable_reason,
   );
+  const mainIssueTypeLabel = formatIssueTypeLabel(replayData?.main_issue?.issue_type);
+  const nextGoalTypeLabel = formatGoalTypeLabel(replayData?.next_goal?.goal_type);
 
   const handleJumpToMessage = (turnNumber: number) => {
     const messageElement = document.querySelector(`[data-turn-number="${turnNumber}"]`);
@@ -279,6 +283,50 @@ export default function SessionReplayPage() {
       {highlightsUnavailableHint && (
         <GlassCard className="p-4 border border-slate-200 bg-slate-50/80">
           <p className="text-sm text-slate-700">{highlightsUnavailableHint}</p>
+        </GlassCard>
+      )}
+
+      {(replayData.main_issue || replayData.next_goal) && (
+        <GlassCard className="p-4 sm:p-5">
+          <div className="flex items-center gap-2 mb-3">
+            <Sparkles className="w-4 h-4 text-blue-600" />
+            <h2 className="font-bold text-slate-900 text-base sm:text-lg">本场教练结论</h2>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {replayData.main_issue ? (
+              <div className="rounded-xl border border-amber-100 bg-amber-50/80 p-4">
+                <div className="flex items-center justify-between gap-3 mb-2 flex-wrap">
+                  <p className="text-xs font-semibold text-amber-700">主问题</p>
+                  {mainIssueTypeLabel ? (
+                    <span className="inline-flex rounded-full border border-amber-200 bg-white/70 px-2.5 py-1 text-xs font-medium text-amber-800">
+                      {mainIssueTypeLabel}
+                    </span>
+                  ) : null}
+                </div>
+                <p className="text-sm text-amber-900">{replayData.main_issue.issue_text}</p>
+                <p className="text-xs text-amber-700 mt-2">
+                  修正动作：{replayData.main_issue.recovery_rule}
+                </p>
+              </div>
+            ) : null}
+
+            {replayData.next_goal ? (
+              <div className="rounded-xl border border-blue-100 bg-blue-50/80 p-4">
+                <div className="flex items-center justify-between gap-3 mb-2 flex-wrap">
+                  <p className="text-xs font-semibold text-blue-700">下一轮目标</p>
+                  {nextGoalTypeLabel ? (
+                    <span className="inline-flex rounded-full border border-blue-200 bg-white/70 px-2.5 py-1 text-xs font-medium text-blue-800">
+                      {nextGoalTypeLabel}
+                    </span>
+                  ) : null}
+                </div>
+                <p className="text-sm text-blue-900">{replayData.next_goal.goal_text}</p>
+                <p className="text-xs text-blue-700 mt-2">
+                  判定条件：{replayData.next_goal.rule}
+                </p>
+              </div>
+            ) : null}
+          </div>
         </GlassCard>
       )}
 

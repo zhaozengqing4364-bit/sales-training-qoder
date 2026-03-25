@@ -76,7 +76,7 @@ This milestone is complete only when all are true:
 - [x] **S03: 阶段推进教练与下一轮规则闭环** `risk:medium` `depends:[S01,S02]`
   > After this: 实时阶段、分维变化和动作卡能共同指向“下一轮该怎么问 / 怎么答 / 怎么推进”，而不是三套平行提示。
 
-- [ ] **S04: 训练中建议与报告结论一致性** `risk:medium` `depends:[S01,S03]`
+- [x] **S04: 训练中建议与报告结论一致性** `risk:medium` `depends:[S01,S03]`
   > After this: 同一 session 的实时教练快照可以和 report / replay 中的 `main_issue`、`next_goal`、`stage_summary` 对齐复查。
 
 - [ ] **S05: 教练链路降级与重连可观测性** `risk:medium` `depends:[S02,S03]`
