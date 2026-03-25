@@ -968,3 +968,27 @@ Append one entry per iteration:
   verification results: passed; the slice-level path/status/scope checks all exited 0, the ownership grep confirmed `hit_keyword_fallback` stays in runtime detail rather than learner/admin status, and the refreshed T01-VERIFY artifact now records the fixed literal-path checks as passing.
   success signal status: M003 S01 now explicitly separates learner/admin-visible knowledge statuses from runtime-only KB-lock and retrieval-detail diagnostics, and auto-mode no longer replays the old `app/(user)` shell failure from stale verification state.
   rollback note: If later planning rewrites M003/S01 again, keep `build_session_runtime_diagnostics(...).status` as the seven-status learner/admin contract, keep `blocked_*` plus `hit_keyword_fallback` in diagnostics only, and refresh any stale VERIFY artifact when verification syntax changes.
+
+- time: 2026-03-25T10:02:13+08:00
+  mode: stabilize
+  item id: M003-S01-T03
+  files changed:
+    - .gsd/milestones/M003/M003-ROADMAP.md
+    - .gsd/milestones/M003/slices/S01/S01-PLAN.md
+    - .gsd/milestones/M003/slices/S01/tasks/T03-PLAN.md
+    - .gsd/milestones/M003/slices/S01/tasks/T03-SUMMARY.md
+    - .gsd/DECISIONS.md
+    - .gsd/KNOWLEDGE.md
+    - .codex/loop/state.json
+    - .codex/loop/log.md
+  summary: Bound the M003 proof boundary to the live report/knowledge-check/replay routes, documented the real replay ownership split, and locked the inventory/spike blocker so later slices cannot verify against guessed backend seams.
+  verification commands:
+    - test -f backend/src/common/api/practice.py && test -f backend/src/common/conversation/api.py && test -f backend/src/common/conversation/replay.py && test -f backend/src/common/conversation/session_evidence.py && test -f web/src/app/admin/personas/\[id\]/page.tsx && test -f web/src/app/admin/knowledge/\[id\]/page.tsx && test -f web/src/app/\(user\)/practice/\[sessionId\]/page.tsx && test -f web/src/app/\(user\)/practice/\[sessionId\]/report/page.tsx && test -f web/src/app/\(user\)/practice/\[sessionId\]/replay/page.tsx
+    - rg -n "focused backend|focused web|live UAT|/api/v1/practice/sessions/\{id\}/report|/api/v1/sessions/\{id\}/replay|common/conversation/api.py|common/conversation/replay.py|SessionEvidenceService|inventory/spike|blocking rule|current routes" .gsd/milestones/M003/M003-ROADMAP.md .gsd/milestones/M003/slices/S01/S01-PLAN.md .gsd/milestones/M003/slices/S01/tasks/T03-PLAN.md
+    - test -f backend/src/agent/services/persona_policy.py && test -f backend/src/sales_bot/services/voice_runtime_policy.py && test -f backend/src/sales_bot/services/voice_instruction_compiler.py && test -f backend/src/common/knowledge/kb_lock_guard.py && test -f backend/src/common/conversation/runtime_diagnostics.py && test -f backend/src/common/conversation/api.py && test -f backend/src/common/conversation/replay.py && test -f backend/src/sales_bot/websocket/components/stepfun_knowledge_helpers.py && test -f backend/src/sales_bot/websocket/components/stepfun_internal_knowledge_searcher.py && test -f backend/src/common/api/practice.py && test -f backend/src/common/conversation/session_evidence.py && test -f web/src/app/admin/personas/\[id\]/page.tsx && test -f web/src/app/admin/knowledge/\[id\]/page.tsx && test -f web/src/app/\(user\)/practice/\[sessionId\]/page.tsx && test -f web/src/app/\(user\)/practice/\[sessionId\]/report/page.tsx && test -f web/src/app/\(user\)/practice/\[sessionId\]/replay/page.tsx
+    - rg -n "no_knowledge_base|disabled|not_triggered|kb_not_ready|search_failed|miss|hit|blocked_no_kb|blocked_not_ready|blocked_search_failed|blocked_empty" backend/src/common/conversation/runtime_diagnostics.py backend/src/common/knowledge/kb_lock_guard.py backend/src/sales_bot/websocket/components/stepfun_internal_knowledge_searcher.py .gsd/milestones/M003/M003-ROADMAP.md .gsd/milestones/M003/slices/S01/S01-PLAN.md .gsd/milestones/M003/slices/S01/tasks/T02-PLAN.md
+    - rg -n "Silence|Conda|\.env|lockfile|inventory/spike|current admin|current product route" .gsd/milestones/M003/M003-ROADMAP.md .gsd/milestones/M003/slices/S01/S01-PLAN.md .gsd/milestones/M003/slices/S01/tasks/T01-PLAN.md .gsd/milestones/M003/slices/S01/tasks/T03-PLAN.md
+    - rg -n "focused backend|focused web|live UAT|/api/v1/practice/sessions/\{id\}/report|/api/v1/sessions/\{id\}/replay|common/conversation/api.py|common/conversation/replay.py|SessionEvidenceService" .gsd/milestones/M003/M003-ROADMAP.md .gsd/milestones/M003/slices/S01/S01-PLAN.md .gsd/milestones/M003/slices/S01/tasks/T03-PLAN.md
+  verification results: passed; both T03 task checks and the full S01 slice verification set exited 0 after the docs were updated to name the current replay route/modules explicitly.
+  success signal status: M003 S01 now forces later proof onto the live admin -> session -> practice -> knowledge-check/report/replay chain, and replay is documented against its real conversation-api ownership instead of an assumed practice.py seam.
+  rollback note: If later M003 planning changes the proof boundary again, keep replay anchored to `/api/v1/sessions/{id}/replay` plus `ReplayService`/`SessionEvidenceService`, and keep the inventory/spike blocker explicit whenever a required route cannot be found.

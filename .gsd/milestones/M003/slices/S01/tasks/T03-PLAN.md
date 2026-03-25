@@ -12,24 +12,25 @@ skills_used:
 
 ## Description
 
-Define the accepted proof surfaces for the rest of M003 using only current product routes and current authority modules. The proof line for this milestone must stay on admin Persona detail, admin knowledge detail, session creation, practice runtime, knowledge-check, report, and replay. If any required surface is missing, stale, or non-production, that is a blocker and the plan must stop at inventory/spike instead of continuing on placeholders.
+Define the accepted proof surfaces for the rest of M003 using only current product routes and current authority modules. The proof line for this milestone must stay on admin Persona detail, admin knowledge detail, session creation, practice runtime, knowledge-check, report, and replay. In the current code, session creation plus report / knowledge-check stay on `backend/src/common/api/practice.py`, while replay stays on `backend/src/common/conversation/api.py` + `backend/src/common/conversation/replay.py` over `SessionEvidenceService`. If any required surface is missing, stale, or non-production, that is a blocker and the plan must stop at inventory/spike instead of continuing on placeholders.
 
 ## Steps
 
 1. Confirm the current user/admin routes that will be accepted as proof surfaces for M003.
-2. Confirm the backend authority route and read-side projection surfaces that those pages already depend on.
-3. Rewrite the roadmap and slice plan to bind focused backend tests, focused web tests, and later live UAT to those current routes only.
+2. Confirm the backend authority split those pages already depend on: `backend/src/common/api/practice.py` for session creation / knowledge-check / report, and `backend/src/common/conversation/api.py` + `backend/src/common/conversation/replay.py` over `SessionEvidenceService` for replay.
+3. Rewrite the roadmap and slice plan to bind focused backend proof, focused web proof, and later live UAT to those current routes only.
 4. Record the explicit blocker rule that missing entrypoints force inventory/spike before execution.
 
 ## Must-Haves
 
-- [ ] The M003 docs name one accepted proof surface set on current routes: admin Persona detail, admin knowledge detail, practice page, knowledge-check, report, and replay.
+- [ ] The M003 docs name one accepted proof surface set on current routes: admin Persona detail, admin knowledge detail, practice page, `GET /api/v1/practice/sessions/{id}/knowledge-check`, `GET /api/v1/practice/sessions/{id}/report`, and `GET /api/v1/sessions/{id}/replay`.
+- [ ] The proof ownership split is explicit: `practice.py` owns session creation / knowledge-check / report, while replay stays on the current conversation API + replay service over `SessionEvidenceService`.
 - [ ] The blocker rule is explicit: if a required entrypoint cannot be located in runnable code, the work stops and becomes inventory/spike before implementation.
 
 ## Verification
 
-- `test -f web/src/app/admin/personas/\[id\]/page.tsx && test -f web/src/app/admin/knowledge/\[id\]/page.tsx && test -f web/src/app/\(user\)/practice/\[sessionId\]/page.tsx && test -f web/src/app/\(user\)/practice/\[sessionId\]/report/page.tsx && test -f web/src/app/\(user\)/practice/\[sessionId\]/replay/page.tsx && test -f backend/src/common/api/practice.py && test -f backend/src/common/conversation/session_evidence.py`
-- `rg -n "knowledge-check|report|replay|focused backend|focused web|live UAT|inventory/spike|blocking rule|current routes" .gsd/milestones/M003/M003-ROADMAP.md .gsd/milestones/M003/slices/S01/S01-PLAN.md .gsd/milestones/M003/slices/S01/tasks/T03-PLAN.md`
+- `test -f backend/src/common/api/practice.py && test -f backend/src/common/conversation/api.py && test -f backend/src/common/conversation/replay.py && test -f backend/src/common/conversation/session_evidence.py && test -f web/src/app/admin/personas/\[id\]/page.tsx && test -f web/src/app/admin/knowledge/\[id\]/page.tsx && test -f web/src/app/\(user\)/practice/\[sessionId\]/page.tsx && test -f web/src/app/\(user\)/practice/\[sessionId\]/report/page.tsx && test -f web/src/app/\(user\)/practice/\[sessionId\]/replay/page.tsx`
+- `rg -n "focused backend|focused web|live UAT|/api/v1/practice/sessions/\{id\}/report|/api/v1/sessions/\{id\}/replay|common/conversation/api.py|common/conversation/replay.py|SessionEvidenceService|inventory/spike|blocking rule|current routes" .gsd/milestones/M003/M003-ROADMAP.md .gsd/milestones/M003/slices/S01/S01-PLAN.md .gsd/milestones/M003/slices/S01/tasks/T03-PLAN.md`
 
 ## Inputs
 
@@ -42,6 +43,8 @@ Define the accepted proof surfaces for the rest of M003 using only current produ
 - `web/src/app/(user)/practice/[sessionId]/report/page.tsx` — current learner post-session proof surface
 - `web/src/app/(user)/practice/[sessionId]/replay/page.tsx` — current learner replay proof surface
 - `backend/src/common/api/practice.py` — current session creation / report / knowledge-check authority route
+- `backend/src/common/conversation/api.py` — current replay API route
+- `backend/src/common/conversation/replay.py` — current replay read service
 - `backend/src/common/conversation/session_evidence.py` — current shared read-side evidence surface
 
 ## Expected Output

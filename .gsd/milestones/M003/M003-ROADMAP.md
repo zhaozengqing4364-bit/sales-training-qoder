@@ -29,14 +29,22 @@
   - `backend/src/common/conversation/runtime_diagnostics.py`
 - Read-side inspection surfaces:
   - `GET /api/v1/practice/sessions/{id}/knowledge-check`
+  - `GET /api/v1/practice/sessions/{id}/report`
+  - `GET /api/v1/sessions/{id}/replay`
+  - `backend/src/common/api/practice.py`
+  - `backend/src/common/conversation/api.py`
+  - `backend/src/common/conversation/replay.py`
+  - `backend/src/common/conversation/session_evidence.py`
   - `web/src/app/(user)/practice/[sessionId]/report/page.tsx`
   - `web/src/app/(user)/practice/[sessionId]/replay/page.tsx`
-  - `backend/src/common/conversation/session_evidence.py`
 
 ## Acceptance Boundary
 
-- Contract acceptance: focused backend/web verification must assert only on the current routes/modules above and on the live seven-status learner/admin vocabulary (`no_knowledge_base`, `disabled`, `not_triggered`, `kb_not_ready`, `search_failed`, `miss`, `hit`); KB-lock `blocked_*` states and retrieval-detail states such as `hit_keyword_fallback` stay in diagnostic fields like `kb_lock_status`, `kb_lock_last_status`, and `runtime_metrics.knowledge_retrieval.last_status`.
-- Integration acceptance: at least one admin Persona/knowledge change must be traceable through `POST /api/v1/practice/sessions`, `web/src/app/(user)/practice/[sessionId]/page.tsx`, runtime diagnostics, and report/replay inspection on current product routes.
+- Accepted proof surfaces: current admin Persona detail, current admin knowledge detail, current learner practice page, `GET /api/v1/practice/sessions/{id}/knowledge-check`, `GET /api/v1/practice/sessions/{id}/report`, and `GET /api/v1/sessions/{id}/replay`.
+- Focused backend proof: assert only on `POST /api/v1/practice/sessions`, `GET /api/v1/practice/sessions/{id}/knowledge-check`, `GET /api/v1/practice/sessions/{id}/report`, `GET /api/v1/sessions/{id}/replay`, and the current owning modules `backend/src/common/api/practice.py`, `backend/src/common/conversation/api.py`, `backend/src/common/conversation/replay.py`, and `backend/src/common/conversation/session_evidence.py`.
+- Focused web proof: assert only on `web/src/app/admin/personas/[id]/page.tsx`, `web/src/app/admin/knowledge/[id]/page.tsx`, `web/src/app/(user)/practice/[sessionId]/page.tsx`, `web/src/app/(user)/practice/[sessionId]/report/page.tsx`, and `web/src/app/(user)/practice/[sessionId]/replay/page.tsx`.
+- Later live UAT: trace at least one current admin Persona/knowledge change through `POST /api/v1/practice/sessions`, the learner practice runtime, runtime diagnostics, `GET /api/v1/practice/sessions/{id}/knowledge-check`, `GET /api/v1/practice/sessions/{id}/report`, and `GET /api/v1/sessions/{id}/replay` instead of using hidden prompts, placeholder APIs, or tooling-only artifacts.
+- Contract acceptance: the proof line must stay on the live seven-status learner/admin vocabulary (`no_knowledge_base`, `disabled`, `not_triggered`, `kb_not_ready`, `search_failed`, `miss`, `hit`); KB-lock `blocked_*` states and retrieval-detail states such as `hit_keyword_fallback` stay in diagnostic fields like `kb_lock_status`, `kb_lock_last_status`, and `runtime_metrics.knowledge_retrieval.last_status`.
 - Blocking rule: if any required entrypoint cannot be located in runnable code, the work stops and becomes inventory/spike; execution must not continue on assumed or placeholder surfaces.
 - Tooling-only boundary: Silence / Conda / `.env` / lockfile work stays out of scope for M003 unless the milestone goal is explicitly re-scoped to environment migration.
 
