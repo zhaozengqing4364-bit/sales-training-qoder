@@ -88,6 +88,7 @@ def test_extract_analysis_patch_fields_filters_invalid_types_and_normalizes_lega
         },
         "ai_feedback": None,
         "transcript_metadata": {"normalized_text": "更稳定的话术"},
+        "objection_ledger": None,
     }
 
 
@@ -129,6 +130,7 @@ async def test_patch_existing_message_analysis_returns_true_on_success(monkeypat
         score_snapshot={"overall": 86, "dimension_scores": {"沟通技巧": 82}},
         ai_feedback=None,
         transcript_metadata={"raw_text": "同一条消息"},
+        objection_ledger=None,
         db_lock=db_lock,
     )
 
@@ -143,6 +145,7 @@ async def test_patch_existing_message_analysis_returns_true_on_success(monkeypat
         },
         ai_feedback=None,
         transcript_metadata={"raw_text": "同一条消息"},
+        objection_ledger=None,
     )
 
 

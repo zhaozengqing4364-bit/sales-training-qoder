@@ -433,3 +433,78 @@ async def test_duplicate_action_card_is_suppressed_for_same_turn_signature() -> 
     sent_payloads = [call.args[1] for call in manager.send_json.await_args_list]
     sent_types = [payload["type"] for payload in sent_payloads]
     assert sent_types == ["score_update", "action_card", "score_update"]
+
+
+@pytest.mark.asyncio
+async def test_open_objection_ledger_keeps_focus_on_same_gap_during_topic_drift() -> None:
+    runner = MagicMock()
+    runner.capabilities = [
+        SimpleNamespace(capability_id="sales_stage"),
+        SimpleNamespace(capability_id="realtime_scoring"),
+    ]
+    runner.run_all = AsyncMock(
+        return_value=[
+            SimpleNamespace(
+                success=True,
+                data={
+                    "current_stage": "closing",
+                    "stage_name": "成交推进",
+                    "key_actions": ["锁定动作"],
+                    "guidance": "推动明确下一步",
+                    "progress": 0.8,
+                    "stage_changed": True,
+                },
+            ),
+            SimpleNamespace(
+                success=True,
+                data={
+                    "overall_score": 79.0,
+                    "dimension_scores": {
+                        "价值表达": 84.0,
+                        "客户收益连接": 82.0,
+                        "证据使用": 88.0,
+                        "异议处理": 81.0,
+                        "推进下一步": 52.0,
+                    },
+                    "feedback": "明确试点、会议、报价或负责人确认中的一个动作。",
+                },
+            ),
+        ]
+    )
+
+    processor = CapabilityProcessor(runner)
+    processor._objection_ledger = {
+        "objection_family": "roi_proof",
+        "promised_proof": "补充同类客户 ROI 案例",
+        "next_expected_evidence": "给出 6 个月回本测算",
+        "closure_state": "open",
+    }
+    context = SimpleNamespace(trace_id="trace-objection-ledger-1", turn_count=5)
+    websocket = AsyncMock()
+    manager = MagicMock()
+    manager.send_json = AsyncMock()
+    db_lock = asyncio.Lock()
+
+    analysis, _ = await processor.run_and_send_feedback(
+        text="我们可以先聊一下后面的协同流程。",
+        context=context,
+        websocket=websocket,
+        manager=manager,
+        db_lock=db_lock,
+    )
+
+    assert analysis["objection_ledger"] == {
+        "objection_family": "roi_proof",
+        "promised_proof": "补充同类客户 ROI 案例",
+        "next_expected_evidence": "给出 6 个月回本测算",
+        "closure_state": "open",
+    }
+    assert analysis["ai_feedback"] == "在确认痛点后，补一个同类客户案例、数据或ROI区间。"
+
+    sent_payloads = [call.args[1] for call in manager.send_json.await_args_list]
+    action_card = next(payload for payload in sent_payloads if payload["type"] == "action_card")
+    assert action_card["data"] == {
+        "issue": "痛点已经聊到，但价值主张还缺少可验证的案例或数据。",
+        "replacement": "在确认痛点后，补一个同类客户案例、数据或ROI区间。",
+        "next_turn_rule": "下一轮先确认痛点影响，再补一个案例或ROI数据。",
+    }

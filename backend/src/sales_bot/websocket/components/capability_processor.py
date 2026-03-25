@@ -7,6 +7,7 @@ Handles:
 """
 
 import asyncio
+import copy
 from datetime import UTC, datetime
 from typing import Any
 
@@ -20,6 +21,10 @@ from common.effectiveness import (
 )
 from common.monitoring.logger import get_logger
 from common.websocket.base_handler import ConnectionManager
+from sales_bot.websocket.components.objection_ledger_helpers import (
+    merge_arbiter_context_with_objection_ledger,
+    resolve_turn_objection_ledger,
+)
 from sales_bot.websocket.realtime_feedback_arbiter import (
     RealtimeFeedbackArbiter,
     RealtimeFeedbackPacingState,
@@ -44,6 +49,7 @@ class CapabilityProcessor:
         self._last_emitted_stage: str | None = None
         self._feedback_arbiter = RealtimeFeedbackArbiter()
         self._feedback_state = RealtimeFeedbackPacingState()
+        self._objection_ledger: dict[str, Any] | None = None
 
     async def run_and_send_feedback(
         self,
@@ -177,6 +183,31 @@ class CapabilityProcessor:
                     logger.info(
                         f"Knowledge retrieval returned {len(knowledge_payload.get('results', []))} results"
                     )
+
+        previous_objection_ledger = self._objection_ledger
+        resolved_objection_ledger = resolve_turn_objection_ledger(
+            existing_ledger=previous_objection_ledger,
+            user_text=text,
+            stage_context=stage_context_for_arbiter,
+            score_context=score_context_for_arbiter,
+        )
+        self._objection_ledger = resolved_objection_ledger
+        if resolved_objection_ledger is not None:
+            analysis_data["objection_ledger"] = copy.deepcopy(resolved_objection_ledger)
+        if resolved_objection_ledger != previous_objection_ledger:
+            logger.info(
+                "[CAPABILITY] Updated objection ledger",
+                objection_ledger=resolved_objection_ledger,
+            )
+
+        (
+            stage_context_for_arbiter,
+            score_context_for_arbiter,
+        ) = merge_arbiter_context_with_objection_ledger(
+            objection_ledger=resolved_objection_ledger,
+            stage_context=stage_context_for_arbiter,
+            score_context=score_context_for_arbiter,
+        )
 
         decision = self._feedback_arbiter.decide(
             turn_number=getattr(context, "turn_count", None),

@@ -8,7 +8,7 @@ from typing import Any
 from sqlalchemy import select
 
 from common.conversation.models import ConversationMessage
-from common.conversation.storage import MessageStorageService
+from common.conversation.storage import MessageStorageService, normalize_objection_ledger
 from common.db.session import AsyncSessionLocal
 from common.monitoring.logger import get_logger
 
@@ -102,6 +102,10 @@ def _normalize_analysis_payload(
     if isinstance(transcript_metadata, dict):
         normalized["transcript_metadata"] = transcript_metadata
 
+    objection_ledger = normalize_objection_ledger(payload.get("objection_ledger"))
+    if objection_ledger is not None:
+        normalized["objection_ledger"] = objection_ledger
+
     return normalized
 
 
@@ -140,6 +144,7 @@ def extract_analysis_patch_fields(
         "score_snapshot": normalized_payload.get("score_snapshot"),
         "ai_feedback": normalized_payload.get("ai_feedback"),
         "transcript_metadata": normalized_payload.get("transcript_metadata"),
+        "objection_ledger": normalized_payload.get("objection_ledger"),
     }
 
 
@@ -154,6 +159,7 @@ async def patch_existing_message_analysis(
     score_snapshot: dict[str, Any] | None,
     ai_feedback: str | None,
     transcript_metadata: dict[str, Any] | None,
+    objection_ledger: dict[str, Any] | None,
     db_lock: asyncio.Lock,
 ) -> bool:
     """Patch analysis fields for an already persisted duplicate message."""
@@ -164,6 +170,7 @@ async def patch_existing_message_analysis(
             "score_snapshot": score_snapshot,
             "ai_feedback": ai_feedback,
             "transcript_metadata": transcript_metadata,
+            "objection_ledger": objection_ledger,
         }
     )
 
@@ -192,6 +199,7 @@ async def patch_existing_message_analysis(
                     score_snapshot=normalized_fields["score_snapshot"],
                     ai_feedback=normalized_fields["ai_feedback"],
                     transcript_metadata=normalized_fields["transcript_metadata"],
+                    objection_ledger=normalized_fields["objection_ledger"],
                 )
                 if not update_result.is_success:
                     logger.warning(

@@ -12,6 +12,7 @@ import pytest
 
 import sales_bot.websocket.stepfun_realtime_handler as stepfun_module
 from common.error_handling.result import Result
+from common.websocket.session_state_service import SessionStateSnapshot
 from sales_bot.websocket.realtime_feedback_arbiter import RealtimeFeedbackPacingState
 from sales_bot.websocket.stepfun_realtime_handler import (
     RealtimeResponseState,
@@ -1689,7 +1690,13 @@ async def test_run_realtime_feedback_suppresses_duplicate_action_card_for_same_t
             },
             "suggestions": ["补上案例、数据或ROI证据，让价值主张更可信。"],
             "stage_name": "需求挖掘",
-        }
+        },
+        "objection_ledger": {
+            "objection_family": "roi_proof",
+            "promised_proof": "补充同类客户 ROI 案例",
+            "next_expected_evidence": "给出 6 个月回本测算",
+            "closure_state": "open",
+        },
     }
     assert len(action_cards) == 1
     assert len(score_updates) == 2
@@ -1750,6 +1757,12 @@ async def test_run_realtime_feedback_emits_canonical_sales_score_and_action_card
 
     assert analysis == {
         "score_snapshot": expected_snapshot,
+        "objection_ledger": {
+            "objection_family": "roi_proof",
+            "promised_proof": "补充同类客户 ROI 案例",
+            "next_expected_evidence": "给出 6 个月回本测算",
+            "closure_state": "open",
+        },
         "ai_feedback": "在确认痛点后，补一个同类客户案例、数据或ROI区间。",
     }
     assert handler._latest_score_snapshot == expected_snapshot
@@ -1973,6 +1986,12 @@ async def test_run_realtime_feedback_uses_declining_dimension_to_match_classic_a
 
     assert analysis == {
         "score_snapshot": expected_snapshot,
+        "objection_ledger": {
+            "objection_family": "price_pressure",
+            "promised_proof": "补充报价依据和版本差异",
+            "next_expected_evidence": "说明报价逻辑、预算回收或折扣边界",
+            "closure_state": "open",
+        },
         "ai_feedback": "先复述价格、竞品或风险顾虑，再给收益与证据回应。",
     }
     assert handler._latest_score_snapshot == expected_snapshot
@@ -1981,3 +2000,226 @@ async def test_run_realtime_feedback_uses_declining_dimension_to_match_classic_a
     sent_payloads = [call.args[1] for call in handler.manager.send_json.await_args_list]
     action_card = next(payload for payload in sent_payloads if payload["type"] == "action_card")
     assert action_card["data"] == expected_action_card
+
+
+@pytest.mark.asyncio
+async def test_run_realtime_feedback_reuses_open_objection_ledger_when_score_focus_drifts() -> None:
+    handler = StepFunRealtimeHandler()
+    handler.session_id = "session-objection-ledger-drift"
+    handler.websocket = MagicMock()
+    handler.manager = MagicMock()
+    handler.manager.send_json = AsyncMock()
+    handler._fuzzy_detection_enabled = False
+    handler._realtime_scoring_enabled = True
+    handler._objection_ledger = {
+        "objection_family": "roi_proof",
+        "promised_proof": "补充同类客户 ROI 案例",
+        "next_expected_evidence": "给出 6 个月回本测算",
+        "closure_state": "open",
+    }
+    handler._latest_stage_data = {
+        "current_stage": "closing",
+        "stage_name": "成交推进",
+        "key_actions": ["锁定动作"],
+        "guidance": "推动明确下一步",
+        "progress": 0.8,
+        "stage_changed": True,
+    }
+    handler._realtime_scoring_capability = MagicMock()
+    handler._realtime_scoring_capability.on_session_start = AsyncMock()
+    handler._realtime_scoring_capability.execute = AsyncMock(
+        return_value=SimpleNamespace(
+            data={
+                "overall_score": 79.0,
+                "dimension_scores": {
+                    "价值表达": 84.0,
+                    "客户收益连接": 82.0,
+                    "证据使用": 88.0,
+                    "异议处理": 81.0,
+                    "推进下一步": 52.0,
+                },
+                "feedback": "明确试点、会议、报价或负责人确认中的一个动作。",
+            }
+        )
+    )
+
+    analysis = await handler._run_realtime_feedback(
+        user_text="我们可以先聊一下后面的协同流程。",
+        turn_number=6,
+        sales_stage="closing",
+    )
+
+    expected_snapshot = {
+        "overall_score": 79.0,
+        "dimension_scores": {
+            "价值表达": 84.0,
+            "客户收益连接": 82.0,
+            "证据使用": 88.0,
+            "异议处理": 81.0,
+            "推进下一步": 52.0,
+        },
+        "suggestions": ["明确试点、会议、报价或负责人确认中的一个动作。"],
+        "stage_name": "促成成交",
+    }
+    expected_action_card = {
+        "issue": "痛点已经聊到，但价值主张还缺少可验证的案例或数据。",
+        "replacement": "在确认痛点后，补一个同类客户案例、数据或ROI区间。",
+        "next_turn_rule": "下一轮先确认痛点影响，再补一个案例或ROI数据。",
+    }
+    expected_ledger = {
+        "objection_family": "roi_proof",
+        "promised_proof": "补充同类客户 ROI 案例",
+        "next_expected_evidence": "给出 6 个月回本测算",
+        "closure_state": "open",
+    }
+
+    assert analysis == {
+        "score_snapshot": expected_snapshot,
+        "objection_ledger": expected_ledger,
+        "ai_feedback": "在确认痛点后，补一个同类客户案例、数据或ROI区间。",
+    }
+    assert handler._objection_ledger == expected_ledger
+    assert handler._latest_action_card == expected_action_card
+
+    sent_payloads = [call.args[1] for call in handler.manager.send_json.await_args_list]
+    action_card = next(payload for payload in sent_payloads if payload["type"] == "action_card")
+    assert action_card["data"] == expected_action_card
+
+
+@pytest.mark.asyncio
+async def test_run_realtime_feedback_marks_objection_ledger_gap_acknowledged_and_releases_focus() -> None:
+    handler = StepFunRealtimeHandler()
+    handler.session_id = "session-objection-ledger-close"
+    handler.websocket = MagicMock()
+    handler.manager = MagicMock()
+    handler.manager.send_json = AsyncMock()
+    handler._fuzzy_detection_enabled = False
+    handler._realtime_scoring_enabled = True
+    handler._objection_ledger = {
+        "objection_family": "roi_proof",
+        "promised_proof": "补充同类客户 ROI 案例",
+        "next_expected_evidence": "给出 6 个月回本测算",
+        "closure_state": "open",
+    }
+    handler._latest_stage_data = {
+        "current_stage": "closing",
+        "stage_name": "成交推进",
+        "key_actions": ["锁定动作"],
+        "guidance": "推动明确下一步",
+        "progress": 0.8,
+        "stage_changed": True,
+    }
+    handler._realtime_scoring_capability = MagicMock()
+    handler._realtime_scoring_capability.on_session_start = AsyncMock()
+    handler._realtime_scoring_capability.execute = AsyncMock(
+        return_value=SimpleNamespace(
+            data={
+                "overall_score": 79.0,
+                "dimension_scores": {
+                    "价值表达": 84.0,
+                    "客户收益连接": 82.0,
+                    "证据使用": 88.0,
+                    "异议处理": 81.0,
+                    "推进下一步": 52.0,
+                },
+                "feedback": "明确试点、会议、报价或负责人确认中的一个动作。",
+            }
+        )
+    )
+
+    analysis = await handler._run_realtime_feedback(
+        user_text="这个 ROI 案例我们现在确实没有，得回去确认后再给你。",
+        turn_number=6,
+        sales_stage="closing",
+    )
+
+    expected_snapshot = {
+        "overall_score": 79.0,
+        "dimension_scores": {
+            "价值表达": 84.0,
+            "客户收益连接": 82.0,
+            "证据使用": 88.0,
+            "异议处理": 81.0,
+            "推进下一步": 52.0,
+        },
+        "suggestions": ["明确试点、会议、报价或负责人确认中的一个动作。"],
+        "stage_name": "促成成交",
+    }
+    expected_action_card = {
+        "issue": "对话快结束了，但下一步动作、时间点和责任人还没定下来。",
+        "replacement": "明确试点、会议、报价或负责人确认中的一个动作。",
+        "next_turn_rule": "下一轮先锁定动作、时间点和责任人，再结束本轮。",
+    }
+    expected_ledger = {
+        "objection_family": "roi_proof",
+        "promised_proof": "补充同类客户 ROI 案例",
+        "next_expected_evidence": "给出 6 个月回本测算",
+        "closure_state": "gap_acknowledged",
+    }
+
+    assert analysis == {
+        "score_snapshot": expected_snapshot,
+        "objection_ledger": expected_ledger,
+        "ai_feedback": "明确试点、会议、报价或负责人确认中的一个动作。",
+    }
+    assert handler._objection_ledger == expected_ledger
+    assert handler._latest_action_card == expected_action_card
+
+    sent_payloads = [call.args[1] for call in handler.manager.send_json.await_args_list]
+    action_card = next(payload for payload in sent_payloads if payload["type"] == "action_card")
+    assert action_card["data"] == expected_action_card
+
+
+def test_create_state_snapshot_includes_objection_ledger_copy() -> None:
+    handler = StepFunRealtimeHandler()
+    handler.session_id = "session-objection-ledger-save"
+    handler._objection_ledger = {
+        "objection_family": "roi_proof",
+        "promised_proof": "补同类客户 ROI 案例",
+        "next_expected_evidence": "给出量化回本周期",
+        "closure_state": "open",
+    }
+
+    snapshot = handler._create_state_snapshot()
+
+    assert snapshot.runtime_state["objection_ledger"] == {
+        "objection_family": "roi_proof",
+        "promised_proof": "补同类客户 ROI 案例",
+        "next_expected_evidence": "给出量化回本周期",
+        "closure_state": "open",
+    }
+
+    handler._objection_ledger["closure_state"] = "gap_acknowledged"
+    assert snapshot.runtime_state["objection_ledger"]["closure_state"] == "open"
+
+
+@pytest.mark.asyncio
+async def test_restore_session_state_rehydrates_objection_ledger() -> None:
+    handler = StepFunRealtimeHandler()
+    handler._send_reconnection_success = AsyncMock()
+
+    state = SessionStateSnapshot(
+        session_id="session-objection-ledger-restore",
+        scenario="sales",
+        turn_count=3,
+        session_status="in_progress",
+        ai_state="listening",
+        runtime_state={
+            "objection_ledger": {
+                "objection_family": "implementation_risk",
+                "promised_proof": "补实施排期与服务边界",
+                "next_expected_evidence": "确认试点负责人",
+                "closure_state": "open",
+            }
+        },
+    )
+
+    await handler._restore_session_state(state)
+
+    assert handler._objection_ledger == {
+        "objection_family": "implementation_risk",
+        "promised_proof": "补实施排期与服务边界",
+        "next_expected_evidence": "确认试点负责人",
+        "closure_state": "open",
+    }
+    handler._send_reconnection_success.assert_awaited_once_with(state)

@@ -11,9 +11,37 @@ import uuid
 from dataclasses import dataclass, field
 from datetime import datetime
 
+import common.conversation.storage as conversation_storage
 from common.error_handling.result import Result
 
+OBJECTION_LEDGER_TRANSCRIPT_KEY = conversation_storage.OBJECTION_LEDGER_TRANSCRIPT_KEY
+normalize_objection_ledger = conversation_storage.normalize_objection_ledger
+
 logger = logging.getLogger(__name__)
+
+
+@dataclass
+class ObjectionLedger:
+    """Minimum cross-turn objection state carried by the current runtime chain."""
+
+    objection_family: str
+    promised_proof: str | None = None
+    next_expected_evidence: str | None = None
+    closure_state: str = "open"
+
+    def to_dict(self) -> dict[str, str]:
+        normalized = normalize_objection_ledger(
+            {
+                "objection_family": self.objection_family,
+                "promised_proof": self.promised_proof,
+                "next_expected_evidence": self.next_expected_evidence,
+                "closure_state": self.closure_state,
+            }
+        )
+        return normalized or {
+            "objection_family": self.objection_family,
+            "closure_state": self.closure_state,
+        }
 
 
 @dataclass
@@ -37,6 +65,7 @@ class ConversationContext:
     user_objectives: list[str] = field(default_factory=list)  # What user wants to achieve
     bot_tactics: list[str] = field(default_factory=list)  # What bot is testing
     current_phase: str = "opening"  # opening, discovery, objection, closing
+    objection_ledger: ObjectionLedger | None = None
 
     # Performance metrics
     total_user_interruptions: int = 0
@@ -180,6 +209,58 @@ class ContextManager:
             )
             return Result.fail(fallback="[CONTEXT_GET_FAILED]")
 
+    async def update_objection_ledger(
+        self,
+        session_id: uuid.UUID,
+        *,
+        objection_family: str,
+        promised_proof: str | None = None,
+        next_expected_evidence: str | None = None,
+        closure_state: str | None = None,
+    ) -> Result[ObjectionLedger]:
+        """Create or update the minimum objection ledger for one session."""
+        try:
+            if session_id not in self.active_contexts:
+                return Result.fail(fallback="[CONTEXT_NOT_FOUND]")
+
+            context = self.active_contexts[session_id]
+            existing = (
+                context.objection_ledger.to_dict()
+                if context.objection_ledger is not None
+                else {}
+            )
+            candidate = dict(existing)
+            candidate["objection_family"] = objection_family
+            if promised_proof is not None:
+                candidate["promised_proof"] = promised_proof
+            if next_expected_evidence is not None:
+                candidate["next_expected_evidence"] = next_expected_evidence
+            if closure_state is not None:
+                candidate["closure_state"] = closure_state
+
+            normalized = normalize_objection_ledger(candidate)
+            if normalized is None:
+                return Result.fail(fallback="[INVALID_OBJECTION_LEDGER]")
+
+            context.objection_ledger = ObjectionLedger(**normalized)
+            logger.info(
+                "Conversation objection ledger updated",
+                extra={
+                    "session_id": str(session_id),
+                    "objection_family": normalized["objection_family"],
+                    "closure_state": normalized["closure_state"],
+                },
+            )
+            return Result(value=context.objection_ledger)
+
+        except (RuntimeError, ValueError, OSError) as e:
+            logger.error(
+                "Failed to update objection ledger",
+                extra={"session_id": str(session_id), "error": str(e)},
+                exc_info=True,
+            )
+            return Result.fail(fallback="[OBJECTION_LEDGER_UPDATE_FAILED]")
+
     async def get_conversation_summary(
         self,
         session_id: uuid.UUID
@@ -205,6 +286,11 @@ class ContextManager:
                 "vagueness_count": context.vagueness_count,
                 "average_challenge_level": self._calculate_avg_challenge(context),
                 "conversation_flow": self._analyze_flow(context),
+                "objection_ledger": (
+                    context.objection_ledger.to_dict()
+                    if context.objection_ledger is not None
+                    else None
+                ),
             }
 
             logger.info(

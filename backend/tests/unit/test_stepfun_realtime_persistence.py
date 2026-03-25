@@ -81,7 +81,6 @@ def test_create_state_snapshot_captures_minimal_runtime_recovery_fields_and_norm
         "current_request_id": 9,
         "last_emitted_stage": "discovery",
         "latest_score_snapshot": {"overall_score": 86.0},
-        "latest_action_card": {"title": "先确认预算"},
         "feedback_pacing_state": {
             "last_action_signature": "sig-score-1",
             "last_action_turn": 4,
@@ -130,7 +129,7 @@ async def test_restore_session_state_rehydrates_minimal_runtime_and_emits_reconn
     assert handler.current_request_id == 6
     assert handler._last_emitted_stage == "qualification"
     assert handler._latest_score_snapshot == {"overall_score": 91.0}
-    assert handler._latest_action_card == {"title": "先确认关键需求"}
+    assert handler._latest_action_card is None
     assert getattr(handler, "_feedback_pacing_state", None) == RealtimeFeedbackPacingState(
         last_action_signature="sig-score-restore",
         last_action_turn=5,
@@ -174,16 +173,22 @@ async def test_restore_session_state_suppresses_replayed_action_card_for_same_tu
 
     prior_decision = RealtimeFeedbackArbiter().decide(
         turn_number=5,
-        score_suggestions=["补上案例、数据或ROI证据，让价值主张更可信。"],
-        pass_flags={
-            "pass_3min_flow": True,
-            "pass_5turn_defense": True,
-            "pass_4step_structure": False,
+        score_suggestions=["给出 6 个月回本测算"],
+        stage_context={"current_stage": "objection", "stage_name": "异议处理"},
+        score_context={
+            "overall_score": 72.0,
+            "dimension_scores": {
+                "价值表达": 78.0,
+                "客户收益连接": 76.0,
+                "证据使用": 48.0,
+                "异议处理": 68.0,
+                "推进下一步": 62.0,
+            },
+            "stage_name": "异议处理",
+            "suggestions": ["给出 6 个月回本测算"],
         },
         prior_state=RealtimeFeedbackPacingState(),
     )
-    restored_action_card = dict(prior_decision.action_card or {})
-
     state = SessionStateSnapshot(
         session_id="session-stepfun-replay-001",
         scenario="sales",
@@ -203,14 +208,19 @@ async def test_restore_session_state_suppresses_replayed_action_card_for_same_tu
                 "suggestions": ["补上案例、数据或ROI证据，让价值主张更可信。"],
                 "stage_name": "需求挖掘",
             },
-            "latest_action_card": restored_action_card,
+            "objection_ledger": {
+                "objection_family": "roi_proof",
+                "promised_proof": "补充同类客户 ROI 案例",
+                "next_expected_evidence": "给出 6 个月回本测算",
+                "closure_state": "open",
+            },
             "feedback_pacing_state": prior_decision.state.to_dict(),
         },
     )
 
     await handler._restore_session_state(state)
     analysis = await handler._run_realtime_feedback(
-        user_text="我们可以用客户案例说明ROI。",
+        user_text="我们先看看后续安排。",
         turn_number=5,
         sales_stage="discovery",
     )
@@ -231,11 +241,23 @@ async def test_restore_session_state_suppresses_replayed_action_card_for_same_tu
             },
             "suggestions": ["补上案例、数据或ROI证据，让价值主张更可信。"],
             "stage_name": "需求挖掘",
-        }
+        },
+        "objection_ledger": {
+            "objection_family": "roi_proof",
+            "promised_proof": "补充同类客户 ROI 案例",
+            "next_expected_evidence": "给出 6 个月回本测算",
+            "closure_state": "open",
+        },
     }
     assert len(score_updates) == 1
     assert action_cards == []
-    assert handler._latest_action_card == restored_action_card
+    assert handler._latest_action_card is None
+    assert handler._objection_ledger == {
+        "objection_family": "roi_proof",
+        "promised_proof": "补充同类客户 ROI 案例",
+        "next_expected_evidence": "给出 6 个月回本测算",
+        "closure_state": "open",
+    }
     assert handler._latest_score_snapshot == {
         "overall_score": 82.0,
         "dimension_scores": {

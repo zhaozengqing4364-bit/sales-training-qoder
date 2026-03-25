@@ -21,12 +21,12 @@ Reuse the current sales runtime and evidence chain only: `backend/src/sales_bot/
 
 ## Tasks
 
-- [ ] **T01: Define and persist the unresolved-objection ledger on current runtime state** `est:90m`
+- [x] **T01: Define and persist the unresolved-objection ledger on current runtime state** `est:90m`
   Define the minimum unresolved-objection ledger on the current runtime chain: unresolved objection family, promised proof, next expected evidence, and closure state. Add focused tests around the existing runtime/context components so this ledger can be persisted without inventing a second store.
   - Files: `backend/src/sales_bot/services/context_manager.py`, `backend/src/common/conversation/storage.py`, `backend/tests/unit/test_context_manager.py`, `backend/tests/unit/test_stepfun_realtime_handler.py`
   - Verify: cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_context_manager.py tests/unit/test_stepfun_realtime_handler.py
 
-- [ ] **T02: Carry unresolved objections across turns and reconnect on both runtime paths** `est:2h`
+- [x] **T02: Carry unresolved objections across turns and reconnect on both runtime paths** `est:2h`
   Wire the ledger through classic and StepFun runtime paths and make reconnect restore safe. Reuse current handlers and capability composition so objection state influences follow-up pressure without replaying stale prompts after reconnect.
   - Files: `backend/src/sales_bot/websocket/stepfun_realtime_handler.py`, `backend/src/sales_bot/websocket/components/capability_processor.py`, `backend/tests/unit/test_stepfun_realtime_handler.py`, `backend/tests/unit/test_stepfun_realtime_persistence.py`
   - Verify: cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_stepfun_realtime_handler.py tests/unit/test_stepfun_realtime_persistence.py

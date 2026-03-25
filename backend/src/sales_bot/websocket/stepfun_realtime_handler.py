@@ -34,6 +34,7 @@ from agent.context import AgentContext
 from agent.models import Agent, Persona
 from common.ai.embedding_service import get_embedding_service
 from common.auth.service import resolve_websocket_token, verify_token
+from common.conversation.storage import normalize_objection_ledger
 from common.db.models import PracticeSession
 from common.effectiveness import (
     build_sales_effectiveness_metrics,
@@ -90,6 +91,10 @@ from sales_bot.websocket.components.stepfun_helpers import (
     extract_response_text,
     extract_text_payload,
     format_stage_name,
+)
+from sales_bot.websocket.components.objection_ledger_helpers import (
+    merge_arbiter_context_with_objection_ledger,
+    resolve_turn_objection_ledger,
 )
 from sales_bot.websocket.components.stepfun_internal_knowledge_searcher import (
     search_internal_knowledge,
@@ -258,6 +263,7 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
         )
         self._latest_score_snapshot: dict[str, Any] | None = None
         self._latest_action_card: dict[str, Any] | None = None
+        self._objection_ledger: dict[str, Any] | None = None
         self._feedback_arbiter = RealtimeFeedbackArbiter()
         self._feedback_pacing_state = RealtimeFeedbackPacingState()
 
@@ -514,9 +520,10 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
             runtime_state["latest_score_snapshot"] = copy.deepcopy(
                 normalized_score_snapshot
             )
-        if self._latest_action_card is not None:
-            runtime_state["latest_action_card"] = copy.deepcopy(
-                self._latest_action_card
+        normalized_objection_ledger = normalize_objection_ledger(self._objection_ledger)
+        if normalized_objection_ledger is not None:
+            runtime_state["objection_ledger"] = copy.deepcopy(
+                normalized_objection_ledger
             )
         feedback_pacing_state = self._feedback_pacing_state.to_dict()
         if feedback_pacing_state:
@@ -549,11 +556,9 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
         self._last_emitted_stage = runtime_state.get("last_emitted_stage")
         latest_score_snapshot = runtime_state.get("latest_score_snapshot")
         self._latest_score_snapshot = normalize_score_snapshot(latest_score_snapshot)
-        latest_action_card = runtime_state.get("latest_action_card")
-        self._latest_action_card = (
-            copy.deepcopy(latest_action_card)
-            if isinstance(latest_action_card, dict)
-            else None
+        self._latest_action_card = None
+        self._objection_ledger = normalize_objection_ledger(
+            runtime_state.get("objection_ledger")
         )
         self._feedback_pacing_state = RealtimeFeedbackPacingState.from_dict(
             runtime_state.get("feedback_pacing_state")
@@ -2032,6 +2037,33 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
                         turn_count=turn_number,
                     )
                 )
+
+        previous_objection_ledger = normalize_objection_ledger(self._objection_ledger)
+        resolved_objection_ledger = resolve_turn_objection_ledger(
+            existing_ledger=previous_objection_ledger,
+            user_text=text,
+            stage_context=stage_context_for_arbiter,
+            score_context=score_context_for_arbiter,
+        )
+        self._objection_ledger = resolved_objection_ledger
+        if resolved_objection_ledger is not None:
+            analysis_data["objection_ledger"] = copy.deepcopy(resolved_objection_ledger)
+        if resolved_objection_ledger != previous_objection_ledger:
+            logger.info(
+                "Updated StepFun objection ledger",
+                session_id=self.session_id,
+                turn_number=turn_number,
+                objection_ledger=resolved_objection_ledger,
+            )
+
+        (
+            stage_context_for_arbiter,
+            score_context_for_arbiter,
+        ) = merge_arbiter_context_with_objection_ledger(
+            objection_ledger=resolved_objection_ledger,
+            stage_context=stage_context_for_arbiter,
+            score_context=score_context_for_arbiter,
+        )
 
         decision = self._feedback_arbiter.decide(
             turn_number=turn_number,
@@ -3982,6 +4014,7 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
         score_snapshot: dict[str, Any] | None = None,
         ai_feedback: str | None = None,
         transcript_metadata: dict[str, Any] | None = None,
+        objection_ledger: dict[str, Any] | None = None,
     ) -> None:
         """Patch analysis fields for an already persisted duplicate message."""
         if not self.session_id:
@@ -3997,6 +4030,7 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
             score_snapshot=score_snapshot,
             ai_feedback=ai_feedback,
             transcript_metadata=transcript_metadata,
+            objection_ledger=objection_ledger,
             db_lock=self._db_lock,
         )
 
@@ -4040,6 +4074,10 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
                 if patch_fields["transcript_metadata"] is not None:
                     patch_kwargs["transcript_metadata"] = patch_fields[
                         "transcript_metadata"
+                    ]
+                if patch_fields["objection_ledger"] is not None:
+                    patch_kwargs["objection_ledger"] = patch_fields[
+                        "objection_ledger"
                     ]
                 await self._update_existing_message_sales_stage(
                     **patch_kwargs,

@@ -1056,3 +1056,48 @@ Append one entry per iteration:
   verification results: passed; the planned backend persona-policy/admin API gate passed with 18 tests, the planned backend runtime-snapshot gate passed with 12 tests, the planned web Persona detail gate matched the intended file and passed with 2 tests, and the extra snapshot-persistence sanity file passed with 8 tests proving the frozen baseline survives later detail/report/replay reads and runtime-metrics appends.
   success signal status: M003/S02 is now closed with one structured customer_pressure contract on the current admin Persona surfaces and one auditable per-session frozen pressure model in PracticeSession.voice_policy_snapshot.
   rollback note: if downstream work revisits Persona realism, keep the nested customer_pressure model, the source.customer_pressure_source snapshot tag, and the current policy-health audit together; splitting those seams would bring back prompt-only drift.
+
+
+- time: 2026-03-25T11:28:04+08:00
+  mode: stabilize
+  item id: M003-S03-T01
+  files changed:
+    - backend/src/common/conversation/storage.py
+    - backend/src/sales_bot/services/context_manager.py
+    - backend/src/sales_bot/websocket/components/stepfun_message_helpers.py
+    - backend/src/sales_bot/websocket/stepfun_realtime_handler.py
+    - backend/tests/unit/test_context_manager.py
+    - backend/tests/unit/test_stepfun_realtime_handler.py
+    - backend/tests/unit/test_stepfun_message_helpers.py
+    - .gsd/DECISIONS.md
+    - .gsd/KNOWLEDGE.md
+    - .gsd/milestones/M003/slices/S03/tasks/T01-SUMMARY.md
+    - .gsd/milestones/M003/slices/S03/S03-PLAN.md
+    - .codex/loop/state.json
+    - .codex/loop/log.md
+  summary: Added the normalized unresolved-objection ledger seam to current runtime state, persisted it via existing conversation transcript metadata, and extended StepFun reconnect snapshots plus focused unit tests without introducing a second store.
+  verification commands:
+    - cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_context_manager.py tests/unit/test_stepfun_realtime_handler.py
+    - cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_stepfun_message_helpers.py
+  verification results: passed; the planned T01 backend gate finished green with 60 tests, and the extra StepFun helper suite finished green with 5 tests confirming the new whitelist/patch path.
+  success signal status: unresolved objection family, promised proof, next expected evidence, and closure state now share one normalized shape across ContextManager, ConversationMessage transcript metadata, duplicate-message patching, and StepFun reconnect snapshots.
+  rollback note: if later S03 tasks revisit persistence, keep the transcript_metadata-objection_ledger seam plus the StepFun runtime_state mirror together; adding new analysis keys without whitelisting both helper and storage layers will silently drop the fact.
+
+- time: 2026-03-25T12:05:16+08:00
+  mode: stabilize
+  item id: M003-S03-T02
+  files changed:
+    - backend/src/sales_bot/websocket/components/objection_ledger_helpers.py
+    - backend/src/sales_bot/websocket/stepfun_realtime_handler.py
+    - backend/src/sales_bot/websocket/components/capability_processor.py
+    - backend/tests/unit/test_stepfun_realtime_handler.py
+    - backend/tests/unit/test_stepfun_realtime_persistence.py
+    - backend/tests/unit/test_capability_processor.py
+    - .gsd/DECISIONS.md
+  summary: Wired one unresolved-objection ledger through the classic and StepFun coaching paths, kept open objection pressure alive across topic drift, and shrank StepFun reconnect state down to ledger + pacing semantics so stale action cards are not replayed.
+  verification commands:
+    - cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_stepfun_realtime_handler.py tests/unit/test_stepfun_realtime_persistence.py
+    - cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_capability_processor.py
+  verification results: passed
+  success signal status: unresolved objection families now survive into later turns and reconnect recovery without re-emitting the previous action-card payload on the same turn
+  rollback note: if a later slice changes objection-pressure semantics, preserve the reconnect rule that action-card UI state is transient while objection_ledger + feedback_pacing_state remain the durable runtime facts

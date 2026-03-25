@@ -23,6 +23,59 @@ from sqlalchemy.exc import SQLAlchemyError
 
 logger = get_logger(__name__)
 
+OBJECTION_LEDGER_TRANSCRIPT_KEY = "objection_ledger"
+VALID_OBJECTION_LEDGER_CLOSURE_STATES = frozenset(
+    {"open", "evidence_provided", "gap_acknowledged"}
+)
+
+
+def normalize_objection_ledger(
+    objection_ledger: dict[str, Any] | None,
+) -> dict[str, Any] | None:
+    """Normalize the minimal unresolved-objection ledger into a stable dict."""
+    if not isinstance(objection_ledger, dict):
+        return None
+
+    objection_family = str(objection_ledger.get("objection_family") or "").strip()
+    if not objection_family:
+        return None
+
+    closure_state = str(objection_ledger.get("closure_state") or "open").strip().lower()
+    if closure_state not in VALID_OBJECTION_LEDGER_CLOSURE_STATES:
+        closure_state = "open"
+
+    normalized: dict[str, Any] = {
+        "objection_family": objection_family,
+        "closure_state": closure_state,
+    }
+
+    promised_proof = str(objection_ledger.get("promised_proof") or "").strip()
+    if promised_proof:
+        normalized["promised_proof"] = promised_proof
+
+    next_expected_evidence = str(
+        objection_ledger.get("next_expected_evidence") or ""
+    ).strip()
+    if next_expected_evidence:
+        normalized["next_expected_evidence"] = next_expected_evidence
+
+    return normalized
+
+
+def _merge_transcript_metadata(
+    transcript_metadata: dict[str, Any] | None,
+    objection_ledger: dict[str, Any] | None,
+) -> dict[str, Any] | None:
+    metadata = (
+        dict(transcript_metadata)
+        if isinstance(transcript_metadata, dict)
+        else {}
+    )
+    normalized_ledger = normalize_objection_ledger(objection_ledger)
+    if normalized_ledger is not None:
+        metadata[OBJECTION_LEDGER_TRANSCRIPT_KEY] = normalized_ledger
+    return metadata or None
+
 
 class MessageStorageService:
     """
@@ -97,8 +150,18 @@ class MessageStorageService:
             if analysis_data:
                 if "fuzzy_words" in analysis_data:
                     message.fuzzy_words = analysis_data["fuzzy_words"]
-                if "transcript_metadata" in analysis_data:
-                    message.transcript_metadata = analysis_data["transcript_metadata"]
+
+                transcript_metadata = (
+                    analysis_data.get("transcript_metadata")
+                    if isinstance(analysis_data.get("transcript_metadata"), dict)
+                    else None
+                )
+                if transcript_metadata is not None or "objection_ledger" in analysis_data:
+                    message.transcript_metadata = _merge_transcript_metadata(
+                        transcript_metadata,
+                        analysis_data.get("objection_ledger"),
+                    )
+
                 if "sales_stage" in analysis_data:
                     message.sales_stage = analysis_data["sales_stage"]
                 if "score_snapshot" in analysis_data:
@@ -129,7 +192,8 @@ class MessageStorageService:
         transcript_metadata: dict[str, Any] | None = None,
         sales_stage: str | None = None,
         score_snapshot: dict | None = None,
-        ai_feedback: str | None = None
+        ai_feedback: str | None = None,
+        objection_ledger: dict[str, Any] | None = None,
     ) -> Result[ConversationMessage]:
         """
         Update analysis data for an existing message.
@@ -137,9 +201,11 @@ class MessageStorageService:
         Args:
             message_id: Message UUID
             fuzzy_words: Optional list of fuzzy word detections
+            transcript_metadata: Optional transcript metadata dict
             sales_stage: Optional sales stage identifier
             score_snapshot: Optional score snapshot dict
             ai_feedback: Optional AI feedback text
+            objection_ledger: Optional unresolved-objection ledger persisted under transcript metadata
 
         Returns:
             Result[ConversationMessage]: Success with updated message or failure
@@ -160,8 +226,11 @@ class MessageStorageService:
             # Update fields if provided
             if fuzzy_words is not None:
                 message.fuzzy_words = fuzzy_words
-            if transcript_metadata is not None:
-                message.transcript_metadata = transcript_metadata
+            if transcript_metadata is not None or objection_ledger is not None:
+                message.transcript_metadata = _merge_transcript_metadata(
+                    transcript_metadata if transcript_metadata is not None else message.transcript_metadata,
+                    objection_ledger,
+                )
             if sales_stage is not None:
                 # Validate sales stage
                 valid_stages = {"opening", "discovery", "presentation", "objection", "closing"}
