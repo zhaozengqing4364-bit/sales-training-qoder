@@ -62,7 +62,7 @@
 - [x] **S04: unsupported claim / evidence truth contract** `risk:medium` `depends:[S02,S03]`
   > After this: The current realtime / report / replay surfaces can distinguish unsupported, evidence-pending, and evidence-backed claims on the same session without inventing a second evaluator.
 
-- [ ] **S05: objection-heavy live proof 与稳定性护栏** `risk:medium` `depends:[S04]`
+- [x] **S05: objection-heavy live proof 与稳定性护栏** `risk:medium` `depends:[S04]`
   > After this: One real admin → practice → report/replay run on current routes proves the system feels like a real customer and keeps degraded states inspectable.
 
 ## Boundary Map
