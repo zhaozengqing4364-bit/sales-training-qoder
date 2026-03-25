@@ -21,7 +21,7 @@
 - 销售语义仍停留在旧实时维度 / 旧前端标签 → retire in S01 by proving practice 右侧面板直接展示当前 sales rubric，并且 WebSocket `score_update` / `stage_update` / `action_card` 契约被同一套测试覆盖。
 - 多反馈通道刷屏 → retire in S02 by proving 多轮真实会话中每轮提示数被约束、重复消息被去重、同一轮只保留唯一主动作卡。
 - 训练中建议与报告结论漂移 → retire in S04 by proving 同一 session 的 realtime snapshot 与 report `main_issue` / `next_goal` 可以一一对照且不冲突。
-- 实时教练成为新的不稳定源 → retire in S05 by proving capability 失败、重连恢复、上游短暂抖动都只让 coach surface 降级，不会让训练主链路卡死。
+- 实时教练成为新的不稳定源 → retire in S07 by proving capability 失败、重连恢复、上游短暂抖动都只让 coach surface 降级，不会让训练主链路卡死，并且降级 / 恢复状态对用户与排障可见。
 
 ## Verification Classes
 
@@ -79,11 +79,11 @@ This milestone is complete only when all are true:
 - [x] **S04: 训练中建议与报告结论一致性** `risk:medium` `depends:[S01,S03]`
   > After this: 同一 session 的实时教练快照可以和 report / replay 中的 `main_issue`、`next_goal`、`stage_summary` 对齐复查。
 
-- [ ] **S05: 教练链路降级与重连可观测性** `risk:medium` `depends:[S02,S03]`
-  > After this: capability 失败、上游短暂抖动或重连恢复时，训练继续进行，同时 UI 和日志能明确显示 coach degraded / resume 状态。
+- [ ] **S07: 教练降级/恢复可观测性补齐** `risk:medium` `depends:[S02,S03]`
+  > After this: capability 失败、上游短暂抖动或重连恢复时，训练继续进行，同时 UI、日志和 runtime 证据能明确显示 coach degraded / resumed / data unavailable 状态。
 
-- [ ] **S06: 实时教练端到端验收** `risk:medium` `depends:[S04,S05]`
-  > After this: 一条真实销售训练链路已经证明实时提示可用、频率受控、报告一致、降级路径可诊断。
+- [ ] **S08: 实时教练终验与闭环 UAT** `risk:medium` `depends:[S04,S07]`
+  > After this: 一条真实销售训练链路已经证明销售维度实时提示可用、频率受控、报告/回放一致、降级路径可诊断。
 
 ## Boundary Map
 
@@ -132,7 +132,7 @@ Consumes from S01:
 Consumes from S03:
 - 统一的下一轮动作规则。
 
-### S02 + S03 → S05
+### S02 + S03 → S07
 
 Produces:
 - coach degrade 状态、reconnect 恢复后的 UI / log / runtime 可观测边界。
@@ -145,7 +145,7 @@ Consumes from S02:
 Consumes from S03:
 - 阶段推进与动作卡生成链路。
 
-### S04 + S05 → S06
+### S04 + S07 → S08
 
 Produces:
 - 实时教练最终验收路径：练中提示 → 练后报告 → 降级恢复 → 证据复查。
@@ -154,5 +154,5 @@ Produces:
 Consumes from S04:
 - 练中 / 练后结论一致性。
 
-Consumes from S05:
+Consumes from S07:
 - 教练链路降级与可观测性。
