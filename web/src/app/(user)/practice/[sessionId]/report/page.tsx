@@ -26,11 +26,16 @@ import {
 } from "@/lib/api/types";
 import { debug } from "@/lib/debug";
 import {
+    formatClaimTruthEvidenceNote,
+    formatClaimTruthSummary,
     formatEvidenceCompletenessNote,
     formatNotEvaluableReason,
     formatPresentationDegradedNote,
     formatPresentationIssueLabel,
     formatSessionStageLabel,
+    extractSessionClaimTruth,
+    getClaimTruthTone,
+    type SessionClaimTruthTone,
 } from "@/lib/session-evidence";
 import { cn } from "@/lib/utils";
 
@@ -58,6 +63,42 @@ function getScoreLabel(score: number): string {
     if (score >= 80) return "良好";
     if (score >= 60) return "及格";
     return "待改进";
+}
+
+function getClaimTruthClasses(tone: SessionClaimTruthTone) {
+    if (tone === "critical") {
+        return {
+            card: "border-rose-200 bg-rose-50/80",
+            badge: "text-rose-700 bg-white/80 border-rose-200",
+            text: "text-rose-900",
+            note: "text-rose-700",
+        };
+    }
+
+    if (tone === "warning") {
+        return {
+            card: "border-amber-200 bg-amber-50/80",
+            badge: "text-amber-700 bg-white/80 border-amber-200",
+            text: "text-amber-900",
+            note: "text-amber-700",
+        };
+    }
+
+    if (tone === "verified") {
+        return {
+            card: "border-emerald-200 bg-emerald-50/80",
+            badge: "text-emerald-700 bg-white/80 border-emerald-200",
+            text: "text-emerald-900",
+            note: "text-emerald-700",
+        };
+    }
+
+    return {
+        card: "border-blue-200 bg-blue-50/80",
+        badge: "text-blue-700 bg-white/80 border-blue-200",
+        text: "text-blue-900",
+        note: "text-blue-700",
+    };
 }
 
 function buildSalesDimensionScores(report: PracticeSessionReport) {
@@ -442,6 +483,12 @@ export default function ComprehensiveReportPage() {
                     : knowledgeCheck?.status === "disabled" || knowledgeCheck?.status === "no_knowledge_base"
                         ? "text-red-700 bg-red-50 border-red-200"
                         : "text-slate-700 bg-slate-50 border-slate-200";
+    const claimTruth = !isPresentationScenario
+        ? extractSessionClaimTruth(report?.effectiveness_snapshot)
+        : null;
+    const claimTruthSummary = formatClaimTruthSummary(claimTruth);
+    const claimTruthEvidenceNote = formatClaimTruthEvidenceNote(claimTruth);
+    const claimTruthClasses = getClaimTruthClasses(getClaimTruthTone(claimTruth?.status));
 
     if (loading) {
         return (
@@ -511,6 +558,21 @@ export default function ComprehensiveReportPage() {
             {enhancedUnavailableHint && (
                 <GlassCard className="p-4 mb-6 border border-slate-200 bg-slate-50/80">
                     <p className="text-sm text-slate-700">{enhancedUnavailableHint}</p>
+                </GlassCard>
+            )}
+
+            {!isPresentationScenario && claimTruth && claimTruthSummary && (
+                <GlassCard className={cn("p-6 mb-6 border", claimTruthClasses.card)}>
+                    <div className="flex items-center justify-between gap-3 mb-3 flex-wrap">
+                        <h2 className="text-lg font-semibold text-zinc-900">主张证据状态</h2>
+                        <span className={cn("text-xs font-semibold px-3 py-1 rounded-full border", claimTruthClasses.badge)}>
+                            {claimTruth.label}
+                        </span>
+                    </div>
+                    <p className={cn("text-sm", claimTruthClasses.text)}>{claimTruthSummary}</p>
+                    {claimTruthEvidenceNote && (
+                        <p className={cn("text-xs mt-2", claimTruthClasses.note)}>{claimTruthEvidenceNote}</p>
+                    )}
                 </GlassCard>
             )}
 

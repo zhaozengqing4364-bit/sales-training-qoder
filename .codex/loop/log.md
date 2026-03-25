@@ -31,6 +31,26 @@ Append one entry per iteration:
   success signal status: reconnected payloads now restore minimal runtime state and reconnect flow reaches end with session_status=scoring while snapshots are cleared
   rollback note: revert StepFun handler snapshot integration if future work changes reconnect protocol; keep D010 boundary unless replacing it with a broader tested contract
 
+- time: 2026-03-25T15:03:33+0800
+  mode: stabilize
+  item id: M003-S04-T03
+  files changed:
+    - web/src/lib/session-evidence.ts
+    - web/src/app/(user)/practice/[sessionId]/report/page.tsx
+    - web/src/app/(user)/practice/[sessionId]/replay/page.tsx
+    - web/src/app/(user)/practice/[sessionId]/report/page.test.tsx
+    - web/src/app/(user)/practice/[sessionId]/replay/page.test.tsx
+    - .gsd/DECISIONS.md
+    - .gsd/KNOWLEDGE.md
+    - .codex/loop/state.json
+  summary: Learner report and replay now render the canonical claim-truth line from the completed-session evidence snapshot, with shared labels/explanations for unsupported, weak, pending, and verified sales claims.
+  verification commands:
+    - cd web && npm test -- --run 'src/app/(user)/practice/[sessionId]/report/page.test.tsx' 'src/app/(user)/practice/[sessionId]/replay/page.test.tsx'
+    - cd web && npx tsc --noEmit
+  verification results: focused report/replay Vitest passed; repo-wide web typecheck still reports the pre-existing admin knowledge page error `api.reprocessKnowledgeDocument` missing in `src/app/admin/knowledge/[id]/page.tsx`, and no new type errors remained in the S04 files after the claim-truth parser fix
+  success signal status: report and replay now expose the same canonical claim-truth vocabulary already used by realtime diagnostics without leaking kb-lock chain-failure copy into completed-session coaching surfaces
+  rollback note: if a future contract version promotes claim-truth to a top-level field, keep report/replay on the completed-session projection line and migrate the shared frontend helper rather than reintroducing knowledge-check as the primary read surface
+
 - time: 2026-03-23T02:35:20+08:00
   mode: stabilize
   item id: M001-S01-T03

@@ -21,12 +21,18 @@ import { api, getApiErrorMessage } from "@/lib/api/client";
 import { HighlightItem, ReplayData } from "@/lib/api/types";
 import { debug } from "@/lib/debug";
 import {
+  extractSessionClaimTruth,
+  formatClaimTruthEvidenceNote,
+  formatClaimTruthSummary,
   formatEvidenceCompletenessNote,
   formatGoalTypeLabel,
   formatIssueTypeLabel,
   formatNotEvaluableReason,
   formatSessionStageLabel,
+  getClaimTruthTone,
+  type SessionClaimTruthTone,
 } from "@/lib/session-evidence";
+import { cn } from "@/lib/utils";
 
 function formatDuration(ms: number): string {
   const safe = Math.max(0, Math.floor(ms || 0));
@@ -47,6 +53,42 @@ function formatTime(value?: string): string {
     minute: "2-digit",
     hour12: false,
   });
+}
+
+function getClaimTruthClasses(tone: SessionClaimTruthTone) {
+  if (tone === "critical") {
+    return {
+      card: "border-rose-200 bg-rose-50/80",
+      badge: "text-rose-700 bg-white/80 border-rose-200",
+      text: "text-rose-900",
+      note: "text-rose-700",
+    };
+  }
+
+  if (tone === "warning") {
+    return {
+      card: "border-amber-200 bg-amber-50/80",
+      badge: "text-amber-700 bg-white/80 border-amber-200",
+      text: "text-amber-900",
+      note: "text-amber-700",
+    };
+  }
+
+  if (tone === "verified") {
+    return {
+      card: "border-emerald-200 bg-emerald-50/80",
+      badge: "text-emerald-700 bg-white/80 border-emerald-200",
+      text: "text-emerald-900",
+      note: "text-emerald-700",
+    };
+  }
+
+  return {
+    card: "border-blue-200 bg-blue-50/80",
+    badge: "text-blue-700 bg-white/80 border-blue-200",
+    text: "text-blue-900",
+    note: "text-blue-700",
+  };
 }
 
 function enrichHighlights(
@@ -163,6 +205,10 @@ export default function SessionReplayPage() {
   );
   const mainIssueTypeLabel = formatIssueTypeLabel(replayData?.main_issue?.issue_type);
   const nextGoalTypeLabel = formatGoalTypeLabel(replayData?.next_goal?.goal_type);
+  const claimTruth = extractSessionClaimTruth(replayData?.effectiveness_snapshot);
+  const claimTruthSummary = formatClaimTruthSummary(claimTruth);
+  const claimTruthEvidenceNote = formatClaimTruthEvidenceNote(claimTruth);
+  const claimTruthClasses = getClaimTruthClasses(getClaimTruthTone(claimTruth?.status));
 
   const handleJumpToMessage = (turnNumber: number) => {
     const messageElement = document.querySelector(`[data-turn-number="${turnNumber}"]`);
@@ -283,6 +329,21 @@ export default function SessionReplayPage() {
       {highlightsUnavailableHint && (
         <GlassCard className="p-4 border border-slate-200 bg-slate-50/80">
           <p className="text-sm text-slate-700">{highlightsUnavailableHint}</p>
+        </GlassCard>
+      )}
+
+      {claimTruth && claimTruthSummary && (
+        <GlassCard className={cn("p-4 sm:p-5 border", claimTruthClasses.card)}>
+          <div className="flex items-center justify-between gap-3 mb-3 flex-wrap">
+            <h2 className="font-bold text-slate-900 text-base sm:text-lg">主张证据状态</h2>
+            <span className={cn("inline-flex rounded-full border px-2.5 py-1 text-xs font-medium", claimTruthClasses.badge)}>
+              {claimTruth.label}
+            </span>
+          </div>
+          <p className={cn("text-sm", claimTruthClasses.text)}>{claimTruthSummary}</p>
+          {claimTruthEvidenceNote ? (
+            <p className={cn("text-xs mt-2", claimTruthClasses.note)}>{claimTruthEvidenceNote}</p>
+          ) : null}
         </GlassCard>
       )}
 

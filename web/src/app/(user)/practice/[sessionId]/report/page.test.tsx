@@ -73,7 +73,14 @@ const baseReport = {
     audio_url: null,
     transcript_url: null,
     voice_policy_snapshot_ref: null,
-    effectiveness_snapshot: null,
+    effectiveness_snapshot: {
+        claim_truth: {
+            status: "evidence_pending",
+            label: "证据待补齐",
+            source: "fallback_snapshot",
+            reason: "insufficient_turn_data",
+        },
+    },
     pass_flags: null,
     main_capability_passed: false,
     overall_result: "fail" as const,
@@ -239,6 +246,15 @@ describe("ReportPage", () => {
             overall_score: 76,
             evaluable: true,
             not_evaluable_reason: null,
+            effectiveness_snapshot: {
+                claim_truth: {
+                    status: "weak_evidence",
+                    label: "证据偏弱",
+                    source: "score_snapshot",
+                    reason: "low_evidence_score",
+                    evidence_score: 63,
+                },
+            },
             main_issue: {
                 issue_type: "evidence_gap",
                 issue_text: "功能点说得多，但还没有把产品价值翻译成客户收益。",
@@ -270,10 +286,50 @@ describe("ReportPage", () => {
         expect(screen.getByText("价值表达")).toBeTruthy();
         expect(screen.getByText("证据与收益")).toBeTruthy();
         expect(screen.getByText("异议推进")).toBeTruthy();
+        expect(screen.getByText("主张证据状态")).toBeTruthy();
+        expect(screen.getByText("证据偏弱")).toBeTruthy();
+        expect(screen.getByText("已经给出了证据，但力度还不够，仍需要更具体的案例、数据或 ROI 证明。")).toBeTruthy();
+        expect(screen.getByText("证据强度：63 分。")).toBeTruthy();
         expect(screen.getByText("功能点说得多，但还没有把产品价值翻译成客户收益。")).toBeTruthy();
         expect(screen.getByText("先补 ROI 证据，再推进一个明确的下一步动作。")).toBeTruthy();
         expect(screen.getByText("综合评分反映价值翻译、证据支撑和异议推进的完成度。"))
             .toBeTruthy();
+    });
+
+    it("renders unsupported claim truth from the unified evidence snapshot without falling back to diagnostics status copy", async () => {
+        getReportMock.mockResolvedValue({
+            ...baseReport,
+            evaluable: true,
+            not_evaluable_reason: null,
+            effectiveness_snapshot: {
+                claim_truth: {
+                    status: "unsupported_claim",
+                    label: "未被证据支撑",
+                    source: "score_snapshot",
+                    reason: "low_evidence_score",
+                    evidence_score: 42,
+                },
+            },
+        });
+        getComprehensiveReportMock.mockResolvedValue({
+            session_id: "session-1",
+            generated_at: "2026-03-23T00:00:00Z",
+            overall_score: 72,
+            dimension_scores: [],
+            stage_summaries: [],
+            key_strengths: [],
+            key_improvements: [],
+            detailed_feedback: "",
+            recommendations: [],
+            voice_policy_snapshot_ref: null,
+        });
+
+        render(<ReportPage />);
+
+        expect(await screen.findByText("主张证据状态")).toBeTruthy();
+        expect(screen.getByText("未被证据支撑")).toBeTruthy();
+        expect(screen.getByText("当前这场对话里的收益或能力主张还没有被案例、数据或 ROI 证据支撑。")).toBeTruthy();
+        expect(screen.getByText("证据强度：42 分。")).toBeTruthy();
     });
 
     it("renders canonical presentation review, skips knowledge-check noise, and keeps retry linked to the same presentation", async () => {
@@ -289,6 +345,7 @@ describe("ReportPage", () => {
 
         expect((await screen.findByTestId("report-overall-score")).textContent).toContain("88");
         expect(screen.getByText("PPT 复盘报告")).toBeTruthy();
+        expect(screen.queryByText("主张证据状态")).toBeNull();
         expect(screen.getByText("PPT 表达能力总览")).toBeTruthy();
         expect(screen.getByText("流畅连贯性")).toBeTruthy();
         expect(screen.getByText("互动问答")).toBeTruthy();
@@ -405,6 +462,9 @@ describe("ReportPage", () => {
         expect((await screen.findByTestId("report-overall-score")).textContent).toContain("72");
         expect(screen.queryByText("导出报告")).toBeNull();
         expect(screen.getByText("当前会话暂不可评估")).toBeTruthy();
+        expect(screen.getByText("主张证据状态")).toBeTruthy();
+        expect(screen.getByText("证据待补齐")).toBeTruthy();
+        expect(screen.getByText("当前仍在补证据或有效互动不足，暂时不能判定这条主张已经成立。")).toBeTruthy();
         expect(screen.getByText("开场破冰")).toBeTruthy();
         expect(screen.queryByText("95")).toBeNull();
     });

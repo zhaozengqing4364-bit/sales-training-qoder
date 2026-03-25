@@ -72,7 +72,16 @@ describe("SessionReplayPage", () => {
             voice_policy_snapshot_ref: null,
             total_duration_ms: 185000,
             overall_score: 78,
-            effectiveness_snapshot: null,
+            effectiveness_snapshot: {
+                claim_truth: {
+                    status: "evidence_verified",
+                    label: "证据已验证",
+                    source: "objection_ledger",
+                    reason: "evidence_provided",
+                    evidence_score: 82,
+                    closure_state: "evidence_provided",
+                },
+            },
             pass_flags: null,
             main_capability_passed: false,
             overall_result: "fail",
@@ -166,6 +175,10 @@ describe("SessionReplayPage", () => {
         const overallScore = await screen.findByTestId("replay-overall-score");
         expect(overallScore.textContent).toContain("78");
         expect(screen.getByText("当前会话暂不可评估")).toBeTruthy();
+        expect(screen.getByText("主张证据状态")).toBeTruthy();
+        expect(screen.getByText("证据已验证")).toBeTruthy();
+        expect(screen.getByText("当前主张已有足够证据支撑，可以继续沿着这条事实线推进下一步。")).toBeTruthy();
+        expect(screen.getByText("证据强度：82 分。本轮补充的证据已达到可验证水平。")).toBeTruthy();
         expect(screen.getByText("本场教练结论")).toBeTruthy();
         expect(screen.getByText("证据支撑")).toBeTruthy();
         expect(screen.getByText("客户收益提到了，但还没有补上可信证据。")).toBeTruthy();

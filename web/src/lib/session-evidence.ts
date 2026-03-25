@@ -60,6 +60,41 @@ const PRESENTATION_DEGRADED_REASON_LABELS: Record<string, string> = {
     missing_page_metadata: "当前会话缺少页码证据，逐页总结和要点覆盖仅展示已确认部分。",
 };
 
+const CLAIM_TRUTH_LABELS = {
+    unsupported_claim: "未被证据支撑",
+    weak_evidence: "证据偏弱",
+    evidence_pending: "证据待补齐",
+    evidence_verified: "证据已验证",
+} as const;
+
+const CLAIM_TRUTH_SUMMARIES = {
+    unsupported_claim: "当前这场对话里的收益或能力主张还没有被案例、数据或 ROI 证据支撑。",
+    weak_evidence: "已经给出了证据，但力度还不够，仍需要更具体的案例、数据或 ROI 证明。",
+    evidence_pending: "当前仍在补证据或有效互动不足，暂时不能判定这条主张已经成立。",
+    evidence_verified: "当前主张已有足够证据支撑，可以继续沿着这条事实线推进下一步。",
+} as const;
+
+export type SessionClaimTruthStatus = keyof typeof CLAIM_TRUTH_LABELS;
+
+export type SessionClaimTruthTone = "critical" | "warning" | "pending" | "verified";
+
+export interface SessionClaimTruth {
+    status: SessionClaimTruthStatus;
+    label: string;
+    source: string;
+    reason: string;
+    evidence_score?: number;
+    closure_state?: string;
+}
+
+function isClaimTruthStatus(value: unknown): value is SessionClaimTruthStatus {
+    return typeof value === "string" && value in CLAIM_TRUTH_LABELS;
+}
+
+function coerceFiniteNumber(value: unknown): number | null {
+    return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
 export function formatSessionStageLabel(stage?: SessionEvidenceStage | null): string {
     if (!stage) {
         return "未分阶段";
@@ -93,6 +128,96 @@ export function formatEvidenceCompletenessNote(
 
     const labels = missingFields.map((field) => MISSING_FIELD_LABELS[field] || field);
     return `当前证据仍不完整：${labels.join("、")}。`;
+}
+
+export function extractSessionClaimTruth(
+    effectivenessSnapshot?: Record<string, unknown> | null,
+): SessionClaimTruth | null {
+    if (!effectivenessSnapshot || typeof effectivenessSnapshot !== "object") {
+        return null;
+    }
+
+    const rawClaimTruth = effectivenessSnapshot.claim_truth;
+    if (!rawClaimTruth || typeof rawClaimTruth !== "object") {
+        return null;
+    }
+
+    const claimTruth = rawClaimTruth as Record<string, unknown>;
+    const status = claimTruth.status;
+    const source = claimTruth.source;
+    const reason = claimTruth.reason;
+    if (!isClaimTruthStatus(status) || typeof source !== "string" || !source.trim()) {
+        return null;
+    }
+    if (typeof reason !== "string" || !reason.trim()) {
+        return null;
+    }
+
+    const label = typeof claimTruth.label === "string" && claimTruth.label.trim()
+        ? claimTruth.label.trim()
+        : CLAIM_TRUTH_LABELS[status];
+
+    const evidenceScore = coerceFiniteNumber(claimTruth.evidence_score);
+    const closureState = typeof claimTruth.closure_state === "string" && claimTruth.closure_state.trim()
+        ? claimTruth.closure_state.trim()
+        : null;
+
+    return {
+        status,
+        label,
+        source: source.trim(),
+        reason: reason.trim(),
+        ...(evidenceScore !== null ? { evidence_score: evidenceScore } : {}),
+        ...(closureState ? { closure_state: closureState } : {}),
+    };
+}
+
+export function formatClaimTruthSummary(claimTruth?: SessionClaimTruth | null): string | null {
+    if (!claimTruth) {
+        return null;
+    }
+
+    return CLAIM_TRUTH_SUMMARIES[claimTruth.status] || claimTruth.label;
+}
+
+export function formatClaimTruthEvidenceNote(claimTruth?: SessionClaimTruth | null): string | null {
+    if (!claimTruth) {
+        return null;
+    }
+
+    const parts: string[] = [];
+    if (typeof claimTruth.evidence_score === "number") {
+        parts.push(`证据强度：${Math.round(claimTruth.evidence_score)} 分。`);
+    }
+
+    if (claimTruth.closure_state === "open") {
+        parts.push("当前异议仍未闭环。");
+    } else if (claimTruth.closure_state === "gap_acknowledged") {
+        parts.push("本轮已明确承认证据缺口。");
+    } else if (claimTruth.closure_state === "evidence_provided") {
+        parts.push(
+            claimTruth.status === "evidence_verified"
+                ? "本轮补充的证据已达到可验证水平。"
+                : "本轮已补充证据，但说服力仍需加强。",
+        );
+    }
+
+    return parts.length > 0 ? parts.join("") : null;
+}
+
+export function getClaimTruthTone(
+    status?: SessionClaimTruthStatus | null,
+): SessionClaimTruthTone {
+    if (status === "unsupported_claim") {
+        return "critical";
+    }
+    if (status === "weak_evidence") {
+        return "warning";
+    }
+    if (status === "evidence_verified") {
+        return "verified";
+    }
+    return "pending";
 }
 
 export function formatIssueTypeLabel(issueType?: string | null): string | null {

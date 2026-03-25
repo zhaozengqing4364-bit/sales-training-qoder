@@ -1,6 +1,6 @@
 {
   "mode": "stabilize",
-  "current_issue_id": "M003-S04-T01",
+  "current_issue_id": "M003-S04-T03",
   "current_issue_type": "task",
   "current_issue_status": "done",
   "pending_issue_ids": [],
@@ -58,23 +58,27 @@
     "M003-S03-T01",
     "M003-S03-T02",
     "M003-S03-T03",
-    "M003-S04-T01"
+    "M003-S04-T01",
+    "M003-S04-T02",
+    "M003-S04-T03"
   ],
   "blocked_issue_ids": [],
   "deferred_issue_ids": [],
   "last_modified_files": [
-    "backend/src/common/effectiveness/evaluator.py",
-    "backend/src/common/conversation/session_evidence.py",
-    "backend/tests/unit/test_effectiveness_sales_report_alignment.py",
-    "backend/tests/unit/test_session_evidence_service.py",
+    "web/src/lib/session-evidence.ts",
+    "web/src/app/(user)/practice/[sessionId]/report/page.tsx",
+    "web/src/app/(user)/practice/[sessionId]/replay/page.tsx",
+    "web/src/app/(user)/practice/[sessionId]/report/page.test.tsx",
+    "web/src/app/(user)/practice/[sessionId]/replay/page.test.tsx",
     ".gsd/DECISIONS.md",
     ".gsd/KNOWLEDGE.md"
   ],
   "last_verification_commands": [
-    "cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_effectiveness_sales_report_alignment.py tests/unit/test_session_evidence_service.py"
+    "cd web && npm test -- --run 'src/app/(user)/practice/[sessionId]/report/page.test.tsx' 'src/app/(user)/practice/[sessionId]/replay/page.test.tsx'",
+    "cd web && npx tsc --noEmit"
   ],
-  "last_verification_result": "Passed. The focused S04 T01 backend gate finished green with 11 tests covering unsupported, weak, pending, and verified claim-truth states across the evaluator and session-evidence seams.",
-  "last_success_signal": "Completed-session sales projections now carry a canonical `effectiveness_snapshot.claim_truth` status while keeping `main_issue` and `next_goal` stable for existing report and replay consumers.",
+  "last_verification_result": "Focused report/replay Vitest coverage passed. Repo-wide web typecheck still reports the pre-existing admin knowledge page error `api.reprocessKnowledgeDocument` missing in `src/app/admin/knowledge/[id]/page.tsx`; no new type errors remained in the S04 claim-truth files.",
+  "last_success_signal": "Learner report and replay now render the canonical claim-truth line from `effectiveness_snapshot.claim_truth`, so completed-session surfaces can distinguish unsupported, weak, pending, and verified sales claims without borrowing runtime chain-failure copy.",
   "last_growth_scan": null,
-  "next_action": "Proceed to M003/S04/T02."
+  "next_action": "Proceed to M003/S04 slice completion."
 }
