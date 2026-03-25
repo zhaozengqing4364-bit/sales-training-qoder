@@ -1,6 +1,6 @@
 {
   "mode": "stabilize",
-  "current_issue_id": "M003-S03-T03",
+  "current_issue_id": "M003-S04-T01",
   "current_issue_type": "task",
   "current_issue_status": "done",
   "pending_issue_ids": [],
@@ -57,25 +57,24 @@
     "M003-S02",
     "M003-S03-T01",
     "M003-S03-T02",
-    "M003-S03-T03"
+    "M003-S03-T03",
+    "M003-S04-T01"
   ],
   "blocked_issue_ids": [],
   "deferred_issue_ids": [],
   "last_modified_files": [
+    "backend/src/common/effectiveness/evaluator.py",
     "backend/src/common/conversation/session_evidence.py",
+    "backend/tests/unit/test_effectiveness_sales_report_alignment.py",
     "backend/tests/unit/test_session_evidence_service.py",
-    "web/src/hooks/use-practice-websocket.ts",
-    "web/src/hooks/use-practice-websocket.test.ts",
-    "web/src/components/practice/RightPanelContent.tsx",
-    "web/src/components/practice/RightPanelContent.test.tsx",
-    ".gsd/DECISIONS.md"
+    ".gsd/DECISIONS.md",
+    ".gsd/KNOWLEDGE.md"
   ],
   "last_verification_commands": [
-    "cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_session_evidence_service.py -k 'latest_open_objection_ledger or preserves_insufficient_sales_evidence_fallback'",
-    "cd web && npm test -- --run 'src/hooks/use-practice-websocket.test.ts' 'src/components/practice/RightPanelContent.test.tsx'"
+    "cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_effectiveness_sales_report_alignment.py tests/unit/test_session_evidence_service.py"
   ],
-  "last_verification_result": "Passed. The session-evidence objection-ledger regression passed, and the slice web gate passed with 13 tests covering reconnect cleanup and right-panel proof visibility.",
-  "last_success_signal": "Open objection proof gaps now surface through main_issue/next_goal on read-side consumers, and the practice panel keeps the proof prompt while reconnect drops stale turn hints.",
+  "last_verification_result": "Passed. The focused S04 T01 backend gate finished green with 11 tests covering unsupported, weak, pending, and verified claim-truth states across the evaluator and session-evidence seams.",
+  "last_success_signal": "Completed-session sales projections now carry a canonical `effectiveness_snapshot.claim_truth` status while keeping `main_issue` and `next_goal` stable for existing report and replay consumers.",
   "last_growth_scan": null,
-  "next_action": "Proceed to M003/S03 slice completion."
+  "next_action": "Proceed to M003/S04/T02."
 }

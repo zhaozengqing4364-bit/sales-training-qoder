@@ -18,17 +18,17 @@ def _resolve_alignment(**kwargs: Any) -> dict[str, Any]:
     return result
 
 
-def test_resolve_sales_report_alignment_for_discovery_evidence_gap() -> None:
+def test_resolve_sales_report_alignment_marks_unsupported_claim_when_evidence_is_missing() -> None:
     aligned = _resolve_alignment(
         sales_stage="discovery",
         score_snapshot={
-            "overall_score": 82.0,
+            "overall_score": 78.0,
             "dimension_scores": {
-                "价值表达": 84.0,
-                "客户收益连接": 80.0,
-                "证据使用": 58.0,
-                "异议处理": 76.0,
-                "推进下一步": 72.0,
+                "价值表达": 82.0,
+                "客户收益连接": 79.0,
+                "证据使用": 42.0,
+                "异议处理": 74.0,
+                "推进下一步": 70.0,
             },
         },
         fallback_snapshot=None,
@@ -40,10 +40,12 @@ def test_resolve_sales_report_alignment_for_discovery_evidence_gap() -> None:
     assert aligned["fallback_reason"] is None
     assert aligned["main_issue"]["issue_type"] == "evidence_gap"
     assert aligned["next_goal"]["goal_type"] == "evidence_backing"
+    assert aligned["claim_truth"]["status"] == "unsupported_claim"
+    assert aligned["claim_truth"]["source"] == "score_snapshot"
 
 
 
-def test_resolve_sales_report_alignment_for_objection_handling_gap() -> None:
+def test_resolve_sales_report_alignment_marks_weak_evidence_for_partial_support() -> None:
     aligned = _resolve_alignment(
         sales_stage="objection",
         score_snapshot={
@@ -51,7 +53,7 @@ def test_resolve_sales_report_alignment_for_objection_handling_gap() -> None:
             "dimension_scores": {
                 "价值表达": 76.0,
                 "客户收益连接": 74.0,
-                "证据使用": 70.0,
+                "证据使用": 68.0,
                 "异议处理": 54.0,
                 "推进下一步": 69.0,
             },
@@ -64,18 +66,20 @@ def test_resolve_sales_report_alignment_for_objection_handling_gap() -> None:
     assert aligned["focus_type"] == "objection_handling_gap"
     assert aligned["main_issue"]["issue_type"] == "objection_handling_gap"
     assert aligned["next_goal"]["goal_type"] == "objection_reframe"
+    assert aligned["claim_truth"]["status"] == "weak_evidence"
+    assert aligned["claim_truth"]["source"] == "score_snapshot"
 
 
 
-def test_resolve_sales_report_alignment_for_closing_next_step_gap() -> None:
+def test_resolve_sales_report_alignment_marks_evidence_verified_when_support_is_strong() -> None:
     aligned = _resolve_alignment(
         sales_stage="closing",
         score_snapshot={
-            "overall_score": 78.0,
+            "overall_score": 82.0,
             "dimension_scores": {
                 "价值表达": 82.0,
                 "客户收益连接": 80.0,
-                "证据使用": 74.0,
+                "证据使用": 84.0,
                 "异议处理": 76.0,
                 "推进下一步": 56.0,
             },
@@ -88,10 +92,12 @@ def test_resolve_sales_report_alignment_for_closing_next_step_gap() -> None:
     assert aligned["focus_type"] == "next_step_gap"
     assert aligned["main_issue"]["issue_type"] == "next_step_gap"
     assert aligned["next_goal"]["goal_type"] == "next_step_commitment"
+    assert aligned["claim_truth"]["status"] == "evidence_verified"
+    assert aligned["claim_truth"]["source"] == "score_snapshot"
 
 
 
-def test_resolve_sales_report_alignment_falls_back_for_insufficient_sales_evidence() -> None:
+def test_resolve_sales_report_alignment_marks_evidence_pending_for_insufficient_sales_evidence() -> None:
     fallback_snapshot = evaluate_effectiveness_snapshot(
         metrics={
             "value_articulation_rollup": 0.0,
@@ -115,3 +121,5 @@ def test_resolve_sales_report_alignment_falls_back_for_insufficient_sales_eviden
     assert aligned["fallback_reason"] == "missing_dimension_scores"
     assert aligned["main_issue"]["issue_type"] == "insufficient_sales_evidence"
     assert aligned["next_goal"]["goal_type"] == "collect_sales_evidence"
+    assert aligned["claim_truth"]["status"] == "evidence_pending"
+    assert aligned["claim_truth"]["source"] == "fallback_snapshot"

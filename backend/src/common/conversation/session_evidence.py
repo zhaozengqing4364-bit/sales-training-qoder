@@ -138,6 +138,18 @@ class SessionEvidenceService:
                 sales_alignment_stage_key=projection.sales_alignment_stage_key,
                 sales_alignment_focus_type=projection.sales_alignment_focus_type,
                 sales_alignment_fallback_reason=projection.sales_alignment_fallback_reason,
+                claim_truth_status=(
+                    projection.effectiveness_snapshot["claim_truth"].get("status")
+                    if isinstance(projection.effectiveness_snapshot, dict)
+                    and isinstance(projection.effectiveness_snapshot.get("claim_truth"), dict)
+                    else None
+                ),
+                claim_truth_source=(
+                    projection.effectiveness_snapshot["claim_truth"].get("source")
+                    if isinstance(projection.effectiveness_snapshot, dict)
+                    and isinstance(projection.effectiveness_snapshot.get("claim_truth"), dict)
+                    else None
+                ),
                 presentation_review_available=bool(projection.presentation_review),
                 presentation_page_metadata_complete=projection.evidence_completeness.get(
                     "page_metadata_complete"
@@ -388,12 +400,19 @@ class SessionEvidenceService:
                 str(fallback_reason) if fallback_reason is not None else None
             )
 
+            aligned_claim_truth = sales_alignment.get("claim_truth")
+            if isinstance(aligned_claim_truth, dict):
+                projection_snapshot = {
+                    **projection_snapshot,
+                    "claim_truth": dict(aligned_claim_truth),
+                }
+
             if sales_alignment_used:
                 aligned_main_issue = sales_alignment.get("main_issue")
                 aligned_next_goal = sales_alignment.get("next_goal")
                 if isinstance(aligned_main_issue, dict) and isinstance(aligned_next_goal, dict):
                     projection_snapshot = {
-                        **snapshot,
+                        **projection_snapshot,
                         "main_issue": dict(aligned_main_issue),
                         "next_goal": dict(aligned_next_goal),
                     }
@@ -665,11 +684,8 @@ class SessionEvidenceService:
             normalized = normalize_objection_ledger(
                 transcript_metadata.get("objection_ledger")
             )
-            if normalized is None:
-                continue
-            if normalized.get("closure_state") == "open":
+            if normalized is not None:
                 return normalized
-            return None
         return None
 
     @staticmethod
@@ -770,6 +786,13 @@ class SessionEvidenceService:
             "fallback_reason": None,
             "main_issue": main_issue,
             "next_goal": next_goal,
+            "claim_truth": {
+                "status": "evidence_pending",
+                "label": "证据待补齐",
+                "source": "objection_ledger",
+                "reason": "open_objection_ledger",
+                "closure_state": "open",
+            },
         }
 
     @classmethod
@@ -787,7 +810,10 @@ class SessionEvidenceService:
             return None
 
         latest_objection_ledger = cls._resolve_latest_objection_ledger(messages)
-        if latest_objection_ledger is not None:
+        if (
+            latest_objection_ledger is not None
+            and latest_objection_ledger.get("closure_state") == "open"
+        ):
             return cls._build_objection_ledger_alignment(latest_objection_ledger)
 
         latest_stage = cls._get_latest_sales_stage(messages)
@@ -806,6 +832,7 @@ class SessionEvidenceService:
                 ),
                 score_snapshot=candidate_snapshot,
                 fallback_snapshot=snapshot,
+                objection_ledger=latest_objection_ledger,
             )
             if alignment.get("alignment_used") is True:
                 return alignment
@@ -814,6 +841,7 @@ class SessionEvidenceService:
             sales_stage=latest_stage,
             score_snapshot=latest_score_snapshot,
             fallback_snapshot=snapshot,
+            objection_ledger=latest_objection_ledger,
         )
 
     @classmethod

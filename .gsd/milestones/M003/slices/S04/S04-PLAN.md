@@ -21,7 +21,7 @@ Reuse the current kb-lock/runtime diagnostics plus evaluator/session-evidence/re
 
 ## Tasks
 
-- [ ] **T01: Define the claim-truth flags on the current evaluator/session-evidence line** `est:90m`
+- [x] **T01: Define the claim-truth flags on the current evaluator/session-evidence line** `est:90m`
   Define canonical truth flags for sales claims on the existing backend authority line: unsupported_claim, weak_evidence, evidence_pending, and evidence_verified. Add focused tests around evaluator/session-evidence semantics so the flags map cleanly onto current issue/goal families without renaming public report keys.
   - Files: `backend/src/common/effectiveness/evaluator.py`, `backend/src/common/conversation/session_evidence.py`, `backend/tests/unit/test_effectiveness_sales_report_alignment.py`, `backend/tests/unit/test_session_evidence_service.py`
   - Verify: cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_effectiveness_sales_report_alignment.py tests/unit/test_session_evidence_service.py

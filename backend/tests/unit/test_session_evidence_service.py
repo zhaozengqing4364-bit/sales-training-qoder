@@ -326,6 +326,8 @@ class TestSessionEvidenceService:
         assert projection.next_goal["goal_type"] == "evidence_backing"
         assert projection.effectiveness_snapshot["main_issue"]["issue_type"] == "evidence_gap"
         assert projection.effectiveness_snapshot["next_goal"]["goal_type"] == "evidence_backing"
+        assert projection.effectiveness_snapshot["claim_truth"]["status"] == "weak_evidence"
+        assert projection.effectiveness_snapshot["claim_truth"]["source"] == "score_snapshot"
         assert session.effectiveness_snapshot["main_issue"]["issue_type"] == "value_translation_gap"
         assert session.effectiveness_snapshot["next_goal"]["goal_type"] == "value_to_benefit_translation"
 
@@ -396,6 +398,8 @@ class TestSessionEvidenceService:
         projection = result.value
         assert projection.main_issue == snapshot["main_issue"]
         assert projection.next_goal == snapshot["next_goal"]
+        assert projection.effectiveness_snapshot["claim_truth"]["status"] == "evidence_pending"
+        assert projection.effectiveness_snapshot["claim_truth"]["source"] == "fallback_snapshot"
         assert projection.evaluable is False
         assert projection.not_evaluable_reason == "INSUFFICIENT_TURN_DATA"
         assert projection.evidence_completeness["message_scores"] == 1
@@ -490,5 +494,151 @@ class TestSessionEvidenceService:
         }
         assert projection.effectiveness_snapshot["main_issue"] == projection.main_issue
         assert projection.effectiveness_snapshot["next_goal"] == projection.next_goal
+        assert projection.effectiveness_snapshot["claim_truth"]["status"] == "evidence_pending"
+        assert projection.effectiveness_snapshot["claim_truth"]["source"] == "objection_ledger"
         assert projection.sales_alignment_used is True
         assert projection.sales_alignment_focus_type == "evidence_gap"
+
+    @pytest.mark.asyncio
+    async def test_get_projection_marks_gap_acknowledged_claims_as_unsupported(
+        self,
+        service: SessionEvidenceService,
+        mock_db: AsyncMock,
+        sample_session_id: str,
+    ) -> None:
+        session = SimpleNamespace(
+            session_id=sample_session_id,
+            status="completed",
+            logic_score=79.0,
+            accuracy_score=68.0,
+            completeness_score=72.0,
+            total_duration_seconds=180,
+            start_time=datetime.now(UTC) - timedelta(seconds=180),
+            end_time=datetime.now(UTC),
+            effectiveness_snapshot=_make_stale_sales_snapshot(),
+            voice_policy_snapshot=None,
+        )
+        messages = [
+            SimpleNamespace(
+                id="msg-1",
+                session_id=sample_session_id,
+                turn_number=1,
+                role="user",
+                content="这个证明我们暂时给不出来。",
+                audio_url=None,
+                timestamp=datetime.now(UTC),
+                duration_ms=1500,
+                fuzzy_words=None,
+                transcript_metadata={
+                    "objection_ledger": {
+                        "objection_family": "roi_proof",
+                        "promised_proof": "补充同类客户 ROI 案例",
+                        "next_expected_evidence": "给出 6 个月回本测算",
+                        "closure_state": "gap_acknowledged",
+                    }
+                },
+                sales_stage="objection",
+                score_snapshot={
+                    "overall_score": 73.0,
+                    "dimension_scores": {
+                        "价值表达": 80.0,
+                        "客户收益连接": 76.0,
+                        "证据使用": 46.0,
+                        "异议处理": 64.0,
+                        "推进下一步": 70.0,
+                    },
+                },
+                ai_feedback="先明确当前缺口，再约定补齐时点。",
+                is_highlight=False,
+                highlight_type=None,
+                highlight_reason=None,
+            ),
+        ]
+
+        mock_session_result = MagicMock()
+        mock_session_result.scalar_one_or_none.return_value = session
+        mock_messages_result = MagicMock()
+        mock_messages_result.scalars.return_value.all.return_value = messages
+        mock_db.execute.side_effect = [mock_session_result, mock_messages_result]
+
+        result = await service.get_projection(
+            session_id=sample_session_id,
+            require_completed=True,
+        )
+
+        assert result.is_success
+        projection = result.value
+        assert projection.effectiveness_snapshot["claim_truth"]["status"] == "unsupported_claim"
+        assert projection.effectiveness_snapshot["claim_truth"]["source"] == "objection_ledger"
+
+    @pytest.mark.asyncio
+    async def test_get_projection_marks_evidence_provided_claims_as_verified_when_support_is_strong(
+        self,
+        service: SessionEvidenceService,
+        mock_db: AsyncMock,
+        sample_session_id: str,
+    ) -> None:
+        session = SimpleNamespace(
+            session_id=sample_session_id,
+            status="completed",
+            logic_score=84.0,
+            accuracy_score=82.0,
+            completeness_score=78.0,
+            total_duration_seconds=180,
+            start_time=datetime.now(UTC) - timedelta(seconds=180),
+            end_time=datetime.now(UTC),
+            effectiveness_snapshot=_make_stale_sales_snapshot(),
+            voice_policy_snapshot=None,
+        )
+        messages = [
+            SimpleNamespace(
+                id="msg-1",
+                session_id=sample_session_id,
+                turn_number=1,
+                role="user",
+                content="我们给了案例和回本周期。",
+                audio_url=None,
+                timestamp=datetime.now(UTC),
+                duration_ms=1500,
+                fuzzy_words=None,
+                transcript_metadata={
+                    "objection_ledger": {
+                        "objection_family": "roi_proof",
+                        "promised_proof": "补充同类客户 ROI 案例",
+                        "next_expected_evidence": "给出 6 个月回本测算",
+                        "closure_state": "evidence_provided",
+                    }
+                },
+                sales_stage="closing",
+                score_snapshot={
+                    "overall_score": 84.0,
+                    "dimension_scores": {
+                        "价值表达": 82.0,
+                        "客户收益连接": 81.0,
+                        "证据使用": 88.0,
+                        "异议处理": 79.0,
+                        "推进下一步": 58.0,
+                    },
+                },
+                ai_feedback="证据已经到位，继续锁定下一步。",
+                is_highlight=False,
+                highlight_type=None,
+                highlight_reason=None,
+            ),
+        ]
+
+        mock_session_result = MagicMock()
+        mock_session_result.scalar_one_or_none.return_value = session
+        mock_messages_result = MagicMock()
+        mock_messages_result.scalars.return_value.all.return_value = messages
+        mock_db.execute.side_effect = [mock_session_result, mock_messages_result]
+
+        result = await service.get_projection(
+            session_id=sample_session_id,
+            require_completed=True,
+        )
+
+        assert result.is_success
+        projection = result.value
+        assert projection.effectiveness_snapshot["claim_truth"]["status"] == "evidence_verified"
+        assert projection.effectiveness_snapshot["claim_truth"]["source"] == "objection_ledger"

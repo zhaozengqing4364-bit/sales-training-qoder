@@ -377,6 +377,233 @@ def _coerce_next_goal(value: Any) -> NextGoal | None:
     }
 
 
+SALES_CLAIM_TRUTH_LABELS = {
+    "unsupported_claim": "未被证据支撑",
+    "weak_evidence": "证据偏弱",
+    "evidence_pending": "证据待补齐",
+    "evidence_verified": "证据已验证",
+}
+SALES_UNSUPPORTED_EVIDENCE_MAX = 55.0
+SALES_VERIFIED_EVIDENCE_MIN = 75.0
+
+
+
+def _build_claim_truth(
+    status: str,
+    *,
+    source: str,
+    reason: str,
+    evidence_score: float | None = None,
+    closure_state: str | None = None,
+) -> dict[str, Any]:
+    payload: dict[str, Any] = {
+        "status": status,
+        "label": SALES_CLAIM_TRUTH_LABELS[status],
+        "source": source,
+        "reason": reason,
+    }
+    if evidence_score is not None:
+        payload["evidence_score"] = round(_clamp_score(evidence_score), 2)
+    if isinstance(closure_state, str) and closure_state.strip():
+        payload["closure_state"] = closure_state.strip()
+    return payload
+
+
+
+def _coerce_claim_truth(value: Any) -> dict[str, Any] | None:
+    if not isinstance(value, dict):
+        return None
+    status = value.get("status")
+    source = value.get("source")
+    reason = value.get("reason")
+    if not isinstance(status, str) or not status.strip():
+        return None
+    if not isinstance(source, str) or not source.strip():
+        return None
+    normalized_status = status.strip()
+    if normalized_status not in SALES_CLAIM_TRUTH_LABELS:
+        return None
+
+    payload = _build_claim_truth(
+        normalized_status,
+        source=source.strip(),
+        reason=str(reason).strip() if reason is not None else "existing_snapshot",
+        evidence_score=(
+            float(value["evidence_score"])
+            if isinstance(value.get("evidence_score"), (int, float))
+            else None
+        ),
+        closure_state=(
+            str(value["closure_state"])
+            if value.get("closure_state") is not None
+            else None
+        ),
+    )
+    label = value.get("label")
+    if isinstance(label, str) and label.strip():
+        payload["label"] = label.strip()
+    return payload
+
+
+
+def _resolve_alignment_evidence_score(score_snapshot: dict[str, Any] | None) -> float | None:
+    if not isinstance(score_snapshot, dict):
+        return None
+
+    raw_dimension_scores = score_snapshot.get("dimension_scores")
+    if isinstance(raw_dimension_scores, dict):
+        for alias in SALES_DIMENSION_ALIASES["证据使用"]:
+            value = raw_dimension_scores.get(alias)
+            if isinstance(value, (int, float)):
+                return _clamp_score(value)
+
+    raw_dimensions = score_snapshot.get("dimensions")
+    if isinstance(raw_dimensions, list):
+        for item in raw_dimensions:
+            if not isinstance(item, dict):
+                continue
+            if _canonical_sales_dimension_name(item.get("name")) != "证据使用":
+                continue
+            score = item.get("score")
+            if isinstance(score, (int, float)):
+                return _clamp_score(score)
+
+    return None
+
+
+
+def _resolve_claim_truth_from_evidence_score(
+    *,
+    evidence_score: float,
+    source: str,
+    reason: str,
+    closure_state: str | None = None,
+    focus_type: SalesCoachingFocusType | None = None,
+) -> dict[str, Any]:
+    if evidence_score < SALES_UNSUPPORTED_EVIDENCE_MAX:
+        status = "unsupported_claim"
+    elif evidence_score < SALES_VERIFIED_EVIDENCE_MIN:
+        status = "weak_evidence"
+    elif focus_type == "evidence_gap":
+        status = "weak_evidence"
+    else:
+        status = "evidence_verified"
+    return _build_claim_truth(
+        status,
+        source=source,
+        reason=reason,
+        evidence_score=evidence_score,
+        closure_state=closure_state,
+    )
+
+
+
+def _resolve_sales_claim_truth(
+    *,
+    score_snapshot: dict[str, Any] | None = None,
+    metrics: dict[str, Any] | None = None,
+    fallback_snapshot: dict[str, Any] | None = None,
+    focus_type: SalesCoachingFocusType | None = None,
+    objection_ledger: dict[str, Any] | None = None,
+    evaluable: bool | None = None,
+    not_evaluable_reason: str | None = None,
+) -> dict[str, Any] | None:
+    closure_state = None
+    if isinstance(objection_ledger, dict):
+        raw_closure_state = objection_ledger.get("closure_state")
+        if isinstance(raw_closure_state, str) and raw_closure_state.strip():
+            closure_state = raw_closure_state.strip().lower()
+
+    if closure_state == "open":
+        return _build_claim_truth(
+            "evidence_pending",
+            source="objection_ledger",
+            reason="open_objection_ledger",
+            closure_state=closure_state,
+        )
+    if closure_state == "gap_acknowledged":
+        return _build_claim_truth(
+            "unsupported_claim",
+            source="objection_ledger",
+            reason="gap_acknowledged",
+            closure_state=closure_state,
+        )
+
+    existing_claim_truth = None
+    if isinstance(fallback_snapshot, dict):
+        existing_claim_truth = _coerce_claim_truth(fallback_snapshot.get("claim_truth"))
+
+    derived_evaluable = evaluable
+    if derived_evaluable is None and isinstance(fallback_snapshot, dict):
+        fallback_evaluable = fallback_snapshot.get("evaluable")
+        if isinstance(fallback_evaluable, bool):
+            derived_evaluable = fallback_evaluable
+    derived_reason = not_evaluable_reason
+    if derived_reason is None and isinstance(fallback_snapshot, dict):
+        fallback_reason = fallback_snapshot.get("not_evaluable_reason")
+        if isinstance(fallback_reason, str) and fallback_reason.strip():
+            derived_reason = fallback_reason.strip()
+
+    if derived_evaluable is False:
+        return _build_claim_truth(
+            "evidence_pending",
+            source="fallback_snapshot",
+            reason=(derived_reason or "insufficient_sales_evidence").lower(),
+            closure_state=closure_state,
+        )
+
+    evidence_score = _resolve_alignment_evidence_score(score_snapshot)
+    evidence_source = "score_snapshot"
+    if evidence_score is None and isinstance(metrics, dict) and _has_sales_metrics(metrics):
+        evidence_score = _resolve_sales_scores(metrics)["证据使用"]
+        evidence_source = "metrics"
+
+    if closure_state == "evidence_provided":
+        if evidence_score is None:
+            return _build_claim_truth(
+                "weak_evidence",
+                source="objection_ledger",
+                reason="evidence_provided_without_strong_score",
+                closure_state=closure_state,
+            )
+        status = (
+            "evidence_verified"
+            if evidence_score >= SALES_VERIFIED_EVIDENCE_MIN
+            else "weak_evidence"
+        )
+        return _build_claim_truth(
+            status,
+            source="objection_ledger",
+            reason="evidence_provided",
+            evidence_score=evidence_score,
+            closure_state=closure_state,
+        )
+
+    if evidence_score is not None:
+        return _resolve_claim_truth_from_evidence_score(
+            evidence_score=evidence_score,
+            source=evidence_source,
+            reason="low_evidence_score"
+            if evidence_score < SALES_VERIFIED_EVIDENCE_MIN
+            else "strong_evidence_score",
+            closure_state=closure_state,
+            focus_type=focus_type,
+        )
+
+    if existing_claim_truth is not None:
+        return existing_claim_truth
+
+    if isinstance(metrics, dict) and not _has_sales_metrics(metrics):
+        return None
+
+    return _build_claim_truth(
+        "evidence_pending",
+        source="fallback_snapshot" if isinstance(fallback_snapshot, dict) else "score_snapshot",
+        reason="missing_evidence_score",
+        closure_state=closure_state,
+    )
+
+
 
 def _has_alignment_dimension_scores(score_snapshot: dict[str, Any] | None) -> bool:
     if not isinstance(score_snapshot, dict):
@@ -447,6 +674,7 @@ def resolve_sales_report_alignment(
     sales_stage: str | None,
     score_snapshot: dict[str, Any] | None,
     fallback_snapshot: dict[str, Any] | None = None,
+    objection_ledger: dict[str, Any] | None = None,
 ) -> SalesReportAlignment:
     stage_context = (
         {
@@ -483,6 +711,13 @@ def resolve_sales_report_alignment(
     else:
         main_issue, next_goal = _resolve_sales_report_alignment_fallback(fallback_snapshot)
 
+    claim_truth = _resolve_sales_claim_truth(
+        score_snapshot=score_context,
+        fallback_snapshot=fallback_snapshot,
+        focus_type=focus_type,
+        objection_ledger=objection_ledger,
+    )
+
     return {
         "alignment_used": alignment_used,
         "stage_key": stage_key,
@@ -490,6 +725,7 @@ def resolve_sales_report_alignment(
         "fallback_reason": fallback_reason,
         "main_issue": main_issue,
         "next_goal": next_goal,
+        "claim_truth": claim_truth,
     }
 
 
@@ -814,7 +1050,18 @@ def evaluate_effectiveness_snapshot(
             metrics=metrics,
         )
 
-    return {
+    claim_truth = _resolve_sales_claim_truth(
+        metrics=metrics,
+        focus_type=(
+            main_issue["issue_type"]
+            if main_issue.get("issue_type") in {"evidence_gap", "objection_handling_gap", "next_step_gap", "value_translation_gap"}
+            else None
+        ),
+        evaluable=bool(evaluable),
+        not_evaluable_reason=not_evaluable_reason,
+    )
+
+    snapshot = {
         "pass_flags": pass_flags,
         "main_capability_passed": bool(main_capability_passed),
         "overall_result": overall_result,
@@ -825,6 +1072,9 @@ def evaluate_effectiveness_snapshot(
         "evaluable": bool(evaluable),
         "not_evaluable_reason": not_evaluable_reason,
     }
+    if claim_truth is not None:
+        snapshot["claim_truth"] = claim_truth
+    return snapshot
 
 
 def build_action_card(

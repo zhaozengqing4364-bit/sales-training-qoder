@@ -1120,3 +1120,22 @@ Append one entry per iteration:
   verification results: passed
   success signal status: unresolved objection families now stay visible to learners and read-side consumers without replaying stale reconnect coaching cards
   rollback note: if later work changes objection carry-forward again, preserve the rule that transcript_metadata objection_ledger overrides generic read-side sales alignment while reconnect cleanup clears only transient action-card/fuzzy state and keeps the score proof prompt.
+
+- time: 2026-03-25T07:31:39+08:00
+  mode: stabilize
+  item id: M003-S04-T01
+  files changed:
+    - backend/src/common/effectiveness/evaluator.py
+    - backend/src/common/conversation/session_evidence.py
+    - backend/tests/unit/test_effectiveness_sales_report_alignment.py
+    - backend/tests/unit/test_session_evidence_service.py
+    - .gsd/DECISIONS.md
+    - .gsd/KNOWLEDGE.md
+    - .codex/loop/state.json
+    - .codex/loop/log.md
+  summary: Defined the canonical claim-truth contract on the current evaluator/session-evidence line, classifying unsupported, weak, pending, and verified evidence without renaming the existing main_issue / next_goal report keys.
+  verification commands:
+    - cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_effectiveness_sales_report_alignment.py tests/unit/test_session_evidence_service.py
+  verification results: passed
+  success signal status: completed sales projections now expose `effectiveness_snapshot.claim_truth` and preserve objection-ledger closure semantics so open gaps stay pending while acknowledged or supported claims no longer masquerade as the same evidence state
+  rollback note: if later S04 work needs to change the truth taxonomy, keep the nested `effectiveness_snapshot.claim_truth` seam and preserve the rule that only open ledgers override main_issue / next_goal while closed ledgers still inform truth-status classification.
