@@ -1,7 +1,7 @@
 {
   "mode": "stabilize",
-  "current_issue_id": "M004-S02-T03",
-  "current_issue_type": "task",
+  "current_issue_id": "M004-S02",
+  "current_issue_type": "slice",
   "current_issue_status": "done",
   "pending_issue_ids": [],
   "completed_issue_ids": [
@@ -66,24 +66,29 @@
     "M003-S05-T02",
     "M003-S05-T03",
     "M004-S01-T03",
+    "M004-S02-T01",
     "M004-S02-T02",
-    "M004-S02-T03"
+    "M004-S02-T03",
+    "M004-S02"
   ],
   "blocked_issue_ids": [],
   "deferred_issue_ids": [],
   "last_modified_files": [
-    "web/src/app/(user)/practice/[sessionId]/replay/page.tsx",
-    "web/src/app/(user)/practice/[sessionId]/replay/page.test.tsx",
-    ".gsd/DECISIONS.md",
-    ".gsd/milestones/M004/slices/S02/tasks/T03-SUMMARY.md",
+    ".gsd/milestones/M004/slices/S02/S02-SUMMARY.md",
+    ".gsd/milestones/M004/slices/S02/S02-UAT.md",
+    ".gsd/milestones/M004/M004-ROADMAP.md",
+    ".gsd/REQUIREMENTS.md",
+    ".gsd/PROJECT.md",
     ".codex/loop/state.json",
     ".codex/loop/log.md"
   ],
   "last_verification_commands": [
+    "cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_replay_service.py tests/integration/test_replay_api.py",
+    "cd web && npm test -- --run 'src/app/(user)/practice/[sessionId]/report/page.test.tsx'",
     "cd web && npm test -- --run 'src/app/(user)/practice/[sessionId]/replay/page.test.tsx' 'src/app/(user)/practice/[sessionId]/report/page.test.tsx'"
   ],
-  "last_verification_result": "Focused replay/report Vitest is green: the replay page now consumes the report deep-link query contract, auto-focuses the requested turn when it still exists, and keeps degraded or missing anchor fallback copy visible instead of silently failing. A frontend-only browser stub attempt on localhost reproduced the repo's known cross-origin route-mock/CORS noise against :3444, so it was not counted as product proof.",
-  "last_success_signal": "Learners can now leave the report and land inside the current replay route on the requested turn or an explicit degraded fallback state instead of manually searching the transcript.",
+  "last_verification_result": "Fresh S02 slice verification is green: backend replay service/API suite passed 48 tests, the focused report page Vitest passed 8 tests, and the combined replay+report Vitest run passed 12 tests while explicitly exercising both target files. Resolved, degraded, and missing-anchor behaviors all stayed visible on the current report/replay routes.",
+  "last_success_signal": "The current report page now opens the existing replay route at the relevant issue/goal/highlight turn, and replay keeps explicit degraded or missing-anchor guidance instead of silently failing when markers drift.",
   "last_growth_scan": null,
-  "next_action": "Close out M004/S02 slice or continue with the next scheduled unit now that replay anchor landing is complete."
+  "next_action": "Continue with the next scheduled unit; M004/S02 is closed and its summary/UAT artifacts are on disk."
 }

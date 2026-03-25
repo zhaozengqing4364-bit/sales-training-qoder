@@ -1284,3 +1284,23 @@ Append one entry per iteration:
   verification results: focused replay/report Vitest passed; a frontend-only browser stub attempt on localhost reproduced the repo's known cross-origin route-mock/CORS noise against :3444, so browser proof was not counted as product verification
   success signal status: report deep links now land inside the current replay route on the requested turn or an explicit degraded fallback state instead of forcing manual transcript search
   rollback note: if a later slice changes the report→replay handoff, keep the replay-side banner plus highlighted-turn behavior on the existing route unless a new tested landing contract replaces D066
+
+- time: 2026-03-26T01:23:00+08:00
+  mode: stabilize
+  item id: M004-S02
+  files changed:
+    - .gsd/milestones/M004/slices/S02/S02-SUMMARY.md
+    - .gsd/milestones/M004/slices/S02/S02-UAT.md
+    - .gsd/milestones/M004/M004-ROADMAP.md
+    - .gsd/REQUIREMENTS.md
+    - .gsd/PROJECT.md
+    - .codex/loop/state.json
+    - .codex/loop/log.md
+  summary: Closed M004/S02 by rerunning the full slice verification set, updating R011/project continuity, and atomically rendering the slice summary/UAT plus roadmap status for the report→replay anchor flow.
+  verification commands:
+    - cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_replay_service.py tests/integration/test_replay_api.py
+    - cd web && npm test -- --run 'src/app/(user)/practice/[sessionId]/report/page.test.tsx'
+    - cd web && npm test -- --run 'src/app/(user)/practice/[sessionId]/replay/page.test.tsx' 'src/app/(user)/practice/[sessionId]/report/page.test.tsx'
+  verification results: passed fresh; backend replay service/API suite passed 48 tests, the focused report-page Vitest passed 8 tests, and the combined replay+report run passed 12 tests while explicitly exercising both files and the resolved/degraded/missing-anchor landing behaviors.
+  success signal status: the current report page can now open the existing replay route at the relevant issue/goal/highlight turn, and replay keeps explicit degraded or missing-anchor guidance instead of silently failing when markers drift.
+  rollback note: if a later slice revisits this loop, keep report→replay navigation on the existing replay authority line and preserve the visible degraded-state banners unless a new tested landing contract supersedes D064-D066.
