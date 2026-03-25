@@ -24,6 +24,7 @@ import {
 } from "@/lib/api/types";
 import { debug } from "@/lib/debug";
 import {
+    extractSessionLearningCue,
     formatEvidenceCompletenessNote,
     formatNotEvaluableReason,
 } from "@/lib/session-evidence";
@@ -275,6 +276,11 @@ export default function HistoryPage() {
                         const notEvaluableReason = item.evaluable === false
                             ? formatNotEvaluableReason(item.not_evaluable_reason)
                             : null;
+                        const learningCue = extractSessionLearningCue({
+                            mainIssue: item.main_issue,
+                            nextGoal: item.next_goal,
+                            feedbackSummary: item.feedback_summary,
+                        });
 
                         return (
                             <GlassCard
@@ -317,6 +323,41 @@ export default function HistoryPage() {
                                         {!notEvaluableReason && evidenceCompletenessNote && (
                                             <div className="mt-2 text-xs text-slate-500">
                                                 {evidenceCompletenessNote}
+                                            </div>
+                                        )}
+                                        {learningCue && (
+                                            <div className="mt-3 rounded-2xl border border-slate-200 bg-slate-50 px-3 py-3">
+                                                <div className="flex flex-wrap gap-2 mb-2">
+                                                    {learningCue.issueLabel ? (
+                                                        <span className="inline-flex rounded-full bg-rose-50 px-3 py-1 text-xs font-medium text-rose-700">
+                                                            {learningCue.issueLabel}
+                                                        </span>
+                                                    ) : null}
+                                                    {learningCue.goalLabel ? (
+                                                        <span className="inline-flex rounded-full bg-blue-50 px-3 py-1 text-xs font-medium text-blue-700">
+                                                            {learningCue.goalLabel}
+                                                        </span>
+                                                    ) : null}
+                                                </div>
+                                                {learningCue.issueText ? (
+                                                    <p className="text-sm text-slate-800">
+                                                        <span className="text-slate-500">当前卡点：</span>
+                                                        <span>{learningCue.issueText}</span>
+                                                    </p>
+                                                ) : null}
+                                                {learningCue.goalText ? (
+                                                    <p className="mt-1 text-sm text-slate-800">
+                                                        <span className="text-slate-500">下一轮重点：</span>
+                                                        <span>{learningCue.goalText}</span>
+                                                    </p>
+                                                ) : null}
+                                                {learningCue.summary
+                                                    && learningCue.summary !== learningCue.issueText
+                                                    && learningCue.summary !== learningCue.goalText ? (
+                                                        <p className="mt-2 text-xs text-slate-500">
+                                                            {learningCue.summary}
+                                                        </p>
+                                                    ) : null}
                                             </div>
                                         )}
                                     </div>

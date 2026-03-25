@@ -1227,3 +1227,25 @@ Append one entry per iteration:
   verification results: passed; the exact objection-heavy backend regression suite is green, the live UAT trace/timeline/debug bundles are still present, and the T03 artifact now explicitly records which fallback states remain shippable versus which same-session replay failures block M003 acceptance.
   success signal status: M003 now has one written release guardrail grounded in the real localhost objection-heavy proof instead of an assumed all-green replay path.
   rollback note: if future work fixes the scoring -> completed replay path, keep the same business-chain acceptance rule and only relax the replay blocker after the live admin -> practice -> report/replay proof is re-run on the same routes.
+
+
+- time: 2026-03-26T00:07:01+0800
+  mode: stabilize
+  item id: M004-S01-T03
+  files changed:
+    - web/src/lib/session-evidence.ts
+    - web/src/app/(user)/practice/[sessionId]/report/page.tsx
+    - web/src/app/(dashboard)/history/page.tsx
+    - web/src/app/(user)/practice/[sessionId]/report/page.test.tsx
+    - web/src/app/(dashboard)/history/page.test.tsx
+    - .gsd/DECISIONS.md
+    - .codex/loop/state.json
+    - .codex/loop/log.md
+  summary: Carried the unified learning vocabulary through the current report and history entrypoints, so issue/goal cues stay aligned with replay/highlights and degraded enhanced-data states remain explicit without adding a new learning route.
+  verification commands:
+    - cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_replay_service.py tests/integration/test_replay_api.py
+    - cd web && npm test -- --run 'src/app/(user)/practice/[sessionId]/replay/page.test.tsx' 'src/components/highlights/HighlightList.test.tsx' 'src/components/highlights/HighlightDetailModal.test.tsx'
+    - cd web && npm test -- --run 'src/app/(user)/practice/[sessionId]/report/page.test.tsx' 'src/app/(dashboard)/history/page.test.tsx' 'src/app/(user)/practice/[sessionId]/replay/page.test.tsx'
+  verification results: passed; the backend replay contract is still green, replay/highlight UI drift detectors stayed green, and the report/history/replay page suite now locks the issue/goal labels plus degraded-state copy on the existing user routes.
+  success signal status: completed-session learners now see the same evidence-gap / next-goal vocabulary across report, history, replay, and highlights even when highlights or analytics overlays degrade.
+  rollback note: if a future slice changes learning-cue wording, keep report/history sourced from the shared session-evidence helper and only expand beyond the current routes after the same drift-detector set is updated together.

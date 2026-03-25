@@ -843,6 +843,34 @@ export interface SalesPersonaOption {
 }
 
 // Session Replay types
+export interface ReplayContextMessage {
+    id?: string | null;
+    role?: string | null;
+    content?: string | null;
+    timestamp?: string | null;
+}
+
+export interface ReplayHighlightContext {
+    prev_message?: ReplayContextMessage | null;
+    next_message?: ReplayContextMessage | null;
+}
+
+export interface ReplayLearningStage {
+    key: SessionEvidenceStage;
+    name: string;
+}
+
+export interface ReplayLearningEvidence {
+    reason?: string | null;
+    issue_family?: string | null;
+    objection_family?: string | null;
+    stage?: ReplayLearningStage | null;
+    nearby_context?: ReplayHighlightContext | null;
+    suggested_response?: string | null;
+    linked_issue?: SessionMainIssue | null;
+    linked_goal?: SessionNextGoal | null;
+}
+
 export interface ReplayMessage {
     id: string;
     session_id: string;
@@ -852,6 +880,8 @@ export interface ReplayMessage {
     timestamp: string;
     audio_url?: string | null;
     duration_ms?: number | null;
+    sales_stage?: string | null;
+    stage_name?: string | null;
     score_snapshot?: {
         overall?: number | null;
         overall_score?: number | null;
@@ -861,11 +891,16 @@ export interface ReplayMessage {
             trend?: string;
             delta?: number;
         }>;
+        dimension_scores?: Record<string, number> | null;
+        stage_name?: string | null;
+        suggestions?: string[];
     } | null;
     ai_feedback?: string | null;
     is_highlight?: boolean;
     highlight_type?: string | null;
     highlight_reason?: string | null;
+    suggested_response?: string | null;
+    learning_evidence?: ReplayLearningEvidence | null;
 }
 
 export interface ReplayTimelineMarker {
@@ -1025,23 +1060,12 @@ export interface ReplayHighlight {
     highlight_reason?: string | null;
     ai_feedback?: string | null;
     suggested_response?: string | null;
+    sales_stage?: string | null;
+    stage_name?: string | null;
+    context?: ReplayHighlightContext;
+    learning_evidence?: ReplayLearningEvidence | null;
     audio_url?: string | null;
     score?: number | null;
-}
-
-export interface ReplayHighlightContext {
-    prev_message?: {
-        id: string;
-        role: string;
-        content: string;
-        timestamp: string;
-    } | null;
-    next_message?: {
-        id: string;
-        role: string;
-        content: string;
-        timestamp: string;
-    } | null;
 }
 
 export interface HighlightItem {
@@ -1057,6 +1081,7 @@ export interface HighlightItem {
     sales_stage: string | null;
     stage_name: string | null;
     context: ReplayHighlightContext;
+    learning_evidence?: ReplayLearningEvidence | null;
     audio_url?: string | null;
     score?: number | null;
 }

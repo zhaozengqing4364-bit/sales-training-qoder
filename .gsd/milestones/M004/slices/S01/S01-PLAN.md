@@ -26,12 +26,12 @@ Keep `backend/src/common/conversation/replay.py`, `backend/src/common/conversati
   - Files: `backend/src/common/conversation/replay.py`, `backend/src/common/conversation/session_evidence.py`, `backend/src/common/conversation/api.py`, `backend/tests/unit/test_replay_service.py`, `backend/tests/integration/test_replay_api.py`
   - Verify: cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_replay_service.py tests/integration/test_replay_api.py
 
-- [ ] **T02: Render the richer learning evidence on the existing replay/highlight surfaces** `est:90m`
+- [x] **T02: Render the richer learning evidence on the existing replay/highlight surfaces** `est:90m`
   Update the current replay and highlight UI components to render the richer explanation contract directly from API data. Use the existing surfaces only: `web/src/app/(user)/practice/[sessionId]/replay/page.tsx`, `web/src/components/highlights/HighlightList.tsx`, `HighlightCard`, and `HighlightDetailModal`. Make the UI explain why a turn matters and how to improve it, while keeping null/no-highlight states clean.
   - Files: `web/src/app/(user)/practice/[sessionId]/replay/page.tsx`, `web/src/components/highlights/HighlightList.tsx`, `web/src/components/highlights/HighlightCard.tsx`, `web/src/components/highlights/HighlightDetailModal.tsx`, `web/src/app/(user)/practice/[sessionId]/replay/page.test.tsx`
   - Verify: cd web && npm test -- --run 'src/app/(user)/practice/[sessionId]/replay/page.test.tsx' 'src/components/highlights/HighlightList.test.tsx' 'src/components/highlights/HighlightDetailModal.test.tsx'
 
-- [ ] **T03: Carry the learning-evidence vocabulary through report/history and lock degraded-state behavior** `est:75m`
+- [x] **T03: Carry the learning-evidence vocabulary through report/history and lock degraded-state behavior** `est:75m`
   Make sure the report page and history page continue to speak the same learning vocabulary and stay usable when highlights are absent or enhanced data degrades. Add the minimum read-side carry-forward needed on the current user entrypoints; do not invent new routes. Lock the behavior with focused tests so future work cannot quietly revert to generic or conflicting evidence language.
   - Files: `web/src/app/(user)/practice/[sessionId]/report/page.tsx`, `web/src/app/(dashboard)/history/page.tsx`, `web/src/lib/session-evidence.ts`, `web/src/app/(user)/practice/[sessionId]/report/page.test.tsx`, `web/src/app/(dashboard)/history/page.test.tsx`
   - Verify: cd web && npm test -- --run 'src/app/(user)/practice/[sessionId]/report/page.test.tsx' 'src/app/(dashboard)/history/page.test.tsx' 'src/app/(user)/practice/[sessionId]/replay/page.test.tsx'

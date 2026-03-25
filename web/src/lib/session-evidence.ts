@@ -2,6 +2,8 @@ import type {
     PresentationReview,
     SessionEvidenceCompleteness,
     SessionEvidenceStage,
+    SessionMainIssue,
+    SessionNextGoal,
     SessionNotEvaluableReason,
 } from "@/lib/api/types";
 
@@ -93,6 +95,20 @@ function isClaimTruthStatus(value: unknown): value is SessionClaimTruthStatus {
 
 function coerceFiniteNumber(value: unknown): number | null {
     return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function cleanText(value?: string | null): string | null {
+    return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+export interface SessionLearningCue {
+    issueLabel: string | null;
+    issueText: string | null;
+    issueAction: string | null;
+    goalLabel: string | null;
+    goalText: string | null;
+    goalRule: string | null;
+    summary: string | null;
 }
 
 export function formatSessionStageLabel(stage?: SessionEvidenceStage | null): string {
@@ -232,6 +248,34 @@ export function formatGoalTypeLabel(goalType?: string | null): string | null {
         return null;
     }
     return GOAL_TYPE_LABELS[String(goalType)] || null;
+}
+
+export function extractSessionLearningCue(input: {
+    mainIssue?: SessionMainIssue | null;
+    nextGoal?: SessionNextGoal | null;
+    feedbackSummary?: string | null;
+}): SessionLearningCue | null {
+    const issueLabel = formatIssueTypeLabel(input.mainIssue?.issue_type);
+    const issueText = cleanText(input.mainIssue?.issue_text);
+    const issueAction = cleanText(input.mainIssue?.recovery_rule);
+    const goalLabel = formatGoalTypeLabel(input.nextGoal?.goal_type);
+    const goalText = cleanText(input.nextGoal?.goal_text);
+    const goalRule = cleanText(input.nextGoal?.rule);
+    const summary = cleanText(input.feedbackSummary) || issueText || goalText;
+
+    if (!issueLabel && !issueText && !issueAction && !goalLabel && !goalText && !goalRule && !summary) {
+        return null;
+    }
+
+    return {
+        issueLabel,
+        issueText,
+        issueAction,
+        goalLabel,
+        goalText,
+        goalRule,
+        summary,
+    };
 }
 
 export function formatPresentationIssueLabel(issueType?: string | null): string | null {

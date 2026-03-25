@@ -110,6 +110,63 @@ describe("HistoryPage", () => {
         expect(reportButton.disabled).toBe(false);
     });
 
+    it("keeps learning cues visible when analytics snapshots degrade", async () => {
+        getMyHistoryMock.mockResolvedValue({
+            sessions: [
+                {
+                    session_id: "session-3",
+                    scenario_name: "销售演练",
+                    scenario_type: "sales",
+                    persona_name: "采购经理",
+                    agent_name: "销售教练",
+                    start_time: "2026-03-23T00:00:00Z",
+                    duration_seconds: 240,
+                    overall_score: 76,
+                    report_status: "failed",
+                    report_generated_at: null,
+                    status: "completed",
+                    evaluable: true,
+                    not_evaluable_reason: null,
+                    evidence_completeness: { complete: true },
+                    effectiveness_snapshot: null,
+                    feedback_summary: "最近一次报告提示：别只说结果，要补可信证据。",
+                    stage_summary: [
+                        {
+                            stage: "objection",
+                            duration_ms: 80000,
+                            score: 76,
+                        },
+                    ],
+                    main_issue: {
+                        issue_type: "evidence_gap",
+                        issue_text: "客户还没听到可信证据。",
+                        recovery_rule: "下一轮先补 ROI 或客户案例。",
+                    },
+                    next_goal: {
+                        goal_type: "evidence_backing",
+                        goal_text: "先补 ROI 证据，再确认下一步。",
+                        rule: "至少补一条证据并确认客户是否认可。",
+                    },
+                },
+            ],
+            total: 1,
+            page: 1,
+            page_size: 50,
+            total_pages: 1,
+        });
+        getHistoryStatisticsMock.mockRejectedValue(new Error("stats unavailable"));
+        getHistoryTrendsMock.mockRejectedValue(new Error("trends unavailable"));
+
+        render(<HistoryPage />);
+
+        expect(await screen.findByText("统计看板、趋势快照暂不可用，训练列表仍基于统一训练证据展示。")).toBeTruthy();
+        expect(screen.getByText("证据支撑")).toBeTruthy();
+        expect(screen.getByText("客户还没听到可信证据。")).toBeTruthy();
+        expect(screen.getByText("证据补强")).toBeTruthy();
+        expect(screen.getByText("先补 ROI 证据，再确认下一步。")).toBeTruthy();
+        expect(screen.getByText("最近一次报告提示：别只说结果，要补可信证据。")).toBeTruthy();
+    });
+
     it("surfaces a not-evaluable session instead of collapsing it into a generic pending state", async () => {
         getMyHistoryMock.mockResolvedValue({
             sessions: [

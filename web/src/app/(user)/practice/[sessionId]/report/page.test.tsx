@@ -290,6 +290,8 @@ describe("ReportPage", () => {
         expect(screen.getByText("证据偏弱")).toBeTruthy();
         expect(screen.getByText("已经给出了证据，但力度还不够，仍需要更具体的案例、数据或 ROI 证明。")).toBeTruthy();
         expect(screen.getByText("证据强度：63 分。")).toBeTruthy();
+        expect(screen.getByText("证据支撑")).toBeTruthy();
+        expect(screen.getByText("证据补强")).toBeTruthy();
         expect(screen.getByText("功能点说得多，但还没有把产品价值翻译成客户收益。")).toBeTruthy();
         expect(screen.getByText("先补 ROI 证据，再推进一个明确的下一步动作。")).toBeTruthy();
         expect(screen.getByText("综合评分反映价值翻译、证据支撑和异议推进的完成度。"))
@@ -478,7 +480,16 @@ describe("ReportPage", () => {
             completeness_score: 61,
             evaluable: true,
             not_evaluable_reason: null,
-            main_issue: null,
+            main_issue: {
+                issue_type: "evidence_gap",
+                issue_text: "价值主张已经提到了，但还没有拿出能让客户相信的证据。",
+                recovery_rule: "先补一条 ROI 或客户案例，再继续推进。",
+            },
+            next_goal: {
+                goal_type: "evidence_backing",
+                goal_text: "先补 ROI 证据，再确认客户愿不愿意进入下一步。",
+                rule: "至少补一条证据并确认下一步。",
+            },
         });
         getComprehensiveReportMock.mockRejectedValue(new ApiRequestError({
             status: 404,
@@ -491,6 +502,10 @@ describe("ReportPage", () => {
         render(<ReportPage />);
 
         expect((await screen.findByTestId("report-overall-score")).textContent).toContain("61");
+        expect(screen.getByText("证据支撑")).toBeTruthy();
+        expect(screen.getByText("价值主张已经提到了，但还没有拿出能让客户相信的证据。")).toBeTruthy();
+        expect(screen.getByText("证据补强")).toBeTruthy();
+        expect(screen.getByText("先补 ROI 证据，再确认客户愿不愿意进入下一步。")).toBeTruthy();
         expect(await screen.findByText("综合洞察暂不可用，当前页面仅展示统一训练证据。"))
             .toBeTruthy();
         expect(await screen.findByText("高光片段暂不可用，基础评估结果不受影响。"))

@@ -26,6 +26,7 @@ import {
 } from "@/lib/api/types";
 import { debug } from "@/lib/debug";
 import {
+    extractSessionLearningCue,
     formatClaimTruthEvidenceNote,
     formatClaimTruthSummary,
     formatEvidenceCompletenessNote,
@@ -486,6 +487,10 @@ export default function ComprehensiveReportPage() {
     const claimTruth = !isPresentationScenario
         ? extractSessionClaimTruth(report?.effectiveness_snapshot)
         : null;
+    const reportLearningCue = extractSessionLearningCue({
+        mainIssue: report?.main_issue,
+        nextGoal: report?.next_goal,
+    });
     const claimTruthSummary = formatClaimTruthSummary(claimTruth);
     const claimTruthEvidenceNote = formatClaimTruthEvidenceNote(claimTruth);
     const claimTruthClasses = getClaimTruthClasses(getClaimTruthTone(claimTruth?.status));
@@ -778,7 +783,14 @@ export default function ComprehensiveReportPage() {
                     </div>
                     {report.main_issue ? (
                         <div className="rounded-xl border border-amber-100 bg-amber-50 p-4">
-                            <p className="text-xs font-semibold text-amber-700 mb-1">本场销售主问题</p>
+                            <div className="flex items-center justify-between gap-3 mb-2 flex-wrap">
+                                <p className="text-xs font-semibold text-amber-700">本场销售主问题</p>
+                                {reportLearningCue?.issueLabel ? (
+                                    <span className="inline-flex rounded-full border border-amber-200 bg-white/80 px-2.5 py-1 text-xs font-medium text-amber-800">
+                                        {reportLearningCue.issueLabel}
+                                    </span>
+                                ) : null}
+                            </div>
                             <p className="text-sm text-amber-900">{report.main_issue.issue_text}</p>
                             <p className="text-xs text-amber-700 mt-2">
                                 修正动作：{report.main_issue.recovery_rule}
@@ -794,10 +806,17 @@ export default function ComprehensiveReportPage() {
                 <GlassCard className="p-6 mb-6">
                     <div className="flex items-start justify-between gap-4 flex-wrap">
                         <div>
-                            <h2 className="text-lg font-semibold text-zinc-900 mb-2 flex items-center gap-2">
-                                <Target className="w-5 h-5 text-blue-600" />
-                                下一轮销售目标
-                            </h2>
+                            <div className="flex items-center gap-2 mb-2 flex-wrap">
+                                <h2 className="text-lg font-semibold text-zinc-900 flex items-center gap-2">
+                                    <Target className="w-5 h-5 text-blue-600" />
+                                    下一轮销售目标
+                                </h2>
+                                {reportLearningCue?.goalLabel ? (
+                                    <span className="inline-flex rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-800">
+                                        {reportLearningCue.goalLabel}
+                                    </span>
+                                ) : null}
+                            </div>
                             <p className="text-sm text-zinc-700 mb-2">{report.next_goal.goal_text}</p>
                             <p className="text-xs text-zinc-500">判定条件：{report.next_goal.rule}</p>
                             {retryBlockedHint && (

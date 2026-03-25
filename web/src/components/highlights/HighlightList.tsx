@@ -1,47 +1,49 @@
 "use client";
 
 import { useState } from "react";
-import { HighlightCard } from "./HighlightCard";
-import { HighlightDetailModal } from "./HighlightDetailModal";
 import { ThumbsUp, ThumbsDown, ChevronDown, ChevronUp, Sparkles } from "lucide-react";
+
+import type { HighlightItem } from "@/lib/api/types";
+import { formatIssueTypeLabel, formatSessionStageLabel } from "@/lib/session-evidence";
 import { cn } from "@/lib/utils";
 import { GlassCard } from "@/components/ui/glass-card";
 
-interface Highlight {
-  id: string;
-  turn_number: number;
-  role: "assistant" | "user";
-  content: string;
-  timestamp: string;
-  highlight_type: "good" | "bad";
-  highlight_reason: string | null;
-  ai_feedback: string | null;
-  suggested_response: string | null;
-  sales_stage: string | null;
-  stage_name: string | null;
-  context: {
-    prev_message?: {
-      id: string;
-      role: string;
-      content: string;
-      timestamp: string;
-    } | null;
-    next_message?: {
-      id: string;
-      role: string;
-      content: string;
-      timestamp: string;
-    } | null;
-  };
-  audio_url?: string | null;
-  score?: number | null;
-}
+import { HighlightCard } from "./HighlightCard";
+import { HighlightDetailModal } from "./HighlightDetailModal";
 
 interface HighlightListProps {
-  highlights: Highlight[];
+  highlights: HighlightItem[];
   totalGood: number;
   totalBad: number;
   onJumpToMessage?: (turnNumber: number) => void;
+}
+
+function getHighlightReason(highlight: HighlightItem): string | null {
+  return highlight.learning_evidence?.reason
+    ?? highlight.highlight_reason
+    ?? highlight.ai_feedback
+    ?? null;
+}
+
+function getHighlightStageName(highlight: HighlightItem): string | null {
+  return highlight.stage_name
+    ?? highlight.learning_evidence?.stage?.name
+    ?? (highlight.sales_stage ? formatSessionStageLabel(highlight.sales_stage) : null);
+}
+
+function getHighlightSuggestedResponse(highlight: HighlightItem): string | null {
+  return highlight.learning_evidence?.suggested_response
+    ?? highlight.suggested_response
+    ?? null;
+}
+
+function getHighlightIssueFamilyLabel(highlight: HighlightItem): string | null {
+  return formatIssueTypeLabel(highlight.learning_evidence?.issue_family ?? null);
+}
+
+function getHighlightGoalText(highlight: HighlightItem): string | null {
+  const goalText = highlight.learning_evidence?.linked_goal?.goal_text;
+  return typeof goalText === "string" && goalText.trim() ? goalText.trim() : null;
 }
 
 export function HighlightList({
@@ -54,7 +56,7 @@ export function HighlightList({
     good: boolean;
     bad: boolean;
   }>({ good: true, bad: true });
-  const [selectedHighlight, setSelectedHighlight] = useState<Highlight | null>(null);
+  const [selectedHighlight, setSelectedHighlight] = useState<HighlightItem | null>(null);
 
   const goodHighlights = highlights.filter((h) => h.highlight_type === "good");
   const badHighlights = highlights.filter((h) => h.highlight_type === "bad");
@@ -66,7 +68,7 @@ export function HighlightList({
     }));
   };
 
-  const handleViewContext = (highlight: Highlight) => {
+  const handleViewContext = (highlight: HighlightItem) => {
     setSelectedHighlight(highlight);
   };
 
@@ -87,7 +89,6 @@ export function HighlightList({
   return (
     <>
       <div className="space-y-6">
-        {/* Good Highlights Section */}
         {goodHighlights.length > 0 && (
           <div className="space-y-3">
             <button
@@ -111,7 +112,7 @@ export function HighlightList({
             <div
               className={cn(
                 "grid gap-3 transition-all duration-300",
-                expandedSections.good ? "block" : "hidden"
+                expandedSections.good ? "block" : "hidden",
               )}
             >
               {goodHighlights.map((highlight) => (
@@ -120,9 +121,12 @@ export function HighlightList({
                   id={highlight.id}
                   type="good"
                   content={highlight.content}
-                  reason={highlight.highlight_reason}
-                  stageName={highlight.stage_name}
+                  reason={getHighlightReason(highlight)}
+                  stageName={getHighlightStageName(highlight)}
+                  issueFamilyLabel={getHighlightIssueFamilyLabel(highlight)}
+                  goalText={getHighlightGoalText(highlight)}
                   aiFeedback={highlight.ai_feedback}
+                  suggestedResponse={getHighlightSuggestedResponse(highlight)}
                   score={highlight.score ?? undefined}
                   audioUrl={highlight.audio_url ?? undefined}
                   onJumpToMessage={() => onJumpToMessage?.(highlight.turn_number)}
@@ -133,7 +137,6 @@ export function HighlightList({
           </div>
         )}
 
-        {/* Bad Highlights Section */}
         {badHighlights.length > 0 && (
           <div className="space-y-3">
             <button
@@ -157,7 +160,7 @@ export function HighlightList({
             <div
               className={cn(
                 "grid gap-3 transition-all duration-300",
-                expandedSections.bad ? "block" : "hidden"
+                expandedSections.bad ? "block" : "hidden",
               )}
             >
               {badHighlights.map((highlight) => (
@@ -166,10 +169,12 @@ export function HighlightList({
                   id={highlight.id}
                   type="bad"
                   content={highlight.content}
-                  reason={highlight.highlight_reason}
-                  stageName={highlight.stage_name}
+                  reason={getHighlightReason(highlight)}
+                  stageName={getHighlightStageName(highlight)}
+                  issueFamilyLabel={getHighlightIssueFamilyLabel(highlight)}
+                  goalText={getHighlightGoalText(highlight)}
                   aiFeedback={highlight.ai_feedback}
-                  suggestedResponse={highlight.suggested_response}
+                  suggestedResponse={getHighlightSuggestedResponse(highlight)}
                   score={highlight.score ?? undefined}
                   audioUrl={highlight.audio_url ?? undefined}
                   onJumpToMessage={() => onJumpToMessage?.(highlight.turn_number)}
@@ -181,7 +186,6 @@ export function HighlightList({
         )}
       </div>
 
-      {/* Detail Modal */}
       <HighlightDetailModal
         isOpen={selectedHighlight !== null}
         onClose={handleCloseModal}

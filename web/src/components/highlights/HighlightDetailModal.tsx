@@ -1,43 +1,87 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { GlassModal } from "@/components/ui/glass-modal";
+import {
+  CheckCircle,
+  AlertCircle,
+  Play,
+  Pause,
+  Volume2,
+  MessageCircle,
+  Clock,
+} from "lucide-react";
+
+import type { HighlightItem, ReplayContextMessage, ReplayHighlightContext } from "@/lib/api/types";
 import { Button } from "@/components/ui/button";
+import { GlassModal } from "@/components/ui/glass-modal";
+import {
+  formatGoalTypeLabel,
+  formatIssueTypeLabel,
+  formatSessionStageLabel,
+} from "@/lib/session-evidence";
 import { cn } from "@/lib/utils";
-import { CheckCircle, AlertCircle, Play, Pause, Volume2, MessageCircle, Clock } from "lucide-react";
 
 interface HighlightDetailModalProps {
   isOpen: boolean;
   onClose: () => void;
-  highlight: {
-    id: string;
-    turn_number: number;
-    role: "assistant" | "user";
-    content: string;
-    timestamp: string;
-    highlight_type: "good" | "bad";
-    highlight_reason: string | null;
-    ai_feedback: string | null;
-    suggested_response: string | null;
-    sales_stage: string | null;
-    stage_name: string | null;
-    context: {
-      prev_message?: {
-        id: string;
-        role: string;
-        content: string;
-        timestamp: string;
-      } | null;
-      next_message?: {
-        id: string;
-        role: string;
-        content: string;
-        timestamp: string;
-      } | null;
-    };
-    audio_url?: string | null;
-    score?: number | null;
-  } | null;
+  highlight: HighlightItem | null;
+}
+
+function formatRoleLabel(role?: string | null): string {
+  if (role === "assistant") return "AI";
+  if (role === "user") return "用户";
+  return "对话";
+}
+
+function formatContextLabel(label: "prev" | "next"): string {
+  return label === "prev" ? "上一轮" : "下一轮";
+}
+
+function resolveHighlightReason(highlight: HighlightItem): string | null {
+  return highlight.learning_evidence?.reason
+    ?? highlight.highlight_reason
+    ?? highlight.ai_feedback
+    ?? null;
+}
+
+function resolveHighlightStageName(highlight: HighlightItem): string | null {
+  return highlight.stage_name
+    ?? highlight.learning_evidence?.stage?.name
+    ?? (highlight.sales_stage ? formatSessionStageLabel(highlight.sales_stage) : null);
+}
+
+function resolveSuggestedResponse(highlight: HighlightItem): string | null {
+  return highlight.learning_evidence?.suggested_response
+    ?? highlight.suggested_response
+    ?? null;
+}
+
+function resolveContext(highlight: HighlightItem): ReplayHighlightContext {
+  return highlight.learning_evidence?.nearby_context
+    ?? highlight.context
+    ?? {};
+}
+
+function ContextMessageCard({
+  label,
+  message,
+}: {
+  label: "prev" | "next";
+  message?: ReplayContextMessage | null;
+}) {
+  if (!message) return null;
+
+  return (
+    <div className="rounded-xl border border-slate-200 bg-slate-50/80 p-3 space-y-2">
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        <span className="text-xs font-semibold text-slate-500">{formatContextLabel(label)}</span>
+        <span className="text-xs rounded-full bg-white px-2 py-1 text-slate-600 border border-slate-200">
+          {formatRoleLabel(message.role)}
+        </span>
+      </div>
+      <p className="text-sm text-slate-700 leading-relaxed">{message.content || "--"}</p>
+    </div>
+  );
 }
 
 export function HighlightDetailModal({
@@ -48,7 +92,6 @@ export function HighlightDetailModal({
   const [isPlaying, setIsPlaying] = useState(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
-  // Cleanup audio on unmount and when modal closes
   useEffect(() => {
     if (!isOpen && audioRef.current) {
       audioRef.current.pause();
@@ -67,54 +110,61 @@ export function HighlightDetailModal({
   if (!highlight) return null;
 
   const isGood = highlight.highlight_type === "good";
+  const learningEvidence = highlight.learning_evidence ?? null;
+  const issueFamilyLabel = formatIssueTypeLabel(learningEvidence?.issue_family ?? null);
+  const stageName = resolveHighlightStageName(highlight);
+  const reason = resolveHighlightReason(highlight);
+  const suggestedResponse = resolveSuggestedResponse(highlight);
+  const linkedIssue = learningEvidence?.linked_issue ?? null;
+  const linkedGoal = learningEvidence?.linked_goal ?? null;
+  const goalTypeLabel = formatGoalTypeLabel(linkedGoal?.goal_type ?? null);
+  const context = resolveContext(highlight);
 
   const handlePlayPause = () => {
     if (!highlight.audio_url) return;
 
     if (isPlaying) {
-      // Stop current audio
       if (audioRef.current) {
         audioRef.current.pause();
         audioRef.current.remove();
         audioRef.current = null;
       }
       setIsPlaying(false);
-    } else {
-      // Create and play new audio
-      const audio = new Audio(highlight.audio_url);
-      audioRef.current = audio;
-
-      audio.play().catch((err) => {
-        console.error('[HighlightDetailModal] Audio playback failed:', err);
-        setIsPlaying(false);
-        if (audioRef.current === audio) {
-          audioRef.current = null;
-        }
-      });
-
-      setIsPlaying(true);
-
-      // Handle audio events
-      audio.onpause = () => {
-        setIsPlaying(false);
-      };
-
-      audio.onended = () => {
-        setIsPlaying(false);
-        if (audioRef.current === audio) {
-          audioRef.current = null;
-        }
-        audio.remove();
-      };
-
-      audio.onerror = () => {
-        console.error('[HighlightDetailModal] Audio error');
-        setIsPlaying(false);
-        if (audioRef.current === audio) {
-          audioRef.current = null;
-        }
-      };
+      return;
     }
+
+    const audio = new Audio(highlight.audio_url);
+    audioRef.current = audio;
+
+    audio.play().catch((err) => {
+      console.error("[HighlightDetailModal] Audio playback failed:", err);
+      setIsPlaying(false);
+      if (audioRef.current === audio) {
+        audioRef.current = null;
+      }
+    });
+
+    setIsPlaying(true);
+
+    audio.onpause = () => {
+      setIsPlaying(false);
+    };
+
+    audio.onended = () => {
+      setIsPlaying(false);
+      if (audioRef.current === audio) {
+        audioRef.current = null;
+      }
+      audio.remove();
+    };
+
+    audio.onerror = () => {
+      console.error("[HighlightDetailModal] Audio error");
+      setIsPlaying(false);
+      if (audioRef.current === audio) {
+        audioRef.current = null;
+      }
+    };
   };
 
   const formatTime = (timestamp: string) => {
@@ -148,13 +198,12 @@ export function HighlightDetailModal({
       size="lg"
     >
       <div className="space-y-5">
-        {/* Header with type badge and score */}
         <div className="flex items-start justify-between gap-4">
           <div className="flex items-center gap-2 flex-wrap">
             <div
               className={cn(
                 "px-3 py-1.5 rounded-full text-sm font-semibold flex items-center gap-1.5",
-                isGood ? "bg-green-100 text-green-700" : "bg-orange-100 text-orange-700"
+                isGood ? "bg-green-100 text-green-700" : "bg-orange-100 text-orange-700",
               )}
             >
               {isGood ? (
@@ -165,9 +214,15 @@ export function HighlightDetailModal({
               <span>{isGood ? "优点" : "待改进"}</span>
             </div>
 
-            {highlight.stage_name && (
+            {stageName && (
               <span className="px-3 py-1.5 rounded-full bg-slate-100 text-slate-700 text-sm font-medium">
-                {highlight.stage_name}
+                {stageName}
+              </span>
+            )}
+
+            {issueFamilyLabel && (
+              <span className="px-3 py-1.5 rounded-full bg-white text-slate-700 text-sm font-medium border border-slate-200">
+                {issueFamilyLabel}
               </span>
             )}
 
@@ -182,7 +237,7 @@ export function HighlightDetailModal({
               className={cn(
                 "px-3 py-1.5 rounded-full border-2 text-sm font-bold",
                 getScoreBackground(highlight.score),
-                getScoreColor(highlight.score)
+                getScoreColor(highlight.score),
               )}
             >
               {highlight.score}分
@@ -190,7 +245,6 @@ export function HighlightDetailModal({
           )}
         </div>
 
-        {/* Audio player */}
         {highlight.audio_url && (
           <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl">
             <Button
@@ -212,43 +266,53 @@ export function HighlightDetailModal({
           </div>
         )}
 
-        {/* Main content */}
         <div className="p-4 bg-slate-50 rounded-xl">
           <div className="flex items-center gap-2 mb-2 text-slate-500 text-sm">
             <MessageCircle className="w-4 h-4" />
-            <span>
-              {highlight.role === "assistant" ? "AI" : "用户"}
-            </span>
+            <span>{formatRoleLabel(highlight.role)}</span>
             <span>·</span>
             <span>{formatTime(highlight.timestamp)}</span>
           </div>
-          <p className="text-base leading-relaxed text-slate-800">
-            {highlight.content}
-          </p>
+          <p className="text-base leading-relaxed text-slate-800">{highlight.content}</p>
         </div>
 
-        {/* Highlight reason */}
-        {highlight.highlight_reason && (
-          <div
-            className={cn(
-              "p-4 rounded-xl border-l-4",
-              isGood
-                ? "bg-green-50 border-green-300"
-                : "bg-orange-50 border-orange-300"
-            )}
-          >
-            <p
-              className={cn(
-                "text-sm font-medium",
-                isGood ? "text-green-700" : "text-orange-700"
-              )}
-            >
-              {highlight.highlight_reason}
-            </p>
+        {reason && (
+          <div className="rounded-xl border border-amber-200 bg-amber-50/70 p-4">
+            <p className="text-xs font-semibold text-amber-700 mb-1">为什么值得复盘</p>
+            <p className="text-sm text-amber-900">{reason}</p>
           </div>
         )}
 
-        {/* AI Feedback */}
+        {(linkedIssue || linkedGoal) && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            {linkedIssue && (
+              <div className="rounded-xl border border-orange-200 bg-orange-50/70 p-4">
+                <p className="text-xs font-semibold text-orange-700 mb-2">关联问题</p>
+                <p className="text-sm text-orange-900">{linkedIssue.issue_text}</p>
+                {linkedIssue.recovery_rule ? (
+                  <p className="text-xs text-orange-700 mt-2">修正动作：{linkedIssue.recovery_rule}</p>
+                ) : null}
+              </div>
+            )}
+            {linkedGoal && (
+              <div className="rounded-xl border border-blue-200 bg-blue-50/70 p-4">
+                <div className="flex items-center justify-between gap-3 mb-2 flex-wrap">
+                  <p className="text-xs font-semibold text-blue-700">下一轮目标</p>
+                  {goalTypeLabel ? (
+                    <span className="text-xs rounded-full border border-blue-200 bg-white/80 px-2 py-1 text-blue-700">
+                      {goalTypeLabel}
+                    </span>
+                  ) : null}
+                </div>
+                <p className="text-sm text-blue-900">{linkedGoal.goal_text}</p>
+                {linkedGoal.rule ? (
+                  <p className="text-xs text-blue-700 mt-2">判定条件：{linkedGoal.rule}</p>
+                ) : null}
+              </div>
+            )}
+          </div>
+        )}
+
         {highlight.ai_feedback && (
           <div className="p-4 bg-blue-50 rounded-xl border border-blue-200">
             <p className="text-sm text-blue-700">
@@ -258,68 +322,24 @@ export function HighlightDetailModal({
           </div>
         )}
 
-        {/* Suggested response (for bad highlights) */}
-        {!isGood && highlight.suggested_response && (
-          <div className="p-4 bg-amber-50 rounded-xl border border-amber-200">
-            <p className="text-sm text-amber-800">
-              <span className="font-semibold">建议改进：</span>
-              {highlight.suggested_response}
-            </p>
+        {suggestedResponse && (
+          <div className="p-4 bg-emerald-50 rounded-xl border border-emerald-200">
+            <p className="text-xs font-semibold text-emerald-700 mb-1">更好的回应</p>
+            <p className="text-sm text-emerald-900">{suggestedResponse}</p>
           </div>
         )}
 
-        {/* Context messages */}
         <div className="space-y-3">
           <p className="text-sm font-semibold text-slate-700">对话上下文</p>
-
-          {/* Previous message */}
-          {highlight.context?.prev_message && (
-            <div className="flex gap-3 p-3 bg-slate-50 rounded-lg">
-              <div
-                className={cn(
-                  "w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 text-xs font-bold",
-                  highlight.context.prev_message.role === "assistant"
-                    ? "bg-blue-100 text-blue-700"
-                    : "bg-slate-200 text-slate-700"
-                )}
-              >
-                AI
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm text-slate-700 line-clamp-3">
-                  {highlight.context.prev_message.content}
-                </p>
-              </div>
-            </div>
-          )}
-
-          {/* Next message */}
-          {highlight.context?.next_message && (
-            <div className="flex gap-3 p-3 bg-slate-50 rounded-lg">
-              <div
-                className={cn(
-                  "w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 text-xs font-bold",
-                  highlight.context.next_message.role === "assistant"
-                    ? "bg-blue-100 text-blue-700"
-                    : "bg-slate-200 text-slate-700"
-                )}
-              >
-                AI
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm text-slate-700 line-clamp-3">
-                  {highlight.context.next_message.content}
-                </p>
-              </div>
-            </div>
-          )}
-
-          {!highlight.context?.prev_message && !highlight.context?.next_message && (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <ContextMessageCard label="prev" message={context.prev_message} />
+            <ContextMessageCard label="next" message={context.next_message} />
+          </div>
+          {!context.prev_message && !context.next_message && (
             <p className="text-sm text-slate-500 italic">暂无上下文信息</p>
           )}
         </div>
 
-        {/* Close button */}
         <div className="flex justify-end pt-2">
           <Button variant="outline" onClick={onClose} className="min-w-[88px] min-h-[44px]">
             关闭

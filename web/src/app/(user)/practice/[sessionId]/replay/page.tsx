@@ -18,7 +18,7 @@ import { HighlightList } from "@/components/highlights";
 import { Button } from "@/components/ui/button";
 import { GlassCard } from "@/components/ui/glass-card";
 import { api, getApiErrorMessage } from "@/lib/api/client";
-import { HighlightItem, ReplayData } from "@/lib/api/types";
+import { HighlightItem, ReplayData, ReplayHighlightContext, ReplayLearningEvidence } from "@/lib/api/types";
 import { debug } from "@/lib/debug";
 import {
   extractSessionClaimTruth,
@@ -91,6 +91,80 @@ function getClaimTruthClasses(tone: SessionClaimTruthTone) {
   };
 }
 
+function getReplayRoleLabel(role?: string | null): string {
+  if (role === "assistant") return "AI";
+  if (role === "user") return "用户";
+  return "对话";
+}
+
+function getReplayEvidenceReason(
+  learningEvidence?: ReplayLearningEvidence | null,
+  fallbackReason?: string | null,
+  fallbackFeedback?: string | null,
+): string | null {
+  return learningEvidence?.reason ?? fallbackReason ?? fallbackFeedback ?? null;
+}
+
+function getReplayStageName({
+  learningEvidence,
+  stageName,
+  salesStage,
+}: {
+  learningEvidence?: ReplayLearningEvidence | null;
+  stageName?: string | null;
+  salesStage?: string | null;
+}): string | null {
+  return stageName
+    ?? learningEvidence?.stage?.name
+    ?? (salesStage ? formatSessionStageLabel(salesStage) : null);
+}
+
+function getReplayIssueFamilyLabel(
+  learningEvidence?: ReplayLearningEvidence | null,
+): string | null {
+  return formatIssueTypeLabel(learningEvidence?.issue_family ?? null);
+}
+
+function getReplaySuggestedResponse(
+  learningEvidence?: ReplayLearningEvidence | null,
+  fallbackSuggestedResponse?: string | null,
+): string | null {
+  return learningEvidence?.suggested_response ?? fallbackSuggestedResponse ?? null;
+}
+
+function getReplayNearbyContext(
+  learningEvidence?: ReplayLearningEvidence | null,
+  fallbackContext?: ReplayHighlightContext | null,
+): ReplayHighlightContext | null {
+  return learningEvidence?.nearby_context ?? fallbackContext ?? null;
+}
+
+function hasReplayContext(context?: ReplayHighlightContext | null): boolean {
+  return Boolean(context?.prev_message || context?.next_message);
+}
+
+function ReplayContextPreview({
+  label,
+  message,
+}: {
+  label: string;
+  message?: ReplayHighlightContext["prev_message"];
+}) {
+  if (!message) return null;
+
+  return (
+    <div className="rounded-lg border border-white/70 bg-white/70 px-3 py-2">
+      <div className="flex items-center justify-between gap-3 mb-1 flex-wrap">
+        <span className="text-[11px] font-semibold text-slate-500">{label}</span>
+        <span className="text-[11px] rounded-full bg-slate-100 px-2 py-0.5 text-slate-600">
+          {getReplayRoleLabel(message.role)}
+        </span>
+      </div>
+      <p className="text-sm text-slate-700 leading-relaxed">{message.content || "--"}</p>
+    </div>
+  );
+}
+
 function enrichHighlights(
   highlights: HighlightItem[],
   replayData: ReplayData,
@@ -102,9 +176,25 @@ function enrichHighlights(
       ?? relatedMessage?.score_snapshot?.overall
       ?? highlight.score
       ?? null;
+    const relatedContext = getReplayNearbyContext(
+      relatedMessage?.learning_evidence,
+      hasReplayContext(highlight.context) ? highlight.context : null,
+    );
 
     return {
       ...highlight,
+      sales_stage: highlight.sales_stage ?? relatedMessage?.sales_stage ?? null,
+      stage_name: getReplayStageName({
+        learningEvidence: highlight.learning_evidence ?? relatedMessage?.learning_evidence,
+        stageName: highlight.stage_name ?? relatedMessage?.stage_name ?? relatedMessage?.score_snapshot?.stage_name ?? null,
+        salesStage: highlight.sales_stage ?? relatedMessage?.sales_stage ?? null,
+      }),
+      suggested_response: getReplaySuggestedResponse(
+        highlight.learning_evidence ?? relatedMessage?.learning_evidence,
+        highlight.suggested_response ?? relatedMessage?.suggested_response ?? null,
+      ),
+      context: relatedContext ?? highlight.context,
+      learning_evidence: highlight.learning_evidence ?? relatedMessage?.learning_evidence ?? null,
       audio_url: highlight.audio_url ?? relatedMessage?.audio_url ?? null,
       score: relatedScore,
     };
@@ -486,6 +576,36 @@ export default function SessionReplayPage() {
               const overallScore = message.score_snapshot?.overall_score
                 ?? message.score_snapshot?.overall
                 ?? null;
+              const learningEvidence = message.learning_evidence ?? null;
+              const stageName = getReplayStageName({
+                learningEvidence,
+                stageName: message.stage_name ?? message.score_snapshot?.stage_name ?? null,
+                salesStage: message.sales_stage ?? null,
+              });
+              const issueFamilyLabel = getReplayIssueFamilyLabel(learningEvidence);
+              const evidenceReason = getReplayEvidenceReason(
+                learningEvidence,
+                message.highlight_reason ?? null,
+                message.ai_feedback ?? null,
+              );
+              const suggestedResponse = getReplaySuggestedResponse(
+                learningEvidence,
+                message.suggested_response ?? null,
+              );
+              const nearbyContext = getReplayNearbyContext(learningEvidence);
+              const linkedIssue = learningEvidence?.linked_issue ?? null;
+              const linkedGoal = learningEvidence?.linked_goal ?? null;
+              const linkedGoalTypeLabel = formatGoalTypeLabel(linkedGoal?.goal_type ?? null);
+              const hasLearningEvidence = Boolean(
+                evidenceReason
+                || stageName
+                || issueFamilyLabel
+                || suggestedResponse
+                || linkedIssue
+                || linkedGoal
+                || hasReplayContext(nearbyContext),
+              );
+
               return (
                 <div
                   key={message.id}
@@ -493,7 +613,7 @@ export default function SessionReplayPage() {
                   className="rounded-xl border border-slate-100 p-3 sm:p-4 transition-all duration-300"
                 >
                   <div className="flex items-center justify-between gap-2 mb-2 flex-wrap">
-                    <div className="flex items-center gap-2 text-xs text-slate-500">
+                    <div className="flex items-center gap-2 text-xs text-slate-500 flex-wrap">
                       <span
                         className={`px-2 py-0.5 rounded-full text-xs font-medium ${
                           message.role === "assistant"
@@ -508,6 +628,16 @@ export default function SessionReplayPage() {
                         <Clock className="w-3 h-3" />
                         {formatTime(message.timestamp)}
                       </span>
+                      {stageName ? (
+                        <span className="inline-flex rounded-full bg-blue-50 px-2 py-0.5 text-[11px] font-medium text-blue-700">
+                          {stageName}
+                        </span>
+                      ) : null}
+                      {issueFamilyLabel ? (
+                        <span className="inline-flex rounded-full border border-slate-200 bg-white px-2 py-0.5 text-[11px] font-medium text-slate-700">
+                          {issueFamilyLabel}
+                        </span>
+                      ) : null}
                     </div>
                     <div className="flex items-center gap-2 text-xs text-slate-500">
                       {message.is_highlight ? (
@@ -539,6 +669,71 @@ export default function SessionReplayPage() {
                   {message.ai_feedback ? (
                     <div className="mt-2 text-xs text-slate-500 bg-slate-50 rounded-lg px-2 py-1">
                       AI 点评：{message.ai_feedback}
+                    </div>
+                  ) : null}
+                  {message.is_highlight && hasLearningEvidence ? (
+                    <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50/70 p-3 space-y-3">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-xs font-semibold text-amber-700">学习证据</span>
+                        {stageName ? (
+                          <span className="text-[11px] rounded-full bg-white/80 px-2 py-1 text-slate-700 border border-amber-100">
+                            {stageName}
+                          </span>
+                        ) : null}
+                        {issueFamilyLabel ? (
+                          <span className="text-[11px] rounded-full bg-white/80 px-2 py-1 text-slate-700 border border-amber-100">
+                            {issueFamilyLabel}
+                          </span>
+                        ) : null}
+                      </div>
+
+                      {evidenceReason ? (
+                        <div>
+                          <p className="text-xs font-semibold text-amber-700 mb-1">为什么这轮关键</p>
+                          <p className="text-sm text-amber-900">{evidenceReason}</p>
+                        </div>
+                      ) : null}
+
+                      {(linkedIssue || linkedGoal) ? (
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                          {linkedIssue ? (
+                            <div className="rounded-lg border border-white/70 bg-white/70 px-3 py-3">
+                              <p className="text-xs font-semibold text-slate-500 mb-1">关联问题</p>
+                              <p className="text-sm text-slate-800">{linkedIssue.issue_text}</p>
+                            </div>
+                          ) : null}
+                          {linkedGoal ? (
+                            <div className="rounded-lg border border-white/70 bg-white/70 px-3 py-3">
+                              <div className="flex items-center justify-between gap-2 mb-1 flex-wrap">
+                                <p className="text-xs font-semibold text-slate-500">下一轮目标</p>
+                                {linkedGoalTypeLabel ? (
+                                  <span className="text-[11px] rounded-full bg-blue-50 px-2 py-0.5 text-blue-700">
+                                    {linkedGoalTypeLabel}
+                                  </span>
+                                ) : null}
+                              </div>
+                              <p className="text-sm text-slate-800">{linkedGoal.goal_text}</p>
+                            </div>
+                          ) : null}
+                        </div>
+                      ) : null}
+
+                      {suggestedResponse ? (
+                        <div>
+                          <p className="text-xs font-semibold text-emerald-700 mb-1">更优回应</p>
+                          <p className="text-sm text-emerald-900">{suggestedResponse}</p>
+                        </div>
+                      ) : null}
+
+                      {hasReplayContext(nearbyContext) ? (
+                        <div className="space-y-2">
+                          <p className="text-xs font-semibold text-slate-500">关联上下文</p>
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                            <ReplayContextPreview label="前一轮" message={nearbyContext?.prev_message} />
+                            <ReplayContextPreview label="后一轮" message={nearbyContext?.next_message} />
+                          </div>
+                        </div>
+                      ) : null}
                     </div>
                   ) : null}
                 </div>
