@@ -6,9 +6,11 @@ from datetime import UTC, datetime
 import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 
+from agent.models import Agent, AgentPersona, Persona, VoiceRuntimeProfile
 from common.auth.service import create_access_token
 from common.conversation.models import ConversationMessage
 from common.db.models import Base, PracticeSession, Scenario, SessionStatus, User
@@ -51,6 +53,55 @@ def _make_stale_sales_snapshot() -> dict[str, object]:
         "evaluable": True,
         "not_evaluable_reason": None,
     }
+
+
+async def _create_runtime_entities(
+    db_session: AsyncSession,
+) -> tuple[VoiceRuntimeProfile, Agent, Persona]:
+    profile = VoiceRuntimeProfile(
+        id=str(uuid.uuid4()),
+        name="测试默认实时配置",
+        is_default=True,
+        is_active=True,
+        voice_mode="stepfun_realtime",
+        model_name="step-audio-2",
+        voice_name="qingchunshaonv",
+        temperature=0.7,
+    )
+    agent = Agent(
+        id=str(uuid.uuid4()),
+        name="测试销售Agent",
+        description="用于集成测试",
+        category="sales",
+        status="published",
+        default_knowledge_base_ids=["kb_test_1"],
+    )
+    persona = Persona(
+        id=str(uuid.uuid4()),
+        name="测试客户角色",
+        description="用于集成测试",
+        category="customer",
+        difficulty="medium",
+        status="active",
+        system_prompt="你是谨慎型采购经理。",
+        knowledge_base_ids=["kb_test_2"],
+    )
+    agent_persona = AgentPersona(
+        id=str(uuid.uuid4()),
+        agent_id=agent.id,
+        persona_id=persona.id,
+        is_default=True,
+        override_config={"challenge_frequency": 0.6, "response_length": "short"},
+    )
+    db_session.add_all([profile, agent, persona, agent_persona])
+    await db_session.commit()
+    return profile, agent, persona
+
+
+def _without_replay_anchor(value: dict[str, object] | None) -> dict[str, object] | None:
+    if not isinstance(value, dict):
+        return value
+    return {key: item for key, item in value.items() if key != "replay_anchor"}
 
 
 @pytest_asyncio.fixture(scope="function")
@@ -196,8 +247,12 @@ async def test_completed_session_report_and_replay_share_legacy_projection_fallb
     assert report_data["not_evaluable_reason"] is None
     assert replay_data["not_evaluable_reason"] is None
     assert report_data["evidence_completeness"] == replay_data["evidence_completeness"]
-    assert report_data["main_issue"] == replay_data["main_issue"]
-    assert report_data["next_goal"] == replay_data["next_goal"]
+    assert _without_replay_anchor(report_data["main_issue"]) == _without_replay_anchor(
+        replay_data["main_issue"]
+    )
+    assert _without_replay_anchor(report_data["next_goal"]) == _without_replay_anchor(
+        replay_data["next_goal"]
+    )
 
 
 @pytest.mark.asyncio
@@ -264,15 +319,100 @@ async def test_completed_session_report_and_replay_override_stale_sales_snapshot
     report_data = report_resp.json()["data"]
     replay_data = replay_resp.json()["data"]
 
-    assert report_data["main_issue"] == replay_data["main_issue"] == {
+    assert _without_replay_anchor(report_data["main_issue"]) == _without_replay_anchor(
+        replay_data["main_issue"]
+    ) == {
         "issue_type": "evidence_gap",
         "issue_text": "价值主张缺少案例、数据或ROI支撑，客户很难相信收益承诺。",
         "recovery_rule": "下一轮先给出案例、数据或benchmark，再回应价格/ROI追问。",
     }
-    assert report_data["next_goal"] == replay_data["next_goal"] == {
+    assert _without_replay_anchor(report_data["next_goal"]) == _without_replay_anchor(
+        replay_data["next_goal"]
+    ) == {
         "goal_type": "evidence_backing",
         "goal_text": "先用案例、数据或ROI证据支撑主张，再推进下一步。",
         "rule": "至少补上一条证据和一个明确的下一步动作。",
     }
     assert report_data["effectiveness_snapshot"]["main_issue"]["issue_type"] == "evidence_gap"
     assert replay_data["effectiveness_snapshot"]["main_issue"]["issue_type"] == "evidence_gap"
+
+
+@pytest.mark.asyncio
+async def test_create_session_persists_retry_focus_intent_from_report_retry_entry(
+    async_client: AsyncClient,
+    db_session: AsyncSession,
+    test_user: User,
+    auth_headers: dict[str, str],
+):
+    _, agent, persona = await _create_runtime_entities(db_session)
+    scenario = Scenario(
+        scenario_id=str(uuid.uuid4()),
+        scenario_type="sales",
+        name="retry focus source scenario",
+        is_active=True,
+    )
+    session = PracticeSession(
+        session_id=str(uuid.uuid4()),
+        user_id=str(test_user.user_id),
+        scenario_id=scenario.scenario_id,
+        status=SessionStatus.COMPLETED.value,
+        total_duration_seconds=180,
+        logic_score=80.0,
+        accuracy_score=69.5,
+        completeness_score=71.5,
+        effectiveness_snapshot=_make_stale_sales_snapshot(),
+    )
+    db_session.add_all([scenario, session])
+    db_session.add(
+        ConversationMessage(
+            session_id=session.session_id,
+            turn_number=1,
+            role="user",
+            content="ROI 这一块你们有真实案例吗？",
+            timestamp=datetime.now(UTC),
+            duration_ms=1600,
+            sales_stage="discovery",
+            score_snapshot={
+                "overall_score": 82.0,
+                "dimension_scores": {
+                    "价值表达": 84.0,
+                    "客户收益连接": 80.0,
+                    "证据使用": 58.0,
+                    "异议处理": 76.0,
+                    "推进下一步": 72.0,
+                },
+            },
+        )
+    )
+    await db_session.commit()
+
+    report_resp = await async_client.get(
+        f"/api/v1/practice/sessions/{session.session_id}/report",
+        headers=auth_headers,
+    )
+    assert report_resp.status_code == 200
+    focus_intent = report_resp.json()["data"]["retry_entry"]["focus_intent"]
+
+    create_resp = await async_client.post(
+        "/api/v1/practice/sessions",
+        headers=auth_headers,
+        json={
+            "scenario_type": "sales",
+            "agent_id": agent.id,
+            "persona_id": persona.id,
+            "focus_intent": focus_intent,
+        },
+    )
+
+    assert create_resp.status_code == 201
+    create_data = create_resp.json()["data"]
+    assert create_data["voice_policy_snapshot"]["focus_intent"] == focus_intent
+
+    persisted = (
+        await db_session.execute(
+            select(PracticeSession).where(
+                PracticeSession.session_id == create_data["session_id"]
+            )
+        )
+    ).scalar_one()
+    assert persisted.voice_policy_snapshot["focus_intent"] == focus_intent

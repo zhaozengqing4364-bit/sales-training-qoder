@@ -212,6 +212,20 @@ async def test_report_api_surfaces_sales_rollups_main_issue_and_next_goal(
         "agent_id": None,
         "persona_id": None,
         "presentation_id": None,
+        "focus_intent": {
+            "version": "retry_focus_v1",
+            "source_session_id": session.session_id,
+            "main_issue": {
+                "issue_type": "evidence_gap",
+                "issue_text": "价值主张缺少案例、数据或ROI支撑，客户很难相信收益承诺。",
+                "recovery_rule": "下一轮先给出案例、数据或benchmark，再回应价格/ROI追问。",
+            },
+            "next_goal": {
+                "goal_type": "evidence_backing",
+                "goal_text": "先用案例、数据或ROI证据支撑主张，再推进下一步。",
+                "rule": "至少补上一条证据和一个明确的下一步动作。",
+            },
+        },
     }
     assert payload["stage_summary"] == [
         {"stage": "discovery", "duration_ms": 1600, "score": 82},

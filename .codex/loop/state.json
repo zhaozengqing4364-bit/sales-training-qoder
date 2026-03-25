@@ -1,7 +1,7 @@
 {
   "mode": "stabilize",
-  "current_issue_id": "M004-S02",
-  "current_issue_type": "slice",
+  "current_issue_id": "M004-S03-T01",
+  "current_issue_type": "task",
   "current_issue_status": "done",
   "pending_issue_ids": [],
   "completed_issue_ids": [
@@ -69,26 +69,28 @@
     "M004-S02-T01",
     "M004-S02-T02",
     "M004-S02-T03",
-    "M004-S02"
+    "M004-S02",
+    "M004-S03-T01"
   ],
   "blocked_issue_ids": [],
   "deferred_issue_ids": [],
   "last_modified_files": [
-    ".gsd/milestones/M004/slices/S02/S02-SUMMARY.md",
-    ".gsd/milestones/M004/slices/S02/S02-UAT.md",
-    ".gsd/milestones/M004/M004-ROADMAP.md",
-    ".gsd/REQUIREMENTS.md",
-    ".gsd/PROJECT.md",
+    "backend/src/common/api/practice.py",
+    "backend/src/common/db/schemas.py",
+    "backend/tests/contract/test_practice_evidence_contract.py",
+    "backend/tests/integration/test_practice_evidence_flow.py",
+    "backend/tests/integration/test_sales_value_training_flow.py",
+    ".gsd/DECISIONS.md",
+    ".gsd/KNOWLEDGE.md",
     ".codex/loop/state.json",
     ".codex/loop/log.md"
   ],
   "last_verification_commands": [
-    "cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_replay_service.py tests/integration/test_replay_api.py",
-    "cd web && npm test -- --run 'src/app/(user)/practice/[sessionId]/report/page.test.tsx'",
-    "cd web && npm test -- --run 'src/app/(user)/practice/[sessionId]/replay/page.test.tsx' 'src/app/(user)/practice/[sessionId]/report/page.test.tsx'"
+    "cd backend && venv/bin/python -m pytest -c pyproject.toml tests/contract/test_practice_evidence_contract.py tests/integration/test_practice_evidence_flow.py",
+    "cd backend && venv/bin/python -m pytest -c pyproject.toml tests/integration/test_sales_value_training_flow.py tests/integration/test_voice_runtime_session_snapshot.py tests/contract/test_sessions.py"
   ],
-  "last_verification_result": "Fresh S02 slice verification is green: backend replay service/API suite passed 48 tests, the focused report page Vitest passed 8 tests, and the combined replay+report Vitest run passed 12 tests while explicitly exercising both target files. Resolved, degraded, and missing-anchor behaviors all stayed visible on the current report/replay routes.",
-  "last_success_signal": "The current report page now opens the existing replay route at the relevant issue/goal/highlight turn, and replay keeps explicit degraded or missing-anchor guidance instead of silently failing when markers drift.",
+  "last_verification_result": "Fresh T01 verification is green: the task suite passed 9 tests covering the report retry-focus contract and create-session persistence, and the adjacent session/report contract suite passed 24 tests after updating the existing sales retry_entry expectation.",
+  "last_success_signal": "Sales reports now expose a structured retry focus intent, and POST /practice/sessions persists that focus under voice_policy_snapshot.focus_intent on the new session without introducing a second retry-launch surface.",
   "last_growth_scan": null,
-  "next_action": "Continue with the next scheduled unit; M004/S02 is closed and its summary/UAT artifacts are on disk."
+  "next_action": "Continue with M004/S03/T02; the backend retry-focus seam is ready on report retry_entry.focus_intent and the new session snapshot."
 }

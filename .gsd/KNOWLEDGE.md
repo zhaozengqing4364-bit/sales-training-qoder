@@ -52,3 +52,4 @@
 - 改 `/api/v1/sessions/{id}/replay` / `highlights` 的 payload 时，别只改 `backend/src/common/conversation/replay.py`：FastAPI 的 `response_model` 会按 `backend/src/common/conversation/schemas.py` 过滤字段，`stage_name`、`context`、`learning_evidence` 这类新增键如果不进 schema，服务里明明构出来了也到不了前端。
 - Replay/highlight rich-evidence UI 现在会在 session-level conclusion 卡片和 per-turn evidence 卡片里重复展示 `issue_type` / `goal_type` / stage label；前端 focused tests 应该用 `getAllByText` 或 textContent matcher，别再假设这些标签只出现一次。
 - 本地做 M004/S02 这类 report/replay browser proof 时，别默认复用机器上已有的 `:3000` 页面：这台环境里 `http://127.0.0.1:3000` 可能是别的应用，真正的 repo 前端需要单独起在 `:3445`（或先核对标题/路由能否命中 `web/src/app/(user)/practice/[sessionId]/report/page.tsx`），否则你会把 чужой app 的 401/404 误判成当前仓库回归。
+- M004/S03 之后如果 report/replay 合同测试还在直接断言 `main_issue` / `next_goal` 整体相等，先确认 replay 侧是不是已经合法附带了 `replay_anchor`：completed-session report 仍保留基础 issue/goal 事实，而 replay 会在同一对象上加定位元数据；这类断言应剥掉 `replay_anchor` 或单独校验它，别把合法深链扩展误报成 evidence drift。

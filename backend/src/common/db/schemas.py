@@ -189,6 +189,10 @@ class SessionCreate(SessionBase):
     runtime_profile_id: UUID | None = Field(
         None, description="Optional runtime profile override"
     )
+    focus_intent: dict[str, Any] | None = Field(
+        default=None,
+        description="Optional retry focus intent carried forward from a prior sales report.",
+    )
 
 
 class SessionUpdate(BaseModel):

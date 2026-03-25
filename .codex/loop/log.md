@@ -1304,3 +1304,24 @@ Append one entry per iteration:
   verification results: passed fresh; backend replay service/API suite passed 48 tests, the focused report-page Vitest passed 8 tests, and the combined replay+report run passed 12 tests while explicitly exercising both files and the resolved/degraded/missing-anchor landing behaviors.
   success signal status: the current report page can now open the existing replay route at the relevant issue/goal/highlight turn, and replay keeps explicit degraded or missing-anchor guidance instead of silently failing when markers drift.
   rollback note: if a later slice revisits this loop, keep report→replay navigation on the existing replay authority line and preserve the visible degraded-state banners unless a new tested landing contract supersedes D064-D066.
+
+- time: 2026-03-26T01:41:45+0800
+  mode: stabilize
+  item id: M004-S03-T01
+  files changed:
+    - backend/src/common/api/practice.py
+    - backend/src/common/db/schemas.py
+    - backend/tests/contract/test_practice_evidence_contract.py
+    - backend/tests/integration/test_practice_evidence_flow.py
+    - backend/tests/integration/test_sales_value_training_flow.py
+    - .gsd/DECISIONS.md
+    - .gsd/KNOWLEDGE.md
+    - .codex/loop/state.json
+    - .codex/loop/log.md
+  summary: Extended the existing sales retry-entry contract with a structured focus_intent derived from main_issue/next_goal and persisted the same payload into new-session voice_policy_snapshot on POST /practice/sessions.
+  verification commands:
+    - cd backend && venv/bin/python -m pytest -c pyproject.toml tests/contract/test_practice_evidence_contract.py tests/integration/test_practice_evidence_flow.py
+    - cd backend && venv/bin/python -m pytest -c pyproject.toml tests/integration/test_sales_value_training_flow.py tests/integration/test_voice_runtime_session_snapshot.py tests/contract/test_sessions.py
+  verification results: passed fresh; the task suite covered report focus-intent contract plus create-session persistence, and the adjacent session/report contract suite stayed green after aligning the existing sales retry_entry expectation.
+  success signal status: sales reports now hand T02/T03 one structured retry focus payload, and newly created practice sessions freeze that focus on the existing voice_policy_snapshot seam for later runtime display.
+  rollback note: if later slices revise retry semantics, keep the focus payload on retry_entry + voice_policy_snapshot instead of inventing a second retry store unless a fully re-verified contract replaces D067.

@@ -88,6 +88,26 @@ def _make_stale_sales_snapshot() -> dict[str, object]:
     }
 
 
+def _expected_retry_focus_intent(
+    *,
+    session_id: str,
+    main_issue: dict[str, object],
+    next_goal: dict[str, object],
+) -> dict[str, object]:
+    return {
+        "version": "retry_focus_v1",
+        "source_session_id": session_id,
+        "main_issue": main_issue,
+        "next_goal": next_goal,
+    }
+
+
+def _without_replay_anchor(value: dict[str, object] | None) -> dict[str, object] | None:
+    if not isinstance(value, dict):
+        return value
+    return {key: item for key, item in value.items() if key != "replay_anchor"}
+
+
 @pytest_asyncio.fixture(scope="function")
 async def test_engine():
     engine = create_async_engine(TEST_DATABASE_URL, echo=False)
@@ -231,8 +251,12 @@ async def test_report_and_replay_contract_share_same_session_evidence_fields(
     assert report_data["logic_score"] == pytest.approx(75.6)
     assert report_data["accuracy_score"] == pytest.approx(62.1)
     assert report_data["completeness_score"] == pytest.approx(72.8)
-    assert report_data["main_issue"] == replay_data["main_issue"]
-    assert report_data["next_goal"] == replay_data["next_goal"]
+    assert _without_replay_anchor(report_data["main_issue"]) == _without_replay_anchor(
+        replay_data["main_issue"]
+    )
+    assert _without_replay_anchor(report_data["next_goal"]) == _without_replay_anchor(
+        replay_data["next_goal"]
+    )
     assert report_data["main_issue"]["issue_type"] == "evidence_gap"
     assert report_data["next_goal"]["goal_type"] == "evidence_backing"
     assert report_data["not_evaluable_reason"] == replay_data["not_evaluable_reason"] == "INSUFFICIENT_TURN_DATA"
@@ -244,6 +268,58 @@ async def test_report_and_replay_contract_share_same_session_evidence_fields(
     ]
     assert report_data["evidence_completeness"]["legacy_score_key_used"] is True
     assert replay_data["evidence_completeness"]["legacy_score_key_used"] is True
+
+
+@pytest.mark.asyncio
+async def test_report_contract_carries_structured_retry_focus_intent_from_issue_and_goal(
+    async_client: AsyncClient,
+    db_session: AsyncSession,
+    owner: User,
+    owner_headers: dict[str, str],
+):
+    snapshot = _make_effectiveness_snapshot(
+        evaluable=True,
+        reason=None,
+    )
+    scenario = Scenario(
+        scenario_id=str(uuid.uuid4()),
+        scenario_type="sales",
+        name="contract retry focus scenario",
+        is_active=True,
+    )
+    session = PracticeSession(
+        session_id=str(uuid.uuid4()),
+        user_id=str(owner.user_id),
+        scenario_id=scenario.scenario_id,
+        status=SessionStatus.COMPLETED.value,
+        logic_score=75.6,
+        accuracy_score=62.1,
+        completeness_score=72.8,
+        total_duration_seconds=180,
+        effectiveness_snapshot=snapshot,
+    )
+    db_session.add_all([scenario, session])
+    await db_session.commit()
+
+    report_resp = await async_client.get(
+        f"/api/v1/practice/sessions/{session.session_id}/report",
+        headers=owner_headers,
+    )
+
+    assert report_resp.status_code == 200
+    report_data = report_resp.json()["data"]
+
+    assert report_data["retry_entry"] == {
+        "scenario_type": "sales",
+        "agent_id": None,
+        "persona_id": None,
+        "presentation_id": None,
+        "focus_intent": _expected_retry_focus_intent(
+            session_id=session.session_id,
+            main_issue=snapshot["main_issue"],
+            next_goal=snapshot["next_goal"],
+        ),
+    }
 
 
 @pytest.mark.asyncio
@@ -311,12 +387,16 @@ async def test_report_and_replay_contract_override_stale_sales_snapshot_with_ali
     report_data = report_resp.json()["data"]
     replay_data = replay_resp.json()["data"]
 
-    assert report_data["main_issue"] == replay_data["main_issue"] == {
+    assert _without_replay_anchor(report_data["main_issue"]) == _without_replay_anchor(
+        replay_data["main_issue"]
+    ) == {
         "issue_type": "evidence_gap",
         "issue_text": "价值主张缺少案例、数据或ROI支撑，客户很难相信收益承诺。",
         "recovery_rule": "下一轮先给出案例、数据或benchmark，再回应价格/ROI追问。",
     }
-    assert report_data["next_goal"] == replay_data["next_goal"] == {
+    assert _without_replay_anchor(report_data["next_goal"]) == _without_replay_anchor(
+        replay_data["next_goal"]
+    ) == {
         "goal_type": "evidence_backing",
         "goal_text": "先用案例、数据或ROI证据支撑主张，再推进下一步。",
         "rule": "至少补上一条证据和一个明确的下一步动作。",

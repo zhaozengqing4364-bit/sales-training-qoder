@@ -129,6 +129,100 @@ def error_response(
     )
 
 
+def _filter_retry_focus_fields(
+    value: Any,
+    *,
+    allowed_keys: tuple[str, ...],
+) -> dict[str, str] | None:
+    if not isinstance(value, dict):
+        return None
+
+    filtered = {
+        key: str(value[key]).strip()
+        for key in allowed_keys
+        if value.get(key) is not None and str(value.get(key)).strip()
+    }
+    return filtered or None
+
+
+def _sanitize_retry_focus_intent(focus_intent: Any) -> dict[str, Any] | None:
+    if focus_intent is None:
+        return None
+    if not isinstance(focus_intent, dict):
+        return None
+
+    main_issue = _filter_retry_focus_fields(
+        focus_intent.get("main_issue"),
+        allowed_keys=("issue_type", "issue_text", "recovery_rule"),
+    )
+    next_goal = _filter_retry_focus_fields(
+        focus_intent.get("next_goal"),
+        allowed_keys=("goal_type", "goal_text", "rule"),
+    )
+    if main_issue is None and next_goal is None:
+        return None
+
+    sanitized: dict[str, Any] = {
+        "version": str(focus_intent.get("version") or "retry_focus_v1"),
+    }
+    source_session_id = focus_intent.get("source_session_id")
+    if source_session_id is not None and str(source_session_id).strip():
+        sanitized["source_session_id"] = str(source_session_id)
+    if main_issue is not None:
+        sanitized["main_issue"] = main_issue
+    if next_goal is not None:
+        sanitized["next_goal"] = next_goal
+    return sanitized
+
+
+def _build_retry_focus_intent(
+    *,
+    session_id: str,
+    scenario_type: str,
+    main_issue: Any,
+    next_goal: Any,
+) -> dict[str, Any] | None:
+    if str(scenario_type or "").lower() != "sales":
+        return None
+
+    return _sanitize_retry_focus_intent(
+        {
+            "version": "retry_focus_v1",
+            "source_session_id": session_id,
+            "main_issue": main_issue,
+            "next_goal": next_goal,
+        }
+    )
+
+
+def _build_retry_entry(
+    *,
+    session: PracticeSession,
+    scenario_type: str,
+    main_issue: Any = None,
+    next_goal: Any = None,
+) -> dict[str, Any]:
+    retry_entry: dict[str, Any] = {
+        "scenario_type": scenario_type,
+        "agent_id": str(session.agent_id) if getattr(session, "agent_id", None) else None,
+        "persona_id": str(session.persona_id) if getattr(session, "persona_id", None) else None,
+        "presentation_id": (
+            str(session.presentation_id)
+            if getattr(session, "presentation_id", None)
+            else None
+        ),
+    }
+    focus_intent = _build_retry_focus_intent(
+        session_id=str(session.session_id),
+        scenario_type=scenario_type,
+        main_issue=main_issue,
+        next_goal=next_goal,
+    )
+    if focus_intent is not None:
+        retry_entry["focus_intent"] = focus_intent
+    return retry_entry
+
+
 def _is_admin_user(user: User) -> bool:
     return str(getattr(user, "role", "user")).lower() == "admin"
 
@@ -821,6 +915,19 @@ async def start_session(
         follow_up_behavior = customer_pressure.get("follow_up_behavior")
         if not isinstance(follow_up_behavior, dict):
             follow_up_behavior = {}
+        focus_intent = _sanitize_retry_focus_intent(session_data.focus_intent)
+        if (
+            scenario_type_value == "sales"
+            and session_data.focus_intent is not None
+            and focus_intent is None
+        ):
+            return error_response(
+                "[INVALID_RETRY_FOCUS_INTENT]",
+                status_code=400,
+                message="retry focus intent 必须包含可读的 main_issue 或 next_goal 结构。",
+            )
+        if scenario_type_value == "sales" and focus_intent is not None:
+            session_policy_snapshot["focus_intent"] = deepcopy(focus_intent)
         logger.info(
             "practice_session_voice_policy_resolved",
             user_id=str(current_user.user_id),
@@ -839,6 +946,21 @@ async def start_session(
             require_evidence=bool(follow_up_behavior.get("require_evidence", False)),
             instruction_contract_hash=str(
                 effective_voice_policy.get("instruction_contract_hash") or ""
+            ),
+            retry_focus_issue_type=(
+                focus_intent.get("main_issue", {}).get("issue_type")
+                if isinstance(focus_intent, dict)
+                else None
+            ),
+            retry_focus_goal_type=(
+                focus_intent.get("next_goal", {}).get("goal_type")
+                if isinstance(focus_intent, dict)
+                else None
+            ),
+            retry_focus_source_session_id=(
+                focus_intent.get("source_session_id")
+                if isinstance(focus_intent, dict)
+                else None
             ),
         )
 
@@ -1358,14 +1480,12 @@ async def get_session_report(
         ),
         evidence_completeness=projection.evidence_completeness,
         presentation_review=presentation_review,
-        retry_entry={
-            "scenario_type": normalized_scenario_type,
-            "agent_id": str(session.agent_id) if session.agent_id else None,
-            "persona_id": str(session.persona_id) if session.persona_id else None,
-            "presentation_id": str(session.presentation_id)
-            if session.presentation_id
-            else None,
-        },
+        retry_entry=_build_retry_entry(
+            session=session,
+            scenario_type=normalized_scenario_type,
+            main_issue=projection.main_issue,
+            next_goal=projection.next_goal,
+        ),
     )
 
     logger.info(
