@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api/client";
-import { AdminPersona } from "@/lib/api/types";
+import { AdminPersona, AdminPersonaPolicyHealthReport } from "@/lib/api/types";
 import { GlassCard } from "@/components/ui/glass-card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -50,6 +50,26 @@ const personaStatusLabel: Record<"active" | "inactive", string> = {
     inactive: "已停用",
 };
 
+const policyIssueLabels: Record<string, string> = {
+    missing_policy: "缺少 persona_policy",
+    version_mismatch: "策略版本不一致",
+    empty_system_prompt: "缺少系统提示词",
+    legacy_prompt_drift: "提示词漂移",
+    legacy_kb_drift: "知识库绑定漂移",
+    kb_lock_unbound: "知识库强制模式未绑定",
+    pressure_model_legacy_only: "仍依赖 legacy 压测字段",
+};
+
+const policyIssueBadgeVariant = (issueType: string): "red" | "orange" | "secondary" => {
+    if (issueType === "kb_lock_unbound" || issueType === "missing_policy" || issueType === "empty_system_prompt") {
+        return "red";
+    }
+    if (issueType === "pressure_model_legacy_only" || issueType === "version_mismatch") {
+        return "orange";
+    }
+    return "secondary";
+};
+
 export default function PersonasPage() {
     const toast = useToast();
     const [personas, setPersonas] = useState<AdminPersona[]>([]);
@@ -61,6 +81,8 @@ export default function PersonasPage() {
     const [page, setPage] = useState(1);
     const [total, setTotal] = useState(0);
     const [isFilterOpen, setIsFilterOpen] = useState(false);
+    const [policyHealth, setPolicyHealth] = useState<AdminPersonaPolicyHealthReport | null>(null);
+    const [policyHealthError, setPolicyHealthError] = useState<string | null>(null);
 
     // Create dialog state
     const [isCreateOpen, setIsCreateOpen] = useState(false);
@@ -81,19 +103,36 @@ export default function PersonasPage() {
     const loadData = async () => {
         setIsLoading(true);
         setError(null);
+        setPolicyHealthError(null);
         try {
-            const result = await api.admin.getPersonas({
-                search: searchQuery || undefined,
-                page: page,
-                page_size: 10
-            });
-            // result 是 AdminPersona[] 数组
-            setPersonas(result.items || []);
-            setTotal(result.total || 0);
+            const [personasResult, policyHealthResult] = await Promise.allSettled([
+                api.admin.getPersonas({
+                    search: searchQuery || undefined,
+                    page: page,
+                    page_size: 10,
+                }),
+                api.admin.getPersonaPolicyHealth(200),
+            ]);
+
+            if (personasResult.status === "rejected") {
+                throw personasResult.reason;
+            }
+
+            setPersonas(personasResult.value.items || []);
+            setTotal(personasResult.value.total || 0);
+
+            if (policyHealthResult.status === "fulfilled") {
+                setPolicyHealth(policyHealthResult.value);
+            } else {
+                console.error("Failed to load persona policy health:", policyHealthResult.reason);
+                setPolicyHealth(null);
+                setPolicyHealthError("策略审计暂不可用，列表仍可继续编辑。");
+            }
         } catch (err) {
             console.error("Failed to load personas:", err);
             setError(err instanceof Error ? err.message : "加载失败");
             setPersonas([]);
+            setPolicyHealth(null);
         } finally {
             setIsLoading(false);
         }
@@ -185,6 +224,13 @@ export default function PersonasPage() {
             setStatusUpdatingId(null);
         }
     };
+
+    const sampleIssuesByPersonaId = new Map(
+        (policyHealth?.sample_issues || []).map((issue) => [issue.persona_id, issue]),
+    );
+    const topPolicyIssues = Object.entries(policyHealth?.issue_type_counts || {})
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 4);
 
     return (
         <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -353,6 +399,43 @@ export default function PersonasPage() {
                 </GlassCard>
             )}
 
+            {!isLoading && !error && (policyHealth || policyHealthError) && (
+                <GlassCard className="p-5 space-y-3">
+                    <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                        <div>
+                            <h2 className="text-sm font-bold text-slate-900">Persona 策略审计</h2>
+                            <p className="text-xs text-slate-500">
+                                用现有后台审计接口检查 persona_policy 漂移、知识库强制模式绑定问题，以及 pressure model 是否仍停留在 legacy 字段。
+                            </p>
+                        </div>
+                        {policyHealth && (
+                            <div className="flex flex-wrap gap-2 text-xs">
+                                <Badge variant="green">健康 {policyHealth.summary.healthy}</Badge>
+                                <Badge variant={policyHealth.summary.with_issues > 0 ? "orange" : "secondary"}>
+                                    待处理 {policyHealth.summary.with_issues}
+                                </Badge>
+                            </div>
+                        )}
+                    </div>
+
+                    {policyHealthError ? (
+                        <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-800">
+                            {policyHealthError}
+                        </div>
+                    ) : null}
+
+                    {policyHealth && topPolicyIssues.length > 0 ? (
+                        <div className="flex flex-wrap gap-2">
+                            {topPolicyIssues.map(([issueType, count]) => (
+                                <Badge key={issueType} variant={policyIssueBadgeVariant(issueType)}>
+                                    {(policyIssueLabels[issueType] || issueType) + ` · ${count}`}
+                                </Badge>
+                            ))}
+                        </div>
+                    ) : null}
+                </GlassCard>
+            )}
+
             {/* Personas Table */}
             {!isLoading && !error && (
                 <GlassCard className="overflow-hidden">
@@ -371,6 +454,27 @@ export default function PersonasPage() {
                                 }
                                 columns={[
                                     { label: "类型", value: categoryLabels[p.category] || p.category },
+                                    {
+                                        label: "策略审计",
+                                        value: (() => {
+                                            const sampleIssue = sampleIssuesByPersonaId.get(p.id);
+                                            if (!sampleIssue || sampleIssue.issue_types.length === 0) {
+                                                return <span className="text-emerald-600 font-medium">正常</span>;
+                                            }
+                                            return (
+                                                <div className="flex flex-wrap justify-end gap-1">
+                                                    {sampleIssue.issue_types.slice(0, 2).map((issueType) => (
+                                                        <Badge key={issueType} variant={policyIssueBadgeVariant(issueType)}>
+                                                            {policyIssueLabels[issueType] || issueType}
+                                                        </Badge>
+                                                    ))}
+                                                    {sampleIssue.issue_types.length > 2 ? (
+                                                        <Badge variant="secondary">+{sampleIssue.issue_types.length - 2}</Badge>
+                                                    ) : null}
+                                                </div>
+                                            );
+                                        })(),
+                                    },
                                     {
                                         label: "状态",
                                         value: (
@@ -424,6 +528,7 @@ export default function PersonasPage() {
                                         <th className="px-6 py-4">角色名称</th>
                                         <th className="px-6 py-4">描述</th>
                                         <th className="px-6 py-4">类型</th>
+                                        <th className="px-6 py-4">压力模型审计</th>
                                         <th className="px-6 py-4">难度</th>
                                         <th className="px-6 py-4">状态</th>
                                         <th className="px-6 py-4 text-right">操作</th>
@@ -445,6 +550,26 @@ export default function PersonasPage() {
                                             </td>
                                             <td className="px-6 py-4 font-medium text-slate-700">
                                                 {categoryLabels[p.category] || p.category}
+                                            </td>
+                                            <td className="px-6 py-4">
+                                                {(() => {
+                                                    const sampleIssue = sampleIssuesByPersonaId.get(p.id);
+                                                    if (!sampleIssue || sampleIssue.issue_types.length === 0) {
+                                                        return <span className="text-emerald-600 font-medium">正常</span>;
+                                                    }
+                                                    return (
+                                                        <div className="flex flex-wrap gap-1 justify-end lg:justify-start">
+                                                            {sampleIssue.issue_types.slice(0, 2).map((issueType) => (
+                                                                <Badge key={issueType} variant={policyIssueBadgeVariant(issueType)}>
+                                                                    {policyIssueLabels[issueType] || issueType}
+                                                                </Badge>
+                                                            ))}
+                                                            {sampleIssue.issue_types.length > 2 ? (
+                                                                <Badge variant="secondary">+{sampleIssue.issue_types.length - 2}</Badge>
+                                                            ) : null}
+                                                        </div>
+                                                    );
+                                                })()}
                                             </td>
                                             <td className="px-6 py-4">
                                                 <div className="flex items-center">

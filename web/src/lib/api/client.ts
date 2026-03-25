@@ -21,6 +21,9 @@ import {
     AdminUser,
     AdminAgent,
     AdminPersona,
+    AdminPersonaCustomerPressure,
+    AdminPersonaPolicy,
+    AdminPersonaPolicyHealthReport,
     AdminKnowledgeBase,
     AdminKnowledgeDocument,
     AdminKnowledgeDocumentPreviewResponse,
@@ -557,6 +560,97 @@ function normalizePresentationForbiddenWord(input: unknown): PresentationForbidd
         phrase: toStringValue(raw.phrase),
         suggested_alternative: alternative || undefined,
         page_id: pageId || undefined,
+    };
+}
+
+function normalizeStringList(value: unknown): string[] {
+    if (!Array.isArray(value)) {
+        return [];
+    }
+
+    const normalized: string[] = [];
+    const seen = new Set<string>();
+    for (const item of value) {
+        const text = typeof item === "string" ? item.trim() : String(item ?? "").trim();
+        if (!text) {
+            continue;
+        }
+        const dedupeKey = text.toLowerCase();
+        if (seen.has(dedupeKey)) {
+            continue;
+        }
+        seen.add(dedupeKey);
+        normalized.push(text);
+    }
+    return normalized;
+}
+
+function normalizeAdminPersonaCustomerPressure(value: unknown): AdminPersonaCustomerPressure | undefined {
+    const raw = toRecord(value);
+    if (!Object.keys(raw).length) {
+        return undefined;
+    }
+
+    const pressureDirection = toRecord(raw.pressure_direction);
+    const followUpBehavior = toRecord(raw.follow_up_behavior);
+
+    return {
+        ...raw,
+        source: toStringValue(raw.source) || undefined,
+        pressure_direction: {
+            ...pressureDirection,
+            sales_focus: toStringValue(pressureDirection.sales_focus) || undefined,
+            value_axes: normalizeStringList(pressureDirection.value_axes),
+            objection_axes: normalizeStringList(pressureDirection.objection_axes),
+        },
+        follow_up_behavior: {
+            ...followUpBehavior,
+            question_strategy: toStringValue(followUpBehavior.question_strategy) || undefined,
+            revisit_on_evasion: Boolean(followUpBehavior.revisit_on_evasion),
+            require_evidence: Boolean(followUpBehavior.require_evidence),
+            expected_customer_questions: normalizeStringList(
+                followUpBehavior.expected_customer_questions,
+            ),
+        },
+    };
+}
+
+function normalizeAdminPersonaPolicy(value: unknown): AdminPersonaPolicy | undefined {
+    const raw = toRecord(value);
+    if (!Object.keys(raw).length) {
+        return undefined;
+    }
+
+    return {
+        ...raw,
+        version: typeof raw.version === "number" ? raw.version : undefined,
+        system_prompt: toStringValue(raw.system_prompt) || undefined,
+        knowledge_base_ids: normalizeStringList(raw.knowledge_base_ids),
+        tool_policy: toRecord(raw.tool_policy),
+        sales_focus: toStringValue(raw.sales_focus) || undefined,
+        value_axes: normalizeStringList(raw.value_axes),
+        objection_axes: normalizeStringList(raw.objection_axes),
+        expected_customer_questions: normalizeStringList(raw.expected_customer_questions),
+        customer_pressure: normalizeAdminPersonaCustomerPressure(raw.customer_pressure),
+    };
+}
+
+function normalizeAdminPersona(input: unknown): AdminPersona {
+    const raw = toRecord(input);
+    return {
+        ...raw,
+        id: toStringValue(raw.id),
+        name: toStringValue(raw.name),
+        description: toStringValue(raw.description),
+        category: toStringValue(raw.category),
+        difficulty: toStringValue(raw.difficulty),
+        status: toStringValue(raw.status),
+        system_prompt: toStringValue(raw.system_prompt),
+        created_at: toStringValue(raw.created_at) || undefined,
+        updated_at: toStringValue(raw.updated_at) || undefined,
+        knowledge_base_ids: normalizeStringList(raw.knowledge_base_ids),
+        persona_policy: normalizeAdminPersonaPolicy(raw.persona_policy),
+        tts_config: toRecord(raw.tts_config) as AdminPersona["tts_config"],
     };
 }
 
@@ -1497,27 +1591,49 @@ export const api = {
 
             const result = await apiFetch<{ personas?: AdminPersona[]; items?: AdminPersona[]; total?: number }>(`/admin/personas?${searchParams}`);
             return {
-                items: (result.personas || result.items || []) as AdminPersona[],
+                items: (result.personas || result.items || []).map(normalizeAdminPersona),
                 total: result.total || 0
             };
         },
 
+        getPersonaPolicyHealth: async (sampleLimit = 50) => {
+            const searchParams = new URLSearchParams();
+            searchParams.set("sample_limit", String(sampleLimit));
+            const result = await apiFetch<AdminPersonaPolicyHealthReport>(`/admin/personas/policy-health?${searchParams}`);
+            return {
+                generated_at: toStringValue(result?.generated_at),
+                summary: {
+                    total: toNumberValue(result?.summary?.total, 0),
+                    healthy: toNumberValue(result?.summary?.healthy, 0),
+                    with_issues: toNumberValue(result?.summary?.with_issues, 0),
+                },
+                issue_type_counts:
+                    result?.issue_type_counts && typeof result.issue_type_counts === "object"
+                        ? result.issue_type_counts
+                        : {},
+                sample_issues: Array.isArray(result?.sample_issues) ? result.sample_issues : [],
+            } satisfies AdminPersonaPolicyHealthReport;
+        },
+
         getPersona: async (id: string) => {
-            return apiFetch<AdminPersona>(`/admin/personas/${id}`);
+            const result = await apiFetch<AdminPersona>(`/admin/personas/${id}`);
+            return normalizeAdminPersona(result);
         },
 
         createPersona: async (data: Partial<AdminPersona>) => {
-            return apiFetch<AdminPersona>("/admin/personas", {
+            const result = await apiFetch<AdminPersona>("/admin/personas", {
                 method: "POST",
                 body: JSON.stringify(data),
             });
+            return normalizeAdminPersona(result);
         },
 
         updatePersona: async (id: string, data: Partial<AdminPersona>) => {
-            return apiFetch<AdminPersona>(`/admin/personas/${id}`, {
+            const result = await apiFetch<AdminPersona>(`/admin/personas/${id}`, {
                 method: "PUT",
                 body: JSON.stringify(data),
             });
+            return normalizeAdminPersona(result);
         },
 
         deletePersona: async (id: string) => {

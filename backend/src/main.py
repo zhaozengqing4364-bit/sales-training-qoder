@@ -304,7 +304,7 @@ async def dev_login(db: AsyncSession = Depends(get_db)):
     Development mode login - creates a mock user and returns a JWT token
     Only active when ENVIRONMENT=development
     """
-    if os.getenv("ENVIRONMENT") != "development":
+    if os.getenv("ENVIRONMENT", "development").strip().lower() != "development":
         from fastapi import HTTPException
 
         raise HTTPException(status_code=403, detail="Development mode only")

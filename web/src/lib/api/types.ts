@@ -354,6 +354,67 @@ export interface AdminAgent {
     capabilities_config?: Record<string, unknown>;
 }
 
+export type AdminPersonaPressureSource =
+    | "explicit"
+    | "legacy_sales_focus_extensions"
+    | "none"
+    | string;
+
+export interface AdminPersonaPressureDirection {
+    sales_focus?: string;
+    value_axes?: string[];
+    objection_axes?: string[];
+    [key: string]: unknown;
+}
+
+export interface AdminPersonaPressureFollowUpBehavior {
+    question_strategy?: string;
+    revisit_on_evasion?: boolean;
+    require_evidence?: boolean;
+    expected_customer_questions?: string[];
+    [key: string]: unknown;
+}
+
+export interface AdminPersonaCustomerPressure {
+    source?: AdminPersonaPressureSource;
+    pressure_direction?: AdminPersonaPressureDirection;
+    follow_up_behavior?: AdminPersonaPressureFollowUpBehavior;
+    [key: string]: unknown;
+}
+
+export interface AdminPersonaPolicy {
+    version?: number;
+    system_prompt?: string;
+    knowledge_base_ids?: string[];
+    tool_policy?: Record<string, unknown>;
+    sales_focus?: string;
+    value_axes?: string[];
+    objection_axes?: string[];
+    expected_customer_questions?: string[];
+    customer_pressure?: AdminPersonaCustomerPressure;
+    [key: string]: unknown;
+}
+
+export interface AdminPersonaPolicyHealthIssue {
+    persona_id: string;
+    persona_name: string;
+    issue_types: string[];
+    policy_version?: number | null;
+    require_kb_grounding?: boolean;
+    pressure_source?: string | null;
+}
+
+export interface AdminPersonaPolicyHealthReport {
+    generated_at: string;
+    summary: {
+        total: number;
+        healthy: number;
+        with_issues: number;
+    };
+    issue_type_counts: Record<string, number>;
+    sample_issues: AdminPersonaPolicyHealthIssue[];
+}
+
 export interface AdminPersona {
     id: string;
     name: string;
@@ -367,17 +428,11 @@ export interface AdminPersona {
     agent_id?: string;
     agent_name?: string;
     knowledge_bases?: AdminKnowledgeBase[];
-    created_at: string;
-    updated_at: string;
+    created_at?: string;
+    updated_at?: string;
     usage_count?: number;
     knowledge_base_ids?: string[];
-    persona_policy?: {
-        version?: number;
-        system_prompt?: string;
-        knowledge_base_ids?: string[];
-        tool_policy?: Record<string, unknown>;
-        [key: string]: unknown;
-    };
+    persona_policy?: AdminPersonaPolicy;
     tts_config?: {
         voice?: string;
         rate?: string;

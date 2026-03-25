@@ -38,6 +38,10 @@ security = HTTPBearer(auto_error=False)
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 
+def _current_environment() -> str:
+    return os.getenv("ENVIRONMENT", "development").strip().lower() or "development"
+
+
 def get_session_cookie_name() -> str:
     return AUTH_SESSION_COOKIE_NAME
 
@@ -233,9 +237,7 @@ async def get_dev_user(db: AsyncSession) -> User:
     Development mode: Get or create a mock user for testing
     Only active when ENVIRONMENT=development
     """
-    import os
-
-    if os.getenv("ENVIRONMENT") != "development":
+    if _current_environment() != "development":
         raise HTTPException(status_code=401, detail="Development mode only")
 
     # Try to find existing dev user by either stable email or stable WeChat ID.
@@ -288,7 +290,7 @@ async def get_current_user_optional(
     import os
 
     # Development mode: use dev user if no token provided
-    if os.getenv("ENVIRONMENT") == "development":
+    if _current_environment() == "development":
         try:
             return await get_dev_user(db)
         except (RuntimeError, ValueError, OSError):

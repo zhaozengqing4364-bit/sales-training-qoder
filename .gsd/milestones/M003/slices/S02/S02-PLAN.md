@@ -31,7 +31,7 @@ Reuse the current Persona authority chain only: `backend/src/agent/services/pers
   - Files: `backend/src/sales_bot/services/voice_runtime_policy.py`, `backend/src/sales_bot/services/voice_instruction_compiler.py`, `backend/src/common/api/practice.py`, `backend/tests/unit/test_voice_instruction_compiler.py`, `backend/tests/integration/test_knowledge_flow.py`
   - Verify: cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_voice_instruction_compiler.py tests/integration/test_knowledge_flow.py
 
-- [ ] **T03: Let admins edit and inspect the pressure model on current Persona pages** `est:75m`
+- [x] **T03: Let admins edit and inspect the pressure model on current Persona pages** `est:75m`
   Expose and validate the pressure model on the existing admin Persona surfaces so operators can edit, preview, and audit the behavior they are about to ship. Stay on the current admin Persona list/detail pages and API client/types; do not create a new management surface.
   - Files: `web/src/app/admin/personas/page.tsx`, `web/src/app/admin/personas/[id]/page.tsx`, `web/src/lib/api/client.ts`, `web/src/lib/api/types.ts`, `web/src/app/admin/personas/[id]/page.test.tsx`
   - Verify: cd web && npm test -- --run 'src/app/admin/personas/[id]/page.test.tsx'
