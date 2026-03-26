@@ -1471,3 +1471,24 @@ Append one entry per iteration:
   verification results: passed; the focused T01 backend/web suites are green again with a repaired VERIFY artifact, and the browser proof confirmed that localhost auth keeps the current sales review loop usable on history/report/replay/retry even when replay must explain a degraded no-matching-highlight anchor.
   success signal status: current user routes now have fresh evidence that a completed sales session can be opened from history, reviewed via report and replay, and relaunched as a focused retry without leaving the shared route family.
   rollback note: if future verification regresses into repo-root pytest or cd ../web failures again, compare the generated VERIFY artifact against T01-PLAN before touching product code; this turn proved the feature path itself was already healthy.
+
+- time: 2026-03-26T13:07:49+08:00
+  mode: stabilize
+  item id: M004-S05-T03
+  files changed:
+    - .gsd/milestones/M004/slices/S05/S05-UAT.md
+    - .artifacts/m004-s05-t03/verify-playwright.js
+    - .artifacts/m004-s05-t03/summary.json
+    - .artifacts/m004-s05-t03/verification.json
+    - .gsd/KNOWLEDGE.md
+    - .codex/loop/state.json
+  summary: Captured the live PPT learner review loop on the shipped shared routes, documented the current sibling report/replay entry shape, and added degraded missing-page-metadata proof to the shared S05 UAT artifact.
+  verification commands:
+    - cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_replay_service.py tests/integration/test_practice_evidence_flow.py
+    - npm test -- --run 'src/app/(user)/practice/[sessionId]/report/page.test.tsx' 'src/app/(user)/practice/[sessionId]/replay/page.test.tsx' 'src/app/(dashboard)/history/page.test.tsx'
+    - node .artifacts/m004-s05-t02/verify-playwright.js
+    - node .artifacts/m004-s05-t03/verify-playwright.js
+    - test -s .gsd/milestones/M004/slices/S05/S05-UAT.md && test -s .artifacts/m004-s05-t02/summary.json && test -s .artifacts/m004-s05-t03/summary.json && test -f .artifacts/m004-s05-t02/history.png && test -f .artifacts/m004-s05-t02/report.png && test -f .artifacts/m004-s05-t02/replay.png && test -f .artifacts/m004-s05-t02/retry.png && test -f .artifacts/m004-s05-t03/history.png && test -f .artifacts/m004-s05-t03/report.png && test -f .artifacts/m004-s05-t03/replay.png && test -f .artifacts/m004-s05-t03/retry.png && test -f .artifacts/m004-s05-t03/degraded-report.png && test -f .artifacts/m004-s05-t03/degraded-replay.png
+  verification results: all five checks passed; the slice regression net stayed green, the sales proof pack was regenerated, the PPT proof pack validated both complete and degraded presentation evidence on current routes, and the shared UAT file is non-empty with both halves documented.
+  success signal status: both scenario types now have live learner-route proof on localhost, and future browser UAT can rely on the explicit note that PPT replay remains a sibling history entrypoint while report exposes retry only.
+  rollback note: if a future UI revision adds a direct PPT report-to-replay CTA, update the shared UAT and Knowledge note together instead of treating the current sibling-route behavior as a regression.

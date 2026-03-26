@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "exported_at": "2026-03-26T04:51:47.424Z",
+  "exported_at": "2026-03-26T05:09:27.111Z",
   "milestones": [
     {
       "id": "M001",
@@ -2213,19 +2213,30 @@
       "milestone_id": "M004",
       "slice_id": "S05",
       "id": "T03",
-      "title": "Capture one live PPT learning-loop proof on current shared routes",
-      "status": "pending",
-      "one_liner": "",
-      "narrative": "",
-      "verification_result": "",
+      "title": "Captured the live PPT learner review loop on the shared report/replay routes and documented the current sibling-route replay entry plus degraded page-metadata behavior.",
+      "status": "complete",
+      "one_liner": "Captured the live PPT learner review loop on the shared report/replay routes and documented the current sibling-route replay entry plus degraded page-metadata behavior.",
+      "narrative": "Extended the shared S05 UAT artifact from the existing sales proof to a full two-scenario learner-route proof. I identified one completed PPT session with stable page evidence (`8531c7f6-50da-4934-9fd4-63784c791edf`) and one degraded PPT session that still lacks page metadata (`c6f66bdc-26ca-487a-8f58-5dd7f61934f4`), then wrote `.artifacts/m004-s05-t03/verify-playwright.js` so the route proof is reproducible. The script authenticates through dev-login, verifies the completed PPT history row still exposes both shared learner routes, proves the report page renders the canonical PPT baseline and page-2 issue cluster, proves replay can inspect page 2 and jump to the evidence-bearing turn, launches a retry that preserves the original `presentation_id` plus agent/persona configuration, and separately proves the degraded report/replay copy stays explicit when page metadata is missing. After that passed, I rewrote `S05-UAT.md` so the slice UAT now documents both the sales and PPT halves of S05, added a Knowledge note recording the current PPT route shape, and updated the loop state/log so the continuity layer reflects that the slice’s last task is done and ready for close-out.",
+      "verification_result": "Passed the focused backend replay/evidence regression suite, the focused report/replay/history Vitest suite, the existing sales Playwright proof, and the new PPT Playwright proof. The PPT browser verifier confirmed the completed history row still exposes both shared learner routes, the report page renders the canonical PPT baseline and page-2 issue cluster, replay can inspect page 2 and jump to the evidence-bearing turn, retry preserves the original presentation configuration, degraded report/replay copy stays explicit under `missing_page_metadata`, and the combined UAT/artifact pack exists on disk.",
       "duration": "",
-      "completed_at": null,
+      "completed_at": "2026-03-26T05:09:27.072Z",
       "blocker_discovered": false,
-      "deviations": "",
-      "known_issues": "",
-      "key_files": [],
-      "key_decisions": [],
-      "full_summary_md": "",
+      "deviations": "The plan read like a PPT analogue of the sales `report -> replay -> retry` path, but the current shipped PPT UI exposes replay as a sibling history action rather than a CTA on the report page. I proved the actual shared learner-route family instead of inventing a non-existent report-side replay handoff. I also used a local Playwright harness under `.artifacts/` because the built-in browser tool runtime failed before navigation in this environment.",
+      "known_issues": "The current PPT report page still lacks a direct replay CTA, so learners enter replay from the shared history row rather than from report itself. Local backend startup also still warns that `python-pptx` and `Pillow` are not installed, so this proof covers persisted PPT evidence and route behavior, not fresh thumbnail/parsing fidelity.",
+      "key_files": [
+        ".gsd/milestones/M004/slices/S05/S05-UAT.md",
+        ".artifacts/m004-s05-t03/verify-playwright.js",
+        ".artifacts/m004-s05-t03/summary.json",
+        ".artifacts/m004-s05-t03/verification.json",
+        ".gsd/KNOWLEDGE.md",
+        ".codex/loop/state.json",
+        ".codex/loop/log.md"
+      ],
+      "key_decisions": [
+        "Proved the PPT loop on the current shipped learner route family exactly as it exists: completed history rows expose sibling `报告` and `回放` entrypoints, while the PPT report page itself currently exposes retry only.",
+        "Regenerated both the existing sales proof pack and the new PPT proof pack in the final slice gate so S05 closes with one fresh route-level evidence set for each scenario type."
+      ],
+      "full_summary_md": "---\nid: T03\nparent: S05\nmilestone: M004\nkey_files:\n  - .gsd/milestones/M004/slices/S05/S05-UAT.md\n  - .artifacts/m004-s05-t03/verify-playwright.js\n  - .artifacts/m004-s05-t03/summary.json\n  - .artifacts/m004-s05-t03/verification.json\n  - .gsd/KNOWLEDGE.md\n  - .codex/loop/state.json\n  - .codex/loop/log.md\nkey_decisions:\n  - Proved the PPT loop on the current shipped learner route family exactly as it exists: completed history rows expose sibling `报告` and `回放` entrypoints, while the PPT report page itself currently exposes retry only.\n  - Regenerated both the existing sales proof pack and the new PPT proof pack in the final slice gate so S05 closes with one fresh route-level evidence set for each scenario type.\nduration: \"\"\nverification_result: passed\ncompleted_at: 2026-03-26T05:09:27.073Z\nblocker_discovered: false\n---\n\n# T03: Captured the live PPT learner review loop on the shared report/replay routes and documented the current sibling-route replay entry plus degraded page-metadata behavior.\n\n**Captured the live PPT learner review loop on the shared report/replay routes and documented the current sibling-route replay entry plus degraded page-metadata behavior.**\n\n## What Happened\n\nExtended the shared S05 UAT artifact from the existing sales proof to a full two-scenario learner-route proof. I identified one completed PPT session with stable page evidence (`8531c7f6-50da-4934-9fd4-63784c791edf`) and one degraded PPT session that still lacks page metadata (`c6f66bdc-26ca-487a-8f58-5dd7f61934f4`), then wrote `.artifacts/m004-s05-t03/verify-playwright.js` so the route proof is reproducible. The script authenticates through dev-login, verifies the completed PPT history row still exposes both shared learner routes, proves the report page renders the canonical PPT baseline and page-2 issue cluster, proves replay can inspect page 2 and jump to the evidence-bearing turn, launches a retry that preserves the original `presentation_id` plus agent/persona configuration, and separately proves the degraded report/replay copy stays explicit when page metadata is missing. After that passed, I rewrote `S05-UAT.md` so the slice UAT now documents both the sales and PPT halves of S05, added a Knowledge note recording the current PPT route shape, and updated the loop state/log so the continuity layer reflects that the slice’s last task is done and ready for close-out.\n\n## Verification\n\nPassed the focused backend replay/evidence regression suite, the focused report/replay/history Vitest suite, the existing sales Playwright proof, and the new PPT Playwright proof. The PPT browser verifier confirmed the completed history row still exposes both shared learner routes, the report page renders the canonical PPT baseline and page-2 issue cluster, replay can inspect page 2 and jump to the evidence-bearing turn, retry preserves the original presentation configuration, degraded report/replay copy stays explicit under `missing_page_metadata`, and the combined UAT/artifact pack exists on disk.\n\n## Verification Evidence\n\n| # | Command | Exit Code | Verdict | Duration |\n|---|---------|-----------|---------|----------|\n| 1 | `cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_replay_service.py tests/integration/test_practice_evidence_flow.py` | 0 | ✅ pass | 5583ms |\n| 2 | `npm test -- --run 'src/app/(user)/practice/[sessionId]/report/page.test.tsx' 'src/app/(user)/practice/[sessionId]/replay/page.test.tsx' 'src/app/(dashboard)/history/page.test.tsx'` | 0 | ✅ pass | 1897ms |\n| 3 | `node .artifacts/m004-s05-t02/verify-playwright.js` | 0 | ✅ pass | 3953ms |\n| 4 | `node .artifacts/m004-s05-t03/verify-playwright.js` | 0 | ✅ pass | 7180ms |\n| 5 | `test -s .gsd/milestones/M004/slices/S05/S05-UAT.md && test -s .artifacts/m004-s05-t02/summary.json && test -s .artifacts/m004-s05-t03/summary.json && test -f .artifacts/m004-s05-t02/history.png && test -f .artifacts/m004-s05-t02/report.png && test -f .artifacts/m004-s05-t02/replay.png && test -f .artifacts/m004-s05-t02/retry.png && test -f .artifacts/m004-s05-t03/history.png && test -f .artifacts/m004-s05-t03/report.png && test -f .artifacts/m004-s05-t03/replay.png && test -f .artifacts/m004-s05-t03/retry.png && test -f .artifacts/m004-s05-t03/degraded-report.png && test -f .artifacts/m004-s05-t03/degraded-replay.png` | 0 | ✅ pass | 3ms |\n\n\n## Deviations\n\nThe plan read like a PPT analogue of the sales `report -> replay -> retry` path, but the current shipped PPT UI exposes replay as a sibling history action rather than a CTA on the report page. I proved the actual shared learner-route family instead of inventing a non-existent report-side replay handoff. I also used a local Playwright harness under `.artifacts/` because the built-in browser tool runtime failed before navigation in this environment.\n\n## Known Issues\n\nThe current PPT report page still lacks a direct replay CTA, so learners enter replay from the shared history row rather than from report itself. Local backend startup also still warns that `python-pptx` and `Pillow` are not installed, so this proof covers persisted PPT evidence and route behavior, not fresh thumbnail/parsing fidelity.\n\n## Files Created/Modified\n\n- `.gsd/milestones/M004/slices/S05/S05-UAT.md`\n- `.artifacts/m004-s05-t03/verify-playwright.js`\n- `.artifacts/m004-s05-t03/summary.json`\n- `.artifacts/m004-s05-t03/verification.json`\n- `.gsd/KNOWLEDGE.md`\n- `.codex/loop/state.json`\n- `.codex/loop/log.md`\n",
       "description": "Run one real PPT learning path on the current shared report/replay routes and capture the page-level evidence and degraded-proof behavior when relevant. Use the same acceptance artifact family as the sales path.",
       "estimate": "90m",
       "files": [
@@ -4587,6 +4598,61 @@
       "verdict": "✅ pass",
       "duration_ms": 0,
       "created_at": "2026-03-26T04:51:47.399Z"
+    },
+    {
+      "id": 77,
+      "task_id": "T03",
+      "slice_id": "S05",
+      "milestone_id": "M004",
+      "command": "cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_replay_service.py tests/integration/test_practice_evidence_flow.py",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 5583,
+      "created_at": "2026-03-26T05:09:27.072Z"
+    },
+    {
+      "id": 78,
+      "task_id": "T03",
+      "slice_id": "S05",
+      "milestone_id": "M004",
+      "command": "npm test -- --run 'src/app/(user)/practice/[sessionId]/report/page.test.tsx' 'src/app/(user)/practice/[sessionId]/replay/page.test.tsx' 'src/app/(dashboard)/history/page.test.tsx'",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 1897,
+      "created_at": "2026-03-26T05:09:27.072Z"
+    },
+    {
+      "id": 79,
+      "task_id": "T03",
+      "slice_id": "S05",
+      "milestone_id": "M004",
+      "command": "node .artifacts/m004-s05-t02/verify-playwright.js",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 3953,
+      "created_at": "2026-03-26T05:09:27.072Z"
+    },
+    {
+      "id": 80,
+      "task_id": "T03",
+      "slice_id": "S05",
+      "milestone_id": "M004",
+      "command": "node .artifacts/m004-s05-t03/verify-playwright.js",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 7180,
+      "created_at": "2026-03-26T05:09:27.072Z"
+    },
+    {
+      "id": 81,
+      "task_id": "T03",
+      "slice_id": "S05",
+      "milestone_id": "M004",
+      "command": "test -s .gsd/milestones/M004/slices/S05/S05-UAT.md && test -s .artifacts/m004-s05-t02/summary.json && test -s .artifacts/m004-s05-t03/summary.json && test -f .artifacts/m004-s05-t02/history.png && test -f .artifacts/m004-s05-t02/report.png && test -f .artifacts/m004-s05-t02/replay.png && test -f .artifacts/m004-s05-t02/retry.png && test -f .artifacts/m004-s05-t03/history.png && test -f .artifacts/m004-s05-t03/report.png && test -f .artifacts/m004-s05-t03/replay.png && test -f .artifacts/m004-s05-t03/retry.png && test -f .artifacts/m004-s05-t03/degraded-report.png && test -f .artifacts/m004-s05-t03/degraded-replay.png",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 3,
+      "created_at": "2026-03-26T05:09:27.072Z"
     }
   ]
 }
