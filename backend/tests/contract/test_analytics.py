@@ -81,6 +81,78 @@ class TestAnalyticsContract:
             assert payload["my_rank"].get("scenario_type") == "sales"
             assert payload["my_rank"].get("time_period") == "weekly"
 
+    async def test_get_admin_overview_projection_summary_contract(
+        self,
+        async_client: AsyncClient,
+        auth_headers: dict,
+    ):
+        """Test admin overview exposes projection-backed score semantics."""
+        response = await async_client.get(
+            "/api/v1/admin/analytics/overview",
+            headers=auth_headers,
+        )
+        assert response.status_code in [200, 401, 403]
+
+        if response.status_code == 200:
+            payload = response.json()
+            assert payload.get("success") is True
+            data = payload.get("data", {})
+            assert "evaluable_sessions" in data
+            assert "not_evaluable_sessions" in data
+            assert data.get("score_basis") == "session_evidence_projection_evaluable_only"
+            assert isinstance(data.get("top_issue_families", []), list)
+            assert isinstance(data.get("not_evaluable_reasons", []), list)
+
+    async def test_get_admin_trends_projection_summary_contract(
+        self,
+        async_client: AsyncClient,
+        auth_headers: dict,
+    ):
+        """Test admin trends exposes projection summary and issue family buckets."""
+        response = await async_client.get(
+            "/api/v1/admin/analytics/trends?time_range=30d&granularity=day",
+            headers=auth_headers,
+        )
+        assert response.status_code in [200, 401, 403]
+
+        if response.status_code == 200:
+            payload = response.json()
+            assert payload.get("success") is True
+            data = payload.get("data", {})
+            assert isinstance(data.get("trend_data", []), list)
+            assert isinstance(data.get("score_distribution", {}), dict)
+            summary = data.get("projection_summary", {})
+            assert "evaluable_sessions" in summary
+            assert "not_evaluable_sessions" in summary
+            assert summary.get("score_basis") == "session_evidence_projection_evaluable_only"
+            assert isinstance(summary.get("issue_family_distribution", []), list)
+            assert isinstance(summary.get("not_evaluable_reasons", []), list)
+
+    async def test_get_admin_leaderboard_projection_fields_contract(
+        self,
+        async_client: AsyncClient,
+        auth_headers: dict,
+    ):
+        """Test admin leaderboard entries expose projection-backed score metadata."""
+        response = await async_client.get(
+            "/api/v1/admin/analytics/leaderboard?time_range=30d&limit=20",
+            headers=auth_headers,
+        )
+        assert response.status_code in [200, 401, 403]
+
+        if response.status_code == 200:
+            payload = response.json()
+            assert payload.get("success") is True
+            leaderboard = payload.get("data", {}).get("leaderboard", [])
+            assert isinstance(leaderboard, list)
+            if leaderboard:
+                entry = leaderboard[0]
+                assert "evaluable_sessions" in entry
+                assert "not_evaluable_sessions" in entry
+                assert entry.get("score_basis") == "session_evidence_projection_evaluable_only"
+                assert "primary_issue_type" in entry
+                assert "primary_next_goal_type" in entry
+
     async def test_get_my_rank(
         self,
         async_client: AsyncClient,

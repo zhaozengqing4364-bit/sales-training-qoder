@@ -485,6 +485,13 @@ async def get_user_stats(
             "average_score": round(float(projection_scores["average_score"] or 0), 1),
             "best_score": round(float(projection_scores["best_score"] or 0), 1),
             "worst_score": round(float(projection_scores["worst_score"] or 0), 1),
+            "evaluable_sessions": int(projection_scores.get("evaluable_sessions") or 0),
+            "not_evaluable_sessions": int(
+                projection_scores.get("not_evaluable_sessions") or 0
+            ),
+            "score_basis": str(
+                projection_scores.get("score_basis") or "session_evidence_projection_evaluable_only"
+            ),
             "total_duration_minutes": round((row.total_duration or 0) / 60, 1),
             "last_practice": row.last_practice.isoformat() if row.last_practice else None,
             "unique_agents_used": row.unique_agents or 0,

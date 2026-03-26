@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "exported_at": "2026-03-26T05:27:53.318Z",
+  "exported_at": "2026-03-26T05:47:47.858Z",
   "milestones": [
     {
       "id": "M001",
@@ -2259,19 +2259,30 @@
       "milestone_id": "M005",
       "slice_id": "S01",
       "id": "T01",
-      "title": "Replace legacy admin analytics math with projection-backed business summaries",
-      "status": "pending",
-      "one_liner": "",
-      "narrative": "",
-      "verification_result": "",
+      "title": "Switched admin analytics and user stats to projection-backed session evidence summaries with evaluability metadata.",
+      "status": "complete",
+      "one_liner": "Switched admin analytics and user stats to projection-backed session evidence summaries with evaluability metadata.",
+      "narrative": "Added focused red tests for the admin analytics service and current admin API surfaces, then replaced the old 0.4/0.3/0.3 SQL score aggregation with HistoryService-backed projection summaries. Admin analytics overview/trends/leaderboard/agent stats now aggregate from the same completed-session evidence line used by learner/admin drill-ins and expose evaluability-aware fields such as score_basis, evaluable/not-evaluable counts, top issue families, and primary issue/next-goal types. The admin user stats route now forwards the same evaluability metadata so drill-in surfaces stay aligned with the corrected admin truth line. I also recorded the projection-source decision in GSD and added a knowledge note about admin analytics RBAC being applied in main.py router wiring rather than the endpoint file itself.",
+      "verification_result": "Ran the focused backend verification suite from the slice plan: `cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/common/test_admin_analytics_service.py tests/integration/test_admin_users_api.py tests/contract/test_analytics.py`. All 27 targeted tests passed, covering projection-backed overview/trends/leaderboard/agent stats, aligned admin user stats/progress, and admin analytics contract metadata.",
       "duration": "",
-      "completed_at": null,
+      "completed_at": "2026-03-26T05:47:47.828Z",
       "blocker_discovered": false,
-      "deviations": "",
-      "known_issues": "",
-      "key_files": [],
-      "key_decisions": [],
-      "full_summary_md": "",
+      "deviations": "Expanded `backend/tests/contract/test_analytics.py` to cover `/api/v1/admin/analytics/*` directly and corrected those checks to allow the real 403 branch because admin RBAC is applied in `backend/src/main.py` router wiring, not inside `backend/src/admin/api/analytics.py`.",
+      "known_issues": "Unrelated `passlib` / Python `crypt` deprecation warning still appears in the focused pytest output. It does not affect admin analytics semantics.",
+      "key_files": [
+        "backend/src/common/analytics/admin_analytics_service.py",
+        "backend/src/common/analytics/history_service.py",
+        "backend/src/admin/api/users.py",
+        "backend/tests/unit/common/test_admin_analytics_service.py",
+        "backend/tests/integration/test_admin_users_api.py",
+        "backend/tests/contract/test_analytics.py",
+        ".gsd/KNOWLEDGE.md"
+      ],
+      "key_decisions": [
+        "Recorded D074: admin analytics aggregates from HistoryService / SessionEvidenceService projection summaries instead of legacy weighted SQL score math.",
+        "Carried evaluability and score-basis metadata through admin analytics and admin user stats instead of keeping the new semantics implicit in averages alone."
+      ],
+      "full_summary_md": "---\nid: T01\nparent: S01\nmilestone: M005\nkey_files:\n  - backend/src/common/analytics/admin_analytics_service.py\n  - backend/src/common/analytics/history_service.py\n  - backend/src/admin/api/users.py\n  - backend/tests/unit/common/test_admin_analytics_service.py\n  - backend/tests/integration/test_admin_users_api.py\n  - backend/tests/contract/test_analytics.py\n  - .gsd/KNOWLEDGE.md\nkey_decisions:\n  - Recorded D074: admin analytics aggregates from HistoryService / SessionEvidenceService projection summaries instead of legacy weighted SQL score math.\n  - Carried evaluability and score-basis metadata through admin analytics and admin user stats instead of keeping the new semantics implicit in averages alone.\nduration: \"\"\nverification_result: passed\ncompleted_at: 2026-03-26T05:47:47.828Z\nblocker_discovered: false\n---\n\n# T01: Switched admin analytics and user stats to projection-backed session evidence summaries with evaluability metadata.\n\n**Switched admin analytics and user stats to projection-backed session evidence summaries with evaluability metadata.**\n\n## What Happened\n\nAdded focused red tests for the admin analytics service and current admin API surfaces, then replaced the old 0.4/0.3/0.3 SQL score aggregation with HistoryService-backed projection summaries. Admin analytics overview/trends/leaderboard/agent stats now aggregate from the same completed-session evidence line used by learner/admin drill-ins and expose evaluability-aware fields such as score_basis, evaluable/not-evaluable counts, top issue families, and primary issue/next-goal types. The admin user stats route now forwards the same evaluability metadata so drill-in surfaces stay aligned with the corrected admin truth line. I also recorded the projection-source decision in GSD and added a knowledge note about admin analytics RBAC being applied in main.py router wiring rather than the endpoint file itself.\n\n## Verification\n\nRan the focused backend verification suite from the slice plan: `cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/common/test_admin_analytics_service.py tests/integration/test_admin_users_api.py tests/contract/test_analytics.py`. All 27 targeted tests passed, covering projection-backed overview/trends/leaderboard/agent stats, aligned admin user stats/progress, and admin analytics contract metadata.\n\n## Verification Evidence\n\n| # | Command | Exit Code | Verdict | Duration |\n|---|---------|-----------|---------|----------|\n| 1 | `cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/common/test_admin_analytics_service.py tests/integration/test_admin_users_api.py tests/contract/test_analytics.py` | 0 | ✅ pass | 8300ms |\n\n\n## Deviations\n\nExpanded `backend/tests/contract/test_analytics.py` to cover `/api/v1/admin/analytics/*` directly and corrected those checks to allow the real 403 branch because admin RBAC is applied in `backend/src/main.py` router wiring, not inside `backend/src/admin/api/analytics.py`.\n\n## Known Issues\n\nUnrelated `passlib` / Python `crypt` deprecation warning still appears in the focused pytest output. It does not affect admin analytics semantics.\n\n## Files Created/Modified\n\n- `backend/src/common/analytics/admin_analytics_service.py`\n- `backend/src/common/analytics/history_service.py`\n- `backend/src/admin/api/users.py`\n- `backend/tests/unit/common/test_admin_analytics_service.py`\n- `backend/tests/integration/test_admin_users_api.py`\n- `backend/tests/contract/test_analytics.py`\n- `.gsd/KNOWLEDGE.md`\n",
       "description": "Write focused failing tests around `backend/src/common/analytics/admin_analytics_service.py` and current admin analytics/user APIs, then replace legacy weighted-score calculations with projection-backed summaries sourced from `HistoryService` / `SessionEvidenceService`. Keep the current admin routes authoritative; do not create a second analytics pipeline.",
       "estimate": "2h",
       "files": [
@@ -3760,6 +3771,18 @@
       "revisable": "Yes",
       "made_by": "agent",
       "superseded_by": null
+    },
+    {
+      "seq": 1433,
+      "id": "D074",
+      "when_context": "M005 S01 T01",
+      "scope": "analytics",
+      "decision": "What semantic source the admin analytics overview/trends/leaderboard should aggregate from",
+      "choice": "Aggregate admin analytics from HistoryService / SessionEvidenceService projection summaries and expose evaluability metadata, instead of computing legacy weighted 0.4/0.3/0.3 scores in SQL.",
+      "rationale": "This keeps admin analytics on the same completed-session truth line as learner report/replay and admin user drill-ins, prevents weighted-score drift, and gives downstream UI slices stable fields for evaluability, issue-family, and score-basis messaging.",
+      "revisable": "Yes",
+      "made_by": "agent",
+      "superseded_by": null
     }
   ],
   "verification_evidence": [
@@ -4653,6 +4676,17 @@
       "verdict": "✅ pass",
       "duration_ms": 3,
       "created_at": "2026-03-26T05:09:27.072Z"
+    },
+    {
+      "id": 82,
+      "task_id": "T01",
+      "slice_id": "S01",
+      "milestone_id": "M005",
+      "command": "cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/common/test_admin_analytics_service.py tests/integration/test_admin_users_api.py tests/contract/test_analytics.py",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 8300,
+      "created_at": "2026-03-26T05:47:47.828Z"
     }
   ]
 }

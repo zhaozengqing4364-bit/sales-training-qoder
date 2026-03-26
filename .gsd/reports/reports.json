@@ -2,7 +2,7 @@
   "version": 1,
   "projectName": "销售训练qoder",
   "projectPath": "/Users/zhaozengqing/github/销售训练qoder",
-  "gsdVersion": "2.44.0",
+  "gsdVersion": "2.46.0",
   "entries": [
     {
       "filename": "M001-2026-03-24T10-38-09.html",
@@ -33,6 +33,22 @@
       "doneSlices": 14,
       "totalSlices": 24,
       "doneMilestones": 2,
+      "totalMilestones": 5,
+      "phase": "executing"
+    },
+    {
+      "filename": "M004-2026-03-26T05-29-47.html",
+      "generatedAt": "2026-03-26T05:29:47.939Z",
+      "milestoneId": "M004",
+      "milestoneTitle": "复盘与学习闭环增强",
+      "label": "M004: 复盘与学习闭环增强",
+      "kind": "milestone",
+      "totalCost": 0,
+      "totalTokens": 1005694596,
+      "totalDuration": 123237149,
+      "doneSlices": 19,
+      "totalSlices": 24,
+      "doneMilestones": 4,
       "totalMilestones": 5,
       "phase": "executing"
     }

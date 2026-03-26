@@ -26,6 +26,8 @@ from common.monitoring.logger import get_logger
 
 logger = get_logger(__name__)
 
+PROJECTION_SCORE_BASIS = "session_evidence_projection_evaluable_only"
+
 
 @dataclass(slots=True)
 class HistorySessionSummary:
@@ -241,7 +243,7 @@ class HistoryService:
     @staticmethod
     def build_projection_score_summary(
         summaries: list[HistorySessionSummary],
-    ) -> dict[str, int | float]:
+    ) -> dict[str, int | float | str]:
         completed_sessions = [
             summary
             for summary in summaries
@@ -263,6 +265,7 @@ class HistoryService:
                 "average_score": 0,
                 "best_score": 0,
                 "worst_score": 0,
+                "score_basis": PROJECTION_SCORE_BASIS,
             }
 
         scores = [float(summary.overall_score or 0.0) for summary in evaluable_sessions]
@@ -273,6 +276,7 @@ class HistoryService:
             "average_score": round(sum(scores) / len(scores), 2),
             "best_score": round(max(scores), 2),
             "worst_score": round(min(scores), 2),
+            "score_basis": PROJECTION_SCORE_BASIS,
         }
 
     @staticmethod
@@ -726,6 +730,14 @@ class HistoryService:
             sessions,
             messages_by_session=messages_by_session,
         )
+
+    async def build_projection_summaries_for_sessions(
+        self,
+        db: AsyncSession,
+        *,
+        sessions: list[PracticeSession],
+    ) -> list[HistorySessionSummary]:
+        return await self._build_history_summaries(db, sessions=sessions)
 
     async def get_user_history(
         self,

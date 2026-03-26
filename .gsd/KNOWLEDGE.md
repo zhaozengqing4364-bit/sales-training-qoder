@@ -62,3 +62,4 @@
 - M004 之后如果 learner-facing 文案需要同时出现在 report / replay / history / highlights，上游仍应从 `web/src/lib/session-evidence.ts` 这类共享 helper 派生 issue/goal cue，而不是在单页里各自翻译 `main_issue` / `next_goal`；否则学习词汇会很快分叉。
 - M004 的定向再练 focus 不能只靠 report/replay query state 传递：必须经 `POST /api/v1/practice/sessions` 写入 `voice_policy_snapshot.focus_intent`，再由 `runtime_descriptor.focus_intent` 投影到 `/practice/{sessionId}`；这样刷新和 reconnect 才不会丢 learning intent。
 - M004 的 replay deep-link 合同里，`resolved` / `degraded` / `missing` anchor 状态都要在 replay 页面保留可见 banner；如果改成静默 fallback，live UAT 与 learner 自查都会失去“当前看到的是精确命中还是近似定位”的诊断面。
+- `/api/v1/admin/analytics/*` 的 admin RBAC 当前是 `backend/src/main.py` 里 `include_router(..., dependencies=[Depends(get_current_admin_user)])` 提供的，不在 `backend/src/admin/api/analytics.py` 端点函数本身；做 contract/fixture 验证时别因为文件内只看到 `get_current_user` 就把 403 当成路由回归。

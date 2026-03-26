@@ -975,6 +975,9 @@ async def test_admin_progress_and_stats_follow_projection_backed_supervisor_snap
     assert stats_payload["statistics"]["worst_score"] == min(score_values)
     assert stats_payload["statistics"]["total_sessions"] == 5
     assert stats_payload["statistics"]["completed_sessions"] == 4
+    assert stats_payload["statistics"]["evaluable_sessions"] == 3
+    assert stats_payload["statistics"]["not_evaluable_sessions"] == 1
+    assert stats_payload["statistics"]["score_basis"] == "session_evidence_projection_evaluable_only"
 
     progress_day = progress_day_response.json()["data"]
     assert progress_day["granularity"] == "day"
