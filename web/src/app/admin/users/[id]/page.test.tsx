@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import UserDetailPage from "./page";
@@ -6,14 +6,22 @@ import { ApiRequestError } from "@/lib/api/client";
 
 const {
     pushMock,
+    useSearchParamsMock,
     getUserStatsMock,
     getUserSessionsMock,
     getUserProgressMock,
+    listManagerInterventionsMock,
+    createManagerInterventionMock,
+    remindManagerInterventionMock,
 } = vi.hoisted(() => ({
     pushMock: vi.fn(),
+    useSearchParamsMock: vi.fn(),
     getUserStatsMock: vi.fn(),
     getUserSessionsMock: vi.fn(),
     getUserProgressMock: vi.fn(),
+    listManagerInterventionsMock: vi.fn(),
+    createManagerInterventionMock: vi.fn(),
+    remindManagerInterventionMock: vi.fn(),
 }));
 
 vi.mock("next/navigation", () => ({
@@ -24,6 +32,7 @@ vi.mock("next/navigation", () => ({
     useParams: () => ({
         id: "user-1",
     }),
+    useSearchParams: () => useSearchParamsMock(),
 }));
 
 vi.mock("next/link", () => ({
@@ -54,6 +63,9 @@ vi.mock("@/lib/api/client", async () => {
                 getUserStats: getUserStatsMock,
                 getUserSessions: getUserSessionsMock,
                 getUserProgress: getUserProgressMock,
+                listManagerInterventions: listManagerInterventionsMock,
+                createManagerIntervention: createManagerInterventionMock,
+                remindManagerIntervention: remindManagerInterventionMock,
             },
         },
     };
@@ -223,16 +235,60 @@ const richProgressResponse = {
     },
 };
 
+const baseInterventionsResponse = {
+    items: [
+        {
+            intervention_id: "intervention-1",
+            manager_user_id: "admin-1",
+            user_id: "user-1",
+            issue_family: "evidence_gap",
+            note: "优先补 ROI 和客户案例证据。",
+            due_state: "due",
+            reminder_status: "sent",
+            reminder_sent_at: "2026-03-23T10:00:00Z",
+            resolving_session_id: null,
+            created_at: "2026-03-23T09:30:00Z",
+            updated_at: "2026-03-23T10:00:00Z",
+        },
+    ],
+    total: 1,
+};
+
 describe("UserDetailPage", () => {
     beforeEach(() => {
         pushMock.mockReset();
+        useSearchParamsMock.mockReset();
         getUserStatsMock.mockReset();
         getUserSessionsMock.mockReset();
         getUserProgressMock.mockReset();
+        listManagerInterventionsMock.mockReset();
+        createManagerInterventionMock.mockReset();
+        remindManagerInterventionMock.mockReset();
 
+        useSearchParamsMock.mockReturnValue(new URLSearchParams());
         getUserStatsMock.mockResolvedValue(baseStatsResponse);
         getUserSessionsMock.mockResolvedValue(baseSessionsResponse as any);
         getUserProgressMock.mockResolvedValue(richProgressResponse as any);
+        listManagerInterventionsMock.mockResolvedValue(baseInterventionsResponse as any);
+        createManagerInterventionMock.mockResolvedValue({
+            intervention_id: "intervention-2",
+            manager_user_id: "admin-1",
+            user_id: "user-1",
+            issue_family: "evidence_gap",
+            note: "先补 ROI 与客户案例证据。",
+            due_state: "pending",
+            reminder_status: "not_sent",
+            reminder_sent_at: null,
+            resolving_session_id: null,
+            created_at: "2026-03-24T09:00:00Z",
+            updated_at: "2026-03-24T09:00:00Z",
+        });
+        remindManagerInterventionMock.mockResolvedValue({
+            sent: true,
+            reminder_id: "reminder-1",
+            user_id: "user-1",
+            intervention_id: "intervention-1",
+        });
     });
 
     it("renders supervisor-readable progress summary with repeated blockers, next goal, and switch-focus guidance", async () => {
@@ -306,5 +362,54 @@ describe("UserDetailPage", () => {
 
         const reportLink = screen.getByRole("link", { name: "查看统一报告" }) as HTMLAnchorElement;
         expect(reportLink.getAttribute("href")).toBe("/practice/session-1/report");
+    });
+
+    it("lets supervisors inspect persisted interventions and create a new focus on the current detail page", async () => {
+        useSearchParamsMock.mockReturnValue(
+            new URLSearchParams("focusIssueFamily=evidence_gap&focusNote=先补%20ROI%20与客户案例证据。"),
+        );
+
+        render(<UserDetailPage />);
+
+        expect(await screen.findByText("主管重点与提醒")).toBeTruthy();
+        expect(screen.getByText("优先补 ROI 和客户案例证据。")).toBeTruthy();
+        expect(screen.getByText("提醒已发送")).toBeTruthy();
+
+        const issueFamilySelect = await screen.findByLabelText("主管重点") as HTMLSelectElement;
+        expect(issueFamilySelect.value).toBe("evidence_gap");
+
+        const noteInput = screen.getByLabelText("主管说明") as HTMLTextAreaElement;
+        expect(noteInput.value).toBe("先补 ROI 与客户案例证据。");
+
+        fireEvent.click(screen.getByRole("button", { name: "设为主管重点" }));
+
+        await waitFor(() => {
+            expect(createManagerInterventionMock).toHaveBeenCalledWith({
+                user_id: "user-1",
+                issue_family: "evidence_gap",
+                note: "先补 ROI 与客户案例证据。",
+            });
+        });
+
+        expect(await screen.findByText("主管重点已记录，可继续发送提醒。")).toBeTruthy();
+        expect(screen.getByText("先补 ROI 与客户案例证据。")).toBeTruthy();
+    });
+
+    it("lets supervisors send a reminder from an existing intervention card", async () => {
+        render(<UserDetailPage />);
+
+        expect(await screen.findByText("优先补 ROI 和客户案例证据。")).toBeTruthy();
+
+        fireEvent.click(screen.getByRole("button", { name: "记录提醒" }));
+
+        await waitFor(() => {
+            expect(remindManagerInterventionMock).toHaveBeenCalledWith({
+                user_id: "user-1",
+                intervention_id: "intervention-1",
+                note: "优先补 ROI 和客户案例证据。",
+            });
+        });
+
+        expect(await screen.findByText("已记录提醒，当前重点仍保持在主管视图中。")).toBeTruthy();
     });
 });

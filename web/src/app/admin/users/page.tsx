@@ -344,7 +344,7 @@ export default function UsersPage() {
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div>
                     <h1 className="text-3xl font-black text-slate-900 tracking-tight">用户管理</h1>
-                    <p className="text-slate-500 mt-1">管理系统访问权限</p>
+                    <p className="text-slate-500 mt-1">管理系统访问权限，并在用户详情里设置主管重点与提醒。</p>
                 </div>
                 <div className="flex gap-3">
                     {/* Export Dialog */}
@@ -861,7 +861,7 @@ function UserActionMenu({
                     </DialogHeader>
                     <div className="py-4 space-y-2">
                         <Button onClick={onViewDetail} variant="ghost" className="w-full justify-start text-slate-700 hover:bg-slate-50 hover:text-blue-600">
-                            <Eye className="w-4 h-4 mr-3" /> 查看详情
+                            <Eye className="w-4 h-4 mr-3" /> 详情 / 主管重点
                         </Button>
                         <Button onClick={onEdit} variant="ghost" className="w-full justify-start text-slate-700 hover:bg-slate-50 hover:text-blue-600">
                             <Shield className="w-4 h-4 mr-3" /> 编辑权限

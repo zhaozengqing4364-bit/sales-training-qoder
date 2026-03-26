@@ -8,7 +8,7 @@
   - Estimate: 2h
   - Files: backend/src/admin/api/interventions.py, backend/src/common/db/models.py, backend/src/common/db/schemas.py, backend/tests/integration/test_admin_interventions_api.py
   - Verify: cd backend && venv/bin/python -m pytest -c pyproject.toml tests/integration/test_admin_interventions_api.py
-- [ ] **T02: Let supervisors create and inspect interventions on current admin user surfaces** — Update the current admin users detail/list surfaces so a supervisor can create and inspect interventions without leaving the existing business chain. Reuse current user detail and manager-lite components rather than adding a new workflow console.
+- [x] **T02: Added in-place supervisor intervention create/remind UI on the admin user detail page, with manager-lite deep links into that same surface.** — Update the current admin users detail/list surfaces so a supervisor can create and inspect interventions without leaving the existing business chain. Reuse current user detail and manager-lite components rather than adding a new workflow console.
   - Estimate: 90m
   - Files: web/src/app/admin/users/[id]/page.tsx, web/src/app/admin/users/page.tsx, web/src/components/admin/manager-lite-panel.tsx, web/src/app/admin/users/[id]/page.test.tsx, web/src/components/admin/manager-lite-panel.test.tsx
   - Verify: cd web && npm test -- --run 'src/app/admin/users/[id]/page.test.tsx' 'src/components/admin/manager-lite-panel.test.tsx'

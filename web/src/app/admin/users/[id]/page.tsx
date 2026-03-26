@@ -2,9 +2,10 @@
 
 import Link from "next/link";
 import { useEffect, useState, useCallback } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { api, getApiErrorMessage } from "@/lib/api/client";
 import {
+    ManagerInterventionItem,
     UserDetailStats,
     UserSessionItem,
     UserSessionsResponse,
@@ -65,6 +66,45 @@ function formatScoreBasisLabel(scoreBasis?: string | null): string {
     }
     return SCORE_BASIS_LABELS[scoreBasis] || scoreBasis;
 }
+
+const INTERVENTION_ISSUE_FAMILY_OPTIONS: Array<{ value: string; label: string }> = [
+    { value: "evidence_gap", label: "证据补强重点" },
+    { value: "objection_response", label: "异议处理重点" },
+    { value: "value_expression", label: "价值表达重点" },
+    { value: "structure_gap", label: "结构表达重点" },
+];
+
+const INTERVENTION_ISSUE_FAMILY_LABELS: Record<string, string> = {
+    evidence_gap: "主管重点 · 证据补强",
+    objection_response: "主管重点 · 异议处理",
+    value_expression: "主管重点 · 价值表达",
+    structure_gap: "主管重点 · 结构表达",
+};
+
+const INTERVENTION_DUE_STATE_LABELS: Record<string, string> = {
+    pending: "待跟进",
+    due: "待提醒",
+    resolved: "已闭环",
+};
+
+const INTERVENTION_REMINDER_STATUS_LABELS: Record<string, string> = {
+    not_sent: "未提醒",
+    sent: "提醒已发送",
+};
+
+function formatInterventionIssueFamily(issueFamily: string): string {
+    return INTERVENTION_ISSUE_FAMILY_LABELS[issueFamily] || `主管重点 · ${issueFamily}`;
+}
+
+function formatInterventionDueState(dueState: string): string {
+    return INTERVENTION_DUE_STATE_LABELS[dueState] || dueState;
+}
+
+function formatInterventionReminderStatus(reminderStatus: string): string {
+    return INTERVENTION_REMINDER_STATUS_LABELS[reminderStatus] || reminderStatus;
+}
+
+const EMPTY_INTERVENTIONS: ManagerInterventionItem[] = [];
 
 const EMPTY_SESSIONS: UserSessionsResponse = {
     items: [],
@@ -192,30 +232,51 @@ function buildProgressOverview(
 export default function UserDetailPage() {
     const params = useParams();
     const router = useRouter();
+    const searchParams = useSearchParams();
     const userId = params.id as string;
 
     const [timeRange, setTimeRange] = useState<TimeRange>("30d");
     const [stats, setStats] = useState<UserDetailStats | null>(null);
     const [sessions, setSessions] = useState<UserSessionsResponse>(EMPTY_SESSIONS);
     const [progress, setProgress] = useState<UserProgressResponse | null>(null);
+    const [interventions, setInterventions] = useState<ManagerInterventionItem[]>(EMPTY_INTERVENTIONS);
+    const [interventionIssueFamily, setInterventionIssueFamily] = useState("evidence_gap");
+    const [interventionNote, setInterventionNote] = useState("");
     const [isLoading, setIsLoading] = useState(true);
     const [pageError, setPageError] = useState<string | null>(null);
     const [sessionsError, setSessionsError] = useState<string | null>(null);
     const [progressError, setProgressError] = useState<string | null>(null);
+    const [interventionError, setInterventionError] = useState<string | null>(null);
+    const [interventionNotice, setInterventionNotice] = useState<string | null>(null);
     const [progressState, setProgressState] = useState<ProgressLoadState>("loading");
     const [sessionsPage, setSessionsPage] = useState(1);
+    const [isSavingIntervention, setIsSavingIntervention] = useState(false);
+    const [remindingInterventionId, setRemindingInterventionId] = useState<string | null>(null);
+
+    useEffect(() => {
+        const focusIssueFamily = searchParams.get("focusIssueFamily");
+        const focusNote = searchParams.get("focusNote");
+        if (focusIssueFamily) {
+            setInterventionIssueFamily(focusIssueFamily);
+        }
+        if (focusNote) {
+            setInterventionNote(focusNote);
+        }
+    }, [searchParams]);
 
     const loadData = useCallback(async () => {
         setIsLoading(true);
         setPageError(null);
         setSessionsError(null);
         setProgressError(null);
+        setInterventionError(null);
         setProgressState("loading");
 
-        const [statsResult, sessionsResult, progressResult] = await Promise.allSettled([
+        const [statsResult, sessionsResult, progressResult, interventionsResult] = await Promise.allSettled([
             api.admin.getUserStats(userId, { time_range: timeRange }),
             api.admin.getUserSessions(userId, { page: 1, page_size: 10 }),
             api.admin.getUserProgress(userId, { time_range: timeRange }),
+            api.admin.listManagerInterventions(userId, { limit: 10 }),
         ]);
 
         if (statsResult.status === "fulfilled") {
@@ -242,6 +303,13 @@ export default function UserDetailPage() {
             setProgressState("error");
         }
 
+        if (interventionsResult.status === "fulfilled") {
+            setInterventions(interventionsResult.value.items || EMPTY_INTERVENTIONS);
+        } else {
+            setInterventions(EMPTY_INTERVENTIONS);
+            setInterventionError(`主管重点加载失败：${getApiErrorMessage(interventionsResult.reason)}`);
+        }
+
         setIsLoading(false);
     }, [timeRange, userId]);
 
@@ -262,6 +330,67 @@ export default function UserDetailPage() {
             setSessionsPage(nextPage);
         } catch (err) {
             setSessionsError(`练习记录加载失败：${getApiErrorMessage(err)}`);
+        }
+    };
+
+    const handleCreateIntervention = async () => {
+        const trimmedIssueFamily = interventionIssueFamily.trim();
+        const trimmedNote = interventionNote.trim();
+        if (!trimmedIssueFamily) {
+            setInterventionError("请先选择主管重点。");
+            return;
+        }
+
+        setIsSavingIntervention(true);
+        setInterventionError(null);
+        setInterventionNotice(null);
+        try {
+            const created = await api.admin.createManagerIntervention({
+                user_id: userId,
+                issue_family: trimmedIssueFamily,
+                note: trimmedNote || undefined,
+            });
+            setInterventions((current) => [
+                created,
+                ...current.filter((item) => item.intervention_id !== created.intervention_id),
+            ]);
+            setInterventionIssueFamily(created.issue_family);
+            setInterventionNote("");
+            setInterventionNotice("主管重点已记录，可继续发送提醒。");
+        } catch (err) {
+            setInterventionError(`主管重点记录失败：${getApiErrorMessage(err)}`);
+        } finally {
+            setIsSavingIntervention(false);
+        }
+    };
+
+    const handleRemindIntervention = async (intervention: ManagerInterventionItem) => {
+        setRemindingInterventionId(intervention.intervention_id);
+        setInterventionError(null);
+        setInterventionNotice(null);
+        try {
+            await api.admin.remindManagerIntervention({
+                user_id: userId,
+                intervention_id: intervention.intervention_id,
+                note: intervention.note || undefined,
+            });
+            const sentAt = new Date().toISOString();
+            setInterventions((current) => current.map((item) => {
+                if (item.intervention_id !== intervention.intervention_id) {
+                    return item;
+                }
+                return {
+                    ...item,
+                    reminder_status: "sent",
+                    reminder_sent_at: sentAt,
+                    due_state: item.due_state === "resolved" ? "resolved" : "due",
+                };
+            }));
+            setInterventionNotice("已记录提醒，当前重点仍保持在主管视图中。");
+        } catch (err) {
+            setInterventionError(`主管提醒记录失败：${getApiErrorMessage(err)}`);
+        } finally {
+            setRemindingInterventionId(null);
         }
     };
 
@@ -507,6 +636,118 @@ export default function UserDetailPage() {
                     </p>
                 </GlassCard>
             </div>
+
+            <GlassCard className="p-6">
+                <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
+                    <div className="lg:max-w-xl">
+                        <h2 className="text-lg font-bold text-slate-900 text-balance">主管重点与提醒</h2>
+                        <p className="mt-2 text-sm text-slate-500 text-pretty">
+                            主管可以直接在当前用户页记录训练重点、查看已发送提醒，并把 manager-lite 入口带来的关注点落成持续记录。
+                        </p>
+                        {interventionNotice ? (
+                            <div role="status" className="mt-4 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700">
+                                {interventionNotice}
+                            </div>
+                        ) : null}
+                        {interventionError ? (
+                            <div role="alert" className="mt-4 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+                                {interventionError}
+                            </div>
+                        ) : null}
+                    </div>
+
+                    <div className="w-full rounded-2xl border border-slate-200 bg-slate-50 p-4 lg:max-w-md">
+                        <div className="space-y-4">
+                            <div>
+                                <label htmlFor="manager-intervention-issue-family" className="text-xs font-bold uppercase tracking-wide text-slate-500">
+                                    主管重点
+                                </label>
+                                <select
+                                    id="manager-intervention-issue-family"
+                                    value={interventionIssueFamily}
+                                    onChange={(event) => setInterventionIssueFamily(event.target.value)}
+                                    className="mt-2 h-11 w-full rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-900 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-500/20"
+                                >
+                                    {INTERVENTION_ISSUE_FAMILY_OPTIONS.map((option) => (
+                                        <option key={option.value} value={option.value}>
+                                            {option.label}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+                            <div>
+                                <label htmlFor="manager-intervention-note" className="text-xs font-bold uppercase tracking-wide text-slate-500">
+                                    主管说明
+                                </label>
+                                <textarea
+                                    id="manager-intervention-note"
+                                    value={interventionNote}
+                                    onChange={(event) => setInterventionNote(event.target.value)}
+                                    className="mt-2 min-h-[108px] w-full rounded-xl border border-slate-200 bg-white px-3 py-3 text-sm text-slate-900 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-500/20"
+                                    placeholder="例如：下一轮先把 ROI 与客户案例证据说具体。"
+                                />
+                            </div>
+                            <Button
+                                onClick={() => void handleCreateIntervention()}
+                                disabled={isSavingIntervention}
+                                className="w-full rounded-full"
+                            >
+                                {isSavingIntervention ? "记录中..." : "设为主管重点"}
+                            </Button>
+                        </div>
+                    </div>
+                </div>
+
+                <div className="mt-6 space-y-3">
+                    {interventions.length > 0 ? (
+                        interventions.map((intervention) => (
+                            <div key={intervention.intervention_id} className="rounded-2xl border border-slate-200 bg-white p-4">
+                                <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                                    <div className="space-y-2">
+                                        <div className="flex flex-wrap gap-2">
+                                            <span className="inline-flex rounded-full bg-blue-50 px-3 py-1 text-xs font-medium text-blue-700">
+                                                {formatInterventionIssueFamily(intervention.issue_family)}
+                                            </span>
+                                            <span className="inline-flex rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600">
+                                                {formatInterventionDueState(intervention.due_state)}
+                                            </span>
+                                            <span className={`inline-flex rounded-full px-3 py-1 text-xs font-medium ${intervention.reminder_status === "sent" ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"}`}>
+                                                {formatInterventionReminderStatus(intervention.reminder_status)}
+                                            </span>
+                                        </div>
+                                        <p className="text-sm text-slate-900 text-pretty">
+                                            {intervention.note || "当前主管重点尚未补充说明。"}
+                                        </p>
+                                        <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500">
+                                            <span>创建于：{formatDate(intervention.created_at)}</span>
+                                            <span>最近更新：{formatDate(intervention.updated_at)}</span>
+                                            {intervention.reminder_sent_at ? (
+                                                <span>最近提醒：{formatDate(intervention.reminder_sent_at)}</span>
+                                            ) : null}
+                                        </div>
+                                    </div>
+
+                                    <div className="flex flex-wrap gap-2">
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            className="rounded-full"
+                                            onClick={() => void handleRemindIntervention(intervention)}
+                                            disabled={remindingInterventionId === intervention.intervention_id || intervention.due_state === "resolved"}
+                                        >
+                                            {remindingInterventionId === intervention.intervention_id ? "记录中..." : "记录提醒"}
+                                        </Button>
+                                    </div>
+                                </div>
+                            </div>
+                        ))
+                    ) : (
+                        <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-sm text-slate-500">
+                            当前还没有主管重点记录。可以直接在上方设定本轮跟进重点。
+                        </div>
+                    )}
+                </div>
+            </GlassCard>
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 <GlassCard className="p-6">

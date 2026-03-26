@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "exported_at": "2026-03-26T07:05:35.991Z",
+  "exported_at": "2026-03-26T07:36:39.578Z",
   "milestones": [
     {
       "id": "M001",
@@ -2474,19 +2474,29 @@
       "milestone_id": "M005",
       "slice_id": "S02",
       "id": "T02",
-      "title": "Let supervisors create and inspect interventions on current admin user surfaces",
-      "status": "pending",
-      "one_liner": "",
-      "narrative": "",
-      "verification_result": "",
+      "title": "Added in-place supervisor intervention create/remind UI on the admin user detail page, with manager-lite deep links into that same surface.",
+      "status": "complete",
+      "one_liner": "Added in-place supervisor intervention create/remind UI on the admin user detail page, with manager-lite deep links into that same surface.",
+      "narrative": "Extended the current frontend API seam with typed manager-intervention list/create/remind methods so the web layer can consume the T01 backend routes without ad-hoc fetches. On the admin user detail page, the page now loads persisted interventions in parallel with stats, sessions, and progress; pre-fills the intervention form from manager-lite query params; renders the current intervention cards with due/reminder state; and lets supervisors create a new focus or record another reminder without leaving the current detail surface. The shared manager-lite panel now deep-links supervisors into `/admin/users/[id]` instead of owning a second workflow surface, and the admin users list now explicitly points supervisors into the detail-page intervention flow.",
+      "verification_result": "Ran the task-plan verifier fresh under timing: `cd web && /usr/bin/time -p npm test -- --run 'src/app/admin/users/[id]/page.test.tsx' 'src/components/admin/manager-lite-panel.test.tsx'` passed all 6 focused tests, covering the manager-lite deep links plus the detail-page intervention inspect/create/remind flow. Also brought up short-lived backend/frontend servers on `:3444` and `:3445` and attempted browser verification, but the local Playwright/browser harness failed before navigation with a module error (`Cannot find module './registry'`), so live browser interaction remained environment-blocked rather than app-blocked.",
       "duration": "",
-      "completed_at": null,
+      "completed_at": "2026-03-26T07:36:39.551Z",
       "blocker_discovered": false,
-      "deviations": "",
-      "known_issues": "",
-      "key_files": [],
-      "key_decisions": [],
-      "full_summary_md": "",
+      "deviations": "Extended `web/src/lib/api/client.ts` and `web/src/lib/api/types.ts` beyond the planned page/component files because the frontend had no typed intervention client seam yet. Also updated `web/src/app/admin/users/page.tsx` copy/action labeling so the list surface visibly points supervisors into the detail-page workflow.",
+      "known_issues": "Local browser verification is currently blocked by the agent browser harness failing before navigation with `Cannot find module './registry'`. Focused Vitest verification passed and short-lived backend/frontend server bring-up succeeded, but in-tool browser interaction could not be completed from this environment.",
+      "key_files": [
+        "web/src/app/admin/users/[id]/page.tsx",
+        "web/src/app/admin/users/page.tsx",
+        "web/src/components/admin/manager-lite-panel.tsx",
+        "web/src/app/admin/users/[id]/page.test.tsx",
+        "web/src/components/admin/manager-lite-panel.test.tsx",
+        "web/src/lib/api/client.ts",
+        "web/src/lib/api/types.ts"
+      ],
+      "key_decisions": [
+        "Use `/admin/users/[id]` as the primary create/inspect surface for manager interventions, and keep manager-lite as a deep-link launcher with prefilled focus query params."
+      ],
+      "full_summary_md": "---\nid: T02\nparent: S02\nmilestone: M005\nkey_files:\n  - web/src/app/admin/users/[id]/page.tsx\n  - web/src/app/admin/users/page.tsx\n  - web/src/components/admin/manager-lite-panel.tsx\n  - web/src/app/admin/users/[id]/page.test.tsx\n  - web/src/components/admin/manager-lite-panel.test.tsx\n  - web/src/lib/api/client.ts\n  - web/src/lib/api/types.ts\nkey_decisions:\n  - Use `/admin/users/[id]` as the primary create/inspect surface for manager interventions, and keep manager-lite as a deep-link launcher with prefilled focus query params.\nduration: \"\"\nverification_result: passed\ncompleted_at: 2026-03-26T07:36:39.552Z\nblocker_discovered: false\n---\n\n# T02: Added in-place supervisor intervention create/remind UI on the admin user detail page, with manager-lite deep links into that same surface.\n\n**Added in-place supervisor intervention create/remind UI on the admin user detail page, with manager-lite deep links into that same surface.**\n\n## What Happened\n\nExtended the current frontend API seam with typed manager-intervention list/create/remind methods so the web layer can consume the T01 backend routes without ad-hoc fetches. On the admin user detail page, the page now loads persisted interventions in parallel with stats, sessions, and progress; pre-fills the intervention form from manager-lite query params; renders the current intervention cards with due/reminder state; and lets supervisors create a new focus or record another reminder without leaving the current detail surface. The shared manager-lite panel now deep-links supervisors into `/admin/users/[id]` instead of owning a second workflow surface, and the admin users list now explicitly points supervisors into the detail-page intervention flow.\n\n## Verification\n\nRan the task-plan verifier fresh under timing: `cd web && /usr/bin/time -p npm test -- --run 'src/app/admin/users/[id]/page.test.tsx' 'src/components/admin/manager-lite-panel.test.tsx'` passed all 6 focused tests, covering the manager-lite deep links plus the detail-page intervention inspect/create/remind flow. Also brought up short-lived backend/frontend servers on `:3444` and `:3445` and attempted browser verification, but the local Playwright/browser harness failed before navigation with a module error (`Cannot find module './registry'`), so live browser interaction remained environment-blocked rather than app-blocked.\n\n## Verification Evidence\n\n| # | Command | Exit Code | Verdict | Duration |\n|---|---------|-----------|---------|----------|\n| 1 | `cd web && /usr/bin/time -p npm test -- --run 'src/app/admin/users/[id]/page.test.tsx' 'src/components/admin/manager-lite-panel.test.tsx'` | 0 | ✅ pass | 2060ms |\n\n\n## Deviations\n\nExtended `web/src/lib/api/client.ts` and `web/src/lib/api/types.ts` beyond the planned page/component files because the frontend had no typed intervention client seam yet. Also updated `web/src/app/admin/users/page.tsx` copy/action labeling so the list surface visibly points supervisors into the detail-page workflow.\n\n## Known Issues\n\nLocal browser verification is currently blocked by the agent browser harness failing before navigation with `Cannot find module './registry'`. Focused Vitest verification passed and short-lived backend/frontend server bring-up succeeded, but in-tool browser interaction could not be completed from this environment.\n\n## Files Created/Modified\n\n- `web/src/app/admin/users/[id]/page.tsx`\n- `web/src/app/admin/users/page.tsx`\n- `web/src/components/admin/manager-lite-panel.tsx`\n- `web/src/app/admin/users/[id]/page.test.tsx`\n- `web/src/components/admin/manager-lite-panel.test.tsx`\n- `web/src/lib/api/client.ts`\n- `web/src/lib/api/types.ts`\n",
       "description": "Update the current admin users detail/list surfaces so a supervisor can create and inspect interventions without leaving the existing business chain. Reuse current user detail and manager-lite components rather than adding a new workflow console.",
       "estimate": "90m",
       "files": [
@@ -3821,6 +3831,18 @@
       "revisable": "Yes",
       "made_by": "agent",
       "superseded_by": null
+    },
+    {
+      "seq": 1435,
+      "id": "D076",
+      "when_context": "M005/S02/T02",
+      "scope": "ui-workflow",
+      "decision": "Which existing admin surface should own the new supervisor intervention workflow.",
+      "choice": "Use `/admin/users/[id]` as the primary create/inspect surface for manager interventions, and keep manager-lite as a deep-link launcher with prefilled focus query params.",
+      "rationale": "The task goal was to close the loop on current admin surfaces with the smallest safe change. Keeping write/read authority on the user-detail page avoids a second workflow console, while query-param deep links let manager-lite seed the same focus/note context without duplicating form state or API orchestration.",
+      "revisable": "Yes",
+      "made_by": "agent",
+      "superseded_by": null
     }
   ],
   "verification_evidence": [
@@ -4780,6 +4802,17 @@
       "verdict": "✅ pass",
       "duration_ms": 1010,
       "created_at": "2026-03-26T07:05:35.959Z"
+    },
+    {
+      "id": 88,
+      "task_id": "T02",
+      "slice_id": "S02",
+      "milestone_id": "M005",
+      "command": "cd web && /usr/bin/time -p npm test -- --run 'src/app/admin/users/[id]/page.test.tsx' 'src/components/admin/manager-lite-panel.test.tsx'",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 2060,
+      "created_at": "2026-03-26T07:36:39.552Z"
     }
   ]
 }

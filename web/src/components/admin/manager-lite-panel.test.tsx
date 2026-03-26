@@ -3,8 +3,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ManagerLitePanel } from "./manager-lite-panel";
 
-const { onRemindMock } = vi.hoisted(() => ({
+const { onRemindMock, getUserHrefMock } = vi.hoisted(() => ({
     onRemindMock: vi.fn(),
+    getUserHrefMock: vi.fn(),
 }));
 
 vi.mock("next/link", () => ({
@@ -16,10 +17,17 @@ vi.mock("next/link", () => ({
 describe("ManagerLitePanel", () => {
     beforeEach(() => {
         onRemindMock.mockReset();
+        getUserHrefMock.mockReset();
         onRemindMock.mockResolvedValue(undefined);
+        getUserHrefMock.mockImplementation(({ kind, userId }: { kind: string; userId: string }) => {
+            if (kind === "not_passed") {
+                return `/admin/users/${userId}?focusIssueFamily=evidence_gap&focusNote=%E5%85%88%E5%AF%B9%E7%85%A7%E6%9C%80%E8%BF%91%E7%BB%9F%E4%B8%80%E6%8A%A5%E5%91%8A%E8%A1%A5%E8%AF%81%E6%8D%AE`;
+            }
+            return `/admin/users/${userId}`;
+        });
     });
 
-    it("keeps manager-lite copy on the same evidence line as admin analytics", async () => {
+    it("keeps manager-lite copy on the same evidence line and links supervisors into current user detail surfaces", async () => {
         render(
             <ManagerLitePanel
                 data={{
@@ -46,6 +54,7 @@ describe("ManagerLitePanel", () => {
                     ],
                 }}
                 onRemind={onRemindMock}
+                getUserHref={getUserHrefMock}
             />,
         );
 
@@ -59,6 +68,14 @@ describe("ManagerLitePanel", () => {
 
         const reportLink = screen.getByRole("link", { name: "查看统一报告" }) as HTMLAnchorElement;
         expect(reportLink.getAttribute("href")).toBe("/practice/session-1/report");
+
+        const focusLink = screen.getByRole("link", { name: "查看并设重点" }) as HTMLAnchorElement;
+        expect(focusLink.getAttribute("href")).toBe(
+            "/admin/users/user-1?focusIssueFamily=evidence_gap&focusNote=%E5%85%88%E5%AF%B9%E7%85%A7%E6%9C%80%E8%BF%91%E7%BB%9F%E4%B8%80%E6%8A%A5%E5%91%8A%E8%A1%A5%E8%AF%81%E6%8D%AE",
+        );
+
+        const inspectLink = screen.getByRole("link", { name: "查看详情" }) as HTMLAnchorElement;
+        expect(inspectLink.getAttribute("href")).toBe("/admin/users/user-2");
 
         fireEvent.click(screen.getByRole("button", { name: "一键提醒" }));
 

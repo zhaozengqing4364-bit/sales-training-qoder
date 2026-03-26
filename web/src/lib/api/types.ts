@@ -750,6 +750,48 @@ export interface UserProgressResponse {
     recommendation: UserProgressRecommendation;
 }
 
+export type ManagerInterventionDueState = "pending" | "due" | "resolved";
+
+export type ManagerInterventionReminderStatus = "not_sent" | "sent";
+
+export interface ManagerInterventionItem {
+    intervention_id: string;
+    manager_user_id: string;
+    user_id: string;
+    issue_family: string;
+    note?: string | null;
+    due_state: ManagerInterventionDueState;
+    reminder_status: ManagerInterventionReminderStatus;
+    reminder_sent_at?: string | null;
+    resolving_session_id?: string | null;
+    created_at: string;
+    updated_at: string;
+}
+
+export interface ManagerInterventionListResponse {
+    items: ManagerInterventionItem[];
+    total: number;
+}
+
+export interface ManagerInterventionCreateRequest {
+    user_id: string;
+    issue_family: string;
+    note?: string;
+    due_state?: ManagerInterventionDueState;
+    reminder_status?: ManagerInterventionReminderStatus;
+    resolving_session_id?: string | null;
+}
+
+export interface ManagerInterventionRemindRequest {
+    user_id: string;
+    intervention_id?: string;
+    note?: string;
+}
+
+export interface ManagerInterventionRemindResponse extends ManagerLiteRemindResponse {
+    intervention_id?: string | null;
+}
+
 // Prompt Template types (B10)
 export type PromptType =
     | "summary"

@@ -68,6 +68,11 @@ import {
     PresentationAIScopeType,
     ManagerLiteListsResponse,
     ManagerLiteRemindResponse,
+    ManagerInterventionCreateRequest,
+    ManagerInterventionItem,
+    ManagerInterventionListResponse,
+    ManagerInterventionRemindRequest,
+    ManagerInterventionRemindResponse,
 } from "./types";
 import { authHandler } from "@/lib/auth-handler";
 import { normalizeCurrentUser } from "@/lib/auth/current-user";
@@ -1645,6 +1650,29 @@ export const api = {
             if (params?.granularity) searchParams.set("granularity", params.granularity);
 
             return apiFetch<UserProgressResponse>(`/admin/users/${userId}/progress?${searchParams}`);
+        },
+
+        listManagerInterventions: async (userId: string, params?: { limit?: number }) => {
+            const searchParams = new URLSearchParams();
+            searchParams.set("user_id", normalizeRequiredId(userId, { fieldName: "user_id" }));
+            if (typeof params?.limit === "number") {
+                searchParams.set("limit", String(params.limit));
+            }
+            return apiFetch<ManagerInterventionListResponse>(`/admin/interventions?${searchParams}`);
+        },
+
+        createManagerIntervention: async (data: ManagerInterventionCreateRequest) => {
+            return apiFetch<ManagerInterventionItem>("/admin/interventions", {
+                method: "POST",
+                body: JSON.stringify(data),
+            });
+        },
+
+        remindManagerIntervention: async (data: ManagerInterventionRemindRequest) => {
+            return apiFetch<ManagerInterventionRemindResponse>("/admin/interventions/remind", {
+                method: "POST",
+                body: JSON.stringify(data),
+            });
         },
 
         exportUsers: async (format: string, params?: { search?: string; status?: string }) => {

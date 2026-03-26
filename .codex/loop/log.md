@@ -1572,3 +1572,27 @@ Append one entry per iteration:
   verification results: passed; the focused backend suite covered create/list persistence, reminder-state updates, and resolving-session linkage, and Alembic applied revision 20260326_1000_021 successfully.
   success signal status: the current admin backend now has durable intervention focus/reminder/resolution records without replacing the existing manager-lite reminder route.
   rollback note: if later slice work changes the manager workflow shape, keep the dedicated manager_interventions table as the single persistence seam and preserve remind-route compatibility until current admin surfaces are re-verified on a new contract.
+
+
+- time: 2026-03-26T15:35:59+0800
+  mode: stabilize
+  item id: M005-S02-T02
+  files changed:
+    - web/src/app/admin/users/[id]/page.tsx
+    - web/src/app/admin/users/page.tsx
+    - web/src/components/admin/manager-lite-panel.tsx
+    - web/src/app/admin/users/[id]/page.test.tsx
+    - web/src/components/admin/manager-lite-panel.test.tsx
+    - web/src/lib/api/client.ts
+    - web/src/lib/api/types.ts
+    - .gsd/DECISIONS.md
+    - .gsd/milestones/M005/slices/S02/tasks/T02-SUMMARY.md
+    - .codex/loop/state.json
+    - .codex/loop/log.md
+  summary: Added in-place supervisor intervention create/remind UI on the current admin user detail page, wired manager-lite deep links into that same detail surface, and updated focused frontend tests plus typed API seams for the persisted intervention routes.
+  verification commands:
+    - cd web && /usr/bin/time -p npm test -- --run 'src/app/admin/users/[id]/page.test.tsx' 'src/components/admin/manager-lite-panel.test.tsx'
+    - browser attempt after short-lived local backend/web bring-up: browser_navigate http://localhost:3445/admin/users
+  verification results: planned Vitest verifier passed; local backend/frontend servers started successfully on :3444 / :3445, but in-tool browser proof was blocked by a Playwright-side module error (`Cannot find module './registry'`) before navigation.
+  success signal status: supervisors can now create and inspect persisted manager interventions on existing admin user surfaces, and manager-lite launches into the same detail-page workflow instead of duplicating intervention state.
+  rollback note: if later slice work changes the intervention UX, keep `/admin/users/[id]` as the single read/write surface until a replacement workflow is re-verified end-to-end, and preserve manager-lite as a deep-link launcher rather than a second form owner.
