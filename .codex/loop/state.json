@@ -1,7 +1,7 @@
 {
   "mode": "stabilize",
-  "current_issue_id": "M004-S04",
-  "current_issue_type": "slice",
+  "current_issue_id": "M004-S05-T01",
+  "current_issue_type": "task",
   "current_issue_status": "done",
   "pending_issue_ids": [],
   "completed_issue_ids": [
@@ -76,38 +76,31 @@
     "M004-S04-T01",
     "M004-S04-T02",
     "M004-S04-T03",
-    "M004-S04"
+    "M004-S04",
+    "M004-S05-T01"
   ],
   "blocked_issue_ids": [],
   "deferred_issue_ids": [],
   "last_modified_files": [
-    "backend/src/presentation_coach/services/presentation_report_service.py",
-    "backend/src/common/conversation/session_evidence.py",
     "backend/src/common/conversation/replay.py",
     "backend/src/common/conversation/schemas.py",
-    "backend/tests/unit/test_presentation_report_service.py",
-    "backend/tests/conftest.py",
-    "web/src/app/(user)/practice/[sessionId]/report/page.tsx",
-    "web/src/app/(user)/practice/[sessionId]/replay/page.tsx",
-    "web/src/components/practice/presentation/SlideViewer.tsx",
-    "web/src/lib/session-evidence.ts",
+    "backend/tests/unit/test_replay_service.py",
+    "backend/tests/integration/test_practice_evidence_flow.py",
     "web/src/app/(user)/practice/[sessionId]/report/page.test.tsx",
     "web/src/app/(user)/practice/[sessionId]/replay/page.test.tsx",
-    "package.json",
-    ".gsd/milestones/M004/slices/S04/S04-SUMMARY.md",
-    ".gsd/milestones/M004/slices/S04/S04-UAT.md",
-    ".gsd/KNOWLEDGE.md",
-    ".gsd/PROJECT.md",
+    "web/src/app/(dashboard)/history/page.test.tsx",
+    ".gsd/DECISIONS.md",
+    ".gsd/milestones/M004/slices/S05/tasks/T01-SUMMARY.md",
     ".codex/loop/state.json",
     ".codex/loop/log.md"
   ],
   "last_verification_commands": [
-    "cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_presentation_report_service.py",
-    "npm test -- --run 'src/app/(user)/practice/[sessionId]/report/page.test.tsx'",
-    "npm test -- --run 'src/app/(user)/practice/[sessionId]/replay/page.test.tsx'"
+    "cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_replay_service.py tests/integration/test_practice_evidence_flow.py",
+    "cd web && pnpm dlx npm@11.6.1 test -- --run 'src/app/(user)/practice/[sessionId]/report/page.test.tsx' 'src/app/(user)/practice/[sessionId]/replay/page.test.tsx' 'src/app/(dashboard)/history/page.test.tsx'",
+    "cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_replay_service.py tests/integration/test_practice_evidence_flow.py && cd ../web && pnpm dlx npm@11.6.1 test -- --run 'src/app/(user)/practice/[sessionId]/report/page.test.tsx' 'src/app/(user)/practice/[sessionId]/replay/page.test.tsx' 'src/app/(dashboard)/history/page.test.tsx'"
   ],
-  "last_verification_result": "Fresh slice-level verification passed on the planned commands after repairing repo-root execution drift: the backend presentation report suite passed 2/2, the report-page suite passed 10/10, and the replay-page suite passed 7/7. Close-out also proved repo-root `npm test` now delegates into `web`, while lazy imports in `backend/tests/conftest.py` prevent unrelated FastAPI runtime dependencies from breaking focused presentation service tests during collection.",
-  "last_success_signal": "The current PPT report and replay routes now tell the learner which page has which issue clusters, why that page needs rework, and which transcript turns to revisit without leaving the existing authority line.",
+  "last_verification_result": "The focused backend replay/evidence suite passed 34/34, the focused report/replay/history web suite passed 23/23 via the pnpm dlx npm runner, and the chained slice verification command passed end to end after repairing the replay route drift and restoring the PPT replay schema field.",
+  "last_success_signal": "The current report, replay, history, and retry routes now stay on one scenario-aware contract for both sales and presentation, and shared replay once again returns PPT review payloads instead of crashing or leaking sales-only conclusions.",
   "last_growth_scan": null,
-  "next_action": "Hand off M004/S04 to roadmap reassessment and continue with S05 final sales + PPT learning-loop verification on the existing routes."
+  "next_action": "Continue with M004/S05 T02 to capture one live sales learning-loop proof on the current user routes."
 }

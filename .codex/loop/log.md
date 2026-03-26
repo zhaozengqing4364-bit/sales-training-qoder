@@ -1425,3 +1425,27 @@ Append one entry per iteration:
   verification results: passed; backend presentation report suite is green at 2/2, root-invoked report page suite is green at 10/10, and root-invoked replay page suite is green at 7/7 after adding the repo-root npm test shim and lazy-loading the FastAPI app in backend test fixtures.
   success signal status: learners can now stay on the current PPT report/replay routes and still see which page has which issue cluster, why it matters, and which transcript turns to revisit.
   rollback note: if future work revisits S04 close-out, keep the shared `presentation_review` / replay authority line and preserve repo-root verification compatibility instead of reintroducing a web-only or app-import-heavy verification path.
+
+- time: 2026-03-26T12:15:02+0800
+  mode: stabilize
+  item id: M004-S05-T01
+  files changed:
+    - backend/src/common/conversation/replay.py
+    - backend/src/common/conversation/schemas.py
+    - backend/tests/unit/test_replay_service.py
+    - backend/tests/integration/test_practice_evidence_flow.py
+    - web/src/app/(user)/practice/[sessionId]/report/page.test.tsx
+    - web/src/app/(user)/practice/[sessionId]/replay/page.test.tsx
+    - web/src/app/(dashboard)/history/page.test.tsx
+    - .gsd/DECISIONS.md
+    - .gsd/milestones/M004/slices/S05/tasks/T01-SUMMARY.md
+    - .codex/loop/state.json
+    - .codex/loop/log.md
+  summary: Repaired the shared replay contract so presentation sessions stay on the same scenario-aware authority line as report, then expanded the focused backend/web regression suites to cover PPT replay payloads, PPT retry continuity, PPT degraded guidance, and shared history links without adding a new acceptance harness.
+  verification commands:
+    - cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_replay_service.py tests/integration/test_practice_evidence_flow.py
+    - cd web && pnpm dlx npm@11.6.1 test -- --run 'src/app/(user)/practice/[sessionId]/report/page.test.tsx' 'src/app/(user)/practice/[sessionId]/replay/page.test.tsx' 'src/app/(dashboard)/history/page.test.tsx'
+    - cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_replay_service.py tests/integration/test_practice_evidence_flow.py && cd ../web && pnpm dlx npm@11.6.1 test -- --run 'src/app/(user)/practice/[sessionId]/report/page.test.tsx' 'src/app/(user)/practice/[sessionId]/replay/page.test.tsx' 'src/app/(dashboard)/history/page.test.tsx'
+  verification results: passed; backend replay/evidence coverage is green at 34/34, the focused report/replay/history web suite is green at 23/23, and the chained slice verification command passed end to end. The only remaining environment caveat is the machine's broken global npm wrapper, so the web leg still uses pnpm dlx npm@11.6.1.
+  success signal status: the current report, replay, history, highlights, and retry routes now stay on one vocabulary and one route family for both sales and presentation, and PPT replay payloads are available again on the shared /sessions/{id}/replay surface.
+  rollback note: if later work revisits this seam, keep replay scenario-aware in exactly the same way as report and preserve presentation_review on the shared replay response model instead of reintroducing a sales-only replay payload.

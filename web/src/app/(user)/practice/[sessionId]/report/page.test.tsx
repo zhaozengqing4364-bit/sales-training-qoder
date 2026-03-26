@@ -669,6 +669,27 @@ describe("ReportPage", () => {
         );
     });
 
+    it("keeps PPT degraded guidance visible when highlights are unavailable", async () => {
+        getReportMock.mockResolvedValue(basePresentationReport);
+        getComprehensiveReportMock.mockRejectedValue(new ApiRequestError({
+            status: 404,
+            errorCode: "[REPORT_NOT_FOUND]",
+            message: "not found",
+        }));
+        generateComprehensiveReportMock.mockRejectedValue(new Error("enhanced report unavailable"));
+        getHighlightsMock.mockRejectedValue(new Error("ppt highlights unavailable"));
+
+        render(<ReportPage />);
+
+        expect((await screen.findByTestId("report-overall-score")).textContent).toContain("88");
+        expect(screen.getByText("PPT 复盘报告")).toBeTruthy();
+        expect(await screen.findByText("高光片段暂不可用，PPT 基础复盘不受影响。")).toBeTruthy();
+        expect(screen.queryByText("主张证据状态")).toBeNull();
+        expect(screen.queryByText("销售推进结果")).toBeNull();
+        expect(screen.queryByText("知识库命中检测")).toBeNull();
+        expect(getKnowledgeCheckMock).not.toHaveBeenCalled();
+    });
+
     it("shows page-level PPT issue clusters with concrete evidence on the shared report route", async () => {
         getReportMock.mockResolvedValue({
             ...basePresentationReport,

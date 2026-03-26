@@ -110,6 +110,78 @@ describe("HistoryPage", () => {
         expect(reportButton.disabled).toBe(false);
     });
 
+    it("keeps presentation history entries on the shared replay/report route family", async () => {
+        getMyHistoryMock.mockResolvedValue({
+            sessions: [
+                {
+                    session_id: "ppt-session-1",
+                    scenario_name: "标准路演复盘",
+                    scenario_type: "presentation",
+                    persona_name: null,
+                    agent_name: null,
+                    start_time: "2026-03-23T00:00:00Z",
+                    duration_seconds: 420,
+                    overall_score: 88,
+                    report_status: "failed",
+                    report_generated_at: null,
+                    status: "completed",
+                    evaluable: true,
+                    not_evaluable_reason: null,
+                    evidence_completeness: {
+                        complete: true,
+                        scenario_type: "presentation",
+                        presentation_review_available: true,
+                    },
+                    effectiveness_snapshot: null,
+                    feedback_summary: "第二页还缺一个客户案例，继续按页补齐。",
+                    stage_summary: [],
+                    main_issue: null,
+                    next_goal: null,
+                },
+            ],
+            total: 1,
+            page: 1,
+            page_size: 50,
+            total_pages: 1,
+        });
+        getHistoryStatisticsMock.mockResolvedValue({
+            total_sessions: 1,
+            evaluable_sessions: 1,
+            not_evaluable_sessions: 0,
+            average_score: 88,
+            best_score: 88,
+            total_practice_time_seconds: 420,
+            total_practice_time_minutes: 7,
+        });
+        getHistoryTrendsMock.mockResolvedValue([
+            {
+                session_id: "ppt-session-1",
+                date: "2026-03-23T00:00:00Z",
+                overall_score: 88,
+                evaluable: true,
+                not_evaluable_reason: null,
+                evidence_completeness: {
+                    complete: true,
+                    scenario_type: "presentation",
+                    presentation_review_available: true,
+                },
+                stage_summary: [],
+                main_issue: null,
+                next_goal: null,
+            },
+        ]);
+
+        render(<HistoryPage />);
+
+        expect(await screen.findByText("第二页还缺一个客户案例，继续按页补齐。")).toBeTruthy();
+        expect(screen.getByRole("link", { name: "回放" }).getAttribute("href")).toBe(
+            "/practice/ppt-session-1/replay",
+        );
+        expect(screen.getByRole("link", { name: "报告" }).getAttribute("href")).toBe(
+            "/practice/ppt-session-1/report",
+        );
+    });
+
     it("keeps learning cues visible when analytics snapshots degrade", async () => {
         getMyHistoryMock.mockResolvedValue({
             sessions: [

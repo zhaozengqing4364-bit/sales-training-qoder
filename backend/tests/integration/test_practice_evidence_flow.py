@@ -13,7 +13,16 @@ from sqlalchemy.orm import sessionmaker
 from agent.models import Agent, AgentPersona, Persona, VoiceRuntimeProfile
 from common.auth.service import create_access_token
 from common.conversation.models import ConversationMessage
-from common.db.models import Base, PracticeSession, Scenario, SessionStatus, User
+from common.db.models import (
+    Base,
+    Page,
+    PracticeSession,
+    Presentation,
+    RequiredTalkingPoint,
+    Scenario,
+    SessionStatus,
+    User,
+)
 from common.db.session import get_db
 from main import app
 
@@ -102,6 +111,97 @@ def _without_replay_anchor(value: dict[str, object] | None) -> dict[str, object]
     if not isinstance(value, dict):
         return value
     return {key: item for key, item in value.items() if key != "replay_anchor"}
+
+
+async def _create_presentation_review_session(
+    db_session: AsyncSession,
+    *,
+    user: User,
+) -> PracticeSession:
+    scenario = Scenario(
+        scenario_id=str(uuid.uuid4()),
+        scenario_type="presentation",
+        name="presentation evidence route family",
+        is_active=True,
+    )
+    presentation = Presentation(
+        presentation_id=str(uuid.uuid4()),
+        title="共享回放课件",
+        file_url="file:///tmp/presentation-evidence-flow.pptx",
+        status="ready",
+        version_number=3,
+        total_pages=2,
+        ocr_progress=1.0,
+    )
+    page_1 = Page(
+        page_id=str(uuid.uuid4()),
+        presentation_id=presentation.presentation_id,
+        page_number=1,
+        ocr_extracted_text="第一页业务目标与客户问题",
+    )
+    page_2 = Page(
+        page_id=str(uuid.uuid4()),
+        presentation_id=presentation.presentation_id,
+        page_number=2,
+        ocr_extracted_text="第二页ROI结果与客户案例",
+    )
+    talking_points = [
+        RequiredTalkingPoint(
+            point_id=str(uuid.uuid4()),
+            page_id=page_1.page_id,
+            description="业务目标",
+            created_by="admin",
+            confirmed_by_admin=True,
+        ),
+        RequiredTalkingPoint(
+            point_id=str(uuid.uuid4()),
+            page_id=page_2.page_id,
+            description="客户案例",
+            created_by="admin",
+            confirmed_by_admin=True,
+        ),
+    ]
+    session = PracticeSession(
+        session_id=str(uuid.uuid4()),
+        user_id=str(user.user_id),
+        scenario_id=scenario.scenario_id,
+        presentation_id=presentation.presentation_id,
+        status=SessionStatus.COMPLETED.value,
+        total_duration_seconds=12 * 60,
+    )
+    messages = [
+        ConversationMessage(
+            session_id=session.session_id,
+            turn_number=1,
+            role="user",
+            content="第一页先讲业务目标。",
+            timestamp=datetime.now(UTC),
+            duration_ms=1800,
+            transcript_metadata={"page_number": 1},
+            score_snapshot={"overall_score": 86},
+        ),
+        ConversationMessage(
+            session_id=session.session_id,
+            turn_number=2,
+            role="user",
+            content="第二页补 ROI 结果和客户案例。",
+            timestamp=datetime.now(UTC),
+            duration_ms=2200,
+            transcript_metadata={"page_number": 2},
+            score_snapshot={"overall_score": 90},
+        ),
+    ]
+    db_session.add_all([
+        scenario,
+        presentation,
+        page_1,
+        page_2,
+        session,
+        *talking_points,
+        *messages,
+    ])
+    await db_session.commit()
+    return session
 
 
 @pytest_asyncio.fixture(scope="function")
@@ -416,3 +516,48 @@ async def test_create_session_persists_retry_focus_intent_from_report_retry_entr
         )
     ).scalar_one()
     assert persisted.voice_policy_snapshot["focus_intent"] == focus_intent
+
+
+@pytest.mark.asyncio
+async def test_completed_presentation_report_and_replay_share_ppt_route_family(
+    async_client: AsyncClient,
+    db_session: AsyncSession,
+    test_user: User,
+    auth_headers: dict[str, str],
+):
+    session = await _create_presentation_review_session(
+        db_session,
+        user=test_user,
+    )
+
+    report_resp = await async_client.get(
+        f"/api/v1/practice/sessions/{session.session_id}/report",
+        headers=auth_headers,
+    )
+    replay_resp = await async_client.get(
+        f"/api/v1/sessions/{session.session_id}/replay",
+        headers=auth_headers,
+    )
+
+    assert report_resp.status_code == 200
+    assert replay_resp.status_code == 200
+
+    report_data = report_resp.json()["data"]
+    replay_data = replay_resp.json()["data"]
+
+    assert report_data["scenario_type"] == replay_data["scenario_type"] == "presentation"
+    assert replay_data["presentation_id"] == session.presentation_id
+    assert report_data["retry_entry"] == {
+        "scenario_type": "presentation",
+        "agent_id": None,
+        "persona_id": None,
+        "presentation_id": session.presentation_id,
+    }
+    assert report_data["presentation_review"] == replay_data["presentation_review"]
+    assert report_data["evidence_completeness"] == replay_data["evidence_completeness"]
+    assert report_data["main_issue"] is None
+    assert report_data["next_goal"] is None
+    assert replay_data["main_issue"] is None
+    assert replay_data["next_goal"] is None
+    assert replay_data["evaluable"] is None
+    assert replay_data["not_evaluable_reason"] is None

@@ -215,6 +215,24 @@ class ReplayService:
                 replay_anchor,
             )
 
+            scenario_type = str(
+                getattr(
+                    projection,
+                    "scenario_type",
+                    SessionEvidenceService.resolve_scenario_type(session),
+                )
+            ).lower()
+            is_presentation_scenario = scenario_type == "presentation"
+            presentation_review = (
+                projection.presentation_review if is_presentation_scenario else None
+            )
+            main_issue_payload = (
+                None if is_presentation_scenario else main_issue_with_anchor
+            )
+            next_goal_payload = (
+                None if is_presentation_scenario else next_goal_with_anchor
+            )
+
             # Get agent and persona names (if available)
             agent_name = None
             persona_name = None
@@ -244,16 +262,22 @@ class ReplayService:
                 "total_duration_ms": projection.total_duration_ms,
                 "messages": enriched_messages,
                 "timeline_markers": timeline_markers,
-                "stage_summary": projection.stage_summary,
+                "stage_summary": [] if is_presentation_scenario else projection.stage_summary,
                 "overall_score": projection.overall_score,
-                "effectiveness_snapshot": projection.effectiveness_snapshot,
-                "pass_flags": projection.pass_flags,
-                "main_capability_passed": projection.main_capability_passed,
-                "overall_result": projection.overall_result,
-                "main_issue": main_issue_with_anchor,
-                "next_goal": next_goal_with_anchor,
-                "evaluable": projection.evaluable,
-                "not_evaluable_reason": projection.not_evaluable_reason,
+                "effectiveness_snapshot": (
+                    None if is_presentation_scenario else projection.effectiveness_snapshot
+                ),
+                "pass_flags": None if is_presentation_scenario else projection.pass_flags,
+                "main_capability_passed": (
+                    None if is_presentation_scenario else projection.main_capability_passed
+                ),
+                "overall_result": None if is_presentation_scenario else projection.overall_result,
+                "main_issue": main_issue_payload,
+                "next_goal": next_goal_payload,
+                "evaluable": None if is_presentation_scenario else projection.evaluable,
+                "not_evaluable_reason": (
+                    None if is_presentation_scenario else projection.not_evaluable_reason
+                ),
                 "evidence_completeness": projection.evidence_completeness,
                 "presentation_review": presentation_review,
             }
@@ -261,32 +285,34 @@ class ReplayService:
             logger.info(
                 "replay_data_generated",
                 session_id=session_id,
+                scenario_type=scenario_type,
+                presentation_review_available=bool(presentation_review),
                 highlight_learning_count=sum(
                     1 for message in enriched_messages if message.get("learning_evidence")
                 ),
                 issue_family=(
-                    main_issue_with_anchor.get("issue_type")
-                    if isinstance(main_issue_with_anchor, dict)
+                    main_issue_payload.get("issue_type")
+                    if isinstance(main_issue_payload, dict)
                     else None
                 ),
                 main_issue_anchor_status=(
-                    main_issue_with_anchor.get("replay_anchor", {}).get("status")
-                    if isinstance(main_issue_with_anchor, dict)
+                    main_issue_payload.get("replay_anchor", {}).get("status")
+                    if isinstance(main_issue_payload, dict)
                     else None
                 ),
                 next_goal_anchor_status=(
-                    next_goal_with_anchor.get("replay_anchor", {}).get("status")
-                    if isinstance(next_goal_with_anchor, dict)
+                    next_goal_payload.get("replay_anchor", {}).get("status")
+                    if isinstance(next_goal_payload, dict)
                     else None
                 ),
                 main_issue_anchor_reason=(
-                    main_issue_with_anchor.get("replay_anchor", {}).get("degraded_reason")
-                    if isinstance(main_issue_with_anchor, dict)
+                    main_issue_payload.get("replay_anchor", {}).get("degraded_reason")
+                    if isinstance(main_issue_payload, dict)
                     else None
                 ),
                 next_goal_anchor_reason=(
-                    next_goal_with_anchor.get("replay_anchor", {}).get("degraded_reason")
-                    if isinstance(next_goal_with_anchor, dict)
+                    next_goal_payload.get("replay_anchor", {}).get("degraded_reason")
+                    if isinstance(next_goal_payload, dict)
                     else None
                 ),
             )

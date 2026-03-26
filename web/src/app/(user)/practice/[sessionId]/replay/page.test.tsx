@@ -777,6 +777,32 @@ describe("SessionReplayPage", () => {
     expect(anchoredTurn?.className).toContain("border-blue-300");
   });
 
+  it("relaunches PPT retry from replay on the shared practice route family", async () => {
+    getReplayMock.mockResolvedValue(buildPresentationReplayData());
+    getHighlightsMock.mockResolvedValue(buildHighlightsResponse({ highlights: [] }));
+    getReportMock.mockResolvedValue(buildPresentationReport());
+
+    render(<SessionReplayPage />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "按目标再练一轮" }));
+
+    await waitFor(() => {
+      expect(createSessionMock).toHaveBeenCalledTimes(1);
+    });
+
+    const [payload] = createSessionMock.mock.calls.at(-1) ?? [];
+    expect(payload).toMatchObject({
+      scenario_type: "presentation",
+      presentation_id: "presentation-1",
+    });
+    expect(payload.agent_id).toBeUndefined();
+    expect(payload.persona_id).toBeUndefined();
+    expect(payload.focus_intent).toBeUndefined();
+    expect(pushMock).toHaveBeenCalledWith(
+      "/practice/retry-1?scenario_type=presentation&presentation_id=presentation-1",
+    );
+  });
+
   it("keeps a degraded page banner visible when the requested PPT page anchor is missing", async () => {
     searchParamsState.current = new URLSearchParams("page=9&page_anchor_status=missing&page_anchor_reason=page_not_found");
     getReplayMock.mockResolvedValue(buildPresentationReplayData());

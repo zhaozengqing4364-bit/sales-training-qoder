@@ -14,6 +14,8 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from common.db.schemas import PresentationReview
+
 # ========== Type Aliases for API ==========
 MessageRoleType = str  # "user" | "assistant"
 HighlightTypeType = str  # "good" | "bad" | "neutral"
@@ -309,6 +311,10 @@ class ReplayDataResponse(BaseModel):
     evidence_completeness: dict[str, Any] | None = Field(
         None,
         description="Projection completeness diagnostics",
+    )
+    presentation_review: PresentationReview | None = Field(
+        None,
+        description="Page-level PPT review payload for presentation sessions",
     )
     messages: list[ConversationMessageResponse] = Field(
         ...,

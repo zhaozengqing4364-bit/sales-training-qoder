@@ -1018,7 +1018,125 @@ class TestReplayService:
         assert data["presentation_review"] == projection.presentation_review
         assert data["main_issue"] is None
         assert data["next_goal"] is None
-        assert data["messages"][0]["learning_evidence"] is None
+        assert data["messages"][0].get("learning_evidence") is None
+
+    @pytest.mark.asyncio
+    async def test_get_replay_data_hides_sales_conclusions_when_projection_is_presentation_even_if_sales_fields_are_present(
+        self,
+        service,
+        mock_completed_session,
+    ):
+        """Presentation replay should keep the shared PPT contract even if stale sales fields leak into the projection."""
+        mock_completed_session.presentation_id = "presentation-1"
+        replay_messages = [
+            {
+                "id": "ppt-turn-1",
+                "session_id": mock_completed_session.session_id,
+                "turn_number": 1,
+                "role": "user",
+                "content": "第一页先讲业务目标。",
+                "audio_url": None,
+                "timestamp": "2026-03-25T00:00:00+00:00",
+                "duration_ms": 1800,
+                "fuzzy_words": None,
+                "transcript_metadata": {"page_number": 1},
+                "sales_stage": None,
+                "score_snapshot": {"overall_score": 88.0},
+                "ai_feedback": None,
+                "is_highlight": False,
+                "highlight_type": None,
+                "highlight_reason": None,
+            },
+        ]
+        projection = _make_projection(
+            mock_completed_session,
+            messages=replay_messages,
+            main_issue={
+                "issue_type": "stale_sales_issue",
+                "issue_text": "这条销售结论不该出现在 PPT 回放里。",
+                "recovery_rule": "忽略它。",
+            },
+            next_goal={
+                "goal_type": "stale_sales_goal",
+                "goal_text": "这条销售目标不该出现在 PPT 回放里。",
+                "rule": "忽略它。",
+            },
+            overall_score=88.0,
+        )
+        projection.scenario_type = "presentation"
+        projection.effectiveness_snapshot = {
+            "main_issue": {"issue_type": "stale_sales_issue"},
+            "next_goal": {"goal_type": "stale_sales_goal"},
+        }
+        projection.pass_flags = {"pass_3min_flow": True}
+        projection.main_capability_passed = True
+        projection.overall_result = "pass"
+        projection.evaluable = False
+        projection.not_evaluable_reason = "INSUFFICIENT_TURN_DATA"
+        projection.presentation_review = {
+            "overall_score": 88,
+            "dimension_scores": [],
+            "page_summaries": [],
+            "required_talking_points": {
+                "status": "degraded",
+                "total": 1,
+                "covered": 0,
+                "missing": 1,
+                "coverage_ratio": 0,
+            },
+            "issue_counts": {},
+            "strengths": [],
+            "improvements": [],
+            "recommendations": [],
+            "detailed_feedback": "PPT shared replay should ignore stale sales fields.",
+            "has_page_metadata": False,
+            "coverage_status": "degraded",
+            "diagnostics": {
+                "has_page_metadata": False,
+                "pages_with_messages": 0,
+                "total_pages": 1,
+                "page_coverage_ratio": 0,
+                "required_points_total": 1,
+                "required_points_covered": 0,
+                "required_points_missing": 1,
+                "required_coverage_ratio": 0,
+                "degraded_reasons": ["missing_page_metadata"],
+            },
+        }
+        projection.evidence_completeness = {
+            "scenario_type": "presentation",
+            "complete": False,
+            "message_count": 1,
+            "presentation_review_available": True,
+            "page_metadata_complete": False,
+            "page_summary_count": 0,
+            "required_talking_points_status": "degraded",
+            "required_points_total": 1,
+            "required_points_covered": 0,
+            "required_points_missing": 1,
+            "required_coverage_ratio": 0,
+            "degraded_reasons": ["missing_page_metadata"],
+        }
+
+        with patch(
+            "common.conversation.replay.SessionEvidenceService.get_projection",
+            new=AsyncMock(return_value=Result.ok(projection)),
+        ):
+            result = await service.get_replay_data(mock_completed_session.session_id)
+
+        assert result.is_success
+        data = result.value
+        assert data["scenario_type"] == "presentation"
+        assert data["presentation_review"] == projection.presentation_review
+        assert data["effectiveness_snapshot"] is None
+        assert data["pass_flags"] is None
+        assert data["main_capability_passed"] is None
+        assert data["overall_result"] is None
+        assert data["main_issue"] is None
+        assert data["next_goal"] is None
+        assert data["evaluable"] is None
+        assert data["not_evaluable_reason"] is None
+        assert data["stage_summary"] == []
 
     @pytest.mark.asyncio
     async def test_get_replay_data_session_not_completed(self, service, mock_db, mock_in_progress_session):
