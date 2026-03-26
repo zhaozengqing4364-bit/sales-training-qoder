@@ -1449,3 +1449,25 @@ Append one entry per iteration:
   verification results: passed; backend replay/evidence coverage is green at 34/34, the focused report/replay/history web suite is green at 23/23, and the chained slice verification command passed end to end. The only remaining environment caveat is the machine's broken global npm wrapper, so the web leg still uses pnpm dlx npm@11.6.1.
   success signal status: the current report, replay, history, highlights, and retry routes now stay on one vocabulary and one route family for both sales and presentation, and PPT replay payloads are available again on the shared /sessions/{id}/replay surface.
   rollback note: if later work revisits this seam, keep replay scenario-aware in exactly the same way as report and preserve presentation_review on the shared replay response model instead of reintroducing a sales-only replay payload.
+
+
+- time: 2026-03-26T12:49:01+08:00
+  mode: stabilize
+  item id: M004-S05-T02
+  files changed:
+    - .gsd/milestones/M004/slices/S05/S05-UAT.md
+    - .gsd/milestones/M004/slices/S05/tasks/T01-PLAN.md
+    - .gsd/milestones/M004/slices/S05/S05-PLAN.md
+    - .gsd/milestones/M004/slices/S05/tasks/T01-VERIFY.json
+    - .artifacts/m004-s05-t02/verify-playwright.js
+    - .artifacts/m004-s05-t02/summary.json
+    - .codex/loop/state.json
+  summary: Captured a fresh localhost sales history->report->replay->retry proof on the current user routes, saved screenshots plus a browser summary artifact, and repaired the stale split T01 verifier so auto-mode stops rerunning bare repo-root pytest and cd ../web fragments.
+  verification commands:
+    - cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_replay_service.py tests/integration/test_practice_evidence_flow.py
+    - npm test -- --run 'src/app/(user)/practice/[sessionId]/report/page.test.tsx' 'src/app/(user)/practice/[sessionId]/replay/page.test.tsx' 'src/app/(dashboard)/history/page.test.tsx'
+    - node .artifacts/m004-s05-t02/verify-playwright.js
+    - test -s .gsd/milestones/M004/slices/S05/S05-UAT.md && test -s .artifacts/m004-s05-t02/summary.json && test -s .artifacts/m004-s05-t02/verify-playwright.js && test -f .artifacts/m004-s05-t02/history.png && test -f .artifacts/m004-s05-t02/report.png && test -f .artifacts/m004-s05-t02/replay.png && test -f .artifacts/m004-s05-t02/retry.png && test -s .gsd/milestones/M004/slices/S05/tasks/T01-VERIFY.json
+  verification results: passed; the focused T01 backend/web suites are green again with a repaired VERIFY artifact, and the browser proof confirmed that localhost auth keeps the current sales review loop usable on history/report/replay/retry even when replay must explain a degraded no-matching-highlight anchor.
+  success signal status: current user routes now have fresh evidence that a completed sales session can be opened from history, reviewed via report and replay, and relaunched as a focused retry without leaving the shared route family.
+  rollback note: if future verification regresses into repo-root pytest or cd ../web failures again, compare the generated VERIFY artifact against T01-PLAN before touching product code; this turn proved the feature path itself was already healthy.
