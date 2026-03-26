@@ -8,6 +8,7 @@ import {
     AnalyticsTrends,
     AnalyticsAgents,
     AnalyticsLeaderboard,
+    AdminOperatingPackResponse,
     ManagerLiteListsResponse,
     OpenAnalyticsDashboard,
     SupportRuntimeFaultItem,
@@ -50,8 +51,43 @@ const EMPTY_MANAGER_LITE: ManagerLiteListsResponse = {
     improving: [],
 };
 
+const EMPTY_OPERATING_PACK: AdminOperatingPackResponse = {
+    score_basis: "session_evidence_projection_evaluable_only",
+    weekly_summary: {
+        window_days: 7,
+        window_start: null,
+        window_end: null,
+        completed_sessions: 0,
+        evaluable_sessions: 0,
+        not_evaluable_sessions: 0,
+        degraded_sessions: 0,
+        active_departments: 0,
+        at_risk_users: 0,
+        improving_users: 0,
+        top_issue_family: null,
+        top_blocker_family: null,
+        top_not_evaluable_reason: null,
+        top_degraded_reason: null,
+    },
+    cohort_issue_buckets: [],
+    department_issue_buckets: [],
+    repeated_blocker_families: [],
+    degradation_breakdown: {
+        not_evaluable_reasons: [],
+        degraded_reasons: [],
+    },
+    manager_lists: EMPTY_MANAGER_LITE,
+};
+
 const SCORE_BASIS_LABELS: Record<string, string> = {
     session_evidence_projection_evaluable_only: "统一训练证据 · 仅统计可评估的已完成训练",
+};
+
+const DEGRADED_REASON_LABELS: Record<string, string> = {
+    message_scores: "消息级评分缺失",
+    stage_evidence: "阶段证据缺失",
+    page_metadata: "页码证据缺失",
+    page_summary: "页级总结缺失",
 };
 
 function formatScoreBasisLabel(scoreBasis?: string | null): string {
@@ -59,6 +95,17 @@ function formatScoreBasisLabel(scoreBasis?: string | null): string {
         return "统一训练证据口径";
     }
     return SCORE_BASIS_LABELS[scoreBasis] || scoreBasis;
+}
+
+function formatDegradedReasonLabel(reason?: string | null): string {
+    if (!reason) {
+        return "暂无降级原因";
+    }
+    return DEGRADED_REASON_LABELS[reason] || reason;
+}
+
+function formatBucketLabel(count: number): string {
+    return `Top ${Math.max(count, 0)}`;
 }
 
 function resolveWindowDays(timeRange: TimeRange): number {
@@ -69,6 +116,7 @@ function resolveWindowDays(timeRange: TimeRange): number {
 }
 
 type LinkedAssetChange = {
+    asset_id?: string;
     asset_type?: string;
     asset_label?: string;
     asset_name?: string;
@@ -109,6 +157,7 @@ function parseLinkedAssetChanges(value: unknown): LinkedAssetChange[] {
         .map((entry) => {
             const raw = asRecord(entry);
             return {
+                asset_id: toOptionalString(raw.asset_id),
                 asset_type: toOptionalString(raw.asset_type),
                 asset_label: toOptionalString(raw.asset_label),
                 asset_name: toOptionalString(raw.asset_name),
@@ -158,7 +207,7 @@ export default function AnalyticsPage() {
     const [trends, setTrends] = useState<AnalyticsTrends | null>(null);
     const [agents, setAgents] = useState<AnalyticsAgents | null>(null);
     const [leaderboard, setLeaderboard] = useState<AnalyticsLeaderboard | null>(null);
-    const [managerLite, setManagerLite] = useState<ManagerLiteListsResponse | null>(null);
+    const [operatingPack, setOperatingPack] = useState<AdminOperatingPackResponse>(EMPTY_OPERATING_PACK);
     const [effectiveness, setEffectiveness] = useState<CoreEffectiveness>(DEFAULT_EFFECTIVENESS);
     const [runtimeFaults, setRuntimeFaults] = useState<SupportRuntimeFaultItem[]>([]);
 
@@ -172,12 +221,17 @@ export default function AnalyticsPage() {
             scenario_type: scenarioType || undefined,
         };
 
-        const [overviewResult, trendsResult, agentsResult, leaderboardResult, managerLiteResult, effectivenessResult, runtimeFaultsResult] = await Promise.allSettled([
+        const [overviewResult, trendsResult, agentsResult, leaderboardResult, operatingPackResult, effectivenessResult, runtimeFaultsResult] = await Promise.allSettled([
             api.analytics.getOverview(params),
             api.analytics.getTrends({ time_range: timeRange }),
             api.analytics.getAgents({ time_range: timeRange }),
             api.analytics.getLeaderboard({ time_range: timeRange, limit: 50 }),
-            api.analytics.getManagerLiteLists({ time_range: timeRange, limit: 20, inactive_days: 7 }),
+            api.analytics.getOperatingPack({
+                time_range: "7d",
+                scenario_type: scenarioType || undefined,
+                limit: 10,
+                inactive_days: 7,
+            }),
             api.analyticsOpen.getDashboard({
                 scenario_type: scenarioType || undefined,
                 days: resolveWindowDays(timeRange),
@@ -213,11 +267,11 @@ export default function AnalyticsPage() {
             setLeaderboard(null);
         }
 
-        if (managerLiteResult.status === "fulfilled") {
-            setManagerLite(managerLiteResult.value);
+        if (operatingPackResult.status === "fulfilled") {
+            setOperatingPack(operatingPackResult.value);
         } else {
-            console.error("Failed to load manager-lite lists:", managerLiteResult.reason);
-            setManagerLite(EMPTY_MANAGER_LITE);
+            console.error("Failed to load analytics operating pack:", operatingPackResult.reason);
+            setOperatingPack(EMPTY_OPERATING_PACK);
         }
 
         if (effectivenessResult.status === "fulfilled") {
@@ -265,6 +319,12 @@ export default function AnalyticsPage() {
     };
 
     const projectionSummary = trends?.projection_summary;
+    const operatingSummary = operatingPack.weekly_summary;
+    const managerLite = operatingPack.manager_lists;
+    const repeatedBlockerFamilies = operatingPack.repeated_blocker_families.length > 0
+        ? operatingPack.repeated_blocker_families
+        : operatingPack.cohort_issue_buckets;
+    const departmentIssueBuckets = operatingPack.department_issue_buckets;
     const evaluableSessions = overview?.evaluable_sessions ?? projectionSummary?.evaluable_sessions ?? 0;
     const notEvaluableSessions = overview?.not_evaluable_sessions ?? projectionSummary?.not_evaluable_sessions ?? 0;
     const scoreBasis = overview?.score_basis ?? projectionSummary?.score_basis ?? null;
@@ -277,6 +337,8 @@ export default function AnalyticsPage() {
         return overview?.not_evaluable_reasons?.[0] ?? projectionSummary?.not_evaluable_reasons?.[0] ?? null;
     }, [overview, projectionSummary]);
 
+    const topBlockerFamily = operatingSummary.top_blocker_family ?? operatingSummary.top_issue_family ?? null;
+    const topDegradedReason = operatingSummary.top_degraded_reason ?? operatingPack.degradation_breakdown.degraded_reasons[0] ?? null;
     const repeatedGoal = projectionSummary?.repeated_next_goals?.[0] ?? null;
     const leaderboardLeader = leaderboard?.leaderboard?.[0] ?? null;
     const linkedRuntimeFaults = useMemo(() => {
@@ -294,6 +356,12 @@ export default function AnalyticsPage() {
         : null;
     const topReasonLabel = topReason
         ? formatNotEvaluableReason(topReason.reason)
+        : null;
+    const topBlockerLabel = topBlockerFamily
+        ? (formatIssueTypeLabel(topBlockerFamily.issue_type) || topBlockerFamily.issue_type || topBlockerFamily.issue_family)
+        : null;
+    const topDegradedReasonLabel = topDegradedReason
+        ? formatDegradedReasonLabel(topDegradedReason.reason)
         : null;
     const repeatedGoalLabel = repeatedGoal
         ? (formatGoalTypeLabel(repeatedGoal.goal_type) || repeatedGoal.goal_type)
@@ -432,6 +500,185 @@ export default function AnalyticsPage() {
 
             {overview && <MetricsCards data={overview} />}
 
+            <GlassCard className="p-6 border border-slate-200 bg-white/95">
+                <div className="flex items-start justify-between gap-4 flex-wrap">
+                    <div>
+                        <h2 className="text-xl font-black text-slate-900">本周经营节奏包</h2>
+                        <p className="mt-2 text-sm text-slate-600 text-pretty">
+                            本周已完成 {operatingSummary.completed_sessions} 次训练，其中 {operatingSummary.evaluable_sessions} 次可评估，{operatingSummary.not_evaluable_sessions} 次证据不足；当前有 {operatingSummary.at_risk_users} 位风险成员、{operatingSummary.improving_users} 位显著回升成员。
+                        </p>
+                    </div>
+                    <span className="inline-flex items-center rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600">
+                        固定观察窗 {operatingSummary.window_days || 7} 天
+                    </span>
+                </div>
+
+                <div className="mt-5 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+                    <div className="rounded-2xl border border-rose-100 bg-rose-50/70 p-4">
+                        <p className="text-xs font-semibold uppercase tracking-wide text-rose-700">风险成员</p>
+                        <p className="mt-2 text-3xl font-black text-slate-900">{operatingSummary.at_risk_users}</p>
+                        <p className="mt-1 text-xs text-slate-600">未通过 + 连续未练，按最新可评估证据对齐。</p>
+                    </div>
+                    <div className="rounded-2xl border border-emerald-100 bg-emerald-50/70 p-4">
+                        <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">显著回升</p>
+                        <p className="mt-2 text-3xl font-black text-slate-900">{operatingSummary.improving_users}</p>
+                        <p className="mt-1 text-xs text-slate-600">最近一周通过率明显抬升的成员。</p>
+                    </div>
+                    <div className="rounded-2xl border border-amber-100 bg-amber-50/70 p-4">
+                        <p className="text-xs font-semibold uppercase tracking-wide text-amber-700">证据不足 / 降级</p>
+                        <p className="mt-2 text-3xl font-black text-slate-900">{operatingSummary.not_evaluable_sessions + operatingSummary.degraded_sessions}</p>
+                        <p className="mt-1 text-xs text-slate-600">{topDegradedReasonLabel || topReasonLabel || "当前没有明显降级信号"}</p>
+                    </div>
+                    <div className="rounded-2xl border border-sky-100 bg-sky-50/70 p-4">
+                        <p className="text-xs font-semibold uppercase tracking-wide text-sky-700">活跃部门</p>
+                        <p className="mt-2 text-3xl font-black text-slate-900">{operatingSummary.active_departments}</p>
+                        <p className="mt-1 text-xs text-slate-600">本周至少产生一次已完成训练的部门数。</p>
+                    </div>
+                </div>
+
+                <div className="mt-6 grid grid-cols-1 gap-6 xl:grid-cols-[1.1fr_0.9fr]">
+                    <div className="rounded-3xl border border-slate-200 bg-slate-50/80 p-5">
+                        <div className="flex items-start justify-between gap-4">
+                            <div>
+                                <h3 className="text-base font-bold text-slate-900">反复卡点 {formatBucketLabel(repeatedBlockerFamilies.length)}</h3>
+                                <p className="mt-1 text-sm text-slate-500 text-pretty">
+                                    优先看本周重复出现的问题家族，而不是把注意力放回旧的均分波动。
+                                </p>
+                            </div>
+                            {topBlockerLabel ? (
+                                <span className="inline-flex rounded-full bg-white px-3 py-1 text-xs font-medium text-slate-700">
+                                    当前最重：{topBlockerLabel}
+                                </span>
+                            ) : null}
+                        </div>
+                        <div className="mt-4 space-y-3">
+                            {repeatedBlockerFamilies.length > 0 ? repeatedBlockerFamilies.map((bucket) => {
+                                const issueLabel = formatIssueTypeLabel(bucket.issue_type) || bucket.issue_type || bucket.issue_family;
+                                return (
+                                    <div key={`${bucket.issue_family}-${bucket.issue_text || "empty"}`} className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
+                                        <div className="flex flex-wrap items-center justify-between gap-3">
+                                            <div>
+                                                <p className="text-sm font-semibold text-slate-900">{bucket.issue_text || issueLabel}</p>
+                                                <p className="mt-1 text-xs text-slate-500">{issueLabel}</p>
+                                            </div>
+                                            <div className="text-right text-xs text-slate-500">
+                                                <p>{bucket.count} 次命中</p>
+                                                <p>{bucket.user_count} 人 / {bucket.department_count ?? 0} 部门</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                );
+                            }) : (
+                                <div className="rounded-2xl border border-dashed border-slate-200 bg-white px-4 py-5 text-sm text-slate-500">
+                                    本周还没有形成稳定重复的 blocker family。
+                                </div>
+                            )}
+                        </div>
+                    </div>
+
+                    <div className="rounded-3xl border border-slate-200 bg-slate-50/80 p-5">
+                        <h3 className="text-base font-bold text-slate-900">本周首要处理点</h3>
+                        <div className="mt-4 space-y-3">
+                            <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
+                                <p className="text-xs font-medium text-slate-500">重复卡点</p>
+                                <p className="mt-2 text-sm font-semibold text-slate-900 text-pretty">
+                                    {topBlockerFamily?.issue_text || "当前还没有稳定重复卡点"}
+                                </p>
+                            </div>
+                            <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
+                                <p className="text-xs font-medium text-slate-500">证据不足主因</p>
+                                <p className="mt-2 text-sm font-semibold text-slate-900 text-pretty">
+                                    {operatingSummary.top_not_evaluable_reason
+                                        ? formatNotEvaluableReason(operatingSummary.top_not_evaluable_reason.reason)
+                                        : "当前没有证据不足主因"}
+                                </p>
+                            </div>
+                            <div className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
+                                <p className="text-xs font-medium text-slate-500">降级主因</p>
+                                <p className="mt-2 text-sm font-semibold text-slate-900 text-pretty">
+                                    {topDegradedReasonLabel || "当前没有降级主因"}
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </GlassCard>
+
+            <GlassCard className="p-6 border border-slate-200 bg-white/95">
+                <div className="flex items-start justify-between gap-4 flex-wrap">
+                    <div>
+                        <h3 className="text-lg font-bold text-slate-900">部门问题面</h3>
+                        <p className="mt-1 text-sm text-slate-500 text-pretty">
+                            把部门维度的 blocker、证据不足与降级原因放在一屏里，方便周会上直接分派动作。
+                        </p>
+                    </div>
+                    <span className="inline-flex items-center rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600">
+                        {departmentIssueBuckets.length > 0 ? `${departmentIssueBuckets.length} 个部门有已完成训练` : "本周暂无部门样本"}
+                    </span>
+                </div>
+
+                {departmentIssueBuckets.length > 0 ? (
+                    <div className="mt-5 grid grid-cols-1 gap-4 xl:grid-cols-2">
+                        {departmentIssueBuckets.map((bucket) => (
+                            <article key={bucket.department} className="rounded-3xl border border-slate-200 bg-slate-50/70 p-5">
+                                <div className="flex items-start justify-between gap-4">
+                                    <div>
+                                        <h4 className="text-lg font-bold text-slate-900">{bucket.department}</h4>
+                                        <p className="mt-1 text-sm text-slate-500 tabular-nums">
+                                            本周 {bucket.session_count} 次训练 · {bucket.evaluable_sessions} 次可评估 · {bucket.not_evaluable_sessions} 次证据不足
+                                        </p>
+                                    </div>
+                                </div>
+
+                                <div className="mt-4 space-y-3">
+                                    {bucket.issue_buckets.length > 0 ? bucket.issue_buckets.map((issueBucket) => {
+                                        const issueLabel = formatIssueTypeLabel(issueBucket.issue_type) || issueBucket.issue_type || issueBucket.issue_family;
+                                        return (
+                                            <div key={`${bucket.department}-${issueBucket.issue_family}`} className="rounded-2xl border border-white/80 bg-white px-4 py-3">
+                                                <div className="flex items-start justify-between gap-4">
+                                                    <div>
+                                                        <p className="text-sm font-semibold text-slate-900 text-pretty">{issueBucket.issue_text || issueLabel}</p>
+                                                        <p className="mt-1 text-xs text-slate-500">{issueLabel}</p>
+                                                    </div>
+                                                    <span className="text-xs font-medium text-slate-500">{issueBucket.count} 次 / {issueBucket.user_count} 人</span>
+                                                </div>
+                                            </div>
+                                        );
+                                    }) : (
+                                        <div className="rounded-2xl border border-dashed border-slate-200 bg-white px-4 py-5 text-sm text-slate-500">
+                                            当前部门本周还没有形成 blocker family。
+                                        </div>
+                                    )}
+                                </div>
+
+                                <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2">
+                                    <div className="rounded-2xl border border-white/80 bg-white px-4 py-3">
+                                        <p className="text-xs font-medium text-slate-500">证据不足原因</p>
+                                        <div className="mt-2 space-y-1 text-sm text-slate-700">
+                                            {bucket.degradation_breakdown.not_evaluable_reasons.length > 0 ? bucket.degradation_breakdown.not_evaluable_reasons.map((reason) => (
+                                                <p key={`${bucket.department}-${reason.reason}`}>{formatNotEvaluableReason(reason.reason)} · {reason.count} 次</p>
+                                            )) : <p>当前无证据不足原因</p>}
+                                        </div>
+                                    </div>
+                                    <div className="rounded-2xl border border-white/80 bg-white px-4 py-3">
+                                        <p className="text-xs font-medium text-slate-500">降级原因</p>
+                                        <div className="mt-2 space-y-1 text-sm text-slate-700">
+                                            {bucket.degradation_breakdown.degraded_reasons.length > 0 ? bucket.degradation_breakdown.degraded_reasons.map((reason) => (
+                                                <p key={`${bucket.department}-degraded-${reason.reason}`}>{formatDegradedReasonLabel(reason.reason)} · {reason.count} 次</p>
+                                            )) : <p>当前无降级原因</p>}
+                                        </div>
+                                    </div>
+                                </div>
+                            </article>
+                        ))}
+                    </div>
+                ) : (
+                    <div className="mt-5 rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-5 text-sm text-slate-500">
+                        本周还没有可用于部门问题面的完成训练样本。
+                    </div>
+                )}
+            </GlassCard>
+
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 <GlassCard className="p-6">
                     <div className="flex items-center gap-3 mb-4">
@@ -562,9 +809,7 @@ export default function AnalyticsPage() {
                 </div>
             </GlassCard>
 
-            {managerLite && (
-                <ManagerLitePanel data={managerLite} onRemind={handleManagerRemind} />
-            )}
+            <ManagerLitePanel data={managerLite} onRemind={handleManagerRemind} />
 
             <GlassCard className="p-6">
                 <div className="flex items-start justify-between gap-4 flex-wrap">

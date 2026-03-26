@@ -1392,30 +1392,92 @@ export interface OpenAnalyticsDashboard {
     };
 }
 
+export interface ManagerLiteNotPassedItem {
+    user_id: string;
+    user_name: string;
+    department?: string | null;
+    overall_result: string;
+    session_id: string;
+    session_start_time: string;
+    issue_family?: string | null;
+}
+
+export interface ManagerLiteInactiveStreakItem {
+    user_id: string;
+    user_name: string;
+    department?: string | null;
+    last_session_at: string;
+    inactive_days: number;
+}
+
+export interface ManagerLiteImprovingItem {
+    user_id: string;
+    user_name: string;
+    department?: string | null;
+    pass_gain: number;
+    baseline_pass_rate: number;
+    current_pass_rate: number;
+}
+
 export interface ManagerLiteListsResponse {
-    not_passed: Array<{
-        user_id: string;
-        user_name: string;
-        department?: string | null;
-        overall_result: string;
-        session_id: string;
-        session_start_time: string;
-    }>;
-    inactive_streak: Array<{
-        user_id: string;
-        user_name: string;
-        department?: string | null;
-        last_session_at: string;
-        inactive_days: number;
-    }>;
-    improving: Array<{
-        user_id: string;
-        user_name: string;
-        department?: string | null;
-        pass_gain: number;
-        baseline_pass_rate: number;
-        current_pass_rate: number;
-    }>;
+    not_passed: ManagerLiteNotPassedItem[];
+    inactive_streak: ManagerLiteInactiveStreakItem[];
+    improving: ManagerLiteImprovingItem[];
+}
+
+export interface AdminOperatingPackIssueBucket {
+    issue_family: string;
+    issue_type: string;
+    issue_text?: string | null;
+    count: number;
+    user_count: number;
+    department_count?: number;
+}
+
+export interface AdminOperatingPackReasonBucket {
+    reason: string;
+    count: number;
+}
+
+export interface AdminOperatingPackDegradationBreakdown {
+    not_evaluable_reasons: AdminOperatingPackReasonBucket[];
+    degraded_reasons: AdminOperatingPackReasonBucket[];
+}
+
+export interface AdminOperatingPackDepartmentBucket {
+    department: string;
+    session_count: number;
+    evaluable_sessions: number;
+    not_evaluable_sessions: number;
+    issue_buckets: AdminOperatingPackIssueBucket[];
+    degradation_breakdown: AdminOperatingPackDegradationBreakdown;
+}
+
+export interface AdminOperatingPackWeeklySummary {
+    window_days?: number | null;
+    window_start?: string | null;
+    window_end?: string | null;
+    completed_sessions: number;
+    evaluable_sessions: number;
+    not_evaluable_sessions: number;
+    degraded_sessions: number;
+    active_departments: number;
+    at_risk_users: number;
+    improving_users: number;
+    top_issue_family?: AdminOperatingPackIssueBucket | null;
+    top_blocker_family?: AdminOperatingPackIssueBucket | null;
+    top_not_evaluable_reason?: AdminOperatingPackReasonBucket | null;
+    top_degraded_reason?: AdminOperatingPackReasonBucket | null;
+}
+
+export interface AdminOperatingPackResponse {
+    score_basis: string;
+    weekly_summary: AdminOperatingPackWeeklySummary;
+    cohort_issue_buckets: AdminOperatingPackIssueBucket[];
+    department_issue_buckets: AdminOperatingPackDepartmentBucket[];
+    repeated_blocker_families: AdminOperatingPackIssueBucket[];
+    degradation_breakdown: AdminOperatingPackDegradationBreakdown;
+    manager_lists: ManagerLiteListsResponse;
 }
 
 export interface ManagerLiteRemindResponse {

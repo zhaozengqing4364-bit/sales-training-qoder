@@ -68,6 +68,7 @@ import {
     PresentationAIScopeType,
     ManagerLiteListsResponse,
     ManagerLiteRemindResponse,
+    AdminOperatingPackResponse,
     ManagerInterventionCreateRequest,
     ManagerInterventionItem,
     ManagerInterventionListResponse,
@@ -857,6 +858,140 @@ function normalizeAnalyticsLeaderboard(input: unknown): AnalyticsLeaderboard {
     };
 }
 
+function normalizeManagerLiteLists(input: unknown): ManagerLiteListsResponse {
+    const raw = toRecord(input);
+    return {
+        not_passed: Array.isArray(raw.not_passed)
+            ? raw.not_passed.map((item) => {
+                const entry = toRecord(item);
+                return {
+                    user_id: toStringValue(entry.user_id),
+                    user_name: toStringValue(entry.user_name),
+                    department: typeof entry.department === "string" ? entry.department : null,
+                    overall_result: toStringValue(entry.overall_result, "fail"),
+                    session_id: toStringValue(entry.session_id),
+                    session_start_time: toStringValue(entry.session_start_time),
+                    issue_family: toStringValue(entry.issue_family) || null,
+                };
+            })
+            : [],
+        inactive_streak: Array.isArray(raw.inactive_streak)
+            ? raw.inactive_streak.map((item) => {
+                const entry = toRecord(item);
+                return {
+                    user_id: toStringValue(entry.user_id),
+                    user_name: toStringValue(entry.user_name),
+                    department: typeof entry.department === "string" ? entry.department : null,
+                    last_session_at: toStringValue(entry.last_session_at),
+                    inactive_days: toNumberValue(entry.inactive_days, 0),
+                };
+            })
+            : [],
+        improving: Array.isArray(raw.improving)
+            ? raw.improving.map((item) => {
+                const entry = toRecord(item);
+                return {
+                    user_id: toStringValue(entry.user_id),
+                    user_name: toStringValue(entry.user_name),
+                    department: typeof entry.department === "string" ? entry.department : null,
+                    pass_gain: toNumberValue(entry.pass_gain, 0),
+                    baseline_pass_rate: toNumberValue(entry.baseline_pass_rate, 0),
+                    current_pass_rate: toNumberValue(entry.current_pass_rate, 0),
+                };
+            })
+            : [],
+    };
+}
+
+function normalizeAdminOperatingPack(input: unknown): AdminOperatingPackResponse {
+    const raw = toRecord(input);
+    const weeklySummary = toRecord(raw.weekly_summary);
+    const normalizeIssueBucket = (value: unknown) => {
+        const entry = toRecord(value);
+        return {
+            issue_family: toStringValue(entry.issue_family),
+            issue_type: toStringValue(entry.issue_type, toStringValue(entry.issue_family)),
+            issue_text: toStringValue(entry.issue_text) || null,
+            count: toNumberValue(entry.count, 0),
+            user_count: toNumberValue(entry.user_count, 0),
+            department_count: entry.department_count === undefined
+                ? undefined
+                : toNumberValue(entry.department_count, 0),
+        };
+    };
+    const normalizeReasonBucket = (value: unknown) => {
+        const entry = toRecord(value);
+        return {
+            reason: toStringValue(entry.reason),
+            count: toNumberValue(entry.count, 0),
+        };
+    };
+    const normalizeDegradationBreakdown = (value: unknown) => {
+        const entry = toRecord(value);
+        return {
+            not_evaluable_reasons: Array.isArray(entry.not_evaluable_reasons)
+                ? entry.not_evaluable_reasons.map(normalizeReasonBucket)
+                : [],
+            degraded_reasons: Array.isArray(entry.degraded_reasons)
+                ? entry.degraded_reasons.map(normalizeReasonBucket)
+                : [],
+        };
+    };
+
+    return {
+        score_basis: toStringValue(raw.score_basis, ADMIN_ANALYTICS_SCORE_BASIS),
+        weekly_summary: {
+            window_days: weeklySummary.window_days === undefined
+                ? undefined
+                : toNumberValue(weeklySummary.window_days, 0),
+            window_start: toStringValue(weeklySummary.window_start) || null,
+            window_end: toStringValue(weeklySummary.window_end) || null,
+            completed_sessions: toNumberValue(weeklySummary.completed_sessions, 0),
+            evaluable_sessions: toNumberValue(weeklySummary.evaluable_sessions, 0),
+            not_evaluable_sessions: toNumberValue(weeklySummary.not_evaluable_sessions, 0),
+            degraded_sessions: toNumberValue(weeklySummary.degraded_sessions, 0),
+            active_departments: toNumberValue(weeklySummary.active_departments, 0),
+            at_risk_users: toNumberValue(weeklySummary.at_risk_users, 0),
+            improving_users: toNumberValue(weeklySummary.improving_users, 0),
+            top_issue_family: Object.keys(toRecord(weeklySummary.top_issue_family)).length > 0
+                ? normalizeIssueBucket(weeklySummary.top_issue_family)
+                : null,
+            top_blocker_family: Object.keys(toRecord(weeklySummary.top_blocker_family)).length > 0
+                ? normalizeIssueBucket(weeklySummary.top_blocker_family)
+                : null,
+            top_not_evaluable_reason: Object.keys(toRecord(weeklySummary.top_not_evaluable_reason)).length > 0
+                ? normalizeReasonBucket(weeklySummary.top_not_evaluable_reason)
+                : null,
+            top_degraded_reason: Object.keys(toRecord(weeklySummary.top_degraded_reason)).length > 0
+                ? normalizeReasonBucket(weeklySummary.top_degraded_reason)
+                : null,
+        },
+        cohort_issue_buckets: Array.isArray(raw.cohort_issue_buckets)
+            ? raw.cohort_issue_buckets.map(normalizeIssueBucket)
+            : [],
+        department_issue_buckets: Array.isArray(raw.department_issue_buckets)
+            ? raw.department_issue_buckets.map((item) => {
+                const entry = toRecord(item);
+                return {
+                    department: toStringValue(entry.department, "未分配部门"),
+                    session_count: toNumberValue(entry.session_count, 0),
+                    evaluable_sessions: toNumberValue(entry.evaluable_sessions, 0),
+                    not_evaluable_sessions: toNumberValue(entry.not_evaluable_sessions, 0),
+                    issue_buckets: Array.isArray(entry.issue_buckets)
+                        ? entry.issue_buckets.map(normalizeIssueBucket)
+                        : [],
+                    degradation_breakdown: normalizeDegradationBreakdown(entry.degradation_breakdown),
+                };
+            })
+            : [],
+        repeated_blocker_families: Array.isArray(raw.repeated_blocker_families)
+            ? raw.repeated_blocker_families.map(normalizeIssueBucket)
+            : [],
+        degradation_breakdown: normalizeDegradationBreakdown(raw.degradation_breakdown),
+        manager_lists: normalizeManagerLiteLists(raw.manager_lists),
+    };
+}
+
 /**
  * Cancel all in-flight API requests.
  * Call this on route change or component unmount to prevent leaked requests.
@@ -1553,7 +1688,20 @@ export const api = {
             if (typeof params?.inactive_days === "number") {
                 searchParams.set("inactive_days", String(params.inactive_days));
             }
-            return apiFetch<ManagerLiteListsResponse>(`/admin/interventions/lists?${searchParams}`);
+            const payload = await apiFetch<ManagerLiteListsResponse>(`/admin/interventions/lists?${searchParams}`);
+            return normalizeManagerLiteLists(payload);
+        },
+
+        getOperatingPack: async (params?: { time_range?: string; scenario_type?: string; limit?: number; inactive_days?: number }) => {
+            const searchParams = new URLSearchParams();
+            if (params?.time_range) searchParams.set("time_range", params.time_range);
+            if (params?.scenario_type) searchParams.set("scenario_type", params.scenario_type);
+            if (typeof params?.limit === "number") searchParams.set("limit", String(params.limit));
+            if (typeof params?.inactive_days === "number") {
+                searchParams.set("inactive_days", String(params.inactive_days));
+            }
+            const payload = await apiFetch<AdminOperatingPackResponse>(`/admin/analytics/operating-pack?${searchParams}`);
+            return normalizeAdminOperatingPack(payload);
         },
 
         remindFromManagerLite: async (data: { user_id: string; note?: string }) => {

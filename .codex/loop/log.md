@@ -1737,3 +1737,23 @@ Append one entry per iteration:
   verification results: passed; the new operating-pack unit coverage and analytics contract coverage are green, including the dedicated /api/v1/admin/analytics/operating-pack route.
   success signal status: admins now have one backend payload for the weekly operating pack instead of recombining issue buckets, degradation counts, and manager lists from drifting sources.
   rollback note: if follow-up work revisits weekly operating semantics, keep blocker-family normalization on HistoryService issue-family aliases and keep risk membership anchored to each user's latest evaluable completed session unless the intervention/report contract changes with fresh proof.
+
+- time: 2026-03-26T19:12:14+08:00
+  mode: stabilize
+  item id: M005-S04-T02
+  files changed:
+    - web/src/app/admin/analytics/page.tsx
+    - web/src/app/admin/analytics/page.test.tsx
+    - web/src/lib/api/types.ts
+    - web/src/lib/api/client.ts
+    - .gsd/DECISIONS.md
+    - .gsd/KNOWLEDGE.md
+    - .gsd/milestones/M005/slices/S04/tasks/T02-SUMMARY.md
+    - .codex/loop/state.json
+    - .codex/loop/log.md
+  summary: Switched the admin analytics route onto the new weekly operating-pack contract, added the one-week operating summary plus department/cohort issue views, and bound the existing manager panel to the projection-backed risk/improving lists.
+  verification commands:
+    - cd web && npm test -- --run 'src/app/admin/analytics/page.test.tsx'
+  verification results: passed; the focused admin analytics page suite is green with the new operating-pack call, weekly summary UI, department issue panel, and existing projection-backed analytics assertions.
+  success signal status: admins can now open the existing analytics page and immediately see a stable 7-day operating pack with risk/improvement counts, repeated blocker families, department issue buckets, and asset-change context on the same screen.
+  rollback note: if a future slice changes the weekly cadence, keep /admin/analytics/operating-pack as the single manager-list authority and version the page contract deliberately instead of recombining the old interventions list with separate analytics payloads.

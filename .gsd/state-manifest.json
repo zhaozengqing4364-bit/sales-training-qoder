@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "exported_at": "2026-03-26T10:49:10.391Z",
+  "exported_at": "2026-03-26T11:14:51.399Z",
   "milestones": [
     {
       "id": "M001",
@@ -2796,19 +2796,30 @@
       "milestone_id": "M005",
       "slice_id": "S04",
       "id": "T02",
-      "title": "Render the weekly operating pack on the existing admin analytics route",
-      "status": "pending",
-      "one_liner": "",
-      "narrative": "",
-      "verification_result": "",
+      "title": "Rendered the admin analytics weekly operating pack with projection-backed risk lists, blocker buckets, and department issue views.",
+      "status": "complete",
+      "one_liner": "Rendered the admin analytics weekly operating pack with projection-backed risk lists, blocker buckets, and department issue views.",
+      "narrative": "Extended the existing admin analytics route so it now consumes the dedicated `/api/v1/admin/analytics/operating-pack` contract instead of stitching weekly manager lists from the legacy interventions endpoint. Added typed operating-pack response models in `web/src/lib/api/types.ts`, normalized the new payload in `web/src/lib/api/client.ts`, and switched `web/src/app/admin/analytics/page.tsx` to fetch a fixed 7-day operating pack alongside the existing broader overview/trend/leaderboard filters. The page now renders a weekly operating-pack summary, repeated blocker-family cards, and a department issue panel, while the existing manager panel is fed directly from the projection-backed `manager_lists`. Updated the focused Vitest file first to assert the new contract and then implemented until the suite passed again. Recorded the fixed-7-day page contract in `.gsd/DECISIONS.md` and added a knowledge note about duplicate reason text on this page so future tests do not assume those strings only render once.",
+      "verification_result": "Ran the slice verification command `cd web && npm test -- --run 'src/app/admin/analytics/page.test.tsx'` fresh after wiring the operating-pack client and page. The suite passed with the new weekly summary assertions, the projection-backed manager-panel feed, and the existing analytics evidence assertions still green.",
       "duration": "",
-      "completed_at": null,
+      "completed_at": "2026-03-26T11:14:51.357Z",
       "blocker_discovered": false,
-      "deviations": "",
-      "known_issues": "",
-      "key_files": [],
-      "key_decisions": [],
-      "full_summary_md": "",
+      "deviations": "The task plan's expected-output list omitted `web/src/lib/api/client.ts`, but the page could not safely consume `/admin/analytics/operating-pack` without adding a typed client method and normalizer there.",
+      "known_issues": "Live browser proof against a real authenticated admin backend was not completed inside this task window; `/admin/*` uses server-side session gating, so client-side route mocks alone are not enough to render the page without a cookie-backed backend session.",
+      "key_files": [
+        "web/src/app/admin/analytics/page.tsx",
+        "web/src/app/admin/analytics/page.test.tsx",
+        "web/src/lib/api/types.ts",
+        "web/src/lib/api/client.ts",
+        ".gsd/DECISIONS.md",
+        ".gsd/KNOWLEDGE.md",
+        ".gsd/milestones/M005/slices/S04/tasks/T02-SUMMARY.md"
+      ],
+      "key_decisions": [
+        "Keep the weekly operating pack on a fixed 7-day `/admin/analytics/operating-pack` read while leaving overview/trends/leaderboard on the existing time-range filter.",
+        "Feed the existing manager-lite panel from `operating_pack.manager_lists` so current risk/improving membership stays on the same projection-backed evidence line as the new weekly buckets."
+      ],
+      "full_summary_md": "---\nid: T02\nparent: S04\nmilestone: M005\nkey_files:\n  - web/src/app/admin/analytics/page.tsx\n  - web/src/app/admin/analytics/page.test.tsx\n  - web/src/lib/api/types.ts\n  - web/src/lib/api/client.ts\n  - .gsd/DECISIONS.md\n  - .gsd/KNOWLEDGE.md\n  - .gsd/milestones/M005/slices/S04/tasks/T02-SUMMARY.md\nkey_decisions:\n  - Keep the weekly operating pack on a fixed 7-day `/admin/analytics/operating-pack` read while leaving overview/trends/leaderboard on the existing time-range filter.\n  - Feed the existing manager-lite panel from `operating_pack.manager_lists` so current risk/improving membership stays on the same projection-backed evidence line as the new weekly buckets.\nduration: \"\"\nverification_result: passed\ncompleted_at: 2026-03-26T11:14:51.359Z\nblocker_discovered: false\n---\n\n# T02: Rendered the admin analytics weekly operating pack with projection-backed risk lists, blocker buckets, and department issue views.\n\n**Rendered the admin analytics weekly operating pack with projection-backed risk lists, blocker buckets, and department issue views.**\n\n## What Happened\n\nExtended the existing admin analytics route so it now consumes the dedicated `/api/v1/admin/analytics/operating-pack` contract instead of stitching weekly manager lists from the legacy interventions endpoint. Added typed operating-pack response models in `web/src/lib/api/types.ts`, normalized the new payload in `web/src/lib/api/client.ts`, and switched `web/src/app/admin/analytics/page.tsx` to fetch a fixed 7-day operating pack alongside the existing broader overview/trend/leaderboard filters. The page now renders a weekly operating-pack summary, repeated blocker-family cards, and a department issue panel, while the existing manager panel is fed directly from the projection-backed `manager_lists`. Updated the focused Vitest file first to assert the new contract and then implemented until the suite passed again. Recorded the fixed-7-day page contract in `.gsd/DECISIONS.md` and added a knowledge note about duplicate reason text on this page so future tests do not assume those strings only render once.\n\n## Verification\n\nRan the slice verification command `cd web && npm test -- --run 'src/app/admin/analytics/page.test.tsx'` fresh after wiring the operating-pack client and page. The suite passed with the new weekly summary assertions, the projection-backed manager-panel feed, and the existing analytics evidence assertions still green.\n\n## Verification Evidence\n\n| # | Command | Exit Code | Verdict | Duration |\n|---|---------|-----------|---------|----------|\n| 1 | `cd web && npm test -- --run 'src/app/admin/analytics/page.test.tsx'` | 0 | ✅ pass | 1010ms |\n\n\n## Deviations\n\nThe task plan's expected-output list omitted `web/src/lib/api/client.ts`, but the page could not safely consume `/admin/analytics/operating-pack` without adding a typed client method and normalizer there.\n\n## Known Issues\n\nLive browser proof against a real authenticated admin backend was not completed inside this task window; `/admin/*` uses server-side session gating, so client-side route mocks alone are not enough to render the page without a cookie-backed backend session.\n\n## Files Created/Modified\n\n- `web/src/app/admin/analytics/page.tsx`\n- `web/src/app/admin/analytics/page.test.tsx`\n- `web/src/lib/api/types.ts`\n- `web/src/lib/api/client.ts`\n- `.gsd/DECISIONS.md`\n- `.gsd/KNOWLEDGE.md`\n- `.gsd/milestones/M005/slices/S04/tasks/T02-SUMMARY.md`\n",
       "description": "Render the weekly operating pack on the current admin analytics page using the new aggregation outputs. Keep the UI on the existing page and make it answer the practical questions: who is at risk, who is improving, what issue family repeats this week, and what changed in the asset layer.",
       "estimate": "90m",
       "files": [
@@ -3962,6 +3973,18 @@
       "revisable": "Yes",
       "made_by": "agent",
       "superseded_by": null
+    },
+    {
+      "seq": 1441,
+      "id": "D082",
+      "when_context": "M005/S04/T02",
+      "scope": "admin-analytics",
+      "decision": "How the admin analytics page should consume the weekly operating-pack contract alongside the existing time-range filters",
+      "choice": "Keep the weekly operating pack on a fixed 7-day `/api/v1/admin/analytics/operating-pack` read and bind its `manager_lists` directly into the existing admin analytics page, while leaving overview/trends/leaderboard on the user-selected analytics range.",
+      "rationale": "The operating pack is meant to answer this week’s manager questions—current risk, improvement, repeated blocker families, and department issue shape. Holding that panel to a fixed 7-day window preserves a stable operating cadence and matches the backend aggregation semantics, without removing the broader 30/90/all-time trend controls that the existing analytics route already provides.",
+      "revisable": "Yes",
+      "made_by": "agent",
+      "superseded_by": null
     }
   ],
   "verification_evidence": [
@@ -5020,6 +5043,17 @@
       "verdict": "✅ pass",
       "duration_ms": 19200,
       "created_at": "2026-03-26T10:49:10.349Z"
+    },
+    {
+      "id": 97,
+      "task_id": "T02",
+      "slice_id": "S04",
+      "milestone_id": "M005",
+      "command": "cd web && npm test -- --run 'src/app/admin/analytics/page.test.tsx'",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 1010,
+      "created_at": "2026-03-26T11:14:51.357Z"
     }
   ]
 }

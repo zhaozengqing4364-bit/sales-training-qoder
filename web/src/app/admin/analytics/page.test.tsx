@@ -10,6 +10,7 @@ const {
     getAgentsMock,
     getLeaderboardMock,
     getManagerLiteListsMock,
+    getOperatingPackMock,
     remindFromManagerLiteMock,
     exportReportMock,
     getDashboardMock,
@@ -20,6 +21,7 @@ const {
     getAgentsMock: vi.fn(),
     getLeaderboardMock: vi.fn(),
     getManagerLiteListsMock: vi.fn(),
+    getOperatingPackMock: vi.fn(),
     remindFromManagerLiteMock: vi.fn(),
     exportReportMock: vi.fn(),
     getDashboardMock: vi.fn(),
@@ -45,6 +47,7 @@ vi.mock("@/lib/api/client", async () => {
                 getAgents: getAgentsMock,
                 getLeaderboard: getLeaderboardMock,
                 getManagerLiteLists: getManagerLiteListsMock,
+                getOperatingPack: getOperatingPackMock,
                 remindFromManagerLite: remindFromManagerLiteMock,
                 exportReport: exportReportMock,
             },
@@ -89,6 +92,7 @@ describe("AnalyticsPage", () => {
         getAgentsMock.mockReset();
         getLeaderboardMock.mockReset();
         getManagerLiteListsMock.mockReset();
+        getOperatingPackMock.mockReset();
         remindFromManagerLiteMock.mockReset();
         exportReportMock.mockReset();
         getDashboardMock.mockReset();
@@ -167,6 +171,251 @@ describe("AnalyticsPage", () => {
             inactive_streak: [],
             improving: [],
         });
+        getOperatingPackMock.mockResolvedValue({
+            score_basis: "session_evidence_projection_evaluable_only",
+            weekly_summary: {
+                window_days: 7,
+                window_start: "2026-03-19T00:00:00Z",
+                window_end: "2026-03-26T00:00:00Z",
+                completed_sessions: 0,
+                evaluable_sessions: 0,
+                not_evaluable_sessions: 0,
+                degraded_sessions: 0,
+                active_departments: 0,
+                at_risk_users: 0,
+                improving_users: 0,
+                top_issue_family: null,
+                top_blocker_family: null,
+                top_not_evaluable_reason: null,
+                top_degraded_reason: null,
+            },
+            cohort_issue_buckets: [],
+            department_issue_buckets: [],
+            repeated_blocker_families: [],
+            degradation_breakdown: {
+                not_evaluable_reasons: [],
+                degraded_reasons: [],
+            },
+            manager_lists: {
+                not_passed: [],
+                inactive_streak: [],
+                improving: [],
+            },
+        });
+    });
+
+    it("renders weekly operating-pack summary, cohort buckets, and projection-backed manager lists", async () => {
+        getOverviewMock.mockResolvedValue({
+            total_users: 12,
+            active_users_today: 4,
+            active_users_week: 8,
+            total_sessions: 15,
+            sessions_today: 2,
+            completed_sessions: 15,
+            completion_rate: 100,
+            average_score: 78.4,
+            average_duration_minutes: 4.5,
+            growth: {
+                users_rate: 0,
+                sessions_rate: 15,
+                score_rate: 4,
+            },
+            evaluable_sessions: 12,
+            not_evaluable_sessions: 3,
+            score_basis: "session_evidence_projection_evaluable_only",
+            top_issue_families: [],
+            not_evaluable_reasons: [],
+        });
+        getTrendsMock.mockResolvedValue({
+            trend_data: [],
+            score_distribution: {
+                excellent: 3,
+                good: 5,
+                fair: 3,
+                poor: 1,
+            },
+            projection_summary: {
+                average_score: 78.4,
+                best_score: 92,
+                evaluable_sessions: 12,
+                not_evaluable_sessions: 3,
+                score_basis: "session_evidence_projection_evaluable_only",
+                issue_family_distribution: [],
+                not_evaluable_reasons: [],
+                repeated_main_issues: [],
+                repeated_next_goals: [],
+            },
+        });
+        getLeaderboardMock.mockResolvedValue({ leaderboard: [] });
+        getManagerLiteListsMock.mockResolvedValue({
+            not_passed: [],
+            inactive_streak: [],
+            improving: [],
+        });
+        getOperatingPackMock.mockResolvedValue({
+            score_basis: "session_evidence_projection_evaluable_only",
+            weekly_summary: {
+                window_days: 7,
+                window_start: "2026-03-19T00:00:00Z",
+                window_end: "2026-03-26T00:00:00Z",
+                completed_sessions: 8,
+                evaluable_sessions: 7,
+                not_evaluable_sessions: 1,
+                degraded_sessions: 1,
+                active_departments: 2,
+                at_risk_users: 4,
+                improving_users: 1,
+                top_issue_family: {
+                    issue_family: "value_expression",
+                    issue_type: "value_expression",
+                    issue_text: "价值表达还停留在产品功能。",
+                    count: 2,
+                    user_count: 2,
+                    department_count: 2,
+                },
+                top_blocker_family: {
+                    issue_family: "value_expression",
+                    issue_type: "value_expression",
+                    issue_text: "价值表达还停留在产品功能。",
+                    count: 2,
+                    user_count: 2,
+                    department_count: 2,
+                },
+                top_not_evaluable_reason: {
+                    reason: "INSUFFICIENT_TURN_DATA",
+                    count: 1,
+                },
+                top_degraded_reason: {
+                    reason: "message_scores",
+                    count: 1,
+                },
+            },
+            cohort_issue_buckets: [
+                {
+                    issue_family: "value_expression",
+                    issue_type: "value_expression",
+                    issue_text: "价值表达还停留在产品功能。",
+                    count: 2,
+                    user_count: 2,
+                    department_count: 2,
+                },
+                {
+                    issue_family: "evidence_gap",
+                    issue_type: "evidence_gap",
+                    issue_text: "案例证据还不够扎实。",
+                    count: 2,
+                    user_count: 1,
+                    department_count: 1,
+                },
+            ],
+            department_issue_buckets: [
+                {
+                    department: "North",
+                    session_count: 7,
+                    evaluable_sessions: 6,
+                    not_evaluable_sessions: 1,
+                    issue_buckets: [
+                        {
+                            issue_family: "evidence_gap",
+                            issue_type: "evidence_gap",
+                            issue_text: "案例证据还不够扎实。",
+                            count: 2,
+                            user_count: 1,
+                        },
+                    ],
+                    degradation_breakdown: {
+                        not_evaluable_reasons: [
+                            {
+                                reason: "INSUFFICIENT_TURN_DATA",
+                                count: 1,
+                            },
+                        ],
+                        degraded_reasons: [
+                            {
+                                reason: "message_scores",
+                                count: 1,
+                            },
+                        ],
+                    },
+                },
+            ],
+            repeated_blocker_families: [
+                {
+                    issue_family: "value_expression",
+                    issue_type: "value_expression",
+                    issue_text: "价值表达还停留在产品功能。",
+                    count: 2,
+                    user_count: 2,
+                    department_count: 2,
+                },
+            ],
+            degradation_breakdown: {
+                not_evaluable_reasons: [
+                    {
+                        reason: "INSUFFICIENT_TURN_DATA",
+                        count: 1,
+                    },
+                ],
+                degraded_reasons: [
+                    {
+                        reason: "message_scores",
+                        count: 1,
+                    },
+                ],
+            },
+            manager_lists: {
+                not_passed: [
+                    {
+                        user_id: "user-risk",
+                        user_name: "South Risk",
+                        department: "South",
+                        overall_result: "fail",
+                        session_id: "session-risk",
+                        session_start_time: "2026-03-25T10:00:00Z",
+                        issue_family: "value_expression",
+                    },
+                ],
+                inactive_streak: [
+                    {
+                        user_id: "user-inactive",
+                        user_name: "Inactive User",
+                        department: "North",
+                        last_session_at: "2026-03-18T10:00:00Z",
+                        inactive_days: 8,
+                    },
+                ],
+                improving: [
+                    {
+                        user_id: "user-good",
+                        user_name: "Improving User",
+                        department: "North",
+                        pass_gain: 100,
+                        baseline_pass_rate: 0,
+                        current_pass_rate: 100,
+                    },
+                ],
+            },
+        });
+
+        render(<AnalyticsPage />);
+
+        await waitFor(() => {
+            expect(getOperatingPackMock).toHaveBeenCalledWith({
+                time_range: "7d",
+                scenario_type: undefined,
+                limit: 10,
+                inactive_days: 7,
+            });
+        });
+
+        expect(await screen.findByText("本周经营节奏包")).toBeTruthy();
+        expect(screen.getByText(/本周已完成 8 次训练，其中 7 次可评估，1 次证据不足；当前有 4 位风险成员、1 位显著回升成员。/)).toBeTruthy();
+        expect(screen.getByText("反复卡点 Top 1")).toBeTruthy();
+        expect(screen.getAllByText("价值表达还停留在产品功能。", { exact: false }).length).toBeGreaterThan(0);
+        expect(screen.getByText("部门问题面")).toBeTruthy();
+        expect(screen.getByText("North")).toBeTruthy();
+        expect(screen.getByText(/本周 7 次训练 · 6 次可评估 · 1 次证据不足/)).toBeTruthy();
+        expect(screen.getByText("ManagerLitePanel:1")).toBeTruthy();
     });
 
     it("renders projection-backed score meaning, issue families, and evidence-insufficient reasoning", async () => {
@@ -288,7 +537,7 @@ describe("AnalyticsPage", () => {
         expect(screen.getByText("统一训练证据 · 仅统计可评估的已完成训练")).toBeTruthy();
         expect(screen.getByText("证据支撑")).toBeTruthy();
         expect(screen.getByText("最近都卡在 ROI 证据不具体。", { exact: false })).toBeTruthy();
-        expect(screen.getByText("对话轮次不足，暂无法形成稳定评估。")).toBeTruthy();
+        expect(screen.getAllByText("对话轮次不足，暂无法形成稳定评估。").length).toBeGreaterThan(0);
         expect(screen.getByText("证据补强")).toBeTruthy();
         expect(screen.getByText("下一轮先补 ROI 与客户案例证据。")).toBeTruthy();
         expect(screen.getByText("当前榜首：张三")).toBeTruthy();
