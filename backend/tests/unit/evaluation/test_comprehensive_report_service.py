@@ -998,6 +998,7 @@ class TestPresentationReportService:
             _ScalarsResult(interruption_events),
             _ScalarsResult(pages),
             _ScalarsResult(required_points),
+            _ScalarsResult([]),
         ]
 
         service = PresentationReportService(presentation_db_session)
@@ -1022,6 +1023,20 @@ class TestPresentationReportService:
             "missing_point": 1,
             "vague_response": 1,
         }
+        assert review["page_summaries"][0]["issue_clusters"] == []
+        assert review["page_summaries"][1]["issue_clusters"] == [
+            {
+                "issue_type": "missing_point",
+                "summary": "第 2 页仍缺少 1 个必讲点，需要补齐再进入下一页。",
+                "evidence": ["未覆盖：时间安排"],
+                "turn_numbers": [2],
+                "linked_points": ["时间安排"],
+                "linked_phrases": [],
+                "related_page_numbers": [],
+            }
+        ]
+        assert review["diagnostics"]["page_issue_cluster_count"] == 1
+        assert review["diagnostics"]["page_issue_types"] == ["missing_point"]
         assert review["diagnostics"]["degraded_reasons"] == []
 
     @pytest.mark.asyncio
@@ -1069,6 +1084,7 @@ class TestPresentationReportService:
             _ScalarsResult([]),
             _ScalarsResult(pages),
             _ScalarsResult(required_points),
+            _ScalarsResult([]),
         ]
 
         service = PresentationReportService(presentation_db_session)
@@ -1082,6 +1098,8 @@ class TestPresentationReportService:
         assert review["page_summaries"] == []
         assert review["required_talking_points"]["status"] == "degraded"
         assert review["required_talking_points"]["total"] == 2
+        assert review["diagnostics"]["page_issue_cluster_count"] == 0
+        assert review["diagnostics"]["page_issue_types"] == []
         assert review["diagnostics"]["degraded_reasons"] == ["missing_page_metadata"]
 
     @pytest.mark.asyncio

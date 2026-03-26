@@ -260,6 +260,22 @@ class PresentationReviewDimensionScore(BaseModel):
     description: str = ""
 
 
+class PresentationReviewPageIssueCluster(BaseModel):
+    issue_type: Literal[
+        "off_page",
+        "missing_point",
+        "overlong_explanation",
+        "forbidden_word",
+        "weak_qa_handling",
+    ]
+    summary: str
+    evidence: list[str] = Field(default_factory=list)
+    turn_numbers: list[int] = Field(default_factory=list)
+    linked_points: list[str] = Field(default_factory=list)
+    linked_phrases: list[str] = Field(default_factory=list)
+    related_page_numbers: list[int] = Field(default_factory=list)
+
+
 class PresentationReviewPageSummary(BaseModel):
     page_number: int
     stage_number: int
@@ -269,6 +285,7 @@ class PresentationReviewPageSummary(BaseModel):
     key_points: list[str] = Field(default_factory=list)
     matched_required_points: list[str] = Field(default_factory=list)
     missing_required_points: list[str] = Field(default_factory=list)
+    issue_clusters: list[PresentationReviewPageIssueCluster] = Field(default_factory=list)
     summary: str
 
 
@@ -290,6 +307,8 @@ class PresentationReviewDiagnostics(BaseModel):
     required_points_missing: int = 0
     required_coverage_ratio: float = Field(..., ge=0, le=1)
     degraded_reasons: list[str] = Field(default_factory=list)
+    page_issue_cluster_count: int = 0
+    page_issue_types: list[str] = Field(default_factory=list)
 
 
 class PresentationReview(BaseModel):

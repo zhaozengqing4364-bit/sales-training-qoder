@@ -154,6 +154,12 @@ class SessionEvidenceService:
                 presentation_page_metadata_complete=projection.evidence_completeness.get(
                     "page_metadata_complete"
                 ),
+                presentation_page_issue_cluster_count=projection.evidence_completeness.get(
+                    "page_issue_cluster_count"
+                ),
+                presentation_page_issue_types=projection.evidence_completeness.get(
+                    "page_issue_types"
+                ),
                 presentation_degraded_reasons=projection.evidence_completeness.get(
                     "degraded_reasons"
                 ),
@@ -293,6 +299,21 @@ class SessionEvidenceService:
         if not isinstance(page_summaries, list):
             page_summaries = []
 
+        page_issue_types = sorted(
+            {
+                str(issue.get("issue_type"))
+                for summary in page_summaries
+                if isinstance(summary, dict)
+                for issue in (summary.get("issue_clusters") or [])
+                if isinstance(issue, dict) and issue.get("issue_type")
+            }
+        )
+        page_issue_cluster_count = sum(
+            len(summary.get("issue_clusters") or [])
+            for summary in page_summaries
+            if isinstance(summary, dict)
+        )
+
         missing_fields: list[str] = []
         if not has_page_metadata:
             missing_fields.append("page_metadata")
@@ -320,6 +341,8 @@ class SessionEvidenceService:
             "presentation_review_available": True,
             "page_metadata_complete": has_page_metadata,
             "page_summary_count": len(page_summaries),
+            "page_issue_cluster_count": page_issue_cluster_count,
+            "page_issue_types": page_issue_types,
             "required_talking_points_status": str(
                 required_points.get("status") or "unknown"
             ),

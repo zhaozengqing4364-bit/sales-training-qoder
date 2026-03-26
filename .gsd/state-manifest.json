@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "exported_at": "2026-03-26T02:11:03.461Z",
+  "exported_at": "2026-03-26T02:33:59.668Z",
   "milestones": [
     {
       "id": "M001",
@@ -1964,19 +1964,28 @@
       "milestone_id": "M004",
       "slice_id": "S04",
       "id": "T01",
-      "title": "Group PPT learning issues at page and point level on the current report line",
-      "status": "pending",
-      "one_liner": "",
-      "narrative": "",
-      "verification_result": "",
+      "title": "Added page-level PPT issue clusters and projection diagnostics to the shared presentation review payload.",
+      "status": "complete",
+      "one_liner": "Added page-level PPT issue clusters and projection diagnostics to the shared presentation review payload.",
+      "narrative": "I executed T01 with a test-first workflow. I first added a new focused backend unit file that made the missing contract fail explicitly: the shared presentation review payload had no per-page issue clusters and SessionEvidenceService did not surface aggregate issue-cluster completeness. I then extended PresentationReportService so report context also loads page/global forbidden words, builds page-level issue clusters for off-page drift, missing points, overlong explanation, forbidden wording, and weak Q&A handling, and publishes aggregate cluster count/types in presentation diagnostics. To keep the current report route on the same authority line, I updated the shared response schema so these new fields are not filtered out. On the projection side, I rolled the aggregate cluster count/types into presentation evidence_completeness and the existing practice_session_evidence_projection_built structured log. During narrow regression verification I found older presentation-report unit fixtures were still mocking only five db.execute calls; I updated that regression test to include the new forbidden-word query result and to lock the new truthful empty/default issue-cluster behavior.",
+      "verification_result": "Verified with the task-plan command `cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_presentation_report_service.py`, which passed and proved the new page-level issue clustering plus completeness aggregation contract. Then ran `cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/evaluation/test_comprehensive_report_service.py -k 'presentation_review'`, which passed and confirmed the existing presentation review/report builder behavior remains compatible after the extra forbidden-word query and schema extension.",
       "duration": "",
-      "completed_at": null,
+      "completed_at": "2026-03-26T02:33:59.613Z",
       "blocker_discovered": false,
-      "deviations": "",
-      "known_issues": "",
-      "key_files": [],
-      "key_decisions": [],
-      "full_summary_md": "",
+      "deviations": "Updated backend/src/common/db/schemas.py so the current API response model can carry the new presentation review fields, and refreshed backend/tests/unit/evaluation/test_comprehensive_report_service.py because its db.execute side_effect fixtures no longer matched the new forbidden-word query.",
+      "known_issues": "None.",
+      "key_files": [
+        "backend/src/presentation_coach/services/presentation_report_service.py",
+        "backend/src/common/conversation/session_evidence.py",
+        "backend/src/common/db/schemas.py",
+        "backend/tests/unit/test_presentation_report_service.py",
+        "backend/tests/unit/evaluation/test_comprehensive_report_service.py"
+      ],
+      "key_decisions": [
+        "D070: keep PPT page-level learning issues under presentation_review.page_summaries[*].issue_clusters and expose only aggregate cluster count/types through diagnostics and projection completeness.",
+        "Schema and projection completeness should mirror the shared presentation review authority line instead of creating a second PPT learning payload."
+      ],
+      "full_summary_md": "---\nid: T01\nparent: S04\nmilestone: M004\nkey_files:\n  - backend/src/presentation_coach/services/presentation_report_service.py\n  - backend/src/common/conversation/session_evidence.py\n  - backend/src/common/db/schemas.py\n  - backend/tests/unit/test_presentation_report_service.py\n  - backend/tests/unit/evaluation/test_comprehensive_report_service.py\nkey_decisions:\n  - D070: keep PPT page-level learning issues under presentation_review.page_summaries[*].issue_clusters and expose only aggregate cluster count/types through diagnostics and projection completeness.\n  - Schema and projection completeness should mirror the shared presentation review authority line instead of creating a second PPT learning payload.\nduration: \"\"\nverification_result: passed\ncompleted_at: 2026-03-26T02:33:59.618Z\nblocker_discovered: false\n---\n\n# T01: Added page-level PPT issue clusters and projection diagnostics to the shared presentation review payload.\n\n**Added page-level PPT issue clusters and projection diagnostics to the shared presentation review payload.**\n\n## What Happened\n\nI executed T01 with a test-first workflow. I first added a new focused backend unit file that made the missing contract fail explicitly: the shared presentation review payload had no per-page issue clusters and SessionEvidenceService did not surface aggregate issue-cluster completeness. I then extended PresentationReportService so report context also loads page/global forbidden words, builds page-level issue clusters for off-page drift, missing points, overlong explanation, forbidden wording, and weak Q&A handling, and publishes aggregate cluster count/types in presentation diagnostics. To keep the current report route on the same authority line, I updated the shared response schema so these new fields are not filtered out. On the projection side, I rolled the aggregate cluster count/types into presentation evidence_completeness and the existing practice_session_evidence_projection_built structured log. During narrow regression verification I found older presentation-report unit fixtures were still mocking only five db.execute calls; I updated that regression test to include the new forbidden-word query result and to lock the new truthful empty/default issue-cluster behavior.\n\n## Verification\n\nVerified with the task-plan command `cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_presentation_report_service.py`, which passed and proved the new page-level issue clustering plus completeness aggregation contract. Then ran `cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/evaluation/test_comprehensive_report_service.py -k 'presentation_review'`, which passed and confirmed the existing presentation review/report builder behavior remains compatible after the extra forbidden-word query and schema extension.\n\n## Verification Evidence\n\n| # | Command | Exit Code | Verdict | Duration |\n|---|---------|-----------|---------|----------|\n| 1 | `cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_presentation_report_service.py` | 0 | ✅ pass | 7180ms |\n| 2 | `cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/evaluation/test_comprehensive_report_service.py -k 'presentation_review'` | 0 | ✅ pass | 14040ms |\n\n\n## Deviations\n\nUpdated backend/src/common/db/schemas.py so the current API response model can carry the new presentation review fields, and refreshed backend/tests/unit/evaluation/test_comprehensive_report_service.py because its db.execute side_effect fixtures no longer matched the new forbidden-word query.\n\n## Known Issues\n\nNone.\n\n## Files Created/Modified\n\n- `backend/src/presentation_coach/services/presentation_report_service.py`\n- `backend/src/common/conversation/session_evidence.py`\n- `backend/src/common/db/schemas.py`\n- `backend/tests/unit/test_presentation_report_service.py`\n- `backend/tests/unit/evaluation/test_comprehensive_report_service.py`\n",
       "description": "Extend the current presentation report builder so it can group issues at page/point level on the existing authority line: off-page, missing point, overlong explanation, forbidden wording, and weak Q&A handling. Lock the contract with focused backend tests rather than freeform UI expectations.",
       "estimate": "90m",
       "files": [
@@ -3650,6 +3659,18 @@
       "revisable": "Yes",
       "made_by": "agent",
       "superseded_by": null
+    },
+    {
+      "seq": 1429,
+      "id": "D070",
+      "when_context": "M004/S04/T01",
+      "scope": "reader-contract",
+      "decision": "How PPT page-level learning issues should travel on the existing report authority line",
+      "choice": "Attach per-page issue clusters under presentation_review.page_summaries[*].issue_clusters, and expose only aggregate cluster count/types through diagnostics and projection completeness.",
+      "rationale": "T02/T03 need page-local evidence they can render directly on the current report and replay routes without inventing a second PPT evidence surface. Reusing page_summaries keeps the contract aligned to the existing presentation review line, while aggregate diagnostics/completeness fields preserve compact observability for logs and degraded-state inspection.",
+      "revisable": "Yes",
+      "made_by": "agent",
+      "superseded_by": null
     }
   ],
   "verification_evidence": [
@@ -4345,6 +4366,28 @@
       "verdict": "✅ pass",
       "duration_ms": 1693,
       "created_at": "2026-03-26T00:41:00.760Z"
+    },
+    {
+      "id": 64,
+      "task_id": "T01",
+      "slice_id": "S04",
+      "milestone_id": "M004",
+      "command": "cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_presentation_report_service.py",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 7180,
+      "created_at": "2026-03-26T02:33:59.615Z"
+    },
+    {
+      "id": 65,
+      "task_id": "T01",
+      "slice_id": "S04",
+      "milestone_id": "M004",
+      "command": "cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/evaluation/test_comprehensive_report_service.py -k 'presentation_review'",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 14040,
+      "created_at": "2026-03-26T02:33:59.615Z"
     }
   ]
 }

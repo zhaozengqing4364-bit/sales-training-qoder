@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.db.models import (
     ConversationMessage,
+    ForbiddenWord,
     InterruptionEvent,
     Page,
     PracticeSession,
@@ -216,6 +217,7 @@ class PresentationReportService:
         )
         pages = list(pages_result.scalars().all())
         page_ids = [page.page_id for page in pages]
+        page_number_by_id = {page.page_id: page.page_number for page in pages}
 
         required_points_by_page: dict[int, list[str]] = defaultdict(list)
         if page_ids:
@@ -224,12 +226,33 @@ class PresentationReportService:
                 .where(RequiredTalkingPoint.page_id.in_(page_ids))
                 .where(RequiredTalkingPoint.confirmed_by_admin.is_(True))
             )
-            page_number_by_id = {page.page_id: page.page_number for page in pages}
             for point in list(points_result.scalars().all()):
                 page_number = page_number_by_id.get(point.page_id)
                 if page_number is None:
                     continue
                 required_points_by_page[page_number].append(point.description)
+
+        forbidden_words_by_page: dict[int, list[str]] = defaultdict(list)
+        global_forbidden_words: list[str] = []
+        if session.presentation_id:
+            forbidden_words_stmt = select(ForbiddenWord).where(
+                ForbiddenWord.presentation_id == session.presentation_id
+            )
+            if page_ids:
+                forbidden_words_stmt = select(ForbiddenWord).where(
+                    (ForbiddenWord.presentation_id == session.presentation_id)
+                    | (ForbiddenWord.page_id.in_(page_ids))
+                )
+            forbidden_words_result = await self.db.execute(forbidden_words_stmt)
+            for forbidden_word in list(forbidden_words_result.scalars().all()):
+                phrase = str(getattr(forbidden_word, "phrase", "") or "").strip()
+                if not phrase:
+                    continue
+                page_number = page_number_by_id.get(getattr(forbidden_word, "page_id", None))
+                if page_number is None:
+                    global_forbidden_words.append(phrase)
+                else:
+                    forbidden_words_by_page[page_number].append(phrase)
 
         return Result.ok(
             {
@@ -238,6 +261,8 @@ class PresentationReportService:
                 "interruption_events": interruption_events,
                 "total_pages": max(1, len(pages)),
                 "required_points_by_page": required_points_by_page,
+                "forbidden_words_by_page": forbidden_words_by_page,
+                "global_forbidden_words": global_forbidden_words,
             }
         )
 
@@ -249,6 +274,8 @@ class PresentationReportService:
         interruption_events: list[InterruptionEvent],
         total_pages: int,
         required_points_by_page: dict[int, list[str]],
+        forbidden_words_by_page: dict[int, list[str]],
+        global_forbidden_words: list[str],
     ) -> dict[str, Any]:
         normalized_texts = [_normalize_text(message.content) for message in user_messages]
         combined_text = "".join(normalized_texts)
@@ -337,11 +364,27 @@ class PresentationReportService:
             1,
         )
 
+        issue_clusters_by_page = self._build_page_issue_clusters(
+            user_messages=user_messages,
+            normalized_texts=normalized_texts,
+            message_page_numbers=message_page_numbers,
+            interruption_events=interruption_events,
+            coverage=coverage,
+            required_points_by_page=required_points_by_page,
+            forbidden_words_by_page=forbidden_words_by_page,
+            global_forbidden_words=global_forbidden_words,
+            has_page_metadata=has_page_metadata,
+        )
+        page_issue_diagnostics = self._build_page_issue_diagnostics(
+            issue_clusters_by_page
+        )
+
         page_summaries = self._build_page_summaries(
             user_messages=user_messages,
             message_page_numbers=message_page_numbers,
             total_pages=total_pages,
             coverage=coverage,
+            issue_clusters_by_page=issue_clusters_by_page,
             has_page_metadata=has_page_metadata,
         )
         strengths = self._build_strengths(
@@ -395,6 +438,8 @@ class PresentationReportService:
                 "required_points_missing": coverage["missing"],
                 "required_coverage_ratio": coverage["coverage_ratio"],
                 "degraded_reasons": degraded_reasons,
+                "page_issue_cluster_count": page_issue_diagnostics["page_issue_cluster_count"],
+                "page_issue_types": page_issue_diagnostics["page_issue_types"],
             },
         }
 
@@ -544,6 +589,325 @@ class PresentationReportService:
             "missing_by_page": dict(missing_by_page),
         }
 
+    @staticmethod
+    def _build_issue_cluster(
+        *,
+        issue_type: str,
+        summary: str,
+        evidence: list[str],
+        turn_numbers: list[int],
+        linked_points: list[str] | None = None,
+        linked_phrases: list[str] | None = None,
+        related_page_numbers: list[int] | None = None,
+    ) -> dict[str, Any]:
+        return {
+            "issue_type": issue_type,
+            "summary": summary,
+            "evidence": evidence,
+            "turn_numbers": turn_numbers,
+            "linked_points": linked_points or [],
+            "linked_phrases": linked_phrases or [],
+            "related_page_numbers": related_page_numbers or [],
+        }
+
+    @staticmethod
+    def _build_page_issue_diagnostics(
+        issue_clusters_by_page: dict[int, list[dict[str, Any]]],
+    ) -> dict[str, Any]:
+        issue_types = sorted(
+            {
+                str(issue.get("issue_type"))
+                for issues in issue_clusters_by_page.values()
+                for issue in issues
+                if isinstance(issue, dict) and issue.get("issue_type")
+            }
+        )
+        return {
+            "page_issue_cluster_count": sum(
+                len(issues) for issues in issue_clusters_by_page.values()
+            ),
+            "page_issue_types": issue_types,
+        }
+
+    @classmethod
+    def _resolve_event_page_number(
+        cls,
+        *,
+        trigger_content: str,
+        user_messages: list[ConversationMessage],
+        normalized_texts: list[str],
+        message_page_numbers: list[int | None],
+    ) -> int | None:
+        normalized_trigger = _normalize_text(trigger_content)
+        if normalized_trigger:
+            for message, normalized_text, page_number in zip(
+                user_messages,
+                normalized_texts,
+                message_page_numbers,
+                strict=False,
+            ):
+                if page_number is None:
+                    continue
+                if normalized_trigger in normalized_text or normalized_text in normalized_trigger:
+                    return max(1, page_number)
+                message_content = str(getattr(message, "content", "") or "")
+                if trigger_content and trigger_content in message_content:
+                    return max(1, page_number)
+        explicit_pages = [
+            page_number for page_number in message_page_numbers if page_number is not None
+        ]
+        if len(set(explicit_pages)) == 1:
+            return explicit_pages[0]
+        return None
+
+    @classmethod
+    def _map_interruption_events_to_pages(
+        cls,
+        *,
+        interruption_events: list[InterruptionEvent],
+        user_messages: list[ConversationMessage],
+        normalized_texts: list[str],
+        message_page_numbers: list[int | None],
+    ) -> dict[str, dict[int, list[dict[str, Any]]]]:
+        event_map: dict[str, dict[int, list[dict[str, Any]]]] = defaultdict(
+            lambda: defaultdict(list)
+        )
+
+        for event in interruption_events:
+            interruption_type = str(getattr(event, "interruption_type", "") or "").strip()
+            if not interruption_type:
+                continue
+            trigger_content = str(getattr(event, "trigger_content", "") or "").strip()
+            page_number = cls._resolve_event_page_number(
+                trigger_content=trigger_content,
+                user_messages=user_messages,
+                normalized_texts=normalized_texts,
+                message_page_numbers=message_page_numbers,
+            )
+            if page_number is None:
+                continue
+
+            matched_turn_numbers: list[int] = []
+            normalized_trigger = _normalize_text(trigger_content)
+            for message, normalized_text, message_page in zip(
+                user_messages,
+                normalized_texts,
+                message_page_numbers,
+                strict=False,
+            ):
+                if message_page != page_number:
+                    continue
+                if not normalized_trigger:
+                    continue
+                if normalized_trigger in normalized_text or normalized_text in normalized_trigger:
+                    matched_turn_numbers.append(int(message.turn_number))
+
+            if not matched_turn_numbers:
+                matched_turn_numbers = [
+                    int(message.turn_number)
+                    for message, message_page in zip(
+                        user_messages,
+                        message_page_numbers,
+                        strict=False,
+                    )
+                    if message_page == page_number
+                ][:1]
+
+            event_map[interruption_type][page_number].append(
+                {
+                    "trigger_content": trigger_content,
+                    "turn_numbers": sorted(set(matched_turn_numbers)),
+                }
+            )
+
+        return {
+            issue_type: {page: list(items) for page, items in pages.items()}
+            for issue_type, pages in event_map.items()
+        }
+
+    def _build_page_issue_clusters(
+        self,
+        *,
+        user_messages: list[ConversationMessage],
+        normalized_texts: list[str],
+        message_page_numbers: list[int | None],
+        interruption_events: list[InterruptionEvent],
+        coverage: dict[str, Any],
+        required_points_by_page: dict[int, list[str]],
+        forbidden_words_by_page: dict[int, list[str]],
+        global_forbidden_words: list[str],
+        has_page_metadata: bool,
+    ) -> dict[int, list[dict[str, Any]]]:
+        if not has_page_metadata:
+            return {}
+
+        grouped_messages: dict[int, list[tuple[ConversationMessage, str]]] = defaultdict(list)
+        for message, normalized_text, page_number in zip(
+            user_messages,
+            normalized_texts,
+            message_page_numbers,
+            strict=False,
+        ):
+            if page_number is None:
+                continue
+            grouped_messages[max(1, page_number)].append((message, normalized_text))
+
+        event_map = self._map_interruption_events_to_pages(
+            interruption_events=interruption_events,
+            user_messages=user_messages,
+            normalized_texts=normalized_texts,
+            message_page_numbers=message_page_numbers,
+        )
+        issue_clusters_by_page: dict[int, list[dict[str, Any]]] = defaultdict(list)
+
+        for page_number in sorted(grouped_messages.keys()):
+            message_pairs = grouped_messages[page_number]
+            matched_points = list(coverage["matched_by_page"].get(page_number, []))
+            missing_points = list(coverage["missing_by_page"].get(page_number, []))
+            page_turn_numbers = sorted({int(message.turn_number) for message, _ in message_pairs})
+
+            off_page_points: dict[int, set[str]] = defaultdict(set)
+            off_page_turns: set[int] = set()
+            for message, normalized_text in message_pairs:
+                for target_page_number, points in required_points_by_page.items():
+                    if target_page_number == page_number:
+                        continue
+                    for point in points:
+                        if self._matches_required_point(point, normalized_text):
+                            off_page_points[target_page_number].add(point)
+                            off_page_turns.add(int(message.turn_number))
+            if off_page_points:
+                related_pages = sorted(off_page_points.keys())
+                linked_points = sorted(
+                    {
+                        point
+                        for points in off_page_points.values()
+                        for point in points
+                    }
+                )
+                evidence = [
+                    f"第 {target_page_number} 页要点：{', '.join(sorted(points))}"
+                    for target_page_number, points in sorted(off_page_points.items())
+                ]
+                issue_clusters_by_page[page_number].append(
+                    self._build_issue_cluster(
+                        issue_type="off_page",
+                        summary=(
+                            f"第 {page_number} 页讲解带到了其他页内容，"
+                            f"优先回到当前页要点。"
+                        ),
+                        evidence=evidence,
+                        turn_numbers=sorted(off_page_turns),
+                        linked_points=linked_points,
+                        related_page_numbers=related_pages,
+                    )
+                )
+
+            page_forbidden_words = list(
+                dict.fromkeys(
+                    [*forbidden_words_by_page.get(page_number, []), *global_forbidden_words]
+                )
+            )
+            matched_phrases: set[str] = set()
+            forbidden_turns: set[int] = set()
+            for message, normalized_text in message_pairs:
+                for phrase in page_forbidden_words:
+                    normalized_phrase = _normalize_text(phrase)
+                    if normalized_phrase and normalized_phrase in normalized_text:
+                        matched_phrases.add(phrase)
+                        forbidden_turns.add(int(message.turn_number))
+            if matched_phrases:
+                issue_clusters_by_page[page_number].append(
+                    self._build_issue_cluster(
+                        issue_type="forbidden_word",
+                        summary=(
+                            f"第 {page_number} 页触发了禁忌表达，"
+                            "建议改成更稳妥、可验证的说法。"
+                        ),
+                        evidence=[f"触发短语：{phrase}" for phrase in sorted(matched_phrases)],
+                        turn_numbers=sorted(forbidden_turns),
+                        linked_phrases=sorted(matched_phrases),
+                    )
+                )
+
+            if missing_points:
+                issue_clusters_by_page[page_number].append(
+                    self._build_issue_cluster(
+                        issue_type="missing_point",
+                        summary=(
+                            f"第 {page_number} 页仍缺少 {len(missing_points)} 个必讲点，"
+                            "需要补齐再进入下一页。"
+                        ),
+                        evidence=[f"未覆盖：{point}" for point in missing_points],
+                        turn_numbers=page_turn_numbers,
+                        linked_points=missing_points,
+                    )
+                )
+
+            required_points = list(required_points_by_page.get(page_number, []))
+            page_char_count = sum(len(normalized_text) for _, normalized_text in message_pairs)
+            long_turn_numbers = sorted(
+                {
+                    int(message.turn_number)
+                    for message, normalized_text in message_pairs
+                    if len(normalized_text) >= 60
+                }
+            )
+            coverage_ratio = (
+                len(matched_points) / len(required_points) if required_points else 1.0
+            )
+            if (
+                required_points
+                and long_turn_numbers
+                and page_char_count >= 80
+                and coverage_ratio < 0.75
+            ):
+                issue_clusters_by_page[page_number].append(
+                    self._build_issue_cluster(
+                        issue_type="overlong_explanation",
+                        summary=(
+                            f"第 {page_number} 页展开偏长，"
+                            f"但当前页 {len(required_points)} 个要点只覆盖了 {len(matched_points)} 个。"
+                        ),
+                        evidence=[
+                            f"累计讲解约 {page_char_count} 个字，优先压缩到当前页必讲点。"
+                        ],
+                        turn_numbers=long_turn_numbers,
+                        linked_points=required_points,
+                    )
+                )
+
+            vague_events = event_map.get("vague_response", {}).get(page_number, [])
+            if vague_events:
+                turn_numbers = sorted(
+                    {
+                        int(turn_number)
+                        for event in vague_events
+                        for turn_number in event.get("turn_numbers", [])
+                    }
+                )
+                evidence = [
+                    str(event.get("trigger_content") or "").strip()
+                    for event in vague_events
+                    if str(event.get("trigger_content") or "").strip()
+                ]
+                issue_clusters_by_page[page_number].append(
+                    self._build_issue_cluster(
+                        issue_type="weak_qa_handling",
+                        summary=(
+                            f"第 {page_number} 页的问答承接偏弱，"
+                            "需要把追问回答得更具体。"
+                        ),
+                        evidence=evidence,
+                        turn_numbers=turn_numbers,
+                    )
+                )
+
+        return {
+            page_number: list(issues)
+            for page_number, issues in issue_clusters_by_page.items()
+        }
+
     def _build_page_summaries(
         self,
         *,
@@ -551,6 +915,7 @@ class PresentationReportService:
         message_page_numbers: list[int | None],
         total_pages: int,
         coverage: dict[str, Any],
+        issue_clusters_by_page: dict[int, list[dict[str, Any]]],
         has_page_metadata: bool,
     ) -> list[dict[str, Any]]:
         if not has_page_metadata:
@@ -591,6 +956,7 @@ class PresentationReportService:
                     "key_points": matched_points[:3],
                     "matched_required_points": matched_points,
                     "missing_required_points": missing_points,
+                    "issue_clusters": list(issue_clusters_by_page.get(page_number, [])),
                     "summary": self._build_page_summary(
                         page_number=page_number,
                         messages=messages,

@@ -53,3 +53,4 @@
 - Replay/highlight rich-evidence UI 现在会在 session-level conclusion 卡片和 per-turn evidence 卡片里重复展示 `issue_type` / `goal_type` / stage label；前端 focused tests 应该用 `getAllByText` 或 textContent matcher，别再假设这些标签只出现一次。
 - 本地做 M004/S02 这类 report/replay browser proof 时，别默认复用机器上已有的 `:3000` 页面：这台环境里 `http://127.0.0.1:3000` 可能是别的应用，真正的 repo 前端需要单独起在 `:3445`（或先核对标题/路由能否命中 `web/src/app/(user)/practice/[sessionId]/report/page.tsx`），否则你会把 чужой app 的 401/404 误判成当前仓库回归。
 - M004/S03 之后如果 report/replay 合同测试还在直接断言 `main_issue` / `next_goal` 整体相等，先确认 replay 侧是不是已经合法附带了 `replay_anchor`：completed-session report 仍保留基础 issue/goal 事实，而 replay 会在同一对象上加定位元数据；这类断言应剥掉 `replay_anchor` 或单独校验它，别把合法深链扩展误报成 evidence drift。
+- `PresentationReportService._load_report_context()` 现在会额外查询一轮 `ForbiddenWord`；写 presentation report 单测时如果还在手工堆 `db.execute.side_effect`，要补上第 6 个结果（通常是 `_ScalarsResult([])`），否则测试会掉进空白的 `[PRESENTATION_REVIEW_BUILD_FAILED:]`，看起来像逻辑坏了，其实只是 fixture 少了一次查询。

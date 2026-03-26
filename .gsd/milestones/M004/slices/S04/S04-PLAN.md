@@ -4,7 +4,7 @@
 **Demo:** After this: On the current PPT report/replay routes, a learner can see which page has which issue cluster and why it should be reworked.
 
 ## Tasks
-- [ ] **T01: Group PPT learning issues at page and point level on the current report line** — Extend the current presentation report builder so it can group issues at page/point level on the existing authority line: off-page, missing point, overlong explanation, forbidden wording, and weak Q&A handling. Lock the contract with focused backend tests rather than freeform UI expectations.
+- [x] **T01: Added page-level PPT issue clusters and projection diagnostics to the shared presentation review payload.** — Extend the current presentation report builder so it can group issues at page/point level on the existing authority line: off-page, missing point, overlong explanation, forbidden wording, and weak Q&A handling. Lock the contract with focused backend tests rather than freeform UI expectations.
   - Estimate: 90m
   - Files: backend/src/presentation_coach/services/presentation_report_service.py, backend/src/common/conversation/session_evidence.py, backend/tests/unit/test_presentation_report_service.py
   - Verify: cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_presentation_report_service.py
