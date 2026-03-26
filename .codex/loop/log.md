@@ -1371,3 +1371,26 @@ Append one entry per iteration:
   verification results: the focused report-page suite passed 10/10 through the temporary npm runner after repairing web node_modules with `cd web && pnpm dlx npm@11.6.1 ci`; attempted live browser proof was blocked by the pre-existing local Next install drift `Cannot find module '../server/config'` before :3445 became ready, so browser verification was not counted as product-failure evidence.
   success signal status: learners can now see which PPT page triggered which issue cluster and why it should be reworked directly on the current report route instead of inferring problems from summary text alone.
   rollback note: if T03 changes how page evidence is carried into replay, keep the report-side issue-cluster rendering sourced from `presentation_review.page_summaries[*].issue_clusters` and its diagnostics overview rather than inventing a second PPT learning payload.
+
+- time: 2026-03-26T11:26:12+0800
+  mode: stabilize
+  item id: M004-S04-T03
+  files changed:
+    - backend/src/common/conversation/replay.py
+    - backend/src/common/conversation/schemas.py
+    - backend/tests/unit/test_replay_service.py
+    - web/src/app/(user)/practice/[sessionId]/replay/page.tsx
+    - web/src/app/(user)/practice/[sessionId]/replay/page.test.tsx
+    - web/src/components/practice/presentation/SlideViewer.tsx
+    - web/src/lib/api/types.ts
+    - .gsd/DECISIONS.md
+    - .codex/loop/state.json
+    - .codex/loop/log.md
+  summary: Extended the existing replay authority line to carry presentation review data, rendered a PPT page-level replay/viewer branch with explicit page-anchor banners, and kept report-page regression coverage green.
+  verification commands:
+    - cd web && pnpm dlx npm@11.6.1 test -- --run 'src/app/(user)/practice/[sessionId]/replay/page.test.tsx'
+    - cd web && pnpm dlx npm@11.6.1 test -- --run 'src/app/(user)/practice/[sessionId]/report/page.test.tsx'
+    - cd backend && venv/bin/python -m py_compile src/common/conversation/replay.py src/common/conversation/schemas.py
+  verification results: passed fresh on the web route; the exact replay-page suite passed 7/7 and the upstream report-page suite stayed green at 10/10 after refreshing web/node_modules with the temporary npm runner. Backend replay/schema files compiled successfully, but repo-local backend pytest/pip remain environment-broken (`ModuleNotFoundError: pygments.lexer` / `pip._vendor.rich.console`). A live browser attempt was also blocked by the local Playwright install (`Cannot find module './registry'`) even though the dev server booted on :3445.
+  success signal status: the current replay route can now open directly onto a PPT page context, show why that page needs rework, keep degraded page-anchor fallbacks visible, and jump from page issues into the matching transcript turns without creating a second replay surface.
+  rollback note: if a later slice changes report→replay page targeting, keep the page-level replay contract on the existing replay route and preserve explicit `page/page_anchor_status/page_anchor_reason` degraded messaging unless a broader tested handoff replaces D072.

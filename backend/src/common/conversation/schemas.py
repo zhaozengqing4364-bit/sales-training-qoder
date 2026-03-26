@@ -285,6 +285,8 @@ class HighlightsResponse(BaseModel):
 class ReplayDataResponse(BaseModel):
     """Complete replay data response - R10.2"""
     session_id: str = Field(..., description="Session UUID")
+    scenario_type: str | None = Field(None, description="Session scenario type")
+    presentation_id: str | None = Field(None, description="Presentation UUID for presentation sessions")
     agent_name: str | None = Field(None, description="Agent name")
     persona_name: str | None = Field(None, description="Persona name")
     voice_policy_snapshot_ref: VoicePolicySnapshotReferenceSchema | None = Field(

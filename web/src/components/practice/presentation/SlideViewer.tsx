@@ -145,7 +145,10 @@ export function SlideViewer({
                 )}
 
                 {/* 页码指示器 */}
-                <div className="absolute top-2 right-2 bg-slate-100/80 backdrop-blur-sm px-2 py-1 rounded-full">
+                <div
+                    data-testid="presentation-slide-page-indicator"
+                    className="absolute top-2 right-2 bg-slate-100/80 backdrop-blur-sm px-2 py-1 rounded-full"
+                >
                     <span className="text-xs font-medium text-slate-600">
                         {currentPage} / {totalPages}
                     </span>

@@ -1,6 +1,6 @@
 {
   "mode": "stabilize",
-  "current_issue_id": "M004-S04-T02",
+  "current_issue_id": "M004-S04-T03",
   "current_issue_type": "task",
   "current_issue_status": "done",
   "pending_issue_ids": [],
@@ -73,26 +73,30 @@
     "M004-S03-T01",
     "M004-S03-T02",
     "M004-S03-T03",
-    "M004-S04-T02"
+    "M004-S04-T02",
+    "M004-S04-T03"
   ],
   "blocked_issue_ids": [],
   "deferred_issue_ids": [],
   "last_modified_files": [
-    "web/src/app/(user)/practice/[sessionId]/report/page.tsx",
-    "web/src/app/(user)/practice/[sessionId]/report/page.test.tsx",
-    "web/src/lib/session-evidence.ts",
+    "backend/src/common/conversation/replay.py",
+    "backend/src/common/conversation/schemas.py",
+    "backend/tests/unit/test_replay_service.py",
+    "web/src/app/(user)/practice/[sessionId]/replay/page.tsx",
+    "web/src/app/(user)/practice/[sessionId]/replay/page.test.tsx",
+    "web/src/components/practice/presentation/SlideViewer.tsx",
     "web/src/lib/api/types.ts",
     ".gsd/DECISIONS.md",
-    ".gsd/KNOWLEDGE.md",
     ".codex/loop/state.json",
     ".codex/loop/log.md"
   ],
   "last_verification_commands": [
+    "cd web && pnpm dlx npm@11.6.1 test -- --run 'src/app/(user)/practice/[sessionId]/replay/page.test.tsx'",
     "cd web && pnpm dlx npm@11.6.1 test -- --run 'src/app/(user)/practice/[sessionId]/report/page.test.tsx'",
-    "cd web && pnpm dlx npm@11.6.1 run dev"
+    "cd backend && venv/bin/python -m py_compile src/common/conversation/replay.py src/common/conversation/schemas.py"
   ],
-  "last_verification_result": "Fresh T02 verification is mixed but sufficient for this intermediate task: the exact report-page suite passed 10/10 through an ephemeral npm runner after repairing web node_modules, while live browser proof remained blocked by pre-existing local Next install drift (`Cannot find module '../server/config'`) before :3445 could boot.",
-  "last_success_signal": "The current shared PPT report route now shows page-level issue-cluster cards with concrete evidence, linked pages/points/phrases, and an aggregate issue overview instead of only per-page summaries plus raw counts.",
+  "last_verification_result": "Fresh T03 verification is strong on the web route: the exact replay-page suite passed 7/7 and the upstream report-page suite stayed green at 10/10 through the temporary npm runner after repairing web/node_modules with `cd web && pnpm dlx npm@11.6.1 ci`. Backend replay code was syntax-checked with repo-local py_compile, but backend pytest/pip in this workspace remain environment-broken (`ModuleNotFoundError: pygments.lexer` / `pip._vendor.rich.console`). A live browser attempt was also blocked by the local Playwright install (`Cannot find module './registry'`) even though the dev server itself booted on :3445.",
+  "last_success_signal": "The current replay route now renders PPT page-level issue clusters beside the shared SlideViewer, honors page-target query params with explicit resolved/degraded banners, and lets learners jump from page issues into the matching transcript turns without leaving the existing route.",
   "last_growth_scan": null,
-  "next_action": "Execute M004/S04/T03: carry the same page-level PPT issue evidence into the existing replay/viewing path so report findings can open directly onto relevant page context."
+  "next_action": "Close M004/S04 at the slice level: reuse the now-green report/replay focused suites, write slice summary/UAT, and complete the slice on the existing presentation report/replay authority line."
 }

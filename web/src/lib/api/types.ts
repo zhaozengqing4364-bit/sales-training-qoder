@@ -1083,6 +1083,7 @@ export interface ReplayStageSummary extends SessionStageSummary {}
 
 export interface ReplayData extends SessionEvidenceContract {
     session_id: string;
+    presentation_id?: string | null;
     agent_name?: string | null;
     persona_name?: string | null;
     voice_policy_snapshot_ref?: VoicePolicySnapshotReference | null;

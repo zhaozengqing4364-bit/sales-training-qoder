@@ -894,6 +894,133 @@ class TestReplayService:
         assert data["evidence_completeness"]["legacy_score_key_used"] is True
 
     @pytest.mark.asyncio
+    async def test_get_replay_data_includes_presentation_review_for_presentation_sessions(
+        self,
+        service,
+        mock_completed_session,
+    ):
+        """Presentation replay should expose page-level review data on the existing replay authority line."""
+        mock_completed_session.presentation_id = "presentation-1"
+        replay_messages = [
+            {
+                "id": "ppt-turn-1",
+                "session_id": mock_completed_session.session_id,
+                "turn_number": 1,
+                "role": "user",
+                "content": "第一页先讲业务目标。",
+                "audio_url": None,
+                "timestamp": "2026-03-25T00:00:00+00:00",
+                "duration_ms": 1800,
+                "fuzzy_words": None,
+                "transcript_metadata": {"page_number": 1},
+                "sales_stage": None,
+                "score_snapshot": {"overall_score": 88.0},
+                "ai_feedback": None,
+                "is_highlight": False,
+                "highlight_type": None,
+                "highlight_reason": None,
+            },
+        ]
+        projection = _make_projection(
+            mock_completed_session,
+            messages=replay_messages,
+            main_issue=None,
+            next_goal=None,
+            overall_score=88.0,
+        )
+        projection.scenario_type = "presentation"
+        projection.effectiveness_snapshot = None
+        projection.pass_flags = None
+        projection.main_capability_passed = None
+        projection.overall_result = None
+        projection.evaluable = None
+        projection.not_evaluable_reason = None
+        projection.stage_summary = []
+        projection.presentation_review = {
+            "overall_score": 88,
+            "dimension_scores": [],
+            "page_summaries": [
+                {
+                    "page_number": 1,
+                    "stage_number": 1,
+                    "start_turn": 1,
+                    "end_turn": 1,
+                    "average_score": 88,
+                    "key_points": ["业务目标"],
+                    "matched_required_points": ["业务目标"],
+                    "missing_required_points": [],
+                    "issue_clusters": [
+                        {
+                            "issue_type": "off_page",
+                            "summary": "第 1 页讲解带到了其他页内容，优先回到当前页要点。",
+                            "evidence": ["第 2 页要点：实施计划"],
+                            "turn_numbers": [1],
+                            "linked_points": ["实施计划"],
+                            "linked_phrases": [],
+                            "related_page_numbers": [2],
+                        }
+                    ],
+                    "summary": "第一页完整讲清业务目标。",
+                }
+            ],
+            "required_talking_points": {
+                "status": "complete",
+                "total": 1,
+                "covered": 1,
+                "missing": 0,
+                "coverage_ratio": 1,
+            },
+            "issue_counts": {"off_page": 1},
+            "strengths": ["表达流畅"],
+            "improvements": ["减少串页"],
+            "recommendations": ["按页讲述。"],
+            "detailed_feedback": "整体稳定，但第一页发生串页。",
+            "has_page_metadata": True,
+            "coverage_status": "complete",
+            "diagnostics": {
+                "has_page_metadata": True,
+                "pages_with_messages": 1,
+                "total_pages": 2,
+                "page_coverage_ratio": 0.5,
+                "required_points_total": 1,
+                "required_points_covered": 1,
+                "required_points_missing": 0,
+                "required_coverage_ratio": 1,
+                "degraded_reasons": [],
+                "page_issue_cluster_count": 1,
+                "page_issue_types": ["off_page"],
+            },
+        }
+        projection.evidence_completeness = {
+            "complete": True,
+            "scenario_type": "presentation",
+            "presentation_review_available": True,
+            "page_metadata_complete": True,
+            "page_summary_count": 1,
+            "required_talking_points_status": "complete",
+            "required_points_total": 1,
+            "required_points_covered": 1,
+            "required_points_missing": 0,
+            "required_coverage_ratio": 1,
+            "degraded_reasons": [],
+        }
+
+        with patch(
+            "common.conversation.replay.SessionEvidenceService.get_projection",
+            new=AsyncMock(return_value=Result.ok(projection)),
+        ):
+            result = await service.get_replay_data(mock_completed_session.session_id)
+
+        assert result.is_success
+        data = result.value
+        assert data["scenario_type"] == "presentation"
+        assert data["presentation_id"] == "presentation-1"
+        assert data["presentation_review"] == projection.presentation_review
+        assert data["main_issue"] is None
+        assert data["next_goal"] is None
+        assert data["messages"][0]["learning_evidence"] is None
+
+    @pytest.mark.asyncio
     async def test_get_replay_data_session_not_completed(self, service, mock_db, mock_in_progress_session):
         """Test getting replay data for an incomplete session fails"""
         # Arrange

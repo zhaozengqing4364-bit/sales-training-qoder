@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "exported_at": "2026-03-26T02:55:00.021Z",
+  "exported_at": "2026-03-26T03:29:18.960Z",
   "milestones": [
     {
       "id": "M001",
@@ -2059,19 +2059,30 @@
       "milestone_id": "M004",
       "slice_id": "S04",
       "id": "T03",
-      "title": "Carry page-level evidence onto the current PPT replay/viewing path",
-      "status": "pending",
-      "one_liner": "",
-      "narrative": "",
-      "verification_result": "",
+      "title": "Extended the current replay route to show PPT page-level issues with page anchors, slide context, and transcript jumps.",
+      "status": "complete",
+      "one_liner": "Extended the current replay route to show PPT page-level issues with page anchors, slide context, and transcript jumps.",
+      "narrative": "I completed T03 by extending the existing replay authority line instead of adding a separate PPT replay surface. On the backend, replay payloads for presentation sessions now include scenario_type, presentation_id, and presentation_review so the existing replay route can render page-level evidence without depending on a second API contract. On the frontend, the current /practice/{sessionId}/replay page now branches for presentation sessions, reuses SlideViewer, resolves page/page_anchor_status/page_anchor_reason query params into explicit resolved/degraded page banners, shows the selected page summary and issue clusters, and lets learners jump from issue-cluster cards into the matching transcript turns. I also added focused replay tests for the new presentation behavior and kept the upstream report-page suite green to prove T02 did not regress. Local environment verification was partially constrained by a broken global npm wrapper, a broken backend pytest/pip install in backend/venv, and a broken Playwright browser tool install, so verification used the known pnpm dlx npm@11.6.1 workaround for web tests and py_compile for the touched backend replay files.",
+      "verification_result": "Passed the exact replay-page task-plan suite with `cd web && pnpm dlx npm@11.6.1 test -- --run 'src/app/(user)/practice/[sessionId]/replay/page.test.tsx'` (7/7). Re-ran the upstream report-page suite with `cd web && pnpm dlx npm@11.6.1 test -- --run 'src/app/(user)/practice/[sessionId]/report/page.test.tsx'` (10/10) to confirm no regression. Also syntax-checked the touched backend replay files with `cd backend && venv/bin/python -m py_compile src/common/conversation/replay.py src/common/conversation/schemas.py`. The local web dev server booted successfully on :3445 and was shut down cleanly, but browser automation could not be counted because the Playwright tool install is broken on this machine (`Cannot find module './registry'`).",
       "duration": "",
-      "completed_at": null,
+      "completed_at": "2026-03-26T03:29:18.923Z",
       "blocker_discovered": false,
-      "deviations": "",
-      "known_issues": "",
-      "key_files": [],
-      "key_decisions": [],
-      "full_summary_md": "",
+      "deviations": "Updated backend/src/common/conversation/schemas.py and web/src/lib/api/types.ts so the replay response model and typed frontend contract could carry the new presentation replay fields, and added small data-testid hooks to SlideViewer to keep the shared viewer verifiable on the replay route.",
+      "known_issues": "The machine's global Volta npm wrapper still exits 1 before Vitest starts, so exact plain `npm test ...` commands remain environment-blocked; repo-local backend pytest/pip in backend/venv are also environment-broken (`ModuleNotFoundError: pygments.lexer` / `pip._vendor.rich.console`), and browser automation is blocked by a broken Playwright install (`Cannot find module './registry'`). None of these blockers are caused by the T03 product code changes.",
+      "key_files": [
+        "backend/src/common/conversation/replay.py",
+        "backend/src/common/conversation/schemas.py",
+        "backend/tests/unit/test_replay_service.py",
+        "web/src/app/(user)/practice/[sessionId]/replay/page.tsx",
+        "web/src/app/(user)/practice/[sessionId]/replay/page.test.tsx",
+        "web/src/components/practice/presentation/SlideViewer.tsx",
+        "web/src/lib/api/types.ts",
+        ".gsd/DECISIONS.md"
+      ],
+      "key_decisions": [
+        "D072: keep PPT page replay on the existing replay authority line by extending replay with scenario_type/presentation_id/presentation_review and consuming page routing via replay query params instead of inventing a second PPT replay payload."
+      ],
+      "full_summary_md": "---\nid: T03\nparent: S04\nmilestone: M004\nkey_files:\n  - backend/src/common/conversation/replay.py\n  - backend/src/common/conversation/schemas.py\n  - backend/tests/unit/test_replay_service.py\n  - web/src/app/(user)/practice/[sessionId]/replay/page.tsx\n  - web/src/app/(user)/practice/[sessionId]/replay/page.test.tsx\n  - web/src/components/practice/presentation/SlideViewer.tsx\n  - web/src/lib/api/types.ts\n  - .gsd/DECISIONS.md\nkey_decisions:\n  - D072: keep PPT page replay on the existing replay authority line by extending replay with scenario_type/presentation_id/presentation_review and consuming page routing via replay query params instead of inventing a second PPT replay payload.\nduration: \"\"\nverification_result: passed\ncompleted_at: 2026-03-26T03:29:18.924Z\nblocker_discovered: false\n---\n\n# T03: Extended the current replay route to show PPT page-level issues with page anchors, slide context, and transcript jumps.\n\n**Extended the current replay route to show PPT page-level issues with page anchors, slide context, and transcript jumps.**\n\n## What Happened\n\nI completed T03 by extending the existing replay authority line instead of adding a separate PPT replay surface. On the backend, replay payloads for presentation sessions now include scenario_type, presentation_id, and presentation_review so the existing replay route can render page-level evidence without depending on a second API contract. On the frontend, the current /practice/{sessionId}/replay page now branches for presentation sessions, reuses SlideViewer, resolves page/page_anchor_status/page_anchor_reason query params into explicit resolved/degraded page banners, shows the selected page summary and issue clusters, and lets learners jump from issue-cluster cards into the matching transcript turns. I also added focused replay tests for the new presentation behavior and kept the upstream report-page suite green to prove T02 did not regress. Local environment verification was partially constrained by a broken global npm wrapper, a broken backend pytest/pip install in backend/venv, and a broken Playwright browser tool install, so verification used the known pnpm dlx npm@11.6.1 workaround for web tests and py_compile for the touched backend replay files.\n\n## Verification\n\nPassed the exact replay-page task-plan suite with `cd web && pnpm dlx npm@11.6.1 test -- --run 'src/app/(user)/practice/[sessionId]/replay/page.test.tsx'` (7/7). Re-ran the upstream report-page suite with `cd web && pnpm dlx npm@11.6.1 test -- --run 'src/app/(user)/practice/[sessionId]/report/page.test.tsx'` (10/10) to confirm no regression. Also syntax-checked the touched backend replay files with `cd backend && venv/bin/python -m py_compile src/common/conversation/replay.py src/common/conversation/schemas.py`. The local web dev server booted successfully on :3445 and was shut down cleanly, but browser automation could not be counted because the Playwright tool install is broken on this machine (`Cannot find module './registry'`).\n\n## Verification Evidence\n\n| # | Command | Exit Code | Verdict | Duration |\n|---|---------|-----------|---------|----------|\n| 1 | `cd web && pnpm dlx npm@11.6.1 test -- --run 'src/app/(user)/practice/[sessionId]/replay/page.test.tsx'` | 0 | ✅ pass | 1781ms |\n| 2 | `cd web && pnpm dlx npm@11.6.1 test -- --run 'src/app/(user)/practice/[sessionId]/report/page.test.tsx'` | 0 | ✅ pass | 1661ms |\n| 3 | `cd backend && venv/bin/python -m py_compile src/common/conversation/replay.py src/common/conversation/schemas.py` | 0 | ✅ pass | 100ms |\n\n\n## Deviations\n\nUpdated backend/src/common/conversation/schemas.py and web/src/lib/api/types.ts so the replay response model and typed frontend contract could carry the new presentation replay fields, and added small data-testid hooks to SlideViewer to keep the shared viewer verifiable on the replay route.\n\n## Known Issues\n\nThe machine's global Volta npm wrapper still exits 1 before Vitest starts, so exact plain `npm test ...` commands remain environment-blocked; repo-local backend pytest/pip in backend/venv are also environment-broken (`ModuleNotFoundError: pygments.lexer` / `pip._vendor.rich.console`), and browser automation is blocked by a broken Playwright install (`Cannot find module './registry'`). None of these blockers are caused by the T03 product code changes.\n\n## Files Created/Modified\n\n- `backend/src/common/conversation/replay.py`\n- `backend/src/common/conversation/schemas.py`\n- `backend/tests/unit/test_replay_service.py`\n- `web/src/app/(user)/practice/[sessionId]/replay/page.tsx`\n- `web/src/app/(user)/practice/[sessionId]/replay/page.test.tsx`\n- `web/src/components/practice/presentation/SlideViewer.tsx`\n- `web/src/lib/api/types.ts`\n- `.gsd/DECISIONS.md`\n",
       "description": "Carry the page-level evidence into the current replay/PPT viewing experience so users can navigate from report conclusions to the relevant page context. Reuse current replay service and PPT UI components; keep degraded states explicit when page anchors are missing.",
       "estimate": "75m",
       "files": [
@@ -3692,6 +3703,18 @@
       "revisable": "Yes",
       "made_by": "agent",
       "superseded_by": null
+    },
+    {
+      "seq": 1431,
+      "id": "D072",
+      "when_context": "M004/S04/T03",
+      "scope": "architecture",
+      "decision": "How the current replay authority line should carry PPT page-level evidence and page targeting",
+      "choice": "Extend the existing replay payload with scenario_type/presentation_id/presentation_review for presentation sessions and consume page routing through replay query params (page, page_anchor_status, page_anchor_reason) on the current replay route.",
+      "rationale": "T03 needed learners to move from the current PPT report conclusions into page-specific replay context without creating a second PPT-only replay API or UI surface. Reusing the existing replay contract keeps report/replay on one authority line, lets the replay page show explicit degraded page-anchor states, and preserves the current SlideViewer/transcript route instead of splitting facts across parallel endpoints.",
+      "revisable": "Yes",
+      "made_by": "agent",
+      "superseded_by": null
     }
   ],
   "verification_evidence": [
@@ -4420,6 +4443,39 @@
       "verdict": "✅ pass",
       "duration_ms": 10870,
       "created_at": "2026-03-26T02:54:59.907Z"
+    },
+    {
+      "id": 67,
+      "task_id": "T03",
+      "slice_id": "S04",
+      "milestone_id": "M004",
+      "command": "cd web && pnpm dlx npm@11.6.1 test -- --run 'src/app/(user)/practice/[sessionId]/replay/page.test.tsx'",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 1781,
+      "created_at": "2026-03-26T03:29:18.924Z"
+    },
+    {
+      "id": 68,
+      "task_id": "T03",
+      "slice_id": "S04",
+      "milestone_id": "M004",
+      "command": "cd web && pnpm dlx npm@11.6.1 test -- --run 'src/app/(user)/practice/[sessionId]/report/page.test.tsx'",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 1661,
+      "created_at": "2026-03-26T03:29:18.924Z"
+    },
+    {
+      "id": 69,
+      "task_id": "T03",
+      "slice_id": "S04",
+      "milestone_id": "M004",
+      "command": "cd backend && venv/bin/python -m py_compile src/common/conversation/replay.py src/common/conversation/schemas.py",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 100,
+      "created_at": "2026-03-26T03:29:18.924Z"
     }
   ]
 }

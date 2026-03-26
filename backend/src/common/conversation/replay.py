@@ -236,6 +236,8 @@ class ReplayService:
 
             replay_data = {
                 "session_id": session_id,
+                "scenario_type": scenario_type,
+                "presentation_id": getattr(session, "presentation_id", None),
                 "agent_name": agent_name,
                 "persona_name": persona_name,
                 "voice_policy_snapshot_ref": build_voice_policy_snapshot_ref_payload(session.voice_policy_snapshot),
@@ -253,6 +255,7 @@ class ReplayService:
                 "evaluable": projection.evaluable,
                 "not_evaluable_reason": projection.not_evaluable_reason,
                 "evidence_completeness": projection.evidence_completeness,
+                "presentation_review": presentation_review,
             }
 
             logger.info(

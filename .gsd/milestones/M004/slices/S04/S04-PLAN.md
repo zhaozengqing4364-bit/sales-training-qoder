@@ -12,7 +12,7 @@
   - Estimate: 75m
   - Files: web/src/app/(user)/practice/[sessionId]/report/page.tsx, web/src/lib/session-evidence.ts, web/src/app/(user)/practice/[sessionId]/report/page.test.tsx
   - Verify: cd web && npm test -- --run 'src/app/(user)/practice/[sessionId]/report/page.test.tsx'
-- [ ] **T03: Carry page-level evidence onto the current PPT replay/viewing path** — Carry the page-level evidence into the current replay/PPT viewing experience so users can navigate from report conclusions to the relevant page context. Reuse current replay service and PPT UI components; keep degraded states explicit when page anchors are missing.
+- [x] **T03: Extended the current replay route to show PPT page-level issues with page anchors, slide context, and transcript jumps.** — Carry the page-level evidence into the current replay/PPT viewing experience so users can navigate from report conclusions to the relevant page context. Reuse current replay service and PPT UI components; keep degraded states explicit when page anchors are missing.
   - Estimate: 75m
   - Files: backend/src/common/conversation/replay.py, web/src/components/practice/presentation/SlideViewer.tsx, web/src/app/(user)/practice/[sessionId]/replay/page.tsx, web/src/app/(user)/practice/[sessionId]/replay/page.test.tsx
   - Verify: cd web && npm test -- --run 'src/app/(user)/practice/[sessionId]/replay/page.test.tsx'

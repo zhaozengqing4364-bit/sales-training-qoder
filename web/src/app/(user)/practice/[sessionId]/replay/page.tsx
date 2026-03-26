@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 
 import { HighlightList } from "@/components/highlights";
+import { SlideViewer } from "@/components/practice/presentation/SlideViewer";
 import { Button } from "@/components/ui/button";
 import { GlassCard } from "@/components/ui/glass-card";
 import { api, getApiErrorMessage } from "@/lib/api/client";
@@ -28,6 +29,9 @@ import {
   formatGoalTypeLabel,
   formatIssueTypeLabel,
   formatNotEvaluableReason,
+  formatPresentationDegradedNote,
+  formatPresentationIssueContextLines,
+  formatPresentationIssueLabel,
   formatSessionStageLabel,
   getClaimTruthTone,
   type SessionClaimTruthTone,
@@ -139,6 +143,137 @@ function parseReplayDeepLinkRequest(searchParams: Pick<URLSearchParams, "get">):
     anchorReason: searchParams.get("anchor_reason") || null,
     markerType: searchParams.get("marker_type") || null,
     markerTimestampMs: parseReplayInteger(searchParams.get("marker_timestamp_ms")),
+  };
+}
+
+interface PresentationPageRequest {
+  pageNumber: number | null;
+  anchorStatus: ReplayAnchorStatus | null;
+  anchorReason: string | null;
+}
+
+function parsePresentationPageRequest(
+  searchParams: Pick<URLSearchParams, "get">,
+): PresentationPageRequest {
+  return {
+    pageNumber: parseReplayInteger(searchParams.get("page")),
+    anchorStatus: parseReplayAnchorStatus(searchParams.get("page_anchor_status")),
+    anchorReason: searchParams.get("page_anchor_reason") || null,
+  };
+}
+
+function getPresentationPageSummaries(review?: ReplayData["presentation_review"] | null) {
+  return Array.isArray(review?.page_summaries) ? review.page_summaries : [];
+}
+
+function getPresentationTotalPages(review?: ReplayData["presentation_review"] | null): number {
+  const diagnosticTotal = review?.diagnostics?.total_pages;
+  if (typeof diagnosticTotal === "number" && diagnosticTotal >= 1) {
+    return diagnosticTotal;
+  }
+
+  const maxPageNumber = getPresentationPageSummaries(review).reduce((maxPage, pageSummary) => (
+    typeof pageSummary.page_number === "number" && pageSummary.page_number > maxPage
+      ? pageSummary.page_number
+      : maxPage
+  ), 0);
+
+  return maxPageNumber >= 1 ? maxPageNumber : 1;
+}
+
+function resolvePresentationLandingPage(
+  review?: ReplayData["presentation_review"] | null,
+  requestedPageNumber?: number | null,
+): number | null {
+  const pageSummaries = getPresentationPageSummaries(review);
+  const totalPages = getPresentationTotalPages(review);
+  if (typeof requestedPageNumber === "number" && requestedPageNumber >= 1 && requestedPageNumber <= totalPages) {
+    return requestedPageNumber;
+  }
+
+  const firstIssuePage = pageSummaries.find(
+    (pageSummary) => (pageSummary.issue_clusters?.length || 0) > 0,
+  )?.page_number;
+  if (typeof firstIssuePage === "number") {
+    return firstIssuePage;
+  }
+
+  const firstSummaryPage = pageSummaries[0]?.page_number;
+  if (typeof firstSummaryPage === "number") {
+    return firstSummaryPage;
+  }
+
+  return totalPages >= 1 ? 1 : null;
+}
+
+function buildPresentationSlideFallback(
+  pageSummary?: {
+    summary?: string | null;
+    key_points?: string[] | null;
+  } | null,
+): string | undefined {
+  if (!pageSummary) {
+    return undefined;
+  }
+
+  if (typeof pageSummary.summary === "string" && pageSummary.summary.trim()) {
+    return pageSummary.summary.trim();
+  }
+
+  if (Array.isArray(pageSummary.key_points) && pageSummary.key_points.length > 0) {
+    return `关键点：${pageSummary.key_points.join("、")}`;
+  }
+
+  return undefined;
+}
+
+function buildPresentationPageNotice(
+  request: PresentationPageRequest,
+  options: {
+    resolvedPageNumber: number | null;
+    pageSummaryFound: boolean;
+  },
+): ReplayAnchorNotice | null {
+  if (request.pageNumber === null) {
+    return null;
+  }
+
+  if (options.resolvedPageNumber === null) {
+    return {
+      title: `未找到第 ${request.pageNumber} 页`,
+      description: "当前回放缺少可用的页级证据，请回到报告页查看完整复盘。",
+      tone: "warning",
+    };
+  }
+
+  if (
+    request.anchorStatus === "missing"
+    || request.anchorReason === "page_not_found"
+    || request.pageNumber !== options.resolvedPageNumber
+  ) {
+    return {
+      title: `未找到第 ${request.pageNumber} 页`,
+      description: `报告引用的页码当前不存在，已回退到第 ${options.resolvedPageNumber} 页继续查看。`,
+      tone: "warning",
+    };
+  }
+
+  if (
+    request.anchorStatus === "degraded"
+    || request.anchorReason === "missing_page_summary"
+    || !options.pageSummaryFound
+  ) {
+    return {
+      title: `已打开第 ${options.resolvedPageNumber} 页`,
+      description: "当前会话缺少该页的逐页回放锚点，仅展示课件内容与已确认的页级证据。",
+      tone: "warning",
+    };
+  }
+
+  return {
+    title: `已定位到第 ${options.resolvedPageNumber} 页`,
+    description: "已打开报告引用的课件页，并同步展示该页问题簇与相关回合。",
+    tone: "info",
   };
 }
 
@@ -381,15 +516,22 @@ export default function SessionReplayPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [replayData, setReplayData] = useState<ReplayData | null>(null);
+  const [reportSnapshot, setReportSnapshot] = useState<PracticeSessionReport | null>(null);
   const [highlights, setHighlights] = useState<HighlightItem[]>([]);
   const [highlightsUnavailableHint, setHighlightsUnavailableHint] = useState<string | null>(null);
   const [activeTurnNumber, setActiveTurnNumber] = useState<number | null>(null);
+  const [activePresentationPage, setActivePresentationPage] = useState<number | null>(null);
   const [replayAnchorNotice, setReplayAnchorNotice] = useState<ReplayAnchorNotice | null>(null);
+  const [presentationPageNotice, setPresentationPageNotice] = useState<ReplayAnchorNotice | null>(null);
   const [retryEntry, setRetryEntry] = useState<PracticeSessionReport["retry_entry"]>(null);
   const [retryHint, setRetryHint] = useState<string | null>(null);
 
   const replayDeepLink = useMemo(
     () => parseReplayDeepLinkRequest(searchParams),
+    [searchParams],
+  );
+  const presentationPageRequest = useMemo(
+    () => parsePresentationPageRequest(searchParams),
     [searchParams],
   );
 
@@ -400,10 +542,13 @@ export default function SessionReplayPage() {
       setIsLoading(true);
       setError(null);
       setReplayData(null);
+      setReportSnapshot(null);
       setHighlights([]);
       setHighlightsUnavailableHint(null);
       setActiveTurnNumber(null);
+      setActivePresentationPage(null);
       setReplayAnchorNotice(null);
+      setPresentationPageNotice(null);
       setRetryEntry(null);
       setRetryHint(null);
 
@@ -423,21 +568,27 @@ export default function SessionReplayPage() {
         setReplayData(replay);
         debug.log("[Replay] Loaded unified evidence contract", {
           sessionId,
+          scenarioType: replay.scenario_type ?? null,
           overallScore: replay.overall_score,
           evaluable: replay.evaluable,
           notEvaluableReason: replay.not_evaluable_reason,
           messageCount: replay.messages.length,
           evidenceComplete: replay.evidence_completeness?.complete,
+          presentationReviewAvailable: Boolean(replay.presentation_review),
         });
 
         if (retryReportResult.status === "fulfilled") {
+          setReportSnapshot(retryReportResult.value);
           setRetryEntry(retryReportResult.value.retry_entry ?? null);
           debug.log("[Replay] Retry entry loaded", {
             sessionId,
             retryScenarioType: retryReportResult.value.retry_entry?.scenario_type ?? null,
             retryFocusIntentVersion: retryReportResult.value.retry_entry?.focus_intent?.version ?? null,
+            reportScenarioType: retryReportResult.value.scenario_type ?? null,
+            presentationReviewAvailable: Boolean(retryReportResult.value.presentation_review),
           });
         } else {
+          setReportSnapshot(null);
           setRetryEntry(null);
           debug.warn("[Replay] Retry entry unavailable; keeping replay conclusions read-only", {
             sessionId,
@@ -519,6 +670,19 @@ export default function SessionReplayPage() {
   const claimTruthSummary = formatClaimTruthSummary(claimTruth);
   const claimTruthEvidenceNote = formatClaimTruthEvidenceNote(claimTruth);
   const claimTruthClasses = getClaimTruthClasses(getClaimTruthTone(claimTruth?.status));
+  const scenarioType = replayData?.scenario_type ?? reportSnapshot?.scenario_type ?? null;
+  const isPresentationScenario = scenarioType === "presentation";
+  const presentationReview = replayData?.presentation_review ?? reportSnapshot?.presentation_review ?? null;
+  const presentationId = replayData?.presentation_id ?? retryEntry?.presentation_id ?? null;
+  const presentationDegradedNote = formatPresentationDegradedNote(
+    presentationReview,
+    replayData?.evidence_completeness,
+  );
+  const presentationTotalPages = getPresentationTotalPages(presentationReview);
+  const selectedPresentationSummary = getPresentationPageSummaries(presentationReview).find(
+    (pageSummary) => pageSummary.page_number === activePresentationPage,
+  ) ?? null;
+  const presentationSlideContent = buildPresentationSlideFallback(selectedPresentationSummary);
 
   const handleJumpToMessage = useCallback((turnNumber: number) => {
     setActiveTurnNumber(turnNumber);
@@ -622,6 +786,43 @@ export default function SessionReplayPage() {
       resolvedMarkerLabel: resolvedMarker?.label ?? null,
     });
   }, [handleJumpToMessage, replayData, replayDeepLink, sessionId]);
+
+  useEffect(() => {
+    if (!isPresentationScenario || !presentationReview) {
+      setPresentationPageNotice(null);
+      setActivePresentationPage(null);
+      return;
+    }
+
+    const resolvedPageNumber = resolvePresentationLandingPage(
+      presentationReview,
+      presentationPageRequest.pageNumber,
+    );
+    const pageSummaryFound = Boolean(
+      getPresentationPageSummaries(presentationReview).find(
+        (pageSummary) => pageSummary.page_number === resolvedPageNumber,
+      ),
+    );
+    setActivePresentationPage(resolvedPageNumber);
+    setPresentationPageNotice(buildPresentationPageNotice(presentationPageRequest, {
+      resolvedPageNumber,
+      pageSummaryFound,
+    }));
+
+    debug.log("[Replay] Applied presentation page request", {
+      sessionId,
+      requestedPageNumber: presentationPageRequest.pageNumber,
+      pageAnchorStatus: presentationPageRequest.anchorStatus,
+      pageAnchorReason: presentationPageRequest.anchorReason,
+      resolvedPageNumber,
+      pageSummaryFound,
+    });
+  }, [
+    isPresentationScenario,
+    presentationPageRequest,
+    presentationReview,
+    sessionId,
+  ]);
 
   if (isLoading) {
     return (
@@ -759,7 +960,215 @@ export default function SessionReplayPage() {
         );
       })()}
 
-      {claimTruth && claimTruthSummary && (
+      {isPresentationScenario && presentationReview && (
+        <>
+          <GlassCard className="p-4 sm:p-5">
+            <div className="flex items-start justify-between gap-4 flex-wrap">
+              <div>
+                <h2 className="font-bold text-slate-900 text-base sm:text-lg">PPT 回放</h2>
+                <p className="text-sm text-slate-600 mt-1">PPT 页级问题定位</p>
+                <p className="text-sm text-slate-700 mt-3">
+                  {presentationReview.detailed_feedback || "当前回放基于统一训练证据中的页级复盘与真实课件页码。"}
+                </p>
+                {presentationDegradedNote ? (
+                  <p className="text-xs text-amber-700 mt-2">{presentationDegradedNote}</p>
+                ) : null}
+                {retryBlockedHint ? (
+                  <p className="text-xs text-amber-700 mt-2">{retryBlockedHint}</p>
+                ) : null}
+                {retryHint ? (
+                  <p className="text-xs text-amber-700 mt-2">{retryHint}</p>
+                ) : null}
+              </div>
+              {retryEntry?.scenario_type === "presentation" ? (
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onClick={handleRetryFromGoal}
+                  className="whitespace-nowrap"
+                  disabled={Boolean(retryBlockedHint)}
+                >
+                  按目标再练一轮
+                </Button>
+              ) : null}
+            </div>
+          </GlassCard>
+
+          {presentationPageNotice ? (() => {
+            const noticeClasses = getReplayAnchorNoticeClasses(presentationPageNotice.tone);
+            return (
+              <GlassCard
+                data-testid="presentation-page-banner"
+                className={cn("p-4 sm:p-5 border", noticeClasses.card)}
+              >
+                <div className="flex items-start gap-3">
+                  <Target className={cn("w-5 h-5 mt-0.5", noticeClasses.icon)} />
+                  <div>
+                    <p className={cn("text-xs font-semibold", noticeClasses.eyebrow)}>
+                      来自报告的页级定位请求
+                    </p>
+                    <h2 className={cn("font-semibold mt-1", noticeClasses.title)}>
+                      {presentationPageNotice.title}
+                    </h2>
+                    <p className={cn("text-sm mt-1", noticeClasses.body)}>
+                      {presentationPageNotice.description}
+                    </p>
+                  </div>
+                </div>
+              </GlassCard>
+            );
+          })() : null}
+
+          <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)] gap-6">
+            <SlideViewer
+              presentationId={presentationId || undefined}
+              currentPage={activePresentationPage || 1}
+              totalPages={presentationTotalPages}
+              slideContent={presentationSlideContent}
+              onPageChange={(page) => setActivePresentationPage(page)}
+            />
+
+            <GlassCard className="p-4 sm:p-5">
+              <div className="flex items-center justify-between gap-3 flex-wrap mb-4">
+                <h2 className="font-bold text-slate-900 text-base sm:text-lg">逐页定位</h2>
+                <span className="text-xs rounded-full border border-slate-200 bg-slate-50 px-2.5 py-1 text-slate-600">
+                  {presentationTotalPages} 页
+                </span>
+              </div>
+              <div className="flex flex-wrap gap-2 mb-4">
+                {Array.from({ length: presentationTotalPages }, (_, index) => index + 1).map((pageNumber) => {
+                  const pageSummary = getPresentationPageSummaries(presentationReview).find(
+                    (item) => item.page_number === pageNumber,
+                  );
+                  const issueCount = pageSummary?.issue_clusters?.length || 0;
+                  const isActive = pageNumber === activePresentationPage;
+                  return (
+                    <button
+                      key={pageNumber}
+                      type="button"
+                      onClick={() => setActivePresentationPage(pageNumber)}
+                      className={cn(
+                        "rounded-full border px-3 py-1.5 text-xs font-medium transition-colors",
+                        isActive
+                          ? "border-blue-200 bg-blue-50 text-blue-700"
+                          : "border-slate-200 bg-white text-slate-600 hover:border-blue-200 hover:text-blue-700",
+                      )}
+                    >
+                      第 {pageNumber} 页{issueCount > 0 ? ` · ${issueCount} 个问题簇` : ""}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {selectedPresentationSummary ? (
+                <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-4 space-y-2">
+                  <div className="flex items-center justify-between gap-3 flex-wrap">
+                    <p className="text-sm font-semibold text-slate-900">
+                      第 {selectedPresentationSummary.page_number} 页
+                    </p>
+                    <span className="text-xs text-slate-500">
+                      回合 {selectedPresentationSummary.start_turn}-{selectedPresentationSummary.end_turn}
+                    </span>
+                  </div>
+                  <p className="text-sm text-slate-700">{selectedPresentationSummary.summary}</p>
+                  {selectedPresentationSummary.key_points.length > 0 ? (
+                    <p className="text-xs text-slate-500">
+                      当前页要点：{selectedPresentationSummary.key_points.join("、")}
+                    </p>
+                  ) : null}
+                  {selectedPresentationSummary.matched_required_points.length > 0 ? (
+                    <p className="text-xs text-emerald-700">
+                      已覆盖：{selectedPresentationSummary.matched_required_points.join("、")}
+                    </p>
+                  ) : null}
+                  {selectedPresentationSummary.missing_required_points.length > 0 ? (
+                    <p className="text-xs text-amber-700">
+                      仍待补充：{selectedPresentationSummary.missing_required_points.join("、")}
+                    </p>
+                  ) : null}
+                </div>
+              ) : (
+                <div className="rounded-xl border border-amber-200 bg-amber-50/80 p-4">
+                  <p className="text-sm font-semibold text-amber-900">当前页暂无逐页摘要</p>
+                  <p className="text-sm text-amber-800 mt-1">
+                    {presentationDegradedNote || "这一页缺少稳定的页级回放锚点，请结合完整对话继续查看。"}
+                  </p>
+                </div>
+              )}
+            </GlassCard>
+          </div>
+
+          <GlassCard className="p-4 sm:p-5">
+            <div className="flex items-center justify-between gap-3 flex-wrap mb-4">
+              <h2 className="font-bold text-slate-900 text-base sm:text-lg">当前页问题簇</h2>
+              <span className="text-xs text-slate-500">
+                {selectedPresentationSummary?.issue_clusters?.length || 0} 个问题簇
+              </span>
+            </div>
+            {selectedPresentationSummary && (selectedPresentationSummary.issue_clusters?.length || 0) > 0 ? (
+              <div className="space-y-3">
+                {(selectedPresentationSummary.issue_clusters || []).map((issue, index) => {
+                  const contextLines = formatPresentationIssueContextLines(issue);
+                  const evidenceItems = (issue.evidence || []).filter((item) => !contextLines.includes(item));
+                  return (
+                    <div
+                      key={`${selectedPresentationSummary.page_number}-${issue.issue_type}-${index}`}
+                      className="rounded-xl border border-amber-100 bg-amber-50/70 p-4"
+                    >
+                      <div className="flex items-center justify-between gap-3 flex-wrap mb-2">
+                        <span className="inline-flex rounded-full border border-amber-200 bg-white/90 px-2.5 py-1 text-xs font-semibold text-amber-800">
+                          {formatPresentationIssueLabel(issue.issue_type) || issue.issue_type}
+                        </span>
+                        <span className="text-xs text-slate-500">
+                          涉及回合：{issue.turn_numbers.length > 0 ? issue.turn_numbers.join("、") : "--"}
+                        </span>
+                      </div>
+                      <p className="text-sm text-slate-800">{issue.summary}</p>
+                      {contextLines.length > 0 ? (
+                        <div className="mt-2 space-y-1">
+                          {contextLines.map((line) => (
+                            <p key={line} className="text-xs text-slate-600">{line}</p>
+                          ))}
+                        </div>
+                      ) : null}
+                      {evidenceItems.length > 0 ? (
+                        <ul className="mt-3 space-y-1">
+                          {evidenceItems.map((item) => (
+                            <li key={item} className="text-xs text-slate-700 flex items-start gap-2">
+                              <span className="mt-1 h-1.5 w-1.5 rounded-full bg-amber-500 flex-shrink-0" />
+                              <span>{item}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      ) : null}
+                      {issue.turn_numbers.length > 0 ? (
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          {issue.turn_numbers.map((turnNumber) => (
+                            <Button
+                              key={`${issue.issue_type}-${turnNumber}`}
+                              variant="outline"
+                              size="sm"
+                              onClick={() => handleJumpToMessage(turnNumber)}
+                            >
+                              定位到第 {turnNumber} 轮
+                            </Button>
+                          ))}
+                        </div>
+                      ) : null}
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="rounded-xl border border-slate-200 bg-slate-50/70 p-4">
+                <p className="text-sm text-slate-600">当前页暂无需要额外回看的问题簇。</p>
+              </div>
+            )}
+          </GlassCard>
+        </>
+      )}
+
+      {!isPresentationScenario && claimTruth && claimTruthSummary && (
         <GlassCard className={cn("p-4 sm:p-5 border", claimTruthClasses.card)}>
           <div className="flex items-center justify-between gap-3 mb-3 flex-wrap">
             <h2 className="font-bold text-slate-900 text-base sm:text-lg">主张证据状态</h2>
@@ -844,7 +1253,7 @@ export default function SessionReplayPage() {
         </GlassCard>
       )}
 
-      {Array.isArray(replayData.stage_summary) && replayData.stage_summary.length > 0 && (
+      {!isPresentationScenario && Array.isArray(replayData.stage_summary) && replayData.stage_summary.length > 0 && (
         <GlassCard className="p-4 sm:p-5">
           <div className="flex items-center gap-2 mb-3">
             <Target className="w-4 h-4 text-blue-600" />
@@ -902,7 +1311,7 @@ export default function SessionReplayPage() {
         </GlassCard>
       ) : null}
 
-      {highlights.length > 0 ? (
+      {!isPresentationScenario && highlights.length > 0 ? (
         <GlassCard className="p-4 sm:p-5">
           <div className="flex items-center gap-2 mb-3 sm:mb-4">
             <Sparkles className="w-4 h-4 text-amber-500" />

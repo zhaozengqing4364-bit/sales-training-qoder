@@ -9,6 +9,7 @@ const {
   getReplayMock,
   getHighlightsMock,
   getReportMock,
+  getThumbnailBlobMock,
   createSessionMock,
   searchParamsState,
   scrollIntoViewMock,
@@ -18,6 +19,7 @@ const {
   getReplayMock: vi.fn(),
   getHighlightsMock: vi.fn(),
   getReportMock: vi.fn(),
+  getThumbnailBlobMock: vi.fn(),
   createSessionMock: vi.fn(),
   searchParamsState: {
     current: new URLSearchParams(),
@@ -42,6 +44,10 @@ vi.mock("next/link", () => ({
   ),
 }));
 
+vi.mock("next/image", () => ({
+  default: ({ src, alt }: { src: string; alt: string }) => <img src={src} alt={alt} />,
+}));
+
 vi.mock("@/components/highlights", () => ({
   HighlightList: ({ highlights }: { highlights: Array<any> }) => (
     <div data-testid="replay-highlight-list">
@@ -63,6 +69,10 @@ vi.mock("@/lib/api/client", async () => {
         getReplay: getReplayMock,
         getHighlights: getHighlightsMock,
         getReport: getReportMock,
+      },
+      presentations: {
+        ...actual.api.presentations,
+        getThumbnailBlob: getThumbnailBlobMock,
       },
       practice: {
         ...actual.api.practice,
@@ -337,6 +347,265 @@ function buildRetryReport(overrides: Record<string, unknown> = {}) {
   };
 }
 
+const basePresentationReview = {
+  overall_score: 88,
+  dimension_scores: [
+    { name: "流畅连贯性", score: 90, weight: 0.22, description: "讲解节奏、重复情况与口头语控制。" },
+    { name: "准确性", score: 86, weight: 0.2, description: "内容与资料一致性、错误信息控制。" },
+    { name: "专业性", score: 84, weight: 0.18, description: "术语使用、结构组织与专业说服力。" },
+    { name: "生动性", score: 82, weight: 0.14, description: "表达感染力、案例化与记忆点设计。" },
+    { name: "互动问答", score: 80, weight: 0.14, description: "对提问的回应质量与现场互动承接。" },
+    { name: "其他表现", score: 78, weight: 0.12, description: "时间控制、状态管理与其他综合表现。" },
+  ],
+  page_summaries: [
+    {
+      page_number: 1,
+      stage_number: 1,
+      start_turn: 1,
+      end_turn: 2,
+      average_score: 88,
+      key_points: ["业务目标", "客户问题"],
+      matched_required_points: ["业务目标", "客户问题"],
+      missing_required_points: [],
+      summary: "第一页完整讲清业务目标与客户问题。",
+      issue_clusters: [
+        {
+          issue_type: "off_page",
+          summary: "第 1 页讲解带到了其他页内容，优先回到当前页要点。",
+          evidence: ["第 2 页要点：实施计划"],
+          turn_numbers: [1],
+          linked_points: ["实施计划"],
+          linked_phrases: [],
+          related_page_numbers: [2],
+        },
+      ],
+    },
+    {
+      page_number: 2,
+      stage_number: 2,
+      start_turn: 3,
+      end_turn: 4,
+      average_score: 84,
+      key_points: ["ROI结果", "客户案例"],
+      matched_required_points: ["ROI结果"],
+      missing_required_points: ["客户案例"],
+      summary: "第二页补充了 ROI 结果，但客户案例展开不够具体。",
+      issue_clusters: [
+        {
+          issue_type: "missing_point",
+          summary: "第 2 页仍缺少 1 个必讲点，需要补齐再进入下一页。",
+          evidence: ["未覆盖：客户案例"],
+          turn_numbers: [3, 4],
+          linked_points: ["客户案例"],
+          linked_phrases: [],
+          related_page_numbers: [],
+        },
+        {
+          issue_type: "weak_qa_handling",
+          summary: "第 2 页的问答承接偏弱，需要把追问回答得更具体。",
+          evidence: ["如果客户追问负责人，我这边暂时只能说后面再确认。"],
+          turn_numbers: [4],
+          linked_points: [],
+          linked_phrases: [],
+          related_page_numbers: [],
+        },
+      ],
+    },
+  ],
+  required_talking_points: {
+    status: "complete" as const,
+    total: 3,
+    covered: 2,
+    missing: 1,
+    coverage_ratio: 2 / 3,
+  },
+  issue_counts: {
+    forbidden_word: 1,
+    missing_point: 1,
+    off_page: 1,
+    weak_qa_handling: 1,
+  },
+  strengths: ["表达流畅", "页间衔接自然"],
+  improvements: ["补足客户案例细节"],
+  recommendations: ["下一轮按页准备必须讲到的案例与 ROI 证据。"],
+  detailed_feedback: "整体讲解稳定，但第二页的案例支撑仍不够扎实。",
+  has_page_metadata: true,
+  coverage_status: "complete" as const,
+  diagnostics: {
+    has_page_metadata: true,
+    pages_with_messages: 2,
+    total_pages: 2,
+    page_coverage_ratio: 1,
+    required_points_total: 3,
+    required_points_covered: 2,
+    required_points_missing: 1,
+    required_coverage_ratio: 2 / 3,
+    degraded_reasons: [],
+    page_issue_cluster_count: 3,
+    page_issue_types: ["off_page", "missing_point", "weak_qa_handling"],
+  },
+};
+
+function buildPresentationReplayData(overrides: Record<string, unknown> = {}) {
+  return {
+    ...buildReplayData({
+      scenario_type: "presentation",
+      presentation_id: "presentation-1",
+      agent_name: null,
+      persona_name: null,
+      overall_score: 88,
+      effectiveness_snapshot: null,
+      pass_flags: null,
+      main_capability_passed: null,
+      overall_result: null,
+      main_issue: null,
+      next_goal: null,
+      evaluable: null,
+      not_evaluable_reason: null,
+      stage_summary: [],
+      evidence_completeness: {
+        complete: true,
+        scenario_type: "presentation",
+        presentation_review_available: true,
+        page_metadata_complete: true,
+        page_summary_count: 2,
+        required_talking_points_status: "complete",
+        required_points_total: 3,
+        required_points_covered: 2,
+        required_points_missing: 1,
+        required_coverage_ratio: 2 / 3,
+        degraded_reasons: [],
+      },
+      presentation_review: basePresentationReview,
+      messages: [
+        {
+          id: "ppt-turn-1",
+          session_id: "session-1",
+          turn_number: 1,
+          role: "user",
+          content: "第一页先讲业务目标，但不小心提前带到了实施计划。",
+          timestamp: "2026-03-23T00:00:00Z",
+          audio_url: null,
+          duration_ms: 1200,
+          score_snapshot: {
+            overall_score: 88,
+          },
+          ai_feedback: null,
+          is_highlight: false,
+          highlight_type: null,
+          highlight_reason: null,
+          transcript_metadata: {
+            page_number: 1,
+          },
+        },
+        {
+          id: "ppt-turn-2",
+          session_id: "session-1",
+          turn_number: 2,
+          role: "assistant",
+          content: "客户更关心当前页的问题背景。",
+          timestamp: "2026-03-23T00:00:08Z",
+          audio_url: null,
+          duration_ms: 1500,
+          score_snapshot: {
+            overall_score: 86,
+          },
+          ai_feedback: null,
+          is_highlight: false,
+          highlight_type: null,
+          highlight_reason: null,
+          transcript_metadata: {
+            page_number: 1,
+          },
+        },
+        {
+          id: "ppt-turn-3",
+          session_id: "session-1",
+          turn_number: 3,
+          role: "user",
+          content: "第二页我只讲了 ROI 结果，还没补客户案例。",
+          timestamp: "2026-03-23T00:00:16Z",
+          audio_url: null,
+          duration_ms: 1700,
+          score_snapshot: {
+            overall_score: 82,
+          },
+          ai_feedback: null,
+          is_highlight: false,
+          highlight_type: null,
+          highlight_reason: null,
+          transcript_metadata: {
+            page_number: 2,
+          },
+        },
+        {
+          id: "ppt-turn-4",
+          session_id: "session-1",
+          turn_number: 4,
+          role: "assistant",
+          content: "如果客户追问负责人，我这边暂时只能说后面再确认。",
+          timestamp: "2026-03-23T00:00:24Z",
+          audio_url: null,
+          duration_ms: 1600,
+          score_snapshot: {
+            overall_score: 80,
+          },
+          ai_feedback: null,
+          is_highlight: false,
+          highlight_type: null,
+          highlight_reason: null,
+          transcript_metadata: {
+            page_number: 2,
+          },
+        },
+      ],
+      timeline_markers: [],
+    }),
+    ...overrides,
+  };
+}
+
+function buildPresentationReport(overrides: Record<string, unknown> = {}) {
+  return {
+    ...buildRetryReport({
+      scenario_type: "presentation",
+      logic_score: 90,
+      accuracy_score: 86,
+      completeness_score: 81,
+      overall_score: 88,
+      suggestions: ["下一轮继续补强第二页案例细节。"],
+      main_capability_passed: null,
+      overall_result: null,
+      main_issue: null,
+      next_goal: null,
+      evaluable: null,
+      not_evaluable_reason: null,
+      evidence_completeness: {
+        complete: true,
+        scenario_type: "presentation",
+        presentation_review_available: true,
+        page_metadata_complete: true,
+        page_summary_count: 2,
+        required_talking_points_status: "complete",
+        required_points_total: 3,
+        required_points_covered: 2,
+        required_points_missing: 1,
+        required_coverage_ratio: 2 / 3,
+        degraded_reasons: [],
+      },
+      presentation_review: basePresentationReview,
+      retry_entry: {
+        scenario_type: "presentation",
+        presentation_id: "presentation-1",
+        agent_id: null,
+        persona_id: null,
+        focus_intent: null,
+      },
+    }),
+    ...overrides,
+  };
+}
+
 function renderReplayPage(options: {
   search?: string;
   replayOverrides?: Record<string, unknown>;
@@ -357,10 +626,12 @@ describe("SessionReplayPage", () => {
     getReplayMock.mockReset();
     getHighlightsMock.mockReset();
     getReportMock.mockReset();
+    getThumbnailBlobMock.mockReset();
     createSessionMock.mockReset();
     scrollIntoViewMock.mockReset();
     searchParamsState.current = new URLSearchParams();
     createSessionMock.mockResolvedValue({ session_id: "retry-1" });
+    getThumbnailBlobMock.mockRejectedValue(new Error("thumbnail unavailable"));
 
     Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
       configurable: true,
@@ -474,5 +745,50 @@ describe("SessionReplayPage", () => {
     expect(banner.textContent).toContain("报告引用的定位标记当前不存在，页面保留完整对话供手动查找。");
     expect(scrollIntoViewMock).not.toHaveBeenCalled();
     expect(screen.getAllByText("客户刚问这个方案凭什么可信。").length).toBeGreaterThanOrEqual(1);
+  });
+
+  it("renders presentation page evidence on replay and lets the learner jump from a page issue to the matching turn", async () => {
+    searchParamsState.current = new URLSearchParams("page=2&page_anchor_status=resolved");
+    getReplayMock.mockResolvedValue(buildPresentationReplayData());
+    getHighlightsMock.mockResolvedValue(buildHighlightsResponse({ highlights: [] }));
+    getReportMock.mockResolvedValue(buildPresentationReport());
+
+    render(<SessionReplayPage />);
+
+    expect((await screen.findByTestId("replay-overall-score")).textContent).toContain("88");
+    expect(screen.getByText("PPT 回放")).toBeTruthy();
+    expect(screen.getByText("PPT 页级问题定位")).toBeTruthy();
+    const banner = await screen.findByTestId("presentation-page-banner");
+    expect(banner.textContent).toContain("已定位到第 2 页");
+    expect(banner.textContent).toContain("已打开报告引用的课件页，并同步展示该页问题簇与相关回合。");
+    expect(screen.queryByText("主张证据状态")).toBeNull();
+    expect(screen.getAllByText("第二页补充了 ROI 结果，但客户案例展开不够具体。").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText("第 2 页仍缺少 1 个必讲点，需要补齐再进入下一页。").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText("如果客户追问负责人，我这边暂时只能说后面再确认。").length).toBeGreaterThanOrEqual(1);
+
+    fireEvent.click(screen.getAllByRole("button", { name: "定位到第 4 轮" })[0]);
+
+    await waitFor(() => {
+      expect(scrollIntoViewMock).toHaveBeenCalledWith({ behavior: "smooth", block: "center" });
+    });
+
+    expect(getThumbnailBlobMock).toHaveBeenCalledWith("presentation-1", 2);
+    const anchoredTurn = document.querySelector('[data-turn-number="4"]');
+    expect(anchoredTurn?.className).toContain("border-blue-300");
+  });
+
+  it("keeps a degraded page banner visible when the requested PPT page anchor is missing", async () => {
+    searchParamsState.current = new URLSearchParams("page=9&page_anchor_status=missing&page_anchor_reason=page_not_found");
+    getReplayMock.mockResolvedValue(buildPresentationReplayData());
+    getHighlightsMock.mockResolvedValue(buildHighlightsResponse({ highlights: [] }));
+    getReportMock.mockResolvedValue(buildPresentationReport());
+
+    render(<SessionReplayPage />);
+
+    const banner = await screen.findByTestId("presentation-page-banner");
+    expect(banner.textContent).toContain("未找到第 9 页");
+    expect(banner.textContent).toContain("报告引用的页码当前不存在，已回退到第 1 页继续查看。");
+    expect(screen.getAllByText("第一页完整讲清业务目标与客户问题。").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText("第 1 页讲解带到了其他页内容，优先回到当前页要点。")).toBeTruthy();
   });
 });
