@@ -1,7 +1,7 @@
 {
   "mode": "stabilize",
-  "current_issue_id": "M005-S01",
-  "current_issue_type": "slice",
+  "current_issue_id": "M005-S02-T01",
+  "current_issue_type": "task",
   "current_issue_status": "done",
   "pending_issue_ids": [],
   "completed_issue_ids": [
@@ -84,26 +84,30 @@
     "M005-S01-T03",
     "M005-S01-T01",
     "M005-S01-T02",
-    "M005-S01"
+    "M005-S01",
+    "M005-S02-T01"
   ],
   "blocked_issue_ids": [],
   "deferred_issue_ids": [],
   "last_modified_files": [
-    ".gsd/milestones/M005/slices/S01/S01-SUMMARY.md",
-    ".gsd/milestones/M005/slices/S01/S01-UAT.md",
-    ".gsd/milestones/M005/M005-ROADMAP.md",
+    "backend/src/admin/api/interventions.py",
+    "backend/src/common/db/models.py",
+    "backend/src/common/db/schemas.py",
+    "backend/tests/integration/test_admin_interventions_api.py",
+    "backend/alembic/versions/20260326_1000_021_add_manager_interventions.py",
+    ".gsd/DECISIONS.md",
+    ".gsd/milestones/M005/slices/S02/tasks/T01-SUMMARY.md",
+    ".gsd/milestones/M005/slices/S02/S02-PLAN.md",
     ".gsd/STATE.md",
-    ".gsd/PROJECT.md",
     ".codex/loop/state.json",
     ".codex/loop/log.md"
   ],
   "last_verification_commands": [
-    "cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/common/test_admin_analytics_service.py tests/integration/test_admin_users_api.py tests/contract/test_analytics.py",
-    "cd web && pnpm dlx npm@11.6.1 test -- --run 'src/app/admin/analytics/page.test.tsx'",
-    "cd web && pnpm dlx npm@11.6.1 test -- --run 'src/components/admin/manager-lite-panel.test.tsx' 'src/app/admin/users/[id]/page.test.tsx'"
+    "cd backend && /usr/bin/time -p venv/bin/python -m pytest -c pyproject.toml tests/integration/test_admin_interventions_api.py",
+    "cd backend && /usr/bin/time -p venv/bin/alembic upgrade head"
   ],
-  "last_verification_result": "Fresh slice verification passed: backend admin analytics/user API/analytics contract suite (27 tests), admin analytics Vitest (2 tests), and manager-lite + admin user drill-in Vitest (4 tests).",
-  "last_success_signal": "Admin analytics, manager-lite, and user drill-in now stay on one projection-backed truth line for score basis, evaluability, issue family, next goal, and report CTA semantics.",
+  "last_verification_result": "Focused admin intervention API verification passed: the new integration suite covered create/list persistence, reminder-state updates, and resolving-session linkage, and Alembic upgraded to head with the manager_interventions table.",
+  "last_success_signal": "The current admin backend now has durable intervention focus/reminder/resolution records without replacing the existing manager-lite reminder route.",
   "last_growth_scan": null,
-  "next_action": "Reassess the M005 roadmap after S01, or start S02 on the now-aligned admin analytics and drill-in surfaces."
+  "next_action": "Continue M005/S02 with T02 to expose intervention create/inspect actions on the current admin user surfaces."
 }

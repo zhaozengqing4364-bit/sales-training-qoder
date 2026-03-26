@@ -1551,3 +1551,24 @@ Append one entry per iteration:
   verification results: passed; backend slice verification returned 27 green tests, the analytics page Vitest returned 2 green tests, and the manager-lite + admin user drill-in Vitest returned 4 green tests. The web runs used the documented pnpm/npm wrapper workaround because the global Volta npm wrapper is unstable in this environment.
   success signal status: the current admin analytics page, manager-lite panel, and user drill-in now describe the same projection-backed score/evaluability/issue-family truth line as learner and supervisor report surfaces.
   rollback note: if a later slice changes admin governance vocabulary again, keep HistoryService / SessionEvidenceService as the only score-bearing authority and preserve canonical /practice/{sessionId}/report deep-links instead of reviving route-local score math or a supervisor-only report surface.
+
+- time: 2026-03-26T15:04:45+0800
+  mode: stabilize
+  item id: M005-S02-T01
+  files changed:
+    - backend/src/admin/api/interventions.py
+    - backend/src/common/db/models.py
+    - backend/src/common/db/schemas.py
+    - backend/tests/integration/test_admin_interventions_api.py
+    - backend/alembic/versions/20260326_1000_021_add_manager_interventions.py
+    - .gsd/DECISIONS.md
+    - .gsd/milestones/M005/slices/S02/tasks/T01-SUMMARY.md
+    - .codex/loop/state.json
+    - .codex/loop/log.md
+  summary: Added a dedicated manager_interventions persistence layer plus create/list/patch admin APIs, kept the existing remind route backward-compatible while letting it update reminder state on persisted interventions, and added the matching Alembic migration.
+  verification commands:
+    - cd backend && /usr/bin/time -p venv/bin/python -m pytest -c pyproject.toml tests/integration/test_admin_interventions_api.py
+    - cd backend && /usr/bin/time -p venv/bin/alembic upgrade head
+  verification results: passed; the focused backend suite covered create/list persistence, reminder-state updates, and resolving-session linkage, and Alembic applied revision 20260326_1000_021 successfully.
+  success signal status: the current admin backend now has durable intervention focus/reminder/resolution records without replacing the existing manager-lite reminder route.
+  rollback note: if later slice work changes the manager workflow shape, keep the dedicated manager_interventions table as the single persistence seam and preserve remind-route compatibility until current admin surfaces are re-verified on a new contract.

@@ -8,7 +8,7 @@ from enum import StrEnum
 from typing import Any, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 from training_runtime.models import TrainingRuntimeDescriptor, TrainingRuntimeSubject
 
 
@@ -36,6 +36,17 @@ class SessionLifecycleAction(StrEnum):
     PAUSE = "pause"
     RESUME = "resume"
     END = "end"
+
+
+class ManagerInterventionDueState(StrEnum):
+    PENDING = "pending"
+    DUE = "due"
+    RESOLVED = "resolved"
+
+
+class ManagerInterventionReminderStatus(StrEnum):
+    NOT_SENT = "not_sent"
+    SENT = "sent"
 
 
 class InterruptionType(StrEnum):
@@ -377,6 +388,87 @@ class SessionReport(BaseModel):
     evidence_completeness: dict[str, Any] | None = None
     presentation_review: PresentationReview | None = None
     retry_entry: dict[str, Any] | None = None
+
+
+# ========== Manager Intervention Schemas ==========
+class ManagerInterventionBase(BaseModel):
+    user_id: UUID
+    issue_family: str = Field(..., min_length=1, max_length=64)
+    note: str | None = Field(default=None, max_length=500)
+
+    @field_validator("issue_family")
+    @classmethod
+    def validate_issue_family(cls, value: str) -> str:
+        cleaned = value.strip()
+        if not cleaned:
+            raise ValueError("issue_family cannot be empty")
+        return cleaned
+
+    @field_validator("note")
+    @classmethod
+    def validate_note(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        cleaned = value.strip()
+        return cleaned or None
+
+
+class ManagerInterventionCreate(ManagerInterventionBase):
+    due_state: ManagerInterventionDueState = ManagerInterventionDueState.PENDING
+    reminder_status: ManagerInterventionReminderStatus = (
+        ManagerInterventionReminderStatus.NOT_SENT
+    )
+    resolving_session_id: UUID | None = None
+
+
+class ManagerInterventionUpdate(BaseModel):
+    note: str | None = Field(default=None, max_length=500)
+    due_state: ManagerInterventionDueState | None = None
+    reminder_status: ManagerInterventionReminderStatus | None = None
+    resolving_session_id: UUID | None = None
+
+    @field_validator("note")
+    @classmethod
+    def validate_note(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        cleaned = value.strip()
+        return cleaned or None
+
+
+class ManagerInterventionReminderRequest(BaseModel):
+    user_id: UUID
+    intervention_id: UUID | None = None
+    note: str | None = Field(default=None, max_length=500)
+
+    @field_validator("note")
+    @classmethod
+    def validate_note(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        cleaned = value.strip()
+        return cleaned or None
+
+
+class ManagerInterventionResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    intervention_id: UUID
+    manager_user_id: UUID
+    user_id: UUID
+    issue_family: str
+    note: str | None = None
+    due_state: ManagerInterventionDueState
+    reminder_status: ManagerInterventionReminderStatus
+    reminder_sent_at: datetime | None = None
+    resolving_session_id: UUID | None = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class ManagerInterventionListResponse(BaseModel):
+    items: list[ManagerInterventionResponse] = Field(default_factory=list)
+    total: int = 0
 
 
 # ========== Enhanced Session Report Schema (R12) ==========

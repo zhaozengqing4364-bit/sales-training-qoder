@@ -62,6 +62,17 @@ class InterruptionType(str, enum.Enum):
     VAGUE_RESPONSE = "vague_response"
 
 
+class ManagerInterventionDueState(str, enum.Enum):
+    PENDING = "pending"
+    DUE = "due"
+    RESOLVED = "resolved"
+
+
+class ManagerInterventionReminderStatus(str, enum.Enum):
+    NOT_SENT = "not_sent"
+    SENT = "sent"
+
+
 class User(Base):
     __tablename__ = "users"
 
@@ -323,6 +334,55 @@ class InterruptionEvent(Base):
 
     # Relationships
     session = relationship("PracticeSession", back_populates="interruption_events")
+
+
+class ManagerIntervention(Base):
+    __tablename__ = "manager_interventions"
+
+    intervention_id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    manager_user_id = Column(String(36), ForeignKey("users.user_id"), nullable=False, index=True)
+    user_id = Column(String(36), ForeignKey("users.user_id"), nullable=False, index=True)
+    issue_family = Column(String(64), nullable=False, index=True)
+    note = Column(Text)
+    due_state = Column(String(20), nullable=False, default="pending", index=True)
+    reminder_status = Column(String(20), nullable=False, default="not_sent")
+    reminder_sent_at = Column(DateTime(timezone=True))
+    resolving_session_id = Column(
+        String(36),
+        ForeignKey("practice_sessions.session_id"),
+        nullable=True,
+        index=True,
+    )
+    created_at = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        nullable=False,
+        index=True,
+    )
+    updated_at = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+        nullable=False,
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "due_state IN ('pending', 'due', 'resolved')",
+            name="ck_manager_intervention_due_state",
+        ),
+        CheckConstraint(
+            "reminder_status IN ('not_sent', 'sent')",
+            name="ck_manager_intervention_reminder_status",
+        ),
+        CheckConstraint(
+            "(resolving_session_id IS NULL AND due_state IN ('pending', 'due')) OR "
+            "(resolving_session_id IS NOT NULL AND due_state = 'resolved')",
+            name="ck_manager_intervention_resolution_state",
+        ),
+        Index("idx_manager_interventions_user_created", "user_id", "created_at"),
+        Index("idx_manager_interventions_manager_created", "manager_user_id", "created_at"),
+    )
 
 
 class LeaderboardEntry(Base):

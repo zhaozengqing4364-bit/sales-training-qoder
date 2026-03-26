@@ -4,7 +4,7 @@
 **Demo:** After this: A supervisor can set a training focus, send a reminder, and later see whether a resulting session improved that issue family — all on current admin surfaces.
 
 ## Tasks
-- [ ] **T01: Persist the minimal manager intervention record on current admin APIs** — Introduce a minimal persistent intervention record on the current admin backend chain: target issue family, note, due state, reminder status, and optional resolving session linkage. Keep it small and tied to current admin users/intervention routes rather than building a general task platform.
+- [x] **T01: Added persistent manager intervention records and reminder lifecycle state to the current admin API chain.** — Introduce a minimal persistent intervention record on the current admin backend chain: target issue family, note, due state, reminder status, and optional resolving session linkage. Keep it small and tied to current admin users/intervention routes rather than building a general task platform.
   - Estimate: 2h
   - Files: backend/src/admin/api/interventions.py, backend/src/common/db/models.py, backend/src/common/db/schemas.py, backend/tests/integration/test_admin_interventions_api.py
   - Verify: cd backend && venv/bin/python -m pytest -c pyproject.toml tests/integration/test_admin_interventions_api.py
