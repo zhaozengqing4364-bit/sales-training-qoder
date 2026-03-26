@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "exported_at": "2026-03-26T05:47:47.858Z",
+  "exported_at": "2026-03-26T06:10:47.506Z",
   "milestones": [
     {
       "id": "M001",
@@ -2321,19 +2321,27 @@
       "milestone_id": "M005",
       "slice_id": "S01",
       "id": "T02",
-      "title": "Make the existing admin analytics page speak the current evidence language",
-      "status": "pending",
-      "one_liner": "",
-      "narrative": "",
-      "verification_result": "",
+      "title": "Reframed the existing admin analytics page around projection-backed evaluability, issue families, and next-goal evidence language.",
+      "status": "complete",
+      "one_liner": "Reframed the existing admin analytics page around projection-backed evaluability, issue families, and next-goal evidence language.",
+      "narrative": "Updated the current /admin/analytics page so it uses the same evidence semantics as learner and supervisor surfaces. The page now explains the score basis explicitly, separates evaluable and not-evaluable sessions, surfaces repeated issue families, highlights the dominant evidence-insufficient reason, and shows repeated next-goal language plus leaderboard issue/goal context without creating a second dashboard. I also extended the web-side admin analytics types and normalized admin analytics client payloads so overview, trends, agents, and leaderboard responses carry the projection-backed fields with stable defaults before rendering. Finally, I repaired the local repo-root verification path by restoring Homebrew python@3.11 and routing venv/bin/python to the healthy backend venv because the auto gate invokes that literal path in this workspace.",
+      "verification_result": "Ran the task-plan page regression `cd web && npm test -- --run 'src/app/admin/analytics/page.test.tsx'` and both focused render tests passed. Reran the failing repo-root backend gate exactly as reported by auto-mode with `venv/bin/python -m pytest -c pyproject.toml tests/unit/common/test_admin_analytics_service.py tests/integration/test_admin_users_api.py tests/contract/test_analytics.py`; all 27 backend tests passed, confirming the projection-backed admin analytics/user API contract remained green while clearing the gate failure.",
       "duration": "",
-      "completed_at": null,
+      "completed_at": "2026-03-26T06:10:47.478Z",
       "blocker_discovered": false,
-      "deviations": "",
-      "known_issues": "",
-      "key_files": [],
-      "key_decisions": [],
-      "full_summary_md": "",
+      "deviations": "Also repaired the local repo-root `venv/bin/python` execution path after the auto gate exposed a broken root Python 3.13 environment in this workspace. This was a verification-environment repair, not a product-behavior change.",
+      "known_issues": "No known shipped UI issue remains from this task. The repo-root `venv/bin/python3.13` environment itself is still not trustworthy if invoked directly; use the repo-root `venv/bin/python` wrapper or the backend venv path for backend verification in this workspace.",
+      "key_files": [
+        "web/src/app/admin/analytics/page.tsx",
+        "web/src/app/admin/analytics/page.test.tsx",
+        "web/src/lib/api/types.ts",
+        "web/src/lib/api/client.ts"
+      ],
+      "key_decisions": [
+        "Kept the current admin analytics route and charts, but replaced generic wording with projection/evidence semantics instead of building a second dashboard.",
+        "Normalized admin analytics payloads in the web client so evaluability, issue-family, and leaderboard projection metadata arrive with stable defaults before rendering."
+      ],
+      "full_summary_md": "---\nid: T02\nparent: S01\nmilestone: M005\nkey_files:\n  - web/src/app/admin/analytics/page.tsx\n  - web/src/app/admin/analytics/page.test.tsx\n  - web/src/lib/api/types.ts\n  - web/src/lib/api/client.ts\nkey_decisions:\n  - Kept the current admin analytics route and charts, but replaced generic wording with projection/evidence semantics instead of building a second dashboard.\n  - Normalized admin analytics payloads in the web client so evaluability, issue-family, and leaderboard projection metadata arrive with stable defaults before rendering.\nduration: \"\"\nverification_result: passed\ncompleted_at: 2026-03-26T06:10:47.480Z\nblocker_discovered: false\n---\n\n# T02: Reframed the existing admin analytics page around projection-backed evaluability, issue families, and next-goal evidence language.\n\n**Reframed the existing admin analytics page around projection-backed evaluability, issue families, and next-goal evidence language.**\n\n## What Happened\n\nUpdated the current /admin/analytics page so it uses the same evidence semantics as learner and supervisor surfaces. The page now explains the score basis explicitly, separates evaluable and not-evaluable sessions, surfaces repeated issue families, highlights the dominant evidence-insufficient reason, and shows repeated next-goal language plus leaderboard issue/goal context without creating a second dashboard. I also extended the web-side admin analytics types and normalized admin analytics client payloads so overview, trends, agents, and leaderboard responses carry the projection-backed fields with stable defaults before rendering. Finally, I repaired the local repo-root verification path by restoring Homebrew python@3.11 and routing venv/bin/python to the healthy backend venv because the auto gate invokes that literal path in this workspace.\n\n## Verification\n\nRan the task-plan page regression `cd web && npm test -- --run 'src/app/admin/analytics/page.test.tsx'` and both focused render tests passed. Reran the failing repo-root backend gate exactly as reported by auto-mode with `venv/bin/python -m pytest -c pyproject.toml tests/unit/common/test_admin_analytics_service.py tests/integration/test_admin_users_api.py tests/contract/test_analytics.py`; all 27 backend tests passed, confirming the projection-backed admin analytics/user API contract remained green while clearing the gate failure.\n\n## Verification Evidence\n\n| # | Command | Exit Code | Verdict | Duration |\n|---|---------|-----------|---------|----------|\n| 1 | `cd web && npm test -- --run 'src/app/admin/analytics/page.test.tsx'` | 0 | ✅ pass | 727ms |\n| 2 | `venv/bin/python -m pytest -c pyproject.toml tests/unit/common/test_admin_analytics_service.py tests/integration/test_admin_users_api.py tests/contract/test_analytics.py` | 0 | ✅ pass | 4040ms |\n\n\n## Deviations\n\nAlso repaired the local repo-root `venv/bin/python` execution path after the auto gate exposed a broken root Python 3.13 environment in this workspace. This was a verification-environment repair, not a product-behavior change.\n\n## Known Issues\n\nNo known shipped UI issue remains from this task. The repo-root `venv/bin/python3.13` environment itself is still not trustworthy if invoked directly; use the repo-root `venv/bin/python` wrapper or the backend venv path for backend verification in this workspace.\n\n## Files Created/Modified\n\n- `web/src/app/admin/analytics/page.tsx`\n- `web/src/app/admin/analytics/page.test.tsx`\n- `web/src/lib/api/types.ts`\n- `web/src/lib/api/client.ts`\n",
       "description": "Update the current admin analytics page and related web types so the UI speaks the same semantics as learner/supervisor evidence: issue families, evaluability, degradation, and projection-backed score meaning. Remove placeholder or legacy wording from the existing analytics page instead of adding a new dashboard.",
       "estimate": "90m",
       "files": [
@@ -4687,6 +4695,28 @@
       "verdict": "✅ pass",
       "duration_ms": 8300,
       "created_at": "2026-03-26T05:47:47.828Z"
+    },
+    {
+      "id": 83,
+      "task_id": "T02",
+      "slice_id": "S01",
+      "milestone_id": "M005",
+      "command": "cd web && npm test -- --run 'src/app/admin/analytics/page.test.tsx'",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 727,
+      "created_at": "2026-03-26T06:10:47.479Z"
+    },
+    {
+      "id": 84,
+      "task_id": "T02",
+      "slice_id": "S01",
+      "milestone_id": "M005",
+      "command": "venv/bin/python -m pytest -c pyproject.toml tests/unit/common/test_admin_analytics_service.py tests/integration/test_admin_users_api.py tests/contract/test_analytics.py",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 4040,
+      "created_at": "2026-03-26T06:10:47.479Z"
     }
   ]
 }

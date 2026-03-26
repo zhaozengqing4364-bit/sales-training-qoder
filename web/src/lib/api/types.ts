@@ -169,6 +169,23 @@ export interface Persona {
 }
 
 // Analytics types
+export interface AnalyticsIssueFamilyBucket {
+    issue_type: string;
+    issue_text: string;
+    count: number;
+}
+
+export interface AnalyticsNotEvaluableReasonBucket {
+    reason: string;
+    count: number;
+}
+
+export interface AnalyticsRepeatedGoalBucket {
+    goal_type: string;
+    goal_text: string;
+    count: number;
+}
+
 export interface AnalyticsOverview {
     total_users: number;
     active_users_today: number;
@@ -184,6 +201,11 @@ export interface AnalyticsOverview {
         sessions_rate: number;
         score_rate: number;
     };
+    evaluable_sessions?: number;
+    not_evaluable_sessions?: number;
+    score_basis?: string;
+    top_issue_families?: AnalyticsIssueFamilyBucket[];
+    not_evaluable_reasons?: AnalyticsNotEvaluableReasonBucket[];
 }
 
 export interface TrendDataPoint {
@@ -191,6 +213,18 @@ export interface TrendDataPoint {
     sessions_count: number;
     average_score: number;
     active_users: number;
+    evaluable_session_count?: number;
+    not_evaluable_session_count?: number;
+    logic_score?: number;
+    accuracy_score?: number;
+    completeness_score?: number;
+    overall_result?: SessionOverallResult | null;
+    evaluable?: boolean | null;
+    not_evaluable_reason?: SessionNotEvaluableReason | null;
+    evidence_completeness?: SessionEvidenceCompleteness | null;
+    main_issue?: SessionMainIssue | null;
+    next_goal?: SessionNextGoal | null;
+    stage_summary?: SessionStageSummary[] | null;
 }
 
 export interface ScoreDistribution {
@@ -200,9 +234,22 @@ export interface ScoreDistribution {
     poor: number;
 }
 
+export interface AnalyticsProjectionSummary {
+    average_score?: number;
+    best_score?: number;
+    evaluable_sessions: number;
+    not_evaluable_sessions: number;
+    score_basis?: string;
+    issue_family_distribution: AnalyticsIssueFamilyBucket[];
+    not_evaluable_reasons: AnalyticsNotEvaluableReasonBucket[];
+    repeated_main_issues: UserRepeatedMainIssueBucket[];
+    repeated_next_goals: AnalyticsRepeatedGoalBucket[];
+}
+
 export interface AnalyticsTrends {
     trend_data: TrendDataPoint[];
     score_distribution: ScoreDistribution;
+    projection_summary?: AnalyticsProjectionSummary;
 }
 
 export interface AgentStatsItem {
@@ -212,6 +259,9 @@ export interface AgentStatsItem {
     usage_count: number;
     average_score: number;
     completion_rate: number;
+    evaluable_sessions?: number;
+    not_evaluable_sessions?: number;
+    score_basis?: string;
 }
 
 export interface PersonaStatsItem {
@@ -220,6 +270,9 @@ export interface PersonaStatsItem {
     difficulty: string;
     usage_count: number;
     average_score: number;
+    evaluable_sessions?: number;
+    not_evaluable_sessions?: number;
+    score_basis?: string;
 }
 
 export interface AnalyticsAgents {
@@ -237,6 +290,11 @@ export interface LeaderboardEntry {
     average_score: number;
     best_score: number;
     total_duration_minutes: number;
+    evaluable_sessions?: number;
+    not_evaluable_sessions?: number;
+    primary_issue_type?: string | null;
+    primary_next_goal_type?: string | null;
+    score_basis?: string;
 }
 
 export interface AnalyticsLeaderboard {

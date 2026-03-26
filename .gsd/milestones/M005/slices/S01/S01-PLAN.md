@@ -8,7 +8,7 @@
   - Estimate: 2h
   - Files: backend/src/common/analytics/admin_analytics_service.py, backend/src/common/analytics/history_service.py, backend/src/admin/api/analytics.py, backend/src/admin/api/users.py, backend/tests/unit/common/test_admin_analytics_service.py, backend/tests/integration/test_admin_users_api.py, backend/tests/contract/test_analytics.py
   - Verify: cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/common/test_admin_analytics_service.py tests/integration/test_admin_users_api.py tests/contract/test_analytics.py
-- [ ] **T02: Make the existing admin analytics page speak the current evidence language** — Update the current admin analytics page and related web types so the UI speaks the same semantics as learner/supervisor evidence: issue families, evaluability, degradation, and projection-backed score meaning. Remove placeholder or legacy wording from the existing analytics page instead of adding a new dashboard.
+- [x] **T02: Reframed the existing admin analytics page around projection-backed evaluability, issue families, and next-goal evidence language.** — Update the current admin analytics page and related web types so the UI speaks the same semantics as learner/supervisor evidence: issue families, evaluability, degradation, and projection-backed score meaning. Remove placeholder or legacy wording from the existing analytics page instead of adding a new dashboard.
   - Estimate: 90m
   - Files: web/src/app/admin/analytics/page.tsx, web/src/lib/api/types.ts, web/src/lib/api/client.ts, web/src/app/admin/analytics/page.test.tsx
   - Verify: cd web && npm test -- --run 'src/app/admin/analytics/page.test.tsx'

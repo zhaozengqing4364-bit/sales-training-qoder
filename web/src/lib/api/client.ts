@@ -655,6 +655,201 @@ function normalizeAdminPersona(input: unknown): AdminPersona {
     };
 }
 
+const ADMIN_ANALYTICS_SCORE_BASIS = "session_evidence_projection_evaluable_only";
+
+function normalizeAnalyticsIssueFamilyBucket(input: unknown) {
+    const raw = toRecord(input);
+    return {
+        issue_type: toStringValue(raw.issue_type),
+        issue_text: toStringValue(raw.issue_text),
+        count: toNumberValue(raw.count, 0),
+    };
+}
+
+function normalizeAnalyticsNotEvaluableReasonBucket(input: unknown) {
+    const raw = toRecord(input);
+    return {
+        reason: toStringValue(raw.reason),
+        count: toNumberValue(raw.count, 0),
+    };
+}
+
+function normalizeAnalyticsRepeatedGoalBucket(input: unknown) {
+    const raw = toRecord(input);
+    return {
+        goal_type: toStringValue(raw.goal_type),
+        goal_text: toStringValue(raw.goal_text),
+        count: toNumberValue(raw.count, 0),
+    };
+}
+
+function normalizeAnalyticsOverview(input: unknown): AnalyticsOverview {
+    const raw = toRecord(input);
+    const growth = toRecord(raw.growth);
+    return {
+        total_users: toNumberValue(raw.total_users, 0),
+        active_users_today: toNumberValue(raw.active_users_today, 0),
+        active_users_week: toNumberValue(raw.active_users_week, 0),
+        total_sessions: toNumberValue(raw.total_sessions, 0),
+        sessions_today: toNumberValue(raw.sessions_today, 0),
+        completed_sessions: toNumberValue(raw.completed_sessions, 0),
+        completion_rate: toNumberValue(raw.completion_rate, 0),
+        average_score: toNumberValue(raw.average_score, 0),
+        average_duration_minutes: toNumberValue(raw.average_duration_minutes, 0),
+        growth: {
+            users_rate: toNumberValue(growth.users_rate, 0),
+            sessions_rate: toNumberValue(growth.sessions_rate, 0),
+            score_rate: toNumberValue(growth.score_rate, 0),
+        },
+        evaluable_sessions: toNumberValue(raw.evaluable_sessions, 0),
+        not_evaluable_sessions: toNumberValue(raw.not_evaluable_sessions, 0),
+        score_basis: toStringValue(raw.score_basis, ADMIN_ANALYTICS_SCORE_BASIS),
+        top_issue_families: Array.isArray(raw.top_issue_families)
+            ? raw.top_issue_families.map(normalizeAnalyticsIssueFamilyBucket)
+            : [],
+        not_evaluable_reasons: Array.isArray(raw.not_evaluable_reasons)
+            ? raw.not_evaluable_reasons.map(normalizeAnalyticsNotEvaluableReasonBucket)
+            : [],
+    };
+}
+
+function normalizeAnalyticsProjectionSummary(input: unknown) {
+    const raw = toRecord(input);
+    return {
+        average_score: toNumberValue(raw.average_score, 0),
+        best_score: toNumberValue(raw.best_score, 0),
+        evaluable_sessions: toNumberValue(raw.evaluable_sessions, 0),
+        not_evaluable_sessions: toNumberValue(raw.not_evaluable_sessions, 0),
+        score_basis: toStringValue(raw.score_basis, ADMIN_ANALYTICS_SCORE_BASIS),
+        issue_family_distribution: Array.isArray(raw.issue_family_distribution)
+            ? raw.issue_family_distribution.map(normalizeAnalyticsIssueFamilyBucket)
+            : [],
+        not_evaluable_reasons: Array.isArray(raw.not_evaluable_reasons)
+            ? raw.not_evaluable_reasons.map(normalizeAnalyticsNotEvaluableReasonBucket)
+            : [],
+        repeated_main_issues: Array.isArray(raw.repeated_main_issues)
+            ? raw.repeated_main_issues.map((item) => {
+                const bucket = toRecord(item);
+                return {
+                    issue_type: toStringValue(bucket.issue_type),
+                    issue_text: toStringValue(bucket.issue_text),
+                    count: toNumberValue(bucket.count, 0),
+                };
+            })
+            : [],
+        repeated_next_goals: Array.isArray(raw.repeated_next_goals)
+            ? raw.repeated_next_goals.map(normalizeAnalyticsRepeatedGoalBucket)
+            : [],
+    };
+}
+
+function normalizeAnalyticsTrends(input: unknown): AnalyticsTrends {
+    const raw = toRecord(input);
+    const scoreDistribution = toRecord(raw.score_distribution);
+
+    return {
+        trend_data: Array.isArray(raw.trend_data)
+            ? raw.trend_data.map((item) => {
+                const point = toRecord(item);
+                return {
+                    ...point,
+                    date: toStringValue(point.date),
+                    sessions_count: toNumberValue(point.sessions_count, 0),
+                    average_score: toNumberValue(point.average_score, 0),
+                    active_users: toNumberValue(point.active_users, 0),
+                    evaluable_session_count: toNumberValue(point.evaluable_session_count, 0),
+                    not_evaluable_session_count: toNumberValue(point.not_evaluable_session_count, 0),
+                    logic_score: toNumberValue(point.logic_score, 0),
+                    accuracy_score: toNumberValue(point.accuracy_score, 0),
+                    completeness_score: toNumberValue(point.completeness_score, 0),
+                };
+            })
+            : [],
+        score_distribution: {
+            excellent: toNumberValue(scoreDistribution.excellent, 0),
+            good: toNumberValue(scoreDistribution.good, 0),
+            fair: toNumberValue(scoreDistribution.fair, 0),
+            poor: toNumberValue(scoreDistribution.poor, 0),
+        },
+        projection_summary: Object.keys(toRecord(raw.projection_summary)).length > 0
+            ? normalizeAnalyticsProjectionSummary(raw.projection_summary)
+            : undefined,
+    };
+}
+
+function normalizeAnalyticsAgents(input: unknown): AnalyticsAgents {
+    const raw = toRecord(input);
+    const normalizeDistribution = (distribution: unknown): Record<string, number> => {
+        const normalized: Record<string, number> = {};
+        Object.entries(toRecord(distribution)).forEach(([key, value]) => {
+            normalized[key] = toNumberValue(value, 0);
+        });
+        return normalized;
+    };
+
+    return {
+        agent_stats: Array.isArray(raw.agent_stats)
+            ? raw.agent_stats.map((item) => {
+                const entry = toRecord(item);
+                return {
+                    agent_id: toStringValue(entry.agent_id),
+                    agent_name: toStringValue(entry.agent_name),
+                    category: toStringValue(entry.category),
+                    usage_count: toNumberValue(entry.usage_count, 0),
+                    average_score: toNumberValue(entry.average_score, 0),
+                    completion_rate: toNumberValue(entry.completion_rate, 0),
+                    evaluable_sessions: toNumberValue(entry.evaluable_sessions, 0),
+                    not_evaluable_sessions: toNumberValue(entry.not_evaluable_sessions, 0),
+                    score_basis: toStringValue(entry.score_basis, ADMIN_ANALYTICS_SCORE_BASIS),
+                };
+            })
+            : [],
+        persona_stats: Array.isArray(raw.persona_stats)
+            ? raw.persona_stats.map((item) => {
+                const entry = toRecord(item);
+                return {
+                    persona_id: toStringValue(entry.persona_id),
+                    persona_name: toStringValue(entry.persona_name),
+                    difficulty: toStringValue(entry.difficulty),
+                    usage_count: toNumberValue(entry.usage_count, 0),
+                    average_score: toNumberValue(entry.average_score, 0),
+                    evaluable_sessions: toNumberValue(entry.evaluable_sessions, 0),
+                    not_evaluable_sessions: toNumberValue(entry.not_evaluable_sessions, 0),
+                    score_basis: toStringValue(entry.score_basis, ADMIN_ANALYTICS_SCORE_BASIS),
+                };
+            })
+            : [],
+        scenario_distribution: normalizeDistribution(raw.scenario_distribution),
+    };
+}
+
+function normalizeAnalyticsLeaderboard(input: unknown): AnalyticsLeaderboard {
+    const raw = toRecord(input);
+    return {
+        leaderboard: Array.isArray(raw.leaderboard)
+            ? raw.leaderboard.map((item) => {
+                const entry = toRecord(item);
+                const username = toStringValue(entry.username, toStringValue(entry.user_name, "-"));
+                return {
+                    rank: toNumberValue(entry.rank, 0),
+                    user_id: toStringValue(entry.user_id),
+                    username: username || "-",
+                    department: typeof entry.department === "string" ? entry.department : null,
+                    total_sessions: toNumberValue(entry.total_sessions, 0),
+                    average_score: toNumberValue(entry.average_score, 0),
+                    best_score: toNumberValue(entry.best_score, 0),
+                    total_duration_minutes: toNumberValue(entry.total_duration_minutes, 0),
+                    evaluable_sessions: toNumberValue(entry.evaluable_sessions, 0),
+                    not_evaluable_sessions: toNumberValue(entry.not_evaluable_sessions, 0),
+                    primary_issue_type: toStringValue(entry.primary_issue_type) || null,
+                    primary_next_goal_type: toStringValue(entry.primary_next_goal_type) || null,
+                    score_basis: toStringValue(entry.score_basis, ADMIN_ANALYTICS_SCORE_BASIS),
+                };
+            })
+            : [],
+    };
+}
+
 /**
  * Cancel all in-flight API requests.
  * Call this on route change or component unmount to prevent leaked requests.
@@ -1287,7 +1482,8 @@ export const api = {
             if (params?.time_range) searchParams.set("time_range", params.time_range);
             if (params?.scenario_type) searchParams.set("scenario_type", params.scenario_type);
 
-            return apiFetch<AnalyticsOverview>(`/admin/analytics/overview?${searchParams}`);
+            const payload = await apiFetch<AnalyticsOverview>(`/admin/analytics/overview?${searchParams}`);
+            return normalizeAnalyticsOverview(payload);
         },
 
         getTrends: async (params?: { time_range?: string; granularity?: string }) => {
@@ -1295,7 +1491,8 @@ export const api = {
             if (params?.time_range) searchParams.set("time_range", params.time_range);
             if (params?.granularity) searchParams.set("granularity", params.granularity);
 
-            return apiFetch<AnalyticsTrends>(`/admin/analytics/trends?${searchParams}`);
+            const payload = await apiFetch<AnalyticsTrends>(`/admin/analytics/trends?${searchParams}`);
+            return normalizeAnalyticsTrends(payload);
         },
 
         getAgents: async (params?: { time_range?: string; limit?: number }) => {
@@ -1303,7 +1500,8 @@ export const api = {
             if (params?.time_range) searchParams.set("time_range", params.time_range);
             if (params?.limit) searchParams.set("limit", params.limit.toString());
 
-            return apiFetch<AnalyticsAgents>(`/admin/analytics/agents?${searchParams}`);
+            const payload = await apiFetch<AnalyticsAgents>(`/admin/analytics/agents?${searchParams}`);
+            return normalizeAnalyticsAgents(payload);
         },
 
         getLeaderboard: async (params?: { time_range?: string; limit?: number }) => {
@@ -1311,26 +1509,8 @@ export const api = {
             if (params?.time_range) searchParams.set("time_range", params.time_range);
             if (params?.limit) searchParams.set("limit", params.limit.toString());
 
-            const payload = await apiFetch<{
-                leaderboard: Array<{
-                    rank: number;
-                    user_id: string;
-                    username?: string;
-                    user_name?: string;
-                    department: string | null;
-                    total_sessions: number;
-                    average_score: number;
-                    best_score: number;
-                    total_duration_minutes: number;
-                }>;
-            }>(`/admin/analytics/leaderboard?${searchParams}`);
-
-            return {
-                leaderboard: (payload.leaderboard || []).map((entry) => ({
-                    ...entry,
-                    username: entry.username || entry.user_name || "-",
-                })),
-            } as AnalyticsLeaderboard;
+            const payload = await apiFetch<AnalyticsLeaderboard>(`/admin/analytics/leaderboard?${searchParams}`);
+            return normalizeAnalyticsLeaderboard(payload);
         },
 
         exportReport: async (params?: { time_range?: string; format?: string }) => {
