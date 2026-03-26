@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "exported_at": "2026-03-26T05:19:44.240Z",
+  "exported_at": "2026-03-26T05:27:53.318Z",
   "milestones": [
     {
       "id": "M001",
@@ -116,10 +116,10 @@
     {
       "id": "M004",
       "title": "复盘与学习闭环增强",
-      "status": "active",
+      "status": "complete",
       "depends_on": [],
       "created_at": "2026-03-25T00:40:37.748Z",
-      "completed_at": null,
+      "completed_at": "2026-03-26T05:27:53.286Z",
       "vision": "让用户与主管在现有 report / replay / history 业务入口上完成“训练 → 报告 → 回放 → 关键片段 → 针对性复练”的学习闭环。所有学习证据都必须来自统一 session evidence / replay / presentation review authority line，而不是再造一套生成式学习系统。",
       "success_criteria": [
         "用户可以从现有 `/practice/{sessionId}/report` 直接定位主问题对应的关键片段，并看到为什么这是关键片段、怎样更好表达。",
