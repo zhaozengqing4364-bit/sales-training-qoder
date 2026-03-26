@@ -642,6 +642,9 @@ export interface UserStatistics {
     average_score: number;
     best_score: number;
     worst_score: number;
+    evaluable_sessions?: number;
+    not_evaluable_sessions?: number;
+    score_basis?: string;
     total_duration_minutes: number;
     last_practice: string | null;
     unique_agents_used: number;

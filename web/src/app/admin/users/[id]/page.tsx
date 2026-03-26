@@ -55,6 +55,17 @@ type ProgressOverview = {
     Icon: LucideIcon;
 };
 
+const SCORE_BASIS_LABELS: Record<string, string> = {
+    session_evidence_projection_evaluable_only: "统一训练证据 · 仅统计可评估的已完成训练",
+};
+
+function formatScoreBasisLabel(scoreBasis?: string | null): string {
+    if (!scoreBasis) {
+        return "统一训练证据口径";
+    }
+    return SCORE_BASIS_LABELS[scoreBasis] || scoreBasis;
+}
+
 const EMPTY_SESSIONS: UserSessionsResponse = {
     items: [],
     total: 0,
@@ -353,6 +364,9 @@ export default function UserDetailPage() {
     }
 
     const { user, statistics } = stats;
+    const evaluableSessions = statistics.evaluable_sessions ?? 0;
+    const notEvaluableSessions = statistics.not_evaluable_sessions ?? 0;
+    const scoreBasisLabel = formatScoreBasisLabel(statistics.score_basis);
     const progressOverview = buildProgressOverview(progressState, progress, progressError);
     const strongestIssue = progress?.repeated_main_issues?.[0] ?? null;
     const strongestGoal = progress?.repeated_next_goals?.[0] ?? null;
@@ -442,13 +456,19 @@ export default function UserDetailPage() {
                             <Award className="w-5 h-5 text-green-600" />
                         </div>
                         <div>
-                            <p className="text-sm text-slate-500">平均分</p>
+                            <p className="text-sm text-slate-500">统一综合分</p>
                             <p className={`text-2xl font-black tabular-nums ${getScoreColor(statistics.average_score)}`}>
                                 {statistics.average_score}
                             </p>
                         </div>
                     </div>
-                    <p className="text-xs text-slate-400 mt-2 text-pretty">
+                    <p className="text-[11px] text-slate-500 mt-2 text-pretty">
+                        {scoreBasisLabel}
+                    </p>
+                    <p className="text-xs text-slate-400 mt-1 text-pretty">
+                        纳入 {evaluableSessions} 次可评估训练，另有 {notEvaluableSessions} 次证据不足会话单独记账。
+                    </p>
+                    <p className="text-xs text-slate-400 mt-1 text-pretty">
                         最高 {statistics.best_score} / 最低 {statistics.worst_score}
                     </p>
                 </GlassCard>
@@ -745,7 +765,7 @@ export default function UserDetailPage() {
                                             状态
                                         </th>
                                         <th className="text-left py-3 px-4 text-sm font-medium text-slate-500">
-                                            统一预览
+                                            统一训练证据预览
                                         </th>
                                         <th className="text-right py-3 px-4 text-sm font-medium text-slate-500">
                                             时长
@@ -825,11 +845,11 @@ export default function UserDetailPage() {
                                                 {session.status === "completed" ? (
                                                     <Button asChild variant="outline" size="sm" className="rounded-full">
                                                         <Link href={`/practice/${session.session_id}/report`}>
-                                                            查看报告
+                                                            查看统一报告
                                                         </Link>
                                                     </Button>
                                                 ) : (
-                                                    <span className="text-xs text-slate-400">完成后可查看</span>
+                                                    <span className="text-xs text-slate-400">完成后可查看统一报告</span>
                                                 )}
                                             </td>
                                         </tr>

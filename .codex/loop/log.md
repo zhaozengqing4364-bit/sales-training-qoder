@@ -1511,3 +1511,23 @@ Append one entry per iteration:
   verification results: passed; the exact backend plan command and focused web suite are green, and the saved browser proof pack plus rewritten slice artifacts are present on disk. Repo-root pytest still shows an environment/plugin import issue before collection, which was captured as knowledge rather than treated as a slice regression.
   success signal status: the current learner route family now has closed-route proof for both sales and PPT, with understandable degraded behavior instead of route drift or sales fallback.
   rollback note: if later work adds a direct PPT report-to-replay CTA, keep it on the existing /practice/{sessionId}/replay route and preserve the current sibling-route contract until the new CTA is re-verified.
+
+
+- time: 2026-03-26T14:34:39+08:00
+  mode: stabilize
+  item id: M005-S01-T03
+  files changed:
+    - web/src/components/admin/manager-lite-panel.tsx
+    - web/src/components/admin/manager-lite-panel.test.tsx
+    - web/src/app/admin/users/[id]/page.tsx
+    - web/src/app/admin/users/[id]/page.test.tsx
+    - web/src/lib/api/types.ts
+    - .gsd/milestones/M005/slices/S01/tasks/T03-SUMMARY.md
+    - .codex/loop/state.json
+    - .codex/loop/log.md
+  summary: Aligned manager-lite and the admin user drill-in with the unified evidence score basis, evaluability counts, and report CTA language instead of leaving those surfaces on generic legacy wording.
+  verification commands:
+    - cd web && npm test -- --run 'src/components/admin/manager-lite-panel.test.tsx' 'src/app/admin/users/[id]/page.test.tsx'
+  verification results: passed; focused Vitest confirmed the manager-lite evidence copy, score-basis/evaluability summary on the user detail page, and the shared 查看统一报告 CTA wording.
+  success signal status: admin analytics, manager-lite, and user drill-in now describe the same projection-backed truth line for scores, issue/evidence semantics, and reminder/report actions.
+  rollback note: revert the manager-lite copy update, user detail evidence summary, and UserStatistics type extension together if a later slice replaces the admin evidence vocabulary with a new contract.

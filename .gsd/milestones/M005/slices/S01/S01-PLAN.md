@@ -12,7 +12,7 @@
   - Estimate: 90m
   - Files: web/src/app/admin/analytics/page.tsx, web/src/lib/api/types.ts, web/src/lib/api/client.ts, web/src/app/admin/analytics/page.test.tsx
   - Verify: cd web && npm test -- --run 'src/app/admin/analytics/page.test.tsx'
-- [ ] **T03: Keep manager-lite and user drill-in aligned with the corrected admin truth line** — Align current manager-lite and user drill-in surfaces with the same admin truth line so reminder/report CTAs and supervisor summaries do not drift from analytics. Reuse the existing `ManagerLitePanel` and `/admin/users/[id]` page; add focused regressions rather than a new workflow surface.
+- [x] **T03: Align admin drill-in and manager-lite copy with unified evidence score semantics.** — Align current manager-lite and user drill-in surfaces with the same admin truth line so reminder/report CTAs and supervisor summaries do not drift from analytics. Reuse the existing `ManagerLitePanel` and `/admin/users/[id]` page; add focused regressions rather than a new workflow surface.
   - Estimate: 75m
   - Files: web/src/components/admin/manager-lite-panel.tsx, web/src/components/admin/manager-lite-panel.test.tsx, web/src/app/admin/users/[id]/page.tsx, web/src/app/admin/users/[id]/page.test.tsx
   - Verify: cd web && npm test -- --run 'src/components/admin/manager-lite-panel.test.tsx' 'src/app/admin/users/[id]/page.test.tsx'

@@ -19,7 +19,7 @@ describe("ManagerLitePanel", () => {
         onRemindMock.mockResolvedValue(undefined);
     });
 
-    it("adds a direct report CTA for not-passed sessions while keeping remind action", async () => {
+    it("keeps manager-lite copy on the same evidence line as admin analytics", async () => {
         render(
             <ManagerLitePanel
                 data={{
@@ -34,13 +34,30 @@ describe("ManagerLitePanel", () => {
                         },
                     ],
                     inactive_streak: [],
-                    improving: [],
+                    improving: [
+                        {
+                            user_id: "user-2",
+                            user_name: "李四",
+                            department: "销售二部",
+                            pass_gain: 25,
+                            baseline_pass_rate: 25,
+                            current_pass_rate: 50,
+                        },
+                    ],
                 }}
                 onRemind={onRemindMock}
             />,
         );
 
-        const reportLink = screen.getByRole("link", { name: "查看报告" }) as HTMLAnchorElement;
+        expect(screen.getByText("仅统计统一训练证据里已完成且可评估但未通过的训练。"))
+            .toBeTruthy();
+        expect(screen.getByText("通过率提升只按可评估的已完成训练计算。"))
+            .toBeTruthy();
+        expect(screen.getByText("先看统一报告，再决定是否提醒。"))
+            .toBeTruthy();
+        expect(screen.getByText("统一结果：未通过（已排除证据不足）")).toBeTruthy();
+
+        const reportLink = screen.getByRole("link", { name: "查看统一报告" }) as HTMLAnchorElement;
         expect(reportLink.getAttribute("href")).toBe("/practice/session-1/report");
 
         fireEvent.click(screen.getByRole("button", { name: "一键提醒" }));

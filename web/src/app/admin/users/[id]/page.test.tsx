@@ -81,6 +81,9 @@ const baseStatsResponse = {
         average_score: 55,
         best_score: 70,
         worst_score: 40,
+        evaluable_sessions: 3,
+        not_evaluable_sessions: 1,
+        score_basis: "session_evidence_projection_evaluable_only",
         total_duration_minutes: 16,
         last_practice: "2026-03-23T09:00:00Z",
         unique_agents_used: 1,
@@ -240,6 +243,9 @@ describe("UserDetailPage", () => {
         });
 
         expect(await screen.findByText("连续变化判断")).toBeTruthy();
+        expect(screen.getByText("统一训练证据 · 仅统计可评估的已完成训练")).toBeTruthy();
+        expect(screen.getByText("纳入 3 次可评估训练，另有 1 次证据不足会话单独记账。")).toBeTruthy();
+        expect(screen.getByText("统一训练证据预览")).toBeTruthy();
         expect(screen.getAllByText("建议切换训练重点").length).toBeGreaterThan(0);
         expect(screen.getByText("证据支撑还不够具体。")).toBeTruthy();
         expect(screen.getByText("下一轮继续补上 ROI 与客户案例证据。")).toBeTruthy();
@@ -249,7 +255,7 @@ describe("UserDetailPage", () => {
         expect(screen.getByText("最近多次训练仍卡在同一重点且没有改善，建议切换训练重点或训练方法。"))
             .toBeTruthy();
 
-        const reportLink = screen.getByRole("link", { name: "查看报告" }) as HTMLAnchorElement;
+        const reportLink = screen.getByRole("link", { name: "查看统一报告" }) as HTMLAnchorElement;
         expect(reportLink.getAttribute("href")).toBe("/practice/session-1/report");
     });
 
@@ -298,7 +304,7 @@ describe("UserDetailPage", () => {
         ).length).toBeGreaterThan(0);
         expect(screen.queryByText("用户不存在或加载失败")).toBeNull();
 
-        const reportLink = screen.getByRole("link", { name: "查看报告" }) as HTMLAnchorElement;
+        const reportLink = screen.getByRole("link", { name: "查看统一报告" }) as HTMLAnchorElement;
         expect(reportLink.getAttribute("href")).toBe("/practice/session-1/report");
     });
 });
