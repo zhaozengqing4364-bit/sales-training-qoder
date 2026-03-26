@@ -1,6 +1,6 @@
 {
   "mode": "stabilize",
-  "current_issue_id": "M005-S03-T03",
+  "current_issue_id": "M005-S04-T01",
   "current_issue_type": "task",
   "current_issue_status": "done",
   "pending_issue_ids": [],
@@ -90,29 +90,28 @@
     "M005-S02-T03",
     "M005-S03-T01",
     "M005-S03-T02",
-    "M005-S03-T03"
+    "M005-S03-T03",
+    "M005-S03",
+    "M005-S04-T01"
   ],
   "blocked_issue_ids": [],
   "deferred_issue_ids": [],
   "last_modified_files": [
-    "backend/src/support/services/runtime_status_service.py",
-    "web/src/app/admin/analytics/page.tsx",
-    "web/src/app/admin/users/[id]/page.tsx",
-    "web/src/app/admin/analytics/page.test.tsx",
-    "web/src/app/admin/users/[id]/page.test.tsx",
-    "backend/tests/unit/test_support_runtime_service.py",
+    "backend/src/common/analytics/admin_analytics_service.py",
+    "backend/src/admin/api/analytics.py",
+    "backend/tests/unit/common/test_admin_analytics_service.py",
+    "backend/tests/contract/test_analytics.py",
     ".gsd/DECISIONS.md",
     ".gsd/KNOWLEDGE.md",
-    ".gsd/milestones/M005/slices/S03/tasks/T03-SUMMARY.md",
+    ".gsd/milestones/M005/slices/S04/tasks/T01-SUMMARY.md",
     ".codex/loop/state.json",
     ".codex/loop/log.md"
   ],
   "last_verification_commands": [
-    "cd web && npm test -- --run 'src/app/admin/analytics/page.test.tsx' 'src/app/admin/users/[id]/page.test.tsx'",
-    "cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_support_runtime_service.py"
+    "cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/common/test_admin_analytics_service.py tests/contract/test_analytics.py"
   ],
-  "last_verification_result": "Focused admin analytics/user-detail regressions passed, and the support-runtime service unit suite stayed green after adding fault-level linked_asset_changes references.",
-  "last_success_signal": "Operators can inspect current runtime anomalies and jump straight to the recent asset changes behind them from the existing analytics and user-detail pages.",
+  "last_verification_result": "Fresh T01 backend verification passed: the new admin analytics operating-pack unit test and the analytics contract suite both passed, including the new /api/v1/admin/analytics/operating-pack route.",
+  "last_success_signal": "Admins now have a projection-backed operating-pack API that exposes weekly blocker families, department buckets, degradation breakdowns, and latest-per-user risk/improving lists on the same evidence line as report and supervisor views.",
   "last_growth_scan": null,
-  "next_action": "Proceed with M005/S03 slice close-out."
+  "next_action": "Proceed to M005/S04/T02: render the weekly operating pack on the current admin analytics page using /api/v1/admin/analytics/operating-pack."
 }

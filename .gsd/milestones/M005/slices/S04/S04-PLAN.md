@@ -4,7 +4,7 @@
 **Demo:** After this: A team lead can look at the current admin entrypoints and see issue buckets, risk lists, improving lists, and a one-week operating summary.
 
 ## Tasks
-- [ ] **T01: Add cohort issue buckets and weekly operating summaries to current analytics APIs** — Extend the current admin analytics aggregation so it can produce cohort- and department-level issue buckets, repeated blocker families, degradation/not-evaluable breakdowns, and improving/risk lists on the same evidence line as learner and supervisor views.
+- [x] **T01: Add a projection-backed admin operating-pack API for weekly blocker, department, degradation, and manager-risk views.** — Extend the current admin analytics aggregation so it can produce cohort- and department-level issue buckets, repeated blocker families, degradation/not-evaluable breakdowns, and improving/risk lists on the same evidence line as learner and supervisor views.
   - Estimate: 2h
   - Files: backend/src/common/analytics/admin_analytics_service.py, backend/src/admin/api/analytics.py, backend/tests/unit/common/test_admin_analytics_service.py, backend/tests/contract/test_analytics.py
   - Verify: cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/common/test_admin_analytics_service.py tests/contract/test_analytics.py

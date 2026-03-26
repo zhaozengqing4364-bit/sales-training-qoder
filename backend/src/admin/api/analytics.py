@@ -300,6 +300,52 @@ async def get_leaderboard(
     return success_response({"leaderboard": result.value})
 
 
+@router.get("/operating-pack", response_model=dict)
+async def get_operating_pack(
+    time_range: Literal["7d", "30d", "90d", "all_time"] = Query("7d", description="Time range filter"),
+    scenario_type: Literal["presentation", "sales"] | None = Query(None, description="Filter by scenario type"),
+    limit: int = Query(10, ge=1, le=50, description="Max users per operating list"),
+    inactive_days: int = Query(7, ge=1, le=90, description="Minimum inactivity days for risk list"),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """
+    Get the weekly operating pack for cohort issue review.
+
+    Returns:
+    - Weekly summary counts on the projection-backed score basis
+    - Cohort and department blocker buckets
+    - Degradation / not-evaluable breakdowns
+    - Risk and improving manager lists aligned to the same evidence line
+    """
+    logger.info(
+        "Getting analytics operating pack",
+        extra={
+            "time_range": time_range,
+            "scenario_type": scenario_type,
+            "limit": limit,
+            "inactive_days": inactive_days,
+            "user_id": str(current_user.user_id),
+        },
+    )
+
+    result = await admin_analytics_service.get_operating_pack(
+        db=db,
+        time_range=time_range,
+        scenario_type=scenario_type,
+        limit=limit,
+        inactive_days=inactive_days,
+    )
+
+    if not result.is_success:
+        return error_response(
+            result.fallback or "[OPERATING_PACK_FAILED]",
+            "Failed to load operating pack",
+        )
+
+    return success_response(result.value)
+
+
 @router.get("/runtime-metrics", response_model=dict)
 async def get_runtime_metrics(
     time_range: Literal["1h", "24h", "7d", "30d", "90d"] = Query("30d", description="Time range filter"),

@@ -1683,3 +1683,57 @@ Append one entry per iteration:
   verification results: passed; focused web regressions and the support-runtime service unit suite both stayed green after wiring fault-level linked_asset_changes references.
   success signal status: admins can move from a live runtime anomaly to the recent knowledge/persona/presentation/runtime-profile change behind it from the existing analytics and user-detail surfaces.
   rollback note: if a later slice replaces this linkage, keep support/runtime as the canonical anomaly seam and remove the inline admin renderers together rather than introducing a second change-inspection API.
+
+- time: 2026-03-26T18:27:45+0800
+  mode: stabilize
+  item id: M005-S03
+  files changed:
+    - backend/src/support/services/runtime_status_service.py
+    - backend/src/common/knowledge/api.py
+    - backend/src/agent/services/persona_service.py
+    - backend/src/presentation_coach/api/presentations.py
+    - backend/src/admin/api/voice_runtime.py
+    - web/src/app/admin/knowledge/page.tsx
+    - web/src/app/admin/personas/page.tsx
+    - web/src/app/admin/presentations/page.tsx
+    - web/src/app/admin/voice-runtime/page.tsx
+    - web/src/app/admin/analytics/page.tsx
+    - web/src/app/admin/users/[id]/page.tsx
+    - backend/tests/integration/test_asset_governance_api.py
+    - web/src/app/admin/asset-governance.test.tsx
+    - web/src/app/admin/analytics/page.test.tsx
+    - web/src/app/admin/users/[id]/page.test.tsx
+    - .gsd/DECISIONS.md
+    - .gsd/PROJECT.md
+    - .gsd/milestones/M005/slices/S03/S03-SUMMARY.md
+    - .gsd/milestones/M005/slices/S03/S03-UAT.md
+    - .codex/loop/state.json
+    - .codex/loop/log.md
+  summary: Closed S03 by re-running the full slice verification set, writing the slice summary/UAT, recording the in-place asset-governance UI decision, and updating project continuity so downstream slices can treat the current admin asset pages plus linked runtime faults as the new governance baseline.
+  verification commands:
+    - cd backend && venv/bin/python -m pytest -c pyproject.toml tests/integration/test_asset_governance_api.py
+    - cd web && npm test -- --run 'src/app/admin/asset-governance.test.tsx'
+    - cd web && npm test -- --run 'src/app/admin/analytics/page.test.tsx' 'src/app/admin/users/[id]/page.test.tsx'
+  verification results: passed; the backend asset-governance integration suite, the cross-page governance UI suite, and the analytics/user-detail regressions all passed fresh during slice close-out.
+  success signal status: the current admin asset pages now show runtime-backed impact/recent-change/health context, and analytics plus user detail can trace current anomalies back to likely asset changes without a separate governance console.
+  rollback note: if future work revisits asset governance, preserve RuntimeStatusService plus diagnostics.linked_asset_changes as the authority line and extend those seams rather than adding a parallel governance or anomaly drill-in surface.
+
+- time: 2026-03-26T18:47:20+08:00
+  mode: stabilize
+  item id: M005-S04-T01
+  files changed:
+    - backend/src/common/analytics/admin_analytics_service.py
+    - backend/src/admin/api/analytics.py
+    - backend/tests/unit/common/test_admin_analytics_service.py
+    - backend/tests/contract/test_analytics.py
+    - .gsd/DECISIONS.md
+    - .gsd/KNOWLEDGE.md
+    - .gsd/milestones/M005/slices/S04/tasks/T01-SUMMARY.md
+    - .codex/loop/state.json
+    - .codex/loop/log.md
+  summary: Added a projection-backed admin operating-pack API that groups weekly blocker families, department buckets, degradation breakdowns, and latest-per-user risk/improving lists on the same evidence line as learner and supervisor views.
+  verification commands:
+    - cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/common/test_admin_analytics_service.py tests/contract/test_analytics.py
+  verification results: passed; the new operating-pack unit coverage and analytics contract coverage are green, including the dedicated /api/v1/admin/analytics/operating-pack route.
+  success signal status: admins now have one backend payload for the weekly operating pack instead of recombining issue buckets, degradation counts, and manager lists from drifting sources.
+  rollback note: if follow-up work revisits weekly operating semantics, keep blocker-family normalization on HistoryService issue-family aliases and keep risk membership anchored to each user's latest evaluable completed session unless the intervention/report contract changes with fresh proof.

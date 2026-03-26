@@ -153,6 +153,33 @@ class TestAnalyticsContract:
                 assert "primary_issue_type" in entry
                 assert "primary_next_goal_type" in entry
 
+    async def test_get_admin_operating_pack_contract(
+        self,
+        async_client: AsyncClient,
+        auth_headers: dict,
+    ):
+        """Test admin operating pack exposes weekly cohort buckets and manager lists."""
+        response = await async_client.get(
+            "/api/v1/admin/analytics/operating-pack?time_range=7d&limit=10&inactive_days=7",
+            headers=auth_headers,
+        )
+        assert response.status_code in [200, 401, 403]
+
+        if response.status_code == 200:
+            payload = response.json()
+            assert payload.get("success") is True
+            data = payload.get("data", {})
+            assert data.get("score_basis") == "session_evidence_projection_evaluable_only"
+            assert isinstance(data.get("weekly_summary", {}), dict)
+            assert isinstance(data.get("cohort_issue_buckets", []), list)
+            assert isinstance(data.get("department_issue_buckets", []), list)
+            assert isinstance(data.get("repeated_blocker_families", []), list)
+            assert isinstance(data.get("degradation_breakdown", {}), dict)
+            manager_lists = data.get("manager_lists", {})
+            assert isinstance(manager_lists.get("not_passed", []), list)
+            assert isinstance(manager_lists.get("inactive_streak", []), list)
+            assert isinstance(manager_lists.get("improving", []), list)
+
     async def test_get_my_rank(
         self,
         async_client: AsyncClient,

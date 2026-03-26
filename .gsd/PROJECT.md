@@ -44,6 +44,7 @@
 - M004 已在里程碑级 close-out 中完成并封板：`git diff --stat HEAD $(git merge-base HEAD 001-ai-practice-system) -- ':!.gsd/'` 证明本里程碑包含真实非 `.gsd` 实现代码；`M004-VALIDATION.md` 与 S01-S05 summaries / UAT 共同证明 explanation-rich learning evidence、report→replay 深链、focus-intent 定向再练、PPT 页级纠偏与 sales + PPT live learner-loop 全部闭合；R011 已提升为 validated。下一阶段重心转向 M005 的治理与规模化运营，而不是继续补 M004 的学习闭环。
 - M005/S01 已完成：`backend/src/common/analytics/admin_analytics_service.py`、`backend/src/admin/api/users.py`、`/admin/analytics`、`ManagerLitePanel` 与 `/admin/users/[id]` 现在都基于 HistoryService / SessionEvidenceService projection summary 说同一套 admin 语义：综合分只统计可评估的已完成训练，证据不足会话单独记账，问题家族 / 下一轮重点 / 查看统一报告 CTA 不再沿用 legacy 0.4/0.3/0.3 wording。
 - M005/S02 已完成：`manager_interventions` 表和 `/api/v1/admin/interventions` 当前链路已经把主管重点、提醒状态与 resolving-session linkage 持久化下来；manager-lite 会 deep-link 到 `/admin/users/[id]` 并预填 focus query params，用户详情页可以直接创建/提醒主管重点，并通过 `HistoryService` + unified session evidence 在同一张卡片上看到“已改善 / 仍卡住 / 待判断”的结果与对应统一报告 drill-in。
+- M005/S03 已完成：当前 `/admin/knowledge`、`/admin/personas`、`/admin/presentations`、`/admin/voice-runtime` 现在都会在原地显示 runtime-backed `governance_summary`（影响范围、最近变更、blocking/warning 健康信号），而 `/admin/analytics` 与 `/admin/users/[id]` 也会把 support/runtime fault 的 `linked_asset_changes` 直接渲染成资产链接与最近变更上下文，运营无需离开现有 admin 链路就能从异常追到可能的资产变更面。
 - 真实首发目标已明确：先把桌面端稳定性做满，不在第一阶段绑定移动端 / 企业微信 / 外部系统集成。
 
 ## Architecture / Key Patterns
@@ -64,4 +65,4 @@ See `.gsd/REQUIREMENTS.md` for the explicit capability contract, requirement sta
 - [ ] M002: 实时教练闭环 — S01-S04 已交付 realtime sales rubric / pacing / shared coaching focus / completed-session alignment，但 close-out 审计仍缺 S07/S08 的教练降级/恢复可观测性与最终 live UAT 证据，暂不能封板。
 - [ ] M003: 知识与角色真实性 — 沿现有 admin Persona / knowledge → practice runtime → knowledge-check / report / replay 业务链路，证明知识与 Persona 真的改变 objection-heavy 销售训练，而不是只停在 prompt 文案层。
 - [x] M004: 复盘与学习闭环增强 — 已把现有 report / replay / history / practice 路由收口成 explanation-rich 的 sales + PPT learner loop，并在 milestone close-out 中完成验证与封板。
-- [ ] M005: 后台治理与规模化运营 — S01-S02 已完成；当前 admin analytics / user drill-in / manager-lite / 用户详情页已经能沿统一 evidence line 完成“发现问题 → 设主管重点 → 记录提醒 → 查看后续结果”，后续继续补资产健康、cohort 问题面与组织化 UAT。
+- [ ] M005: 后台治理与规模化运营 — S01-S03 已完成；当前 admin analytics / user drill-in / manager-lite / 用户详情页已经能沿统一 evidence line 完成“发现问题 → 设主管重点 → 记录提醒 → 查看后续结果”，知识库 / Persona / PPT / voice runtime 资产页也已在原地显示影响范围、最近变更与 blocking/warning 治理信号；后续继续补 cohort 问题面与组织化 UAT。

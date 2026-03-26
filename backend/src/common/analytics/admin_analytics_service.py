@@ -257,6 +257,437 @@ class AdminAnalyticsService:
             for reason, count in counts.most_common(limit)
         ]
 
+    @staticmethod
+    def _blocked_evaluable_records(
+        records: list[ProjectionAnalyticsRecord],
+    ) -> list[ProjectionAnalyticsRecord]:
+        return [
+            record
+            for record in AdminAnalyticsService._evaluable_records(records)
+            if record.summary.overall_result not in {"pass", "strong_pass"}
+        ]
+
+    @staticmethod
+    def _resolve_user_name(record: ProjectionAnalyticsRecord) -> str:
+        user = getattr(record.session, "user", None)
+        if user is None:
+            return str(record.session.user_id)
+        return str(getattr(user, "name", None) or getattr(user, "email", None) or record.session.user_id)
+
+    @staticmethod
+    def _resolve_department(record: ProjectionAnalyticsRecord) -> str:
+        user = getattr(record.session, "user", None)
+        department = getattr(user, "department", None) if user is not None else None
+        if isinstance(department, str) and department.strip():
+            return department.strip()
+        return "未分配部门"
+
+    @staticmethod
+    def _extract_degraded_reasons(summary: HistorySessionSummary) -> list[str]:
+        evidence = summary.evidence_completeness if isinstance(summary.evidence_completeness, dict) else None
+        if evidence is None:
+            return []
+
+        reasons: list[str] = []
+        degraded_reasons = evidence.get("degraded_reasons")
+        if isinstance(degraded_reasons, list):
+            reasons.extend(
+                str(reason)
+                for reason in degraded_reasons
+                if isinstance(reason, str) and reason.strip()
+            )
+
+        if reasons:
+            return reasons
+
+        if bool(evidence.get("complete", True)):
+            return []
+
+        missing_fields = evidence.get("missing_fields")
+        if isinstance(missing_fields, list):
+            reasons.extend(
+                str(field)
+                for field in missing_fields
+                if isinstance(field, str) and field.strip()
+            )
+
+        if reasons:
+            return reasons
+        return ["projection_incomplete"]
+
+    @classmethod
+    def _build_degraded_reason_distribution(
+        cls,
+        summaries: list[HistorySessionSummary],
+        *,
+        limit: int = 10,
+    ) -> list[dict[str, Any]]:
+        counts: Counter[str] = Counter()
+        for summary in summaries:
+            counts.update(cls._extract_degraded_reasons(summary))
+
+        ranked_reasons = sorted(
+            counts,
+            key=lambda reason: (-counts[reason], reason),
+        )
+        return [
+            {"reason": reason, "count": counts[reason]}
+            for reason in ranked_reasons[:limit]
+        ]
+
+    @classmethod
+    def _build_blocker_family_buckets(
+        cls,
+        records: list[ProjectionAnalyticsRecord],
+        *,
+        include_department_count: bool,
+        limit: int = 10,
+    ) -> list[dict[str, Any]]:
+        grouped: dict[str, dict[str, Any]] = {}
+
+        for record in sorted(records, key=lambda item: item.summary.start_time):
+            issue_family = history_service.resolve_summary_issue_family(record.summary)
+            if not issue_family:
+                continue
+
+            payload = record.summary.main_issue if isinstance(record.summary.main_issue, dict) else {}
+            issue_type = payload.get("issue_type") if isinstance(payload.get("issue_type"), str) else issue_family
+            issue_text = payload.get("issue_text") if isinstance(payload.get("issue_text"), str) else None
+            department = cls._resolve_department(record)
+            session_start = cls._coerce_utc(record.summary.start_time)
+
+            bucket = grouped.setdefault(
+                issue_family,
+                {
+                    "issue_family": issue_family,
+                    "issue_type": issue_type,
+                    "issue_text": issue_text,
+                    "count": 0,
+                    "user_ids": set(),
+                    "departments": set(),
+                    "latest_start_time": session_start,
+                },
+            )
+            bucket["count"] += 1
+            bucket["user_ids"].add(str(record.session.user_id))
+            bucket["departments"].add(department)
+            if session_start >= bucket["latest_start_time"]:
+                bucket["latest_start_time"] = session_start
+                bucket["issue_type"] = issue_type
+                bucket["issue_text"] = issue_text
+
+        ranked_families = sorted(
+            grouped,
+            key=lambda issue_family: (
+                -int(grouped[issue_family]["count"]),
+                -grouped[issue_family]["latest_start_time"].timestamp(),
+                issue_family,
+            ),
+        )
+
+        buckets: list[dict[str, Any]] = []
+        for issue_family in ranked_families[:limit]:
+            bucket = grouped[issue_family]
+            item = {
+                "issue_family": issue_family,
+                "issue_type": bucket["issue_type"],
+                "issue_text": bucket["issue_text"],
+                "count": int(bucket["count"]),
+                "user_count": len(bucket["user_ids"]),
+            }
+            if include_department_count:
+                item["department_count"] = len(bucket["departments"])
+            buckets.append(item)
+        return buckets
+
+    @classmethod
+    async def _load_last_completed_sessions(
+        cls,
+        db: AsyncSession,
+        *,
+        scenario_type: str | None,
+    ) -> list[dict[str, Any]]:
+        normalized_scenario_type = history_service.normalize_scenario_type(scenario_type)
+        query = (
+            select(
+                PracticeSession.user_id,
+                func.max(PracticeSession.start_time).label("last_session_at"),
+                User.name,
+                User.department,
+            )
+            .join(User, User.user_id == PracticeSession.user_id)
+            .where(PracticeSession.status == SessionStatus.COMPLETED.value)
+            .group_by(PracticeSession.user_id, User.name, User.department)
+        )
+        if normalized_scenario_type:
+            query = query.where(
+                PracticeSession.scenario.has(scenario_type=normalized_scenario_type)
+            )
+
+        rows = (await db.execute(query)).all()
+        payload: list[dict[str, Any]] = []
+        for row in rows:
+            if row.last_session_at is None:
+                continue
+            payload.append(
+                {
+                    "user_id": str(row.user_id),
+                    "user_name": row.name,
+                    "department": row.department,
+                    "last_session_at": cls._coerce_utc(row.last_session_at),
+                }
+            )
+        return payload
+
+    @classmethod
+    def _build_manager_lists(
+        cls,
+        records: list[ProjectionAnalyticsRecord],
+        *,
+        last_completed_rows: list[dict[str, Any]],
+        inactive_days: int,
+        limit: int,
+    ) -> dict[str, Any]:
+        evaluable_records = cls._evaluable_records(records)
+        grouped_by_user: dict[str, list[ProjectionAnalyticsRecord]] = defaultdict(list)
+        for record in evaluable_records:
+            grouped_by_user[str(record.session.user_id)].append(record)
+
+        not_passed: list[dict[str, Any]] = []
+        for user_id, user_records in grouped_by_user.items():
+            latest_record = max(user_records, key=lambda item: item.summary.start_time)
+            if latest_record.summary.overall_result in {"pass", "strong_pass"}:
+                continue
+            not_passed.append(
+                {
+                    "user_id": user_id,
+                    "user_name": cls._resolve_user_name(latest_record),
+                    "department": cls._resolve_department(latest_record),
+                    "overall_result": latest_record.summary.overall_result or "fail",
+                    "session_id": str(latest_record.session.session_id),
+                    "session_start_time": cls._coerce_utc(latest_record.summary.start_time).isoformat(),
+                    "issue_family": history_service.resolve_summary_issue_family(
+                        latest_record.summary
+                    ),
+                }
+            )
+        not_passed.sort(
+            key=lambda item: (
+                item["session_start_time"],
+                item["user_name"],
+            ),
+            reverse=True,
+        )
+
+        now = datetime.now(UTC)
+        inactive_streak: list[dict[str, Any]] = []
+        for row in last_completed_rows:
+            last_session_at = row["last_session_at"]
+            inactive_span = now - last_session_at
+            days_inactive = int(inactive_span.total_seconds() // 86400)
+            if days_inactive < inactive_days:
+                continue
+            inactive_streak.append(
+                {
+                    "user_id": row["user_id"],
+                    "user_name": row["user_name"],
+                    "department": row["department"],
+                    "last_session_at": last_session_at.isoformat(),
+                    "inactive_days": days_inactive,
+                }
+            )
+        inactive_streak.sort(
+            key=lambda item: (-item["inactive_days"], item["user_name"]),
+        )
+
+        improving: list[dict[str, Any]] = []
+        for user_id, user_records in grouped_by_user.items():
+            if len(user_records) < 4:
+                continue
+            ordered_records = sorted(user_records, key=lambda item: item.summary.start_time)
+            middle = len(ordered_records) // 2
+            baseline = ordered_records[:middle]
+            current = ordered_records[middle:]
+            if not baseline or not current:
+                continue
+
+            baseline_pass_rate = sum(
+                1
+                for record in baseline
+                if record.summary.overall_result in {"pass", "strong_pass"}
+            ) / len(baseline)
+            current_pass_rate = sum(
+                1
+                for record in current
+                if record.summary.overall_result in {"pass", "strong_pass"}
+            ) / len(current)
+            gain = current_pass_rate - baseline_pass_rate
+            if gain <= 0:
+                continue
+
+            latest_record = current[-1]
+            improving.append(
+                {
+                    "user_id": user_id,
+                    "user_name": cls._resolve_user_name(latest_record),
+                    "department": cls._resolve_department(latest_record),
+                    "pass_gain": round(gain * 100, 2),
+                    "baseline_pass_rate": round(baseline_pass_rate * 100, 2),
+                    "current_pass_rate": round(current_pass_rate * 100, 2),
+                }
+            )
+        improving.sort(
+            key=lambda item: (-item["pass_gain"], item["user_name"]),
+        )
+
+        return {
+            "not_passed": not_passed[:limit],
+            "inactive_streak": inactive_streak[:limit],
+            "improving": improving[:limit],
+        }
+
+    @classmethod
+    def _build_department_issue_buckets(
+        cls,
+        records: list[ProjectionAnalyticsRecord],
+    ) -> list[dict[str, Any]]:
+        completed_records = cls._completed_records(records)
+        blocked_records = cls._blocked_evaluable_records(records)
+
+        by_department: dict[str, dict[str, list[Any]]] = defaultdict(
+            lambda: {
+                "completed": [],
+                "blocked": [],
+                "not_evaluable": [],
+                "degraded": [],
+            }
+        )
+
+        for record in completed_records:
+            department = cls._resolve_department(record)
+            by_department[department]["completed"].append(record)
+            if record.summary.evaluable is False:
+                by_department[department]["not_evaluable"].append(record.summary)
+            if cls._extract_degraded_reasons(record.summary):
+                by_department[department]["degraded"].append(record.summary)
+
+        for record in blocked_records:
+            department = cls._resolve_department(record)
+            by_department[department]["blocked"].append(record)
+
+        ranked_departments = sorted(
+            by_department,
+            key=lambda department: (
+                -len(by_department[department]["blocked"]),
+                -len(by_department[department]["completed"]),
+                department,
+            ),
+        )
+
+        payload: list[dict[str, Any]] = []
+        for department in ranked_departments:
+            department_records = by_department[department]
+            payload.append(
+                {
+                    "department": department,
+                    "session_count": len(department_records["completed"]),
+                    "evaluable_sessions": len(
+                        cls._evaluable_records(department_records["completed"])
+                    ),
+                    "not_evaluable_sessions": len(department_records["not_evaluable"]),
+                    "issue_buckets": cls._build_blocker_family_buckets(
+                        department_records["blocked"],
+                        include_department_count=False,
+                    ),
+                    "degradation_breakdown": {
+                        "not_evaluable_reasons": cls._build_reason_distribution(
+                            department_records["not_evaluable"]
+                        ),
+                        "degraded_reasons": cls._build_degraded_reason_distribution(
+                            department_records["degraded"]
+                        ),
+                    },
+                }
+            )
+        return payload
+
+    @classmethod
+    def _build_operating_pack_payload(
+        cls,
+        records: list[ProjectionAnalyticsRecord],
+        *,
+        time_range: str,
+        manager_lists: dict[str, Any],
+    ) -> dict[str, Any]:
+        completed_records = cls._completed_records(records)
+        blocked_records = cls._blocked_evaluable_records(records)
+        evaluable_records = cls._evaluable_records(records)
+        not_evaluable_records = cls._not_evaluable_records(records)
+        degraded_summaries = [
+            record.summary
+            for record in completed_records
+            if cls._extract_degraded_reasons(record.summary)
+        ]
+
+        cohort_issue_buckets = cls._build_blocker_family_buckets(
+            blocked_records,
+            include_department_count=True,
+        )
+        repeated_blocker_families = [
+            bucket for bucket in cohort_issue_buckets if int(bucket["count"]) >= 2
+        ]
+        not_evaluable_reasons = cls._build_reason_distribution(
+            [record.summary for record in not_evaluable_records]
+        )
+        degraded_reasons = cls._build_degraded_reason_distribution(degraded_summaries)
+        at_risk_user_ids = {
+            item["user_id"] for item in manager_lists["not_passed"]
+        } | {item["user_id"] for item in manager_lists["inactive_streak"]}
+
+        time_range_days = {
+            "7d": 7,
+            "30d": 30,
+            "90d": 90,
+        }.get(time_range)
+        now = datetime.now(UTC)
+        start_date = _get_time_range_start(time_range)
+
+        return {
+            "score_basis": PROJECTION_SCORE_BASIS,
+            "weekly_summary": {
+                "window_days": time_range_days,
+                "window_start": start_date.isoformat(),
+                "window_end": now.isoformat(),
+                "completed_sessions": len(completed_records),
+                "evaluable_sessions": len(evaluable_records),
+                "not_evaluable_sessions": len(not_evaluable_records),
+                "degraded_sessions": len(degraded_summaries),
+                "active_departments": len(
+                    {cls._resolve_department(record) for record in completed_records}
+                ),
+                "at_risk_users": len(at_risk_user_ids),
+                "improving_users": len(manager_lists["improving"]),
+                "top_issue_family": cohort_issue_buckets[0] if cohort_issue_buckets else None,
+                "top_blocker_family": (
+                    repeated_blocker_families[0]
+                    if repeated_blocker_families
+                    else (cohort_issue_buckets[0] if cohort_issue_buckets else None)
+                ),
+                "top_not_evaluable_reason": (
+                    not_evaluable_reasons[0] if not_evaluable_reasons else None
+                ),
+                "top_degraded_reason": degraded_reasons[0] if degraded_reasons else None,
+            },
+            "cohort_issue_buckets": cohort_issue_buckets,
+            "department_issue_buckets": cls._build_department_issue_buckets(records),
+            "repeated_blocker_families": repeated_blocker_families,
+            "degradation_breakdown": {
+                "not_evaluable_reasons": not_evaluable_reasons,
+                "degraded_reasons": degraded_reasons,
+            },
+            "manager_lists": manager_lists,
+        }
+
     @classmethod
     def _build_score_distribution(
         cls,
@@ -601,6 +1032,62 @@ class AdminAnalyticsService:
                 exc_info=True,
             )
             return Result.fail(fallback="[TRENDS_DATA_FAILED]")
+
+    async def get_operating_pack(
+        self,
+        db: AsyncSession,
+        time_range: str = "7d",
+        scenario_type: str | None = None,
+        limit: int = 10,
+        inactive_days: int = 7,
+    ) -> Result[dict[str, Any]]:
+        try:
+            start_date = _get_time_range_start(time_range)
+            records = await self._load_projection_records(
+                db,
+                start_date=start_date,
+                scenario_type=scenario_type,
+            )
+            last_completed_rows = await self._load_last_completed_sessions(
+                db,
+                scenario_type=scenario_type,
+            )
+            manager_lists = self._build_manager_lists(
+                records,
+                last_completed_rows=last_completed_rows,
+                inactive_days=inactive_days,
+                limit=limit,
+            )
+            payload = self._build_operating_pack_payload(
+                records,
+                time_range=time_range,
+                manager_lists=manager_lists,
+            )
+
+            logger.info(
+                "admin_operating_pack_calculated",
+                extra={
+                    "time_range": time_range,
+                    "scenario_type": history_service.normalize_scenario_type(
+                        scenario_type
+                    ),
+                    "cohort_issue_bucket_count": len(payload["cohort_issue_buckets"]),
+                    "department_issue_bucket_count": len(payload["department_issue_buckets"]),
+                    "not_passed_count": len(manager_lists["not_passed"]),
+                    "inactive_streak_count": len(manager_lists["inactive_streak"]),
+                    "improving_count": len(manager_lists["improving"]),
+                    "score_basis": PROJECTION_SCORE_BASIS,
+                },
+            )
+            return Result.ok(payload)
+
+        except (SQLAlchemyError, ValueError, TypeError) as exc:
+            logger.error(
+                "Failed to calculate admin operating pack",
+                extra={"error": str(exc)},
+                exc_info=True,
+            )
+            return Result.fail(fallback="[OPERATING_PACK_FAILED]")
 
     async def get_agent_stats(
         self,

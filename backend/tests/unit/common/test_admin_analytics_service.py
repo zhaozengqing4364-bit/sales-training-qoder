@@ -11,7 +11,7 @@ from sqlalchemy.orm import sessionmaker
 # Import Agent models so Base.metadata has all FK targets used by common models.
 from agent.models import Agent, AgentPersona, Persona, VoiceRuntimeProfile  # noqa: F401
 from common.analytics.admin_analytics_service import admin_analytics_service
-from common.db.models import Base, PracticeSession, Scenario, User
+from common.db.models import Base, ConversationMessage, PracticeSession, Scenario, User
 
 TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
 
@@ -441,3 +441,429 @@ async def test_leaderboard_and_agent_stats_use_projection_scores_and_counts(
         }
     ]
     assert agent_payload["scenario_distribution"] == {"sales": 2}
+
+
+@pytest.mark.asyncio
+async def test_operating_pack_groups_cohort_department_buckets_and_manager_lists(
+    db_session: AsyncSession,
+) -> None:
+    scenario = await _create_sales_scenario(db_session, name="团队周节奏")
+
+    north_risk = await _create_user(
+        db_session,
+        name="North Risk",
+        department="North",
+        email="north-risk@example.com",
+    )
+    south_risk = await _create_user(
+        db_session,
+        name="South Risk",
+        department="South",
+        email="south-risk@example.com",
+    )
+    not_evaluable_user = await _create_user(
+        db_session,
+        name="Need More Turns",
+        department="North",
+        email="need-more-turns@example.com",
+    )
+    degraded_user = await _create_user(
+        db_session,
+        name="Degraded Evidence",
+        department="North",
+        email="degraded-evidence@example.com",
+    )
+    improving_user = await _create_user(
+        db_session,
+        name="Improving User",
+        department="North",
+        email="improving-user@example.com",
+    )
+    inactive_user = await _create_user(
+        db_session,
+        name="Inactive User",
+        department="East",
+        email="inactive-user@example.com",
+    )
+
+    now = datetime.now(timezone.utc)
+
+    north_risk_session_id = str(uuid.uuid4())
+    south_risk_session_id = str(uuid.uuid4())
+    degraded_session_id = str(uuid.uuid4())
+    improving_fail_one_id = str(uuid.uuid4())
+    improving_fail_two_id = str(uuid.uuid4())
+    improving_pass_one_id = str(uuid.uuid4())
+    improving_pass_two_id = str(uuid.uuid4())
+
+    db_session.add_all(
+        [
+            PracticeSession(
+                session_id=north_risk_session_id,
+                user_id=str(north_risk.user_id),
+                scenario_id=str(scenario.scenario_id),
+                status="completed",
+                start_time=now - timedelta(days=6),
+                end_time=now - timedelta(days=6) + timedelta(minutes=4),
+                total_duration_seconds=240,
+                logic_score=55,
+                accuracy_score=50,
+                completeness_score=45,
+                effectiveness_snapshot=_make_effectiveness_snapshot(
+                    evaluable=True,
+                    overall_result="fail",
+                    issue_type="value_translation_gap",
+                    issue_text="ROI 证据没接到客户收益。",
+                    goal_type="benefit_translation_drill",
+                    goal_text="下一轮先把 ROI 翻译成客户收益。",
+                ),
+            ),
+            PracticeSession(
+                session_id=south_risk_session_id,
+                user_id=str(south_risk.user_id),
+                scenario_id=str(scenario.scenario_id),
+                status="completed",
+                start_time=now - timedelta(days=2),
+                end_time=now - timedelta(days=2) + timedelta(minutes=5),
+                total_duration_seconds=300,
+                logic_score=60,
+                accuracy_score=52,
+                completeness_score=38,
+                effectiveness_snapshot=_make_effectiveness_snapshot(
+                    evaluable=True,
+                    overall_result="fail",
+                    issue_type="value_expression",
+                    issue_text="价值表达还停留在产品功能。",
+                    goal_type="benefit_translation_drill",
+                    goal_text="下一轮先把功能翻译成客户收益。",
+                ),
+            ),
+            PracticeSession(
+                session_id=str(uuid.uuid4()),
+                user_id=str(not_evaluable_user.user_id),
+                scenario_id=str(scenario.scenario_id),
+                status="completed",
+                start_time=now - timedelta(days=4),
+                end_time=now - timedelta(days=4) + timedelta(minutes=1),
+                total_duration_seconds=60,
+                logic_score=95,
+                accuracy_score=95,
+                completeness_score=95,
+                effectiveness_snapshot=_make_effectiveness_snapshot(
+                    evaluable=False,
+                    overall_result="fail",
+                    issue_type="insufficient_turn_data",
+                    issue_text="当前互动不足，暂时无法判断真实问题。",
+                    goal_type="collect_more_evidence",
+                    goal_text="先补齐有效互动，再继续诊断。",
+                    not_evaluable_reason="INSUFFICIENT_TURN_DATA",
+                ),
+            ),
+            PracticeSession(
+                session_id=degraded_session_id,
+                user_id=str(degraded_user.user_id),
+                scenario_id=str(scenario.scenario_id),
+                status="completed",
+                start_time=now - timedelta(days=3),
+                end_time=now - timedelta(days=3) + timedelta(minutes=4),
+                total_duration_seconds=240,
+                logic_score=80,
+                accuracy_score=70,
+                completeness_score=60,
+                effectiveness_snapshot=_make_effectiveness_snapshot(
+                    evaluable=True,
+                    overall_result="fail",
+                    issue_type="structure_gap",
+                    issue_text="结构还不完整，客户难以跟上。",
+                    goal_type="structure_drill",
+                    goal_text="下一轮先讲完整四段结构。",
+                ),
+            ),
+            PracticeSession(
+                session_id=improving_fail_one_id,
+                user_id=str(improving_user.user_id),
+                scenario_id=str(scenario.scenario_id),
+                status="completed",
+                start_time=now - timedelta(days=6, hours=12),
+                end_time=now - timedelta(days=6, hours=12) + timedelta(minutes=4),
+                total_duration_seconds=240,
+                logic_score=52,
+                accuracy_score=48,
+                completeness_score=46,
+                effectiveness_snapshot=_make_effectiveness_snapshot(
+                    evaluable=True,
+                    overall_result="fail",
+                    issue_type="evidence_gap",
+                    issue_text="案例证据还不够扎实。",
+                    goal_type="evidence_backing",
+                    goal_text="下一轮先补一个完整客户案例。",
+                ),
+            ),
+            PracticeSession(
+                session_id=improving_fail_two_id,
+                user_id=str(improving_user.user_id),
+                scenario_id=str(scenario.scenario_id),
+                status="completed",
+                start_time=now - timedelta(days=5, hours=12),
+                end_time=now - timedelta(days=5, hours=12) + timedelta(minutes=4),
+                total_duration_seconds=240,
+                logic_score=50,
+                accuracy_score=46,
+                completeness_score=44,
+                effectiveness_snapshot=_make_effectiveness_snapshot(
+                    evaluable=True,
+                    overall_result="fail",
+                    issue_type="evidence_gap",
+                    issue_text="案例证据还不够扎实。",
+                    goal_type="evidence_backing",
+                    goal_text="下一轮先补一个完整客户案例。",
+                ),
+            ),
+            PracticeSession(
+                session_id=improving_pass_one_id,
+                user_id=str(improving_user.user_id),
+                scenario_id=str(scenario.scenario_id),
+                status="completed",
+                start_time=now - timedelta(days=1, hours=12),
+                end_time=now - timedelta(days=1, hours=12) + timedelta(minutes=4),
+                total_duration_seconds=240,
+                logic_score=82,
+                accuracy_score=84,
+                completeness_score=86,
+                effectiveness_snapshot=_make_effectiveness_snapshot(
+                    evaluable=True,
+                    overall_result="pass",
+                    issue_type="evidence_gap",
+                    issue_text="案例证据还不够扎实。",
+                    goal_type="evidence_backing",
+                    goal_text="下一轮先补一个完整客户案例。",
+                ),
+            ),
+            PracticeSession(
+                session_id=improving_pass_two_id,
+                user_id=str(improving_user.user_id),
+                scenario_id=str(scenario.scenario_id),
+                status="completed",
+                start_time=now - timedelta(hours=18),
+                end_time=now - timedelta(hours=18) + timedelta(minutes=4),
+                total_duration_seconds=240,
+                logic_score=84,
+                accuracy_score=86,
+                completeness_score=88,
+                effectiveness_snapshot=_make_effectiveness_snapshot(
+                    evaluable=True,
+                    overall_result="strong_pass",
+                    issue_type="evidence_gap",
+                    issue_text="案例证据还不够扎实。",
+                    goal_type="evidence_backing",
+                    goal_text="下一轮先补一个完整客户案例。",
+                ),
+            ),
+            PracticeSession(
+                session_id=str(uuid.uuid4()),
+                user_id=str(inactive_user.user_id),
+                scenario_id=str(scenario.scenario_id),
+                status="completed",
+                start_time=now - timedelta(days=10),
+                end_time=now - timedelta(days=10) + timedelta(minutes=4),
+                total_duration_seconds=240,
+                logic_score=75,
+                accuracy_score=76,
+                completeness_score=77,
+                effectiveness_snapshot=_make_effectiveness_snapshot(
+                    evaluable=True,
+                    overall_result="pass",
+                    issue_type="structure_gap",
+                    issue_text="历史结构练习。",
+                    goal_type="structure_drill",
+                    goal_text="历史结构练习。",
+                ),
+            ),
+            ConversationMessage(
+                session_id=degraded_session_id,
+                turn_number=1,
+                role="user",
+                content="我先介绍一下方案。",
+                timestamp=now - timedelta(days=3) + timedelta(seconds=30),
+            ),
+            ConversationMessage(
+                session_id=degraded_session_id,
+                turn_number=2,
+                role="assistant",
+                content="继续。",
+                timestamp=now - timedelta(days=3) + timedelta(seconds=60),
+            ),
+        ]
+    )
+    await db_session.commit()
+
+    operating_result = await admin_analytics_service.get_operating_pack(
+        db=db_session,
+        time_range="7d",
+        scenario_type="sales",
+        limit=10,
+        inactive_days=7,
+    )
+
+    assert operating_result.is_success, operating_result.fallback
+    operating_pack = operating_result.value
+    assert operating_pack["score_basis"] == "session_evidence_projection_evaluable_only"
+
+    weekly_summary = operating_pack["weekly_summary"]
+    assert weekly_summary["window_days"] == 7
+    assert weekly_summary["completed_sessions"] == 8
+    assert weekly_summary["evaluable_sessions"] == 7
+    assert weekly_summary["not_evaluable_sessions"] == 1
+    assert weekly_summary["degraded_sessions"] == 1
+    assert weekly_summary["at_risk_users"] == 4
+    assert weekly_summary["improving_users"] == 1
+    assert weekly_summary["top_issue_family"]["issue_family"] == "value_expression"
+    assert weekly_summary["top_issue_family"]["count"] == 2
+    assert weekly_summary["top_not_evaluable_reason"] == {
+        "reason": "INSUFFICIENT_TURN_DATA",
+        "count": 1,
+    }
+
+    assert operating_pack["cohort_issue_buckets"] == [
+        {
+            "issue_family": "value_expression",
+            "issue_type": "value_expression",
+            "issue_text": "价值表达还停留在产品功能。",
+            "count": 2,
+            "user_count": 2,
+            "department_count": 2,
+        },
+        {
+            "issue_family": "evidence_gap",
+            "issue_type": "evidence_gap",
+            "issue_text": "案例证据还不够扎实。",
+            "count": 2,
+            "user_count": 1,
+            "department_count": 1,
+        },
+        {
+            "issue_family": "structure_gap",
+            "issue_type": "structure_gap",
+            "issue_text": "结构还不完整，客户难以跟上。",
+            "count": 1,
+            "user_count": 1,
+            "department_count": 1,
+        },
+    ]
+
+    department_buckets = {
+        bucket["department"]: bucket for bucket in operating_pack["department_issue_buckets"]
+    }
+    assert department_buckets["North"]["session_count"] == 7
+    assert department_buckets["North"]["evaluable_sessions"] == 6
+    assert department_buckets["North"]["not_evaluable_sessions"] == 1
+    assert department_buckets["North"]["issue_buckets"] == [
+        {
+            "issue_family": "evidence_gap",
+            "issue_type": "evidence_gap",
+            "issue_text": "案例证据还不够扎实。",
+            "count": 2,
+            "user_count": 1,
+        },
+        {
+            "issue_family": "structure_gap",
+            "issue_type": "structure_gap",
+            "issue_text": "结构还不完整，客户难以跟上。",
+            "count": 1,
+            "user_count": 1,
+        },
+        {
+            "issue_family": "value_expression",
+            "issue_type": "value_translation_gap",
+            "issue_text": "ROI 证据没接到客户收益。",
+            "count": 1,
+            "user_count": 1,
+        },
+    ]
+    assert department_buckets["North"]["degradation_breakdown"] == {
+        "not_evaluable_reasons": [
+            {
+                "reason": "INSUFFICIENT_TURN_DATA",
+                "count": 1,
+            }
+        ],
+        "degraded_reasons": [
+            {
+                "reason": "message_scores",
+                "count": 1,
+            },
+            {
+                "reason": "stage_evidence",
+                "count": 1,
+            },
+        ],
+    }
+    assert department_buckets["South"]["issue_buckets"] == [
+        {
+            "issue_family": "value_expression",
+            "issue_type": "value_expression",
+            "issue_text": "价值表达还停留在产品功能。",
+            "count": 1,
+            "user_count": 1,
+        }
+    ]
+
+    assert operating_pack["repeated_blocker_families"] == [
+        {
+            "issue_family": "value_expression",
+            "issue_type": "value_expression",
+            "issue_text": "价值表达还停留在产品功能。",
+            "count": 2,
+            "user_count": 2,
+            "department_count": 2,
+        },
+        {
+            "issue_family": "evidence_gap",
+            "issue_type": "evidence_gap",
+            "issue_text": "案例证据还不够扎实。",
+            "count": 2,
+            "user_count": 1,
+            "department_count": 1,
+        },
+    ]
+
+    assert operating_pack["degradation_breakdown"] == {
+        "not_evaluable_reasons": [
+            {
+                "reason": "INSUFFICIENT_TURN_DATA",
+                "count": 1,
+            }
+        ],
+        "degraded_reasons": [
+            {
+                "reason": "message_scores",
+                "count": 1,
+            },
+            {
+                "reason": "stage_evidence",
+                "count": 1,
+            },
+        ],
+    }
+
+    manager_lists = operating_pack["manager_lists"]
+    assert [item["user_name"] for item in manager_lists["not_passed"]] == [
+        "South Risk",
+        "Degraded Evidence",
+        "North Risk",
+    ]
+    assert manager_lists["not_passed"][0]["issue_family"] == "value_expression"
+    assert manager_lists["not_passed"][1]["issue_family"] == "structure_gap"
+    assert manager_lists["not_passed"][2]["issue_family"] == "value_expression"
+    assert manager_lists["inactive_streak"][0]["user_name"] == "Inactive User"
+    assert manager_lists["inactive_streak"][0]["inactive_days"] >= 7
+    assert manager_lists["improving"] == [
+        {
+            "user_id": str(improving_user.user_id),
+            "user_name": "Improving User",
+            "department": "North",
+            "pass_gain": 100.0,
+            "baseline_pass_rate": 0.0,
+            "current_pass_rate": 100.0,
+        }
+    ]
