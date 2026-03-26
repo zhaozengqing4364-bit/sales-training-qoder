@@ -1,7 +1,7 @@
 {
   "mode": "stabilize",
-  "current_issue_id": "M005-S01-T03",
-  "current_issue_type": "task",
+  "current_issue_id": "M005-S01",
+  "current_issue_type": "slice",
   "current_issue_status": "done",
   "pending_issue_ids": [],
   "completed_issue_ids": [
@@ -81,25 +81,29 @@
     "M004-S05-T02",
     "M004-S05-T03",
     "M004-S05",
-    "M005-S01-T03"
+    "M005-S01-T03",
+    "M005-S01-T01",
+    "M005-S01-T02",
+    "M005-S01"
   ],
   "blocked_issue_ids": [],
   "deferred_issue_ids": [],
   "last_modified_files": [
-    "web/src/components/admin/manager-lite-panel.tsx",
-    "web/src/components/admin/manager-lite-panel.test.tsx",
-    "web/src/app/admin/users/[id]/page.tsx",
-    "web/src/app/admin/users/[id]/page.test.tsx",
-    "web/src/lib/api/types.ts",
-    ".gsd/milestones/M005/slices/S01/tasks/T03-SUMMARY.md",
+    ".gsd/milestones/M005/slices/S01/S01-SUMMARY.md",
+    ".gsd/milestones/M005/slices/S01/S01-UAT.md",
+    ".gsd/milestones/M005/M005-ROADMAP.md",
+    ".gsd/STATE.md",
+    ".gsd/PROJECT.md",
     ".codex/loop/state.json",
     ".codex/loop/log.md"
   ],
   "last_verification_commands": [
-    "cd web && npm test -- --run 'src/components/admin/manager-lite-panel.test.tsx' 'src/app/admin/users/[id]/page.test.tsx'"
+    "cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/common/test_admin_analytics_service.py tests/integration/test_admin_users_api.py tests/contract/test_analytics.py",
+    "cd web && pnpm dlx npm@11.6.1 test -- --run 'src/app/admin/analytics/page.test.tsx'",
+    "cd web && pnpm dlx npm@11.6.1 test -- --run 'src/components/admin/manager-lite-panel.test.tsx' 'src/app/admin/users/[id]/page.test.tsx'"
   ],
-  "last_verification_result": "Focused manager-lite and admin user drill-in Vitest passed (4 tests). Manager-lite now states that fail/improvement lists follow the unified evidence line, and the admin user detail page shows score basis plus evaluability counts with the aligned 查看统一报告 CTA.",
-  "last_success_signal": "Admin analytics, manager-lite, and the user drill-in now use the same unified evidence vocabulary for score meaning, evaluability, and report/reminder actions.",
+  "last_verification_result": "Fresh slice verification passed: backend admin analytics/user API/analytics contract suite (27 tests), admin analytics Vitest (2 tests), and manager-lite + admin user drill-in Vitest (4 tests).",
+  "last_success_signal": "Admin analytics, manager-lite, and user drill-in now stay on one projection-backed truth line for score basis, evaluability, issue family, next goal, and report CTA semantics.",
   "last_growth_scan": null,
-  "next_action": "Close slice M005/S01 or continue with the next planned M005 task using the aligned admin surfaces."
+  "next_action": "Reassess the M005 roadmap after S01, or start S02 on the now-aligned admin analytics and drill-in surfaces."
 }

@@ -1531,3 +1531,23 @@ Append one entry per iteration:
   verification results: passed; focused Vitest confirmed the manager-lite evidence copy, score-basis/evaluability summary on the user detail page, and the shared 查看统一报告 CTA wording.
   success signal status: admin analytics, manager-lite, and user drill-in now describe the same projection-backed truth line for scores, issue/evidence semantics, and reminder/report actions.
   rollback note: revert the manager-lite copy update, user detail evidence summary, and UserStatistics type extension together if a later slice replaces the admin evidence vocabulary with a new contract.
+
+- time: 2026-03-26T14:46:21+0800
+  mode: stabilize
+  item id: M005-S01
+  files changed:
+    - .gsd/milestones/M005/slices/S01/S01-SUMMARY.md
+    - .gsd/milestones/M005/slices/S01/S01-UAT.md
+    - .gsd/milestones/M005/M005-ROADMAP.md
+    - .gsd/STATE.md
+    - .gsd/PROJECT.md
+    - .codex/loop/state.json
+    - .codex/loop/log.md
+  summary: Closed S01 by re-running the full slice verification set, writing the slice summary/UAT, recording the current admin analytics and drill-in alignment on the project state, and marking the roadmap slice complete on the shared projection-backed evidence line.
+  verification commands:
+    - cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/common/test_admin_analytics_service.py tests/integration/test_admin_users_api.py tests/contract/test_analytics.py
+    - cd web && pnpm dlx npm@11.6.1 test -- --run 'src/app/admin/analytics/page.test.tsx'
+    - cd web && pnpm dlx npm@11.6.1 test -- --run 'src/components/admin/manager-lite-panel.test.tsx' 'src/app/admin/users/[id]/page.test.tsx'
+  verification results: passed; backend slice verification returned 27 green tests, the analytics page Vitest returned 2 green tests, and the manager-lite + admin user drill-in Vitest returned 4 green tests. The web runs used the documented pnpm/npm wrapper workaround because the global Volta npm wrapper is unstable in this environment.
+  success signal status: the current admin analytics page, manager-lite panel, and user drill-in now describe the same projection-backed score/evaluability/issue-family truth line as learner and supervisor report surfaces.
+  rollback note: if a later slice changes admin governance vocabulary again, keep HistoryService / SessionEvidenceService as the only score-bearing authority and preserve canonical /practice/{sessionId}/report deep-links instead of reviving route-local score math or a supervisor-only report surface.
