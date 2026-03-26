@@ -460,6 +460,7 @@ type PresentationListItem = {
     total_pages?: number;
     uploaded_by_admin_id: string;
     created_at: string;
+    governance_summary?: Record<string, unknown> | null;
 };
 
 type PresentationDetailItem = PresentationListItem & {
@@ -532,6 +533,7 @@ function normalizePresentationListItem(input: unknown): PresentationListItem {
         total_pages: totalPages,
         uploaded_by_admin_id: toStringValue(raw.uploaded_by_admin_id),
         created_at: toStringValue(raw.created_at, toStringValue(raw.upload_date)),
+        governance_summary: toRecord(raw.governance_summary),
     };
 }
 

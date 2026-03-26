@@ -1,4 +1,5 @@
 import { render, screen, waitFor } from "@testing-library/react";
+import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import AnalyticsPage from "./page";
@@ -12,6 +13,7 @@ const {
     remindFromManagerLiteMock,
     exportReportMock,
     getDashboardMock,
+    getSupportRuntimeFaultsMock,
 } = vi.hoisted(() => ({
     getOverviewMock: vi.fn(),
     getTrendsMock: vi.fn(),
@@ -21,6 +23,13 @@ const {
     remindFromManagerLiteMock: vi.fn(),
     exportReportMock: vi.fn(),
     getDashboardMock: vi.fn(),
+    getSupportRuntimeFaultsMock: vi.fn(),
+}));
+
+vi.mock("next/link", () => ({
+    default: ({ href, children }: { href: string; children: ReactNode }) => (
+        <a href={href}>{children}</a>
+    ),
 }));
 
 vi.mock("@/lib/api/client", async () => {
@@ -42,6 +51,10 @@ vi.mock("@/lib/api/client", async () => {
             analyticsOpen: {
                 ...actual.api.analyticsOpen,
                 getDashboard: getDashboardMock,
+            },
+            supportRuntime: {
+                ...actual.api.supportRuntime,
+                getFaults: getSupportRuntimeFaultsMock,
             },
         },
     };
@@ -79,6 +92,7 @@ describe("AnalyticsPage", () => {
         remindFromManagerLiteMock.mockReset();
         exportReportMock.mockReset();
         getDashboardMock.mockReset();
+        getSupportRuntimeFaultsMock.mockReset();
 
         remindFromManagerLiteMock.mockResolvedValue({ sent: true, reminder_id: "rem-1", user_id: "user-1" });
         exportReportMock.mockResolvedValue(undefined);
@@ -106,6 +120,39 @@ describe("AnalyticsPage", () => {
                 pass_rate_4step_structure: 75,
                 next_day_retry_rate: 41.7,
             },
+        });
+        getSupportRuntimeFaultsMock.mockResolvedValue({
+            generated_at: "2026-03-26T09:40:00Z",
+            items: [
+                {
+                    source: "session",
+                    severity: "blocking",
+                    kind: "kb_lock_blocked_search_failed",
+                    summary: "知识库锁定模式下检索失败，最近 3 个会话被阻断。",
+                    detected_at: "2026-03-26T09:30:00Z",
+                    session_id: "session-1",
+                    scenario_type: "sales",
+                    session_status: "completed",
+                    report_status: "completed",
+                    diagnostics: {
+                        linked_asset_changes: [
+                            {
+                                asset_type: "knowledge_base",
+                                asset_id: "kb-1",
+                                asset_name: "石犀产品知识库",
+                                admin_path: "/admin/knowledge",
+                                latest_change_label: "最近文档：竞品对比",
+                                change_count_7d: 2,
+                                impact_level: "high",
+                                health_status: "blocking",
+                            },
+                        ],
+                    },
+                },
+            ],
+            count: 1,
+            limit: 20,
+            severity: null,
         });
         getAgentsMock.mockResolvedValue({
             agent_stats: [],
@@ -247,6 +294,10 @@ describe("AnalyticsPage", () => {
         expect(screen.getByText("当前榜首：张三")).toBeTruthy();
         expect(screen.getByText("最近主问题：异议回应")).toBeTruthy();
         expect(screen.getByText("下一轮重点：下一步承诺")).toBeTruthy();
+        expect(screen.getByText("异常关联资产变更")).toBeTruthy();
+        expect(screen.getByText("知识库锁定模式下检索失败，最近 3 个会话被阻断。")).toBeTruthy();
+        expect(screen.getByRole("link", { name: "知识库 · 石犀产品知识库" }).getAttribute("href")).toBe("/admin/knowledge");
+        expect(screen.getByText(/最近文档：竞品对比/)).toBeTruthy();
     });
 
     it("keeps evidence-language placeholders visible when there is no stable repeated signal", async () => {
@@ -292,6 +343,13 @@ describe("AnalyticsPage", () => {
             },
         });
         getLeaderboardMock.mockResolvedValue({ leaderboard: [] });
+        getSupportRuntimeFaultsMock.mockResolvedValue({
+            generated_at: "2026-03-26T09:40:00Z",
+            items: [],
+            count: 0,
+            limit: 20,
+            severity: null,
+        });
 
         render(<AnalyticsPage />);
 
@@ -301,5 +359,6 @@ describe("AnalyticsPage", () => {
         expect(screen.getByText("当前时间范围内没有证据不足会话，所有已完成训练都纳入统一分数口径。")).toBeTruthy();
         expect(screen.getByText("当前时间范围内还没有形成稳定重复的下一轮重点。")).toBeTruthy();
         expect(screen.queryByText(/当前榜首：/)).toBeNull();
+        expect(screen.getByText("当前 blocking / warning 异常还没有指向最近资产变更。")).toBeTruthy();
     });
 });

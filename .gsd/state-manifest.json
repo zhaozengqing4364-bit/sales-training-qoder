@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "exported_at": "2026-03-26T08:40:26.105Z",
+  "exported_at": "2026-03-26T10:17:31.018Z",
   "milestones": [
     {
       "id": "M001",
@@ -2638,19 +2638,30 @@
       "milestone_id": "M005",
       "slice_id": "S03",
       "id": "T02",
-      "title": "Show governance context on the current admin asset pages",
-      "status": "pending",
-      "one_liner": "",
-      "narrative": "",
-      "verification_result": "",
+      "title": "Added in-place governance context to the existing admin asset pages and locked it down with a focused cross-page regression suite.",
+      "status": "complete",
+      "one_liner": "Added in-place governance context to the existing admin asset pages and locked it down with a focused cross-page regression suite.",
+      "narrative": "Kept the slice on the current admin surfaces instead of introducing any new governance page. The knowledge, persona, presentation, and voice-runtime pages now all rely on the shared governance overview/card components in the places operators already use to manage those assets. While wiring that through, I repaired partially-landed source in web/src/app/admin/personas/page.tsx and web/src/app/admin/voice-runtime/page.tsx, where duplicated trailing fragments were preventing the new asset-governance suite from compiling. I then added web/src/app/admin/asset-governance.test.tsx to verify that each page shows health anomalies, recent changes, and likely impact range from the runtime-backed summaries added in T01, and aligned shared admin persona typing with the payload the page now consumes.",
+      "verification_result": "Ran `cd web && npm test -- --run 'src/app/admin/asset-governance.test.tsx'` and confirmed all four admin asset pages render the governance overview plus inline impact/change/health summaries. Also checked LSP diagnostics for the touched web files and shared types; no TypeScript diagnostics remained.",
       "duration": "",
-      "completed_at": null,
+      "completed_at": "2026-03-26T09:37:37.390Z",
       "blocker_discovered": false,
-      "deviations": "",
-      "known_issues": "",
-      "key_files": [],
-      "key_decisions": [],
-      "full_summary_md": "",
+      "deviations": "Had to repair duplicated trailing source fragments in web/src/app/admin/personas/page.tsx and web/src/app/admin/voice-runtime/page.tsx before the planned UI verification could run. The task plan assumed those pages were already in a clean compilable state.",
+      "known_issues": "None.",
+      "key_files": [
+        "web/src/app/admin/knowledge/page.tsx",
+        "web/src/app/admin/personas/page.tsx",
+        "web/src/app/admin/presentations/page.tsx",
+        "web/src/app/admin/voice-runtime/page.tsx",
+        "web/src/app/admin/asset-governance.test.tsx",
+        "web/src/lib/api/types.ts",
+        ".gsd/KNOWLEDGE.md"
+      ],
+      "key_decisions": [
+        "Kept governance in the existing admin asset pages and verified the shared AssetGovernanceOverview / AssetGovernanceSummaryCard seam instead of inventing a new page-specific presentation layer.",
+        "Added one focused cross-page Vitest suite for knowledge, personas, presentations, and runtime so future regressions show up at the operator-facing surface."
+      ],
+      "full_summary_md": "---\nid: T02\nparent: S03\nmilestone: M005\nkey_files:\n  - web/src/app/admin/knowledge/page.tsx\n  - web/src/app/admin/personas/page.tsx\n  - web/src/app/admin/presentations/page.tsx\n  - web/src/app/admin/voice-runtime/page.tsx\n  - web/src/app/admin/asset-governance.test.tsx\n  - web/src/lib/api/types.ts\n  - .gsd/KNOWLEDGE.md\nkey_decisions:\n  - Kept governance in the existing admin asset pages and verified the shared AssetGovernanceOverview / AssetGovernanceSummaryCard seam instead of inventing a new page-specific presentation layer.\n  - Added one focused cross-page Vitest suite for knowledge, personas, presentations, and runtime so future regressions show up at the operator-facing surface.\nduration: \"\"\nverification_result: passed\ncompleted_at: 2026-03-26T09:37:37.391Z\nblocker_discovered: false\n---\n\n# T02: Added in-place governance context to the existing admin asset pages and locked it down with a focused cross-page regression suite.\n\n**Added in-place governance context to the existing admin asset pages and locked it down with a focused cross-page regression suite.**\n\n## What Happened\n\nKept the slice on the current admin surfaces instead of introducing any new governance page. The knowledge, persona, presentation, and voice-runtime pages now all rely on the shared governance overview/card components in the places operators already use to manage those assets. While wiring that through, I repaired partially-landed source in web/src/app/admin/personas/page.tsx and web/src/app/admin/voice-runtime/page.tsx, where duplicated trailing fragments were preventing the new asset-governance suite from compiling. I then added web/src/app/admin/asset-governance.test.tsx to verify that each page shows health anomalies, recent changes, and likely impact range from the runtime-backed summaries added in T01, and aligned shared admin persona typing with the payload the page now consumes.\n\n## Verification\n\nRan `cd web && npm test -- --run 'src/app/admin/asset-governance.test.tsx'` and confirmed all four admin asset pages render the governance overview plus inline impact/change/health summaries. Also checked LSP diagnostics for the touched web files and shared types; no TypeScript diagnostics remained.\n\n## Verification Evidence\n\n| # | Command | Exit Code | Verdict | Duration |\n|---|---------|-----------|---------|----------|\n| 1 | `cd web && npm test -- --run 'src/app/admin/asset-governance.test.tsx'` | 0 | ✅ pass | 851ms |\n\n\n## Deviations\n\nHad to repair duplicated trailing source fragments in web/src/app/admin/personas/page.tsx and web/src/app/admin/voice-runtime/page.tsx before the planned UI verification could run. The task plan assumed those pages were already in a clean compilable state.\n\n## Known Issues\n\nNone.\n\n## Files Created/Modified\n\n- `web/src/app/admin/knowledge/page.tsx`\n- `web/src/app/admin/personas/page.tsx`\n- `web/src/app/admin/presentations/page.tsx`\n- `web/src/app/admin/voice-runtime/page.tsx`\n- `web/src/app/admin/asset-governance.test.tsx`\n- `web/src/lib/api/types.ts`\n- `.gsd/KNOWLEDGE.md`\n",
       "description": "Surface the new governance data on the existing asset pages instead of introducing a new admin product. Update current knowledge/persona/presentation/voice-runtime pages so operators can see health anomalies, recent changes, and likely impact range where they already work.",
       "estimate": "90m",
       "files": [
@@ -2682,19 +2693,30 @@
       "milestone_id": "M005",
       "slice_id": "S03",
       "id": "T03",
-      "title": "Connect asset changes to current runtime/admin inspection surfaces",
-      "status": "pending",
-      "one_liner": "",
-      "narrative": "",
-      "verification_result": "",
+      "title": "Linked support/runtime anomaly changes into the current admin analytics and user-detail pages using fault-backed asset references instead of a new drill-in API.",
+      "status": "complete",
+      "one_liner": "Linked support/runtime anomaly changes into the current admin analytics and user-detail pages using fault-backed asset references instead of a new drill-in API.",
+      "narrative": "Extended `RuntimeStatusService` so support/runtime fault items can carry `linked_asset_changes` metadata for the knowledge, persona, presentation, and runtime-profile assets already implicated by the session. The service now reuses the same asset-governance inputs established earlier in S03, flattens recent-change metadata into support/runtime fault diagnostics, and keeps the linkage on the current runtime anomaly line instead of introducing another backend endpoint. On the frontend, the analytics page now loads the existing support/runtime faults feed alongside the current analytics data and renders a compact anomaly-linked asset-change section with direct links back to the current asset-management pages. The admin user-detail page now does the same at session-row level: when a learner session is tied to a recent asset change, the unified-report preview cell surfaces the current runtime anomaly plus direct links back to the implicated asset page. I also repaired the focused support-runtime unit fixture so direct `RuntimeSessionRecord` construction continues to pass the dataclass’s required `voice_policy_snapshot` field, then recorded that gotcha in `.gsd/KNOWLEDGE.md`.",
+      "verification_result": "Ran the slice-required focused web regression for `admin/analytics` and `admin/users/[id]` and confirmed the new anomaly-linked asset-change surfaces render on both pages. Then ran the existing focused support-runtime service unit suite to confirm the backend payload-builder still classifies release-health anomalies correctly after adding `linked_asset_changes`. I also gave `backend/src/support/services/runtime_status_service.py` a direct `py_compile` syntax check.",
       "duration": "",
-      "completed_at": null,
+      "completed_at": "2026-03-26T10:17:30.970Z",
       "blocker_discovered": false,
-      "deviations": "",
-      "known_issues": "",
-      "key_files": [],
-      "key_decisions": [],
-      "full_summary_md": "",
+      "deviations": "Added one focused backend unit-fixture fix in `backend/tests/unit/test_support_runtime_service.py` even though the task plan only listed the three production files, because the new support/runtime payload seam was already covered there and the stale fixture made the verification signal unusable.",
+      "known_issues": "A browser spot-check was attempted, but the only live local web server on `127.0.0.1:3000` was not this repository’s app and returned a 404 for `/admin/analytics`; no repo-specific admin browser surface was available on the expected local ports during this task.",
+      "key_files": [
+        "backend/src/support/services/runtime_status_service.py",
+        "web/src/app/admin/analytics/page.tsx",
+        "web/src/app/admin/users/[id]/page.tsx",
+        "web/src/app/admin/analytics/page.test.tsx",
+        "web/src/app/admin/users/[id]/page.test.tsx",
+        "backend/tests/unit/test_support_runtime_service.py",
+        ".gsd/KNOWLEDGE.md",
+        ".gsd/milestones/M005/slices/S03/tasks/T03-SUMMARY.md"
+      ],
+      "key_decisions": [
+        "Reused support/runtime fault diagnostics as the single seam for anomaly-linked asset changes, then rendered that seam on analytics and user-detail pages instead of creating a new governance drill-in API."
+      ],
+      "full_summary_md": "---\nid: T03\nparent: S03\nmilestone: M005\nkey_files:\n  - backend/src/support/services/runtime_status_service.py\n  - web/src/app/admin/analytics/page.tsx\n  - web/src/app/admin/users/[id]/page.tsx\n  - web/src/app/admin/analytics/page.test.tsx\n  - web/src/app/admin/users/[id]/page.test.tsx\n  - backend/tests/unit/test_support_runtime_service.py\n  - .gsd/KNOWLEDGE.md\n  - .gsd/milestones/M005/slices/S03/tasks/T03-SUMMARY.md\nkey_decisions:\n  - Reused support/runtime fault diagnostics as the single seam for anomaly-linked asset changes, then rendered that seam on analytics and user-detail pages instead of creating a new governance drill-in API.\nduration: \"\"\nverification_result: passed\ncompleted_at: 2026-03-26T10:17:30.979Z\nblocker_discovered: false\n---\n\n# T03: Linked support/runtime anomaly changes into the current admin analytics and user-detail pages using fault-backed asset references instead of a new drill-in API.\n\n**Linked support/runtime anomaly changes into the current admin analytics and user-detail pages using fault-backed asset references instead of a new drill-in API.**\n\n## What Happened\n\nExtended `RuntimeStatusService` so support/runtime fault items can carry `linked_asset_changes` metadata for the knowledge, persona, presentation, and runtime-profile assets already implicated by the session. The service now reuses the same asset-governance inputs established earlier in S03, flattens recent-change metadata into support/runtime fault diagnostics, and keeps the linkage on the current runtime anomaly line instead of introducing another backend endpoint. On the frontend, the analytics page now loads the existing support/runtime faults feed alongside the current analytics data and renders a compact anomaly-linked asset-change section with direct links back to the current asset-management pages. The admin user-detail page now does the same at session-row level: when a learner session is tied to a recent asset change, the unified-report preview cell surfaces the current runtime anomaly plus direct links back to the implicated asset page. I also repaired the focused support-runtime unit fixture so direct `RuntimeSessionRecord` construction continues to pass the dataclass’s required `voice_policy_snapshot` field, then recorded that gotcha in `.gsd/KNOWLEDGE.md`.\n\n## Verification\n\nRan the slice-required focused web regression for `admin/analytics` and `admin/users/[id]` and confirmed the new anomaly-linked asset-change surfaces render on both pages. Then ran the existing focused support-runtime service unit suite to confirm the backend payload-builder still classifies release-health anomalies correctly after adding `linked_asset_changes`. I also gave `backend/src/support/services/runtime_status_service.py` a direct `py_compile` syntax check.\n\n## Verification Evidence\n\n| # | Command | Exit Code | Verdict | Duration |\n|---|---------|-----------|---------|----------|\n| 1 | `cd web && npm test -- --run 'src/app/admin/analytics/page.test.tsx' 'src/app/admin/users/[id]/page.test.tsx'` | 0 | ✅ pass | 1120ms |\n| 2 | `cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_support_runtime_service.py` | 0 | ✅ pass | 3660ms |\n| 3 | `python3 -m py_compile backend/src/support/services/runtime_status_service.py` | 0 | ✅ pass | 100ms |\n\n\n## Deviations\n\nAdded one focused backend unit-fixture fix in `backend/tests/unit/test_support_runtime_service.py` even though the task plan only listed the three production files, because the new support/runtime payload seam was already covered there and the stale fixture made the verification signal unusable.\n\n## Known Issues\n\nA browser spot-check was attempted, but the only live local web server on `127.0.0.1:3000` was not this repository’s app and returned a 404 for `/admin/analytics`; no repo-specific admin browser surface was available on the expected local ports during this task.\n\n## Files Created/Modified\n\n- `backend/src/support/services/runtime_status_service.py`\n- `web/src/app/admin/analytics/page.tsx`\n- `web/src/app/admin/users/[id]/page.tsx`\n- `web/src/app/admin/analytics/page.test.tsx`\n- `web/src/app/admin/users/[id]/page.test.tsx`\n- `backend/tests/unit/test_support_runtime_service.py`\n- `.gsd/KNOWLEDGE.md`\n- `.gsd/milestones/M005/slices/S03/tasks/T03-SUMMARY.md`\n",
       "description": "Tie the asset-governance views back to existing support/runtime and admin drill-in surfaces so rising anomalies can reference recent changes without operators leaving the current chain. Keep the linkage minimal and evidence-based.",
       "estimate": "75m",
       "files": [
@@ -3892,6 +3914,18 @@
       "revisable": "Yes",
       "made_by": "agent",
       "superseded_by": null
+    },
+    {
+      "seq": 1438,
+      "id": "D079",
+      "when_context": "M005/S03/T03",
+      "scope": "architecture",
+      "decision": "How to expose asset-governance change context on existing analytics and user-detail inspection surfaces",
+      "choice": "Attach linked_asset_changes references to support/runtime fault diagnostics and render those references directly on the current analytics and user-detail pages instead of creating a new drill-in API.",
+      "rationale": "The support/runtime fault line already carries the canonical anomaly context. Extending that payload with recent asset-change references keeps the linkage evidence-based, lets analytics and user drill-ins stay on their current data chain, and avoids adding another admin surface or parallel governance endpoint.",
+      "revisable": "Yes",
+      "made_by": "agent",
+      "superseded_by": null
     }
   ],
   "verification_evidence": [
@@ -4895,6 +4929,50 @@
       "verdict": "✅ pass",
       "duration_ms": 4720,
       "created_at": "2026-03-26T08:40:26.083Z"
+    },
+    {
+      "id": 92,
+      "task_id": "T02",
+      "slice_id": "S03",
+      "milestone_id": "M005",
+      "command": "cd web && npm test -- --run 'src/app/admin/asset-governance.test.tsx'",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 851,
+      "created_at": "2026-03-26T09:37:37.391Z"
+    },
+    {
+      "id": 93,
+      "task_id": "T03",
+      "slice_id": "S03",
+      "milestone_id": "M005",
+      "command": "cd web && npm test -- --run 'src/app/admin/analytics/page.test.tsx' 'src/app/admin/users/[id]/page.test.tsx'",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 1120,
+      "created_at": "2026-03-26T10:17:30.970Z"
+    },
+    {
+      "id": 94,
+      "task_id": "T03",
+      "slice_id": "S03",
+      "milestone_id": "M005",
+      "command": "cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_support_runtime_service.py",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 3660,
+      "created_at": "2026-03-26T10:17:30.971Z"
+    },
+    {
+      "id": 95,
+      "task_id": "T03",
+      "slice_id": "S03",
+      "milestone_id": "M005",
+      "command": "python3 -m py_compile backend/src/support/services/runtime_status_service.py",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 100,
+      "created_at": "2026-03-26T10:17:30.971Z"
     }
   ]
 }

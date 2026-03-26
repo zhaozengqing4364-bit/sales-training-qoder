@@ -1,14 +1,17 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
+import { Search, Filter, Plus, Star, Edit2, Trash2, AlertCircle, RefreshCcw, Power } from "lucide-react";
+
 import { api } from "@/lib/api/client";
 import { AdminPersona, AdminPersonaPolicyHealthReport } from "@/lib/api/types";
+import { AssetGovernanceOverview, AssetGovernanceSummaryCard, type AssetGovernanceSummary } from "@/components/admin/asset-governance";
 import { GlassCard } from "@/components/ui/glass-card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/components/ui/toast";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
-import { Search, Filter, Plus, Star, Edit2, Trash2, AlertCircle, RefreshCcw, Power } from "lucide-react";
 import {
     Dialog,
     DialogContent,
@@ -18,10 +21,7 @@ import {
     DialogTitle,
     DialogTrigger,
 } from "@/components/ui/glass-modal";
-import {
-    MobileTableCard
-} from "@/components/ui/mobile-table-card";
-import Link from "next/link";
+import { MobileTableCard } from "@/components/ui/mobile-table-card";
 
 // Difficulty to stars mapping
 const difficultyToStars = (difficulty: string): number => {
@@ -70,9 +70,13 @@ const policyIssueBadgeVariant = (issueType: string): "red" | "orange" | "seconda
     return "secondary";
 };
 
+type PersonaWithGovernance = AdminPersona & {
+    governance_summary?: AssetGovernanceSummary | null;
+};
+
 export default function PersonasPage() {
     const toast = useToast();
-    const [personas, setPersonas] = useState<AdminPersona[]>([]);
+    const [personas, setPersonas] = useState<PersonaWithGovernance[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
 
@@ -96,7 +100,7 @@ export default function PersonasPage() {
     });
 
     // Delete confirm dialog
-    const [deleteTarget, setDeleteTarget] = useState<AdminPersona | null>(null);
+    const [deleteTarget, setDeleteTarget] = useState<PersonaWithGovernance | null>(null);
     const [isDeleting, setIsDeleting] = useState(false);
     const [statusUpdatingId, setStatusUpdatingId] = useState<string | null>(null);
 
@@ -118,7 +122,7 @@ export default function PersonasPage() {
                 throw personasResult.reason;
             }
 
-            setPersonas(personasResult.value.items || []);
+            setPersonas((personasResult.value.items || []) as PersonaWithGovernance[]);
             setTotal(personasResult.value.total || 0);
 
             if (policyHealthResult.status === "fulfilled") {
@@ -200,7 +204,7 @@ export default function PersonasPage() {
         }
     };
 
-    const handleToggleStatus = async (persona: AdminPersona) => {
+    const handleToggleStatus = async (persona: PersonaWithGovernance) => {
         const currentStatus = normalizePersonaStatus(persona.status);
         const nextStatus = currentStatus === "active" ? "inactive" : "active";
 
@@ -436,6 +440,10 @@ export default function PersonasPage() {
                 </GlassCard>
             )}
 
+            {!isLoading && !error && (
+                <AssetGovernanceOverview assetLabel="角色" items={personas} />
+            )}
+
             {/* Personas Table */}
             {!isLoading && !error && (
                 <GlassCard className="overflow-hidden">
@@ -512,7 +520,10 @@ export default function PersonasPage() {
                                 }
                                 className="relative"
                             >
-                                <div className="text-xs text-slate-500 pt-2">{p.description}</div>
+                                <div className="space-y-3 pt-2">
+                                    <div className="text-xs text-slate-500">{p.description}</div>
+                                    <AssetGovernanceSummaryCard summary={p.governance_summary} />
+                                </div>
                             </MobileTableCard>
                         ))}
                     </div>
@@ -529,6 +540,7 @@ export default function PersonasPage() {
                                         <th className="px-6 py-4">描述</th>
                                         <th className="px-6 py-4">类型</th>
                                         <th className="px-6 py-4">压力模型审计</th>
+                                        <th className="px-6 py-4 min-w-[22rem]">治理上下文</th>
                                         <th className="px-6 py-4">难度</th>
                                         <th className="px-6 py-4">状态</th>
                                         <th className="px-6 py-4 text-right">操作</th>
@@ -570,6 +582,9 @@ export default function PersonasPage() {
                                                         </div>
                                                     );
                                                 })()}
+                                            </td>
+                                            <td className="px-6 py-4 align-top">
+                                                <AssetGovernanceSummaryCard summary={p.governance_summary} className="min-w-[20rem]" />
                                             </td>
                                             <td className="px-6 py-4">
                                                 <div className="flex items-center">

@@ -13,6 +13,7 @@ const {
     listManagerInterventionsMock,
     createManagerInterventionMock,
     remindManagerInterventionMock,
+    getSupportRuntimeFaultsMock,
 } = vi.hoisted(() => ({
     pushMock: vi.fn(),
     useSearchParamsMock: vi.fn(),
@@ -22,6 +23,7 @@ const {
     listManagerInterventionsMock: vi.fn(),
     createManagerInterventionMock: vi.fn(),
     remindManagerInterventionMock: vi.fn(),
+    getSupportRuntimeFaultsMock: vi.fn(),
 }));
 
 vi.mock("next/navigation", () => ({
@@ -66,6 +68,10 @@ vi.mock("@/lib/api/client", async () => {
                 listManagerInterventions: listManagerInterventionsMock,
                 createManagerIntervention: createManagerInterventionMock,
                 remindManagerIntervention: remindManagerInterventionMock,
+            },
+            supportRuntime: {
+                ...actual.api.supportRuntime,
+                getFaults: getSupportRuntimeFaultsMock,
             },
         },
     };
@@ -290,12 +296,46 @@ describe("UserDetailPage", () => {
         listManagerInterventionsMock.mockReset();
         createManagerInterventionMock.mockReset();
         remindManagerInterventionMock.mockReset();
+        getSupportRuntimeFaultsMock.mockReset();
 
         useSearchParamsMock.mockReturnValue(new URLSearchParams());
         getUserStatsMock.mockResolvedValue(baseStatsResponse);
         getUserSessionsMock.mockResolvedValue(baseSessionsResponse as any);
         getUserProgressMock.mockResolvedValue(richProgressResponse as any);
         listManagerInterventionsMock.mockResolvedValue(baseInterventionsResponse as any);
+        getSupportRuntimeFaultsMock.mockResolvedValue({
+            generated_at: "2026-03-26T09:40:00Z",
+            items: [
+                {
+                    source: "session",
+                    severity: "blocking",
+                    kind: "kb_lock_blocked_search_failed",
+                    summary: "知识库锁定模式下检索失败，最近 3 个会话被阻断。",
+                    detected_at: "2026-03-26T09:30:00Z",
+                    session_id: "session-1",
+                    scenario_type: "sales",
+                    session_status: "completed",
+                    report_status: "completed",
+                    diagnostics: {
+                        linked_asset_changes: [
+                            {
+                                asset_type: "knowledge_base",
+                                asset_id: "kb-1",
+                                asset_name: "石犀产品知识库",
+                                admin_path: "/admin/knowledge",
+                                latest_change_label: "最近文档：竞品对比",
+                                change_count_7d: 2,
+                                impact_level: "high",
+                                health_status: "blocking",
+                            },
+                        ],
+                    },
+                },
+            ],
+            count: 1,
+            limit: 100,
+            severity: null,
+        });
         createManagerInterventionMock.mockResolvedValue({
             intervention_id: "intervention-2",
             manager_user_id: "admin-1",
@@ -336,6 +376,9 @@ describe("UserDetailPage", () => {
         expect(screen.getByText(/已完成训练里有 1 次仍证据不足/)).toBeTruthy();
         expect(screen.getByText("最近多次训练仍卡在同一重点且没有改善，建议切换训练重点或训练方法。"))
             .toBeTruthy();
+        expect(screen.getByText("最近运行异常：知识库锁定模式下检索失败，最近 3 个会话被阻断。")).toBeTruthy();
+        expect(screen.getByRole("link", { name: "知识库 · 石犀产品知识库" }).getAttribute("href")).toBe("/admin/knowledge");
+        expect(screen.getByText(/最近文档：竞品对比/)).toBeTruthy();
 
         const reportLink = screen.getByRole("link", { name: "查看统一报告" }) as HTMLAnchorElement;
         expect(reportLink.getAttribute("href")).toBe("/practice/session-1/report");

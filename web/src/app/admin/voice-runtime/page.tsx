@@ -1,13 +1,15 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { Loader2, Plus, Save, Trash2, RefreshCw, Sparkles } from "lucide-react";
+
+import { AssetGovernanceOverview, AssetGovernanceSummaryCard, type AssetGovernanceSummary } from "@/components/admin/asset-governance";
 import { GlassCard } from "@/components/ui/glass-card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/components/ui/toast";
 import { api } from "@/lib/api/client";
-import { Loader2, Plus, Save, Trash2, RefreshCw, Sparkles } from "lucide-react";
 
 type VoiceMode = "legacy" | "stepfun_realtime";
 
@@ -25,6 +27,7 @@ interface RuntimeProfile {
     output_audio_format: string;
     output_sample_rate: number;
     turn_detection?: string | null;
+    governance_summary?: AssetGovernanceSummary | null;
     tool_policy: {
         kb_lock_mode?: "strict_audit" | "coach_mode";
         max_questions_per_turn?: number;
@@ -46,6 +49,8 @@ interface RuntimeProfile {
         }>;
     };
 }
+
+type RuntimeProfileWithGovernance = RuntimeProfile;
 
 const ALLOWED_RUNTIME_TOOL_POLICY_KEYS = [
     "kb_lock_mode",
@@ -123,6 +128,15 @@ function parseLexiconFromEditor(value: string) {
     }).filter((item) => item.canonical_term && item.aliases.length > 0);
 }
 
+function toEditableRuntimeProfile(profile: RuntimeProfileWithGovernance): Omit<RuntimeProfile, "id"> {
+    const { id: _id, ...rest } = profile;
+    return {
+        ...EMPTY_FORM,
+        ...rest,
+        tool_policy: sanitizeRuntimeToolPolicy(profile.tool_policy as Record<string, unknown>),
+    };
+}
+
 const EMPTY_FORM: Omit<RuntimeProfile, "id"> = {
     name: "",
     description: "",
@@ -143,7 +157,7 @@ export default function VoiceRuntimePage() {
     const toast = useToast();
     const [isLoading, setIsLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
-    const [profiles, setProfiles] = useState<RuntimeProfile[]>([]);
+    const [profiles, setProfiles] = useState<RuntimeProfileWithGovernance[]>([]);
     const [selectedProfileId, setSelectedProfileId] = useState<string | null>(null);
     const [form, setForm] = useState<Omit<RuntimeProfile, "id">>(EMPTY_FORM);
     const [lexiconDraft, setLexiconDraft] = useState<string>(
@@ -159,10 +173,10 @@ export default function VoiceRuntimePage() {
         setIsLoading(true);
         try {
             const response = await api.admin.getVoiceRuntimeProfiles();
-            setProfiles(response.items as RuntimeProfile[]);
+            setProfiles(response.items as RuntimeProfileWithGovernance[]);
             if (response.items.length > 0) {
-                const defaultProfile = (response.items as RuntimeProfile[]).find((profile) => profile.is_default);
-                const initial = defaultProfile || (response.items as RuntimeProfile[])[0];
+                const defaultProfile = (response.items as RuntimeProfileWithGovernance[]).find((profile) => profile.is_default);
+                const initial = defaultProfile || (response.items as RuntimeProfileWithGovernance[])[0];
                 setSelectedProfileId(initial.id);
                 const sanitizedToolPolicy = sanitizeRuntimeToolPolicy(initial.tool_policy as Record<string, unknown>);
                 setForm({
@@ -189,12 +203,13 @@ export default function VoiceRuntimePage() {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
-    const selectProfile = (profile: RuntimeProfile) => {
+    const selectProfile = (profile: RuntimeProfileWithGovernance) => {
         setSelectedProfileId(profile.id);
-        const sanitizedToolPolicy = sanitizeRuntimeToolPolicy(profile.tool_policy as Record<string, unknown>);
+        const editableProfile = toEditableRuntimeProfile(profile);
+        const sanitizedToolPolicy = sanitizeRuntimeToolPolicy(editableProfile.tool_policy as Record<string, unknown>);
         setForm({
             ...EMPTY_FORM,
-            ...profile,
+            ...editableProfile,
             tool_policy: sanitizedToolPolicy,
         });
         setLexiconDraft(formatLexiconForEditor(sanitizedToolPolicy.transcript_normalization_lexicon));
@@ -275,6 +290,8 @@ export default function VoiceRuntimePage() {
                 </div>
             </div>
 
+            <AssetGovernanceOverview assetLabel="运行时配置" items={profiles} />
+
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 <GlassCard className="p-4 lg:col-span-1">
                     <div className="text-sm font-bold text-slate-700 mb-3">配置列表</div>
@@ -293,11 +310,10 @@ export default function VoiceRuntimePage() {
                                         key={profile.id}
                                         type="button"
                                         onClick={() => selectProfile(profile)}
-                                        className={`w-full text-left rounded-xl border p-3 transition-all ${
-                                            active
+                                        className={`w-full text-left rounded-xl border p-3 transition-all ${active
                                                 ? "border-indigo-400 bg-indigo-50/60"
                                                 : "border-slate-200 bg-white hover:border-slate-300"
-                                        }`}
+                                            }`}
                                     >
                                         <div className="flex items-center justify-between">
                                             <div className="font-semibold text-slate-800 text-sm truncate">{profile.name}</div>
@@ -314,6 +330,7 @@ export default function VoiceRuntimePage() {
                                         <div className="text-xs text-slate-500 mt-1 truncate">
                                             {profile.model_name} · {profile.voice_name}
                                         </div>
+                                        <AssetGovernanceSummaryCard summary={profile.governance_summary} className="mt-3" />
                                     </button>
                                 );
                             })}
@@ -322,6 +339,22 @@ export default function VoiceRuntimePage() {
                 </GlassCard>
 
                 <GlassCard className="p-6 lg:col-span-2">
+                    <div className="mb-6 space-y-3">
+                        <div>
+                            <h2 className="text-sm font-bold text-slate-900">当前治理上下文</h2>
+                            <p className="text-xs text-slate-500">
+                                先看这份运行时配置最近影响了多少会话、是否刚改过，以及当前有没有 blocking / warning 异常，再决定是否继续编辑参数。
+                            </p>
+                        </div>
+                        {selectedProfile ? (
+                            <AssetGovernanceSummaryCard summary={selectedProfile.governance_summary} />
+                        ) : (
+                            <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50/70 px-4 py-3 text-xs text-slate-500">
+                                新配置尚未生成治理上下文。保存并被真实会话使用后，这里会开始聚合影响范围、最近变更和异常样本。
+                            </div>
+                        )}
+                    </div>
+
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div className="space-y-2 md:col-span-2">
                             <label className="text-xs font-bold text-slate-500 uppercase">配置名称</label>

@@ -12,13 +12,15 @@ from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from agent.models import Persona, VoiceRuntimeProfile
 from common.conversation.models import ConversationMessage
 from common.conversation.runtime_diagnostics import (
     build_session_runtime_diagnostics,
     extract_voice_policy_snapshot,
 )
 from common.conversation.session_evidence import SessionEvidenceService
-from common.db.models import PracticeSession, SystemLog
+from common.db.models import PracticeSession, Presentation, SystemLog
+from common.knowledge.models import KnowledgeBase, KnowledgeDocument
 from common.monitoring.logger import get_logger
 from presentation_coach.services.presentation_report_service import (
     PresentationReportService,
@@ -72,6 +74,7 @@ class RuntimeStatusService:
             limit=limit,
             severity=severity,
             supplemental_logs=snapshot["supplemental_logs"],
+            asset_change_refs_by_session=snapshot.get("asset_change_refs_by_session"),
         )
 
     async def build_asset_governance_indexes(
@@ -80,65 +83,11 @@ class RuntimeStatusService:
         window_hours: int = 24 * 7,
     ) -> dict[str, dict[str, dict[str, Any]]]:
         snapshot = await self._build_release_health_snapshot(window_hours=window_hours)
-        records = snapshot["records"]
-        now = snapshot["now"]
-        typed_fault_items = self._build_fault_items(records, now=now)
-        faults_by_session: dict[str, list[dict[str, Any]]] = {}
-        for item in typed_fault_items:
-            session_id = str(item.get("session_id") or "").strip()
-            if not session_id:
-                continue
-            faults_by_session.setdefault(session_id, []).append(item)
-
-        indexes: dict[str, dict[str, dict[str, Any]]] = {
-            "knowledge_base": {},
-            "persona": {},
-            "presentation": {},
-            "runtime_profile": {},
-        }
-
-        for record in records:
-            session = record.session
-            session_id = str(getattr(session, "session_id", "") or "").strip()
-            fault_items = faults_by_session.get(session_id, [])
-            started_at = self._coerce_datetime(getattr(session, "start_time", None))
-            activity_at = self._coerce_datetime(getattr(session, "end_time", None)) or started_at
-            in_window = self._started_in_window(session, now=now, window_hours=window_hours)
-            is_active = str(getattr(session, "status", "") or "") in (
-                ACTIVE_SESSION_STATUSES | {TERMINAL_SCORING_STATUS}
-            )
-            user_id = str(getattr(session, "user_id", "") or "").strip() or None
-
-            for asset_type, asset_id in self._iter_asset_refs(record):
-                asset_entry = indexes[asset_type].setdefault(
-                    asset_id,
-                    {
-                        "recent_session_count": 0,
-                        "active_session_count": 0,
-                        "impacted_user_ids": set(),
-                        "started_at_values": [],
-                        "last_session_at": None,
-                        "fault_items": [],
-                    },
-                )
-
-                if in_window:
-                    asset_entry["recent_session_count"] += 1
-                if is_active:
-                    asset_entry["active_session_count"] += 1
-                if user_id:
-                    asset_entry["impacted_user_ids"].add(user_id)
-                if started_at is not None:
-                    asset_entry["started_at_values"].append(started_at)
-                if activity_at is not None and (
-                    asset_entry["last_session_at"] is None
-                    or activity_at > asset_entry["last_session_at"]
-                ):
-                    asset_entry["last_session_at"] = activity_at
-                if fault_items:
-                    asset_entry["fault_items"].extend(fault_items)
-
-        return indexes
+        return self._build_asset_governance_indexes_from_records(
+            snapshot["records"],
+            now=snapshot["now"],
+            window_hours=window_hours,
+        )
 
     @classmethod
     def build_asset_governance_summary(
@@ -218,6 +167,293 @@ class RuntimeStatusService:
             },
         }
 
+    @classmethod
+    def _build_asset_governance_indexes_from_records(
+        cls,
+        records: list[RuntimeSessionRecord],
+        *,
+        now: datetime,
+        window_hours: int,
+    ) -> dict[str, dict[str, dict[str, Any]]]:
+        typed_fault_items = cls._build_fault_items(records, now=now)
+        faults_by_session: dict[str, list[dict[str, Any]]] = {}
+        for item in typed_fault_items:
+            session_id = str(item.get("session_id") or "").strip()
+            if not session_id:
+                continue
+            faults_by_session.setdefault(session_id, []).append(item)
+
+        indexes: dict[str, dict[str, dict[str, Any]]] = {
+            "knowledge_base": {},
+            "persona": {},
+            "presentation": {},
+            "runtime_profile": {},
+        }
+
+        for record in records:
+            session = record.session
+            session_id = str(getattr(session, "session_id", "") or "").strip()
+            fault_items = faults_by_session.get(session_id, [])
+            started_at = cls._coerce_datetime(getattr(session, "start_time", None))
+            activity_at = cls._coerce_datetime(getattr(session, "end_time", None)) or started_at
+            in_window = cls._started_in_window(session, now=now, window_hours=window_hours)
+            is_active = str(getattr(session, "status", "") or "") in (
+                ACTIVE_SESSION_STATUSES | {TERMINAL_SCORING_STATUS}
+            )
+            user_id = str(getattr(session, "user_id", "") or "").strip() or None
+
+            for asset_type, asset_id in cls._iter_asset_refs(record):
+                asset_entry = indexes[asset_type].setdefault(
+                    asset_id,
+                    {
+                        "recent_session_count": 0,
+                        "active_session_count": 0,
+                        "impacted_user_ids": set(),
+                        "started_at_values": [],
+                        "last_session_at": None,
+                        "fault_items": [],
+                    },
+                )
+
+                if in_window:
+                    asset_entry["recent_session_count"] += 1
+                if is_active:
+                    asset_entry["active_session_count"] += 1
+                if user_id:
+                    asset_entry["impacted_user_ids"].add(user_id)
+                if started_at is not None:
+                    asset_entry["started_at_values"].append(started_at)
+                if activity_at is not None and (
+                    asset_entry["last_session_at"] is None
+                    or activity_at > asset_entry["last_session_at"]
+                ):
+                    asset_entry["last_session_at"] = activity_at
+                if fault_items:
+                    asset_entry["fault_items"].extend(fault_items)
+
+        return indexes
+
+    async def _build_asset_change_refs_by_session(
+        self,
+        *,
+        records: list[RuntimeSessionRecord],
+        governance_indexes: dict[str, dict[str, dict[str, Any]]],
+        now: datetime,
+    ) -> dict[str, list[dict[str, Any]]]:
+        asset_ids: dict[str, set[str]] = {
+            "knowledge_base": set(),
+            "persona": set(),
+            "presentation": set(),
+            "runtime_profile": set(),
+        }
+        for record in records:
+            for asset_type, asset_id in self._iter_asset_refs(record):
+                asset_ids[asset_type].add(asset_id)
+
+        refs_by_asset: dict[tuple[str, str], dict[str, Any]] = {}
+        seven_days_ago = now - timedelta(days=7)
+
+        if asset_ids["knowledge_base"]:
+            kb_result = await self.db.execute(
+                select(KnowledgeBase).where(KnowledgeBase.id.in_(tuple(asset_ids["knowledge_base"])))
+            )
+            doc_result = await self.db.execute(
+                select(KnowledgeDocument).where(
+                    KnowledgeDocument.knowledge_base_id.in_(tuple(asset_ids["knowledge_base"]))
+                )
+            )
+            docs_by_kb: dict[str, list[KnowledgeDocument]] = {}
+            for document in doc_result.scalars().all():
+                docs_by_kb.setdefault(str(document.knowledge_base_id), []).append(document)
+
+            for kb in kb_result.scalars().all():
+                kb_id = str(kb.id)
+                documents = docs_by_kb.get(kb_id, [])
+                kb_updated_at = self._coerce_datetime(getattr(kb, "updated_at", None))
+                latest_document = max(
+                    documents,
+                    key=lambda document: self._coerce_datetime(document.created_at)
+                    or datetime.min.replace(tzinfo=UTC),
+                    default=None,
+                )
+                latest_document_created_at = (
+                    self._coerce_datetime(latest_document.created_at)
+                    if latest_document is not None
+                    else None
+                )
+                last_changed_at = kb_updated_at
+                latest_change_type = "knowledge_base_updated"
+                latest_change_label = "知识库配置更新"
+                if (
+                    latest_document is not None
+                    and latest_document_created_at is not None
+                    and (kb_updated_at is None or latest_document_created_at >= kb_updated_at)
+                ):
+                    last_changed_at = latest_document_created_at
+                    latest_change_type = "document_uploaded"
+                    latest_change_label = f"最近文档：{latest_document.title}"
+
+                change_count_7d = sum(
+                    1
+                    for document in documents
+                    if (self._coerce_datetime(document.created_at) or datetime.min.replace(tzinfo=UTC))
+                    >= seven_days_ago
+                )
+                if kb_updated_at is not None and kb_updated_at >= seven_days_ago:
+                    change_count_7d += 1
+
+                ref = self._build_asset_change_ref(
+                    asset_type="knowledge_base",
+                    asset_id=kb_id,
+                    asset_name=str(getattr(kb, "name", "") or "知识库"),
+                    governance_summary=self.build_asset_governance_summary(
+                        governance_indexes.get("knowledge_base", {}).get(kb_id),
+                        last_changed_at=last_changed_at,
+                        latest_change_type=latest_change_type,
+                        latest_change_label=latest_change_label,
+                        change_count_7d=change_count_7d,
+                    ),
+                )
+                if ref is not None:
+                    refs_by_asset[("knowledge_base", kb_id)] = ref
+
+        if asset_ids["persona"]:
+            persona_result = await self.db.execute(
+                select(Persona).where(Persona.id.in_(tuple(asset_ids["persona"])))
+            )
+            for persona in persona_result.scalars().all():
+                persona_id = str(persona.id)
+                updated_at = self._coerce_datetime(getattr(persona, "updated_at", None))
+                ref = self._build_asset_change_ref(
+                    asset_type="persona",
+                    asset_id=persona_id,
+                    asset_name=str(getattr(persona, "name", "") or "角色"),
+                    governance_summary=self.build_asset_governance_summary(
+                        governance_indexes.get("persona", {}).get(persona_id),
+                        last_changed_at=updated_at,
+                        latest_change_type="persona_updated",
+                        latest_change_label="角色配置更新",
+                        change_count_7d=1 if updated_at and updated_at >= seven_days_ago else 0,
+                    ),
+                )
+                if ref is not None:
+                    refs_by_asset[("persona", persona_id)] = ref
+
+        if asset_ids["presentation"]:
+            presentation_result = await self.db.execute(
+                select(Presentation).where(
+                    Presentation.presentation_id.in_(tuple(asset_ids["presentation"]))
+                )
+            )
+            for presentation in presentation_result.scalars().all():
+                presentation_id = str(presentation.presentation_id)
+                upload_date = self._coerce_datetime(getattr(presentation, "upload_date", None))
+                latest_change_label = (
+                    f"PPT 已替换到 V{presentation.version_number}"
+                    if int(getattr(presentation, "version_number", 1) or 1) > 1
+                    else "PPT 已上传"
+                )
+                ref = self._build_asset_change_ref(
+                    asset_type="presentation",
+                    asset_id=presentation_id,
+                    asset_name=str(getattr(presentation, "title", "") or "PPT"),
+                    governance_summary=self.build_asset_governance_summary(
+                        governance_indexes.get("presentation", {}).get(presentation_id),
+                        last_changed_at=upload_date,
+                        latest_change_type="presentation_uploaded",
+                        latest_change_label=latest_change_label,
+                        change_count_7d=1 if upload_date and upload_date >= seven_days_ago else 0,
+                    ),
+                )
+                if ref is not None:
+                    refs_by_asset[("presentation", presentation_id)] = ref
+
+        if asset_ids["runtime_profile"]:
+            runtime_result = await self.db.execute(
+                select(VoiceRuntimeProfile).where(
+                    VoiceRuntimeProfile.id.in_(tuple(asset_ids["runtime_profile"]))
+                )
+            )
+            for profile in runtime_result.scalars().all():
+                profile_id = str(profile.id)
+                updated_at = self._coerce_datetime(getattr(profile, "updated_at", None))
+                latest_change_label = (
+                    "默认运行时配置已更新"
+                    if bool(getattr(profile, "is_default", False))
+                    else "运行时配置已更新"
+                )
+                ref = self._build_asset_change_ref(
+                    asset_type="runtime_profile",
+                    asset_id=profile_id,
+                    asset_name=str(getattr(profile, "name", "") or "运行时配置"),
+                    governance_summary=self.build_asset_governance_summary(
+                        governance_indexes.get("runtime_profile", {}).get(profile_id),
+                        last_changed_at=updated_at,
+                        latest_change_type="runtime_profile_updated",
+                        latest_change_label=latest_change_label,
+                        change_count_7d=1 if updated_at and updated_at >= seven_days_ago else 0,
+                    ),
+                )
+                if ref is not None:
+                    refs_by_asset[("runtime_profile", profile_id)] = ref
+
+        refs_by_session: dict[str, list[dict[str, Any]]] = {}
+        for record in records:
+            session_id = str(getattr(record.session, "session_id", "") or "").strip()
+            if not session_id:
+                continue
+            seen: set[tuple[str, str]] = set()
+            linked_refs: list[dict[str, Any]] = []
+            for ref_key in self._iter_asset_refs(record):
+                if ref_key in seen:
+                    continue
+                seen.add(ref_key)
+                ref = refs_by_asset.get(ref_key)
+                if ref is not None:
+                    linked_refs.append(ref)
+            linked_refs.sort(
+                key=lambda item: (
+                    item.get("last_changed_at") or "",
+                    item.get("asset_name") or "",
+                ),
+                reverse=True,
+            )
+            if linked_refs:
+                refs_by_session[session_id] = linked_refs[:3]
+
+        return refs_by_session
+
+    @classmethod
+    def _build_asset_change_ref(
+        cls,
+        *,
+        asset_type: str,
+        asset_id: str,
+        asset_name: str,
+        governance_summary: dict[str, Any],
+    ) -> dict[str, Any] | None:
+        recent_change = governance_summary.get("recent_change_summary") or {}
+        impact_summary = governance_summary.get("impact_summary") or {}
+        health_summary = governance_summary.get("health_summary") or {}
+        change_count_7d = int(recent_change.get("change_count_7d") or 0)
+        if change_count_7d <= 0:
+            return None
+
+        return {
+            "asset_type": asset_type,
+            "asset_label": cls._asset_label(asset_type),
+            "asset_id": asset_id,
+            "asset_name": asset_name,
+            "admin_path": cls._asset_admin_path(asset_type),
+            "latest_change_label": str(recent_change.get("latest_change_label") or "最近有配置改动"),
+            "latest_change_type": str(recent_change.get("latest_change_type") or "updated"),
+            "last_changed_at": cls._serialize_timestamp(recent_change.get("last_changed_at")),
+            "change_count_7d": change_count_7d,
+            "sessions_since_change": int(recent_change.get("sessions_since_change") or 0),
+            "impact_level": str(impact_summary.get("impact_level") or "low"),
+            "health_status": str(health_summary.get("status") or "healthy"),
+        }
+
     async def _build_release_health_snapshot(
         self,
         *,
@@ -233,6 +469,16 @@ class RuntimeStatusService:
             sessions=sessions,
             messages_by_session=messages_by_session,
         )
+        governance_indexes = self._build_asset_governance_indexes_from_records(
+            records,
+            now=now,
+            window_hours=window_hours,
+        )
+        asset_change_refs_by_session = await self._build_asset_change_refs_by_session(
+            records=records,
+            governance_indexes=governance_indexes,
+            now=now,
+        )
         supplemental_logs = await self._load_supplemental_logs(window_start=window_start)
         faults = self.build_faults_payload(
             records,
@@ -240,6 +486,7 @@ class RuntimeStatusService:
             limit=100,
             severity=None,
             supplemental_logs=supplemental_logs,
+            asset_change_refs_by_session=asset_change_refs_by_session,
         )
         overview = self.build_overview_payload(
             records,
@@ -266,6 +513,8 @@ class RuntimeStatusService:
             "overview": overview,
             "records": records,
             "supplemental_logs": supplemental_logs,
+            "governance_indexes": governance_indexes,
+            "asset_change_refs_by_session": asset_change_refs_by_session,
             "now": now,
         }
 
@@ -478,8 +727,13 @@ class RuntimeStatusService:
         limit: int,
         severity: str | None = None,
         supplemental_logs: list[SystemLog],
+        asset_change_refs_by_session: dict[str, list[dict[str, Any]]] | None = None,
     ) -> dict[str, Any]:
-        typed_items = cls._build_fault_items(records, now=now)
+        typed_items = cls._build_fault_items(
+            records,
+            now=now,
+            asset_change_refs_by_session=asset_change_refs_by_session,
+        )
         supplemental_items = cls._build_supplemental_log_items(supplemental_logs)
         items = typed_items + supplemental_items
         items.sort(key=lambda item: item.get("detected_at") or "", reverse=True)
@@ -501,6 +755,7 @@ class RuntimeStatusService:
         records: list[RuntimeSessionRecord],
         *,
         now: datetime,
+        asset_change_refs_by_session: dict[str, list[dict[str, Any]]] | None = None,
     ) -> list[dict[str, Any]]:
         items: list[dict[str, Any]] = []
         seen: set[tuple[str, str | None]] = set()
@@ -529,6 +784,13 @@ class RuntimeStatusService:
                 if key in seen:
                     return
                 seen.add(key)
+                item_diagnostics = dict(diagnostics or {})
+                if session_id:
+                    linked_asset_changes = (
+                        asset_change_refs_by_session or {}
+                    ).get(session_id, [])
+                    if linked_asset_changes:
+                        item_diagnostics["linked_asset_changes"] = linked_asset_changes
                 items.append(
                     {
                         "source": "session",
@@ -540,7 +802,7 @@ class RuntimeStatusService:
                         "scenario_type": scenario_type,
                         "session_status": session_status,
                         "report_status": report_status,
-                        "diagnostics": diagnostics or {},
+                        "diagnostics": item_diagnostics,
                     }
                 )
 
@@ -843,6 +1105,26 @@ class RuntimeStatusService:
                 refs.append(("knowledge_base", normalized))
 
         return refs
+
+    @staticmethod
+    def _asset_label(asset_type: str) -> str:
+        mapping = {
+            "knowledge_base": "知识库",
+            "persona": "角色",
+            "presentation": "PPT",
+            "runtime_profile": "运行时配置",
+        }
+        return mapping.get(asset_type, asset_type)
+
+    @staticmethod
+    def _asset_admin_path(asset_type: str) -> str:
+        mapping = {
+            "knowledge_base": "/admin/knowledge",
+            "persona": "/admin/personas",
+            "presentation": "/admin/presentations",
+            "runtime_profile": "/admin/voice-runtime",
+        }
+        return mapping.get(asset_type, "/admin")
 
     @staticmethod
     def _serialize_timestamp(value: datetime | str | None) -> str | None:

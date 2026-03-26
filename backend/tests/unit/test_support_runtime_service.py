@@ -107,6 +107,7 @@ def _make_record(
     return RuntimeSessionRecord(
         session=session,
         scenario_type=session.scenario.scenario_type,
+        voice_policy_snapshot={},
         knowledge_diagnostics=knowledge_diagnostics or {},
         projection=projection,
         projection_error=projection_error,

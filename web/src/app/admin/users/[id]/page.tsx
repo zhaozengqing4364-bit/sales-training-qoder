@@ -1,12 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { api, getApiErrorMessage } from "@/lib/api/client";
 import {
     ManagerInterventionItem,
     ManagerInterventionResultItem,
+    SupportRuntimeFaultItem,
     UserDetailStats,
     UserSessionItem,
     UserSessionsResponse,
@@ -257,6 +258,72 @@ function buildProgressOverview(
     };
 }
 
+type LinkedAssetChange = {
+    asset_type?: string;
+    asset_label?: string;
+    asset_name?: string;
+    admin_path?: string;
+    latest_change_label?: string;
+    change_count_7d?: number;
+};
+
+function asRecord(value: unknown): Record<string, unknown> {
+    return value && typeof value === "object" ? value as Record<string, unknown> : {};
+}
+
+function toOptionalString(value: unknown): string | undefined {
+    return typeof value === "string" && value.trim() ? value : undefined;
+}
+
+function toNumber(value: unknown): number | undefined {
+    if (typeof value === "number" && Number.isFinite(value)) {
+        return value;
+    }
+    if (typeof value === "string" && value.trim()) {
+        const parsed = Number(value);
+        if (Number.isFinite(parsed)) {
+            return parsed;
+        }
+    }
+    return undefined;
+}
+
+function parseLinkedAssetChanges(value: unknown): LinkedAssetChange[] {
+    if (!Array.isArray(value)) {
+        return [];
+    }
+
+    return value
+        .map((entry) => {
+            const raw = asRecord(entry);
+            return {
+                asset_type: toOptionalString(raw.asset_type),
+                asset_label: toOptionalString(raw.asset_label),
+                asset_name: toOptionalString(raw.asset_name),
+                admin_path: toOptionalString(raw.admin_path),
+                latest_change_label: toOptionalString(raw.latest_change_label),
+                change_count_7d: toNumber(raw.change_count_7d),
+            };
+        })
+        .filter((entry) => Boolean(entry.asset_name && entry.admin_path && entry.latest_change_label));
+}
+
+function extractLinkedAssetChanges(fault: SupportRuntimeFaultItem): LinkedAssetChange[] {
+    const diagnostics = asRecord(fault.diagnostics);
+    return parseLinkedAssetChanges(diagnostics.linked_asset_changes);
+}
+
+function assetLabel(change: LinkedAssetChange): string {
+    if (change.asset_label) {
+        return change.asset_label;
+    }
+    if (change.asset_type === "knowledge_base") return "知识库";
+    if (change.asset_type === "persona") return "角色";
+    if (change.asset_type === "presentation") return "PPT";
+    if (change.asset_type === "runtime_profile") return "运行时配置";
+    return "资产";
+}
+
 export default function UserDetailPage() {
     const params = useParams();
     const router = useRouter();
@@ -267,6 +334,7 @@ export default function UserDetailPage() {
     const [stats, setStats] = useState<UserDetailStats | null>(null);
     const [sessions, setSessions] = useState<UserSessionsResponse>(EMPTY_SESSIONS);
     const [progress, setProgress] = useState<UserProgressResponse | null>(null);
+    const [runtimeFaults, setRuntimeFaults] = useState<SupportRuntimeFaultItem[]>([]);
     const [interventions, setInterventions] = useState<ManagerInterventionItem[]>(EMPTY_INTERVENTIONS);
     const [interventionIssueFamily, setInterventionIssueFamily] = useState("evidence_gap");
     const [interventionNote, setInterventionNote] = useState("");
@@ -300,11 +368,12 @@ export default function UserDetailPage() {
         setInterventionError(null);
         setProgressState("loading");
 
-        const [statsResult, sessionsResult, progressResult, interventionsResult] = await Promise.allSettled([
+        const [statsResult, sessionsResult, progressResult, interventionsResult, runtimeFaultsResult] = await Promise.allSettled([
             api.admin.getUserStats(userId, { time_range: timeRange }),
             api.admin.getUserSessions(userId, { page: 1, page_size: 10 }),
             api.admin.getUserProgress(userId, { time_range: timeRange }),
             api.admin.listManagerInterventions(userId, { limit: 10 }),
+            api.supportRuntime.getFaults({ limit: 100 }),
         ]);
 
         if (statsResult.status === "fulfilled") {
@@ -336,6 +405,12 @@ export default function UserDetailPage() {
         } else {
             setInterventions(EMPTY_INTERVENTIONS);
             setInterventionError(`主管重点加载失败：${getApiErrorMessage(interventionsResult.reason)}`);
+        }
+
+        if (runtimeFaultsResult.status === "fulfilled") {
+            setRuntimeFaults(runtimeFaultsResult.value.items || []);
+        } else {
+            setRuntimeFaults([]);
         }
 
         setIsLoading(false);
@@ -492,6 +567,21 @@ export default function UserDetailPage() {
             || session.next_goal?.goal_text
             || "统一训练证据已生成，可进入报告页查看详情。";
     };
+
+    const runtimeFaultBySessionId = useMemo(() => {
+        const lookup = new Map<string, { fault: SupportRuntimeFaultItem; assetChanges: LinkedAssetChange[] }>();
+        runtimeFaults.forEach((fault) => {
+            if (!fault.session_id || lookup.has(fault.session_id)) {
+                return;
+            }
+            const assetChanges = extractLinkedAssetChanges(fault);
+            if (!assetChanges.length) {
+                return;
+            }
+            lookup.set(fault.session_id, { fault, assetChanges });
+        });
+        return lookup;
+    }, [runtimeFaults]);
 
     if (isLoading) {
         return (
@@ -1080,7 +1170,10 @@ export default function UserDetailPage() {
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {sessions.items.map((session) => (
+                                    {sessions.items.map((session) => {
+                                        const linkedRuntimeFault = runtimeFaultBySessionId.get(session.session_id);
+
+                                        return (
                                         <tr
                                             key={session.session_id}
                                             className="border-b border-slate-50 hover:bg-slate-50/50 transition-colors"
@@ -1128,6 +1221,35 @@ export default function UserDetailPage() {
                                                             <span>{session.next_goal.goal_text}</span>
                                                         </p>
                                                     ) : null}
+                                                    {linkedRuntimeFault ? (
+                                                        <div className="mt-3 rounded-2xl border border-amber-200 bg-amber-50/70 px-3 py-3">
+                                                            <p className="text-xs font-semibold text-amber-900 text-pretty">
+                                                                最近运行异常：{linkedRuntimeFault.fault.summary}
+                                                            </p>
+                                                            <div className="mt-2 flex flex-wrap gap-2">
+                                                                {linkedRuntimeFault.assetChanges.map((change) => (
+                                                                    <Link
+                                                                        key={`${session.session_id}-${change.asset_type}-${change.asset_name}`}
+                                                                        href={change.admin_path || "/admin"}
+                                                                        className="inline-flex rounded-full border border-amber-200 bg-white px-3 py-1 text-xs font-medium text-amber-800 hover:text-amber-900"
+                                                                    >
+                                                                        {assetLabel(change)} · {change.asset_name}
+                                                                    </Link>
+                                                                ))}
+                                                            </div>
+                                                            {linkedRuntimeFault.assetChanges.map((change) => (
+                                                                <p
+                                                                    key={`${session.session_id}-${change.asset_type}-${change.latest_change_label}`}
+                                                                    className="mt-2 text-xs text-amber-800 text-pretty"
+                                                                >
+                                                                    {change.latest_change_label}
+                                                                    {typeof change.change_count_7d === "number"
+                                                                        ? ` · 近 7 天 ${change.change_count_7d} 次变更`
+                                                                        : ""}
+                                                                </p>
+                                                            ))}
+                                                        </div>
+                                                    ) : null}
                                                 </div>
                                             </td>
                                             <td className="py-3 px-4 text-sm text-slate-600 text-right align-top tabular-nums">
@@ -1154,7 +1276,8 @@ export default function UserDetailPage() {
                                                 )}
                                             </td>
                                         </tr>
-                                    ))}
+                                        );
+                                    })}
                                 </tbody>
                             </table>
                         </div>

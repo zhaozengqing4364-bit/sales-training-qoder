@@ -1640,3 +1640,46 @@ Append one entry per iteration:
   verification results: passed; the focused backend integration suite confirms the four current asset routes now return governance summaries with impact, recent-change, and anomaly data.
   success signal status: operators can read likely impact range, recent changes, and live anomaly lines from the existing backend asset surfaces instead of a separate governance endpoint.
   rollback note: if later work changes governance rendering, keep RuntimeStatusService as the shared anomaly/impact seam and continue layering asset-local document or policy issues on top instead of inventing a second backend fault model.
+
+- time: 2026-03-26T17:36:48+0800
+  mode: stabilize
+  item id: M005-S03-T02
+  files changed:
+    - web/src/app/admin/knowledge/page.tsx
+    - web/src/app/admin/personas/page.tsx
+    - web/src/app/admin/presentations/page.tsx
+    - web/src/app/admin/voice-runtime/page.tsx
+    - web/src/app/admin/asset-governance.test.tsx
+    - web/src/lib/api/types.ts
+    - .gsd/KNOWLEDGE.md
+    - .codex/loop/state.json
+    - .codex/loop/log.md
+  summary: Added focused governance coverage for the current admin asset pages, repaired the partially-landed persona/runtime page wiring, and ensured knowledge/persona/presentation/runtime surfaces all show impact, recent-change, and health context in place.
+  verification commands:
+    - cd web && npm test -- --run 'src/app/admin/asset-governance.test.tsx'
+  verification results: passed; the new cross-page Vitest suite confirms the four existing admin asset pages render governance overview cards plus inline impact/change/health summaries from the runtime-backed payload.
+  success signal status: operators can now stay on the current admin asset pages and still see which assets changed recently, how broadly they are hitting sessions, and whether runtime anomalies are already attached.
+  rollback note: if future UI work changes the admin asset layouts again, keep governance assertions focused on the shared summary copy and remember that both mobile and desktop variants stay mounted in the DOM.
+
+- time: 2026-03-26T18:15:38+08:00
+  mode: stabilize
+  item id: M005-S03-T03
+  files changed:
+    - backend/src/support/services/runtime_status_service.py
+    - web/src/app/admin/analytics/page.tsx
+    - web/src/app/admin/users/[id]/page.tsx
+    - web/src/app/admin/analytics/page.test.tsx
+    - web/src/app/admin/users/[id]/page.test.tsx
+    - backend/tests/unit/test_support_runtime_service.py
+    - .gsd/DECISIONS.md
+    - .gsd/KNOWLEDGE.md
+    - .gsd/milestones/M005/slices/S03/tasks/T03-SUMMARY.md
+    - .codex/loop/state.json
+    - .codex/loop/log.md
+  summary: Support/runtime faults now carry linked asset-change references, and the current admin analytics plus user-detail pages render those recent-change links inline so operators can inspect anomaly context without leaving the existing drill-in chain.
+  verification commands:
+    - cd web && npm test -- --run 'src/app/admin/analytics/page.test.tsx' 'src/app/admin/users/[id]/page.test.tsx'
+    - cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_support_runtime_service.py
+  verification results: passed; focused web regressions and the support-runtime service unit suite both stayed green after wiring fault-level linked_asset_changes references.
+  success signal status: admins can move from a live runtime anomaly to the recent knowledge/persona/presentation/runtime-profile change behind it from the existing analytics and user-detail surfaces.
+  rollback note: if a later slice replaces this linkage, keep support/runtime as the canonical anomaly seam and remove the inline admin renderers together rather than introducing a second change-inspection API.

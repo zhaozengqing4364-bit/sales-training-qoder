@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState, useCallback, useMemo } from "react";
 import { api } from "@/lib/api/client";
 import {
@@ -9,6 +10,7 @@ import {
     AnalyticsLeaderboard,
     ManagerLiteListsResponse,
     OpenAnalyticsDashboard,
+    SupportRuntimeFaultItem,
 } from "@/lib/api/types";
 import { GlassCard } from "@/components/ui/glass-card";
 import { Button } from "@/components/ui/button";
@@ -66,6 +68,88 @@ function resolveWindowDays(timeRange: TimeRange): number {
     return 30;
 }
 
+type LinkedAssetChange = {
+    asset_type?: string;
+    asset_label?: string;
+    asset_name?: string;
+    admin_path?: string;
+    latest_change_label?: string;
+    change_count_7d?: number;
+    impact_level?: string;
+    health_status?: string;
+};
+
+function asRecord(value: unknown): Record<string, unknown> {
+    return value && typeof value === "object" ? value as Record<string, unknown> : {};
+}
+
+function toOptionalString(value: unknown): string | undefined {
+    return typeof value === "string" && value.trim() ? value : undefined;
+}
+
+function toNumber(value: unknown): number | undefined {
+    if (typeof value === "number" && Number.isFinite(value)) {
+        return value;
+    }
+    if (typeof value === "string" && value.trim()) {
+        const parsed = Number(value);
+        if (Number.isFinite(parsed)) {
+            return parsed;
+        }
+    }
+    return undefined;
+}
+
+function parseLinkedAssetChanges(value: unknown): LinkedAssetChange[] {
+    if (!Array.isArray(value)) {
+        return [];
+    }
+
+    return value
+        .map((entry) => {
+            const raw = asRecord(entry);
+            return {
+                asset_type: toOptionalString(raw.asset_type),
+                asset_label: toOptionalString(raw.asset_label),
+                asset_name: toOptionalString(raw.asset_name),
+                admin_path: toOptionalString(raw.admin_path),
+                latest_change_label: toOptionalString(raw.latest_change_label),
+                change_count_7d: toNumber(raw.change_count_7d),
+                impact_level: toOptionalString(raw.impact_level),
+                health_status: toOptionalString(raw.health_status),
+            };
+        })
+        .filter((entry) => Boolean(entry.admin_path && entry.asset_name && entry.latest_change_label));
+}
+
+function extractLinkedAssetChanges(fault: SupportRuntimeFaultItem): LinkedAssetChange[] {
+    const diagnostics = asRecord(fault.diagnostics);
+    return parseLinkedAssetChanges(diagnostics.linked_asset_changes);
+}
+
+function impactLevelLabel(level?: string): string {
+    if (level === "high") return "高影响";
+    if (level === "medium") return "中影响";
+    return "低影响";
+}
+
+function healthStatusLabel(status?: string): string {
+    if (status === "blocking") return "阻塞";
+    if (status === "warning") return "告警";
+    return "健康";
+}
+
+function assetLabel(change: LinkedAssetChange): string {
+    if (change.asset_label) {
+        return change.asset_label;
+    }
+    if (change.asset_type === "knowledge_base") return "知识库";
+    if (change.asset_type === "persona") return "角色";
+    if (change.asset_type === "presentation") return "PPT";
+    if (change.asset_type === "runtime_profile") return "运行时配置";
+    return "资产";
+}
+
 export default function AnalyticsPage() {
     const [timeRange, setTimeRange] = useState<TimeRange>("30d");
     const [scenarioType, setScenarioType] = useState<string | null>(null);
@@ -76,6 +160,7 @@ export default function AnalyticsPage() {
     const [leaderboard, setLeaderboard] = useState<AnalyticsLeaderboard | null>(null);
     const [managerLite, setManagerLite] = useState<ManagerLiteListsResponse | null>(null);
     const [effectiveness, setEffectiveness] = useState<CoreEffectiveness>(DEFAULT_EFFECTIVENESS);
+    const [runtimeFaults, setRuntimeFaults] = useState<SupportRuntimeFaultItem[]>([]);
 
     const [isLoading, setIsLoading] = useState(true);
     const [isExporting, setIsExporting] = useState(false);
@@ -87,7 +172,7 @@ export default function AnalyticsPage() {
             scenario_type: scenarioType || undefined,
         };
 
-        const [overviewResult, trendsResult, agentsResult, leaderboardResult, managerLiteResult, effectivenessResult] = await Promise.allSettled([
+        const [overviewResult, trendsResult, agentsResult, leaderboardResult, managerLiteResult, effectivenessResult, runtimeFaultsResult] = await Promise.allSettled([
             api.analytics.getOverview(params),
             api.analytics.getTrends({ time_range: timeRange }),
             api.analytics.getAgents({ time_range: timeRange }),
@@ -97,6 +182,7 @@ export default function AnalyticsPage() {
                 scenario_type: scenarioType || undefined,
                 days: resolveWindowDays(timeRange),
             }),
+            api.supportRuntime.getFaults({ limit: 8 }),
         ]);
 
         if (overviewResult.status === "fulfilled") {
@@ -139,6 +225,13 @@ export default function AnalyticsPage() {
         } else {
             console.error("Failed to load effectiveness metrics:", effectivenessResult.reason);
             setEffectiveness(DEFAULT_EFFECTIVENESS);
+        }
+
+        if (runtimeFaultsResult.status === "fulfilled") {
+            setRuntimeFaults(runtimeFaultsResult.value.items || []);
+        } else {
+            console.error("Failed to load support runtime faults:", runtimeFaultsResult.reason);
+            setRuntimeFaults([]);
         }
 
         setIsLoading(false);
@@ -186,6 +279,15 @@ export default function AnalyticsPage() {
 
     const repeatedGoal = projectionSummary?.repeated_next_goals?.[0] ?? null;
     const leaderboardLeader = leaderboard?.leaderboard?.[0] ?? null;
+    const linkedRuntimeFaults = useMemo(() => {
+        return runtimeFaults
+            .map((fault) => ({
+                fault,
+                assetChanges: extractLinkedAssetChanges(fault),
+            }))
+            .filter((entry) => entry.assetChanges.length > 0)
+            .slice(0, 3);
+    }, [runtimeFaults]);
 
     const topIssueLabel = topIssueFamily
         ? (formatIssueTypeLabel(topIssueFamily.issue_type) || topIssueFamily.issue_type)
@@ -463,6 +565,69 @@ export default function AnalyticsPage() {
             {managerLite && (
                 <ManagerLitePanel data={managerLite} onRemind={handleManagerRemind} />
             )}
+
+            <GlassCard className="p-6">
+                <div className="flex items-start justify-between gap-4 flex-wrap">
+                    <div>
+                        <h3 className="text-lg font-bold text-slate-900">异常关联资产变更</h3>
+                        <p className="mt-1 text-sm text-slate-500 text-pretty">
+                            把 support/runtime 里的 blocking / warning 直接连回当前资产治理链，先看异常是否刚好落在最近变更之后。
+                        </p>
+                    </div>
+                    <span className="inline-flex items-center rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600">
+                        {linkedRuntimeFaults.length > 0 ? `已命中 ${linkedRuntimeFaults.length} 条异常` : "当前无命中"}
+                    </span>
+                </div>
+
+                {linkedRuntimeFaults.length > 0 ? (
+                    <div className="mt-5 space-y-4">
+                        {linkedRuntimeFaults.map(({ fault, assetChanges }, index) => (
+                            <article
+                                key={`${fault.kind}-${fault.session_id ?? index}`}
+                                className="rounded-2xl border border-slate-200 bg-slate-50/70 p-4"
+                            >
+                                <div className="flex flex-wrap items-center gap-2 text-xs text-slate-500">
+                                    <span className={`inline-flex rounded-full px-2.5 py-1 font-medium ${fault.severity === "blocking" ? "bg-red-50 text-red-700" : "bg-amber-50 text-amber-700"}`}>
+                                        {fault.severity === "blocking" ? "blocking" : "warning"}
+                                    </span>
+                                    <span>{fault.scenario_type || "-"} · {fault.session_status || "-"}</span>
+                                    {fault.session_id ? (
+                                        <Link href={`/practice/${fault.session_id}/report`} className="font-medium text-blue-600 hover:text-blue-700">
+                                            查看对应报告
+                                        </Link>
+                                    ) : null}
+                                </div>
+                                <p className="mt-3 text-sm font-medium text-slate-900 text-pretty">{fault.summary}</p>
+                                <div className="mt-4 grid grid-cols-1 gap-3 xl:grid-cols-2">
+                                    {assetChanges.map((change) => (
+                                        <div key={`${fault.kind}-${change.asset_type}-${change.asset_id}`} className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
+                                            <div className="flex flex-wrap items-center gap-2">
+                                                <Link href={change.admin_path || "/admin"} className="text-sm font-semibold text-slate-900 hover:text-blue-600">
+                                                    {assetLabel(change)} · {change.asset_name}
+                                                </Link>
+                                                <span className="inline-flex rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-medium text-slate-600">
+                                                    {impactLevelLabel(change.impact_level)}
+                                                </span>
+                                                <span className="inline-flex rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-medium text-slate-600">
+                                                    {healthStatusLabel(change.health_status)}
+                                                </span>
+                                            </div>
+                                            <p className="mt-2 text-sm text-slate-700 text-pretty">{change.latest_change_label}</p>
+                                            <p className="mt-1 text-xs text-slate-500 text-pretty">
+                                                近 7 天 {change.change_count_7d || 0} 次变更
+                                            </p>
+                                        </div>
+                                    ))}
+                                </div>
+                            </article>
+                        ))}
+                    </div>
+                ) : (
+                    <div className="mt-5 rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-5 text-sm text-slate-500 text-pretty">
+                        当前 blocking / warning 异常还没有指向最近资产变更。
+                    </div>
+                )}
+            </GlassCard>
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 <GlassCard className="lg:col-span-2 p-6">

@@ -483,6 +483,7 @@ export interface AdminPersona {
     status: string;
     icon?: string;
     system_prompt: string;
+    governance_summary?: Record<string, unknown> | null;
     traits?: Record<string, string>;
     agent_id?: string;
     agent_name?: string;

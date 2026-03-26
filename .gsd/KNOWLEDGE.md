@@ -64,4 +64,6 @@
 - M004 的 replay deep-link 合同里，`resolved` / `degraded` / `missing` anchor 状态都要在 replay 页面保留可见 banner；如果改成静默 fallback，live UAT 与 learner 自查都会失去“当前看到的是精确命中还是近似定位”的诊断面。
 - `/api/v1/admin/analytics/*` 的 admin RBAC 当前是 `backend/src/main.py` 里 `include_router(..., dependencies=[Depends(get_current_admin_user)])` 提供的，不在 `backend/src/admin/api/analytics.py` 端点函数本身；做 contract/fixture 验证时别因为文件内只看到 `get_current_user` 就把 403 当成路由回归。
 - M005/S02 的主管重点结果链路要优先读取“干预创建后的最新可评估 completed session”；如果最新 completed 只是 `INSUFFICIENT_TURN_DATA` 之类薄证据会话，不要让它覆盖掉前一条可评估结果，否则主管卡片会把已经出现的真实改善误降级成“待判断”。
+- M005/S03 的资产治理页同时渲染 mobile card 和 desktop table 两套 DOM；写 focused Vitest 断言时，像知识库名 / persona 名 / PPT 标题这类文本通常会出现两次，优先用 `getAllByText` 并把断言落在共享治理文案上，别把双布局误报成回归。
 - M005/S03 的资产治理后端如果会话处于 `require_kb_grounding=true`，support/runtime 这条事实线会把检索故障归成 `kb_lock_blocked_search_failed`，而不是宽泛的 `knowledge_search_failed`；写聚合测试时要按实际 kb-lock anomaly kind 断言。
+- `backend/tests/unit/test_support_runtime_service.py` 这类直接构造 `RuntimeSessionRecord` 的 helper 必须显式传 `voice_policy_snapshot`（即使测例本身不关心它）；这个 dataclass 没有默认值，漏掉会在 pytest collection 后第一条 fixture 构造时直接 TypeError，看起来像 service 回归其实只是测试夹具过期。
