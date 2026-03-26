@@ -669,6 +669,109 @@ describe("ReportPage", () => {
         );
     });
 
+    it("shows page-level PPT issue clusters with concrete evidence on the shared report route", async () => {
+        getReportMock.mockResolvedValue({
+            ...basePresentationReport,
+            presentation_review: {
+                ...basePresentationReview,
+                page_summaries: [
+                    {
+                        ...basePresentationReview.page_summaries[0],
+                        issue_clusters: [
+                            {
+                                issue_type: "off_page",
+                                summary: "第 1 页讲解带到了其他页内容，优先回到当前页要点。",
+                                evidence: ["第 2 页要点：实施计划"],
+                                turn_numbers: [1],
+                                linked_points: ["实施计划"],
+                                linked_phrases: [],
+                                related_page_numbers: [2],
+                            },
+                            {
+                                issue_type: "forbidden_word",
+                                summary: "第 1 页触发了禁忌表达，建议改成更稳妥、可验证的说法。",
+                                evidence: ["触发短语：百分之百保证"],
+                                turn_numbers: [1],
+                                linked_points: [],
+                                linked_phrases: ["百分之百保证"],
+                                related_page_numbers: [],
+                            },
+                        ],
+                    },
+                    {
+                        ...basePresentationReview.page_summaries[1],
+                        issue_clusters: [
+                            {
+                                issue_type: "missing_point",
+                                summary: "第 2 页仍缺少 1 个必讲点，需要补齐再进入下一页。",
+                                evidence: ["未覆盖：客户案例"],
+                                turn_numbers: [3, 4],
+                                linked_points: ["客户案例"],
+                                linked_phrases: [],
+                                related_page_numbers: [],
+                            },
+                            {
+                                issue_type: "overlong_explanation",
+                                summary: "第 2 页展开偏长，但当前页 2 个要点只覆盖了 1 个。",
+                                evidence: ["累计讲解约 128 个字，优先压缩到当前页必讲点。"],
+                                turn_numbers: [3],
+                                linked_points: ["ROI结果", "客户案例"],
+                                linked_phrases: [],
+                                related_page_numbers: [],
+                            },
+                            {
+                                issue_type: "weak_qa_handling",
+                                summary: "第 2 页的问答承接偏弱，需要把追问回答得更具体。",
+                                evidence: ["如果客户追问负责人，我这边暂时只能说后面再确认。"],
+                                turn_numbers: [4],
+                                linked_points: [],
+                                linked_phrases: [],
+                                related_page_numbers: [],
+                            },
+                        ],
+                    },
+                ],
+                diagnostics: {
+                    ...basePresentationReview.diagnostics,
+                    page_issue_cluster_count: 5,
+                    page_issue_types: [
+                        "forbidden_word",
+                        "missing_point",
+                        "off_page",
+                        "overlong_explanation",
+                        "weak_qa_handling",
+                    ],
+                },
+            },
+        });
+        getComprehensiveReportMock.mockRejectedValue(new ApiRequestError({
+            status: 404,
+            errorCode: "[REPORT_NOT_FOUND]",
+            message: "not found",
+        }));
+        generateComprehensiveReportMock.mockRejectedValue(new Error("enhanced report unavailable"));
+
+        render(<ReportPage />);
+
+        expect((await screen.findByTestId("report-overall-score")).textContent).toContain("88");
+        expect(screen.getByText("页级问题簇总览")).toBeTruthy();
+        expect(screen.getByText("共 5 个页级问题簇，优先按页修正这些表达偏差。"))
+            .toBeTruthy();
+        expect(screen.getByText("第 1 页问题簇")).toBeTruthy();
+        expect(screen.getAllByText("串页偏题")[0]).toBeTruthy();
+        expect(screen.getByText("第 1 页讲解带到了其他页内容，优先回到当前页要点。"))
+            .toBeTruthy();
+        expect(screen.getByText("关联页：第 2 页")).toBeTruthy();
+        expect(screen.getByText("关联要点：实施计划")).toBeTruthy();
+        expect(screen.getByText("触发短语：百分之百保证")).toBeTruthy();
+        expect(screen.getByText("第 2 页问题簇")).toBeTruthy();
+        expect(screen.getByText("展开过长")).toBeTruthy();
+        expect(screen.getByText("第 2 页展开偏长，但当前页 2 个要点只覆盖了 1 个。"))
+            .toBeTruthy();
+        expect(screen.getByText("如果客户追问负责人，我这边暂时只能说后面再确认。"))
+            .toBeTruthy();
+    });
+
     it("shows presentation-specific degraded copy instead of falling back to sales UI when page metadata is missing", async () => {
         getReportMock.mockResolvedValue({
             ...basePresentationReport,

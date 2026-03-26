@@ -1351,3 +1351,23 @@ Append one entry per iteration:
   verification results: passed fresh; backend runtime-descriptor coverage is green, the T01 backend contract/integration suite stayed green, the exact T02 report/replay CTA suite passed after rerunning the correctly quoted test paths, and both the practice-page focus suite and the exact T03 websocket hook command passed.
   success signal status: a learner who starts a focused retry now lands on `/practice/{sessionId}` with an explicit targeted-retry banner showing the carried-forward main issue and next goal instead of a generic blank entry state.
   rollback note: if later work revisits this entry chain, keep the learner page reading retry focus from `runtime_descriptor.focus_intent` rather than adding raw snapshot parsing or a second metadata fetch unless a broader tested runtime contract replaces D068.
+
+- time: 2026-03-26T10:48:51+0800
+  mode: stabilize
+  item id: M004-S04-T02
+  files changed:
+    - web/src/app/(user)/practice/[sessionId]/report/page.tsx
+    - web/src/app/(user)/practice/[sessionId]/report/page.test.tsx
+    - web/src/lib/session-evidence.ts
+    - web/src/lib/api/types.ts
+    - .gsd/DECISIONS.md
+    - .gsd/KNOWLEDGE.md
+    - .codex/loop/state.json
+    - .codex/loop/log.md
+  summary: Extended the shared PPT report branch to surface page-level issue-cluster cards with concrete evidence, added a focused regression for the richer page evidence UI, and kept the route on the existing presentation authority line.
+  verification commands:
+    - cd web && pnpm dlx npm@11.6.1 test -- --run 'src/app/(user)/practice/[sessionId]/report/page.test.tsx'
+    - cd web && pnpm dlx npm@11.6.1 run dev
+  verification results: the focused report-page suite passed 10/10 through the temporary npm runner after repairing web node_modules with `cd web && pnpm dlx npm@11.6.1 ci`; attempted live browser proof was blocked by the pre-existing local Next install drift `Cannot find module '../server/config'` before :3445 became ready, so browser verification was not counted as product-failure evidence.
+  success signal status: learners can now see which PPT page triggered which issue cluster and why it should be reworked directly on the current report route instead of inferring problems from summary text alone.
+  rollback note: if T03 changes how page evidence is carried into replay, keep the report-side issue-cluster rendering sourced from `presentation_review.page_summaries[*].issue_clusters` and its diagnostics overview rather than inventing a second PPT learning payload.

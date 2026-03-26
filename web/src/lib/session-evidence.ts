@@ -1,5 +1,6 @@
 import type {
     PresentationReview,
+    PresentationReviewPageIssueCluster,
     SessionEvidenceCompleteness,
     SessionEvidenceStage,
     SessionMainIssue,
@@ -55,6 +56,9 @@ const GOAL_TYPE_LABELS: Record<string, string> = {
 const PRESENTATION_ISSUE_LABELS: Record<string, string> = {
     forbidden_word: "禁用词提醒",
     missing_point: "遗漏要点",
+    off_page: "串页偏题",
+    overlong_explanation: "展开过长",
+    weak_qa_handling: "问答承接偏弱",
     vague_response: "表达模糊",
 };
 
@@ -283,6 +287,46 @@ export function formatPresentationIssueLabel(issueType?: string | null): string 
         return null;
     }
     return PRESENTATION_ISSUE_LABELS[String(issueType)] || null;
+}
+
+export function formatPresentationIssueContextLines(
+    issue?: PresentationReviewPageIssueCluster | null,
+): string[] {
+    if (!issue) {
+        return [];
+    }
+
+    const lines: string[] = [];
+    const relatedPageNumbers = Array.isArray(issue.related_page_numbers)
+        ? issue.related_page_numbers.filter((value) => Number.isFinite(value))
+        : [];
+    const linkedPoints = Array.isArray(issue.linked_points)
+        ? issue.linked_points.filter(Boolean)
+        : [];
+    const linkedPhrases = Array.isArray(issue.linked_phrases)
+        ? issue.linked_phrases.filter(Boolean)
+        : [];
+    const turnNumbers = Array.isArray(issue.turn_numbers)
+        ? issue.turn_numbers.filter((value) => Number.isFinite(value))
+        : [];
+
+    if (relatedPageNumbers.length > 0) {
+        lines.push(`关联页：${relatedPageNumbers.map((pageNumber) => `第 ${pageNumber} 页`).join("、")}`);
+    }
+
+    if (linkedPoints.length > 0) {
+        lines.push(`关联要点：${linkedPoints.join("、")}`);
+    }
+
+    if (linkedPhrases.length > 0) {
+        lines.push(`触发短语：${linkedPhrases.join("、")}`);
+    }
+
+    if (turnNumbers.length > 0) {
+        lines.push(`涉及回合：${turnNumbers.join("、")}`);
+    }
+
+    return lines;
 }
 
 export function formatPresentationDegradedNote(

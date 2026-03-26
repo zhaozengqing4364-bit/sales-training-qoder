@@ -34,6 +34,7 @@ import {
     formatEvidenceCompletenessNote,
     formatNotEvaluableReason,
     formatPresentationDegradedNote,
+    formatPresentationIssueContextLines,
     formatPresentationIssueLabel,
     formatSessionStageLabel,
     extractSessionClaimTruth,
@@ -125,6 +126,30 @@ function buildSalesDimensionScores(report: PracticeSessionReport) {
 }
 
 function buildPresentationIssueItems(review?: PresentationReview | null) {
+    const pageIssueCounts = (review?.page_summaries || []).reduce((counts, pageSummary) => {
+        for (const cluster of pageSummary.issue_clusters || []) {
+            counts.set(cluster.issue_type, (counts.get(cluster.issue_type) || 0) + 1);
+        }
+        return counts;
+    }, new Map<string, number>());
+
+    const diagnosticIssueTypes = Array.isArray(review?.diagnostics?.page_issue_types)
+        ? review.diagnostics.page_issue_types.filter(Boolean)
+        : [];
+    const issueTypes = diagnosticIssueTypes.length > 0
+        ? diagnosticIssueTypes
+        : Array.from(pageIssueCounts.keys());
+
+    if (issueTypes.length > 0) {
+        return issueTypes
+            .map((issueType) => ({
+                issueType,
+                count: pageIssueCounts.get(issueType) || Number(review?.issue_counts?.[issueType] || 0),
+                label: formatPresentationIssueLabel(issueType) || issueType,
+            }))
+            .filter((item) => item.count > 0);
+    }
+
     return Object.entries(review?.issue_counts || {})
         .map(([issueType, rawCount]) => ({
             issueType,
@@ -486,6 +511,16 @@ export default function ComprehensiveReportPage() {
         () => buildPresentationIssueItems(presentationReview),
         [presentationReview],
     );
+    const presentationIssueClusterCount = useMemo(() => {
+        const diagnosticCount = presentationReview?.diagnostics?.page_issue_cluster_count;
+        if (typeof diagnosticCount === "number") {
+            return diagnosticCount;
+        }
+        return (presentationReview?.page_summaries || []).reduce(
+            (count, pageSummary) => count + (pageSummary.issue_clusters?.length || 0),
+            0,
+        );
+    }, [presentationReview]);
     const retryEntry = report?.retry_entry;
     const retryBlockedHint = (
         retryEntry?.scenario_type === "sales"
@@ -783,6 +818,36 @@ export default function ComprehensiveReportPage() {
                         </div>
                     </GlassCard>
 
+                    {presentationIssueClusterCount > 0 && (
+                        <GlassCard className="p-6 mb-6">
+                            <div className="flex items-start justify-between gap-3 mb-4 flex-wrap">
+                                <div>
+                                    <h2 className="text-lg font-semibold text-zinc-900">页级问题簇总览</h2>
+                                    <p className="text-sm text-zinc-600 mt-1">
+                                        共 {presentationIssueClusterCount} 个页级问题簇，优先按页修正这些表达偏差。
+                                    </p>
+                                </div>
+                                <span className="inline-flex rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-medium text-amber-800">
+                                    {presentationIssueClusterCount} 个问题簇
+                                </span>
+                            </div>
+                            {presentationIssueItems.length > 0 ? (
+                                <div className="flex flex-wrap gap-2">
+                                    {presentationIssueItems.map((item) => (
+                                        <span
+                                            key={item.issueType}
+                                            className="inline-flex items-center rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-medium text-amber-800"
+                                        >
+                                            {item.label} · {item.count}
+                                        </span>
+                                    ))}
+                                </div>
+                            ) : (
+                                <p className="text-sm text-zinc-600">当前尚未识别出需要逐页回看的问题簇。</p>
+                            )}
+                        </GlassCard>
+                    )}
+
                     <GlassCard className="p-6 mb-6">
                         <h2 className="text-lg font-semibold text-zinc-900 mb-4">逐页总结</h2>
                         {presentationReview.page_summaries.length > 0 ? (
@@ -813,6 +878,60 @@ export default function ComprehensiveReportPage() {
                                             <p className="text-xs text-amber-700">
                                                 仍待补充：{pageSummary.missing_required_points.join("、")}
                                             </p>
+                                        )}
+
+                                        {(pageSummary.issue_clusters?.length || 0) > 0 && (
+                                            <div className="mt-4 rounded-xl border border-amber-100 bg-white/80 p-4">
+                                                <div className="flex items-center justify-between gap-3 flex-wrap mb-3">
+                                                    <p className="text-sm font-semibold text-zinc-900">
+                                                        第 {pageSummary.page_number} 页问题簇
+                                                    </p>
+                                                    <span className="inline-flex rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-800">
+                                                        {pageSummary.issue_clusters?.length || 0} 个
+                                                    </span>
+                                                </div>
+                                                <div className="space-y-3">
+                                                    {(pageSummary.issue_clusters || []).map((issue, index) => {
+                                                        const contextLines = formatPresentationIssueContextLines(issue);
+                                                        const evidenceItems = issue.evidence.filter(
+                                                            (item) => !contextLines.includes(item),
+                                                        );
+                                                        return (
+                                                            <div
+                                                                key={`${pageSummary.page_number}-${issue.issue_type}-${index}`}
+                                                                className="rounded-xl border border-amber-100 bg-amber-50/70 p-3"
+                                                            >
+                                                                <div className="flex items-center justify-between gap-3 flex-wrap mb-2">
+                                                                    <span className="inline-flex rounded-full border border-amber-200 bg-white/90 px-2.5 py-1 text-xs font-semibold text-amber-800">
+                                                                        {formatPresentationIssueLabel(issue.issue_type) || issue.issue_type}
+                                                                    </span>
+                                                                    <span className="text-xs text-zinc-500">
+                                                                        涉及回合：{issue.turn_numbers.length > 0 ? issue.turn_numbers.join("、") : "--"}
+                                                                    </span>
+                                                                </div>
+                                                                <p className="text-sm text-zinc-800">{issue.summary}</p>
+                                                                {contextLines.length > 0 && (
+                                                                    <div className="mt-2 space-y-1">
+                                                                        {contextLines.map((line) => (
+                                                                            <p key={line} className="text-xs text-zinc-600">{line}</p>
+                                                                        ))}
+                                                                    </div>
+                                                                )}
+                                                                {evidenceItems.length > 0 && (
+                                                                    <ul className="mt-3 space-y-1">
+                                                                        {evidenceItems.map((item) => (
+                                                                            <li key={item} className="text-xs text-zinc-700 flex items-start gap-2">
+                                                                                <span className="mt-1 h-1.5 w-1.5 rounded-full bg-amber-500 flex-shrink-0" />
+                                                                                <span>{item}</span>
+                                                                            </li>
+                                                                        ))}
+                                                                    </ul>
+                                                                )}
+                                                            </div>
+                                                        );
+                                                    })}
+                                                </div>
+                                            </div>
                                         )}
                                     </div>
                                 ))}

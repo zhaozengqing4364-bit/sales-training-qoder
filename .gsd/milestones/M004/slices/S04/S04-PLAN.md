@@ -8,7 +8,7 @@
   - Estimate: 90m
   - Files: backend/src/presentation_coach/services/presentation_report_service.py, backend/src/common/conversation/session_evidence.py, backend/tests/unit/test_presentation_report_service.py
   - Verify: cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_presentation_report_service.py
-- [ ] **T02: Show page-level learning evidence on the current PPT report route** — Render the richer page-level evidence on the current shared PPT report page so the learner can see which page has which issue cluster and why. Reuse the current presentation branch of `report/page.tsx`; do not create a separate PPT learning page.
+- [x] **T02: Shared PPT report now shows page-level issue clusters with evidence and a page-level overview on the existing route.** — Render the richer page-level evidence on the current shared PPT report page so the learner can see which page has which issue cluster and why. Reuse the current presentation branch of `report/page.tsx`; do not create a separate PPT learning page.
   - Estimate: 75m
   - Files: web/src/app/(user)/practice/[sessionId]/report/page.tsx, web/src/lib/session-evidence.ts, web/src/app/(user)/practice/[sessionId]/report/page.test.tsx
   - Verify: cd web && npm test -- --run 'src/app/(user)/practice/[sessionId]/report/page.test.tsx'

@@ -944,6 +944,16 @@ export interface PresentationReviewDimensionScore {
     description: string;
 }
 
+export interface PresentationReviewPageIssueCluster {
+    issue_type: "off_page" | "missing_point" | "overlong_explanation" | "forbidden_word" | "weak_qa_handling" | string;
+    summary: string;
+    evidence: string[];
+    turn_numbers: number[];
+    linked_points: string[];
+    linked_phrases: string[];
+    related_page_numbers: number[];
+}
+
 export interface PresentationReviewPageSummary {
     page_number: number;
     stage_number: number;
@@ -953,6 +963,7 @@ export interface PresentationReviewPageSummary {
     key_points: string[];
     matched_required_points: string[];
     missing_required_points: string[];
+    issue_clusters?: PresentationReviewPageIssueCluster[];
     summary: string;
 }
 
@@ -974,6 +985,8 @@ export interface PresentationReviewDiagnostics {
     required_points_missing: number;
     required_coverage_ratio: number;
     degraded_reasons: string[];
+    page_issue_cluster_count?: number;
+    page_issue_types?: string[];
 }
 
 export interface PresentationReview {
