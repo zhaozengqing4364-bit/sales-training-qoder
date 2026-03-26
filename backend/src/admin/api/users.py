@@ -597,6 +597,20 @@ async def get_user_sessions(
         if row.PracticeSession.status == SessionStatus.COMPLETED.value
     }
 
+    manager_intervention_results: list[dict[str, Any]] = []
+    intervention_results_result = await history_service.get_manager_intervention_results(
+        db=db,
+        user_id=uuid.UUID(user_id),
+    )
+    if intervention_results_result.is_success:
+        manager_intervention_results = intervention_results_result.value
+    else:
+        logger.warning(
+            "admin_user_intervention_results_degraded",
+            user_id=user_id,
+            error=intervention_results_result.fallback,
+        )
+
     sessions = []
     for row in rows:
         session = row.PracticeSession
@@ -654,6 +668,7 @@ async def get_user_sessions(
         "page": page,
         "page_size": page_size,
         "has_more": (page * page_size) < total,
+        "manager_intervention_results": manager_intervention_results,
     })
 
 

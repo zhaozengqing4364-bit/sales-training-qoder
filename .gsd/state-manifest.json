@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "exported_at": "2026-03-26T07:36:39.578Z",
+  "exported_at": "2026-03-26T08:40:26.105Z",
   "milestones": [
     {
       "id": "M001",
@@ -525,16 +525,16 @@
       "milestone_id": "M005",
       "id": "S02",
       "title": "系统内主管重点与提醒闭环",
-      "status": "pending",
+      "status": "complete",
       "risk": "high",
       "depends": [
         "S01"
       ],
       "demo": "A supervisor can set a training focus, send a reminder, and later see whether a resulting session improved that issue family — all on current admin surfaces.",
       "created_at": "2026-03-25T00:41:56.626Z",
-      "completed_at": null,
-      "full_summary_md": "",
-      "full_uat_md": "",
+      "completed_at": "2026-03-26T08:14:57.699Z",
+      "full_summary_md": "---\nid: S02\nparent: M005\nmilestone: M005\nprovides:\n  - Persistent manager intervention records on the current admin API chain.\n  - Manager-lite deep links into `/admin/users/[id]` with prefilled focus context.\n  - Projection-backed `manager_intervention_results` on the existing admin user sessions surface plus canonical report drill-ins.\nrequires:\n  - slice: S01\n    provides: projection-backed admin analytics / user drill-in semantics and the unified completed-session evidence baseline\naffects:\n  - S04\n  - S05\nkey_files:\n  - backend/alembic/versions/20260326_1000_021_add_manager_interventions.py\n  - backend/src/admin/api/interventions.py\n  - backend/src/admin/api/users.py\n  - backend/src/common/analytics/history_service.py\n  - backend/src/common/db/models.py\n  - backend/src/common/db/schemas.py\n  - backend/tests/integration/test_admin_interventions_api.py\n  - backend/tests/integration/test_admin_users_api.py\n  - web/src/app/admin/users/[id]/page.tsx\n  - web/src/app/admin/users/[id]/page.test.tsx\n  - web/src/app/admin/users/page.tsx\n  - web/src/components/admin/manager-lite-panel.tsx\n  - web/src/components/admin/manager-lite-panel.test.tsx\nkey_decisions:\n  - Use a dedicated `manager_interventions` table instead of stretching current admin routes into a generic task system.\n  - Keep `/admin/users/[id]` as the single supervisor authority surface, with manager-lite acting as a launcher through focus query params.\n  - Derive intervention results on the read side from `HistoryService` + `SessionEvidenceService` projections instead of mutating intervention rows during GET requests.\npatterns_established:\n  - Add minimal durable workflow state to current admin entrypoints before considering a second governance surface.\n  - Use manager-lite as a launcher into the same authority page instead of duplicating form and state orchestration.\n  - When supervisor outcomes depend on training facts, derive them from the same projection-backed evidence line as report/admin previews and prefer the latest evaluable completed session after intervention creation.\nobservability_surfaces:\n  - `manager_intervention_created` structured log.\n  - `manager_lite_reminder_logged` structured log.\n  - `practice_history_projection_query` with `query_name=\"admin_user_intervention_results\"`.\ndrill_down_paths:\n  - .gsd/milestones/M005/slices/S02/tasks/T01-SUMMARY.md\n  - .gsd/milestones/M005/slices/S02/tasks/T02-SUMMARY.md\n  - .gsd/milestones/M005/slices/S02/tasks/T03-SUMMARY.md\nduration: \"\"\nverification_result: passed\ncompleted_at: 2026-03-26T08:14:57.702Z\nblocker_discovered: false\n---\n\n# S02: 系统内主管重点与提醒闭环\n\n**主管现在可以在现有 admin 用户链路里设训练重点、记录提醒，并在同一页看到后续训练是否已经改善该问题家族。**\n\n## What Happened\n\nThis slice closed the smallest usable supervisor loop on the current admin surfaces instead of introducing a second governance console. The backend added a dedicated `manager_interventions` table plus create/list/patch/remind endpoints so supervisor focus, reminder state, due state, and optional resolving-session linkage persist on the existing admin API chain. The legacy remind entrypoint stayed compatible, but now updates persisted reminder state when an open intervention already exists.\n\nOn the web side, manager-lite stayed a launcher rather than becoming a second workflow surface. Its not-passed cards now deep-link into `/admin/users/[id]` with prefilled `focusIssueFamily` / `focusNote` query params, and the current user detail page now owns the create/remind/read loop: supervisors can set a focus, inspect existing interventions, record a reminder, and drill into the canonical report for the linked resulting session.\n\nResult linkage was kept on the read side. `HistoryService.build_manager_intervention_results(...)` derives the latest supervisor outcome from persisted interventions plus completed-session projections and prefers the latest evaluable completed session after intervention creation. That keeps the intervention card on the same evidence line as learner/report/admin previews, avoids GET-time mutation, and prevents a later thin `INSUFFICIENT_TURN_DATA` session from erasing a real earlier improvement.\n\n## Verification\n\nFresh slice-close verification reran all planned task checks and the schema path: `cd backend && /usr/bin/time -p venv/bin/python -m pytest -c pyproject.toml tests/integration/test_admin_interventions_api.py` passed 3/3 tests; `cd web && pnpm dlx npm@11.6.1 test -- --run 'src/app/admin/users/[id]/page.test.tsx' 'src/components/admin/manager-lite-panel.test.tsx'` passed 2/2 test files and 7/7 tests; `cd backend && /usr/bin/time -p venv/bin/python -m pytest -c pyproject.toml tests/integration/test_admin_users_api.py` passed 15/15 tests; and `cd backend && /usr/bin/time -p venv/bin/alembic upgrade head` succeeded on the local backend database.\n\n## Requirements Advanced\n\nNone.\n\n## Requirements Validated\n\nNone.\n\n## New Requirements Surfaced\n\nNone.\n\n## Requirements Invalidated or Re-scoped\n\nNone.\n\n## Deviations\n\nNone.\n\n## Known Limitations\n\nReminder actions currently record in-product reminder lifecycle state only; they do not deliver an external notification. The detail page shows the latest meaningful resulting session but does not auto-resolve interventions or provide a bulk team-level queue. Team/cohort operating views remain future slice work.\n\n## Follow-ups\n\nS04 should aggregate these intervention results into team/cohort views instead of leaving them only on individual user detail pages. If the product later needs real delivery, the current remind action should fan out to an external notification channel while `manager_interventions` remains the source of truth.\n\n## Files Created/Modified\n\n- `backend/alembic/versions/20260326_1000_021_add_manager_interventions.py` — Added the `manager_interventions` migration and constraints/indexes for supervisor focus persistence.\n- `backend/src/common/db/models.py` — Added the `ManagerIntervention` SQLAlchemy model.\n- `backend/src/common/db/schemas.py` — Added manager intervention enums and request/response schemas.\n- `backend/src/admin/api/interventions.py` — Implemented create/list/update/remind endpoints on the existing admin intervention chain.\n- `backend/src/common/analytics/history_service.py` — Derived intervention-result summaries from persisted interventions plus unified session-evidence projections.\n- `backend/src/admin/api/users.py` — Exposed `manager_intervention_results` on the existing admin user sessions read surface.\n- `web/src/components/admin/manager-lite-panel.tsx` — Turned manager-lite into a launcher with unified-report links, deep links into user detail, and reminder actions.\n- `web/src/app/admin/users/[id]/page.tsx` — Added the supervisor intervention form, intervention cards, reminder actions, and linked-result/report UI on the current detail page.\n- `web/src/app/admin/users/page.tsx` — Updated current users-page copy so the supervisor-focus path is explicit on the existing entrypoint.\n- `backend/tests/integration/test_admin_interventions_api.py` — Covered intervention persistence, remind lifecycle updates, and resolving-session linkage.\n- `backend/tests/integration/test_admin_users_api.py` — Covered projection-backed admin sessions/progress plus intervention-result linkage.\n- `web/src/app/admin/users/[id]/page.test.tsx` — Covered create/remind/result UX and current detail-page inline states.\n- `web/src/components/admin/manager-lite-panel.test.tsx` — Covered manager-lite evidence wording, report links, and user-detail deep-link launcher behavior.\n",
+      "full_uat_md": "# S02: 系统内主管重点与提醒闭环 — UAT\n\n**Milestone:** M005\n**Written:** 2026-03-26T08:14:57.702Z\n\n# S02: 系统内主管重点与提醒闭环 — UAT\n\n**Milestone:** M005\n**Written:** 2026-03-26\n\n## UAT Type\n\n- UAT mode: mixed\n- Why this mode is sufficient: This slice changed both persistent admin contracts and the existing admin user-detail / manager-lite surfaces. Focused backend and web tests already prove the persistence and projection edges; this UAT confirms that a supervisor can complete the intended in-product workflow on the shipped admin surfaces.\n\n## Preconditions\n\n- Backend is migrated to Alembic head, including revision `20260326_1000_021`.\n- Backend and web are running against the same environment.\n- You can log in as an admin user.\n- There is at least one learner with:\n  - a visible admin user detail page,\n  - at least one completed sales session with a canonical report,\n  - ideally one manager-lite “未达标名单” entry so the deep-link launcher path can be exercised.\n- If you want to verify the “已改善” result case, prepare a learner who already has:\n  - one intervention created earlier, and\n  - a later completed **evaluable** session whose main issue family shifted away from the intervention family or whose session passed.\n\n## Smoke Test\n\n1. Open the current admin users detail page for a learner.\n2. Set a主管重点 with a note.\n3. **Expected:** A new intervention card appears immediately on the same page with the chosen issue family, the note, and an initial reminder state of “未提醒” / due state of “待跟进”.\n\n## Test Cases\n\n### 1. Manager-lite deep link pre-fills the current user-detail intervention form\n\n1. Open the current admin manager-lite surface that shows the “未达标名单”.\n2. Pick a learner row and click **查看并设重点**.\n3. Confirm the browser lands on `/admin/users/{id}` instead of a new workflow console.\n4. On the detail page, verify the **主管重点** select is already set from the launcher query string.\n5. Verify the **主管说明** textarea is already prefilled with the launcher note.\n6. Click **设为主管重点**.\n7. **Expected:**\n   - A success notice appears.\n   - A new intervention card is inserted on the same detail page.\n   - The card shows the selected issue family and the prefilled note.\n   - No separate admin workflow page or modal is required.\n\n### 2. Supervisor can record a reminder on an existing intervention card\n\n1. Open `/admin/users/{id}` for a learner who already has at least one intervention card.\n2. Find an open intervention card with a visible **记录提醒** button.\n3. Click **记录提醒**.\n4. Wait for the action to complete.\n5. **Expected:**\n   - A success notice appears on the same page.\n   - The same intervention card updates to show **提醒已发送**.\n   - If the card was not already resolved, its due-state badge now reads **待提醒**.\n   - The page stays on the current user detail surface; no separate reminder console opens.\n\n### 3. Supervisor can inspect the latest linked result and drill into the authoritative report\n\n1. Open `/admin/users/{id}` for a learner with an existing intervention and at least one later completed evaluable session.\n2. Locate the intervention card.\n3. Inspect the linked result block under that card.\n4. Verify the result block shows one of the explicit statuses:\n   - **最近结果：已改善**\n   - **最近结果：仍卡住**\n   - **最近结果：待判断**\n5. If a linked session is shown, click **查看对应统一报告**.\n6. **Expected:**\n   - The intervention card explains the result in plain supervisor language.\n   - The result is tied to one later completed session, not an abstract score-only judgment.\n   - The report link opens `/practice/{sessionId}/report` for that linked session.\n   - The report page is the same authoritative learner/supervisor report surface already used elsewhere in the product.\n\n### 4. Current user-detail page still holds the complete in-product supervisor loop\n\n1. Open `/admin/users/{id}` directly, without coming from manager-lite.\n2. Create a new intervention from the page.\n3. On the newly created card, use **记录提醒**.\n4. Refresh the page.\n5. **Expected:**\n   - The newly created intervention is still present after refresh.\n   - Its latest reminder status is preserved.\n   - The workflow remains inside the existing user-detail page from create → remind → inspect.\n\n## Edge Cases\n\n### Latest post-intervention session is not evaluable\n\n1. Use a learner whose latest completed session after the intervention is thin / evidence-insufficient.\n2. Open the corresponding intervention card on `/admin/users/{id}`.\n3. **Expected:**\n   - The result block says **最近结果：待判断**.\n   - The summary explains that the latest completed session does not yet provide enough evidence.\n   - The UI does not falsely claim improvement or closure.\n\n### A newer thin session exists after an earlier evaluable improvement\n\n1. Use a learner with this sequence after intervention creation:\n   - first a later completed **evaluable** session showing improvement,\n   - then a newer completed **not evaluable** thin session.\n2. Open `/admin/users/{id}` and inspect the same intervention card.\n3. **Expected:**\n   - The card still uses the latest meaningful evaluable result for the improvement judgment.\n   - It does not downgrade an already proven improvement just because a thinner completed session happened later.\n\n### No existing interventions yet\n\n1. Open `/admin/users/{id}` for a learner with no manager interventions.\n2. Scroll to the supervisor section.\n3. **Expected:**\n   - The page shows the explicit empty state for supervisor focus records.\n   - The create form is still immediately usable.\n\n## Failure Signals\n\n- Clicking **查看并设重点** opens a different workflow surface or loses the intended prefilled focus/note.\n- Creating a focus succeeds in the UI but the intervention disappears on refresh.\n- Clicking **记录提醒** does not change the card to **提醒已发送** / **待提醒**.\n- The intervention result block disappears even though the learner has later completed sessions.\n- A later thin `INSUFFICIENT_TURN_DATA` session incorrectly overwrites an earlier evaluable improvement.\n- **查看对应统一报告** does not open the canonical `/practice/{sessionId}/report` route.\n\n## Requirements Proved By This UAT\n\n- None — this UAT proves the M005/S02 roadmap slice goal on current admin surfaces, but it does not change the status of a tracked requirement in `.gsd/REQUIREMENTS.md` by itself.\n\n## Not Proven By This UAT\n\n- Actual external reminder delivery through email / WeCom / another notification transport.\n- Automatic intervention resolution writes back into `due_state=\"resolved\"` when a later session improves.\n- Team-level cohort rollups or weekly operating summaries; those belong to later M005 slices.\n\n## Notes for Tester\n\n- If `/admin/users/{id}` or `/api/v1/admin/users/{id}/sessions` suddenly fails with what looks like a frontend/network problem, check Alembic first; this slice depends on the post-`20260317_2310_020` projection path and the new `manager_interventions` table migration.\n- For this slice, the authoritative result linkage lives on the current user sessions/read-model path. If the intervention card result looks wrong, inspect `/api/v1/admin/users/{id}/sessions` before assuming the UI is at fault.\n- The product copy deliberately keeps manager-lite as a launcher and `/admin/users/[id]` as the single supervisor authority surface. Seeing everything happen on the detail page is the expected outcome, not a missing dashboard.\n",
       "goal": "Turn the existing manager-lite / intervention entrypoints into a minimal in-product manager workflow with persistent focus, reminder, and result linkage.",
       "success_criteria": "A supervisor can set a training focus, send a reminder, and later see whether a resulting session improved that issue family — all on current admin surfaces.",
       "proof_level": "integration",
@@ -2527,19 +2527,31 @@
       "milestone_id": "M005",
       "slice_id": "S02",
       "id": "T03",
-      "title": "Link interventions back to later session outcomes on the current evidence line",
-      "status": "pending",
-      "one_liner": "",
-      "narrative": "",
-      "verification_result": "",
+      "title": "Linked supervisor interventions to the latest meaningful session evidence and surfaced the result on the admin user detail page.",
+      "status": "complete",
+      "one_liner": "Linked supervisor interventions to the latest meaningful session evidence and surfaced the result on the admin user detail page.",
+      "narrative": "Added a read-side manager intervention result projection on `/api/v1/admin/users/{id}/sessions` by combining persisted interventions with `HistoryService` and the existing session-evidence projection. The backend now normalizes intervention issue families against the current report/replay vocabulary and derives the latest meaningful outcome per intervention, preferring the newest evaluable completed session and only falling back to thin-evidence completions when no evaluable follow-up exists yet. The admin user detail page now renders that derived result directly on each intervention card and links straight to the matching unified report, so supervisors can see whether a later session improved the targeted issue family without leaving the current surface. Added backend integration coverage for improved/not-evaluable/pending outcomes and a focused page test for the new intervention-card result block.",
+      "verification_result": "Ran the full task-plan verifier `cd backend && /usr/bin/time -p venv/bin/python -m pytest -c pyproject.toml tests/integration/test_admin_users_api.py`, which passed all 15 admin user integration tests including the new intervention-result regression. Also ran `cd web && /usr/bin/time -p pnpm exec vitest run 'src/app/admin/users/[id]/page.test.tsx'`, which passed all 6 focused admin user detail page tests after surfacing the linked result on the intervention card.",
       "duration": "",
-      "completed_at": null,
+      "completed_at": "2026-03-26T08:01:50.909Z",
       "blocker_discovered": false,
-      "deviations": "",
-      "known_issues": "",
-      "key_files": [],
-      "key_decisions": [],
-      "full_summary_md": "",
+      "deviations": "Extended the planned backend-only file set with the typed frontend response/update on `web/src/lib/api/types.ts`, `web/src/app/admin/users/[id]/page.tsx`, and `web/src/app/admin/users/[id]/page.test.tsx` because a backend payload alone would not surface the linked result on the current admin page.",
+      "known_issues": "None.",
+      "key_files": [
+        "backend/src/common/analytics/history_service.py",
+        "backend/src/admin/api/users.py",
+        "backend/tests/integration/test_admin_users_api.py",
+        "web/src/lib/api/types.ts",
+        "web/src/app/admin/users/[id]/page.tsx",
+        "web/src/app/admin/users/[id]/page.test.tsx",
+        ".gsd/DECISIONS.md",
+        ".gsd/KNOWLEDGE.md"
+      ],
+      "key_decisions": [
+        "Derive manager intervention results on the `/api/v1/admin/users/{id}/sessions` read path from persisted interventions plus session-evidence projections instead of mutating intervention rows during admin reads.",
+        "Prefer the latest evaluable completed session after an intervention when deciding the current manager result; only fall back to thin-evidence completed sessions when no evaluable follow-up exists yet."
+      ],
+      "full_summary_md": "---\nid: T03\nparent: S02\nmilestone: M005\nkey_files:\n  - backend/src/common/analytics/history_service.py\n  - backend/src/admin/api/users.py\n  - backend/tests/integration/test_admin_users_api.py\n  - web/src/lib/api/types.ts\n  - web/src/app/admin/users/[id]/page.tsx\n  - web/src/app/admin/users/[id]/page.test.tsx\n  - .gsd/DECISIONS.md\n  - .gsd/KNOWLEDGE.md\nkey_decisions:\n  - Derive manager intervention results on the `/api/v1/admin/users/{id}/sessions` read path from persisted interventions plus session-evidence projections instead of mutating intervention rows during admin reads.\n  - Prefer the latest evaluable completed session after an intervention when deciding the current manager result; only fall back to thin-evidence completed sessions when no evaluable follow-up exists yet.\nduration: \"\"\nverification_result: passed\ncompleted_at: 2026-03-26T08:01:50.910Z\nblocker_discovered: false\n---\n\n# T03: Linked supervisor interventions to the latest meaningful session evidence and surfaced the result on the admin user detail page.\n\n**Linked supervisor interventions to the latest meaningful session evidence and surfaced the result on the admin user detail page.**\n\n## What Happened\n\nAdded a read-side manager intervention result projection on `/api/v1/admin/users/{id}/sessions` by combining persisted interventions with `HistoryService` and the existing session-evidence projection. The backend now normalizes intervention issue families against the current report/replay vocabulary and derives the latest meaningful outcome per intervention, preferring the newest evaluable completed session and only falling back to thin-evidence completions when no evaluable follow-up exists yet. The admin user detail page now renders that derived result directly on each intervention card and links straight to the matching unified report, so supervisors can see whether a later session improved the targeted issue family without leaving the current surface. Added backend integration coverage for improved/not-evaluable/pending outcomes and a focused page test for the new intervention-card result block.\n\n## Verification\n\nRan the full task-plan verifier `cd backend && /usr/bin/time -p venv/bin/python -m pytest -c pyproject.toml tests/integration/test_admin_users_api.py`, which passed all 15 admin user integration tests including the new intervention-result regression. Also ran `cd web && /usr/bin/time -p pnpm exec vitest run 'src/app/admin/users/[id]/page.test.tsx'`, which passed all 6 focused admin user detail page tests after surfacing the linked result on the intervention card.\n\n## Verification Evidence\n\n| # | Command | Exit Code | Verdict | Duration |\n|---|---------|-----------|---------|----------|\n| 1 | `cd backend && /usr/bin/time -p venv/bin/python -m pytest -c pyproject.toml tests/integration/test_admin_users_api.py` | 0 | ✅ pass | 6900ms |\n| 2 | `cd web && /usr/bin/time -p pnpm exec vitest run 'src/app/admin/users/[id]/page.test.tsx'` | 0 | ✅ pass | 1730ms |\n\n\n## Deviations\n\nExtended the planned backend-only file set with the typed frontend response/update on `web/src/lib/api/types.ts`, `web/src/app/admin/users/[id]/page.tsx`, and `web/src/app/admin/users/[id]/page.test.tsx` because a backend payload alone would not surface the linked result on the current admin page.\n\n## Known Issues\n\nNone.\n\n## Files Created/Modified\n\n- `backend/src/common/analytics/history_service.py`\n- `backend/src/admin/api/users.py`\n- `backend/tests/integration/test_admin_users_api.py`\n- `web/src/lib/api/types.ts`\n- `web/src/app/admin/users/[id]/page.tsx`\n- `web/src/app/admin/users/[id]/page.test.tsx`\n- `.gsd/DECISIONS.md`\n- `.gsd/KNOWLEDGE.md`\n",
       "description": "Link the intervention state back to the current report/replay evidence chain so a manager can tell whether the targeted issue family improved after a later session. Reuse existing projection/evidence semantics and admin drill-ins instead of a bespoke result screen.",
       "estimate": "75m",
       "files": [
@@ -2566,19 +2578,32 @@
       "milestone_id": "M005",
       "slice_id": "S03",
       "id": "T01",
-      "title": "Expose asset impact and recent-change summaries on current backend routes",
-      "status": "pending",
-      "one_liner": "",
-      "narrative": "",
-      "verification_result": "",
+      "title": "Added shared runtime-backed governance summaries to the existing asset list routes for knowledge bases, personas, presentations, and voice runtime profiles.",
+      "status": "complete",
+      "one_liner": "Added shared runtime-backed governance summaries to the existing asset list routes for knowledge bases, personas, presentations, and voice runtime profiles.",
+      "narrative": "Implemented one shared backend governance shape for the current asset-management chain: impact_summary, recent_change_summary, and health_summary. RuntimeStatusService now builds per-asset usage and anomaly indexes from the existing typed support/runtime fault line, and the current list routes layer in asset-local facts such as failed knowledge documents, persona policy drift, presentation processing/failed status, and runtime-profile inactive state. Knowledge, persona, presentation, and voice-runtime routes now expose governance_summary directly on their existing responses instead of introducing a parallel governance API. A focused integration suite seeds real sessions and verifies that the four routes surface impact range, recent-change counts, and anomaly samples from real runtime behavior.",
+      "verification_result": "Ran `cd backend && venv/bin/python -m pytest -c pyproject.toml tests/integration/test_asset_governance_api.py` and confirmed the new integration suite passes against the current routes and seeded runtime facts.",
       "duration": "",
-      "completed_at": null,
+      "completed_at": "2026-03-26T08:40:26.083Z",
       "blocker_discovered": false,
-      "deviations": "",
-      "known_issues": "",
-      "key_files": [],
-      "key_decisions": [],
-      "full_summary_md": "",
+      "deviations": "Adjusted the focused integration suite to the actual KB-lock runtime anomaly kind (`kb_lock_blocked_search_failed`) emitted by the shared support/runtime diagnostics seam instead of forcing a looser `knowledge_search_failed` label.",
+      "known_issues": "None.",
+      "key_files": [
+        "backend/src/support/services/runtime_status_service.py",
+        "backend/src/common/knowledge/api.py",
+        "backend/src/common/knowledge/schemas.py",
+        "backend/src/agent/services/persona_service.py",
+        "backend/src/agent/schemas.py",
+        "backend/src/common/db/schemas.py",
+        "backend/src/presentation_coach/api/presentations.py",
+        "backend/src/admin/api/voice_runtime.py",
+        "backend/tests/integration/test_asset_governance_api.py"
+      ],
+      "key_decisions": [
+        "Reused RuntimeStatusService as the shared anomaly and impact seam, then layered asset-local change and health signals on each route.",
+        "Kept governance data on the existing list endpoints by extending current response payloads instead of adding a new governance-specific backend surface."
+      ],
+      "full_summary_md": "---\nid: T01\nparent: S03\nmilestone: M005\nkey_files:\n  - backend/src/support/services/runtime_status_service.py\n  - backend/src/common/knowledge/api.py\n  - backend/src/common/knowledge/schemas.py\n  - backend/src/agent/services/persona_service.py\n  - backend/src/agent/schemas.py\n  - backend/src/common/db/schemas.py\n  - backend/src/presentation_coach/api/presentations.py\n  - backend/src/admin/api/voice_runtime.py\n  - backend/tests/integration/test_asset_governance_api.py\nkey_decisions:\n  - Reused RuntimeStatusService as the shared anomaly and impact seam, then layered asset-local change and health signals on each route.\n  - Kept governance data on the existing list endpoints by extending current response payloads instead of adding a new governance-specific backend surface.\nduration: \"\"\nverification_result: passed\ncompleted_at: 2026-03-26T08:40:26.083Z\nblocker_discovered: false\n---\n\n# T01: Added shared runtime-backed governance summaries to the existing asset list routes for knowledge bases, personas, presentations, and voice runtime profiles.\n\n**Added shared runtime-backed governance summaries to the existing asset list routes for knowledge bases, personas, presentations, and voice runtime profiles.**\n\n## What Happened\n\nImplemented one shared backend governance shape for the current asset-management chain: impact_summary, recent_change_summary, and health_summary. RuntimeStatusService now builds per-asset usage and anomaly indexes from the existing typed support/runtime fault line, and the current list routes layer in asset-local facts such as failed knowledge documents, persona policy drift, presentation processing/failed status, and runtime-profile inactive state. Knowledge, persona, presentation, and voice-runtime routes now expose governance_summary directly on their existing responses instead of introducing a parallel governance API. A focused integration suite seeds real sessions and verifies that the four routes surface impact range, recent-change counts, and anomaly samples from real runtime behavior.\n\n## Verification\n\nRan `cd backend && venv/bin/python -m pytest -c pyproject.toml tests/integration/test_asset_governance_api.py` and confirmed the new integration suite passes against the current routes and seeded runtime facts.\n\n## Verification Evidence\n\n| # | Command | Exit Code | Verdict | Duration |\n|---|---------|-----------|---------|----------|\n| 1 | `cd backend && venv/bin/python -m pytest -c pyproject.toml tests/integration/test_asset_governance_api.py` | 0 | ✅ pass | 4720ms |\n\n\n## Deviations\n\nAdjusted the focused integration suite to the actual KB-lock runtime anomaly kind (`kb_lock_blocked_search_failed`) emitted by the shared support/runtime diagnostics seam instead of forcing a looser `knowledge_search_failed` label.\n\n## Known Issues\n\nNone.\n\n## Files Created/Modified\n\n- `backend/src/support/services/runtime_status_service.py`\n- `backend/src/common/knowledge/api.py`\n- `backend/src/common/knowledge/schemas.py`\n- `backend/src/agent/services/persona_service.py`\n- `backend/src/agent/schemas.py`\n- `backend/src/common/db/schemas.py`\n- `backend/src/presentation_coach/api/presentations.py`\n- `backend/src/admin/api/voice_runtime.py`\n- `backend/tests/integration/test_asset_governance_api.py`\n",
       "description": "Add backend impact and recent-change summaries for the current asset types: knowledge bases, personas, presentations, and voice runtime profiles. Reuse current services/APIs and support/runtime diagnostics so the data comes from real usage and anomaly lines rather than static metadata only.",
       "estimate": "2h",
       "files": [
@@ -3843,6 +3868,30 @@
       "revisable": "Yes",
       "made_by": "agent",
       "superseded_by": null
+    },
+    {
+      "seq": 1436,
+      "id": "D077",
+      "when_context": "M005 S02 T03",
+      "scope": "architecture",
+      "decision": "How manager intervention results link back to later training outcomes",
+      "choice": "Derive `manager_intervention_results` on the `/api/v1/admin/users/{id}/sessions` read path from persisted interventions plus `HistoryService`/session-evidence projections instead of mutating intervention rows during admin reads.",
+      "rationale": "The admin user detail page already consumes the sessions endpoint and report drill-ins. Keeping result linkage as a read-side projection reuses the current evidence line, avoids GET-time writes and stale reminder/due-state side effects, and still lets supervisors inspect the latest meaningful outcome for each intervention on the existing surface.",
+      "revisable": "Yes",
+      "made_by": "agent",
+      "superseded_by": null
+    },
+    {
+      "seq": 1437,
+      "id": "D078",
+      "when_context": "M005/S03/T01",
+      "scope": "architecture",
+      "decision": "How asset-governance summaries should be exposed on current admin backend routes",
+      "choice": "Compute one shared runtime-backed governance summary per asset via RuntimeStatusService and merge route-specific change/local-health signals on the existing list endpoints for knowledge bases, personas, presentations, and voice runtime profiles.",
+      "rationale": "The same release-health reader already owns typed anomaly classification across completed, scoring, knowledge-lock, and degraded presentation sessions. Reusing that seam keeps governance surfaces on the canonical runtime/report diagnostics line, while allowing each route to add asset-local change facts such as failed knowledge documents or persona policy drift without inventing a second anomaly model.",
+      "revisable": "Yes",
+      "made_by": "agent",
+      "superseded_by": null
     }
   ],
   "verification_evidence": [
@@ -4813,6 +4862,39 @@
       "verdict": "✅ pass",
       "duration_ms": 2060,
       "created_at": "2026-03-26T07:36:39.552Z"
+    },
+    {
+      "id": 89,
+      "task_id": "T03",
+      "slice_id": "S02",
+      "milestone_id": "M005",
+      "command": "cd backend && /usr/bin/time -p venv/bin/python -m pytest -c pyproject.toml tests/integration/test_admin_users_api.py",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 6900,
+      "created_at": "2026-03-26T08:01:50.910Z"
+    },
+    {
+      "id": 90,
+      "task_id": "T03",
+      "slice_id": "S02",
+      "milestone_id": "M005",
+      "command": "cd web && /usr/bin/time -p pnpm exec vitest run 'src/app/admin/users/[id]/page.test.tsx'",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 1730,
+      "created_at": "2026-03-26T08:01:50.910Z"
+    },
+    {
+      "id": 91,
+      "task_id": "T01",
+      "slice_id": "S03",
+      "milestone_id": "M005",
+      "command": "cd backend && venv/bin/python -m pytest -c pyproject.toml tests/integration/test_asset_governance_api.py",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 4720,
+      "created_at": "2026-03-26T08:40:26.083Z"
     }
   ]
 }

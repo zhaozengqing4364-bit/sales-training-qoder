@@ -12,7 +12,7 @@
   - Estimate: 90m
   - Files: web/src/app/admin/users/[id]/page.tsx, web/src/app/admin/users/page.tsx, web/src/components/admin/manager-lite-panel.tsx, web/src/app/admin/users/[id]/page.test.tsx, web/src/components/admin/manager-lite-panel.test.tsx
   - Verify: cd web && npm test -- --run 'src/app/admin/users/[id]/page.test.tsx' 'src/components/admin/manager-lite-panel.test.tsx'
-- [ ] **T03: Link interventions back to later session outcomes on the current evidence line** — Link the intervention state back to the current report/replay evidence chain so a manager can tell whether the targeted issue family improved after a later session. Reuse existing projection/evidence semantics and admin drill-ins instead of a bespoke result screen.
+- [x] **T03: Linked supervisor interventions to the latest meaningful session evidence and surfaced the result on the admin user detail page.** — Link the intervention state back to the current report/replay evidence chain so a manager can tell whether the targeted issue family improved after a later session. Reuse existing projection/evidence semantics and admin drill-ins instead of a bespoke result screen.
   - Estimate: 75m
   - Files: backend/src/admin/api/users.py, backend/src/common/analytics/history_service.py, backend/tests/integration/test_admin_users_api.py
   - Verify: cd backend && venv/bin/python -m pytest -c pyproject.toml tests/integration/test_admin_users_api.py

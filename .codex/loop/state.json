@@ -1,6 +1,6 @@
 {
   "mode": "stabilize",
-  "current_issue_id": "M005-S02-T02",
+  "current_issue_id": "M005-S03-T01",
   "current_issue_type": "task",
   "current_issue_status": "done",
   "pending_issue_ids": [],
@@ -86,28 +86,32 @@
     "M005-S01-T02",
     "M005-S01",
     "M005-S02-T01",
-    "M005-S02-T02"
+    "M005-S02-T02",
+    "M005-S02-T03",
+    "M005-S03-T01"
   ],
   "blocked_issue_ids": [],
   "deferred_issue_ids": [],
   "last_modified_files": [
-    "web/src/app/admin/users/[id]/page.tsx",
-    "web/src/app/admin/users/page.tsx",
-    "web/src/components/admin/manager-lite-panel.tsx",
-    "web/src/app/admin/users/[id]/page.test.tsx",
-    "web/src/components/admin/manager-lite-panel.test.tsx",
-    "web/src/lib/api/client.ts",
-    "web/src/lib/api/types.ts",
+    "backend/src/support/services/runtime_status_service.py",
+    "backend/src/common/knowledge/api.py",
+    "backend/src/common/knowledge/schemas.py",
+    "backend/src/agent/services/persona_service.py",
+    "backend/src/agent/schemas.py",
+    "backend/src/common/db/schemas.py",
+    "backend/src/presentation_coach/api/presentations.py",
+    "backend/src/admin/api/voice_runtime.py",
+    "backend/tests/integration/test_asset_governance_api.py",
     ".gsd/DECISIONS.md",
-    ".gsd/milestones/M005/slices/S02/tasks/T02-SUMMARY.md",
+    ".gsd/KNOWLEDGE.md",
     ".codex/loop/state.json",
     ".codex/loop/log.md"
   ],
   "last_verification_commands": [
-    "cd web && /usr/bin/time -p npm test -- --run 'src/app/admin/users/[id]/page.test.tsx' 'src/components/admin/manager-lite-panel.test.tsx'"
+    "cd backend && venv/bin/python -m pytest -c pyproject.toml tests/integration/test_asset_governance_api.py"
   ],
-  "last_verification_result": "Focused admin-user intervention web verification passed: the detail-page intervention inspect/create/remind flow and manager-lite deep links both passed the planned Vitest suite.",
-  "last_success_signal": "Supervisors can now create and inspect persisted interventions on the existing admin user surfaces, and manager-lite links into that same detail-page workflow.",
+  "last_verification_result": "Focused asset-governance backend verification passed: the integration suite confirms current knowledge, persona, presentation, and voice-runtime routes now expose runtime-backed governance summaries with recent-change and anomaly data.",
+  "last_success_signal": "Operators can inspect likely impact range, recent changes, and current anomaly lines for each managed asset through the existing backend list routes.",
   "last_growth_scan": null,
-  "next_action": "Continue M005/S02 with T03 to link interventions back to later session outcomes on the current evidence line."
+  "next_action": "Proceed with M005/S03/T02 and render the new governance_summary fields on the current admin asset pages."
 }

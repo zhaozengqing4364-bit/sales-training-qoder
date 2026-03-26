@@ -23,6 +23,7 @@ from agent.models import Agent, AgentPersona, Persona, VoiceRuntimeProfile  # no
 from common.db.models import (
     Base,
     ConversationMessage,
+    ManagerIntervention,
     PracticeSession,
     Scenario,
     SystemLog,
@@ -1021,3 +1022,273 @@ async def test_admin_progress_and_stats_follow_projection_backed_supervisor_snap
         "reason": "stalled_repeated_focus",
         "summary": "最近多次训练仍卡在同一重点且没有改善，建议切换训练重点或训练方法。",
     }
+
+
+@pytest.mark.asyncio
+async def test_user_sessions_expose_latest_manager_intervention_results_on_projection_line(
+    async_client: AsyncClient,
+    admin_headers: dict[str, str],
+    db_session: AsyncSession,
+    admin_user: User,
+    non_admin_user: User,
+) -> None:
+    """User sessions should include the latest intervention outcome derived from later unified evidence."""
+    scenario = Scenario(
+        scenario_id=str(uuid.uuid4()),
+        scenario_type="sales",
+        name="主管重点闭环",
+        description="Manager intervention result linkage test",
+        is_active=True,
+    )
+    db_session.add(scenario)
+    await db_session.flush()
+
+    intervention_start = datetime(2026, 3, 23, 8, 0, tzinfo=timezone.utc)
+    blocked_start = datetime(2026, 3, 24, 9, 0, tzinfo=timezone.utc)
+    improved_start = datetime(2026, 3, 25, 9, 0, tzinfo=timezone.utc)
+    thin_start = datetime(2026, 3, 26, 9, 0, tzinfo=timezone.utc)
+
+    blocked_session = PracticeSession(
+        session_id=str(uuid.uuid4()),
+        user_id=str(non_admin_user.user_id),
+        scenario_id=str(scenario.scenario_id),
+        status="completed",
+        start_time=blocked_start,
+        end_time=blocked_start + timedelta(minutes=4),
+        total_duration_seconds=240,
+        logic_score=None,
+        accuracy_score=None,
+        completeness_score=None,
+        interruption_count=1,
+        effectiveness_snapshot={
+            "pass_flags": {
+                "pass_3min_flow": False,
+                "pass_5turn_defense": False,
+                "pass_4step_structure": False,
+            },
+            "main_capability_passed": False,
+            "overall_result": "fail",
+            "main_issue": {
+                "issue_type": "evidence_gap",
+                "issue_text": "证据支撑仍不够具体。",
+                "recovery_rule": "补 ROI 与客户案例证据。",
+            },
+            "next_goal": {
+                "goal_type": "evidence_backing",
+                "goal_text": "下一轮继续补齐 ROI 与客户案例证据。",
+                "rule": "至少补 1 组 ROI 与客户案例证据。",
+            },
+            "evaluable": True,
+            "not_evaluable_reason": None,
+        },
+    )
+    improved_session = PracticeSession(
+        session_id=str(uuid.uuid4()),
+        user_id=str(non_admin_user.user_id),
+        scenario_id=str(scenario.scenario_id),
+        status="completed",
+        start_time=improved_start,
+        end_time=improved_start + timedelta(minutes=4),
+        total_duration_seconds=240,
+        logic_score=None,
+        accuracy_score=None,
+        completeness_score=None,
+        interruption_count=0,
+        effectiveness_snapshot={
+            "pass_flags": {
+                "pass_3min_flow": False,
+                "pass_5turn_defense": False,
+                "pass_4step_structure": False,
+            },
+            "main_capability_passed": False,
+            "overall_result": "fail",
+            "main_issue": {
+                "issue_type": "objection_handling_gap",
+                "issue_text": "新的主问题转成了异议处理。",
+                "recovery_rule": "继续补异议回应。",
+            },
+            "next_goal": {
+                "goal_type": "objection_response_drill",
+                "goal_text": "下一轮把异议回应说完整。",
+                "rule": "至少完成 1 次完整异议回应。",
+            },
+            "evaluable": True,
+            "not_evaluable_reason": None,
+        },
+    )
+    thin_session = PracticeSession(
+        session_id=str(uuid.uuid4()),
+        user_id=str(non_admin_user.user_id),
+        scenario_id=str(scenario.scenario_id),
+        status="completed",
+        start_time=thin_start,
+        end_time=thin_start + timedelta(minutes=1),
+        total_duration_seconds=60,
+        logic_score=None,
+        accuracy_score=None,
+        completeness_score=None,
+        interruption_count=0,
+        effectiveness_snapshot={
+            "pass_flags": {
+                "pass_3min_flow": False,
+                "pass_5turn_defense": False,
+                "pass_4step_structure": False,
+            },
+            "main_capability_passed": False,
+            "overall_result": "fail",
+            "main_issue": {
+                "issue_type": "insufficient_turn_data",
+                "issue_text": "当前互动不足，暂时无法判断真实问题。",
+                "recovery_rule": "至少完成一轮用户表达和 AI 回应。",
+            },
+            "next_goal": {
+                "goal_type": "collect_more_evidence",
+                "goal_text": "先补齐有效互动，再继续诊断。",
+                "rule": "至少完成 1 次往返对话。",
+            },
+            "evaluable": False,
+            "not_evaluable_reason": "INSUFFICIENT_TURN_DATA",
+        },
+    )
+    db_session.add_all([blocked_session, improved_session, thin_session])
+    await db_session.flush()
+
+    db_session.add_all(
+        [
+            ConversationMessage(
+                session_id=str(blocked_session.session_id),
+                turn_number=1,
+                role="user",
+                content="先介绍方案价值。",
+                timestamp=blocked_start,
+                duration_ms=45000,
+                sales_stage="presentation",
+            ),
+            ConversationMessage(
+                session_id=str(blocked_session.session_id),
+                turn_number=2,
+                role="assistant",
+                content="客户继续追问 ROI 证据。",
+                timestamp=blocked_start + timedelta(seconds=45),
+                duration_ms=55000,
+                sales_stage="objection",
+                score_snapshot={
+                    "overall_score": 48,
+                    "dimension_scores": {
+                        "professional": 40,
+                        "communication": 50,
+                        "discovery": 54,
+                    },
+                },
+            ),
+            ConversationMessage(
+                session_id=str(improved_session.session_id),
+                turn_number=1,
+                role="user",
+                content="补充 ROI 与案例证据。",
+                timestamp=improved_start,
+                duration_ms=45000,
+                sales_stage="presentation",
+            ),
+            ConversationMessage(
+                session_id=str(improved_session.session_id),
+                turn_number=2,
+                role="assistant",
+                content="客户改为追问异议处理。",
+                timestamp=improved_start + timedelta(seconds=45),
+                duration_ms=55000,
+                sales_stage="objection",
+                score_snapshot={
+                    "overall_score": 72,
+                    "dimension_scores": {
+                        "professional": 70,
+                        "communication": 74,
+                        "discovery": 72,
+                    },
+                },
+            ),
+            ConversationMessage(
+                session_id=str(thin_session.session_id),
+                turn_number=1,
+                role="user",
+                content="只说了一句开场。",
+                timestamp=thin_start,
+                duration_ms=15000,
+                sales_stage="opening",
+            ),
+        ]
+    )
+
+    improved_intervention = ManagerIntervention(
+        intervention_id=str(uuid.uuid4()),
+        manager_user_id=str(admin_user.user_id),
+        user_id=str(non_admin_user.user_id),
+        issue_family="evidence_gap",
+        note="优先补 ROI 和客户案例证据。",
+        due_state="due",
+        reminder_status="sent",
+        reminder_sent_at=intervention_start + timedelta(hours=1),
+        created_at=intervention_start,
+        updated_at=intervention_start + timedelta(hours=1),
+    )
+    thin_intervention = ManagerIntervention(
+        intervention_id=str(uuid.uuid4()),
+        manager_user_id=str(admin_user.user_id),
+        user_id=str(non_admin_user.user_id),
+        issue_family="objection_response",
+        note="观察后续异议处理是否改善。",
+        due_state="pending",
+        reminder_status="not_sent",
+        created_at=improved_start + timedelta(hours=3),
+        updated_at=improved_start + timedelta(hours=3),
+    )
+    pending_intervention = ManagerIntervention(
+        intervention_id=str(uuid.uuid4()),
+        manager_user_id=str(admin_user.user_id),
+        user_id=str(non_admin_user.user_id),
+        issue_family="value_expression",
+        note="等待下一次完整训练结果。",
+        due_state="pending",
+        reminder_status="not_sent",
+        created_at=thin_start + timedelta(hours=3),
+        updated_at=thin_start + timedelta(hours=3),
+    )
+    db_session.add_all([improved_intervention, thin_intervention, pending_intervention])
+    await db_session.commit()
+
+    response = await async_client.get(
+        f"/api/v1/admin/users/{non_admin_user.user_id}/sessions",
+        params={"page": 1, "page_size": 10},
+        headers=admin_headers,
+    )
+
+    assert response.status_code == 200
+    payload = response.json()["data"]
+    intervention_results = {
+        item["intervention_id"]: item for item in payload["manager_intervention_results"]
+    }
+
+    improved_result = intervention_results[str(improved_intervention.intervention_id)]
+    assert improved_result["issue_family"] == "evidence_gap"
+    assert improved_result["status"] == "improved"
+    assert improved_result["reason"] == "issue_family_shifted"
+    assert improved_result["session_id"] == str(improved_session.session_id)
+    assert improved_result["session_start_time"] == improved_start.isoformat()
+    assert improved_result["overall_result"] == "fail"
+    assert improved_result["evaluable"] is True
+    assert improved_result["main_issue"]["issue_type"] == "objection_handling_gap"
+
+    thin_result = intervention_results[str(thin_intervention.intervention_id)]
+    assert thin_result["issue_family"] == "objection_response"
+    assert thin_result["status"] == "not_evaluable"
+    assert thin_result["reason"] == "session_not_evaluable"
+    assert thin_result["session_id"] == str(thin_session.session_id)
+    assert thin_result["evaluable"] is False
+    assert thin_result["not_evaluable_reason"] == "INSUFFICIENT_TURN_DATA"
+
+    pending_result = intervention_results[str(pending_intervention.intervention_id)]
+    assert pending_result["issue_family"] == "value_expression"
+    assert pending_result["status"] == "pending"
+    assert pending_result["reason"] == "no_completed_session_after_intervention"
+    assert pending_result["session_id"] is None
+    assert pending_result["main_issue"] is None

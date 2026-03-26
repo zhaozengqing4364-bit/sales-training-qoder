@@ -37,6 +37,7 @@ DEFAULT_STUCK_SCORING_AFTER = timedelta(minutes=10)
 class RuntimeSessionRecord:
     session: Any
     scenario_type: str
+    voice_policy_snapshot: dict[str, Any]
     knowledge_diagnostics: dict[str, Any]
     projection: Any | None = None
     projection_error: str | None = None
@@ -72,6 +73,150 @@ class RuntimeStatusService:
             severity=severity,
             supplemental_logs=snapshot["supplemental_logs"],
         )
+
+    async def build_asset_governance_indexes(
+        self,
+        *,
+        window_hours: int = 24 * 7,
+    ) -> dict[str, dict[str, dict[str, Any]]]:
+        snapshot = await self._build_release_health_snapshot(window_hours=window_hours)
+        records = snapshot["records"]
+        now = snapshot["now"]
+        typed_fault_items = self._build_fault_items(records, now=now)
+        faults_by_session: dict[str, list[dict[str, Any]]] = {}
+        for item in typed_fault_items:
+            session_id = str(item.get("session_id") or "").strip()
+            if not session_id:
+                continue
+            faults_by_session.setdefault(session_id, []).append(item)
+
+        indexes: dict[str, dict[str, dict[str, Any]]] = {
+            "knowledge_base": {},
+            "persona": {},
+            "presentation": {},
+            "runtime_profile": {},
+        }
+
+        for record in records:
+            session = record.session
+            session_id = str(getattr(session, "session_id", "") or "").strip()
+            fault_items = faults_by_session.get(session_id, [])
+            started_at = self._coerce_datetime(getattr(session, "start_time", None))
+            activity_at = self._coerce_datetime(getattr(session, "end_time", None)) or started_at
+            in_window = self._started_in_window(session, now=now, window_hours=window_hours)
+            is_active = str(getattr(session, "status", "") or "") in (
+                ACTIVE_SESSION_STATUSES | {TERMINAL_SCORING_STATUS}
+            )
+            user_id = str(getattr(session, "user_id", "") or "").strip() or None
+
+            for asset_type, asset_id in self._iter_asset_refs(record):
+                asset_entry = indexes[asset_type].setdefault(
+                    asset_id,
+                    {
+                        "recent_session_count": 0,
+                        "active_session_count": 0,
+                        "impacted_user_ids": set(),
+                        "started_at_values": [],
+                        "last_session_at": None,
+                        "fault_items": [],
+                    },
+                )
+
+                if in_window:
+                    asset_entry["recent_session_count"] += 1
+                if is_active:
+                    asset_entry["active_session_count"] += 1
+                if user_id:
+                    asset_entry["impacted_user_ids"].add(user_id)
+                if started_at is not None:
+                    asset_entry["started_at_values"].append(started_at)
+                if activity_at is not None and (
+                    asset_entry["last_session_at"] is None
+                    or activity_at > asset_entry["last_session_at"]
+                ):
+                    asset_entry["last_session_at"] = activity_at
+                if fault_items:
+                    asset_entry["fault_items"].extend(fault_items)
+
+        return indexes
+
+    @classmethod
+    def build_asset_governance_summary(
+        cls,
+        base_entry: dict[str, Any] | None,
+        *,
+        last_changed_at: datetime | str | None,
+        latest_change_type: str,
+        latest_change_label: str,
+        change_count_7d: int,
+        extra_anomalies: list[dict[str, Any]] | None = None,
+    ) -> dict[str, Any]:
+        entry = base_entry or {}
+        last_changed_dt = cls._coerce_datetime(last_changed_at)
+        started_at_values = [
+            value
+            for value in entry.get("started_at_values", [])
+            if isinstance(value, datetime)
+        ]
+        sessions_since_change = 0
+        if last_changed_dt is not None:
+            sessions_since_change = sum(
+                1
+                for started_at in started_at_values
+                if started_at >= last_changed_dt
+            )
+
+        anomalies = [
+            cls._normalize_asset_anomaly_item(item)
+            for item in entry.get("fault_items", [])
+            if isinstance(item, dict)
+        ]
+        anomalies.extend(
+            cls._normalize_asset_anomaly_item(item)
+            for item in (extra_anomalies or [])
+            if isinstance(item, dict)
+        )
+        anomalies.sort(key=lambda item: item.get("detected_at") or "", reverse=True)
+
+        blocking_count = sum(1 for item in anomalies if item.get("severity") == "blocking")
+        warning_count = sum(1 for item in anomalies if item.get("severity") == "warning")
+        impacted_user_ids = entry.get("impacted_user_ids") or set()
+        impacted_user_count = len(impacted_user_ids)
+        recent_session_count = int(entry.get("recent_session_count") or 0)
+        active_session_count = int(entry.get("active_session_count") or 0)
+
+        return {
+            "impact_summary": {
+                "impact_level": cls._resolve_asset_impact_level(
+                    recent_session_count=recent_session_count,
+                    active_session_count=active_session_count,
+                    impacted_user_count=impacted_user_count,
+                    sessions_since_change=sessions_since_change,
+                ),
+                "recent_session_count": recent_session_count,
+                "active_session_count": active_session_count,
+                "impacted_user_count": impacted_user_count,
+                "last_session_at": cls._serialize_timestamp(entry.get("last_session_at")),
+            },
+            "recent_change_summary": {
+                "last_changed_at": cls._serialize_timestamp(last_changed_dt),
+                "latest_change_type": latest_change_type,
+                "latest_change_label": latest_change_label,
+                "change_count_7d": max(0, int(change_count_7d or 0)),
+                "sessions_since_change": sessions_since_change,
+            },
+            "health_summary": {
+                "status": cls._resolve_overall_status(
+                    blocking_count=blocking_count,
+                    warning_count=warning_count,
+                    supplemental_warning_log_count=0,
+                ),
+                "anomaly_count": len(anomalies),
+                "blocking_count": blocking_count,
+                "warning_count": warning_count,
+                "sample_anomalies": anomalies[:5],
+            },
+        }
 
     async def _build_release_health_snapshot(
         self,
@@ -219,6 +364,7 @@ class RuntimeStatusService:
                 RuntimeSessionRecord(
                     session=session,
                     scenario_type=scenario_type,
+                    voice_policy_snapshot=snapshot,
                     knowledge_diagnostics=knowledge_diagnostics,
                     projection=projection,
                     projection_error=projection_error,
@@ -610,6 +756,93 @@ class RuntimeStatusService:
     @classmethod
     def _stuck_scoring_after_delta(cls) -> timedelta:
         return DEFAULT_STUCK_SCORING_AFTER
+
+    @staticmethod
+    def _coerce_datetime(value: datetime | str | None) -> datetime | None:
+        if isinstance(value, datetime):
+            if value.tzinfo is None:
+                return value.replace(tzinfo=UTC)
+            return value.astimezone(UTC)
+        if isinstance(value, str):
+            try:
+                parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+            except ValueError:
+                return None
+            if parsed.tzinfo is None:
+                return parsed.replace(tzinfo=UTC)
+            return parsed.astimezone(UTC)
+        return None
+
+    @classmethod
+    def _normalize_asset_anomaly_item(cls, item: dict[str, Any]) -> dict[str, Any]:
+        return {
+            "kind": str(item.get("kind") or "unknown"),
+            "severity": str(item.get("severity") or "warning"),
+            "summary": str(item.get("summary") or ""),
+            "detected_at": cls._serialize_timestamp(item.get("detected_at")),
+            "session_id": str(item.get("session_id") or "").strip() or None,
+            "source": str(item.get("source") or "asset"),
+        }
+
+    @classmethod
+    def _resolve_asset_impact_level(
+        cls,
+        *,
+        recent_session_count: int,
+        active_session_count: int,
+        impacted_user_count: int,
+        sessions_since_change: int,
+    ) -> str:
+        if (
+            active_session_count > 0
+            or recent_session_count >= 5
+            or impacted_user_count >= 5
+            or sessions_since_change >= 3
+        ):
+            return "high"
+        if (
+            recent_session_count >= 2
+            or impacted_user_count >= 2
+            or sessions_since_change >= 1
+        ):
+            return "medium"
+        return "low"
+
+    @classmethod
+    def _iter_asset_refs(
+        cls,
+        record: RuntimeSessionRecord,
+    ) -> list[tuple[str, str]]:
+        refs: list[tuple[str, str]] = []
+        session = record.session
+
+        persona_id = str(getattr(session, "persona_id", "") or "").strip()
+        if persona_id:
+            refs.append(("persona", persona_id))
+
+        presentation_id = str(getattr(session, "presentation_id", "") or "").strip()
+        if presentation_id:
+            refs.append(("presentation", presentation_id))
+
+        runtime_profile_id = str(
+            getattr(session, "voice_runtime_profile_id", None)
+            or record.voice_policy_snapshot.get("runtime_profile_id")
+            or ""
+        ).strip()
+        if runtime_profile_id:
+            refs.append(("runtime_profile", runtime_profile_id))
+
+        raw_kb_ids = record.voice_policy_snapshot.get("knowledge_base_ids")
+        if isinstance(raw_kb_ids, list):
+            seen: set[str] = set()
+            for kb_id in raw_kb_ids:
+                normalized = str(kb_id or "").strip()
+                if not normalized or normalized in seen:
+                    continue
+                seen.add(normalized)
+                refs.append(("knowledge_base", normalized))
+
+        return refs
 
     @staticmethod
     def _serialize_timestamp(value: datetime | str | None) -> str | None:

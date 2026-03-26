@@ -6,6 +6,7 @@ import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { api, getApiErrorMessage } from "@/lib/api/client";
 import {
     ManagerInterventionItem,
+    ManagerInterventionResultItem,
     UserDetailStats,
     UserSessionItem,
     UserSessionsResponse,
@@ -104,6 +105,32 @@ function formatInterventionReminderStatus(reminderStatus: string): string {
     return INTERVENTION_REMINDER_STATUS_LABELS[reminderStatus] || reminderStatus;
 }
 
+function getInterventionResultTone(result?: ManagerInterventionResultItem | null): string {
+    switch (result?.status) {
+        case "improved":
+            return "border-emerald-200 bg-emerald-50 text-emerald-800";
+        case "still_blocked":
+            return "border-rose-200 bg-rose-50 text-rose-800";
+        case "not_evaluable":
+            return "border-amber-200 bg-amber-50 text-amber-800";
+        default:
+            return "border-slate-200 bg-slate-50 text-slate-700";
+    }
+}
+
+function formatInterventionResultStatus(result?: ManagerInterventionResultItem | null): string {
+    switch (result?.status) {
+        case "improved":
+            return "最近结果：已改善";
+        case "still_blocked":
+            return "最近结果：仍卡住";
+        case "not_evaluable":
+            return "最近结果：待判断";
+        default:
+            return "最近结果：等待新训练";
+    }
+}
+
 const EMPTY_INTERVENTIONS: ManagerInterventionItem[] = [];
 
 const EMPTY_SESSIONS: UserSessionsResponse = {
@@ -112,6 +139,7 @@ const EMPTY_SESSIONS: UserSessionsResponse = {
     page: 1,
     page_size: 10,
     has_more: false,
+    manager_intervention_results: [],
 };
 
 function hasEvaluableProgress(progress: UserProgressResponse | null): progress is UserProgressResponse {
@@ -505,6 +533,9 @@ export default function UserDetailPage() {
     const latestTrendPoint = hasEvaluableProgress(progress)
         ? progress.trend_data[progress.trend_data.length - 1]
         : null;
+    const interventionResultById = new Map(
+        (sessions.manager_intervention_results || []).map((item) => [item.intervention_id, item]),
+    );
 
     return (
         <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -700,47 +731,76 @@ export default function UserDetailPage() {
 
                 <div className="mt-6 space-y-3">
                     {interventions.length > 0 ? (
-                        interventions.map((intervention) => (
-                            <div key={intervention.intervention_id} className="rounded-2xl border border-slate-200 bg-white p-4">
-                                <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-                                    <div className="space-y-2">
-                                        <div className="flex flex-wrap gap-2">
-                                            <span className="inline-flex rounded-full bg-blue-50 px-3 py-1 text-xs font-medium text-blue-700">
-                                                {formatInterventionIssueFamily(intervention.issue_family)}
-                                            </span>
-                                            <span className="inline-flex rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600">
-                                                {formatInterventionDueState(intervention.due_state)}
-                                            </span>
-                                            <span className={`inline-flex rounded-full px-3 py-1 text-xs font-medium ${intervention.reminder_status === "sent" ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"}`}>
-                                                {formatInterventionReminderStatus(intervention.reminder_status)}
-                                            </span>
-                                        </div>
-                                        <p className="text-sm text-slate-900 text-pretty">
-                                            {intervention.note || "当前主管重点尚未补充说明。"}
-                                        </p>
-                                        <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500">
-                                            <span>创建于：{formatDate(intervention.created_at)}</span>
-                                            <span>最近更新：{formatDate(intervention.updated_at)}</span>
-                                            {intervention.reminder_sent_at ? (
-                                                <span>最近提醒：{formatDate(intervention.reminder_sent_at)}</span>
+                        interventions.map((intervention) => {
+                            const linkedResult = interventionResultById.get(intervention.intervention_id);
+                            return (
+                                <div key={intervention.intervention_id} className="rounded-2xl border border-slate-200 bg-white p-4">
+                                    <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                                        <div className="space-y-2">
+                                            <div className="flex flex-wrap gap-2">
+                                                <span className="inline-flex rounded-full bg-blue-50 px-3 py-1 text-xs font-medium text-blue-700">
+                                                    {formatInterventionIssueFamily(intervention.issue_family)}
+                                                </span>
+                                                <span className="inline-flex rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-600">
+                                                    {formatInterventionDueState(intervention.due_state)}
+                                                </span>
+                                                <span className={`inline-flex rounded-full px-3 py-1 text-xs font-medium ${intervention.reminder_status === "sent" ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"}`}>
+                                                    {formatInterventionReminderStatus(intervention.reminder_status)}
+                                                </span>
+                                            </div>
+                                            <p className="text-sm text-slate-900 text-pretty">
+                                                {intervention.note || "当前主管重点尚未补充说明。"}
+                                            </p>
+                                            <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-500">
+                                                <span>创建于：{formatDate(intervention.created_at)}</span>
+                                                <span>最近更新：{formatDate(intervention.updated_at)}</span>
+                                                {intervention.reminder_sent_at ? (
+                                                    <span>最近提醒：{formatDate(intervention.reminder_sent_at)}</span>
+                                                ) : null}
+                                            </div>
+                                            {linkedResult ? (
+                                                <div className={`mt-3 rounded-2xl border px-4 py-3 ${getInterventionResultTone(linkedResult)}`}>
+                                                    <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                                                        <div>
+                                                            <p className="text-sm font-semibold text-balance">
+                                                                {formatInterventionResultStatus(linkedResult)}
+                                                            </p>
+                                                            <p className="mt-1 text-sm text-pretty">
+                                                                {linkedResult.summary}
+                                                            </p>
+                                                            {linkedResult.session_start_time ? (
+                                                                <p className="mt-2 text-xs text-current/80 text-pretty">
+                                                                    对应训练：{formatDate(linkedResult.session_start_time)}
+                                                                </p>
+                                                            ) : null}
+                                                        </div>
+                                                        {linkedResult.session_id ? (
+                                                            <Button asChild variant="outline" size="sm" className="rounded-full bg-white/80">
+                                                                <Link href={`/practice/${linkedResult.session_id}/report`}>
+                                                                    查看对应统一报告
+                                                                </Link>
+                                                            </Button>
+                                                        ) : null}
+                                                    </div>
+                                                </div>
                                             ) : null}
                                         </div>
-                                    </div>
 
-                                    <div className="flex flex-wrap gap-2">
-                                        <Button
-                                            variant="outline"
-                                            size="sm"
-                                            className="rounded-full"
-                                            onClick={() => void handleRemindIntervention(intervention)}
-                                            disabled={remindingInterventionId === intervention.intervention_id || intervention.due_state === "resolved"}
-                                        >
-                                            {remindingInterventionId === intervention.intervention_id ? "记录中..." : "记录提醒"}
-                                        </Button>
+                                        <div className="flex flex-wrap gap-2">
+                                            <Button
+                                                variant="outline"
+                                                size="sm"
+                                                className="rounded-full"
+                                                onClick={() => void handleRemindIntervention(intervention)}
+                                                disabled={remindingInterventionId === intervention.intervention_id || intervention.due_state === "resolved"}
+                                            >
+                                                {remindingInterventionId === intervention.intervention_id ? "记录中..." : "记录提醒"}
+                                            </Button>
+                                        </div>
                                     </div>
                                 </div>
-                            </div>
-                        ))
+                            );
+                        })
                     ) : (
                         <div className="rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 py-6 text-sm text-slate-500">
                             当前还没有主管重点记录。可以直接在上方设定本轮跟进重点。

@@ -11,6 +11,7 @@ References:
 """
 
 from datetime import datetime
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -65,6 +66,7 @@ class KnowledgeBaseResponse(KnowledgeBaseBase):
     status: KnowledgeBaseStatusType
     created_at: datetime
     updated_at: datetime
+    governance_summary: dict[str, Any] | None = None
 
 
 class KnowledgeBaseListItem(BaseModel):
@@ -80,6 +82,7 @@ class KnowledgeBaseListItem(BaseModel):
     total_chunks: int = 0
     status: KnowledgeBaseStatusType
     updated_at: datetime
+    governance_summary: dict[str, Any] | None = None
 
 
 class KnowledgeBaseListResponse(BaseModel):

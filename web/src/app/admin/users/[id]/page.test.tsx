@@ -144,6 +144,32 @@ const baseSessionsResponse = {
     page: 1,
     page_size: 10,
     has_more: false,
+    manager_intervention_results: [
+        {
+            intervention_id: "intervention-1",
+            issue_family: "evidence_gap",
+            note: "优先补 ROI 和客户案例证据。",
+            created_at: "2026-03-23T09:30:00Z",
+            session_id: "session-1",
+            session_start_time: "2026-03-23T09:00:00Z",
+            status: "improved",
+            reason: "issue_family_shifted",
+            summary: "最近一次可评估训练的主问题已转向其他家族，说明这个主管重点已有改善。",
+            overall_result: "fail",
+            evaluable: true,
+            not_evaluable_reason: null,
+            main_issue: {
+                issue_type: "main_capability_not_passed",
+                issue_text: "关键异议回应不够具体。",
+                recovery_rule: "先回应风险，再补证据。",
+            },
+            next_goal: {
+                goal_type: "single_next_goal",
+                goal_text: "下一轮先把异议处理说完整。",
+                rule: "至少完成 1 次完整异议回应。",
+            },
+        },
+    ],
 };
 
 const richProgressResponse = {
@@ -393,6 +419,17 @@ describe("UserDetailPage", () => {
 
         expect(await screen.findByText("主管重点已记录，可继续发送提醒。")).toBeTruthy();
         expect(screen.getByText("先补 ROI 与客户案例证据。")).toBeTruthy();
+    });
+
+    it("shows the latest intervention result with a report drill-in on the current intervention card", async () => {
+        render(<UserDetailPage />);
+
+        expect(await screen.findByText("主管重点与提醒")).toBeTruthy();
+        expect(screen.getByText("最近结果：已改善")).toBeTruthy();
+        expect(screen.getByText("最近一次可评估训练的主问题已转向其他家族，说明这个主管重点已有改善。")).toBeTruthy();
+
+        const linkedReport = screen.getByRole("link", { name: "查看对应统一报告" }) as HTMLAnchorElement;
+        expect(linkedReport.getAttribute("href")).toBe("/practice/session-1/report");
     });
 
     it("lets supervisors send a reminder from an existing intervention card", async () => {

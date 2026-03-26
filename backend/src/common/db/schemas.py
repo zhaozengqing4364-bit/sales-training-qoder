@@ -118,6 +118,7 @@ class PresentationResponse(PresentationBase):
     version_number: int
     total_pages: int | None = None
     ocr_progress: float = 0.0
+    governance_summary: dict[str, Any] | None = None
 
 
 class PresentationDetail(PresentationResponse):

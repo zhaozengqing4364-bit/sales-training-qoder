@@ -692,12 +692,36 @@ export interface UserSessionItem {
     interruption_count: number;
 }
 
+export type ManagerInterventionResultStatus =
+    | "pending"
+    | "not_evaluable"
+    | "still_blocked"
+    | "improved";
+
+export interface ManagerInterventionResultItem {
+    intervention_id: string;
+    issue_family: string;
+    note?: string | null;
+    created_at: string;
+    session_id?: string | null;
+    session_start_time?: string | null;
+    status: ManagerInterventionResultStatus;
+    reason: string;
+    summary: string;
+    overall_result?: SessionOverallResult | null;
+    evaluable?: boolean | null;
+    not_evaluable_reason?: SessionNotEvaluableReason | null;
+    main_issue?: SessionMainIssue | null;
+    next_goal?: SessionNextGoal | null;
+}
+
 export interface UserSessionsResponse {
     items: UserSessionItem[];
     total: number;
     page: number;
     page_size: number;
     has_more: boolean;
+    manager_intervention_results?: ManagerInterventionResultItem[];
 }
 
 export interface UserProgressDataPoint {

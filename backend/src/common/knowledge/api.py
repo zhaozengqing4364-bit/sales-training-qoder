@@ -13,6 +13,7 @@ References:
 from __future__ import annotations
 
 import hashlib
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from fastapi import (
@@ -26,6 +27,7 @@ from fastapi import (
     UploadFile,
 )
 from fastapi.responses import JSONResponse
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.api.server_error import build_server_error
@@ -34,8 +36,9 @@ from common.db.models import User
 from common.db.session import get_db
 from common.monitoring.logger import get_logger
 from common.storage.document import get_document_storage_service
+from support.services.runtime_status_service import RuntimeStatusService
 
-from .models import DocumentStatus
+from .models import DocumentStatus, KnowledgeDocument
 from .processor import get_document_processor
 from .schemas import (
     CreateKnowledgeBaseRequest,
@@ -236,10 +239,118 @@ async def list_knowledge_bases(
     service = KnowledgeService(db)
     items, total = await service.list(page=page, page_size=page_size, category=category)
 
+    knowledge_base_ids = [item.id for item in items]
+    governance_indexes = await RuntimeStatusService(db).build_asset_governance_indexes()
+    docs_by_kb: dict[str, list[KnowledgeDocument]] = {}
+    if knowledge_base_ids:
+        doc_result = await db.execute(
+            select(KnowledgeDocument).where(
+                KnowledgeDocument.knowledge_base_id.in_(knowledge_base_ids)
+            )
+        )
+        for document in doc_result.scalars().all():
+            docs_by_kb.setdefault(str(document.knowledge_base_id), []).append(document)
+
+    now = datetime.now(UTC)
+    seven_days_ago = now - timedelta(days=7)
+    enriched_items: list[Any] = []
+
+    for item in items:
+        documents = docs_by_kb.get(str(item.id), [])
+        item_updated_at = RuntimeStatusService._coerce_datetime(item.updated_at)
+        latest_document = max(
+            documents,
+            key=lambda document: RuntimeStatusService._coerce_datetime(document.created_at)
+            or datetime.min.replace(tzinfo=UTC),
+            default=None,
+        )
+        latest_document_created_at = (
+            RuntimeStatusService._coerce_datetime(latest_document.created_at)
+            if latest_document is not None
+            else None
+        )
+        last_changed_at = item_updated_at
+        latest_change_type = "knowledge_base_updated"
+        latest_change_label = "知识库配置更新"
+        if (
+            latest_document is not None
+            and latest_document_created_at is not None
+            and (item_updated_at is None or latest_document_created_at >= item_updated_at)
+        ):
+            last_changed_at = latest_document_created_at
+            latest_change_type = "document_uploaded"
+            latest_change_label = f"最近文档：{latest_document.title}"
+
+        change_count_7d = sum(
+            1
+            for document in documents
+            if (RuntimeStatusService._coerce_datetime(document.created_at) or datetime.min.replace(tzinfo=UTC))
+            >= seven_days_ago
+        )
+        if item_updated_at is not None and item_updated_at >= seven_days_ago:
+            change_count_7d += 1
+
+        extra_anomalies: list[dict[str, Any]] = []
+        failed_documents = [document for document in documents if document.status == DocumentStatus.FAILED.value]
+        if failed_documents:
+            latest_failed_at = max(
+                (
+                    RuntimeStatusService._coerce_datetime(document.created_at)
+                    for document in failed_documents
+                ),
+                default=None,
+            )
+            extra_anomalies.append(
+                {
+                    "source": "asset",
+                    "kind": "document_failed",
+                    "severity": "warning",
+                    "summary": f"{len(failed_documents)} 个文档处理失败，需复核解析链路。",
+                    "detected_at": latest_failed_at,
+                    "session_id": None,
+                }
+            )
+
+        processing_documents = [
+            document
+            for document in documents
+            if document.status in {DocumentStatus.PENDING.value, DocumentStatus.PROCESSING.value}
+        ]
+        if processing_documents:
+            latest_processing_at = max(
+                (
+                    RuntimeStatusService._coerce_datetime(document.created_at)
+                    for document in processing_documents
+                ),
+                default=None,
+            )
+            extra_anomalies.append(
+                {
+                    "source": "asset",
+                    "kind": "document_processing",
+                    "severity": "warning",
+                    "summary": f"{len(processing_documents)} 个文档仍在处理中。",
+                    "detected_at": latest_processing_at,
+                    "session_id": None,
+                }
+            )
+
+        governance_summary = RuntimeStatusService.build_asset_governance_summary(
+            governance_indexes.get("knowledge_base", {}).get(str(item.id)),
+            last_changed_at=last_changed_at,
+            latest_change_type=latest_change_type,
+            latest_change_label=latest_change_label,
+            change_count_7d=change_count_7d,
+            extra_anomalies=extra_anomalies,
+        )
+        enriched_items.append(
+            item.model_copy(update={"governance_summary": governance_summary})
+        )
+
     return {
         "success": True,
         "data": KnowledgeBaseListResponse(
-            knowledge_bases=items, total=total, page=page, page_size=page_size
+            knowledge_bases=enriched_items, total=total, page=page, page_size=page_size
         ).model_dump(),
     }
 

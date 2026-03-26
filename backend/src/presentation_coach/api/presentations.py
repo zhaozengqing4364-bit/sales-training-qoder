@@ -5,7 +5,7 @@ Presentations API - CRUD operations for PPT presentations
 import os
 import tempfile
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, cast
 
@@ -35,6 +35,7 @@ from common.db.schemas import (
 from common.db.session import get_db
 from common.monitoring.logger import get_logger
 from presentation_coach.services.ppt_parser import get_ppt_parser
+from support.services.runtime_status_service import RuntimeStatusService
 
 logger = get_logger(__name__)
 
@@ -302,7 +303,51 @@ async def list_presentations(
     query = query.limit(limit)
 
     result = await db.execute(query)
-    presentations = result.scalars().all()
+    presentations = list(result.scalars().all())
+    runtime_service = RuntimeStatusService(db)
+    governance_indexes = await runtime_service.build_asset_governance_indexes()
+    seven_days_ago = datetime.now(UTC) - timedelta(days=7)
+
+    for presentation in presentations:
+        upload_date = RuntimeStatusService._coerce_datetime(presentation.upload_date)
+        extra_anomalies: list[dict[str, Any]] = []
+        if presentation.status == "failed":
+            extra_anomalies.append(
+                {
+                    "source": "asset",
+                    "kind": "presentation_failed",
+                    "severity": "blocking",
+                    "summary": "PPT 仍处于失败状态，需检查解析或替换链路。",
+                    "detected_at": upload_date,
+                    "session_id": None,
+                }
+            )
+        elif presentation.status == "processing":
+            extra_anomalies.append(
+                {
+                    "source": "asset",
+                    "kind": "presentation_processing",
+                    "severity": "warning",
+                    "summary": "PPT 仍在处理中，内容尚未稳定可用。",
+                    "detected_at": upload_date,
+                    "session_id": None,
+                }
+            )
+
+        latest_change_label = (
+            f"PPT 已替换到 V{presentation.version_number}"
+            if int(getattr(presentation, "version_number", 1) or 1) > 1
+            else "PPT 已上传"
+        )
+        governance_summary = runtime_service.build_asset_governance_summary(
+            governance_indexes.get("presentation", {}).get(str(presentation.presentation_id)),
+            last_changed_at=upload_date,
+            latest_change_type="presentation_uploaded",
+            latest_change_label=latest_change_label,
+            change_count_7d=1 if upload_date and upload_date >= seven_days_ago else 0,
+            extra_anomalies=extra_anomalies,
+        )
+        setattr(presentation, "governance_summary", governance_summary)
 
     return presentations
 

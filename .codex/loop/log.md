@@ -1596,3 +1596,47 @@ Append one entry per iteration:
   verification results: planned Vitest verifier passed; local backend/frontend servers started successfully on :3444 / :3445, but in-tool browser proof was blocked by a Playwright-side module error (`Cannot find module './registry'`) before navigation.
   success signal status: supervisors can now create and inspect persisted manager interventions on existing admin user surfaces, and manager-lite launches into the same detail-page workflow instead of duplicating intervention state.
   rollback note: if later slice work changes the intervention UX, keep `/admin/users/[id]` as the single read/write surface until a replacement workflow is re-verified end-to-end, and preserve manager-lite as a deep-link launcher rather than a second form owner.
+
+- time: 2026-03-26T16:00:19+0800
+  mode: stabilize
+  item id: M005-S02-T03
+  files changed:
+    - backend/src/common/analytics/history_service.py
+    - backend/src/admin/api/users.py
+    - backend/tests/integration/test_admin_users_api.py
+    - web/src/lib/api/types.ts
+    - web/src/app/admin/users/[id]/page.tsx
+    - web/src/app/admin/users/[id]/page.test.tsx
+    - .gsd/DECISIONS.md
+    - .gsd/KNOWLEDGE.md
+    - .codex/loop/state.json
+  summary: Added read-side manager intervention result snapshots on the admin user sessions endpoint, then surfaced the latest outcome and report drill-in directly on each intervention card in the existing user detail page.
+  verification commands:
+    - cd backend && /usr/bin/time -p venv/bin/python -m pytest -c pyproject.toml tests/integration/test_admin_users_api.py
+    - cd web && /usr/bin/time -p pnpm exec vitest run 'src/app/admin/users/[id]/page.test.tsx'
+  verification results: passed; the full backend task verifier is green and the focused admin user page test confirms the intervention card now shows the latest result plus report link.
+  success signal status: supervisors can tell whether the targeted issue family improved on a later meaningful session and open the matching unified report from the same admin user page
+  rollback note: if later work changes intervention closure semantics, keep the read path anchored to HistoryService/session-evidence and continue preferring the latest evaluable completed session over thin-evidence completions
+- time: 2026-03-26T16:38:12+0800
+  mode: stabilize
+  item id: M005-S03-T01
+  files changed:
+    - backend/src/support/services/runtime_status_service.py
+    - backend/src/common/knowledge/api.py
+    - backend/src/common/knowledge/schemas.py
+    - backend/src/agent/services/persona_service.py
+    - backend/src/agent/schemas.py
+    - backend/src/common/db/schemas.py
+    - backend/src/presentation_coach/api/presentations.py
+    - backend/src/admin/api/voice_runtime.py
+    - backend/tests/integration/test_asset_governance_api.py
+    - .gsd/DECISIONS.md
+    - .gsd/KNOWLEDGE.md
+    - .codex/loop/state.json
+    - .codex/loop/log.md
+  summary: Added one shared runtime-backed governance summary for knowledge bases, personas, presentations, and voice runtime profiles, then exposed it on the current backend list routes with asset-local change and health signals.
+  verification commands:
+    - cd backend && venv/bin/python -m pytest -c pyproject.toml tests/integration/test_asset_governance_api.py
+  verification results: passed; the focused backend integration suite confirms the four current asset routes now return governance summaries with impact, recent-change, and anomaly data.
+  success signal status: operators can read likely impact range, recent changes, and live anomaly lines from the existing backend asset surfaces instead of a separate governance endpoint.
+  rollback note: if later work changes governance rendering, keep RuntimeStatusService as the shared anomaly/impact seam and continue layering asset-local document or policy issues on top instead of inventing a second backend fault model.

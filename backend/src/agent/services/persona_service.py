@@ -10,7 +10,7 @@ References:
 """
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from sqlalchemy import func, select
@@ -146,8 +146,28 @@ class PersonaService:
             }
 
         items: list[PersonaListItem] = []
+        from support.services.runtime_status_service import RuntimeStatusService
+
+        runtime_service = RuntimeStatusService(self.db)
+        governance_indexes = await runtime_service.build_asset_governance_indexes()
+        seven_days_ago = datetime.now(UTC) - timedelta(days=7)
+
         for persona in personas:
             persona_id = str(persona.id)
+            updated_at = RuntimeStatusService._coerce_datetime(persona.updated_at)
+            policy_issue_types = self._collect_policy_issue_types(persona)
+            extra_anomalies = [
+                self._policy_issue_to_anomaly(issue_type, detected_at=updated_at)
+                for issue_type in policy_issue_types
+            ]
+            governance_summary = runtime_service.build_asset_governance_summary(
+                governance_indexes.get("persona", {}).get(persona_id),
+                last_changed_at=updated_at,
+                latest_change_type="persona_updated",
+                latest_change_label="角色配置更新",
+                change_count_7d=1 if updated_at and updated_at >= seven_days_ago else 0,
+                extra_anomalies=extra_anomalies,
+            )
             items.append(
                 PersonaListItem(
                     id=persona.id,
@@ -160,6 +180,7 @@ class PersonaService:
                     is_public=persona.is_public,
                     usage_count=usage_counts.get(persona_id, 0),
                     agent_count=agent_counts.get(persona_id, 0),
+                    governance_summary=governance_summary,
                 )
             )
 
@@ -346,45 +367,20 @@ class PersonaService:
         for persona in personas:
             raw_policy = persona.persona_policy if isinstance(persona.persona_policy, dict) else {}
             normalized_policy = self._build_normalized_policy(persona)
-            persona_issues: list[str] = []
-
-            if not isinstance(persona.persona_policy, dict) or not persona.persona_policy:
-                persona_issues.append("missing_policy")
+            persona_issues = self._collect_policy_issue_types(persona)
 
             raw_version = raw_policy.get("version") if isinstance(raw_policy, dict) else None
-            if raw_version != PERSONA_POLICY_VERSION:
-                persona_issues.append("version_mismatch")
-
-            normalized_prompt = str(normalized_policy.get("system_prompt") or "").strip()
-            legacy_prompt = str(persona.system_prompt or "").strip()
-            if not normalized_prompt:
-                persona_issues.append("empty_system_prompt")
-            if legacy_prompt != normalized_prompt:
-                persona_issues.append("legacy_prompt_drift")
-
-            normalized_kb_ids = self._normalize_kb_ids(
-                normalized_policy.get("knowledge_base_ids")
-            )
-            legacy_kb_ids = self._normalize_kb_ids(persona.knowledge_base_ids)
-            if normalized_kb_ids != legacy_kb_ids:
-                persona_issues.append("legacy_kb_drift")
-
             normalized_tool_policy = normalized_policy.get("tool_policy")
             require_kb_grounding = (
                 isinstance(normalized_tool_policy, dict)
                 and bool(normalized_tool_policy.get("require_kb_grounding"))
             )
-            if require_kb_grounding and not normalized_kb_ids:
-                persona_issues.append("kb_lock_unbound")
-
             normalized_customer_pressure = normalized_policy.get("customer_pressure")
             pressure_source = (
                 normalized_customer_pressure.get("source")
                 if isinstance(normalized_customer_pressure, dict)
                 else None
             )
-            if pressure_source == "legacy_sales_focus_extensions":
-                persona_issues.append("pressure_model_legacy_only")
 
             if not persona_issues:
                 healthy_count += 1
@@ -415,6 +411,77 @@ class PersonaService:
             },
             "issue_type_counts": issue_type_counts,
             "sample_issues": issues,
+        }
+
+    @classmethod
+    def _collect_policy_issue_types(cls, persona: Persona) -> list[str]:
+        raw_policy = persona.persona_policy if isinstance(persona.persona_policy, dict) else {}
+        normalized_policy = cls._build_normalized_policy(persona)
+        persona_issues: list[str] = []
+
+        if not isinstance(persona.persona_policy, dict) or not persona.persona_policy:
+            persona_issues.append("missing_policy")
+
+        raw_version = raw_policy.get("version") if isinstance(raw_policy, dict) else None
+        if raw_version != PERSONA_POLICY_VERSION:
+            persona_issues.append("version_mismatch")
+
+        normalized_prompt = str(normalized_policy.get("system_prompt") or "").strip()
+        legacy_prompt = str(persona.system_prompt or "").strip()
+        if not normalized_prompt:
+            persona_issues.append("empty_system_prompt")
+        if legacy_prompt != normalized_prompt:
+            persona_issues.append("legacy_prompt_drift")
+
+        normalized_kb_ids = cls._normalize_kb_ids(
+            normalized_policy.get("knowledge_base_ids")
+        )
+        legacy_kb_ids = cls._normalize_kb_ids(persona.knowledge_base_ids)
+        if normalized_kb_ids != legacy_kb_ids:
+            persona_issues.append("legacy_kb_drift")
+
+        normalized_tool_policy = normalized_policy.get("tool_policy")
+        require_kb_grounding = (
+            isinstance(normalized_tool_policy, dict)
+            and bool(normalized_tool_policy.get("require_kb_grounding"))
+        )
+        if require_kb_grounding and not normalized_kb_ids:
+            persona_issues.append("kb_lock_unbound")
+
+        normalized_customer_pressure = normalized_policy.get("customer_pressure")
+        pressure_source = (
+            normalized_customer_pressure.get("source")
+            if isinstance(normalized_customer_pressure, dict)
+            else None
+        )
+        if pressure_source == "legacy_sales_focus_extensions":
+            persona_issues.append("pressure_model_legacy_only")
+
+        return persona_issues
+
+    @staticmethod
+    def _policy_issue_to_anomaly(issue_type: str, *, detected_at: datetime | None) -> dict[str, Any]:
+        severity = (
+            "blocking"
+            if issue_type in {"missing_policy", "empty_system_prompt", "kb_lock_unbound"}
+            else "warning"
+        )
+        summary_map = {
+            "missing_policy": "角色缺少 persona_policy，运行时配置来源不完整。",
+            "version_mismatch": "角色策略版本与当前规范不一致。",
+            "empty_system_prompt": "角色缺少有效系统提示词。",
+            "legacy_prompt_drift": "角色 legacy prompt 与 persona_policy 不一致。",
+            "legacy_kb_drift": "角色 legacy 知识库绑定与 persona_policy 不一致。",
+            "kb_lock_unbound": "角色启用了知识库强制模式，但未绑定知识库。",
+            "pressure_model_legacy_only": "角色压力模型仍依赖 legacy 平铺字段。",
+        }
+        return {
+            "source": "asset",
+            "kind": f"policy_issue_{issue_type}",
+            "severity": severity,
+            "summary": summary_map.get(issue_type, issue_type),
+            "detected_at": detected_at,
+            "session_id": None,
         }
 
     @staticmethod

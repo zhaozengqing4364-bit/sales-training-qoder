@@ -7,6 +7,7 @@ Manages:
 """
 from __future__ import annotations
 
+from datetime import UTC, datetime, timedelta
 from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -20,6 +21,7 @@ from common.db.models import User
 from common.db.session import get_db
 from common.monitoring.logger import get_logger, get_trace_id
 from sales_bot.services.voice_runtime_policy import VoiceRuntimePolicyService
+from support.services.runtime_status_service import RuntimeStatusService
 
 logger = get_logger(__name__)
 
@@ -92,6 +94,39 @@ async def list_runtime_profiles(
 ):
     service = VoiceRuntimePolicyService(db)
     profiles = await service.list_profiles(only_active=only_active)
+    runtime_service = RuntimeStatusService(db)
+    governance_indexes = await runtime_service.build_asset_governance_indexes()
+    seven_days_ago = datetime.now(UTC) - timedelta(days=7)
+
+    for profile in profiles:
+        updated_at = RuntimeStatusService._coerce_datetime(profile.get("updated_at"))
+        extra_anomalies: list[dict[str, Any]] = []
+        if profile.get("is_active") is False:
+            extra_anomalies.append(
+                {
+                    "source": "asset",
+                    "kind": "runtime_profile_inactive",
+                    "severity": "warning",
+                    "summary": "运行时配置已停用，新增会话不会继续使用它。",
+                    "detected_at": updated_at,
+                    "session_id": None,
+                }
+            )
+
+        latest_change_label = (
+            "默认运行时配置已更新"
+            if profile.get("is_default")
+            else "运行时配置已更新"
+        )
+        profile["governance_summary"] = runtime_service.build_asset_governance_summary(
+            governance_indexes.get("runtime_profile", {}).get(str(profile.get("id") or "")),
+            last_changed_at=updated_at,
+            latest_change_type="runtime_profile_updated",
+            latest_change_label=latest_change_label,
+            change_count_7d=1 if updated_at and updated_at >= seven_days_ago else 0,
+            extra_anomalies=extra_anomalies,
+        )
+
     return _success({"items": profiles, "total": len(profiles)})
 
 
