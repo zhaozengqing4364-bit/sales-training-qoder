@@ -17,8 +17,7 @@ from sqlalchemy.orm import sessionmaker
 # Add src to path for imports
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
-from common.db.models import Base, User
-from main import app
+from common.db.models import Base
 
 # Test database URL (SQLite for testing)
 TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
@@ -71,6 +70,7 @@ async def test_db(test_engine):
 async def async_client(test_db):
     """Create async HTTP client for testing"""
     from common.db.session import get_db
+    from main import app
 
     # Override database dependency
     async def override_get_db():
@@ -97,6 +97,8 @@ async def test_user(test_db: AsyncSession):
 @pytest_asyncio.fixture
 async def another_user(test_db: AsyncSession):
     """Create a second user for duplicate-email tests."""
+    from common.db.models import User
+
     user = User(
         user_id=str(uuid.uuid4()),
         wechat_user_id=f"another_{uuid.uuid4().hex[:8]}",

@@ -1394,3 +1394,34 @@ Append one entry per iteration:
   verification results: passed fresh on the web route; the exact replay-page suite passed 7/7 and the upstream report-page suite stayed green at 10/10 after refreshing web/node_modules with the temporary npm runner. Backend replay/schema files compiled successfully, but repo-local backend pytest/pip remain environment-broken (`ModuleNotFoundError: pygments.lexer` / `pip._vendor.rich.console`). A live browser attempt was also blocked by the local Playwright install (`Cannot find module './registry'`) even though the dev server booted on :3445.
   success signal status: the current replay route can now open directly onto a PPT page context, show why that page needs rework, keep degraded page-anchor fallbacks visible, and jump from page issues into the matching transcript turns without creating a second replay surface.
   rollback note: if a later slice changes report→replay page targeting, keep the page-level replay contract on the existing replay route and preserve explicit `page/page_anchor_status/page_anchor_reason` degraded messaging unless a broader tested handoff replaces D072.
+
+- time: 2026-03-26T11:53:51+08:00
+  mode: stabilize
+  item id: M004-S04
+  files changed:
+    - backend/src/presentation_coach/services/presentation_report_service.py
+    - backend/src/common/conversation/session_evidence.py
+    - backend/src/common/conversation/replay.py
+    - backend/src/common/conversation/schemas.py
+    - backend/tests/unit/test_presentation_report_service.py
+    - backend/tests/conftest.py
+    - web/src/app/(user)/practice/[sessionId]/report/page.tsx
+    - web/src/app/(user)/practice/[sessionId]/replay/page.tsx
+    - web/src/components/practice/presentation/SlideViewer.tsx
+    - web/src/lib/session-evidence.ts
+    - web/src/app/(user)/practice/[sessionId]/report/page.test.tsx
+    - web/src/app/(user)/practice/[sessionId]/replay/page.test.tsx
+    - package.json
+    - .gsd/milestones/M004/slices/S04/S04-SUMMARY.md
+    - .gsd/milestones/M004/slices/S04/S04-UAT.md
+    - .gsd/KNOWLEDGE.md
+    - .gsd/PROJECT.md
+    - .codex/loop/state.json
+  summary: Closed S04 on the existing PPT report/replay authority line, verified page-level issue cluster contract + report/replay consumers, and hardened repo-root verification so the planned backend/web commands execute without false negatives.
+  verification commands:
+    - cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_presentation_report_service.py
+    - npm test -- --run 'src/app/(user)/practice/[sessionId]/report/page.test.tsx'
+    - npm test -- --run 'src/app/(user)/practice/[sessionId]/replay/page.test.tsx'
+  verification results: passed; backend presentation report suite is green at 2/2, root-invoked report page suite is green at 10/10, and root-invoked replay page suite is green at 7/7 after adding the repo-root npm test shim and lazy-loading the FastAPI app in backend test fixtures.
+  success signal status: learners can now stay on the current PPT report/replay routes and still see which page has which issue cluster, why it matters, and which transcript turns to revisit.
+  rollback note: if future work revisits S04 close-out, keep the shared `presentation_review` / replay authority line and preserve repo-root verification compatibility instead of reintroducing a web-only or app-import-heavy verification path.

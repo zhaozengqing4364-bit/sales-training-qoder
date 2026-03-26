@@ -1,0 +1,8 @@
+{
+  "name": "sales-training-qoder-root",
+  "private": true,
+  "packageManager": "pnpm@10.20.0",
+  "scripts": {
+    "test": "pnpm --dir web exec vitest run"
+  }
+}
