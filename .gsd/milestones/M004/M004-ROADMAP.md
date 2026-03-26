@@ -10,4 +10,4 @@
 | S02 | report 直达 replay 关键片段 | high | S01 | ✅ | On the current report page, the learner can open the replay at the relevant turn/marker for the surfaced issue or goal. |
 | S03 | 主问题驱动的再练入口 | high | S01, S02 | ✅ | From the current report or replay page, the learner can start a new practice session targeted at the previous issue family and see that focus carried into the new session. |
 | S04 | PPT 页级学习证据 | medium | S01 | ✅ | On the current PPT report/replay routes, a learner can see which page has which issue cluster and why it should be reworked. |
-| S05 | sales + PPT 学习闭环终验 | medium | S03, S04 | ⬜ | At least one sales and one PPT route complete a live learning loop on the current entrypoints, and degraded states remain understandable. |
+| S05 | sales + PPT 学习闭环终验 | medium | S03, S04 | ✅ | At least one sales and one PPT route complete a live learning loop on the current entrypoints, and degraded states remain understandable. |

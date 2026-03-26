@@ -1,7 +1,7 @@
 {
   "mode": "stabilize",
-  "current_issue_id": "M004-S05-T03",
-  "current_issue_type": "task",
+  "current_issue_id": "M004-S05",
+  "current_issue_type": "slice",
   "current_issue_status": "done",
   "pending_issue_ids": [],
   "completed_issue_ids": [
@@ -79,28 +79,26 @@
     "M004-S04",
     "M004-S05-T01",
     "M004-S05-T02",
-    "M004-S05-T03"
+    "M004-S05-T03",
+    "M004-S05"
   ],
   "blocked_issue_ids": [],
   "deferred_issue_ids": [],
   "last_modified_files": [
+    ".gsd/milestones/M004/slices/S05/S05-SUMMARY.md",
     ".gsd/milestones/M004/slices/S05/S05-UAT.md",
-    ".artifacts/m004-s05-t03/verify-playwright.js",
-    ".artifacts/m004-s05-t03/summary.json",
-    ".artifacts/m004-s05-t03/verification.json",
+    ".gsd/PROJECT.md",
     ".gsd/KNOWLEDGE.md",
     ".codex/loop/state.json",
     ".codex/loop/log.md"
   ],
   "last_verification_commands": [
     "cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_replay_service.py tests/integration/test_practice_evidence_flow.py",
-    "npm test -- --run 'src/app/(user)/practice/[sessionId]/report/page.test.tsx' 'src/app/(user)/practice/[sessionId]/replay/page.test.tsx' 'src/app/(dashboard)/history/page.test.tsx'",
-    "node .artifacts/m004-s05-t02/verify-playwright.js",
-    "node .artifacts/m004-s05-t03/verify-playwright.js",
-    "test -s .gsd/milestones/M004/slices/S05/S05-UAT.md && test -s .artifacts/m004-s05-t02/summary.json && test -s .artifacts/m004-s05-t03/summary.json && test -f .artifacts/m004-s05-t02/history.png && test -f .artifacts/m004-s05-t02/report.png && test -f .artifacts/m004-s05-t02/replay.png && test -f .artifacts/m004-s05-t02/retry.png && test -f .artifacts/m004-s05-t03/history.png && test -f .artifacts/m004-s05-t03/report.png && test -f .artifacts/m004-s05-t03/replay.png && test -f .artifacts/m004-s05-t03/retry.png && test -f .artifacts/m004-s05-t03/degraded-report.png && test -f .artifacts/m004-s05-t03/degraded-replay.png"
+    "pnpm dlx npm@11.6.1 test -- --run 'src/app/(user)/practice/[sessionId]/report/page.test.tsx' 'src/app/(user)/practice/[sessionId]/replay/page.test.tsx' 'src/app/(dashboard)/history/page.test.tsx'",
+    "test -s .gsd/milestones/M004/slices/S05/S05-SUMMARY.md && test -s .gsd/milestones/M004/slices/S05/S05-UAT.md && test -s .artifacts/m004-s05-t02/summary.json && test -s .artifacts/m004-s05-t03/summary.json && test -f .artifacts/m004-s05-t02/history.png && test -f .artifacts/m004-s05-t02/report.png && test -f .artifacts/m004-s05-t02/replay.png && test -f .artifacts/m004-s05-t02/retry.png && test -f .artifacts/m004-s05-t03/history.png && test -f .artifacts/m004-s05-t03/report.png && test -f .artifacts/m004-s05-t03/replay.png && test -f .artifacts/m004-s05-t03/retry.png && test -f .artifacts/m004-s05-t03/degraded-report.png && test -f .artifacts/m004-s05-t03/degraded-replay.png"
   ],
-  "last_verification_result": "Focused backend/web regressions passed, the existing sales browser proof regenerated cleanly, the new PPT browser proof captured both complete page-evidence and degraded missing-page-metadata behavior on the current shared routes, and the combined UAT/artifact pack exists on disk.",
-  "last_success_signal": "Both halves of S05 now have fresh route-level proof on localhost: sales still traverses history -> report -> replay -> retry, and PPT now proves report plus sibling replay plus retry on the same learner route family, with degraded page-metadata copy remaining understandable.",
+  "last_verification_result": "The exact S05 backend plan command passed (34 tests), the focused web report/replay/history Vitest suite passed (23 tests across 3 files), and the saved sales/PPT browser proof pack plus rewritten slice summary/UAT artifacts exist on disk. Repo-root pytest still trips a root-venv plugin/import issue, but the slice contract itself is green on the authored verifier path.",
+  "last_success_signal": "S05 is now closed with one shared learner route family proving both sales and PPT review loops: sales keeps report -> replay -> focus-intent retry, PPT keeps report + sibling replay + same-presentation retry, and degraded page-metadata copy stays readable.",
   "last_growth_scan": null,
-  "next_action": "Slice S05 is ready for slice completion/close-out."
+  "next_action": "Reassess the M004 roadmap using S05 summary outputs."
 }

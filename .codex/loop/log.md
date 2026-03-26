@@ -1492,3 +1492,22 @@ Append one entry per iteration:
   verification results: all five checks passed; the slice regression net stayed green, the sales proof pack was regenerated, the PPT proof pack validated both complete and degraded presentation evidence on current routes, and the shared UAT file is non-empty with both halves documented.
   success signal status: both scenario types now have live learner-route proof on localhost, and future browser UAT can rely on the explicit note that PPT replay remains a sibling history entrypoint while report exposes retry only.
   rollback note: if a future UI revision adds a direct PPT report-to-replay CTA, update the shared UAT and Knowledge note together instead of treating the current sibling-route behavior as a regression.
+
+- time: 2026-03-26T13:14:09+0800
+  mode: stabilize
+  item id: M004-S05
+  files changed:
+    - .gsd/milestones/M004/slices/S05/S05-SUMMARY.md
+    - .gsd/milestones/M004/slices/S05/S05-UAT.md
+    - .gsd/PROJECT.md
+    - .gsd/KNOWLEDGE.md
+    - .codex/loop/state.json
+    - .codex/loop/log.md
+  summary: Closed S05 by re-verifying the shared replay/report/history contract, compressing the sales + PPT route proof into slice-level summary/UAT artifacts, recording the current PPT sibling-route replay contract, and marking the learning-loop slice ready for roadmap reassessment.
+  verification commands:
+    - cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_replay_service.py tests/integration/test_practice_evidence_flow.py
+    - pnpm dlx npm@11.6.1 test -- --run 'src/app/(user)/practice/[sessionId]/report/page.test.tsx' 'src/app/(user)/practice/[sessionId]/replay/page.test.tsx' 'src/app/(dashboard)/history/page.test.tsx'
+    - test -s .gsd/milestones/M004/slices/S05/S05-SUMMARY.md && test -s .gsd/milestones/M004/slices/S05/S05-UAT.md && test -s .artifacts/m004-s05-t02/summary.json && test -s .artifacts/m004-s05-t03/summary.json && test -f .artifacts/m004-s05-t02/history.png && test -f .artifacts/m004-s05-t02/report.png && test -f .artifacts/m004-s05-t02/replay.png && test -f .artifacts/m004-s05-t02/retry.png && test -f .artifacts/m004-s05-t03/history.png && test -f .artifacts/m004-s05-t03/report.png && test -f .artifacts/m004-s05-t03/replay.png && test -f .artifacts/m004-s05-t03/retry.png && test -f .artifacts/m004-s05-t03/degraded-report.png && test -f .artifacts/m004-s05-t03/degraded-replay.png
+  verification results: passed; the exact backend plan command and focused web suite are green, and the saved browser proof pack plus rewritten slice artifacts are present on disk. Repo-root pytest still shows an environment/plugin import issue before collection, which was captured as knowledge rather than treated as a slice regression.
+  success signal status: the current learner route family now has closed-route proof for both sales and PPT, with understandable degraded behavior instead of route drift or sales fallback.
+  rollback note: if later work adds a direct PPT report-to-replay CTA, keep it on the existing /practice/{sessionId}/replay route and preserve the current sibling-route contract until the new CTA is re-verified.

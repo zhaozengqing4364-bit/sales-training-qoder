@@ -40,6 +40,7 @@
 - M004/S02 已完成：当前 `/practice/{sessionId}/report` 会把 `main_issue`、`next_goal` 与高光 evidence 直接深链到现有 `/practice/{sessionId}/replay` 路由；backend replay authority line 会给 issue/goal 挂接 stable `replay_anchor` 元数据，report 继续复用当前 CTA 区而不新增页面，replay 则按 query params 自动定位到目标 turn，并在高光缺失或 marker 漂移时保留明确的 degraded / missing anchor banner 供用户继续手动检索。
 - M004/S03 已完成：sales report 与 replay 入口现在都会复用 canonical `retry_entry.focus_intent` 直接发起定向再练，新的 create-session 会把该 focus intent 冻结进 `voice_policy_snapshot.focus_intent`，并经由 `runtime_descriptor.focus_intent` 在 `/practice/{sessionId}` 首屏展示“本次练习聚焦上次复盘问题”的主问题/下一轮目标卡片，形成当前 report → replay → retry 的学习闭环骨架而不新增第二套 retry flow。
 - M004/S04 已完成：shared presentation report/replay authority line 现在会把 PPT 页级问题簇挂在 `presentation_review.page_summaries[*].issue_clusters` 上，并通过 diagnostics/completeness 暴露聚合计数；当前 `/practice/{sessionId}/report` 会显示页级问题总览与逐页 evidence 卡片，`/practice/{sessionId}/replay` 也能沿现有 replay route 展示 SlideViewer、page/page_anchor 状态 banner、逐页问题簇和 transcript jumps，让 learner 在当前 PPT 入口里直接看到“哪一页出了什么问题、为什么要重讲”。
+- M004/S05 已完成：现有 learner `history/report/replay/retry` 路由家族已经拿到 sales + PPT 双场景终验。sales 侧保住了 canonical report 结论、replay 深链降级说明与 focus-intent retry；PPT 侧保住了 shared report/replay 的页级问题证据、保持同一 `presentation_id` 的 retry，以及 `missing_page_metadata` 时可理解的 degraded report/replay 文案。当前 shipped PPT contract 仍是“history 行暴露 replay、report 暴露 retry”，而不是 sales-style report 内直接跳 replay。
 - 真实首发目标已明确：先把桌面端稳定性做满，不在第一阶段绑定移动端 / 企业微信 / 外部系统集成。
 
 ## Architecture / Key Patterns

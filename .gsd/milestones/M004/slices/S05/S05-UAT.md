@@ -1,7 +1,12 @@
 # S05: sales + PPT 学习闭环终验 — UAT
 
 **Milestone:** M004
-**Written:** 2026-03-26T05:08:00Z
+**Written:** 2026-03-26T05:19:44.208Z
+
+# S05: sales + PPT 学习闭环终验 — UAT
+
+**Milestone:** M004
+**Written:** 2026-03-26T05:14:09Z
 
 ## UAT Type
 
@@ -134,7 +139,7 @@
   - `.artifacts/m004-s05-t02/summary.json`
 - The replay URL captured in the sales run was:
   - `http://localhost:3445/practice/6aff04f9-a09e-4956-8abc-07251c597a8f/replay?focus=main_issue&message_id=a5c1094d-d365-4da9-9210-f8e9671d1252&turn=3&anchor_status=degraded&anchor_reason=no_matching_highlight&marker_type=stage_change&marker_timestamp_ms=3900`
-- The focused sales retry launched as new session `d4083a3f-2ec9-4154-93c0-242a0ce1f010` during the proof run documented in T02.
+- The focused sales retry launched as new session `99027304-dfe1-4c5a-bb05-743b54fda7be` during the proof run documented in `.artifacts/m004-s05-t02/summary.json`.
 - Browser evidence from the PPT run lives in:
   - `.artifacts/m004-s05-t03/history.png`
   - `.artifacts/m004-s05-t03/report.png`
@@ -144,5 +149,6 @@
   - `.artifacts/m004-s05-t03/degraded-replay.png`
   - `.artifacts/m004-s05-t03/summary.json`
 - The PPT report proof used completed session `8531c7f6-50da-4934-9fd4-63784c791edf`; the degraded proof used `c6f66bdc-26ca-487a-8f58-5dd7f61934f4`.
-- The PPT retry launched as new session `7da690a1-d52b-427a-8966-f7fe501158f9` during this proof run.
+- The PPT retry launched as new session `a41a1ce7-5d86-4fe5-b3d0-20dad869818b` during this proof run.
 - This run also confirmed `reportHasReplayCta=false` for the current PPT report UI: replay remains a sibling history entrypoint, while retry stays available directly on report and replay.
+
