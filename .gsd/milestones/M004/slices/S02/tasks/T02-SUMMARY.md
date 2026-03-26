@@ -2,6 +2,29 @@
 id: T02
 parent: S02
 milestone: M004
+provides: []
+requires: []
+affects: []
+key_files: ["web/src/app/(user)/practice/[sessionId]/report/page.tsx", "web/src/app/(user)/practice/[sessionId]/report/page.test.tsx", "web/src/lib/api/types.ts", ".gsd/DECISIONS.md", ".gsd/KNOWLEDGE.md"]
+key_decisions: ["Reused the existing replay route and encoded report deep links as replay query params (`focus`, `message_id`, `turn`, `anchor_status`, `anchor_reason`, `marker_type`, `marker_timestamp_ms`) instead of adding a report-only resolver or a second learning page.", "Loaded replay anchor metadata from the canonical replay API only when the report already had `main_issue` or `next_goal`, so the report cards stay aligned with the same SessionEvidenceService projection that T01 extended.", "Kept report highlight deep links on the current `HighlightList` seam by routing cards into replay with `focus=learning_evidence&turn=...` until T03 consumes the query contract on the replay page."]
+patterns_established: []
+drill_down_paths: []
+observability_surfaces: []
+duration: ""
+verification_result: "Re-ran the required focused verifier from the task plan: `cd web && npm test -- --run 'src/app/(user)/practice/[sessionId]/report/page.test.tsx'`. The suite passed with 8/8 tests, covering the new replay deep-link CTAs, degraded anchor copy, and highlight-card replay handoff alongside the existing report regressions. I also attempted a live browser/runtime proof by starting the repo backend on `:3444` and the repo frontend on `:3445`; that attempt confirmed the correct repo route and environment host mismatch gotcha, but it did not complete a fully authenticated report→replay click-through within the task time budget."
+completed_at: 2026-03-25T16:55:38.881Z
+blocker_discovered: false
+---
+
+# T02: Added replay deep-link CTAs to the report page for issue, goal, and highlight evidence.
+
+> Added replay deep-link CTAs to the report page for issue, goal, and highlight evidence.
+
+## What Happened
+---
+id: T02
+parent: S02
+milestone: M004
 key_files:
   - web/src/app/(user)/practice/[sessionId]/report/page.tsx
   - web/src/app/(user)/practice/[sessionId]/report/page.test.tsx
@@ -58,3 +81,10 @@ A fully authenticated live browser proof on the repo web app was not completed i
 - `web/src/lib/api/types.ts`
 - `.gsd/DECISIONS.md`
 - `.gsd/KNOWLEDGE.md`
+
+
+## Deviations
+The local snapshot already exposed `api.sessions.getReplay(...)` in `web/src/lib/api/client.ts`, so T02 did not need a client-layer code change even though the original task file list expected that file to move.
+
+## Known Issues
+A fully authenticated live browser proof on the repo web app was not completed inside this task's time budget. The focused report-page Vitest is green, and a partial runtime attempt confirmed the repo route exists on `localhost:3445`, but T03 should finish the full localhost/localhost report→replay proof once the local login/runtime path is in hand.

@@ -1,6 +1,6 @@
 {
   "mode": "stabilize",
-  "current_issue_id": "M004-S03-T01",
+  "current_issue_id": "M004-S03-T03",
   "current_issue_type": "task",
   "current_issue_status": "done",
   "pending_issue_ids": [],
@@ -70,27 +70,34 @@
     "M004-S02-T02",
     "M004-S02-T03",
     "M004-S02",
-    "M004-S03-T01"
+    "M004-S03-T01",
+    "M004-S03-T02",
+    "M004-S03-T03"
   ],
   "blocked_issue_ids": [],
   "deferred_issue_ids": [],
   "last_modified_files": [
-    "backend/src/common/api/practice.py",
-    "backend/src/common/db/schemas.py",
-    "backend/tests/contract/test_practice_evidence_contract.py",
-    "backend/tests/integration/test_practice_evidence_flow.py",
-    "backend/tests/integration/test_sales_value_training_flow.py",
+    "backend/src/training_runtime/models.py",
+    "backend/src/training_runtime/service.py",
+    "backend/tests/unit/test_training_runtime_service.py",
+    "web/src/lib/api/types.ts",
+    "web/src/app/(user)/practice/[sessionId]/runtime-lock.ts",
+    "web/src/app/(user)/practice/[sessionId]/runtime-lock.test.ts",
+    "web/src/app/(user)/practice/[sessionId]/page.tsx",
+    "web/src/app/(user)/practice/[sessionId]/page.test.tsx",
     ".gsd/DECISIONS.md",
-    ".gsd/KNOWLEDGE.md",
     ".codex/loop/state.json",
     ".codex/loop/log.md"
   ],
   "last_verification_commands": [
+    "cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_training_runtime_service.py",
     "cd backend && venv/bin/python -m pytest -c pyproject.toml tests/contract/test_practice_evidence_contract.py tests/integration/test_practice_evidence_flow.py",
-    "cd backend && venv/bin/python -m pytest -c pyproject.toml tests/integration/test_sales_value_training_flow.py tests/integration/test_voice_runtime_session_snapshot.py tests/contract/test_sessions.py"
+    "cd web && npm test -- --run 'src/app/(user)/practice/[sessionId]/report/page.test.tsx' 'src/app/(user)/practice/[sessionId]/replay/page.test.tsx'",
+    "cd web && npm test -- --run 'src/app/(user)/practice/[sessionId]/page.test.tsx' 'src/app/(user)/practice/[sessionId]/runtime-lock.test.ts' 'src/hooks/use-practice-websocket.test.ts'",
+    "cd web && npm test -- --run 'src/hooks/use-practice-websocket.test.ts'"
   ],
-  "last_verification_result": "Fresh T01 verification is green: the task suite passed 9 tests covering the report retry-focus contract and create-session persistence, and the adjacent session/report contract suite passed 24 tests after updating the existing sales retry_entry expectation.",
-  "last_success_signal": "Sales reports now expose a structured retry focus intent, and POST /practice/sessions persists that focus under voice_policy_snapshot.focus_intent on the new session without introducing a second retry-launch surface.",
+  "last_verification_result": "Fresh S03 verification is green: the new runtime-descriptor unit tests passed, the T01 backend contract/integration suite passed, the exact T02 report/replay CTA suite passed after re-running the correctly quoted test paths, and the practice-page focus suite plus the exact T03 websocket hook command both passed.",
+  "last_success_signal": "Focused retries now carry the prior main issue and next goal into `/practice/{sessionId}` on the existing session metadata surface, so learners can see a targeted retry banner instead of a generic new practice page.",
   "last_growth_scan": null,
-  "next_action": "Continue with M004/S03/T02; the backend retry-focus seam is ready on report retry_entry.focus_intent and the new session snapshot."
+  "next_action": "Close M004/S03: all three task bars are now green and the learner practice page shows carry-forward focus from the existing runtime descriptor seam."
 }

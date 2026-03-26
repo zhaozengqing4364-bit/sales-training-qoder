@@ -2,6 +2,29 @@
 id: T02
 parent: S03
 milestone: M004
+provides: []
+requires: []
+affects: []
+key_files: ["web/src/app/(user)/practice/[sessionId]/report/page.tsx", "web/src/app/(user)/practice/[sessionId]/replay/page.tsx", "web/src/lib/api/client.ts", "web/src/lib/api/types.ts", "web/src/app/(user)/practice/[sessionId]/report/page.test.tsx", "web/src/app/(user)/practice/[sessionId]/replay/page.test.tsx"]
+key_decisions: ["Reuse the existing report/replay CTA and `api.practice.createSession` surface for retries instead of creating a retry-specific frontend flow.", "Load replay retry metadata from the canonical report `retry_entry` so report and replay stay aligned on one retry-launch contract.", "Keep scenario selection visible in the follow-up `/practice/{sessionId}` URL via existing query params while `focus_intent` travels in the create-session request body."]
+patterns_established: []
+drill_down_paths: []
+observability_surfaces: []
+duration: ""
+verification_result: "Re-ran the task-plan verification command from `web/`. Vitest passed for both `src/app/(user)/practice/[sessionId]/report/page.test.tsx` and `src/app/(user)/practice/[sessionId]/replay/page.test.tsx` (14 tests total), confirming the focused retry CTA wiring, `focus_intent` forwarding, scenario-specific navigation params, and replay deep-link behavior remain green. I also confirmed the task summary artifact itself was missing before this completion call, which explains the gate failure."
+completed_at: 2026-03-25T18:03:40.263Z
+blocker_discovered: false
+---
+
+# T02: Connected report and replay retry CTAs to focused create-session launches
+
+> Connected report and replay retry CTAs to focused create-session launches
+
+## What Happened
+---
+id: T02
+parent: S03
+milestone: M004
 key_files:
   - web/src/app/(user)/practice/[sessionId]/report/page.tsx
   - web/src/app/(user)/practice/[sessionId]/replay/page.tsx
@@ -54,3 +77,10 @@ None.
 - `web/src/lib/api/types.ts`
 - `web/src/app/(user)/practice/[sessionId]/report/page.test.tsx`
 - `web/src/app/(user)/practice/[sessionId]/replay/page.test.tsx`
+
+
+## Deviations
+No product-scope deviations. This recovery pass did not require code edits because the T02 implementation was already present; the failing gate was caused by the missing `T02-SUMMARY.md` artifact.
+
+## Known Issues
+None.

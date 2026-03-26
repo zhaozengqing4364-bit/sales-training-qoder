@@ -2,9 +2,68 @@
 
 from __future__ import annotations
 
+from copy import deepcopy
+from typing import Any
+
 from common.db.models import PracticeSession
 
 from .models import TrainingRuntimeDescriptor
+
+
+def _filter_retry_focus_fields(
+    value: Any,
+    *,
+    allowed_keys: tuple[str, ...],
+) -> dict[str, str] | None:
+    if not isinstance(value, dict):
+        return None
+
+    filtered = {
+        key: str(value[key]).strip()
+        for key in allowed_keys
+        if value.get(key) is not None and str(value.get(key)).strip()
+    }
+    return filtered or None
+
+
+def _extract_runtime_focus_intent(
+    session: PracticeSession,
+    *,
+    scenario_type: str,
+) -> dict[str, Any] | None:
+    if str(scenario_type or "").lower() != "sales":
+        return None
+
+    snapshot = getattr(session, "voice_policy_snapshot", None)
+    if not isinstance(snapshot, dict):
+        return None
+
+    focus_intent = snapshot.get("focus_intent")
+    if not isinstance(focus_intent, dict):
+        return None
+
+    main_issue = _filter_retry_focus_fields(
+        focus_intent.get("main_issue"),
+        allowed_keys=("issue_type", "issue_text", "recovery_rule"),
+    )
+    next_goal = _filter_retry_focus_fields(
+        focus_intent.get("next_goal"),
+        allowed_keys=("goal_type", "goal_text", "rule"),
+    )
+    if main_issue is None and next_goal is None:
+        return None
+
+    sanitized: dict[str, Any] = {
+        "version": str(focus_intent.get("version") or "retry_focus_v1"),
+    }
+    source_session_id = focus_intent.get("source_session_id")
+    if source_session_id is not None and str(source_session_id).strip():
+        sanitized["source_session_id"] = str(source_session_id)
+    if main_issue is not None:
+        sanitized["main_issue"] = main_issue
+    if next_goal is not None:
+        sanitized["next_goal"] = next_goal
+    return deepcopy(sanitized)
 
 
 def build_training_runtime_descriptor(
@@ -37,5 +96,9 @@ def build_training_runtime_descriptor(
             str(session.voice_runtime_profile_id)
             if getattr(session, "voice_runtime_profile_id", None)
             else None
+        ),
+        focus_intent=_extract_runtime_focus_intent(
+            session,
+            scenario_type=resolved_scenario_type,
         ),
     )

@@ -2,6 +2,29 @@
 id: T02
 parent: S01
 milestone: M004
+provides: []
+requires: []
+affects: []
+key_files: ["web/src/lib/api/types.ts", "web/src/app/(user)/practice/[sessionId]/replay/page.tsx", "web/src/app/(user)/practice/[sessionId]/replay/page.test.tsx", "web/src/components/highlights/HighlightList.tsx", "web/src/components/highlights/HighlightCard.tsx", "web/src/components/highlights/HighlightDetailModal.tsx", "web/src/components/highlights/HighlightList.test.tsx", "web/src/components/highlights/HighlightDetailModal.test.tsx", ".gsd/KNOWLEDGE.md"]
+key_decisions: ["Bound replay and highlight UI components to the shared web API `HighlightItem`/`ReplayLearningEvidence` types instead of maintaining separate local interfaces.", "Rendered per-turn learning evidence directly inside the replay page’s highlighted message cards so the current replay surface stays informative even when the separate highlight panel is unavailable.", "Preserved compatibility fallbacks from flat fields like `stage_name`, `suggested_response`, and `context` while preferring the nested `learning_evidence` payload when it is present."]
+patterns_established: []
+drill_down_paths: []
+observability_surfaces: []
+duration: ""
+verification_result: "Fresh verification: `cd web && npm test -- --run 'src/app/(user)/practice/[sessionId]/replay/page.test.tsx' 'src/components/highlights/HighlightList.test.tsx' 'src/components/highlights/HighlightDetailModal.test.tsx'` passed with 3/3 files and 5/5 tests green. This covers the slice plan’s replay page and highlight component drift detectors for T02. The suite exercises the richer learning evidence on the existing replay/highlight surfaces, including nested evidence rendering, modal detail rendering, and the clean no-highlights state."
+completed_at: 2026-03-25T11:09:39.337Z
+blocker_discovered: false
+---
+
+# T02: Rendered shared learning evidence on the replay and highlight surfaces with focused UI tests.
+
+> Rendered shared learning evidence on the replay and highlight surfaces with focused UI tests.
+
+## What Happened
+---
+id: T02
+parent: S01
+milestone: M004
 key_files:
   - web/src/lib/api/types.ts
   - web/src/app/(user)/practice/[sessionId]/replay/page.tsx
@@ -68,3 +91,10 @@ None.
 - `web/src/components/highlights/HighlightList.test.tsx`
 - `web/src/components/highlights/HighlightDetailModal.test.tsx`
 - `.gsd/KNOWLEDGE.md`
+
+
+## Deviations
+Minor local adaptation: the task plan named the replay page and highlight UI files, but the current code also needed `web/src/lib/api/types.ts` because the existing highlight components were using duplicate local interfaces that could not represent the nested `learning_evidence` contract safely. I also added the focused component tests referenced by the task verification command because they were missing from the repository.
+
+## Known Issues
+None.

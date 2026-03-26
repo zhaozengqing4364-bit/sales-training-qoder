@@ -52,6 +52,7 @@ export interface TrainingRuntimeDescriptor {
     presentation_id?: string | null;
     voice_mode?: "legacy" | "stepfun_realtime" | string | null;
     runtime_profile_id?: string | null;
+    focus_intent?: RetryFocusIntent | null;
 }
 
 export type SessionStatus =

@@ -2,6 +2,29 @@
 id: T03
 parent: S01
 milestone: M004
+provides: []
+requires: []
+affects: []
+key_files: ["web/src/lib/session-evidence.ts", "web/src/app/(user)/practice/[sessionId]/report/page.tsx", "web/src/app/(dashboard)/history/page.tsx", "web/src/app/(user)/practice/[sessionId]/report/page.test.tsx", "web/src/app/(dashboard)/history/page.test.tsx", ".gsd/DECISIONS.md", ".codex/loop/state.json", ".codex/loop/log.md"]
+key_decisions: ["Derived report/history coaching cues from the unified completed-session contract (`main_issue` / `next_goal`) via a shared frontend helper instead of treating highlights or enhanced reports as the primary source.", "Kept degraded-state behavior on the existing routes explicit: report retains issue/goal vocabulary when enhanced report or highlights fail, and history retains unified-evidence cues when analytics snapshots degrade."]
+patterns_established: []
+drill_down_paths: []
+observability_surfaces: []
+duration: ""
+verification_result: "Red-green path: I first extended `web/src/app/(user)/practice/[sessionId]/report/page.test.tsx` and `web/src/app/(dashboard)/history/page.test.tsx`, then ran `cd web && npm test -- --run 'src/app/(user)/practice/[sessionId]/report/page.test.tsx' 'src/app/(dashboard)/history/page.test.tsx' 'src/app/(user)/practice/[sessionId]/replay/page.test.tsx'` and watched it fail on the missing `证据支撑` / `证据补强` labels and missing history learning cues. After implementing the shared helper and page updates, I reran the same command and it passed (10/10 tests). Because this is the final task in the slice, I also reran the earlier slice drift detectors: `cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_replay_service.py tests/integration/test_replay_api.py` passed (43 tests), and `cd web && npm test -- --run 'src/app/(user)/practice/[sessionId]/replay/page.test.tsx' 'src/components/highlights/HighlightList.test.tsx' 'src/components/highlights/HighlightDetailModal.test.tsx'` passed (5 tests). Together those checks confirm the backend replay authority line, replay/highlight UI, and the new report/history carry-forward stay aligned on the current routes while degraded states remain explicit."
+completed_at: 2026-03-25T16:07:52.404Z
+blocker_discovered: false
+---
+
+# T03: Aligned report and history learning cues with replay evidence and degraded-state behavior.
+
+> Aligned report and history learning cues with replay evidence and degraded-state behavior.
+
+## What Happened
+---
+id: T03
+parent: S01
+milestone: M004
 key_files:
   - web/src/lib/session-evidence.ts
   - web/src/app/(user)/practice/[sessionId]/report/page.tsx
@@ -67,3 +90,10 @@ None.
 - `.gsd/DECISIONS.md`
 - `.codex/loop/state.json`
 - `.codex/loop/log.md`
+
+
+## Deviations
+None.
+
+## Known Issues
+None.

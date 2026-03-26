@@ -1325,3 +1325,29 @@ Append one entry per iteration:
   verification results: passed fresh; the task suite covered report focus-intent contract plus create-session persistence, and the adjacent session/report contract suite stayed green after aligning the existing sales retry_entry expectation.
   success signal status: sales reports now hand T02/T03 one structured retry focus payload, and newly created practice sessions freeze that focus on the existing voice_policy_snapshot seam for later runtime display.
   rollback note: if later slices revise retry semantics, keep the focus payload on retry_entry + voice_policy_snapshot instead of inventing a second retry store unless a fully re-verified contract replaces D067.
+
+- time: 2026-03-26T08:38:30+0800
+  mode: stabilize
+  item id: M004-S03-T03
+  files changed:
+    - backend/src/training_runtime/models.py
+    - backend/src/training_runtime/service.py
+    - backend/tests/unit/test_training_runtime_service.py
+    - web/src/lib/api/types.ts
+    - web/src/app/(user)/practice/[sessionId]/runtime-lock.ts
+    - web/src/app/(user)/practice/[sessionId]/runtime-lock.test.ts
+    - web/src/app/(user)/practice/[sessionId]/page.tsx
+    - web/src/app/(user)/practice/[sessionId]/page.test.tsx
+    - .gsd/DECISIONS.md
+    - .codex/loop/state.json
+    - .codex/loop/log.md
+  summary: Exposed retry focus on the typed runtime descriptor, threaded it through the practice runtime-lock hook, and rendered a targeted-retry focus callout on the live practice page.
+  verification commands:
+    - cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_training_runtime_service.py
+    - cd backend && venv/bin/python -m pytest -c pyproject.toml tests/contract/test_practice_evidence_contract.py tests/integration/test_practice_evidence_flow.py
+    - cd web && npm test -- --run 'src/app/(user)/practice/[sessionId]/report/page.test.tsx' 'src/app/(user)/practice/[sessionId]/replay/page.test.tsx'
+    - cd web && npm test -- --run 'src/app/(user)/practice/[sessionId]/page.test.tsx' 'src/app/(user)/practice/[sessionId]/runtime-lock.test.ts' 'src/hooks/use-practice-websocket.test.ts'
+    - cd web && npm test -- --run 'src/hooks/use-practice-websocket.test.ts'
+  verification results: passed fresh; backend runtime-descriptor coverage is green, the T01 backend contract/integration suite stayed green, the exact T02 report/replay CTA suite passed after rerunning the correctly quoted test paths, and both the practice-page focus suite and the exact T03 websocket hook command passed.
+  success signal status: a learner who starts a focused retry now lands on `/practice/{sessionId}` with an explicit targeted-retry banner showing the carried-forward main issue and next goal instead of a generic blank entry state.
+  rollback note: if later work revisits this entry chain, keep the learner page reading retry focus from `runtime_descriptor.focus_intent` rather than adding raw snapshot parsing or a second metadata fetch unless a broader tested runtime contract replaces D068.

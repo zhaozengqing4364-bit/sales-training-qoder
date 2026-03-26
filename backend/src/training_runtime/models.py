@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from enum import StrEnum
+from typing import Any
 
 from pydantic import BaseModel
 
@@ -26,3 +27,4 @@ class TrainingRuntimeDescriptor(BaseModel):
     presentation_id: str | None = None
     voice_mode: str | None = None
     runtime_profile_id: str | None = None
+    focus_intent: dict[str, Any] | None = None

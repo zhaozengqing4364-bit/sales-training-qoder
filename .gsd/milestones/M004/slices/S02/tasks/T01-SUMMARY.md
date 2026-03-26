@@ -2,6 +2,29 @@
 id: T01
 parent: S02
 milestone: M004
+provides: []
+requires: []
+affects: []
+key_files: ["backend/src/common/conversation/replay.py", "backend/tests/unit/test_replay_service.py", "backend/tests/integration/test_replay_api.py", ".gsd/DECISIONS.md"]
+key_decisions: ["Attach replay deep-link metadata as nested `replay_anchor` payloads on `replay.main_issue` and `replay.next_goal` instead of introducing a separate resolver surface.", "Resolve anchors from existing replay messages and timeline markers, preferring matching highlights and degrading to visible stage or missing-marker states when exact highlight targets are unavailable."]
+patterns_established: []
+drill_down_paths: []
+observability_surfaces: []
+duration: ""
+verification_result: "Wrote failing tests first for resolved and degraded replay anchors, confirmed the new assertions failed because `replay_anchor` was absent, then implemented the resolver and reran the focused backend verification command until the full targeted suite passed. Final verification covered unit and integration replay contracts for resolved highlight anchors, degraded stage fallback when no matching highlight exists, degraded missing-marker behavior, and the existing replay/message/highlights access-control and normalization checks."
+completed_at: 2026-03-25T16:29:42.777Z
+blocker_discovered: false
+---
+
+# T01: Added stable replay anchors to replay issue/goal conclusions with degraded fallback coverage.
+
+> Added stable replay anchors to replay issue/goal conclusions with degraded fallback coverage.
+
+## What Happened
+---
+id: T01
+parent: S02
+milestone: M004
 key_files:
   - backend/src/common/conversation/replay.py
   - backend/tests/unit/test_replay_service.py
@@ -55,3 +78,10 @@ None.
 - `backend/tests/unit/test_replay_service.py`
 - `backend/tests/integration/test_replay_api.py`
 - `.gsd/DECISIONS.md`
+
+
+## Deviations
+None.
+
+## Known Issues
+None.

@@ -3,7 +3,7 @@
 import * as React from "react";
 
 import { api } from "@/lib/api/client";
-import type { PracticeSessionRuntime } from "@/lib/api/types";
+import type { PracticeSessionRuntime, RetryFocusIntent } from "@/lib/api/types";
 import { debug } from "@/lib/debug";
 
 type ScenarioType = "sales" | "presentation";
@@ -30,6 +30,7 @@ interface PracticeRuntimeLockState {
     lockedAgentId?: string;
     lockedPersonaId?: string;
     lockedPresentationId?: string;
+    focusIntent: RetryFocusIntent | null;
     rewriteHref: string | null;
 }
 
@@ -46,6 +47,7 @@ export interface UsePracticeRuntimeLockResult {
     lockedAgentId?: string;
     lockedPersonaId?: string;
     lockedPresentationId?: string;
+    focusIntent: RetryFocusIntent | null;
     sessionMetaError: string | null;
 }
 
@@ -79,6 +81,7 @@ export function buildRuntimeLockState({
             lockedAgentId,
             lockedPersonaId,
             lockedPresentationId,
+            focusIntent: session.runtime_descriptor?.focus_intent ?? null,
             rewriteHref: null,
         };
     }
@@ -110,6 +113,7 @@ export function buildRuntimeLockState({
         lockedAgentId,
         lockedPersonaId,
         lockedPresentationId,
+        focusIntent: session.runtime_descriptor?.focus_intent ?? null,
         rewriteHref: `/practice/${sessionId}?${searchParams.toString()}`,
     };
 }
@@ -134,6 +138,7 @@ export function usePracticeRuntimeLock({
         lockedAgentId: queryAgentId,
         lockedPersonaId: queryPersonaId,
         lockedPresentationId: queryPresentationId,
+        focusIntent: null,
         sessionMetaError: null,
     });
 
@@ -167,6 +172,7 @@ export function usePracticeRuntimeLock({
                     agentId: nextState.lockedAgentId || null,
                     personaId: nextState.lockedPersonaId || null,
                     presentationId: nextState.lockedPresentationId || null,
+                    retryFocusIntentVersion: nextState.focusIntent?.version || null,
                     shouldRewriteQuery: Boolean(nextState.rewriteHref),
                 });
 
@@ -176,6 +182,7 @@ export function usePracticeRuntimeLock({
                     lockedAgentId: nextState.lockedAgentId,
                     lockedPersonaId: nextState.lockedPersonaId,
                     lockedPresentationId: nextState.lockedPresentationId,
+                    focusIntent: nextState.focusIntent,
                     sessionMetaError: null,
                 });
 

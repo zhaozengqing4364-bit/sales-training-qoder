@@ -2,6 +2,29 @@
 id: T01
 parent: S01
 milestone: M004
+provides: []
+requires: []
+affects: []
+key_files: ["backend/src/common/conversation/replay.py", "backend/src/common/conversation/session_evidence.py", "backend/src/common/conversation/schemas.py", "backend/tests/unit/test_replay_service.py", "backend/tests/integration/test_replay_api.py", ".gsd/KNOWLEDGE.md", ".gsd/DECISIONS.md"]
+key_decisions: ["Derived replay/highlight explanation fields from `SessionEvidenceService` projection instead of building a second truth line in replay handlers.", "Introduced a nested `learning_evidence` contract for highlighted turns while preserving flat compatibility fields like `sales_stage`, `stage_name`, `context`, and `suggested_response`.", "Updated the Pydantic response schemas in lockstep with service changes so FastAPI `response_model` serialization would not trim the new fields."]
+patterns_established: []
+drill_down_paths: []
+observability_surfaces: []
+duration: ""
+verification_result: "Fresh verification: `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/test_replay_service.py backend/tests/integration/test_replay_api.py` passed with 43/43 tests green. This covers the current slice’s backend drift detectors for replay service and replay API. I also ran LSP diagnostics on `backend/src/common/conversation/replay.py`, `backend/src/common/conversation/session_evidence.py`, `backend/src/common/conversation/schemas.py`, `backend/tests/unit/test_replay_service.py`, and `backend/tests/integration/test_replay_api.py`; all returned no diagnostics. The slice’s frontend replay/highlight component checks belong to T02 and were not run in this backend task."
+completed_at: 2026-03-25T10:42:31.247Z
+blocker_discovered: false
+---
+
+# T01: Lock replay/highlight learning evidence to the shared session projection with a stable nested contract
+
+> Lock replay/highlight learning evidence to the shared session projection with a stable nested contract
+
+## What Happened
+---
+id: T01
+parent: S01
+milestone: M004
 key_files:
   - backend/src/common/conversation/replay.py
   - backend/src/common/conversation/session_evidence.py
@@ -60,3 +83,10 @@ Repo-root focused backend pytest still emits the existing `pytest-cov` warnings 
 - `backend/tests/integration/test_replay_api.py`
 - `.gsd/KNOWLEDGE.md`
 - `.gsd/DECISIONS.md`
+
+
+## Deviations
+Minor local adaptation: `backend/src/common/conversation/api.py` did not need code changes once the replay service and response schemas were aligned, but `backend/src/common/conversation/schemas.py` did need changes so FastAPI would stop filtering the new payload fields. I also updated `.gsd/KNOWLEDGE.md` because the schema-filter behavior is a recurring gotcha for this route family.
+
+## Known Issues
+Repo-root focused backend pytest still emits the existing `pytest-cov` warnings (`Module src was never imported` / `No data was collected`) even when the targeted suites pass. The functional verification for this task is green, but the coverage warning noise remains unfixed.

@@ -16,6 +16,7 @@ import { RightPanelContent } from "@/components/practice/RightPanelContent";
 import { usePracticeRuntimeLock, normalizeVoiceMode } from "./runtime-lock";
 import { usePracticeRecordingHotkeys } from "./use-practice-recording-hotkeys";
 import { usePracticeSessionLifecycle } from "./use-practice-session-lifecycle";
+import { formatGoalTypeLabel, formatIssueTypeLabel } from "@/lib/session-evidence";
 
 const SESSION_STATUS_LABELS: Record<SessionStatus, string> = {
     preparing: "准备中",
@@ -141,6 +142,7 @@ export default function PracticeSessionPage() {
         lockedAgentId: runtimeAgentId,
         lockedPersonaId: runtimePersonaId,
         lockedPresentationId: runtimePresentationId,
+        focusIntent,
         sessionMetaError,
     } = usePracticeRuntimeLock({
         sessionId,
@@ -193,6 +195,15 @@ export default function PracticeSessionPage() {
 
     const scenarioType = lockedScenarioType;
     const voiceMode = lockedVoiceMode;
+    const focusIssueTypeLabel = React.useMemo(
+        () => formatIssueTypeLabel(focusIntent?.main_issue?.issue_type ?? null),
+        [focusIntent],
+    );
+    const focusGoalTypeLabel = React.useMemo(
+        () => formatGoalTypeLabel(focusIntent?.next_goal?.goal_type ?? null),
+        [focusIntent],
+    );
+    const showCarryForwardFocus = scenarioType === "sales" && Boolean(focusIntent);
 
     // AI 是否正在忙碌（说话或思考中），用于一来一回交互模式
     const aiIsBusy = isPlayingAudio || aiState === "thinking" || aiState === "speaking";
@@ -424,6 +435,40 @@ export default function PracticeSessionPage() {
                         </Button>
                     </div>
                 </header>
+
+                {showCarryForwardFocus && focusIntent && (
+                    <div className="mx-4 mt-4 rounded-2xl border border-indigo-100 bg-indigo-50/80 p-4 text-slate-700 shadow-sm">
+                        <div className="flex flex-wrap items-center gap-2">
+                            <span className="inline-flex items-center rounded-full bg-indigo-600 px-2.5 py-1 text-xs font-semibold text-white">
+                                定向再练
+                            </span>
+                            <p className="text-sm font-semibold text-slate-900">本次练习聚焦上次复盘问题</p>
+                        </div>
+                        <p className="mt-2 text-sm text-slate-600">
+                            这次不是普通新建会话，系统已带入上一轮的主问题和下一轮目标，方便你直接针对性再练。
+                        </p>
+                        <div className="mt-3 grid gap-3 md:grid-cols-2">
+                            {focusIntent.main_issue && (
+                                <div className="rounded-xl border border-amber-100 bg-white/80 p-3">
+                                    <p className="text-xs font-semibold text-amber-700">主问题{focusIssueTypeLabel ? ` · ${focusIssueTypeLabel}` : ""}</p>
+                                    <p className="mt-1 text-sm text-amber-950">{focusIntent.main_issue.issue_text}</p>
+                                    {focusIntent.main_issue.recovery_rule && (
+                                        <p className="mt-2 text-xs text-amber-800">修正动作：{focusIntent.main_issue.recovery_rule}</p>
+                                    )}
+                                </div>
+                            )}
+                            {focusIntent.next_goal && (
+                                <div className="rounded-xl border border-sky-100 bg-white/80 p-3">
+                                    <p className="text-xs font-semibold text-sky-700">下一轮目标{focusGoalTypeLabel ? ` · ${focusGoalTypeLabel}` : ""}</p>
+                                    <p className="mt-1 text-sm text-sky-950">{focusIntent.next_goal.goal_text}</p>
+                                    {focusIntent.next_goal.rule && (
+                                        <p className="mt-2 text-xs text-sky-800">判定条件：{focusIntent.next_goal.rule}</p>
+                                    )}
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                )}
 
                 {/* 错误提示 */}
                 {practiceError && (

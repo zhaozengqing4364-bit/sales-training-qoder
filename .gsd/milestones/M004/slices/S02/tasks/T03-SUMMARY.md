@@ -2,6 +2,29 @@
 id: T03
 parent: S02
 milestone: M004
+provides: []
+requires: []
+affects: []
+key_files: ["web/src/app/(user)/practice/[sessionId]/replay/page.tsx", "web/src/app/(user)/practice/[sessionId]/replay/page.test.tsx", ".gsd/DECISIONS.md"]
+key_decisions: ["Consumed the report deep-link contract directly on the existing replay page via query params instead of adding a second resolver or replay-only route.", "Made replay landing stateful in the UI with a persistent anchor banner plus turn highlighting so resolved, degraded, and missing-target cases stay visible instead of silently failing."]
+patterns_established: []
+drill_down_paths: []
+observability_surfaces: []
+duration: ""
+verification_result: "Ran the task-plan verifier exactly as written: `cd web && npm test -- --run 'src/app/(user)/practice/[sessionId]/replay/page.test.tsx' 'src/app/(user)/practice/[sessionId]/report/page.test.tsx'`. The focused Vitest suite passed with 12/12 tests green. That covers the replay page's resolved anchor landing, degraded stage fallback copy, missing-target fallback copy, and the existing report-page deep-link contract that produces the replay query params consumed here. I also attempted a local browser proof on `localhost:3445`, but a frontend-only fetch-mock path reproduced the known cross-origin mock/CORS noise against `localhost:3444`, so it was treated as non-authoritative environment noise rather than a product failure."
+completed_at: 2026-03-25T17:13:46.549Z
+blocker_discovered: false
+---
+
+# T03: Replay now honors report deep links, auto-focuses the requested turn, and keeps degraded anchor fallback visible.
+
+> Replay now honors report deep links, auto-focuses the requested turn, and keeps degraded anchor fallback visible.
+
+## What Happened
+---
+id: T03
+parent: S02
+milestone: M004
 key_files:
   - web/src/app/(user)/practice/[sessionId]/replay/page.tsx
   - web/src/app/(user)/practice/[sessionId]/replay/page.test.tsx
@@ -51,3 +74,10 @@ A frontend-only browser proof on localhost hit the repository's known cross-orig
 - `web/src/app/(user)/practice/[sessionId]/replay/page.tsx`
 - `web/src/app/(user)/practice/[sessionId]/replay/page.test.tsx`
 - `.gsd/DECISIONS.md`
+
+
+## Deviations
+None.
+
+## Known Issues
+A frontend-only browser proof on localhost hit the repository's known cross-origin route-mock/CORS noise when trying to stub backend replay APIs, so the passing focused Vitest suite remains the authoritative verification for this task.
