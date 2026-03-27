@@ -16,15 +16,28 @@ import {
 import {
     formatGoalTypeLabel,
     formatIssueTypeLabel,
-    formatNotEvaluableReason,
 } from "@/lib/session-evidence";
 import { readAdminUserDrillInContext } from "@/lib/admin/drill-in";
 import {
-    extractLinkedAssetChanges,
+    EMPTY_ADMIN_MANAGER_INTERVENTIONS,
+    EMPTY_ADMIN_USER_SESSIONS,
+    buildInterventionResultById,
+    buildUserProgressOverview,
+    formatAdminScoreBasisLabel,
+    getAdminTrendSummary,
+    getUserProgressRecommendationLabel,
+    getUserSessionOverallResultLabel,
+    getUserSessionOverallResultTone,
+    getUserSessionPreview,
+    hasEvaluableUserProgress,
+    type AdminProgressLoadState,
+} from "@/lib/admin/read-models";
+import {
     formatLinkedAssetLabel,
     formatLinkedAssetLink,
     type LinkedAssetChange,
 } from "@/lib/admin/linked-assets";
+import { buildRuntimeFaultBySessionId } from "@/lib/admin/runtime-faults";
 import { GlassCard } from "@/components/ui/glass-card";
 import { Button } from "@/components/ui/button";
 import {
@@ -32,16 +45,10 @@ import {
     Calendar,
     Clock,
     Target,
-    TrendingUp,
-    TrendingDown,
     Award,
     BarChart3,
     Activity,
     RefreshCw,
-    AlertTriangle,
-    Lightbulb,
-    CircleHelp,
-    type LucideIcon,
 } from "lucide-react";
 import {
     LineChart,
@@ -54,27 +61,6 @@ import {
 } from "recharts";
 
 type TimeRange = "7d" | "30d" | "90d" | "all_time";
-type ProgressLoadState = "loading" | "success" | "empty" | "error";
-
-type ProgressOverview = {
-    title: string;
-    subtitle: string;
-    valueClassName: string;
-    iconBgClassName: string;
-    iconClassName: string;
-    Icon: LucideIcon;
-};
-
-const SCORE_BASIS_LABELS: Record<string, string> = {
-    session_evidence_projection_evaluable_only: "统一训练证据 · 仅统计可评估的已完成训练",
-};
-
-function formatScoreBasisLabel(scoreBasis?: string | null): string {
-    if (!scoreBasis) {
-        return "统一训练证据口径";
-    }
-    return SCORE_BASIS_LABELS[scoreBasis] || scoreBasis;
-}
 
 const INTERVENTION_ISSUE_FAMILY_OPTIONS: Array<{ value: string; label: string }> = [
     { value: "evidence_gap", label: "证据补强重点" },
@@ -139,132 +125,6 @@ function formatInterventionResultStatus(result?: ManagerInterventionResultItem |
     }
 }
 
-const EMPTY_INTERVENTIONS: ManagerInterventionItem[] = [];
-
-const EMPTY_SESSIONS: UserSessionsResponse = {
-    items: [],
-    total: 0,
-    page: 1,
-    page_size: 10,
-    has_more: false,
-    manager_intervention_results: [],
-};
-
-function hasEvaluableProgress(progress: UserProgressResponse | null): progress is UserProgressResponse {
-    return Boolean(progress && progress.evaluable_session_count > 0 && progress.trend_data.length > 0);
-}
-
-function getProgressRecommendationLabel(progress?: UserProgressResponse | null): string {
-    if (!progress) {
-        return "等待连续变化数据";
-    }
-    if (progress.should_switch_focus) {
-        return "建议切换训练重点";
-    }
-    switch (progress.recommendation.reason) {
-        case "repeat_focus_until_stable":
-            return "继续补同一重点";
-        case "insufficient_evaluable_history":
-            return "先补齐有效互动";
-        default:
-            return "继续观察当前重点";
-    }
-}
-
-function getTrendSummary(improvementRate: number): {
-    title: string;
-    valueClassName: string;
-    iconBgClassName: string;
-    iconClassName: string;
-    Icon: LucideIcon;
-} {
-    if (improvementRate > 5) {
-        return {
-            title: "最近有明显进步",
-            valueClassName: "text-emerald-700",
-            iconBgClassName: "bg-emerald-50",
-            iconClassName: "text-emerald-600",
-            Icon: TrendingUp,
-        };
-    }
-    if (improvementRate > 0) {
-        return {
-            title: "最近在改善",
-            valueClassName: "text-blue-700",
-            iconBgClassName: "bg-blue-50",
-            iconClassName: "text-blue-600",
-            Icon: TrendingUp,
-        };
-    }
-    if (improvementRate < 0) {
-        return {
-            title: "最近在回落",
-            valueClassName: "text-rose-700",
-            iconBgClassName: "bg-rose-50",
-            iconClassName: "text-rose-600",
-            Icon: TrendingDown,
-        };
-    }
-    return {
-        title: "最近基本持平",
-        valueClassName: "text-slate-700",
-        iconBgClassName: "bg-slate-100",
-        iconClassName: "text-slate-600",
-        Icon: Activity,
-    };
-}
-
-function buildProgressOverview(
-    progressState: ProgressLoadState,
-    progress: UserProgressResponse | null,
-    progressError: string | null,
-): ProgressOverview {
-    if (progressState === "error") {
-        return {
-            title: "加载失败",
-            subtitle: progressError || "连续变化视图暂时不可用。",
-            valueClassName: "text-rose-700",
-            iconBgClassName: "bg-rose-50",
-            iconClassName: "text-rose-600",
-            Icon: AlertTriangle,
-        };
-    }
-
-    if (progressState === "empty" && progress) {
-        return {
-            title: "证据不足",
-            subtitle: progress.completed_session_count > 0
-                ? `最近 ${progress.not_evaluable_session_count} 次已完成训练暂不可评估。`
-                : "当前时间范围内还没有已完成训练。",
-            valueClassName: "text-amber-700",
-            iconBgClassName: "bg-amber-50",
-            iconClassName: "text-amber-600",
-            Icon: CircleHelp,
-        };
-    }
-
-    if (hasEvaluableProgress(progress)) {
-        const trendSummary = getTrendSummary(progress.improvement_rate);
-        return {
-            title: getProgressRecommendationLabel(progress),
-            subtitle: `${trendSummary.title} · ${progress.evaluable_session_count} 次可评估训练`,
-            valueClassName: progress.should_switch_focus ? "text-amber-700" : "text-slate-900",
-            iconBgClassName: progress.should_switch_focus ? "bg-amber-50" : trendSummary.iconBgClassName,
-            iconClassName: progress.should_switch_focus ? "text-amber-600" : trendSummary.iconClassName,
-            Icon: progress.should_switch_focus ? Lightbulb : trendSummary.Icon,
-        };
-    }
-
-    return {
-        title: "等待连续变化数据",
-        subtitle: "完成训练后这里会更新主管判断。",
-        valueClassName: "text-slate-700",
-        iconBgClassName: "bg-slate-100",
-        iconClassName: "text-slate-600",
-        Icon: Activity,
-    };
-}
-
 export default function UserDetailPage() {
     const params = useParams();
     const router = useRouter();
@@ -273,10 +133,10 @@ export default function UserDetailPage() {
 
     const [timeRange, setTimeRange] = useState<TimeRange>("30d");
     const [stats, setStats] = useState<UserDetailStats | null>(null);
-    const [sessions, setSessions] = useState<UserSessionsResponse>(EMPTY_SESSIONS);
+    const [sessions, setSessions] = useState(EMPTY_ADMIN_USER_SESSIONS);
     const [progress, setProgress] = useState<UserProgressResponse | null>(null);
     const [runtimeFaults, setRuntimeFaults] = useState<SupportRuntimeFaultItem[]>([]);
-    const [interventions, setInterventions] = useState<ManagerInterventionItem[]>(EMPTY_INTERVENTIONS);
+    const [interventions, setInterventions] = useState(EMPTY_ADMIN_MANAGER_INTERVENTIONS);
     const [interventionIssueFamily, setInterventionIssueFamily] = useState("evidence_gap");
     const [interventionNote, setInterventionNote] = useState("");
     const [isLoading, setIsLoading] = useState(true);
@@ -328,13 +188,13 @@ export default function UserDetailPage() {
             setSessions(sessionsResult.value);
             setSessionsPage(1);
         } else {
-            setSessions(EMPTY_SESSIONS);
+            setSessions(EMPTY_ADMIN_USER_SESSIONS);
             setSessionsError(`练习记录加载失败：${getApiErrorMessage(sessionsResult.reason)}`);
         }
 
         if (progressResult.status === "fulfilled") {
             setProgress(progressResult.value);
-            setProgressState(hasEvaluableProgress(progressResult.value) ? "success" : "empty");
+            setProgressState(hasEvaluableUserProgress(progressResult.value) ? "success" : "empty");
         } else {
             setProgress(null);
             setProgressError(`连续变化视图加载失败：${getApiErrorMessage(progressResult.reason)}`);
@@ -342,9 +202,9 @@ export default function UserDetailPage() {
         }
 
         if (interventionsResult.status === "fulfilled") {
-            setInterventions(interventionsResult.value.items || EMPTY_INTERVENTIONS);
+            setInterventions(interventionsResult.value.items || EMPTY_ADMIN_MANAGER_INTERVENTIONS);
         } else {
-            setInterventions(EMPTY_INTERVENTIONS);
+            setInterventions(EMPTY_ADMIN_MANAGER_INTERVENTIONS);
             setInterventionError(`主管重点加载失败：${getApiErrorMessage(interventionsResult.reason)}`);
         }
 
@@ -480,48 +340,8 @@ export default function UserDetailPage() {
         return "text-red-600";
     };
 
-    const getOverallResultLabel = (session: UserSessionItem) => {
-        if (session.evaluable === false) return "不可评估";
-        if (session.overall_result === "strong_pass") return "Strong Pass";
-        if (session.overall_result === "pass") return "Pass";
-        if (session.overall_result === "fail") return "Fail";
-        return "进行中";
-    };
-
-    const getOverallResultTone = (session: UserSessionItem) => {
-        if (session.evaluable === false) return "bg-amber-50 text-amber-700";
-        if (session.overall_result === "strong_pass") return "bg-emerald-50 text-emerald-700";
-        if (session.overall_result === "pass") return "bg-blue-50 text-blue-700";
-        if (session.overall_result === "fail") return "bg-rose-50 text-rose-700";
-        return "bg-slate-50 text-slate-500";
-    };
-
-    const getSessionPreview = (session: UserSessionItem) => {
-        if (session.status !== "completed") {
-            return "练习完成后会显示统一报告预览。";
-        }
-        if (session.evaluable === false) {
-            return formatNotEvaluableReason(session.not_evaluable_reason);
-        }
-        return session.feedback_summary
-            || session.main_issue?.issue_text
-            || session.next_goal?.goal_text
-            || "统一训练证据已生成，可进入报告页查看详情。";
-    };
-
     const runtimeFaultBySessionId = useMemo(() => {
-        const lookup = new Map<string, { fault: SupportRuntimeFaultItem; assetChanges: LinkedAssetChange[] }>();
-        runtimeFaults.forEach((fault) => {
-            if (!fault.session_id || lookup.has(fault.session_id)) {
-                return;
-            }
-            const assetChanges = extractLinkedAssetChanges(fault);
-            if (!assetChanges.length) {
-                return;
-            }
-            lookup.set(fault.session_id, { fault, assetChanges });
-        });
-        return lookup;
+        return buildRuntimeFaultBySessionId(runtimeFaults);
     }, [runtimeFaults]);
 
     if (isLoading) {
@@ -554,20 +374,18 @@ export default function UserDetailPage() {
     const { user, statistics } = stats;
     const evaluableSessions = statistics.evaluable_sessions ?? 0;
     const notEvaluableSessions = statistics.not_evaluable_sessions ?? 0;
-    const scoreBasisLabel = formatScoreBasisLabel(statistics.score_basis);
-    const progressOverview = buildProgressOverview(progressState, progress, progressError);
+    const scoreBasisLabel = formatAdminScoreBasisLabel(statistics.score_basis);
+    const progressOverview = buildUserProgressOverview(progressState, progress, progressError);
     const strongestIssue = progress?.repeated_main_issues?.[0] ?? null;
     const strongestGoal = progress?.repeated_next_goals?.[0] ?? null;
-    const trendSummary = hasEvaluableProgress(progress)
-        ? getTrendSummary(progress.improvement_rate)
+    const trendSummary = hasEvaluableUserProgress(progress)
+        ? getAdminTrendSummary(progress.improvement_rate)
         : null;
-    const latestTrendPoint = hasEvaluableProgress(progress)
+    const latestTrendPoint = hasEvaluableUserProgress(progress)
         ? progress.trend_data[progress.trend_data.length - 1]
         : null;
     const drillInBanner = drillInContext.banner;
-    const interventionResultById = new Map(
-        (sessions.manager_intervention_results || []).map((item) => [item.intervention_id, item]),
-    );
+    const interventionResultById = buildInterventionResultById(sessions);
 
     return (
         <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -910,7 +728,7 @@ export default function UserDetailPage() {
                             </p>
                             <p className="text-sm text-amber-800 text-pretty">{progress.recommendation.summary}</p>
                         </div>
-                    ) : hasEvaluableProgress(progress) && trendSummary && latestTrendPoint ? (
+                    ) : hasEvaluableUserProgress(progress) && trendSummary && latestTrendPoint ? (
                         <div className="mt-6 space-y-5">
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
@@ -938,7 +756,7 @@ export default function UserDetailPage() {
                                 <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
                                     <p className="text-sm font-semibold text-slate-900">训练建议</p>
                                     <p className={`mt-3 text-base font-semibold ${progress.should_switch_focus ? "text-amber-700" : "text-slate-900"}`}>
-                                        {getProgressRecommendationLabel(progress)}
+                                        {getUserProgressRecommendationLabel(progress)}
                                     </p>
                                     <p className="mt-2 text-sm text-slate-600 text-pretty">
                                         {progress.recommendation.summary}
@@ -1174,8 +992,8 @@ export default function UserDetailPage() {
                                                                     : session.status}
                                                         </span>
                                                         {session.status === "completed" ? (
-                                                            <span className={`inline-flex px-2.5 py-1 rounded-full text-xs font-medium ${getOverallResultTone(session)}`}>
-                                                                {getOverallResultLabel(session)}
+                                                            <span className={`inline-flex px-2.5 py-1 rounded-full text-xs font-medium ${getUserSessionOverallResultTone(session)}`}>
+                                                                {getUserSessionOverallResultLabel(session)}
                                                             </span>
                                                         ) : null}
                                                     </div>
@@ -1183,7 +1001,7 @@ export default function UserDetailPage() {
                                                 <td className="py-3 px-4 align-top">
                                                     <div className="space-y-1 max-w-sm">
                                                         <p className="text-sm text-slate-700 text-pretty">
-                                                            {getSessionPreview(session)}
+                                                            {getUserSessionPreview(session)}
                                                         </p>
                                                         {session.next_goal?.goal_text ? (
                                                             <p className="text-xs text-slate-500 text-pretty">

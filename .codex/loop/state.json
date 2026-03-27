@@ -1,6 +1,6 @@
 {
   "mode": "grow",
-  "current_issue_id": "M006-S04-T02",
+  "current_issue_id": "M006-S05-T01",
   "current_issue_type": "task",
   "current_issue_status": "done",
   "pending_issue_ids": [],
@@ -112,35 +112,34 @@
     "M006-S03-T02",
     "M006-S03-T03",
     "M006-S04-T01",
-    "M006-S04-T02"
+    "M006-S04-T02",
+    "M006-S04-T03",
+    "M006-S04",
+    "M006-S05-T01"
   ],
   "blocked_issue_ids": [],
   "deferred_issue_ids": [],
   "last_modified_files": [
-    "web/src/lib/admin/assets.ts",
-    "web/src/lib/admin/linked-assets.ts",
-    "web/src/components/admin/asset-governance.tsx",
+    "web/src/lib/admin/read-models.ts",
+    "web/src/lib/admin/runtime-faults.ts",
+    "web/src/lib/admin/read-models.test.ts",
+    "web/src/lib/admin/runtime-faults.test.ts",
     "web/src/app/admin/analytics/page.tsx",
+    "web/src/app/admin/users/page.tsx",
     "web/src/app/admin/users/[id]/page.tsx",
-    "web/src/app/admin/knowledge/page.tsx",
-    "web/src/app/admin/personas/page.tsx",
-    "web/src/app/admin/presentations/page.tsx",
-    "web/src/app/admin/voice-runtime/page.tsx",
-    "web/src/lib/admin/assets.test.ts",
-    "web/src/app/admin/analytics/page.test.tsx",
-    "web/src/app/admin/users/[id]/page.test.tsx",
-    "web/src/app/admin/asset-governance.test.tsx",
     ".gsd/DECISIONS.md",
-    ".gsd/milestones/M006/slices/S04/tasks/T02-SUMMARY.md",
+    ".gsd/milestones/M006/slices/S05/tasks/T01-SUMMARY.md",
     ".codex/loop/state.json",
     ".codex/loop/log.md"
   ],
   "last_verification_commands": [
-    "cd web && /usr/bin/time -p pnpm dlx npm@11.6.1 test -- --run 'src/lib/admin/assets.test.ts' 'src/lib/admin/linked-assets.test.ts'",
-    "cd web && /usr/bin/time -p pnpm dlx npm@11.6.1 test -- --run 'src/app/admin/analytics/page.test.tsx' 'src/app/admin/users/[id]/page.test.tsx' 'src/app/admin/asset-governance.test.tsx'"
+    "cd web && pnpm dlx npm@11.6.1 test -- --run 'src/lib/admin/read-models.test.ts' 'src/lib/admin/runtime-faults.test.ts'",
+    "cd web && pnpm dlx npm@11.6.1 test -- --run 'src/lib/admin/read-models.test.ts' 'src/lib/admin/runtime-faults.test.ts' 'src/app/admin/analytics/page.test.tsx' 'src/components/admin/manager-lite-panel.test.tsx' 'src/app/admin/users/[id]/page.test.tsx'",
+    "lsp diagnostics: web/src/lib/admin/read-models.ts, web/src/lib/admin/runtime-faults.ts, web/src/app/admin/analytics/page.tsx, web/src/app/admin/users/page.tsx",
+    "browser runtime: localhost dev-login -> /admin/analytics -> /admin/users/89e31f06-6393-42b6-877e-5a007803136a"
   ],
-  "last_verification_result": "Fresh frontend helper regressions passed 6/6, and the planned S04 frontend slice verification suite passed 22/22 across analytics, admin user detail, and governance surfaces.",
-  "last_success_signal": "Frontend admin asset labels and admin list routes now resolve through one shared registry seam, and linked runtime fault views no longer fall back to generic /admin assumptions when payload metadata is sparse.",
+  "last_verification_result": "Fresh T01 verification passed: new admin adapter unit tests were green 6/6, the planned analytics/manager-lite/user-detail regression pack stayed green 24/24, focused LSP diagnostics were clean on the touched shared/admin files, and live localhost browser checks passed on /admin/analytics plus the seeded /admin/users/{id} detail surface after host-aligned dev-login.",
+  "last_success_signal": "Current admin analytics/users pages now share one route-shaped frontend seam for operating-pack fallbacks, linked runtime faults, and user-detail session/intervention state without changing the shipped route behavior.",
   "last_growth_scan": null,
-  "next_action": "Stop after one item. Resume M006-S04-T03 on the next auto-mode turn."
+  "next_action": "Stop after one item. Resume M006-S05-T02 on the next auto-mode turn."
 }

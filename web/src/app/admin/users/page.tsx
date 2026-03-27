@@ -4,7 +4,8 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { api } from "@/lib/api/client";
-import { AdminUser, ManagerLiteListsResponse } from "@/lib/api/types";
+import { AdminUser } from "@/lib/api/types";
+import { EMPTY_ADMIN_MANAGER_LITE_LISTS } from "@/lib/admin/read-models";
 import { buildAdminUserDrillInHref } from "@/lib/admin/drill-in";
 import { formatIssueTypeLabel } from "@/lib/session-evidence";
 import { GlassCard } from "@/components/ui/glass-card";
@@ -94,17 +95,11 @@ const initialCreateForm: CreateUserForm = {
     role: "user"
 };
 
-const EMPTY_WEEKLY_MANAGER_LISTS: ManagerLiteListsResponse = {
-    not_passed: [],
-    inactive_streak: [],
-    improving: [],
-};
-
 export default function UsersPage() {
     const router = useRouter();
     const [users, setUsers] = useState<AdminUser[]>([]);
     const [isLoading, setIsLoading] = useState(true);
-    const [weeklyManagerLists, setWeeklyManagerLists] = useState<ManagerLiteListsResponse>(EMPTY_WEEKLY_MANAGER_LISTS);
+    const [weeklyManagerLists, setWeeklyManagerLists] = useState(EMPTY_ADMIN_MANAGER_LITE_LISTS);
     const [weeklyBucketsError, setWeeklyBucketsError] = useState<string | null>(null);
     const toast = useToast();
 
@@ -172,7 +167,7 @@ export default function UsersPage() {
             setWeeklyManagerLists(operatingPack.manager_lists);
         } catch (err) {
             console.error("Failed to load weekly operating buckets:", err);
-            setWeeklyManagerLists(EMPTY_WEEKLY_MANAGER_LISTS);
+            setWeeklyManagerLists(EMPTY_ADMIN_MANAGER_LITE_LISTS);
             setWeeklyBucketsError("本周经营名单暂时不可用，请稍后重试。");
         }
     }, []);

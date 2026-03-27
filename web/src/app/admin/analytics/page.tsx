@@ -8,8 +8,6 @@ import {
     AnalyticsTrends,
     AnalyticsAgents,
     AnalyticsLeaderboard,
-    AdminOperatingPackResponse,
-    ManagerLiteListsResponse,
     OpenAnalyticsDashboard,
     SupportRuntimeFaultItem,
 } from "@/lib/api/types";
@@ -27,12 +25,18 @@ import {
     formatNotEvaluableReason,
 } from "@/lib/session-evidence";
 import {
-    extractLinkedAssetChanges,
     formatLinkedAssetHealthStatusLabel,
     formatLinkedAssetImpactLevelLabel,
     formatLinkedAssetLabel,
     formatLinkedAssetLink,
 } from "@/lib/admin/linked-assets";
+import {
+    EMPTY_ADMIN_OPERATING_PACK,
+    buildOperatingPackReadModel,
+    formatAdminDegradedReasonLabel,
+    formatAdminScoreBasisLabel,
+} from "@/lib/admin/read-models";
+import { buildLinkedRuntimeFaultEntries } from "@/lib/admin/runtime-faults";
 import {
     Download,
     RefreshCw,
@@ -51,65 +55,6 @@ const DEFAULT_EFFECTIVENESS: CoreEffectiveness = {
     pass_rate_4step_structure: 0,
     next_day_retry_rate: 0,
 };
-
-const EMPTY_MANAGER_LITE: ManagerLiteListsResponse = {
-    not_passed: [],
-    inactive_streak: [],
-    improving: [],
-};
-
-const EMPTY_OPERATING_PACK: AdminOperatingPackResponse = {
-    score_basis: "session_evidence_projection_evaluable_only",
-    weekly_summary: {
-        window_days: 7,
-        window_start: null,
-        window_end: null,
-        completed_sessions: 0,
-        evaluable_sessions: 0,
-        not_evaluable_sessions: 0,
-        degraded_sessions: 0,
-        active_departments: 0,
-        at_risk_users: 0,
-        improving_users: 0,
-        top_issue_family: null,
-        top_blocker_family: null,
-        top_not_evaluable_reason: null,
-        top_degraded_reason: null,
-    },
-    cohort_issue_buckets: [],
-    department_issue_buckets: [],
-    repeated_blocker_families: [],
-    degradation_breakdown: {
-        not_evaluable_reasons: [],
-        degraded_reasons: [],
-    },
-    manager_lists: EMPTY_MANAGER_LITE,
-};
-
-const SCORE_BASIS_LABELS: Record<string, string> = {
-    session_evidence_projection_evaluable_only: "统一训练证据 · 仅统计可评估的已完成训练",
-};
-
-const DEGRADED_REASON_LABELS: Record<string, string> = {
-    message_scores: "消息级评分缺失",
-    stage_evidence: "阶段证据缺失",
-    page_metadata: "页码证据缺失",
-    page_summary: "页级总结缺失",
-};
-
-function formatScoreBasisLabel(scoreBasis?: string | null): string {
-    if (!scoreBasis) {
-        return "统一训练证据口径";
-    }
-    return SCORE_BASIS_LABELS[scoreBasis] || scoreBasis;
-}
-
-function formatDegradedReasonLabel(reason?: string | null): string {
-    if (!reason) {
-        return "暂无降级原因";
-    }
-    return DEGRADED_REASON_LABELS[reason] || reason;
-}
 
 function formatBucketLabel(count: number): string {
     return `Top ${Math.max(count, 0)}`;
@@ -130,7 +75,7 @@ export default function AnalyticsPage() {
     const [trends, setTrends] = useState<AnalyticsTrends | null>(null);
     const [agents, setAgents] = useState<AnalyticsAgents | null>(null);
     const [leaderboard, setLeaderboard] = useState<AnalyticsLeaderboard | null>(null);
-    const [operatingPack, setOperatingPack] = useState<AdminOperatingPackResponse>(EMPTY_OPERATING_PACK);
+    const [operatingPack, setOperatingPack] = useState(EMPTY_ADMIN_OPERATING_PACK);
     const [effectiveness, setEffectiveness] = useState<CoreEffectiveness>(DEFAULT_EFFECTIVENESS);
     const [runtimeFaults, setRuntimeFaults] = useState<SupportRuntimeFaultItem[]>([]);
 
@@ -194,7 +139,7 @@ export default function AnalyticsPage() {
             setOperatingPack(operatingPackResult.value);
         } else {
             console.error("Failed to load analytics operating pack:", operatingPackResult.reason);
-            setOperatingPack(EMPTY_OPERATING_PACK);
+            setOperatingPack(EMPTY_ADMIN_OPERATING_PACK);
         }
 
         if (effectivenessResult.status === "fulfilled") {
@@ -242,12 +187,14 @@ export default function AnalyticsPage() {
     };
 
     const projectionSummary = trends?.projection_summary;
-    const operatingSummary = operatingPack.weekly_summary;
-    const managerLite = operatingPack.manager_lists;
-    const repeatedBlockerFamilies = operatingPack.repeated_blocker_families.length > 0
-        ? operatingPack.repeated_blocker_families
-        : operatingPack.cohort_issue_buckets;
-    const departmentIssueBuckets = operatingPack.department_issue_buckets;
+    const {
+        operatingSummary,
+        managerLite,
+        repeatedBlockerFamilies,
+        departmentIssueBuckets,
+        topBlockerFamily,
+        topDegradedReason,
+    } = useMemo(() => buildOperatingPackReadModel(operatingPack), [operatingPack]);
     const evaluableSessions = overview?.evaluable_sessions ?? projectionSummary?.evaluable_sessions ?? 0;
     const notEvaluableSessions = overview?.not_evaluable_sessions ?? projectionSummary?.not_evaluable_sessions ?? 0;
     const scoreBasis = overview?.score_basis ?? projectionSummary?.score_basis ?? null;
@@ -260,20 +207,8 @@ export default function AnalyticsPage() {
         return overview?.not_evaluable_reasons?.[0] ?? projectionSummary?.not_evaluable_reasons?.[0] ?? null;
     }, [overview, projectionSummary]);
 
-    const topBlockerFamily = operatingSummary.top_blocker_family ?? operatingSummary.top_issue_family ?? null;
-    const topDegradedReason = operatingSummary.top_degraded_reason ?? operatingPack.degradation_breakdown.degraded_reasons[0] ?? null;
     const repeatedGoal = projectionSummary?.repeated_next_goals?.[0] ?? null;
     const leaderboardLeader = leaderboard?.leaderboard?.[0] ?? null;
-    const linkedRuntimeFaults = useMemo(() => {
-        return runtimeFaults
-            .map((fault) => ({
-                fault,
-                assetChanges: extractLinkedAssetChanges(fault),
-            }))
-            .filter((entry) => entry.assetChanges.length > 0)
-            .slice(0, 3);
-    }, [runtimeFaults]);
-
     const topIssueLabel = topIssueFamily
         ? (formatIssueTypeLabel(topIssueFamily.issue_type) || topIssueFamily.issue_type)
         : null;
@@ -284,7 +219,7 @@ export default function AnalyticsPage() {
         ? (formatIssueTypeLabel(topBlockerFamily.issue_type) || topBlockerFamily.issue_type || topBlockerFamily.issue_family)
         : null;
     const topDegradedReasonLabel = topDegradedReason
-        ? formatDegradedReasonLabel(topDegradedReason.reason)
+        ? formatAdminDegradedReasonLabel(topDegradedReason.reason)
         : null;
     const repeatedGoalLabel = repeatedGoal
         ? (formatGoalTypeLabel(repeatedGoal.goal_type) || repeatedGoal.goal_type)
@@ -295,6 +230,9 @@ export default function AnalyticsPage() {
     const leaderGoalLabel = leaderboardLeader?.primary_next_goal_type
         ? (formatGoalTypeLabel(leaderboardLeader.primary_next_goal_type) || leaderboardLeader.primary_next_goal_type)
         : null;
+    const linkedRuntimeFaults = useMemo(() => {
+        return buildLinkedRuntimeFaultEntries(runtimeFaults, { limit: 3 });
+    }, [runtimeFaults]);
 
     const timeRangeOptions: { value: TimeRange; label: string }[] = [
         { value: "7d", label: "7天" },
@@ -410,7 +348,7 @@ export default function AnalyticsPage() {
                         <div className="rounded-2xl border border-sky-100 bg-white/90 p-4 lg:max-w-sm">
                             <p className="text-xs font-semibold tracking-wide text-slate-500 uppercase">分数口径</p>
                             <p className="mt-2 text-base font-semibold text-slate-900 text-pretty">
-                                {formatScoreBasisLabel(scoreBasis)}
+                                {formatAdminScoreBasisLabel(scoreBasis)}
                             </p>
                             <p className="mt-2 text-sm text-slate-600 text-pretty">
                                 当前平均分 {overview?.average_score?.toFixed(1) ?? "0.0"} 来自统一训练证据，不再沿用旧的加权 SQL 语义。
@@ -586,7 +524,7 @@ export default function AnalyticsPage() {
                                         <p className="text-xs font-medium text-slate-500">降级原因</p>
                                         <div className="mt-2 space-y-1 text-sm text-slate-700">
                                             {bucket.degradation_breakdown.degraded_reasons.length > 0 ? bucket.degradation_breakdown.degraded_reasons.map((reason) => (
-                                                <p key={`${bucket.department}-degraded-${reason.reason}`}>{formatDegradedReasonLabel(reason.reason)} · {reason.count} 次</p>
+                                                <p key={`${bucket.department}-degraded-${reason.reason}`}>{formatAdminDegradedReasonLabel(reason.reason)} · {reason.count} 次</p>
                                             )) : <p>当前无降级原因</p>}
                                         </div>
                                     </div>

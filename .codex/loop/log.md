@@ -2077,3 +2077,49 @@ Append one entry per iteration:
   verification results: passed; the new frontend helper regressions passed 6/6 after an initial red import failure, and the planned slice-level web suite passed 22/22 once the shared registry seam was wired into analytics, user-detail, and governance surfaces.
   success signal status: current admin asset labels and list routes now come from one frontend registry seam, and linked runtime fault cards still render the correct runtime-profile destination even when payload admin_path metadata is blank.
   rollback note: if future work expands asset types, extend web/src/lib/admin/assets.ts first and keep page components consuming assetType + linked-assets helpers instead of restoring inline labels or /admin fallbacks.
+
+
+- time: 2026-03-27T19:09:00+08:00
+  mode: grow
+  item id: M006-S04
+  files changed:
+    - .gsd/milestones/M006/slices/S04/S04-SUMMARY.md
+    - .gsd/milestones/M006/slices/S04/S04-UAT.md
+    - .gsd/KNOWLEDGE.md
+    - .gsd/PROJECT.md
+    - .codex/loop/state.json
+    - .codex/loop/log.md
+  summary: Closed S04 by rerunning the full slice verification set, proving the backend/frontend asset registry seam on current governance and fault-linked admin surfaces, recording the registry extension/testing guidance, and writing the slice summary/UAT plus project continuity updates.
+  verification commands:
+    - cd backend && /usr/bin/time -p venv/bin/python -m pytest -c pyproject.toml tests/unit/test_support_runtime_service.py
+    - cd web && /usr/bin/time -p pnpm dlx npm@11.6.1 test -- --run 'src/app/admin/analytics/page.test.tsx' 'src/app/admin/users/[id]/page.test.tsx' 'src/app/admin/asset-governance.test.tsx'
+    - cd backend && /usr/bin/time -p venv/bin/python -m pytest -c pyproject.toml tests/unit/test_support_runtime_service.py tests/integration/test_asset_governance_api.py tests/contract/test_support_runtime.py
+    - cd web && /usr/bin/time -p pnpm dlx npm@11.6.1 test -- --run 'src/app/admin/asset-governance.test.tsx' 'src/app/admin/analytics/page.test.tsx' 'src/app/admin/users/[id]/page.test.tsx'
+  verification results: passed; backend suites were green at 3/3 and 14/14, frontend suites were green at 26/26 in both planned command orders, and focused LSP diagnostics were clean for the registry seam files.
+  success signal status: S04 is complete and the current four asset types now resolve governance labels, admin routes, and linked-change fallback references through one backend/frontend registry seam across support/runtime, analytics, user detail, and governance pages.
+  rollback note: if later work adds asset types or new admin adapters, keep both registries as the only metadata authority and extend tests there before reintroducing any page-local or service-local fallback branching.
+
+- time: 2026-03-27T19:29:19+0800
+  mode: grow
+  item id: M006-S05-T01
+  files changed:
+    - web/src/lib/admin/read-models.ts
+    - web/src/lib/admin/runtime-faults.ts
+    - web/src/lib/admin/read-models.test.ts
+    - web/src/lib/admin/runtime-faults.test.ts
+    - web/src/app/admin/analytics/page.tsx
+    - web/src/app/admin/users/page.tsx
+    - web/src/app/admin/users/[id]/page.tsx
+    - .gsd/DECISIONS.md
+    - .gsd/milestones/M006/slices/S05/tasks/T01-SUMMARY.md
+    - .codex/loop/state.json
+    - .codex/loop/log.md
+  summary: Extracted route-shaped shared admin read-model adapters for operating-pack highlights, linked runtime faults, and user-detail progress/session/intervention state, then rewired the current analytics/users pages onto that seam without changing the shipped admin route behavior.
+  verification commands:
+    - cd web && pnpm dlx npm@11.6.1 test -- --run 'src/lib/admin/read-models.test.ts' 'src/lib/admin/runtime-faults.test.ts'
+    - cd web && pnpm dlx npm@11.6.1 test -- --run 'src/lib/admin/read-models.test.ts' 'src/lib/admin/runtime-faults.test.ts' 'src/app/admin/analytics/page.test.tsx' 'src/components/admin/manager-lite-panel.test.tsx' 'src/app/admin/users/[id]/page.test.tsx'
+    - lsp diagnostics: web/src/lib/admin/read-models.ts, web/src/lib/admin/runtime-faults.ts, web/src/app/admin/analytics/page.tsx, web/src/app/admin/users/page.tsx
+    - browser runtime: localhost dev-login -> /admin/analytics -> /admin/users/89e31f06-6393-42b6-877e-5a007803136a
+  verification results: passed; new adapter regressions were green 6/6, the planned admin analytics/manager-lite/user-detail pack stayed green 24/24, focused LSP diagnostics were clean, and the live localhost browser checks passed after host-aligned dev-login.
+  success signal status: current admin analytics/users routes now share one frontend seam for operating-pack fallback, runtime-fault enrichment, and user-detail read-model derivation without reviving a generic dashboard abstraction.
+  rollback note: if later M006 work expands the admin seam, extend read-models.ts/runtime-faults.ts first and keep the pages consuming those helpers instead of restoring inline fallback branches.

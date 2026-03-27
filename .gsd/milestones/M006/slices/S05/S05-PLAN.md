@@ -4,7 +4,7 @@
 **Demo:** After this: Rerun the current M005 admin regression pack after migrating analytics, users list, and user detail to shared adapters/hooks, proving the route family still behaves the same while duplication drops.
 
 ## Tasks
-- [ ] **T01: 抽出 shared admin read-model adapters** — Extract shared pure adapters for current admin read models — operating-pack highlights, manager-list drill-in cards, runtime-fault linked-asset enrichment, and user-session/intervention derived view state — under `web/src/lib/admin/`. Keep them route-shaped for the current pages instead of inventing a generic dashboard framework.
+- [x] **T01: Extracted shared admin read-model adapters for operating-pack, runtime-fault, and user-detail state while keeping the shipped analytics/users regressions green.** — Extract shared pure adapters for current admin read models — operating-pack highlights, manager-list drill-in cards, runtime-fault linked-asset enrichment, and user-session/intervention derived view state — under `web/src/lib/admin/`. Keep them route-shaped for the current pages instead of inventing a generic dashboard framework.
   - Estimate: 0.75d
   - Files: web/src/lib/admin/read-models.ts, web/src/lib/admin/runtime-faults.ts, web/src/app/admin/analytics/page.tsx, web/src/app/admin/users/page.tsx, web/src/app/admin/users/[id]/page.tsx
   - Verify: cd web && pnpm dlx npm@11.6.1 test -- --run 'src/app/admin/analytics/page.test.tsx' 'src/components/admin/manager-lite-panel.test.tsx' 'src/app/admin/users/[id]/page.test.tsx'
