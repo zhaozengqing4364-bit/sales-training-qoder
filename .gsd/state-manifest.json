@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "exported_at": "2026-03-27T08:10:12.467Z",
+  "exported_at": "2026-03-27T09:43:28.790Z",
   "milestones": [
     {
       "id": "M001",
@@ -3476,19 +3476,30 @@
       "milestone_id": "M006",
       "slice_id": "S02",
       "id": "T03",
-      "title": "补齐 governance contract 回归证明",
-      "status": "pending",
-      "one_liner": "",
-      "narrative": "",
-      "verification_result": "",
+      "title": "Locked governance and fault-linked admin regressions end-to-end with stronger backend contract assertions and shared typed admin page fixtures.",
+      "status": "complete",
+      "one_liner": "Locked governance and fault-linked admin regressions end-to-end with stronger backend contract assertions and shared typed admin page fixtures.",
+      "narrative": "T03 only needed stronger proof, not runtime behavior changes. I tightened the backend governance regression from a few spot checks into field-level assertions over the nested impact/change/health payloads across knowledge, persona, presentation, and runtime routes, and I strengthened the support-runtime OpenAPI regression so LinkedAssetChangeReference is pinned by its concrete shared field set. I also extended the analytics operating-pack contract assertions around the weekly blocker/degradation objects that feed the admin surface. On the frontend side, I converted the governance and fault fixtures to explicit shared typed contracts with `satisfies`, then expanded analytics and user-detail coverage from a single knowledge-base asset to a multi-asset chain covering knowledge-base, persona, and runtime-profile links plus change labels. No shipped runtime code changed in this task; the delivered value is regression coverage that will now fail if the shared governance_summary or linked_asset_changes contract drifts.",
+      "verification_result": "Ran the full planned backend and web verification commands fresh after the test hardening. Backend pytest passed 24/24 and web Vitest passed 21/21. LSP diagnostics were also clean on the touched backend/web test files, so the stronger contract assertions and typed fixtures did not introduce any new errors.",
       "duration": "",
-      "completed_at": null,
+      "completed_at": "2026-03-27T09:43:28.771Z",
       "blocker_discovered": false,
-      "deviations": "",
-      "known_issues": "",
-      "key_files": [],
-      "key_decisions": [],
-      "full_summary_md": "",
+      "deviations": "None.",
+      "known_issues": "The backend OpenAPI build still emits the pre-existing duplicate operation-id warning from backend/src/admin/api/model_configs.py; this task did not change that surface.",
+      "key_files": [
+        "backend/tests/integration/test_asset_governance_api.py",
+        "backend/tests/contract/test_analytics.py",
+        "backend/tests/contract/test_support_runtime.py",
+        "web/src/app/admin/asset-governance.test.tsx",
+        "web/src/app/admin/analytics/page.test.tsx",
+        "web/src/app/admin/users/[id]/page.test.tsx",
+        ".gsd/milestones/M006/slices/S02/tasks/T03-SUMMARY.md"
+      ],
+      "key_decisions": [
+        "Locked frontend fault-linked fixtures to the shared typed contract with `satisfies` so analytics and user-detail regressions now fail on contract drift instead of silently accepting loosely shaped mocks.",
+        "Tightened backend governance and linked-asset regression checks at the field level rather than only asserting schema-ref presence, so shared contract drift is caught before the admin UI layer."
+      ],
+      "full_summary_md": "---\nid: T03\nparent: S02\nmilestone: M006\nkey_files:\n  - backend/tests/integration/test_asset_governance_api.py\n  - backend/tests/contract/test_analytics.py\n  - backend/tests/contract/test_support_runtime.py\n  - web/src/app/admin/asset-governance.test.tsx\n  - web/src/app/admin/analytics/page.test.tsx\n  - web/src/app/admin/users/[id]/page.test.tsx\n  - .gsd/milestones/M006/slices/S02/tasks/T03-SUMMARY.md\nkey_decisions:\n  - Locked frontend fault-linked fixtures to the shared typed contract with `satisfies` so analytics and user-detail regressions now fail on contract drift instead of silently accepting loosely shaped mocks.\n  - Tightened backend governance and linked-asset regression checks at the field level rather than only asserting schema-ref presence, so shared contract drift is caught before the admin UI layer.\nduration: \"\"\nverification_result: passed\ncompleted_at: 2026-03-27T09:43:28.771Z\nblocker_discovered: false\n---\n\n# T03: Locked governance and fault-linked admin regressions end-to-end with stronger backend contract assertions and shared typed admin page fixtures.\n\n**Locked governance and fault-linked admin regressions end-to-end with stronger backend contract assertions and shared typed admin page fixtures.**\n\n## What Happened\n\nT03 only needed stronger proof, not runtime behavior changes. I tightened the backend governance regression from a few spot checks into field-level assertions over the nested impact/change/health payloads across knowledge, persona, presentation, and runtime routes, and I strengthened the support-runtime OpenAPI regression so LinkedAssetChangeReference is pinned by its concrete shared field set. I also extended the analytics operating-pack contract assertions around the weekly blocker/degradation objects that feed the admin surface. On the frontend side, I converted the governance and fault fixtures to explicit shared typed contracts with `satisfies`, then expanded analytics and user-detail coverage from a single knowledge-base asset to a multi-asset chain covering knowledge-base, persona, and runtime-profile links plus change labels. No shipped runtime code changed in this task; the delivered value is regression coverage that will now fail if the shared governance_summary or linked_asset_changes contract drifts.\n\n## Verification\n\nRan the full planned backend and web verification commands fresh after the test hardening. Backend pytest passed 24/24 and web Vitest passed 21/21. LSP diagnostics were also clean on the touched backend/web test files, so the stronger contract assertions and typed fixtures did not introduce any new errors.\n\n## Verification Evidence\n\n| # | Command | Exit Code | Verdict | Duration |\n|---|---------|-----------|---------|----------|\n| 1 | `cd backend && /usr/bin/time -p venv/bin/python -m pytest -c pyproject.toml tests/integration/test_asset_governance_api.py tests/contract/test_analytics.py tests/contract/test_support_runtime.py` | 0 | ✅ pass | 11190ms |\n| 2 | `cd web && /usr/bin/time -p pnpm dlx npm@11.6.1 test -- --run 'src/app/admin/asset-governance.test.tsx' 'src/app/admin/analytics/page.test.tsx' 'src/app/admin/users/[id]/page.test.tsx'` | 0 | ✅ pass | 2640ms |\n\n\n## Deviations\n\nNone.\n\n## Known Issues\n\nThe backend OpenAPI build still emits the pre-existing duplicate operation-id warning from backend/src/admin/api/model_configs.py; this task did not change that surface.\n\n## Files Created/Modified\n\n- `backend/tests/integration/test_asset_governance_api.py`\n- `backend/tests/contract/test_analytics.py`\n- `backend/tests/contract/test_support_runtime.py`\n- `web/src/app/admin/asset-governance.test.tsx`\n- `web/src/app/admin/analytics/page.test.tsx`\n- `web/src/app/admin/users/[id]/page.test.tsx`\n- `.gsd/milestones/M006/slices/S02/tasks/T03-SUMMARY.md`\n",
       "description": "Refresh focused contract and UI coverage so governance summary and linked-asset payloads are locked end-to-end. Explicitly prove that current knowledge/persona/presentation/runtime pages and fault-linked analytics/user-detail views still render the same behavior after the type hardening.",
       "estimate": "0.5d",
       "files": [
@@ -6307,6 +6318,28 @@
       "verdict": "✅ pass",
       "duration_ms": 1960,
       "created_at": "2026-03-27T08:10:12.448Z"
+    },
+    {
+      "id": 122,
+      "task_id": "T03",
+      "slice_id": "S02",
+      "milestone_id": "M006",
+      "command": "cd backend && /usr/bin/time -p venv/bin/python -m pytest -c pyproject.toml tests/integration/test_asset_governance_api.py tests/contract/test_analytics.py tests/contract/test_support_runtime.py",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 11190,
+      "created_at": "2026-03-27T09:43:28.771Z"
+    },
+    {
+      "id": 123,
+      "task_id": "T03",
+      "slice_id": "S02",
+      "milestone_id": "M006",
+      "command": "cd web && /usr/bin/time -p pnpm dlx npm@11.6.1 test -- --run 'src/app/admin/asset-governance.test.tsx' 'src/app/admin/analytics/page.test.tsx' 'src/app/admin/users/[id]/page.test.tsx'",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 2640,
+      "created_at": "2026-03-27T09:43:28.771Z"
     }
   ]
 }

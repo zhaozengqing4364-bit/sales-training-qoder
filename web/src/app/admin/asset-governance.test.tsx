@@ -90,7 +90,7 @@ const governanceSummary = {
             },
         ],
     },
-};
+} satisfies AssetGovernanceSummary;
 
 beforeEach(() => {
     successToastMock.mockReset();

@@ -1,102 +1,126 @@
 # S01: 前端 drill-in 与 linked-asset 共享协议收口 — UAT
 
 **Milestone:** M006  
-**Written:** 2026-03-27T15:49:24+08:00
+**Written:** 2026-03-27
 
 ## UAT Type
 
-- UAT mode: mixed
-- Why this mode is sufficient: this slice refactors the current admin route family onto shared frontend helpers, so acceptance is proving the exact query-string contract, destination prefill behavior, and linked-asset rendering on the shipped pages plus the focused helper/page regression pack that locks those seams.
+- UAT mode: focused route-contract + UI regression
+- Why this mode is sufficient: this slice intentionally preserves the shipped admin route family and support/runtime payloads while moving duplicated frontend logic into shared helpers. The acceptance question is whether launcher and destination pages still agree on the same drill-in contract, and whether analytics/user-detail now render linked assets through one helper path without semantic drift.
 
 ## Preconditions
 
 - Use an admin account that can access `/admin/analytics`, `/admin/users`, and `/admin/users/{id}`.
-- Have data that includes:
-  - at least one user in the current `not_passed` bucket with a real `issue_family`,
-  - at least one user in `inactive_streak` or `improving`,
-  - at least one support/runtime fault carrying `diagnostics.linked_asset_changes`.
-- If running the artifact-driven proof instead of the live UI path, the following repo-root commands must be runnable:
-  - `pnpm --dir web dlx npm@11.6.1 test -- --run 'src/components/admin/manager-lite-panel.test.tsx'`
-  - `pnpm --dir web dlx npm@11.6.1 test -- --run 'src/app/admin/users/[id]/page.test.tsx'`
-  - `pnpm --dir web dlx npm@11.6.1 test -- --run 'src/app/admin/analytics/page.test.tsx' 'src/app/admin/users/[id]/page.test.tsx'`
-  - `pnpm --dir web dlx npm@11.6.1 test -- --run 'src/lib/admin/drill-in.test.ts' 'src/lib/admin/linked-assets.test.ts' 'src/components/admin/manager-lite-panel.test.tsx' 'src/app/admin/analytics/page.test.tsx' 'src/app/admin/users/[id]/page.test.tsx'`
-- For local live UI checks, keep frontend and backend on the same loopback host family so admin auth cookies persist across the web boundary.
+- The web app is running with seeded admin analytics / user-detail data.
+- Seed data should include:
+  - at least one `not_passed` user with `issue_family=value_expression` or `objection_response`,
+  - at least one `inactive_streak` user,
+  - at least one `improving` user,
+  - at least one support/runtime fault carrying `diagnostics.linked_asset_changes` pointing at a real admin asset path.
+- Automated proof commands available from repo root:
+  - `cd web && pnpm dlx npm@11.6.1 test -- --run 'src/components/admin/manager-lite-panel.test.tsx'`
+  - `cd web && pnpm dlx npm@11.6.1 test -- --run 'src/app/admin/users/[id]/page.test.tsx'`
+  - `cd web && pnpm dlx npm@11.6.1 test -- --run 'src/app/admin/analytics/page.test.tsx' 'src/app/admin/users/[id]/page.test.tsx'`
 
 ## Smoke Test
 
-1. Open `/admin/analytics` as an admin.
-2. Scroll to the manager-lite panel and click a `查看详情` link from one of the weekly buckets.
-3. **Expected:** the link opens `/admin/users/{id}` with a `focusBucket=...` drill-in query string, and the detail page shows the matching drill-in banner instead of a blank/default state.
+1. Log in as an admin.
+2. Open `/admin/analytics` and confirm the manager-lite / weekly operating surfaces load.
+3. Open `/admin/users` and confirm the weekly drill-in cards load.
+4. Open `/admin/users/{id}` for a seeded learner.
+5. **Expected:** all three surfaces render without route errors, and the user-detail page still exposes the current intervention form and linked runtime anomaly section.
 
 ## Test Cases
 
-### 1. Manager-lite and users list generate the same current drill-in contract
+### 1. Manager-lite `not_passed` launcher builds the shared drill-in href
 
-1. Open `/admin/analytics` and copy a `查看详情` link from the manager-lite `未达标名单`.
-2. Open `/admin/users` and copy the matching `查看详情` link for the same bucket/user from the weekly operating drill-in section.
-3. Compare the query string.
-4. **Expected:** both links use the same `/admin/users/{id}?focusBucket=...` route family; `not_passed` links carry the same `focusIssueFamily` and `focusNote`, while `inactive_streak` and `improving` links keep only the bucket param.
+1. Open `/admin/analytics` and locate a `not_passed` manager-lite row.
+2. Click `查看并设重点`.
+3. Inspect the target URL.
+4. **Expected:** the URL is `/admin/users/{userId}?focusBucket=not_passed&focusIssueFamily={issueFamily}&focusNote={sharedDefaultOrExplicitNote}`.
+5. On the destination page, confirm the banner reads `本周风险成员` and the issue-family copy matches the launcher row.
+6. **Expected:** the intervention form is prefilled with the same issue family and note that the launcher implied.
 
-### 2. User detail recovers the shared not-passed note when the URL omits `focusNote`
+### 2. Shared fallback note survives partial not-passed drill-in URLs
 
-1. Open `/admin/users/{id}?focusBucket=not_passed&focusIssueFamily=objection_response` directly.
-2. Inspect the drill-in banner and the supervisor intervention textarea.
-3. Inspect the focus selector.
-4. **Expected:** the page still shows the `异议回应` family banner, restores the shared default note text into the recommendation line and textarea, and preselects the matching intervention focus instead of leaving the form blank.
+1. Manually open `/admin/users/{id}?focusBucket=not_passed&focusIssueFamily=objection_response` (omit `focusNote`).
+2. Wait for the page to load.
+3. **Expected:** the banner still explains `当前这条 drill-in 仍落在「异议回应」这个问题家族。`.
+4. **Expected:** the suggested note is auto-recovered as `先对照最近统一报告把异议回应说完整。`.
+5. **Expected:** the intervention form uses `objection_response` as the selected focus and the recovered shared note as the textarea value.
 
-### 3. Non-risk buckets keep their current lightweight drill-in behavior
+### 3. `inactive_streak` drill-ins stay on the current route family and do not overwrite notes
 
-1. Open `/admin/users/{id}?focusBucket=inactive_streak`.
-2. Open `/admin/users/{id}?focusBucket=improving`.
-3. **Expected:** both pages show the correct current bucket banner copy, but they do not inject a synthetic risk note or overwrite an existing supervisor note the way a `not_passed` drill-in does.
+1. From either manager-lite or `/admin/users`, open a `连续未练` entry via `查看详情`.
+2. Inspect the target URL.
+3. **Expected:** the URL is exactly `/admin/users/{userId}?focusBucket=inactive_streak` with no forced `focusIssueFamily` or `focusNote`.
+4. On the destination page, confirm the banner reads `本周连续未练`.
+5. **Expected:** the explanatory text says the member came from the continuous-inactive list, and the intervention note field is left unchanged/blank instead of being overwritten by a fallback note.
 
-### 4. Analytics and user detail render linked assets from the same helper path
+### 4. `improving` drill-ins keep the same shared destination semantics
 
-1. Open `/admin/analytics` and find a fault card that includes linked asset references.
-2. Open `/admin/users/{id}` for a user affected by the same fault family.
-3. Compare the linked asset labels, health/impact wording, and recent-change line.
-4. **Expected:** both pages use the same asset label formatting and change copy, and each linked asset entry includes a working admin path plus the same latest-change text.
+1. From manager-lite or `/admin/users`, open an `显著回升` entry via `查看详情`.
+2. Inspect the target URL.
+3. **Expected:** the URL is exactly `/admin/users/{userId}?focusBucket=improving`.
+4. On the destination page, confirm the banner reads `本周显著回升`.
+5. **Expected:** the detail page tells the supervisor to review the recent effective action and solidify the next round, and the intervention note field is not force-filled.
 
-### 5. Artifact-driven helper proof keeps the full shared linked-asset contract intact
+### 5. Weekly users list and manager-lite produce the same `not_passed` contract
 
-1. Run `pnpm --dir web dlx npm@11.6.1 test -- --run 'src/lib/admin/linked-assets.test.ts'`.
-2. Inspect the `returns the full shared linked-asset contract from runtime diagnostics` assertion.
-3. **Expected:** the helper preserves `latest_change_type`, `last_changed_at`, and `sessions_since_change` alongside the fields currently rendered by analytics/user-detail, so downstream typed seams can reuse the same contract without re-parsing the payload.
+1. In `/admin/analytics`, note one `not_passed` user and the issue family shown there.
+2. Open `/admin/users` and locate the same user in the weekly risk list.
+3. Click `查看并设重点` from both surfaces in separate tabs/windows.
+4. Compare the query strings.
+5. **Expected:** both launchers resolve to the same `/admin/users/{id}?focusBucket=not_passed...` contract for the same issue family and note semantics; neither surface falls back to a page-local or mismatched default.
+
+### 6. Analytics linked-asset section renders shared labels from runtime diagnostics
+
+1. Open `/admin/analytics` with a seeded support/runtime fault carrying `linked_asset_changes`.
+2. Go to the `异常关联资产变更` section.
+3. **Expected:** each linked asset row shows the shared asset label (for example `知识库 · 石犀产品知识库`), the shared impact label (`高影响` / `中影响` / `低影响`), the shared health label (`阻塞` / `告警` / `健康`), and the latest change label.
+4. Click the asset link.
+5. **Expected:** it opens the existing admin path from the payload (for example `/admin/knowledge`).
+
+### 7. User-detail linked-asset section renders the same shared helper path
+
+1. Open `/admin/users/{id}` for a user whose runtime fault section includes `linked_asset_changes`.
+2. Find the recent runtime anomaly card.
+3. **Expected:** the linked asset rows use the same asset-type labels and latest-change copy as analytics, without page-specific fallback wording.
+4. Click one linked asset.
+5. **Expected:** it opens the same admin asset path exposed in analytics.
 
 ## Edge Cases
 
-### Manual not-passed URL is partial but still reconstructable
+### Direct issue-family prefill without `focusBucket`
 
-1. Manually remove `focusNote` from a known-good `not_passed` URL while keeping `focusIssueFamily`.
-2. Reload the page.
-3. **Expected:** the shared helper reconstructs the default note and the page still prefills the current intervention form correctly.
+1. Open `/admin/users/{id}?focusIssueFamily=evidence_gap&focusNote=先补ROI与客户案例证据。`.
+2. **Expected:** the page does not show a weekly bucket banner, but the intervention form still prefills the issue family and note.
+3. **Expected:** this keeps the direct prefill affordance working even when the page is not opened from a weekly bucket launcher.
 
-### Linked-asset entry is incomplete
+### Linked-asset fault list has no usable recent asset changes
 
-1. Inspect a fault payload or test fixture that contains a `linked_asset_changes` item missing `asset_name`, `admin_path`, or `latest_change_label`.
-2. Open the affected analytics/user-detail surface.
-3. **Expected:** the incomplete entry is filtered out entirely; the UI does not render broken labels, placeholder admin links, or page-local fallback copy.
+1. Open `/admin/analytics` or `/admin/users/{id}` with a runtime anomaly set that has no complete linked asset entries.
+2. **Expected:** the page falls back to its current empty-state wording instead of rendering partial rows with guessed labels or broken links.
 
 ## Failure Signals
 
-- Manager-lite and `/admin/users` generate different query strings for the same drill-in bucket.
-- `/admin/users/{id}` loses the not-passed recommendation line or textarea prefill when `focusNote` is omitted but `focusIssueFamily` is present.
-- `inactive_streak` or `improving` drill-ins start behaving like risk buckets and inject unrelated focus notes.
-- `/admin/analytics` and `/admin/users/{id}` show different linked-asset labels or one page renders incomplete entries that the other suppresses.
-- `web/src/lib/admin/linked-assets.ts` stops returning the full normalized linked-asset contract even though current pages still appear to work.
+- Manager-lite and `/admin/users` produce different query-string shapes for the same drill-in bucket.
+- `/admin/users/{id}` loses the not-passed fallback note when `focusIssueFamily` is present but `focusNote` is omitted.
+- `inactive_streak` or `improving` drill-ins start forcing issue-family/note fields that were previously blank.
+- Analytics and user-detail show different asset-type labels or impact/status wording for the same `linked_asset_changes` payload.
+- Linked asset rows render incomplete diagnostics as if they were valid asset links.
 
 ## Requirements Proved By This UAT
 
-- None — this UAT proves M006/S01 slice acceptance on the shipped admin route family but does not change formal requirement status.
+- None — S01 hardens frontend shared seams for the existing admin route family, but it does not change a requirement status on its own.
 
 ## Not Proven By This UAT
 
-- The typed governance/admin contract work planned for S02.
-- The supervisor workflow service extraction planned for S03.
-- The asset registry/shared adapter regression work planned for S04-S05.
-- A fresh same-session live browser proof on the local dev stack when admin auth is crossing mismatched host boundaries.
+- Backend governance typing and client normalization closure planned for S02.
+- Supervisor workflow service extraction planned for S03.
+- Asset registry / adapter seam planned for S04.
 
 ## Notes for Tester
 
-- If the live local admin check redirects back to `/login` after dev-login, verify frontend/backend host alignment first; this slice does not change auth handling.
-- The artifact-driven helper/page regression suite is the most trustworthy acceptance signal for this slice because it exercises the exact shared seams introduced in `web/src/lib/admin/drill-in.ts` and `web/src/lib/admin/linked-assets.ts`.
+- Keep using `pnpm dlx npm@11.6.1 test -- --run ...` for focused web verification in this environment; the global Volta `npm` wrapper is known to be unreliable.
+- The acceptance bar here is semantic preservation: the slice should keep the current admin URLs and copy stable while proving those semantics now come from shared helpers instead of page-local implementations.

@@ -12,7 +12,7 @@
   - Estimate: 0.75d
   - Files: web/src/lib/api/types.ts, web/src/lib/api/client.ts, web/src/components/admin/asset-governance.tsx, web/src/lib/admin/linked-assets.ts
   - Verify: cd web && pnpm dlx npm@11.6.1 test -- --run 'src/app/admin/asset-governance.test.tsx' 'src/app/admin/analytics/page.test.tsx' 'src/app/admin/users/[id]/page.test.tsx'
-- [ ] **T03: 补齐 governance contract 回归证明** — Refresh focused contract and UI coverage so governance summary and linked-asset payloads are locked end-to-end. Explicitly prove that current knowledge/persona/presentation/runtime pages and fault-linked analytics/user-detail views still render the same behavior after the type hardening.
+- [x] **T03: Locked governance and fault-linked admin regressions end-to-end with stronger backend contract assertions and shared typed admin page fixtures.** — Refresh focused contract and UI coverage so governance summary and linked-asset payloads are locked end-to-end. Explicitly prove that current knowledge/persona/presentation/runtime pages and fault-linked analytics/user-detail views still render the same behavior after the type hardening.
   - Estimate: 0.5d
   - Files: backend/tests/integration/test_asset_governance_api.py, backend/tests/contract/test_analytics.py, backend/tests/contract/test_support_runtime.py, web/src/app/admin/asset-governance.test.tsx, web/src/app/admin/analytics/page.test.tsx, web/src/app/admin/users/[id]/page.test.tsx
   - Verify: cd backend && venv/bin/python -m pytest -c pyproject.toml tests/integration/test_asset_governance_api.py tests/contract/test_analytics.py tests/contract/test_support_runtime.py

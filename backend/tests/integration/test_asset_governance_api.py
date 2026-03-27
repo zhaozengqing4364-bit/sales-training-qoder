@@ -87,6 +87,54 @@ def _assert_governance_summary_schema_ref(model: type[object]) -> None:
     assert "AssetGovernanceSummary" in schema.get("$defs", {})
 
 
+def _assert_governance_summary_payload(
+    summary: dict[str, object],
+    *,
+    impact_level: str,
+    recent_session_count: int,
+    sessions_since_change: int,
+    health_status: str,
+    expected_anomaly_kinds: set[str],
+) -> None:
+    impact_summary = summary["impact_summary"]
+    assert isinstance(impact_summary, dict)
+    assert impact_summary["impact_level"] == impact_level
+    assert impact_summary["recent_session_count"] == recent_session_count
+    assert isinstance(impact_summary["active_session_count"], int)
+    assert isinstance(impact_summary["impacted_user_count"], int)
+
+    recent_change_summary = summary["recent_change_summary"]
+    assert isinstance(recent_change_summary, dict)
+    assert recent_change_summary["sessions_since_change"] == sessions_since_change
+    assert isinstance(recent_change_summary["change_count_7d"], int)
+    assert isinstance(recent_change_summary["latest_change_label"], str)
+    assert recent_change_summary["latest_change_label"]
+
+    health_summary = summary["health_summary"]
+    assert isinstance(health_summary, dict)
+    assert health_summary["status"] == health_status
+    assert isinstance(health_summary["anomaly_count"], int)
+    assert isinstance(health_summary["blocking_count"], int)
+    assert isinstance(health_summary["warning_count"], int)
+
+    sample_anomalies = health_summary["sample_anomalies"]
+    assert isinstance(sample_anomalies, list)
+    assert {
+        anomaly["kind"]
+        for anomaly in sample_anomalies
+        if isinstance(anomaly, dict) and isinstance(anomaly.get("kind"), str)
+    } >= expected_anomaly_kinds
+    for anomaly in sample_anomalies:
+        assert isinstance(anomaly, dict)
+        assert isinstance(anomaly.get("kind"), str)
+        assert anomaly["kind"]
+        assert isinstance(anomaly.get("source"), str)
+        assert anomaly["source"]
+        assert anomaly.get("severity") in {"warning", "blocking"}
+        assert isinstance(anomaly.get("summary"), str)
+        assert anomaly["summary"]
+
+
 @pytest.mark.parametrize(
     "model",
     [
@@ -426,14 +474,14 @@ async def test_asset_routes_expose_governance_summaries(
     assert knowledge_response.status_code == 200
     knowledge_items = knowledge_response.json()["data"]["knowledge_bases"]
     knowledge_item = next(item for item in knowledge_items if item["id"] == seeded["knowledge_base_id"])
-    assert knowledge_item["governance_summary"]["impact_summary"]["recent_session_count"] == 2
-    assert knowledge_item["governance_summary"]["impact_summary"]["impact_level"] == "high"
-    assert knowledge_item["governance_summary"]["recent_change_summary"]["sessions_since_change"] == 2
-    assert knowledge_item["governance_summary"]["health_summary"]["status"] == "blocking"
-    assert {
-        anomaly["kind"]
-        for anomaly in knowledge_item["governance_summary"]["health_summary"]["sample_anomalies"]
-    } >= {"kb_lock_blocked_search_failed", "document_failed"}
+    _assert_governance_summary_payload(
+        knowledge_item["governance_summary"],
+        impact_level="high",
+        recent_session_count=2,
+        sessions_since_change=2,
+        health_status="blocking",
+        expected_anomaly_kinds={"kb_lock_blocked_search_failed", "document_failed"},
+    )
 
     persona_response = await async_client.get(
         "/api/v1/admin/personas?page=1&page_size=20",
@@ -442,13 +490,14 @@ async def test_asset_routes_expose_governance_summaries(
     assert persona_response.status_code == 200
     persona_items = persona_response.json()["data"]["personas"]
     persona_item = next(item for item in persona_items if item["id"] == seeded["persona_id"])
-    assert persona_item["governance_summary"]["impact_summary"]["recent_session_count"] == 2
-    assert persona_item["governance_summary"]["recent_change_summary"]["sessions_since_change"] == 2
-    assert persona_item["governance_summary"]["health_summary"]["status"] == "blocking"
-    assert "policy_issue_pressure_model_legacy_only" in {
-        anomaly["kind"]
-        for anomaly in persona_item["governance_summary"]["health_summary"]["sample_anomalies"]
-    }
+    _assert_governance_summary_payload(
+        persona_item["governance_summary"],
+        impact_level="high",
+        recent_session_count=2,
+        sessions_since_change=2,
+        health_status="blocking",
+        expected_anomaly_kinds={"policy_issue_pressure_model_legacy_only"},
+    )
 
     presentations_response = await async_client.get(
         "/api/v1/presentations?limit=20",
@@ -460,13 +509,14 @@ async def test_asset_routes_expose_governance_summaries(
         for item in presentations_response.json()
         if item["presentation_id"] == seeded["presentation_id"]
     )
-    assert presentation_item["governance_summary"]["impact_summary"]["recent_session_count"] == 1
-    assert presentation_item["governance_summary"]["recent_change_summary"]["sessions_since_change"] == 1
-    assert presentation_item["governance_summary"]["health_summary"]["status"] == "warning"
-    assert {
-        anomaly["kind"]
-        for anomaly in presentation_item["governance_summary"]["health_summary"]["sample_anomalies"]
-    } >= {"presentation_degraded_missing_page_metadata", "optional_report_failed"}
+    _assert_governance_summary_payload(
+        presentation_item["governance_summary"],
+        impact_level="medium",
+        recent_session_count=1,
+        sessions_since_change=1,
+        health_status="warning",
+        expected_anomaly_kinds={"presentation_degraded_missing_page_metadata", "optional_report_failed"},
+    )
 
     runtime_response = await async_client.get(
         "/api/v1/admin/voice-runtime/profiles",
@@ -475,10 +525,15 @@ async def test_asset_routes_expose_governance_summaries(
     assert runtime_response.status_code == 200
     runtime_items = runtime_response.json()["data"]["items"]
     runtime_item = next(item for item in runtime_items if item["id"] == seeded["runtime_profile_id"])
-    assert runtime_item["governance_summary"]["impact_summary"]["recent_session_count"] == 3
-    assert runtime_item["governance_summary"]["recent_change_summary"]["sessions_since_change"] == 3
-    assert runtime_item["governance_summary"]["health_summary"]["status"] == "blocking"
-    assert {
-        anomaly["kind"]
-        for anomaly in runtime_item["governance_summary"]["health_summary"]["sample_anomalies"]
-    } >= {"kb_lock_blocked_search_failed", "stuck_scoring", "presentation_degraded_missing_page_metadata"}
+    _assert_governance_summary_payload(
+        runtime_item["governance_summary"],
+        impact_level="high",
+        recent_session_count=3,
+        sessions_since_change=3,
+        health_status="blocking",
+        expected_anomaly_kinds={
+            "kb_lock_blocked_search_failed",
+            "stuck_scoring",
+            "presentation_degraded_missing_page_metadata",
+        },
+    )

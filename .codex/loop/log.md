@@ -1929,3 +1929,25 @@ Append one entry per iteration:
   verification results: passed; the focused schema/OpenAPI checks turned green after the shared models and route envelopes landed, the full planned backend suite passed 24/24 tests in 7.18s, and LSP diagnostics were clean on the touched backend files.
   success signal status: knowledge/persona/presentation/runtime/support now share one explicit backend governance/link-change contract, and the runtime/support OpenAPI surfaces no longer collapse those payloads to generic objects.
   rollback note: if later M006 work versions this contract, keep the shared nested models in backend/src/common/db/schemas.py and validate nested governance payloads before copying them into response objects; otherwise serializer warnings and schema drift will reappear.
+
+- time: 2026-03-27T17:42:02+08:00
+  mode: grow
+  item id: M006-S02-T03
+  files changed:
+    - backend/tests/integration/test_asset_governance_api.py
+    - backend/tests/contract/test_analytics.py
+    - backend/tests/contract/test_support_runtime.py
+    - web/src/app/admin/asset-governance.test.tsx
+    - web/src/app/admin/analytics/page.test.tsx
+    - web/src/app/admin/users/[id]/page.test.tsx
+    - .gsd/milestones/M006/slices/S02/tasks/T03-SUMMARY.md
+    - .codex/loop/state.json
+    - .codex/loop/log.md
+  summary: Strengthened the governance regression proof by locking backend field-level governance and linked-asset contracts, then typed the admin page fixtures so asset-governance, analytics, and user-detail continue rendering the same linked asset behavior across knowledge/persona/runtime surfaces.
+  verification commands:
+    - cd backend && /usr/bin/time -p venv/bin/python -m pytest -c pyproject.toml tests/integration/test_asset_governance_api.py tests/contract/test_analytics.py tests/contract/test_support_runtime.py
+    - cd web && /usr/bin/time -p pnpm dlx npm@11.6.1 test -- --run 'src/app/admin/asset-governance.test.tsx' 'src/app/admin/analytics/page.test.tsx' 'src/app/admin/users/[id]/page.test.tsx'
+    - lsp diagnostics: backend/tests/integration/test_asset_governance_api.py, backend/tests/contract/test_analytics.py, backend/tests/contract/test_support_runtime.py, web/src/app/admin/asset-governance.test.tsx, web/src/app/admin/analytics/page.test.tsx, web/src/app/admin/users/[id]/page.test.tsx
+  verification results: passed; backend 24/24 and web 21/21 stayed green after the stronger contract assertions, and no diagnostics remained on the touched test files.
+  success signal status: governance_summary and linked_asset_changes are now explicitly locked through backend field-level contract assertions and typed admin page fixtures covering knowledge/persona/runtime linked assets.
+  rollback note: no runtime rollback surface was introduced because this task only strengthened regression coverage; if later contract fields change, update the shared typed fixtures and contract assertions together rather than reintroducing page-local parsing.

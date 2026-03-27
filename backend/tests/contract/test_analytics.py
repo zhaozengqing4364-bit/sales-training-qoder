@@ -175,6 +175,20 @@ class TestAnalyticsContract:
             assert isinstance(data.get("department_issue_buckets", []), list)
             assert isinstance(data.get("repeated_blocker_families", []), list)
             assert isinstance(data.get("degradation_breakdown", {}), dict)
+            weekly_summary = data.get("weekly_summary", {})
+            top_blocker_family = weekly_summary.get("top_blocker_family")
+            top_not_evaluable_reason = weekly_summary.get("top_not_evaluable_reason")
+            top_degraded_reason = weekly_summary.get("top_degraded_reason")
+            if top_blocker_family:
+                assert "issue_family" in top_blocker_family
+                assert "issue_text" in top_blocker_family
+                assert "count" in top_blocker_family
+            if top_not_evaluable_reason:
+                assert "reason" in top_not_evaluable_reason
+                assert "count" in top_not_evaluable_reason
+            if top_degraded_reason:
+                assert "reason" in top_degraded_reason
+                assert "count" in top_degraded_reason
             manager_lists = data.get("manager_lists", {})
             not_passed = manager_lists.get("not_passed", [])
             inactive_streak = manager_lists.get("inactive_streak", [])

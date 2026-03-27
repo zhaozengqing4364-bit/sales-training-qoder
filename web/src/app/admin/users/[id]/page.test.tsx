@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import UserDetailPage from "./page";
 import { ApiRequestError } from "@/lib/api/client";
 import { buildAdminUserDrillInHref } from "@/lib/admin/drill-in";
+import type { LinkedAssetChangeReference, SupportRuntimeFaultsResponse } from "@/lib/api/types";
 
 const {
     pushMock,
@@ -81,6 +82,74 @@ vi.mock("@/lib/api/client", async () => {
 function searchParamsFromDrillInHref(href: string): URLSearchParams {
     return new URL(href, "https://example.com").searchParams;
 }
+
+const linkedAssetChanges = [
+    {
+        asset_type: "knowledge_base",
+        asset_label: "知识库",
+        asset_id: "kb-1",
+        asset_name: "石犀产品知识库",
+        admin_path: "/admin/knowledge",
+        latest_change_label: "最近文档：竞品对比",
+        latest_change_type: "document_replace",
+        last_changed_at: "2026-03-25T08:00:00Z",
+        change_count_7d: 2,
+        sessions_since_change: 5,
+        impact_level: "high",
+        health_status: "blocking",
+    },
+    {
+        asset_type: "persona",
+        asset_label: "角色",
+        asset_id: "persona-1",
+        asset_name: "预算压价角色",
+        admin_path: "/admin/personas",
+        latest_change_label: "最近策略：提高压价强度",
+        latest_change_type: "policy_update",
+        last_changed_at: "2026-03-25T09:00:00Z",
+        change_count_7d: 1,
+        sessions_since_change: 3,
+        impact_level: "medium",
+        health_status: "warning",
+    },
+    {
+        asset_type: "runtime_profile",
+        asset_label: "运行时配置",
+        asset_id: "runtime-1",
+        asset_name: "销售默认 Realtime",
+        admin_path: "/admin/voice-runtime",
+        latest_change_label: "最近配置：切换 KB 锁模式",
+        latest_change_type: "config_update",
+        last_changed_at: "2026-03-25T10:00:00Z",
+        change_count_7d: 3,
+        sessions_since_change: 6,
+        impact_level: "high",
+        health_status: "blocking",
+    },
+] satisfies LinkedAssetChangeReference[];
+
+const supportRuntimeFaultsResponse = {
+    generated_at: "2026-03-26T09:40:00Z",
+    items: [
+        {
+            source: "session",
+            severity: "blocking",
+            kind: "kb_lock_blocked_search_failed",
+            summary: "知识库锁定模式下检索失败，最近 3 个会话被阻断。",
+            detected_at: "2026-03-26T09:30:00Z",
+            session_id: "session-1",
+            scenario_type: "sales",
+            session_status: "completed",
+            report_status: "completed",
+            diagnostics: {
+                linked_asset_changes: linkedAssetChanges,
+            },
+        },
+    ],
+    count: 1,
+    limit: 100,
+    severity: null,
+} satisfies SupportRuntimeFaultsResponse;
 
 const baseStatsResponse = {
     user: {
@@ -308,39 +377,7 @@ describe("UserDetailPage", () => {
         getUserSessionsMock.mockResolvedValue(baseSessionsResponse as any);
         getUserProgressMock.mockResolvedValue(richProgressResponse as any);
         listManagerInterventionsMock.mockResolvedValue(baseInterventionsResponse as any);
-        getSupportRuntimeFaultsMock.mockResolvedValue({
-            generated_at: "2026-03-26T09:40:00Z",
-            items: [
-                {
-                    source: "session",
-                    severity: "blocking",
-                    kind: "kb_lock_blocked_search_failed",
-                    summary: "知识库锁定模式下检索失败，最近 3 个会话被阻断。",
-                    detected_at: "2026-03-26T09:30:00Z",
-                    session_id: "session-1",
-                    scenario_type: "sales",
-                    session_status: "completed",
-                    report_status: "completed",
-                    diagnostics: {
-                        linked_asset_changes: [
-                            {
-                                asset_type: "knowledge_base",
-                                asset_id: "kb-1",
-                                asset_name: "石犀产品知识库",
-                                admin_path: "/admin/knowledge",
-                                latest_change_label: "最近文档：竞品对比",
-                                change_count_7d: 2,
-                                impact_level: "high",
-                                health_status: "blocking",
-                            },
-                        ],
-                    },
-                },
-            ],
-            count: 1,
-            limit: 100,
-            severity: null,
-        });
+        getSupportRuntimeFaultsMock.mockResolvedValue(supportRuntimeFaultsResponse);
         createManagerInterventionMock.mockResolvedValue({
             intervention_id: "intervention-2",
             manager_user_id: "admin-1",
@@ -383,7 +420,11 @@ describe("UserDetailPage", () => {
             .toBeTruthy();
         expect(screen.getByText("最近运行异常：知识库锁定模式下检索失败，最近 3 个会话被阻断。")).toBeTruthy();
         expect(screen.getByRole("link", { name: "知识库 · 石犀产品知识库" }).getAttribute("href")).toBe("/admin/knowledge");
+        expect(screen.getByRole("link", { name: "角色 · 预算压价角色" }).getAttribute("href")).toBe("/admin/personas");
+        expect(screen.getByRole("link", { name: "运行时配置 · 销售默认 Realtime" }).getAttribute("href")).toBe("/admin/voice-runtime");
         expect(screen.getByText("最近文档：竞品对比 · 近 7 天 2 次变更")).toBeTruthy();
+        expect(screen.getByText("最近策略：提高压价强度 · 近 7 天 1 次变更")).toBeTruthy();
+        expect(screen.getByText("最近配置：切换 KB 锁模式 · 近 7 天 3 次变更")).toBeTruthy();
 
         const reportLink = screen.getByRole("link", { name: "查看统一报告" }) as HTMLAnchorElement;
         expect(reportLink.getAttribute("href")).toBe("/practice/session-1/report");

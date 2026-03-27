@@ -97,6 +97,23 @@ class TestSupportRuntimeContract:
             if isinstance(schema, dict)
         )
 
+        linked_asset_schema = components["LinkedAssetChangeReference"]
+        assert linked_asset_schema["type"] == "object"
+        assert set(linked_asset_schema.get("properties", {})) >= {
+            "asset_type",
+            "asset_label",
+            "asset_id",
+            "asset_name",
+            "admin_path",
+            "latest_change_label",
+            "latest_change_type",
+            "last_changed_at",
+            "change_count_7d",
+            "sessions_since_change",
+            "impact_level",
+            "health_status",
+        }
+
     async def test_faults_rejects_invalid_severity_filter(
         self,
         async_client: AsyncClient,
