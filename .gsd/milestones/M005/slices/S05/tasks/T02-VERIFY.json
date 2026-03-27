@@ -2,17 +2,15 @@
   "schemaVersion": 1,
   "taskId": "T02",
   "unitId": "M005/S05/T02",
-  "timestamp": 1774575921881,
-  "passed": false,
-  "discoverySource": "package-json",
+  "timestamp": 1774576731124,
+  "passed": true,
+  "discoverySource": "task-plan",
   "checks": [
     {
-      "command": "npm run test",
-      "exitCode": 1,
-      "durationMs": 7219,
-      "verdict": "fail"
+      "command": "test -s .gsd/milestones/M005/slices/S05/S05-UAT.md",
+      "exitCode": 0,
+      "durationMs": 5,
+      "verdict": "pass"
     }
-  ],
-  "retryAttempt": 1,
-  "maxRetries": 2
+  ]
 }

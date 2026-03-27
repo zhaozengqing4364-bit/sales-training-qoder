@@ -46,6 +46,7 @@
 - M005/S02 已完成：`manager_interventions` 表和 `/api/v1/admin/interventions` 当前链路已经把主管重点、提醒状态与 resolving-session linkage 持久化下来；manager-lite 会 deep-link 到 `/admin/users/[id]` 并预填 focus query params，用户详情页可以直接创建/提醒主管重点，并通过 `HistoryService` + unified session evidence 在同一张卡片上看到“已改善 / 仍卡住 / 待判断”的结果与对应统一报告 drill-in。
 - M005/S03 已完成：当前 `/admin/knowledge`、`/admin/personas`、`/admin/presentations`、`/admin/voice-runtime` 现在都会在原地显示 runtime-backed `governance_summary`（影响范围、最近变更、blocking/warning 健康信号），而 `/admin/analytics` 与 `/admin/users/[id]` 也会把 support/runtime fault 的 `linked_asset_changes` 直接渲染成资产链接与最近变更上下文，运营无需离开现有 admin 链路就能从异常追到可能的资产变更面。
 - M005/S04 已完成：`/api/v1/admin/analytics/operating-pack` 与 `/admin/analytics` 现在会固定按 7 天窗口给出团队周节奏包：cohort 重复卡点家族、部门问题面、证据不足/降级拆分，以及基于“每个用户最新一条可评估 completed session”的风险名单、连续未练名单、显著回升名单；`ManagerLitePanel`、`/admin/users` 与 `/admin/users/[id]` 通过 `focusBucket` + `focusIssueFamily` drill-in 保持同一问题家族语义，主管可以从周节奏包一路带着上下文进入用户详情页设重点。
+- M005 已在里程碑级 close-out 中完成并封板：`M005-VALIDATION.md` verdict 为 `pass`；fresh backend admin governance verification（49/49）与 web admin governance verification（19/19）通过；required `git diff --stat HEAD $(git merge-base HEAD 001-ai-practice-system) -- ':!.gsd/'` 也确认当前 branch 含有真实非 `.gsd` 代码改动。当前 shipped admin route family 已经在原有 `/admin/analytics*`、`/admin/users*`、knowledge / persona / presentation / voice-runtime 页面上闭合 evidence-aligned analytics、主管 intervention、资产治理与 weekly operating pack，R012 已升为 `validated`。
 - 真实首发目标已明确：先把桌面端稳定性做满，不在第一阶段绑定移动端 / 企业微信 / 外部系统集成。
 
 ## Architecture / Key Patterns
@@ -66,4 +67,4 @@ See `.gsd/REQUIREMENTS.md` for the explicit capability contract, requirement sta
 - [ ] M002: 实时教练闭环 — S01-S04 已交付 realtime sales rubric / pacing / shared coaching focus / completed-session alignment，但 close-out 审计仍缺 S07/S08 的教练降级/恢复可观测性与最终 live UAT 证据，暂不能封板。
 - [ ] M003: 知识与角色真实性 — 沿现有 admin Persona / knowledge → practice runtime → knowledge-check / report / replay 业务链路，证明知识与 Persona 真的改变 objection-heavy 销售训练，而不是只停在 prompt 文案层。
 - [x] M004: 复盘与学习闭环增强 — 已把现有 report / replay / history / practice 路由收口成 explanation-rich 的 sales + PPT learner loop，并在 milestone close-out 中完成验证与封板。
-- [ ] M005: 后台治理与规模化运营 — S01-S04 已完成；当前 admin analytics / weekly operating-pack / user drill-in / manager-lite / 用户详情页已经能沿统一 evidence line 完成“识别本周 cohort 卡点与风险名单 → drill-in 到具体成员 → 设主管重点 / 记录提醒 → 查看后续结果”，知识库 / Persona / PPT / voice runtime 资产页也已在原地显示影响范围、最近变更与 blocking/warning 治理信号；后续继续补组织化 UAT。
+- [x] M005: 后台治理与规模化运营 — 已把 evidence-aligned admin analytics / user drill-in、主管 focus/reminder/result workflow、asset governance 与 fixed-cadence weekly operating pack 全部收口到现有 admin route family，并在 milestone close-out 中完成验证与封板。

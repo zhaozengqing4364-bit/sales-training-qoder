@@ -1815,3 +1815,28 @@ Append one entry per iteration:
   verification results: passed; the repo-root-safe backend/web regression pack is green again, the UAT artifact exists, and live browser verification proved the shipped analytics -> drill-in -> reminder -> report/replay path. Optional enhanced-report endpoints still emitted 404/500 fallback noise, but the unified report/replay routes remained usable.
   success signal status: the current admin chain now has durable live proof that one supervisor can take a real weekly operating signal, act on it on the user-detail page, and review the exact session outcome on canonical report/replay routes without leaving current surfaces.
   rollback note: if future work revisits this chain, keep the live proof on the existing admin + canonical learner routes and keep verification commands runnable directly from repo root so auto-mode cannot regress on shell path hops alone.
+
+- time: 2026-03-27T09:58:00+0800
+  mode: stabilize
+  item id: M005-S05
+  files changed:
+    - .gsd/milestones/M005/slices/S05/S05-SUMMARY.md
+    - .gsd/milestones/M005/slices/S05/S05-UAT.md
+    - .gsd/milestones/M005/M005-ROADMAP.md
+    - .gsd/DECISIONS.md
+    - .gsd/PROJECT.md
+    - .gsd/milestones/M005/slices/S05/tasks/T01-VERIFY.json
+    - .gsd/milestones/M005/slices/S05/tasks/T02-VERIFY.json
+    - .gsd/milestones/M005/slices/S05/tasks/T03-VERIFY.json
+    - .codex/loop/state.json
+    - .codex/loop/log.md
+  summary: Closed S05 by re-running the full slice verification set, refreshing the stale task VERIFY artifacts, recording the final admin-chain acceptance boundary decision, and writing the slice summary/UAT that prove one real supervisor workflow on the shipped analytics -> user-detail -> report/replay route family.
+  verification commands:
+    - backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/contract/test_analytics.py backend/tests/integration/test_admin_users_api.py backend/tests/integration/test_admin_interventions_api.py
+    - npm --prefix web test -- --run 'src/app/admin/analytics/page.test.tsx' 'src/app/admin/users/[id]/page.test.tsx' 'src/components/admin/manager-lite-panel.test.tsx'
+    - test -s .gsd/milestones/M005/slices/S05/S05-UAT.md
+    - rg -n "export|permission|weekly|drill-in" .gsd/milestones/M005/slices/S05/tasks/T03-PLAN.md
+    - lsp diagnostics: web/src/app/admin/analytics/page.tsx, web/src/components/admin/manager-lite-panel.tsx, backend/src/admin/api/analytics.py, backend/src/main.py
+  verification results: passed; fresh slice-close backend/web verification is green, the UAT artifact exists, the T03 export/permission guardrails are present, and key analytics/admin files are diagnostics-clean. Optional enhanced-report/highlights noise remains explicitly non-blocking on the canonical report/replay path.
+  success signal status: the current admin chain is now operationally proven on shipped surfaces — a supervisor can move from the weekly pack to a concrete member action and then review the resulting session on canonical report/replay without leaving the current route family.
+  rollback note: if future work revisits this chain, keep UAT on the shipped /admin/analytics -> /admin/users/{id} -> canonical report/replay path, preserve the admin-only router dependency on the analytics route family, and refresh VERIFY artifacts whenever verifier commands change so auto-mode cannot resurrect stale false failures.

@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "taskId": "T03",
+  "unitId": "M005/S05/T03",
+  "timestamp": 1774576731124,
+  "passed": true,
+  "discoverySource": "task-plan",
+  "checks": [
+    {
+      "command": "rg -n \"export|permission|weekly|drill-in\" .gsd/milestones/M005/slices/S05/tasks/T03-PLAN.md",
+      "exitCode": 0,
+      "durationMs": 8,
+      "verdict": "pass"
+    }
+  ]
+}
