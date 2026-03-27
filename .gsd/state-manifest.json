@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "exported_at": "2026-03-27T11:46:55.017Z",
+  "exported_at": "2026-03-27T11:51:27.342Z",
   "milestones": [
     {
       "id": "M001",
@@ -3938,19 +3938,26 @@
       "milestone_id": "M006",
       "slice_id": "S05",
       "id": "T03",
-      "title": "运行 full admin regression pack 并回写 seam 经验",
-      "status": "pending",
-      "one_liner": "",
-      "narrative": "",
-      "verification_result": "",
+      "title": "Re-ran the full admin regression pack after the seam refactor and wrote back the proved seam acceptance contract for future admin work.",
+      "status": "complete",
+      "one_liner": "Re-ran the full admin regression pack after the seam refactor and wrote back the proved seam acceptance contract for future admin work.",
+      "narrative": "Verified local reality against the task plan and confirmed this task was close-out proof plus artifact write-back rather than further product-code migration. Ran the exact planned backend and web admin regression commands fresh after the shared admin read-model seam work from T01/T02; both passed cleanly with no code repair needed. Wrote the resulting seam lessons back into `.gsd/KNOWLEDGE.md` and `M006-RESEARCH.md`, and recorded D098 so future admin seam work treats the full route-family regression pack as the canonical acceptance bar instead of relying on helper-local or single-page checks.",
+      "verification_result": "Fresh planned regression commands passed end to end: backend passed 60 tests across admin analytics/support-runtime/users/interventions/asset-governance/RBAC/contract coverage, and web passed 28 tests across analytics/asset-governance/user-detail/manager-lite. The seam proof and follow-on guidance were then written into knowledge, research, and decisions artifacts.",
       "duration": "",
-      "completed_at": null,
+      "completed_at": "2026-03-27T11:51:27.326Z",
       "blocker_discovered": false,
-      "deviations": "",
-      "known_issues": "",
-      "key_files": [],
-      "key_decisions": [],
-      "full_summary_md": "",
+      "deviations": "Minor local adaptation only: the timing wrapper used `python3` because this shell does not expose a `python` alias, but the underlying planned backend and web commands were executed unchanged.",
+      "known_issues": "Existing non-blocking backend warnings remain during the regression pack: Passlib still emits the `crypt` deprecation warning under Python 3.11, and FastAPI OpenAPI generation still emits the duplicate operation-id warning for `admin/api/model_configs.py`.",
+      "key_files": [
+        ".gsd/KNOWLEDGE.md",
+        ".gsd/milestones/M006/M006-RESEARCH.md",
+        ".gsd/DECISIONS.md",
+        ".gsd/milestones/M006/slices/S05/tasks/T03-SUMMARY.md"
+      ],
+      "key_decisions": [
+        "D098: use the current full M005 admin regression pack as the canonical acceptance bar for future admin read-model seam refactors."
+      ],
+      "full_summary_md": "---\nid: T03\nparent: S05\nmilestone: M006\nkey_files:\n  - .gsd/KNOWLEDGE.md\n  - .gsd/milestones/M006/M006-RESEARCH.md\n  - .gsd/DECISIONS.md\n  - .gsd/milestones/M006/slices/S05/tasks/T03-SUMMARY.md\nkey_decisions:\n  - D098: use the current full M005 admin regression pack as the canonical acceptance bar for future admin read-model seam refactors.\nduration: \"\"\nverification_result: passed\ncompleted_at: 2026-03-27T11:51:27.327Z\nblocker_discovered: false\n---\n\n# T03: Re-ran the full admin regression pack after the seam refactor and wrote back the proved seam acceptance contract for future admin work.\n\n**Re-ran the full admin regression pack after the seam refactor and wrote back the proved seam acceptance contract for future admin work.**\n\n## What Happened\n\nVerified local reality against the task plan and confirmed this task was close-out proof plus artifact write-back rather than further product-code migration. Ran the exact planned backend and web admin regression commands fresh after the shared admin read-model seam work from T01/T02; both passed cleanly with no code repair needed. Wrote the resulting seam lessons back into `.gsd/KNOWLEDGE.md` and `M006-RESEARCH.md`, and recorded D098 so future admin seam work treats the full route-family regression pack as the canonical acceptance bar instead of relying on helper-local or single-page checks.\n\n## Verification\n\nFresh planned regression commands passed end to end: backend passed 60 tests across admin analytics/support-runtime/users/interventions/asset-governance/RBAC/contract coverage, and web passed 28 tests across analytics/asset-governance/user-detail/manager-lite. The seam proof and follow-on guidance were then written into knowledge, research, and decisions artifacts.\n\n## Verification Evidence\n\n| # | Command | Exit Code | Verdict | Duration |\n|---|---------|-----------|---------|----------|\n| 1 | `cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/common/test_admin_analytics_service.py tests/unit/test_support_runtime_service.py tests/integration/test_admin_users_api.py tests/integration/test_admin_interventions_api.py tests/integration/test_asset_governance_api.py tests/integration/test_rbac_access_control_api.py tests/contract/test_analytics.py` | 0 | ✅ pass | 10195ms |\n| 2 | `cd web && pnpm dlx npm@11.6.1 test -- --run 'src/app/admin/analytics/page.test.tsx' 'src/app/admin/asset-governance.test.tsx' 'src/app/admin/users/[id]/page.test.tsx' 'src/components/admin/manager-lite-panel.test.tsx'` | 0 | ✅ pass | 1950ms |\n\n\n## Deviations\n\nMinor local adaptation only: the timing wrapper used `python3` because this shell does not expose a `python` alias, but the underlying planned backend and web commands were executed unchanged.\n\n## Known Issues\n\nExisting non-blocking backend warnings remain during the regression pack: Passlib still emits the `crypt` deprecation warning under Python 3.11, and FastAPI OpenAPI generation still emits the duplicate operation-id warning for `admin/api/model_configs.py`.\n\n## Files Created/Modified\n\n- `.gsd/KNOWLEDGE.md`\n- `.gsd/milestones/M006/M006-RESEARCH.md`\n- `.gsd/DECISIONS.md`\n- `.gsd/milestones/M006/slices/S05/tasks/T03-SUMMARY.md`\n",
       "description": "Rerun the full current M005 admin regression pack after the adapter migration and capture any seam-level lessons in project knowledge/research artifacts so the next extension milestone starts from the new shared contract instead of rediscovering it.",
       "estimate": "0.5d",
       "files": [
@@ -5153,6 +5160,18 @@
       "choice": "Reuse `web/src/lib/admin/read-models.ts` for users-page operating-pack and display-label derivation instead of adding a new users-specific hook/store abstraction",
       "rationale": "The existing shared admin seam is already route-shaped around current analytics/users/user-detail needs. Extending it with the users-page manager-lite fallback and display-label helpers removes duplication without creating a second client-state abstraction that downstream slices would have to reconcile.",
       "revisable": "Yes",
+      "made_by": "agent",
+      "superseded_by": null
+    },
+    {
+      "seq": 1457,
+      "id": "D098",
+      "when_context": "",
+      "scope": "verification",
+      "decision": "What verification bar future shared admin read-model seam changes must satisfy",
+      "choice": "Use the current full M005 admin regression pack (backend analytics/support/users/interventions/asset-governance/RBAC/contract suites plus web analytics/asset-governance/user-detail/manager-lite suites) as the canonical acceptance bar for admin read-model seam refactors.",
+      "rationale": "The T03 proof showed the shared admin seam is only trustworthy when the entire shipped admin route family stays green together; helper-only or page-local checks would miss cross-route contract drift.",
+      "revisable": "Yes — if the shipped admin route family or its authority seams materially change, the canonical pack should be updated in one place.",
       "made_by": "agent",
       "superseded_by": null
     }
@@ -6796,6 +6815,28 @@
       "verdict": "✅ pass",
       "duration_ms": 4000,
       "created_at": "2026-03-27T11:46:54.998Z"
+    },
+    {
+      "id": 150,
+      "task_id": "T03",
+      "slice_id": "S05",
+      "milestone_id": "M006",
+      "command": "cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/common/test_admin_analytics_service.py tests/unit/test_support_runtime_service.py tests/integration/test_admin_users_api.py tests/integration/test_admin_interventions_api.py tests/integration/test_asset_governance_api.py tests/integration/test_rbac_access_control_api.py tests/contract/test_analytics.py",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 10195,
+      "created_at": "2026-03-27T11:51:27.326Z"
+    },
+    {
+      "id": 151,
+      "task_id": "T03",
+      "slice_id": "S05",
+      "milestone_id": "M006",
+      "command": "cd web && pnpm dlx npm@11.6.1 test -- --run 'src/app/admin/analytics/page.test.tsx' 'src/app/admin/asset-governance.test.tsx' 'src/app/admin/users/[id]/page.test.tsx' 'src/components/admin/manager-lite-panel.test.tsx'",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 1950,
+      "created_at": "2026-03-27T11:51:27.326Z"
     }
   ]
 }
