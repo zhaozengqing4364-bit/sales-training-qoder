@@ -1951,3 +1951,44 @@ Append one entry per iteration:
   verification results: passed; backend 24/24 and web 21/21 stayed green after the stronger contract assertions, and no diagnostics remained on the touched test files.
   success signal status: governance_summary and linked_asset_changes are now explicitly locked through backend field-level contract assertions and typed admin page fixtures covering knowledge/persona/runtime linked assets.
   rollback note: no runtime rollback surface was introduced because this task only strengthened regression coverage; if later contract fields change, update the shared typed fixtures and contract assertions together rather than reintroducing page-local parsing.
+
+- time: 2026-03-27T17:53:14+0800
+  mode: grow
+  item id: M006-S02
+  files changed:
+    - .gsd/milestones/M006/slices/S02/S02-SUMMARY.md
+    - .gsd/milestones/M006/slices/S02/S02-UAT.md
+    - .gsd/milestones/M006/M006-ROADMAP.md
+    - .gsd/PROJECT.md
+    - .codex/loop/state.json
+    - .codex/loop/log.md
+  summary: Closed M006/S02 by rerunning the full typed-governance slice verification set, recording the slice summary/UAT plus operational-readiness notes, and updating project/loop state now that backend schemas, frontend normalization, and admin page regressions all share one governance/link-change contract.
+  verification commands:
+    - cd backend && /usr/bin/time -p venv/bin/python -m pytest -c pyproject.toml tests/integration/test_asset_governance_api.py tests/contract/test_analytics.py tests/contract/test_support_runtime.py
+    - cd web && /usr/bin/time -p pnpm dlx npm@11.6.1 test -- --run 'src/app/admin/asset-governance.test.tsx' 'src/app/admin/analytics/page.test.tsx' 'src/app/admin/users/[id]/page.test.tsx'
+    - lsp diagnostics: backend/src/common/db/schemas.py, backend/src/common/knowledge/schemas.py, backend/src/agent/schemas.py, web/src/lib/api/types.ts, web/src/lib/api/client.ts, web/src/components/admin/asset-governance.tsx, backend/tests/integration/test_asset_governance_api.py, backend/tests/contract/test_analytics.py, backend/tests/contract/test_support_runtime.py, web/src/app/admin/asset-governance.test.tsx, web/src/app/admin/analytics/page.test.tsx, web/src/app/admin/users/*/page.test.tsx
+  verification results: passed; backend 24/24 and web 21/21 passed fresh, and LSP diagnostics were clean across the shared contract sources plus the focused regression files.
+  success signal status: S02 is complete and the admin governance/link-change seam is now explicitly typed from backend schema through frontend normalization to current asset-governance and runtime-fault UI surfaces.
+  rollback note: if later M006 work changes this seam, keep shared model validation in backend/src/common/db/schemas.py and centralized normalization in web/src/lib/api/client.ts; do not reintroduce page-local raw-object parsing as a silent compatibility layer.
+
+- time: 2026-03-27T18:02:06+0800
+  mode: grow
+  item id: M006-S03-T01
+  files changed:
+    - backend/src/admin/services/manager_intervention_service.py
+    - backend/src/admin/services/__init__.py
+    - backend/src/admin/api/interventions.py
+    - backend/tests/integration/test_admin_interventions_api.py
+    - .gsd/DECISIONS.md
+    - .gsd/KNOWLEDGE.md
+    - .gsd/milestones/M006/slices/S03/tasks/T01-SUMMARY.md
+    - .codex/loop/state.json
+    - .codex/loop/log.md
+  summary: Extracted a dedicated ManagerInterventionWriteService for create/list/update/remind lifecycle rules, slimmed the intervention routes to transport/auth wrappers, and locked the new seam with delegation-focused integration regressions without changing the shipped payload contract.
+  verification commands:
+    - cd backend && venv/bin/python -m pytest -c pyproject.toml tests/integration/test_admin_interventions_api.py -k 'delegates_to_manager_intervention_write_service'
+    - cd backend && /usr/bin/time -p venv/bin/python -m pytest -c pyproject.toml tests/integration/test_admin_interventions_api.py
+    - lsp diagnostics: backend/src/admin/api/interventions.py, backend/src/admin/services/manager_intervention_service.py, backend/tests/integration/test_admin_interventions_api.py
+  verification results: the seam-focused regression failed first because the route lacked a ManagerInterventionWriteService symbol, then passed after extraction; the full admin interventions integration suite passed 7/7 and LSP diagnostics were clean.
+  success signal status: intervention write-side lifecycle semantics now live behind one admin service seam, and /api/v1/admin/interventions keeps the same create/remind/update/list behavior for the current UI surface.
+  rollback note: if later M006 work revisits intervention write semantics, keep the service as the single owner of due/reminder/latest-open transitions and update the route-level delegation tests together with any API seam change.

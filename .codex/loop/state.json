@@ -1,6 +1,6 @@
 {
   "mode": "grow",
-  "current_issue_id": "M006-S02-T03",
+  "current_issue_id": "M006-S03-T01",
   "current_issue_type": "task",
   "current_issue_status": "done",
   "pending_issue_ids": [],
@@ -106,28 +106,30 @@
     "M006-S01",
     "M006-S02-T01",
     "M006-S02-T02",
-    "M006-S02-T03"
+    "M006-S02-T03",
+    "M006-S02",
+    "M006-S03-T01"
   ],
   "blocked_issue_ids": [],
   "deferred_issue_ids": [],
   "last_modified_files": [
-    "backend/tests/integration/test_asset_governance_api.py",
-    "backend/tests/contract/test_analytics.py",
-    "backend/tests/contract/test_support_runtime.py",
-    "web/src/app/admin/asset-governance.test.tsx",
-    "web/src/app/admin/analytics/page.test.tsx",
-    "web/src/app/admin/users/[id]/page.test.tsx",
-    ".gsd/milestones/M006/slices/S02/tasks/T03-SUMMARY.md",
+    "backend/src/admin/services/manager_intervention_service.py",
+    "backend/src/admin/services/__init__.py",
+    "backend/src/admin/api/interventions.py",
+    "backend/tests/integration/test_admin_interventions_api.py",
+    ".gsd/DECISIONS.md",
+    ".gsd/KNOWLEDGE.md",
+    ".gsd/milestones/M006/slices/S03/tasks/T01-SUMMARY.md",
     ".codex/loop/state.json",
     ".codex/loop/log.md"
   ],
   "last_verification_commands": [
-    "cd backend && /usr/bin/time -p venv/bin/python -m pytest -c pyproject.toml tests/integration/test_asset_governance_api.py tests/contract/test_analytics.py tests/contract/test_support_runtime.py",
-    "cd web && /usr/bin/time -p pnpm dlx npm@11.6.1 test -- --run 'src/app/admin/asset-governance.test.tsx' 'src/app/admin/analytics/page.test.tsx' 'src/app/admin/users/[id]/page.test.tsx'",
-    "lsp diagnostics: backend/tests/integration/test_asset_governance_api.py, backend/tests/contract/test_analytics.py, backend/tests/contract/test_support_runtime.py, web/src/app/admin/asset-governance.test.tsx, web/src/app/admin/analytics/page.test.tsx, web/src/app/admin/users/[id]/page.test.tsx"
+    "cd backend && venv/bin/python -m pytest -c pyproject.toml tests/integration/test_admin_interventions_api.py -k 'delegates_to_manager_intervention_write_service'",
+    "cd backend && /usr/bin/time -p venv/bin/python -m pytest -c pyproject.toml tests/integration/test_admin_interventions_api.py",
+    "lsp diagnostics: backend/src/admin/api/interventions.py, backend/src/admin/services/manager_intervention_service.py, backend/tests/integration/test_admin_interventions_api.py"
   ],
-  "last_verification_result": "Fresh T03 verification passed. The backend governance/admin contract suite stayed green after adding stronger field-level governance and linked-asset assertions, the focused admin Vitest suite stayed green after locking analytics/user-detail linked-asset rendering to shared typed fixtures, and LSP diagnostics were clean on the touched backend/web test files.",
-  "last_success_signal": "Governance summary and linked-asset contracts are now regression-locked end-to-end: backend tests assert the shared field shapes, and admin governance/analytics/user-detail pages still render the same typed governance and fault-linked asset behaviors.",
+  "last_verification_result": "The new delegation seam failed first as expected, then the seam-focused regressions passed, the full admin interventions integration suite passed 7/7, and LSP diagnostics were clean on the touched backend files.",
+  "last_success_signal": "Supervisor intervention create/update/remind/list routes now delegate lifecycle rules to one write-side service while preserving the shipped admin response semantics.",
   "last_growth_scan": null,
-  "next_action": "Stop after one item. If continuing M006, close slice S02 only after task summaries are written and the slice-level verification set is fully recorded."
+  "next_action": "Stop after one item. Resume M006/S03 with T02 when the next auto-mode turn starts."
 }

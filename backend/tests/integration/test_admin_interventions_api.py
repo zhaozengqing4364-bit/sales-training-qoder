@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime, timezone
+from types import SimpleNamespace
 
 import pytest
 import pytest_asyncio
@@ -14,6 +15,7 @@ from sqlalchemy.orm import sessionmaker
 
 # Import Agent models so Base.metadata has all FK targets used by common models.
 from agent.models import Agent, AgentPersona, Persona, VoiceRuntimeProfile  # noqa: F401
+from admin.api import interventions as interventions_api
 from common.auth.service import create_access_token
 from common.db.models import Base, PracticeSession, Scenario, User
 from common.db.session import get_db
@@ -364,3 +366,199 @@ async def test_admin_can_link_intervention_to_resolving_session(
     ).mappings().one()
     assert row["due_state"] == "resolved"
     assert row["resolving_session_id"] == str(resolving_session.session_id)
+
+
+@pytest.mark.asyncio
+async def test_create_route_delegates_to_manager_intervention_write_service(
+    async_client: AsyncClient,
+    admin_headers: dict[str, str],
+    admin_user: User,
+    trainee_user: User,
+) -> None:
+    observed: dict[str, object] = {}
+    timestamp = datetime.now(timezone.utc)
+
+    class FakeWriteService:
+        def __init__(self, db: AsyncSession) -> None:
+            observed["db_bound"] = db is not None
+
+        async def create_intervention(self, *, payload, current_user):
+            observed["payload_user_id"] = str(payload.user_id)
+            observed["payload_issue_family"] = payload.issue_family
+            observed["payload_note"] = payload.note
+            observed["current_user_id"] = str(current_user.user_id)
+            return SimpleNamespace(
+                intervention_id=uuid.uuid4(),
+                manager_user_id=uuid.UUID(str(admin_user.user_id)),
+                user_id=uuid.UUID(str(trainee_user.user_id)),
+                issue_family=payload.issue_family,
+                note=payload.note,
+                due_state="pending",
+                reminder_status="not_sent",
+                reminder_sent_at=None,
+                resolving_session_id=None,
+                created_at=timestamp,
+                updated_at=timestamp,
+            )
+
+    monkeypatch = pytest.MonkeyPatch()
+    monkeypatch.setattr(
+        interventions_api,
+        "ManagerInterventionWriteService",
+        FakeWriteService,
+    )
+    try:
+        response = await async_client.post(
+            "/api/v1/admin/interventions",
+            json={
+                "user_id": str(trainee_user.user_id),
+                "issue_family": "evidence_gap",
+                "note": "优先补 ROI 和客户案例证据。",
+            },
+            headers=admin_headers,
+        )
+    finally:
+        monkeypatch.undo()
+
+    assert response.status_code == 200
+    assert observed == {
+        "db_bound": True,
+        "payload_user_id": str(trainee_user.user_id),
+        "payload_issue_family": "evidence_gap",
+        "payload_note": "优先补 ROI 和客户案例证据。",
+        "current_user_id": str(admin_user.user_id),
+    }
+    payload = response.json()["data"]
+    assert payload["user_id"] == str(trainee_user.user_id)
+    assert payload["manager_user_id"] == str(admin_user.user_id)
+    assert payload["issue_family"] == "evidence_gap"
+    assert payload["due_state"] == "pending"
+    assert payload["reminder_status"] == "not_sent"
+
+
+@pytest.mark.asyncio
+async def test_update_route_delegates_to_manager_intervention_write_service(
+    async_client: AsyncClient,
+    admin_headers: dict[str, str],
+    admin_user: User,
+    trainee_user: User,
+) -> None:
+    intervention_id = str(uuid.uuid4())
+    resolving_session_id = str(uuid.uuid4())
+    observed: dict[str, object] = {}
+    timestamp = datetime.now(timezone.utc)
+
+    class FakeWriteService:
+        def __init__(self, db: AsyncSession) -> None:
+            observed["db_bound"] = db is not None
+
+        async def update_intervention(self, *, intervention_id: str, payload):
+            observed["intervention_id"] = intervention_id
+            observed["payload_due_state"] = (
+                payload.due_state.value if payload.due_state is not None else None
+            )
+            observed["payload_resolving_session_id"] = str(payload.resolving_session_id)
+            return SimpleNamespace(
+                intervention_id=uuid.UUID(intervention_id),
+                manager_user_id=uuid.UUID(str(admin_user.user_id)),
+                user_id=uuid.UUID(str(trainee_user.user_id)),
+                issue_family="objection_response",
+                note="围绕价格异议做一次复练。",
+                due_state="resolved",
+                reminder_status="not_sent",
+                reminder_sent_at=None,
+                resolving_session_id=uuid.UUID(resolving_session_id),
+                created_at=timestamp,
+                updated_at=timestamp,
+            )
+
+    monkeypatch = pytest.MonkeyPatch()
+    monkeypatch.setattr(
+        interventions_api,
+        "ManagerInterventionWriteService",
+        FakeWriteService,
+    )
+    try:
+        response = await async_client.patch(
+            f"/api/v1/admin/interventions/{intervention_id}",
+            json={
+                "due_state": "resolved",
+                "resolving_session_id": resolving_session_id,
+            },
+            headers=admin_headers,
+        )
+    finally:
+        monkeypatch.undo()
+
+    assert response.status_code == 200
+    assert observed == {
+        "db_bound": True,
+        "intervention_id": intervention_id,
+        "payload_due_state": "resolved",
+        "payload_resolving_session_id": resolving_session_id,
+    }
+    payload = response.json()["data"]
+    assert payload["intervention_id"] == intervention_id
+    assert payload["due_state"] == "resolved"
+    assert payload["resolving_session_id"] == resolving_session_id
+
+
+@pytest.mark.asyncio
+async def test_remind_route_delegates_to_manager_intervention_write_service(
+    async_client: AsyncClient,
+    admin_headers: dict[str, str],
+    admin_user: User,
+    trainee_user: User,
+) -> None:
+    intervention_id = str(uuid.uuid4())
+    observed: dict[str, object] = {}
+
+    class FakeWriteService:
+        def __init__(self, db: AsyncSession) -> None:
+            observed["db_bound"] = db is not None
+
+        async def remind_user(self, *, payload, current_user):
+            observed["payload_user_id"] = str(payload.user_id)
+            observed["payload_intervention_id"] = str(payload.intervention_id)
+            observed["payload_note"] = payload.note
+            observed["current_user_id"] = str(current_user.user_id)
+            return {
+                "sent": True,
+                "reminder_id": "delegated-reminder-id",
+                "user_id": str(payload.user_id),
+                "intervention_id": intervention_id,
+            }
+
+    monkeypatch = pytest.MonkeyPatch()
+    monkeypatch.setattr(
+        interventions_api,
+        "ManagerInterventionWriteService",
+        FakeWriteService,
+    )
+    try:
+        response = await async_client.post(
+            "/api/v1/admin/interventions/remind",
+            json={
+                "user_id": str(trainee_user.user_id),
+                "intervention_id": intervention_id,
+                "note": "请本周补一次围绕价值表达的练习。",
+            },
+            headers=admin_headers,
+        )
+    finally:
+        monkeypatch.undo()
+
+    assert response.status_code == 200
+    assert observed == {
+        "db_bound": True,
+        "payload_user_id": str(trainee_user.user_id),
+        "payload_intervention_id": intervention_id,
+        "payload_note": "请本周补一次围绕价值表达的练习。",
+        "current_user_id": str(admin_user.user_id),
+    }
+    assert response.json()["data"] == {
+        "sent": True,
+        "reminder_id": "delegated-reminder-id",
+        "user_id": str(trainee_user.user_id),
+        "intervention_id": intervention_id,
+    }

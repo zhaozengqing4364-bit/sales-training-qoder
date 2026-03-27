@@ -4,7 +4,7 @@
 **Demo:** After this: Create/remind/read supervisor interventions from the current `/admin/users/[id]` surface while the route handlers delegate workflow logic to extracted services and still show the same result semantics.
 
 ## Tasks
-- [ ] **T01: 抽出 ManagerIntervention write-side service** — Create a dedicated write-side service under `backend/src/admin/services/` to own `manager_interventions` create/load/update/remind rules, including due-state/reminder-state transitions and latest-open lookup. Refactor `/api/v1/admin/interventions` routes to delegate to it without changing response payloads.
+- [x] **T01: Extracted ManagerInterventionWriteService and slimmed the admin intervention routes down to service-backed transport/auth wrappers without changing the shipped response contract.** — Create a dedicated write-side service under `backend/src/admin/services/` to own `manager_interventions` create/load/update/remind rules, including due-state/reminder-state transitions and latest-open lookup. Refactor `/api/v1/admin/interventions` routes to delegate to it without changing response payloads.
   - Estimate: 0.75d
   - Files: backend/src/admin/services/manager_intervention_service.py, backend/src/admin/services/__init__.py, backend/src/admin/api/interventions.py, backend/tests/integration/test_admin_interventions_api.py
   - Verify: cd backend && venv/bin/python -m pytest -c pyproject.toml tests/integration/test_admin_interventions_api.py
