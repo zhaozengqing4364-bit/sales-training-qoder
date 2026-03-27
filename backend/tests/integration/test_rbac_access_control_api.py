@@ -203,3 +203,36 @@ async def test_admin_knowledge_alias_rejects_non_admin_with_trace_id(
     assert body["success"] is False
     assert "trace_id" in body
     assert "ADMIN_REQUIRED" in body.get("message", "")
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "path",
+    [
+        "/api/v1/admin/analytics/operating-pack?time_range=7d&limit=10&inactive_days=7",
+        "/api/v1/admin/analytics/export?time_range=7d&format=csv",
+    ],
+)
+async def test_admin_analytics_routes_reject_non_admin_with_trace_id(
+    async_client,
+    test_db: AsyncSession,
+    path: str,
+) -> None:
+    user = await _create_user(
+        test_db,
+        email=f"rbac-analytics-{uuid.uuid4().hex[:8]}@example.com",
+        role="user",
+        is_active=True,
+    )
+    token = create_access_token(data={"sub": str(user.user_id)})
+
+    response = await async_client.get(
+        path,
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 403
+    body = response.json()
+    assert body["success"] is False
+    assert "trace_id" in body
+    assert "ADMIN_REQUIRED" in body.get("message", "")

@@ -12,7 +12,7 @@
   - Estimate: 90m
   - Files: .gsd/milestones/M005/slices/S05/S05-UAT.md
   - Verify: Manual review — file exists and is non-empty
-- [ ] **T03: Write the final export and permission acceptance guardrails for M005** — Validate that the same current admin chain can produce an export/operating pack with the right permission boundary and evidence semantics, and write the final acceptance notes. This is the last guardrail before calling M005 operationally usable.
+- [x] **T03: Added explicit admin analytics RBAC regression proof and wrote the final M005 export/permission acceptance guardrails on the current admin chain.** — Validate that the same current admin chain can produce an export/operating pack with the right permission boundary and evidence semantics, and write the final acceptance notes. This is the last guardrail before calling M005 operationally usable.
   - Estimate: 45m
   - Files: .gsd/milestones/M005/slices/S05/tasks/T03-PLAN.md
   - Verify: rg -n "export|permission|weekly|drill-in" .gsd/milestones/M005/slices/S05/tasks/T03-PLAN.md
