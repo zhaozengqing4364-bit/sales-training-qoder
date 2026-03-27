@@ -1756,4 +1756,42 @@ Append one entry per iteration:
     - cd web && npm test -- --run 'src/app/admin/analytics/page.test.tsx'
   verification results: passed; the focused admin analytics page suite is green with the new operating-pack call, weekly summary UI, department issue panel, and existing projection-backed analytics assertions.
   success signal status: admins can now open the existing analytics page and immediately see a stable 7-day operating pack with risk/improvement counts, repeated blocker families, department issue buckets, and asset-change context on the same screen.
-  rollback note: if a future slice changes the weekly cadence, keep /admin/analytics/operating-pack as the single manager-list authority and version the page contract deliberately instead of recombining the old interventions list with separate analytics payloads.
+- time: 2026-03-26T19:30:17+08:00
+  mode: stabilize
+  item id: M005-S04-T03
+  files changed:
+    - web/src/app/admin/users/page.tsx
+    - web/src/app/admin/users/[id]/page.tsx
+    - web/src/app/admin/users/[id]/page.test.tsx
+    - web/src/components/admin/manager-lite-panel.tsx
+    - web/src/components/admin/manager-lite-panel.test.tsx
+    - .codex/loop/state.json
+    - .codex/loop/log.md
+  summary: Added weekly risk / inactive / improving drill-in blocks to the admin users page, preserved focus-bucket context on /admin/users/[id], and fixed the manager-lite link so it carries the real issue family instead of collapsing every risk user to evidence_gap.
+  verification commands:
+    - cd web && npm test -- --run 'src/components/admin/manager-lite-panel.test.tsx' 'src/app/admin/users/[id]/page.test.tsx'
+    - cd web && npm test -- --run 'src/app/admin/users/[id]/page.test.tsx'
+  verification results: passed; the manager-lite drill-link regression and the task-plan user-detail suite both ran green. Browser smoke-test attempt against http://localhost:3445/admin/users was blocked by ERR_CONNECTION_REFUSED because no local web server was running.
+  success signal status: admin users surfaces now expose the same weekly bucket vocabulary as the operating pack, and drill-ins preserve bucket + issue-family context through to the supervisor focus form.
+  rollback note: if future work changes weekly bucket semantics, keep focusBucket/focusIssueFamily as the shared drill contract across manager-lite, /admin/users, and /admin/users/[id] instead of reintroducing hardcoded evidence-gap links.
+
+- time: 2026-03-27T09:07:43+08:00
+  mode: stabilize
+  item id: M005-S05-T01
+  files changed:
+    - backend/tests/contract/test_analytics.py
+    - backend/tests/integration/test_admin_users_api.py
+    - backend/tests/integration/test_admin_interventions_api.py
+    - web/src/app/admin/analytics/page.test.tsx
+    - web/src/app/admin/users/[id]/page.test.tsx
+    - web/src/components/admin/manager-lite-panel.test.tsx
+    - .gsd/milestones/M005/slices/S05/tasks/T01-SUMMARY.md
+    - .codex/loop/state.json
+    - .codex/loop/log.md
+  summary: Expanded the current admin regression pack so the operating chain now proves export, manager-lite reminder action, risk/inactive drill-ins, and intervention-result review on one shared evidence vocabulary without introducing a new acceptance harness.
+  verification commands:
+    - cd backend && venv/bin/python -m pytest -c pyproject.toml tests/contract/test_analytics.py tests/integration/test_admin_users_api.py tests/integration/test_admin_interventions_api.py
+    - cd web && npm test -- --run 'src/app/admin/analytics/page.test.tsx' 'src/app/admin/users/[id]/page.test.tsx' 'src/components/admin/manager-lite-panel.test.tsx'
+  verification results: passed; the backend pack is green with the new admin export contract and manager-lite remind fallback coverage, and the web pack is green with export click, manager-lite reminder, inactive-streak drill-in, and fallback note assertions.
+  success signal status: the current analytics → manager-lite → user drill-in → intervention/review chain is now protected by one focused regression pack that speaks the same evidence vocabulary end to end.
+  rollback note: if future work changes this chain again, keep using the existing focused backend/web suites as the regression pack and extend them in place instead of introducing a parallel acceptance framework.

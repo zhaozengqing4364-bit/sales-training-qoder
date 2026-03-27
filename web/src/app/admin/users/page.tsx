@@ -1,13 +1,15 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { api } from "@/lib/api/client";
-import { AdminUser } from "@/lib/api/types";
+import { AdminUser, ManagerLiteListsResponse } from "@/lib/api/types";
+import { formatIssueTypeLabel } from "@/lib/session-evidence";
 import { GlassCard } from "@/components/ui/glass-card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Search, Filter, MoreHorizontal, UserPlus, Download, Mail, Shield, Ban, Trash2, Calendar, CheckCircle, Loader2, Eye } from "lucide-react";
+import { Search, Filter, MoreHorizontal, UserPlus, Download, Mail, Shield, Ban, Trash2, Calendar, CheckCircle, Loader2, Eye, RefreshCw } from "lucide-react";
 import {
     Dialog,
     DialogContent,
@@ -91,10 +93,50 @@ const initialCreateForm: CreateUserForm = {
     role: "user"
 };
 
+const EMPTY_WEEKLY_MANAGER_LISTS: ManagerLiteListsResponse = {
+    not_passed: [],
+    inactive_streak: [],
+    improving: [],
+};
+
+type WeeklyBucketKind = "not_passed" | "inactive_streak" | "improving";
+
+function getWeeklyBucketNote(issueFamily?: string | null): string {
+    switch (issueFamily) {
+        case "value_expression":
+            return "先对照最近统一报告把价值表达说具体。";
+        case "objection_response":
+            return "先对照最近统一报告把异议回应说完整。";
+        case "structure_gap":
+            return "先对照最近统一报告把结构步骤说完整。";
+        case "evidence_gap":
+        default:
+            return "先对照最近统一报告补证据。";
+    }
+}
+
+function buildWeeklyUserDetailHref(args: {
+    kind: WeeklyBucketKind;
+    userId: string;
+    issueFamily?: string | null;
+    note?: string | null;
+}): string {
+    const searchParams = new URLSearchParams({ focusBucket: args.kind });
+
+    if (args.kind === "not_passed") {
+        searchParams.set("focusIssueFamily", args.issueFamily || "evidence_gap");
+        searchParams.set("focusNote", args.note || getWeeklyBucketNote(args.issueFamily));
+    }
+
+    return `/admin/users/${args.userId}?${searchParams.toString()}`;
+}
+
 export default function UsersPage() {
     const router = useRouter();
     const [users, setUsers] = useState<AdminUser[]>([]);
     const [isLoading, setIsLoading] = useState(true);
+    const [weeklyManagerLists, setWeeklyManagerLists] = useState<ManagerLiteListsResponse>(EMPTY_WEEKLY_MANAGER_LISTS);
+    const [weeklyBucketsError, setWeeklyBucketsError] = useState<string | null>(null);
     const toast = useToast();
 
     // Filter & Search States
@@ -149,6 +191,22 @@ export default function UsersPage() {
             setIsLoading(false);
         }
     }, [page, roleFilter, searchQuery, statusFilter]);
+
+    const loadWeeklyBuckets = useCallback(async () => {
+        setWeeklyBucketsError(null);
+        try {
+            const operatingPack = await api.analytics.getOperatingPack({
+                time_range: "7d",
+                limit: 10,
+                inactive_days: 7,
+            });
+            setWeeklyManagerLists(operatingPack.manager_lists);
+        } catch (err) {
+            console.error("Failed to load weekly operating buckets:", err);
+            setWeeklyManagerLists(EMPTY_WEEKLY_MANAGER_LISTS);
+            setWeeklyBucketsError("本周经营名单暂时不可用，请稍后重试。");
+        }
+    }, []);
 
     // Create user handler
     const handleCreateUser = async () => {
@@ -322,6 +380,10 @@ export default function UsersPage() {
     useEffect(() => {
         loadData();
     }, [loadData]);
+
+    useEffect(() => {
+        void loadWeeklyBuckets();
+    }, [loadWeeklyBuckets]);
 
     if (isLoading) {
         return <div className="p-8 text-center text-slate-500">加载中...</div>;
@@ -527,6 +589,129 @@ export default function UsersPage() {
                     </Dialog>
                 </div>
             </div>
+
+            <GlassCard className="p-6 border border-slate-200 bg-white/95">
+                <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+                    <div>
+                        <h2 className="text-lg font-bold text-slate-900">本周经营名单 drill-in</h2>
+                        <p className="mt-1 text-sm text-slate-500 text-pretty">
+                            把当前用户页和本周经营节奏包放在同一套风险 / 回升词汇上，点进详情后会自动带上对应的主管重点上下文。
+                        </p>
+                    </div>
+                    <Button variant="outline" size="sm" className="rounded-full" onClick={() => void loadWeeklyBuckets()}>
+                        <RefreshCw className="w-4 h-4 mr-2" />
+                        刷新名单
+                    </Button>
+                </div>
+
+                {weeklyBucketsError ? (
+                    <div role="alert" className="mt-4 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">
+                        {weeklyBucketsError}
+                    </div>
+                ) : (
+                    <div className="mt-5 grid grid-cols-1 gap-4 xl:grid-cols-3">
+                        <div className="rounded-2xl border border-rose-100 bg-rose-50/70 p-4">
+                            <div className="flex items-center justify-between gap-3">
+                                <div>
+                                    <h3 className="text-sm font-bold text-slate-900">本周风险成员</h3>
+                                    <p className="mt-1 text-xs text-slate-500">统一训练证据里最近一条可评估训练仍未通过。</p>
+                                </div>
+                                <span className="text-xs font-medium text-rose-700">{weeklyManagerLists.not_passed.length} 人</span>
+                            </div>
+                            <div className="mt-4 space-y-3">
+                                {weeklyManagerLists.not_passed.length > 0 ? weeklyManagerLists.not_passed.map((item) => (
+                                    <div key={`${item.user_id}-${item.session_id}`} className="rounded-2xl border border-white/80 bg-white px-4 py-3">
+                                        <p className="text-sm font-semibold text-slate-900">{item.user_name}</p>
+                                        <p className="mt-1 text-xs text-slate-500">{item.department || "未分配部门"}</p>
+                                        <p className="mt-2 text-xs text-rose-700 text-pretty">
+                                            问题家族 · {formatIssueTypeLabel(item.issue_family) || item.issue_family || "证据支撑"}
+                                        </p>
+                                        <div className="mt-3 flex flex-wrap gap-2">
+                                            <Button asChild size="sm" variant="outline" className="h-8 rounded-full">
+                                                <Link
+                                                    href={buildWeeklyUserDetailHref({
+                                                        kind: "not_passed",
+                                                        userId: item.user_id,
+                                                        issueFamily: item.issue_family,
+                                                        note: getWeeklyBucketNote(item.issue_family),
+                                                    })}
+                                                >
+                                                    查看并设重点
+                                                </Link>
+                                            </Button>
+                                        </div>
+                                    </div>
+                                )) : (
+                                    <div className="rounded-2xl border border-dashed border-slate-200 bg-white px-4 py-5 text-sm text-slate-500">
+                                        当前没有风险成员。
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+
+                        <div className="rounded-2xl border border-amber-100 bg-amber-50/70 p-4">
+                            <div className="flex items-center justify-between gap-3">
+                                <div>
+                                    <h3 className="text-sm font-bold text-slate-900">本周连续未练</h3>
+                                    <p className="mt-1 text-xs text-slate-500">按最后一次已完成训练计算连续未练天数。</p>
+                                </div>
+                                <span className="text-xs font-medium text-amber-700">{weeklyManagerLists.inactive_streak.length} 人</span>
+                            </div>
+                            <div className="mt-4 space-y-3">
+                                {weeklyManagerLists.inactive_streak.length > 0 ? weeklyManagerLists.inactive_streak.map((item) => (
+                                    <div key={item.user_id} className="rounded-2xl border border-white/80 bg-white px-4 py-3">
+                                        <p className="text-sm font-semibold text-slate-900">{item.user_name}</p>
+                                        <p className="mt-1 text-xs text-slate-500">{item.department || "未分配部门"}</p>
+                                        <p className="mt-2 text-xs text-amber-700">连续未练：{item.inactive_days} 天</p>
+                                        <div className="mt-3 flex flex-wrap gap-2">
+                                            <Button asChild size="sm" variant="outline" className="h-8 rounded-full">
+                                                <Link href={buildWeeklyUserDetailHref({ kind: "inactive_streak", userId: item.user_id })}>
+                                                    查看详情
+                                                </Link>
+                                            </Button>
+                                        </div>
+                                    </div>
+                                )) : (
+                                    <div className="rounded-2xl border border-dashed border-slate-200 bg-white px-4 py-5 text-sm text-slate-500">
+                                        当前没有连续未练成员。
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+
+                        <div className="rounded-2xl border border-emerald-100 bg-emerald-50/70 p-4">
+                            <div className="flex items-center justify-between gap-3">
+                                <div>
+                                    <h3 className="text-sm font-bold text-slate-900">本周显著回升</h3>
+                                    <p className="mt-1 text-xs text-slate-500">通过率改善只按可评估的已完成训练计算。</p>
+                                </div>
+                                <span className="text-xs font-medium text-emerald-700">{weeklyManagerLists.improving.length} 人</span>
+                            </div>
+                            <div className="mt-4 space-y-3">
+                                {weeklyManagerLists.improving.length > 0 ? weeklyManagerLists.improving.map((item) => (
+                                    <div key={item.user_id} className="rounded-2xl border border-white/80 bg-white px-4 py-3">
+                                        <p className="text-sm font-semibold text-slate-900">{item.user_name}</p>
+                                        <p className="mt-1 text-xs text-slate-500">{item.department || "未分配部门"}</p>
+                                        <p className="mt-2 text-xs text-emerald-700">可评估通过率提升：+{item.pass_gain}%</p>
+                                        <p className="mt-1 text-[11px] text-slate-500">基线 {item.baseline_pass_rate}% → 当前 {item.current_pass_rate}%</p>
+                                        <div className="mt-3 flex flex-wrap gap-2">
+                                            <Button asChild size="sm" variant="outline" className="h-8 rounded-full">
+                                                <Link href={buildWeeklyUserDetailHref({ kind: "improving", userId: item.user_id })}>
+                                                    查看详情
+                                                </Link>
+                                            </Button>
+                                        </div>
+                                    </div>
+                                )) : (
+                                    <div className="rounded-2xl border border-dashed border-slate-200 bg-white px-4 py-5 text-sm text-slate-500">
+                                        当前没有显著回升成员。
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                )}
+            </GlassCard>
 
             {/* Edit User Dialog */}
             <Dialog open={!!editingUser} onOpenChange={(open) => !open && setEditingUser(null)}>

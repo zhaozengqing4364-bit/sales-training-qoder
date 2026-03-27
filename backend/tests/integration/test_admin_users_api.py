@@ -1270,8 +1270,10 @@ async def test_user_sessions_expose_latest_manager_intervention_results_on_proje
 
     improved_result = intervention_results[str(improved_intervention.intervention_id)]
     assert improved_result["issue_family"] == "evidence_gap"
+    assert improved_result["note"] == "优先补 ROI 和客户案例证据。"
     assert improved_result["status"] == "improved"
     assert improved_result["reason"] == "issue_family_shifted"
+    assert improved_result["summary"] == "最近一次可评估训练的主问题已转向其他家族，说明这个主管重点已有改善。"
     assert improved_result["session_id"] == str(improved_session.session_id)
     assert improved_result["session_start_time"] == improved_start.isoformat()
     assert improved_result["overall_result"] == "fail"
@@ -1280,15 +1282,19 @@ async def test_user_sessions_expose_latest_manager_intervention_results_on_proje
 
     thin_result = intervention_results[str(thin_intervention.intervention_id)]
     assert thin_result["issue_family"] == "objection_response"
+    assert thin_result["note"] == "观察后续异议处理是否改善。"
     assert thin_result["status"] == "not_evaluable"
     assert thin_result["reason"] == "session_not_evaluable"
+    assert thin_result["summary"] == "最近一次已完成训练证据不足，暂时还不能判断这个主管重点是否改善。"
     assert thin_result["session_id"] == str(thin_session.session_id)
     assert thin_result["evaluable"] is False
     assert thin_result["not_evaluable_reason"] == "INSUFFICIENT_TURN_DATA"
 
     pending_result = intervention_results[str(pending_intervention.intervention_id)]
     assert pending_result["issue_family"] == "value_expression"
+    assert pending_result["note"] == "等待下一次完整训练结果。"
     assert pending_result["status"] == "pending"
     assert pending_result["reason"] == "no_completed_session_after_intervention"
+    assert pending_result["summary"] == "主管重点建立后，还没有新的已完成训练可用于判断结果。"
     assert pending_result["session_id"] is None
     assert pending_result["main_issue"] is None

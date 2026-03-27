@@ -1,6 +1,6 @@
 {
   "mode": "stabilize",
-  "current_issue_id": "M005-S04-T02",
+  "current_issue_id": "M005-S05-T01",
   "current_issue_type": "task",
   "current_issue_status": "done",
   "pending_issue_ids": [],
@@ -93,26 +93,29 @@
     "M005-S03-T03",
     "M005-S03",
     "M005-S04-T01",
-    "M005-S04-T02"
+    "M005-S04-T02",
+    "M005-S04-T03",
+    "M005-S05-T01"
   ],
   "blocked_issue_ids": [],
   "deferred_issue_ids": [],
   "last_modified_files": [
-    "web/src/app/admin/analytics/page.tsx",
+    "backend/tests/contract/test_analytics.py",
+    "backend/tests/integration/test_admin_users_api.py",
+    "backend/tests/integration/test_admin_interventions_api.py",
     "web/src/app/admin/analytics/page.test.tsx",
-    "web/src/lib/api/types.ts",
-    "web/src/lib/api/client.ts",
-    ".gsd/DECISIONS.md",
-    ".gsd/KNOWLEDGE.md",
-    ".gsd/milestones/M005/slices/S04/tasks/T02-SUMMARY.md",
+    "web/src/app/admin/users/[id]/page.test.tsx",
+    "web/src/components/admin/manager-lite-panel.test.tsx",
+    ".gsd/milestones/M005/slices/S05/tasks/T01-SUMMARY.md",
     ".codex/loop/state.json",
     ".codex/loop/log.md"
   ],
   "last_verification_commands": [
-    "cd web && npm test -- --run 'src/app/admin/analytics/page.test.tsx'"
+    "cd backend && venv/bin/python -m pytest -c pyproject.toml tests/contract/test_analytics.py tests/integration/test_admin_users_api.py tests/integration/test_admin_interventions_api.py",
+    "cd web && npm test -- --run 'src/app/admin/analytics/page.test.tsx' 'src/app/admin/users/[id]/page.test.tsx' 'src/components/admin/manager-lite-panel.test.tsx'"
   ],
-  "last_verification_result": "Fresh T02 web verification passed: the admin analytics page test suite ran green against the weekly operating-pack integration and the existing projection-backed analytics assertions.",
-  "last_success_signal": "The admin analytics route now renders a fixed 7-day weekly operating pack from /api/v1/admin/analytics/operating-pack, feeds projection-backed risk/improving lists into the manager panel, and keeps the broader overview/trend sections on their existing filters.",
+  "last_verification_result": "Fresh S05/T01 regression-pack verification passed: backend analytics/users/interventions suites ran green, and the admin analytics/user-detail/manager-lite web pack also passed after adding export, manager-lite remind, and inactive-streak drill-in coverage.",
+  "last_success_signal": "The current admin operating chain now has one focused regression pack proving analytics export, manager-lite remind, user drill-in context, and intervention review all stay on the same evidence vocabulary.",
   "last_growth_scan": null,
-  "next_action": "Proceed to M005/S04/T03: align the current admin users surfaces with the weekly operating buckets so managers can drill into specific users without leaving the same evidence vocabulary."
+  "next_action": "Proceed to M005/S05/T02 live workflow capture using the now-green admin operating-chain regression pack."
 }

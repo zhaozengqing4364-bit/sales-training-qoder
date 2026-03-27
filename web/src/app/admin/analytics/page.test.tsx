@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -80,8 +80,19 @@ vi.mock("@/components/analytics/LeaderboardTable", () => ({
 }));
 
 vi.mock("@/components/admin/manager-lite-panel", () => ({
-    ManagerLitePanel: ({ data }: { data: { not_passed: unknown[] } }) => (
-        <div>ManagerLitePanel:{data.not_passed.length}</div>
+    ManagerLitePanel: ({
+        data,
+        onRemind,
+    }: {
+        data: { not_passed: Array<{ user_id: string }> };
+        onRemind?: (userId: string) => Promise<void>;
+    }) => (
+        <div>
+            <div>ManagerLitePanel:{data.not_passed.length}</div>
+            {data.not_passed[0] ? (
+                <button onClick={() => void onRemind?.(data.not_passed[0].user_id)}>触发主管提醒</button>
+            ) : null}
+        </div>
     ),
 }));
 
@@ -547,6 +558,175 @@ describe("AnalyticsPage", () => {
         expect(screen.getByText("知识库锁定模式下检索失败，最近 3 个会话被阻断。")).toBeTruthy();
         expect(screen.getByRole("link", { name: "知识库 · 石犀产品知识库" }).getAttribute("href")).toBe("/admin/knowledge");
         expect(screen.getByText(/最近文档：竞品对比/)).toBeTruthy();
+    });
+
+    it("sends the current manager-lite reminder through the admin operating-pack surface and refreshes the page data", async () => {
+        getOverviewMock.mockResolvedValue({
+            total_users: 12,
+            active_users_today: 4,
+            active_users_week: 8,
+            total_sessions: 15,
+            sessions_today: 2,
+            completed_sessions: 15,
+            completion_rate: 100,
+            average_score: 78.4,
+            average_duration_minutes: 4.5,
+            growth: {
+                users_rate: 0,
+                sessions_rate: 15,
+                score_rate: 4,
+            },
+            evaluable_sessions: 12,
+            not_evaluable_sessions: 3,
+            score_basis: "session_evidence_projection_evaluable_only",
+            top_issue_families: [],
+            not_evaluable_reasons: [],
+        });
+        getTrendsMock.mockResolvedValue({
+            trend_data: [],
+            score_distribution: {
+                excellent: 3,
+                good: 5,
+                fair: 3,
+                poor: 1,
+            },
+            projection_summary: {
+                average_score: 78.4,
+                best_score: 92,
+                evaluable_sessions: 12,
+                not_evaluable_sessions: 3,
+                score_basis: "session_evidence_projection_evaluable_only",
+                issue_family_distribution: [],
+                not_evaluable_reasons: [],
+                repeated_main_issues: [],
+                repeated_next_goals: [],
+            },
+        });
+        getLeaderboardMock.mockResolvedValue({ leaderboard: [] });
+        getOperatingPackMock.mockResolvedValue({
+            score_basis: "session_evidence_projection_evaluable_only",
+            weekly_summary: {
+                window_days: 7,
+                window_start: "2026-03-19T00:00:00Z",
+                window_end: "2026-03-26T00:00:00Z",
+                completed_sessions: 8,
+                evaluable_sessions: 7,
+                not_evaluable_sessions: 1,
+                degraded_sessions: 1,
+                active_departments: 2,
+                at_risk_users: 1,
+                improving_users: 1,
+                top_issue_family: null,
+                top_blocker_family: null,
+                top_not_evaluable_reason: null,
+                top_degraded_reason: null,
+            },
+            cohort_issue_buckets: [],
+            department_issue_buckets: [],
+            repeated_blocker_families: [],
+            degradation_breakdown: {
+                not_evaluable_reasons: [],
+                degraded_reasons: [],
+            },
+            manager_lists: {
+                not_passed: [
+                    {
+                        user_id: "user-risk",
+                        user_name: "South Risk",
+                        department: "South",
+                        overall_result: "fail",
+                        session_id: "session-risk",
+                        session_start_time: "2026-03-25T10:00:00Z",
+                        issue_family: "value_expression",
+                    },
+                ],
+                inactive_streak: [],
+                improving: [],
+            },
+        });
+
+        render(<AnalyticsPage />);
+
+        expect(await screen.findByText("ManagerLitePanel:1")).toBeTruthy();
+
+        fireEvent.click(screen.getByRole("button", { name: "触发主管提醒" }));
+
+        await waitFor(() => {
+            expect(remindFromManagerLiteMock).toHaveBeenCalledWith({
+                user_id: "user-risk",
+                note: "请按本周训练目标完成一次练习并提交结果。",
+            });
+        });
+        await waitFor(() => {
+            expect(getOperatingPackMock).toHaveBeenCalledTimes(2);
+        });
+    });
+
+    it("exports the current analytics window through the existing admin CSV surface", async () => {
+        getOverviewMock.mockResolvedValue({
+            total_users: 12,
+            active_users_today: 4,
+            active_users_week: 8,
+            total_sessions: 15,
+            sessions_today: 2,
+            completed_sessions: 15,
+            completion_rate: 100,
+            average_score: 78.4,
+            average_duration_minutes: 4.5,
+            growth: {
+                users_rate: 0,
+                sessions_rate: 15,
+                score_rate: 4,
+            },
+            evaluable_sessions: 12,
+            not_evaluable_sessions: 3,
+            score_basis: "session_evidence_projection_evaluable_only",
+            top_issue_families: [],
+            not_evaluable_reasons: [],
+        });
+        getTrendsMock.mockResolvedValue({
+            trend_data: [],
+            score_distribution: {
+                excellent: 3,
+                good: 5,
+                fair: 3,
+                poor: 1,
+            },
+            projection_summary: {
+                average_score: 78.4,
+                best_score: 92,
+                evaluable_sessions: 12,
+                not_evaluable_sessions: 3,
+                score_basis: "session_evidence_projection_evaluable_only",
+                issue_family_distribution: [],
+                not_evaluable_reasons: [],
+                repeated_main_issues: [],
+                repeated_next_goals: [],
+            },
+        });
+        getLeaderboardMock.mockResolvedValue({ leaderboard: [] });
+
+        render(<AnalyticsPage />);
+
+        expect(await screen.findByText("当前看板口径")).toBeTruthy();
+
+        fireEvent.click(screen.getByRole("button", { name: "7天" }));
+
+        await waitFor(() => {
+            expect(getOverviewMock).toHaveBeenLastCalledWith({
+                time_range: "7d",
+                scenario_type: undefined,
+            });
+        });
+
+        fireEvent.click(screen.getByRole("button", { name: "导出报表" }));
+
+        await waitFor(() => {
+            expect(exportReportMock).toHaveBeenCalledWith({
+                time_range: "7d",
+                format: "csv",
+            });
+        });
     });
 
     it("keeps evidence-language placeholders visible when there is no stable repeated signal", async () => {

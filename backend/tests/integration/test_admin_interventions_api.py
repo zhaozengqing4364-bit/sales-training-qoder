@@ -202,8 +202,8 @@ async def test_remind_route_marks_existing_intervention_sent(
         "/api/v1/admin/interventions",
         json={
             "user_id": str(trainee_user.user_id),
-            "issue_family": "value_translation_gap",
-            "note": "先建立主管重点。",
+            "issue_family": "value_expression",
+            "note": "先建立价值表达重点。",
         },
         headers=admin_headers,
     )
@@ -214,7 +214,7 @@ async def test_remind_route_marks_existing_intervention_sent(
         json={
             "user_id": str(trainee_user.user_id),
             "intervention_id": intervention_id,
-            "note": "请本周补一次围绕客户收益翻译的练习。",
+            "note": "请本周补一次围绕价值表达的练习。",
         },
         headers=admin_headers,
     )
@@ -233,10 +233,85 @@ async def test_remind_route_marks_existing_intervention_sent(
             {"intervention_id": intervention_id},
         )
     ).mappings().one()
-    assert row["note"] == "请本周补一次围绕客户收益翻译的练习。"
+    assert row["note"] == "请本周补一次围绕价值表达的练习。"
     assert row["due_state"] == "due"
     assert row["reminder_status"] == "sent"
     assert row["reminder_sent_at"] is not None
+
+
+@pytest.mark.asyncio
+async def test_manager_lite_remind_without_intervention_id_updates_latest_open_focus(
+    async_client: AsyncClient,
+    admin_headers: dict[str, str],
+    trainee_user: User,
+    db_session: AsyncSession,
+) -> None:
+    older_response = await async_client.post(
+        "/api/v1/admin/interventions",
+        json={
+            "user_id": str(trainee_user.user_id),
+            "issue_family": "evidence_gap",
+            "note": "先补 ROI 和客户案例证据。",
+        },
+        headers=admin_headers,
+    )
+    older_id = older_response.json()["data"]["intervention_id"]
+
+    latest_response = await async_client.post(
+        "/api/v1/admin/interventions",
+        json={
+            "user_id": str(trainee_user.user_id),
+            "issue_family": "objection_response",
+            "note": "下一轮继续把异议回应说完整。",
+        },
+        headers=admin_headers,
+    )
+    latest_id = latest_response.json()["data"]["intervention_id"]
+
+    remind_response = await async_client.post(
+        "/api/v1/admin/interventions/remind",
+        json={
+            "user_id": str(trainee_user.user_id),
+            "note": "请按本周主管重点完成一次围绕异议回应的复练。",
+        },
+        headers=admin_headers,
+    )
+
+    assert remind_response.status_code == 200
+    remind_data = remind_response.json()["data"]
+    assert remind_data["sent"] is True
+    assert remind_data["user_id"] == str(trainee_user.user_id)
+    assert remind_data["intervention_id"] == latest_id
+
+    latest_row = (
+        await db_session.execute(
+            text(
+                "SELECT issue_family, note, due_state, reminder_status, reminder_sent_at "
+                "FROM manager_interventions WHERE intervention_id = :intervention_id"
+            ),
+            {"intervention_id": latest_id},
+        )
+    ).mappings().one()
+    assert latest_row["issue_family"] == "objection_response"
+    assert latest_row["note"] == "请按本周主管重点完成一次围绕异议回应的复练。"
+    assert latest_row["due_state"] == "due"
+    assert latest_row["reminder_status"] == "sent"
+    assert latest_row["reminder_sent_at"] is not None
+
+    older_row = (
+        await db_session.execute(
+            text(
+                "SELECT issue_family, note, due_state, reminder_status, reminder_sent_at "
+                "FROM manager_interventions WHERE intervention_id = :intervention_id"
+            ),
+            {"intervention_id": older_id},
+        )
+    ).mappings().one()
+    assert older_row["issue_family"] == "evidence_gap"
+    assert older_row["note"] == "先补 ROI 和客户案例证据。"
+    assert older_row["due_state"] == "pending"
+    assert older_row["reminder_status"] == "not_sent"
+    assert older_row["reminder_sent_at"] is None
 
 
 @pytest.mark.asyncio
@@ -251,7 +326,7 @@ async def test_admin_can_link_intervention_to_resolving_session(
         "/api/v1/admin/interventions",
         json={
             "user_id": str(trainee_user.user_id),
-            "issue_family": "objection_handling_gap",
+            "issue_family": "objection_response",
             "note": "围绕价格异议做一次复练。",
         },
         headers=admin_headers,

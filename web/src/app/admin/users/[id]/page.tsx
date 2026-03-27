@@ -143,6 +143,57 @@ const EMPTY_SESSIONS: UserSessionsResponse = {
     manager_intervention_results: [],
 };
 
+type FocusBucketKind = "not_passed" | "inactive_streak" | "improving";
+
+type FocusBucketContext = {
+    badge: string;
+    description: string;
+    issueFamilyLabel?: string | null;
+    note?: string | null;
+};
+
+function isFocusBucketKind(value: string | null): value is FocusBucketKind {
+    return value === "not_passed" || value === "inactive_streak" || value === "improving";
+}
+
+function buildFocusBucketContext(input: {
+    focusBucket: string | null;
+    focusIssueFamily: string | null;
+    focusNote: string | null;
+}): FocusBucketContext | null {
+    if (!isFocusBucketKind(input.focusBucket)) {
+        return null;
+    }
+
+    const issueFamilyLabel = formatIssueTypeLabel(input.focusIssueFamily) || input.focusIssueFamily;
+    const note = input.focusNote?.trim() || null;
+
+    if (input.focusBucket === "not_passed") {
+        return {
+            badge: "本周风险成员",
+            description: issueFamilyLabel
+                ? `当前这条 drill-in 仍落在「${issueFamilyLabel}」这个问题家族。`
+                : "当前这条 drill-in 来自本周风险名单，建议先对照最近统一报告再决定主管动作。",
+            issueFamilyLabel,
+            note,
+        };
+    }
+
+    if (input.focusBucket === "inactive_streak") {
+        return {
+            badge: "本周连续未练",
+            description: "当前这位成员来自本周连续未练名单，先确认节奏恢复，再决定是否补主管重点。",
+            note,
+        };
+    }
+
+    return {
+        badge: "本周显著回升",
+        description: "当前这位成员来自本周显著回升名单，适合复盘最近有效动作并固化下一轮训练。",
+        note,
+    };
+}
+
 function hasEvaluableProgress(progress: UserProgressResponse | null): progress is UserProgressResponse {
     return Boolean(progress && progress.evaluable_session_count > 0 && progress.trend_data.length > 0);
 }
@@ -349,16 +400,18 @@ export default function UserDetailPage() {
     const [isSavingIntervention, setIsSavingIntervention] = useState(false);
     const [remindingInterventionId, setRemindingInterventionId] = useState<string | null>(null);
 
+    const focusBucket = searchParams.get("focusBucket");
+    const focusIssueFamily = searchParams.get("focusIssueFamily");
+    const focusNote = searchParams.get("focusNote");
+
     useEffect(() => {
-        const focusIssueFamily = searchParams.get("focusIssueFamily");
-        const focusNote = searchParams.get("focusNote");
         if (focusIssueFamily) {
             setInterventionIssueFamily(focusIssueFamily);
         }
         if (focusNote) {
             setInterventionNote(focusNote);
         }
-    }, [searchParams]);
+    }, [focusIssueFamily, focusNote]);
 
     const loadData = useCallback(async () => {
         setIsLoading(true);
@@ -623,6 +676,11 @@ export default function UserDetailPage() {
     const latestTrendPoint = hasEvaluableProgress(progress)
         ? progress.trend_data[progress.trend_data.length - 1]
         : null;
+    const drillInContext = buildFocusBucketContext({
+        focusBucket,
+        focusIssueFamily,
+        focusNote,
+    });
     const interventionResultById = new Map(
         (sessions.manager_intervention_results || []).map((item) => [item.intervention_id, item]),
     );
@@ -757,6 +815,35 @@ export default function UserDetailPage() {
                     </p>
                 </GlassCard>
             </div>
+
+            {drillInContext ? (
+                <GlassCard className="p-6 border border-indigo-100 bg-indigo-50/70">
+                    <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                        <div>
+                            <div className="flex flex-wrap items-center gap-2">
+                                <span className="inline-flex rounded-full bg-white px-3 py-1 text-xs font-semibold text-indigo-700">
+                                    {drillInContext.badge}
+                                </span>
+                                {drillInContext.issueFamilyLabel ? (
+                                    <span className="inline-flex rounded-full bg-white px-3 py-1 text-xs font-medium text-slate-700">
+                                        问题家族 · {drillInContext.issueFamilyLabel}
+                                    </span>
+                                ) : null}
+                            </div>
+                            <h2 className="mt-4 text-lg font-bold text-slate-900 text-balance">本周经营名单来源</h2>
+                            <p className="mt-2 text-sm text-slate-600 text-pretty">{drillInContext.description}</p>
+                            {drillInContext.note ? (
+                                <p className="mt-2 text-sm font-medium text-slate-700 text-pretty">
+                                    建议说明：{drillInContext.note}
+                                </p>
+                            ) : null}
+                        </div>
+                        <Button asChild variant="outline" size="sm" className="rounded-full">
+                            <Link href="/admin/users">返回用户列表</Link>
+                        </Button>
+                    </div>
+                </GlassCard>
+            ) : null}
 
             <GlassCard className="p-6">
                 <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">

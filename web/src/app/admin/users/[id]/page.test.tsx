@@ -433,6 +433,39 @@ describe("UserDetailPage", () => {
         expect(reportLink.getAttribute("href")).toBe("/practice/session-1/report");
     });
 
+    it("shows the weekly operating drill-in context when the detail page is opened from a current risk bucket", async () => {
+        useSearchParamsMock.mockReturnValue(
+            new URLSearchParams("focusBucket=not_passed&focusIssueFamily=objection_response&focusNote=%E5%85%88%E6%8A%8A%E9%A3%8E%E9%99%A9%E5%9B%9E%E5%BA%94%E8%A1%A5%E5%85%A8%E3%80%82"),
+        );
+
+        render(<UserDetailPage />);
+
+        expect(await screen.findByText("本周经营名单来源")).toBeTruthy();
+        expect(screen.getByText("本周风险成员")).toBeTruthy();
+        expect(screen.getByText("当前这条 drill-in 仍落在「异议回应」这个问题家族。")).toBeTruthy();
+        expect(screen.getByText("建议说明：先把风险回应补全。"))
+            .toBeTruthy();
+
+        const noteInput = screen.getByLabelText("主管说明") as HTMLTextAreaElement;
+        expect(noteInput.value).toBe("先把风险回应补全。");
+    });
+
+    it("shows the inactive-streak drill-in context without overwriting the current intervention note", async () => {
+        useSearchParamsMock.mockReturnValue(
+            new URLSearchParams("focusBucket=inactive_streak"),
+        );
+
+        render(<UserDetailPage />);
+
+        expect(await screen.findByText("本周经营名单来源")).toBeTruthy();
+        expect(screen.getByText("本周连续未练")).toBeTruthy();
+        expect(screen.getByText("当前这位成员来自本周连续未练名单，先确认节奏恢复，再决定是否补主管重点。"))
+            .toBeTruthy();
+
+        const noteInput = screen.getByLabelText("主管说明") as HTMLTextAreaElement;
+        expect(noteInput.value).toBe("");
+    });
+
     it("lets supervisors inspect persisted interventions and create a new focus on the current detail page", async () => {
         useSearchParamsMock.mockReturnValue(
             new URLSearchParams("focusIssueFamily=evidence_gap&focusNote=先补%20ROI%20与客户案例证据。"),

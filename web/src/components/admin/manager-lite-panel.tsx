@@ -21,17 +21,26 @@ interface ManagerLitePanelProps {
   getUserHref?: (args: ManagerLiteLinkArgs) => string;
 }
 
-const DEFAULT_NOT_PASSED_NOTE = "先对照最近统一报告补证据";
+const DEFAULT_NOT_PASSED_NOTE_BY_ISSUE_FAMILY: Record<string, string> = {
+  value_expression: "先对照最近统一报告把价值表达说具体。",
+  objection_response: "先对照最近统一报告把异议回应说完整。",
+  structure_gap: "先对照最近统一报告把结构步骤说完整。",
+  evidence_gap: "先对照最近统一报告补证据。",
+};
+
+function getDefaultNotPassedNote(issueFamily?: string): string {
+  return DEFAULT_NOT_PASSED_NOTE_BY_ISSUE_FAMILY[issueFamily || ""] || DEFAULT_NOT_PASSED_NOTE_BY_ISSUE_FAMILY.evidence_gap;
+}
 
 function defaultGetUserHref({ kind, userId, issueFamily, note }: ManagerLiteLinkArgs): string {
   const basePath = `/admin/users/${userId}`;
-  if (kind !== "not_passed") {
-    return basePath;
+  const searchParams = new URLSearchParams({ focusBucket: kind });
+
+  if (kind === "not_passed") {
+    searchParams.set("focusIssueFamily", issueFamily || "evidence_gap");
+    searchParams.set("focusNote", note || getDefaultNotPassedNote(issueFamily));
   }
 
-  const searchParams = new URLSearchParams();
-  searchParams.set("focusIssueFamily", issueFamily || "evidence_gap");
-  searchParams.set("focusNote", note || DEFAULT_NOT_PASSED_NOTE);
   return `${basePath}?${searchParams.toString()}`;
 }
 
@@ -115,8 +124,8 @@ export function ManagerLitePanel({ data, onRemind, getUserHref = defaultGetUserH
                         href={getUserHref({
                           kind: "not_passed",
                           userId: item.user_id,
-                          issueFamily: "evidence_gap",
-                          note: DEFAULT_NOT_PASSED_NOTE,
+                          issueFamily: item.issue_family || "evidence_gap",
+                          note: getDefaultNotPassedNote(item.issue_family || undefined),
                         })}
                       >
                         查看并设重点

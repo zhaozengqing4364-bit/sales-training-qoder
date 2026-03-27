@@ -176,9 +176,44 @@ class TestAnalyticsContract:
             assert isinstance(data.get("repeated_blocker_families", []), list)
             assert isinstance(data.get("degradation_breakdown", {}), dict)
             manager_lists = data.get("manager_lists", {})
-            assert isinstance(manager_lists.get("not_passed", []), list)
-            assert isinstance(manager_lists.get("inactive_streak", []), list)
-            assert isinstance(manager_lists.get("improving", []), list)
+            not_passed = manager_lists.get("not_passed", [])
+            inactive_streak = manager_lists.get("inactive_streak", [])
+            improving = manager_lists.get("improving", [])
+            assert isinstance(not_passed, list)
+            assert isinstance(inactive_streak, list)
+            assert isinstance(improving, list)
+            if not_passed:
+                first_risk = not_passed[0]
+                assert "issue_family" in first_risk
+                assert "session_id" in first_risk
+                assert "session_start_time" in first_risk
+            if inactive_streak:
+                assert "inactive_days" in inactive_streak[0]
+            if improving:
+                assert "pass_gain" in improving[0]
+
+    async def test_export_admin_analytics_contract(
+        self,
+        async_client: AsyncClient,
+        auth_headers: dict,
+    ):
+        """Test admin analytics export stays on the current CSV surface."""
+        response = await async_client.get(
+            "/api/v1/admin/analytics/export?time_range=7d&format=csv",
+            headers=auth_headers,
+        )
+        assert response.status_code in [200, 401, 403]
+
+        if response.status_code == 200:
+            assert "text/csv" in response.headers.get("content-type", "")
+            assert "attachment; filename=analytics_report_" in response.headers.get(
+                "content-disposition",
+                "",
+            )
+            body = response.text
+            assert "=== 系统概览 ===" in body
+            assert "=== 分数分布 ===" in body
+            assert "=== 用户排行榜 ===" in body
 
     async def test_get_my_rank(
         self,

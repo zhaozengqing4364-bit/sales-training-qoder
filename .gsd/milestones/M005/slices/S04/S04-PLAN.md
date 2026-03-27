@@ -12,7 +12,7 @@
   - Estimate: 90m
   - Files: web/src/app/admin/analytics/page.tsx, web/src/app/admin/analytics/page.test.tsx, web/src/lib/api/types.ts
   - Verify: cd web && npm test -- --run 'src/app/admin/analytics/page.test.tsx'
-- [ ] **T03: Let current admin users surfaces drill into the weekly operating buckets** — Keep the current users list/detail surfaces aligned with the new cohort operating view so managers can drill from a weekly bucket into specific users without losing the same evidence vocabulary. Reuse current admin users pages and focused tests.
+- [x] **T03: Aligned admin users drill-ins with the weekly operating pack by preserving bucket and issue-family context through manager-lite, /admin/users, and /admin/users/[id].** — Keep the current users list/detail surfaces aligned with the new cohort operating view so managers can drill from a weekly bucket into specific users without losing the same evidence vocabulary. Reuse current admin users pages and focused tests.
   - Estimate: 75m
   - Files: web/src/app/admin/users/page.tsx, web/src/app/admin/users/[id]/page.tsx, web/src/app/admin/users/[id]/page.test.tsx
   - Verify: cd web && npm test -- --run 'src/app/admin/users/[id]/page.test.tsx'
