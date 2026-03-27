@@ -1,7 +1,7 @@
 {
-  "mode": "stabilize",
-  "current_issue_id": "M005-S05",
-  "current_issue_type": "slice",
+  "mode": "grow",
+  "current_issue_id": "M006-S01-T02",
+  "current_issue_type": "task",
   "current_issue_status": "done",
   "pending_issue_ids": [],
   "completed_issue_ids": [
@@ -99,31 +99,27 @@
     "M005-S05-T02",
     "M005-S04",
     "M005-S05-T03",
-    "M005-S05"
+    "M005-S05",
+    "M006-S01-T01",
+    "M006-S01-T02"
   ],
   "blocked_issue_ids": [],
   "deferred_issue_ids": [],
   "last_modified_files": [
-    ".gsd/milestones/M005/slices/S05/S05-SUMMARY.md",
-    ".gsd/milestones/M005/slices/S05/S05-UAT.md",
-    ".gsd/milestones/M005/M005-ROADMAP.md",
+    "web/src/lib/admin/drill-in.ts",
+    "web/src/app/admin/users/[id]/page.test.tsx",
     ".gsd/DECISIONS.md",
-    ".gsd/PROJECT.md",
-    ".gsd/milestones/M005/slices/S05/tasks/T01-VERIFY.json",
-    ".gsd/milestones/M005/slices/S05/tasks/T02-VERIFY.json",
-    ".gsd/milestones/M005/slices/S05/tasks/T03-VERIFY.json",
+    ".gsd/milestones/M006/slices/S01/tasks/T02-SUMMARY.md",
     ".codex/loop/state.json",
     ".codex/loop/log.md"
   ],
   "last_verification_commands": [
-    "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/contract/test_analytics.py backend/tests/integration/test_admin_users_api.py backend/tests/integration/test_admin_interventions_api.py",
-    "npm --prefix web test -- --run 'src/app/admin/analytics/page.test.tsx' 'src/app/admin/users/[id]/page.test.tsx' 'src/components/admin/manager-lite-panel.test.tsx'",
-    "test -s .gsd/milestones/M005/slices/S05/S05-UAT.md",
-    "rg -n \"export|permission|weekly|drill-in\" .gsd/milestones/M005/slices/S05/tasks/T03-PLAN.md",
-    "lsp diagnostics: web/src/app/admin/analytics/page.tsx, web/src/components/admin/manager-lite-panel.tsx, backend/src/admin/api/analytics.py, backend/src/main.py"
+    "cd web && pnpm dlx npm@11.6.1 test -- --run 'src/app/admin/users/[id]/page.test.tsx'",
+    "cd web && pnpm dlx npm@11.6.1 test -- --run 'src/lib/admin/drill-in.test.ts' 'src/app/admin/users/[id]/page.test.tsx'",
+    "lsp diagnostics: web/src/lib/admin/drill-in.ts, web/src/app/admin/users/\\[id\\]/page.tsx, web/src/app/admin/users/\\[id\\]/page.test.tsx"
   ],
-  "last_verification_result": "Fresh slice-close verification passed: 32 backend tests and 15 web tests passed, the S05 UAT artifact is non-empty, the T03 export/permission guardrails are present, and LSP diagnostics were clean on the key analytics/admin files. The stale T01-T03 VERIFY artifacts were also rewritten so auto-mode no longer reuses false failures.",
-  "last_success_signal": "S05 is complete: one supervisor can start on /admin/analytics, act on /admin/users/{id}, and review the resulting session on canonical /practice/{sessionId}/report and replay while export and admin-only RBAC stay on the shipped analytics route family.",
+  "last_verification_result": "Fresh T02 verification passed: the focused user-detail page suite and the shared drill-in helper + page regression both passed, and LSP diagnostics were clean on the helper plus the user-detail page/test files. A live browser spot-check was attempted on the local stack, but admin auth did not persist through the web server boundary after dev-login, so the real-route proof remained blocked by local session state rather than the drill-in change.",
+  "last_success_signal": "Admin user-detail now derives the same not-passed default guidance note from the shared drill-in helper on the read side, so partial/manual risk drill-ins still prefill the supervisor form and banner copy consistently with launcher-built URLs.",
   "last_growth_scan": null,
-  "next_action": "Proceed to roadmap reassessment / milestone close-out for M005 using the S05 summary and UAT artifacts."
+  "next_action": "Stop after one item. If continuing M006, proceed to S01/T03 to extract the shared linked-asset parser for analytics and user-detail."
 }

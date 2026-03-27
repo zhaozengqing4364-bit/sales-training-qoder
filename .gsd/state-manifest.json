@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "exported_at": "2026-03-27T02:14:13.851Z",
+  "exported_at": "2026-03-27T03:28:21.383Z",
   "milestones": [
     {
       "id": "M001",
@@ -258,6 +258,76 @@
       ],
       "requirement_coverage": "Covers R012 directly by turning existing admin entrypoints into a sustainable operating chain. Partially advances deferred manager-workflow work under R017 without jumping to broad organization tooling. Leaves mobile and external-system expansion (R018/R019) as later boundary work rather than this milestone’s core scope.",
       "boundary_map_markdown": "### S01 → S02\n\nProduces:\n- A unified admin analytics / user-drill-in semantic baseline on the current evidence line.\n- Shared issue-family, evaluability, degradation, and score semantics reused by intervention workflows.\n\nConsumes:\n- nothing (first slice)\n\n### S01 → S03\n\nProduces:\n- A trustworthy usage / impact baseline that asset-governance screens can reuse.\n- Alignment between admin analytics and learner/supervisor evidence surfaces.\n\nConsumes:\n- nothing (first slice)\n\n### S02 → S04\n\nProduces:\n- Focus assignment / reminder / status / result-linkage contracts on the current admin routes.\n- Manager actions that can be aggregated into a weekly operating view.\n\nConsumes from S01:\n- Unified admin semantics.\n\n### S03 → S04\n\nProduces:\n- Asset health / impact / recent-change context that can be shown in weekly operating packs.\n- A governance line for knowledge/persona/presentation/runtime assets.\n\nConsumes from S01:\n- Usage / impact baseline.\n\n### S04 → S05\n\nProduces:\n- A real team workflow on the current admin entrypoints: analytics → drill-in → action → review.\n- Operating-pack outputs and acceptance surfaces.\n\nConsumes from S02:\n- Manager workflow contract.\n\nConsumes from S03:\n- Asset-governance surfaces."
+    },
+    {
+      "id": "M006",
+      "title": "",
+      "status": "queued",
+      "depends_on": [],
+      "created_at": "2026-03-27T02:35:07.560Z",
+      "completed_at": null,
+      "vision": "基于 M005 已验证的后台治理链路，不再继续加新页面，而是把现有 admin analytics / users / asset pages 背后的共享 contract、shared parser、service seam、asset registry 和 regression proof 抽出来，降低后续新增 admin 功能、资产类型和治理视图时的复制成本与语义漂移风险。",
+      "success_criteria": [
+        "Current admin drill-in context and linked-asset parsing are each owned by one shared frontend seam reused by the shipped admin route family.",
+        "`governance_summary` and `linked_asset_changes` travel through typed backend/client/UI contracts instead of page-local weak parsing.",
+        "Supervisor intervention write-side rules and latest-evaluable result semantics are extracted behind dedicated services with no behavior drift on current APIs/pages.",
+        "Current asset governance and linked-asset consumers resolve the existing four asset types through one registry/adapter seam.",
+        "A full backend + web regression pack proves the refactor preserves the validated M005 admin route family while lowering extension cost for future work."
+      ],
+      "key_risks": [
+        {
+          "risk": "Typing and parser refactors could silently drift validated M005 admin semantics even if pages still render.",
+          "whyItMatters": "R012 is already validated; M006 must harden reuse without weakening truthful score/evaluability/governance behavior."
+        },
+        {
+          "risk": "Supervisor-workflow extraction could over-generalize `manager_interventions` and delay practical value.",
+          "whyItMatters": "The current chain works because it is minimal and route-anchored; an abstract-but-wrong workflow engine would add complexity without helping future extension."
+        },
+        {
+          "risk": "Registry/adapter work could create another layer of indirection without actually lowering extension cost.",
+          "whyItMatters": "If adding a new asset type or drill-in entry still requires multi-page edits, the refactor would only hide duplication rather than remove it."
+        }
+      ],
+      "proof_strategy": [
+        {
+          "riskOrUnknown": "Can frontend admin drill-in and linked-asset consumption become single-source helpers without behavior drift?",
+          "retireIn": "S01",
+          "whatWillBeProven": "Manager-lite, users list, analytics, and user detail all build/parse the same current-route context and linked-asset structures through shared helpers, with focused web regression proof."
+        },
+        {
+          "riskOrUnknown": "Can governance and linked-asset contracts be made end-to-end typed instead of page-local `Record<string, unknown>` parsing?",
+          "retireIn": "S02",
+          "whatWillBeProven": "Backend schemas, API client normalization, and admin UI components share typed governance/linked-asset contracts while existing asset pages and analytics/user detail behavior stay intact."
+        },
+        {
+          "riskOrUnknown": "Can supervisor workflow rules be extracted from routes without breaking the latest-evaluable result semantics?",
+          "retireIn": "S03",
+          "whatWillBeProven": "Create/update/remind/result-resolution logic moves behind services while integration tests still prove latest evaluable completed session wins over thin later sessions."
+        },
+        {
+          "riskOrUnknown": "Will a shared asset registry actually reduce future change surface across current asset types?",
+          "retireIn": "S04",
+          "whatWillBeProven": "Knowledge/persona/presentation/runtime all resolve labels, admin paths, and governance references through one registry/adapter seam, backed by support/runtime and asset-governance tests."
+        },
+        {
+          "riskOrUnknown": "Will the refactored seams still support the full shipped admin route family without drift?",
+          "retireIn": "S05",
+          "whatWillBeProven": "A full backend + web regression pack passes on current M005 admin surfaces after pages switch to shared adapters/hooks."
+        }
+      ],
+      "verification_contract": "Verification must prove behavior preservation, not just file movement: focused web tests for manager-lite / analytics / users / user-detail must stay green while shared helpers replace local copies; backend integration/contract tests must confirm admin analytics, interventions, asset governance, and support runtime contracts retain the same semantics after service/schema extraction.",
+      "verification_integration": "Integration proof stays on the current shipped route family: `/admin/analytics*`, `/admin/users*`, `/admin/knowledge`, `/admin/personas`, `/admin/presentations`, and `/admin/voice-runtime`. Every slice must close by showing the new seam is actually consumed by those current routes/pages, not merely introduced alongside them.",
+      "verification_operational": "Operationally, the milestone is only done if a future extension point gets cheaper in a measurable way: adding a new drill-in entry should touch one shared drill-in helper, and adding a new asset type should primarily touch one registry/adapter seam plus tests instead of multiple pages/services.",
+      "verification_uat": "UAT should replay the current M005 supervisor/operator loop after the refactor: weekly operating-pack → user drill-in → focus/reminder → canonical report/replay review, plus asset-page governance and runtime-fault linked-asset inspection. The goal is to prove that current operators see the same behavior while the implementation underneath becomes more reusable.",
+      "definition_of_done": [
+        "Current admin drill-in context, linked-asset parsing, and governance summary shapes each have one shared source of truth instead of page-local duplicates.",
+        "Backend write-side intervention rules and read-side intervention-result rules live behind dedicated service seams, not primarily inside route handlers.",
+        "Current four asset types resolve labels/admin paths/governance references through a shared registry/adapter seam.",
+        "Current admin pages consume shared adapters/helpers for operating-pack, runtime-fault-linked assets, and user drill-in context without changing shipped behavior.",
+        "Focused backend/web regression packs for M005 surfaces pass after the refactor, and the new seams are documented in project knowledge/research artifacts."
+      ],
+      "requirement_coverage": "No new capability requirement is introduced. M006 hardens the architecture behind validated R012 so future admin/governance additions can extend existing seams instead of copying page-local logic. The milestone also reduces drift risk for future work that reuses the same projection-backed evidence line, supervisor workflow semantics, and asset-governance contracts.",
+      "boundary_map_markdown": "## In Scope\n- **Backend shared seams**\n  - `backend/src/common/analytics/*`\n  - `backend/src/support/services/*`\n  - `backend/src/admin/api/*`\n  - shared response schemas under `backend/src/common/*/schemas.py` and related admin/support contracts\n- **Frontend shared seams**\n  - `web/src/lib/api/*`\n  - new shared admin helpers/adapters under `web/src/lib/admin/*`\n  - `web/src/components/admin/*`\n  - current admin pages under `web/src/app/admin/*`\n- **Proof surfaces**\n  - current `/admin/analytics*`, `/admin/users*`, `/admin/knowledge`, `/admin/personas`, `/admin/presentations`, `/admin/voice-runtime`\n\n## Out of Scope\n- No new standalone admin console or new route family\n- No learner-facing route redesign\n- No new external notification provider\n- No generic workflow engine or plugin platform beyond seams needed by current routes\n- No change to current evidence semantics except preserving and hardening them through shared abstractions"
     }
   ],
   "slices": [
@@ -607,6 +677,116 @@
       "proof_level": "final-assembly",
       "integration_closure": "Exercise the real admin analytics/users/intervention/report/replay surfaces plus current export path. No external systems and no sidecar acceptance app.",
       "observability_impact": "Live admin UAT artifacts, analytics/user/intervention regressions, and export/permission checks become the release proof for M005. The workflow must stay inspectable on current routes.",
+      "sequence": 0,
+      "replan_triggered_at": null
+    },
+    {
+      "milestone_id": "M006",
+      "id": "S01",
+      "title": "前端 drill-in 与 linked-asset 共享协议收口",
+      "status": "pending",
+      "risk": "Medium — the route family is stable today, so the main risk is accidental behavior drift while deduplicating page code.",
+      "depends": [],
+      "demo": "Show manager-lite and users-list drill-ins generating the same `/admin/users/[id]?focusBucket=...` context, and show analytics/user-detail linked asset sections both rendered from the same shared helper path.",
+      "created_at": "2026-03-27T02:39:16.480Z",
+      "completed_at": null,
+      "full_summary_md": "",
+      "full_uat_md": "",
+      "goal": "Extract the current admin drill-in context (`focusBucket` / `focusIssueFamily` / `focusNote`) and linked-asset parsing/labeling into single-source frontend helpers reused by the shipped admin pages.",
+      "success_criteria": "- `web/src/lib/admin/drill-in.*` owns `focusBucket` parsing/building and default note logic.\n- `web/src/lib/admin/linked-assets.*` owns linked asset typing/parsing/labeling.\n- Current admin pages and manager-lite no longer maintain their own duplicate drill-in or linked-asset helpers.\n- Existing focused web tests still prove the same shipped behavior.",
+      "proof_level": "Focused web regression + helper tests",
+      "integration_closure": "`/admin/analytics`, `/admin/users`, `/admin/users/[id]`, and `ManagerLitePanel` all consume one shared drill-in and linked-asset helper layer instead of maintaining local parsers/builders.",
+      "observability_impact": "Adds focused helper tests and makes future drift visible by removing duplicate page-local parsing logic.",
+      "sequence": 0,
+      "replan_triggered_at": null
+    },
+    {
+      "milestone_id": "M006",
+      "id": "S02",
+      "title": "治理与 admin contract 强类型化",
+      "status": "pending",
+      "risk": "High — typing changes cross backend schema, client normalize, and UI consumption layers.",
+      "depends": [
+        "S01"
+      ],
+      "demo": "Inspect current knowledge/persona/presentation/runtime asset rows and analytics/user-detail fault sections using one typed governance / linked-asset contract from backend schema through client normalization to UI props.",
+      "created_at": "2026-03-27T02:39:16.480Z",
+      "completed_at": null,
+      "full_summary_md": "",
+      "full_uat_md": "",
+      "goal": "Replace weak governance/admin payload parsing with shared typed contracts for `governance_summary` and `linked_asset_changes` across backend schemas, API client normalization, and admin UI components.",
+      "success_criteria": "- `governance_summary` reaches current admin pages through shared typed contracts.\n- `linked_asset_changes` is represented by one typed structure across support/runtime and admin consumers.\n- Asset governance pages keep current rendering behavior after the type hardening.\n- Contract + focused UI tests lock the typed path.",
+      "proof_level": "Backend contract + focused web regression",
+      "integration_closure": "Asset governance pages, analytics, and user detail all consume one typed contract path instead of page-local `Record<string, unknown>` parsing.",
+      "observability_impact": "Contract tests and typed normalizers make schema drift fail early instead of appearing as page-specific runtime parsing bugs.",
+      "sequence": 0,
+      "replan_triggered_at": null
+    },
+    {
+      "milestone_id": "M006",
+      "id": "S03",
+      "title": "主管 workflow service seam 抽取",
+      "status": "pending",
+      "risk": "Medium-high — over-generalizing the current minimal workflow would add complexity without adding reuse.",
+      "depends": [
+        "S01"
+      ],
+      "demo": "Create/remind/read supervisor interventions from the current `/admin/users/[id]` surface while the route handlers delegate workflow logic to extracted services and still show the same result semantics.",
+      "created_at": "2026-03-27T02:39:16.480Z",
+      "completed_at": null,
+      "full_summary_md": "",
+      "full_uat_md": "",
+      "goal": "Extract supervisor intervention write-side rules and read-side result semantics into dedicated service seams without changing the current API/UI contract.",
+      "success_criteria": "- A dedicated service owns create/update/remind workflow rules for `manager_interventions`.\n- Read-side intervention-result resolution is isolated from generic route glue and still prefers the latest evaluable completed session.\n- Existing admin intervention and user-session integration tests continue to pass.\n- User-detail focused tests confirm no UI behavior drift.",
+      "proof_level": "Backend integration + focused user-detail regression",
+      "integration_closure": "`/admin/interventions` and `/admin/users/[id]` keep their shipped payloads and behavior while route handlers delegate to dedicated workflow/result services.",
+      "observability_impact": "Service-level tests make latest-evaluable result selection and reminder-state transitions easier to verify independently of route wiring.",
+      "sequence": 0,
+      "replan_triggered_at": null
+    },
+    {
+      "milestone_id": "M006",
+      "id": "S04",
+      "title": "资产 registry 与 adapter seam 收口",
+      "status": "pending",
+      "risk": "Medium — the seam must reduce edit surface for new asset types, not just move switch statements elsewhere.",
+      "depends": [
+        "S02"
+      ],
+      "demo": "Show the current four asset types resolving governance labels, admin paths, and linked-change references through one registry/adapter seam, with asset pages and fault-linked views still rendering correctly.",
+      "created_at": "2026-03-27T02:39:16.480Z",
+      "completed_at": null,
+      "full_summary_md": "",
+      "full_uat_md": "",
+      "goal": "Introduce a shared asset registry/adapter seam so governance summaries, linked asset changes, and admin-path labeling for current asset types are not spread across page/service-specific conditionals.",
+      "success_criteria": "- Knowledge, persona, presentation, and runtime profile mappings live in one registry/adapter seam.\n- `RuntimeStatusService` and frontend linked-asset display both consume shared asset metadata rather than page-local mappings.\n- Adding a new asset type is reduced to registry + tests instead of multi-page edits.\n- Current governance pages and runtime-fault views still show correct labels and admin paths.",
+      "proof_level": "Backend service/contract + focused asset-page regression",
+      "integration_closure": "Runtime governance builders, support fault enrichment, and frontend linked-asset display all resolve current asset types through one registry/adapter model.",
+      "observability_impact": "Registry tests and support/runtime + asset governance regressions make extension cost visible and constrain future drift.",
+      "sequence": 0,
+      "replan_triggered_at": null
+    },
+    {
+      "milestone_id": "M006",
+      "id": "S05",
+      "title": "共享 admin read-model adapter 与全链回归证明",
+      "status": "pending",
+      "risk": "Medium — if adapters are too generic, they will add indirection without removing real duplication.",
+      "depends": [
+        "S02",
+        "S03",
+        "S04"
+      ],
+      "demo": "Rerun the current M005 admin regression pack after migrating analytics, users list, and user detail to shared adapters/hooks, proving the route family still behaves the same while duplication drops.",
+      "created_at": "2026-03-27T02:39:16.480Z",
+      "completed_at": null,
+      "full_summary_md": "",
+      "full_uat_md": "",
+      "goal": "Move remaining page-level admin read-model glue into shared adapters/hooks and prove the full shipped admin route family still passes regression after the seam refactor.",
+      "success_criteria": "- Shared admin adapters/hooks own current operating-pack, user sessions/intervention results, and runtime fault enrichment derivations.\n- Current admin pages stop duplicating normalize/derive code that now belongs in the shared adapter layer.\n- Full backend + web regression suites pass on the current M005 surfaces.\n- Knowledge/research artifacts document the new seams for the next milestone.",
+      "proof_level": "Full admin regression pack",
+      "integration_closure": "Analytics, users list, and user detail assemble their current read models from shared adapters/hooks for operating-pack, runtime-fault-linked assets, and user-session/intervention derivations.",
+      "observability_impact": "Establishes one repo-safe regression pack and shared adapter surface for future admin extensions.",
       "sequence": 0,
       "replan_triggered_at": null
     }
@@ -3035,6 +3215,647 @@
       "observability_impact": "",
       "full_plan_md": "",
       "sequence": 0
+    },
+    {
+      "milestone_id": "M006",
+      "slice_id": "S01",
+      "id": "T01",
+      "title": "Extracted a shared admin drill-in href builder and migrated manager-lite plus users-list launchers onto it without changing the shipped route contract.",
+      "status": "complete",
+      "one_liner": "Extracted a shared admin drill-in href builder and migrated manager-lite plus users-list launchers onto it without changing the shipped route contract.",
+      "narrative": "Executed M006/S01/T01 with test-first flow. I first added a new helper test file `web/src/lib/admin/drill-in.test.ts` that asserted the existing not-passed, inactive-streak, and improving drill-in URLs plus the shared default evidence-gap note. Running that test failed immediately because the helper module did not exist yet, which confirmed the new seam was actually under test. I then implemented `web/src/lib/admin/drill-in.ts` with the shared bucket type, default-note resolution, and href builder, and migrated both `ManagerLitePanel` and the weekly-manager-list section of `web/src/app/admin/users/page.tsx` to call that helper instead of keeping separate page-local builders. No route shape or wording changed; the work only removed duplicated builder logic and made the URL contract single-source. After the change, the new helper tests passed, the existing manager-lite regression passed unchanged, and LSP diagnostics were clean on the touched files.",
+      "verification_result": "Fresh verification passed. The new helper contract test `cd web && pnpm dlx npm@11.6.1 test -- --run 'src/lib/admin/drill-in.test.ts' 'src/components/admin/manager-lite-panel.test.tsx'` passed 6/6 tests, the task-plan verifier `cd web && pnpm dlx npm@11.6.1 test -- --run 'src/components/admin/manager-lite-panel.test.tsx'` passed 2/2 tests, and LSP diagnostics reported no issues in `web/src/lib/admin/drill-in.ts`, `web/src/components/admin/manager-lite-panel.tsx`, or `web/src/app/admin/users/page.tsx`.",
+      "duration": "",
+      "completed_at": "2026-03-27T02:51:06.734Z",
+      "blocker_discovered": false,
+      "deviations": "None.",
+      "known_issues": "None.",
+      "key_files": [
+        "web/src/lib/admin/drill-in.ts",
+        "web/src/lib/admin/drill-in.test.ts",
+        "web/src/components/admin/manager-lite-panel.tsx",
+        "web/src/app/admin/users/page.tsx"
+      ],
+      "key_decisions": [
+        "Created a shared `web/src/lib/admin/drill-in.ts` helper as the single source of truth for current admin user drill-in URL generation.",
+        "Kept the shipped query-string contract unchanged so existing manager-lite and weekly users-list links continue to land on the same `/admin/users/[id]?focusBucket=...` surfaces."
+      ],
+      "full_summary_md": "---\nid: T01\nparent: S01\nmilestone: M006\nkey_files:\n  - web/src/lib/admin/drill-in.ts\n  - web/src/lib/admin/drill-in.test.ts\n  - web/src/components/admin/manager-lite-panel.tsx\n  - web/src/app/admin/users/page.tsx\nkey_decisions:\n  - Created a shared `web/src/lib/admin/drill-in.ts` helper as the single source of truth for current admin user drill-in URL generation.\n  - Kept the shipped query-string contract unchanged so existing manager-lite and weekly users-list links continue to land on the same `/admin/users/[id]?focusBucket=...` surfaces.\nduration: \"\"\nverification_result: passed\ncompleted_at: 2026-03-27T02:51:06.735Z\nblocker_discovered: false\n---\n\n# T01: Extracted a shared admin drill-in href builder and migrated manager-lite plus users-list launchers onto it without changing the shipped route contract.\n\n**Extracted a shared admin drill-in href builder and migrated manager-lite plus users-list launchers onto it without changing the shipped route contract.**\n\n## What Happened\n\nExecuted M006/S01/T01 with test-first flow. I first added a new helper test file `web/src/lib/admin/drill-in.test.ts` that asserted the existing not-passed, inactive-streak, and improving drill-in URLs plus the shared default evidence-gap note. Running that test failed immediately because the helper module did not exist yet, which confirmed the new seam was actually under test. I then implemented `web/src/lib/admin/drill-in.ts` with the shared bucket type, default-note resolution, and href builder, and migrated both `ManagerLitePanel` and the weekly-manager-list section of `web/src/app/admin/users/page.tsx` to call that helper instead of keeping separate page-local builders. No route shape or wording changed; the work only removed duplicated builder logic and made the URL contract single-source. After the change, the new helper tests passed, the existing manager-lite regression passed unchanged, and LSP diagnostics were clean on the touched files.\n\n## Verification\n\nFresh verification passed. The new helper contract test `cd web && pnpm dlx npm@11.6.1 test -- --run 'src/lib/admin/drill-in.test.ts' 'src/components/admin/manager-lite-panel.test.tsx'` passed 6/6 tests, the task-plan verifier `cd web && pnpm dlx npm@11.6.1 test -- --run 'src/components/admin/manager-lite-panel.test.tsx'` passed 2/2 tests, and LSP diagnostics reported no issues in `web/src/lib/admin/drill-in.ts`, `web/src/components/admin/manager-lite-panel.tsx`, or `web/src/app/admin/users/page.tsx`.\n\n## Verification Evidence\n\n| # | Command | Exit Code | Verdict | Duration |\n|---|---------|-----------|---------|----------|\n| 1 | `cd web && pnpm dlx npm@11.6.1 test -- --run 'src/lib/admin/drill-in.test.ts' 'src/components/admin/manager-lite-panel.test.tsx'` | 0 | ✅ pass | 737ms |\n| 2 | `cd web && pnpm dlx npm@11.6.1 test -- --run 'src/components/admin/manager-lite-panel.test.tsx'` | 0 | ✅ pass | 1000ms |\n| 3 | `lsp diagnostics: web/src/lib/admin/drill-in.ts, web/src/components/admin/manager-lite-panel.tsx, web/src/app/admin/users/page.tsx` | 0 | ✅ pass | 100ms |\n\n\n## Deviations\n\nNone.\n\n## Known Issues\n\nNone.\n\n## Files Created/Modified\n\n- `web/src/lib/admin/drill-in.ts`\n- `web/src/lib/admin/drill-in.test.ts`\n- `web/src/components/admin/manager-lite-panel.tsx`\n- `web/src/app/admin/users/page.tsx`\n",
+      "description": "Inventory the current `focusBucket` / `focusIssueFamily` / `focusNote` URL builders in manager-lite and users list, then create `web/src/lib/admin/drill-in.ts` exporting the shared bucket type, default-note resolution, and href builder. Migrate launcher code to call the helper while preserving the exact query-string shape used today.",
+      "estimate": "0.5d",
+      "files": [
+        "web/src/lib/admin/drill-in.ts",
+        "web/src/components/admin/manager-lite-panel.tsx",
+        "web/src/app/admin/users/page.tsx",
+        "web/src/components/admin/manager-lite-panel.test.tsx"
+      ],
+      "verify": "cd web && pnpm dlx npm@11.6.1 test -- --run 'src/components/admin/manager-lite-panel.test.tsx'",
+      "inputs": [
+        "web/src/components/admin/manager-lite-panel.tsx",
+        "web/src/app/admin/users/page.tsx",
+        "web/src/components/admin/manager-lite-panel.test.tsx"
+      ],
+      "expected_output": [
+        "`web/src/lib/admin/drill-in.ts` with shared drill-in builders",
+        "Manager-lite and users list launch current user-detail URLs through the shared helper"
+      ],
+      "observability_impact": "",
+      "full_plan_md": "",
+      "sequence": 0
+    },
+    {
+      "milestone_id": "M006",
+      "slice_id": "S01",
+      "id": "T02",
+      "title": "Made admin user-detail drill-ins recover shared not-passed guidance text and locked the banner/prefill contract in tests.",
+      "status": "complete",
+      "one_liner": "Made admin user-detail drill-ins recover shared not-passed guidance text and locked the banner/prefill contract in tests.",
+      "narrative": "I treated the remaining T02 gap as a destination-side contract issue rather than another launcher refactor. First I added a focused UserDetailPage regression for a `focusBucket=not_passed&focusIssueFamily=objection_response` URL that omits `focusNote`; that failed because the banner rendered but the suggested note line and textarea prefill stayed empty. I then updated `readAdminUserDrillInContext(...)` in `web/src/lib/admin/drill-in.ts` so not-passed drill-ins recover the shared default note from the same issue-family mapping already used by the launcher helper whenever the destination URL still carries an issue family. The page component itself remained unchanged on the shared helper seam, and I tightened the existing risk-bucket page coverage to assert the supervisor-focus select is prefilled from the shared launcher contract as well. I also recorded the read-side fallback choice in D086 and updated the Safe Grow continuity files so the next turn starts at S01/T03 instead of reopening the drill-in parser work.",
+      "verification_result": "Fresh focused verification passed. `cd web && pnpm dlx npm@11.6.1 test -- --run 'src/app/admin/users/[id]/page.test.tsx'` passed with 10/10 tests after the helper change, and `cd web && pnpm dlx npm@11.6.1 test -- --run 'src/lib/admin/drill-in.test.ts' 'src/app/admin/users/[id]/page.test.tsx'` passed with 16/16 tests to prove the shared helper and destination page still agree on the round-trip contract. LSP diagnostics were clean for `web/src/lib/admin/drill-in.ts`, `web/src/app/admin/users/[id]/page.tsx`, and `web/src/app/admin/users/[id]/page.test.tsx`. A live browser spot-check on the local stack remained blocked by dev-login auth not persisting through the Next.js server boundary, which produced backend 401s and a redirect back to `/login`; this was an environment/session issue rather than a regression in the drill-in helper.",
+      "duration": "",
+      "completed_at": "2026-03-27T03:28:21.349Z",
+      "blocker_discovered": false,
+      "deviations": "None.",
+      "known_issues": "Local browser proof for the shipped admin route is still blocked by dev-login session persistence across the 127.0.0.1:3444 backend and 127.0.0.1:3445 web server boundary. Focused tests and diagnostics passed, so this did not block the task contract.",
+      "key_files": [
+        "web/src/lib/admin/drill-in.ts",
+        "web/src/app/admin/users/[id]/page.test.tsx",
+        ".gsd/DECISIONS.md",
+        ".gsd/milestones/M006/slices/S01/tasks/T02-SUMMARY.md",
+        ".codex/loop/state.json",
+        ".codex/loop/log.md"
+      ],
+      "key_decisions": [
+        "Derived missing `focusNote` values for `focusBucket=not_passed` from the shared drill-in helper instead of trusting every launcher or stored URL to include the note explicitly.",
+        "Kept the user-detail page on the shared helper seam rather than adding page-local fallback logic for risk-bucket banner and prefill state."
+      ],
+      "full_summary_md": "---\nid: T02\nparent: S01\nmilestone: M006\nkey_files:\n  - web/src/lib/admin/drill-in.ts\n  - web/src/app/admin/users/[id]/page.test.tsx\n  - .gsd/DECISIONS.md\n  - .gsd/milestones/M006/slices/S01/tasks/T02-SUMMARY.md\n  - .codex/loop/state.json\n  - .codex/loop/log.md\nkey_decisions:\n  - Derived missing `focusNote` values for `focusBucket=not_passed` from the shared drill-in helper instead of trusting every launcher or stored URL to include the note explicitly.\n  - Kept the user-detail page on the shared helper seam rather than adding page-local fallback logic for risk-bucket banner and prefill state.\nduration: \"\"\nverification_result: passed\ncompleted_at: 2026-03-27T03:28:21.350Z\nblocker_discovered: false\n---\n\n# T02: Made admin user-detail drill-ins recover shared not-passed guidance text and locked the banner/prefill contract in tests.\n\n**Made admin user-detail drill-ins recover shared not-passed guidance text and locked the banner/prefill contract in tests.**\n\n## What Happened\n\nI treated the remaining T02 gap as a destination-side contract issue rather than another launcher refactor. First I added a focused UserDetailPage regression for a `focusBucket=not_passed&focusIssueFamily=objection_response` URL that omits `focusNote`; that failed because the banner rendered but the suggested note line and textarea prefill stayed empty. I then updated `readAdminUserDrillInContext(...)` in `web/src/lib/admin/drill-in.ts` so not-passed drill-ins recover the shared default note from the same issue-family mapping already used by the launcher helper whenever the destination URL still carries an issue family. The page component itself remained unchanged on the shared helper seam, and I tightened the existing risk-bucket page coverage to assert the supervisor-focus select is prefilled from the shared launcher contract as well. I also recorded the read-side fallback choice in D086 and updated the Safe Grow continuity files so the next turn starts at S01/T03 instead of reopening the drill-in parser work.\n\n## Verification\n\nFresh focused verification passed. `cd web && pnpm dlx npm@11.6.1 test -- --run 'src/app/admin/users/[id]/page.test.tsx'` passed with 10/10 tests after the helper change, and `cd web && pnpm dlx npm@11.6.1 test -- --run 'src/lib/admin/drill-in.test.ts' 'src/app/admin/users/[id]/page.test.tsx'` passed with 16/16 tests to prove the shared helper and destination page still agree on the round-trip contract. LSP diagnostics were clean for `web/src/lib/admin/drill-in.ts`, `web/src/app/admin/users/[id]/page.tsx`, and `web/src/app/admin/users/[id]/page.test.tsx`. A live browser spot-check on the local stack remained blocked by dev-login auth not persisting through the Next.js server boundary, which produced backend 401s and a redirect back to `/login`; this was an environment/session issue rather than a regression in the drill-in helper.\n\n## Verification Evidence\n\n| # | Command | Exit Code | Verdict | Duration |\n|---|---------|-----------|---------|----------|\n| 1 | `cd web && pnpm dlx npm@11.6.1 test -- --run 'src/app/admin/users/[id]/page.test.tsx'` | 0 | ✅ pass | 1130ms |\n| 2 | `cd web && pnpm dlx npm@11.6.1 test -- --run 'src/lib/admin/drill-in.test.ts' 'src/app/admin/users/[id]/page.test.tsx'` | 0 | ✅ pass | 1080ms |\n| 3 | `lsp diagnostics: web/src/lib/admin/drill-in.ts, web/src/app/admin/users/\\[id\\]/page.tsx, web/src/app/admin/users/\\[id\\]/page.test.tsx` | 0 | ✅ pass | 100ms |\n\n\n## Deviations\n\nNone.\n\n## Known Issues\n\nLocal browser proof for the shipped admin route is still blocked by dev-login session persistence across the 127.0.0.1:3444 backend and 127.0.0.1:3445 web server boundary. Focused tests and diagnostics passed, so this did not block the task contract.\n\n## Files Created/Modified\n\n- `web/src/lib/admin/drill-in.ts`\n- `web/src/app/admin/users/[id]/page.test.tsx`\n- `.gsd/DECISIONS.md`\n- `.gsd/milestones/M006/slices/S01/tasks/T02-SUMMARY.md`\n- `.codex/loop/state.json`\n- `.codex/loop/log.md`\n",
+      "description": "Move current user-detail `focusBucket` parsing and banner-context derivation onto the shared drill-in helper. Preserve the shipped badge/copy behavior for `not_passed` / `inactive_streak` / `improving`, and update focused tests so the context contract is locked from both launcher and destination sides.",
+      "estimate": "0.5d",
+      "files": [
+        "web/src/lib/admin/drill-in.ts",
+        "web/src/app/admin/users/[id]/page.tsx",
+        "web/src/app/admin/users/[id]/page.test.tsx"
+      ],
+      "verify": "cd web && pnpm dlx npm@11.6.1 test -- --run 'src/app/admin/users/[id]/page.test.tsx'",
+      "inputs": [
+        "web/src/lib/admin/drill-in.ts",
+        "web/src/app/admin/users/[id]/page.tsx",
+        "web/src/app/admin/users/[id]/page.test.tsx"
+      ],
+      "expected_output": [
+        "`/admin/users/[id]` reads drill-in context through the shared helper",
+        "Focused user-detail tests lock the preserved banner/prefill behavior"
+      ],
+      "observability_impact": "",
+      "full_plan_md": "",
+      "sequence": 0
+    },
+    {
+      "milestone_id": "M006",
+      "slice_id": "S01",
+      "id": "T03",
+      "title": "抽出 shared linked-asset parser",
+      "status": "pending",
+      "one_liner": "",
+      "narrative": "",
+      "verification_result": "",
+      "duration": "",
+      "completed_at": null,
+      "blocker_discovered": false,
+      "deviations": "",
+      "known_issues": "",
+      "key_files": [],
+      "key_decisions": [],
+      "full_summary_md": "",
+      "description": "Create `web/src/lib/admin/linked-assets.ts` with shared linked-asset change typing, parsing, filtering, and label helpers. Migrate `/admin/analytics` and `/admin/users/[id]` to use it so fault-linked asset sections stop owning duplicate parser code.",
+      "estimate": "0.5d",
+      "files": [
+        "web/src/lib/admin/linked-assets.ts",
+        "web/src/app/admin/analytics/page.tsx",
+        "web/src/app/admin/users/[id]/page.tsx",
+        "web/src/app/admin/analytics/page.test.tsx",
+        "web/src/app/admin/users/[id]/page.test.tsx"
+      ],
+      "verify": "cd web && pnpm dlx npm@11.6.1 test -- --run 'src/app/admin/analytics/page.test.tsx' 'src/app/admin/users/[id]/page.test.tsx'",
+      "inputs": [
+        "web/src/app/admin/analytics/page.tsx",
+        "web/src/app/admin/users/[id]/page.tsx",
+        "web/src/app/admin/analytics/page.test.tsx",
+        "web/src/app/admin/users/[id]/page.test.tsx"
+      ],
+      "expected_output": [
+        "`web/src/lib/admin/linked-assets.ts` shared parser/label helper",
+        "Analytics and user-detail pages consume the same linked-asset helper path"
+      ],
+      "observability_impact": "",
+      "full_plan_md": "",
+      "sequence": 0
+    },
+    {
+      "milestone_id": "M006",
+      "slice_id": "S02",
+      "id": "T01",
+      "title": "硬化 backend governance / linked-asset schema",
+      "status": "pending",
+      "one_liner": "",
+      "narrative": "",
+      "verification_result": "",
+      "duration": "",
+      "completed_at": null,
+      "blocker_discovered": false,
+      "deviations": "",
+      "known_issues": "",
+      "key_files": [],
+      "key_decisions": [],
+      "full_summary_md": "",
+      "description": "Introduce shared backend schema models for asset governance summary and linked-asset change references, then replace current dict-typed fields on knowledge/persona/presentation/runtime/admin-support response models. Keep the payload shape backward-compatible while making the contract explicit in Python types.",
+      "estimate": "0.75d",
+      "files": [
+        "backend/src/common/db/schemas.py",
+        "backend/src/common/knowledge/schemas.py",
+        "backend/src/agent/schemas.py",
+        "backend/src/presentation_coach/api/presentations.py",
+        "backend/src/admin/api/voice_runtime.py",
+        "backend/src/support/api/runtime_status.py"
+      ],
+      "verify": "cd backend && venv/bin/python -m pytest -c pyproject.toml tests/integration/test_asset_governance_api.py tests/contract/test_analytics.py tests/contract/test_support_runtime.py",
+      "inputs": [
+        "backend/src/common/db/schemas.py",
+        "backend/src/common/knowledge/schemas.py",
+        "backend/src/agent/schemas.py",
+        "backend/src/presentation_coach/api/presentations.py",
+        "backend/src/admin/api/voice_runtime.py",
+        "backend/src/support/api/runtime_status.py"
+      ],
+      "expected_output": [
+        "Shared backend schema models for governance summary and linked asset references",
+        "Current admin/support responses stop declaring these fields as raw dicts"
+      ],
+      "observability_impact": "",
+      "full_plan_md": "",
+      "sequence": 0
+    },
+    {
+      "milestone_id": "M006",
+      "slice_id": "S02",
+      "id": "T02",
+      "title": "收口 frontend typed governance contract",
+      "status": "pending",
+      "one_liner": "",
+      "narrative": "",
+      "verification_result": "",
+      "duration": "",
+      "completed_at": null,
+      "blocker_discovered": false,
+      "deviations": "",
+      "known_issues": "",
+      "key_files": [],
+      "key_decisions": [],
+      "full_summary_md": "",
+      "description": "Promote frontend admin governance and linked-asset data to shared typed interfaces in `web/src/lib/api/types.ts` and normalize them centrally in `web/src/lib/api/client.ts`. Remove page-level dependence on `Record<string, unknown>` for these contracts and update `AssetGovernanceSummaryCard` props to consume the typed shape directly.",
+      "estimate": "0.75d",
+      "files": [
+        "web/src/lib/api/types.ts",
+        "web/src/lib/api/client.ts",
+        "web/src/components/admin/asset-governance.tsx",
+        "web/src/lib/admin/linked-assets.ts"
+      ],
+      "verify": "cd web && pnpm dlx npm@11.6.1 test -- --run 'src/app/admin/asset-governance.test.tsx' 'src/app/admin/analytics/page.test.tsx' 'src/app/admin/users/[id]/page.test.tsx'",
+      "inputs": [
+        "web/src/lib/api/types.ts",
+        "web/src/lib/api/client.ts",
+        "web/src/components/admin/asset-governance.tsx",
+        "web/src/lib/admin/linked-assets.ts"
+      ],
+      "expected_output": [
+        "Shared frontend interfaces for governance summary and linked asset changes",
+        "API client returns typed governance/admin contracts to current pages/components"
+      ],
+      "observability_impact": "",
+      "full_plan_md": "",
+      "sequence": 0
+    },
+    {
+      "milestone_id": "M006",
+      "slice_id": "S02",
+      "id": "T03",
+      "title": "补齐 governance contract 回归证明",
+      "status": "pending",
+      "one_liner": "",
+      "narrative": "",
+      "verification_result": "",
+      "duration": "",
+      "completed_at": null,
+      "blocker_discovered": false,
+      "deviations": "",
+      "known_issues": "",
+      "key_files": [],
+      "key_decisions": [],
+      "full_summary_md": "",
+      "description": "Refresh focused contract and UI coverage so governance summary and linked-asset payloads are locked end-to-end. Explicitly prove that current knowledge/persona/presentation/runtime pages and fault-linked analytics/user-detail views still render the same behavior after the type hardening.",
+      "estimate": "0.5d",
+      "files": [
+        "backend/tests/integration/test_asset_governance_api.py",
+        "backend/tests/contract/test_analytics.py",
+        "backend/tests/contract/test_support_runtime.py",
+        "web/src/app/admin/asset-governance.test.tsx",
+        "web/src/app/admin/analytics/page.test.tsx",
+        "web/src/app/admin/users/[id]/page.test.tsx"
+      ],
+      "verify": "cd backend && venv/bin/python -m pytest -c pyproject.toml tests/integration/test_asset_governance_api.py tests/contract/test_analytics.py tests/contract/test_support_runtime.py\ncd web && pnpm dlx npm@11.6.1 test -- --run 'src/app/admin/asset-governance.test.tsx' 'src/app/admin/analytics/page.test.tsx' 'src/app/admin/users/[id]/page.test.tsx'",
+      "inputs": [
+        "backend/tests/integration/test_asset_governance_api.py",
+        "backend/tests/contract/test_analytics.py",
+        "backend/tests/contract/test_support_runtime.py",
+        "web/src/app/admin/asset-governance.test.tsx",
+        "web/src/app/admin/analytics/page.test.tsx",
+        "web/src/app/admin/users/[id]/page.test.tsx"
+      ],
+      "expected_output": [
+        "Updated backend contract coverage for governance/admin payloads",
+        "Focused web regression covering typed governance and fault-linked asset rendering"
+      ],
+      "observability_impact": "",
+      "full_plan_md": "",
+      "sequence": 0
+    },
+    {
+      "milestone_id": "M006",
+      "slice_id": "S03",
+      "id": "T01",
+      "title": "抽出 ManagerIntervention write-side service",
+      "status": "pending",
+      "one_liner": "",
+      "narrative": "",
+      "verification_result": "",
+      "duration": "",
+      "completed_at": null,
+      "blocker_discovered": false,
+      "deviations": "",
+      "known_issues": "",
+      "key_files": [],
+      "key_decisions": [],
+      "full_summary_md": "",
+      "description": "Create a dedicated write-side service under `backend/src/admin/services/` to own `manager_interventions` create/load/update/remind rules, including due-state/reminder-state transitions and latest-open lookup. Refactor `/api/v1/admin/interventions` routes to delegate to it without changing response payloads.",
+      "estimate": "0.75d",
+      "files": [
+        "backend/src/admin/services/manager_intervention_service.py",
+        "backend/src/admin/services/__init__.py",
+        "backend/src/admin/api/interventions.py",
+        "backend/tests/integration/test_admin_interventions_api.py"
+      ],
+      "verify": "cd backend && venv/bin/python -m pytest -c pyproject.toml tests/integration/test_admin_interventions_api.py",
+      "inputs": [
+        "backend/src/admin/api/interventions.py",
+        "backend/tests/integration/test_admin_interventions_api.py"
+      ],
+      "expected_output": [
+        "New write-side manager intervention service",
+        "`/admin/interventions` routes slimmed down to transport + authorization + service calls"
+      ],
+      "observability_impact": "",
+      "full_plan_md": "",
+      "sequence": 0
+    },
+    {
+      "milestone_id": "M006",
+      "slice_id": "S03",
+      "id": "T02",
+      "title": "抽出 latest-evaluable result resolver",
+      "status": "pending",
+      "one_liner": "",
+      "narrative": "",
+      "verification_result": "",
+      "duration": "",
+      "completed_at": null,
+      "blocker_discovered": false,
+      "deviations": "",
+      "known_issues": "",
+      "key_files": [],
+      "key_decisions": [],
+      "full_summary_md": "",
+      "description": "Extract latest-evaluable intervention-result resolution from `HistoryService` into a dedicated helper/module so supervisor workflow semantics are explicit and reusable. Keep the current rule that the latest evaluable completed session after intervention creation wins over a later thin non-evaluable session.",
+      "estimate": "0.75d",
+      "files": [
+        "backend/src/common/analytics/manager_intervention_results.py",
+        "backend/src/common/analytics/history_service.py",
+        "backend/src/admin/api/users.py",
+        "backend/tests/integration/test_admin_users_api.py"
+      ],
+      "verify": "cd backend && venv/bin/python -m pytest -c pyproject.toml tests/integration/test_admin_users_api.py",
+      "inputs": [
+        "backend/src/common/analytics/history_service.py",
+        "backend/src/admin/api/users.py",
+        "backend/tests/integration/test_admin_users_api.py"
+      ],
+      "expected_output": [
+        "Dedicated intervention-result resolver module/service",
+        "`HistoryService` delegates manager intervention result building instead of owning the detailed workflow semantics inline"
+      ],
+      "observability_impact": "",
+      "full_plan_md": "",
+      "sequence": 0
+    },
+    {
+      "milestone_id": "M006",
+      "slice_id": "S03",
+      "id": "T03",
+      "title": "回归证明 current supervisor workflow 无漂移",
+      "status": "pending",
+      "one_liner": "",
+      "narrative": "",
+      "verification_result": "",
+      "duration": "",
+      "completed_at": null,
+      "blocker_discovered": false,
+      "deviations": "",
+      "known_issues": "",
+      "key_files": [],
+      "key_decisions": [],
+      "full_summary_md": "",
+      "description": "Run the current supervisor workflow regression path end-to-end after the service extraction and update the user-detail focused UI assertions if any copy or ordering assumptions need to be anchored more explicitly. The goal is zero behavior drift on the shipped `/admin/users/[id]` authority surface.",
+      "estimate": "0.5d",
+      "files": [
+        "backend/tests/integration/test_admin_interventions_api.py",
+        "backend/tests/integration/test_admin_users_api.py",
+        "web/src/app/admin/users/[id]/page.test.tsx"
+      ],
+      "verify": "cd backend && venv/bin/python -m pytest -c pyproject.toml tests/integration/test_admin_interventions_api.py tests/integration/test_admin_users_api.py\ncd web && pnpm dlx npm@11.6.1 test -- --run 'src/app/admin/users/[id]/page.test.tsx'",
+      "inputs": [
+        "backend/tests/integration/test_admin_interventions_api.py",
+        "backend/tests/integration/test_admin_users_api.py",
+        "web/src/app/admin/users/[id]/page.test.tsx"
+      ],
+      "expected_output": [
+        "Backend regression proof for current intervention/user-session routes",
+        "Focused user-detail UI proof that the authority surface still behaves the same after service extraction"
+      ],
+      "observability_impact": "",
+      "full_plan_md": "",
+      "sequence": 0
+    },
+    {
+      "milestone_id": "M006",
+      "slice_id": "S04",
+      "id": "T01",
+      "title": "建立 backend asset registry",
+      "status": "pending",
+      "one_liner": "",
+      "narrative": "",
+      "verification_result": "",
+      "duration": "",
+      "completed_at": null,
+      "blocker_discovered": false,
+      "deviations": "",
+      "known_issues": "",
+      "key_files": [],
+      "key_decisions": [],
+      "full_summary_md": "",
+      "description": "Create a backend asset registry module that centralizes current asset-type metadata (label, admin path builder, reference extraction hooks) for knowledge bases, personas, presentations, and runtime profiles. Refactor `RuntimeStatusService` to consume the registry for asset-ref iteration and linked-change enrichment instead of owning asset-type conditionals inline.",
+      "estimate": "0.75d",
+      "files": [
+        "backend/src/support/services/asset_registry.py",
+        "backend/src/support/services/runtime_status_service.py",
+        "backend/tests/unit/test_support_runtime_service.py"
+      ],
+      "verify": "cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_support_runtime_service.py",
+      "inputs": [
+        "backend/src/support/services/runtime_status_service.py",
+        "backend/tests/unit/test_support_runtime_service.py"
+      ],
+      "expected_output": [
+        "Backend asset registry/adapter seam for current four asset types",
+        "`RuntimeStatusService` resolves asset metadata through the registry"
+      ],
+      "observability_impact": "",
+      "full_plan_md": "",
+      "sequence": 0
+    },
+    {
+      "milestone_id": "M006",
+      "slice_id": "S04",
+      "id": "T02",
+      "title": "对齐 frontend asset metadata helper",
+      "status": "pending",
+      "one_liner": "",
+      "narrative": "",
+      "verification_result": "",
+      "duration": "",
+      "completed_at": null,
+      "blocker_discovered": false,
+      "deviations": "",
+      "known_issues": "",
+      "key_files": [],
+      "key_decisions": [],
+      "full_summary_md": "",
+      "description": "Add a matching frontend asset metadata helper so linked-asset displays and governance surfaces stop hardcoding asset labels/admin-path assumptions in page components. Reuse the helper from the shared linked-asset utilities introduced earlier.",
+      "estimate": "0.5d",
+      "files": [
+        "web/src/lib/admin/assets.ts",
+        "web/src/lib/admin/linked-assets.ts",
+        "web/src/app/admin/analytics/page.tsx",
+        "web/src/app/admin/users/[id]/page.tsx",
+        "web/src/components/admin/asset-governance.tsx"
+      ],
+      "verify": "cd web && pnpm dlx npm@11.6.1 test -- --run 'src/app/admin/analytics/page.test.tsx' 'src/app/admin/users/[id]/page.test.tsx' 'src/app/admin/asset-governance.test.tsx'",
+      "inputs": [
+        "web/src/lib/admin/linked-assets.ts",
+        "web/src/app/admin/analytics/page.tsx",
+        "web/src/app/admin/users/[id]/page.tsx",
+        "web/src/components/admin/asset-governance.tsx"
+      ],
+      "expected_output": [
+        "Frontend asset metadata helper aligned with backend registry names",
+        "Analytics/user-detail linked-asset UI and governance surfaces reuse shared asset metadata"
+      ],
+      "observability_impact": "",
+      "full_plan_md": "",
+      "sequence": 0
+    },
+    {
+      "milestone_id": "M006",
+      "slice_id": "S04",
+      "id": "T03",
+      "title": "补齐 asset registry 扩展与回归证明",
+      "status": "pending",
+      "one_liner": "",
+      "narrative": "",
+      "verification_result": "",
+      "duration": "",
+      "completed_at": null,
+      "blocker_discovered": false,
+      "deviations": "",
+      "known_issues": "",
+      "key_files": [],
+      "key_decisions": [],
+      "full_summary_md": "",
+      "description": "Lock the registry seam with regression coverage that proves all current four asset types still render correct governance labels, admin links, and linked-change metadata, and that adding a new asset type is reduced to a registry-focused change path plus tests.",
+      "estimate": "0.5d",
+      "files": [
+        "backend/tests/unit/test_support_runtime_service.py",
+        "backend/tests/integration/test_asset_governance_api.py",
+        "backend/tests/contract/test_support_runtime.py",
+        "web/src/app/admin/asset-governance.test.tsx",
+        "web/src/app/admin/analytics/page.test.tsx",
+        "web/src/app/admin/users/[id]/page.test.tsx"
+      ],
+      "verify": "cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_support_runtime_service.py tests/integration/test_asset_governance_api.py tests/contract/test_support_runtime.py\ncd web && pnpm dlx npm@11.6.1 test -- --run 'src/app/admin/asset-governance.test.tsx' 'src/app/admin/analytics/page.test.tsx' 'src/app/admin/users/[id]/page.test.tsx'",
+      "inputs": [
+        "backend/tests/unit/test_support_runtime_service.py",
+        "backend/tests/integration/test_asset_governance_api.py",
+        "backend/tests/contract/test_support_runtime.py",
+        "web/src/app/admin/asset-governance.test.tsx",
+        "web/src/app/admin/analytics/page.test.tsx",
+        "web/src/app/admin/users/[id]/page.test.tsx"
+      ],
+      "expected_output": [
+        "Registry-focused backend/frontend regression proof across current asset types",
+        "Documented extension rule for future asset-type additions"
+      ],
+      "observability_impact": "",
+      "full_plan_md": "",
+      "sequence": 0
+    },
+    {
+      "milestone_id": "M006",
+      "slice_id": "S05",
+      "id": "T01",
+      "title": "抽出 shared admin read-model adapters",
+      "status": "pending",
+      "one_liner": "",
+      "narrative": "",
+      "verification_result": "",
+      "duration": "",
+      "completed_at": null,
+      "blocker_discovered": false,
+      "deviations": "",
+      "known_issues": "",
+      "key_files": [],
+      "key_decisions": [],
+      "full_summary_md": "",
+      "description": "Extract shared pure adapters for current admin read models — operating-pack highlights, manager-list drill-in cards, runtime-fault linked-asset enrichment, and user-session/intervention derived view state — under `web/src/lib/admin/`. Keep them route-shaped for the current pages instead of inventing a generic dashboard framework.",
+      "estimate": "0.75d",
+      "files": [
+        "web/src/lib/admin/read-models.ts",
+        "web/src/lib/admin/runtime-faults.ts",
+        "web/src/app/admin/analytics/page.tsx",
+        "web/src/app/admin/users/page.tsx",
+        "web/src/app/admin/users/[id]/page.tsx"
+      ],
+      "verify": "cd web && pnpm dlx npm@11.6.1 test -- --run 'src/app/admin/analytics/page.test.tsx' 'src/components/admin/manager-lite-panel.test.tsx' 'src/app/admin/users/[id]/page.test.tsx'",
+      "inputs": [
+        "web/src/app/admin/analytics/page.tsx",
+        "web/src/app/admin/users/page.tsx",
+        "web/src/app/admin/users/[id]/page.tsx"
+      ],
+      "expected_output": [
+        "Shared admin read-model adapter module(s) under `web/src/lib/admin/`",
+        "Current operating-pack, runtime fault, and user-session derivations can be consumed without page-local duplication"
+      ],
+      "observability_impact": "",
+      "full_plan_md": "",
+      "sequence": 0
+    },
+    {
+      "milestone_id": "M006",
+      "slice_id": "S05",
+      "id": "T02",
+      "title": "迁移 current admin pages 到 shared adapters",
+      "status": "pending",
+      "one_liner": "",
+      "narrative": "",
+      "verification_result": "",
+      "duration": "",
+      "completed_at": null,
+      "blocker_discovered": false,
+      "deviations": "",
+      "known_issues": "",
+      "key_files": [],
+      "key_decisions": [],
+      "full_summary_md": "",
+      "description": "Migrate current admin pages to the shared adapters/hooks and delete the remaining duplicated normalize/derive code that now belongs in the shared layer. Keep the route family unchanged and resist introducing a second state-management abstraction.",
+      "estimate": "0.75d",
+      "files": [
+        "web/src/lib/admin/read-models.ts",
+        "web/src/lib/admin/runtime-faults.ts",
+        "web/src/app/admin/analytics/page.tsx",
+        "web/src/app/admin/users/page.tsx",
+        "web/src/app/admin/users/[id]/page.tsx",
+        "web/src/components/admin/manager-lite-panel.tsx"
+      ],
+      "verify": "cd web && pnpm dlx npm@11.6.1 test -- --run 'src/app/admin/analytics/page.test.tsx' 'src/app/admin/asset-governance.test.tsx' 'src/app/admin/users/[id]/page.test.tsx' 'src/components/admin/manager-lite-panel.test.tsx'",
+      "inputs": [
+        "web/src/lib/admin/read-models.ts",
+        "web/src/lib/admin/runtime-faults.ts",
+        "web/src/app/admin/analytics/page.tsx",
+        "web/src/app/admin/users/page.tsx",
+        "web/src/app/admin/users/[id]/page.tsx",
+        "web/src/components/admin/manager-lite-panel.tsx"
+      ],
+      "expected_output": [
+        "Analytics/users/user-detail pages consume shared admin adapters/hooks",
+        "Remaining page-local duplicate derive code is removed or reduced to route-specific composition"
+      ],
+      "observability_impact": "",
+      "full_plan_md": "",
+      "sequence": 0
+    },
+    {
+      "milestone_id": "M006",
+      "slice_id": "S05",
+      "id": "T03",
+      "title": "运行 full admin regression pack 并回写 seam 经验",
+      "status": "pending",
+      "one_liner": "",
+      "narrative": "",
+      "verification_result": "",
+      "duration": "",
+      "completed_at": null,
+      "blocker_discovered": false,
+      "deviations": "",
+      "known_issues": "",
+      "key_files": [],
+      "key_decisions": [],
+      "full_summary_md": "",
+      "description": "Rerun the full current M005 admin regression pack after the adapter migration and capture any seam-level lessons in project knowledge/research artifacts so the next extension milestone starts from the new shared contract instead of rediscovering it.",
+      "estimate": "0.5d",
+      "files": [
+        "backend/tests/unit/common/test_admin_analytics_service.py",
+        "backend/tests/unit/test_support_runtime_service.py",
+        "backend/tests/integration/test_admin_users_api.py",
+        "backend/tests/integration/test_admin_interventions_api.py",
+        "backend/tests/integration/test_asset_governance_api.py",
+        "backend/tests/integration/test_rbac_access_control_api.py",
+        "backend/tests/contract/test_analytics.py",
+        "web/src/app/admin/analytics/page.test.tsx",
+        "web/src/app/admin/asset-governance.test.tsx",
+        "web/src/app/admin/users/[id]/page.test.tsx",
+        "web/src/components/admin/manager-lite-panel.test.tsx",
+        ".gsd/KNOWLEDGE.md",
+        ".gsd/milestones/M006/M006-RESEARCH.md"
+      ],
+      "verify": "cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/common/test_admin_analytics_service.py tests/unit/test_support_runtime_service.py tests/integration/test_admin_users_api.py tests/integration/test_admin_interventions_api.py tests/integration/test_asset_governance_api.py tests/integration/test_rbac_access_control_api.py tests/contract/test_analytics.py\ncd web && pnpm dlx npm@11.6.1 test -- --run 'src/app/admin/analytics/page.test.tsx' 'src/app/admin/asset-governance.test.tsx' 'src/app/admin/users/[id]/page.test.tsx' 'src/components/admin/manager-lite-panel.test.tsx'",
+      "inputs": [
+        "backend/tests/unit/common/test_admin_analytics_service.py",
+        "backend/tests/unit/test_support_runtime_service.py",
+        "backend/tests/integration/test_admin_users_api.py",
+        "backend/tests/integration/test_admin_interventions_api.py",
+        "backend/tests/integration/test_asset_governance_api.py",
+        "backend/tests/integration/test_rbac_access_control_api.py",
+        "backend/tests/contract/test_analytics.py",
+        "web/src/app/admin/analytics/page.test.tsx",
+        "web/src/app/admin/asset-governance.test.tsx",
+        "web/src/app/admin/users/[id]/page.test.tsx",
+        "web/src/components/admin/manager-lite-panel.test.tsx"
+      ],
+      "expected_output": [
+        "Repo-safe full admin regression proof after the seam refactor",
+        "Updated seam notes in project knowledge/research artifacts"
+      ],
+      "observability_impact": "",
+      "full_plan_md": "",
+      "sequence": 0
     }
   ],
   "decisions": [
@@ -4042,6 +4863,30 @@
       "decision": "How M005/S05 should prove the admin operating chain is operationally usable",
       "choice": "Use the shipped /admin/analytics weekly pack and export surface, keep admin-only RBAC on that same route family, and review outcomes on the canonical /practice/{sessionId}/report and /practice/{sessionId}/replay pages instead of introducing a separate acceptance-only workflow.",
       "rationale": "T01's focused regression pack, T02's live analytics→drill-in→reminder→report/replay proof, and T03's export/permission guardrails together show the current shipped surfaces already cover the real supervisor operating loop. Keeping UAT on those routes prevents a second acceptance-only flow from drifting away from the product paths managers and learners actually use.",
+      "revisable": "Yes",
+      "made_by": "agent",
+      "superseded_by": null
+    },
+    {
+      "seq": 1444,
+      "id": "D085",
+      "when_context": "Post-M005 planning",
+      "scope": "architecture",
+      "decision": "How to package the abstraction/refactor follow-up after M005",
+      "choice": "Plan one dedicated milestone (M006) focused on hardening current admin/evidence seams for reuse, rather than splitting the work into multiple parallel milestones or adding new admin surfaces first.",
+      "rationale": "The identified work items share one goal: turn the validated M005 governance chain into a lower-drift, lower-cost extension surface. Keeping them in one milestone preserves cross-slice continuity between shared contracts, shared parsers, service extraction, and regression proof, while avoiding premature product-surface expansion.",
+      "revisable": "Yes",
+      "made_by": "collaborative",
+      "superseded_by": null
+    },
+    {
+      "seq": 1445,
+      "id": "D086",
+      "when_context": "M006 S01 T02",
+      "scope": "frontend contract",
+      "decision": "How admin user-detail drill-ins recover missing not-passed guidance text",
+      "choice": "Derive the not-passed focus note on the read side from the shared drill-in helper whenever `focusIssueFamily` is present but `focusNote` is omitted.",
+      "rationale": "This keeps the destination page aligned with the shared launcher defaults, preserves the shipped risk-bucket copy even for partial/manual URLs, and avoids duplicating fallback-note logic inside the page component.",
       "revisable": "Yes",
       "made_by": "agent",
       "superseded_by": null
@@ -5246,6 +6091,72 @@
       "verdict": "✅ pass",
       "duration_ms": 0,
       "created_at": "2026-03-27T01:53:33.008Z"
+    },
+    {
+      "id": 110,
+      "task_id": "T01",
+      "slice_id": "S01",
+      "milestone_id": "M006",
+      "command": "cd web && pnpm dlx npm@11.6.1 test -- --run 'src/lib/admin/drill-in.test.ts' 'src/components/admin/manager-lite-panel.test.tsx'",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 737,
+      "created_at": "2026-03-27T02:51:06.735Z"
+    },
+    {
+      "id": 111,
+      "task_id": "T01",
+      "slice_id": "S01",
+      "milestone_id": "M006",
+      "command": "cd web && pnpm dlx npm@11.6.1 test -- --run 'src/components/admin/manager-lite-panel.test.tsx'",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 1000,
+      "created_at": "2026-03-27T02:51:06.735Z"
+    },
+    {
+      "id": 112,
+      "task_id": "T01",
+      "slice_id": "S01",
+      "milestone_id": "M006",
+      "command": "lsp diagnostics: web/src/lib/admin/drill-in.ts, web/src/components/admin/manager-lite-panel.tsx, web/src/app/admin/users/page.tsx",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 100,
+      "created_at": "2026-03-27T02:51:06.735Z"
+    },
+    {
+      "id": 113,
+      "task_id": "T02",
+      "slice_id": "S01",
+      "milestone_id": "M006",
+      "command": "cd web && pnpm dlx npm@11.6.1 test -- --run 'src/app/admin/users/[id]/page.test.tsx'",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 1130,
+      "created_at": "2026-03-27T03:28:21.349Z"
+    },
+    {
+      "id": 114,
+      "task_id": "T02",
+      "slice_id": "S01",
+      "milestone_id": "M006",
+      "command": "cd web && pnpm dlx npm@11.6.1 test -- --run 'src/lib/admin/drill-in.test.ts' 'src/app/admin/users/[id]/page.test.tsx'",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 1080,
+      "created_at": "2026-03-27T03:28:21.350Z"
+    },
+    {
+      "id": 115,
+      "task_id": "T02",
+      "slice_id": "S01",
+      "milestone_id": "M006",
+      "command": "lsp diagnostics: web/src/lib/admin/drill-in.ts, web/src/app/admin/users/\\[id\\]/page.tsx, web/src/app/admin/users/\\[id\\]/page.test.tsx",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 100,
+      "created_at": "2026-03-27T03:28:21.350Z"
     }
   ]
 }

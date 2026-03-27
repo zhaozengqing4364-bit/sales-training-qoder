@@ -1840,3 +1840,43 @@ Append one entry per iteration:
   verification results: passed; fresh slice-close backend/web verification is green, the UAT artifact exists, the T03 export/permission guardrails are present, and key analytics/admin files are diagnostics-clean. Optional enhanced-report/highlights noise remains explicitly non-blocking on the canonical report/replay path.
   success signal status: the current admin chain is now operationally proven on shipped surfaces — a supervisor can move from the weekly pack to a concrete member action and then review the resulting session on canonical report/replay without leaving the current route family.
   rollback note: if future work revisits this chain, keep UAT on the shipped /admin/analytics -> /admin/users/{id} -> canonical report/replay path, preserve the admin-only router dependency on the analytics route family, and refresh VERIFY artifacts whenever verifier commands change so auto-mode cannot resurrect stale false failures.
+
+- time: 2026-03-27T10:51:42+08:00
+  mode: grow
+  item id: M006-S01-T01
+  files changed:
+    - web/src/lib/admin/drill-in.ts
+    - web/src/lib/admin/drill-in.test.ts
+    - web/src/components/admin/manager-lite-panel.tsx
+    - web/src/app/admin/users/page.tsx
+    - .gsd/milestones/M006/slices/S01/tasks/T01-SUMMARY.md
+    - .codex/loop/state.json
+    - .codex/loop/log.md
+  summary: Added a shared admin drill-in helper for `focusBucket` / `focusIssueFamily` / `focusNote`, moved manager-lite and weekly users-list launchers onto it, and removed the duplicate page-local URL builder logic without changing the shipped route contract.
+  verification commands:
+    - cd web && pnpm dlx npm@11.6.1 test -- --run 'src/lib/admin/drill-in.test.ts' 'src/components/admin/manager-lite-panel.test.tsx'
+    - cd web && pnpm dlx npm@11.6.1 test -- --run 'src/components/admin/manager-lite-panel.test.tsx'
+    - lsp diagnostics: web/src/lib/admin/drill-in.ts, web/src/components/admin/manager-lite-panel.tsx, web/src/app/admin/users/page.tsx
+  verification results: passed; the new shared-helper tests and the existing manager-lite regression are green, and diagnostics are clean on the helper plus both migrated callers.
+  success signal status: current manager-lite and weekly users-list drill-ins now generate the same `/admin/users/[id]?focusBucket=...` contract from one shared helper instead of two independent builders.
+  rollback note: if future work changes the drill-in protocol, update the shared helper and its tests first rather than reintroducing page-local query-string builders.
+
+- time: 2026-03-27T11:26:31+08:00
+  mode: grow
+  item id: M006-S01-T02
+  files changed:
+    - web/src/lib/admin/drill-in.ts
+    - web/src/app/admin/users/[id]/page.test.tsx
+    - .gsd/DECISIONS.md
+    - .gsd/milestones/M006/slices/S01/tasks/T02-SUMMARY.md
+    - .codex/loop/state.json
+    - .codex/loop/log.md
+  summary: User-detail drill-in parsing now trusts the shared admin helper end-to-end, including deriving the shared not-passed default note when only the issue family survives into the destination URL, and focused page coverage now locks the preserved risk/inactive/improving banner plus prefill behavior.
+  verification commands:
+    - cd web && pnpm dlx npm@11.6.1 test -- --run 'src/app/admin/users/[id]/page.test.tsx'
+    - cd web && pnpm dlx npm@11.6.1 test -- --run 'src/lib/admin/drill-in.test.ts' 'src/app/admin/users/[id]/page.test.tsx'
+    - lsp diagnostics: web/src/lib/admin/drill-in.ts, web/src/app/admin/users/\[id\]/page.tsx, web/src/app/admin/users/\[id\]/page.test.tsx
+    - browser runtime attempt: dev-login -> /admin/users/89e31f06-6393-42b6-877e-5a007803136a?focusBucket=not_passed&focusIssueFamily=objection_response
+  verification results: focused T02 web regression passed, shared helper + page regressions passed, and LSP diagnostics were clean. Browser proof remained blocked because local dev-login auth did not persist through the web server boundary, producing 401s on /users/me and dashboard bootstrap requests after redirecting back to /login.
+  success signal status: partial/manual not-passed drill-ins now recover the same default guidance note as launcher-built URLs, so the user-detail supervisor form and banner stay on one shared contract.
+  rollback note: if a later slice versions the drill-in query contract, keep the read-side fallback in the shared helper unless every launcher and stored URL is migrated atomically.

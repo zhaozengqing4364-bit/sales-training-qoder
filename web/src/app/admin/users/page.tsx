@@ -5,6 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { api } from "@/lib/api/client";
 import { AdminUser, ManagerLiteListsResponse } from "@/lib/api/types";
+import { buildAdminUserDrillInHref } from "@/lib/admin/drill-in";
 import { formatIssueTypeLabel } from "@/lib/session-evidence";
 import { GlassCard } from "@/components/ui/glass-card";
 import { Button } from "@/components/ui/button";
@@ -98,38 +99,6 @@ const EMPTY_WEEKLY_MANAGER_LISTS: ManagerLiteListsResponse = {
     inactive_streak: [],
     improving: [],
 };
-
-type WeeklyBucketKind = "not_passed" | "inactive_streak" | "improving";
-
-function getWeeklyBucketNote(issueFamily?: string | null): string {
-    switch (issueFamily) {
-        case "value_expression":
-            return "先对照最近统一报告把价值表达说具体。";
-        case "objection_response":
-            return "先对照最近统一报告把异议回应说完整。";
-        case "structure_gap":
-            return "先对照最近统一报告把结构步骤说完整。";
-        case "evidence_gap":
-        default:
-            return "先对照最近统一报告补证据。";
-    }
-}
-
-function buildWeeklyUserDetailHref(args: {
-    kind: WeeklyBucketKind;
-    userId: string;
-    issueFamily?: string | null;
-    note?: string | null;
-}): string {
-    const searchParams = new URLSearchParams({ focusBucket: args.kind });
-
-    if (args.kind === "not_passed") {
-        searchParams.set("focusIssueFamily", args.issueFamily || "evidence_gap");
-        searchParams.set("focusNote", args.note || getWeeklyBucketNote(args.issueFamily));
-    }
-
-    return `/admin/users/${args.userId}?${searchParams.toString()}`;
-}
 
 export default function UsersPage() {
     const router = useRouter();
@@ -629,11 +598,10 @@ export default function UsersPage() {
                                         <div className="mt-3 flex flex-wrap gap-2">
                                             <Button asChild size="sm" variant="outline" className="h-8 rounded-full">
                                                 <Link
-                                                    href={buildWeeklyUserDetailHref({
+                                                    href={buildAdminUserDrillInHref({
                                                         kind: "not_passed",
                                                         userId: item.user_id,
                                                         issueFamily: item.issue_family,
-                                                        note: getWeeklyBucketNote(item.issue_family),
                                                     })}
                                                 >
                                                     查看并设重点
@@ -665,7 +633,7 @@ export default function UsersPage() {
                                         <p className="mt-2 text-xs text-amber-700">连续未练：{item.inactive_days} 天</p>
                                         <div className="mt-3 flex flex-wrap gap-2">
                                             <Button asChild size="sm" variant="outline" className="h-8 rounded-full">
-                                                <Link href={buildWeeklyUserDetailHref({ kind: "inactive_streak", userId: item.user_id })}>
+                                                <Link href={buildAdminUserDrillInHref({ kind: "inactive_streak", userId: item.user_id })}>
                                                     查看详情
                                                 </Link>
                                             </Button>
@@ -696,7 +664,7 @@ export default function UsersPage() {
                                         <p className="mt-1 text-[11px] text-slate-500">基线 {item.baseline_pass_rate}% → 当前 {item.current_pass_rate}%</p>
                                         <div className="mt-3 flex flex-wrap gap-2">
                                             <Button asChild size="sm" variant="outline" className="h-8 rounded-full">
-                                                <Link href={buildWeeklyUserDetailHref({ kind: "improving", userId: item.user_id })}>
+                                                <Link href={buildAdminUserDrillInHref({ kind: "improving", userId: item.user_id })}>
                                                     查看详情
                                                 </Link>
                                             </Button>

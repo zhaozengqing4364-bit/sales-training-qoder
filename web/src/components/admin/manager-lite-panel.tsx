@@ -3,46 +3,23 @@
 import Link from "next/link";
 import { useState } from "react";
 import type { ManagerLiteListsResponse } from "@/lib/api/types";
+import {
+  buildAdminUserDrillInHref,
+  getDefaultAdminUserFocusNote,
+  type BuildAdminUserDrillInHrefArgs,
+} from "@/lib/admin/drill-in";
 import { Button } from "@/components/ui/button";
 import { GlassCard } from "@/components/ui/glass-card";
-
-type ManagerLiteLinkKind = "not_passed" | "inactive_streak" | "improving";
-
-type ManagerLiteLinkArgs = {
-  kind: ManagerLiteLinkKind;
-  userId: string;
-  issueFamily?: string;
-  note?: string;
-};
 
 interface ManagerLitePanelProps {
   data: ManagerLiteListsResponse;
   onRemind: (userId: string) => Promise<void>;
-  getUserHref?: (args: ManagerLiteLinkArgs) => string;
+  getUserHref?: (args: BuildAdminUserDrillInHrefArgs) => string;
 }
 
-const DEFAULT_NOT_PASSED_NOTE_BY_ISSUE_FAMILY: Record<string, string> = {
-  value_expression: "先对照最近统一报告把价值表达说具体。",
-  objection_response: "先对照最近统一报告把异议回应说完整。",
-  structure_gap: "先对照最近统一报告把结构步骤说完整。",
-  evidence_gap: "先对照最近统一报告补证据。",
-};
-
-function getDefaultNotPassedNote(issueFamily?: string): string {
-  return DEFAULT_NOT_PASSED_NOTE_BY_ISSUE_FAMILY[issueFamily || ""] || DEFAULT_NOT_PASSED_NOTE_BY_ISSUE_FAMILY.evidence_gap;
-}
-
-function defaultGetUserHref({ kind, userId, issueFamily, note }: ManagerLiteLinkArgs): string {
-  const basePath = `/admin/users/${userId}`;
-  const searchParams = new URLSearchParams({ focusBucket: kind });
-
-  if (kind === "not_passed") {
-    searchParams.set("focusIssueFamily", issueFamily || "evidence_gap");
-    searchParams.set("focusNote", note || getDefaultNotPassedNote(issueFamily));
-  }
-
-  return `${basePath}?${searchParams.toString()}`;
-}
+const defaultGetUserHref = (args: BuildAdminUserDrillInHrefArgs): string => (
+  buildAdminUserDrillInHref(args)
+);
 
 function SectionHeader({
   title,
@@ -125,7 +102,7 @@ export function ManagerLitePanel({ data, onRemind, getUserHref = defaultGetUserH
                           kind: "not_passed",
                           userId: item.user_id,
                           issueFamily: item.issue_family || "evidence_gap",
-                          note: getDefaultNotPassedNote(item.issue_family || undefined),
+                          note: getDefaultAdminUserFocusNote(item.issue_family),
                         })}
                       >
                         查看并设重点
