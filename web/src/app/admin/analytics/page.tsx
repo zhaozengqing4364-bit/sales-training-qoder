@@ -27,6 +27,12 @@ import {
     formatNotEvaluableReason,
 } from "@/lib/session-evidence";
 import {
+    extractLinkedAssetChanges,
+    formatLinkedAssetHealthStatusLabel,
+    formatLinkedAssetImpactLevelLabel,
+    formatLinkedAssetLabel,
+} from "@/lib/admin/linked-assets";
+import {
     Download,
     RefreshCw,
     Filter,
@@ -113,90 +119,6 @@ function resolveWindowDays(timeRange: TimeRange): number {
     if (timeRange === "90d") return 90;
     if (timeRange === "all_time") return 365;
     return 30;
-}
-
-type LinkedAssetChange = {
-    asset_id?: string;
-    asset_type?: string;
-    asset_label?: string;
-    asset_name?: string;
-    admin_path?: string;
-    latest_change_label?: string;
-    change_count_7d?: number;
-    impact_level?: string;
-    health_status?: string;
-};
-
-function asRecord(value: unknown): Record<string, unknown> {
-    return value && typeof value === "object" ? value as Record<string, unknown> : {};
-}
-
-function toOptionalString(value: unknown): string | undefined {
-    return typeof value === "string" && value.trim() ? value : undefined;
-}
-
-function toNumber(value: unknown): number | undefined {
-    if (typeof value === "number" && Number.isFinite(value)) {
-        return value;
-    }
-    if (typeof value === "string" && value.trim()) {
-        const parsed = Number(value);
-        if (Number.isFinite(parsed)) {
-            return parsed;
-        }
-    }
-    return undefined;
-}
-
-function parseLinkedAssetChanges(value: unknown): LinkedAssetChange[] {
-    if (!Array.isArray(value)) {
-        return [];
-    }
-
-    return value
-        .map((entry) => {
-            const raw = asRecord(entry);
-            return {
-                asset_id: toOptionalString(raw.asset_id),
-                asset_type: toOptionalString(raw.asset_type),
-                asset_label: toOptionalString(raw.asset_label),
-                asset_name: toOptionalString(raw.asset_name),
-                admin_path: toOptionalString(raw.admin_path),
-                latest_change_label: toOptionalString(raw.latest_change_label),
-                change_count_7d: toNumber(raw.change_count_7d),
-                impact_level: toOptionalString(raw.impact_level),
-                health_status: toOptionalString(raw.health_status),
-            };
-        })
-        .filter((entry) => Boolean(entry.admin_path && entry.asset_name && entry.latest_change_label));
-}
-
-function extractLinkedAssetChanges(fault: SupportRuntimeFaultItem): LinkedAssetChange[] {
-    const diagnostics = asRecord(fault.diagnostics);
-    return parseLinkedAssetChanges(diagnostics.linked_asset_changes);
-}
-
-function impactLevelLabel(level?: string): string {
-    if (level === "high") return "高影响";
-    if (level === "medium") return "中影响";
-    return "低影响";
-}
-
-function healthStatusLabel(status?: string): string {
-    if (status === "blocking") return "阻塞";
-    if (status === "warning") return "告警";
-    return "健康";
-}
-
-function assetLabel(change: LinkedAssetChange): string {
-    if (change.asset_label) {
-        return change.asset_label;
-    }
-    if (change.asset_type === "knowledge_base") return "知识库";
-    if (change.asset_type === "persona") return "角色";
-    if (change.asset_type === "presentation") return "PPT";
-    if (change.asset_type === "runtime_profile") return "运行时配置";
-    return "资产";
 }
 
 export default function AnalyticsPage() {
@@ -426,11 +348,10 @@ export default function AnalyticsPage() {
                             <button
                                 key={option.value}
                                 onClick={() => setTimeRange(option.value)}
-                                className={`px-4 py-2 text-sm font-medium rounded-full transition-all ${
-                                    timeRange === option.value
+                                className={`px-4 py-2 text-sm font-medium rounded-full transition-all ${timeRange === option.value
                                         ? "bg-white text-slate-900 shadow-sm"
                                         : "text-slate-500 hover:text-slate-700"
-                                }`}
+                                    }`}
                             >
                                 {option.label}
                             </button>
@@ -848,13 +769,13 @@ export default function AnalyticsPage() {
                                         <div key={`${fault.kind}-${change.asset_type}-${change.asset_id}`} className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
                                             <div className="flex flex-wrap items-center gap-2">
                                                 <Link href={change.admin_path || "/admin"} className="text-sm font-semibold text-slate-900 hover:text-blue-600">
-                                                    {assetLabel(change)} · {change.asset_name}
+                                                    {formatLinkedAssetLabel(change)} · {change.asset_name}
                                                 </Link>
                                                 <span className="inline-flex rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-medium text-slate-600">
-                                                    {impactLevelLabel(change.impact_level)}
+                                                    {formatLinkedAssetImpactLevelLabel(change.impact_level)}
                                                 </span>
                                                 <span className="inline-flex rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-medium text-slate-600">
-                                                    {healthStatusLabel(change.health_status)}
+                                                    {formatLinkedAssetHealthStatusLabel(change.health_status)}
                                                 </span>
                                             </div>
                                             <p className="mt-2 text-sm text-slate-700 text-pretty">{change.latest_change_label}</p>

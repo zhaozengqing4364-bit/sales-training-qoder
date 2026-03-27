@@ -557,6 +557,8 @@ describe("AnalyticsPage", () => {
         expect(screen.getByText("异常关联资产变更")).toBeTruthy();
         expect(screen.getByText("知识库锁定模式下检索失败，最近 3 个会话被阻断。")).toBeTruthy();
         expect(screen.getByRole("link", { name: "知识库 · 石犀产品知识库" }).getAttribute("href")).toBe("/admin/knowledge");
+        expect(screen.getByText("高影响")).toBeTruthy();
+        expect(screen.getByText("阻塞")).toBeTruthy();
         expect(screen.getByText(/最近文档：竞品对比/)).toBeTruthy();
     });
 

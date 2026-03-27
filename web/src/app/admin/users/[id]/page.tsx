@@ -19,6 +19,11 @@ import {
     formatNotEvaluableReason,
 } from "@/lib/session-evidence";
 import { readAdminUserDrillInContext } from "@/lib/admin/drill-in";
+import {
+    extractLinkedAssetChanges,
+    formatLinkedAssetLabel,
+    type LinkedAssetChange,
+} from "@/lib/admin/linked-assets";
 import { GlassCard } from "@/components/ui/glass-card";
 import { Button } from "@/components/ui/button";
 import {
@@ -257,72 +262,6 @@ function buildProgressOverview(
         iconClassName: "text-slate-600",
         Icon: Activity,
     };
-}
-
-type LinkedAssetChange = {
-    asset_type?: string;
-    asset_label?: string;
-    asset_name?: string;
-    admin_path?: string;
-    latest_change_label?: string;
-    change_count_7d?: number;
-};
-
-function asRecord(value: unknown): Record<string, unknown> {
-    return value && typeof value === "object" ? value as Record<string, unknown> : {};
-}
-
-function toOptionalString(value: unknown): string | undefined {
-    return typeof value === "string" && value.trim() ? value : undefined;
-}
-
-function toNumber(value: unknown): number | undefined {
-    if (typeof value === "number" && Number.isFinite(value)) {
-        return value;
-    }
-    if (typeof value === "string" && value.trim()) {
-        const parsed = Number(value);
-        if (Number.isFinite(parsed)) {
-            return parsed;
-        }
-    }
-    return undefined;
-}
-
-function parseLinkedAssetChanges(value: unknown): LinkedAssetChange[] {
-    if (!Array.isArray(value)) {
-        return [];
-    }
-
-    return value
-        .map((entry) => {
-            const raw = asRecord(entry);
-            return {
-                asset_type: toOptionalString(raw.asset_type),
-                asset_label: toOptionalString(raw.asset_label),
-                asset_name: toOptionalString(raw.asset_name),
-                admin_path: toOptionalString(raw.admin_path),
-                latest_change_label: toOptionalString(raw.latest_change_label),
-                change_count_7d: toNumber(raw.change_count_7d),
-            };
-        })
-        .filter((entry) => Boolean(entry.asset_name && entry.admin_path && entry.latest_change_label));
-}
-
-function extractLinkedAssetChanges(fault: SupportRuntimeFaultItem): LinkedAssetChange[] {
-    const diagnostics = asRecord(fault.diagnostics);
-    return parseLinkedAssetChanges(diagnostics.linked_asset_changes);
-}
-
-function assetLabel(change: LinkedAssetChange): string {
-    if (change.asset_label) {
-        return change.asset_label;
-    }
-    if (change.asset_type === "knowledge_base") return "知识库";
-    if (change.asset_type === "persona") return "角色";
-    if (change.asset_type === "presentation") return "PPT";
-    if (change.asset_type === "runtime_profile") return "运行时配置";
-    return "资产";
 }
 
 export default function UserDetailPage() {
@@ -663,11 +602,10 @@ export default function UserDetailPage() {
                             <button
                                 key={option.value}
                                 onClick={() => setTimeRange(option.value)}
-                                className={`px-4 py-2 text-sm font-medium rounded-full transition-all ${
-                                    timeRange === option.value
+                                className={`px-4 py-2 text-sm font-medium rounded-full transition-all ${timeRange === option.value
                                         ? "bg-white text-slate-900 shadow-sm"
                                         : "text-slate-500 hover:text-slate-700"
-                                }`}
+                                    }`}
                             >
                                 {option.label}
                             </button>
@@ -1205,108 +1143,108 @@ export default function UserDetailPage() {
                                         const linkedRuntimeFault = runtimeFaultBySessionId.get(session.session_id);
 
                                         return (
-                                        <tr
-                                            key={session.session_id}
-                                            className="border-b border-slate-50 hover:bg-slate-50/50 transition-colors"
-                                        >
-                                            <td className="py-3 px-4 text-sm text-slate-700 align-top">
-                                                {formatDate(session.start_time)}
-                                            </td>
-                                            <td className="py-3 px-4 align-top">
-                                                <span className="text-sm font-medium text-slate-700">
-                                                    {session.scenario_name || session.scenario_type || "-"}
-                                                </span>
-                                            </td>
-                                            <td className="py-3 px-4 text-sm text-slate-600 align-top">
-                                                {session.agent_name || "-"}
-                                                {session.persona_name && ` / ${session.persona_name}`}
-                                            </td>
-                                            <td className="py-3 px-4 align-top">
-                                                <div className="space-y-2">
-                                                    <span
-                                                        className={`inline-flex px-2.5 py-1 rounded-full text-xs font-medium ${getStatusColor(
-                                                            session.status
-                                                        )}`}
-                                                    >
-                                                        {session.status === "completed"
-                                                            ? "已完成"
-                                                            : session.status === "in_progress"
-                                                                ? "进行中"
-                                                                : session.status}
+                                            <tr
+                                                key={session.session_id}
+                                                className="border-b border-slate-50 hover:bg-slate-50/50 transition-colors"
+                                            >
+                                                <td className="py-3 px-4 text-sm text-slate-700 align-top">
+                                                    {formatDate(session.start_time)}
+                                                </td>
+                                                <td className="py-3 px-4 align-top">
+                                                    <span className="text-sm font-medium text-slate-700">
+                                                        {session.scenario_name || session.scenario_type || "-"}
                                                     </span>
-                                                    {session.status === "completed" ? (
-                                                        <span className={`inline-flex px-2.5 py-1 rounded-full text-xs font-medium ${getOverallResultTone(session)}`}>
-                                                            {getOverallResultLabel(session)}
+                                                </td>
+                                                <td className="py-3 px-4 text-sm text-slate-600 align-top">
+                                                    {session.agent_name || "-"}
+                                                    {session.persona_name && ` / ${session.persona_name}`}
+                                                </td>
+                                                <td className="py-3 px-4 align-top">
+                                                    <div className="space-y-2">
+                                                        <span
+                                                            className={`inline-flex px-2.5 py-1 rounded-full text-xs font-medium ${getStatusColor(
+                                                                session.status
+                                                            )}`}
+                                                        >
+                                                            {session.status === "completed"
+                                                                ? "已完成"
+                                                                : session.status === "in_progress"
+                                                                    ? "进行中"
+                                                                    : session.status}
                                                         </span>
-                                                    ) : null}
-                                                </div>
-                                            </td>
-                                            <td className="py-3 px-4 align-top">
-                                                <div className="space-y-1 max-w-sm">
-                                                    <p className="text-sm text-slate-700 text-pretty">
-                                                        {getSessionPreview(session)}
-                                                    </p>
-                                                    {session.next_goal?.goal_text ? (
-                                                        <p className="text-xs text-slate-500 text-pretty">
-                                                            <span className="text-slate-400">下一轮：</span>
-                                                            <span>{session.next_goal.goal_text}</span>
+                                                        {session.status === "completed" ? (
+                                                            <span className={`inline-flex px-2.5 py-1 rounded-full text-xs font-medium ${getOverallResultTone(session)}`}>
+                                                                {getOverallResultLabel(session)}
+                                                            </span>
+                                                        ) : null}
+                                                    </div>
+                                                </td>
+                                                <td className="py-3 px-4 align-top">
+                                                    <div className="space-y-1 max-w-sm">
+                                                        <p className="text-sm text-slate-700 text-pretty">
+                                                            {getSessionPreview(session)}
                                                         </p>
-                                                    ) : null}
-                                                    {linkedRuntimeFault ? (
-                                                        <div className="mt-3 rounded-2xl border border-amber-200 bg-amber-50/70 px-3 py-3">
-                                                            <p className="text-xs font-semibold text-amber-900 text-pretty">
-                                                                最近运行异常：{linkedRuntimeFault.fault.summary}
+                                                        {session.next_goal?.goal_text ? (
+                                                            <p className="text-xs text-slate-500 text-pretty">
+                                                                <span className="text-slate-400">下一轮：</span>
+                                                                <span>{session.next_goal.goal_text}</span>
                                                             </p>
-                                                            <div className="mt-2 flex flex-wrap gap-2">
+                                                        ) : null}
+                                                        {linkedRuntimeFault ? (
+                                                            <div className="mt-3 rounded-2xl border border-amber-200 bg-amber-50/70 px-3 py-3">
+                                                                <p className="text-xs font-semibold text-amber-900 text-pretty">
+                                                                    最近运行异常：{linkedRuntimeFault.fault.summary}
+                                                                </p>
+                                                                <div className="mt-2 flex flex-wrap gap-2">
+                                                                    {linkedRuntimeFault.assetChanges.map((change) => (
+                                                                        <Link
+                                                                            key={`${session.session_id}-${change.asset_type}-${change.asset_name}`}
+                                                                            href={change.admin_path || "/admin"}
+                                                                            className="inline-flex rounded-full border border-amber-200 bg-white px-3 py-1 text-xs font-medium text-amber-800 hover:text-amber-900"
+                                                                        >
+                                                                            {formatLinkedAssetLabel(change)} · {change.asset_name}
+                                                                        </Link>
+                                                                    ))}
+                                                                </div>
                                                                 {linkedRuntimeFault.assetChanges.map((change) => (
-                                                                    <Link
-                                                                        key={`${session.session_id}-${change.asset_type}-${change.asset_name}`}
-                                                                        href={change.admin_path || "/admin"}
-                                                                        className="inline-flex rounded-full border border-amber-200 bg-white px-3 py-1 text-xs font-medium text-amber-800 hover:text-amber-900"
+                                                                    <p
+                                                                        key={`${session.session_id}-${change.asset_type}-${change.latest_change_label}`}
+                                                                        className="mt-2 text-xs text-amber-800 text-pretty"
                                                                     >
-                                                                        {assetLabel(change)} · {change.asset_name}
-                                                                    </Link>
+                                                                        {change.latest_change_label}
+                                                                        {typeof change.change_count_7d === "number"
+                                                                            ? ` · 近 7 天 ${change.change_count_7d} 次变更`
+                                                                            : ""}
+                                                                    </p>
                                                                 ))}
                                                             </div>
-                                                            {linkedRuntimeFault.assetChanges.map((change) => (
-                                                                <p
-                                                                    key={`${session.session_id}-${change.asset_type}-${change.latest_change_label}`}
-                                                                    className="mt-2 text-xs text-amber-800 text-pretty"
-                                                                >
-                                                                    {change.latest_change_label}
-                                                                    {typeof change.change_count_7d === "number"
-                                                                        ? ` · 近 7 天 ${change.change_count_7d} 次变更`
-                                                                        : ""}
-                                                                </p>
-                                                            ))}
-                                                        </div>
-                                                    ) : null}
-                                                </div>
-                                            </td>
-                                            <td className="py-3 px-4 text-sm text-slate-600 text-right align-top tabular-nums">
-                                                {session.duration_minutes.toFixed(1)} 分钟
-                                            </td>
-                                            <td className="py-3 px-4 text-right align-top">
-                                                <span
-                                                    className={`text-lg font-bold tabular-nums ${getScoreColor(
-                                                        session.scores.overall
-                                                    )}`}
-                                                >
-                                                    {session.scores.overall ?? "-"}
-                                                </span>
-                                            </td>
-                                            <td className="py-3 px-4 text-right align-top">
-                                                {session.status === "completed" ? (
-                                                    <Button asChild variant="outline" size="sm" className="rounded-full">
-                                                        <Link href={`/practice/${session.session_id}/report`}>
-                                                            查看统一报告
-                                                        </Link>
-                                                    </Button>
-                                                ) : (
-                                                    <span className="text-xs text-slate-400">完成后可查看统一报告</span>
-                                                )}
-                                            </td>
-                                        </tr>
+                                                        ) : null}
+                                                    </div>
+                                                </td>
+                                                <td className="py-3 px-4 text-sm text-slate-600 text-right align-top tabular-nums">
+                                                    {session.duration_minutes.toFixed(1)} 分钟
+                                                </td>
+                                                <td className="py-3 px-4 text-right align-top">
+                                                    <span
+                                                        className={`text-lg font-bold tabular-nums ${getScoreColor(
+                                                            session.scores.overall
+                                                        )}`}
+                                                    >
+                                                        {session.scores.overall ?? "-"}
+                                                    </span>
+                                                </td>
+                                                <td className="py-3 px-4 text-right align-top">
+                                                    {session.status === "completed" ? (
+                                                        <Button asChild variant="outline" size="sm" className="rounded-full">
+                                                            <Link href={`/practice/${session.session_id}/report`}>
+                                                                查看统一报告
+                                                            </Link>
+                                                        </Button>
+                                                    ) : (
+                                                        <span className="text-xs text-slate-400">完成后可查看统一报告</span>
+                                                    )}
+                                                </td>
+                                            </tr>
                                         );
                                     })}
                                 </tbody>

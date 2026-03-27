@@ -383,7 +383,7 @@ describe("UserDetailPage", () => {
             .toBeTruthy();
         expect(screen.getByText("最近运行异常：知识库锁定模式下检索失败，最近 3 个会话被阻断。")).toBeTruthy();
         expect(screen.getByRole("link", { name: "知识库 · 石犀产品知识库" }).getAttribute("href")).toBe("/admin/knowledge");
-        expect(screen.getByText(/最近文档：竞品对比/)).toBeTruthy();
+        expect(screen.getByText("最近文档：竞品对比 · 近 7 天 2 次变更")).toBeTruthy();
 
         const reportLink = screen.getByRole("link", { name: "查看统一报告" }) as HTMLAnchorElement;
         expect(reportLink.getAttribute("href")).toBe("/practice/session-1/report");
