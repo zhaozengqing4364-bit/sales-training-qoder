@@ -2048,3 +2048,32 @@ Append one entry per iteration:
   verification results: passed; fresh py_compile succeeded and the focused support runtime unit suite passed 3/3 including the new registry seam regression.
   success signal status: support runtime governance indexes and linked fault asset metadata now share one backend source of truth for labels, admin paths, and asset reference extraction across knowledge bases, personas, presentations, and runtime profiles.
   rollback note: if future work expands asset types, extend support.services.asset_registry first and keep RuntimeStatusService consuming that registry instead of restoring inline label/path/ref maps.
+
+- time: 2026-03-27T18:54:00+08:00
+  mode: grow
+  item id: M006-S04-T02
+  files changed:
+    - web/src/lib/admin/assets.ts
+    - web/src/lib/admin/linked-assets.ts
+    - web/src/components/admin/asset-governance.tsx
+    - web/src/app/admin/analytics/page.tsx
+    - web/src/app/admin/users/[id]/page.tsx
+    - web/src/app/admin/knowledge/page.tsx
+    - web/src/app/admin/personas/page.tsx
+    - web/src/app/admin/presentations/page.tsx
+    - web/src/app/admin/voice-runtime/page.tsx
+    - web/src/lib/admin/assets.test.ts
+    - web/src/app/admin/analytics/page.test.tsx
+    - web/src/app/admin/users/[id]/page.test.tsx
+    - web/src/app/admin/asset-governance.test.tsx
+    - .gsd/DECISIONS.md
+    - .gsd/milestones/M006/slices/S04/tasks/T02-SUMMARY.md
+    - .codex/loop/state.json
+    - .codex/loop/log.md
+  summary: Added a shared frontend asset metadata registry aligned with the backend seam, routed linked-asset label/path fallback through it, and removed hardcoded governance asset labels from the current admin asset pages.
+  verification commands:
+    - cd web && /usr/bin/time -p pnpm dlx npm@11.6.1 test -- --run 'src/lib/admin/assets.test.ts' 'src/lib/admin/linked-assets.test.ts'
+    - cd web && /usr/bin/time -p pnpm dlx npm@11.6.1 test -- --run 'src/app/admin/analytics/page.test.tsx' 'src/app/admin/users/[id]/page.test.tsx' 'src/app/admin/asset-governance.test.tsx'
+  verification results: passed; the new frontend helper regressions passed 6/6 after an initial red import failure, and the planned slice-level web suite passed 22/22 once the shared registry seam was wired into analytics, user-detail, and governance surfaces.
+  success signal status: current admin asset labels and list routes now come from one frontend registry seam, and linked runtime fault cards still render the correct runtime-profile destination even when payload admin_path metadata is blank.
+  rollback note: if future work expands asset types, extend web/src/lib/admin/assets.ts first and keep page components consuming assetType + linked-assets helpers instead of restoring inline labels or /admin fallbacks.

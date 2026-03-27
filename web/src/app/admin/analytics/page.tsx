@@ -31,6 +31,7 @@ import {
     formatLinkedAssetHealthStatusLabel,
     formatLinkedAssetImpactLevelLabel,
     formatLinkedAssetLabel,
+    formatLinkedAssetLink,
 } from "@/lib/admin/linked-assets";
 import {
     Download,
@@ -768,7 +769,7 @@ export default function AnalyticsPage() {
                                     {assetChanges.map((change) => (
                                         <div key={`${fault.kind}-${change.asset_type}-${change.asset_id}`} className="rounded-2xl border border-slate-200 bg-white px-4 py-3">
                                             <div className="flex flex-wrap items-center gap-2">
-                                                <Link href={change.admin_path || "/admin"} className="text-sm font-semibold text-slate-900 hover:text-blue-600">
+                                                <Link href={formatLinkedAssetLink(change)} className="text-sm font-semibold text-slate-900 hover:text-blue-600">
                                                     {formatLinkedAssetLabel(change)} · {change.asset_name}
                                                 </Link>
                                                 <span className="inline-flex rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-medium text-slate-600">

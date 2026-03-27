@@ -22,6 +22,7 @@ import { readAdminUserDrillInContext } from "@/lib/admin/drill-in";
 import {
     extractLinkedAssetChanges,
     formatLinkedAssetLabel,
+    formatLinkedAssetLink,
     type LinkedAssetChange,
 } from "@/lib/admin/linked-assets";
 import { GlassCard } from "@/components/ui/glass-card";
@@ -1199,7 +1200,7 @@ export default function UserDetailPage() {
                                                                     {linkedRuntimeFault.assetChanges.map((change) => (
                                                                         <Link
                                                                             key={`${session.session_id}-${change.asset_type}-${change.asset_name}`}
-                                                                            href={change.admin_path || "/admin"}
+                                                                            href={formatLinkedAssetLink(change)}
                                                                             className="inline-flex rounded-full border border-amber-200 bg-white px-3 py-1 text-xs font-medium text-amber-800 hover:text-amber-900"
                                                                         >
                                                                             {formatLinkedAssetLabel(change)} · {change.asset_name}

@@ -1,5 +1,7 @@
 import type { LinkedAssetChangeReference, SupportRuntimeFaultItem } from "@/lib/api/types";
 
+import { resolveAdminAssetLabel, resolveAdminAssetLink } from "@/lib/admin/assets";
+
 export type LinkedAssetChange = LinkedAssetChangeReference;
 
 export function parseLinkedAssetChanges(
@@ -27,12 +29,9 @@ export function formatLinkedAssetHealthStatusLabel(status?: string): string {
 }
 
 export function formatLinkedAssetLabel(change: Pick<LinkedAssetChange, "asset_label" | "asset_type">): string {
-    if (change.asset_label) {
-        return change.asset_label;
-    }
-    if (change.asset_type === "knowledge_base") return "知识库";
-    if (change.asset_type === "persona") return "角色";
-    if (change.asset_type === "presentation") return "PPT";
-    if (change.asset_type === "runtime_profile") return "运行时配置";
-    return "资产";
+    return resolveAdminAssetLabel(change);
+}
+
+export function formatLinkedAssetLink(change: Pick<LinkedAssetChange, "admin_path" | "asset_type">): string {
+    return resolveAdminAssetLink(change);
 }

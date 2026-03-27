@@ -247,7 +247,7 @@ export default function PresentationsPage() {
                 </div>
             </GlassCard>
 
-            {!isLoading ? <AssetGovernanceOverview assetLabel="PPT" items={filteredPresentations} /> : null}
+            {!isLoading ? <AssetGovernanceOverview assetType="presentation" items={filteredPresentations} /> : null}
 
             <GlassCard className="overflow-hidden">
                 <div className="space-y-4 p-4 md:hidden">

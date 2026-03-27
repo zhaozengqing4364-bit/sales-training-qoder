@@ -3,6 +3,7 @@ import { Activity, AlertTriangle, Clock3, ShieldAlert, ShieldCheck, Users } from
 import { Badge } from "@/components/ui/badge";
 import { GlassCard } from "@/components/ui/glass-card";
 import type { AssetGovernanceSubject, AssetGovernanceSummary } from "@/lib/api/types";
+import { resolveAdminAssetTypeLabel } from "@/lib/admin/assets";
 import { cn } from "@/lib/utils";
 
 export type { AssetGovernanceSubject, AssetGovernanceSummary } from "@/lib/api/types";
@@ -174,11 +175,11 @@ export function AssetGovernanceSummaryCard({
 }
 
 export function AssetGovernanceOverview({
-    assetLabel,
+    assetType,
     items,
     className,
 }: {
-    assetLabel: string;
+    assetType: string;
     items: AssetGovernanceSubject[];
     className?: string;
 }) {
@@ -190,6 +191,7 @@ export function AssetGovernanceOverview({
     const blockingCount = summaries.filter((item) => item.health_summary?.status === "blocking").length;
     const warningCount = summaries.filter((item) => item.health_summary?.status === "warning").length;
     const changedCount = summaries.filter((item) => (item.recent_change_summary?.change_count_7d || 0) > 0).length;
+    const assetLabel = resolveAdminAssetTypeLabel(assetType);
 
     const overviewCards = [
         {

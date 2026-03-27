@@ -290,7 +290,7 @@ export default function VoiceRuntimePage() {
                 </div>
             </div>
 
-            <AssetGovernanceOverview assetLabel="运行时配置" items={profiles} />
+            <AssetGovernanceOverview assetType="runtime_profile" items={profiles} />
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 <GlassCard className="p-4 lg:col-span-1">

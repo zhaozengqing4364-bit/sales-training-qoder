@@ -441,7 +441,7 @@ export default function PersonasPage() {
             )}
 
             {!isLoading && !error && (
-                <AssetGovernanceOverview assetLabel="角色" items={personas} />
+                <AssetGovernanceOverview assetType="persona" items={personas} />
             )}
 
             {/* Personas Table */}

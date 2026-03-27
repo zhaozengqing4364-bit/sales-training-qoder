@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "exported_at": "2026-03-27T10:46:33.288Z",
+  "exported_at": "2026-03-27T10:57:14.271Z",
   "milestones": [
     {
       "id": "M001",
@@ -3723,19 +3723,38 @@
       "milestone_id": "M006",
       "slice_id": "S04",
       "id": "T02",
-      "title": "对齐 frontend asset metadata helper",
-      "status": "pending",
-      "one_liner": "",
-      "narrative": "",
-      "verification_result": "",
+      "title": "Added a shared frontend asset metadata registry and routed linked-asset plus governance UI through it for the current four asset types.",
+      "status": "complete",
+      "one_liner": "Added a shared frontend asset metadata registry and routed linked-asset plus governance UI through it for the current four asset types.",
+      "narrative": "I followed TDD by first adding a focused frontend registry regression in `web/src/lib/admin/assets.test.ts`, verifying it failed because the planned `web/src/lib/admin/assets.ts` file did not exist locally, then creating that shared registry to mirror the backend asset labels and admin list routes for knowledge bases, personas, presentations, and runtime profiles. I refactored `web/src/lib/admin/linked-assets.ts` to delegate label and admin-path fallback resolution to the new registry, switched the analytics and admin user-detail pages to use the shared link helper instead of generic `/admin` fallbacks, and changed `AssetGovernanceOverview` plus the four governance pages to pass `assetType` so governance labels now come from the same shared metadata seam rather than page-specific string literals. I also tightened the analytics and user-detail tests so runtime-profile linked assets still resolve the correct label and route when `asset_label` and `admin_path` are blank in the payload, then reran the helper suite and the planned slice verification command successfully.",
+      "verification_result": "Fresh frontend helper regressions passed for the new registry seam, and the planned slice verification suite passed across analytics, admin user detail, and governance surfaces. Specifically, `src/lib/admin/assets.test.ts` and `src/lib/admin/linked-assets.test.ts` passed 6/6, and the planned `src/app/admin/analytics/page.test.tsx`, `src/app/admin/users/[id]/page.test.tsx`, and `src/app/admin/asset-governance.test.tsx` suite passed 22/22.",
       "duration": "",
-      "completed_at": null,
+      "completed_at": "2026-03-27T10:57:14.253Z",
       "blocker_discovered": false,
-      "deviations": "",
-      "known_issues": "",
-      "key_files": [],
-      "key_decisions": [],
-      "full_summary_md": "",
+      "deviations": "The planner snapshot expected `web/src/lib/admin/assets.ts` to already exist; it did not, so I created it and updated the four governance pages to pass `assetType` into `AssetGovernanceOverview` so the shared registry could own the label mapping.",
+      "known_issues": "None.",
+      "key_files": [
+        "web/src/lib/admin/assets.ts",
+        "web/src/lib/admin/linked-assets.ts",
+        "web/src/components/admin/asset-governance.tsx",
+        "web/src/app/admin/analytics/page.tsx",
+        "web/src/app/admin/users/[id]/page.tsx",
+        "web/src/app/admin/knowledge/page.tsx",
+        "web/src/app/admin/personas/page.tsx",
+        "web/src/app/admin/presentations/page.tsx",
+        "web/src/app/admin/voice-runtime/page.tsx",
+        "web/src/lib/admin/assets.test.ts",
+        "web/src/app/admin/analytics/page.test.tsx",
+        "web/src/app/admin/users/[id]/page.test.tsx",
+        "web/src/app/admin/asset-governance.test.tsx",
+        ".gsd/DECISIONS.md",
+        ".gsd/milestones/M006/slices/S04/tasks/T02-SUMMARY.md"
+      ],
+      "key_decisions": [
+        "Recorded D095 to make a shared frontend asset metadata registry the single source of truth for the current four asset labels and admin list routes.",
+        "Changed `AssetGovernanceOverview` to derive its display label from `assetType` so governance pages stop repeating literal asset-label strings."
+      ],
+      "full_summary_md": "---\nid: T02\nparent: S04\nmilestone: M006\nkey_files:\n  - web/src/lib/admin/assets.ts\n  - web/src/lib/admin/linked-assets.ts\n  - web/src/components/admin/asset-governance.tsx\n  - web/src/app/admin/analytics/page.tsx\n  - web/src/app/admin/users/[id]/page.tsx\n  - web/src/app/admin/knowledge/page.tsx\n  - web/src/app/admin/personas/page.tsx\n  - web/src/app/admin/presentations/page.tsx\n  - web/src/app/admin/voice-runtime/page.tsx\n  - web/src/lib/admin/assets.test.ts\n  - web/src/app/admin/analytics/page.test.tsx\n  - web/src/app/admin/users/[id]/page.test.tsx\n  - web/src/app/admin/asset-governance.test.tsx\n  - .gsd/DECISIONS.md\n  - .gsd/milestones/M006/slices/S04/tasks/T02-SUMMARY.md\nkey_decisions:\n  - Recorded D095 to make a shared frontend asset metadata registry the single source of truth for the current four asset labels and admin list routes.\n  - Changed `AssetGovernanceOverview` to derive its display label from `assetType` so governance pages stop repeating literal asset-label strings.\nduration: \"\"\nverification_result: passed\ncompleted_at: 2026-03-27T10:57:14.253Z\nblocker_discovered: false\n---\n\n# T02: Added a shared frontend asset metadata registry and routed linked-asset plus governance UI through it for the current four asset types.\n\n**Added a shared frontend asset metadata registry and routed linked-asset plus governance UI through it for the current four asset types.**\n\n## What Happened\n\nI followed TDD by first adding a focused frontend registry regression in `web/src/lib/admin/assets.test.ts`, verifying it failed because the planned `web/src/lib/admin/assets.ts` file did not exist locally, then creating that shared registry to mirror the backend asset labels and admin list routes for knowledge bases, personas, presentations, and runtime profiles. I refactored `web/src/lib/admin/linked-assets.ts` to delegate label and admin-path fallback resolution to the new registry, switched the analytics and admin user-detail pages to use the shared link helper instead of generic `/admin` fallbacks, and changed `AssetGovernanceOverview` plus the four governance pages to pass `assetType` so governance labels now come from the same shared metadata seam rather than page-specific string literals. I also tightened the analytics and user-detail tests so runtime-profile linked assets still resolve the correct label and route when `asset_label` and `admin_path` are blank in the payload, then reran the helper suite and the planned slice verification command successfully.\n\n## Verification\n\nFresh frontend helper regressions passed for the new registry seam, and the planned slice verification suite passed across analytics, admin user detail, and governance surfaces. Specifically, `src/lib/admin/assets.test.ts` and `src/lib/admin/linked-assets.test.ts` passed 6/6, and the planned `src/app/admin/analytics/page.test.tsx`, `src/app/admin/users/[id]/page.test.tsx`, and `src/app/admin/asset-governance.test.tsx` suite passed 22/22.\n\n## Verification Evidence\n\n| # | Command | Exit Code | Verdict | Duration |\n|---|---------|-----------|---------|----------|\n| 1 | `cd web && /usr/bin/time -p pnpm dlx npm@11.6.1 test -- --run 'src/lib/admin/assets.test.ts' 'src/lib/admin/linked-assets.test.ts'` | 0 | ✅ pass | 1150ms |\n| 2 | `cd web && /usr/bin/time -p pnpm dlx npm@11.6.1 test -- --run 'src/app/admin/analytics/page.test.tsx' 'src/app/admin/users/[id]/page.test.tsx' 'src/app/admin/asset-governance.test.tsx'` | 0 | ✅ pass | 1780ms |\n\n\n## Deviations\n\nThe planner snapshot expected `web/src/lib/admin/assets.ts` to already exist; it did not, so I created it and updated the four governance pages to pass `assetType` into `AssetGovernanceOverview` so the shared registry could own the label mapping.\n\n## Known Issues\n\nNone.\n\n## Files Created/Modified\n\n- `web/src/lib/admin/assets.ts`\n- `web/src/lib/admin/linked-assets.ts`\n- `web/src/components/admin/asset-governance.tsx`\n- `web/src/app/admin/analytics/page.tsx`\n- `web/src/app/admin/users/[id]/page.tsx`\n- `web/src/app/admin/knowledge/page.tsx`\n- `web/src/app/admin/personas/page.tsx`\n- `web/src/app/admin/presentations/page.tsx`\n- `web/src/app/admin/voice-runtime/page.tsx`\n- `web/src/lib/admin/assets.test.ts`\n- `web/src/app/admin/analytics/page.test.tsx`\n- `web/src/app/admin/users/[id]/page.test.tsx`\n- `web/src/app/admin/asset-governance.test.tsx`\n- `.gsd/DECISIONS.md`\n- `.gsd/milestones/M006/slices/S04/tasks/T02-SUMMARY.md`\n",
       "description": "Add a matching frontend asset metadata helper so linked-asset displays and governance surfaces stop hardcoding asset labels/admin-path assumptions in page components. Reuse the helper from the shared linked-asset utilities introduced earlier.",
       "estimate": "0.5d",
       "files": [
@@ -5070,6 +5089,18 @@
       "decision": "How backend asset-type metadata is resolved for support/runtime governance and linked-change payloads",
       "choice": "Introduce a shared support.services.asset_registry registry that owns the current asset-type label, admin-path builder, and runtime-record reference extraction hooks, and make RuntimeStatusService consume that registry instead of inline per-type conditionals for those concerns.",
       "rationale": "This keeps the four shipped asset types on one source of truth, reduces duplicated label/path/ref logic between governance indexes and linked-asset enrichment, and makes future asset-type additions a registry-first change instead of editing multiple service conditionals.",
+      "revisable": "Yes",
+      "made_by": "agent",
+      "superseded_by": null
+    },
+    {
+      "seq": 1454,
+      "id": "D095",
+      "when_context": "M006 S04 T02",
+      "scope": "architecture",
+      "decision": "How frontend admin surfaces resolve current asset labels and admin routes for supported asset types",
+      "choice": "Use a shared frontend asset metadata registry as the single source of truth for knowledge base, persona, presentation, and runtime-profile labels plus admin list routes, and route linked-asset helpers and governance overviews through it.",
+      "rationale": "This keeps the frontend aligned with the backend asset registry seam introduced in T01, removes duplicated string/path conditionals from analytics, user detail, and governance pages, and makes future asset-type additions flow through one metadata contract instead of scattered page-specific assumptions.",
       "revisable": "Yes",
       "made_by": "agent",
       "superseded_by": null
@@ -6571,6 +6602,28 @@
       "verdict": "✅ pass",
       "duration_ms": 3770,
       "created_at": "2026-03-27T10:46:33.273Z"
+    },
+    {
+      "id": 137,
+      "task_id": "T02",
+      "slice_id": "S04",
+      "milestone_id": "M006",
+      "command": "cd web && /usr/bin/time -p pnpm dlx npm@11.6.1 test -- --run 'src/lib/admin/assets.test.ts' 'src/lib/admin/linked-assets.test.ts'",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 1150,
+      "created_at": "2026-03-27T10:57:14.253Z"
+    },
+    {
+      "id": 138,
+      "task_id": "T02",
+      "slice_id": "S04",
+      "milestone_id": "M006",
+      "command": "cd web && /usr/bin/time -p pnpm dlx npm@11.6.1 test -- --run 'src/app/admin/analytics/page.test.tsx' 'src/app/admin/users/[id]/page.test.tsx' 'src/app/admin/asset-governance.test.tsx'",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 1780,
+      "created_at": "2026-03-27T10:57:14.253Z"
     }
   ]
 }

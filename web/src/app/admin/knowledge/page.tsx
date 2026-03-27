@@ -224,7 +224,7 @@ export default function KnowledgePage() {
                 </div>
             </GlassCard>
 
-            {!isLoading && !error ? <AssetGovernanceOverview assetLabel="知识库" items={kbs} /> : null}
+            {!isLoading && !error ? <AssetGovernanceOverview assetType="knowledge_base" items={kbs} /> : null}
 
             {error ? (
                 <GlassCard className="p-8 text-center">

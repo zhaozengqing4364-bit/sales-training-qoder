@@ -128,10 +128,10 @@ const linkedAssetChanges = [
     },
     {
         asset_type: "runtime_profile",
-        asset_label: "运行时配置",
+        asset_label: "",
         asset_id: "runtime-1",
         asset_name: "销售默认 Realtime",
-        admin_path: "/admin/voice-runtime",
+        admin_path: "",
         latest_change_label: "最近配置：切换 KB 锁模式",
         latest_change_type: "config_update",
         last_changed_at: "2026-03-25T10:00:00Z",
