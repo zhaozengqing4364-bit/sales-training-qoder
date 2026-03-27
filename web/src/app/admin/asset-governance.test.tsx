@@ -209,6 +209,23 @@ describe("admin asset governance pages", () => {
             .toEqualTypeOf<AssetGovernanceSummary | null | undefined>();
     });
 
+    it.each([
+        ["knowledge_base", "知识库"],
+        ["persona", "角色"],
+        ["presentation", "PPT"],
+        ["runtime_profile", "运行时配置"],
+    ])("uses the shared registry label for %s governance overview", (assetType, assetLabel) => {
+        render(
+            <AssetGovernanceOverview
+                assetType={assetType}
+                items={[{ governance_summary: governanceSummary }]}
+            />,
+        );
+
+        expect(screen.getByText(`已覆盖 1/1 个${assetLabel}`)).toBeTruthy();
+        expect(screen.getByText(`${assetLabel}中当前最可能影响范围较大的项`)).toBeTruthy();
+    });
+
     it("shows governance overview and inline summary on the knowledge page", async () => {
         render(<KnowledgePage />);
 
