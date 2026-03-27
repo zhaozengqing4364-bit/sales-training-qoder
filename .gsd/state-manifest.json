@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "exported_at": "2026-03-27T10:02:24.811Z",
+  "exported_at": "2026-03-27T10:11:14.513Z",
   "milestones": [
     {
       "id": "M001",
@@ -3582,19 +3582,28 @@
       "milestone_id": "M006",
       "slice_id": "S03",
       "id": "T02",
-      "title": "抽出 latest-evaluable result resolver",
-      "status": "pending",
-      "one_liner": "",
-      "narrative": "",
-      "verification_result": "",
+      "title": "Extracted the latest-evaluable manager intervention result resolver into a dedicated analytics seam without changing the admin user-detail contract.",
+      "status": "complete",
+      "one_liner": "Extracted the latest-evaluable manager intervention result resolver into a dedicated analytics seam without changing the admin user-detail contract.",
+      "narrative": "I followed a red/green cycle against the existing admin users integration suite. First I added a resolver-seam regression to the /api/v1/admin/users/{id}/sessions path and verified it failed because common.analytics.history_service had no patchable manager_intervention_result_resolver boundary. I then extracted the latest-evaluable manager intervention outcome rules, issue-family normalization, and payload builder into backend/src/common/analytics/manager_intervention_results.py, and slimmed HistoryService down to delegation wrappers so other analytics code can keep using the same public helper names. After that, the seam regression passed, the full admin users integration suite stayed green, and the existing admin user-detail contract kept the same intervention-result semantics while now reading through an explicit resolver seam.",
+      "verification_result": "Ran the new seam-focused admin users integration regression in red/green order, then ran the full task-plan verification command and fresh LSP diagnostics. The red run failed because HistoryService lacked the resolver boundary, the green rerun passed after extraction, the full tests/integration/test_admin_users_api.py suite passed 16/16, and no diagnostics remained on the touched backend files.",
       "duration": "",
-      "completed_at": null,
+      "completed_at": "2026-03-27T10:11:14.487Z",
       "blocker_discovered": false,
-      "deviations": "",
-      "known_issues": "",
-      "key_files": [],
-      "key_decisions": [],
-      "full_summary_md": "",
+      "deviations": "Added a delegation-focused integration regression inside backend/tests/integration/test_admin_users_api.py so the new resolver seam is explicitly locked in addition to the pre-existing behavior coverage.",
+      "known_issues": "None.",
+      "key_files": [
+        "backend/src/common/analytics/manager_intervention_results.py",
+        "backend/src/common/analytics/history_service.py",
+        "backend/tests/integration/test_admin_users_api.py",
+        ".gsd/DECISIONS.md",
+        ".gsd/milestones/M006/slices/S03/tasks/T02-SUMMARY.md"
+      ],
+      "key_decisions": [
+        "Extracted supervisor intervention result semantics into common.analytics.manager_intervention_results so HistoryService stays a query/projection orchestrator.",
+        "Locked the new read-side seam with an integration regression that monkeypatches HistoryService’s imported resolver singleton instead of adding a separate unit-only seam test."
+      ],
+      "full_summary_md": "---\nid: T02\nparent: S03\nmilestone: M006\nkey_files:\n  - backend/src/common/analytics/manager_intervention_results.py\n  - backend/src/common/analytics/history_service.py\n  - backend/tests/integration/test_admin_users_api.py\n  - .gsd/DECISIONS.md\n  - .gsd/milestones/M006/slices/S03/tasks/T02-SUMMARY.md\nkey_decisions:\n  - Extracted supervisor intervention result semantics into common.analytics.manager_intervention_results so HistoryService stays a query/projection orchestrator.\n  - Locked the new read-side seam with an integration regression that monkeypatches HistoryService’s imported resolver singleton instead of adding a separate unit-only seam test.\nduration: \"\"\nverification_result: mixed\ncompleted_at: 2026-03-27T10:11:14.487Z\nblocker_discovered: false\n---\n\n# T02: Extracted the latest-evaluable manager intervention result resolver into a dedicated analytics seam without changing the admin user-detail contract.\n\n**Extracted the latest-evaluable manager intervention result resolver into a dedicated analytics seam without changing the admin user-detail contract.**\n\n## What Happened\n\nI followed a red/green cycle against the existing admin users integration suite. First I added a resolver-seam regression to the /api/v1/admin/users/{id}/sessions path and verified it failed because common.analytics.history_service had no patchable manager_intervention_result_resolver boundary. I then extracted the latest-evaluable manager intervention outcome rules, issue-family normalization, and payload builder into backend/src/common/analytics/manager_intervention_results.py, and slimmed HistoryService down to delegation wrappers so other analytics code can keep using the same public helper names. After that, the seam regression passed, the full admin users integration suite stayed green, and the existing admin user-detail contract kept the same intervention-result semantics while now reading through an explicit resolver seam.\n\n## Verification\n\nRan the new seam-focused admin users integration regression in red/green order, then ran the full task-plan verification command and fresh LSP diagnostics. The red run failed because HistoryService lacked the resolver boundary, the green rerun passed after extraction, the full tests/integration/test_admin_users_api.py suite passed 16/16, and no diagnostics remained on the touched backend files.\n\n## Verification Evidence\n\n| # | Command | Exit Code | Verdict | Duration |\n|---|---------|-----------|---------|----------|\n| 1 | `cd backend && venv/bin/python -m pytest -c pyproject.toml tests/integration/test_admin_users_api.py -k 'delegate_manager_intervention_results_to_resolver_seam'` | 1 | ❌ fail | 5120ms |\n| 2 | `cd backend && venv/bin/python -m pytest -c pyproject.toml tests/integration/test_admin_users_api.py -k 'delegate_manager_intervention_results_to_resolver_seam'` | 0 | ✅ pass | 5190ms |\n| 3 | `cd backend && /usr/bin/time -p venv/bin/python -m pytest -c pyproject.toml tests/integration/test_admin_users_api.py` | 0 | ✅ pass | 8080ms |\n| 4 | `lsp diagnostics: backend/src/common/analytics/history_service.py, backend/src/common/analytics/manager_intervention_results.py, backend/tests/integration/test_admin_users_api.py` | 0 | ✅ pass | 100ms |\n\n\n## Deviations\n\nAdded a delegation-focused integration regression inside backend/tests/integration/test_admin_users_api.py so the new resolver seam is explicitly locked in addition to the pre-existing behavior coverage.\n\n## Known Issues\n\nNone.\n\n## Files Created/Modified\n\n- `backend/src/common/analytics/manager_intervention_results.py`\n- `backend/src/common/analytics/history_service.py`\n- `backend/tests/integration/test_admin_users_api.py`\n- `.gsd/DECISIONS.md`\n- `.gsd/milestones/M006/slices/S03/tasks/T02-SUMMARY.md`\n",
       "description": "Extract latest-evaluable intervention-result resolution from `HistoryService` into a dedicated helper/module so supervisor workflow semantics are explicit and reusable. Keep the current rule that the latest evaluable completed session after intervention creation wins over a later thin non-evaluable session.",
       "estimate": "0.75d",
       "files": [
@@ -5010,6 +5019,18 @@
       "revisable": "Yes",
       "made_by": "agent",
       "superseded_by": null
+    },
+    {
+      "seq": 1451,
+      "id": "D092",
+      "when_context": "M006/S03/T02",
+      "scope": "architecture",
+      "decision": "How supervisor intervention result semantics are separated from HistoryService",
+      "choice": "Extract latest-evaluable intervention outcome rules into common.analytics.manager_intervention_results and keep HistoryService as the query/projection orchestrator that delegates to the resolver.",
+      "rationale": "The latest-evaluable-after-creation rule is workflow-specific read semantics, not generic history aggregation. Pulling it into a dedicated resolver makes the seam explicit, reusable for downstream admin analytics, and easy to lock with delegation-focused tests while preserving the shipped API payload contract.",
+      "revisable": "Yes",
+      "made_by": "agent",
+      "superseded_by": null
     }
   ],
   "verification_evidence": [
@@ -6409,6 +6430,50 @@
       "verdict": "✅ pass",
       "duration_ms": 100,
       "created_at": "2026-03-27T10:02:24.793Z"
+    },
+    {
+      "id": 128,
+      "task_id": "T02",
+      "slice_id": "S03",
+      "milestone_id": "M006",
+      "command": "cd backend && venv/bin/python -m pytest -c pyproject.toml tests/integration/test_admin_users_api.py -k 'delegate_manager_intervention_results_to_resolver_seam'",
+      "exit_code": 1,
+      "verdict": "❌ fail",
+      "duration_ms": 5120,
+      "created_at": "2026-03-27T10:11:14.487Z"
+    },
+    {
+      "id": 129,
+      "task_id": "T02",
+      "slice_id": "S03",
+      "milestone_id": "M006",
+      "command": "cd backend && venv/bin/python -m pytest -c pyproject.toml tests/integration/test_admin_users_api.py -k 'delegate_manager_intervention_results_to_resolver_seam'",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 5190,
+      "created_at": "2026-03-27T10:11:14.487Z"
+    },
+    {
+      "id": 130,
+      "task_id": "T02",
+      "slice_id": "S03",
+      "milestone_id": "M006",
+      "command": "cd backend && /usr/bin/time -p venv/bin/python -m pytest -c pyproject.toml tests/integration/test_admin_users_api.py",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 8080,
+      "created_at": "2026-03-27T10:11:14.487Z"
+    },
+    {
+      "id": 131,
+      "task_id": "T02",
+      "slice_id": "S03",
+      "milestone_id": "M006",
+      "command": "lsp diagnostics: backend/src/common/analytics/history_service.py, backend/src/common/analytics/manager_intervention_results.py, backend/tests/integration/test_admin_users_api.py",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 100,
+      "created_at": "2026-03-27T10:11:14.487Z"
     }
   ]
 }

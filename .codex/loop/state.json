@@ -1,6 +1,6 @@
 {
   "mode": "grow",
-  "current_issue_id": "M006-S03-T01",
+  "current_issue_id": "M006-S03-T02",
   "current_issue_type": "task",
   "current_issue_status": "done",
   "pending_issue_ids": [],
@@ -108,28 +108,27 @@
     "M006-S02-T02",
     "M006-S02-T03",
     "M006-S02",
-    "M006-S03-T01"
+    "M006-S03-T01",
+    "M006-S03-T02"
   ],
   "blocked_issue_ids": [],
   "deferred_issue_ids": [],
   "last_modified_files": [
-    "backend/src/admin/services/manager_intervention_service.py",
-    "backend/src/admin/services/__init__.py",
-    "backend/src/admin/api/interventions.py",
-    "backend/tests/integration/test_admin_interventions_api.py",
+    "backend/src/common/analytics/manager_intervention_results.py",
+    "backend/src/common/analytics/history_service.py",
+    "backend/tests/integration/test_admin_users_api.py",
     ".gsd/DECISIONS.md",
-    ".gsd/KNOWLEDGE.md",
-    ".gsd/milestones/M006/slices/S03/tasks/T01-SUMMARY.md",
+    ".gsd/milestones/M006/slices/S03/tasks/T02-SUMMARY.md",
     ".codex/loop/state.json",
     ".codex/loop/log.md"
   ],
   "last_verification_commands": [
-    "cd backend && venv/bin/python -m pytest -c pyproject.toml tests/integration/test_admin_interventions_api.py -k 'delegates_to_manager_intervention_write_service'",
-    "cd backend && /usr/bin/time -p venv/bin/python -m pytest -c pyproject.toml tests/integration/test_admin_interventions_api.py",
-    "lsp diagnostics: backend/src/admin/api/interventions.py, backend/src/admin/services/manager_intervention_service.py, backend/tests/integration/test_admin_interventions_api.py"
+    "cd backend && venv/bin/python -m pytest -c pyproject.toml tests/integration/test_admin_users_api.py -k 'delegate_manager_intervention_results_to_resolver_seam'",
+    "cd backend && /usr/bin/time -p venv/bin/python -m pytest -c pyproject.toml tests/integration/test_admin_users_api.py",
+    "lsp diagnostics: backend/src/common/analytics/history_service.py, backend/src/common/analytics/manager_intervention_results.py, backend/tests/integration/test_admin_users_api.py"
   ],
-  "last_verification_result": "The new delegation seam failed first as expected, then the seam-focused regressions passed, the full admin interventions integration suite passed 7/7, and LSP diagnostics were clean on the touched backend files.",
-  "last_success_signal": "Supervisor intervention create/update/remind/list routes now delegate lifecycle rules to one write-side service while preserving the shipped admin response semantics.",
+  "last_verification_result": "The resolver seam regression failed first because HistoryService lacked a patchable manager_intervention_result_resolver boundary, then passed after extraction; the full admin users integration suite passed 16/16 and LSP diagnostics were clean on the touched backend files.",
+  "last_success_signal": "Supervisor intervention latest-result semantics now live behind one read-side resolver seam while the current /api/v1/admin/users/{id}/sessions contract and outcome semantics remain unchanged.",
   "last_growth_scan": null,
-  "next_action": "Stop after one item. Resume M006/S03 with T02 when the next auto-mode turn starts."
+  "next_action": "Stop after one item. Resume M006/S03 with T03 when the next auto-mode turn starts."
 }

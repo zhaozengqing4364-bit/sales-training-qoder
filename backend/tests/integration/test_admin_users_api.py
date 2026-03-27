@@ -1298,3 +1298,93 @@ async def test_user_sessions_expose_latest_manager_intervention_results_on_proje
     assert pending_result["summary"] == "主管重点建立后，还没有新的已完成训练可用于判断结果。"
     assert pending_result["session_id"] is None
     assert pending_result["main_issue"] is None
+
+
+@pytest.mark.asyncio
+async def test_user_sessions_delegate_manager_intervention_results_to_resolver_seam(
+    async_client: AsyncClient,
+    admin_headers: dict[str, str],
+    db_session: AsyncSession,
+    admin_user: User,
+    non_admin_user: User,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Sessions endpoint should surface whatever the extracted resolver seam returns."""
+    import common.analytics.history_service as history_service_module
+
+    intervention = ManagerIntervention(
+        intervention_id=str(uuid.uuid4()),
+        manager_user_id=str(admin_user.user_id),
+        user_id=str(non_admin_user.user_id),
+        issue_family="evidence_gap",
+        note="resolver seam regression",
+        due_state="due",
+        reminder_status="not_sent",
+        created_at=datetime(2026, 3, 27, 9, 0, tzinfo=timezone.utc),
+        updated_at=datetime(2026, 3, 27, 9, 0, tzinfo=timezone.utc),
+    )
+    db_session.add(intervention)
+    await db_session.commit()
+
+    class StubResolver:
+        def __init__(self) -> None:
+            self.calls: list[tuple[int, int]] = []
+
+        def build_results(self, summaries, interventions):
+            self.calls.append((len(summaries), len(interventions)))
+
+            class StubResult:
+                def to_payload(self):
+                    return {
+                        "intervention_id": str(intervention.intervention_id),
+                        "issue_family": "resolver_override",
+                        "note": "来自 resolver seam",
+                        "created_at": intervention.created_at.isoformat(),
+                        "session_id": "resolver-session-id",
+                        "session_start_time": intervention.created_at.isoformat(),
+                        "status": "resolver_status",
+                        "reason": "resolver_reason",
+                        "summary": "resolver summary text",
+                        "overall_result": "pass",
+                        "evaluable": True,
+                        "not_evaluable_reason": None,
+                        "main_issue": {"issue_type": "resolver_issue"},
+                        "next_goal": {"goal_type": "resolver_goal"},
+                    }
+
+            return [StubResult()]
+
+    stub_resolver = StubResolver()
+    monkeypatch.setattr(
+        history_service_module,
+        "manager_intervention_result_resolver",
+        stub_resolver,
+    )
+
+    response = await async_client.get(
+        f"/api/v1/admin/users/{non_admin_user.user_id}/sessions",
+        params={"page": 1, "page_size": 10},
+        headers=admin_headers,
+    )
+
+    assert response.status_code == 200
+    payload = response.json()["data"]
+    assert payload["manager_intervention_results"] == [
+        {
+            "intervention_id": str(intervention.intervention_id),
+            "issue_family": "resolver_override",
+            "note": "来自 resolver seam",
+            "created_at": intervention.created_at.isoformat(),
+            "session_id": "resolver-session-id",
+            "session_start_time": intervention.created_at.isoformat(),
+            "status": "resolver_status",
+            "reason": "resolver_reason",
+            "summary": "resolver summary text",
+            "overall_result": "pass",
+            "evaluable": True,
+            "not_evaluable_reason": None,
+            "main_issue": {"issue_type": "resolver_issue"},
+            "next_goal": {"goal_type": "resolver_goal"},
+        }
+    ]
+    assert stub_resolver.calls == [(0, 1)]

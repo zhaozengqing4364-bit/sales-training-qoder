@@ -1992,3 +1992,23 @@ Append one entry per iteration:
   verification results: the seam-focused regression failed first because the route lacked a ManagerInterventionWriteService symbol, then passed after extraction; the full admin interventions integration suite passed 7/7 and LSP diagnostics were clean.
   success signal status: intervention write-side lifecycle semantics now live behind one admin service seam, and /api/v1/admin/interventions keeps the same create/remind/update/list behavior for the current UI surface.
   rollback note: if later M006 work revisits intervention write semantics, keep the service as the single owner of due/reminder/latest-open transitions and update the route-level delegation tests together with any API seam change.
+
+- time: 2026-03-27T17:49:00+08:00
+  mode: grow
+  item id: M006-S03-T02
+  files changed:
+    - backend/src/common/analytics/manager_intervention_results.py
+    - backend/src/common/analytics/history_service.py
+    - backend/tests/integration/test_admin_users_api.py
+    - .gsd/DECISIONS.md
+    - .gsd/milestones/M006/slices/S03/tasks/T02-SUMMARY.md
+    - .codex/loop/state.json
+    - .codex/loop/log.md
+  summary: Extracted a dedicated manager intervention result resolver for the latest-evaluable read-side rule, slimmed HistoryService down to delegation wrappers, and locked the seam with an integration regression without changing the shipped admin user-detail payload contract.
+  verification commands:
+    - cd backend && venv/bin/python -m pytest -c pyproject.toml tests/integration/test_admin_users_api.py -k 'delegate_manager_intervention_results_to_resolver_seam'
+    - cd backend && /usr/bin/time -p venv/bin/python -m pytest -c pyproject.toml tests/integration/test_admin_users_api.py
+    - lsp diagnostics: backend/src/common/analytics/history_service.py, backend/src/common/analytics/manager_intervention_results.py, backend/tests/integration/test_admin_users_api.py
+  verification results: the seam-focused regression failed first because HistoryService had no manager_intervention_result_resolver boundary, then passed after extraction; the full admin users integration suite passed 16/16 and no diagnostics remained on the touched backend files.
+  success signal status: supervisor intervention latest-result semantics now live behind one explicit read-side resolver seam while /api/v1/admin/users/{id}/sessions keeps the same result contract for the current UI surface.
+  rollback note: if later M006 work revisits supervisor read semantics, keep manager_intervention_results.py as the single owner of the latest-evaluable-after-creation rule and update the delegation regression together with any seam change.
