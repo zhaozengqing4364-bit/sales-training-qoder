@@ -1,0 +1,36 @@
+{
+  "schemaVersion": 1,
+  "taskId": "T01",
+  "unitId": "M005/S05/T01",
+  "timestamp": 1774574621259,
+  "passed": false,
+  "discoverySource": "task-plan",
+  "checks": [
+    {
+      "command": "cd backend",
+      "exitCode": 0,
+      "durationMs": 6,
+      "verdict": "pass"
+    },
+    {
+      "command": "venv/bin/python -m pytest -c pyproject.toml tests/contract/test_analytics.py tests/integration/test_admin_users_api.py tests/integration/test_admin_interventions_api.py",
+      "exitCode": 0,
+      "durationMs": 6589,
+      "verdict": "pass"
+    },
+    {
+      "command": "cd ../web",
+      "exitCode": 1,
+      "durationMs": 4,
+      "verdict": "fail"
+    },
+    {
+      "command": "npm test -- --run 'src/app/admin/analytics/page.test.tsx' 'src/app/admin/users/[id]/page.test.tsx' 'src/components/admin/manager-lite-panel.test.tsx'",
+      "exitCode": 0,
+      "durationMs": 1817,
+      "verdict": "pass"
+    }
+  ],
+  "retryAttempt": 1,
+  "maxRetries": 2
+}

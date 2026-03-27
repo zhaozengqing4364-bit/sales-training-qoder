@@ -1795,3 +1795,23 @@ Append one entry per iteration:
   verification results: passed; the backend pack is green with the new admin export contract and manager-lite remind fallback coverage, and the web pack is green with export click, manager-lite reminder, inactive-streak drill-in, and fallback note assertions.
   success signal status: the current analytics → manager-lite → user drill-in → intervention/review chain is now protected by one focused regression pack that speaks the same evidence vocabulary end to end.
   rollback note: if future work changes this chain again, keep using the existing focused backend/web suites as the regression pack and extend them in place instead of introducing a parallel acceptance framework.
+
+- time: 2026-03-27T09:41:30+0800
+  mode: stabilize
+  item id: M005-S05-T02
+  files changed:
+    - .gsd/milestones/M005/slices/S05/S05-UAT.md
+    - .gsd/milestones/M005/slices/S05/S05-PLAN.md
+    - .gsd/KNOWLEDGE.md
+    - .gsd/milestones/M005/slices/S05/tasks/T02-SUMMARY.md
+    - .codex/loop/state.json
+    - .codex/loop/log.md
+  summary: Captured a live admin workflow from weekly analytics through user drill-in, supervisor focus/reminder action, and canonical report/replay review on the current shipped routes, then corrected the stale root-relative verification command that had been blocking the gate.
+  verification commands:
+    - backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/contract/test_analytics.py backend/tests/integration/test_admin_users_api.py backend/tests/integration/test_admin_interventions_api.py
+    - npm --prefix web test -- --run 'src/app/admin/analytics/page.test.tsx' 'src/app/admin/users/[id]/page.test.tsx' 'src/components/admin/manager-lite-panel.test.tsx'
+    - browser runtime: /admin/analytics -> /admin/users/0a0af6d4-d7cb-4ec8-be9f-f44288b10be2 -> focus/reminder -> /practice/1398bea9-c25a-454f-ad1c-f645edcb3350/report -> /practice/1398bea9-c25a-454f-ad1c-f645edcb3350/replay
+    - test -s .gsd/milestones/M005/slices/S05/S05-UAT.md
+  verification results: passed; the repo-root-safe backend/web regression pack is green again, the UAT artifact exists, and live browser verification proved the shipped analytics -> drill-in -> reminder -> report/replay path. Optional enhanced-report endpoints still emitted 404/500 fallback noise, but the unified report/replay routes remained usable.
+  success signal status: the current admin chain now has durable live proof that one supervisor can take a real weekly operating signal, act on it on the user-detail page, and review the exact session outcome on canonical report/replay routes without leaving current surfaces.
+  rollback note: if future work revisits this chain, keep the live proof on the existing admin + canonical learner routes and keep verification commands runnable directly from repo root so auto-mode cannot regress on shell path hops alone.

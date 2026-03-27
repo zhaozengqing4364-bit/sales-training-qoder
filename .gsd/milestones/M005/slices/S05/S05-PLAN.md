@@ -8,7 +8,7 @@
   - Estimate: 75m
   - Files: backend/tests/contract/test_analytics.py, backend/tests/integration/test_admin_users_api.py, backend/tests/integration/test_admin_interventions_api.py, web/src/app/admin/analytics/page.test.tsx, web/src/app/admin/users/[id]/page.test.tsx, web/src/components/admin/manager-lite-panel.test.tsx
   - Verify: cd backend && venv/bin/python -m pytest -c pyproject.toml tests/contract/test_analytics.py tests/integration/test_admin_users_api.py tests/integration/test_admin_interventions_api.py && cd ../web && npm test -- --run 'src/app/admin/analytics/page.test.tsx' 'src/app/admin/users/[id]/page.test.tsx' 'src/components/admin/manager-lite-panel.test.tsx'
-- [ ] **T02: Capture one live team-management workflow on the current admin routes** — Run one real supervisor workflow using the current admin surfaces and capture the artifact trail: weekly/cycle view, user drill-in, focus or reminder action, and report/replay review on a resulting session. Keep the proof on current routes only.
+- [x] **T02: Captured a live admin analytics→drill-in→reminder→report/replay workflow on current routes and fixed the stale verification path blocking the gate.** — Run one real supervisor workflow using the current admin surfaces and capture the artifact trail: weekly/cycle view, user drill-in, focus or reminder action, and report/replay review on a resulting session. Keep the proof on current routes only.
   - Estimate: 90m
   - Files: .gsd/milestones/M005/slices/S05/S05-UAT.md
   - Verify: Manual review — file exists and is non-empty
