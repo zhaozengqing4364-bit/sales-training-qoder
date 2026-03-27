@@ -80,3 +80,4 @@
 - 给 FastAPI 路由做 service-seam 回归时，可以在集成测试里 monkeypatch 路由模块内导入的 service 符号，再走真实 HTTP 请求；这样既能锁定“路由确实委托给 service”，又不会改变现有 response payload 断言方式。
 - M006/S02 的 frontend typed-contract 收口里，`apiFetch<T>()` 的泛型只会给调用点一个静态外壳，不会把后端返回的字符串数字自动变成前端 contract 里的 number；像 `governance_summary` / `linked_asset_changes` 这类 admin payload 仍要在 `web/src/lib/api/client.ts` 里显式 normalize，别把 unknown/raw dict 再留给组件或 helper 二次解析。
 - M006/S03 的 supervisor workflow read side 要同时守住两条规则：`manager_intervention_results` 先选“干预创建后的最新可评估 completed session”，但如果干预后还没有任何 completed session，则 `/admin/users/[id]` 必须保留 `最近结果：等待新训练` 文案且不要渲染“查看对应统一报告”链接；否则 pending 分支会被误包装成已有结果。
+- M006/S04 的 linked-asset 前端回归里，analytics / user-detail 页面可能同时渲染多个 `中影响` / `告警` 徽标；这类断言要用 `getAllByText(...)`，并显式校验 presentation/runtime_profile 在 `asset_label` / `admin_path` 为空时仍通过共享 registry fallback 到 `/admin/presentations` 和 `/admin/voice-runtime`，否则测试会把 UI 重复元素误报成 registry 回归。

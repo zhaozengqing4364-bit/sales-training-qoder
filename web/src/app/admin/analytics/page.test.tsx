@@ -609,11 +609,12 @@ describe("AnalyticsPage", () => {
         expect(screen.getByText("知识库锁定模式下检索失败，最近 3 个会话被阻断。")).toBeTruthy();
         expect(screen.getByRole("link", { name: "知识库 · 石犀产品知识库" }).getAttribute("href")).toBe("/admin/knowledge");
         expect(screen.getByRole("link", { name: "角色 · 预算压价角色" }).getAttribute("href")).toBe("/admin/personas");
+        expect(screen.getByRole("link", { name: "PPT · 季度复盘" }).getAttribute("href")).toBe("/admin/presentations");
         expect(screen.getByRole("link", { name: "运行时配置 · 销售默认 Realtime" }).getAttribute("href")).toBe("/admin/voice-runtime");
         expect(screen.getAllByText("高影响").length).toBeGreaterThan(1);
-        expect(screen.getByText("中影响")).toBeTruthy();
+        expect(screen.getAllByText("中影响").length).toBeGreaterThan(1);
         expect(screen.getAllByText("阻塞").length).toBeGreaterThan(1);
-        expect(screen.getByText("告警")).toBeTruthy();
+        expect(screen.getAllByText("告警").length).toBeGreaterThan(1);
         expect(screen.getByText(/最近文档：竞品对比/)).toBeTruthy();
         expect(screen.getByText(/最近策略：提高压价强度/)).toBeTruthy();
         expect(screen.getByText(/最近配置：切换 KB 锁模式/)).toBeTruthy();

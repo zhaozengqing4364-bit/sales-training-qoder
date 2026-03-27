@@ -435,6 +435,7 @@ describe("UserDetailPage", () => {
         expect(screen.getByText("最近运行异常：知识库锁定模式下检索失败，最近 3 个会话被阻断。")).toBeTruthy();
         expect(screen.getByRole("link", { name: "知识库 · 石犀产品知识库" }).getAttribute("href")).toBe("/admin/knowledge");
         expect(screen.getByRole("link", { name: "角色 · 预算压价角色" }).getAttribute("href")).toBe("/admin/personas");
+        expect(screen.getByRole("link", { name: "PPT · 季度复盘" }).getAttribute("href")).toBe("/admin/presentations");
         expect(screen.getByRole("link", { name: "运行时配置 · 销售默认 Realtime" }).getAttribute("href")).toBe("/admin/voice-runtime");
         expect(screen.getByText("最近文档：竞品对比 · 近 7 天 2 次变更")).toBeTruthy();
         expect(screen.getByText("最近策略：提高压价强度 · 近 7 天 1 次变更")).toBeTruthy();

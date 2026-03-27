@@ -12,7 +12,7 @@
   - Estimate: 0.5d
   - Files: web/src/lib/admin/assets.ts, web/src/lib/admin/linked-assets.ts, web/src/app/admin/analytics/page.tsx, web/src/app/admin/users/[id]/page.tsx, web/src/components/admin/asset-governance.tsx
   - Verify: cd web && pnpm dlx npm@11.6.1 test -- --run 'src/app/admin/analytics/page.test.tsx' 'src/app/admin/users/[id]/page.test.tsx' 'src/app/admin/asset-governance.test.tsx'
-- [ ] **T03: 补齐 asset registry 扩展与回归证明** — Lock the registry seam with regression coverage that proves all current four asset types still render correct governance labels, admin links, and linked-change metadata, and that adding a new asset type is reduced to a registry-focused change path plus tests.
+- [x] **T03: Locked the asset registry seam with passing backend/frontend regression coverage and completed the missing four-asset admin-link proof for analytics and user-detail surfaces.** — Lock the registry seam with regression coverage that proves all current four asset types still render correct governance labels, admin links, and linked-change metadata, and that adding a new asset type is reduced to a registry-focused change path plus tests.
   - Estimate: 0.5d
   - Files: backend/tests/unit/test_support_runtime_service.py, backend/tests/integration/test_asset_governance_api.py, backend/tests/contract/test_support_runtime.py, web/src/app/admin/asset-governance.test.tsx, web/src/app/admin/analytics/page.test.tsx, web/src/app/admin/users/[id]/page.test.tsx
   - Verify: cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_support_runtime_service.py tests/integration/test_asset_governance_api.py tests/contract/test_support_runtime.py

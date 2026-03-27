@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "exported_at": "2026-03-27T10:57:14.271Z",
+  "exported_at": "2026-03-27T11:05:41.705Z",
   "milestones": [
     {
       "id": "M001",
@@ -3783,19 +3783,26 @@
       "milestone_id": "M006",
       "slice_id": "S04",
       "id": "T03",
-      "title": "补齐 asset registry 扩展与回归证明",
-      "status": "pending",
-      "one_liner": "",
-      "narrative": "",
-      "verification_result": "",
+      "title": "Locked the asset registry seam with passing backend/frontend regression coverage and completed the missing four-asset admin-link proof for analytics and user-detail surfaces.",
+      "status": "complete",
+      "one_liner": "Locked the asset registry seam with passing backend/frontend regression coverage and completed the missing four-asset admin-link proof for analytics and user-detail surfaces.",
+      "narrative": "Verified the local T03 state, confirmed the prior gate failure was caused by the missing T03 task artifact rather than a broken asset-registry implementation, and reran the planned backend/frontend verification commands. The backend suite already proved the shared registry/service contract for the current four asset types, while the frontend analytics suite exposed a stale test assumption that only one `中影响` badge would render. I fixed that root cause by switching the analytics assertions to multi-match checks and added explicit PPT fallback admin-link assertions in both analytics and admin user-detail tests so all four current asset types are now covered on the linked-asset UI path when `asset_label` and `admin_path` are blank. I then reran the planned frontend suite to green, reran the backend suite for fresh final evidence, documented the repeated-badge/testing gotcha in `.gsd/KNOWLEDGE.md`, and wrote the required T03 summary artifact to disk.",
+      "verification_result": "Executed the exact slice-level verification commands from the task plan. Backend pytest passed 14/14 across the unit, integration, and contract suites for the asset registry seam. Frontend Vitest passed 26/26 across `asset-governance`, analytics, and admin user-detail after updating the stale multi-badge assertions and adding the missing PPT fallback-link proof.",
       "duration": "",
-      "completed_at": null,
+      "completed_at": "2026-03-27T11:05:41.679Z",
       "blocker_discovered": false,
-      "deviations": "",
-      "known_issues": "",
-      "key_files": [],
-      "key_decisions": [],
-      "full_summary_md": "",
+      "deviations": "None.",
+      "known_issues": "None.",
+      "key_files": [
+        "web/src/app/admin/analytics/page.test.tsx",
+        "web/src/app/admin/users/[id]/page.test.tsx",
+        ".gsd/KNOWLEDGE.md",
+        ".gsd/milestones/M006/slices/S04/tasks/T03-SUMMARY.md"
+      ],
+      "key_decisions": [
+        "Kept the shipped asset registry/adapter implementation unchanged because the backend suite already proved the registry seam; T03 only needed to harden the frontend regression assertions and record the extension/testing rule."
+      ],
+      "full_summary_md": "---\nid: T03\nparent: S04\nmilestone: M006\nkey_files:\n  - web/src/app/admin/analytics/page.test.tsx\n  - web/src/app/admin/users/[id]/page.test.tsx\n  - .gsd/KNOWLEDGE.md\n  - .gsd/milestones/M006/slices/S04/tasks/T03-SUMMARY.md\nkey_decisions:\n  - Kept the shipped asset registry/adapter implementation unchanged because the backend suite already proved the registry seam; T03 only needed to harden the frontend regression assertions and record the extension/testing rule.\nduration: \"\"\nverification_result: passed\ncompleted_at: 2026-03-27T11:05:41.680Z\nblocker_discovered: false\n---\n\n# T03: Locked the asset registry seam with passing backend/frontend regression coverage and completed the missing four-asset admin-link proof for analytics and user-detail surfaces.\n\n**Locked the asset registry seam with passing backend/frontend regression coverage and completed the missing four-asset admin-link proof for analytics and user-detail surfaces.**\n\n## What Happened\n\nVerified the local T03 state, confirmed the prior gate failure was caused by the missing T03 task artifact rather than a broken asset-registry implementation, and reran the planned backend/frontend verification commands. The backend suite already proved the shared registry/service contract for the current four asset types, while the frontend analytics suite exposed a stale test assumption that only one `中影响` badge would render. I fixed that root cause by switching the analytics assertions to multi-match checks and added explicit PPT fallback admin-link assertions in both analytics and admin user-detail tests so all four current asset types are now covered on the linked-asset UI path when `asset_label` and `admin_path` are blank. I then reran the planned frontend suite to green, reran the backend suite for fresh final evidence, documented the repeated-badge/testing gotcha in `.gsd/KNOWLEDGE.md`, and wrote the required T03 summary artifact to disk.\n\n## Verification\n\nExecuted the exact slice-level verification commands from the task plan. Backend pytest passed 14/14 across the unit, integration, and contract suites for the asset registry seam. Frontend Vitest passed 26/26 across `asset-governance`, analytics, and admin user-detail after updating the stale multi-badge assertions and adding the missing PPT fallback-link proof.\n\n## Verification Evidence\n\n| # | Command | Exit Code | Verdict | Duration |\n|---|---------|-----------|---------|----------|\n| 1 | `cd backend && /usr/bin/time -p venv/bin/python -m pytest -c pyproject.toml tests/unit/test_support_runtime_service.py tests/integration/test_asset_governance_api.py tests/contract/test_support_runtime.py` | 0 | ✅ pass | 6410ms |\n| 2 | `cd web && /usr/bin/time -p pnpm dlx npm@11.6.1 test -- --run 'src/app/admin/asset-governance.test.tsx' 'src/app/admin/analytics/page.test.tsx' 'src/app/admin/users/[id]/page.test.tsx'` | 0 | ✅ pass | 1730ms |\n\n\n## Deviations\n\nNone.\n\n## Known Issues\n\nNone.\n\n## Files Created/Modified\n\n- `web/src/app/admin/analytics/page.test.tsx`\n- `web/src/app/admin/users/[id]/page.test.tsx`\n- `.gsd/KNOWLEDGE.md`\n- `.gsd/milestones/M006/slices/S04/tasks/T03-SUMMARY.md`\n",
       "description": "Lock the registry seam with regression coverage that proves all current four asset types still render correct governance labels, admin links, and linked-change metadata, and that adding a new asset type is reduced to a registry-focused change path plus tests.",
       "estimate": "0.5d",
       "files": [
@@ -6624,6 +6631,28 @@
       "verdict": "✅ pass",
       "duration_ms": 1780,
       "created_at": "2026-03-27T10:57:14.253Z"
+    },
+    {
+      "id": 139,
+      "task_id": "T03",
+      "slice_id": "S04",
+      "milestone_id": "M006",
+      "command": "cd backend && /usr/bin/time -p venv/bin/python -m pytest -c pyproject.toml tests/unit/test_support_runtime_service.py tests/integration/test_asset_governance_api.py tests/contract/test_support_runtime.py",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 6410,
+      "created_at": "2026-03-27T11:05:41.680Z"
+    },
+    {
+      "id": 140,
+      "task_id": "T03",
+      "slice_id": "S04",
+      "milestone_id": "M006",
+      "command": "cd web && /usr/bin/time -p pnpm dlx npm@11.6.1 test -- --run 'src/app/admin/asset-governance.test.tsx' 'src/app/admin/analytics/page.test.tsx' 'src/app/admin/users/[id]/page.test.tsx'",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 1730,
+      "created_at": "2026-03-27T11:05:41.680Z"
     }
   ]
 }
