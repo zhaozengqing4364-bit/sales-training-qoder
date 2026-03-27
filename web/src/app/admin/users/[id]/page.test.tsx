@@ -611,6 +611,37 @@ describe("UserDetailPage", () => {
         expect(linkedReport.getAttribute("href")).toBe("/practice/session-1/report");
     });
 
+    it("keeps pending intervention results visible without a report drill-in before a follow-up session exists", async () => {
+        getUserSessionsMock.mockResolvedValue({
+            ...baseSessionsResponse,
+            manager_intervention_results: [
+                {
+                    intervention_id: "intervention-1",
+                    issue_family: "evidence_gap",
+                    note: "优先补 ROI 和客户案例证据。",
+                    created_at: "2026-03-23T09:30:00Z",
+                    session_id: null,
+                    session_start_time: null,
+                    status: "pending",
+                    reason: "no_completed_session_after_intervention",
+                    summary: "主管重点建立后，还没有新的已完成训练可用于判断结果。",
+                    overall_result: null,
+                    evaluable: null,
+                    not_evaluable_reason: null,
+                    main_issue: null,
+                    next_goal: null,
+                },
+            ],
+        } as any);
+
+        render(<UserDetailPage />);
+
+        expect(await screen.findByText("主管重点与提醒")).toBeTruthy();
+        expect(screen.getByText("最近结果：等待新训练")).toBeTruthy();
+        expect(screen.getByText("主管重点建立后，还没有新的已完成训练可用于判断结果。")).toBeTruthy();
+        expect(screen.queryByRole("link", { name: "查看对应统一报告" })).toBeNull();
+    });
+
     it("lets supervisors send a reminder from an existing intervention card", async () => {
         render(<UserDetailPage />);
 

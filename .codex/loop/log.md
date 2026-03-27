@@ -2012,3 +2012,20 @@ Append one entry per iteration:
   verification results: the seam-focused regression failed first because HistoryService had no manager_intervention_result_resolver boundary, then passed after extraction; the full admin users integration suite passed 16/16 and no diagnostics remained on the touched backend files.
   success signal status: supervisor intervention latest-result semantics now live behind one explicit read-side resolver seam while /api/v1/admin/users/{id}/sessions keeps the same result contract for the current UI surface.
   rollback note: if later M006 work revisits supervisor read semantics, keep manager_intervention_results.py as the single owner of the latest-evaluable-after-creation rule and update the delegation regression together with any seam change.
+
+- time: 2026-03-27T18:24:31+0800
+  mode: grow
+  item id: M006-S03-T03
+  files changed:
+    - web/src/app/admin/users/[id]/page.test.tsx
+    - .gsd/milestones/M006/slices/S03/tasks/T03-SUMMARY.md
+    - .codex/loop/state.json
+    - .codex/loop/log.md
+  summary: Re-proved the current supervisor workflow after the service extraction, added a focused pending-result user-detail regression, and confirmed the live /admin/users/[id] authority surface still behaves the same with no premature report drill-in for pending interventions.
+  verification commands:
+    - cd backend && /usr/bin/time -p venv/bin/python -m pytest -c pyproject.toml tests/integration/test_admin_interventions_api.py tests/integration/test_admin_users_api.py
+    - cd web && /usr/bin/time -p pnpm dlx npm@11.6.1 test -- --run 'src/app/admin/users/[id]/page.test.tsx'
+    - browser reload + assert http://localhost:3445/admin/users/0a0af6d4-d7cb-4ec8-be9f-f44288b10be2
+  verification results: passed; backend 23/23 and web 11/11 were green fresh, and the live localhost user-detail page passed explicit URL/text/diagnostics assertions after host-aligned dev-login.
+  success signal status: the shipped supervisor authority surface still exposes the same intervention creation/reminder/result semantics after the new write/read seams, and the pending result branch is now explicitly locked in the page regression suite.
+  rollback note: no product rollback needed; this task only strengthened regression proof. If future work changes intervention result presentation, update the pending-state and report-link assertions together.

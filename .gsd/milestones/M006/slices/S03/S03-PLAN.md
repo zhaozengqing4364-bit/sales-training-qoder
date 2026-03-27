@@ -12,7 +12,7 @@
   - Estimate: 0.75d
   - Files: backend/src/common/analytics/manager_intervention_results.py, backend/src/common/analytics/history_service.py, backend/src/admin/api/users.py, backend/tests/integration/test_admin_users_api.py
   - Verify: cd backend && venv/bin/python -m pytest -c pyproject.toml tests/integration/test_admin_users_api.py
-- [ ] **T03: 回归证明 current supervisor workflow 无漂移** — Run the current supervisor workflow regression path end-to-end after the service extraction and update the user-detail focused UI assertions if any copy or ordering assumptions need to be anchored more explicitly. The goal is zero behavior drift on the shipped `/admin/users/[id]` authority surface.
+- [x] **T03: Added pending-state user-detail regression proof while re-verifying the supervisor workflow after service extraction.** — Run the current supervisor workflow regression path end-to-end after the service extraction and update the user-detail focused UI assertions if any copy or ordering assumptions need to be anchored more explicitly. The goal is zero behavior drift on the shipped `/admin/users/[id]` authority surface.
   - Estimate: 0.5d
   - Files: backend/tests/integration/test_admin_interventions_api.py, backend/tests/integration/test_admin_users_api.py, web/src/app/admin/users/[id]/page.test.tsx
   - Verify: cd backend && venv/bin/python -m pytest -c pyproject.toml tests/integration/test_admin_interventions_api.py tests/integration/test_admin_users_api.py
