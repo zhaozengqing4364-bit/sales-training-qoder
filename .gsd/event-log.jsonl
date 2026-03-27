@@ -56,3 +56,4 @@
 {"cmd":"complete-task","params":{"milestoneId":"M006","sliceId":"S05","taskId":"T02"},"ts":"2026-03-27T11:46:55.019Z","actor":"agent","hash":"ea333d8c995e134c","session_id":"1e38653b-6b14-44f8-9cae-c9301851927e"}
 {"cmd":"complete-task","params":{"milestoneId":"M006","sliceId":"S05","taskId":"T03"},"ts":"2026-03-27T11:51:27.345Z","actor":"agent","hash":"7016e7124927e2bc","session_id":"1e38653b-6b14-44f8-9cae-c9301851927e"}
 {"cmd":"complete-slice","params":{"milestoneId":"M006","sliceId":"S05"},"ts":"2026-03-27T11:57:11.727Z","actor":"agent","hash":"c7d0e0dd8305fe36","session_id":"1e38653b-6b14-44f8-9cae-c9301851927e"}
+{"cmd":"complete-milestone","params":{"milestoneId":"M006"},"ts":"2026-03-27T12:12:33.096Z","actor":"agent","hash":"66cc71b09400beb4","session_id":"1e38653b-6b14-44f8-9cae-c9301851927e"}

@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "exported_at": "2026-03-27T11:57:11.723Z",
+  "exported_at": "2026-03-27T12:12:33.084Z",
   "milestones": [
     {
       "id": "M001",
@@ -262,10 +262,10 @@
     {
       "id": "M006",
       "title": "",
-      "status": "queued",
+      "status": "complete",
       "depends_on": [],
       "created_at": "2026-03-27T02:35:07.560Z",
-      "completed_at": null,
+      "completed_at": "2026-03-27T12:12:32.974Z",
       "vision": "基于 M005 已验证的后台治理链路，不再继续加新页面，而是把现有 admin analytics / users / asset pages 背后的共享 contract、shared parser、service seam、asset registry 和 regression proof 抽出来，降低后续新增 admin 功能、资产类型和治理视图时的复制成本与语义漂移风险。",
       "success_criteria": [
         "Current admin drill-in context and linked-asset parsing are each owned by one shared frontend seam reused by the shipped admin route family.",
