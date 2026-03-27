@@ -2123,3 +2123,23 @@ Append one entry per iteration:
   verification results: passed; new adapter regressions were green 6/6, the planned admin analytics/manager-lite/user-detail pack stayed green 24/24, focused LSP diagnostics were clean, and the live localhost browser checks passed after host-aligned dev-login.
   success signal status: current admin analytics/users routes now share one frontend seam for operating-pack fallback, runtime-fault enrichment, and user-detail read-model derivation without reviving a generic dashboard abstraction.
   rollback note: if later M006 work expands the admin seam, extend read-models.ts/runtime-faults.ts first and keep the pages consuming those helpers instead of restoring inline fallback branches.
+
+- time: 2026-03-27T19:57:59+08:00
+  mode: grow
+  item id: M006-S05
+  files changed:
+    - .gsd/milestones/M006/slices/S05/S05-SUMMARY.md
+    - .gsd/milestones/M006/slices/S05/S05-UAT.md
+    - .gsd/milestones/M006/M006-ROADMAP.md
+    - .gsd/PROJECT.md
+    - .codex/loop/state.json
+    - .codex/loop/log.md
+  summary: Closed S05 by verifying the shared admin read-model seam against the exact slice-plan commands, writing the slice summary/UAT, marking the roadmap slice complete, and updating project continuity now that M006 has no remaining planned slices.
+  verification commands:
+    - cd web && pnpm dlx npm@11.6.1 test -- --run 'src/app/admin/analytics/page.test.tsx' 'src/components/admin/manager-lite-panel.test.tsx' 'src/app/admin/users/[id]/page.test.tsx'
+    - cd web && pnpm dlx npm@11.6.1 test -- --run 'src/app/admin/analytics/page.test.tsx' 'src/app/admin/asset-governance.test.tsx' 'src/app/admin/users/[id]/page.test.tsx' 'src/components/admin/manager-lite-panel.test.tsx'
+    - cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/common/test_admin_analytics_service.py tests/unit/test_support_runtime_service.py tests/integration/test_admin_users_api.py tests/integration/test_admin_interventions_api.py tests/integration/test_asset_governance_api.py tests/integration/test_rbac_access_control_api.py tests/contract/test_analytics.py
+    - lsp diagnostics: web/src/lib/admin/read-models.ts, web/src/lib/admin/runtime-faults.ts, web/src/app/admin/analytics/page.tsx, web/src/app/admin/users/page.tsx
+  verification results: passed; fresh slice-plan verification was green end to end (web 18/18, web 28/28, backend 60/60), focused LSP diagnostics were clean on the touched seam files, and gsd_complete_slice rendered S05 summary/UAT plus the roadmap projection successfully.
+  success signal status: the current admin analytics/users/user-detail route family now shares one route-shaped read-model seam and the canonical full M005 admin regression pack still proves no behavior drift after the seam extraction.
+  rollback note: if milestone validation or later admin changes surface route drift, restore shared behavior by fixing web/src/lib/admin/read-models.ts or web/src/lib/admin/runtime-faults.ts and rerun the full backend+web admin regression pack before accepting the seam again.
