@@ -2,109 +2,19 @@ import { Activity, AlertTriangle, Clock3, ShieldAlert, ShieldCheck, Users } from
 
 import { Badge } from "@/components/ui/badge";
 import { GlassCard } from "@/components/ui/glass-card";
+import type { AssetGovernanceSubject, AssetGovernanceSummary } from "@/lib/api/types";
 import { cn } from "@/lib/utils";
 
-export interface AssetGovernanceAnomaly {
-    source?: string;
-    kind?: string;
-    severity?: "warning" | "blocking" | string;
-    summary?: string;
-    detected_at?: string | null;
-    session_id?: string | null;
-}
+export type { AssetGovernanceSubject, AssetGovernanceSummary } from "@/lib/api/types";
 
-export interface AssetGovernanceSummary {
-    impact_summary?: {
-        impact_level?: "low" | "medium" | "high" | string;
-        recent_session_count?: number;
-        active_session_count?: number;
-        impacted_user_count?: number;
-        last_session_at?: string | null;
-    } | null;
-    recent_change_summary?: {
-        last_changed_at?: string | null;
-        latest_change_type?: string;
-        latest_change_label?: string;
-        change_count_7d?: number;
-        sessions_since_change?: number;
-    } | null;
-    health_summary?: {
-        status?: "healthy" | "warning" | "blocking" | string;
-        anomaly_count?: number;
-        blocking_count?: number;
-        warning_count?: number;
-        sample_anomalies?: AssetGovernanceAnomaly[] | null;
-    } | null;
-}
-
-function asRecord(value: unknown): Record<string, unknown> {
-    return value && typeof value === "object" ? value as Record<string, unknown> : {};
-}
-
-function toNumber(value: unknown, fallback = 0): number {
-    if (typeof value === "number" && Number.isFinite(value)) {
-        return value;
-    }
-    if (typeof value === "string" && value.trim()) {
-        const parsed = Number(value);
-        if (Number.isFinite(parsed)) {
-            return parsed;
-        }
-    }
-    return fallback;
-}
-
-function toOptionalString(value: unknown): string | null {
-    return typeof value === "string" && value.trim() ? value : null;
-}
-
-function normalizeAnomaly(value: unknown): AssetGovernanceAnomaly {
-    const raw = asRecord(value);
-    return {
-        source: toOptionalString(raw.source) || undefined,
-        kind: toOptionalString(raw.kind) || undefined,
-        severity: toOptionalString(raw.severity) || undefined,
-        summary: toOptionalString(raw.summary) || undefined,
-        detected_at: toOptionalString(raw.detected_at),
-        session_id: toOptionalString(raw.session_id),
-    };
-}
-
-export function parseAssetGovernanceSummary(value: unknown): AssetGovernanceSummary | null {
-    const raw = asRecord(value);
-    if (!Object.keys(raw).length) {
-        return null;
-    }
-
-    const impact = asRecord(raw.impact_summary);
-    const recentChange = asRecord(raw.recent_change_summary);
-    const health = asRecord(raw.health_summary);
-
-    return {
-        impact_summary: Object.keys(impact).length ? {
-            impact_level: toOptionalString(impact.impact_level) || undefined,
-            recent_session_count: toNumber(impact.recent_session_count, 0),
-            active_session_count: toNumber(impact.active_session_count, 0),
-            impacted_user_count: toNumber(impact.impacted_user_count, 0),
-            last_session_at: toOptionalString(impact.last_session_at),
-        } : null,
-        recent_change_summary: Object.keys(recentChange).length ? {
-            last_changed_at: toOptionalString(recentChange.last_changed_at),
-            latest_change_type: toOptionalString(recentChange.latest_change_type) || undefined,
-            latest_change_label: toOptionalString(recentChange.latest_change_label) || undefined,
-            change_count_7d: toNumber(recentChange.change_count_7d, 0),
-            sessions_since_change: toNumber(recentChange.sessions_since_change, 0),
-        } : null,
-        health_summary: Object.keys(health).length ? {
-            status: toOptionalString(health.status) || undefined,
-            anomaly_count: toNumber(health.anomaly_count, 0),
-            blocking_count: toNumber(health.blocking_count, 0),
-            warning_count: toNumber(health.warning_count, 0),
-            sample_anomalies: Array.isArray(health.sample_anomalies)
-                ? health.sample_anomalies.map(normalizeAnomaly)
-                : [],
-        } : null,
-    };
+function hasGovernanceSummary(
+    summary: AssetGovernanceSummary | null | undefined,
+): summary is AssetGovernanceSummary {
+    return Boolean(
+        summary?.impact_summary
+        || summary?.recent_change_summary
+        || summary?.health_summary,
+    );
 }
 
 function formatDateTime(value: string | null | undefined): string {
@@ -201,10 +111,10 @@ export function AssetGovernanceSummaryCard({
     summary,
     className,
 }: {
-    summary: AssetGovernanceSummary | null | undefined | unknown;
+    summary: AssetGovernanceSummary | null | undefined;
     className?: string;
 }) {
-    const parsed = parseAssetGovernanceSummary(summary);
+    const parsed = hasGovernanceSummary(summary) ? summary : null;
     if (!parsed) {
         return (
             <div className={cn("rounded-2xl border border-dashed border-slate-200 bg-slate-50/70 px-4 py-3 text-xs text-slate-500", className)}>
@@ -269,12 +179,12 @@ export function AssetGovernanceOverview({
     className,
 }: {
     assetLabel: string;
-    items: Array<{ governance_summary?: unknown | null }>;
+    items: AssetGovernanceSubject[];
     className?: string;
 }) {
     const summaries = items
-        .map((item) => parseAssetGovernanceSummary(item.governance_summary))
-        .filter((item): item is AssetGovernanceSummary => Boolean(item));
+        .map((item) => item.governance_summary)
+        .filter(hasGovernanceSummary);
 
     const highImpactCount = summaries.filter((item) => item.impact_summary?.impact_level === "high").length;
     const blockingCount = summaries.filter((item) => item.health_summary?.status === "blocking").length;

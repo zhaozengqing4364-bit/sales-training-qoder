@@ -18,6 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from common.api.server_error import build_server_error
 from common.auth.service import get_current_admin_user
 from common.db.models import User
+from common.db.schemas import AssetGovernanceSummary
 from common.db.session import get_db
 from common.monitoring.logger import get_logger, get_trace_id
 from sales_bot.services.voice_runtime_policy import VoiceRuntimePolicyService
@@ -76,6 +77,37 @@ class AgentVoicePolicyPayload(BaseModel):
     tool_policy_override: dict[str, Any] = Field(default_factory=dict)
 
 
+class RuntimeProfileResponse(BaseModel):
+    id: str
+    name: str
+    description: str | None = None
+    is_default: bool = False
+    is_active: bool = True
+    voice_mode: Literal["legacy", "stepfun_realtime"] = "stepfun_realtime"
+    model_name: str
+    voice_name: str
+    temperature: float
+    input_audio_format: str
+    output_audio_format: str
+    output_sample_rate: int
+    turn_detection: str | None = None
+    tool_policy: dict[str, Any] = Field(default_factory=dict)
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+    governance_summary: AssetGovernanceSummary | None = None
+
+
+class RuntimeProfileListData(BaseModel):
+    items: list[RuntimeProfileResponse] = Field(default_factory=list)
+    total: int = 0
+
+
+class RuntimeProfileListEnvelope(BaseModel):
+    success: bool = True
+    data: RuntimeProfileListData
+    trace_id: str | None = None
+
+
 router = APIRouter(
     prefix="/voice-runtime",
     tags=["voice-runtime"],
@@ -87,7 +119,7 @@ def _success(data: Any) -> dict[str, Any]:
     return {"success": True, "data": data, "trace_id": get_trace_id()}
 
 
-@router.get("/profiles")
+@router.get("/profiles", response_model=RuntimeProfileListEnvelope)
 async def list_runtime_profiles(
     only_active: bool = Query(False),
     db: AsyncSession = Depends(get_db),

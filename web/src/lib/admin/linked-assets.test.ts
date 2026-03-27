@@ -1,5 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, expectTypeOf, it } from "vitest";
 
+import type { LinkedAssetChangeReference, SupportRuntimeFaultItem } from "@/lib/api/types";
 import {
     extractLinkedAssetChanges,
     formatLinkedAssetHealthStatusLabel,
@@ -8,50 +9,50 @@ import {
 } from "./linked-assets";
 
 describe("admin linked-asset helpers", () => {
-    it("parses linked asset changes from runtime diagnostics and drops incomplete entries", () => {
-        expect(
-            extractLinkedAssetChanges({
-                source: "session",
-                severity: "blocking",
-                kind: "kb_lock_blocked_search_failed",
-                summary: "runtime failure",
-                detected_at: "2026-03-26T09:30:00Z",
-                session_id: "session-1",
-                scenario_type: "sales",
-                session_status: "completed",
-                report_status: "completed",
-                diagnostics: {
-                    linked_asset_changes: [
-                        {
-                            asset_type: "knowledge_base",
-                            asset_id: "kb-1",
-                            asset_name: "石犀产品知识库",
-                            admin_path: "/admin/knowledge",
-                            latest_change_label: "最近文档：竞品对比",
-                            change_count_7d: "2",
-                            impact_level: "high",
-                            health_status: "blocking",
-                        },
-                        {
-                            asset_type: "persona",
-                            asset_name: "预算压价角色",
-                            latest_change_label: "缺少管理路径，应被过滤",
-                        },
-                    ],
-                },
-            }),
-        ).toEqual([
+    it("returns the full shared linked-asset contract from runtime diagnostics", () => {
+        const fault: Pick<SupportRuntimeFaultItem, "diagnostics"> = {
+            diagnostics: {
+                linked_asset_changes: [
+                    {
+                        asset_type: "knowledge_base",
+                        asset_label: "知识库",
+                        asset_id: "kb-1",
+                        asset_name: "石犀产品知识库",
+                        admin_path: "/admin/knowledge",
+                        latest_change_label: "最近文档：竞品对比",
+                        latest_change_type: "document_replace",
+                        last_changed_at: "2026-03-25T08:00:00Z",
+                        change_count_7d: 2,
+                        sessions_since_change: 5,
+                        impact_level: "high",
+                        health_status: "blocking",
+                    },
+                ],
+            },
+        };
+
+        const changes = extractLinkedAssetChanges(fault);
+
+        expect(changes).toEqual<LinkedAssetChangeReference[]>([
             {
                 asset_type: "knowledge_base",
+                asset_label: "知识库",
                 asset_id: "kb-1",
                 asset_name: "石犀产品知识库",
                 admin_path: "/admin/knowledge",
                 latest_change_label: "最近文档：竞品对比",
+                latest_change_type: "document_replace",
+                last_changed_at: "2026-03-25T08:00:00Z",
                 change_count_7d: 2,
+                sessions_since_change: 5,
                 impact_level: "high",
                 health_status: "blocking",
             },
         ]);
+    });
+
+    it("exposes the shared linked-asset contract type from the helper", () => {
+        expectTypeOf(extractLinkedAssetChanges).returns.toEqualTypeOf<LinkedAssetChangeReference[]>();
     });
 
     it("formats linked-asset labels and fallback status copy from the shared helper", () => {

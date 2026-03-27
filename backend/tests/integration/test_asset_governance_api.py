@@ -9,10 +9,13 @@ import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from agent.models import Persona, VoiceRuntimeProfile
+from agent.schemas import PersonaListItem, PersonaResponse
 from common.auth.service import create_access_token
 from common.conversation.models import ConversationMessage
 from common.db.models import Page, PracticeSession, Presentation, RequiredTalkingPoint, Scenario, User
+from common.db.schemas import PresentationResponse
 from common.knowledge.models import KnowledgeBase, KnowledgeDocument
+from common.knowledge.schemas import KnowledgeBaseListItem, KnowledgeBaseResponse
 
 
 async def _create_admin_user(db: AsyncSession) -> User:
@@ -68,6 +71,61 @@ def _make_not_evaluable_snapshot(reason: str) -> dict[str, object]:
         "evaluable": False,
         "not_evaluable_reason": reason,
     }
+
+
+def _assert_governance_summary_schema_ref(model: type[object]) -> None:
+    schema = model.model_json_schema()
+    governance_property = schema["properties"]["governance_summary"]
+    refs = [
+        option.get("$ref")
+        for option in governance_property.get("anyOf", [])
+        if isinstance(option, dict)
+    ]
+    assert any(
+        isinstance(ref, str) and ref.endswith("/AssetGovernanceSummary") for ref in refs
+    )
+    assert "AssetGovernanceSummary" in schema.get("$defs", {})
+
+
+@pytest.mark.parametrize(
+    "model",
+    [
+        KnowledgeBaseResponse,
+        KnowledgeBaseListItem,
+        PersonaResponse,
+        PersonaListItem,
+        PresentationResponse,
+    ],
+)
+def test_asset_response_models_use_shared_governance_summary_schema(model: type[object]) -> None:
+    _assert_governance_summary_schema_ref(model)
+
+
+async def test_runtime_profile_openapi_exposes_typed_governance_summary(
+    async_client,
+) -> None:
+    response = await async_client.get("/openapi.json")
+    assert response.status_code == 200
+
+    document = response.json()
+    route_schema = document["paths"]["/api/v1/admin/voice-runtime/profiles"]["get"][
+        "responses"
+    ]["200"]["content"]["application/json"]["schema"]
+    assert "$ref" in route_schema
+
+    components = document.get("components", {}).get("schemas", {})
+    assert "AssetGovernanceSummary" in components
+    assert any(
+        any(
+            isinstance(option, dict)
+            and option.get("$ref", "").endswith("/AssetGovernanceSummary")
+            for option in schema.get("properties", {})
+            .get("governance_summary", {})
+            .get("anyOf", [])
+        )
+        for schema in components.values()
+        if isinstance(schema, dict)
+    )
 
 
 async def _seed_asset_graph(test_db: AsyncSession) -> dict[str, str]:

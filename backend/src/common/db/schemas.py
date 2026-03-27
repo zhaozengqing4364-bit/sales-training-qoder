@@ -55,6 +55,61 @@ class InterruptionType(StrEnum):
     VAGUE_RESPONSE = "vague_response"
 
 
+# ========== Shared Asset Governance Schemas ==========
+class AssetGovernanceAnomaly(BaseModel):
+    kind: str
+    severity: str
+    summary: str
+    detected_at: datetime | None = None
+    session_id: str | None = None
+    source: str | None = None
+
+
+class AssetGovernanceImpactSummary(BaseModel):
+    impact_level: str
+    recent_session_count: int = 0
+    active_session_count: int = 0
+    impacted_user_count: int = 0
+    last_session_at: datetime | None = None
+
+
+class AssetGovernanceRecentChangeSummary(BaseModel):
+    last_changed_at: datetime | None = None
+    latest_change_type: str
+    latest_change_label: str
+    change_count_7d: int = 0
+    sessions_since_change: int = 0
+
+
+class AssetGovernanceHealthSummary(BaseModel):
+    status: str
+    anomaly_count: int = 0
+    blocking_count: int = 0
+    warning_count: int = 0
+    sample_anomalies: list[AssetGovernanceAnomaly] = Field(default_factory=list)
+
+
+class AssetGovernanceSummary(BaseModel):
+    impact_summary: AssetGovernanceImpactSummary
+    recent_change_summary: AssetGovernanceRecentChangeSummary
+    health_summary: AssetGovernanceHealthSummary
+
+
+class LinkedAssetChangeReference(BaseModel):
+    asset_type: str
+    asset_label: str
+    asset_id: str
+    asset_name: str
+    admin_path: str
+    latest_change_label: str
+    latest_change_type: str
+    last_changed_at: datetime | None = None
+    change_count_7d: int = 0
+    sessions_since_change: int = 0
+    impact_level: str = "low"
+    health_status: str = "healthy"
+
+
 # ========== User Schemas ==========
 class UserBase(BaseModel):
     name: str = Field(..., max_length=100)
@@ -118,7 +173,7 @@ class PresentationResponse(PresentationBase):
     version_number: int
     total_pages: int | None = None
     ocr_progress: float = 0.0
-    governance_summary: dict[str, Any] | None = None
+    governance_summary: AssetGovernanceSummary | None = None
 
 
 class PresentationDetail(PresentationResponse):

@@ -337,6 +337,65 @@ export interface SupportRuntimeOverview {
     };
 }
 
+export interface AssetGovernanceAnomaly {
+    kind: string;
+    severity: "warning" | "blocking" | string;
+    summary: string;
+    detected_at?: string | null;
+    session_id?: string | null;
+    source?: string | null;
+}
+
+export interface AssetGovernanceImpactSummary {
+    impact_level: "low" | "medium" | "high" | string;
+    recent_session_count: number;
+    active_session_count: number;
+    impacted_user_count: number;
+    last_session_at: string | null;
+}
+
+export interface AssetGovernanceRecentChangeSummary {
+    last_changed_at: string | null;
+    latest_change_type: string;
+    latest_change_label: string;
+    change_count_7d: number;
+    sessions_since_change: number;
+}
+
+export interface AssetGovernanceHealthSummary {
+    status: "healthy" | "warning" | "blocking" | string;
+    anomaly_count: number;
+    blocking_count: number;
+    warning_count: number;
+    sample_anomalies: AssetGovernanceAnomaly[];
+}
+
+export interface AssetGovernanceSummary {
+    impact_summary?: AssetGovernanceImpactSummary | null;
+    recent_change_summary?: AssetGovernanceRecentChangeSummary | null;
+    health_summary?: AssetGovernanceHealthSummary | null;
+}
+
+export interface LinkedAssetChangeReference {
+    asset_type: string;
+    asset_label: string;
+    asset_id: string;
+    asset_name: string;
+    admin_path: string;
+    latest_change_label: string;
+    latest_change_type: string;
+    last_changed_at: string | null;
+    change_count_7d: number;
+    sessions_since_change: number;
+    impact_level: string;
+    health_status: string;
+}
+
+export interface SupportRuntimeFaultDiagnostics {
+    linked_asset_changes: LinkedAssetChangeReference[];
+    [key: string]: unknown;
+}
+
 export interface SupportRuntimeFaultItem {
     source: "session" | "system_log" | string;
     severity: SupportRuntimeFaultSeverity;
@@ -347,7 +406,7 @@ export interface SupportRuntimeFaultItem {
     scenario_type: "sales" | "presentation" | string | null;
     session_status: string | null;
     report_status: string | null;
-    diagnostics: Record<string, unknown>;
+    diagnostics: SupportRuntimeFaultDiagnostics;
 }
 
 export interface SupportRuntimeFaultsResponse {
@@ -483,7 +542,7 @@ export interface AdminPersona {
     status: string;
     icon?: string;
     system_prompt: string;
-    governance_summary?: Record<string, unknown> | null;
+    governance_summary?: AssetGovernanceSummary | null;
     traits?: Record<string, string>;
     agent_id?: string;
     agent_name?: string;
@@ -512,6 +571,76 @@ export interface AdminKnowledgeBase {
     doc_count?: number;
     created_at: string;
     updated_at: string;
+    governance_summary?: AssetGovernanceSummary | null;
+}
+
+export interface AssetGovernanceSubject {
+    governance_summary?: AssetGovernanceSummary | null;
+}
+
+export interface AdminVoiceRuntimeToolPolicyLexiconItem {
+    canonical_term: string;
+    aliases: string[];
+    scope?: string;
+    replace_on_final_only?: boolean;
+}
+
+export interface AdminVoiceRuntimeToolPolicy {
+    kb_lock_mode?: "strict_audit" | "coach_mode";
+    max_questions_per_turn?: number;
+    web_search_top_k?: number;
+    web_search_timeout_seconds?: number;
+    retrieval_top_k?: number;
+    retrieval_similarity_threshold?: number;
+    retrieval_enable_hybrid?: boolean;
+    retrieval_keyword_candidate_limit?: number;
+    retrieval_enable_rerank?: boolean;
+    retrieval_rerank_top_k?: number;
+    transcript_normalization_enabled?: boolean;
+    transcript_normalization_apply_to_interim?: boolean;
+    transcript_normalization_lexicon?: AdminVoiceRuntimeToolPolicyLexiconItem[];
+}
+
+export interface AdminVoiceRuntimeProfile extends AssetGovernanceSubject {
+    id: string;
+    name: string;
+    description?: string | null;
+    is_default: boolean;
+    is_active: boolean;
+    voice_mode: "legacy" | "stepfun_realtime";
+    model_name: string;
+    voice_name: string;
+    temperature: number;
+    input_audio_format: string;
+    output_audio_format: string;
+    output_sample_rate: number;
+    turn_detection?: string | null;
+    tool_policy: AdminVoiceRuntimeToolPolicy;
+    created_at?: string | null;
+    updated_at?: string | null;
+}
+
+export interface AdminPresentationListItem extends AssetGovernanceSubject {
+    presentation_id: string;
+    title: string;
+    status: "processing" | "ready" | "failed";
+    version_number: number;
+    file_size_bytes: number;
+    page_count: number;
+    total_pages?: number;
+    uploaded_by_admin_id: string;
+    created_at: string;
+}
+
+export interface AdminPresentationPage {
+    page_id: string;
+    page_number: number;
+    image_url: string;
+    extracted_text?: string;
+}
+
+export interface AdminPresentationDetailItem extends AdminPresentationListItem {
+    pages: AdminPresentationPage[];
 }
 
 export interface AdminKnowledgeDocument {

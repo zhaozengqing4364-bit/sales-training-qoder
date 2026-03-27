@@ -72,6 +72,31 @@ class TestSupportRuntimeContract:
                 assert isinstance(item.get("summary"), str)
                 assert "detected_at" in item
 
+    async def test_faults_openapi_exposes_linked_asset_change_contract(
+        self,
+        async_client: AsyncClient,
+    ) -> None:
+        response = await async_client.get("/openapi.json")
+        assert response.status_code == 200
+
+        document = response.json()
+        route_schema = document["paths"]["/api/v1/support/runtime/faults"]["get"][
+            "responses"
+        ]["200"]["content"]["application/json"]["schema"]
+        assert "$ref" in route_schema
+
+        components = document.get("components", {}).get("schemas", {})
+        assert "LinkedAssetChangeReference" in components
+        assert any(
+            schema.get("properties", {})
+            .get("linked_asset_changes", {})
+            .get("items", {})
+            .get("$ref", "")
+            .endswith("/LinkedAssetChangeReference")
+            for schema in components.values()
+            if isinstance(schema, dict)
+        )
+
     async def test_faults_rejects_invalid_severity_filter(
         self,
         async_client: AsyncClient,

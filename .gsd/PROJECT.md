@@ -47,6 +47,7 @@
 - M005/S03 已完成：当前 `/admin/knowledge`、`/admin/personas`、`/admin/presentations`、`/admin/voice-runtime` 现在都会在原地显示 runtime-backed `governance_summary`（影响范围、最近变更、blocking/warning 健康信号），而 `/admin/analytics` 与 `/admin/users/[id]` 也会把 support/runtime fault 的 `linked_asset_changes` 直接渲染成资产链接与最近变更上下文，运营无需离开现有 admin 链路就能从异常追到可能的资产变更面。
 - M005/S04 已完成：`/api/v1/admin/analytics/operating-pack` 与 `/admin/analytics` 现在会固定按 7 天窗口给出团队周节奏包：cohort 重复卡点家族、部门问题面、证据不足/降级拆分，以及基于“每个用户最新一条可评估 completed session”的风险名单、连续未练名单、显著回升名单；`ManagerLitePanel`、`/admin/users` 与 `/admin/users/[id]` 通过 `focusBucket` + `focusIssueFamily` drill-in 保持同一问题家族语义，主管可以从周节奏包一路带着上下文进入用户详情页设重点。
 - M005 已在里程碑级 close-out 中完成并封板：`M005-VALIDATION.md` verdict 为 `pass`；fresh backend admin governance verification（49/49）与 web admin governance verification（19/19）通过；required `git diff --stat HEAD $(git merge-base HEAD 001-ai-practice-system) -- ':!.gsd/'` 也确认当前 branch 含有真实非 `.gsd` 代码改动。当前 shipped admin route family 已经在原有 `/admin/analytics*`、`/admin/users*`、knowledge / persona / presentation / voice-runtime 页面上闭合 evidence-aligned analytics、主管 intervention、资产治理与 weekly operating pack，R012 已升为 `validated`。
+- M006/S01 已完成：`web/src/lib/admin/drill-in.ts` 与 `web/src/lib/admin/linked-assets.ts` 现在分别收口 admin weekly drill-in URL / read-side fallback note 与 linked-asset parsing / labeling；`ManagerLitePanel`、`/admin/users`、`/admin/analytics`、`/admin/users/[id]` 复用同一 helper seam，当前 query-string contract 保持单源，linked-asset helper 也继续对齐完整 `LinkedAssetChangeReference` contract，而不再分散在页面本地实现里。
 - 真实首发目标已明确：先把桌面端稳定性做满，不在第一阶段绑定移动端 / 企业微信 / 外部系统集成。
 
 ## Architecture / Key Patterns
@@ -68,3 +69,4 @@ See `.gsd/REQUIREMENTS.md` for the explicit capability contract, requirement sta
 - [ ] M003: 知识与角色真实性 — 沿现有 admin Persona / knowledge → practice runtime → knowledge-check / report / replay 业务链路，证明知识与 Persona 真的改变 objection-heavy 销售训练，而不是只停在 prompt 文案层。
 - [x] M004: 复盘与学习闭环增强 — 已把现有 report / replay / history / practice 路由收口成 explanation-rich 的 sales + PPT learner loop，并在 milestone close-out 中完成验证与封板。
 - [x] M005: 后台治理与规模化运营 — 已把 evidence-aligned admin analytics / user drill-in、主管 focus/reminder/result workflow、asset governance 与 fixed-cadence weekly operating pack 全部收口到现有 admin route family，并在 milestone close-out 中完成验证与封板。
+- [ ] M006: 后台共享 seam 收口 — 在现有 admin route family 内继续抽出可复用的 frontend contract、typed governance seam、workflow service 与 adapter/registry 边界；S01 已完成 drill-in 与 linked-asset helper 收口。

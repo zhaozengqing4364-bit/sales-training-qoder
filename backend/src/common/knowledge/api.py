@@ -33,6 +33,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from common.api.server_error import build_server_error
 from common.auth.service import get_current_user
 from common.db.models import User
+from common.db.schemas import AssetGovernanceSummary
 from common.db.session import get_db
 from common.monitoring.logger import get_logger
 from common.storage.document import get_document_storage_service
@@ -344,7 +345,13 @@ async def list_knowledge_bases(
             extra_anomalies=extra_anomalies,
         )
         enriched_items.append(
-            item.model_copy(update={"governance_summary": governance_summary})
+            item.model_copy(
+                update={
+                    "governance_summary": AssetGovernanceSummary.model_validate(
+                        governance_summary
+                    )
+                }
+            )
         )
 
     return {

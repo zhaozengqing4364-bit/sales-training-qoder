@@ -30,6 +30,10 @@ import {
     AdminKnowledgeSearchResponse,
     AdminSystemLog,
     AdminSystemLogListResponse,
+    AdminVoiceRuntimeProfile,
+    AdminPresentationListItem,
+    AdminPresentationDetailItem,
+    AdminPresentationPage,
     UserDetailStats,
     UserSessionsResponse,
     UserProgressResponse,
@@ -74,6 +78,13 @@ import {
     ManagerInterventionListResponse,
     ManagerInterventionRemindRequest,
     ManagerInterventionRemindResponse,
+    AssetGovernanceAnomaly,
+    AssetGovernanceHealthSummary,
+    AssetGovernanceImpactSummary,
+    AssetGovernanceRecentChangeSummary,
+    AssetGovernanceSummary,
+    LinkedAssetChangeReference,
+    SupportRuntimeFaultDiagnostics,
 } from "./types";
 import { authHandler } from "@/lib/auth-handler";
 import { normalizeCurrentUser } from "@/lib/auth/current-user";
@@ -357,24 +368,7 @@ type AdminModelConfigUpsertPayload = {
     is_active?: boolean;
 };
 
-type VoiceRuntimeProfile = {
-    id: string;
-    name: string;
-    description?: string | null;
-    is_default: boolean;
-    is_active: boolean;
-    voice_mode: "legacy" | "stepfun_realtime";
-    model_name: string;
-    voice_name: string;
-    temperature: number;
-    input_audio_format: string;
-    output_audio_format: string;
-    output_sample_rate: number;
-    turn_detection?: string | null;
-    tool_policy: Record<string, unknown>;
-    created_at?: string | null;
-    updated_at?: string | null;
-};
+type VoiceRuntimeProfile = AdminVoiceRuntimeProfile;
 
 type VoiceRuntimeProfilePayload = {
     name: string;
@@ -444,29 +438,11 @@ type PresentationAIPolicyPreviewPayload = {
 
 type PresentationStatus = "processing" | "ready" | "failed";
 
-type PresentationPage = {
-    page_id: string;
-    page_number: number;
-    image_url: string;
-    extracted_text?: string;
-};
+type PresentationPage = AdminPresentationPage;
 
-type PresentationListItem = {
-    presentation_id: string;
-    title: string;
-    status: PresentationStatus;
-    version_number: number;
-    file_size_bytes: number;
-    page_count: number;
-    total_pages?: number;
-    uploaded_by_admin_id: string;
-    created_at: string;
-    governance_summary?: Record<string, unknown> | null;
-};
+type PresentationListItem = AdminPresentationListItem;
 
-type PresentationDetailItem = PresentationListItem & {
-    pages: PresentationPage[];
-};
+type PresentationDetailItem = AdminPresentationDetailItem;
 
 type PresentationTalkingPoint = {
     point_id: string;
@@ -503,6 +479,189 @@ function toNumberValue(value: unknown, fallback = 0): number {
     return fallback;
 }
 
+function toNullableStringValue(value: unknown): string | null {
+    const normalized = toStringValue(value).trim();
+    return normalized ? normalized : null;
+}
+
+function normalizeAssetGovernanceAnomaly(value: unknown): AssetGovernanceAnomaly {
+    const raw = toRecord(value);
+    return {
+        kind: toStringValue(raw.kind),
+        severity: toStringValue(raw.severity),
+        summary: toStringValue(raw.summary),
+        detected_at: toNullableStringValue(raw.detected_at),
+        session_id: toNullableStringValue(raw.session_id),
+        source: toNullableStringValue(raw.source),
+    };
+}
+
+function normalizeAssetGovernanceSummary(value: unknown): AssetGovernanceSummary | null {
+    const raw = toRecord(value);
+    if (!Object.keys(raw).length) {
+        return null;
+    }
+
+    const impact = toRecord(raw.impact_summary);
+    const recentChange = toRecord(raw.recent_change_summary);
+    const health = toRecord(raw.health_summary);
+
+    if (!Object.keys(impact).length && !Object.keys(recentChange).length && !Object.keys(health).length) {
+        return null;
+    }
+
+    const impactSummary: AssetGovernanceImpactSummary | null = Object.keys(impact).length
+        ? {
+            impact_level: toStringValue(impact.impact_level, "low"),
+            recent_session_count: toNumberValue(impact.recent_session_count, 0),
+            active_session_count: toNumberValue(impact.active_session_count, 0),
+            impacted_user_count: toNumberValue(impact.impacted_user_count, 0),
+            last_session_at: toNullableStringValue(impact.last_session_at),
+        }
+        : null;
+
+    const recentChangeSummary: AssetGovernanceRecentChangeSummary | null = Object.keys(recentChange).length
+        ? {
+            last_changed_at: toNullableStringValue(recentChange.last_changed_at),
+            latest_change_type: toStringValue(recentChange.latest_change_type),
+            latest_change_label: toStringValue(recentChange.latest_change_label),
+            change_count_7d: toNumberValue(recentChange.change_count_7d, 0),
+            sessions_since_change: toNumberValue(recentChange.sessions_since_change, 0),
+        }
+        : null;
+
+    const healthSummary: AssetGovernanceHealthSummary | null = Object.keys(health).length
+        ? {
+            status: toStringValue(health.status, "healthy"),
+            anomaly_count: toNumberValue(health.anomaly_count, 0),
+            blocking_count: toNumberValue(health.blocking_count, 0),
+            warning_count: toNumberValue(health.warning_count, 0),
+            sample_anomalies: Array.isArray(health.sample_anomalies)
+                ? health.sample_anomalies.map(normalizeAssetGovernanceAnomaly)
+                : [],
+        }
+        : null;
+
+    return {
+        impact_summary: impactSummary,
+        recent_change_summary: recentChangeSummary,
+        health_summary: healthSummary,
+    };
+}
+
+function normalizeLinkedAssetChangeReference(value: unknown): LinkedAssetChangeReference | null {
+    const raw = toRecord(value);
+    const assetName = toStringValue(raw.asset_name).trim();
+    const adminPath = toStringValue(raw.admin_path).trim();
+    const latestChangeLabel = toStringValue(raw.latest_change_label).trim();
+
+    if (!assetName || !adminPath || !latestChangeLabel) {
+        return null;
+    }
+
+    return {
+        asset_type: toStringValue(raw.asset_type),
+        asset_label: toStringValue(raw.asset_label),
+        asset_id: toStringValue(raw.asset_id),
+        asset_name: assetName,
+        admin_path: adminPath,
+        latest_change_label: latestChangeLabel,
+        latest_change_type: toStringValue(raw.latest_change_type),
+        last_changed_at: toNullableStringValue(raw.last_changed_at),
+        change_count_7d: toNumberValue(raw.change_count_7d, 0),
+        sessions_since_change: toNumberValue(raw.sessions_since_change, 0),
+        impact_level: toStringValue(raw.impact_level, "low"),
+        health_status: toStringValue(raw.health_status, "healthy"),
+    };
+}
+
+function normalizeSupportRuntimeFaultDiagnostics(value: unknown): SupportRuntimeFaultDiagnostics {
+    const raw = toRecord(value);
+    const linkedAssetChanges = Array.isArray(raw.linked_asset_changes)
+        ? raw.linked_asset_changes
+            .map(normalizeLinkedAssetChangeReference)
+            .filter((item): item is LinkedAssetChangeReference => Boolean(item))
+        : [];
+
+    return {
+        ...raw,
+        linked_asset_changes: linkedAssetChanges,
+    };
+}
+
+function normalizeSupportRuntimeFaultItem(
+    input: unknown,
+): SupportRuntimeFaultsResponse["items"][number] {
+    const raw = toRecord(input);
+    return {
+        source: toStringValue(raw.source),
+        severity: raw.severity === "warning" ? "warning" : "blocking",
+        kind: toStringValue(raw.kind),
+        summary: toStringValue(raw.summary),
+        detected_at: toNullableStringValue(raw.detected_at),
+        session_id: toNullableStringValue(raw.session_id),
+        scenario_type: toNullableStringValue(raw.scenario_type),
+        session_status: toNullableStringValue(raw.session_status),
+        report_status: toNullableStringValue(raw.report_status),
+        diagnostics: normalizeSupportRuntimeFaultDiagnostics(raw.diagnostics),
+    };
+}
+
+function normalizeSupportRuntimeFaultsResponse(input: unknown): SupportRuntimeFaultsResponse {
+    const raw = toRecord(input);
+    return {
+        generated_at: toStringValue(raw.generated_at),
+        items: Array.isArray(raw.items) ? raw.items.map(normalizeSupportRuntimeFaultItem) : [],
+        count: toNumberValue(raw.count, 0),
+        limit: toNumberValue(raw.limit, 0),
+        severity: raw.severity === "warning" || raw.severity === "blocking"
+            ? raw.severity
+            : null,
+    };
+}
+
+function normalizeAdminKnowledgeBase(input: unknown): AdminKnowledgeBase {
+    const raw = toRecord(input);
+    return {
+        ...raw,
+        id: toStringValue(raw.id),
+        name: toStringValue(raw.name),
+        description: toStringValue(raw.description),
+        category: toStringValue(raw.category),
+        status: toStringValue(raw.status),
+        document_count: toNumberValue(raw.document_count, toNumberValue(raw.doc_count, 0)),
+        total_chunks: toNumberValue(raw.total_chunks, 0),
+        doc_count: raw.doc_count === undefined ? undefined : toNumberValue(raw.doc_count, 0),
+        created_at: toStringValue(raw.created_at),
+        updated_at: toStringValue(raw.updated_at),
+        governance_summary: normalizeAssetGovernanceSummary(raw.governance_summary),
+    };
+}
+
+function normalizeVoiceRuntimeProfile(input: unknown): VoiceRuntimeProfile {
+    const raw = toRecord(input);
+    return {
+        ...raw,
+        id: toStringValue(raw.id),
+        name: toStringValue(raw.name),
+        description: toNullableStringValue(raw.description),
+        is_default: Boolean(raw.is_default),
+        is_active: raw.is_active !== false,
+        voice_mode: raw.voice_mode === "legacy" ? "legacy" : "stepfun_realtime",
+        model_name: toStringValue(raw.model_name),
+        voice_name: toStringValue(raw.voice_name),
+        temperature: toNumberValue(raw.temperature, 0.7),
+        input_audio_format: toStringValue(raw.input_audio_format),
+        output_audio_format: toStringValue(raw.output_audio_format),
+        output_sample_rate: toNumberValue(raw.output_sample_rate, 24000),
+        turn_detection: toNullableStringValue(raw.turn_detection),
+        tool_policy: toRecord(raw.tool_policy),
+        created_at: toNullableStringValue(raw.created_at),
+        updated_at: toNullableStringValue(raw.updated_at),
+        governance_summary: normalizeAssetGovernanceSummary(raw.governance_summary),
+    };
+}
+
 function normalizePresentationStatus(value: unknown): PresentationStatus {
     if (value === "ready") return "ready";
     if (value === "processing") return "processing";
@@ -534,7 +693,7 @@ function normalizePresentationListItem(input: unknown): PresentationListItem {
         total_pages: totalPages,
         uploaded_by_admin_id: toStringValue(raw.uploaded_by_admin_id),
         created_at: toStringValue(raw.created_at, toStringValue(raw.upload_date)),
-        governance_summary: toRecord(raw.governance_summary),
+        governance_summary: normalizeAssetGovernanceSummary(raw.governance_summary),
     };
 }
 
@@ -655,8 +814,12 @@ function normalizeAdminPersona(input: unknown): AdminPersona {
         difficulty: toStringValue(raw.difficulty),
         status: toStringValue(raw.status),
         system_prompt: toStringValue(raw.system_prompt),
+        governance_summary: normalizeAssetGovernanceSummary(raw.governance_summary),
         created_at: toStringValue(raw.created_at) || undefined,
         updated_at: toStringValue(raw.updated_at) || undefined,
+        knowledge_bases: Array.isArray(raw.knowledge_bases)
+            ? raw.knowledge_bases.map(normalizeAdminKnowledgeBase)
+            : undefined,
         knowledge_base_ids: normalizeStringList(raw.knowledge_base_ids),
         persona_policy: normalizeAdminPersonaPolicy(raw.persona_policy),
         tts_config: toRecord(raw.tts_config) as AdminPersona["tts_config"],
@@ -1431,7 +1594,8 @@ export const api = {
             if (params?.severity) {
                 searchParams.set("severity", params.severity);
             }
-            return apiFetch<SupportRuntimeFaultsResponse>(`/support/runtime/faults?${searchParams}`);
+            const result = await apiFetch<SupportRuntimeFaultsResponse>(`/support/runtime/faults?${searchParams}`);
+            return normalizeSupportRuntimeFaultsResponse(result);
         },
     },
 
@@ -2008,29 +2172,38 @@ export const api = {
             if (params?.page_size) searchParams.set("page_size", params.page_size.toString());
             if (params?.search) searchParams.set("search", params.search);
 
-            const result = await apiFetch<{ knowledge_bases?: AdminKnowledgeBase[]; items?: AdminKnowledgeBase[]; total?: number }>(`/admin/knowledge?${searchParams}`);
+            const result = await apiFetch<{ knowledge_bases?: unknown[]; items?: unknown[]; total?: unknown }>(`/admin/knowledge?${searchParams}`);
+            const items = Array.isArray(result.knowledge_bases)
+                ? result.knowledge_bases
+                : Array.isArray(result.items)
+                    ? result.items
+                    : [];
+
             return {
-                items: (result.knowledge_bases || result.items || []) as AdminKnowledgeBase[],
-                total: result.total || 0
+                items: items.map(normalizeAdminKnowledgeBase),
+                total: toNumberValue(result.total, 0),
             };
         },
 
         getKnowledgeBase: async (id: string) => {
-            return apiFetch<AdminKnowledgeBase>(`/admin/knowledge/${id}`);
+            const result = await apiFetch<unknown>(`/admin/knowledge/${id}`);
+            return normalizeAdminKnowledgeBase(result);
         },
 
         createKnowledgeBase: async (data: { name: string; description?: string; category?: string }) => {
-            return apiFetch<AdminKnowledgeBase>("/admin/knowledge", {
+            const result = await apiFetch<unknown>("/admin/knowledge", {
                 method: "POST",
                 body: JSON.stringify(data),
             });
+            return normalizeAdminKnowledgeBase(result);
         },
 
         updateKnowledgeBase: async (id: string, data: Partial<AdminKnowledgeBase>) => {
-            return apiFetch<AdminKnowledgeBase>(`/admin/knowledge/${id}`, {
+            const result = await apiFetch<unknown>(`/admin/knowledge/${id}`, {
                 method: "PUT",
                 body: JSON.stringify(data),
             });
+            return normalizeAdminKnowledgeBase(result);
         },
 
         deleteKnowledgeBase: async (id: string) => {
@@ -2130,21 +2303,28 @@ export const api = {
                 queryParams.set("only_active", String(params.only_active));
             }
             const query = queryParams.toString() ? `?${queryParams.toString()}` : "";
-            return apiFetch<{ items: VoiceRuntimeProfile[]; total: number }>(`/admin/voice-runtime/profiles${query}`);
+            const result = await apiFetch<{ items?: unknown[]; total?: unknown }>(`/admin/voice-runtime/profiles${query}`);
+            const items = Array.isArray(result.items) ? result.items : [];
+            return {
+                items: items.map(normalizeVoiceRuntimeProfile),
+                total: toNumberValue(result.total, 0),
+            };
         },
 
         createVoiceRuntimeProfile: async (data: VoiceRuntimeProfilePayload) => {
-            return apiFetch<VoiceRuntimeProfile>("/admin/voice-runtime/profiles", {
+            const result = await apiFetch<unknown>("/admin/voice-runtime/profiles", {
                 method: "POST",
                 body: JSON.stringify(data),
             });
+            return normalizeVoiceRuntimeProfile(result);
         },
 
         updateVoiceRuntimeProfile: async (profileId: string, data: Partial<VoiceRuntimeProfilePayload>) => {
-            return apiFetch<VoiceRuntimeProfile>(`/admin/voice-runtime/profiles/${profileId}`, {
+            const result = await apiFetch<unknown>(`/admin/voice-runtime/profiles/${profileId}`, {
                 method: "PUT",
                 body: JSON.stringify(data),
             });
+            return normalizeVoiceRuntimeProfile(result);
         },
 
         deleteVoiceRuntimeProfile: async (profileId: string) => {

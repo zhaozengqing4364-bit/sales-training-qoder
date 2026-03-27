@@ -15,6 +15,8 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from common.db.schemas import AssetGovernanceSummary
+
 # ========== Enums as Literals for API ==========
 # Using Literal types for cleaner API documentation
 
@@ -278,7 +280,7 @@ class PersonaResponse(PersonaBase):
     created_by: str | None = None
     created_at: datetime
     updated_at: datetime
-    governance_summary: dict[str, Any] | None = None
+    governance_summary: AssetGovernanceSummary | None = None
 
 
 class PersonaListItem(BaseModel):
@@ -296,7 +298,7 @@ class PersonaListItem(BaseModel):
     is_public: bool
     usage_count: int = 0
     agent_count: int = 0
-    governance_summary: dict[str, Any] | None = None
+    governance_summary: AssetGovernanceSummary | None = None
 
 
 class PersonaListResponse(BaseModel):

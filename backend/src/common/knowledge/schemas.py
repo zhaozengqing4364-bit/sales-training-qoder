@@ -15,6 +15,8 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from common.db.schemas import AssetGovernanceSummary
+
 # ========== Type Aliases for API ==========
 KnowledgeBaseCategoryType = str  # "product" | "competitor" | "faq" | "policy"
 KnowledgeBaseStatusType = str  # "active" | "archived"
@@ -66,7 +68,7 @@ class KnowledgeBaseResponse(KnowledgeBaseBase):
     status: KnowledgeBaseStatusType
     created_at: datetime
     updated_at: datetime
-    governance_summary: dict[str, Any] | None = None
+    governance_summary: AssetGovernanceSummary | None = None
 
 
 class KnowledgeBaseListItem(BaseModel):
@@ -82,7 +84,7 @@ class KnowledgeBaseListItem(BaseModel):
     total_chunks: int = 0
     status: KnowledgeBaseStatusType
     updated_at: datetime
-    governance_summary: dict[str, Any] | None = None
+    governance_summary: AssetGovernanceSummary | None = None
 
 
 class KnowledgeBaseListResponse(BaseModel):

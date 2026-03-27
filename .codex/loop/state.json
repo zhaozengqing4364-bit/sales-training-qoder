@@ -1,6 +1,6 @@
 {
   "mode": "grow",
-  "current_issue_id": "M006-S01-T02",
+  "current_issue_id": "M006-S02-T01",
   "current_issue_type": "task",
   "current_issue_status": "done",
   "pending_issue_ids": [],
@@ -101,25 +101,36 @@
     "M005-S05-T03",
     "M005-S05",
     "M006-S01-T01",
-    "M006-S01-T02"
+    "M006-S01-T02",
+    "M006-S01-T03",
+    "M006-S01",
+    "M006-S02-T01"
   ],
   "blocked_issue_ids": [],
   "deferred_issue_ids": [],
   "last_modified_files": [
-    "web/src/lib/admin/drill-in.ts",
-    "web/src/app/admin/users/[id]/page.test.tsx",
+    "backend/src/common/db/schemas.py",
+    "backend/src/common/knowledge/schemas.py",
+    "backend/src/common/knowledge/api.py",
+    "backend/src/agent/schemas.py",
+    "backend/src/admin/api/voice_runtime.py",
+    "backend/src/support/api/runtime_status.py",
+    "backend/tests/integration/test_asset_governance_api.py",
+    "backend/tests/contract/test_support_runtime.py",
+    ".gsd/milestones/M006/slices/S02/tasks/T01-SUMMARY.md",
     ".gsd/DECISIONS.md",
-    ".gsd/milestones/M006/slices/S01/tasks/T02-SUMMARY.md",
+    ".gsd/KNOWLEDGE.md",
     ".codex/loop/state.json",
     ".codex/loop/log.md"
   ],
   "last_verification_commands": [
-    "cd web && pnpm dlx npm@11.6.1 test -- --run 'src/app/admin/users/[id]/page.test.tsx'",
-    "cd web && pnpm dlx npm@11.6.1 test -- --run 'src/lib/admin/drill-in.test.ts' 'src/app/admin/users/[id]/page.test.tsx'",
-    "lsp diagnostics: web/src/lib/admin/drill-in.ts, web/src/app/admin/users/\\[id\\]/page.tsx, web/src/app/admin/users/\\[id\\]/page.test.tsx"
+    "cd backend && venv/bin/python -m pytest -c pyproject.toml tests/integration/test_asset_governance_api.py -k 'asset_response_models_use_shared_governance_summary_schema or runtime_profile_openapi_exposes_typed_governance_summary'",
+    "cd backend && venv/bin/python -m pytest -c pyproject.toml tests/contract/test_support_runtime.py -k 'faults_openapi_exposes_linked_asset_change_contract'",
+    "cd backend && /usr/bin/time -p venv/bin/python -m pytest -c pyproject.toml tests/integration/test_asset_governance_api.py tests/contract/test_analytics.py tests/contract/test_support_runtime.py",
+    "lsp diagnostics: backend/src/common/db/schemas.py, backend/src/common/knowledge/schemas.py, backend/src/common/knowledge/api.py, backend/src/agent/schemas.py, backend/src/admin/api/voice_runtime.py, backend/src/support/api/runtime_status.py, backend/tests/integration/test_asset_governance_api.py, backend/tests/contract/test_support_runtime.py"
   ],
-  "last_verification_result": "Fresh T02 verification passed: the focused user-detail page suite and the shared drill-in helper + page regression both passed, and LSP diagnostics were clean on the helper plus the user-detail page/test files. A live browser spot-check was attempted on the local stack, but admin auth did not persist through the web server boundary after dev-login, so the real-route proof remained blocked by local session state rather than the drill-in change.",
-  "last_success_signal": "Admin user-detail now derives the same not-passed default guidance note from the shared drill-in helper on the read side, so partial/manual risk drill-ins still prefill the supervisor form and banner copy consistently with launcher-built URLs.",
+  "last_verification_result": "Fresh T01 backend verification passed. The shared governance schema refs, runtime-profile OpenAPI envelope, and support-runtime linked-asset OpenAPI contract all went green, then the full planned backend suite passed 24/24 tests in 7.18s with clean LSP diagnostics on the touched backend files.",
+  "last_success_signal": "Knowledge/persona/presentation/runtime/support now share one explicit backend governance/link-change contract, and runtime/support OpenAPI no longer advertises these payloads as generic objects.",
   "last_growth_scan": null,
-  "next_action": "Stop after one item. If continuing M006, proceed to S01/T03 to extract the shared linked-asset parser for analytics and user-detail."
+  "next_action": "Stop after one item. If continuing M006, proceed to S02/T02 to type the frontend governance contract against the shared backend AssetGovernanceSummary and LinkedAssetChangeReference models instead of reintroducing page-local parsing."
 }

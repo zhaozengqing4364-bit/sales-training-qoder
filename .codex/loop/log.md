@@ -1880,3 +1880,52 @@ Append one entry per iteration:
   verification results: focused T02 web regression passed, shared helper + page regressions passed, and LSP diagnostics were clean. Browser proof remained blocked because local dev-login auth did not persist through the web server boundary, producing 401s on /users/me and dashboard bootstrap requests after redirecting back to /login.
   success signal status: partial/manual not-passed drill-ins now recover the same default guidance note as launcher-built URLs, so the user-detail supervisor form and banner stay on one shared contract.
   rollback note: if a later slice versions the drill-in query contract, keep the read-side fallback in the shared helper unless every launcher and stored URL is migrated atomically.
+
+- time: 2026-03-27T12:22:16+0800
+  mode: grow
+  item id: M006-S01
+  files changed:
+    - .gsd/milestones/M006/slices/S01/S01-SUMMARY.md
+    - .gsd/milestones/M006/slices/S01/S01-UAT.md
+    - .gsd/DECISIONS.md
+    - .gsd/KNOWLEDGE.md
+    - .gsd/PROJECT.md
+    - .codex/loop/state.json
+    - .codex/loop/log.md
+  summary: Closed M006/S01 by rerunning the full admin helper/page verification set from the repo root, recording the shared drill-in helper seam in DECISIONS, updating project knowledge/state, and writing the slice summary/UAT on the current admin route family.
+  verification commands:
+    - pnpm --dir web exec vitest run 'src/components/admin/manager-lite-panel.test.tsx'
+    - pnpm --dir web exec vitest run 'src/app/admin/users/[id]/page.test.tsx'
+    - pnpm --dir web exec vitest run 'src/app/admin/analytics/page.test.tsx' 'src/app/admin/users/[id]/page.test.tsx'
+    - pnpm --dir web exec vitest run 'src/lib/admin/drill-in.test.ts' 'src/lib/admin/linked-assets.test.ts' 'src/components/admin/manager-lite-panel.test.tsx' 'src/app/admin/analytics/page.test.tsx' 'src/app/admin/users/[id]/page.test.tsx'
+    - lsp diagnostics: web/src/lib/admin/drill-in.ts, web/src/lib/admin/linked-assets.ts, web/src/components/admin/manager-lite-panel.tsx, web/src/app/admin/analytics/page.tsx, web/src/app/admin/users/page.tsx, web/src/app/admin/users/\[id\]/page.tsx, plus corresponding test files
+  verification results: passed; all planned slice checks, the combined helper/surface regression suite, and LSP diagnostics were green. Local admin browser auth remained an environment-level host/session quirk rather than a slice regression, so acceptance stayed on the focused helper/page evidence line.
+  success signal status: Manager-lite, /admin/users, /admin/analytics, and /admin/users/[id] now share one frontend seam for drill-in query generation/parsing and linked-asset rendering, reducing duplication without changing the shipped route or diagnostics contract.
+  rollback note: if later M006 slices revisit these surfaces, keep drill-in generation/parsing in web/src/lib/admin/drill-in.ts and keep linked_asset_changes filtering/labels in web/src/lib/admin/linked-assets.ts instead of reintroducing page-local defaults or parsers.
+
+- time: 2026-03-27T14:27:01+0800
+  mode: grow
+  item id: M006-S02-T01
+  files changed:
+    - backend/src/common/db/schemas.py
+    - backend/src/common/knowledge/schemas.py
+    - backend/src/common/knowledge/api.py
+    - backend/src/agent/schemas.py
+    - backend/src/admin/api/voice_runtime.py
+    - backend/src/support/api/runtime_status.py
+    - backend/tests/integration/test_asset_governance_api.py
+    - backend/tests/contract/test_support_runtime.py
+    - .gsd/milestones/M006/slices/S02/tasks/T01-SUMMARY.md
+    - .gsd/DECISIONS.md
+    - .gsd/KNOWLEDGE.md
+    - .codex/loop/state.json
+    - .codex/loop/log.md
+  summary: Hardened the backend governance/admin contract by promoting governance_summary and linked_asset_changes to shared typed schemas, adding explicit runtime/support response envelopes, and proving the new schema refs with focused OpenAPI regressions plus the planned backend suite.
+  verification commands:
+    - cd backend && venv/bin/python -m pytest -c pyproject.toml tests/integration/test_asset_governance_api.py -k 'asset_response_models_use_shared_governance_summary_schema or runtime_profile_openapi_exposes_typed_governance_summary'
+    - cd backend && venv/bin/python -m pytest -c pyproject.toml tests/contract/test_support_runtime.py -k 'faults_openapi_exposes_linked_asset_change_contract'
+    - cd backend && /usr/bin/time -p venv/bin/python -m pytest -c pyproject.toml tests/integration/test_asset_governance_api.py tests/contract/test_analytics.py tests/contract/test_support_runtime.py
+    - lsp diagnostics: backend/src/common/db/schemas.py, backend/src/common/knowledge/schemas.py, backend/src/common/knowledge/api.py, backend/src/agent/schemas.py, backend/src/admin/api/voice_runtime.py, backend/src/support/api/runtime_status.py, backend/tests/integration/test_asset_governance_api.py, backend/tests/contract/test_support_runtime.py
+  verification results: passed; the focused schema/OpenAPI checks turned green after the shared models and route envelopes landed, the full planned backend suite passed 24/24 tests in 7.18s, and LSP diagnostics were clean on the touched backend files.
+  success signal status: knowledge/persona/presentation/runtime/support now share one explicit backend governance/link-change contract, and the runtime/support OpenAPI surfaces no longer collapse those payloads to generic objects.
+  rollback note: if later M006 work versions this contract, keep the shared nested models in backend/src/common/db/schemas.py and validate nested governance payloads before copying them into response objects; otherwise serializer warnings and schema drift will reappear.

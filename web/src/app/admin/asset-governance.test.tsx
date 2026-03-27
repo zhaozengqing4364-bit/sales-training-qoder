@@ -1,11 +1,13 @@
 import { render, screen, waitFor } from "@testing-library/react";
-import type { ReactNode } from "react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { ComponentProps, ReactNode } from "react";
+import { beforeEach, describe, expect, expectTypeOf, it, vi } from "vitest";
 
 import KnowledgePage from "./knowledge/page";
 import PersonasPage from "./personas/page";
 import PresentationsPage from "./presentations/page";
 import VoiceRuntimePage from "./voice-runtime/page";
+import { AssetGovernanceOverview, AssetGovernanceSummaryCard } from "@/components/admin/asset-governance";
+import type { AssetGovernanceSubject, AssetGovernanceSummary } from "@/lib/api/types";
 
 const {
     successToastMock,
@@ -197,6 +199,16 @@ beforeEach(() => {
 });
 
 describe("admin asset governance pages", () => {
+    it("narrows governance overview items to the shared frontend contract", () => {
+        expectTypeOf<ComponentProps<typeof AssetGovernanceOverview>["items"]>()
+            .toEqualTypeOf<AssetGovernanceSubject[]>();
+    });
+
+    it("narrows governance card props to the shared frontend contract", () => {
+        expectTypeOf<ComponentProps<typeof AssetGovernanceSummaryCard>["summary"]>()
+            .toEqualTypeOf<AssetGovernanceSummary | null | undefined>();
+    });
+
     it("shows governance overview and inline summary on the knowledge page", async () => {
         render(<KnowledgePage />);
 
