@@ -5,7 +5,13 @@ import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { api } from "@/lib/api/client";
 import { AdminUser } from "@/lib/api/types";
-import { EMPTY_ADMIN_MANAGER_LITE_LISTS } from "@/lib/admin/read-models";
+import {
+    EMPTY_ADMIN_MANAGER_LITE_LISTS,
+    buildOperatingPackReadModel,
+    formatAdminRelativeTime,
+    formatAdminUserRoleLabel,
+    formatAdminUserStatusLabel,
+} from "@/lib/admin/read-models";
 import { buildAdminUserDrillInHref } from "@/lib/admin/drill-in";
 import { formatIssueTypeLabel } from "@/lib/session-evidence";
 import { GlassCard } from "@/components/ui/glass-card";
@@ -32,42 +38,6 @@ import {
 } from "@/components/ui/mobile-table-card";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { useToast } from "@/components/ui/toast";
-
-// Helper to format relative time
-function formatRelativeTime(dateString: string) {
-    if (!dateString) return "从未";
-    const date = new Date(dateString);
-    const now = new Date();
-    const diffInSeconds = Math.floor((now.getTime() - date.getTime()) / 1000);
-    
-    if (diffInSeconds < 60) return "刚刚";
-    if (diffInSeconds < 3600) return `${Math.floor(diffInSeconds / 60)}分钟前`;
-    if (diffInSeconds < 86400) return `${Math.floor(diffInSeconds / 3600)}小时前`;
-    if (diffInSeconds < 604800) return `${Math.floor(diffInSeconds / 86400)}天前`;
-    return date.toLocaleDateString();
-}
-
-function getStatusLabel(status: string) {
-    const map: Record<string, string> = {
-        active: "活跃",
-        inactive: "停用",
-        offline: "离线",
-        suspended: "已停用"
-    };
-    return map[status] || status;
-}
-
-function getRoleLabel(role: string) {
-    const map: Record<string, string> = {
-        admin: "管理员",
-        support: "支持角色",
-        user: "普通用户",
-        manager: "经理",
-        editor: "编辑",
-        viewer: "访客"
-    };
-    return map[role] || role;
-}
 
 // Form state type
 interface CreateUserForm {
@@ -123,7 +93,7 @@ export default function UsersPage() {
         description: string;
         variant: "danger" | "warning" | "default";
         onConfirm: () => void;
-    }>({ open: false, title: "", description: "", variant: "default", onConfirm: () => {} });
+    }>({ open: false, title: "", description: "", variant: "default", onConfirm: () => { } });
 
     // Create user form
     const [createForm, setCreateForm] = useState<CreateUserForm>(initialCreateForm);
@@ -164,7 +134,7 @@ export default function UsersPage() {
                 limit: 10,
                 inactive_days: 7,
             });
-            setWeeklyManagerLists(operatingPack.manager_lists);
+            setWeeklyManagerLists(buildOperatingPackReadModel(operatingPack).managerLite);
         } catch (err) {
             console.error("Failed to load weekly operating buckets:", err);
             setWeeklyManagerLists(EMPTY_ADMIN_MANAGER_LITE_LISTS);
@@ -175,7 +145,7 @@ export default function UsersPage() {
     // Create user handler
     const handleCreateUser = async () => {
         setCreateError("");
-        
+
         // Validation
         if (!createForm.display_name.trim()) {
             setCreateError("请输入用户名");
@@ -189,7 +159,7 @@ export default function UsersPage() {
             setCreateError("密码至少需要8位");
             return;
         }
-        
+
         setIsCreating(true);
         try {
             await api.admin.createUser({
@@ -214,7 +184,7 @@ export default function UsersPage() {
     // Update user handler
     const handleUpdateUser = async () => {
         if (!editingUser) return;
-        
+
         setIsEditing(true);
         try {
             await api.admin.updateUser(editingUser.id, {
@@ -240,7 +210,7 @@ export default function UsersPage() {
         setActionLoading(userId);
         try {
             await api.admin.suspendUser(userId);
-            setUsers(prev => prev.map(u => 
+            setUsers(prev => prev.map(u =>
                 u.id === userId ? { ...u, status: "suspended" as const } : u
             ));
             toast.success("账户已停用");
@@ -268,7 +238,7 @@ export default function UsersPage() {
         setActionLoading(userId);
         try {
             await api.admin.activateUser(userId);
-            setUsers(prev => prev.map(u => 
+            setUsers(prev => prev.map(u =>
                 u.id === userId ? { ...u, status: "active" as const } : u
             ));
             toast.success("账户已激活");
@@ -386,23 +356,21 @@ export default function UsersPage() {
                                 <DialogDescription>选择导出格式。</DialogDescription>
                             </DialogHeader>
                             <div className="py-6 flex gap-4">
-                                <div 
-                                    className={`flex-1 p-4 rounded-xl border cursor-pointer transition-all text-center ${
-                                        exportFormat === "csv" 
-                                            ? "border-blue-500 bg-blue-50" 
+                                <div
+                                    className={`flex-1 p-4 rounded-xl border cursor-pointer transition-all text-center ${exportFormat === "csv"
+                                            ? "border-blue-500 bg-blue-50"
                                             : "border-slate-200 bg-slate-50 hover:border-blue-500 hover:bg-blue-50"
-                                    }`}
+                                        }`}
                                     onClick={() => setExportFormat("csv")}
                                 >
                                     <div className="font-bold text-slate-900">CSV</div>
                                     <div className="text-xs text-slate-500 mt-1">电子表格</div>
                                 </div>
-                                <div 
-                                    className={`flex-1 p-4 rounded-xl border cursor-pointer transition-all text-center ${
-                                        exportFormat === "json" 
-                                            ? "border-blue-500 bg-blue-50" 
+                                <div
+                                    className={`flex-1 p-4 rounded-xl border cursor-pointer transition-all text-center ${exportFormat === "json"
+                                            ? "border-blue-500 bg-blue-50"
                                             : "border-slate-200 bg-slate-50 hover:border-blue-500 hover:bg-blue-50"
-                                    }`}
+                                        }`}
                                     onClick={() => setExportFormat("json")}
                                 >
                                     <div className="font-bold text-slate-900">JSON</div>
@@ -410,7 +378,7 @@ export default function UsersPage() {
                                 </div>
                             </div>
                             <DialogFooter>
-                                <Button 
+                                <Button
                                     className="w-full rounded-full bg-slate-900 text-white"
                                     onClick={handleExport}
                                     disabled={isExporting}
@@ -443,8 +411,8 @@ export default function UsersPage() {
                                 <div className="grid grid-cols-2 gap-4">
                                     <div className="space-y-2">
                                         <label className="text-xs font-bold text-slate-500 uppercase">用户名 *</label>
-                                        <input 
-                                            className="w-full h-10 px-3 rounded-lg border border-slate-200 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none text-sm" 
+                                        <input
+                                            className="w-full h-10 px-3 rounded-lg border border-slate-200 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none text-sm"
                                             placeholder="zhangsan"
                                             value={createForm.display_name}
                                             onChange={(e) => setCreateForm(prev => ({ ...prev, display_name: e.target.value }))}
@@ -452,8 +420,8 @@ export default function UsersPage() {
                                     </div>
                                     <div className="space-y-2">
                                         <label className="text-xs font-bold text-slate-500 uppercase">姓名</label>
-                                        <input 
-                                            className="w-full h-10 px-3 rounded-lg border border-slate-200 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none text-sm" 
+                                        <input
+                                            className="w-full h-10 px-3 rounded-lg border border-slate-200 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none text-sm"
                                             placeholder="张三"
                                             value={createForm.name}
                                             onChange={(e) => setCreateForm(prev => ({ ...prev, name: e.target.value }))}
@@ -464,9 +432,9 @@ export default function UsersPage() {
                                     <label className="text-xs font-bold text-slate-500 uppercase">邮箱地址 *</label>
                                     <div className="relative">
                                         <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                                        <input 
+                                        <input
                                             type="email"
-                                            className="w-full h-10 pl-10 pr-3 rounded-lg border border-slate-200 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none text-sm" 
+                                            className="w-full h-10 pl-10 pr-3 rounded-lg border border-slate-200 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none text-sm"
                                             placeholder="zhangsan@company.com"
                                             value={createForm.email}
                                             onChange={(e) => setCreateForm(prev => ({ ...prev, email: e.target.value }))}
@@ -475,9 +443,9 @@ export default function UsersPage() {
                                 </div>
                                 <div className="space-y-2">
                                     <label className="text-xs font-bold text-slate-500 uppercase">初始密码 *</label>
-                                    <input 
+                                    <input
                                         type="password"
-                                        className="w-full h-10 px-3 rounded-lg border border-slate-200 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none text-sm" 
+                                        className="w-full h-10 px-3 rounded-lg border border-slate-200 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none text-sm"
                                         placeholder="••••••••"
                                         value={createForm.password}
                                         onChange={(e) => setCreateForm(prev => ({ ...prev, password: e.target.value }))}
@@ -486,7 +454,7 @@ export default function UsersPage() {
                                 </div>
                                 <div className="space-y-2">
                                     <label className="text-xs font-bold text-slate-500 uppercase">部门</label>
-                                    <select 
+                                    <select
                                         className="w-full h-10 px-3 rounded-lg border border-slate-200 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none text-sm"
                                         value={createForm.department}
                                         onChange={(e) => setCreateForm(prev => ({ ...prev, department: e.target.value }))}
@@ -502,34 +470,31 @@ export default function UsersPage() {
                                 <div className="space-y-2">
                                     <label className="text-xs font-bold text-slate-500 uppercase">角色 *</label>
                                     <div className="grid grid-cols-3 gap-2">
-                                        <div 
-                                            className={`border py-2.5 rounded-xl text-center cursor-pointer transition-all ${
-                                                createForm.role === "user" 
-                                                    ? "border-blue-500 bg-blue-50 text-blue-700" 
+                                        <div
+                                            className={`border py-2.5 rounded-xl text-center cursor-pointer transition-all ${createForm.role === "user"
+                                                    ? "border-blue-500 bg-blue-50 text-blue-700"
                                                     : "border-slate-200 text-slate-600 hover:bg-slate-50"
-                                            }`}
+                                                }`}
                                             onClick={() => setCreateForm(prev => ({ ...prev, role: "user" }))}
                                         >
                                             <div className="font-bold text-sm">普通用户</div>
                                             <div className="text-xs opacity-70">基础访问权限</div>
                                         </div>
-                                        <div 
-                                            className={`border py-2.5 rounded-xl text-center cursor-pointer transition-all ${
-                                                createForm.role === "support" 
-                                                    ? "border-blue-500 bg-blue-50 text-blue-700" 
+                                        <div
+                                            className={`border py-2.5 rounded-xl text-center cursor-pointer transition-all ${createForm.role === "support"
+                                                    ? "border-blue-500 bg-blue-50 text-blue-700"
                                                     : "border-slate-200 text-slate-600 hover:bg-slate-50"
-                                            }`}
+                                                }`}
                                             onClick={() => setCreateForm(prev => ({ ...prev, role: "support" }))}
                                         >
                                             <div className="font-bold text-sm">支持角色</div>
                                             <div className="text-xs opacity-70">只读运行状态</div>
                                         </div>
-                                        <div 
-                                            className={`border py-2.5 rounded-xl text-center cursor-pointer transition-all ${
-                                                createForm.role === "admin" 
-                                                    ? "border-blue-500 bg-blue-50 text-blue-700" 
+                                        <div
+                                            className={`border py-2.5 rounded-xl text-center cursor-pointer transition-all ${createForm.role === "admin"
+                                                    ? "border-blue-500 bg-blue-50 text-blue-700"
                                                     : "border-slate-200 text-slate-600 hover:bg-slate-50"
-                                            }`}
+                                                }`}
                                             onClick={() => setCreateForm(prev => ({ ...prev, role: "admin" }))}
                                         >
                                             <div className="font-bold text-sm">管理员</div>
@@ -540,7 +505,7 @@ export default function UsersPage() {
                             </div>
                             <DialogFooter className="gap-2">
                                 <Button variant="ghost" className="rounded-full" onClick={() => setIsCreateOpen(false)}>取消</Button>
-                                <Button 
+                                <Button
                                     className="rounded-full bg-slate-900 text-white px-6"
                                     onClick={handleCreateUser}
                                     disabled={isCreating}
@@ -686,24 +651,24 @@ export default function UsersPage() {
                     <div className="py-4 space-y-4">
                         <div className="space-y-2">
                             <label className="text-xs font-bold text-slate-500 uppercase">姓名</label>
-                            <input 
-                                className="w-full h-10 px-3 rounded-lg border border-slate-200 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none text-sm" 
+                            <input
+                                className="w-full h-10 px-3 rounded-lg border border-slate-200 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none text-sm"
                                 value={editForm.name}
                                 onChange={(e) => setEditForm(prev => ({ ...prev, name: e.target.value }))}
                             />
                         </div>
                         <div className="space-y-2">
                             <label className="text-xs font-bold text-slate-500 uppercase">邮箱</label>
-                            <input 
+                            <input
                                 type="email"
-                                className="w-full h-10 px-3 rounded-lg border border-slate-200 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none text-sm" 
+                                className="w-full h-10 px-3 rounded-lg border border-slate-200 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none text-sm"
                                 value={editForm.email}
                                 onChange={(e) => setEditForm(prev => ({ ...prev, email: e.target.value }))}
                             />
                         </div>
                         <div className="space-y-2">
                             <label className="text-xs font-bold text-slate-500 uppercase">部门</label>
-                            <select 
+                            <select
                                 className="w-full h-10 px-3 rounded-lg border border-slate-200 bg-slate-50 focus:bg-white focus:ring-2 focus:ring-blue-500 outline-none text-sm"
                                 value={editForm.department}
                                 onChange={(e) => setEditForm(prev => ({ ...prev, department: e.target.value }))}
@@ -719,32 +684,29 @@ export default function UsersPage() {
                         <div className="space-y-2">
                             <label className="text-xs font-bold text-slate-500 uppercase">角色</label>
                             <div className="grid grid-cols-3 gap-2">
-                                <div 
-                                    className={`border py-2.5 rounded-xl text-center cursor-pointer transition-all ${
-                                        editForm.role === "user" 
-                                            ? "border-blue-500 bg-blue-50 text-blue-700" 
+                                <div
+                                    className={`border py-2.5 rounded-xl text-center cursor-pointer transition-all ${editForm.role === "user"
+                                            ? "border-blue-500 bg-blue-50 text-blue-700"
                                             : "border-slate-200 text-slate-600 hover:bg-slate-50"
-                                    }`}
+                                        }`}
                                     onClick={() => setEditForm(prev => ({ ...prev, role: "user" }))}
                                 >
                                     <div className="font-bold text-sm">普通用户</div>
                                 </div>
-                                <div 
-                                    className={`border py-2.5 rounded-xl text-center cursor-pointer transition-all ${
-                                        editForm.role === "support" 
-                                            ? "border-blue-500 bg-blue-50 text-blue-700" 
+                                <div
+                                    className={`border py-2.5 rounded-xl text-center cursor-pointer transition-all ${editForm.role === "support"
+                                            ? "border-blue-500 bg-blue-50 text-blue-700"
                                             : "border-slate-200 text-slate-600 hover:bg-slate-50"
-                                    }`}
+                                        }`}
                                     onClick={() => setEditForm(prev => ({ ...prev, role: "support" }))}
                                 >
                                     <div className="font-bold text-sm">支持角色</div>
                                 </div>
-                                <div 
-                                    className={`border py-2.5 rounded-xl text-center cursor-pointer transition-all ${
-                                        editForm.role === "admin" 
-                                            ? "border-blue-500 bg-blue-50 text-blue-700" 
+                                <div
+                                    className={`border py-2.5 rounded-xl text-center cursor-pointer transition-all ${editForm.role === "admin"
+                                            ? "border-blue-500 bg-blue-50 text-blue-700"
                                             : "border-slate-200 text-slate-600 hover:bg-slate-50"
-                                    }`}
+                                        }`}
                                     onClick={() => setEditForm(prev => ({ ...prev, role: "admin" }))}
                                 >
                                     <div className="font-bold text-sm">管理员</div>
@@ -754,7 +716,7 @@ export default function UsersPage() {
                     </div>
                     <DialogFooter className="gap-2">
                         <Button variant="ghost" className="rounded-full" onClick={() => setEditingUser(null)}>取消</Button>
-                        <Button 
+                        <Button
                             className="rounded-full bg-slate-900 text-white px-6"
                             onClick={handleUpdateUser}
                             disabled={isEditing}
@@ -794,13 +756,13 @@ export default function UsersPage() {
                                     <label className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 block">状态</label>
                                     <div className="flex flex-wrap gap-2">
                                         {["all", "active", "inactive", "suspended"].map((s) => (
-                                            <Badge 
+                                            <Badge
                                                 key={s}
-                                                variant={statusFilter === s ? 'blue' : 'secondary'} 
+                                                variant={statusFilter === s ? 'blue' : 'secondary'}
                                                 className="cursor-pointer"
                                                 onClick={() => setStatusFilter(s)}
                                             >
-                                                {s === "all" ? "全部" : getStatusLabel(s)}
+                                                {s === "all" ? "全部" : formatAdminUserStatusLabel(s)}
                                             </Badge>
                                         ))}
                                     </div>
@@ -809,13 +771,13 @@ export default function UsersPage() {
                                     <label className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2 block">角色</label>
                                     <div className="flex flex-wrap gap-2">
                                         {["all", "admin", "support", "user"].map((r) => (
-                                            <Badge 
+                                            <Badge
                                                 key={r}
-                                                variant={roleFilter === r ? 'blue' : 'secondary'} 
+                                                variant={roleFilter === r ? 'blue' : 'secondary'}
                                                 className="cursor-pointer"
                                                 onClick={() => setRoleFilter(r)}
                                             >
-                                                {r === "all" ? "全部" : getRoleLabel(r)}
+                                                {r === "all" ? "全部" : formatAdminUserRoleLabel(r)}
                                             </Badge>
                                         ))}
                                     </div>
@@ -850,7 +812,7 @@ export default function UsersPage() {
                             columns={[
                                 {
                                     label: "角色",
-                                    value: <Badge variant="secondary" className="bg-slate-100 text-slate-600 border-slate-200 font-medium">{getRoleLabel(user.role)}</Badge>
+                                    value: <Badge variant="secondary" className="bg-slate-100 text-slate-600 border-slate-200 font-medium">{formatAdminUserRoleLabel(user.role)}</Badge>
                                 },
                                 {
                                     label: "状态",
@@ -858,7 +820,7 @@ export default function UsersPage() {
                                         <div className="flex items-center gap-2">
                                             <div className={`w-1.5 h-1.5 rounded-full ${user.status === 'active' ? 'bg-emerald-500 shadow-[0_0_8px_#10b981]' : (['suspended', 'inactive'].includes(user.status) ? 'bg-red-500' : 'bg-slate-400')}`} />
                                             <span className={`font-medium ${user.status === 'active' ? 'text-emerald-600' : (['suspended', 'inactive'].includes(user.status) ? 'text-red-600' : 'text-slate-500')}`}>
-                                                {getStatusLabel(user.status)}
+                                                {formatAdminUserStatusLabel(user.status)}
                                             </span>
                                         </div>
                                     )
@@ -866,7 +828,7 @@ export default function UsersPage() {
                             ]}
                             actions={
                                 <div className="absolute top-4 right-4">
-                                    <UserActionMenu 
+                                    <UserActionMenu
                                         user={user}
                                         onEdit={() => openEditDialog(user)}
                                         onSuspend={() => handleSuspend(user.id)}
@@ -880,7 +842,7 @@ export default function UsersPage() {
                             className="relative"
                         >
                             <div className="flex items-center gap-2 text-xs text-slate-400 pt-2">
-                                <Calendar className="w-3 h-3" /> 上次活跃: {formatRelativeTime(user.last_active_at || user.last_login || '')}
+                                <Calendar className="w-3 h-3" /> 上次活跃: {formatAdminRelativeTime(user.last_active_at || user.last_login)}
                             </div>
                         </MobileTableCard>
                     ))}
@@ -913,21 +875,21 @@ export default function UsersPage() {
                                         </div>
                                     </td>
                                     <td className="px-6 py-4">
-                                        <Badge variant="secondary" className="bg-slate-100 text-slate-600 border-slate-200 font-medium">{getRoleLabel(user.role)}</Badge>
+                                        <Badge variant="secondary" className="bg-slate-100 text-slate-600 border-slate-200 font-medium">{formatAdminUserRoleLabel(user.role)}</Badge>
                                     </td>
                                     <td className="px-6 py-4">
                                         <div className="flex items-center gap-2">
                                             <div className={`w-1.5 h-1.5 rounded-full ${user.status === 'active' ? 'bg-emerald-500 shadow-[0_0_8px_#10b981]' : (['suspended', 'inactive'].includes(user.status) ? 'bg-red-500' : 'bg-slate-400')}`} />
                                             <span className={`font-medium ${user.status === 'active' ? 'text-emerald-600' : (['suspended', 'inactive'].includes(user.status) ? 'text-red-600' : 'text-slate-500')}`}>
-                                                {getStatusLabel(user.status)}
+                                                {formatAdminUserStatusLabel(user.status)}
                                             </span>
                                         </div>
                                     </td>
                                     <td className="px-6 py-4 text-slate-500 font-medium">
-                                        {formatRelativeTime(user.last_active_at || user.last_login || '')}
+                                        {formatAdminRelativeTime(user.last_active_at || user.last_login)}
                                     </td>
                                     <td className="px-6 py-4 text-right">
-                                        <UserActionMenu 
+                                        <UserActionMenu
                                             user={user}
                                             onEdit={() => openEditDialog(user)}
                                             onSuspend={() => handleSuspend(user.id)}
@@ -946,18 +908,18 @@ export default function UsersPage() {
                 <div className="px-6 py-4 border-t border-slate-100 flex items-center justify-between">
                     <span className="text-xs text-slate-400 font-medium">显示 {users.length} 位用户</span>
                     <div className="flex gap-2">
-                        <Button 
-                            variant="outline" 
-                            size="sm" 
-                            className="h-8 text-xs rounded-full" 
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-8 text-xs rounded-full"
                             disabled={page === 1}
                             onClick={() => setPage(p => p - 1)}
                         >
                             上一页
                         </Button>
-                        <Button 
-                            variant="outline" 
-                            size="sm" 
+                        <Button
+                            variant="outline"
+                            size="sm"
                             className="h-8 text-xs rounded-full"
                             onClick={() => setPage(p => p + 1)}
                             disabled={users.length < 10}
@@ -972,15 +934,15 @@ export default function UsersPage() {
 }
 
 // User Action Menu Component
-function UserActionMenu({ 
-    user, 
-    onEdit, 
-    onSuspend, 
-    onActivate, 
+function UserActionMenu({
+    user,
+    onEdit,
+    onSuspend,
+    onActivate,
     onDelete,
     onViewDetail,
-    isLoading 
-}: { 
+    isLoading
+}: {
     user: AdminUser;
     onEdit: () => void;
     onSuspend: () => void;

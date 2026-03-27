@@ -8,7 +8,7 @@
   - Estimate: 0.75d
   - Files: web/src/lib/admin/read-models.ts, web/src/lib/admin/runtime-faults.ts, web/src/app/admin/analytics/page.tsx, web/src/app/admin/users/page.tsx, web/src/app/admin/users/[id]/page.tsx
   - Verify: cd web && pnpm dlx npm@11.6.1 test -- --run 'src/app/admin/analytics/page.test.tsx' 'src/components/admin/manager-lite-panel.test.tsx' 'src/app/admin/users/[id]/page.test.tsx'
-- [ ] **T02: 迁移 current admin pages 到 shared adapters** — Migrate current admin pages to the shared adapters/hooks and delete the remaining duplicated normalize/derive code that now belongs in the shared layer. Keep the route family unchanged and resist introducing a second state-management abstraction.
+- [x] **T02: Moved the remaining users-page admin read-model glue onto the shared seam and proved the shipped admin route family still passes regression.** — Migrate current admin pages to the shared adapters/hooks and delete the remaining duplicated normalize/derive code that now belongs in the shared layer. Keep the route family unchanged and resist introducing a second state-management abstraction.
   - Estimate: 0.75d
   - Files: web/src/lib/admin/read-models.ts, web/src/lib/admin/runtime-faults.ts, web/src/app/admin/analytics/page.tsx, web/src/app/admin/users/page.tsx, web/src/app/admin/users/[id]/page.tsx, web/src/components/admin/manager-lite-panel.tsx
   - Verify: cd web && pnpm dlx npm@11.6.1 test -- --run 'src/app/admin/analytics/page.test.tsx' 'src/app/admin/asset-governance.test.tsx' 'src/app/admin/users/[id]/page.test.tsx' 'src/components/admin/manager-lite-panel.test.tsx'

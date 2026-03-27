@@ -145,7 +145,7 @@ export default function UserDetailPage() {
     const [progressError, setProgressError] = useState<string | null>(null);
     const [interventionError, setInterventionError] = useState<string | null>(null);
     const [interventionNotice, setInterventionNotice] = useState<string | null>(null);
-    const [progressState, setProgressState] = useState<ProgressLoadState>("loading");
+    const [progressState, setProgressState] = useState<AdminProgressLoadState>("loading");
     const [sessionsPage, setSessionsPage] = useState(1);
     const [isSavingIntervention, setIsSavingIntervention] = useState(false);
     const [remindingInterventionId, setRemindingInterventionId] = useState<string | null>(null);
