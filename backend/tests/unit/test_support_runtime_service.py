@@ -6,6 +6,11 @@ from types import SimpleNamespace
 
 import pytest
 
+from support.services.asset_registry import (
+    build_empty_asset_governance_indexes,
+    get_asset_registration,
+    iter_asset_refs,
+)
 from support.services.runtime_status_service import (
     RuntimeSessionRecord,
     RuntimeStatusService,
@@ -342,3 +347,53 @@ def test_build_overview_payload_tracks_scoring_separately_from_completed() -> No
     assert overview["release_health"]["warning_count"] == 0
     assert overview["anomaly_summary"]["blocking"] == [{"kind": "stuck_scoring", "count": 1}]
     assert overview["anomaly_summary"]["warning"] == []
+
+
+def test_asset_registry_covers_current_asset_types_and_extracts_refs() -> None:
+    now = datetime(2026, 3, 24, 12, 0, tzinfo=UTC)
+    session = _make_session(
+        status="completed",
+        start_time=now - timedelta(hours=1),
+        end_time=now - timedelta(minutes=30),
+        scenario_type="presentation",
+    )
+    session.persona_id = "persona-1"
+    session.voice_runtime_profile_id = None
+
+    record = RuntimeSessionRecord(
+        session=session,
+        scenario_type="presentation",
+        voice_policy_snapshot={
+            "runtime_profile_id": "runtime-1",
+            "knowledge_base_ids": ["kb-1", "kb-2", "kb-1"],
+        },
+        knowledge_diagnostics={},
+    )
+
+    assert build_empty_asset_governance_indexes() == {
+        "knowledge_base": {},
+        "persona": {},
+        "presentation": {},
+        "runtime_profile": {},
+    }
+    assert list(iter_asset_refs(record)) == [
+        ("persona", "persona-1"),
+        ("presentation", session.presentation_id),
+        ("runtime_profile", "runtime-1"),
+        ("knowledge_base", "kb-1"),
+        ("knowledge_base", "kb-2"),
+    ]
+
+    persona_registration = get_asset_registration("persona")
+    presentation_registration = get_asset_registration("presentation")
+    runtime_registration = get_asset_registration("runtime_profile")
+    knowledge_registration = get_asset_registration("knowledge_base")
+
+    assert persona_registration.label == "角色"
+    assert persona_registration.build_admin_path("persona-1") == "/admin/personas"
+    assert presentation_registration.label == "PPT"
+    assert presentation_registration.build_admin_path(session.presentation_id) == "/admin/presentations"
+    assert runtime_registration.label == "运行时配置"
+    assert runtime_registration.build_admin_path("runtime-1") == "/admin/voice-runtime"
+    assert knowledge_registration.label == "知识库"
+    assert knowledge_registration.build_admin_path("kb-1") == "/admin/knowledge"

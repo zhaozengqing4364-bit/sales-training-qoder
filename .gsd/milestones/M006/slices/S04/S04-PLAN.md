@@ -4,7 +4,7 @@
 **Demo:** After this: Show the current four asset types resolving governance labels, admin paths, and linked-change references through one registry/adapter seam, with asset pages and fault-linked views still rendering correctly.
 
 ## Tasks
-- [ ] **T01: 建立 backend asset registry** — Create a backend asset registry module that centralizes current asset-type metadata (label, admin path builder, reference extraction hooks) for knowledge bases, personas, presentations, and runtime profiles. Refactor `RuntimeStatusService` to consume the registry for asset-ref iteration and linked-change enrichment instead of owning asset-type conditionals inline.
+- [x] **T01: Added a shared backend asset registry and routed RuntimeStatusService asset metadata resolution through it for the current four asset types.** — Create a backend asset registry module that centralizes current asset-type metadata (label, admin path builder, reference extraction hooks) for knowledge bases, personas, presentations, and runtime profiles. Refactor `RuntimeStatusService` to consume the registry for asset-ref iteration and linked-change enrichment instead of owning asset-type conditionals inline.
   - Estimate: 0.75d
   - Files: backend/src/support/services/asset_registry.py, backend/src/support/services/runtime_status_service.py, backend/tests/unit/test_support_runtime_service.py
   - Verify: cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_support_runtime_service.py

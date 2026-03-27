@@ -26,6 +26,12 @@ from presentation_coach.services.presentation_report_service import (
     PresentationReportService,
 )
 from sales_bot.services.voice_runtime_policy import VoiceRuntimePolicyService
+from support.services.asset_registry import (
+    build_empty_asset_governance_indexes,
+    get_asset_registration,
+    iter_asset_refs as iter_registered_asset_refs,
+    supported_asset_types,
+)
 
 logger = get_logger(__name__)
 
@@ -183,12 +189,7 @@ class RuntimeStatusService:
                 continue
             faults_by_session.setdefault(session_id, []).append(item)
 
-        indexes: dict[str, dict[str, dict[str, Any]]] = {
-            "knowledge_base": {},
-            "persona": {},
-            "presentation": {},
-            "runtime_profile": {},
-        }
+        indexes = build_empty_asset_governance_indexes()
 
         for record in records:
             session = record.session
@@ -202,7 +203,7 @@ class RuntimeStatusService:
             )
             user_id = str(getattr(session, "user_id", "") or "").strip() or None
 
-            for asset_type, asset_id in cls._iter_asset_refs(record):
+            for asset_type, asset_id in iter_registered_asset_refs(record):
                 asset_entry = indexes[asset_type].setdefault(
                     asset_id,
                     {
@@ -241,13 +242,10 @@ class RuntimeStatusService:
         now: datetime,
     ) -> dict[str, list[dict[str, Any]]]:
         asset_ids: dict[str, set[str]] = {
-            "knowledge_base": set(),
-            "persona": set(),
-            "presentation": set(),
-            "runtime_profile": set(),
+            asset_type: set() for asset_type in supported_asset_types()
         }
         for record in records:
-            for asset_type, asset_id in self._iter_asset_refs(record):
+            for asset_type, asset_id in iter_registered_asset_refs(record):
                 asset_ids[asset_type].add(asset_id)
 
         refs_by_asset: dict[tuple[str, str], dict[str, Any]] = {}
@@ -404,7 +402,7 @@ class RuntimeStatusService:
                 continue
             seen: set[tuple[str, str]] = set()
             linked_refs: list[dict[str, Any]] = []
-            for ref_key in self._iter_asset_refs(record):
+            for ref_key in iter_registered_asset_refs(record):
                 if ref_key in seen:
                     continue
                 seen.add(ref_key)
@@ -439,12 +437,14 @@ class RuntimeStatusService:
         if change_count_7d <= 0:
             return None
 
+        registration = get_asset_registration(asset_type)
+
         return {
             "asset_type": asset_type,
-            "asset_label": cls._asset_label(asset_type),
+            "asset_label": registration.label,
             "asset_id": asset_id,
             "asset_name": asset_name,
-            "admin_path": cls._asset_admin_path(asset_type),
+            "admin_path": registration.build_admin_path(asset_id),
             "latest_change_label": str(recent_change.get("latest_change_label") or "最近有配置改动"),
             "latest_change_type": str(recent_change.get("latest_change_type") or "updated"),
             "last_changed_at": cls._serialize_timestamp(recent_change.get("last_changed_at")),
@@ -1069,62 +1069,6 @@ class RuntimeStatusService:
         ):
             return "medium"
         return "low"
-
-    @classmethod
-    def _iter_asset_refs(
-        cls,
-        record: RuntimeSessionRecord,
-    ) -> list[tuple[str, str]]:
-        refs: list[tuple[str, str]] = []
-        session = record.session
-
-        persona_id = str(getattr(session, "persona_id", "") or "").strip()
-        if persona_id:
-            refs.append(("persona", persona_id))
-
-        presentation_id = str(getattr(session, "presentation_id", "") or "").strip()
-        if presentation_id:
-            refs.append(("presentation", presentation_id))
-
-        runtime_profile_id = str(
-            getattr(session, "voice_runtime_profile_id", None)
-            or record.voice_policy_snapshot.get("runtime_profile_id")
-            or ""
-        ).strip()
-        if runtime_profile_id:
-            refs.append(("runtime_profile", runtime_profile_id))
-
-        raw_kb_ids = record.voice_policy_snapshot.get("knowledge_base_ids")
-        if isinstance(raw_kb_ids, list):
-            seen: set[str] = set()
-            for kb_id in raw_kb_ids:
-                normalized = str(kb_id or "").strip()
-                if not normalized or normalized in seen:
-                    continue
-                seen.add(normalized)
-                refs.append(("knowledge_base", normalized))
-
-        return refs
-
-    @staticmethod
-    def _asset_label(asset_type: str) -> str:
-        mapping = {
-            "knowledge_base": "知识库",
-            "persona": "角色",
-            "presentation": "PPT",
-            "runtime_profile": "运行时配置",
-        }
-        return mapping.get(asset_type, asset_type)
-
-    @staticmethod
-    def _asset_admin_path(asset_type: str) -> str:
-        mapping = {
-            "knowledge_base": "/admin/knowledge",
-            "persona": "/admin/personas",
-            "presentation": "/admin/presentations",
-            "runtime_profile": "/admin/voice-runtime",
-        }
-        return mapping.get(asset_type, "/admin")
 
     @staticmethod
     def _serialize_timestamp(value: datetime | str | None) -> str | None:

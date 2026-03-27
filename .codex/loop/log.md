@@ -2029,3 +2029,22 @@ Append one entry per iteration:
   verification results: passed; backend 23/23 and web 11/11 were green fresh, and the live localhost user-detail page passed explicit URL/text/diagnostics assertions after host-aligned dev-login.
   success signal status: the shipped supervisor authority surface still exposes the same intervention creation/reminder/result semantics after the new write/read seams, and the pending result branch is now explicitly locked in the page regression suite.
   rollback note: no product rollback needed; this task only strengthened regression proof. If future work changes intervention result presentation, update the pending-state and report-link assertions together.
+
+- time: 2026-03-27T18:45:43+08:00
+  mode: grow
+  item id: M006-S04-T01
+  files changed:
+    - backend/src/support/services/asset_registry.py
+    - backend/src/support/services/runtime_status_service.py
+    - backend/tests/unit/test_support_runtime_service.py
+    - .gsd/DECISIONS.md
+    - .gsd/milestones/M006/slices/S04/tasks/T01-SUMMARY.md
+    - .codex/loop/state.json
+    - .codex/loop/log.md
+  summary: Added a shared backend asset registry for the current four asset types, routed RuntimeStatusService asset-ref iteration and linked-change metadata through that seam, and locked the behavior with focused support-runtime unit coverage.
+  verification commands:
+    - cd backend && /usr/bin/time -p venv/bin/python -m py_compile src/support/services/asset_registry.py src/support/services/runtime_status_service.py tests/unit/test_support_runtime_service.py
+    - cd backend && /usr/bin/time -p venv/bin/python -m pytest -c pyproject.toml tests/unit/test_support_runtime_service.py
+  verification results: passed; fresh py_compile succeeded and the focused support runtime unit suite passed 3/3 including the new registry seam regression.
+  success signal status: support runtime governance indexes and linked fault asset metadata now share one backend source of truth for labels, admin paths, and asset reference extraction across knowledge bases, personas, presentations, and runtime profiles.
+  rollback note: if future work expands asset types, extend support.services.asset_registry first and keep RuntimeStatusService consuming that registry instead of restoring inline label/path/ref maps.

@@ -1,6 +1,6 @@
 {
   "mode": "grow",
-  "current_issue_id": "M006-S03-T03",
+  "current_issue_id": "M006-S04-T01",
   "current_issue_type": "task",
   "current_issue_status": "done",
   "pending_issue_ids": [],
@@ -110,23 +110,26 @@
     "M006-S02",
     "M006-S03-T01",
     "M006-S03-T02",
-    "M006-S03-T03"
+    "M006-S03-T03",
+    "M006-S04-T01"
   ],
   "blocked_issue_ids": [],
   "deferred_issue_ids": [],
   "last_modified_files": [
-    "web/src/app/admin/users/[id]/page.test.tsx",
-    ".gsd/milestones/M006/slices/S03/tasks/T03-SUMMARY.md",
+    "backend/src/support/services/asset_registry.py",
+    "backend/src/support/services/runtime_status_service.py",
+    "backend/tests/unit/test_support_runtime_service.py",
+    ".gsd/DECISIONS.md",
+    ".gsd/milestones/M006/slices/S04/tasks/T01-SUMMARY.md",
     ".codex/loop/state.json",
     ".codex/loop/log.md"
   ],
   "last_verification_commands": [
-    "cd backend && /usr/bin/time -p venv/bin/python -m pytest -c pyproject.toml tests/integration/test_admin_interventions_api.py tests/integration/test_admin_users_api.py",
-    "cd web && /usr/bin/time -p pnpm dlx npm@11.6.1 test -- --run 'src/app/admin/users/[id]/page.test.tsx'",
-    "browser reload + assert http://localhost:3445/admin/users/0a0af6d4-d7cb-4ec8-be9f-f44288b10be2"
+    "cd backend && /usr/bin/time -p venv/bin/python -m py_compile src/support/services/asset_registry.py src/support/services/runtime_status_service.py tests/unit/test_support_runtime_service.py",
+    "cd backend && /usr/bin/time -p venv/bin/python -m pytest -c pyproject.toml tests/unit/test_support_runtime_service.py"
   ],
-  "last_verification_result": "Fresh backend integration regression passed 23/23, the focused admin user-detail page suite passed 11/11 after a pending-result regression was added, and a live localhost browser reload/assert passed with no fresh console or network failures.",
-  "last_success_signal": "The shipped /admin/users/[id] supervisor workflow still renders the same create/remind/read semantics after the write/read service extractions, including the pending intervention-result state with no premature report drill-in.",
+  "last_verification_result": "Fresh backend py_compile passed for the new asset registry seam and the focused support runtime unit suite passed 3/3, including the new registry coverage for the current four asset types.",
+  "last_success_signal": "Support runtime governance and linked-asset fault metadata now resolve current asset labels, admin paths, and runtime-record refs from one backend registry seam instead of duplicated RuntimeStatusService mappings.",
   "last_growth_scan": null,
-  "next_action": "Stop after one item. Resume the next planned M006 unit on the next auto-mode turn."
+  "next_action": "Stop after one item. Resume M006-S04-T02 on the next auto-mode turn."
 }
