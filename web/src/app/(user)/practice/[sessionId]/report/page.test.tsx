@@ -925,4 +925,62 @@ describe("ReportPage", () => {
         expect(await screen.findByText("高光片段暂不可用，基础评估结果不受影响。"))
             .toBeTruthy();
     });
+
+    it("keeps the canonical report conclusion visible when replay is still locked for the same session", async () => {
+        getReportMock.mockResolvedValue({
+            ...baseReport,
+            overall_score: 79,
+            logic_score: 83,
+            accuracy_score: 74,
+            completeness_score: 71,
+            evaluable: true,
+            not_evaluable_reason: null,
+            effectiveness_snapshot: {
+                claim_truth: {
+                    status: "evidence_pending",
+                    label: "证据待补齐",
+                    source: "fallback_snapshot",
+                    reason: "insufficient_turn_data",
+                },
+            },
+            main_issue: {
+                issue_type: "evidence_gap",
+                issue_text: "客户已经追问 ROI，但这场对话还没补上足够证据。",
+                recovery_rule: "下一轮先给案例或 ROI 数据，再继续推进。",
+            },
+            next_goal: {
+                goal_type: "evidence_backing",
+                goal_text: "先补 ROI 证据，再确认客户是否愿意进入下一步。",
+                rule: "至少补一条证据并确认下一步。",
+            },
+        });
+        getReplayMock.mockRejectedValue(new ApiRequestError({
+            status: 400,
+            errorCode: "[SESSION_NOT_COMPLETED]",
+            message: "Session must be completed for replay",
+        }));
+        getComprehensiveReportMock.mockResolvedValue({
+            session_id: "session-1",
+            generated_at: "2026-03-23T00:00:00Z",
+            overall_score: 79,
+            dimension_scores: [],
+            stage_summaries: [],
+            key_strengths: [],
+            key_improvements: [],
+            detailed_feedback: "",
+            recommendations: [],
+            voice_policy_snapshot_ref: null,
+        });
+
+        render(<ReportPage />);
+
+        expect((await screen.findByTestId("report-overall-score")).textContent).toContain("79");
+        expect(screen.getByText("主张证据状态")).toBeTruthy();
+        expect(screen.getByText("证据待补齐")).toBeTruthy();
+        expect(screen.getByText("客户已经追问 ROI，但这场对话还没补上足够证据。")).toBeTruthy();
+        expect(screen.getByText("先补 ROI 证据，再确认客户是否愿意进入下一步。")).toBeTruthy();
+        expect(await screen.findAllByText("当前暂无可定位的回放片段。")).toHaveLength(2);
+        expect((screen.getByRole("button", { name: "定位问题片段" }) as HTMLButtonElement).disabled).toBe(true);
+        expect((screen.getByRole("button", { name: "定位目标片段" }) as HTMLButtonElement).disabled).toBe(true);
+    });
 });

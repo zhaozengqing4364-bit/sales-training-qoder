@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "exported_at": "2026-03-28T08:02:53.085Z",
+  "exported_at": "2026-03-28T08:10:13.057Z",
   "milestones": [
     {
       "id": "M001",
@@ -4450,19 +4450,28 @@
       "milestone_id": "M007",
       "slice_id": "S02",
       "id": "T03",
-      "title": "Lock same-session report and replay parity on the canonical projection",
-      "status": "pending",
-      "one_liner": "",
-      "narrative": "",
-      "verification_result": "",
+      "title": "Locked same-session report/replay parity with scoring-gate, replay-anchor, and frontend authority tests on the canonical projection.",
+      "status": "complete",
+      "one_liner": "Locked same-session report/replay parity with scoring-gate, replay-anchor, and frontend authority tests on the canonical projection.",
+      "narrative": "Audited the current report/replay seam and found the shipped runtime behavior already matched the slice intent; the remaining gap was proof, not business logic. Extended backend contract and integration coverage so one same session is exercised across the scoring-to-completed transition: report stays available while replay is blocked, then completed report and replay are compared on the same canonical family after unlock, with replay-only `replay_anchor` treated as decoration rather than divergent truth. Tightened the report page tests so a replay `[SESSION_NOT_COMPLETED]` failure leaves canonical issue/goal/claim-truth copy intact and disables replay jumps instead of degrading the report itself. Tightened the replay page tests so conflicting report snapshot copy cannot override canonical replay projection data, which closes the risk of inventing a second authority in page code.",
+      "verification_result": "Ran the exact task-plan verification commands after updating the focused backend and frontend suites. The backend command passed with 15 targeted contract/integration tests, including the new same-session scoring-to-completed parity coverage. The frontend command passed with 21 targeted report/replay page tests, including the new replay-locked report-state and conflicting-report-snapshot replay cases.",
       "duration": "",
-      "completed_at": null,
+      "completed_at": "2026-03-28T08:10:13.030Z",
       "blocker_discovered": false,
-      "deviations": "",
-      "known_issues": "",
-      "key_files": [],
-      "key_decisions": [],
-      "full_summary_md": "",
+      "deviations": "None.",
+      "known_issues": "None.",
+      "key_files": [
+        "backend/tests/contract/test_practice_evidence_contract.py",
+        "backend/tests/integration/test_practice_evidence_flow.py",
+        "web/src/app/(user)/practice/[sessionId]/report/page.test.tsx",
+        "web/src/app/(user)/practice/[sessionId]/replay/page.test.tsx"
+      ],
+      "key_decisions": [
+        "Assert completed report/replay parity by stripping replay-only `replay_anchor` decoration before comparison, while separately proving the anchor stays present on replay.",
+        "Lock the scoring-to-completed transition as a same-session contract: report remains readable during scoring, replay stays blocked until completion, and frontend report UI must still render canonical issue/goal/claim-truth copy when replay is unavailable.",
+        "Use conflicting report snapshot fixtures in replay-page tests to prove the page renders canonical replay projection data instead of inventing a second authority."
+      ],
+      "full_summary_md": "---\nid: T03\nparent: S02\nmilestone: M007\nkey_files:\n  - backend/tests/contract/test_practice_evidence_contract.py\n  - backend/tests/integration/test_practice_evidence_flow.py\n  - web/src/app/(user)/practice/[sessionId]/report/page.test.tsx\n  - web/src/app/(user)/practice/[sessionId]/replay/page.test.tsx\nkey_decisions:\n  - Assert completed report/replay parity by stripping replay-only `replay_anchor` decoration before comparison, while separately proving the anchor stays present on replay.\n  - Lock the scoring-to-completed transition as a same-session contract: report remains readable during scoring, replay stays blocked until completion, and frontend report UI must still render canonical issue/goal/claim-truth copy when replay is unavailable.\n  - Use conflicting report snapshot fixtures in replay-page tests to prove the page renders canonical replay projection data instead of inventing a second authority.\nduration: \"\"\nverification_result: passed\ncompleted_at: 2026-03-28T08:10:13.030Z\nblocker_discovered: false\n---\n\n# T03: Locked same-session report/replay parity with scoring-gate, replay-anchor, and frontend authority tests on the canonical projection.\n\n**Locked same-session report/replay parity with scoring-gate, replay-anchor, and frontend authority tests on the canonical projection.**\n\n## What Happened\n\nAudited the current report/replay seam and found the shipped runtime behavior already matched the slice intent; the remaining gap was proof, not business logic. Extended backend contract and integration coverage so one same session is exercised across the scoring-to-completed transition: report stays available while replay is blocked, then completed report and replay are compared on the same canonical family after unlock, with replay-only `replay_anchor` treated as decoration rather than divergent truth. Tightened the report page tests so a replay `[SESSION_NOT_COMPLETED]` failure leaves canonical issue/goal/claim-truth copy intact and disables replay jumps instead of degrading the report itself. Tightened the replay page tests so conflicting report snapshot copy cannot override canonical replay projection data, which closes the risk of inventing a second authority in page code.\n\n## Verification\n\nRan the exact task-plan verification commands after updating the focused backend and frontend suites. The backend command passed with 15 targeted contract/integration tests, including the new same-session scoring-to-completed parity coverage. The frontend command passed with 21 targeted report/replay page tests, including the new replay-locked report-state and conflicting-report-snapshot replay cases.\n\n## Verification Evidence\n\n| # | Command | Exit Code | Verdict | Duration |\n|---|---------|-----------|---------|----------|\n| 1 | `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/contract/test_practice_evidence_contract.py backend/tests/integration/test_practice_evidence_flow.py` | 0 | ✅ pass | 4331ms |\n| 2 | `npm test -- --run 'web/src/app/(user)/practice/[sessionId]/report/page.test.tsx' 'web/src/app/(user)/practice/[sessionId]/replay/page.test.tsx'` | 0 | ✅ pass | 2023ms |\n\n\n## Deviations\n\nNone.\n\n## Known Issues\n\nNone.\n\n## Files Created/Modified\n\n- `backend/tests/contract/test_practice_evidence_contract.py`\n- `backend/tests/integration/test_practice_evidence_flow.py`\n- `web/src/app/(user)/practice/[sessionId]/report/page.test.tsx`\n- `web/src/app/(user)/practice/[sessionId]/replay/page.test.tsx`\n",
       "description": "Keep report/replay closure honest on the existing route family instead of papering over drift in page code. Steps: 1. Extend backend contract/integration coverage so the same session's report truth, replay truth, and completion gate are asserted together, with replay only adding anchor/deep-link decoration on top of the canonical family. 2. Tighten report/replay page tests so both surfaces consume the shared issue/goal/claim-truth vocabulary consistently and do not silently fork copy or lifecycle assumptions. 3. Fix any remaining report/replay projection seam that breaks same-session parity, but keep `SessionEvidenceService` as the authority and preserve the existing rule that replay stays blocked until completion. Must-haves: report can still load first on the same session while status is `scoring`/`completed`; replay remains blocked before completion and matches report family after unlock; replay-only `replay_anchor`/learning-evidence decoration does not mutate the underlying issue/goal contract. Failure modes: replay/test code assumes availability during scoring, report and replay pages format family copy differently, or projection logic falls back to stale session snapshot after live/runtime alignment changed. Load profile: stay on the current projection-backed read path with no extra polling or duplicate data fetch layer. Negative tests: same-session replay blocked before completion, replay anchor stripped before parity comparison, and optional enhancement/report noise not being treated as core family drift.",
       "estimate": "1h",
       "files": [
@@ -7621,6 +7630,28 @@
       "verdict": "✅ pass",
       "duration_ms": 15500,
       "created_at": "2026-03-28T08:02:53.067Z"
+    },
+    {
+      "id": 168,
+      "task_id": "T03",
+      "slice_id": "S02",
+      "milestone_id": "M007",
+      "command": "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/contract/test_practice_evidence_contract.py backend/tests/integration/test_practice_evidence_flow.py",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 4331,
+      "created_at": "2026-03-28T08:10:13.030Z"
+    },
+    {
+      "id": 169,
+      "task_id": "T03",
+      "slice_id": "S02",
+      "milestone_id": "M007",
+      "command": "npm test -- --run 'web/src/app/(user)/practice/[sessionId]/report/page.test.tsx' 'web/src/app/(user)/practice/[sessionId]/replay/page.test.tsx'",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 2023,
+      "created_at": "2026-03-28T08:10:13.030Z"
     }
   ]
 }

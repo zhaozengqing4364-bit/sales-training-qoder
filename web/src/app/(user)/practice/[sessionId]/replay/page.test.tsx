@@ -817,4 +817,38 @@ describe("SessionReplayPage", () => {
     expect(screen.getAllByText("第一页完整讲清业务目标与客户问题。").length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText("第 1 页讲解带到了其他页内容，优先回到当前页要点。")).toBeTruthy();
   });
+
+  it("renders replay from the canonical projection even when the report snapshot carries conflicting family copy", async () => {
+    renderReplayPage({
+      reportOverrides: {
+        overall_score: 55,
+        main_issue: {
+          issue_type: "objection_handling_gap",
+          issue_text: "这是报告快照里的过期主问题，不应覆盖 replay contract。",
+          recovery_rule: "报告快照里的过期修正动作。",
+        },
+        next_goal: {
+          goal_type: "objection_reframe",
+          goal_text: "这是报告快照里的过期目标，不应覆盖 replay contract。",
+          rule: "报告快照里的过期目标规则。",
+        },
+        effectiveness_snapshot: {
+          claim_truth: {
+            status: "unsupported_claim",
+            label: "未被证据支撑",
+            source: "fallback_snapshot",
+            reason: "stale_report_snapshot",
+          },
+        },
+      },
+    });
+
+    expect((await screen.findByTestId("replay-overall-score")).textContent).toContain("78");
+    expect(screen.getByText("证据已验证")).toBeTruthy();
+    expect(screen.getAllByText("客户收益提到了，但还没有补上可信证据。").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText("先补 ROI 证据，再继续推进下一步。").length).toBeGreaterThanOrEqual(1);
+    expect(screen.queryByText("这是报告快照里的过期主问题，不应覆盖 replay contract。")).toBeNull();
+    expect(screen.queryByText("这是报告快照里的过期目标，不应覆盖 replay contract。")).toBeNull();
+    expect(screen.queryByText("未被证据支撑")).toBeNull();
+  });
 });

@@ -561,3 +561,111 @@ async def test_completed_presentation_report_and_replay_share_ppt_route_family(
     assert replay_data["next_goal"] is None
     assert replay_data["evaluable"] is None
     assert replay_data["not_evaluable_reason"] is None
+
+
+@pytest.mark.asyncio
+async def test_same_session_sales_report_survives_scoring_and_completed_replay_reuses_same_projection_family(
+    async_client: AsyncClient,
+    db_session: AsyncSession,
+    test_user: User,
+    auth_headers: dict[str, str],
+):
+    scenario = Scenario(
+        scenario_id=str(uuid.uuid4()),
+        scenario_type="sales",
+        name="same session scoring parity scenario",
+        is_active=True,
+    )
+    session = PracticeSession(
+        session_id=str(uuid.uuid4()),
+        user_id=str(test_user.user_id),
+        scenario_id=scenario.scenario_id,
+        status=SessionStatus.SCORING.value,
+        total_duration_seconds=180,
+        logic_score=None,
+        accuracy_score=None,
+        completeness_score=None,
+        effectiveness_snapshot=None,
+    )
+    db_session.add_all([scenario, session])
+    db_session.add_all(
+        [
+            ConversationMessage(
+                session_id=session.session_id,
+                turn_number=1,
+                role="user",
+                content="我们最近线索转化掉得很厉害。",
+                timestamp=datetime.now(UTC),
+                duration_ms=2100,
+                sales_stage="opening",
+                score_snapshot={"overall": 74},
+                ai_feedback="先确认当前漏斗现状",
+            ),
+            ConversationMessage(
+                session_id=session.session_id,
+                turn_number=2,
+                role="assistant",
+                content="主要卡在需求确认和预算环节。",
+                timestamp=datetime.now(UTC),
+                duration_ms=2600,
+                sales_stage="discovery",
+                score_snapshot={
+                    "overall_score": 89,
+                    "dimension_scores": {
+                        "professional": 88,
+                        "communication": 82,
+                        "discovery": 76,
+                    },
+                },
+                ai_feedback="继续追问预算和决策链",
+            ),
+        ]
+    )
+    await db_session.commit()
+
+    scoring_report_resp = await async_client.get(
+        f"/api/v1/practice/sessions/{session.session_id}/report",
+        headers=auth_headers,
+    )
+    scoring_replay_resp = await async_client.get(
+        f"/api/v1/sessions/{session.session_id}/replay",
+        headers=auth_headers,
+    )
+
+    assert scoring_report_resp.status_code == 200
+    assert scoring_replay_resp.status_code == 400
+    assert scoring_replay_resp.json()["error"] == "[SESSION_NOT_COMPLETED]"
+
+    session.status = SessionStatus.COMPLETED.value
+    await db_session.commit()
+    await db_session.refresh(session)
+
+    completed_report_resp = await async_client.get(
+        f"/api/v1/practice/sessions/{session.session_id}/report",
+        headers=auth_headers,
+    )
+    completed_replay_resp = await async_client.get(
+        f"/api/v1/sessions/{session.session_id}/replay",
+        headers=auth_headers,
+    )
+
+    assert completed_report_resp.status_code == 200
+    assert completed_replay_resp.status_code == 200
+
+    scoring_report_data = scoring_report_resp.json()["data"]
+    completed_report_data = completed_report_resp.json()["data"]
+    completed_replay_data = completed_replay_resp.json()["data"]
+
+    assert scoring_report_data["overall_score"] == pytest.approx(82.0)
+    assert completed_report_data["overall_score"] == completed_replay_data["overall_score"] == pytest.approx(82.0)
+    assert completed_report_data["stage_summary"] == completed_replay_data["stage_summary"] == [
+        {"stage": "opening", "duration_ms": 2100, "score": 74},
+        {"stage": "discovery", "duration_ms": 2600, "score": 89},
+    ]
+    assert completed_report_data["evidence_completeness"] == completed_replay_data["evidence_completeness"]
+    assert _without_replay_anchor(completed_report_data["main_issue"]) == _without_replay_anchor(
+        completed_replay_data["main_issue"]
+    )
+    assert _without_replay_anchor(completed_report_data["next_goal"]) == _without_replay_anchor(
+        completed_replay_data["next_goal"]
+    )

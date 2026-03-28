@@ -894,3 +894,114 @@ async def test_replay_completion_gate_and_report_access_control_remain_unchanged
     assert outsider_report_resp.json()["error"] == "[ACCESS_DENIED]"
     assert outsider_replay_resp.status_code == 403
     assert outsider_replay_resp.json()["error"] == "[ACCESS_DENIED]"
+
+
+@pytest.mark.asyncio
+async def test_same_session_report_stays_available_during_scoring_and_replay_matches_after_unlock(
+    async_client: AsyncClient,
+    db_session: AsyncSession,
+    owner: User,
+    owner_headers: dict[str, str],
+):
+    scenario = Scenario(
+        scenario_id=str(uuid.uuid4()),
+        scenario_type="sales",
+        name="contract scoring parity scenario",
+        is_active=True,
+    )
+    session = PracticeSession(
+        session_id=str(uuid.uuid4()),
+        user_id=str(owner.user_id),
+        scenario_id=scenario.scenario_id,
+        status=SessionStatus.SCORING.value,
+        logic_score=80.0,
+        accuracy_score=69.5,
+        completeness_score=71.5,
+        total_duration_seconds=180,
+        effectiveness_snapshot=_make_stale_sales_snapshot(),
+    )
+    db_session.add_all([scenario, session])
+    db_session.add(
+        ConversationMessage(
+            session_id=session.session_id,
+            turn_number=1,
+            role="user",
+            content="ROI 这一块你们有真实案例吗？",
+            timestamp=datetime.now(UTC),
+            duration_ms=1600,
+            sales_stage="objection",
+            score_snapshot={
+                "overall_score": 88.0,
+                "dimension_scores": {
+                    "价值表达": 86.0,
+                    "客户收益连接": 84.0,
+                    "证据使用": 89.0,
+                    "异议处理": 81.0,
+                    "推进下一步": 79.0,
+                },
+            },
+            is_highlight=True,
+            highlight_type="good",
+            highlight_reason="补上了 ROI 证据。",
+        )
+    )
+    await db_session.commit()
+
+    scoring_report_resp = await async_client.get(
+        f"/api/v1/practice/sessions/{session.session_id}/report",
+        headers=owner_headers,
+    )
+    scoring_replay_resp = await async_client.get(
+        f"/api/v1/sessions/{session.session_id}/replay",
+        headers=owner_headers,
+    )
+
+    assert scoring_report_resp.status_code == 200
+    assert scoring_replay_resp.status_code == 400
+    assert scoring_replay_resp.json()["error"] == "[SESSION_NOT_COMPLETED]"
+
+    session.status = SessionStatus.COMPLETED.value
+    await db_session.commit()
+    await db_session.refresh(session)
+
+    completed_report_resp = await async_client.get(
+        f"/api/v1/practice/sessions/{session.session_id}/report",
+        headers=owner_headers,
+    )
+    completed_replay_resp = await async_client.get(
+        f"/api/v1/sessions/{session.session_id}/replay",
+        headers=owner_headers,
+    )
+
+    assert completed_report_resp.status_code == 200
+    assert completed_replay_resp.status_code == 200
+
+    scoring_report_data = scoring_report_resp.json()["data"]
+    completed_report_data = completed_report_resp.json()["data"]
+    completed_replay_data = completed_replay_resp.json()["data"]
+
+    assert scoring_report_data["main_issue"] == _make_stale_sales_snapshot()["main_issue"]
+    assert scoring_report_data["next_goal"] == _make_stale_sales_snapshot()["next_goal"]
+    assert completed_report_data["effectiveness_snapshot"]["claim_truth"] == completed_replay_data[
+        "effectiveness_snapshot"
+    ]["claim_truth"] == {
+        "status": "evidence_verified",
+        "label": "证据已验证",
+        "source": "score_snapshot",
+        "reason": "strong_evidence_score",
+        "evidence_score": 89.0,
+    }
+    assert _without_replay_anchor(completed_report_data["main_issue"]) == _without_replay_anchor(
+        completed_replay_data["main_issue"]
+    )
+    assert _without_replay_anchor(completed_report_data["next_goal"]) == _without_replay_anchor(
+        completed_replay_data["next_goal"]
+    )
+    assert completed_report_data["main_issue"]["issue_type"] != scoring_report_data["main_issue"][
+        "issue_type"
+    ]
+    assert completed_report_data["next_goal"]["goal_type"] != scoring_report_data["next_goal"][
+        "goal_type"
+    ]
+    assert completed_replay_data["main_issue"]["replay_anchor"]["status"] == "resolved"
+    assert completed_replay_data["next_goal"]["replay_anchor"]["status"] == "resolved"
