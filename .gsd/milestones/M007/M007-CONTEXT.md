@@ -1,15 +1,15 @@
 # M007: 实时教练闭环正式封板
 
 **Gathered:** 2026-03-28
-**Status:** Ready for planning
+**Status:** In progress
 
 ## Project Description
 
-M007 不是新产品线，也不是继续沿旧 M002 remediation 命名思路打补丁。它要把已经开始但尚未诚实封板的 realtime coaching closure，正式吸收到 M007 的 milestone 结构里：在现有 learner/runtime/report/replay 路由族上，把训练中的 coach degraded / resumed 状态做成对学员真实可见、可理解、可追溯；再用同一条真实 session 证明 `/practice/{sessionId}` 的实时教练，到 `/practice/{sessionId}/report` 与 `/practice/{sessionId}/replay` 的结论是连贯的；最后把 requirement / roadmap / validation / summary / state 的 authority 重新对齐，让这条能力线可以被诚实标记为完成。
+M007 不是新产品线，也不是继续沿旧 M002 remediation 命名思路打补丁。它要把已经开始但尚未诚实封板的 realtime coaching closure，正式吸收到 M007 的 milestone 结构里：在现有 learner/runtime/report/replay 路由族上，把训练中的 coach degraded / resumed 状态做成对学员真实可见、可理解、可追溯；再用同一条真实 session 证明 `/practice/{sessionId}` 的实时教练，到 `/practice/{sessionId}/report` 与 `/practice/{sessionId}/replay` 的结论是连贯的；最后把 requirement / roadmap / validation / summary / state 的 authority 重新对齐，让这条能力线可以被诚实标记为完成。M002 只保留为 2026-03-25 failed close-out 的 historical foundation，不再作为可执行 remediation milestone。
 
 ## Why This Milestone
 
-M002 的 S01-S04 已经交付了 realtime sales rubric、pacing、shared coaching focus、completed-session alignment 等基础，但 close-out 审计仍明确指出两类未退休风险：一是训练中的 coach degraded / resumed 没有在当前产品链路上被真实证明且对学员可见；二是缺少一条同一条真实 session 从 live coaching 走到最终 report/replay 的 closure proof。继续把这件事挂在旧 M002 remediation 尾巴上，会让 requirement 状态、milestone 工件和真实产品状态继续漂移。现在做 M007，就是把这条 closure 工作正式收口成一个独立、可验证、可结束的 milestone。
+M002 的 S01-S04 已经交付了 realtime sales rubric、pacing、shared coaching focus、completed-session alignment 等基础，但 close-out 审计仍明确指出两类未退休风险：一是训练中的 coach degraded / resumed 没有在当前产品链路上被真实证明且对学员可见；二是缺少一条同一条真实 session 从 live coaching 走到最终 report/replay 的 closure proof。继续把这件事挂在旧 M002 remediation 尾巴上，会让 requirement 状态、milestone 工件和真实产品状态继续漂移。现在做 M007，就是把这条 closure 工作正式收口成一个独立、可验证、可结束的 milestone；historical `M002/S07-S08` intent 仅作为 preserved failed-closeout context，当前可执行 owner 已明确映射到 M007/S01-S04。
 
 ## User-Visible Outcome
 
@@ -57,7 +57,7 @@ To call this milestone complete, we must prove:
 
 ## Relevant Requirements
 
-- R009 — M007 负责把旧 M002 remediation 残留的 realtime coaching closure 正式收口并推动其从 active 走向 validated。
+- R009 — M007 现为 R009 余留 closure/proof 的唯一 live owner，并负责把 preserved M002 failed-closeout foundation 与当前 requirement / roadmap / validation / summary / state authority 正式收口。
 
 ## Scope
 
@@ -65,7 +65,7 @@ To call this milestone complete, we must prove:
 
 - 在现有 learner/runtime/report/replay 路由族上完成 coach degraded / resumed 真相面。
 - 用同一条真实 localhost sales session 完成 realtime coaching → report → replay 的 same-session closure proof。
-- 将已开始的 M002 remediation artifacts、以及 requirement / roadmap / validation / summary / state 的 authority 正式归并到 M007。
+- 将 preserved M002 failed-closeout artifacts、以及 requirement / roadmap / validation / summary / state 的 authority 正式归并到 M007。
 - 在不改变现有产品入口的前提下完成最终 validation 与封板。
 
 ### Out of Scope / Non-Goals
@@ -73,7 +73,7 @@ To call this milestone complete, we must prove:
 - 不重做 sales rubric、pacing 语义或已交付的 S01-S04 核心语义，除非 live proof 暴露真实回归。
 - 不新增页面、第二套 debug console、或 milestone-only API。
 - 不顺手扩展 M003/M004/M005 的其它能力。
-- 不继续沿旧 M002 remediation 命名和工件思路做临时收尾。
+- 不把 preserved M002 failed-closeout foundation 重新包装成可执行 remediation milestone。
 
 ## Technical Constraints
 
@@ -91,4 +91,4 @@ To call this milestone complete, we must prove:
 
 ## Open Questions
 
-- 旧 M002 validation / summary 是否需要在 M007 执行中被明确标记为“historical partial foundation”，还是只需要把 authority 切换到 M007 而不再回写旧 milestone —— 当前倾向：保留历史事实，不伪造旧 milestone 已封板，但后续 closure authority 统一写入 M007。
+- None for authority ownership. Preserve old M002 validation / summary as historical failed-closeout foundation only; all remaining closure authority and future execution stay in M007.

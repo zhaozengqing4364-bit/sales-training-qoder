@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "exported_at": "2026-03-28T08:42:01.544Z",
+  "exported_at": "2026-03-28T10:00:48.170Z",
   "milestones": [
     {
       "id": "M001",
@@ -871,16 +871,16 @@
       "milestone_id": "M007",
       "id": "S02",
       "title": "同 session 结论同源收口",
-      "status": "pending",
+      "status": "complete",
       "risk": "high",
       "depends": [
         "S01"
       ],
       "demo": "After this: one real localhost sales session can be followed from live coaching on `/practice/{sessionId}` through `/practice/{sessionId}/report` and `/practice/{sessionId}/replay`, and the issue/goal family stays coherent on that same session.",
       "created_at": "2026-03-28T01:28:14.338Z",
-      "completed_at": null,
-      "full_summary_md": "",
-      "full_uat_md": "",
+      "completed_at": "2026-03-28T09:20:12.444Z",
+      "full_summary_md": "---\nid: S02\nparent: M007\nmilestone: M007\nprovides:\n  - A single same-session conclusion vocabulary across active runtime, `/knowledge-check`, learner practice UI, canonical report, and replay parity tests.\n  - A localhost proof artifact that separates genuine backend completion drift from host/cookie or optional-enhancement noise during same-session close-out.\nrequires:\n  - slice: S01\n    provides: Fresh reconnect truth and learner-visible coach-health surfaces on the existing runtime authority line, so same-session conclusion work could build on a stable practice-page state contract and `/knowledge-check` diagnostics seam.\naffects:\n  - S03\n  - S04\nkey_files:\n  - backend/src/common/effectiveness/evaluator.py\n  - backend/src/common/conversation/runtime_diagnostics.py\n  - backend/src/sales_bot/websocket/stepfun_realtime_handler.py\n  - backend/src/sales_bot/websocket/components/capability_processor.py\n  - web/src/hooks/websocket/message-handlers.ts\n  - web/src/lib/session-evidence.ts\n  - web/src/components/practice/RightPanelContent.tsx\n  - web/src/app/(user)/practice/[sessionId]/page.tsx\n  - backend/tests/contract/test_practice_evidence_contract.py\n  - backend/tests/integration/test_practice_evidence_flow.py\n  - web/src/app/(user)/practice/[sessionId]/report/page.test.tsx\n  - web/src/app/(user)/practice/[sessionId]/replay/page.test.tsx\n  - .artifacts/m007-s02-same-session/session-proof.md\n  - .gsd/PROJECT.md\nkey_decisions:\n  - Use one evaluator-backed `live_session_summary` object as the active-session authority for main_issue/next_goal/claim_truth across StepFun, classic, and `/knowledge-check`.\n  - Persist a normalized `liveSessionSummary` in learner websocket reducer state and render all same-session issue/goal/claim-truth copy through shared `session-evidence` helpers instead of deriving it from stage or action-card text.\n  - Evaluate same-session report/replay parity on the canonical issue/goal/claim-truth family after stripping replay-only `replay_anchor` decoration, while separately asserting the anchor remains present and replay stays completion-gated.\n  - Treat the localhost post-end `status=\"scoring\"` + replay `[SESSION_NOT_COMPLETED]` split as backend completion drift once canonical `/practice/{id}/report` is already readable on that same session, not as a host/cookie bug.\npatterns_established:\n  - Treat evaluator-backed `live_session_summary` as the only active-session conclusion authority, then reuse it across runtime diagnostics, `/knowledge-check`, and learner websocket state rather than inventing route-local mappings.\n  - Keep learner/report/replay wording on shared `session-evidence` helpers so frontend surfaces render one vocabulary contract instead of re-deriving family labels from stage, score, or action-card prose.\n  - Verify report/replay parity on the canonical projection family while treating replay-only anchor metadata as additive decoration, not a divergent truth line.\nobservability_surfaces:\n  - Websocket `score_update.data.live_session_summary` and learner reducer state on `/practice/{sessionId}`.\n  - `/api/v1/practice/sessions/{id}/knowledge-check` live diagnostics, which now prefer active handler conclusions and fail soft on malformed partial summaries.\n  - Backend logs around terminal flow: `practice_session_evidence_persisted`, `report_generation_triggered`, `no_scoring_context_available`, and `report_generation_failed [NO_STAGE_RESULTS]`.\n  - Persistent proof artifact at `.artifacts/m007-s02-same-session/session-proof.md` documenting the localhost same-session wedge.\ndrill_down_paths:\n  - .gsd/milestones/M007/slices/S02/tasks/T01-SUMMARY.md\n  - .gsd/milestones/M007/slices/S02/tasks/T02-SUMMARY.md\n  - .gsd/milestones/M007/slices/S02/tasks/T03-SUMMARY.md\n  - .gsd/milestones/M007/slices/S02/tasks/T04-SUMMARY.md\nduration: \"\"\nverification_result: passed\ncompleted_at: 2026-03-28T09:20:12.454Z\nblocker_discovered: false\n---\n\n# S02: 同 session 结论同源收口\n\n**Unified same-session issue/goal/claim-truth vocabulary now flows from live coaching to canonical report/replay on the current route family, and the remaining replay-unlock failure is isolated to a documented StepFun completion drift instead of frontend or host-alignment ambiguity.**\n\n## What Happened\n\nS02 closed the same-session truth gap on the existing learner/runtime/report/replay route family without inventing a second authority. On the backend, T01 established a single evaluator-backed `live_session_summary` shape for active sales sessions, then threaded it through StepFun, classic runtime diagnostics, and `/api/v1/practice/sessions/{id}/knowledge-check` so live main issue, next goal, and claim-truth semantics match while a handler is active and fail soft to null when the live payload is partial. On the frontend, T02 extended the websocket reducer and learner route so `/practice/{sessionId}` keeps a stable same-session cue sourced directly from `score_update.data.live_session_summary`; the page and right panel now render issue/goal/claim-truth copy via shared `session-evidence` helpers, while final-transcript cleanup continues clearing transient action cards and fuzzy detections without erasing the stable conclusion. T03 then tightened the completed-session proof line rather than changing business logic: backend contract/integration tests now assert the scoring-to-completed transition on one same session, report remains readable while replay is still gated, and replay parity compares the canonical issue/goal/claim-truth family while treating `replay_anchor` as replay-only decoration. Matching web tests prove the report page keeps canonical copy when replay is unavailable and that the replay page trusts canonical replay projection data instead of a conflicting report snapshot. T04 reran the localhost route-family proof on aligned `localhost` hosts, confirmed the learner cue on a real StepFun session, confirmed replay is blocked before completion, and re-confirmed the remaining blocker: after lifecycle end, a real StepFun session can persist evidence and keep the canonical report readable while still wedging in `status=\"scoring\"`, with replay locked behind `[SESSION_NOT_COMPLETED]` and backend logs showing `report_generation_failed [NO_STAGE_RESULTS]`. The slice therefore delivered same-session vocabulary closure across live/runtime/report/replay plus a precise blocker artifact for the remaining unlock drift, rather than claiming a false full close-out.\n\n## Verification\n\nFresh slice-close verification passed for the planned focused suites and the live localhost proof. Commands rerun from repo root in this close-out session: `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/test_stepfun_realtime_handler.py` (63 passed), `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/test_enhanced_handler_coach_health.py` (6 passed), `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/contract/test_practice_evidence_contract.py -k 'knowledge_check or replay or report'` (10 passed), `npm test -- --run 'web/src/hooks/websocket/message-handlers.test.ts' 'web/src/components/practice/RightPanelContent.test.tsx' 'web/src/app/(user)/practice/[sessionId]/page.test.tsx'` (44 passed), `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/contract/test_practice_evidence_contract.py backend/tests/integration/test_practice_evidence_flow.py` (15 passed), `npm test -- --run 'web/src/app/(user)/practice/[sessionId]/report/page.test.tsx' 'web/src/app/(user)/practice/[sessionId]/replay/page.test.tsx'` (21 passed), and `npm test -- --run 'web/src/hooks/websocket/message-handlers.test.ts' 'web/src/app/(user)/practice/[sessionId]/page.test.tsx' 'web/src/app/(user)/practice/[sessionId]/report/page.test.tsx' 'web/src/app/(user)/practice/[sessionId]/replay/page.test.tsx'` (57 passed). On live localhost with backend `:3444` and web `:3445`, dev-login restored auth, `/practice/3830822a-505d-4db0-a9fd-167e02e20d45/report` rendered the canonical report headings (`训练评估报告`, `主张证据状态`, `销售推进结果`, `下一轮销售目标`), and `/practice/3830822a-505d-4db0-a9fd-167e02e20d45/replay` still truthfully showed `[SESSION_NOT_COMPLETED] ... Current status: scoring`, matching the documented StepFun completion blocker.\n\n## Requirements Advanced\n\n- R009 — S02 pushed R009 from coach-health truth into same-session conclusion truth: live coaching, knowledge-check, learner practice UI, canonical report, and replay parity tests now share one issue/goal/claim-truth vocabulary on the current route family. The remaining active blocker is no longer semantic drift; it is the StepFun completion wedge that keeps replay locked in `status=\"scoring\"` after end.\n\n## Requirements Validated\n\nNone.\n\n## New Requirements Surfaced\n\nNone.\n\n## Requirements Invalidated or Re-scoped\n\nNone.\n\n## Deviations\n\nUsed the learner page’s own websocket `type:\"text\"` path for the localhost proof after the machine’s legacy streaming ASR dependency failed (`torch._C`), so the live proof stayed on the shipped `/practice/{sessionId}` route family instead of proving an environment-specific microphone failure. Otherwise the slice stayed within plan.\n\n## Known Limitations\n\nA real localhost `stepfun_realtime` sales session can still wedge after lifecycle end: canonical `/practice/{id}/report` remains readable from the persisted projection, but the session can stay in `status=\"scoring\"` and `/practice/{id}/replay` continues to fail with `[SESSION_NOT_COMPLETED]` because terminal report generation logs `report_generation_failed [NO_STAGE_RESULTS]`. This slice intentionally documented that blocker instead of papering over it. The machine used for proof also has a broken legacy streaming ASR dependency (`torch._C`), so raw microphone-path proof on legacy mode is not a trustworthy signal here.\n\n## Follow-ups\n\n1. In S03/S04, fix the StepFun terminal path that accepts lifecycle end, persists evidence, then logs `report_generation_failed [NO_STAGE_RESULTS]` and leaves the session stuck in `status=\"scoring\"`; that is the blocker preventing same-session replay unlock on localhost. 2. After that fix, rerun one fresh localhost StepFun proof across `/practice/{id}` → `/practice/{id}/report` → `/practice/{id}/replay` and promote the result into milestone validation evidence. 3. Keep same-host frontend/backend alignment (`localhost` ↔ `localhost`) during future live proofs so host-only auth cookies do not create false 401 regressions.\n\n## Files Created/Modified\n\n- `backend/src/common/effectiveness/evaluator.py` — Added the evaluator-backed `live_session_summary` authority used by active runtime, knowledge-check, and learner UI vocabulary.\n- `backend/src/common/conversation/runtime_diagnostics.py` — Threaded live-session conclusion data through runtime diagnostics so `/knowledge-check` can prefer active handler truth without reviving stale persisted conclusions.\n- `backend/src/sales_bot/websocket/stepfun_realtime_handler.py` — Made StepFun emit, persist, and restore the richer same-session conclusion summary alongside existing claim-truth/runtime diagnostics.\n- `backend/src/sales_bot/websocket/components/capability_processor.py` — Reordered classic score-update emission behind objection-ledger alignment so classic and StepFun expose the same active-session issue/goal/claim-truth semantics.\n- `web/src/hooks/websocket/message-handlers.ts` — Stored normalized `liveSessionSummary` in reducer state and cleared it safely when backend authority disappears or becomes partial.\n- `web/src/lib/session-evidence.ts` — Centralized learner/report/replay issue/goal/claim-truth wording so frontend surfaces stop inferring family labels from stage or action-card text.\n- `web/src/components/practice/RightPanelContent.tsx` — Rendered the stable same-session cue from backend authority while preserving action-card/fuzzy cleanup behavior.\n- `web/src/app/(user)/practice/[sessionId]/page.tsx` — Wired the new stable same-session cue through the learner page shell and panels on the current practice route.\n- `backend/tests/contract/test_practice_evidence_contract.py` — Locked knowledge-check live-summary precedence and same-session report/replay parity expectations on the canonical projection.\n- `backend/tests/integration/test_practice_evidence_flow.py` — Covered the scoring-to-completed family behavior and replay unlock parity on the projection-backed backend flow.\n- `web/src/app/(user)/practice/[sessionId]/report/page.test.tsx` — Proved report keeps canonical issue/goal/claim-truth copy even when replay remains unavailable.\n- `web/src/app/(user)/practice/[sessionId]/replay/page.test.tsx` — Proved replay consumes canonical projection data and treats `replay_anchor` as decoration rather than a second conclusion authority.\n- `.artifacts/m007-s02-same-session/session-proof.md` — Captured the localhost same-session proof and the remaining StepFun completion drift that leaves report readable while replay stays locked.\n- `.gsd/PROJECT.md` — Refreshed current-state documentation so M007 now records S02 as delivered and names the remaining StepFun scoring wedge explicitly.\n",
+      "full_uat_md": "# S02: 同 session 结论同源收口 — UAT\n\n**Milestone:** M007\n**Written:** 2026-03-28T09:20:12.455Z\n\n# S02: 同 session 结论同源收口 — UAT\n\n**Milestone:** M007\n**Written:** 2026-03-28\n\n## UAT Type\n\n- UAT mode: mixed\n- Why this mode is sufficient: this slice changes both code-level authority seams (runtime diagnostics, websocket reducer, report/replay parity) and a live localhost route-family proof. Focused backend/web suites prove the contract edges; the localhost session proof proves the user-visible route family and preserves the remaining blocker truthfully.\n\n## Preconditions\n\n- Backend is reachable on `http://localhost:3444` and web is reachable on `http://localhost:3445`.\n- Frontend and backend use the same loopback host (`localhost` ↔ `localhost`) so auth cookies stay aligned.\n- Run `POST /api/v1/auth/dev-login` once before opening protected routes.\n- Have either a fresh StepFun sales practice session or the recorded proof session referenced in `.artifacts/m007-s02-same-session/session-proof.md`.\n- Focused verification suites are runnable from repo root:\n  - `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/test_stepfun_realtime_handler.py`\n  - `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/test_enhanced_handler_coach_health.py`\n  - `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/contract/test_practice_evidence_contract.py -k 'knowledge_check or replay or report'`\n  - `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/contract/test_practice_evidence_contract.py backend/tests/integration/test_practice_evidence_flow.py`\n  - `npm test -- --run 'web/src/hooks/websocket/message-handlers.test.ts' 'web/src/components/practice/RightPanelContent.test.tsx' 'web/src/app/(user)/practice/[sessionId]/page.test.tsx'`\n  - `npm test -- --run 'web/src/app/(user)/practice/[sessionId]/report/page.test.tsx' 'web/src/app/(user)/practice/[sessionId]/replay/page.test.tsx'`\n\n## Smoke Test\n\n1. Run the focused backend/web verification commands above from repo root.\n2. Open a same-session sales report route.\n3. **Expected:** all focused suites pass; the report page shows `训练评估报告`, `主张证据状态`, `销售推进结果`, and `下一轮销售目标` on the same session.\n\n## Test Cases\n\n### 1. Active runtime and `/knowledge-check` share one live conclusion contract\n\n1. Run `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/test_stepfun_realtime_handler.py`.\n2. Run `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/test_enhanced_handler_coach_health.py`.\n3. Run `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/contract/test_practice_evidence_contract.py -k 'knowledge_check or replay or report'`.\n4. **Expected:** StepFun, classic, and `/knowledge-check` tests all pass; active-session live summary wins while a handler is live, malformed partial summaries fail soft instead of reviving stale completed-session conclusions, and claim-truth stays distinct from unrelated diagnostics.\n\n### 2. Learner `/practice/{sessionId}` renders the stable same-session cue from websocket authority\n\n1. Run `npm test -- --run 'web/src/hooks/websocket/message-handlers.test.ts' 'web/src/components/practice/RightPanelContent.test.tsx' 'web/src/app/(user)/practice/[sessionId]/page.test.tsx'`.\n2. Open a live sales practice session on `/practice/{sessionId}`.\n3. Drive at least one real turn through the page websocket so a `score_update.data.live_session_summary` is emitted.\n4. **Expected:** the learner route renders a stable same-session cue (`当前同 session 结论` plus main issue / next goal / claim-truth wording) sourced from backend payload fields; final-transcript cleanup clears only transient `actionCard` / `fuzzyDetections`, not the stable cue.\n\n### 3. Canonical report remains authoritative while replay is still locked\n\n1. End the same session through the existing lifecycle path.\n2. Open `/practice/{sessionId}/report`.\n3. Open `/practice/{sessionId}/replay` before the session is completed.\n4. **Expected:** the report page still shows canonical issue/goal/claim-truth copy on that same session; replay returns the explicit `[SESSION_NOT_COMPLETED] Session must be completed for replay. Current status: ...` failure instead of fabricating replay content.\n\n### 4. Completed-session report/replay parity stays on one projection family\n\n1. Run `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/contract/test_practice_evidence_contract.py backend/tests/integration/test_practice_evidence_flow.py`.\n2. Run `npm test -- --run 'web/src/app/(user)/practice/[sessionId]/report/page.test.tsx' 'web/src/app/(user)/practice/[sessionId]/replay/page.test.tsx'`.\n3. **Expected:** backend tests prove report is readable during scoring and replay matches the same canonical issue/goal/claim-truth family after unlock; frontend tests prove replay-only `replay_anchor` remains present but does not mutate the underlying conclusion authority.\n\n## Edge Cases\n\n### Missing or partial live summary payload\n\n1. Feed a `score_update` without `live_session_summary`, or with only part of the summary object populated.\n2. **Expected:** the learner reducer clears the stable cue instead of keeping a stale prior-turn issue/goal/claim-truth conclusion.\n\n### Replay still locked while report is readable\n\n1. Use the localhost proof session flow from `.artifacts/m007-s02-same-session/session-proof.md`.\n2. End the StepFun session, wait for the report route to open, then retry replay.\n3. **Expected:** if the backend still wedges in `status=\"scoring\"`, report remains readable from the projection while replay continues returning `[SESSION_NOT_COMPLETED]`; this is recorded as the known blocker rather than treated as frontend drift.\n\n### Optional enhancement noise on report\n\n1. Load the canonical report route for the proof session.\n2. Observe any 404/500 noise from optional enhanced-report/highlight endpoints.\n3. **Expected:** the canonical report body still shows the unified issue/goal/claim-truth sections; optional enhancement failures are visible diagnostics but do not invalidate the core same-session conclusion contract.\n\n## Failure Signals\n\n- Learner `/practice/{sessionId}` re-derives issue/goal wording from stage text or action-card copy instead of rendering the backend `live_session_summary` fields.\n- `/knowledge-check` shows stale completed-session conclusions while a live handler is active.\n- Report and replay disagree on issue family / goal family after stripping replay-only `replay_anchor` data.\n- Replay becomes available before completion, or report loses its canonical evidence sections while replay is still blocked.\n- On localhost, a StepFun session ends with `status=\"scoring\"`, replay remains `[SESSION_NOT_COMPLETED]`, and backend logs show `report_generation_failed [NO_STAGE_RESULTS]`.\n\n## Requirements Proved By This UAT\n\n- R009 — proves same-session coaching conclusions now stay on one vocabulary from live runtime through learner UI and canonical report/replay parity tests, while the remaining gap is an explicit completion wedge rather than semantic drift.\n\n## Not Proven By This UAT\n\n- A fresh localhost StepFun session reaching `/practice/{id}/replay` after completion. The current shipped terminal path can still wedge in `status=\"scoring\"` after end.\n- Legacy raw-microphone ASR proof on this machine. Local streaming ASR is environment-broken (`torch._C`), so that path is not treated as a product acceptance signal here.\n\n## Notes for Tester\n\n- Keep frontend/backend hosts aligned (`localhost` ↔ `localhost`) during live proof; mixed loopback hosts create false 401 regressions.\n- If the report page shows optional enhanced-report or highlight failures but still renders `训练评估报告`, `主张证据状态`, `销售推进结果`, and `下一轮销售目标`, treat that as non-blocking noise unless the canonical family itself drifts.\n- The durable live-proof reference for this slice is `.artifacts/m007-s02-same-session/session-proof.md`; use it when comparing future behavior against the current blocker.\n",
       "goal": "Prove that one real same-session sales path stays coherent from live coaching through final report/replay conclusions on the current learner/runtime/report/replay route family, without inventing a second authority or a frontend-only family map.",
       "success_criteria": "- Both StepFun and classic sales runtimes expose the same evaluator-driven live conclusion summary for the current session, and that summary is available through existing websocket/runtime diagnostics surfaces without adding a second API or a frontend-only family map.\n- The learner `/practice/{sessionId}` route renders a stable same-session issue/goal/claim-truth cue from live authority that survives end-of-turn action-card clearing and does not hide current score, stage, or coach-health guidance.\n- Canonical `/practice/{sessionId}/report` and `/practice/{sessionId}/replay` stay on `SessionEvidenceService` truth, with replay still completion-gated while matching the same session's issue/goal family once it unlocks.\n- Focused backend and frontend tests name the exact route-family files that prove live authority, learner rendering, report/replay parity, and completion gating, and localhost proof follows one real same-host session across practice -> report -> replay.\n\n### Threat Surface (Q3)\n- Treat websocket/runtime diagnostics payloads as untrusted, partial, or stale: malformed or missing live summary fields must degrade safely instead of crashing, leaking stale family state, or reusing the previous session's cue.\n- Preserve session and auth boundaries on `/knowledge-check`, report, and replay: same-session proof must not read another session's evidence, and replay must remain blocked until that exact session is completed.\n- Avoid adding a second debug surface or client-side inference layer that could expose contradictory coaching direction or more runtime detail than the currently authorized learner/report/replay surfaces.\n\n### Requirement Impact (Q4)\n- Advances `R009` by making learner-visible active-session guidance resolve to the same issue/goal family later shown on report/replay.\n- Re-verify the report/replay parts of `R005` and `R011` after shipping because shared issue/goal vocabulary, claim-truth rendering, and lifecycle gating are part of their validated evidence chain.\n- Keep D099, D100, and D101 intact unless execution proves same-session continuity cannot be expressed through the current evaluator, websocket, and `/knowledge-check` seams.",
       "proof_level": "Focused backend unit/contract/integration coverage plus focused frontend reducer/page tests, then a localhost same-session browser proof that follows one real sales session from active practice into report and replay while respecting the existing completion gate.",
@@ -904,11 +904,11 @@
       "completed_at": null,
       "full_summary_md": "",
       "full_uat_md": "",
-      "goal": "Absorb the already-started M002 remediation artifacts into M007 and switch closure authority to one milestone story without falsifying historical facts.",
-      "success_criteria": "- R009 ownership and milestone narrative no longer point at an unfinished old M002 remediation tail.\n- Historical M002 facts remain readable, but closure authority clearly moves to M007.\n- Project/runtime planning artifacts stop contradicting each other about whether realtime coaching is truly closed.",
-      "proof_level": "Artifact reconciliation proof backed by the already-delivered runtime/report/replay truth line and the new same-session evidence pack.",
-      "integration_closure": "Requirement ownership, roadmap semantics, validation language, summary language, and current-state narrative all point at the same closure authority.",
-      "observability_impact": "Removes milestone-state ambiguity for downstream agents by making the authoritative closure story explicit in current project artifacts.",
+      "goal": "Absorb the unfinished M002 remediation narrative into M007 so current GSD sources, preserved M002 close-out artifacts, and generated state/status surfaces tell one truthful authority story for the remaining R009 closure work without falsifying history.",
+      "success_criteria": "- Current-facing authority sources — `.gsd/DECISIONS.md`, `.gsd/PROJECT.md`, `.gsd/REQUIREMENTS.md`, and the M007 milestone context/roadmap surfaces — explicitly say that unfinished realtime-coaching closure work and remaining R009 proof now belong to M007, with a durable mapping from historical `M002/S07-S08` intent to `M007/S01-S04`.\n- Preserved M002 close-out artifacts stay historically truthful: `.gsd/milestones/M002/M002-SUMMARY.md` and `.gsd/milestones/M002/M002-VALIDATION.md` retain the failed 2026-03-25 audit outcome while adding a dated pointer that unfinished closure/evidence work moved forward to M007 instead of inventing executable `M002/S07` / `M002/S08` slices or claiming M002 later completed.\n- Requirement impact: R009 authority cues are re-verified across current M007 docs, preserved M002 close-out records, and generated state/status surfaces; D099-D105 remain valid and gain one explicit authority-switch follow-on decision rather than being silently superseded.\n- A rendered-state audit rechecks `.gsd/STATE.md` and `.gsd/state-manifest.json` after canonical updates, and any remaining mismatch is captured in `.artifacts/m007-s03-authority-audit.md` as explicit proof/follow-up instead of being hand-edited away.",
+      "proof_level": "This slice proves: operational\nReal runtime required: no\nHuman/UAT required: no",
+      "integration_closure": "Upstream surfaces consumed: `.gsd/PROJECT.md`, `.gsd/REQUIREMENTS.md`, `.gsd/DECISIONS.md`, `.gsd/milestones/M002/M002-SUMMARY.md`, `.gsd/milestones/M002/M002-VALIDATION.md`, `.gsd/milestones/M007/M007-CONTEXT.md`, `.gsd/milestones/M007/M007-ROADMAP.md`, `.gsd/STATE.md`, and `.gsd/state-manifest.json`. New wiring introduced in this slice: a durable decision plus explicit forward pointers from preserved M002 close-out records into M007, and one audit artifact that records whether generated state surfaces followed the canonical authority switch or still drift. What remains before the milestone is truly usable end-to-end: S04 still has to retire the live StepFun completion wedge and complete final milestone validation/close-out with this authority line as its only milestone story.",
+      "observability_impact": "Inspection surfaces are document/state surfaces rather than runtime APIs: future agents should be able to answer closure ownership by reading `.gsd/DECISIONS.md`, `.gsd/PROJECT.md`, `.gsd/REQUIREMENTS.md`, `.gsd/milestones/M002/M002-SUMMARY.md`, `.gsd/milestones/M002/M002-VALIDATION.md`, and the audit artifact `.artifacts/m007-s03-authority-audit.md`. Failure visibility comes from the explicit read-back of `.gsd/STATE.md` and `.gsd/state-manifest.json`; any remaining mismatch must be written down as evidence instead of being hand-edited away. Redaction constraint: all proof stays on repository-local GSD artifacts; no secrets or external service state are involved.",
       "sequence": 0,
       "replan_triggered_at": null
     },
@@ -4548,6 +4548,147 @@
       "observability_impact": "Produces concrete localhost evidence for the active-session cue and the report/replay completion gate, and leaves any new host/runtime trap documented in project knowledge so later slices do not rediscover it by accident.",
       "full_plan_md": "",
       "sequence": 0
+    },
+    {
+      "milestone_id": "M007",
+      "slice_id": "S03",
+      "id": "T01",
+      "title": "Clarified the GSD authority line so M007 is the sole live owner of remaining R009 closure work while M002 stays explicitly historical.",
+      "status": "complete",
+      "one_liner": "Clarified the GSD authority line so M007 is the sole live owner of remaining R009 closure work while M002 stays explicitly historical.",
+      "narrative": "Re-read the current-facing GSD sources plus recent M007 slice summaries and found that the planner’s authority-switch decision already existed as D106 in `.gsd/DECISIONS.md`. Instead of appending a duplicate decision row, I treated D106 as the durable authority record and tightened the live docs around it. Updated `.gsd/REQUIREMENTS.md` so active R009 now points at `M007/S04` as the remaining primary owner with S01-S03 as supporting slices, and clarified in `.gsd/PROJECT.md` that M002 is historical failed-closeout foundation only while M007 is the sole live owner of the remaining closure/proof work. Updated `M007-CONTEXT.md` to `Status: In progress`, settled the authority mapping, and removed the lingering open-question framing around whether execution still lives under M002. Updated `M007-ROADMAP.md` so the milestone vision and S03/S04 after-this wording explicitly preserve M002 as historical only and place the unfinished closure work under M007.",
+      "verification_result": "Re-read the updated sources and reran focused grep checks against the exact files in the task plan. Verified that D106 remains the durable authority-switch decision, that `.gsd/PROJECT.md`, `.gsd/REQUIREMENTS.md`, `M007-CONTEXT.md`, and `M007-ROADMAP.md` now name M007 as the live owner for remaining R009 closure/proof work, and that remaining `M002/S07` / `M002/S08` mentions in current-facing docs are explicitly historical rather than execution instructions.",
+      "duration": "",
+      "completed_at": "2026-03-28T10:00:48.138Z",
+      "blocker_discovered": false,
+      "deviations": "The written plan expected a new authority-switch decision to be recorded in `.gsd/DECISIONS.md`. Local reality already contained that decision as D106, so execution reused the existing durable row and tightened the current-facing docs around it instead of appending a redundant duplicate decision.",
+      "known_issues": "None.",
+      "key_files": [
+        ".gsd/PROJECT.md",
+        ".gsd/REQUIREMENTS.md",
+        ".gsd/milestones/M007/M007-CONTEXT.md",
+        ".gsd/milestones/M007/M007-ROADMAP.md",
+        ".gsd/milestones/M007/slices/S03/tasks/T01-SUMMARY.md"
+      ],
+      "key_decisions": [
+        "Reused existing D106 as the durable M002→M007 authority-switch record instead of appending a duplicate decision row.",
+        "Moved active R009 ownership to the remaining closure slice `M007/S04` so the requirement no longer points at a completed slice."
+      ],
+      "full_summary_md": "---\nid: T01\nparent: S03\nmilestone: M007\nkey_files:\n  - .gsd/PROJECT.md\n  - .gsd/REQUIREMENTS.md\n  - .gsd/milestones/M007/M007-CONTEXT.md\n  - .gsd/milestones/M007/M007-ROADMAP.md\n  - .gsd/milestones/M007/slices/S03/tasks/T01-SUMMARY.md\nkey_decisions:\n  - Reused existing D106 as the durable M002→M007 authority-switch record instead of appending a duplicate decision row.\n  - Moved active R009 ownership to the remaining closure slice `M007/S04` so the requirement no longer points at a completed slice.\nduration: \"\"\nverification_result: passed\ncompleted_at: 2026-03-28T10:00:48.138Z\nblocker_discovered: false\n---\n\n# T01: Clarified the GSD authority line so M007 is the sole live owner of remaining R009 closure work while M002 stays explicitly historical.\n\n**Clarified the GSD authority line so M007 is the sole live owner of remaining R009 closure work while M002 stays explicitly historical.**\n\n## What Happened\n\nRe-read the current-facing GSD sources plus recent M007 slice summaries and found that the planner’s authority-switch decision already existed as D106 in `.gsd/DECISIONS.md`. Instead of appending a duplicate decision row, I treated D106 as the durable authority record and tightened the live docs around it. Updated `.gsd/REQUIREMENTS.md` so active R009 now points at `M007/S04` as the remaining primary owner with S01-S03 as supporting slices, and clarified in `.gsd/PROJECT.md` that M002 is historical failed-closeout foundation only while M007 is the sole live owner of the remaining closure/proof work. Updated `M007-CONTEXT.md` to `Status: In progress`, settled the authority mapping, and removed the lingering open-question framing around whether execution still lives under M002. Updated `M007-ROADMAP.md` so the milestone vision and S03/S04 after-this wording explicitly preserve M002 as historical only and place the unfinished closure work under M007.\n\n## Verification\n\nRe-read the updated sources and reran focused grep checks against the exact files in the task plan. Verified that D106 remains the durable authority-switch decision, that `.gsd/PROJECT.md`, `.gsd/REQUIREMENTS.md`, `M007-CONTEXT.md`, and `M007-ROADMAP.md` now name M007 as the live owner for remaining R009 closure/proof work, and that remaining `M002/S07` / `M002/S08` mentions in current-facing docs are explicitly historical rather than execution instructions.\n\n## Verification Evidence\n\n| # | Command | Exit Code | Verdict | Duration |\n|---|---------|-----------|---------|----------|\n| 1 | `rg -n \"M002|M007|R009|S07|S08|authority|historical\" .gsd/DECISIONS.md .gsd/PROJECT.md .gsd/REQUIREMENTS.md .gsd/milestones/M007/M007-CONTEXT.md .gsd/milestones/M007/M007-ROADMAP.md` | 0 | ✅ pass | 30ms |\n| 2 | `rg -n \"唯一 live owner|historical failed-closeout foundation|In progress|M007/S04|M002/S07 或 M002/S08|sole live authority\" .gsd/PROJECT.md .gsd/REQUIREMENTS.md .gsd/milestones/M007/M007-CONTEXT.md .gsd/milestones/M007/M007-ROADMAP.md` | 0 | ✅ pass | 40ms |\n\n\n## Deviations\n\nThe written plan expected a new authority-switch decision to be recorded in `.gsd/DECISIONS.md`. Local reality already contained that decision as D106, so execution reused the existing durable row and tightened the current-facing docs around it instead of appending a redundant duplicate decision.\n\n## Known Issues\n\nNone.\n\n## Files Created/Modified\n\n- `.gsd/PROJECT.md`\n- `.gsd/REQUIREMENTS.md`\n- `.gsd/milestones/M007/M007-CONTEXT.md`\n- `.gsd/milestones/M007/M007-ROADMAP.md`\n- `.gsd/milestones/M007/slices/S03/tasks/T01-SUMMARY.md`\n",
+      "description": "Lock the active authority line before touching historical artifacts. Steps: 1. Save one explicit decision stating that M002 remains the preserved failed close-out/foundation milestone while all unfinished R009 closure authority now belongs to M007, including the mapping from historical `M002/S07-S08` intent to current `M007/S01-S04`. 2. Tighten current-facing sources such as `.gsd/PROJECT.md`, `.gsd/REQUIREMENTS.md`, and the M007 milestone context/roadmap surfaces so future agents see M007 — not a phantom M002 remediation branch — as the only live closure story. 3. Re-read those sources with focused grep/read-back checks before moving on. Must-haves: current-facing docs never instruct future work under live `M002/S07` / `M002/S08` IDs; the current-state story still preserves M002 as the historical foundation; the authority switch is recorded in a durable current source, not only in execution chatter. Failure modes: a decision is saved but current docs still split authority, or M007 docs keep assuming readers know the historical mapping implicitly. Load profile: trivial file updates only. Negative tests: stale references to `M002/S07` / `M002/S08` on current-facing docs, or wording that accidentally marks M002 as completed later.",
+      "estimate": "45m",
+      "files": [
+        ".gsd/DECISIONS.md",
+        ".gsd/PROJECT.md",
+        ".gsd/REQUIREMENTS.md",
+        ".gsd/milestones/M007/M007-CONTEXT.md",
+        ".gsd/milestones/M007/M007-ROADMAP.md"
+      ],
+      "verify": "rg -n \"M002|M007|R009|S07|S08|authority|historical\" .gsd/DECISIONS.md .gsd/PROJECT.md .gsd/REQUIREMENTS.md .gsd/milestones/M007/M007-CONTEXT.md .gsd/milestones/M007/M007-ROADMAP.md",
+      "inputs": [
+        ".gsd/DECISIONS.md",
+        ".gsd/PROJECT.md",
+        ".gsd/REQUIREMENTS.md",
+        ".gsd/milestones/M007/M007-CONTEXT.md",
+        ".gsd/milestones/M007/M007-ROADMAP.md",
+        ".gsd/milestones/M007/slices/S01/S01-SUMMARY.md",
+        ".gsd/milestones/M007/slices/S02/S02-SUMMARY.md"
+      ],
+      "expected_output": [
+        ".gsd/DECISIONS.md",
+        ".gsd/PROJECT.md",
+        ".gsd/REQUIREMENTS.md",
+        ".gsd/milestones/M007/M007-CONTEXT.md",
+        ".gsd/milestones/M007/M007-ROADMAP.md"
+      ],
+      "observability_impact": "",
+      "full_plan_md": "",
+      "sequence": 0
+    },
+    {
+      "milestone_id": "M007",
+      "slice_id": "S03",
+      "id": "T02",
+      "title": "Add dated M007 handoff notes to preserved M002 close-out artifacts",
+      "status": "pending",
+      "one_liner": "",
+      "narrative": "",
+      "verification_result": "",
+      "duration": "",
+      "completed_at": null,
+      "blocker_discovered": false,
+      "deviations": "",
+      "known_issues": "",
+      "key_files": [],
+      "key_decisions": [],
+      "full_summary_md": "",
+      "description": "Once the active authority is clear, reconcile the preserved M002 record without rewriting history. Steps: 1. Update `.gsd/milestones/M002/M002-SUMMARY.md` and `.gsd/milestones/M002/M002-VALIDATION.md` with a short dated note that the unresolved close-out/remediation work was later absorbed by M007, and point readers to the current M007 slices instead of missing M002 remediation artifacts. 2. Keep the original failed-audit verdict, slice inventory, and timeline intact; do not create fake `M002/S07` or `M002/S08` directories or language that implies M002 later completed. 3. Re-read the M002 artifacts and confirm they now act as preserved history with a forward pointer rather than a second live plan. Must-haves: preserved M002 docs still read as historical records first; the forward pointer names M007 as the current closure owner; no task fabricates missing M002 slices. Failure modes: over-correcting M002 into a completed milestone, or under-correcting so readers still infer that unfinished work belongs under M002. Load profile: trivial file updates only. Negative tests: M002 artifacts still mention unresolved remediation without a forward owner, or a pointer note contradicts the 2026-03-25 failed validation.",
+      "estimate": "45m",
+      "files": [
+        ".gsd/milestones/M002/M002-SUMMARY.md",
+        ".gsd/milestones/M002/M002-VALIDATION.md",
+        ".gsd/milestones/M007/M007-ROADMAP.md",
+        ".gsd/DECISIONS.md"
+      ],
+      "verify": "rg -n \"M007|S07|S08|2026-03-25|historical|failed|needs-remediation\" .gsd/milestones/M002/M002-SUMMARY.md .gsd/milestones/M002/M002-VALIDATION.md",
+      "inputs": [
+        ".gsd/milestones/M002/M002-SUMMARY.md",
+        ".gsd/milestones/M002/M002-VALIDATION.md",
+        ".gsd/milestones/M002/M002-ROADMAP.md",
+        ".gsd/milestones/M007/M007-ROADMAP.md",
+        ".gsd/DECISIONS.md"
+      ],
+      "expected_output": [
+        ".gsd/milestones/M002/M002-SUMMARY.md",
+        ".gsd/milestones/M002/M002-VALIDATION.md"
+      ],
+      "observability_impact": "",
+      "full_plan_md": "",
+      "sequence": 0
+    },
+    {
+      "milestone_id": "M007",
+      "slice_id": "S03",
+      "id": "T03",
+      "title": "Audit rendered state surfaces and capture any remaining generator drift",
+      "status": "pending",
+      "one_liner": "",
+      "narrative": "",
+      "verification_result": "",
+      "duration": "",
+      "completed_at": null,
+      "blocker_discovered": false,
+      "deviations": "",
+      "known_issues": "",
+      "key_files": [],
+      "key_decisions": [],
+      "full_summary_md": "",
+      "description": "Finish by proving whether the canonical authority switch actually reached the system-managed state surfaces. Steps: 1. Re-run the M002 slice inventory and authority-line grep across `.gsd/milestones/M002`, `.gsd/milestones/M007`, `.gsd/PROJECT.md`, `.gsd/REQUIREMENTS.md`, `.gsd/DECISIONS.md`, `.gsd/STATE.md`, and `.gsd/state-manifest.json`. 2. Read back `.gsd/STATE.md` and `.gsd/state-manifest.json` after the canonical doc updates; if they still disagree with the active authority story, capture the exact mismatch and why it must remain an explicit blocker/follow-up rather than a hand-edited fix. 3. Write a compact audit artifact for S04 that records the inventory truth, the authority-line read-back, and the remaining generator-backed drift status. Must-haves: `.gsd/STATE.md` and `.gsd/state-manifest.json` are verified but not treated as hand-edited primary sources; the audit artifact names any residual mismatch precisely; S04 can use the artifact directly during final validation. Failure modes: silently patching generated state, or claiming alignment without checking both generated surfaces. Load profile: read-only inspection plus one small artifact file. Negative tests: M002 still appears simultaneously complete and active across state surfaces, or current-facing docs still point future work at a nonexistent M002 remediation slice.",
+      "estimate": "45m",
+      "files": [
+        ".gsd/PROJECT.md",
+        ".gsd/REQUIREMENTS.md",
+        ".gsd/DECISIONS.md",
+        ".gsd/STATE.md",
+        ".gsd/state-manifest.json",
+        ".artifacts/m007-s03-authority-audit.md"
+      ],
+      "verify": "find .gsd/milestones/M002/slices -maxdepth 1 -mindepth 1 -type d | sort\nrg -n \"M002|M007|R009|needs-remediation|historical|authority|S07|S08\" .gsd/milestones/M002 .gsd/milestones/M007 .gsd/PROJECT.md .gsd/REQUIREMENTS.md .gsd/DECISIONS.md .gsd/STATE.md .gsd/state-manifest.json\ntest -s .artifacts/m007-s03-authority-audit.md",
+      "inputs": [
+        ".gsd/PROJECT.md",
+        ".gsd/REQUIREMENTS.md",
+        ".gsd/DECISIONS.md",
+        ".gsd/milestones/M002/M002-SUMMARY.md",
+        ".gsd/milestones/M002/M002-VALIDATION.md",
+        ".gsd/STATE.md",
+        ".gsd/state-manifest.json"
+      ],
+      "expected_output": [
+        ".artifacts/m007-s03-authority-audit.md"
+      ],
+      "observability_impact": "",
+      "full_plan_md": "",
+      "sequence": 0
     }
   ],
   "decisions": [
@@ -5795,6 +5936,30 @@
       "decision": "What frontend state and rendering seam owns the learner-visible same-session sales conclusion during active practice",
       "choice": "Persist a normalized `liveSessionSummary` in practice websocket reducer state from `score_update.data.live_session_summary`, render learner issue/goal/claim-truth copy from that object via shared `session-evidence` helpers, and preserve it across final-transcript cleanup while clearing only turn-bound `actionCard`/`fuzzyDetections`.",
       "rationale": "The backend already emits one evaluator-backed live conclusion contract. Keeping an explicit reducer field tied to that payload makes the learner cue inspectable in state, prevents page-level remapping from stage/score text, and avoids stale transient coaching affordances from masquerading as the stable same-session conclusion.",
+      "revisable": "Yes",
+      "made_by": "agent",
+      "superseded_by": null
+    },
+    {
+      "seq": 1465,
+      "id": "D105",
+      "when_context": "M007/S02/T03",
+      "scope": "reader-contract",
+      "decision": "How same-session report/replay parity is evaluated while replay keeps route-specific deep-link metadata",
+      "choice": "Compare report and replay on the canonical issue/goal/claim-truth family after stripping replay-only `replay_anchor`, while separately asserting the anchor remains present and replay stays blocked until completion",
+      "rationale": "S02/T03 proved replay adds legitimate deep-link decoration on top of the SessionEvidenceService projection rather than a second conclusion authority. Locking parity at the canonical family level preserves the current completion gate and keeps report-readable-during-scoring semantics from being misread as replay drift.",
+      "revisable": "Yes",
+      "made_by": "agent",
+      "superseded_by": null
+    },
+    {
+      "seq": 1466,
+      "id": "D106",
+      "when_context": "M007/S03 planning",
+      "scope": "milestone-governance",
+      "decision": "Which milestone owns the remaining realtime-coaching closure authority after M007 absorbed unfinished M002 remediation work",
+      "choice": "Preserve M002 as the historical failed close-out/foundation milestone, and treat M007 as the sole current authority for unfinished R009 closure work and final proof, with historical `M002/S07-S08` intent mapped forward to `M007/S01-S04`.",
+      "rationale": "Current runtime/product truth already moved to M007 through S01-S02, while M002 artifacts remain accurate only as preserved historical failed-closeout records. Making the authority switch explicit prevents future agents from chasing nonexistent M002 remediation slices, preserves the failed 2026-03-25 audit as history, and gives S04 one unambiguous milestone story for final validation and close-out.",
       "revisable": "Yes",
       "made_by": "agent",
       "superseded_by": null
@@ -7703,6 +7868,28 @@
       "verdict": "✅ pass",
       "duration_ms": 0,
       "created_at": "2026-03-28T08:42:01.523Z"
+    },
+    {
+      "id": 174,
+      "task_id": "T01",
+      "slice_id": "S03",
+      "milestone_id": "M007",
+      "command": "rg -n \"M002|M007|R009|S07|S08|authority|historical\" .gsd/DECISIONS.md .gsd/PROJECT.md .gsd/REQUIREMENTS.md .gsd/milestones/M007/M007-CONTEXT.md .gsd/milestones/M007/M007-ROADMAP.md",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 30,
+      "created_at": "2026-03-28T10:00:48.138Z"
+    },
+    {
+      "id": 175,
+      "task_id": "T01",
+      "slice_id": "S03",
+      "milestone_id": "M007",
+      "command": "rg -n \"唯一 live owner|historical failed-closeout foundation|In progress|M007/S04|M002/S07 或 M002/S08|sole live authority\" .gsd/PROJECT.md .gsd/REQUIREMENTS.md .gsd/milestones/M007/M007-CONTEXT.md .gsd/milestones/M007/M007-ROADMAP.md",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 40,
+      "created_at": "2026-03-28T10:00:48.138Z"
     }
   ]
 }
