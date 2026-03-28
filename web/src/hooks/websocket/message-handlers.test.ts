@@ -129,6 +129,29 @@ describe("handleWebSocketMessage connection/status behavior", () => {
                     推进下一步: 78,
                 },
             };
+            const liveSessionSummary = {
+                alignment_used: true,
+                stage_key: "objection",
+                focus_type: "evidence_gap",
+                fallback_reason: null,
+                main_issue: {
+                    issue_type: "evidence_gap",
+                    issue_text: "价值主张缺少案例、数据或ROI支撑，客户很难相信收益承诺。",
+                    recovery_rule: "下一轮先给出案例、数据或benchmark，再回应价格/ROI追问。",
+                },
+                next_goal: {
+                    goal_type: "evidence_backing",
+                    goal_text: "先用案例、数据或ROI证据支撑主张，再推进下一步。",
+                    rule: "至少补上一条证据和一个明确的下一步动作。",
+                },
+                claim_truth: {
+                    status: "evidence_pending",
+                    label: "证据待补齐",
+                    source: "objection_ledger",
+                    reason: "open_objection_ledger",
+                    closure_state: "open",
+                },
+            };
             const initialStage = {
                 current_stage: "objection",
                 stage_name: "异议处理",
@@ -140,6 +163,7 @@ describe("handleWebSocketMessage connection/status behavior", () => {
                 ...INITIAL_PRACTICE_STATE,
                 interimTranscript: "上一轮中间识别",
                 scores: initialScores,
+                liveSessionSummary,
                 salesStage: initialStage,
                 actionCard: {
                     issue: "直接跳到报价",
@@ -157,6 +181,7 @@ describe("handleWebSocketMessage connection/status behavior", () => {
             });
             const previousScores = getState().scores;
             const previousStage = getState().salesStage;
+            const previousLiveSessionSummary = getState().liveSessionSummary;
 
             handleWebSocketMessage(
                 createMessageEvent({
@@ -178,11 +203,35 @@ describe("handleWebSocketMessage connection/status behavior", () => {
             expect(getState().fuzzyDetections).toEqual([]);
             expect(getState().scores).toBe(previousScores);
             expect(getState().salesStage).toBe(previousStage);
+            expect(getState().liveSessionSummary).toBe(previousLiveSessionSummary);
             expect(getState().interimTranscript).toBe("");
         },
     );
 
     it("clears stale turn-bound hints even when the final transcript text is empty", () => {
+        const liveSessionSummary = {
+            alignment_used: true,
+            stage_key: "discovery",
+            focus_type: "value_translation_gap",
+            fallback_reason: null,
+            main_issue: {
+                issue_type: "value_translation_gap",
+                issue_text: "还在讲产品功能，未把产品价值翻译成客户收益或业务结果。",
+                recovery_rule: "下一轮先说客户场景、收益指标和预期变化，再讲方案细节。",
+            },
+            next_goal: {
+                goal_type: "value_to_benefit_translation",
+                goal_text: "先把产品价值翻译成客户收益，再进入方案说明。",
+                rule: "至少说清一个客户场景、一个收益指标、一个量化变化。",
+            },
+            claim_truth: {
+                status: "weak_evidence",
+                label: "证据偏弱",
+                source: "score_snapshot",
+                reason: "low_evidence_score",
+                evidence_score: 61,
+            },
+        };
         const { deps, getState } = createDeps({
             ...INITIAL_PRACTICE_STATE,
             scores: {
@@ -193,6 +242,7 @@ describe("handleWebSocketMessage connection/status behavior", () => {
                     价值表达: 72,
                 },
             },
+            liveSessionSummary,
             salesStage: {
                 current_stage: "discovery",
                 stage_name: "需求挖掘",
@@ -230,6 +280,7 @@ describe("handleWebSocketMessage connection/status behavior", () => {
         expect(getState().messages).toHaveLength(0);
         expect(getState().actionCard).toBeNull();
         expect(getState().fuzzyDetections).toEqual([]);
+        expect(getState().liveSessionSummary).toEqual(liveSessionSummary);
         expect(getState().scores?.overall_score).toBe(72);
         expect(getState().salesStage?.stage_name).toBe("需求挖掘");
     });
@@ -654,6 +705,245 @@ describe("handleWebSocketMessage connection/status behavior", () => {
             },
         });
         expect(getState().scores).not.toBe(previousScores);
+    });
+
+    it("replaces the stable same-session cue when a newer score_update arrives", () => {
+        const initialSummary = {
+            alignment_used: true,
+            stage_key: "discovery",
+            focus_type: "value_translation_gap",
+            fallback_reason: null,
+            main_issue: {
+                issue_type: "value_translation_gap",
+                issue_text: "还在讲产品功能，未把产品价值翻译成客户收益或业务结果。",
+                recovery_rule: "下一轮先说客户场景、收益指标和预期变化，再讲方案细节。",
+            },
+            next_goal: {
+                goal_type: "value_to_benefit_translation",
+                goal_text: "先把产品价值翻译成客户收益，再进入方案说明。",
+                rule: "至少说清一个客户场景、一个收益指标、一个量化变化。",
+            },
+            claim_truth: {
+                status: "weak_evidence",
+                label: "证据偏弱",
+                source: "score_snapshot",
+                reason: "low_evidence_score",
+                evidence_score: 61,
+            },
+        };
+        const { deps, getState } = createDeps({
+            ...INITIAL_PRACTICE_STATE,
+            liveSessionSummary: initialSummary,
+            scores: {
+                overall_score: 81,
+                turn_count: 3,
+                stage_name: "需求挖掘",
+                suggestions: ["先把价值翻译成客户收益"],
+                dimension_scores: {
+                    价值表达: 81,
+                },
+                live_session_summary: initialSummary,
+            },
+        });
+
+        handleWebSocketMessage(
+            createMessageEvent({
+                type: "score_update",
+                timestamp: new Date().toISOString(),
+                data: {
+                    overall_score: 83,
+                    turn_count: 4,
+                    stage_name: "异议处理",
+                    suggestions: ["先补一个 ROI 证据，再回应价格异议"],
+                    dimension_scores: {
+                        价值表达: 80,
+                        客户收益连接: 84,
+                        证据使用: 79,
+                        异议处理: 85,
+                        推进下一步: 78,
+                    },
+                    claim_truth: {
+                        status: "evidence_pending",
+                        label: "证据待补齐",
+                        source: "objection_ledger",
+                        reason: "open_objection_ledger",
+                        closure_state: "open",
+                    },
+                    live_session_summary: {
+                        alignment_used: true,
+                        stage_key: "objection",
+                        focus_type: "evidence_gap",
+                        fallback_reason: null,
+                        main_issue: {
+                            issue_type: "evidence_gap",
+                            issue_text: "价值主张缺少案例、数据或ROI支撑，客户很难相信收益承诺。",
+                            recovery_rule: "下一轮先给出案例、数据或benchmark，再回应价格/ROI追问。",
+                        },
+                        next_goal: {
+                            goal_type: "evidence_backing",
+                            goal_text: "先用案例、数据或ROI证据支撑主张，再推进下一步。",
+                            rule: "至少补上一条证据和一个明确的下一步动作。",
+                        },
+                        claim_truth: {
+                            status: "evidence_pending",
+                            label: "证据待补齐",
+                            source: "objection_ledger",
+                            reason: "open_objection_ledger",
+                            closure_state: "open",
+                        },
+                    },
+                },
+            }),
+            deps as never,
+        );
+
+        expect(getState().liveSessionSummary).toMatchObject({
+            focus_type: "evidence_gap",
+            main_issue: {
+                issue_type: "evidence_gap",
+            },
+            next_goal: {
+                goal_type: "evidence_backing",
+            },
+            claim_truth: {
+                status: "evidence_pending",
+                closure_state: "open",
+            },
+        });
+        expect(getState().scores?.live_session_summary).toEqual(getState().liveSessionSummary);
+    });
+
+    it("clears a stale same-session cue when score_update omits live summary fields", () => {
+        const staleSummary = {
+            alignment_used: true,
+            stage_key: "objection",
+            focus_type: "evidence_gap",
+            fallback_reason: null,
+            main_issue: {
+                issue_type: "evidence_gap",
+                issue_text: "价值主张缺少案例、数据或ROI支撑，客户很难相信收益承诺。",
+                recovery_rule: "下一轮先给出案例、数据或benchmark，再回应价格/ROI追问。",
+            },
+            next_goal: {
+                goal_type: "evidence_backing",
+                goal_text: "先用案例、数据或ROI证据支撑主张，再推进下一步。",
+                rule: "至少补上一条证据和一个明确的下一步动作。",
+            },
+            claim_truth: {
+                status: "evidence_pending",
+                label: "证据待补齐",
+                source: "objection_ledger",
+                reason: "open_objection_ledger",
+                closure_state: "open",
+            },
+        };
+        const { deps, getState } = createDeps({
+            ...INITIAL_PRACTICE_STATE,
+            liveSessionSummary: staleSummary,
+            scores: {
+                overall_score: 83,
+                turn_count: 4,
+                stage_name: "异议处理",
+                suggestions: ["先补一个 ROI 证据，再回应价格异议"],
+                dimension_scores: {
+                    价值表达: 80,
+                    客户收益连接: 84,
+                    证据使用: 79,
+                    异议处理: 85,
+                    推进下一步: 78,
+                },
+                live_session_summary: staleSummary,
+            },
+        });
+
+        handleWebSocketMessage(
+            createMessageEvent({
+                type: "score_update",
+                timestamp: new Date().toISOString(),
+                data: {
+                    overall_score: 84,
+                    turn_count: 5,
+                    stage_name: "异议处理",
+                    suggestions: ["先承接顾虑，再补证据"],
+                    dimension_scores: {
+                        价值表达: 82,
+                        客户收益连接: 85,
+                        证据使用: 80,
+                        异议处理: 86,
+                        推进下一步: 79,
+                    },
+                },
+            }),
+            deps as never,
+        );
+
+        expect(getState().liveSessionSummary).toBeNull();
+        expect(getState().scores?.live_session_summary).toBeNull();
+    });
+
+    it("fails soft to null when score_update carries only a partial live summary", () => {
+        const staleSummary = {
+            alignment_used: true,
+            stage_key: "objection",
+            focus_type: "evidence_gap",
+            fallback_reason: null,
+            main_issue: {
+                issue_type: "evidence_gap",
+                issue_text: "价值主张缺少案例、数据或ROI支撑，客户很难相信收益承诺。",
+                recovery_rule: "下一轮先给出案例、数据或benchmark，再回应价格/ROI追问。",
+            },
+            next_goal: {
+                goal_type: "evidence_backing",
+                goal_text: "先用案例、数据或ROI证据支撑主张，再推进下一步。",
+                rule: "至少补上一条证据和一个明确的下一步动作。",
+            },
+            claim_truth: {
+                status: "evidence_pending",
+                label: "证据待补齐",
+                source: "objection_ledger",
+                reason: "open_objection_ledger",
+                closure_state: "open",
+            },
+        };
+        const { deps, getState } = createDeps({
+            ...INITIAL_PRACTICE_STATE,
+            liveSessionSummary: staleSummary,
+            scores: {
+                overall_score: 83,
+                turn_count: 4,
+                suggestions: [],
+                dimension_scores: {
+                    价值表达: 80,
+                },
+                live_session_summary: staleSummary,
+            },
+        });
+
+        handleWebSocketMessage(
+            createMessageEvent({
+                type: "score_update",
+                timestamp: new Date().toISOString(),
+                data: {
+                    overall_score: 83,
+                    turn_count: 5,
+                    suggestions: [],
+                    dimension_scores: {
+                        价值表达: 80,
+                    },
+                    live_session_summary: {
+                        main_issue: { issue_type: "" },
+                        claim_truth: {
+                            status: "",
+                            source: "score_snapshot",
+                        },
+                    },
+                },
+            }),
+            deps as never,
+        );
+
+        expect(getState().liveSessionSummary).toBeNull();
+        expect(getState().scores?.live_session_summary).toBeNull();
     });
 
     it("keeps score_update idempotent when the full payload is unchanged", () => {

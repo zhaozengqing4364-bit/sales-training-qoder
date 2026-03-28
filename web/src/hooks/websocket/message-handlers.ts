@@ -5,6 +5,7 @@ import type {
     WSMessage, ChatMessage, PracticeState, TTSAudioData,
     FuzzyDetection, SalesStage, ScoreUpdate, SlideUpdate,
     PointCovered, ForbiddenWordDetection, TTSChunkMessage, SessionStatus, ConnectionState, ActionCard, CoachHealth,
+    LiveSessionConclusionSummary, SessionClaimTruthPayload,
 } from "./types";
 
 /**
@@ -100,6 +101,148 @@ function isSameDimensionScores(
     return currentEntries.every(([key, value]) => incoming?.[key] === value);
 }
 
+function normalizeSessionClaimTruth(
+    value: unknown,
+): SessionClaimTruthPayload | null {
+    if (!value || typeof value !== "object") {
+        return null;
+    }
+
+    const payload = value as Partial<SessionClaimTruthPayload>;
+    const status = typeof payload.status === "string" && payload.status.trim()
+        ? payload.status.trim()
+        : null;
+    const source = typeof payload.source === "string" && payload.source.trim()
+        ? payload.source.trim()
+        : null;
+    const reason = typeof payload.reason === "string" && payload.reason.trim()
+        ? payload.reason.trim()
+        : null;
+
+    if (!status || !source || !reason) {
+        return null;
+    }
+
+    const label = typeof payload.label === "string" && payload.label.trim()
+        ? payload.label.trim()
+        : undefined;
+    const evidenceScore = typeof payload.evidence_score === "number" && Number.isFinite(payload.evidence_score)
+        ? payload.evidence_score
+        : undefined;
+    const closureState = typeof payload.closure_state === "string" && payload.closure_state.trim()
+        ? payload.closure_state.trim()
+        : undefined;
+
+    return {
+        status,
+        ...(label ? { label } : {}),
+        source,
+        reason,
+        ...(evidenceScore !== undefined ? { evidence_score: evidenceScore } : {}),
+        ...(closureState ? { closure_state: closureState } : {}),
+    };
+}
+
+function normalizeSummaryText(value: unknown): string | null {
+    return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function normalizeLiveSessionSummary(
+    value: unknown,
+): LiveSessionConclusionSummary | null {
+    if (!value || typeof value !== "object") {
+        return null;
+    }
+
+    const payload = value as Record<string, unknown>;
+    const rawMainIssue = payload.main_issue;
+    const rawNextGoal = payload.next_goal;
+    const rawClaimTruth = payload.claim_truth;
+
+    const mainIssue = rawMainIssue && typeof rawMainIssue === "object"
+        ? {
+            issue_type: normalizeSummaryText((rawMainIssue as Record<string, unknown>).issue_type) ?? "",
+            issue_text: normalizeSummaryText((rawMainIssue as Record<string, unknown>).issue_text) ?? "",
+            recovery_rule: normalizeSummaryText((rawMainIssue as Record<string, unknown>).recovery_rule) ?? "",
+        }
+        : null;
+    const nextGoal = rawNextGoal && typeof rawNextGoal === "object"
+        ? {
+            goal_type: normalizeSummaryText((rawNextGoal as Record<string, unknown>).goal_type) ?? "",
+            goal_text: normalizeSummaryText((rawNextGoal as Record<string, unknown>).goal_text) ?? "",
+            rule: normalizeSummaryText((rawNextGoal as Record<string, unknown>).rule) ?? "",
+        }
+        : null;
+    const claimTruth = normalizeSessionClaimTruth(rawClaimTruth);
+
+    const hasMainIssue = Boolean(
+        mainIssue?.issue_type && mainIssue.issue_text && mainIssue.recovery_rule,
+    );
+    const hasNextGoal = Boolean(
+        nextGoal?.goal_type && nextGoal.goal_text && nextGoal.rule,
+    );
+
+    if (!hasMainIssue && !hasNextGoal && !claimTruth) {
+        return null;
+    }
+
+    const stageKey = normalizeSummaryText(payload.stage_key);
+    const focusType = normalizeSummaryText(payload.focus_type);
+    const fallbackReason = normalizeSummaryText(payload.fallback_reason);
+
+    return {
+        alignment_used: Boolean(payload.alignment_used),
+        stage_key: stageKey,
+        focus_type: focusType,
+        fallback_reason: fallbackReason,
+        main_issue: hasMainIssue ? mainIssue : null,
+        next_goal: hasNextGoal ? nextGoal : null,
+        claim_truth: claimTruth,
+    };
+}
+
+function isSameClaimTruth(
+    current?: SessionClaimTruthPayload | null,
+    incoming?: SessionClaimTruthPayload | null,
+): boolean {
+    if (!current && !incoming) {
+        return true;
+    }
+    if (!current || !incoming) {
+        return false;
+    }
+    return current.status === incoming.status
+        && current.label === incoming.label
+        && current.source === incoming.source
+        && current.reason === incoming.reason
+        && current.evidence_score === incoming.evidence_score
+        && current.closure_state === incoming.closure_state;
+}
+
+function isSameLiveSessionSummary(
+    current?: LiveSessionConclusionSummary | null,
+    incoming?: LiveSessionConclusionSummary | null,
+): boolean {
+    if (!current && !incoming) {
+        return true;
+    }
+    if (!current || !incoming) {
+        return false;
+    }
+
+    return current.alignment_used === incoming.alignment_used
+        && current.stage_key === incoming.stage_key
+        && current.focus_type === incoming.focus_type
+        && current.fallback_reason === incoming.fallback_reason
+        && current.main_issue?.issue_type === incoming.main_issue?.issue_type
+        && current.main_issue?.issue_text === incoming.main_issue?.issue_text
+        && current.main_issue?.recovery_rule === incoming.main_issue?.recovery_rule
+        && current.next_goal?.goal_type === incoming.next_goal?.goal_type
+        && current.next_goal?.goal_text === incoming.next_goal?.goal_text
+        && current.next_goal?.rule === incoming.next_goal?.rule
+        && isSameClaimTruth(current.claim_truth, incoming.claim_truth);
+}
+
 function isSameScoreUpdate(current: ScoreUpdate | null, incoming: ScoreUpdate): boolean {
     if (!current) {
         return false;
@@ -110,7 +253,9 @@ function isSameScoreUpdate(current: ScoreUpdate | null, incoming: ScoreUpdate): 
         && current.overall_score === incoming.overall_score
         && current.stage_name === incoming.stage_name
         && isSameStringArray(current.suggestions, incoming.suggestions)
-        && isSameDimensionScores(current.dimension_scores, incoming.dimension_scores);
+        && isSameDimensionScores(current.dimension_scores, incoming.dimension_scores)
+        && isSameClaimTruth(current.claim_truth, incoming.claim_truth)
+        && isSameLiveSessionSummary(current.live_session_summary, incoming.live_session_summary);
 }
 
 function normalizeCoachHealth(data: unknown): CoachHealth {
@@ -611,14 +756,24 @@ export function handleWebSocketMessage(
             }
 
             case "score_update": {
-                const data = message.data as ScoreUpdate;
+                const rawData = message.data as ScoreUpdate;
+                const liveSessionSummary = normalizeLiveSessionSummary(rawData.live_session_summary);
+                const data: ScoreUpdate = {
+                    ...rawData,
+                    claim_truth: normalizeSessionClaimTruth(rawData.claim_truth),
+                    live_session_summary: liveSessionSummary,
+                };
                 setState(prev => {
-                    if (isSameScoreUpdate(prev.scores, data)) {
+                    if (
+                        isSameScoreUpdate(prev.scores, data)
+                        && isSameLiveSessionSummary(prev.liveSessionSummary, liveSessionSummary)
+                    ) {
                         return prev;
                     }
                     return {
                         ...prev,
                         scores: data,
+                        liveSessionSummary,
                     };
                 });
                 break;

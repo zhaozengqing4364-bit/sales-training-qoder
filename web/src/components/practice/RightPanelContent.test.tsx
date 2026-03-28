@@ -9,6 +9,7 @@ const baseProps = {
     currentSlide: null,
     points: [],
     forbiddenWords: [],
+    liveSessionSummary: null,
     salesStage: {
         current_stage: "objection",
         stage_name: "异议处理",
@@ -79,6 +80,128 @@ describe("RightPanelContent", () => {
 
         expect(screen.getByText("辅导状态")).toBeTruthy();
         expect(screen.getByText("实时辅导已恢复，后续建议会继续更新。")).toBeTruthy();
+    });
+
+    it("renders the stable same-session cue from backend summary while keeping stage and score context visible", () => {
+        render(
+            <RightPanelContent
+                {...baseProps}
+                scores={{
+                    overall_score: 83,
+                    turn_count: 4,
+                    stage_name: "异议处理",
+                    suggestions: ["先补一个 ROI 证据，再回应价格异议"],
+                    dimension_scores: {
+                        价值表达: 80,
+                        客户收益连接: 84,
+                        证据使用: 79,
+                    },
+                }}
+                liveSessionSummary={{
+                    alignment_used: true,
+                    stage_key: "objection",
+                    focus_type: "evidence_gap",
+                    fallback_reason: null,
+                    main_issue: {
+                        issue_type: "evidence_gap",
+                        issue_text: "价值主张缺少案例、数据或ROI支撑，客户很难相信收益承诺。",
+                        recovery_rule: "下一轮先给出案例、数据或benchmark，再回应价格/ROI追问。",
+                    },
+                    next_goal: {
+                        goal_type: "evidence_backing",
+                        goal_text: "先用案例、数据或ROI证据支撑主张，再推进下一步。",
+                        rule: "至少补上一条证据和一个明确的下一步动作。",
+                    },
+                    claim_truth: {
+                        status: "evidence_pending",
+                        label: "证据待补齐",
+                        source: "objection_ledger",
+                        reason: "open_objection_ledger",
+                        closure_state: "open",
+                    },
+                }}
+                actionCard={null}
+                fuzzyDetections={[]}
+            />,
+        );
+
+        expect(screen.getByText("当前同 session 结论")).toBeTruthy();
+        expect(screen.getByText("主问题 · 证据支撑")).toBeTruthy();
+        expect(screen.getByText("价值主张缺少案例、数据或ROI支撑，客户很难相信收益承诺。")).toBeTruthy();
+        expect(screen.getByText("修正动作：下一轮先给出案例、数据或benchmark，再回应价格/ROI追问。")).toBeTruthy();
+        expect(screen.getByText("下一轮目标 · 证据补强")).toBeTruthy();
+        expect(screen.getByText("先用案例、数据或ROI证据支撑主张，再推进下一步。")).toBeTruthy();
+        expect(screen.getByText("判定条件：至少补上一条证据和一个明确的下一步动作。")).toBeTruthy();
+        expect(screen.getByText("主张证据状态 · 证据待补齐")).toBeTruthy();
+        expect(screen.getByText("当前仍在补证据或有效互动不足，暂时不能判定这条主张已经成立。")).toBeTruthy();
+        expect(screen.getByText("当前异议仍未闭环。")).toBeTruthy();
+        expect(screen.getByText("当前阶段")).toBeTruthy();
+        expect(screen.getByText("销售维度得分")).toBeTruthy();
+    });
+
+    it("keeps the stable same-session cue visible while transient action-card coaching is shown", () => {
+        render(
+            <RightPanelContent
+                {...baseProps}
+                scores={{
+                    overall_score: 83,
+                    turn_count: 4,
+                    stage_name: "异议处理",
+                    suggestions: ["先补一个 ROI 证据，再回应价格异议"],
+                    dimension_scores: {
+                        价值表达: 80,
+                        客户收益连接: 84,
+                        证据使用: 79,
+                    },
+                }}
+                liveSessionSummary={{
+                    alignment_used: true,
+                    stage_key: "objection",
+                    focus_type: "evidence_gap",
+                    fallback_reason: null,
+                    main_issue: {
+                        issue_type: "evidence_gap",
+                        issue_text: "价值主张缺少案例、数据或ROI支撑，客户很难相信收益承诺。",
+                        recovery_rule: "下一轮先给出案例、数据或benchmark，再回应价格/ROI追问。",
+                    },
+                    next_goal: {
+                        goal_type: "evidence_backing",
+                        goal_text: "先用案例、数据或ROI证据支撑主张，再推进下一步。",
+                        rule: "至少补上一条证据和一个明确的下一步动作。",
+                    },
+                    claim_truth: {
+                        status: "weak_evidence",
+                        label: "证据偏弱",
+                        source: "score_snapshot",
+                        reason: "low_evidence_score",
+                        evidence_score: 61,
+                    },
+                }}
+                actionCard={{
+                    issue: "直接跳到报价",
+                    replacement: "我先确认预算审批链路，再给你报价区间。",
+                    next_turn_rule: "下一轮先确认预算与决策人。",
+                }}
+                fuzzyDetections={[]}
+            />,
+        );
+
+        expect(screen.getByText("当前同 session 结论")).toBeTruthy();
+        expect(screen.getByText("本轮唯一动作")).toBeTruthy();
+        expect(screen.getByText("先补一个 ROI 证据，再回应价格异议")).toBeTruthy();
+    });
+
+    it("stays quiet when there is no live same-session summary", () => {
+        render(
+            <RightPanelContent
+                {...baseProps}
+                scores={null}
+                actionCard={null}
+                fuzzyDetections={[]}
+            />,
+        );
+
+        expect(screen.queryByText("当前同 session 结论")).toBeNull();
     });
 
     it("stays quiet when coach health is healthy or missing a non-healthy message", () => {

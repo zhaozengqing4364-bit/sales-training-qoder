@@ -1305,6 +1305,25 @@ export interface SessionNextGoal {
     replay_anchor?: ReplayAnchor | null;
 }
 
+export interface SessionClaimTruthPayload {
+    status: string;
+    label?: string;
+    source: string;
+    reason: string;
+    evidence_score?: number | null;
+    closure_state?: string | null;
+}
+
+export interface LiveSessionConclusionSummary {
+    alignment_used: boolean;
+    stage_key?: SessionEvidenceStage | null;
+    focus_type?: string | null;
+    fallback_reason?: string | null;
+    main_issue?: SessionMainIssue | null;
+    next_goal?: SessionNextGoal | null;
+    claim_truth?: SessionClaimTruthPayload | null;
+}
+
 export interface RetryFocusIntent {
     version: string;
     source_session_id: string;

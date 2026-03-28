@@ -12,6 +12,14 @@ import { PointTracker } from "@/components/practice/presentation/PointTracker";
 import { ForbiddenWordsAlert } from "@/components/practice/presentation/ForbiddenWordsAlert";
 import { ScorePanel } from "@/components/practice/ScorePanel";
 import { CoachHealthNotice } from "@/components/practice/CoachHealthNotice";
+import {
+    extractLiveSessionClaimTruth,
+    extractLiveSessionLearningCue,
+    formatClaimTruthEvidenceNote,
+    formatClaimTruthSummary,
+    getClaimTruthTone,
+} from "@/lib/session-evidence";
+import type { LiveSessionConclusionSummary } from "@/lib/api/types";
 import type {
     FuzzyDetection,
     SalesStage,
@@ -30,6 +38,7 @@ interface RightPanelContentProps {
     points: PointCovered[];
     forbiddenWords: ForbiddenWordDetection[];
     scores: ScoreUpdate | null;
+    liveSessionSummary: LiveSessionConclusionSummary | null;
     actionCard: ActionCard | null;
     coachHealth: CoachHealth;
     fuzzyDetections: FuzzyDetection[];
@@ -44,6 +53,7 @@ export const RightPanelContent = React.memo(function RightPanelContent({
     points,
     forbiddenWords,
     scores,
+    liveSessionSummary,
     actionCard,
     coachHealth,
     fuzzyDetections,
@@ -55,6 +65,11 @@ export const RightPanelContent = React.memo(function RightPanelContent({
     const objectionProofPrompt = actionCard && scores?.suggestions?.length
         ? scores.suggestions[0]
         : null;
+    const liveLearningCue = extractLiveSessionLearningCue(liveSessionSummary);
+    const liveClaimTruth = extractLiveSessionClaimTruth(liveSessionSummary);
+    const liveClaimTruthSummary = formatClaimTruthSummary(liveClaimTruth);
+    const liveClaimTruthEvidenceNote = formatClaimTruthEvidenceNote(liveClaimTruth);
+    const liveClaimTruthTone = getClaimTruthTone(liveClaimTruth?.status);
 
     if (scenarioType === "presentation") {
         return (
@@ -101,6 +116,100 @@ export const RightPanelContent = React.memo(function RightPanelContent({
     return (
         <div className="space-y-6">
             <CoachHealthNotice coachHealth={coachHealth} />
+
+            {(liveLearningCue || liveClaimTruthSummary) && (
+                <div className="bg-white/60 backdrop-blur-sm rounded-2xl p-4 border border-white/70 shadow-[0_8px_30px_rgb(0,0,0,0.04)]">
+                    <div className="flex items-center gap-2 mb-3">
+                        <span className="w-2 h-2 rounded-full bg-violet-500" />
+                        <h3 className="text-sm font-semibold text-slate-700">当前同 session 结论</h3>
+                    </div>
+
+                    <div className="space-y-3 text-xs">
+                        {liveLearningCue?.issueText && (
+                            <div className="rounded-lg border border-amber-100 bg-amber-50 p-3">
+                                <p className="font-bold text-amber-700 mb-1">
+                                    主问题{liveLearningCue.issueLabel ? ` · ${liveLearningCue.issueLabel}` : ""}
+                                </p>
+                                <p className="text-amber-900">{liveLearningCue.issueText}</p>
+                                {liveLearningCue.issueAction && (
+                                    <p className="text-amber-800 mt-2">修正动作：{liveLearningCue.issueAction}</p>
+                                )}
+                            </div>
+                        )}
+
+                        {liveLearningCue?.goalText && (
+                            <div className="rounded-lg border border-sky-100 bg-sky-50 p-3">
+                                <p className="font-bold text-sky-700 mb-1">
+                                    下一轮目标{liveLearningCue.goalLabel ? ` · ${liveLearningCue.goalLabel}` : ""}
+                                </p>
+                                <p className="text-sky-900">{liveLearningCue.goalText}</p>
+                                {liveLearningCue.goalRule && (
+                                    <p className="text-sky-800 mt-2">判定条件：{liveLearningCue.goalRule}</p>
+                                )}
+                            </div>
+                        )}
+
+                        {liveClaimTruth && liveClaimTruthSummary && (
+                            <div
+                                className={cn(
+                                    "rounded-lg border p-3",
+                                    liveClaimTruthTone === "critical"
+                                        ? "border-rose-100 bg-rose-50"
+                                        : liveClaimTruthTone === "warning"
+                                        ? "border-amber-100 bg-amber-50"
+                                        : liveClaimTruthTone === "verified"
+                                        ? "border-emerald-100 bg-emerald-50"
+                                        : "border-slate-200 bg-slate-50",
+                                )}
+                            >
+                                <p
+                                    className={cn(
+                                        "font-bold mb-1",
+                                        liveClaimTruthTone === "critical"
+                                            ? "text-rose-700"
+                                            : liveClaimTruthTone === "warning"
+                                            ? "text-amber-700"
+                                            : liveClaimTruthTone === "verified"
+                                            ? "text-emerald-700"
+                                            : "text-slate-700",
+                                    )}
+                                >
+                                    主张证据状态 · {liveClaimTruth.label}
+                                </p>
+                                <p
+                                    className={cn(
+                                        liveClaimTruthTone === "critical"
+                                            ? "text-rose-900"
+                                            : liveClaimTruthTone === "warning"
+                                            ? "text-amber-900"
+                                            : liveClaimTruthTone === "verified"
+                                            ? "text-emerald-900"
+                                            : "text-slate-800",
+                                    )}
+                                >
+                                    {liveClaimTruthSummary}
+                                </p>
+                                {liveClaimTruthEvidenceNote && (
+                                    <p
+                                        className={cn(
+                                            "mt-2",
+                                            liveClaimTruthTone === "critical"
+                                                ? "text-rose-800"
+                                                : liveClaimTruthTone === "warning"
+                                                ? "text-amber-800"
+                                                : liveClaimTruthTone === "verified"
+                                                ? "text-emerald-800"
+                                                : "text-slate-600",
+                                        )}
+                                    >
+                                        {liveClaimTruthEvidenceNote}
+                                    </p>
+                                )}
+                            </div>
+                        )}
+                    </div>
+                </div>
+            )}
 
             {actionCard && (
                 <div className="bg-white/60 backdrop-blur-sm rounded-2xl p-4 border border-white/70 shadow-[0_8px_30px_rgb(0,0,0,0.04)]">

@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "exported_at": "2026-03-28T07:46:22.041Z",
+  "exported_at": "2026-03-28T08:02:53.085Z",
   "milestones": [
     {
       "id": "M001",
@@ -4389,19 +4389,32 @@
       "milestone_id": "M007",
       "slice_id": "S02",
       "id": "T02",
-      "title": "Carry the live conclusion summary through the learner websocket contract and render a stable same-session cue",
-      "status": "pending",
-      "one_liner": "",
-      "narrative": "",
-      "verification_result": "",
+      "title": "Threaded websocket `live_session_summary` into learner state and rendered a stable same-session cue on `/practice/{sessionId}`.",
+      "status": "complete",
+      "one_liner": "Threaded websocket `live_session_summary` into learner state and rendered a stable same-session cue on `/practice/{sessionId}`.",
+      "narrative": "Extended the learner websocket contract so `score_update` now normalizes and stores the backend `live_session_summary` as explicit reducer state, with fail-soft clearing when the field disappears or arrives partially invalid. Reused shared `session-evidence` helpers to render main issue, next goal, and claim-truth vocabulary from backend authority inside `RightPanelContent` instead of inferring it from stage labels, score text, or action-card prose. Passed the new state through the practice page into both desktop and mobile learner panels, while preserving the existing final-transcript behavior that clears transient `actionCard` / `fuzzyDetections` but leaves the stable same-session cue intact. Added focused reducer, panel, and page tests covering cue replacement, omission/partial clear, final-transcript preservation, and learner-page prop wiring.",
+      "verification_result": "Ran the exact task-plan verification command from repo root: `npm test -- --run 'web/src/hooks/websocket/message-handlers.test.ts' 'web/src/components/practice/RightPanelContent.test.tsx' 'web/src/app/(user)/practice/[sessionId]/page.test.tsx'`. All three targeted suites passed (44 tests total), proving reducer-state carry-through, stable cue rendering, and page-level panel pass-through on the current learner route family.",
       "duration": "",
-      "completed_at": null,
+      "completed_at": "2026-03-28T08:02:53.066Z",
       "blocker_discovered": false,
-      "deviations": "",
-      "known_issues": "",
-      "key_files": [],
-      "key_decisions": [],
-      "full_summary_md": "",
+      "deviations": "Added shared frontend contract types in `web/src/lib/api/types.ts` so the websocket reducer, learner page, and `session-evidence` helper can reference the same live-summary payload shape without duplicating local interfaces.",
+      "known_issues": "None.",
+      "key_files": [
+        "web/src/lib/api/types.ts",
+        "web/src/hooks/websocket/types.ts",
+        "web/src/hooks/websocket/message-handlers.ts",
+        "web/src/lib/session-evidence.ts",
+        "web/src/components/practice/RightPanelContent.tsx",
+        "web/src/app/(user)/practice/[sessionId]/page.tsx",
+        "web/src/hooks/websocket/message-handlers.test.ts",
+        "web/src/components/practice/RightPanelContent.test.tsx",
+        "web/src/app/(user)/practice/[sessionId]/page.test.tsx"
+      ],
+      "key_decisions": [
+        "Persist a normalized `liveSessionSummary` at the websocket reducer level and render learner issue/goal/claim-truth copy from shared `session-evidence` helpers instead of deriving it from stage text or action-card prose.",
+        "Treat absence or partial invalidation of `score_update.data.live_session_summary` as a cue-clear signal so the learner route does not retain stale prior-turn conclusions."
+      ],
+      "full_summary_md": "---\nid: T02\nparent: S02\nmilestone: M007\nkey_files:\n  - web/src/lib/api/types.ts\n  - web/src/hooks/websocket/types.ts\n  - web/src/hooks/websocket/message-handlers.ts\n  - web/src/lib/session-evidence.ts\n  - web/src/components/practice/RightPanelContent.tsx\n  - web/src/app/(user)/practice/[sessionId]/page.tsx\n  - web/src/hooks/websocket/message-handlers.test.ts\n  - web/src/components/practice/RightPanelContent.test.tsx\n  - web/src/app/(user)/practice/[sessionId]/page.test.tsx\nkey_decisions:\n  - Persist a normalized `liveSessionSummary` at the websocket reducer level and render learner issue/goal/claim-truth copy from shared `session-evidence` helpers instead of deriving it from stage text or action-card prose.\n  - Treat absence or partial invalidation of `score_update.data.live_session_summary` as a cue-clear signal so the learner route does not retain stale prior-turn conclusions.\nduration: \"\"\nverification_result: passed\ncompleted_at: 2026-03-28T08:02:53.067Z\nblocker_discovered: false\n---\n\n# T02: Threaded websocket `live_session_summary` into learner state and rendered a stable same-session cue on `/practice/{sessionId}`.\n\n**Threaded websocket `live_session_summary` into learner state and rendered a stable same-session cue on `/practice/{sessionId}`.**\n\n## What Happened\n\nExtended the learner websocket contract so `score_update` now normalizes and stores the backend `live_session_summary` as explicit reducer state, with fail-soft clearing when the field disappears or arrives partially invalid. Reused shared `session-evidence` helpers to render main issue, next goal, and claim-truth vocabulary from backend authority inside `RightPanelContent` instead of inferring it from stage labels, score text, or action-card prose. Passed the new state through the practice page into both desktop and mobile learner panels, while preserving the existing final-transcript behavior that clears transient `actionCard` / `fuzzyDetections` but leaves the stable same-session cue intact. Added focused reducer, panel, and page tests covering cue replacement, omission/partial clear, final-transcript preservation, and learner-page prop wiring.\n\n## Verification\n\nRan the exact task-plan verification command from repo root: `npm test -- --run 'web/src/hooks/websocket/message-handlers.test.ts' 'web/src/components/practice/RightPanelContent.test.tsx' 'web/src/app/(user)/practice/[sessionId]/page.test.tsx'`. All three targeted suites passed (44 tests total), proving reducer-state carry-through, stable cue rendering, and page-level panel pass-through on the current learner route family.\n\n## Verification Evidence\n\n| # | Command | Exit Code | Verdict | Duration |\n|---|---------|-----------|---------|----------|\n| 1 | `npm test -- --run 'web/src/hooks/websocket/message-handlers.test.ts' 'web/src/components/practice/RightPanelContent.test.tsx' 'web/src/app/(user)/practice/[sessionId]/page.test.tsx'` | 0 | ✅ pass | 15500ms |\n\n\n## Deviations\n\nAdded shared frontend contract types in `web/src/lib/api/types.ts` so the websocket reducer, learner page, and `session-evidence` helper can reference the same live-summary payload shape without duplicating local interfaces.\n\n## Known Issues\n\nNone.\n\n## Files Created/Modified\n\n- `web/src/lib/api/types.ts`\n- `web/src/hooks/websocket/types.ts`\n- `web/src/hooks/websocket/message-handlers.ts`\n- `web/src/lib/session-evidence.ts`\n- `web/src/components/practice/RightPanelContent.tsx`\n- `web/src/app/(user)/practice/[sessionId]/page.tsx`\n- `web/src/hooks/websocket/message-handlers.test.ts`\n- `web/src/components/practice/RightPanelContent.test.tsx`\n- `web/src/app/(user)/practice/[sessionId]/page.test.tsx`\n",
       "description": "Once backend authority is stable, surface it on the learner route without creating a second interpretation layer. Steps: 1. Extend the typed websocket/reducer contract so the live same-session summary survives `score_update` handling and final-transcript cleanup without piggybacking on transient action-card text. 2. Reuse a shared learner/report vocabulary helper where needed so the practice page renders issue/goal/claim-truth copy from backend authority rather than inferring it from score or stage labels. 3. Prove the learner route keeps current score, stage, and coach-health guidance visible while the stable same-session cue updates turn-by-turn and clears safely when live authority disappears. Must-haves: the stable cue comes from backend payload fields, not a frontend-only mapping; final transcript still clears transient `actionCard` / `fuzzyDetections` while leaving the stable same-session cue intact; no extra fetch or local storage path is introduced. Failure modes: reducer drops the new summary field, learner UI persists a stale prior-turn cue, or page-level code re-derives family labels from score/stage text and drifts from report/replay. Load profile: every `score_update` remains a cheap state update with no additional network request or expensive recomputation. Negative tests: `score_update` without live summary fields, replacement of an older cue by a newer turn, and final-transcript cleanup preserving the stable cue while clearing transient coaching affordances.",
       "estimate": "1h",
       "files": [
@@ -5754,6 +5767,18 @@
       "decision": "How live same-session sales conclusions are derived and exposed during active runtime",
       "choice": "Use one evaluator-backed live_session_summary object (main_issue, next_goal, claim_truth, alignment metadata) as the active-session authority, and let websocket score_update plus /knowledge-check read that summary instead of recomputing route-local mappings or falling back to persisted snapshots while a live handler is active.",
       "rationale": "StepFun and classic were drifting because one path emitted only claim_truth and the other emitted score updates before objection-ledger alignment. Centralizing the live summary on the evaluator keeps live coaching, runtime diagnostics, and knowledge-check on the same semantics and prevents stale completed-session snapshots from overriding an active session.",
+      "revisable": "Yes",
+      "made_by": "agent",
+      "superseded_by": null
+    },
+    {
+      "seq": 1464,
+      "id": "D104",
+      "when_context": "M007/S02/T02",
+      "scope": "frontend-runtime",
+      "decision": "What frontend state and rendering seam owns the learner-visible same-session sales conclusion during active practice",
+      "choice": "Persist a normalized `liveSessionSummary` in practice websocket reducer state from `score_update.data.live_session_summary`, render learner issue/goal/claim-truth copy from that object via shared `session-evidence` helpers, and preserve it across final-transcript cleanup while clearing only turn-bound `actionCard`/`fuzzyDetections`.",
+      "rationale": "The backend already emits one evaluator-backed live conclusion contract. Keeping an explicit reducer field tied to that payload makes the learner cue inspectable in state, prevents page-level remapping from stage/score text, and avoids stale transient coaching affordances from masquerading as the stable same-session conclusion.",
       "revisable": "Yes",
       "made_by": "agent",
       "superseded_by": null
@@ -7585,6 +7610,17 @@
       "verdict": "✅ pass",
       "duration_ms": 3058,
       "created_at": "2026-03-28T07:46:22.014Z"
+    },
+    {
+      "id": 167,
+      "task_id": "T02",
+      "slice_id": "S02",
+      "milestone_id": "M007",
+      "command": "npm test -- --run 'web/src/hooks/websocket/message-handlers.test.ts' 'web/src/components/practice/RightPanelContent.test.tsx' 'web/src/app/(user)/practice/[sessionId]/page.test.tsx'",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 15500,
+      "created_at": "2026-03-28T08:02:53.067Z"
     }
   ]
 }

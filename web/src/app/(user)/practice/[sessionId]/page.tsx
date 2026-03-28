@@ -74,6 +74,7 @@ export default function PracticeSessionPage() {
         fuzzyDetections,
         salesStage,
         scores,
+        liveSessionSummary,
         actionCard,
         coachHealth,
         error: wsError,
@@ -694,6 +695,7 @@ export default function PracticeSessionPage() {
                     points={points}
                     forbiddenWords={forbiddenWords}
                     scores={scores}
+                    liveSessionSummary={liveSessionSummary}
                     actionCard={actionCard}
                     coachHealth={coachHealth}
                     fuzzyDetections={fuzzyDetections}
@@ -712,18 +714,19 @@ export default function PracticeSessionPage() {
                 <div className="h-full overflow-y-auto pb-8">
                     <h2 className="text-lg font-bold mb-6 text-slate-800">实时分析面板</h2>
                     <RightPanelContent
-                    scenarioType={scenarioType}
-                    presentationId={lockedPresentationId}
-                    currentSlide={currentSlide}
-                    points={points}
-                    forbiddenWords={forbiddenWords}
-                    scores={scores}
-                    actionCard={actionCard}
-                    coachHealth={coachHealth}
-                    fuzzyDetections={fuzzyDetections}
-                    salesStage={salesStage}
-                    sendMessage={sendMessage}
-                />
+                        scenarioType={scenarioType}
+                        presentationId={lockedPresentationId}
+                        currentSlide={currentSlide}
+                        points={points}
+                        forbiddenWords={forbiddenWords}
+                        scores={scores}
+                        liveSessionSummary={liveSessionSummary}
+                        actionCard={actionCard}
+                        coachHealth={coachHealth}
+                        fuzzyDetections={fuzzyDetections}
+                        salesStage={salesStage}
+                        sendMessage={sendMessage}
+                    />
                 </div>
             </GlassSheet>
         </div>

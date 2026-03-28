@@ -21,7 +21,8 @@ export type {
     FuzzyDetection, SalesStage, ScoreDimension, ScoreUpdate, ActionCard,
     CoachHealth, SlideUpdate, PointCovered, ForbiddenWordDetection,
     TTSAudioData, TTSChunkMessage, PracticeState, SessionStatus, ConnectionState,
-    UsePracticeWebSocketOptions, TTSChunkData,
+    UsePracticeWebSocketOptions, TTSChunkData, LiveSessionConclusionSummary,
+    SessionClaimTruthPayload,
 } from "./websocket/types";
 
 import type {

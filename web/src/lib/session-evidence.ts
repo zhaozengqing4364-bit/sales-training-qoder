@@ -1,6 +1,8 @@
 import type {
+    LiveSessionConclusionSummary,
     PresentationReview,
     PresentationReviewPageIssueCluster,
+    SessionClaimTruthPayload,
     SessionEvidenceCompleteness,
     SessionEvidenceStage,
     SessionMainIssue,
@@ -105,6 +107,42 @@ function cleanText(value?: string | null): string | null {
     return typeof value === "string" && value.trim() ? value.trim() : null;
 }
 
+function extractSessionClaimTruthFromPayload(
+    payload?: SessionClaimTruthPayload | Record<string, unknown> | null,
+): SessionClaimTruth | null {
+    if (!payload || typeof payload !== "object") {
+        return null;
+    }
+
+    const status = payload.status;
+    const source = payload.source;
+    const reason = payload.reason;
+    if (!isClaimTruthStatus(status) || typeof source !== "string" || !source.trim()) {
+        return null;
+    }
+    if (typeof reason !== "string" || !reason.trim()) {
+        return null;
+    }
+
+    const label = typeof payload.label === "string" && payload.label.trim()
+        ? payload.label.trim()
+        : CLAIM_TRUTH_LABELS[status];
+
+    const evidenceScore = coerceFiniteNumber(payload.evidence_score);
+    const closureState = typeof payload.closure_state === "string" && payload.closure_state.trim()
+        ? payload.closure_state.trim()
+        : null;
+
+    return {
+        status,
+        label,
+        source: source.trim(),
+        reason: reason.trim(),
+        ...(evidenceScore !== null ? { evidence_score: evidenceScore } : {}),
+        ...(closureState ? { closure_state: closureState } : {}),
+    };
+}
+
 export interface SessionLearningCue {
     issueLabel: string | null;
     issueText: string | null;
@@ -157,39 +195,24 @@ export function extractSessionClaimTruth(
         return null;
     }
 
-    const rawClaimTruth = effectivenessSnapshot.claim_truth;
-    if (!rawClaimTruth || typeof rawClaimTruth !== "object") {
-        return null;
-    }
+    return extractSessionClaimTruthFromPayload(
+        effectivenessSnapshot.claim_truth as SessionClaimTruthPayload | Record<string, unknown> | null | undefined,
+    );
+}
 
-    const claimTruth = rawClaimTruth as Record<string, unknown>;
-    const status = claimTruth.status;
-    const source = claimTruth.source;
-    const reason = claimTruth.reason;
-    if (!isClaimTruthStatus(status) || typeof source !== "string" || !source.trim()) {
-        return null;
-    }
-    if (typeof reason !== "string" || !reason.trim()) {
-        return null;
-    }
+export function extractLiveSessionClaimTruth(
+    liveSessionSummary?: LiveSessionConclusionSummary | null,
+): SessionClaimTruth | null {
+    return extractSessionClaimTruthFromPayload(liveSessionSummary?.claim_truth ?? null);
+}
 
-    const label = typeof claimTruth.label === "string" && claimTruth.label.trim()
-        ? claimTruth.label.trim()
-        : CLAIM_TRUTH_LABELS[status];
-
-    const evidenceScore = coerceFiniteNumber(claimTruth.evidence_score);
-    const closureState = typeof claimTruth.closure_state === "string" && claimTruth.closure_state.trim()
-        ? claimTruth.closure_state.trim()
-        : null;
-
-    return {
-        status,
-        label,
-        source: source.trim(),
-        reason: reason.trim(),
-        ...(evidenceScore !== null ? { evidence_score: evidenceScore } : {}),
-        ...(closureState ? { closure_state: closureState } : {}),
-    };
+export function extractLiveSessionLearningCue(
+    liveSessionSummary?: LiveSessionConclusionSummary | null,
+): SessionLearningCue | null {
+    return extractSessionLearningCue({
+        mainIssue: liveSessionSummary?.main_issue,
+        nextGoal: liveSessionSummary?.next_goal,
+    });
 }
 
 export function formatClaimTruthSummary(claimTruth?: SessionClaimTruth | null): string | null {

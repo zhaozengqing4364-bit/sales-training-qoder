@@ -1,4 +1,7 @@
 import type { TTSChunkData, InterruptReason } from "../use-streaming-audio-player";
+import type { LiveSessionConclusionSummary, SessionClaimTruthPayload } from "@/lib/api/types";
+
+export type { LiveSessionConclusionSummary, SessionClaimTruthPayload } from "@/lib/api/types";
 
 // Re-export types from streaming audio player for consumers
 export type { TTSChunkData, InterruptReason } from "../use-streaming-audio-player";
@@ -64,6 +67,8 @@ export interface ScoreUpdate {
     dimension_scores: Record<string, number>;
     suggestions: string[];
     stage_name?: string;
+    claim_truth?: SessionClaimTruthPayload | null;
+    live_session_summary?: LiveSessionConclusionSummary | null;
 }
 
 export interface ActionCard {
@@ -144,6 +149,7 @@ export interface PracticeState {
     fuzzyDetections: FuzzyDetection[];
     salesStage: SalesStage | null;
     scores: ScoreUpdate | null;
+    liveSessionSummary: LiveSessionConclusionSummary | null;
     actionCard: ActionCard | null;
     coachHealth: CoachHealth;
     error: string | null;
@@ -192,6 +198,7 @@ export const INITIAL_PRACTICE_STATE: PracticeState = {
     fuzzyDetections: [],
     salesStage: null,
     scores: null,
+    liveSessionSummary: null,
     actionCard: null,
     coachHealth: {
         status: "healthy",

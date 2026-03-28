@@ -56,7 +56,12 @@ vi.mock("@/components/ui/glass-sheet", () => ({
 }));
 
 vi.mock("@/components/practice/RightPanelContent", () => ({
-    RightPanelContent: () => <div data-testid="right-panel-content" />,
+    RightPanelContent: ({ liveSessionSummary }: { liveSessionSummary?: { main_issue?: { issue_text?: string | null } | null; focus_type?: string | null } | null }) => (
+        <div data-testid="right-panel-content">
+            {liveSessionSummary?.focus_type ? <span>{`live-focus:${liveSessionSummary.focus_type}`}</span> : null}
+            {liveSessionSummary?.main_issue?.issue_text ? <span>{liveSessionSummary.main_issue.issue_text}</span> : null}
+        </div>
+    ),
 }));
 
 vi.mock("@/hooks/use-practice-websocket", () => ({
@@ -95,6 +100,7 @@ describe("PracticeSessionPage carry-forward retry focus", () => {
             fuzzyDetections: [],
             salesStage: null,
             scores: null,
+            liveSessionSummary: null,
             actionCard: null,
             error: null,
             isPlayingAudio: false,
@@ -219,6 +225,7 @@ describe("PracticeSessionPage carry-forward retry focus", () => {
                     价值表达: 84,
                 },
             },
+            liveSessionSummary: null,
             actionCard: null,
             coachHealth: {
                 status: "degraded",
@@ -250,6 +257,86 @@ describe("PracticeSessionPage carry-forward retry focus", () => {
         expect(screen.getAllByTestId("right-panel-content")).toHaveLength(2);
     });
 
+    it("passes live same-session summary through to the learner panel", () => {
+        usePracticeRuntimeLockMock.mockReturnValue({
+            lockedScenarioType: "sales",
+            lockedVoiceMode: "legacy",
+            lockedAgentId: "agent-1",
+            lockedPersonaId: "persona-1",
+            lockedPresentationId: undefined,
+            focusIntent: null,
+            sessionMetaError: null,
+        });
+        usePracticeWebSocketMock.mockReturnValue({
+            connectionState: "connected",
+            isConnected: true,
+            sessionStatus: "in_progress",
+            aiState: "idle",
+            messages: [],
+            fuzzyDetections: [],
+            salesStage: null,
+            scores: {
+                overall_score: 83,
+                turn_count: 4,
+                stage_name: "异议处理",
+                suggestions: ["先补一个 ROI 证据，再回应价格异议"],
+                dimension_scores: {
+                    价值表达: 84,
+                },
+            },
+            liveSessionSummary: {
+                alignment_used: true,
+                stage_key: "objection",
+                focus_type: "evidence_gap",
+                fallback_reason: null,
+                main_issue: {
+                    issue_type: "evidence_gap",
+                    issue_text: "价值主张缺少案例、数据或ROI支撑，客户很难相信收益承诺。",
+                    recovery_rule: "下一轮先给出案例、数据或benchmark，再回应价格/ROI追问。",
+                },
+                next_goal: {
+                    goal_type: "evidence_backing",
+                    goal_text: "先用案例、数据或ROI证据支撑主张，再推进下一步。",
+                    rule: "至少补上一条证据和一个明确的下一步动作。",
+                },
+                claim_truth: {
+                    status: "evidence_pending",
+                    label: "证据待补齐",
+                    source: "objection_ledger",
+                    reason: "open_objection_ledger",
+                    closure_state: "open",
+                },
+            },
+            actionCard: null,
+            coachHealth: {
+                status: "healthy",
+                reason: null,
+                message: "实时辅导正常。",
+            },
+            error: null,
+            isPlayingAudio: false,
+            interimTranscript: "",
+            audioUnlocked: true,
+            isNetworkSlow: false,
+            currentSlide: null,
+            points: [],
+            forbiddenWords: [],
+            sendAudio: vi.fn(),
+            sendAudioBinary: vi.fn(),
+            sendAudioEnd: vi.fn(),
+            startSpeaking: vi.fn(),
+            sendInterrupt: vi.fn(),
+            unlockAudio: vi.fn(),
+            sendMessage: vi.fn(),
+            connect: vi.fn(),
+        });
+
+        render(<PracticeSessionPage />);
+
+        expect(screen.getAllByText("live-focus:evidence_gap")).toHaveLength(2);
+        expect(screen.getAllByText("价值主张缺少案例、数据或ROI支撑，客户很难相信收益承诺。")).toHaveLength(2);
+    });
+
     it("keeps the learner page shell quiet when coach health is healthy or missing a message", () => {
         usePracticeRuntimeLockMock.mockReturnValue({
             lockedScenarioType: "sales",
@@ -269,6 +356,7 @@ describe("PracticeSessionPage carry-forward retry focus", () => {
             fuzzyDetections: [],
             salesStage: null,
             scores: null,
+            liveSessionSummary: null,
             actionCard: null,
             coachHealth: {
                 status: "resumed",
