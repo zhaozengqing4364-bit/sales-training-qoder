@@ -37,11 +37,12 @@ from common.auth.service import resolve_websocket_token, verify_token
 from common.conversation.storage import normalize_objection_ledger
 from common.db.models import PracticeSession
 from common.effectiveness import (
+    build_live_session_conclusion_summary,
     build_sales_effectiveness_metrics,
     build_sales_rollup_scores,
+    coerce_live_session_conclusion_summary,
     evaluate_effectiveness_snapshot,
     evaluate_pass_flags,
-    resolve_sales_report_alignment,
 )
 from common.db.session import AsyncSessionLocal
 from common.db.session_lifecycle import (
@@ -265,6 +266,7 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
             self._realtime_scoring_runtime_config
         )
         self._latest_score_snapshot: dict[str, Any] | None = None
+        self._latest_live_session_summary: dict[str, Any] | None = None
         self._latest_claim_truth: dict[str, Any] | None = None
         self._latest_action_card: dict[str, Any] | None = None
         self._objection_ledger: dict[str, Any] | None = None
@@ -524,6 +526,13 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
             runtime_state["latest_score_snapshot"] = copy.deepcopy(
                 normalized_score_snapshot
             )
+        normalized_live_session_summary = coerce_live_session_conclusion_summary(
+            self._latest_live_session_summary
+        )
+        if normalized_live_session_summary is not None:
+            runtime_state["latest_live_session_summary"] = copy.deepcopy(
+                normalized_live_session_summary
+            )
         if isinstance(self._latest_claim_truth, dict):
             runtime_state["latest_claim_truth"] = copy.deepcopy(self._latest_claim_truth)
         normalized_objection_ledger = normalize_objection_ledger(self._objection_ledger)
@@ -566,6 +575,10 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
         self._last_emitted_stage = runtime_state.get("last_emitted_stage")
         latest_score_snapshot = runtime_state.get("latest_score_snapshot")
         self._latest_score_snapshot = normalize_score_snapshot(latest_score_snapshot)
+        latest_live_session_summary = runtime_state.get("latest_live_session_summary")
+        self._latest_live_session_summary = coerce_live_session_conclusion_summary(
+            latest_live_session_summary
+        )
         latest_claim_truth = runtime_state.get("latest_claim_truth")
         self._latest_claim_truth = (
             copy.deepcopy(latest_claim_truth)
@@ -1903,6 +1916,7 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
         suggestions: list[str],
         stage_name: str = "",
         claim_truth: dict[str, Any] | None = None,
+        live_session_summary: dict[str, Any] | None = None,
     ) -> None:
         payload_data: dict[str, Any] = {
             "session_id": self.session_id,
@@ -1912,6 +1926,17 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
             "suggestions": suggestions,
             "stage_name": stage_name,
         }
+        normalized_live_session_summary = coerce_live_session_conclusion_summary(
+            live_session_summary
+        )
+        if isinstance(normalized_live_session_summary, dict):
+            payload_data["live_session_summary"] = copy.deepcopy(
+                normalized_live_session_summary
+            )
+            if claim_truth is None:
+                summary_claim_truth = normalized_live_session_summary.get("claim_truth")
+                if isinstance(summary_claim_truth, dict):
+                    claim_truth = summary_claim_truth
         if isinstance(claim_truth, dict):
             payload_data["claim_truth"] = copy.deepcopy(claim_truth)
         await self.manager.send_json(
@@ -1956,10 +1981,21 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
         }
 
     def get_runtime_diagnostics(self) -> dict[str, Any]:
+        live_session_summary = coerce_live_session_conclusion_summary(
+            self._latest_live_session_summary
+        )
+        claim_truth = None
+        if isinstance(live_session_summary, dict):
+            summary_claim_truth = live_session_summary.get("claim_truth")
+            if isinstance(summary_claim_truth, dict):
+                claim_truth = copy.deepcopy(summary_claim_truth)
+        if claim_truth is None and isinstance(self._latest_claim_truth, dict):
+            claim_truth = copy.deepcopy(self._latest_claim_truth)
         return {
-            "claim_truth": copy.deepcopy(self._latest_claim_truth)
-            if isinstance(self._latest_claim_truth, dict)
+            "live_session_summary": copy.deepcopy(live_session_summary)
+            if isinstance(live_session_summary, dict)
             else None,
+            "claim_truth": claim_truth,
             "coach_health": self._coach_health_payload(),
         }
 
@@ -2185,19 +2221,23 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
         )
 
         live_claim_truth: dict[str, Any] | None = None
+        live_session_summary: dict[str, Any] | None = None
         live_score_snapshot = analysis_data.get("score_snapshot")
         if isinstance(live_score_snapshot, dict) or resolved_objection_ledger is not None:
-            live_alignment = resolve_sales_report_alignment(
+            live_session_summary = build_live_session_conclusion_summary(
                 sales_stage=sales_stage,
                 score_snapshot=(
                     live_score_snapshot if isinstance(live_score_snapshot, dict) else None
                 ),
                 objection_ledger=resolved_objection_ledger,
             )
-            aligned_claim_truth = live_alignment.get("claim_truth")
+            self._latest_live_session_summary = copy.deepcopy(live_session_summary)
+            aligned_claim_truth = live_session_summary.get("claim_truth")
             if isinstance(aligned_claim_truth, dict):
                 live_claim_truth = copy.deepcopy(aligned_claim_truth)
                 self._latest_claim_truth = copy.deepcopy(aligned_claim_truth)
+            else:
+                self._latest_claim_truth = None
 
         if score_update_payload is not None:
             await self._send_score_update(
@@ -2207,6 +2247,7 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
                 suggestions=list(score_update_payload["suggestions"]),
                 stage_name=str(score_update_payload["stage_name"]),
                 claim_truth=live_claim_truth,
+                live_session_summary=live_session_summary,
             )
 
         decision = self._feedback_arbiter.decide(

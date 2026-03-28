@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import UTC, datetime
+from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import pytest
@@ -15,6 +16,7 @@ from common.conversation.models import ConversationMessage
 from common.db.models import Base, PracticeSession, Scenario, SessionStatus, User
 from common.db.session import get_db
 from common.error_handling.result import Result
+from common.websocket.session_manager import get_session_manager
 from evaluation.services.report_generation_trigger import ReportGenerationTrigger
 from main import app
 
@@ -576,6 +578,173 @@ async def test_knowledge_check_keeps_claim_truth_distinct_from_kb_lock_chain_fai
     }
     assert knowledge_check_data["claim_truth_status"] == "weak_evidence"
     assert knowledge_check_data["claim_truth_source"] == "score_snapshot"
+
+
+@pytest.mark.asyncio
+async def test_knowledge_check_prefers_live_session_summary_over_stale_completed_snapshot_when_handler_active(
+    async_client: AsyncClient,
+    db_session: AsyncSession,
+    owner: User,
+    owner_headers: dict[str, str],
+):
+    scenario = Scenario(
+        scenario_id=str(uuid.uuid4()),
+        scenario_type="sales",
+        name="contract live summary scenario",
+        is_active=True,
+    )
+    session = PracticeSession(
+        session_id=str(uuid.uuid4()),
+        user_id=str(owner.user_id),
+        scenario_id=scenario.scenario_id,
+        status=SessionStatus.IN_PROGRESS.value,
+        effectiveness_snapshot=_make_stale_sales_snapshot(),
+        voice_policy_snapshot={
+            "knowledge_base_ids": ["kb-live-1"],
+            "tool_policy": {
+                "enable_internal_retrieval": True,
+                "require_kb_grounding": False,
+            },
+        },
+    )
+    db_session.add_all([scenario, session])
+    await db_session.commit()
+
+    live_handler = SimpleNamespace(
+        get_runtime_diagnostics=lambda: {
+            "live_session_summary": {
+                "alignment_used": True,
+                "stage_key": "objection",
+                "focus_type": "objection_handling_gap",
+                "fallback_reason": None,
+                "main_issue": {
+                    "issue_type": "objection_handling_gap",
+                    "issue_text": "面对价格、竞品或风险顾虑时，承接和重构回应还不够到位。",
+                    "recovery_rule": "下一轮先复述顾虑，再用收益、证据和试点方案回应。",
+                },
+                "next_goal": {
+                    "goal_type": "objection_reframe",
+                    "goal_text": "下一轮先承接价格/竞品/风险顾虑，再用收益和证据回应。",
+                    "rule": "先复述顾虑，再给回应，最后落到低风险推进方案。",
+                },
+                "claim_truth": {
+                    "status": "unsupported_claim",
+                    "label": "未被证据支撑",
+                    "source": "objection_ledger",
+                    "reason": "gap_acknowledged",
+                    "closure_state": "gap_acknowledged",
+                },
+            },
+            "claim_truth": {
+                "status": "unsupported_claim",
+                "label": "未被证据支撑",
+                "source": "objection_ledger",
+                "reason": "gap_acknowledged",
+                "closure_state": "gap_acknowledged",
+            },
+            "coach_health": {
+                "status": "healthy",
+                "reason": None,
+                "message": "实时辅导正常。",
+            },
+        },
+        _latest_live_session_summary=None,
+        _latest_claim_truth=None,
+    )
+    session_manager = get_session_manager()
+    await session_manager.register_session(session.session_id, live_handler)
+    try:
+        knowledge_check_resp = await async_client.get(
+            f"/api/v1/practice/sessions/{session.session_id}/knowledge-check",
+            headers=owner_headers,
+        )
+
+        assert knowledge_check_resp.status_code == 200
+        knowledge_check_data = knowledge_check_resp.json()["data"]
+        assert knowledge_check_data["main_issue"] == {
+            "issue_type": "objection_handling_gap",
+            "issue_text": "面对价格、竞品或风险顾虑时，承接和重构回应还不够到位。",
+            "recovery_rule": "下一轮先复述顾虑，再用收益、证据和试点方案回应。",
+        }
+        assert knowledge_check_data["next_goal"] == {
+            "goal_type": "objection_reframe",
+            "goal_text": "下一轮先承接价格/竞品/风险顾虑，再用收益和证据回应。",
+            "rule": "先复述顾虑，再给回应，最后落到低风险推进方案。",
+        }
+        assert knowledge_check_data["claim_truth"] == {
+            "status": "unsupported_claim",
+            "label": "未被证据支撑",
+            "source": "objection_ledger",
+            "reason": "gap_acknowledged",
+            "closure_state": "gap_acknowledged",
+        }
+        assert knowledge_check_data["live_session_summary"]["focus_type"] == "objection_handling_gap"
+    finally:
+        await session_manager.unregister_session(session.session_id, reason="test_cleanup")
+
+
+@pytest.mark.asyncio
+async def test_knowledge_check_does_not_revive_stale_snapshot_when_live_summary_is_partial(
+    async_client: AsyncClient,
+    db_session: AsyncSession,
+    owner: User,
+    owner_headers: dict[str, str],
+):
+    scenario = Scenario(
+        scenario_id=str(uuid.uuid4()),
+        scenario_type="sales",
+        name="contract partial live summary scenario",
+        is_active=True,
+    )
+    session = PracticeSession(
+        session_id=str(uuid.uuid4()),
+        user_id=str(owner.user_id),
+        scenario_id=scenario.scenario_id,
+        status=SessionStatus.IN_PROGRESS.value,
+        effectiveness_snapshot=_make_stale_sales_snapshot(),
+        voice_policy_snapshot={
+            "knowledge_base_ids": ["kb-live-2"],
+            "tool_policy": {
+                "enable_internal_retrieval": True,
+                "require_kb_grounding": False,
+            },
+        },
+    )
+    db_session.add_all([scenario, session])
+    await db_session.commit()
+
+    live_handler = SimpleNamespace(
+        get_runtime_diagnostics=lambda: {
+            "live_session_summary": {
+                "main_issue": {"issue_type": ""},
+                "claim_truth": {"status": "", "source": "score_snapshot"},
+            },
+            "claim_truth": None,
+            "coach_health": {
+                "status": "healthy",
+                "reason": None,
+                "message": "实时辅导正常。",
+            },
+        },
+        _latest_live_session_summary=None,
+        _latest_claim_truth=None,
+    )
+    session_manager = get_session_manager()
+    await session_manager.register_session(session.session_id, live_handler)
+    try:
+        knowledge_check_resp = await async_client.get(
+            f"/api/v1/practice/sessions/{session.session_id}/knowledge-check",
+            headers=owner_headers,
+        )
+
+        assert knowledge_check_resp.status_code == 200
+        knowledge_check_data = knowledge_check_resp.json()["data"]
+        assert knowledge_check_data["main_issue"] is None
+        assert knowledge_check_data["next_goal"] is None
+        assert knowledge_check_data["claim_truth"] is None
+        assert knowledge_check_data["live_session_summary"] is None
+    finally:
+        await session_manager.unregister_session(session.session_id, reason="test_cleanup")
 
 
 @pytest.mark.asyncio

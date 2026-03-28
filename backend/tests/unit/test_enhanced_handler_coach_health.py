@@ -144,3 +144,127 @@ async def test_enhanced_handler_restore_session_state_syncs_initialized_capabili
             "message": "实时辅导暂不可用，训练仍可继续。",
         }
     }
+
+
+@pytest.mark.asyncio
+async def test_enhanced_handler_runtime_diagnostics_surface_live_session_summary_from_processor() -> None:
+    handler = EnhancedSalesHandler()
+    handler.capability_processor = type(
+        "ProcessorStub",
+        (),
+        {
+            "coach_health": "healthy",
+            "_coach_health_reason": None,
+            "live_session_summary": {
+                "alignment_used": True,
+                "stage_key": "discovery",
+                "focus_type": "evidence_gap",
+                "fallback_reason": None,
+                "main_issue": {
+                    "issue_type": "evidence_gap",
+                    "issue_text": "价值主张缺少案例、数据或ROI支撑，客户很难相信收益承诺。",
+                    "recovery_rule": "下一轮先给出案例、数据或benchmark，再回应价格/ROI追问。",
+                },
+                "next_goal": {
+                    "goal_type": "evidence_backing",
+                    "goal_text": "先用案例、数据或ROI证据支撑主张，再推进下一步。",
+                    "rule": "至少补上一条证据和一个明确的下一步动作。",
+                },
+                "claim_truth": {
+                    "status": "weak_evidence",
+                    "label": "证据偏弱",
+                    "source": "score_snapshot",
+                    "reason": "low_evidence_score",
+                    "evidence_score": 61.0,
+                },
+            },
+        },
+    )()
+
+    diagnostics = handler.get_runtime_diagnostics()
+
+    assert diagnostics["claim_truth"] == {
+        "status": "weak_evidence",
+        "label": "证据偏弱",
+        "source": "score_snapshot",
+        "reason": "low_evidence_score",
+        "evidence_score": 61.0,
+    }
+    assert diagnostics["live_session_summary"] == {
+        "alignment_used": True,
+        "stage_key": "discovery",
+        "focus_type": "evidence_gap",
+        "fallback_reason": None,
+        "main_issue": {
+            "issue_type": "evidence_gap",
+            "issue_text": "价值主张缺少案例、数据或ROI支撑，客户很难相信收益承诺。",
+            "recovery_rule": "下一轮先给出案例、数据或benchmark，再回应价格/ROI追问。",
+        },
+        "next_goal": {
+            "goal_type": "evidence_backing",
+            "goal_text": "先用案例、数据或ROI证据支撑主张，再推进下一步。",
+            "rule": "至少补上一条证据和一个明确的下一步动作。",
+        },
+        "claim_truth": {
+            "status": "weak_evidence",
+            "label": "证据偏弱",
+            "source": "score_snapshot",
+            "reason": "low_evidence_score",
+            "evidence_score": 61.0,
+        },
+    }
+    assert handler._create_state_snapshot().runtime_state == {
+        "live_session_summary": diagnostics["live_session_summary"],
+    }
+
+
+@pytest.mark.asyncio
+async def test_enhanced_handler_restore_session_state_rehydrates_live_session_summary() -> None:
+    handler = EnhancedSalesHandler()
+    handler._send_reconnection_success = AsyncMock()
+
+    state = SessionStateSnapshot(
+        session_id="session-live-summary",
+        scenario="sales",
+        turn_count=5,
+        session_status="in_progress",
+        ai_state="listening",
+        runtime_state={
+            "live_session_summary": {
+                "alignment_used": True,
+                "stage_key": "objection",
+                "focus_type": "objection_handling_gap",
+                "fallback_reason": None,
+                "main_issue": {
+                    "issue_type": "objection_handling_gap",
+                    "issue_text": "面对价格、竞品或风险顾虑时，承接和重构回应还不够到位。",
+                    "recovery_rule": "下一轮先复述顾虑，再用收益、证据和试点方案回应。",
+                },
+                "next_goal": {
+                    "goal_type": "objection_reframe",
+                    "goal_text": "下一轮先承接价格/竞品/风险顾虑，再用收益和证据回应。",
+                    "rule": "先复述顾虑，再给回应，最后落到低风险推进方案。",
+                },
+                "claim_truth": {
+                    "status": "unsupported_claim",
+                    "label": "未被证据支撑",
+                    "source": "objection_ledger",
+                    "reason": "gap_acknowledged",
+                    "closure_state": "gap_acknowledged",
+                },
+            }
+        },
+        user_id="user-1",
+    )
+
+    await handler._restore_session_state(state)
+
+    diagnostics = handler.get_runtime_diagnostics()
+    assert diagnostics["live_session_summary"] == state.runtime_state["live_session_summary"]
+    assert diagnostics["claim_truth"] == {
+        "status": "unsupported_claim",
+        "label": "未被证据支撑",
+        "source": "objection_ledger",
+        "reason": "gap_acknowledged",
+        "closure_state": "gap_acknowledged",
+    }

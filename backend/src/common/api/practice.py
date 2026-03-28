@@ -1536,15 +1536,26 @@ async def get_session_knowledge_check(
 
     live_claim_truth = None
     live_coach_health = None
+    live_session_summary = None
     session_info = get_session_manager().sessions.get(session_id)
     live_handler = session_info.handler if session_info is not None else None
+    live_runtime_active = live_handler is not None
     if live_handler is not None:
         diagnostics_getter = getattr(live_handler, "get_runtime_diagnostics", None)
         if callable(diagnostics_getter):
             runtime_diagnostics = diagnostics_getter()
             if isinstance(runtime_diagnostics, dict):
+                live_session_summary = deepcopy(
+                    runtime_diagnostics.get("live_session_summary")
+                )
                 live_claim_truth = deepcopy(runtime_diagnostics.get("claim_truth"))
                 live_coach_health = deepcopy(runtime_diagnostics.get("coach_health"))
+        if live_session_summary is None:
+            live_session_summary = deepcopy(
+                getattr(live_handler, "_latest_live_session_summary", None)
+            )
+        if live_claim_truth is None and isinstance(live_session_summary, dict):
+            live_claim_truth = deepcopy(live_session_summary.get("claim_truth"))
         if live_claim_truth is None:
             live_claim_truth = deepcopy(getattr(live_handler, "_latest_claim_truth", None))
         if live_coach_health is None:
@@ -1583,6 +1594,8 @@ async def get_session_knowledge_check(
         effective_tool_types=effective_tool_types,
         live_claim_truth=live_claim_truth,
         live_coach_health=live_coach_health,
+        live_session_summary=live_session_summary,
+        live_runtime_active=live_runtime_active,
         projection_effectiveness_snapshot=projection_effectiveness_snapshot,
     )
 

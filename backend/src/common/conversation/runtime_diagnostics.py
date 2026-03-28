@@ -6,6 +6,7 @@ import os
 from typing import Any
 
 from common.db.models import PracticeSession
+from common.effectiveness import coerce_live_session_conclusion_summary
 from common.knowledge.kb_lock_guard import is_kb_lock_chain_failure_status
 
 
@@ -38,6 +39,45 @@ def _normalize_claim_truth_payload(value: Any) -> dict[str, Any] | None:
     except (TypeError, ValueError):
         payload.pop("evidence_score", None)
     return payload
+
+
+
+def _normalize_main_issue_payload(value: Any) -> dict[str, Any] | None:
+    if not isinstance(value, dict):
+        return None
+    issue_type = value.get("issue_type")
+    issue_text = value.get("issue_text")
+    recovery_rule = value.get("recovery_rule")
+    if not all(
+        isinstance(item, str) and item.strip()
+        for item in (issue_type, issue_text, recovery_rule)
+    ):
+        return None
+    return {
+        "issue_type": issue_type.strip(),
+        "issue_text": issue_text.strip(),
+        "recovery_rule": recovery_rule.strip(),
+    }
+
+
+
+def _normalize_next_goal_payload(value: Any) -> dict[str, Any] | None:
+    if not isinstance(value, dict):
+        return None
+    goal_type = value.get("goal_type")
+    goal_text = value.get("goal_text")
+    rule = value.get("rule")
+    if not all(
+        isinstance(item, str) and item.strip()
+        for item in (goal_type, goal_text, rule)
+    ):
+        return None
+    return {
+        "goal_type": goal_type.strip(),
+        "goal_text": goal_text.strip(),
+        "rule": rule.strip(),
+    }
+
 
 
 def _normalize_coach_health_payload(value: Any) -> dict[str, Any]:
@@ -74,6 +114,8 @@ def build_session_runtime_diagnostics(
     effective_tool_types: list[str] | None = None,
     live_claim_truth: dict[str, Any] | None = None,
     live_coach_health: dict[str, Any] | None = None,
+    live_session_summary: dict[str, Any] | None = None,
+    live_runtime_active: bool = False,
     projection_effectiveness_snapshot: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     snapshot = snapshot if isinstance(snapshot, dict) else {}
@@ -145,13 +187,66 @@ def build_session_runtime_diagnostics(
         if isinstance(projection_effectiveness_snapshot, dict)
         else {}
     )
-    claim_truth = (
-        _normalize_claim_truth_payload(live_claim_truth)
-        or _normalize_claim_truth_payload(
-            projection_effectiveness_snapshot.get("claim_truth")
-        )
-        or _normalize_claim_truth_payload(session_effectiveness_snapshot.get("claim_truth"))
+    normalized_live_session_summary = coerce_live_session_conclusion_summary(
+        live_session_summary
     )
+
+    if live_runtime_active:
+        main_issue = (
+            normalized_live_session_summary.get("main_issue")
+            if isinstance(normalized_live_session_summary, dict)
+            else None
+        )
+        next_goal = (
+            normalized_live_session_summary.get("next_goal")
+            if isinstance(normalized_live_session_summary, dict)
+            else None
+        )
+        claim_truth = (
+            (
+                normalized_live_session_summary.get("claim_truth")
+                if isinstance(normalized_live_session_summary, dict)
+                else None
+            )
+            or _normalize_claim_truth_payload(live_claim_truth)
+        )
+    else:
+        main_issue = (
+            (
+                normalized_live_session_summary.get("main_issue")
+                if isinstance(normalized_live_session_summary, dict)
+                else None
+            )
+            or _normalize_main_issue_payload(
+                projection_effectiveness_snapshot.get("main_issue")
+            )
+            or _normalize_main_issue_payload(
+                session_effectiveness_snapshot.get("main_issue")
+            )
+        )
+        next_goal = (
+            (
+                normalized_live_session_summary.get("next_goal")
+                if isinstance(normalized_live_session_summary, dict)
+                else None
+            )
+            or _normalize_next_goal_payload(
+                projection_effectiveness_snapshot.get("next_goal")
+            )
+            or _normalize_next_goal_payload(session_effectiveness_snapshot.get("next_goal"))
+        )
+        claim_truth = (
+            (
+                normalized_live_session_summary.get("claim_truth")
+                if isinstance(normalized_live_session_summary, dict)
+                else None
+            )
+            or _normalize_claim_truth_payload(live_claim_truth)
+            or _normalize_claim_truth_payload(
+                projection_effectiveness_snapshot.get("claim_truth")
+            )
+            or _normalize_claim_truth_payload(session_effectiveness_snapshot.get("claim_truth"))
+        )
     coach_health = _normalize_coach_health_payload(live_coach_health)
 
     kb_lock_timeout_budget_ms = _bounded_int_env(
@@ -247,6 +342,9 @@ def build_session_runtime_diagnostics(
         "kb_lock_timeout_budget_ms": kb_lock_timeout_budget_ms,
         "kb_lock_min_pass_score": round(kb_lock_min_pass_score, 4),
         "kb_lock_min_pass_score_keyword": round(kb_lock_min_pass_score_keyword, 4),
+        "live_session_summary": normalized_live_session_summary,
+        "main_issue": main_issue,
+        "next_goal": next_goal,
         "claim_truth": claim_truth,
         "claim_truth_status": (
             str(claim_truth.get("status")) if isinstance(claim_truth, dict) else None

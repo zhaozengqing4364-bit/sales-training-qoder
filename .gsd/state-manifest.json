@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "exported_at": "2026-03-28T03:34:32.578Z",
+  "exported_at": "2026-03-28T07:46:22.041Z",
   "milestones": [
     {
       "id": "M001",
@@ -851,14 +851,14 @@
       "milestone_id": "M007",
       "id": "S01",
       "title": "教练健康状态真相收口",
-      "status": "pending",
+      "status": "complete",
       "risk": "high",
       "depends": [],
       "demo": "After this: on the current `/practice/{sessionId}` learner route, coach degraded / resumed is explicitly visible without interrupting training, and reconnect no longer causes the UI/runtime surfaces to lie about recovery state.",
       "created_at": "2026-03-28T01:28:14.338Z",
-      "completed_at": null,
-      "full_summary_md": "",
-      "full_uat_md": "",
+      "completed_at": "2026-03-28T04:01:01.713Z",
+      "full_summary_md": "---\nid: S01\nparent: M007\nmilestone: M007\nprovides:\n  - Reconnect payloads now carry normalized coach-health truth from the live runtime handler for both classic and StepFun sales sessions.\n  - Learner practice pages expose degraded/resumed coach-health near the main controls without interrupting active training.\n  - Repo-root focused Vitest commands can target `web/src/...` plan paths without false path failures.\nrequires:\n  []\naffects:\n  - S02\n  - S03\n  - S04\nkey_files:\n  - backend/src/sales_bot/websocket/stepfun_realtime_handler.py\n  - backend/src/sales_bot/websocket/enhanced_handler.py\n  - backend/tests/unit/test_stepfun_realtime_persistence.py\n  - backend/tests/unit/test_enhanced_handler_coach_health.py\n  - backend/tests/integration/test_voice_runtime_session_snapshot.py\n  - web/src/hooks/websocket/message-handlers.test.ts\n  - web/src/components/practice/CoachHealthNotice.tsx\n  - web/src/components/practice/RightPanelContent.tsx\n  - web/src/components/practice/RightPanelContent.test.tsx\n  - web/src/app/(user)/practice/[sessionId]/page.tsx\n  - web/src/app/(user)/practice/[sessionId]/page.test.tsx\n  - scripts/run-vitest-root.mjs\n  - package.json\n  - .gsd/PROJECT.md\n  - .gsd/KNOWLEDGE.md\nkey_decisions:\n  - Continue treating the live runtime snapshot / websocket `coach_health` payload as the single authority for degraded/resumed truth, with `/knowledge-check` as the inspection surface instead of adding a second polling or read-side authority.\n  - Emit `reconnected.restored_state` from a freshly rebuilt live handler snapshot after restore, rather than echoing the raw persisted snapshot back to the client.\n  - Render non-healthy coach-health copy through a shared `CoachHealthNotice` so the learner shell and right panel stay on the same message contract while healthy state remains quiet.\npatterns_established:\n  - Restore persisted realtime state onto the live handler first, then regenerate the outbound reconnect snapshot from that live authority instead of replaying raw stored payloads.\n  - For learner-visible runtime warnings, share one presentation helper across page-shell and panel surfaces so copy and quiet-state rules do not drift.\n  - Keep repo-root verification shims honest about workspace-relative paths; if the root command delegates into `web/`, normalize `web/src/...` filters there instead of relying on manual command rewrites.\nobservability_surfaces:\n  - `/api/v1/practice/sessions/{id}/knowledge-check` continues to expose live coach-health diagnostics from the active session handler.\n  - The learner `/practice/{sessionId}` shell now shows a compact `辅导状态提醒` notice whenever coach health is degraded or resumed.\n  - `RightPanelContent` still renders the richer `辅导状态` card for non-healthy runtime states without hiding current stage, score, or action-card guidance.\ndrill_down_paths:\n  - .gsd/milestones/M007/slices/S01/tasks/T01-SUMMARY.md\n  - .gsd/milestones/M007/slices/S01/tasks/T02-SUMMARY.md\nduration: \"\"\nverification_result: passed\ncompleted_at: 2026-03-28T04:01:01.715Z\nblocker_discovered: false\n---\n\n# S01: 教练健康状态真相收口\n\n**S01 aligned reconnect emission, learner-page visibility, and live diagnostics on one coach-health authority so degraded/resumed state is visible without interrupting training and reconnect no longer replays stale runtime truth.**\n\n## What Happened\n\nThis slice closed the highest-risk truth gap in the realtime coaching loop: reconnect, learner UI, and diagnostics were all talking about coach health, but they were not guaranteed to talk about the same state. T01 hardened the backend/runtime seam by making both StepFun and classic handlers restore persisted runtime state onto the live handler first, then emit `reconnected.restored_state` from a fresh handler snapshot instead of echoing the raw persisted payload. That preserved the intended `healthy -> degraded -> resumed -> healthy` semantics, kept malformed raw payloads from leaking back to the client, and left `/api/v1/practice/sessions/{id}/knowledge-check` on the same live authority line for inspection.\n\nT02 then surfaced that same non-healthy state on the learner route itself. The page shell now mirrors a compact `CoachHealthNotice` above the primary controls, so the learner can see degraded/resumed status without opening the analysis panel, while `RightPanelContent` keeps the richer explanatory card alongside current stage, score, and action-card context. The shared notice component prevents copy drift between shell and panel. In the same task, the repo-root Vitest shim was normalized to strip a leading `web/` prefix before delegating into `web/`, so the planned verification commands now run as written instead of failing on a path mismatch.\n\nThe result is a single runtime authority for coach-health truth across reconnect, learner UI, and diagnostics, with focused backend, reducer, and UI verification all green. This slice advances R009 by making realtime coaching degradation/recovery visible and truthful during active practice, but it does not yet retire the same-session practice -> report -> replay live closure proof; S02 still owns that end-to-end authority check.\n\n## Verification\n\nPassed all slice-plan verification checks: `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/test_enhanced_handler_coach_health.py`, `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/test_stepfun_realtime_persistence.py -k \"restore_session_state\"`, `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/integration/test_voice_runtime_session_snapshot.py -k live_coach_health`, `npm test -- --run 'web/src/hooks/websocket/message-handlers.test.ts'`, and `npm test -- --run 'web/src/components/practice/RightPanelContent.test.tsx' 'web/src/app/(user)/practice/[sessionId]/page.test.tsx'`. Also confirmed the temporary browser sanity check from T02: the learner route rendered on localhost and stayed quiet when no degraded/resumed coach-health message was present.\n\n## Requirements Advanced\n\n- R009 — Made degraded/resumed realtime coaching status truthful and learner-visible during active practice by aligning reconnect emission, learner shell, right-panel copy, and `/knowledge-check` on the same runtime authority.\n\n## Requirements Validated\n\nNone.\n\n## New Requirements Surfaced\n\nNone.\n\n## Requirements Invalidated or Re-scoped\n\nNone.\n\n## Deviations\n\nThe slice goal and task scope stayed intact, but the planned repo-root web verification paths needed correction in execution: the root `npm test` shim already runs inside `web/`, so a leading `web/` prefix produced a false `No test files found` failure. T02 fixed that shim structurally instead of continuing to rely on ad hoc command rewrites.\n\n## Known Limitations\n\nThis slice stops at focused contract and learner-surface closure; it does not yet provide the same-session live closure proof from active practice through completed report/replay, so R009 remains active until S02/S04 finish that evidence. Focused backend pytest commands still emit the pre-existing coverage noise (`--cov=src` / `No data was collected`) even though the targeted suites pass.\n\n## Follow-ups\n\nS02 should now prove the same coach-health truth line stays coherent when one real localhost sales session moves from `/practice/{sessionId}` into canonical `/practice/{sessionId}/report` and `/practice/{sessionId}/replay`. S03 should absorb the remaining historical M002 remediation artifacts now that the degraded/resumed truth surface has an explicit M007 authority line.\n\n## Files Created/Modified\n\n- `backend/src/sales_bot/websocket/stepfun_realtime_handler.py` — Changed StepFun reconnect restore to rehydrate live handler state and emit `reconnected.restored_state` from a freshly rebuilt snapshot instead of replaying the raw persisted payload.\n- `backend/src/sales_bot/websocket/enhanced_handler.py` — Applied the same live-handler snapshot rebuild contract to the classic sales handler so degraded/resumed semantics stay aligned across runtimes.\n- `backend/tests/unit/test_stepfun_realtime_persistence.py` — Added focused restore-state coverage for normalized reconnect payloads, omission-after-recovery behavior, and stale read-side snapshot suppression.\n- `backend/tests/unit/test_enhanced_handler_coach_health.py` — Extended classic-handler coverage for reconnect parity and malformed/invalid coach-health payload handling.\n- `backend/tests/integration/test_voice_runtime_session_snapshot.py` — Locked the `/api/v1/practice/sessions/{id}/knowledge-check` contract to the same live coach-health authority line used by reconnect.\n- `web/src/hooks/websocket/message-handlers.test.ts` — Covered reducer behavior for malformed reconnect payload normalization and clearing stale degraded state when restored payloads omit `coach_health` after recovery.\n- `web/src/components/practice/CoachHealthNotice.tsx` — Added a shared learner-facing notice renderer for degraded/resumed coach-health copy with a quiet healthy/no-message path.\n- `web/src/components/practice/RightPanelContent.tsx` — Kept the richer right-panel coach-status card while reusing the shared notice and preserving stage, score, and action-card context.\n- `web/src/app/(user)/practice/[sessionId]/page.tsx` — Surfaced a compact coach-health notice in the learner page shell above the primary controls so degraded/resumed state is visible without opening the analysis panel.\n- `web/src/app/(user)/practice/[sessionId]/page.test.tsx` — Added page-shell assertions proving degraded notices render even when the right panel is mocked and healthy/malformed states stay quiet.\n- `web/src/components/practice/RightPanelContent.test.tsx` — Added degraded/resumed coverage and verified coach-health copy coexists with active stage and score guidance instead of hiding it.\n- `scripts/run-vitest-root.mjs` — Normalized repo-root Vitest filters by stripping a leading `web/` prefix before delegating into the `web/` workspace.\n- `package.json` — Pointed the repo-root `npm test` shim at the new path-normalizing Vitest wrapper so planned verification commands execute correctly.\n- `.gsd/PROJECT.md` — Updated current-state documentation to reflect that M007/S01 is complete and coach-health truth is now visible on the learner route and reconnect contract.\n- `.gsd/KNOWLEDGE.md` — Recorded the reconnect authority rule so future realtime work does not reintroduce raw persisted `coach_health` replay drift.\n",
+      "full_uat_md": "# S01: 教练健康状态真相收口 — UAT\n\n**Milestone:** M007\n**Written:** 2026-03-28T04:01:01.715Z\n\n# S01 UAT — 教练健康状态真相收口\n\n## Preconditions\n- Backend is running with the current sales realtime handlers enabled.\n- Web app is running from the repo-root test shim or the normal learner route, and frontend/backend use the same loopback host.\n- A dev/test user can open the learner route `/practice/{sessionId}`.\n- Repo root commands are executed from `/Users/zhaozengqing/github/销售训练qoder`.\n\n## Test Case 1 — Reconnect restores normalized coach-health instead of replaying stale raw snapshots\n1. Run `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/test_stepfun_realtime_persistence.py -k \"restore_session_state\"`.\n2. Confirm the selected restore-state tests pass.\n3. Review the assertions covered by that suite.\n\n**Expected outcomes**\n- Reconnect emits `reconnected.restored_state` from the rebuilt live handler snapshot, not the raw persisted payload.\n- Malformed persisted `coach_health.status` values do not leak back to the client as bogus runtime truth.\n- If recovered state omits `coach_health`, stale degraded state is cleared instead of lingering after recovery.\n- Legacy stale read-side fields such as raw action-card remnants are not replayed as reconnect truth.\n\n## Test Case 2 — Classic handler follows the same coach-health reconnect contract\n1. Run `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/test_enhanced_handler_coach_health.py`.\n2. Confirm the focused classic-handler suite passes.\n3. Verify the suite covers degraded, resumed, malformed-payload, and recovery-clears-state behavior.\n\n**Expected outcomes**\n- Classic reconnect handling matches the StepFun contract for degraded/resumed coach-health.\n- Invalid or malformed `coach_health` input is normalized or ignored instead of crashing the handler.\n- Reconnect does not silently report healthy state before the live handler has rebuilt it.\n\n## Test Case 3 — `/knowledge-check` still exposes the same live coach-health authority\n1. Run `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/integration/test_voice_runtime_session_snapshot.py -k live_coach_health`.\n2. Confirm the integration test passes.\n\n**Expected outcomes**\n- `GET /api/v1/practice/sessions/{id}/knowledge-check` reads live coach-health diagnostics from the registered session handler.\n- A degraded runtime state is exposed with the same coach-health shape expected by the learner runtime flow.\n- No extra polling/read-side authority is introduced just to render degraded/resumed state.\n\n## Test Case 4 — Learner shell shows degraded status without opening the analysis panel\n1. Run `npm test -- --run 'web/src/components/practice/RightPanelContent.test.tsx' 'web/src/app/(user)/practice/[sessionId]/page.test.tsx'`.\n2. Confirm both files pass.\n3. Inspect the assertions covered by `page.test.tsx`.\n\n**Expected outcomes**\n- The learner page shell renders `辅导状态提醒` when `coachHealth.status=\"degraded\"` and `message=\"实时辅导暂不可用，训练仍可继续。\"`.\n- The page-level degraded notice still renders even when `RightPanelContent` is mocked, proving the shell itself owns the visibility requirement.\n- Healthy state and malformed/no-message non-healthy payloads stay quiet; the shell does not show a warning banner for `healthy` or message-less payloads.\n\n## Test Case 5 — Right panel keeps richer guidance visible while showing degraded/resumed coach-health\n1. Reuse the command from Test Case 4 and inspect the assertions covered by `RightPanelContent.test.tsx`.\n2. Verify degraded and resumed coach-health states.\n\n**Expected outcomes**\n- `辅导状态` appears with `实时辅导暂不可用，训练仍可继续。` for degraded state.\n- `辅导状态` appears with `实时辅导已恢复，后续建议会继续更新。` for resumed state.\n- `当前阶段` and `销售维度得分` remain visible while coach-health notices render.\n- When an `action_card` is present, it remains the only primary textual coach surface; coach-health does not replace or duplicate the active guidance contract.\n\n## Test Case 6 — Repo-root Vitest shim accepts planned `web/src/...` filters\n1. From repo root, run `npm test -- --run 'web/src/hooks/websocket/message-handlers.test.ts'`.\n2. Confirm the suite executes and passes instead of failing with `No test files found`.\n3. Optionally rerun `npm test -- --run 'web/src/components/practice/RightPanelContent.test.tsx' 'web/src/app/(user)/practice/[sessionId]/page.test.tsx'` to confirm the same behavior on multi-file filters.\n\n**Expected outcomes**\n- The repo-root shim strips the leading `web/` prefix and forwards valid `src/...` filters into the `web/` workspace.\n- The reducer suite runs and passes, covering malformed reconnect normalization and omission-after-recovery behavior.\n- Slice-plan verification commands now execute as written from repo root.\n\n## Edge Checks\n- Degraded state should be visible in both the page shell and right panel when a non-healthy message is present.\n- Resumed state should be visible in the right panel with the recovery message and should not leave stale degraded state behind after reconnect.\n- Healthy state must remain quiet on the learner shell; there should be no distracting success banner such as `实时辅导正常。`.\n- Missing-message non-healthy payloads should fail safe by staying quiet rather than rendering partial or misleading coach-health UI.\n- No browser/runtime path in this slice should require a second fetch loop or polling surface just to decide whether coaching is degraded or resumed.\n",
       "goal": "把当前 `/practice/{sessionId}` learner route 上的 coach-health 真相收口到同一个 runtime authority：degraded / resumed 要在不中断训练的前提下明确可见，且 reconnect 之后前端与 runtime/diagnostic surfaces 不再对恢复状态说谎。",
       "success_criteria": "## Must-Haves\n\n- 直接推进 `R009`：当前 learner route 在训练进行中就能明确显示 realtime coach 处于 `degraded`、`resumed` 或 `healthy`，不要求用户先打开分析面板。\n- StepFun 与 classic sales handlers 对 `coach_health` 继续共用同一套 snapshot/restore 语义；`reconnected` 只在 runtime snapshot 真正省略 `coach_health` 时才回到 healthy。\n- 现有 `RightPanelContent` 的阶段、评分、action card、fuzzy detections 仍保持 non-blocking；新增 page-shell 状态不能遮挡或替代这些 surfaces。\n- 现有 `/api/v1/practice/sessions/{id}/knowledge-check` 继续作为 live inspection surface 暴露 `coach_health` 诊断，不新增轮询 authority 或 milestone-only debug surface。\n\n## Threat Surface\n\n- **Abuse**: stale / malformed websocket reconnect payload 不能把 learner UI 误导成“已恢复”，也不能因为非法 `coach_health.status` 让 reducer 崩溃。\n- **Data exposure**: 暴露给 learner 的仅限 coach health 的 `status` / `reason` / `message`；不得泄露 token、session internals 或其他用户数据。\n- **Input trust**: 前端仅消费并 normalize 服务端发来的 websocket snapshot 与 knowledge-check diagnostics，不在客户端派生第二套 health authority。\n\n## Requirement Impact\n\n- **Requirements touched**: `R009` 直接交付；同时保护 `R002`（失败显式可见）与 `R011`（reconnect 后 runtime evidence 语义不漂移）。\n- **Re-verify**: `/practice/{sessionId}` learner route 的 degraded/resumed 可见性、`reconnected` restore contract、`GET /api/v1/practice/sessions/{id}/knowledge-check` live coach-health diagnostics。\n- **Decisions revisited**: `D099` 继续成立——只在现有 learner/runtime/report/replay route family 上收口，不新增第二套 debug surface 或 authority API。\n\n## Verification\n\n- `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/test_capability_processor.py -k \"coach_health\"`\n- `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/test_enhanced_handler_coach_health.py`\n- `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/test_stepfun_realtime_handler.py -k \"coach_health\"`\n- `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/test_stepfun_realtime_persistence.py -k \"restore_session_state\"`\n- `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/integration/test_voice_runtime_session_snapshot.py -k \"live_coach_health\"`\n- `npm test -- --run 'web/src/hooks/websocket/message-handlers.test.ts' 'web/src/components/practice/RightPanelContent.test.tsx' 'web/src/app/(user)/practice/[sessionId]/page.test.tsx'`",
       "proof_level": "integration — prove the current learner route truthfully mirrors backend-owned coach-health state through reconnect, with focused backend + frontend tests and no second authority.",
@@ -881,11 +881,11 @@
       "completed_at": null,
       "full_summary_md": "",
       "full_uat_md": "",
-      "goal": "Prove that one real same-session sales path stays coherent from live coaching through final report/replay conclusions on the current route family.",
-      "success_criteria": "- A same-session proof exists for live coaching direction, report `main_issue` / `next_goal`, and replay conclusion family.\n- The proof does not stitch data from multiple sessions.\n- If coach health degrades during the run, the session still remains diagnosable and its final conclusions stay truthful.",
-      "proof_level": "Focused regression suites plus one real localhost same-session closure proof on the current learner/runtime/report/replay path.",
-      "integration_closure": "The accepted learner route family `/practice/{sessionId}` → `/report` → `/replay` is exercised end-to-end on localhost using one real session only.",
-      "observability_impact": "Produces a concrete same-session evidence pack that future validation and close-out can reference instead of inferring coherence from isolated tests.",
+      "goal": "Prove that one real same-session sales path stays coherent from live coaching through final report/replay conclusions on the current learner/runtime/report/replay route family, without inventing a second authority or a frontend-only family map.",
+      "success_criteria": "- Both StepFun and classic sales runtimes expose the same evaluator-driven live conclusion summary for the current session, and that summary is available through existing websocket/runtime diagnostics surfaces without adding a second API or a frontend-only family map.\n- The learner `/practice/{sessionId}` route renders a stable same-session issue/goal/claim-truth cue from live authority that survives end-of-turn action-card clearing and does not hide current score, stage, or coach-health guidance.\n- Canonical `/practice/{sessionId}/report` and `/practice/{sessionId}/replay` stay on `SessionEvidenceService` truth, with replay still completion-gated while matching the same session's issue/goal family once it unlocks.\n- Focused backend and frontend tests name the exact route-family files that prove live authority, learner rendering, report/replay parity, and completion gating, and localhost proof follows one real same-host session across practice -> report -> replay.\n\n### Threat Surface (Q3)\n- Treat websocket/runtime diagnostics payloads as untrusted, partial, or stale: malformed or missing live summary fields must degrade safely instead of crashing, leaking stale family state, or reusing the previous session's cue.\n- Preserve session and auth boundaries on `/knowledge-check`, report, and replay: same-session proof must not read another session's evidence, and replay must remain blocked until that exact session is completed.\n- Avoid adding a second debug surface or client-side inference layer that could expose contradictory coaching direction or more runtime detail than the currently authorized learner/report/replay surfaces.\n\n### Requirement Impact (Q4)\n- Advances `R009` by making learner-visible active-session guidance resolve to the same issue/goal family later shown on report/replay.\n- Re-verify the report/replay parts of `R005` and `R011` after shipping because shared issue/goal vocabulary, claim-truth rendering, and lifecycle gating are part of their validated evidence chain.\n- Keep D099, D100, and D101 intact unless execution proves same-session continuity cannot be expressed through the current evaluator, websocket, and `/knowledge-check` seams.",
+      "proof_level": "Focused backend unit/contract/integration coverage plus focused frontend reducer/page tests, then a localhost same-session browser proof that follows one real sales session from active practice into report and replay while respecting the existing completion gate.",
+      "integration_closure": "Same-session issue/goal/claim-truth continuity stays on one evaluator and `SessionEvidenceService` authority line across live runtime payloads, `/api/v1/practice/sessions/{id}/knowledge-check`, `/practice/{sessionId}`, `/practice/{sessionId}/report`, and `/practice/{sessionId}/replay`; StepFun and classic runtimes emit equivalent live summary shape, and replay remains completion-gated on that same session instead of falling back to cross-session stitching.",
+      "observability_impact": "Extend the existing observability seam instead of adding a new one: live same-session conclusion summary should be inspectable through websocket `score_update` state and `/api/v1/practice/sessions/{id}/knowledge-check`, while focused tests and localhost proof make drift visible when runtime, report, and replay stop agreeing on issue/goal family or claim-truth status.",
       "sequence": 0,
       "replan_triggered_at": null
     },
@@ -4321,6 +4321,204 @@
       "observability_impact": "Adds a learner-visible inspection surface for live coach health on `/practice/{sessionId}`. Failures become visible in the page shell immediately instead of being hidden in the mobile sheet; focused page tests then distinguish page-shell visibility regressions from websocket-state regressions.",
       "full_plan_md": "",
       "sequence": 0
+    },
+    {
+      "milestone_id": "M007",
+      "slice_id": "S02",
+      "id": "T01",
+      "title": "Unified live sales conclusion summary across StepFun, classic runtime diagnostics, and `/knowledge-check`.",
+      "status": "complete",
+      "one_liner": "Unified live sales conclusion summary across StepFun, classic runtime diagnostics, and `/knowledge-check`.",
+      "narrative": "I traced the seam drift to two different runtime behaviors: StepFun only surfaced live claim truth, while the classic capability path emitted `score_update` before objection-ledger alignment and exposed no same-session conclusion summary. I fixed that by adding one evaluator-backed `live_session_summary` shape carrying `main_issue`, `next_goal`, `claim_truth`, and alignment metadata. StepFun now persists, restores, emits, and exposes that full summary alongside the existing top-level claim-truth field. Classic now delays `score_update` emission until objection-ledger alignment is complete, attaches the same `live_session_summary`, and mirrors it through `EnhancedSalesHandler` runtime diagnostics and reconnect snapshots. I then tightened shared runtime diagnostics and `/practice/sessions/{id}/knowledge-check` so an active live handler overrides stale persisted session conclusions only while it is active, and malformed or partial live summaries fail soft to null instead of reviving old completed-session state. Focused unit/contract coverage now proves StepFun, classic, and knowledge-check all speak the same same-session issue/goal/claim-truth semantics.",
+      "verification_result": "Ran the required task-plan verification suites after updating the StepFun reconnect assertion to check the emitted snapshot contract rather than object identity. All three required commands passed: the full StepFun realtime handler unit suite, the enhanced/classic handler coach-health + live-summary unit suite, and the practice evidence contract suite filtered to knowledge-check/report/replay coverage.",
+      "duration": "",
+      "completed_at": "2026-03-28T07:46:22.013Z",
+      "blocker_discovered": false,
+      "deviations": "Added a small export in `backend/src/common/effectiveness/__init__.py` so both runtime implementations could consume the shared evaluator helper through the existing package seam. Also ran `backend/tests/unit/test_capability_processor.py` as an extra guard because the classic `score_update` emission path was reordered behind objection-ledger alignment.",
+      "known_issues": "None.",
+      "key_files": [
+        "backend/src/common/effectiveness/evaluator.py",
+        "backend/src/common/effectiveness/__init__.py",
+        "backend/src/common/conversation/runtime_diagnostics.py",
+        "backend/src/common/api/practice.py",
+        "backend/src/sales_bot/websocket/stepfun_realtime_handler.py",
+        "backend/src/sales_bot/websocket/components/capability_processor.py",
+        "backend/src/sales_bot/websocket/enhanced_handler.py",
+        "backend/tests/unit/test_stepfun_realtime_handler.py",
+        "backend/tests/unit/test_enhanced_handler_coach_health.py",
+        "backend/tests/contract/test_practice_evidence_contract.py"
+      ],
+      "key_decisions": [
+        "Use one evaluator-backed `live_session_summary` object as the active-session authority for `main_issue`, `next_goal`, and `claim_truth`.",
+        "Let `/practice/sessions/{id}/knowledge-check` prefer live handler diagnostics only when a live handler is present, and fail soft to null on malformed partial live summaries instead of reviving stale persisted snapshot conclusions.",
+        "Keep top-level `claim_truth` in websocket/runtime diagnostics for backward compatibility while adding the richer `live_session_summary` contract."
+      ],
+      "full_summary_md": "---\nid: T01\nparent: S02\nmilestone: M007\nkey_files:\n  - backend/src/common/effectiveness/evaluator.py\n  - backend/src/common/effectiveness/__init__.py\n  - backend/src/common/conversation/runtime_diagnostics.py\n  - backend/src/common/api/practice.py\n  - backend/src/sales_bot/websocket/stepfun_realtime_handler.py\n  - backend/src/sales_bot/websocket/components/capability_processor.py\n  - backend/src/sales_bot/websocket/enhanced_handler.py\n  - backend/tests/unit/test_stepfun_realtime_handler.py\n  - backend/tests/unit/test_enhanced_handler_coach_health.py\n  - backend/tests/contract/test_practice_evidence_contract.py\nkey_decisions:\n  - Use one evaluator-backed `live_session_summary` object as the active-session authority for `main_issue`, `next_goal`, and `claim_truth`.\n  - Let `/practice/sessions/{id}/knowledge-check` prefer live handler diagnostics only when a live handler is present, and fail soft to null on malformed partial live summaries instead of reviving stale persisted snapshot conclusions.\n  - Keep top-level `claim_truth` in websocket/runtime diagnostics for backward compatibility while adding the richer `live_session_summary` contract.\nduration: \"\"\nverification_result: passed\ncompleted_at: 2026-03-28T07:46:22.014Z\nblocker_discovered: false\n---\n\n# T01: Unified live sales conclusion summary across StepFun, classic runtime diagnostics, and `/knowledge-check`.\n\n**Unified live sales conclusion summary across StepFun, classic runtime diagnostics, and `/knowledge-check`.**\n\n## What Happened\n\nI traced the seam drift to two different runtime behaviors: StepFun only surfaced live claim truth, while the classic capability path emitted `score_update` before objection-ledger alignment and exposed no same-session conclusion summary. I fixed that by adding one evaluator-backed `live_session_summary` shape carrying `main_issue`, `next_goal`, `claim_truth`, and alignment metadata. StepFun now persists, restores, emits, and exposes that full summary alongside the existing top-level claim-truth field. Classic now delays `score_update` emission until objection-ledger alignment is complete, attaches the same `live_session_summary`, and mirrors it through `EnhancedSalesHandler` runtime diagnostics and reconnect snapshots. I then tightened shared runtime diagnostics and `/practice/sessions/{id}/knowledge-check` so an active live handler overrides stale persisted session conclusions only while it is active, and malformed or partial live summaries fail soft to null instead of reviving old completed-session state. Focused unit/contract coverage now proves StepFun, classic, and knowledge-check all speak the same same-session issue/goal/claim-truth semantics.\n\n## Verification\n\nRan the required task-plan verification suites after updating the StepFun reconnect assertion to check the emitted snapshot contract rather than object identity. All three required commands passed: the full StepFun realtime handler unit suite, the enhanced/classic handler coach-health + live-summary unit suite, and the practice evidence contract suite filtered to knowledge-check/report/replay coverage.\n\n## Verification Evidence\n\n| # | Command | Exit Code | Verdict | Duration |\n|---|---------|-----------|---------|----------|\n| 1 | `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/test_stepfun_realtime_handler.py` | 0 | ✅ pass | 10369ms |\n| 2 | `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/test_enhanced_handler_coach_health.py` | 0 | ✅ pass | 2650ms |\n| 3 | `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/contract/test_practice_evidence_contract.py -k 'knowledge_check or replay or report'` | 0 | ✅ pass | 3058ms |\n\n\n## Deviations\n\nAdded a small export in `backend/src/common/effectiveness/__init__.py` so both runtime implementations could consume the shared evaluator helper through the existing package seam. Also ran `backend/tests/unit/test_capability_processor.py` as an extra guard because the classic `score_update` emission path was reordered behind objection-ledger alignment.\n\n## Known Issues\n\nNone.\n\n## Files Created/Modified\n\n- `backend/src/common/effectiveness/evaluator.py`\n- `backend/src/common/effectiveness/__init__.py`\n- `backend/src/common/conversation/runtime_diagnostics.py`\n- `backend/src/common/api/practice.py`\n- `backend/src/sales_bot/websocket/stepfun_realtime_handler.py`\n- `backend/src/sales_bot/websocket/components/capability_processor.py`\n- `backend/src/sales_bot/websocket/enhanced_handler.py`\n- `backend/tests/unit/test_stepfun_realtime_handler.py`\n- `backend/tests/unit/test_enhanced_handler_coach_health.py`\n- `backend/tests/contract/test_practice_evidence_contract.py`\n",
+      "description": "Lock the highest-risk seam first: backend live runtime, websocket emission, and `/knowledge-check` must all speak the same same-session issue/goal/claim-truth language before any learner-page rendering work. Steps: 1. Reuse the existing evaluator family authority to define one live conclusion summary shape for the active session instead of inventing a route-local mapping. 2. Route both `StepFunRealtimeHandler` and `EnhancedSalesHandler` through that shared authority and make the existing runtime diagnostics / score-update path expose it for the current session. 3. Extend focused backend coverage so StepFun, classic, and `/knowledge-check` all prove the same family/claim-truth semantics on the same session. Must-haves: classic reaches parity with StepFun on live same-session conclusion data; `/api/v1/practice/sessions/{id}/knowledge-check` stays the inspection surface instead of adding a new endpoint; missing or partial live summary fields fail soft without reviving stale prior-session state. Failure modes: StepFun and classic emit different family labels; live runtime summary drifts from completed-session alignment; `/knowledge-check` prefers stale persisted data while a live handler is active. Load profile: keep per-turn scoring and reconnect O(1) with no extra DB queries, polling loop, or duplicate projection pass. Negative tests: malformed or partial live summary payloads, classic objection-handling/evidence-gap cases, and active-session diagnostics overriding stale snapshot fallback only when a live handler is present.",
+      "estimate": "1h",
+      "files": [
+        "backend/src/common/effectiveness/evaluator.py",
+        "backend/src/common/conversation/runtime_diagnostics.py",
+        "backend/src/sales_bot/websocket/stepfun_realtime_handler.py",
+        "backend/src/sales_bot/websocket/enhanced_handler.py",
+        "backend/src/sales_bot/websocket/components/capability_processor.py",
+        "backend/tests/unit/test_stepfun_realtime_handler.py",
+        "backend/tests/unit/test_enhanced_handler_coach_health.py",
+        "backend/tests/contract/test_practice_evidence_contract.py"
+      ],
+      "verify": "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/test_stepfun_realtime_handler.py\nbackend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/test_enhanced_handler_coach_health.py\nbackend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/contract/test_practice_evidence_contract.py -k 'knowledge_check or replay or report'",
+      "inputs": [
+        "`backend/src/common/effectiveness/evaluator.py`",
+        "`backend/src/common/conversation/runtime_diagnostics.py`",
+        "`backend/src/sales_bot/websocket/stepfun_realtime_handler.py`",
+        "`backend/src/sales_bot/websocket/enhanced_handler.py`",
+        "`backend/src/sales_bot/websocket/components/capability_processor.py`"
+      ],
+      "expected_output": [
+        "`backend/src/common/effectiveness/evaluator.py`",
+        "`backend/src/common/conversation/runtime_diagnostics.py`",
+        "`backend/src/sales_bot/websocket/stepfun_realtime_handler.py`",
+        "`backend/src/sales_bot/websocket/enhanced_handler.py`",
+        "`backend/tests/contract/test_practice_evidence_contract.py`"
+      ],
+      "observability_impact": "Keeps live same-session conclusion drift diagnosable on the current runtime surfaces by making websocket emission and `/knowledge-check` read the same backend authority instead of hiding semantics inside page-local formatting.",
+      "full_plan_md": "",
+      "sequence": 0
+    },
+    {
+      "milestone_id": "M007",
+      "slice_id": "S02",
+      "id": "T02",
+      "title": "Carry the live conclusion summary through the learner websocket contract and render a stable same-session cue",
+      "status": "pending",
+      "one_liner": "",
+      "narrative": "",
+      "verification_result": "",
+      "duration": "",
+      "completed_at": null,
+      "blocker_discovered": false,
+      "deviations": "",
+      "known_issues": "",
+      "key_files": [],
+      "key_decisions": [],
+      "full_summary_md": "",
+      "description": "Once backend authority is stable, surface it on the learner route without creating a second interpretation layer. Steps: 1. Extend the typed websocket/reducer contract so the live same-session summary survives `score_update` handling and final-transcript cleanup without piggybacking on transient action-card text. 2. Reuse a shared learner/report vocabulary helper where needed so the practice page renders issue/goal/claim-truth copy from backend authority rather than inferring it from score or stage labels. 3. Prove the learner route keeps current score, stage, and coach-health guidance visible while the stable same-session cue updates turn-by-turn and clears safely when live authority disappears. Must-haves: the stable cue comes from backend payload fields, not a frontend-only mapping; final transcript still clears transient `actionCard` / `fuzzyDetections` while leaving the stable same-session cue intact; no extra fetch or local storage path is introduced. Failure modes: reducer drops the new summary field, learner UI persists a stale prior-turn cue, or page-level code re-derives family labels from score/stage text and drifts from report/replay. Load profile: every `score_update` remains a cheap state update with no additional network request or expensive recomputation. Negative tests: `score_update` without live summary fields, replacement of an older cue by a newer turn, and final-transcript cleanup preserving the stable cue while clearing transient coaching affordances.",
+      "estimate": "1h",
+      "files": [
+        "web/src/hooks/websocket/types.ts",
+        "web/src/hooks/websocket/message-handlers.ts",
+        "web/src/lib/session-evidence.ts",
+        "web/src/components/practice/RightPanelContent.tsx",
+        "web/src/app/(user)/practice/[sessionId]/page.tsx",
+        "web/src/hooks/websocket/message-handlers.test.ts",
+        "web/src/components/practice/RightPanelContent.test.tsx",
+        "web/src/app/(user)/practice/[sessionId]/page.test.tsx"
+      ],
+      "verify": "npm test -- --run 'web/src/hooks/websocket/message-handlers.test.ts' 'web/src/components/practice/RightPanelContent.test.tsx' 'web/src/app/(user)/practice/[sessionId]/page.test.tsx'",
+      "inputs": [
+        "`web/src/hooks/websocket/types.ts`",
+        "`web/src/hooks/websocket/message-handlers.ts`",
+        "`web/src/lib/session-evidence.ts`",
+        "`web/src/components/practice/RightPanelContent.tsx`",
+        "`web/src/app/(user)/practice/[sessionId]/page.tsx`"
+      ],
+      "expected_output": [
+        "`web/src/hooks/websocket/types.ts`",
+        "`web/src/hooks/websocket/message-handlers.ts`",
+        "`web/src/lib/session-evidence.ts`",
+        "`web/src/components/practice/RightPanelContent.tsx`",
+        "`web/src/app/(user)/practice/[sessionId]/page.test.tsx`"
+      ],
+      "observability_impact": "Makes the learner-visible same-session conclusion traceable back to a concrete websocket payload field, so browser/UI regressions can be diagnosed from reducer state instead of guessing from rendered copy.",
+      "full_plan_md": "",
+      "sequence": 0
+    },
+    {
+      "milestone_id": "M007",
+      "slice_id": "S02",
+      "id": "T03",
+      "title": "Lock same-session report and replay parity on the canonical projection",
+      "status": "pending",
+      "one_liner": "",
+      "narrative": "",
+      "verification_result": "",
+      "duration": "",
+      "completed_at": null,
+      "blocker_discovered": false,
+      "deviations": "",
+      "known_issues": "",
+      "key_files": [],
+      "key_decisions": [],
+      "full_summary_md": "",
+      "description": "Keep report/replay closure honest on the existing route family instead of papering over drift in page code. Steps: 1. Extend backend contract/integration coverage so the same session's report truth, replay truth, and completion gate are asserted together, with replay only adding anchor/deep-link decoration on top of the canonical family. 2. Tighten report/replay page tests so both surfaces consume the shared issue/goal/claim-truth vocabulary consistently and do not silently fork copy or lifecycle assumptions. 3. Fix any remaining report/replay projection seam that breaks same-session parity, but keep `SessionEvidenceService` as the authority and preserve the existing rule that replay stays blocked until completion. Must-haves: report can still load first on the same session while status is `scoring`/`completed`; replay remains blocked before completion and matches report family after unlock; replay-only `replay_anchor`/learning-evidence decoration does not mutate the underlying issue/goal contract. Failure modes: replay/test code assumes availability during scoring, report and replay pages format family copy differently, or projection logic falls back to stale session snapshot after live/runtime alignment changed. Load profile: stay on the current projection-backed read path with no extra polling or duplicate data fetch layer. Negative tests: same-session replay blocked before completion, replay anchor stripped before parity comparison, and optional enhancement/report noise not being treated as core family drift.",
+      "estimate": "1h",
+      "files": [
+        "backend/src/common/conversation/session_evidence.py",
+        "backend/src/common/conversation/replay.py",
+        "backend/tests/contract/test_practice_evidence_contract.py",
+        "backend/tests/integration/test_practice_evidence_flow.py",
+        "web/src/app/(user)/practice/[sessionId]/report/page.test.tsx",
+        "web/src/app/(user)/practice/[sessionId]/replay/page.test.tsx"
+      ],
+      "verify": "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/contract/test_practice_evidence_contract.py backend/tests/integration/test_practice_evidence_flow.py\nnpm test -- --run 'web/src/app/(user)/practice/[sessionId]/report/page.test.tsx' 'web/src/app/(user)/practice/[sessionId]/replay/page.test.tsx'",
+      "inputs": [
+        "`backend/src/common/conversation/session_evidence.py`",
+        "`backend/src/common/conversation/replay.py`",
+        "`backend/tests/contract/test_practice_evidence_contract.py`",
+        "`backend/tests/integration/test_practice_evidence_flow.py`",
+        "`web/src/app/(user)/practice/[sessionId]/report/page.test.tsx`",
+        "`web/src/app/(user)/practice/[sessionId]/replay/page.test.tsx`"
+      ],
+      "expected_output": [
+        "`backend/tests/contract/test_practice_evidence_contract.py`",
+        "`backend/tests/integration/test_practice_evidence_flow.py`",
+        "`web/src/app/(user)/practice/[sessionId]/report/page.test.tsx`",
+        "`web/src/app/(user)/practice/[sessionId]/replay/page.test.tsx`"
+      ],
+      "observability_impact": "",
+      "full_plan_md": "",
+      "sequence": 0
+    },
+    {
+      "milestone_id": "M007",
+      "slice_id": "S02",
+      "id": "T04",
+      "title": "Capture localhost same-session proof on the shipped route family and write back any durable traps",
+      "status": "pending",
+      "one_liner": "",
+      "narrative": "",
+      "verification_result": "",
+      "duration": "",
+      "completed_at": null,
+      "blocker_discovered": false,
+      "deviations": "",
+      "known_issues": "",
+      "key_files": [],
+      "key_decisions": [],
+      "full_summary_md": "",
+      "description": "Finish with the real route-family proof bar: one localhost sales session must be followable from active practice into report and replay on the same host. Steps: 1. Start backend and web on the same loopback host and create one real sales session that reaches live coaching on `/practice/{sessionId}`. 2. Confirm the learner route shows the live same-session cue, follow that exact session into `/practice/{sessionId}/report`, then wait for completion before asserting `/practice/{sessionId}/replay` and its family coherence. 3. Save a short proof artifact and append any reusable host/completion-gate lesson to project knowledge only if execution uncovers a durable trap beyond the current documented constraints. Must-haves: use one real session instead of cross-session stitching; keep frontend/backend hosts aligned for auth-cookie continuity; stop any temporary local servers before finishing. Failure modes: mixed `localhost`/`127.0.0.1` hosts fake a 401 regression, an unrelated app on `:3000` is mistaken for this repo, or replay is asserted before completion and misclassified as a bug. Load profile: one end-to-end session only, with no parallel pytest runs that collide on coverage files and no stale dev servers left behind. Negative tests: replay still blocked before completion, report stays available during scoring/completed transition, and optional enhancement noise is recognized as non-blocking unless the canonical family itself drifts.",
+      "estimate": "0.75d",
+      "files": [
+        ".artifacts/m007-s02-same-session/session-proof.md",
+        ".gsd/KNOWLEDGE.md",
+        "web/src/app/(user)/practice/[sessionId]/page.tsx",
+        "web/src/app/(user)/practice/[sessionId]/report/page.tsx",
+        "web/src/app/(user)/practice/[sessionId]/replay/page.tsx"
+      ],
+      "verify": "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/contract/test_practice_evidence_contract.py backend/tests/integration/test_practice_evidence_flow.py\nnpm test -- --run 'web/src/hooks/websocket/message-handlers.test.ts' 'web/src/app/(user)/practice/[sessionId]/page.test.tsx' 'web/src/app/(user)/practice/[sessionId]/report/page.test.tsx' 'web/src/app/(user)/practice/[sessionId]/replay/page.test.tsx'\nUse `bg_shell` to run `backend/venv/bin/python -m uvicorn main:app --app-dir backend/src --port 3444` and `pnpm --dir web exec next dev --hostname localhost --port 3445`, then prove the same session through `/practice/{sessionId}` -> `/practice/{sessionId}/report` -> `/practice/{sessionId}/replay` with browser assertions and save `.artifacts/m007-s02-same-session/session-proof.md`.",
+      "inputs": [
+        "`web/src/app/(user)/practice/[sessionId]/page.tsx`",
+        "`web/src/app/(user)/practice/[sessionId]/report/page.tsx`",
+        "`web/src/app/(user)/practice/[sessionId]/replay/page.tsx`",
+        "`.gsd/KNOWLEDGE.md`"
+      ],
+      "expected_output": [
+        "`.artifacts/m007-s02-same-session/session-proof.md`",
+        "`.gsd/KNOWLEDGE.md`"
+      ],
+      "observability_impact": "Produces concrete localhost evidence for the active-session cue and the report/replay completion gate, and leaves any new host/runtime trap documented in project knowledge so later slices do not rediscover it by accident.",
+      "full_plan_md": "",
+      "sequence": 0
     }
   ],
   "decisions": [
@@ -5532,6 +5730,30 @@
       "decision": "What reconnect payload should be sent after restoring coach-health runtime state",
       "choice": "Emit a freshly rebuilt session snapshot from the restored handler state instead of echoing the raw persisted snapshot",
       "rationale": "The raw persisted snapshot can contain stale or malformed runtime_state values that the handler already normalized locally. Rebuilding the snapshot before emitting `reconnected` keeps StepFun, classic, and the frontend reducer aligned on one runtime authority and preserves omission semantics for recovered healthy state.",
+      "revisable": "Yes",
+      "made_by": "agent",
+      "superseded_by": null
+    },
+    {
+      "seq": 1462,
+      "id": "D102",
+      "when_context": "M007/S02 planning",
+      "scope": "architecture",
+      "decision": "How S02 should achieve same-session live-to-report/replay coherence",
+      "choice": "Close same-session continuity by emitting one evaluator-backed live conclusion summary from the backend runtime/`/knowledge-check` seam, render that summary on the learner route without frontend-only family inference, and keep report/replay parity on the existing `SessionEvidenceService` projection with replay still completion-gated.",
+      "rationale": "Research showed report and replay already share the canonical completed-session authority, while the real gap is live runtime continuity and classic parity. Making the backend emit one shared live summary avoids a second API or page-local mapping, keeps the learner route on the same authority line as `/knowledge-check`, and preserves the existing replay completion gate instead of masking lifecycle truth.",
+      "revisable": "Yes",
+      "made_by": "agent",
+      "superseded_by": null
+    },
+    {
+      "seq": 1463,
+      "id": "D103",
+      "when_context": "M007 S02 T01",
+      "scope": "architecture",
+      "decision": "How live same-session sales conclusions are derived and exposed during active runtime",
+      "choice": "Use one evaluator-backed live_session_summary object (main_issue, next_goal, claim_truth, alignment metadata) as the active-session authority, and let websocket score_update plus /knowledge-check read that summary instead of recomputing route-local mappings or falling back to persisted snapshots while a live handler is active.",
+      "rationale": "StepFun and classic were drifting because one path emitted only claim_truth and the other emitted score updates before objection-ledger alignment. Centralizing the live summary on the evaluator keeps live coaching, runtime diagnostics, and knowledge-check on the same semantics and prevents stale completed-session snapshots from overriding an active session.",
       "revisable": "Yes",
       "made_by": "agent",
       "superseded_by": null
@@ -7330,6 +7552,39 @@
       "verdict": "✅ pass",
       "duration_ms": 2280,
       "created_at": "2026-03-28T03:34:32.559Z"
+    },
+    {
+      "id": 164,
+      "task_id": "T01",
+      "slice_id": "S02",
+      "milestone_id": "M007",
+      "command": "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/test_stepfun_realtime_handler.py",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 10369,
+      "created_at": "2026-03-28T07:46:22.013Z"
+    },
+    {
+      "id": 165,
+      "task_id": "T01",
+      "slice_id": "S02",
+      "milestone_id": "M007",
+      "command": "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/test_enhanced_handler_coach_health.py",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 2650,
+      "created_at": "2026-03-28T07:46:22.014Z"
+    },
+    {
+      "id": 166,
+      "task_id": "T01",
+      "slice_id": "S02",
+      "milestone_id": "M007",
+      "command": "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/contract/test_practice_evidence_contract.py -k 'knowledge_check or replay or report'",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 3058,
+      "created_at": "2026-03-28T07:46:22.014Z"
     }
   ]
 }

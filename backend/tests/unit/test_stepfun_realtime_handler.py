@@ -1794,6 +1794,29 @@ async def test_run_realtime_feedback_emits_canonical_sales_score_and_action_card
             "reason": "open_objection_ledger",
             "closure_state": "open",
         },
+        "live_session_summary": {
+            "alignment_used": True,
+            "stage_key": "discovery",
+            "focus_type": "evidence_gap",
+            "fallback_reason": None,
+            "main_issue": {
+                "issue_type": "evidence_gap",
+                "issue_text": "价值主张缺少案例、数据或ROI支撑，客户很难相信收益承诺。",
+                "recovery_rule": "下一轮先给出案例、数据或benchmark，再回应价格/ROI追问。",
+            },
+            "next_goal": {
+                "goal_type": "evidence_backing",
+                "goal_text": "先用案例、数据或ROI证据支撑主张，再推进下一步。",
+                "rule": "至少补上一条证据和一个明确的下一步动作。",
+            },
+            "claim_truth": {
+                "status": "evidence_pending",
+                "label": "证据待补齐",
+                "source": "objection_ledger",
+                "reason": "open_objection_ledger",
+                "closure_state": "open",
+            },
+        },
     }
     assert action_card["data"] == expected_action_card
 
@@ -1931,6 +1954,29 @@ async def test_run_realtime_feedback_passes_rich_stage_and_raw_score_context_to_
             "source": "score_snapshot",
             "reason": "low_evidence_score",
             "evidence_score": 74.0,
+        },
+        "live_session_summary": {
+            "alignment_used": True,
+            "stage_key": "closing",
+            "focus_type": "next_step_gap",
+            "fallback_reason": None,
+            "main_issue": {
+                "issue_type": "next_step_gap",
+                "issue_text": "对话结束前没有形成明确的下一步动作、责任人或时间点。",
+                "recovery_rule": "下一轮必须落到试点、会议、报价或负责人确认中的一个动作。",
+            },
+            "next_goal": {
+                "goal_type": "next_step_commitment",
+                "goal_text": "下一轮必须把试点、会议、报价或责任人确认成明确下一步。",
+                "rule": "每轮结尾至少确认一个动作、一个时间点和一个责任人。",
+            },
+            "claim_truth": {
+                "status": "weak_evidence",
+                "label": "证据偏弱",
+                "source": "score_snapshot",
+                "reason": "low_evidence_score",
+                "evidence_score": 74.0,
+            },
         },
     }
     assert "dimensions" not in score_update["data"]
@@ -2418,7 +2464,20 @@ async def test_restore_session_state_rehydrates_objection_ledger() -> None:
         "next_expected_evidence": "确认试点负责人",
         "closure_state": "open",
     }
-    handler._send_reconnection_success.assert_awaited_once_with(state)
+    handler._send_reconnection_success.assert_awaited_once()
+    emitted_snapshot = handler._send_reconnection_success.await_args.args[0]
+    assert emitted_snapshot.session_id == state.session_id
+    assert emitted_snapshot.turn_count == state.turn_count
+    assert emitted_snapshot.session_status == state.session_status
+    assert emitted_snapshot.ai_state == state.ai_state
+    assert emitted_snapshot.runtime_state == {
+        "objection_ledger": {
+            "objection_family": "implementation_risk",
+            "promised_proof": "补实施排期与服务边界",
+            "next_expected_evidence": "确认试点负责人",
+            "closure_state": "open",
+        }
+    }
 
 
 # ── S07: Coach health degraded/resumed state ──

@@ -42,6 +42,7 @@ from common.audio.asr_service import get_asr_service
 from common.db.models import PracticeSession
 from common.audio.tts_factory import get_tts_service_with_fallback
 from common.db.session import AsyncSessionLocal
+from common.effectiveness import coerce_live_session_conclusion_summary
 from common.knowledge.kb_lock_guard import evaluate_kb_lock_decision
 from common.knowledge.service import KnowledgeService
 from common.monitoring.latency_tracker import LatencyTracker, get_latency_tracker
@@ -107,6 +108,7 @@ class EnhancedSalesHandler(BaseSalesHandler):
         self._base_instructions: str = ""
         self._coach_health: str = "healthy"
         self._coach_health_reason: str | None = None
+        self._latest_live_session_summary: dict[str, Any] | None = None
 
         # Internal state for current turn
         self._current_turn_initialized: bool = False
@@ -304,6 +306,9 @@ class EnhancedSalesHandler(BaseSalesHandler):
         self._coach_health_reason = (
             str(reason).strip() if isinstance(reason, str) and reason.strip() else None
         )
+        self._latest_live_session_summary = coerce_live_session_conclusion_summary(
+            getattr(self.capability_processor, "live_session_summary", None)
+        )
 
     def _coach_health_payload(self) -> dict[str, Any]:
         return {
@@ -314,8 +319,18 @@ class EnhancedSalesHandler(BaseSalesHandler):
 
     def get_runtime_diagnostics(self) -> dict[str, Any]:
         self._sync_coach_health_from_processor()
+        live_session_summary = coerce_live_session_conclusion_summary(
+            self._latest_live_session_summary
+        )
+        claim_truth = (
+            live_session_summary.get("claim_truth")
+            if isinstance(live_session_summary, dict)
+            and isinstance(live_session_summary.get("claim_truth"), dict)
+            else None
+        )
         return {
-            "claim_truth": None,
+            "live_session_summary": live_session_summary,
+            "claim_truth": claim_truth,
             "coach_health": self._coach_health_payload(),
         }
 
@@ -325,6 +340,11 @@ class EnhancedSalesHandler(BaseSalesHandler):
         coach_health = self._coach_health_payload()
         if coach_health["status"] != "healthy" or coach_health["reason"] is not None:
             runtime_state["coach_health"] = coach_health
+        live_session_summary = coerce_live_session_conclusion_summary(
+            self._latest_live_session_summary
+        )
+        if live_session_summary is not None:
+            runtime_state["live_session_summary"] = live_session_summary
         return SessionStateSnapshot(
             session_id=self.session_id or "",
             scenario=self.scenario,
@@ -344,6 +364,9 @@ class EnhancedSalesHandler(BaseSalesHandler):
         self.ai_state = state.ai_state or self.ai_state
         runtime_state = state.runtime_state if isinstance(state.runtime_state, dict) else {}
         restored_coach_health = runtime_state.get("coach_health")
+        restored_live_session_summary = coerce_live_session_conclusion_summary(
+            runtime_state.get("live_session_summary")
+        )
         if isinstance(restored_coach_health, dict):
             restored_status = str(restored_coach_health.get("status") or "healthy")
             if restored_status not in {"healthy", "degraded", "resumed"}:
@@ -358,9 +381,11 @@ class EnhancedSalesHandler(BaseSalesHandler):
         else:
             self._coach_health = "healthy"
             self._coach_health_reason = None
+        self._latest_live_session_summary = restored_live_session_summary
         if self.capability_processor is not None:
             self.capability_processor.coach_health = self._coach_health
             self.capability_processor._coach_health_reason = self._coach_health_reason
+            self.capability_processor.live_session_summary = restored_live_session_summary
         await self._send_reconnection_success(self._create_state_snapshot())
 
     # ========== Connection lifecycle hooks ==========

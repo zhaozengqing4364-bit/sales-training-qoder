@@ -2167,3 +2167,21 @@ Append one entry per iteration:
   verification results: passed; focused backend status-boundary suites were green (44/44), the accepted M003 backend chain stayed green (114/114), and live localhost proof on session 6a9e45d7-c15a-43c6-95cf-59583918780a showed immediate end status=scoring, later persisted status=completed with report_status=failed, 200 report/replay/highlights on the same session, browser report/replay rendering same-session evidence, and true unfinished sessions still blocked by [SESSION_NOT_COMPLETED].
   success signal status: the accepted M003 same-session sales chain now unlocks canonical replay/highlights truthfully after background finalization instead of stalling behind status=scoring.
   rollback note: if future work reopens the replay blocker, keep the replay/highlights gate strict and inspect SessionEvidenceService-backed finalization first; do not “fix” this by broadly allowing scoring sessions through.
+
+- time: 2026-03-28T15:03:34+08:00
+  mode: grow
+  item id: M007-S01
+  files changed:
+    - .gsd/KNOWLEDGE.md
+    - .codex/loop/state.json
+    - .codex/loop/log.md
+  summary: Re-verified the full M007/S01 slice gate, confirmed reconnect and learner-surface coach-health truth stay aligned on one authority, and refreshed loop state after the slice closer run.
+  verification commands:
+    - backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/test_enhanced_handler_coach_health.py
+    - backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/test_stepfun_realtime_persistence.py -k "restore_session_state"
+    - backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/integration/test_voice_runtime_session_snapshot.py -k "live_coach_health"
+    - npm test -- --run 'web/src/hooks/websocket/message-handlers.test.ts'
+    - npm test -- --run 'web/src/components/practice/RightPanelContent.test.tsx' 'web/src/app/(user)/practice/[sessionId]/page.test.tsx'
+  verification results: passed; all slice-plan verification commands reran green, knowledge-check still exposes live coach-health, and the learner shell/right panel tests prove degraded-resumed visibility without healthy-state noise.
+  success signal status: reconnect no longer replays stale coach-health, and the current /practice learner route now surfaces degraded/resumed truth without interrupting training.
+  rollback note: slice artifacts already existed as complete; gsd_complete_slice was re-invoked during close-out but returned that S01 was already complete, so no roadmap/db rollback was required.

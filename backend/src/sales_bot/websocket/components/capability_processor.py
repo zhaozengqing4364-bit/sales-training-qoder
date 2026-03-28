@@ -16,6 +16,7 @@ from fastapi import WebSocket
 from agent.capabilities.runner import CapabilityRunner
 from agent.context import AgentContext
 from common.effectiveness import (
+    build_live_session_conclusion_summary,
     build_sales_effectiveness_metrics,
     evaluate_pass_flags,
 )
@@ -50,6 +51,7 @@ class CapabilityProcessor:
         self._feedback_arbiter = RealtimeFeedbackArbiter()
         self._feedback_state = RealtimeFeedbackPacingState()
         self._objection_ledger: dict[str, Any] | None = None
+        self.live_session_summary: dict[str, Any] | None = None
         self.coach_health: str = "healthy"
         self._coach_health_reason: str | None = None
 
@@ -81,6 +83,7 @@ class CapabilityProcessor:
         pass_flags_for_card: dict[str, bool] | None = None
         stage_context_for_arbiter: dict[str, Any] | None = None
         score_context_for_arbiter: dict[str, Any] | None = None
+        score_update_payload: dict[str, Any] | None = None
 
         logger.info("[CAPABILITY] Running capability modules...")
 
@@ -148,14 +151,17 @@ class CapabilityProcessor:
 
             elif cap.capability_id == "realtime_scoring" and result.data:
                 score_payload = result.data if isinstance(result.data, dict) else {}
-                await self._send_score_update(
-                    score_payload, websocket, manager, trace_id
-                )
-                analysis_data["score_snapshot"] = score_payload
-                score_context_for_arbiter = dict(score_payload)
                 feedback_message = score_payload.get("feedback")
                 if isinstance(feedback_message, str) and feedback_message.strip():
                     suggestions_for_card = [feedback_message.strip()]
+                else:
+                    suggestions = score_payload.get("suggestions")
+                    if isinstance(suggestions, list):
+                        suggestions_for_card = [
+                            str(item).strip()
+                            for item in suggestions
+                            if isinstance(item, str) and item.strip()
+                        ]
 
                 dimension_scores: dict[str, float] = {}
                 canonical_dimension_scores = score_payload.get("dimension_scores")
@@ -185,6 +191,34 @@ class CapabilityProcessor:
                         else 0.0
                     )
                 overall_score = max(0.0, min(100.0, float(overall_raw)))
+                stage_name = score_payload.get("stage_name")
+                if not isinstance(stage_name, str) or not stage_name.strip():
+                    stage_name = (
+                        str(stage_context_for_arbiter.get("stage_name")).strip()
+                        if isinstance(stage_context_for_arbiter, dict)
+                        and isinstance(stage_context_for_arbiter.get("stage_name"), str)
+                        and str(stage_context_for_arbiter.get("stage_name")).strip()
+                        else ""
+                    )
+                suggestions = list(suggestions_for_card)
+                normalized_score_snapshot = {
+                    "overall_score": overall_score,
+                    "dimension_scores": dimension_scores,
+                    "suggestions": suggestions,
+                    "stage_name": stage_name,
+                }
+                analysis_data["score_snapshot"] = normalized_score_snapshot
+                score_context_for_arbiter = dict(score_payload)
+                score_context_for_arbiter["overall_score"] = overall_score
+                score_context_for_arbiter["dimension_scores"] = dict(dimension_scores)
+                score_context_for_arbiter["suggestions"] = list(suggestions)
+                score_context_for_arbiter["stage_name"] = stage_name
+                score_update_payload = {
+                    "overall_score": overall_score,
+                    "dimension_scores": dimension_scores,
+                    "suggestions": suggestions,
+                    "stage_name": stage_name,
+                }
                 turn_count = max(1, int(context.turn_count or 1))
                 pass_flags_for_card = evaluate_pass_flags(
                     build_sales_effectiveness_metrics(
@@ -253,6 +287,42 @@ class CapabilityProcessor:
             stage_context=stage_context_for_arbiter,
             score_context=score_context_for_arbiter,
         )
+
+        live_session_summary: dict[str, Any] | None = None
+        live_score_snapshot = analysis_data.get("score_snapshot")
+        if isinstance(live_score_snapshot, dict) or resolved_objection_ledger is not None:
+            live_session_summary = build_live_session_conclusion_summary(
+                sales_stage=(
+                    str(stage_context_for_arbiter.get("current_stage")).strip()
+                    if isinstance(stage_context_for_arbiter, dict)
+                    and isinstance(stage_context_for_arbiter.get("current_stage"), str)
+                    and str(stage_context_for_arbiter.get("current_stage")).strip()
+                    else None
+                ),
+                score_snapshot=(
+                    live_score_snapshot if isinstance(live_score_snapshot, dict) else None
+                ),
+                objection_ledger=resolved_objection_ledger,
+            )
+            self.live_session_summary = copy.deepcopy(live_session_summary)
+            analysis_data["live_session_summary"] = copy.deepcopy(live_session_summary)
+        if score_update_payload is not None:
+            enriched_score_update_payload = dict(score_update_payload)
+            if isinstance(live_session_summary, dict):
+                enriched_score_update_payload["live_session_summary"] = copy.deepcopy(
+                    live_session_summary
+                )
+                claim_truth = live_session_summary.get("claim_truth")
+                if isinstance(claim_truth, dict):
+                    enriched_score_update_payload["claim_truth"] = copy.deepcopy(
+                        claim_truth
+                    )
+            await self._send_score_update(
+                enriched_score_update_payload,
+                websocket,
+                manager,
+                trace_id,
+            )
 
         decision = self._feedback_arbiter.decide(
             turn_number=getattr(context, "turn_count", None),

@@ -730,6 +730,82 @@ def resolve_sales_report_alignment(
 
 
 
+def build_live_session_conclusion_summary(
+    *,
+    sales_stage: str | None,
+    score_snapshot: dict[str, Any] | None,
+    fallback_snapshot: dict[str, Any] | None = None,
+    objection_ledger: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    alignment = resolve_sales_report_alignment(
+        sales_stage=sales_stage,
+        score_snapshot=score_snapshot,
+        fallback_snapshot=fallback_snapshot,
+        objection_ledger=objection_ledger,
+    )
+    return {
+        "alignment_used": bool(alignment.get("alignment_used", False)),
+        "stage_key": (
+            alignment.get("stage_key")
+            if alignment.get("stage_key") in SALES_STAGE_ALIASES
+            else None
+        ),
+        "focus_type": (
+            alignment.get("focus_type")
+            if alignment.get("focus_type") in SALES_COACHING_FOCUS_TEMPLATES
+            else None
+        ),
+        "fallback_reason": (
+            str(alignment.get("fallback_reason")).strip()
+            if alignment.get("fallback_reason") is not None
+            and str(alignment.get("fallback_reason")).strip()
+            else None
+        ),
+        "main_issue": dict(alignment["main_issue"]),
+        "next_goal": dict(alignment["next_goal"]),
+        "claim_truth": _coerce_claim_truth(alignment.get("claim_truth")),
+    }
+
+
+
+def coerce_live_session_conclusion_summary(
+    value: Any,
+) -> dict[str, Any] | None:
+    if not isinstance(value, dict):
+        return None
+
+    main_issue = _coerce_main_issue(value.get("main_issue"))
+    next_goal = _coerce_next_goal(value.get("next_goal"))
+    claim_truth = _coerce_claim_truth(value.get("claim_truth"))
+    if main_issue is None and next_goal is None and claim_truth is None:
+        return None
+
+    stage_key = value.get("stage_key")
+    if stage_key not in SALES_STAGE_ALIASES:
+        stage_key = None
+
+    focus_type = value.get("focus_type")
+    if focus_type not in SALES_COACHING_FOCUS_TEMPLATES:
+        focus_type = None
+
+    fallback_reason = value.get("fallback_reason")
+    if not isinstance(fallback_reason, str) or not fallback_reason.strip():
+        fallback_reason = None
+    else:
+        fallback_reason = fallback_reason.strip()
+
+    return {
+        "alignment_used": bool(value.get("alignment_used", False)),
+        "stage_key": stage_key,
+        "focus_type": focus_type,
+        "fallback_reason": fallback_reason,
+        "main_issue": dict(main_issue) if main_issue is not None else None,
+        "next_goal": dict(next_goal) if next_goal is not None else None,
+        "claim_truth": claim_truth,
+    }
+
+
+
 def build_sales_rollup_scores(
     *,
     overall_score: float,

@@ -1,6 +1,6 @@
 {
   "mode": "grow",
-  "current_issue_id": "M003-S06",
+  "current_issue_id": "M007-S01",
   "current_issue_type": "slice",
   "current_issue_status": "done",
   "pending_issue_ids": [],
@@ -119,7 +119,8 @@
     "M006-S05-T02",
     "M006-S05-T03",
     "M006-S05",
-    "M003-S06"
+    "M003-S06",
+    "M007-S01"
   ],
   "blocked_issue_ids": [],
   "deferred_issue_ids": [],
@@ -129,16 +130,20 @@
     ".gsd/milestones/M003/M003-ROADMAP.md",
     ".gsd/REQUIREMENTS.md",
     ".codex/loop/state.json",
-    ".codex/loop/log.md"
+    ".codex/loop/log.md",
+    ".gsd/milestones/M007/slices/S01/S01-SUMMARY.md",
+    ".gsd/milestones/M007/slices/S01/S01-UAT.md",
+    ".gsd/KNOWLEDGE.md"
   ],
   "last_verification_commands": [
-    "cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_report_generation_trigger.py tests/integration/test_session_lifecycle_api.py tests/integration/test_replay_api.py tests/contract/test_practice_evidence_contract.py -v",
-    "cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_stepfun_realtime_handler.py tests/unit/test_stepfun_knowledge_helpers.py tests/integration/test_knowledge_flow.py tests/integration/test_replay_api.py tests/contract/test_practice_evidence_contract.py",
-    "live localhost proof: POST /api/v1/practice/sessions -> /practice/{sessionId} -> POST /api/v1/practice/sessions/{id}/lifecycle (status=scoring) -> background finalization -> GET /api/v1/practice/sessions/{id}/knowledge-check,/report and GET /api/v1/sessions/{id}/replay,/highlights -> /practice/{sessionId}/report,/replay",
-    "lsp diagnostics: backend/src/evaluation/services/report_generation_trigger.py, backend/tests/unit/test_report_generation_trigger.py, backend/tests/integration/test_session_lifecycle_api.py, backend/tests/integration/test_replay_api.py, backend/tests/contract/test_practice_evidence_contract.py"
+    "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/test_enhanced_handler_coach_health.py",
+    "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/test_stepfun_realtime_persistence.py -k \"restore_session_state\"",
+    "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/integration/test_voice_runtime_session_snapshot.py -k \"live_coach_health\"",
+    "npm test -- --run 'web/src/hooks/websocket/message-handlers.test.ts'",
+    "npm test -- --run 'web/src/components/practice/RightPanelContent.test.tsx' 'web/src/app/(user)/practice/[sessionId]/page.test.tsx'"
   ],
-  "last_verification_result": "Fresh S06 verification passed: focused backend status-boundary suites were green (44/44), the accepted M003 backend chain stayed green (114/114), live localhost proof on session 6a9e45d7-c15a-43c6-95cf-59583918780a preserved immediate end status=scoring, then background finalization persisted status=completed while report_status=failed, and canonical report/replay/highlights plus learner report/replay routes all loaded same-session evidence; true unfinished sessions still returned [SESSION_NOT_COMPLETED].",
-  "last_success_signal": "The accepted M003 same-session sales chain no longer strands replay/highlights behind persisted status=scoring once canonical evidence is readable.",
+  "last_verification_result": "Fresh S01 close-out verification passed: classic coach-health reconnect suite 4/4, StepFun restore-session suite 4 selected tests, live knowledge-check integration 1 selected test, websocket reducer suite 28/28, and learner shell/right-panel suite 9/9. /knowledge-check still exposes the live coach-health truth line while the learner page shell surfaces degraded/resumed status without interrupting training.",
+  "last_success_signal": "Reconnect, learner shell, right panel, and /knowledge-check now agree on one coach-health authority, so degraded/resumed state is visible without replaying stale runtime truth.",
   "last_growth_scan": null,
-  "next_action": "M003 slices are now all complete. Run milestone validation, then decide milestone close-out."
+  "next_action": "M007/S01 is closed. Reassess the roadmap, then continue with S02 same-session closure proof."
 }
