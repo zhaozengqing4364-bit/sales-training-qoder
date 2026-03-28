@@ -1535,10 +1535,24 @@ async def get_session_knowledge_check(
     ]
 
     live_claim_truth = None
+    live_coach_health = None
     session_info = get_session_manager().sessions.get(session_id)
     live_handler = session_info.handler if session_info is not None else None
     if live_handler is not None:
-        live_claim_truth = deepcopy(getattr(live_handler, "_latest_claim_truth", None))
+        diagnostics_getter = getattr(live_handler, "get_runtime_diagnostics", None)
+        if callable(diagnostics_getter):
+            runtime_diagnostics = diagnostics_getter()
+            if isinstance(runtime_diagnostics, dict):
+                live_claim_truth = deepcopy(runtime_diagnostics.get("claim_truth"))
+                live_coach_health = deepcopy(runtime_diagnostics.get("coach_health"))
+        if live_claim_truth is None:
+            live_claim_truth = deepcopy(getattr(live_handler, "_latest_claim_truth", None))
+        if live_coach_health is None:
+            live_coach_health = {
+                "status": str(getattr(live_handler, "_coach_health", "healthy") or "healthy"),
+                "reason": getattr(live_handler, "_coach_health_reason", None),
+                "message": getattr(live_handler, "_coach_health_message", lambda status: "实时辅导正常。")(getattr(live_handler, "_coach_health", "healthy")),
+            }
 
     projection_effectiveness_snapshot = None
     resolved_scenario_type = SessionEvidenceService.resolve_scenario_type(session)
@@ -1568,6 +1582,7 @@ async def get_session_knowledge_check(
         snapshot=snapshot,
         effective_tool_types=effective_tool_types,
         live_claim_truth=live_claim_truth,
+        live_coach_health=live_coach_health,
         projection_effectiveness_snapshot=projection_effectiveness_snapshot,
     )
 

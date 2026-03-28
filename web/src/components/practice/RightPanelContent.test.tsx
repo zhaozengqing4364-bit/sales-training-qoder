@@ -16,10 +16,71 @@ const baseProps = {
         guidance: "保持问题澄清后再推进下一步",
         progress: 0.72,
     },
+    coachHealth: {
+        status: "healthy" as const,
+        reason: null,
+        message: "实时辅导正常。",
+    },
     sendMessage: vi.fn(),
 };
 
 describe("RightPanelContent", () => {
+    it("shows coach degraded state without hiding the active practice guidance", () => {
+        render(
+            <RightPanelContent
+                {...baseProps}
+                scores={{
+                    overall_score: 83,
+                    turn_count: 4,
+                    stage_name: "异议处理",
+                    suggestions: ["先补一个 ROI 证据，再回应价格异议"],
+                    dimension_scores: {
+                        价值表达: 80,
+                    },
+                }}
+                actionCard={null}
+                fuzzyDetections={[]}
+                coachHealth={{
+                    status: "degraded",
+                    reason: "capability_pipeline_failed",
+                    message: "实时辅导暂不可用，训练仍可继续。",
+                }}
+            />,
+        );
+
+        expect(screen.getByText("辅导状态")).toBeTruthy();
+        expect(screen.getByText("实时辅导暂不可用，训练仍可继续。")).toBeTruthy();
+        expect(screen.getByText("当前阶段")).toBeTruthy();
+        expect(screen.getByText("销售维度得分")).toBeTruthy();
+    });
+
+    it("shows resumed coach state on the same learner panel", () => {
+        render(
+            <RightPanelContent
+                {...baseProps}
+                scores={{
+                    overall_score: 86,
+                    turn_count: 5,
+                    stage_name: "异议处理",
+                    suggestions: ["继续补 ROI 证据"],
+                    dimension_scores: {
+                        价值表达: 86,
+                    },
+                }}
+                actionCard={null}
+                fuzzyDetections={[]}
+                coachHealth={{
+                    status: "resumed",
+                    reason: "capability_pipeline_resumed",
+                    message: "实时辅导已恢复，后续建议会继续更新。",
+                }}
+            />,
+        );
+
+        expect(screen.getByText("辅导状态")).toBeTruthy();
+        expect(screen.getByText("实时辅导已恢复，后续建议会继续更新。")).toBeTruthy();
+    });
+
     it("treats action_card as the only primary textual coach surface while keeping stage and score context visible", () => {
         render(
             <RightPanelContent

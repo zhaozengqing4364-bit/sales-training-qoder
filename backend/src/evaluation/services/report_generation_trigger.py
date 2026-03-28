@@ -23,10 +23,11 @@ from tenacity import (
     wait_exponential,
 )
 
-from common.db.models import PracticeSession, ReportGenerationStatus
+from common.db.models import PracticeSession, ReportGenerationStatus, SessionStatus
 from common.db.session import AsyncSessionLocal
 from common.error_handling.result import Result
 from common.monitoring.logger import get_logger
+from common.conversation.session_evidence import SessionEvidenceService
 from evaluation.services.comprehensive_report import ComprehensiveReportService
 from prompt_templates.service import PromptTemplateService
 from common.ai.llm_service import LLMService
@@ -118,6 +119,10 @@ class ReportGenerationTrigger:
                     session_id,
                     ReportGenerationStatus.COMPLETED,
                 )
+                await self._finalize_session_status_if_ready(
+                    session_id,
+                    scenario_type=scenario_type,
+                )
                 logger.info(
                     "report_generation_completed",
                     session_id=session_id,
@@ -129,6 +134,10 @@ class ReportGenerationTrigger:
                     session_id,
                     ReportGenerationStatus.FAILED,
                     error=error_msg,
+                )
+                await self._finalize_session_status_if_ready(
+                    session_id,
+                    scenario_type=scenario_type,
                 )
                 logger.error(
                     "report_generation_failed",
@@ -142,12 +151,66 @@ class ReportGenerationTrigger:
                 ReportGenerationStatus.FAILED,
                 error=str(e),
             )
+            await self._finalize_session_status_if_ready(
+                session_id,
+                scenario_type=scenario_type,
+            )
             logger.error(
                 "report_generation_exception",
                 session_id=session_id,
                 error=str(e),
                 exc_info=True,
             )
+
+    async def _finalize_session_status_if_ready(
+        self,
+        session_id: str,
+        *,
+        scenario_type: str,
+    ) -> None:
+        """Promote a sales session from scoring to completed once canonical evidence is readable."""
+        if (scenario_type or "").lower() != "sales":
+            return
+
+        stmt = select(PracticeSession).where(PracticeSession.session_id == session_id)
+        result = await self.db.execute(stmt)
+        session = result.scalar_one_or_none()
+
+        if session is None or session.status != SessionStatus.SCORING.value:
+            return
+
+        projection_result = await SessionEvidenceService(self.db).get_projection(
+            session_id=session_id,
+            session=session,
+            require_completed=False,
+            scenario_type="sales",
+        )
+        if not projection_result.is_success:
+            logger.info(
+                "sales_session_finalization_deferred",
+                session_id=session_id,
+                reason=projection_result.fallback,
+            )
+            return
+
+        projection = projection_result.value
+        if not projection.evidence_completeness.get("session_scores", False):
+            logger.info(
+                "sales_session_finalization_deferred",
+                session_id=session_id,
+                reason="missing_session_scores",
+            )
+            return
+
+        session.status = SessionStatus.COMPLETED.value
+        await self.db.flush()
+        logger.info(
+            "sales_session_finalized",
+            session_id=session_id,
+            report_status=session.report_status,
+            message_count=projection.evidence_completeness.get("message_count"),
+            projection_complete=projection.evidence_completeness.get("complete"),
+        )
 
     @retry(
         stop=stop_after_attempt(3),

@@ -50,6 +50,8 @@ class CapabilityProcessor:
         self._feedback_arbiter = RealtimeFeedbackArbiter()
         self._feedback_state = RealtimeFeedbackPacingState()
         self._objection_ledger: dict[str, Any] | None = None
+        self.coach_health: str = "healthy"
+        self._coach_health_reason: str | None = None
 
     async def run_and_send_feedback(
         self,
@@ -82,16 +84,34 @@ class CapabilityProcessor:
 
         logger.info("[CAPABILITY] Running capability modules...")
 
-        async with db_lock:
-            capability_results = await self.capability_runner.run_all(context, text)
-
         trace_id = context.trace_id if context else None
 
-        for i, result in enumerate(capability_results):
-            if not result.success:
-                continue
+        try:
+            async with db_lock:
+                capability_results = await self.capability_runner.run_all(context, text)
+        except Exception as exc:
+            logger.warning(
+                "[CAPABILITY] Capability runner degraded",
+                error=str(exc),
+            )
+            await self._set_coach_health(
+                status="degraded",
+                reason="capability_pipeline_failed",
+                websocket=websocket,
+                manager=manager,
+                trace_id=trace_id,
+            )
+            return analysis_data, knowledge_context
 
+        capability_pipeline_degraded = False
+
+        for i, result in enumerate(capability_results):
             cap = self.capability_runner.capabilities[i]
+
+            if not result.success:
+                if cap.capability_id in {"fuzzy_detection", "realtime_scoring"}:
+                    capability_pipeline_degraded = True
+                continue
 
             if cap.capability_id == "fuzzy_detection" and result.data:
                 fuzzy_payload = result.data if isinstance(result.data, dict) else {}
@@ -184,6 +204,31 @@ class CapabilityProcessor:
                         f"Knowledge retrieval returned {len(knowledge_payload.get('results', []))} results"
                     )
 
+        if capability_pipeline_degraded:
+            await self._set_coach_health(
+                status="degraded",
+                reason="capability_pipeline_failed",
+                websocket=websocket,
+                manager=manager,
+                trace_id=trace_id,
+            )
+        elif self.coach_health == "degraded":
+            await self._set_coach_health(
+                status="resumed",
+                reason="capability_pipeline_resumed",
+                websocket=websocket,
+                manager=manager,
+                trace_id=trace_id,
+            )
+        elif self.coach_health == "resumed":
+            await self._set_coach_health(
+                status="healthy",
+                reason=None,
+                websocket=websocket,
+                manager=manager,
+                trace_id=trace_id,
+            )
+
         previous_objection_ledger = self._objection_ledger
         resolved_objection_ledger = resolve_turn_objection_ledger(
             existing_ledger=previous_objection_ledger,
@@ -227,6 +272,42 @@ class CapabilityProcessor:
             analysis_data["ai_feedback"] = decision.action_card.get("replacement", "")
 
         return analysis_data, knowledge_context
+
+    @staticmethod
+    def _coach_health_message(status: str) -> str:
+        if status == "degraded":
+            return "实时辅导暂不可用，训练仍可继续。"
+        if status == "resumed":
+            return "实时辅导已恢复，后续建议会继续更新。"
+        return "实时辅导正常。"
+
+    async def _set_coach_health(
+        self,
+        *,
+        status: str,
+        reason: str | None,
+        websocket: WebSocket,
+        manager: ConnectionManager,
+        trace_id: str | None,
+    ) -> None:
+        normalized_reason = reason.strip() if isinstance(reason, str) and reason.strip() else None
+        if self.coach_health == status and self._coach_health_reason == normalized_reason:
+            return
+        self.coach_health = status
+        self._coach_health_reason = normalized_reason
+        await manager.send_json(
+            websocket,
+            {
+                "type": "coach_health_update",
+                "timestamp": datetime.now(UTC).isoformat(),
+                "trace_id": trace_id,
+                "data": {
+                    "status": self.coach_health,
+                    "reason": self._coach_health_reason,
+                    "message": self._coach_health_message(self.coach_health),
+                },
+            },
+        )
 
     # ── Feedback message senders ──
 

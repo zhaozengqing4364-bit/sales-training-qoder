@@ -2,6 +2,29 @@
 id: T01
 parent: S01
 milestone: M003
+provides: []
+requires: []
+affects: []
+key_files: [".gsd/milestones/M003/M003-ROADMAP.md", ".gsd/milestones/M003/slices/S01/S01-PLAN.md", ".gsd/milestones/M003/slices/S01/tasks/T01-PLAN.md", ".gsd/KNOWLEDGE.md"]
+key_decisions: ["Treat `POST /api/v1/practice/sessions` plus `web/src/app/(user)/practice/[sessionId]/page.tsx` as the canonical M003 business entry seam between admin configuration and learner-visible runtime/read surfaces.", "Keep planning verification commands shell-runnable by quoting literal Next.js file paths that contain `[]` or `()`."]
+patterns_established: []
+drill_down_paths: []
+observability_surfaces: []
+duration: ""
+verification_result: "Ran the task-level verification commands from `T01-PLAN.md` and the slice-level verification commands from `S01-PLAN.md`. All five final checks exited 0: the confirmed backend/frontend entrypoint files exist, the roadmap/slice/task docs now mention the real business chain (`POST /api/v1/practice/sessions` plus the learner practice/report/replay paths), the live knowledge status vocabulary remains aligned with current code, and the out-of-scope / inventory-spike boundary language is present in the milestone docs."
+completed_at: 2026-03-25T01:37:18.630Z
+blocker_discovered: false
+---
+
+# T01: Locked M003 on the real admin→session→practice entry chain and made the doc verifiers runnable.
+
+> Locked M003 on the real admin→session→practice entry chain and made the doc verifiers runnable.
+
+## What Happened
+---
+id: T01
+parent: S01
+milestone: M003
 key_files:
   - .gsd/milestones/M003/M003-ROADMAP.md
   - .gsd/milestones/M003/slices/S01/S01-PLAN.md
@@ -53,3 +76,10 @@ None.
 - `.gsd/milestones/M003/slices/S01/S01-PLAN.md`
 - `.gsd/milestones/M003/slices/S01/tasks/T01-PLAN.md`
 - `.gsd/KNOWLEDGE.md`
+
+
+## Deviations
+Extended the planned doc edits to quote literal Next.js route-segment file paths inside verification commands because the unquoted planner version was syntactically invalid in `bash`. No scope change.
+
+## Known Issues
+None.

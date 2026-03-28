@@ -2,6 +2,29 @@
 id: T01
 parent: S05
 milestone: M003
+provides: []
+requires: []
+affects: []
+key_files: ["backend/tests/unit/test_stepfun_realtime_handler.py", "backend/tests/unit/test_stepfun_knowledge_helpers.py", "backend/tests/integration/test_knowledge_flow.py", "backend/tests/contract/test_practice_evidence_contract.py"]
+key_decisions: ["Kept the regression expansion on the existing StepFun/runtime/report routes instead of adding a parallel helper-only proof surface.", "Asserted the shipped claim-truth status keys (`weak_evidence`, `evidence_pending`, `evidence_verified`) rather than inventing alias names in tests.", "Used `effectiveness_snapshot.claim_truth` on report/replay as the shared verified-evidence contract seam."]
+patterns_established: []
+drill_down_paths: []
+observability_surfaces: []
+duration: ""
+verification_result: "Ran the exact task gate `cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_stepfun_realtime_handler.py tests/unit/test_stepfun_knowledge_helpers.py tests/integration/test_knowledge_flow.py tests/contract/test_practice_evidence_contract.py` and it passed with 90/90 tests green. Also checked LSP diagnostics on the four changed Python files; no diagnostics were reported."
+completed_at: 2026-03-25T07:30:49.353Z
+blocker_discovered: false
+---
+
+# T01: Expanded objection-heavy runtime regressions across competitor, implementation-risk, and claim-truth evidence paths
+
+> Expanded objection-heavy runtime regressions across competitor, implementation-risk, and claim-truth evidence paths
+
+## What Happened
+---
+id: T01
+parent: S05
+milestone: M003
 key_files:
   - backend/tests/unit/test_stepfun_realtime_handler.py
   - backend/tests/unit/test_stepfun_knowledge_helpers.py
@@ -50,3 +73,10 @@ None.
 - `backend/tests/unit/test_stepfun_knowledge_helpers.py`
 - `backend/tests/integration/test_knowledge_flow.py`
 - `backend/tests/contract/test_practice_evidence_contract.py`
+
+
+## Deviations
+None.
+
+## Known Issues
+None.

@@ -508,3 +508,157 @@ async def test_open_objection_ledger_keeps_focus_on_same_gap_during_topic_drift(
         "replacement": "在确认痛点后，补一个同类客户案例、数据或ROI区间。",
         "next_turn_rule": "下一轮先确认痛点影响，再补一个案例或ROI数据。",
     }
+
+
+# ── S07: Coach health degraded/resumed state ──
+
+
+@pytest.mark.asyncio
+async def test_capability_processor_marks_coach_degraded_when_scoring_fails() -> None:
+    """When scoring capability fails, processor should set coach_health to 'degraded'."""
+    runner = MagicMock()
+    runner.capabilities = [
+        SimpleNamespace(capability_id="sales_stage"),
+        SimpleNamespace(capability_id="realtime_scoring"),
+    ]
+    runner.run_all = AsyncMock(
+        return_value=[
+            SimpleNamespace(
+                success=True,
+                data={
+                    "current_stage": "discovery",
+                    "stage_name": "需求挖掘",
+                    "key_actions": ["深入痛点"],
+                    "guidance": "多问开放问题",
+                    "progress": 0.4,
+                    "stage_changed": False,
+                },
+            ),
+            SimpleNamespace(success=False, data=None),
+        ]
+    )
+
+    processor = CapabilityProcessor(runner)
+    context = SimpleNamespace(trace_id="trace-degraded-1", turn_count=2)
+    websocket = AsyncMock()
+    manager = MagicMock()
+    manager.send_json = AsyncMock()
+    db_lock = asyncio.Lock()
+
+    analysis, _ = await processor.run_and_send_feedback(
+        text="这个产品怎么样",
+        context=context,
+        websocket=websocket,
+        manager=manager,
+        db_lock=db_lock,
+    )
+
+    assert processor.coach_health == "degraded"
+
+
+@pytest.mark.asyncio
+async def test_capability_processor_marks_coach_degraded_when_runner_raises() -> None:
+    """Unexpected capability-runner failures should degrade coaching instead of aborting the turn."""
+    runner = MagicMock()
+    runner.capabilities = []
+    runner.run_all = AsyncMock(side_effect=RuntimeError("runner exploded"))
+
+    processor = CapabilityProcessor(runner)
+    context = SimpleNamespace(trace_id="trace-runner-failure", turn_count=2)
+    websocket = AsyncMock()
+    manager = MagicMock()
+    manager.send_json = AsyncMock()
+    db_lock = asyncio.Lock()
+
+    analysis, knowledge_context = await processor.run_and_send_feedback(
+        text="这个产品怎么样",
+        context=context,
+        websocket=websocket,
+        manager=manager,
+        db_lock=db_lock,
+    )
+
+    assert analysis == {}
+    assert knowledge_context == ""
+    assert processor.coach_health == "degraded"
+    sent_payloads = [call.args[1] for call in manager.send_json.await_args_list]
+    coach_update = next(payload for payload in sent_payloads if payload["type"] == "coach_health_update")
+    assert coach_update["data"]["status"] == "degraded"
+    assert coach_update["data"]["reason"] == "capability_pipeline_failed"
+
+
+@pytest.mark.asyncio
+async def test_capability_processor_clears_degraded_after_successful_resume() -> None:
+    """After a degraded turn, successful scoring should set coach_health to 'resumed'."""
+    runner = MagicMock()
+    runner.capabilities = [
+        SimpleNamespace(capability_id="sales_stage"),
+        SimpleNamespace(capability_id="realtime_scoring"),
+    ]
+    # Turn 1: scoring fails, turn 2: scoring succeeds
+    runner.run_all = AsyncMock(
+        side_effect=[
+            [
+                SimpleNamespace(
+                    success=True,
+                    data={
+                        "current_stage": "discovery",
+                        "stage_name": "需求挖掘",
+                        "key_actions": ["深入痛点"],
+                        "guidance": "多问开放问题",
+                        "progress": 0.4,
+                        "stage_changed": False,
+                    },
+                ),
+                SimpleNamespace(success=False, data=None),
+            ],
+            [
+                SimpleNamespace(
+                    success=True,
+                    data={
+                        "current_stage": "discovery",
+                        "stage_name": "需求挖掘",
+                        "key_actions": ["深入痛点"],
+                        "guidance": "多问开放问题",
+                        "progress": 0.5,
+                        "stage_changed": False,
+                    },
+                ),
+                SimpleNamespace(
+                    success=True,
+                    data={
+                        "overall_score": 75.0,
+                        "dimension_scores": {"价值表达": 75.0},
+                        "feedback": "更具体说明 ROI",
+                    },
+                ),
+            ],
+        ]
+    )
+
+    processor = CapabilityProcessor(runner)
+    context = SimpleNamespace(trace_id="trace-resume-1", turn_count=3)
+    websocket = AsyncMock()
+    manager = MagicMock()
+    manager.send_json = AsyncMock()
+    db_lock = asyncio.Lock()
+
+    # First turn: degrades
+    await processor.run_and_send_feedback(
+        text="这个产品怎么样",
+        context=context,
+        websocket=websocket,
+        manager=manager,
+        db_lock=db_lock,
+    )
+    assert processor.coach_health == "degraded"
+
+    # Second turn: resumes
+    await processor.run_and_send_feedback(
+        text="客户 ROI 达到了 35%",
+        context=context,
+        websocket=websocket,
+        manager=manager,
+        db_lock=db_lock,
+    )
+    assert processor.coach_health == "resumed"

@@ -74,6 +74,7 @@ export default function PracticeSessionPage() {
         salesStage,
         scores,
         actionCard,
+        coachHealth,
         error: wsError,
         isPlayingAudio,
         interimTranscript,
@@ -687,6 +688,7 @@ export default function PracticeSessionPage() {
                     forbiddenWords={forbiddenWords}
                     scores={scores}
                     actionCard={actionCard}
+                    coachHealth={coachHealth}
                     fuzzyDetections={fuzzyDetections}
                     salesStage={salesStage}
                     sendMessage={sendMessage}
@@ -710,6 +712,7 @@ export default function PracticeSessionPage() {
                     forbiddenWords={forbiddenWords}
                     scores={scores}
                     actionCard={actionCard}
+                    coachHealth={coachHealth}
                     fuzzyDetections={fuzzyDetections}
                     salesStage={salesStage}
                     sendMessage={sendMessage}

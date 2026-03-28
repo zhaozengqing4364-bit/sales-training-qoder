@@ -2,6 +2,29 @@
 id: T02
 parent: S03
 milestone: M003
+provides: []
+requires: []
+affects: []
+key_files: ["backend/src/sales_bot/websocket/components/objection_ledger_helpers.py", "backend/src/sales_bot/websocket/stepfun_realtime_handler.py", "backend/src/sales_bot/websocket/components/capability_processor.py", "backend/tests/unit/test_stepfun_realtime_handler.py", "backend/tests/unit/test_stepfun_realtime_persistence.py", "backend/tests/unit/test_capability_processor.py", ".gsd/DECISIONS.md", ".codex/loop/state.json", ".codex/loop/log.md"]
+key_decisions: ["Persist reconnect-safe unresolved-objection state as objection_ledger plus feedback_pacing_state, and stop relying on replaying the last action-card payload after reconnect.", "Use one shared objection-ledger helper for both StepFun and classic capability-composition paths so topic-drift pressure, closure heuristics, and arbiter overrides stay on one contract."]
+patterns_established: []
+drill_down_paths: []
+observability_surfaces: []
+duration: ""
+verification_result: "Ran the task-plan backend verification command with timing evidence: `cd backend && /usr/bin/time -p venv/bin/python -m pytest -c pyproject.toml tests/unit/test_stepfun_realtime_handler.py tests/unit/test_stepfun_realtime_persistence.py`, which passed all 68 tests covering StepFun runtime feedback, objection-ledger carry-forward, reconnect snapshot recovery, and persistence behavior. Because this task also changed the classic capability-composition path, I ran an extra focused regression: `cd backend && /usr/bin/time -p venv/bin/python -m pytest -c pyproject.toml tests/unit/test_capability_processor.py`, which passed all 7 tests, including the new classic-path topic-drift objection-ledger case."
+completed_at: 2026-03-25T04:06:02.560Z
+blocker_discovered: false
+---
+
+# T02: Carried unresolved objection pressure through classic and StepFun runtime turns with reconnect-safe snapshot recovery.
+
+> Carried unresolved objection pressure through classic and StepFun runtime turns with reconnect-safe snapshot recovery.
+
+## What Happened
+---
+id: T02
+parent: S03
+milestone: M003
 key_files:
   - backend/src/sales_bot/websocket/components/objection_ledger_helpers.py
   - backend/src/sales_bot/websocket/stepfun_realtime_handler.py
@@ -62,3 +85,10 @@ None.
 - `.gsd/DECISIONS.md`
 - `.codex/loop/state.json`
 - `.codex/loop/log.md`
+
+
+## Deviations
+Added `backend/src/sales_bot/websocket/components/objection_ledger_helpers.py` plus `backend/tests/unit/test_capability_processor.py` coverage beyond the four-file planner snapshot so both runtime paths could share one ledger/update heuristic instead of duplicating logic in the handler and capability processor.
+
+## Known Issues
+None.

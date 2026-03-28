@@ -2143,3 +2143,27 @@ Append one entry per iteration:
   verification results: passed; fresh slice-plan verification was green end to end (web 18/18, web 28/28, backend 60/60), focused LSP diagnostics were clean on the touched seam files, and gsd_complete_slice rendered S05 summary/UAT plus the roadmap projection successfully.
   success signal status: the current admin analytics/users/user-detail route family now shares one route-shaped read-model seam and the canonical full M005 admin regression pack still proves no behavior drift after the seam extraction.
   rollback note: if milestone validation or later admin changes surface route drift, restore shared behavior by fixing web/src/lib/admin/read-models.ts or web/src/lib/admin/runtime-faults.ts and rerun the full backend+web admin regression pack before accepting the seam again.
+
+- time: 2026-03-27T21:00:00+08:00
+  mode: grow
+  item id: M003-S06
+  files changed:
+    - backend/src/evaluation/services/report_generation_trigger.py
+    - backend/tests/unit/test_report_generation_trigger.py
+    - backend/tests/integration/test_session_lifecycle_api.py
+    - backend/tests/integration/test_replay_api.py
+    - backend/tests/contract/test_practice_evidence_contract.py
+    - .gsd/milestones/M003/slices/S06/S06-SUMMARY.md
+    - .gsd/milestones/M003/slices/S06/S06-UAT.md
+    - .gsd/milestones/M003/M003-ROADMAP.md
+    - .gsd/REQUIREMENTS.md
+    - .codex/loop/state.json
+  summary: Closed the M003/S06 replay blocker by keeping immediate sales lifecycle end at status=scoring, then promoting the same session to completed during background finalization once SessionEvidenceService could read canonical evidence, which unlocked same-session replay/highlights without relaxing the unfinished-session gate.
+  verification commands:
+    - cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_report_generation_trigger.py tests/integration/test_session_lifecycle_api.py tests/integration/test_replay_api.py tests/contract/test_practice_evidence_contract.py -v
+    - cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_stepfun_realtime_handler.py tests/unit/test_stepfun_knowledge_helpers.py tests/integration/test_knowledge_flow.py tests/integration/test_replay_api.py tests/contract/test_practice_evidence_contract.py
+    - live localhost proof: POST /api/v1/practice/sessions -> /practice/{sessionId} -> POST /api/v1/practice/sessions/{id}/lifecycle (status=scoring) -> background finalization -> GET /api/v1/practice/sessions/{id}/knowledge-check,/report and GET /api/v1/sessions/{id}/replay,/highlights -> /practice/{sessionId}/report,/replay
+    - lsp diagnostics: backend/src/evaluation/services/report_generation_trigger.py, backend/tests/unit/test_report_generation_trigger.py, backend/tests/integration/test_session_lifecycle_api.py, backend/tests/integration/test_replay_api.py, backend/tests/contract/test_practice_evidence_contract.py
+  verification results: passed; focused backend status-boundary suites were green (44/44), the accepted M003 backend chain stayed green (114/114), and live localhost proof on session 6a9e45d7-c15a-43c6-95cf-59583918780a showed immediate end status=scoring, later persisted status=completed with report_status=failed, 200 report/replay/highlights on the same session, browser report/replay rendering same-session evidence, and true unfinished sessions still blocked by [SESSION_NOT_COMPLETED].
+  success signal status: the accepted M003 same-session sales chain now unlocks canonical replay/highlights truthfully after background finalization instead of stalling behind status=scoring.
+  rollback note: if future work reopens the replay blocker, keep the replay/highlights gate strict and inspect SessionEvidenceService-backed finalization first; do not “fix” this by broadly allowing scoring sessions through.

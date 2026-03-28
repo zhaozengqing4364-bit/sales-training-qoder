@@ -1,79 +1,65 @@
 ---
 id: M003
-provides:
-  - Frozen `customer_pressure` session snapshots on the current admin Persona/knowledge -> session create -> practice runtime chain.
-  - Persisted unresolved objection ledgers plus one shared `effectiveness_snapshot.claim_truth` contract across runtime diagnostics, knowledge-check, report, and replay read paths.
-  - One live admin Persona/knowledge -> practice -> knowledge-check -> report proof on current routes, with explicit evidence that replay/highlights are still blocked by `status="scoring"` / `[SESSION_NOT_COMPLETED]` on the same chain.
+title: "知识与角色真实性"
+status: complete
+completed_at: 2026-03-27T13:17:12.848Z
 key_decisions:
-  - Keep the accepted M003 entry chain on the current admin Persona/knowledge detail routes, `POST /api/v1/practice/sessions`, learner practice runtime, knowledge-check/report, and replay via `backend/src/common/conversation/api.py` + `backend/src/common/conversation/replay.py`.
-  - Freeze Persona pressure as nested `customer_pressure` in `PracticeSession.voice_policy_snapshot` and inspect `source.customer_pressure_source` instead of inferring behavior from compiled prompt prose.
-  - Keep unsupported/weak/pending/verified evidence semantics on `effectiveness_snapshot.claim_truth`, distinct from KB-lock blocked/detail statuses.
-patterns_established:
-  - Persist multi-turn sales-realism facts on existing pass-through seams (`voice_policy_snapshot`, `transcript_metadata`, runtime snapshots) instead of inventing parallel storage.
-  - Keep the public learner/admin vocabulary small and stable while richer blocked/detail states stay in diagnostics.
-  - Milestone close-out must compare the roadmap’s planned slices against actual slice directories and summary/UAT files before any completion claim.
-observability_surfaces:
-  - GET /api/v1/practice/sessions/{id}/knowledge-check
-  - GET /api/v1/practice/sessions/{id}/report
-  - GET /api/v1/sessions/{id}/replay
-  - PracticeSession.voice_policy_snapshot.customer_pressure / source.customer_pressure_source
-  - ConversationMessage.transcript_metadata.objection_ledger
-  - effectiveness_snapshot.claim_truth
-  - runtime_metrics.knowledge_retrieval.*, kb_lock_status, kb_lock_last_status
-requirement_outcomes: []
-duration: 2026-03-25 close-out audit
-verification_result: failed
-completed_at: 2026-03-25T18:13:17+08:00
+  - 把 M003 全程锚定在当前 admin Persona/knowledge → practice → knowledge-check/report/replay 的真实业务链路上，不为里程碑另造 acceptance-only surface。
+  - 将 Persona 压力、异议持续施压、claim-truth 和 replay/report 结论都绑定到统一 session-evidence / runtime seam 上，而不是为某个消费面单独发明第二套 scorer 或 reader。
+  - 保留销售 end-session 立即返回 `status="scoring"` 的 shipped contract，并通过 background finalization + SessionEvidenceService 真值线来解锁 same-session replay/highlights，而不是粗暴放宽 replay gate。
+key_files:
+  - .gsd/milestones/M003/M003-ROADMAP.md
+  - .gsd/milestones/M003/M003-VALIDATION.md
+  - .gsd/milestones/M003/slices/S01/S01-SUMMARY.md
+  - .gsd/milestones/M003/slices/S02/S02-SUMMARY.md
+  - .gsd/milestones/M003/slices/S03/S03-SUMMARY.md
+  - .gsd/milestones/M003/slices/S04/S04-SUMMARY.md
+  - .gsd/milestones/M003/slices/S05/S05-SUMMARY.md
+  - .gsd/milestones/M003/slices/S06/S06-SUMMARY.md
+  - backend/src/evaluation/services/report_generation_trigger.py
+  - backend/src/common/conversation/session_evidence.py
+  - backend/src/common/conversation/replay.py
+  - backend/src/common/api/practice.py
+lessons_learned:
+  - 对这类 brownfield 里程碑，最重要的不是再发明新 surface，而是先锁住真实 authority chain；S01 早点把 accepted route family 定死，后面每个 slice 都轻松很多。
+  - replay/highlights 被 `[SESSION_NOT_COMPLETED]` 拦住时，不一定是 replay gate 太严；先检查 persisted lifecycle truth 有没有在 canonical evidence 已可读时完成状态收口。
+  - 把 canonical availability (`session.status`) 和 optional enhancement health (`report_status`) 分开，是避免 learner-facing surface 被 enhancement 噪声绑死的关键。
 ---
 
 # M003: 知识与角色真实性
 
-**Built the S01-S05 knowledge/persona realism chain through canonical report on current routes, but the milestone failed close-out because S06 is missing and the accepted replay/highlights proof is still blocked behind `status="scoring"`.**
+**M003 把当前销售训练链路收口成一条真实可验证的“Persona/knowledge → objection pressure → claim-truth → same-session report/replay/highlights”事实线。**
 
 ## What Happened
 
-M003 started by locking the work to the real business chain instead of designing against imagined seams. S01 fixed the authority line on the current admin Persona detail page, admin knowledge detail page, `POST /api/v1/practice/sessions`, learner practice runtime, knowledge-check, canonical report, and replay via the conversation API. It also froze the public learner/admin knowledge vocabulary at the seven live statuses (`no_knowledge_base`, `disabled`, `not_triggered`, `kb_not_ready`, `search_failed`, `miss`, `hit`) and kept richer blocked/detail states in diagnostics.
+M003 把“知识与角色真实性”从 prompt 层的意图，落成了当前产品代码链路上的可验证事实。S01 先锁定了真实 authority chain：admin Persona / knowledge detail、`POST /api/v1/practice/sessions`、learner practice page、knowledge-check、canonical report、replay。这样后面的实现都被强制留在现有 runnable 路线上，而不是转向新的 helper-only surface 或环境工件。S02 随后把 Persona 压力模型结构化并冻结进 `voice_policy_snapshot`，让同一个 Persona 的 pressure direction、follow-up behavior 和 KB binding 能跨 turn / reconnect 保持稳定。S03 再把 unresolved objection ledger 固定在现有 runtime/evidence chain 上，使价格、ROI、竞品、实施风险这类阻塞点不会因为 topic drift 或 reconnect 消失，而会持续回到同一个 gap 上。S04 把 unsupported / weak / pending / verified 这些 claim-truth 语义挂到统一 `effectiveness_snapshot.claim_truth` 上，并让 runtime diagnostics、knowledge-check、report、replay 都通过同一 vocabulary 解释同一 session。S05 用一条 live objection-heavy same-session proof 验证了这套链路在当前产品 surface 上确实能工作，同时诚实地暴露了最后一个 blocker：same-session canonical report 已可读，但 replay/highlights 仍卡在 persisted `status="scoring"` 后面。S06 则把这个 blocker 在不破坏 shipped contract 的前提下收掉：sales end-session 立即响应仍保持 `status="scoring"`，后台 finalization 只在 `SessionEvidenceService` 已能读取 canonical evidence 时把同一 session 提升到 `completed`，随后 canonical report/replay/highlights 全部能在该 same session 上 truthful 解锁，而真正 unfinished session 仍继续被 `[SESSION_NOT_COMPLETED]` 拦住。
 
-S02 and S03 then made Persona and objection pressure durable instead of prompt-shaped. Persona pressure now normalizes into one canonical nested `customer_pressure` contract, current admin Persona surfaces can edit and audit it, and session creation freezes that contract into `PracticeSession.voice_policy_snapshot` with `source.customer_pressure_source`. On top of that frozen session truth, unresolved objection ledgers now persist on `ConversationMessage.transcript_metadata["objection_ledger"]` and reconnect-safe runtime snapshots, so price / competitor / proof gaps survive topic drift and flow back into report/replay `main_issue` and `next_goal`.
+到 milestone 结束时，M003 的关键价值已经闭环：admin 配置能通过当前 session-create/runtime path 真正影响 learner-facing objection pressure；同一会话的异议、证据缺口和 claim truth 可以跨 runtime、knowledge-check、report、replay 保持一致；并且最终 same-session replay/highlights 不再被一个落后于 canonical evidence 的 persisted scoring 状态卡死。validation 结果为 pass，也确认了没有 cross-slice seam drift 留下。
 
-S04 aligned the read side around one claim-truth contract instead of introducing a second evaluator. Runtime diagnostics, `/api/v1/practice/sessions/{id}/knowledge-check`, canonical `/api/v1/practice/sessions/{id}/report`, and `/api/v1/sessions/{id}/replay` now share `effectiveness_snapshot.claim_truth` semantics (`unsupported_claim`, `weak_evidence`, `evidence_pending`, `evidence_verified`) while KB-lock blocked states remain diagnostic-only. S05 then proved the live admin Persona/knowledge -> practice -> knowledge-check -> report chain on current routes: objection-heavy coaching showed up in runtime, the frozen session exposed `customer_pressure_source="explicit"`, `knowledge-check.status` reached `hit`, and the canonical report stayed readable even when optional enhanced insights/highlights degraded.
+## Success Criteria Results
 
-The close-out failed at the final milestone boundary, not at the code-exists check. The working branch contains real implementation code, and the implemented S01-S05 surfaces verify cleanly on focused backend/web suites. But the milestone still lacks S06 entirely: `.gsd/milestones/M003/slices/S06/` has no plan, summary, or UAT artifact, and the accepted same-session replay/highlights proof is still blocked by `status="scoring"`, `report_generation_failed [NO_STAGE_RESULTS]`, `no_scoring_context_available`, and `[SESSION_NOT_COMPLETED]` on the replay/highlights endpoints. Separately, the roadmap’s strict “business-code directories only” wording was not met literally, because the implemented claim-truth and client-contract work also required shared seams such as `backend/src/common/effectiveness/*` and `web/src/lib/api/*`.
+- **管理员配置仍走 accepted current business route family** — 达成。validation checklist 第 1 条为 pass，且 S05 live proof 与 S06 same-session proof 都继续使用当前 admin Persona/knowledge、session create、learner practice/report/replay 路由。
+- **知识状态维持 live seven-status vocabulary** — 达成。validation checklist 第 2 条为 pass；S01 锁定 vocabulary 后，S05 live knowledge-check/report proof 与 S06 replay-unlock 修复都没有改变该 seam。
+- **Persona pressure / objection focus / claim-truth / read-side conclusions 在同一 evidence line 上保持稳定** — 达成。validation checklist 第 3 条为 pass，S02-S04 建立的 snapshot + objection ledger + claim-truth seam 在 S05/S06 的 fresh proof 中继续被消费，没有出现 cross-slice drift。
+- **最终 same-session proof chain 能到 replay/highlights，不再停在 `[SESSION_NOT_COMPLETED]`** — 达成。validation checklist 第 4 条为 pass；S06 用 focused backend regressions、accepted same-chain backend pack 和 live localhost same-session proof 一起证明该 blocker 已退休。
 
-## Cross-Slice Verification
+## Definition of Done Results
 
-- **Implementation-backed branch, not planning-only:** `git diff --stat "$(git merge-base HEAD 001-ai-practice-system)" HEAD -- ':!.gsd/'` returned non-`.gsd/` code changes across **105 files** with **20630 insertions** and **2253 deletions**. This proves the working branch contains real implementation, not only milestone artifacts.
-- **Definition-of-done artifact check failed:** `for s in S01 S02 S03 S04 S05 S06; do ...; done` confirmed `S01`-`S05` each have `PLAN/SUMMARY/UAT`, while `S06-PLAN.md`, `S06-SUMMARY.md`, and `S06-UAT.md` are all missing. The milestone cannot pass close-out while a planned slice has no execution artifacts.
-- **Focused backend verification for the implemented contract passed:** `venv/bin/python -m pytest -c pyproject.toml tests/integration/test_knowledge_flow.py tests/integration/test_voice_runtime_session_snapshot.py tests/contract/test_practice_evidence_contract.py tests/unit/test_session_evidence_service.py tests/unit/test_persona_policy.py tests/unit/test_stepfun_realtime_persistence.py -q` completed with **39 passed**. This covers frozen Persona pressure snapshots, knowledge-check runtime statuses, report/replay claim-truth alignment, objection-ledger read-side projection, and reconnect-safe minimal StepFun persistence.
-- **Focused web verification for the implemented surfaces passed:** `cd web && npm test -- --run "src/app/admin/personas/[id]/page.test.tsx" "src/app/admin/knowledge/[id]/page.test.tsx" "src/app/(user)/practice/[sessionId]/report/page.test.tsx" "src/app/(user)/practice/[sessionId]/replay/page.test.tsx" "src/hooks/use-practice-websocket.test.ts"` completed with **5 files passed / 23 tests passed**. This rechecked the current admin Persona/knowledge surfaces, learner report/replay rendering, and reconnect UI behavior.
-- **Criterion 1 — admin Persona/knowledge config freezes into session/runtime on the current chain:** **Met.** S01-S02 evidence plus the passing backend/web suites confirm that current admin surfaces feed `POST /api/v1/practice/sessions`, freeze `voice_policy_snapshot.customer_pressure`, and continue through current practice/report/replay seams.
-- **Criterion 2 — learner/admin surfaces distinguish the live seven-status knowledge vocabulary:** **Not fully met.** The passing backend suites verify the seven-status knowledge-check contract and keep KB-lock `blocked_*` states in diagnostics, and the canonical report remains readable on the same proof chain. But the accepted replay surface is still blocked on the same live proof session by `status="scoring"` / `[SESSION_NOT_COMPLETED]`, so this criterion is not retired across all accepted read surfaces.
-- **Criterion 3 — Persona pressure stays stable across turns and reconnect:** **Met for the delivered S01-S05 scope.** The passing backend current-contract suite includes reconnect-safe snapshot tests, and the passing web websocket suite verifies reconnect behavior while preserving the objection-proof prompt line.
-- **Criterion 4 — slices stay only inside the roadmap’s listed business-code directories:** **Not met as written.** The implemented milestone needed shared contract seams outside the literal allowlist, notably `backend/src/common/effectiveness/*` for claim-truth alignment and `web/src/lib/api/*` for admin/practice contract plumbing.
-- **Definition of done:** **Failed.** The roadmap still has an unfinished planned slice in practice, all slice summaries do not exist (`S06` missing), and the key cross-slice acceptance point — same-session `scoring -> completed` so replay/highlights load canonical evidence instead of `[SESSION_NOT_COMPLETED]` — is still open.
-- **Additional verification note:** running `venv/bin/python -m pytest -c pyproject.toml tests/integration/test_knowledge_flow.py tests/integration/test_sales_realtime_reconnect_flow.py tests/contract/test_practice_evidence_contract.py tests/unit/test_session_evidence_service.py tests/unit/test_persona_policy.py -q` produced **21 passed / 1 failed** because `tests/integration/test_sales_realtime_reconnect_flow.py` still expects persisted `latest_action_card` in the reconnect snapshot. The current contract intentionally keeps only minimal `feedback_pacing_state`, so that test is stale proof, not the milestone’s primary blocker.
+- **真实业务链路收口完成**：M003 全程都保持在当前 admin Persona / knowledge → session create → learner practice → knowledge-check / report / replay 这条真实业务代码链路上推进，没有引入并行占位 surface；validation 也再次确认 S01-S06 全部仍建立在这条 authority line 上。
+- **同一事实线贯通完成**：Persona 压力、异议 ledger、claim-truth、canonical report/replay/highlights 都继续建立在统一 session-evidence / runtime diagnostics seam 上，而不是各自重算；validation 的 cross-slice audit 确认没有新的 boundary drift。
+- **最终 blocker 已被退休**：S05 暴露的 same-session replay/highlights 卡在 persisted `status="scoring"` 的 blocker 已由 S06 用 fresh backend regression + live localhost same-session proof 退休，并且没有通过放宽 replay gate 这种取巧方式完成。
+- **里程碑验证已通过**：`.gsd/milestones/M003/M003-VALIDATION.md` verdict 为 `pass`，说明 milestone 在结构、验证和 requirement 覆盖上都满足 close-out 门槛。
 
-## Requirement Changes
+## Requirement Outcomes
 
-- None. **R010 remains active** — S01-S05 materially advanced it, but the milestone did not validate the full requirement because the accepted same-session replay/highlights surface is still blocked and S06 has not been executed.
+- **R010**: `active` → `validated` — 证据链来自 S01-S06 全部 slice 的完成与 M003 validation pass。S01 锁定 accepted route family 与 live seven-status knowledge vocabulary；S02 冻结 Persona pressure 到 session snapshot；S03 让 unresolved objection ledger 跨 turn/reconnect 持续存在；S04 把 claim-truth 统一到 `effectiveness_snapshot.claim_truth` 并贯穿 runtime/report/replay；S05 提供 live objection-heavy same-session proof 并定位最终 blocker；S06 则用 fresh backend regressions（44/44）、accepted same-chain backend proof（114/114）和 live localhost same-session proof 退休该 blocker，证明 immediate lifecycle end 仍为 `status="scoring"`，background finalization 后 persisted session 变为 `completed`，canonical report/replay/highlights 在同一 session 上 truthful 解锁，而 unfinished sessions 仍被 `[SESSION_NOT_COMPLETED]` 拦住。
 
-## Forward Intelligence
+## Deviations
 
-### What the next milestone should know
-- Finish the missing S06 on the same accepted proof chain before reopening any new realism work. The next meaningful proof is not “report still renders”; it is one objection-heavy session moving from `scoring` to `completed` so replay/highlights read the same evidence line the report already can.
+S06 的 live acceptance proof没有再完整重跑一次真实麦克风驱动的 objection-heavy 对话，而是复用 accepted learner route family 并在 fresh same session 上通过 live DB seam 注入 canonical objection/evidence facts，再经过真实 lifecycle end 与 background finalization 证明状态边界与 replay/highlights 解锁。这是范围内偏差，但没有改变 acceptance route family，也没有削弱 S06 要验证的核心边界。另一个执行偏差是 M003/S06 原先缺少 GSD DB 的 slice/task rows；close-out 前已补齐并重新对账 milestone/slice state，再做 validation/close-out。
 
-### What's fragile
-- The report/replay split is real: canonical `/practice/{sessionId}/report` can stay readable from persisted evidence while `/sessions/{id}/replay` and `/sessions/{id}/highlights` still fail the completed-session gate. That can look like a frontend routing issue if you do not check session status, report-generation logs, and replay endpoint payloads together.
+## Follow-ups
 
-### Authoritative diagnostics
-- Start with `GET /api/v1/practice/sessions/{id}/knowledge-check`, `GET /api/v1/practice/sessions/{id}/report`, `GET /api/v1/sessions/{id}/replay`, `PracticeSession.status`, and backend logs carrying `report_generation_failed [NO_STAGE_RESULTS]` / `no_scoring_context_available`. Those signals tell you whether you have a real replay-completion blocker, a knowledge/runtime issue, or only optional enhancement noise.
-
-### What assumptions changed
-- “All slices are done” was false. The close-out step has to verify roadmap slice IDs against actual slice directories and summary/UAT files.
-- “Keep the milestone inside a narrow set of business-code directories” was too tight for the real implementation. Shared seams such as `common/effectiveness` and `web/src/lib/api` are part of the current product contract and need to be named explicitly if future milestones want a literal directory boundary.
-
-## Files Created/Modified
-
-- `.gsd/milestones/M003/M003-SUMMARY.md` — wrote the milestone close-out record with fresh verification evidence, unmet criteria, and the remaining blocker line.
-- `.gsd/PROJECT.md` — updated current project state to record the failed M003 close-out audit, the missing S06 artifacts, and the remaining replay/highlights gate.
-- `.gsd/KNOWLEDGE.md` — appended reusable close-out lessons about slice/artifact parity, shared contract seams, and the stale reconnect snapshot test expectation.
+- M004 之后如继续扩 learner loop，优先复用当前 report / replay / highlights / retry-entry authority seams，不要再做第二套 learning surface。
+- Optional enhanced-report generation 在 localhost proof path 仍有 `[REPORT_NOT_FOUND]` / `[REPORT_GENERATION_FAILED]` 噪声；后续如要治理，应继续把它当作 enhancement path，而不是重新耦合 canonical replay/report availability。
+- 如果后续再扩 Persona / knowledge realism，先看 `voice_policy_snapshot.customer_pressure`、`SessionEvidenceService`、`effectiveness_snapshot.claim_truth` 和 objection ledger 这几条 authority seam，避免重新把事实拆回多套 contract。

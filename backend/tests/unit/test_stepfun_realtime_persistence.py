@@ -140,7 +140,85 @@ async def test_restore_session_state_rehydrates_minimal_runtime_and_emits_reconn
     assert handler._pending_tool_followup_response is False
     assert handler._awaiting_transcription_after_commit is False
     assert handler._has_uncommitted_audio is False
-    handler._send_reconnection_success.assert_awaited_once_with(state)
+
+    handler._send_reconnection_success.assert_awaited_once()
+    emitted_snapshot = handler._send_reconnection_success.await_args.args[0]
+    assert emitted_snapshot.session_id == "session-stepfun-restore-001"
+    assert emitted_snapshot.turn_count == 5
+    assert emitted_snapshot.session_status == "in_progress"
+    assert emitted_snapshot.ai_state == "listening"
+    assert emitted_snapshot.runtime_state == {
+        "current_request_id": 6,
+        "last_emitted_stage": "qualification",
+        "latest_score_snapshot": {"overall_score": 91.0},
+        "feedback_pacing_state": {
+            "last_action_signature": "sig-score-restore",
+            "last_action_turn": 5,
+        },
+    }
+
+
+@pytest.mark.asyncio
+async def test_restore_session_state_emits_normalized_coach_health_snapshot() -> None:
+    handler = StepFunRealtimeHandler()
+    handler._send_reconnection_success = AsyncMock()
+
+    state = SessionStateSnapshot(
+        session_id="session-stepfun-restore-health-001",
+        scenario="sales",
+        turn_count=2,
+        session_status="in_progress",
+        ai_state="listening",
+        runtime_state={
+            "coach_health": {
+                "status": "paused",
+                "reason": " capability_pipeline_failed ",
+                "message": "旧的异常消息",
+            }
+        },
+    )
+
+    await handler._restore_session_state(state)
+
+    assert handler._coach_health == "healthy"
+    assert handler._coach_health_reason == "capability_pipeline_failed"
+    handler._send_reconnection_success.assert_awaited_once()
+    emitted_snapshot = handler._send_reconnection_success.await_args.args[0]
+    assert emitted_snapshot.runtime_state == {
+        "coach_health": {
+            "status": "healthy",
+            "reason": "capability_pipeline_failed",
+            "message": "实时辅导正常。",
+        }
+    }
+
+
+@pytest.mark.asyncio
+async def test_restore_session_state_omits_coach_health_after_recovery() -> None:
+    handler = StepFunRealtimeHandler()
+    handler._send_reconnection_success = AsyncMock()
+    handler._coach_health = "degraded"
+    handler._coach_health_reason = "capability_pipeline_failed"
+
+    state = SessionStateSnapshot(
+        session_id="session-stepfun-restore-healthy-001",
+        scenario="sales",
+        turn_count=3,
+        session_status="in_progress",
+        ai_state="listening",
+        runtime_state={
+            "current_request_id": 3,
+        },
+    )
+
+    await handler._restore_session_state(state)
+
+    assert handler._coach_health == "healthy"
+    assert handler._coach_health_reason is None
+    emitted_snapshot = handler._send_reconnection_success.await_args.args[0]
+    assert emitted_snapshot.runtime_state == {
+        "current_request_id": 3,
+    }
 
 
 @pytest.mark.asyncio

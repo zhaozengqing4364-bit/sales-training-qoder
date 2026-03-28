@@ -1,6 +1,6 @@
 {
   "mode": "grow",
-  "current_issue_id": "M006-S05",
+  "current_issue_id": "M003-S06",
   "current_issue_type": "slice",
   "current_issue_status": "done",
   "pending_issue_ids": [],
@@ -118,26 +118,27 @@
     "M006-S05-T01",
     "M006-S05-T02",
     "M006-S05-T03",
-    "M006-S05"
+    "M006-S05",
+    "M003-S06"
   ],
   "blocked_issue_ids": [],
   "deferred_issue_ids": [],
   "last_modified_files": [
-    ".gsd/milestones/M006/slices/S05/S05-SUMMARY.md",
-    ".gsd/milestones/M006/slices/S05/S05-UAT.md",
-    ".gsd/milestones/M006/M006-ROADMAP.md",
-    ".gsd/PROJECT.md",
+    ".gsd/milestones/M003/slices/S06/S06-SUMMARY.md",
+    ".gsd/milestones/M003/slices/S06/S06-UAT.md",
+    ".gsd/milestones/M003/M003-ROADMAP.md",
+    ".gsd/REQUIREMENTS.md",
     ".codex/loop/state.json",
     ".codex/loop/log.md"
   ],
   "last_verification_commands": [
-    "cd web && pnpm dlx npm@11.6.1 test -- --run 'src/app/admin/analytics/page.test.tsx' 'src/components/admin/manager-lite-panel.test.tsx' 'src/app/admin/users/[id]/page.test.tsx'",
-    "cd web && pnpm dlx npm@11.6.1 test -- --run 'src/app/admin/analytics/page.test.tsx' 'src/app/admin/asset-governance.test.tsx' 'src/app/admin/users/[id]/page.test.tsx' 'src/components/admin/manager-lite-panel.test.tsx'",
-    "cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/common/test_admin_analytics_service.py tests/unit/test_support_runtime_service.py tests/integration/test_admin_users_api.py tests/integration/test_admin_interventions_api.py tests/integration/test_asset_governance_api.py tests/integration/test_rbac_access_control_api.py tests/contract/test_analytics.py",
-    "lsp diagnostics: web/src/lib/admin/read-models.ts, web/src/lib/admin/runtime-faults.ts, web/src/app/admin/analytics/page.tsx, web/src/app/admin/users/page.tsx"
+    "cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_report_generation_trigger.py tests/integration/test_session_lifecycle_api.py tests/integration/test_replay_api.py tests/contract/test_practice_evidence_contract.py -v",
+    "cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_stepfun_realtime_handler.py tests/unit/test_stepfun_knowledge_helpers.py tests/integration/test_knowledge_flow.py tests/integration/test_replay_api.py tests/contract/test_practice_evidence_contract.py",
+    "live localhost proof: POST /api/v1/practice/sessions -> /practice/{sessionId} -> POST /api/v1/practice/sessions/{id}/lifecycle (status=scoring) -> background finalization -> GET /api/v1/practice/sessions/{id}/knowledge-check,/report and GET /api/v1/sessions/{id}/replay,/highlights -> /practice/{sessionId}/report,/replay",
+    "lsp diagnostics: backend/src/evaluation/services/report_generation_trigger.py, backend/tests/unit/test_report_generation_trigger.py, backend/tests/integration/test_session_lifecycle_api.py, backend/tests/integration/test_replay_api.py, backend/tests/contract/test_practice_evidence_contract.py"
   ],
-  "last_verification_result": "Fresh S05 verification passed: the T01 web pack was green (18/18), the T02/T03 admin web pack was green (28/28), the full backend admin regression pack was green (60/60), focused LSP diagnostics were clean on the touched web seam files, and slice-close artifacts/roadmap projection were rendered successfully.",
-  "last_success_signal": "Shared admin read-model glue now lives behind route-shaped adapters for analytics/users/user-detail, and the full shipped admin route family stayed green after the seam migration.",
+  "last_verification_result": "Fresh S06 verification passed: focused backend status-boundary suites were green (44/44), the accepted M003 backend chain stayed green (114/114), live localhost proof on session 6a9e45d7-c15a-43c6-95cf-59583918780a preserved immediate end status=scoring, then background finalization persisted status=completed while report_status=failed, and canonical report/replay/highlights plus learner report/replay routes all loaded same-session evidence; true unfinished sessions still returned [SESSION_NOT_COMPLETED].",
+  "last_success_signal": "The accepted M003 same-session sales chain no longer strands replay/highlights behind persisted status=scoring once canonical evidence is readable.",
   "last_growth_scan": null,
-  "next_action": "Stop after one item. M006 is now ready for milestone validation/close-out."
+  "next_action": "M003 slices are now all complete. Run milestone validation, then decide milestone close-out."
 }

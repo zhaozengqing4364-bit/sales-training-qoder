@@ -2,6 +2,29 @@
 id: T01
 parent: S03
 milestone: M003
+provides: []
+requires: []
+affects: []
+key_files: ["backend/src/sales_bot/services/context_manager.py", "backend/src/common/conversation/storage.py", "backend/src/sales_bot/websocket/components/stepfun_message_helpers.py", "backend/src/sales_bot/websocket/stepfun_realtime_handler.py", "backend/tests/unit/test_context_manager.py", "backend/tests/unit/test_stepfun_realtime_handler.py", "backend/tests/unit/test_stepfun_message_helpers.py", ".gsd/KNOWLEDGE.md"]
+key_decisions: ["Persist the structured objection ledger under `ConversationMessage.transcript_metadata["objection_ledger"]` instead of adding a new column or side store, so replay/report readers can keep using the current evidence chain.", "Normalize the ledger once and reuse the same dict shape in both persisted message analysis and `StepFunRealtimeHandler` reconnect snapshots, so later classic/StepFun wiring work can carry one contract across runtime and read-side code.", "Whitelist the ledger through both `stepfun_message_helpers` and `MessageStorageService`, because this codebase intentionally filters unknown analysis keys before persistence."]
+patterns_established: []
+drill_down_paths: []
+observability_surfaces: []
+duration: ""
+verification_result: "Fresh verification evidence came from the planned backend gate and one extra helper suite for the widened persistence seam. `cd backend && /usr/bin/time -p venv/bin/python -m pytest -c pyproject.toml tests/unit/test_context_manager.py tests/unit/test_stepfun_realtime_handler.py` passed with 60 tests, covering the new context-manager ledger API, transcript-metadata persistence, and StepFun snapshot save/restore behavior. Because T01 also touched the shared StepFun persistence helper layer, I ran `cd backend && /usr/bin/time -p venv/bin/python -m pytest -c pyproject.toml tests/unit/test_stepfun_message_helpers.py`, which passed with 5 tests and confirmed the updated whitelist/duplicate-patch path stays green."
+completed_at: 2026-03-25T03:30:14.683Z
+blocker_discovered: false
+---
+
+# T01: Added a normalized unresolved-objection ledger seam to context, message persistence, and StepFun reconnect state.
+
+> Added a normalized unresolved-objection ledger seam to context, message persistence, and StepFun reconnect state.
+
+## What Happened
+---
+id: T01
+parent: S03
+milestone: M003
 key_files:
   - backend/src/sales_bot/services/context_manager.py
   - backend/src/common/conversation/storage.py
@@ -61,3 +84,10 @@ None.
 - `backend/tests/unit/test_stepfun_realtime_handler.py`
 - `backend/tests/unit/test_stepfun_message_helpers.py`
 - `.gsd/KNOWLEDGE.md`
+
+
+## Deviations
+Expanded beyond the four-file planner snapshot to update `backend/src/sales_bot/websocket/components/stepfun_message_helpers.py`, `backend/src/sales_bot/websocket/stepfun_realtime_handler.py`, and `backend/tests/unit/test_stepfun_message_helpers.py`, because the live persistence chain currently drops unknown `analysis_data` keys before they reach storage; without extending those seams, the new ledger shape would exist only in types/tests and not on the real runtime path.
+
+## Known Issues
+None.

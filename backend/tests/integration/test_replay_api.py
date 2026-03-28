@@ -10,6 +10,7 @@ References:
 """
 import uuid
 from datetime import datetime, timezone
+from unittest.mock import AsyncMock
 
 import pytest
 import pytest_asyncio
@@ -22,6 +23,8 @@ from common.db.models import Base, User, Scenario, PracticeSession, SessionStatu
 from agent.models import Agent, AgentPersona, Persona
 from common.knowledge.models import KnowledgeBase, KnowledgeDocument
 from common.conversation.models import ConversationMessage
+from common.error_handling.result import Result
+from evaluation.services.report_generation_trigger import ReportGenerationTrigger
 
 from main import app
 from common.db.session import get_db
@@ -755,6 +758,147 @@ class TestReplayAPI:
         
         # Assert
         assert response.status_code == 400
+
+    @pytest.mark.asyncio
+    async def test_sales_session_replay_unlocks_after_background_finalization(
+        self,
+        async_client,
+        auth_headers,
+        db_session,
+        test_user,
+    ):
+        """A scoring sales session should unlock replay/highlights only after background finalization promotes it."""
+        scenario = Scenario(
+            name="Sales Finalization",
+            description="Replay unlock after background finalization",
+            scenario_type="sales",
+        )
+        db_session.add(scenario)
+        await db_session.flush()
+
+        session = PracticeSession(
+            user_id=test_user.user_id,
+            scenario_id=scenario.scenario_id,
+            status=SessionStatus.SCORING.value,
+            report_status="processing",
+            start_time=datetime.now(timezone.utc),
+            end_time=datetime.now(timezone.utc),
+            logic_score=84.0,
+            accuracy_score=82.0,
+            completeness_score=80.0,
+            effectiveness_snapshot={
+                "pass_flags": {
+                    "pass_3min_flow": True,
+                    "pass_5turn_defense": True,
+                    "pass_4step_structure": False,
+                },
+                "main_capability_passed": False,
+                "overall_result": "fail",
+                "main_issue": {
+                    "issue_type": "evidence_gap",
+                    "issue_text": "客户已经追问 ROI 案例，但这一轮还没给出证据。",
+                    "recovery_rule": "下一轮先补案例和 ROI 数字。",
+                },
+                "next_goal": {
+                    "goal_type": "evidence_backing",
+                    "goal_text": "下一轮优先补一条 ROI 证据。",
+                    "rule": "至少补一个案例或量化收益。",
+                },
+                "evaluable": True,
+                "not_evaluable_reason": None,
+            },
+        )
+        db_session.add(session)
+        await db_session.flush()
+
+        db_session.add_all(
+            [
+                ConversationMessage(
+                    session_id=session.session_id,
+                    turn_number=1,
+                    role="assistant",
+                    content="您现在最想先看哪类 ROI 证明？",
+                    timestamp=datetime.now(timezone.utc),
+                    duration_ms=1600,
+                    sales_stage="discovery",
+                    score_snapshot={"overall_score": 82},
+                    is_highlight=False,
+                ),
+                ConversationMessage(
+                    session_id=session.session_id,
+                    turn_number=2,
+                    role="user",
+                    content="我们还是想先看同行案例和回收周期。",
+                    timestamp=datetime.now(timezone.utc),
+                    duration_ms=2200,
+                    sales_stage="objection",
+                    score_snapshot={"overall_score": 81},
+                    is_highlight=True,
+                    highlight_type="bad",
+                    highlight_reason="客户已经追问 ROI 证据。",
+                ),
+            ]
+        )
+        await db_session.commit()
+        await db_session.refresh(session)
+
+        replay_before = await async_client.get(
+            f"/api/v1/sessions/{session.session_id}/replay",
+            headers=auth_headers,
+        )
+        highlights_before = await async_client.get(
+            f"/api/v1/sessions/{session.session_id}/highlights",
+            headers=auth_headers,
+        )
+        assert replay_before.status_code == 400
+        assert replay_before.json()["error"] == "[SESSION_NOT_COMPLETED]"
+        assert highlights_before.status_code == 400
+        assert highlights_before.json()["error"] == "[SESSION_NOT_COMPLETED]"
+
+        mock_report_service = AsyncMock()
+        mock_report_service.generate_report = AsyncMock(
+            return_value=Result.fail("[ENHANCED_REPORT_FAILED]")
+        )
+        await ReportGenerationTrigger(db_session, mock_report_service).trigger_on_session_end(
+            str(session.session_id),
+            "sales",
+        )
+        await db_session.commit()
+        await db_session.refresh(session)
+
+        assert session.report_status == "failed"
+        assert session.status == SessionStatus.COMPLETED.value
+
+        replay_after = await async_client.get(
+            f"/api/v1/sessions/{session.session_id}/replay",
+            headers=auth_headers,
+        )
+        highlights_after = await async_client.get(
+            f"/api/v1/sessions/{session.session_id}/highlights",
+            headers=auth_headers,
+        )
+        assert replay_after.status_code == 200
+        assert replay_after.json()["success"] is True
+        assert highlights_after.status_code == 200
+        assert highlights_after.json()["success"] is True
+
+    @pytest.mark.asyncio
+    async def test_should_keep_highlights_locked_for_true_in_progress_session(
+        self,
+        async_client,
+        auth_headers,
+        in_progress_session,
+    ):
+        """True in-progress sessions should still fail the completion gate."""
+        response = await async_client.get(
+            f"/api/v1/sessions/{in_progress_session.session_id}/highlights",
+            headers=auth_headers,
+        )
+
+        assert response.status_code == 400
+        body = response.json()
+        assert body["success"] is False
+        assert body["error"] == "[SESSION_NOT_COMPLETED]"
 
     # ========== GET /sessions/{session_id}/highlights tests ==========
 

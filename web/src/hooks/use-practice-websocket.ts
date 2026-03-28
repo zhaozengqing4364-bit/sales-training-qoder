@@ -19,7 +19,7 @@ import { getSharedTraceId } from "@/lib/observability/trace-context";
 export type {
     InterruptReason, InterruptMessageData, WSMessage, ChatMessage,
     FuzzyDetection, SalesStage, ScoreDimension, ScoreUpdate, ActionCard,
-    SlideUpdate, PointCovered, ForbiddenWordDetection,
+    CoachHealth, SlideUpdate, PointCovered, ForbiddenWordDetection,
     TTSAudioData, TTSChunkMessage, PracticeState, SessionStatus, ConnectionState,
     UsePracticeWebSocketOptions, TTSChunkData,
 } from "./websocket/types";

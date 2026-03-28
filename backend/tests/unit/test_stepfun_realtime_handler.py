@@ -1,5 +1,7 @@
 """
 Unit tests for StepFunRealtimeHandler realtime channel behavior.
+
+Includes degraded/resumed coach health state tests for S07.
 """
 
 from __future__ import annotations
@@ -2417,3 +2419,152 @@ async def test_restore_session_state_rehydrates_objection_ledger() -> None:
         "closure_state": "open",
     }
     handler._send_reconnection_success.assert_awaited_once_with(state)
+
+
+# ── S07: Coach health degraded/resumed state ──
+
+
+@pytest.mark.asyncio
+async def test_run_realtime_feedback_marks_coach_degraded_when_capability_pipeline_fails():
+    """When scoring capability raises, the handler should set coach_health to 'degraded'."""
+    handler = StepFunRealtimeHandler()
+    handler.session_status = "in_progress"
+    handler.turn_count = 1
+    handler.session_id = "session-degraded-test"
+
+    handler._ensure_feedback_context = AsyncMock()
+    handler._feedback_context = SimpleNamespace(
+        turn_count=1,
+        add_message=MagicMock(),
+    )
+    handler._send_score_update = AsyncMock()
+    handler._send_fuzzy_detection = AsyncMock()
+    handler._send_action_card = AsyncMock()
+    handler._send_coach_health = AsyncMock()
+
+    # Scoring capability raises an exception
+    handler._realtime_scoring_enabled = True
+    handler._realtime_scoring_capability = MagicMock()
+    handler._realtime_scoring_capability.execute = AsyncMock(
+        side_effect=RuntimeError("scoring service unavailable")
+    )
+
+    handler._fuzzy_detection_enabled = True
+    handler._fuzzy_detection_capability = MagicMock()
+    handler._fuzzy_detection_capability.execute = AsyncMock(
+        return_value=SimpleNamespace(success=True, data={"detections": []})
+    )
+
+    handler._sales_stage_enabled = True
+
+    analysis = await handler._run_realtime_feedback(
+        user_text="我们这个产品的 ROI 很高",
+        turn_number=1,
+        sales_stage="discovery",
+    )
+
+    # Coach health should be marked degraded
+    assert handler._coach_health == "degraded"
+    # The handler should have emitted a coach_health_update to the frontend
+    handler._send_coach_health.assert_awaited()
+    # Session status should still be usable (in_progress)
+    assert handler.session_status == "in_progress"
+
+
+@pytest.mark.asyncio
+async def test_run_realtime_feedback_clears_coach_degraded_state_after_successful_resume():
+    """After a degraded turn, a successful next evaluation should set coach_health to 'resumed'."""
+    handler = StepFunRealtimeHandler()
+    handler.session_status = "in_progress"
+    handler.turn_count = 2
+    handler.session_id = "session-resume-test"
+
+    handler._ensure_feedback_context = AsyncMock()
+    handler._feedback_context = SimpleNamespace(
+        turn_count=2,
+        add_message=MagicMock(),
+    )
+    handler._send_score_update = AsyncMock()
+    handler._send_fuzzy_detection = AsyncMock()
+    handler._send_action_card = AsyncMock()
+    handler._send_coach_health = AsyncMock()
+
+    # Simulate prior degraded state
+    handler._coach_health = "degraded"
+
+    # This turn succeeds
+    handler._realtime_scoring_enabled = True
+    handler._realtime_scoring_capability = MagicMock()
+    handler._realtime_scoring_capability.execute = AsyncMock(
+        return_value=SimpleNamespace(
+            success=True,
+            data={
+                "dimension_scores": {"价值表达": 78.0},
+                "overall_score": 78.0,
+                "feedback": "尝试更具体的 ROI 表达",
+            },
+        )
+    )
+
+    handler._fuzzy_detection_enabled = True
+    handler._fuzzy_detection_capability = MagicMock()
+    handler._fuzzy_detection_capability.execute = AsyncMock(
+        return_value=SimpleNamespace(success=True, data={"detections": []})
+    )
+
+    handler._sales_stage_enabled = True
+
+    await handler._run_realtime_feedback(
+        user_text="根据我们的数据，客户 ROI 达到了 35%",
+        turn_number=2,
+        sales_stage="discovery",
+    )
+
+    # Coach health should transition from degraded -> resumed
+    assert handler._coach_health == "resumed"
+    handler._send_coach_health.assert_awaited()
+
+
+@pytest.mark.asyncio
+async def test_capability_pipeline_fails_does_not_change_training_session_status():
+    """When the coaching pipeline fails, session status must remain in_progress."""
+    handler = StepFunRealtimeHandler()
+    handler.session_status = "in_progress"
+    handler.turn_count = 1
+    handler.session_id = "session-status-test"
+
+    handler._ensure_feedback_context = AsyncMock()
+    handler._feedback_context = SimpleNamespace(
+        turn_count=1,
+        add_message=MagicMock(),
+    )
+    handler._send_score_update = AsyncMock()
+    handler._send_fuzzy_detection = AsyncMock()
+    handler._send_action_card = AsyncMock()
+    handler._send_coach_health = AsyncMock()
+
+    # All capabilities fail
+    handler._realtime_scoring_enabled = True
+    handler._realtime_scoring_capability = MagicMock()
+    handler._realtime_scoring_capability.execute = AsyncMock(
+        side_effect=RuntimeError("scoring down")
+    )
+
+    handler._fuzzy_detection_enabled = True
+    handler._fuzzy_detection_capability = MagicMock()
+    handler._fuzzy_detection_capability.execute = AsyncMock(
+        side_effect=RuntimeError("fuzzy detection down")
+    )
+
+    handler._sales_stage_enabled = True
+
+    await handler._run_realtime_feedback(
+        user_text="这个功能对我们帮助很大",
+        turn_number=1,
+        sales_stage="opening",
+    )
+
+    # Training session must still be usable
+    assert handler.session_status == "in_progress"
+    assert handler._coach_health == "degraded"
+

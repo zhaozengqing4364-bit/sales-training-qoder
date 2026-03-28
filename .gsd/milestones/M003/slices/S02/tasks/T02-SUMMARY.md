@@ -2,6 +2,29 @@
 id: T02
 parent: S02
 milestone: M003
+provides: []
+requires: []
+affects: []
+key_files: ["backend/src/sales_bot/services/voice_instruction_compiler.py", "backend/src/sales_bot/services/voice_runtime_policy.py", "backend/src/common/api/practice.py", "backend/src/sales_bot/websocket/stepfun_realtime_handler.py", "backend/tests/unit/test_voice_instruction_compiler.py", "backend/tests/integration/test_knowledge_flow.py", "backend/tests/unit/test_stepfun_realtime_handler.py", ".gsd/DECISIONS.md", ".gsd/KNOWLEDGE.md"]
+key_decisions: ["Mirror the normalized Persona `customer_pressure` contract onto the top-level effective policy and persisted session snapshot while keeping `persona_policy.customer_pressure` as the canonical nested source.", "Compile structured `customer_pressure` directly into the runtime instruction contract, including evidence and revisit-on-evasion directives, instead of relying only on legacy flat sales-focus fields.", "When a StepFun session already has a persisted voice-policy snapshot, reconnect must trust that frozen snapshot rather than re-resolving live policy from admin config."]
+patterns_established: []
+drill_down_paths: []
+observability_surfaces: []
+duration: ""
+verification_result: "Followed a red-green cycle on the new behavior: the initial focused pytest run failed because the compiler ignored top-level structured pressure data and the created session snapshot had no `customer_pressure` field. After the implementation, the focused compiler/integration rerun passed. I then ran a focused StepFun unit test to verify reconnect now prefers the frozen session snapshot over live policy resolution. Finally, I ran the task’s planned verification gate exactly as written: `cd backend && /usr/bin/time -p venv/bin/python -m pytest -c pyproject.toml tests/unit/test_voice_instruction_compiler.py tests/integration/test_knowledge_flow.py`, and all 12 tests passed. LSP diagnostics on `backend/src/sales_bot/services/voice_instruction_compiler.py`, `backend/src/sales_bot/services/voice_runtime_policy.py`, `backend/src/common/api/practice.py`, `backend/src/sales_bot/websocket/stepfun_realtime_handler.py`, and the touched test files all returned `No diagnostics`."
+completed_at: 2026-03-25T02:38:27.686Z
+blocker_discovered: false
+---
+
+# T02: Freeze Persona pressure contracts into runtime snapshots and StepFun reconnects
+
+> Freeze Persona pressure contracts into runtime snapshots and StepFun reconnects
+
+## What Happened
+---
+id: T02
+parent: S02
+milestone: M003
 key_files:
   - backend/src/sales_bot/services/voice_instruction_compiler.py
   - backend/src/sales_bot/services/voice_runtime_policy.py
@@ -71,3 +94,10 @@ None.
 - `backend/tests/unit/test_stepfun_realtime_handler.py`
 - `.gsd/DECISIONS.md`
 - `.gsd/KNOWLEDGE.md`
+
+
+## Deviations
+Minor local adaptation: I also updated `backend/src/sales_bot/websocket/stepfun_realtime_handler.py` and added a focused unit test in `backend/tests/unit/test_stepfun_realtime_handler.py` because the live reconnect path still re-resolved policy from admin config, which would have invalidated the task’s frozen-snapshot goal. Otherwise the task followed the written plan.
+
+## Known Issues
+None.

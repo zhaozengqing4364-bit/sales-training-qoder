@@ -1,38 +1,53 @@
 ---
-verdict: needs-remediation
+verdict: pass
 remediation_round: 0
 ---
 
 # Milestone Validation: M003
 
 ## Success Criteria Checklist
-- [x] Criterion 1 — evidence: S02 moved Persona pressure into a canonical nested `customer_pressure` contract, froze it into `PracticeSession.voice_policy_snapshot`, and kept it on the current admin → `POST /api/v1/practice/sessions` → practice runtime authority chain; S05’s live same-session proof further showed `customer_pressure_source="explicit"` plus bound knowledge-base context on the accepted routes.
-- [ ] Criterion 2 — gap: S01 locked the seven-status learner/admin vocabulary and S05 proved the same-session `knowledge-check.status="hit"` plus a readable canonical report with explicit fallback copy, but the accepted replay leg never completed on that same proof session. The session stayed `status="scoring"`, `/api/v1/sessions/{id}/replay` returned `[SESSION_NOT_COMPLETED]`, and `/practice/{sessionId}/replay` fell back to `统一训练证据不可用`, so the full practice → knowledge-check / report / replay surface proof is still incomplete.
-- [x] Criterion 3 — evidence: S02 froze Persona pressure direction into the session snapshot, S03 persisted one unresolved objection ledger across topic drift and reconnect, and S05’s live runtime proof kept ROI / evidence pressure visible on the same session instead of reverting to generic prompt chat.
-- [x] Criterion 4 — evidence: the slice summaries show product changes stayed on the accepted current-route backend/web directories (`backend/src/agent/`, `backend/src/sales_bot/`, `backend/src/common/knowledge/`, `backend/src/common/conversation/`, `backend/src/common/api/`, `web/src/app/admin/`, `web/src/app/(user)/practice/`) with supporting tests/docs only; no Silence / Conda / `.env` / lockfile work was promoted into the milestone.
+- [x] Admin Persona / knowledge changes remain on the accepted current business route family (`web/src/app/admin/personas/[id]/page.tsx`, `web/src/app/admin/knowledge/[id]/page.tsx`, `POST /api/v1/practice/sessions`, learner practice/report/replay routes).
+  - Evidence: S01 route-lock summary/UAT remained authoritative; S05 live proof and S06 live same-session proof both stayed on those current routes.
+- [x] Learner/admin-visible knowledge statuses remain on the live seven-status contract (`no_knowledge_base`, `disabled`, `not_triggered`, `kb_not_ready`, `search_failed`, `miss`, `hit`) instead of collapsing into generic miss/error labels.
+  - Evidence: S01 locked the contract; S05 live knowledge-check/report proof remained on that vocabulary; S06 did not alter the knowledge-status seam.
+- [x] Persona pressure, objection focus, claim-truth, and read-side conclusions stay stable across turns/reconnect on one same-session evidence line.
+  - Evidence: S02-S04 slice proofs remain complete and were re-covered indirectly by the accepted same-chain backend pack (`114 passed`) during S06 validation.
+- [x] The final same-session proof chain now reaches replay and highlights truthfully after background finalization instead of stopping at `[SESSION_NOT_COMPLETED]`.
+  - Evidence: S06 focused backend regressions (`44 passed`), accepted same-chain backend proof (`114 passed`), live persisted-row proof (`status: scoring -> completed` while `report_status: failed`), and live 200 responses for canonical report/replay/highlights plus unlocked `/practice/{sessionId}/report` and `/practice/{sessionId}/replay` pages on the exact same session.
 
 ## Slice Delivery Audit
-| Slice | Claimed | Delivered | Status |
-|-------|---------|-----------|--------|
-| S01 | Lock the real admin Persona/knowledge → session create → practice → knowledge-check/report/replay chain and the live seven-status knowledge vocabulary. | Summary and verification show the current entry chain, replay ownership seam, seven public statuses, and inventory/spike blocker were all locked to current routes/modules. | pass |
-| S02 | Freeze Persona pressure into `voice_policy_snapshot` and make current admin Persona surfaces edit/audit the model. | Summary and UAT show nested `customer_pressure` editing/audit on current admin pages plus per-session frozen snapshot fields and stable snapshot refs after later edits. | pass |
-| S03 | Keep one unresolved objection alive across topic drift/reconnect and carry it onto report/replay conclusions. | Summary and UAT show ledger persistence in `transcript_metadata`, reconnect-safe restore, ledger-aware runtime coaching, and report/replay `main_issue` / `next_goal` preference for the latest open objection. | pass |
-| S04 | Distinguish unsupported / pending / weak / verified claim truth on current realtime/report/replay surfaces without a second evaluator. | Summary and UAT show canonical `effectiveness_snapshot.claim_truth` across evaluator/session evidence, live StepFun diagnostics, knowledge-check, and learner report/replay cards while keeping kb-lock chain failures diagnostic-only. | pass |
-| S05 | Prove one real admin → practice → report/replay run on current routes and capture degraded-state guardrails. | Delivered the real admin → practice → knowledge-check → canonical report proof and explicit degraded-state guardrails, but the same-session replay/highlights leg remained blocked behind `status="scoring"` and `[SESSION_NOT_COMPLETED]`. | gap |
+| Slice | Planned outcome | Delivered evidence |
+|---|---|---|
+| S01 | Lock the current admin/persona/knowledge → practice/report/replay authority chain and live knowledge vocabulary | `S01-SUMMARY.md`, `S01-UAT.md`, and current roadmap still point at the accepted route family; later slices continued to build only on those routes. |
+| S02 | Freeze one canonical `customer_pressure` model into session snapshots and keep it stable across reconnect | `S02-SUMMARY.md`, `S02-UAT.md`, validated snapshot pressure contract consumed by S03-S06. |
+| S03 | Persist unresolved objection ledger facts across turns/reconnect and expose them on read-side conclusions | `S03-SUMMARY.md`, `S03-UAT.md`, and S04-S06 proofs continue to consume that same objection-ledger seam. |
+| S04 | Expose one canonical claim-truth vocabulary across realtime/report/replay | `S04-SUMMARY.md`, `S04-UAT.md`, plus S05/S06 same-session proof continuing to show `claim_truth` on the accepted route family. |
+| S05 | Capture one live objection-heavy same-session proof on current routes and document the scoring/replay blocker | `S05-SUMMARY.md`, `S05-UAT.md` and the live proof/blocker narrative that S06 later retired. |
+| S06 | Keep immediate sales end at `scoring`, then unlock same-session replay/highlights after background finalization | `S06-SUMMARY.md`, `S06-UAT.md`, focused backend regressions (44/44), accepted same-chain backend proof (114/114), and live localhost same-session proof on session `6a9e45d7-c15a-43c6-95cf-59583918780a`. |
 
 ## Cross-Slice Integration
-- S01 → S02 aligned: the locked current entry chain and seven-status vocabulary were consumed by S02’s snapshot freeze work on the existing admin/session-create/runtime seam.
-- S02 → S03 aligned: the frozen `voice_policy_snapshot.customer_pressure` contract became the stable pressure baseline for the unresolved-objection ledger and reconnect restore path.
-- S03 → S04 aligned: the persisted objection ledger and closure states fed the canonical claim-truth classification without changing stable report/replay keys.
-- The material boundary mismatch appears at S04 → S05 / final acceptance: S05 successfully consumed the shared claim-truth contract and objection ledger on one same-session proof, but post-end scoring finalization did not carry that same evidence into `/api/v1/sessions/{id}/replay` (and sibling highlights). Upstream integrations are working; the broken seam is the scoring-finalization / replay-completion handoff at the end of the accepted chain.
+## Cross-slice integration audit
+
+- **S01 → S02**: preserved. The accepted admin Persona/knowledge → session-create → learner/report/replay route family remains the milestone authority, and S02 still freezes pressure semantics into `voice_policy_snapshot` instead of introducing a parallel surface.
+- **S02 → S03**: preserved. Frozen persona pressure and reconnect-safe runtime context still feed the unresolved objection ledger path that S03 established.
+- **S03 → S04**: preserved. Multi-turn objection evidence still underpins the claim-truth contract exposed on runtime diagnostics, report, and replay.
+- **S04 → S05**: preserved. The shared claim-truth vocabulary and same-session evidence line still drive the live objection-heavy proof and degraded-state interpretation on current routes.
+- **S05 → S06**: retired cleanly. S05 documented the last blocker (`status="scoring"` leaving replay/highlights behind `[SESSION_NOT_COMPLETED]`), and S06 fixed that blocker without weakening the unfinished-session gate or changing the shipped immediate `status="scoring"` lifecycle-end contract.
+
+No cross-slice boundary mismatch remains on the accepted M003 route family. The remaining noisy path is optional enhanced-report generation (`[REPORT_NOT_FOUND]` / `[REPORT_GENERATION_FAILED]` on localhost), but canonical report/replay/highlights now stay truthful and available independently, so that noise does not invalidate the milestone seam.
 
 ## Requirement Coverage
-- R010 is the active requirement owned by M003, and it is addressed across S01-S05: route inventory/contract lock (S01), frozen Persona pressure (S02), reconnect-safe objection persistence (S03), claim-truth alignment (S04), and live same-session proof (S05).
-- R010 is not yet validated because the accepted same-session chain still stops at replay/highlights when objection-heavy sessions remain `status="scoring"` after `report_generation_failed [NO_STAGE_RESULTS]` / `no_scoring_context_available`.
-- Other active requirements (`R009`, `R011`, `R012`) remain owned by other milestones/slices (`M002`, `M004`, `M005`) and do not introduce a separate M003 coverage gap in this validation pass.
+## Requirement coverage
+
+- **R010** is now fully covered and validated.
+  - S01 locked the accepted route family and learner/admin-visible knowledge status vocabulary.
+  - S02 froze persona pressure semantics into the session snapshot.
+  - S03 preserved unresolved objection evidence across turns and reconnect.
+  - S04 aligned claim-truth semantics across runtime, report, and replay.
+  - S05 proved one live objection-heavy same-session admin → practice → knowledge-check → report chain and documented the remaining replay blocker.
+  - S06 retired that blocker by proving the same session can keep immediate end `status="scoring"`, then background-finalize to `completed`, and unlock canonical report/replay/highlights truthfully on current routes.
+
+No active M003-scoped requirement remains unproven.
 
 ## Verdict Rationale
-M003 cannot be sealed yet. S01-S04 substantiate the roadmap’s technical seams, and S05 provides a real same-session proof that the admin Persona/knowledge → practice → knowledge-check → canonical report chain now behaves like the intended objection-heavy customer. But the roadmap’s accepted chain explicitly includes replay, and the live proof shows that same-session replay is still blocked by post-end scoring finalization. That is a material milestone-level gap, not a minor note, because the replay route is part of both the success criteria and the acceptance boundary. The blocker is narrow and well evidenced, so remediation should focus on the scoring-finalization / replay-completion seam rather than reworking earlier slices.
-
-## Remediation Plan
-- **S06: scoring 收口与 replay/highlights 解锁** — fix the current post-end scoring/report finalization path so the same objection-heavy proof session transitions from `status="scoring"` to `status="completed"`, `/api/v1/sessions/{id}/replay` and `/api/v1/sessions/{id}/highlights` return same-session evidence instead of `[SESSION_NOT_COMPLETED]`, and `/practice/{sessionId}/replay` renders truthful replay content on the accepted chain. Re-run the live same-session admin Persona/knowledge → practice → knowledge-check → report → replay proof after the fix.
+All planned M003 slices are now complete in both roadmap state and filesystem artifacts, the milestone’s only active scoped requirement (R010) is validated, and the previously documented S05 blocker has been retired by fresh S06 backend and live same-session proof. There is no remaining mismatch between the accepted route family and the delivered behavior. The only still-noisy area is optional enhanced-report generation on localhost, but canonical report/replay/highlights now remain truthful and available independently, so that path no longer blocks milestone acceptance.

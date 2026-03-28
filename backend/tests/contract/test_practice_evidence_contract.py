@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import UTC, datetime
+from unittest.mock import AsyncMock
 
 import pytest
 import pytest_asyncio
@@ -13,6 +14,8 @@ from common.auth.service import create_access_token
 from common.conversation.models import ConversationMessage
 from common.db.models import Base, PracticeSession, Scenario, SessionStatus, User
 from common.db.session import get_db
+from common.error_handling.result import Result
+from evaluation.services.report_generation_trigger import ReportGenerationTrigger
 from main import app
 
 TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
@@ -573,6 +576,106 @@ async def test_knowledge_check_keeps_claim_truth_distinct_from_kb_lock_chain_fai
     }
     assert knowledge_check_data["claim_truth_status"] == "weak_evidence"
     assert knowledge_check_data["claim_truth_source"] == "score_snapshot"
+
+
+@pytest.mark.asyncio
+async def test_sales_background_finalization_unlocks_same_session_replay_and_highlights(
+    async_client: AsyncClient,
+    db_session: AsyncSession,
+    owner: User,
+    owner_headers: dict[str, str],
+):
+    scenario = Scenario(
+        scenario_id=str(uuid.uuid4()),
+        scenario_type="sales",
+        name="contract finalized sales scenario",
+        is_active=True,
+    )
+    session = PracticeSession(
+        session_id=str(uuid.uuid4()),
+        user_id=str(owner.user_id),
+        scenario_id=scenario.scenario_id,
+        status=SessionStatus.SCORING.value,
+        report_status="processing",
+        logic_score=84.0,
+        accuracy_score=82.0,
+        completeness_score=80.0,
+        total_duration_seconds=180,
+        effectiveness_snapshot=_make_effectiveness_snapshot(
+            evaluable=True,
+            reason=None,
+        ),
+    )
+    db_session.add_all([scenario, session])
+    db_session.add_all(
+        [
+            ConversationMessage(
+                session_id=session.session_id,
+                turn_number=1,
+                role="assistant",
+                content="您现在最想先看哪类 ROI 证明？",
+                timestamp=datetime.now(UTC),
+                duration_ms=1500,
+                sales_stage="discovery",
+                score_snapshot={"overall_score": 82},
+            ),
+            ConversationMessage(
+                session_id=session.session_id,
+                turn_number=2,
+                role="user",
+                content="我们还是想先看同行案例和回收周期。",
+                timestamp=datetime.now(UTC),
+                duration_ms=2100,
+                sales_stage="objection",
+                score_snapshot={"overall_score": 81},
+                is_highlight=True,
+                highlight_type="bad",
+                highlight_reason="客户已经追问 ROI 证据。",
+            ),
+        ]
+    )
+    await db_session.commit()
+
+    replay_before = await async_client.get(
+        f"/api/v1/sessions/{session.session_id}/replay",
+        headers=owner_headers,
+    )
+    highlights_before = await async_client.get(
+        f"/api/v1/sessions/{session.session_id}/highlights",
+        headers=owner_headers,
+    )
+    assert replay_before.status_code == 400
+    assert replay_before.json()["error"] == "[SESSION_NOT_COMPLETED]"
+    assert highlights_before.status_code == 400
+    assert highlights_before.json()["error"] == "[SESSION_NOT_COMPLETED]"
+
+    mock_report_service = AsyncMock()
+    mock_report_service.generate_report = AsyncMock(
+        return_value=Result.fail("[ENHANCED_REPORT_FAILED]")
+    )
+    await ReportGenerationTrigger(db_session, mock_report_service).trigger_on_session_end(
+        str(session.session_id),
+        "sales",
+    )
+    await db_session.commit()
+    await db_session.refresh(session)
+
+    assert session.report_status == "failed"
+    assert session.status == SessionStatus.COMPLETED.value
+
+    replay_after = await async_client.get(
+        f"/api/v1/sessions/{session.session_id}/replay",
+        headers=owner_headers,
+    )
+    highlights_after = await async_client.get(
+        f"/api/v1/sessions/{session.session_id}/highlights",
+        headers=owner_headers,
+    )
+
+    assert replay_after.status_code == 200
+    assert replay_after.json()["success"] is True
+    assert highlights_after.status_code == 200
+    assert highlights_after.json()["success"] is True
 
 
 @pytest.mark.asyncio

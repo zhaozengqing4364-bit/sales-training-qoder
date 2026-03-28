@@ -2,6 +2,29 @@
 id: T03
 parent: S01
 milestone: M003
+provides: []
+requires: []
+affects: []
+key_files: [".gsd/milestones/M003/M003-ROADMAP.md", ".gsd/milestones/M003/slices/S01/S01-PLAN.md", ".gsd/milestones/M003/slices/S01/tasks/T03-PLAN.md", ".gsd/DECISIONS.md", ".gsd/KNOWLEDGE.md"]
+key_decisions: ["Keep session creation, knowledge-check, and report proof on `backend/src/common/api/practice.py`, but bind replay proof to `backend/src/common/conversation/api.py` + `backend/src/common/conversation/replay.py` over `SessionEvidenceService`.", "Limit downstream M003 acceptance to one current-route proof set: focused backend proof, focused web proof, and later live UAT on the same admin -> session -> practice -> knowledge-check/report/replay chain; missing entrypoints force inventory/spike."]
+patterns_established: []
+drill_down_paths: []
+observability_surfaces: []
+duration: ""
+verification_result: "Ran the task-level verifier for the proof-surface file set, then ran the task-level doc grep for focused backend / focused web / live UAT / replay-route wording. After that I ran the full slice verification set: the expanded file-existence check now includes `backend/src/common/conversation/api.py` and `backend/src/common/conversation/replay.py`, the live knowledge-status vocabulary grep still passes, the out-of-scope / inventory-spike grep still passes, and the new proof-boundary grep confirms the roadmap, slice plan, and T03 plan all mention the current report and replay routes plus `SessionEvidenceService`. All final verification commands exited 0."
+completed_at: 2026-03-25T02:01:44.790Z
+blocker_discovered: false
+---
+
+# T03: Bound M003 proof to the live report/knowledge-check/replay routes and locked the inventory/spike blocker.
+
+> Bound M003 proof to the live report/knowledge-check/replay routes and locked the inventory/spike blocker.
+
+## What Happened
+---
+id: T03
+parent: S01
+milestone: M003
 key_files:
   - .gsd/milestones/M003/M003-ROADMAP.md
   - .gsd/milestones/M003/slices/S01/S01-PLAN.md
@@ -58,3 +81,10 @@ None.
 - `.gsd/milestones/M003/slices/S01/tasks/T03-PLAN.md`
 - `.gsd/DECISIONS.md`
 - `.gsd/KNOWLEDGE.md`
+
+
+## Deviations
+Minor local adaptation: the live replay proof surface is not owned by `backend/src/common/api/practice.py`, so I extended the docs and verifiers to include `backend/src/common/conversation/api.py` and `backend/src/common/conversation/replay.py` instead of pretending replay lives under the practice API.
+
+## Known Issues
+None.

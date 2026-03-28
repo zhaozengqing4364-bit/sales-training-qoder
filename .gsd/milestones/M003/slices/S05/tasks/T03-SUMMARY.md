@@ -2,6 +2,29 @@
 id: T03
 parent: S05
 milestone: M003
+provides: []
+requires: []
+affects: []
+key_files: [".gsd/milestones/M003/slices/S05/tasks/T03-PLAN.md", ".gsd/DECISIONS.md", ".codex/loop/state.json", ".codex/loop/log.md"]
+key_decisions: ["Treat projection-backed canonical report degradation as shippable only when the learner still gets a truthful same-session evidence surface with explicit fallback copy.", "Treat same-session replay/highlights blocked behind `status="scoring"` as the remaining release blocker for M003 final acceptance, even though the replay page surfaces that failure explicitly.", "Use measured browser timeline milestones from the same-session proof as the current latency guardrail until this business chain exposes a durable server-side latency metric."]
+patterns_established: []
+drill_down_paths: []
+observability_surfaces: []
+duration: ""
+verification_result: "Ran a fresh slice-close verification set after writing the guardrail. First, I reran the exact S05 objection-heavy backend regression suite from T01 and it passed with all 90 tests green. Second, I rechecked the live UAT proof pack from T02: `S05-UAT.md` is still non-empty and the trace, timeline, report debug bundle, and replay debug bundle referenced by the artifact still exist on disk. Third, I ran the task’s own verification gate and confirmed the rewritten `T03-PLAN.md` now contains the required latency, degraded/fallback, and blocking language. I also re-read the updated loop state/log after rewriting them to confirm the continuity layer now points at `M003-S05-T03`."
+completed_at: 2026-03-25T09:44:29.284Z
+blocker_discovered: false
+---
+
+# T03: Documented M003 release guardrails and marked replay-blocked scoring sessions as the remaining acceptance blocker.
+
+> Documented M003 release guardrails and marked replay-blocked scoring sessions as the remaining acceptance blocker.
+
+## What Happened
+---
+id: T03
+parent: S05
+milestone: M003
 key_files:
   - .gsd/milestones/M003/slices/S05/tasks/T03-PLAN.md
   - .gsd/DECISIONS.md
@@ -56,3 +79,10 @@ The same live objection-heavy proof session from T02 still shows the remaining M
 - `.gsd/DECISIONS.md`
 - `.codex/loop/state.json`
 - `.codex/loop/log.md`
+
+
+## Deviations
+None.
+
+## Known Issues
+The same live objection-heavy proof session from T02 still shows the remaining M003 acceptance problem: after end-of-session, the session can remain `status="scoring"`, `/api/v1/sessions/{id}/replay` and `/api/v1/sessions/{id}/highlights` stay blocked with `[SESSION_NOT_COMPLETED]`, and backend logs attribute that state to `report_generation_failed [NO_STAGE_RESULTS]` / `no_scoring_context_available`. The new guardrail documents this as release-blocking rather than treating it as an acceptable degradation.

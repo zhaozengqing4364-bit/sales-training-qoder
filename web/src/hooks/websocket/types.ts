@@ -72,6 +72,12 @@ export interface ActionCard {
     next_turn_rule: string;
 }
 
+export interface CoachHealth {
+    status: "healthy" | "degraded" | "resumed";
+    reason?: string | null;
+    message: string;
+}
+
 export interface SlideUpdate {
     current_page: number;
     page_number?: number;
@@ -139,6 +145,7 @@ export interface PracticeState {
     salesStage: SalesStage | null;
     scores: ScoreUpdate | null;
     actionCard: ActionCard | null;
+    coachHealth: CoachHealth;
     error: string | null;
     isPlayingAudio: boolean;
     interimTranscript: string;
@@ -186,6 +193,11 @@ export const INITIAL_PRACTICE_STATE: PracticeState = {
     salesStage: null,
     scores: null,
     actionCard: null,
+    coachHealth: {
+        status: "healthy",
+        reason: null,
+        message: "实时辅导正常。",
+    },
     error: null,
     isPlayingAudio: false,
     interimTranscript: "",

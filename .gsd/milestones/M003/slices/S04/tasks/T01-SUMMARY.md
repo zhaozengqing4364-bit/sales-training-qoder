@@ -2,6 +2,29 @@
 id: T01
 parent: S04
 milestone: M003
+provides: []
+requires: []
+affects: []
+key_files: ["backend/src/common/effectiveness/evaluator.py", "backend/src/common/conversation/session_evidence.py", "backend/tests/unit/test_effectiveness_sales_report_alignment.py", "backend/tests/unit/test_session_evidence_service.py", ".gsd/DECISIONS.md", ".gsd/KNOWLEDGE.md"]
+key_decisions: ["Stored the new truth state as `effectiveness_snapshot.claim_truth` so current report/replay consumers keep reading stable `main_issue` and `next_goal` keys.", "Kept the S03 read-side override rule narrow: only open objection ledgers replace `main_issue` / `next_goal`, but the latest closed ledger still informs claim-truth classification."]
+patterns_established: []
+drill_down_paths: []
+observability_surfaces: []
+duration: ""
+verification_result: "Ran the task-plan verification command fresh with timing: `cd backend && /usr/bin/time -p venv/bin/python -m pytest -c pyproject.toml tests/unit/test_effectiveness_sales_report_alignment.py tests/unit/test_session_evidence_service.py`. It passed with 11/11 tests green, covering score-driven unsupported/weak/verified mappings, fallback `evidence_pending`, open-ledger pending carry-forward, and closed-ledger `gap_acknowledged` / `evidence_provided` status handling on the shared session-evidence projection. I also ran LSP diagnostics on `backend/src/common/effectiveness/evaluator.py`, `backend/src/common/conversation/session_evidence.py`, and both touched unit test files; all returned clean. This is the task-level proof for S04/T01. The broader slice-level runtime/report/replay surfaces remain for T02 and T03."
+completed_at: 2026-03-25T06:23:00.767Z
+blocker_discovered: false
+---
+
+# T01: Added canonical sales claim-truth statuses to the evaluator and session-evidence projection without changing report/replay issue-goal keys.
+
+> Added canonical sales claim-truth statuses to the evaluator and session-evidence projection without changing report/replay issue-goal keys.
+
+## What Happened
+---
+id: T01
+parent: S04
+milestone: M003
 key_files:
   - backend/src/common/effectiveness/evaluator.py
   - backend/src/common/conversation/session_evidence.py
@@ -59,3 +82,10 @@ None.
 - `backend/tests/unit/test_session_evidence_service.py`
 - `.gsd/DECISIONS.md`
 - `.gsd/KNOWLEDGE.md`
+
+
+## Deviations
+None.
+
+## Known Issues
+None.

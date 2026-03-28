@@ -147,6 +147,21 @@ describe("usePracticeWebSocket reconnect lifecycle", () => {
         vi.unstubAllGlobals();
     });
 
+    it("exposes healthy coach state by default so runtime health can transition on the current learner surface", () => {
+        const { result } = renderHook(() =>
+            usePracticeWebSocket({
+                sessionId: "session-coach-health",
+                scenarioType: "sales",
+            }),
+        );
+
+        expect((result.current as unknown as { coachHealth?: unknown }).coachHealth).toEqual({
+            status: "healthy",
+            reason: null,
+            message: "实时辅导正常。",
+        });
+    });
+
     it("switches to reconnecting when abnormal close triggers retry", () => {
         const { result } = renderHook(() =>
             usePracticeWebSocket({

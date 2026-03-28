@@ -46,6 +46,7 @@ from common.knowledge.kb_lock_guard import evaluate_kb_lock_decision
 from common.knowledge.service import KnowledgeService
 from common.monitoring.latency_tracker import LatencyTracker, get_latency_tracker
 from common.monitoring.logger import get_logger
+from common.websocket.session_state_service import SessionStateSnapshot
 from sales_bot.services.voice_instruction_compiler import VoiceInstructionCompiler
 from sales_bot.websocket.base_sales_handler import BaseSalesHandler
 from sales_bot.websocket.components import (
@@ -104,6 +105,8 @@ class EnhancedSalesHandler(BaseSalesHandler):
         self._llm_override_config_id: str | None = None
         self._voice_policy_snapshot: dict[str, Any] = {}
         self._base_instructions: str = ""
+        self._coach_health: str = "healthy"
+        self._coach_health_reason: str | None = None
 
         # Internal state for current turn
         self._current_turn_initialized: bool = False
@@ -282,6 +285,83 @@ class EnhancedSalesHandler(BaseSalesHandler):
         if legacy_prompt:
             return legacy_prompt
         return str(self.agent_config.get("system_prompt") or "你是一个销售教练。").strip()
+
+    @staticmethod
+    def _coach_health_message(status: str) -> str:
+        if status == "degraded":
+            return "实时辅导暂不可用，训练仍可继续。"
+        if status == "resumed":
+            return "实时辅导已恢复，后续建议会继续更新。"
+        return "实时辅导正常。"
+
+    def _sync_coach_health_from_processor(self) -> None:
+        if self.capability_processor is None:
+            return
+        self._coach_health = str(
+            getattr(self.capability_processor, "coach_health", "healthy") or "healthy"
+        )
+        reason = getattr(self.capability_processor, "_coach_health_reason", None)
+        self._coach_health_reason = (
+            str(reason).strip() if isinstance(reason, str) and reason.strip() else None
+        )
+
+    def _coach_health_payload(self) -> dict[str, Any]:
+        return {
+            "status": self._coach_health,
+            "reason": self._coach_health_reason,
+            "message": self._coach_health_message(self._coach_health),
+        }
+
+    def get_runtime_diagnostics(self) -> dict[str, Any]:
+        self._sync_coach_health_from_processor()
+        return {
+            "claim_truth": None,
+            "coach_health": self._coach_health_payload(),
+        }
+
+    def _create_state_snapshot(self) -> SessionStateSnapshot:
+        self._sync_coach_health_from_processor()
+        runtime_state: dict[str, Any] = {}
+        coach_health = self._coach_health_payload()
+        if coach_health["status"] != "healthy" or coach_health["reason"] is not None:
+            runtime_state["coach_health"] = coach_health
+        return SessionStateSnapshot(
+            session_id=self.session_id or "",
+            scenario=self.scenario,
+            turn_count=self.turn_count,
+            session_status=self.session_status,
+            ai_state=self.ai_state,
+            runtime_state=runtime_state or None,
+            user_id=self.user_id,
+        )
+
+    async def _restore_session_state(self, state: SessionStateSnapshot):
+        await super()._restore_session_state(state)
+        self.session_id = state.session_id or self.session_id
+        self.user_id = state.user_id or self.user_id
+        self.turn_count = state.turn_count
+        self.session_status = state.session_status or self.session_status
+        self.ai_state = state.ai_state or self.ai_state
+        runtime_state = state.runtime_state if isinstance(state.runtime_state, dict) else {}
+        restored_coach_health = runtime_state.get("coach_health")
+        if isinstance(restored_coach_health, dict):
+            restored_status = str(restored_coach_health.get("status") or "healthy")
+            if restored_status not in {"healthy", "degraded", "resumed"}:
+                restored_status = "healthy"
+            restored_reason = restored_coach_health.get("reason")
+            self._coach_health = restored_status
+            self._coach_health_reason = (
+                str(restored_reason).strip()
+                if isinstance(restored_reason, str) and restored_reason.strip()
+                else None
+            )
+        else:
+            self._coach_health = "healthy"
+            self._coach_health_reason = None
+        if self.capability_processor is not None:
+            self.capability_processor.coach_health = self._coach_health
+            self.capability_processor._coach_health_reason = self._coach_health_reason
+        await self._send_reconnection_success(self._create_state_snapshot())
 
     # ========== Connection lifecycle hooks ==========
 
@@ -669,6 +749,7 @@ class EnhancedSalesHandler(BaseSalesHandler):
                 manager=self.manager,
                 db_lock=self._db_lock,
             )
+            self._sync_coach_health_from_processor()
 
         # 3. Update message analysis data (via component)
         if user_message_id and analysis_data and self.persistence:

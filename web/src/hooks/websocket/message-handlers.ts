@@ -4,7 +4,7 @@ import { debug } from "@/lib/debug";
 import type {
     WSMessage, ChatMessage, PracticeState, TTSAudioData,
     FuzzyDetection, SalesStage, ScoreUpdate, SlideUpdate,
-    PointCovered, ForbiddenWordDetection, TTSChunkMessage, SessionStatus, ConnectionState, ActionCard,
+    PointCovered, ForbiddenWordDetection, TTSChunkMessage, SessionStatus, ConnectionState, ActionCard, CoachHealth,
 } from "./types";
 
 /**
@@ -111,6 +111,30 @@ function isSameScoreUpdate(current: ScoreUpdate | null, incoming: ScoreUpdate): 
         && current.stage_name === incoming.stage_name
         && isSameStringArray(current.suggestions, incoming.suggestions)
         && isSameDimensionScores(current.dimension_scores, incoming.dimension_scores);
+}
+
+function normalizeCoachHealth(data: unknown): CoachHealth {
+    const payload = data && typeof data === "object" ? data as Partial<CoachHealth> : {};
+    const status = payload.status === "degraded" || payload.status === "resumed"
+        ? payload.status
+        : "healthy";
+    const reason = typeof payload.reason === "string" && payload.reason.trim().length > 0
+        ? payload.reason.trim()
+        : null;
+    const message = typeof payload.message === "string" && payload.message.trim().length > 0
+        ? payload.message.trim()
+        : status === "degraded"
+        ? "实时辅导暂不可用，训练仍可继续。"
+        : status === "resumed"
+        ? "实时辅导已恢复，后续建议会继续更新。"
+        : "实时辅导正常。";
+    return { status, reason, message };
+}
+
+function isSameCoachHealth(current: CoachHealth, incoming: CoachHealth): boolean {
+    return current.status === incoming.status
+        && current.reason === incoming.reason
+        && current.message === incoming.message;
 }
 
 type EvaluationFeedbackPayload = {
@@ -448,6 +472,7 @@ export function handleWebSocketMessage(
                     ai_state?: string;
                     session_status?: string;
                     connection_state?: string;
+                    coach_health?: unknown;
                 };
                 debug.log("[PracticeWS] Status update", {
                     traceId: message.trace_id || null,
@@ -462,6 +487,9 @@ export function handleWebSocketMessage(
                     }
                     if (data.session_status) {
                         next.sessionStatus = data.session_status as SessionStatus;
+                    }
+                    if (data.coach_health !== undefined) {
+                        next.coachHealth = normalizeCoachHealth(data.coach_health);
                     }
                     if (
                         data.connection_state
@@ -479,6 +507,7 @@ export function handleWebSocketMessage(
                         next.aiState === prev.aiState
                         && next.sessionStatus === prev.sessionStatus
                         && next.connectionState === prev.connectionState
+                        && isSameCoachHealth(next.coachHealth, prev.coachHealth)
                         && next.isPlayingAudio === prev.isPlayingAudio
                         && next.isStreamingTTS === prev.isStreamingTTS
                         && next.interimTranscript === prev.interimTranscript
@@ -590,6 +619,20 @@ export function handleWebSocketMessage(
                     return {
                         ...prev,
                         scores: data,
+                    };
+                });
+                break;
+            }
+
+            case "coach_health_update": {
+                const data = normalizeCoachHealth(message.data);
+                setState(prev => {
+                    if (isSameCoachHealth(prev.coachHealth, data)) {
+                        return prev;
+                    }
+                    return {
+                        ...prev,
+                        coachHealth: data,
                     };
                 });
                 break;
@@ -741,6 +784,9 @@ export function handleWebSocketMessage(
                     restored_state?: {
                         session_status?: SessionStatus;
                         ai_state?: PracticeState["aiState"];
+                        runtime_state?: {
+                            coach_health?: unknown;
+                        };
                     };
                 };
                 const restored = data?.restored_state;
@@ -752,6 +798,9 @@ export function handleWebSocketMessage(
                     error: null,
                     sessionStatus: (restored?.session_status || prev.sessionStatus) as SessionStatus,
                     aiState: (restored?.ai_state || prev.aiState) as PracticeState["aiState"],
+                    coachHealth: restored?.runtime_state?.coach_health !== undefined
+                        ? normalizeCoachHealth(restored.runtime_state.coach_health)
+                        : normalizeCoachHealth(undefined),
                 }));
                 break;
             }

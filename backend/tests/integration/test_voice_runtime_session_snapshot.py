@@ -7,6 +7,7 @@ from __future__ import annotations
 import os
 import uuid
 from copy import deepcopy
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -17,6 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from agent.models import Agent, AgentPersona, Persona, VoiceRuntimeProfile
 from common.auth.service import create_access_token
 from common.db.models import PracticeSession, Presentation, Scenario, User
+from common.websocket.session_manager import get_session_manager
 
 os.environ["ENVIRONMENT"] = "development"
 
@@ -439,6 +441,62 @@ async def test_knowledge_check_reports_kb_not_ready_status(
     assert body["data"]["last_status"] == "kb_not_ready"
     assert body["data"]["attempt_count"] == 2
     assert body["data"]["knowledge_base_ids"] == ["kb_test_1"]
+
+
+@pytest.mark.asyncio
+async def test_knowledge_check_reports_live_coach_health_from_registered_session_handler(
+    async_client: AsyncClient,
+    auth_headers: dict,
+    test_db: AsyncSession,
+):
+    """Knowledge-check should surface live coach degraded/resumed state on the current runtime route."""
+    _, agent, persona = await _create_runtime_entities(test_db)
+
+    create_resp = await async_client.post(
+        "/api/v1/practice/sessions",
+        headers=auth_headers,
+        json={
+            "scenario_type": "sales",
+            "agent_id": agent.id,
+            "persona_id": persona.id,
+            "voice_mode": "legacy",
+        },
+    )
+    assert create_resp.status_code == 201
+    session_id = create_resp.json()["data"]["session_id"]
+
+    handler = SimpleNamespace(
+        get_runtime_diagnostics=lambda: {
+            "claim_truth": None,
+            "coach_health": {
+                "status": "degraded",
+                "reason": "capability_pipeline_failed",
+                "message": "实时辅导暂不可用，训练仍可继续。",
+            },
+        },
+        _latest_claim_truth=None,
+    )
+    session_manager = get_session_manager()
+    await session_manager.register_session(session_id, handler)
+    try:
+        resp = await async_client.get(
+            f"/api/v1/practice/sessions/{session_id}/knowledge-check",
+            headers=auth_headers,
+        )
+
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["success"] is True
+        assert body["data"]["coach_health"] == {
+            "status": "degraded",
+            "reason": "capability_pipeline_failed",
+            "message": "实时辅导暂不可用，训练仍可继续。",
+        }
+        assert body["data"]["coach_health_status"] == "degraded"
+        assert body["data"]["coach_health_reason"] == "capability_pipeline_failed"
+        assert body["data"]["coach_health_summary"] == "实时辅导暂不可用，训练仍可继续。"
+    finally:
+        await session_manager.unregister_session(session_id, reason="test_cleanup")
 
 
 @pytest.mark.asyncio

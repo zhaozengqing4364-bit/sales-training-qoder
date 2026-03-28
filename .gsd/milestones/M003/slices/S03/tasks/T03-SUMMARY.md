@@ -2,6 +2,29 @@
 id: T03
 parent: S03
 milestone: M003
+provides: []
+requires: []
+affects: []
+key_files: ["backend/src/common/conversation/session_evidence.py", "backend/tests/unit/test_session_evidence_service.py", "web/src/hooks/use-practice-websocket.ts", "web/src/hooks/use-practice-websocket.test.ts", "web/src/components/practice/RightPanelContent.tsx", "web/src/components/practice/RightPanelContent.test.tsx", ".gsd/DECISIONS.md"]
+key_decisions: ["Prefer the latest open transcript-metadata objection ledger over generic sales score-stage alignment when projecting `main_issue` and `next_goal`.", "Treat `actionCard` and `fuzzyDetections` as reconnect-unsafe turn hints, but preserve `scores.suggestions` as the durable learner-side proof prompt that can survive reconnect."]
+patterns_established: []
+drill_down_paths: []
+observability_surfaces: []
+duration: ""
+verification_result: "Ran a focused backend projection regression to prove the latest open objection ledger now overrides generic sales alignment on the shared session-evidence path, then ran the slice-plan web gate to prove the practice websocket reducer and right-panel component keep the proof prompt visible while reconnect cleanup drops stale action-card/fuzzy state. Commands: `cd backend && /usr/bin/time -p venv/bin/python -m pytest -c pyproject.toml tests/unit/test_session_evidence_service.py -k 'latest_open_objection_ledger or preserves_insufficient_sales_evidence_fallback'`; `cd web && /usr/bin/time -p npm test -- --run 'src/hooks/use-practice-websocket.test.ts' 'src/components/practice/RightPanelContent.test.tsx'`."
+completed_at: 2026-03-25T04:16:44.584Z
+blocker_discovered: false
+---
+
+# T03: Surfaced unresolved objection proof gaps in report projection and the practice panel without replaying stale reconnect hints.
+
+> Surfaced unresolved objection proof gaps in report projection and the practice panel without replaying stale reconnect hints.
+
+## What Happened
+---
+id: T03
+parent: S03
+milestone: M003
 key_files:
   - backend/src/common/conversation/session_evidence.py
   - backend/tests/unit/test_session_evidence_service.py
@@ -60,3 +83,10 @@ None.
 - `web/src/components/practice/RightPanelContent.tsx`
 - `web/src/components/practice/RightPanelContent.test.tsx`
 - `.gsd/DECISIONS.md`
+
+
+## Deviations
+Added focused backend regression coverage in `backend/tests/unit/test_session_evidence_service.py` beyond the task-plan file list, because the read-side carry-forward change needed an explicit shared-projection proof even though the planner’s verification line only listed the web gate.
+
+## Known Issues
+None.

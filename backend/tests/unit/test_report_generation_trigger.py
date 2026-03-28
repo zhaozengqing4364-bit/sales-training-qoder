@@ -78,6 +78,39 @@ class TestReportGenerationTrigger:
         assert mock_session.report_generated_at is not None
 
     @pytest.mark.asyncio
+    async def test_trigger_on_session_end_success_promotes_sales_session_to_completed(
+        self,
+        report_trigger,
+        mock_db,
+        mock_report_service,
+    ):
+        """Sales sessions should leave scoring once background finalization can read canonical evidence."""
+        session_id = "test-session-123"
+        scenario_type = "sales"
+
+        mock_session = MagicMock()
+        mock_session.session_id = session_id
+        mock_session.status = "scoring"
+        mock_session.report_status = "processing"
+
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.return_value = mock_session
+        mock_db.execute.return_value = mock_result
+
+        mock_report = MagicMock()
+        mock_report.overall_score = 85.5
+        mock_report_service.generate_report.return_value = Result.ok(mock_report)
+
+        with patch(
+            "common.conversation.session_evidence.SessionEvidenceService.get_projection",
+            new=AsyncMock(return_value=Result.ok(MagicMock())),
+        ):
+            await report_trigger.trigger_on_session_end(session_id, scenario_type)
+
+        assert mock_session.report_status == "completed"
+        assert mock_session.status == "completed"
+
+    @pytest.mark.asyncio
     async def test_trigger_on_session_end_failure(self, report_trigger, mock_db, mock_report_service):
         """Test report generation failure handling."""
         # Arrange

@@ -5,6 +5,7 @@ Integration tests for session lifecycle REST controls.
 from __future__ import annotations
 
 import uuid
+from datetime import UTC, datetime
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
@@ -15,9 +16,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 import common.api.practice as practice_api
 from common.auth.service import create_access_token
+from common.conversation.models import ConversationMessage
 from common.db.models import PracticeSession, Scenario, User
 from common.error_handling.result import Result
 from common.websocket.session_manager import get_session_manager
+from evaluation.services.report_generation_trigger import ReportGenerationTrigger
 
 
 def _headers_for_user(user_id: str) -> dict[str, str]:
@@ -179,6 +182,104 @@ async def test_lifecycle_api_end_triggers_report_on_first_terminal_transition(
     assert transition.action == "end"
     assert transition.to_status == "scoring"
     assert transition.changed is True
+
+
+@pytest.mark.asyncio
+async def test_sales_end_response_stays_scoring_but_background_finalization_can_complete_session(
+    async_client: AsyncClient,
+    test_db: AsyncSession,
+    test_user: User,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    summary_mock, cleanup_mock = _stub_sales_end_dependencies(monkeypatch)
+    report_trigger_mock = AsyncMock()
+    monkeypatch.setattr(
+        practice_api.SessionLifecycleService,
+        "trigger_report_generation_if_needed",
+        report_trigger_mock,
+    )
+
+    session = await _create_session(
+        test_db,
+        user_id=str(test_user.user_id),
+        scenario_type="sales",
+        status="in_progress",
+    )
+    session.logic_score = 84
+    session.accuracy_score = 82
+    session.completeness_score = 80
+    session.effectiveness_snapshot = {
+        "pass_flags": {
+            "pass_3min_flow": True,
+            "pass_5turn_defense": True,
+            "pass_4step_structure": False,
+        },
+        "main_capability_passed": False,
+        "overall_result": "fail",
+        "main_issue": {
+            "issue_type": "evidence_gap",
+            "issue_text": "客户要案例，但这一轮还没给出证据。",
+            "recovery_rule": "下一轮先补案例和 ROI 数字。",
+        },
+        "next_goal": {
+            "goal_type": "evidence_backing",
+            "goal_text": "下一轮优先补一条 ROI 证据。",
+            "rule": "至少补一个案例或量化收益。",
+        },
+        "evaluable": True,
+        "not_evaluable_reason": None,
+    }
+    test_db.add(
+        ConversationMessage(
+            session_id=session.session_id,
+            turn_number=1,
+            role="user",
+            content="我现在最关心同行案例和回收周期。",
+            timestamp=datetime.now(UTC),
+            duration_ms=1800,
+            sales_stage="objection",
+            score_snapshot={"overall_score": 82},
+            is_highlight=True,
+            highlight_type="bad",
+            highlight_reason="客户已经追问 ROI 证据。",
+        )
+    )
+    await test_db.commit()
+
+    session_id = str(session.session_id)
+    response = await async_client.post(
+        f"/api/v1/practice/sessions/{session_id}/lifecycle",
+        headers=_headers_for_user(str(test_user.user_id)),
+        json={"action": "end"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["data"]["status"] == "scoring"
+
+    persisted_session = (
+        await test_db.execute(
+            select(PracticeSession).where(PracticeSession.session_id == session_id)
+        )
+    ).scalar_one()
+    assert persisted_session.status == "scoring"
+
+    mock_report_service = AsyncMock()
+    mock_report_service.generate_report = AsyncMock(
+        return_value=Result.fail("[ENHANCED_REPORT_FAILED]")
+    )
+    await ReportGenerationTrigger(test_db, mock_report_service).trigger_on_session_end(
+        session_id,
+        "sales",
+    )
+    await test_db.commit()
+
+    persisted_session = (
+        await test_db.execute(
+            select(PracticeSession).where(PracticeSession.session_id == session_id)
+        )
+    ).scalar_one()
+    assert persisted_session.report_status == "failed"
+    assert persisted_session.status == "completed"
 
 
 @pytest.mark.asyncio

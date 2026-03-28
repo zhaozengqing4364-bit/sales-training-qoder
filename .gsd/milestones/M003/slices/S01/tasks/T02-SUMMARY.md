@@ -2,6 +2,29 @@
 id: T02
 parent: S01
 milestone: M003
+provides: []
+requires: []
+affects: []
+key_files: [".gsd/milestones/M003/M003-ROADMAP.md", ".gsd/milestones/M003/slices/S01/S01-PLAN.md", ".gsd/milestones/M003/slices/S01/tasks/T01-PLAN.md", ".gsd/milestones/M003/slices/S01/tasks/T02-PLAN.md", ".gsd/milestones/M003/slices/S01/tasks/T03-PLAN.md", ".gsd/milestones/M003/slices/S01/tasks/T01-VERIFY.json", ".gsd/KNOWLEDGE.md"]
+key_decisions: ["Treat `build_session_runtime_diagnostics(...).status` as the only current learner/admin-visible knowledge-status contract; keep KB-lock `blocked_*` states and retrieval detail like `hit_keyword_fallback` in diagnostic fields instead of promoting them to report status.", "Use escaped literal Next.js paths in M003 S01 `test -f` verifier commands, and refresh the generated `T##-VERIFY.json` artifact when a failed gate already captured the old broken command form."]
+patterns_established: []
+drill_down_paths: []
+observability_surfaces: []
+duration: ""
+verification_result: "Ran the slice-level file-existence verifier with escaped literal Next.js paths and confirmed all current admin/runtime/report/replay authority files exist. Ran the T02 status grep across runtime diagnostics, the KB-lock guard, the internal searcher, and the M003 roadmap/slice/task docs to confirm the locked vocabulary is present in code and planning artifacts. Ran the slice out-of-scope / blocker grep to confirm the current-route and inventory/spike boundaries remain explicit. Ran an extra ownership grep for `hit_keyword_fallback`, `last_status`, `kb_lock_status`, and `kb_lock_last_status` to prove the new doc wording matches the real runtime-detail fields."
+completed_at: 2026-03-25T01:51:45.861Z
+blocker_discovered: false
+---
+
+# T02: Locked M003’s live knowledge-status contract to the current report/runtime vocabulary and retired the stale T01 verifier failure.
+
+> Locked M003’s live knowledge-status contract to the current report/runtime vocabulary and retired the stale T01 verifier failure.
+
+## What Happened
+---
+id: T02
+parent: S01
+milestone: M003
 key_files:
   - .gsd/milestones/M003/M003-ROADMAP.md
   - .gsd/milestones/M003/slices/S01/S01-PLAN.md
@@ -62,3 +85,10 @@ None.
 - `.gsd/milestones/M003/slices/S01/tasks/T03-PLAN.md`
 - `.gsd/milestones/M003/slices/S01/tasks/T01-VERIFY.json`
 - `.gsd/KNOWLEDGE.md`
+
+
+## Deviations
+Extended the planned doc rewrite to refresh the stale `.gsd/milestones/M003/slices/S01/tasks/T01-VERIFY.json` artifact and to harden the T01/T03 file-existence verifier commands with escaped literal Next.js paths so auto-mode would stop replaying a false failure.
+
+## Known Issues
+None.

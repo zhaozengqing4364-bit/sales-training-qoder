@@ -40,12 +40,40 @@ def _normalize_claim_truth_payload(value: Any) -> dict[str, Any] | None:
     return payload
 
 
+def _normalize_coach_health_payload(value: Any) -> dict[str, Any]:
+    default_payload = {
+        "status": "healthy",
+        "reason": None,
+        "message": "实时辅导正常。",
+    }
+    if not isinstance(value, dict):
+        return default_payload
+
+    status = str(value.get("status") or "healthy").strip().lower()
+    if status not in {"healthy", "degraded", "resumed"}:
+        status = "healthy"
+    reason = value.get("reason")
+    message = value.get("message")
+    if not isinstance(message, str) or not message.strip():
+        message = default_payload["message"] if status == "healthy" else (
+            "实时辅导暂不可用，训练仍可继续。"
+            if status == "degraded"
+            else "实时辅导已恢复，后续建议会继续更新。"
+        )
+    return {
+        "status": status,
+        "reason": reason.strip() if isinstance(reason, str) and reason.strip() else None,
+        "message": message.strip(),
+    }
+
+
 def build_session_runtime_diagnostics(
     *,
     session: PracticeSession,
     snapshot: dict[str, Any] | None,
     effective_tool_types: list[str] | None = None,
     live_claim_truth: dict[str, Any] | None = None,
+    live_coach_health: dict[str, Any] | None = None,
     projection_effectiveness_snapshot: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     snapshot = snapshot if isinstance(snapshot, dict) else {}
@@ -124,6 +152,7 @@ def build_session_runtime_diagnostics(
         )
         or _normalize_claim_truth_payload(session_effectiveness_snapshot.get("claim_truth"))
     )
+    coach_health = _normalize_coach_health_payload(live_coach_health)
 
     kb_lock_timeout_budget_ms = _bounded_int_env(
         "STEPFUN_KB_LOCK_DECISION_TIMEOUT_MS",
@@ -225,6 +254,10 @@ def build_session_runtime_diagnostics(
         "claim_truth_source": (
             str(claim_truth.get("source")) if isinstance(claim_truth, dict) else None
         ),
+        "coach_health": coach_health,
+        "coach_health_status": str(coach_health.get("status") or "healthy"),
+        "coach_health_reason": coach_health.get("reason"),
+        "coach_health_summary": str(coach_health.get("message") or "实时辅导正常。"),
         "last_decision_id": last_decision_id,
         "last_decision_duration_ms": round(max(0.0, last_decision_duration_ms), 1),
         "last_decision_phase_breakdown": last_decision_phase_breakdown,

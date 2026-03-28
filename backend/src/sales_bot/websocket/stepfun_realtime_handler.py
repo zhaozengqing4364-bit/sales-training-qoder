@@ -189,6 +189,8 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
         self.upstream_ws = None
         self._upstream_task: asyncio.Task | None = None
         self._effective_policy: dict[str, Any] = {}
+        self._coach_health: str = "healthy"
+        self._coach_health_reason: str | None = None
 
         self.current_request_id = 0
         self._active_response: RealtimeResponseState | None = None
@@ -532,6 +534,8 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
         feedback_pacing_state = self._feedback_pacing_state.to_dict()
         if feedback_pacing_state:
             runtime_state["feedback_pacing_state"] = feedback_pacing_state
+        if self._coach_health != "healthy" or self._coach_health_reason is not None:
+            runtime_state["coach_health"] = self._coach_health_payload()
 
         return SessionStateSnapshot(
             session_id=self.session_id or "",
@@ -553,6 +557,8 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
             else {}
         )
         await self._cancel_pending_response_after_commit()
+        self.session_id = state.session_id or self.session_id
+        self.user_id = state.user_id or self.user_id
         self.turn_count = state.turn_count
         self.session_status = state.session_status or self.session_status
         self.ai_state = state.ai_state or "idle"
@@ -573,6 +579,21 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
         self._feedback_pacing_state = RealtimeFeedbackPacingState.from_dict(
             runtime_state.get("feedback_pacing_state")
         )
+        restored_coach_health = runtime_state.get("coach_health")
+        if isinstance(restored_coach_health, dict):
+            restored_status = str(restored_coach_health.get("status") or "healthy")
+            if restored_status not in {"healthy", "degraded", "resumed"}:
+                restored_status = "healthy"
+            restored_reason = restored_coach_health.get("reason")
+            self._coach_health = restored_status
+            self._coach_health_reason = (
+                str(restored_reason).strip()
+                if isinstance(restored_reason, str) and restored_reason.strip()
+                else None
+            )
+        else:
+            self._coach_health = "healthy"
+            self._coach_health_reason = None
 
         self._active_response = None
         self._function_call_states.clear()
@@ -597,7 +618,7 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
             ai_state=self.ai_state,
             restored_runtime_keys=sorted(runtime_state.keys()),
         )
-        await self._send_reconnection_success(state)
+        await self._send_reconnection_success(self._create_state_snapshot())
 
     async def _save_session_state(self):
         """Persist reconnectable state, or clear dirty snapshots after terminal exits."""
@@ -1919,6 +1940,48 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
     def _format_stage_name(stage_id: str | None) -> str:
         return format_stage_name(stage_id)
 
+    @staticmethod
+    def _coach_health_message(status: str) -> str:
+        if status == "degraded":
+            return "实时辅导暂不可用，训练仍可继续。"
+        if status == "resumed":
+            return "实时辅导已恢复，后续建议会继续更新。"
+        return "实时辅导正常。"
+
+    def _coach_health_payload(self) -> dict[str, Any]:
+        return {
+            "status": self._coach_health,
+            "reason": self._coach_health_reason,
+            "message": self._coach_health_message(self._coach_health),
+        }
+
+    def get_runtime_diagnostics(self) -> dict[str, Any]:
+        return {
+            "claim_truth": copy.deepcopy(self._latest_claim_truth)
+            if isinstance(self._latest_claim_truth, dict)
+            else None,
+            "coach_health": self._coach_health_payload(),
+        }
+
+    async def _send_coach_health(self) -> None:
+        await self.manager.send_json(
+            self.websocket,
+            {
+                "type": "coach_health_update",
+                "timestamp": datetime.now(UTC).isoformat(),
+                "trace_id": get_trace_id(),
+                "data": self._coach_health_payload(),
+            },
+        )
+
+    async def _set_coach_health(self, status: str, reason: str | None = None) -> None:
+        normalized_reason = reason.strip() if isinstance(reason, str) and reason.strip() else None
+        if self._coach_health == status and self._coach_health_reason == normalized_reason:
+            return
+        self._coach_health = status
+        self._coach_health_reason = normalized_reason
+        await self._send_coach_health()
+
     async def _run_realtime_feedback(
         self,
         *,
@@ -1957,101 +2020,142 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
             self._feedback_context.turn_count, turn_number
         )
 
+        capability_pipeline_degraded = False
+
         if self._fuzzy_detection_enabled:
-            fuzzy_result = await self._fuzzy_detection_capability.execute(
-                self._feedback_context, text
-            )
-            fuzzy_payload = (
-                fuzzy_result.data if isinstance(fuzzy_result.data, dict) else {}
-            )
-            detections = (
-                fuzzy_payload.get("detections")
-                if isinstance(fuzzy_payload, dict)
-                else None
-            )
-            if isinstance(detections, list) and detections:
-                await self._send_fuzzy_detection(detections)
-                detections_for_card = [item for item in detections if isinstance(item, dict)]
-                analysis_data["fuzzy_words"] = detections
+            try:
+                fuzzy_result = await self._fuzzy_detection_capability.execute(
+                    self._feedback_context, text
+                )
+            except Exception as exc:
+                capability_pipeline_degraded = True
+                logger.warning(
+                    "StepFun realtime fuzzy detection degraded",
+                    session_id=self.session_id,
+                    turn_number=turn_number,
+                    error=str(exc),
+                )
+            else:
+                if getattr(fuzzy_result, "success", True):
+                    fuzzy_payload = (
+                        fuzzy_result.data if isinstance(fuzzy_result.data, dict) else {}
+                    )
+                    detections = (
+                        fuzzy_payload.get("detections")
+                        if isinstance(fuzzy_payload, dict)
+                        else None
+                    )
+                    if isinstance(detections, list) and detections:
+                        await self._send_fuzzy_detection(detections)
+                        detections_for_card = [
+                            item for item in detections if isinstance(item, dict)
+                        ]
+                        analysis_data["fuzzy_words"] = detections
+                else:
+                    capability_pipeline_degraded = True
 
         score_update_payload: dict[str, Any] | None = None
         if self._realtime_scoring_enabled:
-            score_result = await self._realtime_scoring_capability.execute(
-                self._feedback_context, text
-            )
-            score_payload = (
-                score_result.data if isinstance(score_result.data, dict) else {}
-            )
-            dimension_scores = (
-                score_payload.get("dimension_scores")
-                if isinstance(score_payload, dict)
-                else None
-            )
-            if not isinstance(dimension_scores, dict):
-                dimensions = (
-                    score_payload.get("dimensions") if isinstance(score_payload, dict) else None
+            try:
+                score_result = await self._realtime_scoring_capability.execute(
+                    self._feedback_context, text
                 )
-                dimension_scores = {}
-                if isinstance(dimensions, list):
-                    for item in dimensions:
-                        if not isinstance(item, dict):
-                            continue
-                        name = item.get("name")
-                        score = item.get("score")
-                        if isinstance(name, str) and isinstance(score, (int, float)):
-                            dimension_scores[name] = max(0.0, min(100.0, float(score)))
-
-            overall_raw = (
-                score_payload.get("overall_score") if isinstance(score_payload, dict) else None
-            )
-            if not isinstance(overall_raw, (int, float)):
-                overall_raw = (
-                    score_payload.get("overall") if isinstance(score_payload, dict) else None
+            except Exception as exc:
+                capability_pipeline_degraded = True
+                logger.warning(
+                    "StepFun realtime scoring degraded",
+                    session_id=self.session_id,
+                    turn_number=turn_number,
+                    error=str(exc),
                 )
-            if not isinstance(overall_raw, (int, float)):
-                overall_raw = (
-                    sum(dimension_scores.values()) / len(dimension_scores)
-                    if dimension_scores
-                    else 0.0
-                )
-            overall_score = max(0.0, min(100.0, float(overall_raw)))
-
-            feedback_message = (
-                score_payload.get("feedback") if isinstance(score_payload, dict) else None
-            )
-            suggestions: list[str] = []
-            if isinstance(feedback_message, str) and feedback_message.strip():
-                suggestions = [feedback_message.strip()]
-            suggestions_for_card = suggestions
-
-            if dimension_scores:
-                score_snapshot = {
-                    "overall_score": overall_score,
-                    "dimension_scores": dimension_scores,
-                    "suggestions": suggestions,
-                    "stage_name": self._format_stage_name(sales_stage),
-                }
-                self._latest_score_snapshot = score_snapshot
-                analysis_data["score_snapshot"] = score_snapshot
-                score_context_for_arbiter = copy.deepcopy(score_payload)
-                score_context_for_arbiter["overall_score"] = overall_score
-                score_context_for_arbiter["dimension_scores"] = dict(dimension_scores)
-                score_context_for_arbiter["suggestions"] = list(suggestions)
-                score_context_for_arbiter["stage_name"] = score_snapshot["stage_name"]
-                score_update_payload = {
-                    "turn_number": turn_number,
-                    "overall_score": overall_score,
-                    "dimension_scores": dimension_scores,
-                    "suggestions": suggestions,
-                    "stage_name": score_snapshot["stage_name"],
-                }
-                pass_flags_for_card = evaluate_pass_flags(
-                    build_sales_effectiveness_metrics(
-                        overall_score=overall_score,
-                        dimension_scores=dimension_scores,
-                        turn_count=turn_number,
+            else:
+                if getattr(score_result, "success", True):
+                    score_payload = (
+                        score_result.data if isinstance(score_result.data, dict) else {}
                     )
-                )
+                    dimension_scores = (
+                        score_payload.get("dimension_scores")
+                        if isinstance(score_payload, dict)
+                        else None
+                    )
+                    if not isinstance(dimension_scores, dict):
+                        dimensions = (
+                            score_payload.get("dimensions") if isinstance(score_payload, dict) else None
+                        )
+                        dimension_scores = {}
+                        if isinstance(dimensions, list):
+                            for item in dimensions:
+                                if not isinstance(item, dict):
+                                    continue
+                                name = item.get("name")
+                                score = item.get("score")
+                                if isinstance(name, str) and isinstance(score, (int, float)):
+                                    dimension_scores[name] = max(0.0, min(100.0, float(score)))
+
+                    overall_raw = (
+                        score_payload.get("overall_score") if isinstance(score_payload, dict) else None
+                    )
+                    if not isinstance(overall_raw, (int, float)):
+                        overall_raw = (
+                            score_payload.get("overall") if isinstance(score_payload, dict) else None
+                        )
+                    if not isinstance(overall_raw, (int, float)):
+                        overall_raw = (
+                            sum(dimension_scores.values()) / len(dimension_scores)
+                            if dimension_scores
+                            else 0.0
+                        )
+                    overall_score = max(0.0, min(100.0, float(overall_raw)))
+
+                    feedback_message = (
+                        score_payload.get("feedback") if isinstance(score_payload, dict) else None
+                    )
+                    suggestions: list[str] = []
+                    if isinstance(feedback_message, str) and feedback_message.strip():
+                        suggestions = [feedback_message.strip()]
+                    suggestions_for_card = suggestions
+
+                    if dimension_scores:
+                        score_snapshot = {
+                            "overall_score": overall_score,
+                            "dimension_scores": dimension_scores,
+                            "suggestions": suggestions,
+                            "stage_name": self._format_stage_name(sales_stage),
+                        }
+                        self._latest_score_snapshot = score_snapshot
+                        analysis_data["score_snapshot"] = score_snapshot
+                        score_context_for_arbiter = copy.deepcopy(score_payload)
+                        score_context_for_arbiter["overall_score"] = overall_score
+                        score_context_for_arbiter["dimension_scores"] = dict(dimension_scores)
+                        score_context_for_arbiter["suggestions"] = list(suggestions)
+                        score_context_for_arbiter["stage_name"] = score_snapshot["stage_name"]
+                        score_update_payload = {
+                            "turn_number": turn_number,
+                            "overall_score": overall_score,
+                            "dimension_scores": dimension_scores,
+                            "suggestions": suggestions,
+                            "stage_name": score_snapshot["stage_name"],
+                        }
+                        pass_flags_for_card = evaluate_pass_flags(
+                            build_sales_effectiveness_metrics(
+                                overall_score=overall_score,
+                                dimension_scores=dimension_scores,
+                                turn_count=turn_number,
+                            )
+                        )
+                else:
+                    capability_pipeline_degraded = True
+
+        if capability_pipeline_degraded:
+            await self._set_coach_health(
+                "degraded", reason="capability_pipeline_failed"
+            )
+        elif self._coach_health == "degraded":
+            await self._set_coach_health(
+                "resumed", reason="capability_pipeline_resumed"
+            )
+        elif self._coach_health == "resumed":
+            await self._set_coach_health("healthy")
 
         previous_objection_ledger = normalize_objection_ledger(self._objection_ledger)
         resolved_objection_ledger = resolve_turn_objection_ledger(

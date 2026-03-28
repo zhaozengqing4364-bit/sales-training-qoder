@@ -54,6 +54,65 @@ function createDeps(initialState: PracticeState) {
 }
 
 describe("handleWebSocketMessage connection/status behavior", () => {
+    it("shows coach degraded state without breaking the active practice session", () => {
+        const { deps, getState } = createDeps({
+            ...INITIAL_PRACTICE_STATE,
+            sessionStatus: "in_progress",
+        });
+
+        handleWebSocketMessage(
+            createMessageEvent({
+                type: "coach_health_update",
+                timestamp: new Date().toISOString(),
+                data: {
+                    status: "degraded",
+                    reason: "capability_pipeline_failed",
+                    message: "实时辅导暂不可用，训练仍可继续。",
+                },
+            }),
+            deps as never,
+        );
+
+        expect(getState().coachHealth).toEqual({
+            status: "degraded",
+            reason: "capability_pipeline_failed",
+            message: "实时辅导暂不可用，训练仍可继续。",
+        });
+        expect(getState().sessionStatus).toBe("in_progress");
+    });
+
+    it("clears degraded coach state when coaching resumes", () => {
+        const { deps, getState } = createDeps({
+            ...INITIAL_PRACTICE_STATE,
+            sessionStatus: "in_progress",
+            coachHealth: {
+                status: "degraded",
+                reason: "capability_pipeline_failed",
+                message: "实时辅导暂不可用，训练仍可继续。",
+            },
+        });
+
+        handleWebSocketMessage(
+            createMessageEvent({
+                type: "coach_health_update",
+                timestamp: new Date().toISOString(),
+                data: {
+                    status: "resumed",
+                    reason: "capability_pipeline_resumed",
+                    message: "实时辅导已恢复，后续建议会继续更新。",
+                },
+            }),
+            deps as never,
+        );
+
+        expect(getState().coachHealth).toEqual({
+            status: "resumed",
+            reason: "capability_pipeline_resumed",
+            message: "实时辅导已恢复，后续建议会继续更新。",
+        });
+        expect(getState().sessionStatus).toBe("in_progress");
+    });
+
     it.each(["transcript", "asr_transcript"] as const)(
         "clears stale turn-bound hints on final %s events while preserving score and stage context",
         (messageType) => {
@@ -767,12 +826,87 @@ describe("handleWebSocketMessage connection/status behavior", () => {
         expect(getState().isConnecting).toBe(false);
         expect(getState().sessionStatus).toBe("in_progress");
         expect(getState().aiState).toBe("listening");
+        expect(getState().coachHealth).toEqual({
+            status: "healthy",
+            reason: null,
+            message: "实时辅导正常。",
+        });
         expect(getState().isPlayingAudio).toBe(false);
         expect(getState().isStreamingTTS).toBe(false);
         expect(getState().interimTranscript).toBe("");
         expect(getState().isBackpressureActive).toBe(false);
         expect(getState().isNetworkSlow).toBe(false);
         expect(getState().error).toBeNull();
+    });
+
+    it("resets stale degraded coach state to healthy when reconnect snapshot omits coach health", () => {
+        const { deps, getState } = createDeps({
+            ...INITIAL_PRACTICE_STATE,
+            connectionState: "reconnecting",
+            coachHealth: {
+                status: "degraded",
+                reason: "capability_pipeline_failed",
+                message: "实时辅导暂不可用，训练仍可继续。",
+            },
+        });
+
+        handleWebSocketMessage(
+            createMessageEvent({
+                type: "reconnected",
+                timestamp: new Date().toISOString(),
+                data: {
+                    restored_state: {
+                        session_status: "in_progress",
+                        ai_state: "listening",
+                    },
+                },
+            }),
+            deps as never,
+        );
+
+        expect(getState().coachHealth).toEqual({
+            status: "healthy",
+            reason: null,
+            message: "实时辅导正常。",
+        });
+    });
+
+    it("normalizes malformed reconnect coach health payloads instead of preserving stale degraded state", () => {
+        const { deps, getState } = createDeps({
+            ...INITIAL_PRACTICE_STATE,
+            connectionState: "reconnecting",
+            coachHealth: {
+                status: "degraded",
+                reason: "capability_pipeline_failed",
+                message: "实时辅导暂不可用，训练仍可继续。",
+            },
+        });
+
+        handleWebSocketMessage(
+            createMessageEvent({
+                type: "reconnected",
+                timestamp: new Date().toISOString(),
+                data: {
+                    restored_state: {
+                        session_status: "in_progress",
+                        ai_state: "listening",
+                        runtime_state: {
+                            coach_health: {
+                                status: "paused",
+                                reason: " capability_pipeline_failed ",
+                            },
+                        },
+                    },
+                },
+            }),
+            deps as never,
+        );
+
+        expect(getState().coachHealth).toEqual({
+            status: "healthy",
+            reason: "capability_pipeline_failed",
+            message: "实时辅导正常。",
+        });
     });
 
     it("marks connection failed on session_timeout and surfaces error callback", () => {
