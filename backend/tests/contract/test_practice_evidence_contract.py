@@ -754,6 +754,7 @@ async def test_sales_background_finalization_unlocks_same_session_replay_and_hig
     owner: User,
     owner_headers: dict[str, str],
 ):
+    stale_snapshot = _make_stale_sales_snapshot()
     scenario = Scenario(
         scenario_id=str(uuid.uuid4()),
         scenario_type="sales",
@@ -766,14 +767,11 @@ async def test_sales_background_finalization_unlocks_same_session_replay_and_hig
         scenario_id=scenario.scenario_id,
         status=SessionStatus.SCORING.value,
         report_status="processing",
-        logic_score=84.0,
-        accuracy_score=82.0,
-        completeness_score=80.0,
+        logic_score=80.0,
+        accuracy_score=69.5,
+        completeness_score=71.5,
         total_duration_seconds=180,
-        effectiveness_snapshot=_make_effectiveness_snapshot(
-            evaluable=True,
-            reason=None,
-        ),
+        effectiveness_snapshot=stale_snapshot,
     )
     db_session.add_all([scenario, session])
     db_session.add_all(
@@ -792,19 +790,32 @@ async def test_sales_background_finalization_unlocks_same_session_replay_and_hig
                 session_id=session.session_id,
                 turn_number=2,
                 role="user",
-                content="我们还是想先看同行案例和回收周期。",
+                content="我们有 3 个同行案例在 6 个月内回本，迁移期 SLA 保持 99.9%。",
                 timestamp=datetime.now(UTC),
                 duration_ms=2100,
                 sales_stage="objection",
-                score_snapshot={"overall_score": 81},
+                score_snapshot={
+                    "overall_score": 88,
+                    "dimension_scores": {
+                        "价值表达": 86.0,
+                        "客户收益连接": 84.0,
+                        "证据使用": 89.0,
+                        "异议处理": 81.0,
+                        "推进下一步": 79.0,
+                    },
+                },
                 is_highlight=True,
-                highlight_type="bad",
-                highlight_reason="客户已经追问 ROI 证据。",
+                highlight_type="good",
+                highlight_reason="补上了 ROI 证据。",
             ),
         ]
     )
     await db_session.commit()
 
+    scoring_report = await async_client.get(
+        f"/api/v1/practice/sessions/{session.session_id}/report",
+        headers=owner_headers,
+    )
     replay_before = await async_client.get(
         f"/api/v1/sessions/{session.session_id}/replay",
         headers=owner_headers,
@@ -813,6 +824,9 @@ async def test_sales_background_finalization_unlocks_same_session_replay_and_hig
         f"/api/v1/sessions/{session.session_id}/highlights",
         headers=owner_headers,
     )
+    assert scoring_report.status_code == 200
+    assert scoring_report.json()["data"]["main_issue"] == stale_snapshot["main_issue"]
+    assert scoring_report.json()["data"]["next_goal"] == stale_snapshot["next_goal"]
     assert replay_before.status_code == 400
     assert replay_before.json()["error"] == "[SESSION_NOT_COMPLETED]"
     assert highlights_before.status_code == 400
@@ -832,6 +846,10 @@ async def test_sales_background_finalization_unlocks_same_session_replay_and_hig
     assert session.report_status == "failed"
     assert session.status == SessionStatus.COMPLETED.value
 
+    report_after = await async_client.get(
+        f"/api/v1/practice/sessions/{session.session_id}/report",
+        headers=owner_headers,
+    )
     replay_after = await async_client.get(
         f"/api/v1/sessions/{session.session_id}/replay",
         headers=owner_headers,
@@ -841,10 +859,36 @@ async def test_sales_background_finalization_unlocks_same_session_replay_and_hig
         headers=owner_headers,
     )
 
+    assert report_after.status_code == 200
     assert replay_after.status_code == 200
     assert replay_after.json()["success"] is True
     assert highlights_after.status_code == 200
     assert highlights_after.json()["success"] is True
+
+    report_after_data = report_after.json()["data"]
+    replay_after_data = replay_after.json()["data"]
+    highlight_after_data = highlights_after.json()["data"]["highlights"][0]
+
+    assert report_after_data["effectiveness_snapshot"]["claim_truth"] == replay_after_data[
+        "effectiveness_snapshot"
+    ]["claim_truth"] == {
+        "status": "evidence_verified",
+        "label": "证据已验证",
+        "source": "score_snapshot",
+        "reason": "strong_evidence_score",
+        "evidence_score": 89.0,
+    }
+    assert _without_replay_anchor(report_after_data["main_issue"]) == _without_replay_anchor(
+        replay_after_data["main_issue"]
+    )
+    assert _without_replay_anchor(report_after_data["next_goal"]) == _without_replay_anchor(
+        replay_after_data["next_goal"]
+    )
+    assert report_after_data["main_issue"] != scoring_report.json()["data"]["main_issue"]
+    assert report_after_data["next_goal"] != scoring_report.json()["data"]["next_goal"]
+    assert report_after_data["main_issue"]["issue_type"] == highlight_after_data["learning_evidence"]["issue_family"]
+    assert replay_after_data["main_issue"]["replay_anchor"]["status"] == "resolved"
+    assert replay_after_data["next_goal"]["replay_anchor"]["status"] == "resolved"
 
 
 @pytest.mark.asyncio

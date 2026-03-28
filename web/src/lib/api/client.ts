@@ -189,6 +189,7 @@ const API_ERROR_MESSAGE_MAP: Record<string, string> = {
     "[PROMPT_SCOPE_VIOLATION]": "销售场景仅允许评估/报告相关模板。",
     "[SALES_PERSONA_REQUIRED]": "请先选择销售角色。",
     "[SESSION_NOT_FOUND]": "未找到目标会话，请刷新后重试。",
+    "[SESSION_NOT_COMPLETED]": "当前会话还在评分中，回放会在持久化完成后解锁。",
     "[ACCESS_DENIED]": "你没有权限访问该会话。",
     "[PROMPT_TEMPLATE_EDIT_ADMIN_ONLY]": "仅管理员可访问提示词治理接口。",
     "[ROLE_REQUIRED]": "当前账号权限不足，无法执行该操作。",

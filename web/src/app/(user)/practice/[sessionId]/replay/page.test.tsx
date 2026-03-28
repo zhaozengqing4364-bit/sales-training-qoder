@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import SessionReplayPage from "./page";
+import { ApiRequestError } from "@/lib/api/client";
 
 const {
   pushMock,
@@ -637,6 +638,22 @@ describe("SessionReplayPage", () => {
       configurable: true,
       value: scrollIntoViewMock,
     });
+  });
+
+  it("shows an explicit blocked message when replay is still completion-gated", async () => {
+    getReplayMock.mockRejectedValue(new ApiRequestError({
+      status: 400,
+      errorCode: "[SESSION_NOT_COMPLETED]",
+      message: "Session must be completed for replay",
+    }));
+    getReportMock.mockResolvedValue(buildRetryReport());
+    getHighlightsMock.mockResolvedValue(buildHighlightsResponse());
+
+    render(<SessionReplayPage />);
+
+    expect(await screen.findByText("统一训练证据不可用")).toBeTruthy();
+    expect(screen.getByText("统一训练证据加载失败：当前会话还在评分中，回放会在持久化完成后解锁。"))
+      .toBeTruthy();
   });
 
   it("renders the unified replay evidence without stitching conflicting messages", async () => {

@@ -2185,3 +2185,23 @@ Append one entry per iteration:
   verification results: passed; all slice-plan verification commands reran green, knowledge-check still exposes live coach-health, and the learner shell/right panel tests prove degraded-resumed visibility without healthy-state noise.
   success signal status: reconnect no longer replays stale coach-health, and the current /practice learner route now surfaces degraded/resumed truth without interrupting training.
   rollback note: slice artifacts already existed as complete; gsd_complete_slice was re-invoked during close-out but returned that S01 was already complete, so no roadmap/db rollback was required.
+
+- time: 2026-03-28T19:33:19+08:00
+  mode: grow
+  item id: M007-S04-T02
+  files changed:
+    - backend/tests/contract/test_practice_evidence_contract.py
+    - backend/tests/integration/test_replay_api.py
+    - web/src/lib/api/client.ts
+    - web/src/app/(user)/practice/[sessionId]/replay/page.test.tsx
+    - .gsd/KNOWLEDGE.md
+    - .codex/loop/state.json
+  summary: Tightened the same-session closure proofs around the persisted completion transition, added replay/report parity assertions on the real finalization path, and made the replay page render an explicit blocked-state message when replay is still completion-gated.
+  verification commands:
+    - backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/integration/test_session_lifecycle_api.py -k "report_generation or scoring"
+    - backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/contract/test_practice_evidence_contract.py -k "same_session or knowledge_check or replay"
+    - backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/integration/test_practice_evidence_flow.py backend/tests/integration/test_replay_api.py -k "finalization or scoring or replay_unlock"
+    - npm test -- --run 'web/src/app/(user)/practice/[sessionId]/report/page.test.tsx' 'web/src/app/(user)/practice/[sessionId]/replay/page.test.tsx'
+  verification results: passed; all four task-plan verification commands reran green, the backend tests now prove report/replay/highlights stay on one SessionEvidenceService projection after real background finalization, and the learner replay page keeps the completion gate visible instead of leaking raw backend copy.
+  success signal status: same-session closure semantics are now locked by focused backend/frontend regression coverage, so report stays readable during scoring while replay/highlights only unlock after persisted completion.
+  rollback note: if T03 live proof reopens this path, inspect the persisted completion transition first and keep the replay gate strict; do not reintroduce frontend-only fallbacks for unfinished sessions.

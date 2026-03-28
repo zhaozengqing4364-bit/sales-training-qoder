@@ -34,6 +34,12 @@ from common.db.session import get_db
 TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
 
 
+def _without_replay_anchor(value: dict[str, object] | None) -> dict[str, object] | None:
+    if not isinstance(value, dict):
+        return value
+    return {key: item for key, item in value.items() if key != "replay_anchor"}
+
+
 @pytest_asyncio.fixture(scope="function")
 async def test_engine():
     """Create test database engine with all tables"""
@@ -842,6 +848,10 @@ class TestReplayAPI:
         await db_session.commit()
         await db_session.refresh(session)
 
+        report_before = await async_client.get(
+            f"/api/v1/practice/sessions/{session.session_id}/report",
+            headers=auth_headers,
+        )
         replay_before = await async_client.get(
             f"/api/v1/sessions/{session.session_id}/replay",
             headers=auth_headers,
@@ -850,6 +860,7 @@ class TestReplayAPI:
             f"/api/v1/sessions/{session.session_id}/highlights",
             headers=auth_headers,
         )
+        assert report_before.status_code == 200
         assert replay_before.status_code == 400
         assert replay_before.json()["error"] == "[SESSION_NOT_COMPLETED]"
         assert highlights_before.status_code == 400
@@ -869,6 +880,10 @@ class TestReplayAPI:
         assert session.report_status == "failed"
         assert session.status == SessionStatus.COMPLETED.value
 
+        report_after = await async_client.get(
+            f"/api/v1/practice/sessions/{session.session_id}/report",
+            headers=auth_headers,
+        )
         replay_after = await async_client.get(
             f"/api/v1/sessions/{session.session_id}/replay",
             headers=auth_headers,
@@ -877,10 +892,21 @@ class TestReplayAPI:
             f"/api/v1/sessions/{session.session_id}/highlights",
             headers=auth_headers,
         )
+        assert report_after.status_code == 200
         assert replay_after.status_code == 200
         assert replay_after.json()["success"] is True
         assert highlights_after.status_code == 200
         assert highlights_after.json()["success"] is True
+
+        report_after_data = report_after.json()["data"]
+        replay_after_data = replay_after.json()["data"]
+        assert report_after_data["evidence_completeness"] == replay_after_data["evidence_completeness"]
+        assert _without_replay_anchor(report_after_data["main_issue"]) == _without_replay_anchor(
+            replay_after_data["main_issue"]
+        )
+        assert _without_replay_anchor(report_after_data["next_goal"]) == _without_replay_anchor(
+            replay_after_data["next_goal"]
+        )
 
     @pytest.mark.asyncio
     async def test_should_keep_highlights_locked_for_true_in_progress_session(
