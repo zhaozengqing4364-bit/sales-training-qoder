@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "exported_at": "2026-03-28T03:18:34.359Z",
+  "exported_at": "2026-03-28T03:34:32.578Z",
   "milestones": [
     {
       "id": "M001",
@@ -4271,19 +4271,30 @@
       "milestone_id": "M007",
       "slice_id": "S01",
       "id": "T02",
-      "title": "把 coach-health 状态抬到 learner page shell",
-      "status": "pending",
-      "one_liner": "",
-      "narrative": "",
-      "verification_result": "",
+      "title": "Surfaced degraded/resumed coach-health on the learner page shell and fixed the repo-root Vitest shim so the planned `web/src/...` verification command executes correctly.",
+      "status": "complete",
+      "one_liner": "Surfaced degraded/resumed coach-health on the learner page shell and fixed the repo-root Vitest shim so the planned `web/src/...` verification command executes correctly.",
+      "narrative": "Reproduced the verification failure and confirmed the carry-forward backend checks were already passing while the learner route still hid coach-health inside the right panel and the repo-root `npm test` shim dropped `web/src/...` filters. Added failing page-level assertions first, then extracted a shared `CoachHealthNotice` component so both the learner shell and `RightPanelContent` render the same non-healthy `coachHealth` message with a safe empty-message guard. Wired the learner page to show that compact notice above the primary controls, extended the page and panel tests for degraded/resumed plus healthy/malformed boundaries, and replaced the root `npm test` script with a small Node wrapper that strips a leading `web/` before delegating to `web/` Vitest. Reran the focused UI suite, the carry-forward backend/reducer checks, and a temporary browser sanity check on `:3445`, then shut the temporary server down.",
+      "verification_result": "Confirmed the learner route and right panel focused Vitest suites pass via the planned repo-root command, confirmed the reconnect/runtime truth backend suites and reducer suite still pass, and ran a browser sanity check against a temporary frontend server on `http://localhost:3445/practice/session-current?scenario_type=sales&voice_mode=legacy`, verifying the learner route renders and the shell stays quiet when no degraded/resumed coach-health message is present.",
       "duration": "",
-      "completed_at": null,
+      "completed_at": "2026-03-28T03:34:32.557Z",
       "blocker_discovered": false,
-      "deviations": "",
-      "known_issues": "",
-      "key_files": [],
-      "key_decisions": [],
-      "full_summary_md": "",
+      "deviations": "Added a small repo-root Vitest argument normalizer because the slice verification command itself was invalid in the current workspace and would have kept failing even after the UI work shipped.",
+      "known_issues": "Focused backend pytest commands still emit the pre-existing `--cov=src` / `No data was collected` warnings from the backend coverage configuration even though the tests pass.",
+      "key_files": [
+        "web/src/app/(user)/practice/[sessionId]/page.tsx",
+        "web/src/components/practice/CoachHealthNotice.tsx",
+        "web/src/components/practice/RightPanelContent.tsx",
+        "web/src/app/(user)/practice/[sessionId]/page.test.tsx",
+        "web/src/components/practice/RightPanelContent.test.tsx",
+        "package.json",
+        "scripts/run-vitest-root.mjs"
+      ],
+      "key_decisions": [
+        "Extracted a shared `CoachHealthNotice` so the learner shell and right panel render the same `coachHealth` message instead of drifting into separate copy paths.",
+        "Normalized repo-root `npm test` arguments by stripping a leading `web/` prefix before delegating to `web/` Vitest so the slice-plan verification command runs as written."
+      ],
+      "full_summary_md": "---\nid: T02\nparent: S01\nmilestone: M007\nkey_files:\n  - web/src/app/(user)/practice/[sessionId]/page.tsx\n  - web/src/components/practice/CoachHealthNotice.tsx\n  - web/src/components/practice/RightPanelContent.tsx\n  - web/src/app/(user)/practice/[sessionId]/page.test.tsx\n  - web/src/components/practice/RightPanelContent.test.tsx\n  - package.json\n  - scripts/run-vitest-root.mjs\nkey_decisions:\n  - Extracted a shared `CoachHealthNotice` so the learner shell and right panel render the same `coachHealth` message instead of drifting into separate copy paths.\n  - Normalized repo-root `npm test` arguments by stripping a leading `web/` prefix before delegating to `web/` Vitest so the slice-plan verification command runs as written.\nduration: \"\"\nverification_result: passed\ncompleted_at: 2026-03-28T03:34:32.559Z\nblocker_discovered: false\n---\n\n# T02: Surfaced degraded/resumed coach-health on the learner page shell and fixed the repo-root Vitest shim so the planned `web/src/...` verification command executes correctly.\n\n**Surfaced degraded/resumed coach-health on the learner page shell and fixed the repo-root Vitest shim so the planned `web/src/...` verification command executes correctly.**\n\n## What Happened\n\nReproduced the verification failure and confirmed the carry-forward backend checks were already passing while the learner route still hid coach-health inside the right panel and the repo-root `npm test` shim dropped `web/src/...` filters. Added failing page-level assertions first, then extracted a shared `CoachHealthNotice` component so both the learner shell and `RightPanelContent` render the same non-healthy `coachHealth` message with a safe empty-message guard. Wired the learner page to show that compact notice above the primary controls, extended the page and panel tests for degraded/resumed plus healthy/malformed boundaries, and replaced the root `npm test` script with a small Node wrapper that strips a leading `web/` before delegating to `web/` Vitest. Reran the focused UI suite, the carry-forward backend/reducer checks, and a temporary browser sanity check on `:3445`, then shut the temporary server down.\n\n## Verification\n\nConfirmed the learner route and right panel focused Vitest suites pass via the planned repo-root command, confirmed the reconnect/runtime truth backend suites and reducer suite still pass, and ran a browser sanity check against a temporary frontend server on `http://localhost:3445/practice/session-current?scenario_type=sales&voice_mode=legacy`, verifying the learner route renders and the shell stays quiet when no degraded/resumed coach-health message is present.\n\n## Verification Evidence\n\n| # | Command | Exit Code | Verdict | Duration |\n|---|---------|-----------|---------|----------|\n| 1 | `npm test -- --run 'web/src/components/practice/RightPanelContent.test.tsx' 'web/src/app/(user)/practice/[sessionId]/page.test.tsx'` | 0 | ✅ pass | 3550ms |\n| 2 | `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/test_enhanced_handler_coach_health.py` | 0 | ✅ pass | 5560ms |\n| 3 | `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/test_stepfun_realtime_persistence.py -k 'restore_session_state'` | 0 | ✅ pass | 6040ms |\n| 4 | `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/integration/test_voice_runtime_session_snapshot.py -k 'live_coach_health'` | 0 | ✅ pass | 7740ms |\n| 5 | `npm test -- --run 'web/src/hooks/websocket/message-handlers.test.ts'` | 0 | ✅ pass | 2280ms |\n\n\n## Deviations\n\nAdded a small repo-root Vitest argument normalizer because the slice verification command itself was invalid in the current workspace and would have kept failing even after the UI work shipped.\n\n## Known Issues\n\nFocused backend pytest commands still emit the pre-existing `--cov=src` / `No data was collected` warnings from the backend coverage configuration even though the tests pass.\n\n## Files Created/Modified\n\n- `web/src/app/(user)/practice/[sessionId]/page.tsx`\n- `web/src/components/practice/CoachHealthNotice.tsx`\n- `web/src/components/practice/RightPanelContent.tsx`\n- `web/src/app/(user)/practice/[sessionId]/page.test.tsx`\n- `web/src/components/practice/RightPanelContent.test.tsx`\n- `package.json`\n- `scripts/run-vitest-root.mjs`\n",
       "description": "Make degraded/resumed explicitly visible on the learner route itself, especially on mobile where the current signal is hidden until the bottom sheet is opened. Steps: 1. Add a compact, non-blocking page-shell strip/chip near the primary practice controls that mirrors the same `coachHealth` object already passed to `RightPanelContent`. 2. Keep the richer right-panel card in place so the learner still gets explanatory copy without losing stage, score, action-card, or fuzzy-detection surfaces; extract a tiny shared presentation helper only if duplication would cause copy/style drift. 3. Extend learner-page tests so the page-shell status is asserted even when `RightPanelContent` is mocked, and keep right-panel tests proving degraded/resumed copy does not hide the active coaching guidance. Must-haves: degraded/resumed is visible without opening the analysis panel; healthy state stays quiet/non-distracting; no second state source is introduced. Negative tests: mobile/desktop render parity, healthy state not showing a warning banner, and degraded/resumed copy coexisting with stage and score guidance.",
       "estimate": "1h",
       "files": [
@@ -7264,6 +7275,61 @@
       "verdict": "✅ pass",
       "duration_ms": 4500,
       "created_at": "2026-03-28T03:18:34.337Z"
+    },
+    {
+      "id": 159,
+      "task_id": "T02",
+      "slice_id": "S01",
+      "milestone_id": "M007",
+      "command": "npm test -- --run 'web/src/components/practice/RightPanelContent.test.tsx' 'web/src/app/(user)/practice/[sessionId]/page.test.tsx'",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 3550,
+      "created_at": "2026-03-28T03:34:32.558Z"
+    },
+    {
+      "id": 160,
+      "task_id": "T02",
+      "slice_id": "S01",
+      "milestone_id": "M007",
+      "command": "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/test_enhanced_handler_coach_health.py",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 5560,
+      "created_at": "2026-03-28T03:34:32.559Z"
+    },
+    {
+      "id": 161,
+      "task_id": "T02",
+      "slice_id": "S01",
+      "milestone_id": "M007",
+      "command": "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/test_stepfun_realtime_persistence.py -k 'restore_session_state'",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 6040,
+      "created_at": "2026-03-28T03:34:32.559Z"
+    },
+    {
+      "id": 162,
+      "task_id": "T02",
+      "slice_id": "S01",
+      "milestone_id": "M007",
+      "command": "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/integration/test_voice_runtime_session_snapshot.py -k 'live_coach_health'",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 7740,
+      "created_at": "2026-03-28T03:34:32.559Z"
+    },
+    {
+      "id": 163,
+      "task_id": "T02",
+      "slice_id": "S01",
+      "milestone_id": "M007",
+      "command": "npm test -- --run 'web/src/hooks/websocket/message-handlers.test.ts'",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 2280,
+      "created_at": "2026-03-28T03:34:32.559Z"
     }
   ]
 }

@@ -11,6 +11,7 @@ import { PageNavigator } from "@/components/practice/presentation/PageNavigator"
 import { PointTracker } from "@/components/practice/presentation/PointTracker";
 import { ForbiddenWordsAlert } from "@/components/practice/presentation/ForbiddenWordsAlert";
 import { ScorePanel } from "@/components/practice/ScorePanel";
+import { CoachHealthNotice } from "@/components/practice/CoachHealthNotice";
 import type {
     FuzzyDetection,
     SalesStage,
@@ -99,28 +100,7 @@ export const RightPanelContent = React.memo(function RightPanelContent({
 
     return (
         <div className="space-y-6">
-            {coachHealth.status !== "healthy" && (
-                <div className={cn(
-                    "rounded-2xl p-4 border shadow-[0_8px_30px_rgb(0,0,0,0.04)]",
-                    coachHealth.status === "degraded"
-                        ? "bg-amber-50/90 border-amber-200"
-                        : "bg-emerald-50/90 border-emerald-200"
-                )}>
-                    <h3 className="text-sm font-semibold text-slate-700 mb-2 flex items-center gap-2">
-                        <span className={cn(
-                            "w-2 h-2 rounded-full",
-                            coachHealth.status === "degraded" ? "bg-amber-500" : "bg-emerald-500"
-                        )} />
-                        辅导状态
-                    </h3>
-                    <p className={cn(
-                        "text-xs leading-6",
-                        coachHealth.status === "degraded" ? "text-amber-800" : "text-emerald-800"
-                    )}>
-                        {coachHealth.message}
-                    </p>
-                </div>
-            )}
+            <CoachHealthNotice coachHealth={coachHealth} />
 
             {actionCard && (
                 <div className="bg-white/60 backdrop-blur-sm rounded-2xl p-4 border border-white/70 shadow-[0_8px_30px_rgb(0,0,0,0.04)]">

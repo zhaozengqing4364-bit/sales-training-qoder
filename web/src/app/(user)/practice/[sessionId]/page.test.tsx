@@ -185,4 +185,116 @@ describe("PracticeSessionPage carry-forward retry focus", () => {
 
         expect(screen.queryByText("本次练习聚焦上次复盘问题")).toBeNull();
     });
+
+    it("shows degraded coach health in the learner page shell even when the right panel is mocked", () => {
+        usePracticeRuntimeLockMock.mockReturnValue({
+            lockedScenarioType: "sales",
+            lockedVoiceMode: "legacy",
+            lockedAgentId: "agent-1",
+            lockedPersonaId: "persona-1",
+            lockedPresentationId: undefined,
+            focusIntent: null,
+            sessionMetaError: null,
+        });
+        usePracticeWebSocketMock.mockReturnValue({
+            connectionState: "connected",
+            isConnected: true,
+            sessionStatus: "in_progress",
+            aiState: "idle",
+            messages: [],
+            fuzzyDetections: [],
+            salesStage: {
+                current_stage: "objection",
+                stage_name: "异议处理",
+                key_actions: ["先回应风险", "再补证据"],
+                guidance: "保持问题澄清后再推进下一步",
+                progress: 0.72,
+            },
+            scores: {
+                overall_score: 84,
+                turn_count: 4,
+                stage_name: "异议处理",
+                suggestions: ["先补一个 ROI 证据，再回应价格异议"],
+                dimension_scores: {
+                    价值表达: 84,
+                },
+            },
+            actionCard: null,
+            coachHealth: {
+                status: "degraded",
+                reason: "capability_pipeline_failed",
+                message: "实时辅导暂不可用，训练仍可继续。",
+            },
+            error: null,
+            isPlayingAudio: false,
+            interimTranscript: "",
+            audioUnlocked: true,
+            isNetworkSlow: false,
+            currentSlide: null,
+            points: [],
+            forbiddenWords: [],
+            sendAudio: vi.fn(),
+            sendAudioBinary: vi.fn(),
+            sendAudioEnd: vi.fn(),
+            startSpeaking: vi.fn(),
+            sendInterrupt: vi.fn(),
+            unlockAudio: vi.fn(),
+            sendMessage: vi.fn(),
+            connect: vi.fn(),
+        });
+
+        render(<PracticeSessionPage />);
+
+        expect(screen.getByText("辅导状态提醒")).toBeTruthy();
+        expect(screen.getByText("实时辅导暂不可用，训练仍可继续。", { exact: true })).toBeTruthy();
+        expect(screen.getAllByTestId("right-panel-content")).toHaveLength(2);
+    });
+
+    it("keeps the learner page shell quiet when coach health is healthy or missing a message", () => {
+        usePracticeRuntimeLockMock.mockReturnValue({
+            lockedScenarioType: "sales",
+            lockedVoiceMode: "legacy",
+            lockedAgentId: "agent-1",
+            lockedPersonaId: "persona-1",
+            lockedPresentationId: undefined,
+            focusIntent: null,
+            sessionMetaError: null,
+        });
+        usePracticeWebSocketMock.mockReturnValue({
+            connectionState: "connected",
+            isConnected: true,
+            sessionStatus: "in_progress",
+            aiState: "idle",
+            messages: [],
+            fuzzyDetections: [],
+            salesStage: null,
+            scores: null,
+            actionCard: null,
+            coachHealth: {
+                status: "resumed",
+                reason: "capability_pipeline_resumed",
+            },
+            error: null,
+            isPlayingAudio: false,
+            interimTranscript: "",
+            audioUnlocked: true,
+            isNetworkSlow: false,
+            currentSlide: null,
+            points: [],
+            forbiddenWords: [],
+            sendAudio: vi.fn(),
+            sendAudioBinary: vi.fn(),
+            sendAudioEnd: vi.fn(),
+            startSpeaking: vi.fn(),
+            sendInterrupt: vi.fn(),
+            unlockAudio: vi.fn(),
+            sendMessage: vi.fn(),
+            connect: vi.fn(),
+        });
+
+        render(<PracticeSessionPage />);
+
+        expect(screen.queryByText("辅导状态提醒")).toBeNull();
+        expect(screen.queryByText("实时辅导正常。", { exact: true })).toBeNull();
+    });
 });

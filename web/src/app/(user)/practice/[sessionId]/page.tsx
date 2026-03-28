@@ -13,6 +13,7 @@ import { usePracticeWebSocket } from "@/hooks/use-practice-websocket";
 import type { ConnectionState, SessionStatus } from "@/hooks/use-practice-websocket";
 import { useAudioRecorder } from "@/hooks/use-audio-recorder";
 import { RightPanelContent } from "@/components/practice/RightPanelContent";
+import { CoachHealthNotice } from "@/components/practice/CoachHealthNotice";
 import { usePracticeRuntimeLock, normalizeVoiceMode } from "./runtime-lock";
 import { usePracticeRecordingHotkeys } from "./use-practice-recording-hotkeys";
 import { usePracticeSessionLifecycle } from "./use-practice-session-lifecycle";
@@ -546,6 +547,12 @@ export default function PracticeSessionPage() {
                 {/* 底部控制区 */}
                 <div className="absolute bottom-0 left-0 right-0 p-4 md:p-6 bg-gradient-to-t from-white via-white/90 to-transparent z-20">
                     <div className="max-w-3xl mx-auto flex flex-col items-center gap-4">
+                        <CoachHealthNotice
+                            coachHealth={coachHealth}
+                            title="辅导状态提醒"
+                            variant="shell"
+                        />
+
                         {interimTranscript && (
                             <div className="w-full max-w-md px-4 py-2 bg-indigo-50 border border-indigo-100 rounded-xl">
                                 <p className="text-sm text-indigo-700 text-center animate-pulse">

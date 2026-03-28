@@ -81,6 +81,39 @@ describe("RightPanelContent", () => {
         expect(screen.getByText("实时辅导已恢复，后续建议会继续更新。")).toBeTruthy();
     });
 
+    it("stays quiet when coach health is healthy or missing a non-healthy message", () => {
+        const { rerender } = render(
+            <RightPanelContent
+                {...baseProps}
+                scores={null}
+                actionCard={null}
+                fuzzyDetections={[]}
+                coachHealth={{
+                    status: "healthy",
+                    reason: null,
+                    message: "实时辅导正常。",
+                }}
+            />,
+        );
+
+        expect(screen.queryByText("辅导状态")).toBeNull();
+
+        rerender(
+            <RightPanelContent
+                {...baseProps}
+                scores={null}
+                actionCard={null}
+                fuzzyDetections={[]}
+                coachHealth={{
+                    status: "degraded",
+                    reason: "capability_pipeline_failed",
+                } as never}
+            />,
+        );
+
+        expect(screen.queryByText("辅导状态")).toBeNull();
+    });
+
     it("treats action_card as the only primary textual coach surface while keeping stage and score context visible", () => {
         render(
             <RightPanelContent
