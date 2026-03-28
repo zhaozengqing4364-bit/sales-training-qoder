@@ -1,6 +1,6 @@
 {
   "mode": "grow",
-  "current_issue_id": "M007-S04-T02",
+  "current_issue_id": "M007-S04-T03",
   "current_issue_type": "task",
   "current_issue_status": "done",
   "pending_issue_ids": [],
@@ -121,27 +121,28 @@
     "M006-S05",
     "M003-S06",
     "M007-S01",
-    "M007-S04-T02"
+    "M007-S04-T02",
+    "M007-S04-T03"
   ],
   "blocked_issue_ids": [],
   "deferred_issue_ids": [],
   "last_modified_files": [
-    "backend/tests/contract/test_practice_evidence_contract.py",
-    "backend/tests/integration/test_replay_api.py",
-    "web/src/lib/api/client.ts",
-    "web/src/app/(user)/practice/[sessionId]/replay/page.test.tsx",
+    ".artifacts/m007-s04-final-closure-proof.md",
+    ".artifacts/browser/2026-03-28T11-37-24-845Z-session/m007-s04-proof-timeline.json",
+    ".artifacts/browser/2026-03-28T11-37-24-845Z-session/m007-s04-proof.trace.zip",
+    ".gsd/DECISIONS.md",
     ".gsd/KNOWLEDGE.md",
     ".codex/loop/state.json",
     ".codex/loop/log.md"
   ],
   "last_verification_commands": [
-    "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/integration/test_session_lifecycle_api.py -k \"report_generation or scoring\"",
-    "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/contract/test_practice_evidence_contract.py -k \"same_session or knowledge_check or replay\"",
-    "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/integration/test_practice_evidence_flow.py backend/tests/integration/test_replay_api.py -k \"finalization or scoring or replay_unlock\"",
-    "npm test -- --run 'web/src/app/(user)/practice/[sessionId]/report/page.test.tsx' 'web/src/app/(user)/practice/[sessionId]/replay/page.test.tsx'"
+    "bg_shell start backend: PYTHONPATH=backend/src backend/venv/bin/uvicorn main:app --app-dir backend/src --host localhost --port 3444",
+    "bg_shell start web: pnpm --dir web exec next dev --hostname localhost --port 3445",
+    "browser/API localhost proof on one session: /practice/{id} -> /practice/{id}/report -> /practice/{id}/replay plus supporting /api/v1/practice/sessions/{id}, /knowledge-check, /sessions/{id}/replay, /sessions/{id}/highlights",
+    "bg_shell kill backend+web and verify no background processes remain"
   ],
-  "last_verification_result": "Fresh S04/T02 focused gate passed: lifecycle scoring boundary 1/1, same-session contract suite 9/9, integration replay/report proof 2/2, and learner report/replay Vitest 22/22. Report stays readable during scoring, replay/highlights stay locked until persisted completion, and the replay page now surfaces an explicit blocked-state message instead of raw backend copy.",
-  "last_success_signal": "Same-session report/replay/highlights now have explicit contract coverage around the persisted completion transition, and the learner replay surface stays honest when the backend still returns [SESSION_NOT_COMPLETED].",
+  "last_verification_result": "Fresh S04/T03 localhost proof passed on one StepFun sales session. Same-host auth stayed on localhost, replay/highlights were blocked before completion, the learner route truthfully showed the scoring boundary after end, persisted session status then advanced to completed, and the shipped /report and /replay pages both rendered the same-session canonical projection. KB-not-ready plus trigger-side no_scoring_context_available / report_generation_failed noise remained observable but did not block persisted completion or replay unlock.",
+  "last_success_signal": "M007 S04 now has a fresh same-session localhost artifact proving the shipped learner/runtime/report/replay family leaves scoring truthfully and unlocks replay on the same completed session.",
   "last_growth_scan": null,
-  "next_action": "M007/S04/T02 is done. Continue with T03 localhost same-session closure proof on the shipped route family."
+  "next_action": "M007/S04/T03 is done. Continue with T04 generated-state validation and milestone close-out only if the localhost proof artifact and rendered state still agree."
 }

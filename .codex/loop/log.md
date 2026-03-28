@@ -2205,3 +2205,24 @@ Append one entry per iteration:
   verification results: passed; all four task-plan verification commands reran green, the backend tests now prove report/replay/highlights stay on one SessionEvidenceService projection after real background finalization, and the learner replay page keeps the completion gate visible instead of leaking raw backend copy.
   success signal status: same-session closure semantics are now locked by focused backend/frontend regression coverage, so report stays readable during scoring while replay/highlights only unlock after persisted completion.
   rollback note: if T03 live proof reopens this path, inspect the persisted completion transition first and keep the replay gate strict; do not reintroduce frontend-only fallbacks for unfinished sessions.
+
+- time: 2026-03-28T19:46:00+08:00
+  mode: grow
+  item id: M007-S04-T03
+  files changed:
+    - .artifacts/m007-s04-final-closure-proof.md
+    - .artifacts/browser/2026-03-28T11-37-24-845Z-session/m007-s04-proof-timeline.json
+    - .artifacts/browser/2026-03-28T11-37-24-845Z-session/m007-s04-proof.trace.zip
+    - .gsd/DECISIONS.md
+    - .gsd/KNOWLEDGE.md
+    - .codex/loop/state.json
+    - .codex/loop/log.md
+  summary: Captured one fresh localhost same-session closure proof on the shipped learner/report/replay family, recorded the persisted completion transition plus replay unlock on the same StepFun session, and distinguished that canonical success from concurrent KB-not-ready and trigger-side report-generation noise.
+  verification commands:
+    - bg_shell start backend: PYTHONPATH=backend/src backend/venv/bin/uvicorn main:app --app-dir backend/src --host localhost --port 3444
+    - bg_shell start web: pnpm --dir web exec next dev --hostname localhost --port 3445
+    - browser/API localhost proof on one session: /practice/{id} -> /practice/{id}/report -> /practice/{id}/replay plus supporting /api/v1/practice/sessions/{id}, /knowledge-check, /sessions/{id}/replay, /sessions/{id}/highlights
+    - bg_shell kill backend+web and verify no background processes remain
+  verification results: passed; same-host localhost auth held, one fresh StepFun session stayed on the shipped route family end to end, replay/highlights were blocked before completion, the persisted session later advanced to completed, report/replay/highlights all unlocked on that same session, and the artifact captures why concurrent kb_not_ready plus no_scoring_context_available / report_generation_failed logs are optional noise rather than the canonical blocker.
+  success signal status: M007/S04 now has a fresh localhost artifact proving the final same-session closure path retires status=scoring truthfully and unlocks replay on the completed session without host drift or cross-session stitching.
+  rollback note: if T04 close-out ever disagrees with this proof, re-run the same localhost route-family flow before touching generated state, and judge success by persisted session status plus report/replay unlock rather than by trigger-side noise alone.
