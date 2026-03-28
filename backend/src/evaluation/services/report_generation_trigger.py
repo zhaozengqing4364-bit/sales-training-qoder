@@ -62,9 +62,12 @@ class ReportGenerationTrigger:
         self,
         db: AsyncSession,
         report_service: ComprehensiveReportService | None = None,
+        *,
+        owns_db_session: bool = False,
     ):
         self.db = db
         self.report_service = report_service
+        self.owns_db_session = owns_db_session
         self._init_report_service()
 
     def _init_report_service(self) -> None:
@@ -106,10 +109,13 @@ class ReportGenerationTrigger:
         """
         try:
             # Update status to processing
-            await self._update_report_status(
+            session = await self._update_report_status(
                 session_id,
                 ReportGenerationStatus.PROCESSING,
             )
+            if session is None:
+                return
+            await self._commit_if_owned()
 
             # Generate report with retry
             result = await self._generate_report_with_retry(session_id, scenario_type)
@@ -123,6 +129,7 @@ class ReportGenerationTrigger:
                     session_id,
                     scenario_type=scenario_type,
                 )
+                await self._commit_if_owned()
                 logger.info(
                     "report_generation_completed",
                     session_id=session_id,
@@ -139,6 +146,7 @@ class ReportGenerationTrigger:
                     session_id,
                     scenario_type=scenario_type,
                 )
+                await self._commit_if_owned()
                 logger.error(
                     "report_generation_failed",
                     session_id=session_id,
@@ -146,6 +154,8 @@ class ReportGenerationTrigger:
                 )
 
         except Exception as e:
+            if self.owns_db_session:
+                await self.db.rollback()
             await self._update_report_status(
                 session_id,
                 ReportGenerationStatus.FAILED,
@@ -155,12 +165,19 @@ class ReportGenerationTrigger:
                 session_id,
                 scenario_type=scenario_type,
             )
+            await self._commit_if_owned()
             logger.error(
                 "report_generation_exception",
                 session_id=session_id,
                 error=str(e),
                 exc_info=True,
             )
+
+    async def _commit_if_owned(self) -> None:
+        if not self.owns_db_session:
+            return
+
+        await self.db.commit()
 
     async def _finalize_session_status_if_ready(
         self,
@@ -283,7 +300,7 @@ class ReportGenerationTrigger:
         session_id: str,
         status: ReportGenerationStatus,
         error: str | None = None,
-    ) -> None:
+    ) -> PracticeSession | None:
         """
         Update report generation status in database.
 
@@ -298,13 +315,23 @@ class ReportGenerationTrigger:
         result = await self.db.execute(stmt)
         session = result.scalar_one_or_none()
 
-        if session:
-            session.report_status = status.value
-            if status == ReportGenerationStatus.COMPLETED:
-                session.report_generated_at = datetime.now(timezone.utc)
-            if error:
-                session.report_error = error
-            await self.db.flush()
+        if session is None:
+            logger.warning(
+                "report_generation_session_missing",
+                session_id=session_id,
+                report_status=status.value,
+            )
+            return None
+
+        session.report_status = status.value
+        if status == ReportGenerationStatus.COMPLETED:
+            session.report_generated_at = datetime.now(timezone.utc)
+        if error:
+            session.report_error = error
+        elif status != ReportGenerationStatus.FAILED:
+            session.report_error = None
+        await self.db.flush()
+        return session
 
     async def get_report_status(
         self,
@@ -360,7 +387,7 @@ async def trigger_report_generation(
     try:
         if db is None:
             async with get_db_session() as db_session:
-                trigger = ReportGenerationTrigger(db_session)
+                trigger = ReportGenerationTrigger(db_session, owns_db_session=True)
                 await trigger.trigger_on_session_end(session_id, scenario_type)
         else:
             trigger = ReportGenerationTrigger(db)

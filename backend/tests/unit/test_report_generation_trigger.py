@@ -3,22 +3,22 @@ Unit tests for report generation trigger (Story 3.1)
 
 Tests:
 - Report generation trigger on session end
-- Retry mechanism
-- Status tracking
+- Own-session commit semantics for fire-and-forget execution
+- Status tracking and failure handling
 """
 
 import asyncio
-
-import pytest
 from datetime import datetime, timezone
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from common.db.models import PracticeSession, ReportGenerationStatus
+import pytest
+
+from common.error_handling.result import Result
 from evaluation.services.report_generation_trigger import (
     ReportGenerationTrigger,
     trigger_report_generation,
 )
-from common.error_handling.result import Result
 
 
 @pytest.fixture
@@ -38,8 +38,33 @@ def mock_report_service():
 @pytest.fixture
 def report_trigger(mock_db, mock_report_service):
     """Create report generation trigger instance."""
-    trigger = ReportGenerationTrigger(mock_db, mock_report_service)
-    return trigger
+    return ReportGenerationTrigger(mock_db, mock_report_service)
+
+
+@pytest.fixture
+def own_session_report_trigger(mock_db, mock_report_service):
+    """Create report generation trigger that owns its DB session."""
+    return ReportGenerationTrigger(
+        mock_db,
+        mock_report_service,
+        owns_db_session=True,
+    )
+
+
+def _mock_db_session(mock_db: AsyncMock, session: MagicMock | None) -> None:
+    result = MagicMock()
+    result.scalar_one_or_none.return_value = session
+    mock_db.execute.return_value = result
+
+
+def _complete_sales_projection() -> SimpleNamespace:
+    return SimpleNamespace(
+        evidence_completeness={
+            "session_scores": True,
+            "message_count": 2,
+            "complete": True,
+        }
+    )
 
 
 class TestReportGenerationTrigger:
@@ -47,55 +72,15 @@ class TestReportGenerationTrigger:
 
     @pytest.mark.asyncio
     async def test_trigger_on_session_end_success(self, report_trigger, mock_db, mock_report_service):
-        """Test successful report generation trigger."""
-        # Arrange
-        session_id = "test-session-123"
-        scenario_type = "sales"
-
-        mock_session = MagicMock()
-        mock_session.session_id = session_id
-        mock_session.report_status = "pending"
-
-        # Mock database query
-        mock_result = MagicMock()
-        mock_result.scalar_one_or_none.return_value = mock_session
-        mock_db.execute.return_value = mock_result
-
-        # Mock report generation success
-        mock_report = MagicMock()
-        mock_report.overall_score = 85.5
-        mock_report_service.generate_report.return_value = Result.ok(mock_report)
-
-        # Act
-        await report_trigger.trigger_on_session_end(session_id, scenario_type)
-
-        # Assert
-        mock_report_service.generate_report.assert_called_once_with(
-            session_id=session_id,
-            scenario_type=scenario_type,
-        )
-        assert mock_session.report_status == "completed"
-        assert mock_session.report_generated_at is not None
-
-    @pytest.mark.asyncio
-    async def test_trigger_on_session_end_success_promotes_sales_session_to_completed(
-        self,
-        report_trigger,
-        mock_db,
-        mock_report_service,
-    ):
-        """Sales sessions should leave scoring once background finalization can read canonical evidence."""
+        """Caller-owned sessions should update state without auto-commit."""
         session_id = "test-session-123"
         scenario_type = "sales"
 
         mock_session = MagicMock()
         mock_session.session_id = session_id
         mock_session.status = "scoring"
-        mock_session.report_status = "processing"
-
-        mock_result = MagicMock()
-        mock_result.scalar_one_or_none.return_value = mock_session
-        mock_db.execute.return_value = mock_result
+        mock_session.report_status = "pending"
+        _mock_db_session(mock_db, mock_session)
 
         mock_report = MagicMock()
         mock_report.overall_score = 85.5
@@ -103,42 +88,165 @@ class TestReportGenerationTrigger:
 
         with patch(
             "common.conversation.session_evidence.SessionEvidenceService.get_projection",
-            new=AsyncMock(return_value=Result.ok(MagicMock())),
+            new=AsyncMock(return_value=Result.ok(_complete_sales_projection())),
         ):
             await report_trigger.trigger_on_session_end(session_id, scenario_type)
 
+        mock_report_service.generate_report.assert_called_once_with(
+            session_id=session_id,
+            scenario_type=scenario_type,
+        )
         assert mock_session.report_status == "completed"
+        assert mock_session.report_generated_at is not None
         assert mock_session.status == "completed"
+        mock_db.commit.assert_not_awaited()
 
     @pytest.mark.asyncio
-    async def test_trigger_on_session_end_failure(self, report_trigger, mock_db, mock_report_service):
-        """Test report generation failure handling."""
-        # Arrange
+    async def test_trigger_on_session_end_success_commits_owned_session(
+        self,
+        own_session_report_trigger,
+        mock_db,
+        mock_report_service,
+    ):
+        """Fire-and-forget execution must commit processing and terminal writes itself."""
         session_id = "test-session-123"
-        scenario_type = "sales"
 
         mock_session = MagicMock()
         mock_session.session_id = session_id
+        mock_session.status = "scoring"
         mock_session.report_status = "pending"
+        _mock_db_session(mock_db, mock_session)
 
-        mock_result = MagicMock()
-        mock_result.scalar_one_or_none.return_value = mock_session
-        mock_db.execute.return_value = mock_result
+        mock_report = MagicMock()
+        mock_report.overall_score = 85.5
+        mock_report_service.generate_report.return_value = Result.ok(mock_report)
 
-        # Mock report generation failure
+        with patch(
+            "common.conversation.session_evidence.SessionEvidenceService.get_projection",
+            new=AsyncMock(return_value=Result.ok(_complete_sales_projection())),
+        ):
+            await own_session_report_trigger.trigger_on_session_end(session_id, "sales")
+
+        assert mock_session.report_status == "completed"
+        assert mock_session.status == "completed"
+        assert mock_session.report_generated_at is not None
+        assert mock_db.commit.await_count == 2
+
+    @pytest.mark.asyncio
+    async def test_trigger_on_session_end_failure_commits_owned_session_terminal_state(
+        self,
+        own_session_report_trigger,
+        mock_db,
+        mock_report_service,
+    ):
+        """Optional enhanced-report failures should still persist a truthful terminal sales status."""
+        session_id = "test-session-123"
+
+        mock_session = MagicMock()
+        mock_session.session_id = session_id
+        mock_session.status = "scoring"
+        mock_session.report_status = "processing"
+        _mock_db_session(mock_db, mock_session)
+
         mock_report_service.generate_report.return_value = Result.fail("[GENERATION_FAILED]")
 
-        # Act
-        await report_trigger.trigger_on_session_end(session_id, scenario_type)
+        with patch(
+            "common.conversation.session_evidence.SessionEvidenceService.get_projection",
+            new=AsyncMock(return_value=Result.ok(_complete_sales_projection())),
+        ):
+            await own_session_report_trigger.trigger_on_session_end(session_id, "sales")
 
-        # Assert
         assert mock_session.report_status == "failed"
         assert mock_session.report_error == "[GENERATION_FAILED]"
+        assert mock_session.status == "completed"
+        assert mock_db.commit.await_count == 2
+
+    @pytest.mark.asyncio
+    async def test_trigger_on_session_end_skips_generation_when_session_missing(
+        self,
+        own_session_report_trigger,
+        mock_db,
+        mock_report_service,
+    ):
+        """Unknown sessions should fail cleanly without calling the report generator."""
+        _mock_db_session(mock_db, None)
+
+        await own_session_report_trigger.trigger_on_session_end("missing-session", "sales")
+
+        mock_report_service.generate_report.assert_not_called()
+        mock_db.commit.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_trigger_on_session_end_malformed_report_result_marks_failed(
+        self,
+        report_trigger,
+        mock_db,
+        mock_report_service,
+    ):
+        """Malformed report-service responses should not fake success."""
+        session_id = "test-session-123"
+
+        mock_session = MagicMock()
+        mock_session.session_id = session_id
+        mock_session.status = "scoring"
+        mock_session.report_status = "pending"
+        _mock_db_session(mock_db, mock_session)
+
+        mock_report_service.generate_report.return_value = object()
+
+        with patch(
+            "common.conversation.session_evidence.SessionEvidenceService.get_projection",
+            new=AsyncMock(return_value=Result.ok(_complete_sales_projection())),
+        ):
+            await report_trigger.trigger_on_session_end(session_id, "sales")
+
+        assert mock_session.report_status == "failed"
+        assert "is_success" in mock_session.report_error
+        assert mock_session.status == "completed"
+        mock_db.commit.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_trigger_on_session_end_defers_sales_completion_when_projection_incomplete(
+        self,
+        report_trigger,
+        mock_db,
+        mock_report_service,
+    ):
+        """Boundary case: replay gating stays intact until canonical evidence is readable."""
+        session_id = "test-session-123"
+
+        mock_session = MagicMock()
+        mock_session.session_id = session_id
+        mock_session.status = "scoring"
+        mock_session.report_status = "pending"
+        _mock_db_session(mock_db, mock_session)
+
+        mock_report = MagicMock()
+        mock_report.overall_score = 85.5
+        mock_report_service.generate_report.return_value = Result.ok(mock_report)
+
+        with patch(
+            "common.conversation.session_evidence.SessionEvidenceService.get_projection",
+            new=AsyncMock(
+                return_value=Result.ok(
+                    SimpleNamespace(
+                        evidence_completeness={
+                            "session_scores": False,
+                            "message_count": 1,
+                            "complete": False,
+                        }
+                    )
+                )
+            ),
+        ):
+            await report_trigger.trigger_on_session_end(session_id, "sales")
+
+        assert mock_session.report_status == "completed"
+        assert mock_session.status == "scoring"
 
     @pytest.mark.asyncio
     async def test_get_report_status(self, report_trigger, mock_db):
         """Test getting report generation status."""
-        # Arrange
         session_id = "test-session-123"
 
         mock_session = MagicMock()
@@ -146,15 +254,10 @@ class TestReportGenerationTrigger:
         mock_session.report_status = "completed"
         mock_session.report_generated_at = datetime.now(timezone.utc)
         mock_session.report_error = None
+        _mock_db_session(mock_db, mock_session)
 
-        mock_result = MagicMock()
-        mock_result.scalar_one_or_none.return_value = mock_session
-        mock_db.execute.return_value = mock_result
-
-        # Act
         result = await report_trigger.get_report_status(session_id)
 
-        # Assert
         assert result.is_success
         assert result.value["report_status"] == "completed"
         assert result.value["report_generated_at"] is not None
@@ -162,17 +265,10 @@ class TestReportGenerationTrigger:
     @pytest.mark.asyncio
     async def test_get_report_status_not_found(self, report_trigger, mock_db):
         """Test getting status for non-existent session."""
-        # Arrange
-        session_id = "non-existent"
+        _mock_db_session(mock_db, None)
 
-        mock_result = MagicMock()
-        mock_result.scalar_one_or_none.return_value = None
-        mock_db.execute.return_value = mock_result
+        result = await report_trigger.get_report_status("non-existent")
 
-        # Act
-        result = await report_trigger.get_report_status(session_id)
-
-        # Assert
         assert not result.is_success
         assert result.fallback == "[SESSION_NOT_FOUND]"
 
@@ -183,9 +279,8 @@ class TestTriggerReportGeneration:
     @pytest.mark.asyncio
     @patch("evaluation.services.report_generation_trigger.ReportGenerationTrigger")
     @patch("evaluation.services.report_generation_trigger.get_db_session")
-    async def test_trigger_report_generation(self, mock_get_db, mock_trigger_class):
-        """Test fire-and-forget report generation trigger."""
-        # Arrange
+    async def test_trigger_report_generation_uses_owned_session(self, mock_get_db, mock_trigger_class):
+        """db=None should construct a trigger that commits its own writes."""
         session_id = "test-session-123"
         scenario_type = "sales"
 
@@ -195,16 +290,13 @@ class TestTriggerReportGeneration:
         mock_trigger = AsyncMock()
         mock_trigger_class.return_value = mock_trigger
 
-        # Act
         await trigger_report_generation(session_id, scenario_type, db=None)
-
-        # Wait for async task to complete
         await asyncio.sleep(0.1)
 
-        # Assert
-        mock_trigger_class.assert_called_once_with(mock_db)
+        mock_trigger_class.assert_called_once_with(mock_db, owns_db_session=True)
         mock_trigger.trigger_on_session_end.assert_called_once_with(
-            session_id, scenario_type
+            session_id,
+            scenario_type,
         )
 
 
@@ -213,22 +305,18 @@ class TestRetryMechanism:
 
     @pytest.mark.asyncio
     async def test_retry_on_failure(self, report_trigger, mock_report_service):
-        """Test that report generation is retried on failure."""
-        # Arrange
+        """Document current retry coverage gap without broadening this task."""
         session_id = "test-session-123"
         scenario_type = "sales"
 
-        # Mock report service to fail twice then succeed
         mock_report_service.generate_report.side_effect = [
             Result.fail("[TEMP_ERROR]"),
             Result.fail("[TEMP_ERROR]"),
             Result.ok(MagicMock(overall_score=85)),
         ]
 
-        # Act & Assert
-        # The retry decorator should handle this
-        # Note: Actual retry testing would require more complex setup
-        pass
+        assert session_id
+        assert scenario_type
 
 
 if __name__ == "__main__":

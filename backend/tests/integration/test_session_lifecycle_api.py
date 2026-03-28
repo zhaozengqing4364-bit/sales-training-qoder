@@ -12,15 +12,16 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from httpx import AsyncClient
 from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 import common.api.practice as practice_api
+import evaluation.services.report_generation_trigger as trigger_module
 from common.auth.service import create_access_token
 from common.conversation.models import ConversationMessage
 from common.db.models import PracticeSession, Scenario, User
 from common.error_handling.result import Result
 from common.websocket.session_manager import get_session_manager
-from evaluation.services.report_generation_trigger import ReportGenerationTrigger
+from evaluation.services.report_generation_trigger import trigger_report_generation
 
 
 def _headers_for_user(user_id: str) -> dict[str, str]:
@@ -263,23 +264,37 @@ async def test_sales_end_response_stays_scoring_but_background_finalization_can_
     ).scalar_one()
     assert persisted_session.status == "scoring"
 
+    session_factory = async_sessionmaker(
+        test_db.bind,
+        class_=AsyncSession,
+        expire_on_commit=False,
+    )
     mock_report_service = AsyncMock()
     mock_report_service.generate_report = AsyncMock(
         return_value=Result.fail("[ENHANCED_REPORT_FAILED]")
     )
-    await ReportGenerationTrigger(test_db, mock_report_service).trigger_on_session_end(
-        session_id,
-        "sales",
-    )
-    await test_db.commit()
 
-    persisted_session = (
-        await test_db.execute(
-            select(PracticeSession).where(PracticeSession.session_id == session_id)
-        )
-    ).scalar_one()
+    def _init_report_service(self) -> None:
+        self.report_service = mock_report_service
+
+    monkeypatch.setattr(trigger_module, "AsyncSessionLocal", session_factory)
+    monkeypatch.setattr(
+        trigger_module.ReportGenerationTrigger,
+        "_init_report_service",
+        _init_report_service,
+    )
+
+    await trigger_report_generation(session_id, "sales", db=None)
+
+    async with session_factory() as verify_db:
+        persisted_session = (
+            await verify_db.execute(
+                select(PracticeSession).where(PracticeSession.session_id == session_id)
+            )
+        ).scalar_one()
     assert persisted_session.report_status == "failed"
     assert persisted_session.status == "completed"
+    assert persisted_session.report_error == "[ENHANCED_REPORT_FAILED]"
 
 
 @pytest.mark.asyncio

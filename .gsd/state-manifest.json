@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "exported_at": "2026-03-28T10:11:04.507Z",
+  "exported_at": "2026-03-28T11:18:05.222Z",
   "milestones": [
     {
       "id": "M001",
@@ -893,7 +893,7 @@
       "milestone_id": "M007",
       "id": "S03",
       "title": "M002 remediation 归并与权威切换",
-      "status": "pending",
+      "status": "complete",
       "risk": "medium",
       "depends": [
         "S01",
@@ -901,9 +901,9 @@
       ],
       "demo": "After this: the remaining M002 remediation facts are no longer hanging off an old temporary closeout narrative; M007 becomes the clear authority for the unfinished closure work and its evidence.",
       "created_at": "2026-03-28T01:28:14.338Z",
-      "completed_at": null,
-      "full_summary_md": "",
-      "full_uat_md": "",
+      "completed_at": "2026-03-28T10:17:50.739Z",
+      "full_summary_md": "---\nid: S03\nparent: M007\nmilestone: M007\nprovides:\n  - One canonical milestone-governance story for remaining realtime-coaching closure work: M007 is live owner, M002 is preserved history only.\n  - Preserved M002 close-out artifacts that point forward to M007 without rewriting the 2026-03-25 failed audit.\n  - A compact audit artifact that records the exact generated-state drift S04 must retire through the normal generator/DB render path.\nrequires:\n  - slice: S01\n    provides: Learner-visible coach degraded/resumed truth and reconnect semantics already retired under M007, proving the product authority had already moved forward before artifact reconciliation.\n  - slice: S02\n    provides: Same-session report/replay authority and the remaining completion blocker framing that S03 had to preserve while switching milestone ownership from historical M002 intent to live M007 closure work.\naffects:\n  - S04\nkey_files:\n  - .gsd/PROJECT.md\n  - .gsd/REQUIREMENTS.md\n  - .gsd/milestones/M007/M007-CONTEXT.md\n  - .gsd/milestones/M007/M007-ROADMAP.md\n  - .gsd/milestones/M002/M002-SUMMARY.md\n  - .gsd/milestones/M002/M002-VALIDATION.md\n  - .artifacts/m007-s03-authority-audit.md\n  - .gsd/DECISIONS.md\n  - .gsd/KNOWLEDGE.md\nkey_decisions:\n  - D106 remains the durable authority-switch record: M002 stays preserved historical failed-closeout foundation, and M007 is the sole live owner of unfinished R009 closure work.\n  - R009’s live ownership is now explicitly carried by `M007/S04`, with `M007/S01-S03` recorded as supporting slices so future validation no longer points at a completed or nonexistent M002 slice.\n  - D107 formalizes the generated-surface rule discovered during this slice: align canonical docs first, then audit `STATE.md`/`state-manifest.json` separately instead of hand-editing generated files to fake agreement.\npatterns_established:\n  - After a milestone-authority switch, align the canonical current-state sources first (`PROJECT.md`, `REQUIREMENTS.md`, decisions, preserved milestone artifacts) and treat generated surfaces only as read-back evidence.\n  - When a preserved failed-closeout milestone still matters historically, add dated forward pointers to the new live owner instead of rewriting the old record as completed or fabricating missing slices.\n  - If broad grep verification intentionally spans preserved plans and summaries, pair it with one smaller targeted read-back so downstream validation can quote the exact mismatch rather than relying on noisy output.\nobservability_surfaces:\n  - .artifacts/m007-s03-authority-audit.md\n  - .gsd/STATE.md\n  - .gsd/state-manifest.json\n  - Decision D107 in .gsd/DECISIONS.md\n  - R009 row in .gsd/REQUIREMENTS.md\ndrill_down_paths:\n  - .gsd/milestones/M007/slices/S03/tasks/T01-SUMMARY.md\n  - .gsd/milestones/M007/slices/S03/tasks/T02-SUMMARY.md\n  - .gsd/milestones/M007/slices/S03/tasks/T03-SUMMARY.md\nduration: \"\"\nverification_result: passed\ncompleted_at: 2026-03-28T10:17:50.741Z\nblocker_discovered: false\n---\n\n# S03: M002 remediation 归并与权威切换\n\n**Aligned the M002→M007 authority story across canonical GSD sources, preserved M002’s failed-closeout record with explicit forward pointers, and recorded the remaining generated-state drift as audit evidence for S04 instead of faking alignment.**\n\n## What Happened\n\nS03 closed the artifact-authority gap that was left behind after M007/S01-S02 had already moved the real product truth out of the old M002 remediation story. First, the slice tightened the live authority line in canonical current-state sources: R009 now names M007/S04 as the remaining primary owner, M007 context/roadmap describe M002 only as preserved failed-closeout foundation, and the authority switch is anchored in D106 rather than split across prompt chatter and stale milestone wording. Second, the slice updated the preserved M002 close-out artifacts without falsifying history: both M002-SUMMARY.md and M002-VALIDATION.md keep the original 2026-03-25 failed / needs-remediation record intact, but now carry dated handoff notes that redirect readers to M007/S01-S04 and D106 instead of implying missing executable M002 remediation slices still exist. Third, the slice verified the system-managed surfaces instead of hand-editing them: `.artifacts/m007-s03-authority-audit.md` records that canonical docs are aligned, while `.gsd/STATE.md` and `.gsd/state-manifest.json` still lag in different ways. That leaves S04 with one truthful story: the authority switch itself is complete, but generator-backed state reconciliation still needs to be retired through the normal DB/render path during final validation.\n\n## Verification\n\nFresh slice-level verification passed after the DB-backed requirement/decision updates were applied. 1) `rg -n \"M002|M007|R009|S07|S08|authority|historical\" .gsd/DECISIONS.md .gsd/PROJECT.md .gsd/REQUIREMENTS.md .gsd/milestones/M007/M007-CONTEXT.md .gsd/milestones/M007/M007-ROADMAP.md` confirmed the live authority story points to M007 and treats M002 as historical only. 2) `rg -n \"M007|S07|S08|2026-03-25|historical|failed|needs-remediation\" .gsd/milestones/M002/M002-SUMMARY.md .gsd/milestones/M002/M002-VALIDATION.md` confirmed the preserved M002 record still reads as failed-closeout history with dated M007 forward pointers. 3) `find .gsd/milestones/M002/slices -maxdepth 1 -mindepth 1 -type d | sort && ... && test -s .artifacts/m007-s03-authority-audit.md` confirmed only S01-S04 exist under M002 and that the audit artifact is present. 4) A targeted read-back against `.gsd/STATE.md` and `.gsd/state-manifest.json` confirmed the exact residual drift quoted in the audit artifact: STATE points execution at M007/S03 but still renders M002 too optimistically, while state-manifest still reports stale milestone metadata such as `M002 active`, `M007 queued`, and blank titles.\n\n## Requirements Advanced\n\n- R009 — Clarified that all remaining closure/proof authority now lives under M007/S04, preserved M002 as historical failed-closeout context only, and removed the last artifact-level ambiguity that could have sent future validation work toward nonexistent M002 remediation slices.\n\n## Requirements Validated\n\nNone.\n\n## New Requirements Surfaced\n\nNone.\n\n## Requirements Invalidated or Re-scoped\n\nNone.\n\n## Deviations\n\nThe plan expected T01 to add a new authority-switch decision row. Execution found that D106 already carried the durable M002→M007 authority mapping, so S03 reused D106 instead of appending a duplicate row, then added D107 only for the separate generated-surface handling rule discovered during T03. T03 also added a smaller targeted read-back because the broad grep intentionally matches preserved plans and summaries and is too noisy to quote the exact generated-state mismatch by itself.\n\n## Known Limitations\n\nThe generator-backed status surfaces still lag the canonical authority story. `.gsd/STATE.md` currently shows M007 as the active execution target but renders M002 like a completed milestone, while `.gsd/state-manifest.json` still carries stale milestone lifecycle metadata (`M002 active`, `M007 queued`, blank titles). This slice intentionally documents that drift instead of patching generated files by hand.\n\n## Follow-ups\n\nS04 must re-run the normal generator-backed validation/closeout path and then re-check `.gsd/STATE.md` plus `.gsd/state-manifest.json` before claiming full authority reconciliation. S04 also remains responsible for retiring R009 with live proof; S03 only makes the milestone/requirement/story truthful enough for that final validation to be credible.\n\n## Files Created/Modified\n\n- `.gsd/PROJECT.md` — Refreshed current-state milestone wording so M007 is the only live owner of remaining R009 closure work and M002 is explicitly historical failed-closeout foundation.\n- `.gsd/REQUIREMENTS.md` — Updated the R009 row to point active ownership at M007/S04 with S01-S03 as supporting slices and notes explaining the M002→M007 authority transfer.\n- `.gsd/milestones/M007/M007-CONTEXT.md` — Clarified M007’s status and purpose as the active milestone that owns closure/proof plus artifact reconciliation for the absorbed M002 remediation intent.\n- `.gsd/milestones/M007/M007-ROADMAP.md` — Aligned the milestone vision and slice wording so S03/S04 describe M007 as the active closure story instead of implying a live M002 remediation branch.\n- `.gsd/milestones/M002/M002-SUMMARY.md` — Added a dated historical handoff note pointing remaining closure interpretation forward to M007 while preserving the original failed-closeout summary.\n- `.gsd/milestones/M002/M002-VALIDATION.md` — Added a matching dated handoff note to the preserved needs-remediation validation record without changing the original 2026-03-25 verdict.\n- `.artifacts/m007-s03-authority-audit.md` — Recorded inventory truth, canonical authority alignment, and the exact residual drift in generated state surfaces for S04 closeout.\n- `.gsd/DECISIONS.md` — Kept D106 as the canonical authority-switch decision and appended D107 to formalize the rule for handling generated-state drift after milestone authority changes.\n- `.gsd/KNOWLEDGE.md` — Added the recurring lesson that canonical docs and generated state surfaces can lag independently after authority switches and must be audited separately.\n",
+      "full_uat_md": "# S03: M002 remediation 归并与权威切换 — UAT\n\n**Milestone:** M007\n**Written:** 2026-03-28T10:17:50.742Z\n\n# S03: M002 remediation 归并与权威切换 — UAT\n\n**Milestone:** M007\n**Written:** 2026-03-28\n\n## UAT Type\n\n- UAT mode: artifact-driven\n- Why this mode is sufficient: this slice changes milestone authority, preserved historical records, and generator-backed state read-backs rather than application runtime code. The credible proof is that canonical docs, preserved M002 artifacts, and generated surfaces now tell one truthful story with any remaining drift made explicit.\n\n## Preconditions\n\n- The completed task summaries for `M007/S03/T01-T03` exist.\n- `.artifacts/m007-s03-authority-audit.md` exists.\n- `R009` has been re-rendered from the GSD database so the live owner/supporting slices reflect M007.\n- The repo still contains only the preserved historical M002 slice directories that actually shipped.\n\n## Smoke Test\n\nOpen `.gsd/REQUIREMENTS.md` and confirm the `R009` row says:\n- **Primary owning slice:** `M007/S04`\n- **Supporting slices:** `M007/S01, M007/S02, M007/S03`\n- **Notes:** M007 is the only live owner and there is no continuing `M002/S07` or `M002/S08`\n\n## Test Cases\n\n### 1. Current-facing GSD sources point all remaining closure work to M007\n\n1. Open `.gsd/PROJECT.md`, `.gsd/REQUIREMENTS.md`, `.gsd/milestones/M007/M007-CONTEXT.md`, and `.gsd/milestones/M007/M007-ROADMAP.md`.\n2. Open `.gsd/DECISIONS.md` and locate `D106` plus `D107`.\n3. Confirm these sources consistently say M002 is preserved historical failed-closeout foundation only, M007 is the sole current authority for unfinished R009 closure work, and current work should not continue under `M002/S07` or `M002/S08`.\n4. **Expected:** every current-facing source points future execution and final validation at M007, not at a phantom M002 remediation branch.\n\n### 2. Preserved M002 artifacts still read as failed-closeout history with a forward pointer\n\n1. Open `.gsd/milestones/M002/M002-SUMMARY.md`.\n2. Open `.gsd/milestones/M002/M002-VALIDATION.md`.\n3. Confirm each file contains a dated 2026-03-28 historical handoff note that points readers to M007 / D106.\n4. Confirm the original 2026-03-25 failed / `needs-remediation` record, slice inventory, and remediation gaps are still present.\n5. **Expected:** M002 remains an accurate historical failed-closeout record, not a retroactively completed milestone and not an active execution plan.\n\n### 3. M002 inventory truth shows there were never executable remediation slices under M002\n\n1. List directories under `.gsd/milestones/M002/slices/`.\n2. Confirm only `S01`, `S02`, `S03`, and `S04` exist.\n3. Confirm no `S07` or `S08` directories or summary/UAT artifacts exist under M002.\n4. **Expected:** the repository inventory matches the historical story: M002 delivered S01-S04 only, and later closure work was absorbed into M007 instead of being executed under new M002 slices.\n\n### 4. Generated-state drift is recorded explicitly instead of being silently patched away\n\n1. Open `.artifacts/m007-s03-authority-audit.md`.\n2. Read the sections for `.gsd/STATE.md` and `.gsd/state-manifest.json`.\n3. Open `.gsd/STATE.md` and verify it shows `Active Milestone: M007` / `Active Slice: S03` while still rendering M002 too optimistically.\n4. Open `.gsd/state-manifest.json` and verify the audit’s quoted drift still matches the file (`M002 active`, `M007 queued`, blank titles, `completed_at: null`).\n5. **Expected:** the audit precisely documents the remaining mismatch, and the generated files were not hand-edited to manufacture agreement.\n\n## Edge Cases\n\n### Grep results include preserved plans and summaries\n\n1. Run the broad authority grep from the slice plan.\n2. Notice that many matches come from preserved task plans/summaries and prior milestone artifacts.\n3. Use the targeted `STATE.md` / `state-manifest.json` read-back to identify the exact live mismatch.\n4. **Expected:** noisy historical matches are treated as context, not as proof that current-facing docs still have split authority.\n\n### Historical M002 failure remains visible after the handoff\n\n1. Re-read the top of `M002-SUMMARY.md` and `M002-VALIDATION.md` after the forward-pointer note.\n2. Check that neither file claims M002 later completed successfully.\n3. **Expected:** the handoff note clarifies current ownership without erasing the original failed audit.\n\n## Failure Signals\n\n- Any current-facing source still instructs future work under `M002/S07` or `M002/S08`.\n- `R009` points at a completed slice or still splits ownership between M002 and M007.\n- `M002-SUMMARY.md` or `M002-VALIDATION.md` imply the milestone later completed instead of preserving the failed 2026-03-25 record.\n- `.artifacts/m007-s03-authority-audit.md` is missing or does not quote the exact `STATE.md` / `state-manifest.json` drift.\n- Generated state files were manually patched to look aligned without a real generator-backed lifecycle change.\n\n## Requirements Proved By This UAT\n\n- R009 — proves the remaining closure/proof authority is now documented under M007/S04, with M002 preserved as historical context only, so final validation can proceed on one truthful milestone story.\n\n## Not Proven By This UAT\n\n- This UAT does not prove the realtime coaching runtime itself is complete or validated.\n- This UAT does not retire the generator-backed `STATE.md` / `state-manifest.json` drift; it only proves the drift is explicit and accurately documented for S04.\n- This UAT does not replace the live same-session proof and final integrated validation still required in M007/S04.\n\n## Notes for Tester\n\n- Treat `.gsd/PROJECT.md`, `.gsd/REQUIREMENTS.md`, `.gsd/DECISIONS.md`, and the preserved M002 close-out artifacts as the canonical human-maintained authority. `STATE.md` and `state-manifest.json` are verification surfaces, not primary sources.\n- If the broad grep looks noisy, that is expected: preserved task artifacts intentionally retain historical wording. Use the targeted read-back plus the audit artifact to judge whether the live authority story is aligned.\n",
       "goal": "Absorb the unfinished M002 remediation narrative into M007 so current GSD sources, preserved M002 close-out artifacts, and generated state/status surfaces tell one truthful authority story for the remaining R009 closure work without falsifying history.",
       "success_criteria": "- Current-facing authority sources — `.gsd/DECISIONS.md`, `.gsd/PROJECT.md`, `.gsd/REQUIREMENTS.md`, and the M007 milestone context/roadmap surfaces — explicitly say that unfinished realtime-coaching closure work and remaining R009 proof now belong to M007, with a durable mapping from historical `M002/S07-S08` intent to `M007/S01-S04`.\n- Preserved M002 close-out artifacts stay historically truthful: `.gsd/milestones/M002/M002-SUMMARY.md` and `.gsd/milestones/M002/M002-VALIDATION.md` retain the failed 2026-03-25 audit outcome while adding a dated pointer that unfinished closure/evidence work moved forward to M007 instead of inventing executable `M002/S07` / `M002/S08` slices or claiming M002 later completed.\n- Requirement impact: R009 authority cues are re-verified across current M007 docs, preserved M002 close-out records, and generated state/status surfaces; D099-D105 remain valid and gain one explicit authority-switch follow-on decision rather than being silently superseded.\n- A rendered-state audit rechecks `.gsd/STATE.md` and `.gsd/state-manifest.json` after canonical updates, and any remaining mismatch is captured in `.artifacts/m007-s03-authority-audit.md` as explicit proof/follow-up instead of being hand-edited away.",
       "proof_level": "This slice proves: operational\nReal runtime required: no\nHuman/UAT required: no",
@@ -928,11 +928,11 @@
       "completed_at": null,
       "full_summary_md": "",
       "full_uat_md": "",
-      "goal": "Run the final integrated validation for realtime coaching closure and seal the milestone only if product truth and artifact truth both pass together.",
-      "success_criteria": "- Live product truth and GSD artifact truth are both green in the same validation pass.\n- Final validation does not rely on old stale state cache or historical assumptions.\n- The closure record explains exactly what was proven and why realtime coaching is now honestly sealed.",
-      "proof_level": "Milestone-level validation and close-out proof over the assembled runtime, read-side, and artifact surfaces.",
-      "integration_closure": "The final validation step re-checks the live learner/runtime/report/replay path and the final project artifacts as one integrated acceptance gate.",
-      "observability_impact": "Creates the durable closure record for why realtime coaching is now considered complete and what proof supports that claim.",
+      "goal": "Retire the last R009 closure blocker by making StepFun sales sessions leave `status=\"scoring\"` truthfully on the existing learner/runtime/report/replay route family, then validate and close M007 only if live proof and generated-state reconciliation both pass.",
+      "success_criteria": "## Must-Haves\n- Fix the fire-and-forget report-generation path so a sales session's own background DB session persists `report_status`, `report_error`, and final `status=\"completed\"` once canonical evidence is readable.\n- Keep `ReplayService._check_session_completed()` behavior intact: canonical report may remain readable during `scoring`, but replay/highlights stay completion-gated until the persisted session becomes `completed`.\n- Produce one fresh localhost proof on `localhost:3444` ↔ `localhost:3445` that follows a single sales session through `/practice/{sessionId}` → `/practice/{sessionId}/report` → `/practice/{sessionId}/replay` on the shipped route family.\n- Close the slice and milestone only through GSD DB/render flows, then re-read `.gsd/STATE.md` and `.gsd/state-manifest.json` so M007 and R009 status are truthful without hand-editing generated files.\n\n## Threat Surface\n- **Abuse**: forged session IDs, impatient replay requests, or ad hoc manual DB edits must not bypass the completed-session replay gate or manufacture a false close-out.\n- **Data exposure**: same-session report/replay APIs and proof artifacts touch learner conversation evidence and auth cookies; proof must stay on owner-scoped localhost sessions and never persist secrets/tokens.\n- **Input trust**: websocket/session-end events, persisted score snapshots, background report triggers, browser cookies, and generated GSD state are all untrusted until verified against current APIs and DB-backed render output.\n\n## Requirement Impact\n- **Requirements touched**: R009 directly; re-verify the already-validated same-session replay/highlights completion semantics established under R010 so the fix does not loosen that gate.\n- **Re-verify**: `backend/tests/unit/test_report_generation_trigger.py`, `backend/tests/integration/test_report_generation_trigger_fire_and_forget.py`, `backend/tests/integration/test_session_lifecycle_api.py`, `backend/tests/contract/test_practice_evidence_contract.py`, `backend/tests/integration/test_practice_evidence_flow.py`, `backend/tests/integration/test_replay_api.py`, `web/src/app/(user)/practice/[sessionId]/report/page.test.tsx`, `web/src/app/(user)/practice/[sessionId]/replay/page.test.tsx`, plus one localhost browser proof and GSD rendered-state read-back.\n- **Decisions revisited**: D099, D105, D106, D107.\n\n## Verification\n- `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/test_report_generation_trigger.py backend/tests/integration/test_report_generation_trigger_fire_and_forget.py`\n- `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/integration/test_session_lifecycle_api.py -k \"report_generation or scoring\"`\n- `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/contract/test_practice_evidence_contract.py -k \"same_session or knowledge_check or replay\"`\n- `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/integration/test_practice_evidence_flow.py backend/tests/integration/test_replay_api.py -k \"finalization or scoring or replay_unlock\"`\n- `npm test -- --run 'web/src/app/(user)/practice/[sessionId]/report/page.test.tsx' 'web/src/app/(user)/practice/[sessionId]/replay/page.test.tsx'`\n- One same-host localhost proof on `localhost:3444` and `localhost:3445` shows report readable during `scoring`, persisted completion, replay unlock, and a saved proof artifact.\n- GSD close-out read-back shows `.gsd/milestones/M007/slices/S04/S04-SUMMARY.md`, `.gsd/milestones/M007/slices/S04/S04-UAT.md`, `.gsd/milestones/M007/M007-VALIDATION.md`, `.gsd/milestones/M007/M007-SUMMARY.md`, `.gsd/STATE.md`, and `.gsd/state-manifest.json` agree with M007 completion truth.",
+      "proof_level": "- This slice proves: final-assembly\n- Real runtime required: yes\n- Human/UAT required: yes\n- Contract bar: same-session report remains readable during `scoring`, replay unlocks only after persisted `completed`, and GSD close-out state matches the shipped route-family truth.",
+      "integration_closure": "- Upstream surfaces consumed: `backend/src/common/db/session_lifecycle.py`, `backend/src/common/api/practice.py`, `backend/src/common/conversation/replay.py`, `backend/src/common/conversation/session_evidence.py`, `web/src/app/(user)/practice/[sessionId]/page.tsx`, `web/src/app/(user)/practice/[sessionId]/report/page.tsx`, `web/src/app/(user)/practice/[sessionId]/replay/page.tsx`, and the GSD render flows behind `gsd_complete_slice`, `gsd_validate_milestone`, and `gsd_complete_milestone`.\n- New wiring introduced in this slice: the fire-and-forget report trigger must persist its own DB-session updates so background finalization can promote `PracticeSession.status/report_status` durably without weakening replay gating or adding a debug-only surface.\n- What remains before the milestone is truly usable end-to-end: nothing once the same-session localhost proof passes, R009 is validated, and generated state no longer reports stale milestone ownership/status.",
+      "observability_impact": "- Runtime signals: `report_generation_triggered`, `report_generation_completed`, `report_generation_failed`, `sales_session_finalized`, `sales_session_finalization_deferred`, and `no_scoring_context_available`.\n- Inspection surfaces: `GET /api/v1/practice/sessions/{id}`, `GET /api/v1/practice/sessions/{id}/report`, `GET /api/v1/practice/sessions/{id}/knowledge-check`, `GET /api/v1/sessions/{id}/replay`, `GET /api/v1/sessions/{id}/highlights`, `.artifacts/m007-s04-final-closure-proof.md`, `.gsd/STATE.md`, and `.gsd/state-manifest.json`.\n- Failure visibility: persisted `PracticeSession.status`, `report_status`, `report_error`, replay `[SESSION_NOT_COMPLETED]`, proof-artifact notes, and milestone validation verdict/read-back mismatch.\n- Redaction constraints: never record auth cookies, tokens, raw user audio, or transcript secrets in proof artifacts or logs.",
       "sequence": 0,
       "replan_triggered_at": null
     }
@@ -4701,6 +4701,207 @@
       "observability_impact": "",
       "full_plan_md": "",
       "sequence": 0
+    },
+    {
+      "milestone_id": "M007",
+      "slice_id": "S04",
+      "id": "T01",
+      "title": "Made the fire-and-forget report trigger commit its own sales finalization state, added own-session regressions, and aligned lifecycle proof with the real db=None path.",
+      "status": "complete",
+      "one_liner": "Made the fire-and-forget report trigger commit its own sales finalization state, added own-session regressions, and aligned lifecycle proof with the real db=None path.",
+      "narrative": "Updated `ReportGenerationTrigger` so the `db=None` fire-and-forget path owns and commits its own processing plus terminal writes, while injected-session execution stays flush-only under the repo’s explicit-commit policy. Added an early missing-session exit to avoid false success logs. Reworked unit coverage around caller-owned vs own-session semantics, added a new integration regression file that patches the trigger onto the real test sqlite session factory and proves persisted success/failure outcomes through a fresh async session, and updated the lifecycle integration proof to use the real `trigger_report_generation(..., db=None)` path with a fresh-session readback.",
+      "verification_result": "Passed the task plan verification command (`backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/test_report_generation_trigger.py backend/tests/integration/test_report_generation_trigger_fire_and_forget.py`) and a focused lifecycle alignment proof (`backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/integration/test_session_lifecycle_api.py -k 'background_finalization_can_complete_session'`). The task pack covered caller-owned vs own-session persistence, missing-session/malformed/incomplete-projection negatives, and real `db=None` success/failure persistence; the lifecycle proof confirmed the end-call response remains `scoring` while background finalization durably persists `report_status` plus terminal sales completion.",
+      "duration": "",
+      "completed_at": "2026-03-28T11:18:04.992Z",
+      "blocker_discovered": false,
+      "deviations": "Used `async_sessionmaker(test_db.bind, ...)` instead of the standalone `test_engine` fixture for the new integration proof because isolated sqlite tests in this repo can miss `Agent`/`Persona` metadata registration before `create_all()`. This kept the proof on the real own-session path without widening fixture scope.",
+      "known_issues": "Focused backend pytest still emits the pre-existing `pytest-cov` warnings about `Module src was never imported` / `No data was collected`; the commands exited 0 and assertions passed, so coverage configuration was left unchanged in this task.",
+      "key_files": [
+        "backend/src/evaluation/services/report_generation_trigger.py",
+        "backend/tests/unit/test_report_generation_trigger.py",
+        "backend/tests/integration/test_report_generation_trigger_fire_and_forget.py",
+        "backend/tests/integration/test_session_lifecycle_api.py",
+        ".gsd/KNOWLEDGE.md",
+        ".gsd/DECISIONS.md"
+      ],
+      "key_decisions": [
+        "Commit report/finalization writes only when ReportGenerationTrigger owns the async DB session; keep injected-session execution flush-only.",
+        "Read post-trigger persisted lifecycle state through a fresh async session instead of the caller session’s identity map."
+      ],
+      "full_summary_md": "---\nid: T01\nparent: S04\nmilestone: M007\nkey_files:\n  - backend/src/evaluation/services/report_generation_trigger.py\n  - backend/tests/unit/test_report_generation_trigger.py\n  - backend/tests/integration/test_report_generation_trigger_fire_and_forget.py\n  - backend/tests/integration/test_session_lifecycle_api.py\n  - .gsd/KNOWLEDGE.md\n  - .gsd/DECISIONS.md\nkey_decisions:\n  - Commit report/finalization writes only when ReportGenerationTrigger owns the async DB session; keep injected-session execution flush-only.\n  - Read post-trigger persisted lifecycle state through a fresh async session instead of the caller session’s identity map.\nduration: \"\"\nverification_result: passed\ncompleted_at: 2026-03-28T11:18:04.995Z\nblocker_discovered: false\n---\n\n# T01: Made the fire-and-forget report trigger commit its own sales finalization state, added own-session regressions, and aligned lifecycle proof with the real db=None path.\n\n**Made the fire-and-forget report trigger commit its own sales finalization state, added own-session regressions, and aligned lifecycle proof with the real db=None path.**\n\n## What Happened\n\nUpdated `ReportGenerationTrigger` so the `db=None` fire-and-forget path owns and commits its own processing plus terminal writes, while injected-session execution stays flush-only under the repo’s explicit-commit policy. Added an early missing-session exit to avoid false success logs. Reworked unit coverage around caller-owned vs own-session semantics, added a new integration regression file that patches the trigger onto the real test sqlite session factory and proves persisted success/failure outcomes through a fresh async session, and updated the lifecycle integration proof to use the real `trigger_report_generation(..., db=None)` path with a fresh-session readback.\n\n## Verification\n\nPassed the task plan verification command (`backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/test_report_generation_trigger.py backend/tests/integration/test_report_generation_trigger_fire_and_forget.py`) and a focused lifecycle alignment proof (`backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/integration/test_session_lifecycle_api.py -k 'background_finalization_can_complete_session'`). The task pack covered caller-owned vs own-session persistence, missing-session/malformed/incomplete-projection negatives, and real `db=None` success/failure persistence; the lifecycle proof confirmed the end-call response remains `scoring` while background finalization durably persists `report_status` plus terminal sales completion.\n\n## Verification Evidence\n\n| # | Command | Exit Code | Verdict | Duration |\n|---|---------|-----------|---------|----------|\n| 1 | `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/test_report_generation_trigger.py backend/tests/integration/test_report_generation_trigger_fire_and_forget.py` | 0 | ✅ pass | 37900ms |\n| 2 | `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/integration/test_session_lifecycle_api.py -k 'background_finalization_can_complete_session'` | 0 | ✅ pass | 4900ms |\n\n\n## Deviations\n\nUsed `async_sessionmaker(test_db.bind, ...)` instead of the standalone `test_engine` fixture for the new integration proof because isolated sqlite tests in this repo can miss `Agent`/`Persona` metadata registration before `create_all()`. This kept the proof on the real own-session path without widening fixture scope.\n\n## Known Issues\n\nFocused backend pytest still emits the pre-existing `pytest-cov` warnings about `Module src was never imported` / `No data was collected`; the commands exited 0 and assertions passed, so coverage configuration was left unchanged in this task.\n\n## Files Created/Modified\n\n- `backend/src/evaluation/services/report_generation_trigger.py`\n- `backend/tests/unit/test_report_generation_trigger.py`\n- `backend/tests/integration/test_report_generation_trigger_fire_and_forget.py`\n- `backend/tests/integration/test_session_lifecycle_api.py`\n- `.gsd/KNOWLEDGE.md`\n- `.gsd/DECISIONS.md`\n",
+      "description": "Load `safe-grow`, `fastapi-python`, and `verification-before-completion`. Fix the persistence bug on the real fire-and-forget path, not just the injected-session happy path. Steps: 1. Inspect `backend/src/evaluation/services/report_generation_trigger.py`, the explicit-commit DB policy, and current retry/finalization branches so the background own-session flow commits `report_status`, `report_error`, and `session.status` durably after success or failure finalization. 2. Add focused regressions that fail on `db=None` / own-session execution, including a real async-session test that proves a sales session moves from `scoring` to `completed` (or `failed` + `completed` when optional enhanced report generation fails) after the background trigger returns. 3. Re-run the focused unit/integration pack and stop if any existing injected-session tests still mask the own-session behavior instead of proving it. Must-haves: `ReplayService._check_session_completed()` and route-family gating stay untouched; both success and failure branches persist through the trigger's own DB session; the new regression proves the live fire-and-forget path rather than caller-owned commit semantics. Failure modes: status/report fields still roll back when `get_db_session()` closes, failure handling writes `report_error` but leaves `status=\"scoring\"`, or an injected-session test passes even though the real background path still loses updates. Load profile: shared resources are async DB sessions and transaction boundaries; per operation cost stays to one session lookup/projection pass plus existing report generation; at 10x load the first breakpoint is transaction/connection contention, so avoid duplicate commits or extra polling loops. Negative tests: own-session success path persists `completed`, own-session failure path persists `failed` plus `completed`, and optional enhanced-report failure still leaves replay correctly locked until the status promotion is durably committed.",
+      "estimate": "1h",
+      "files": [
+        "backend/src/evaluation/services/report_generation_trigger.py",
+        "backend/tests/unit/test_report_generation_trigger.py",
+        "backend/tests/integration/test_report_generation_trigger_fire_and_forget.py",
+        "backend/tests/integration/test_session_lifecycle_api.py"
+      ],
+      "verify": "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/test_report_generation_trigger.py backend/tests/integration/test_report_generation_trigger_fire_and_forget.py",
+      "inputs": [
+        "backend/src/evaluation/services/report_generation_trigger.py",
+        "backend/src/common/db/session.py",
+        "backend/src/common/db/session_lifecycle.py",
+        "backend/tests/unit/test_report_generation_trigger.py",
+        "backend/tests/integration/test_session_lifecycle_api.py"
+      ],
+      "expected_output": [
+        "backend/src/evaluation/services/report_generation_trigger.py",
+        "backend/tests/unit/test_report_generation_trigger.py",
+        "backend/tests/integration/test_report_generation_trigger_fire_and_forget.py",
+        "backend/tests/integration/test_session_lifecycle_api.py"
+      ],
+      "observability_impact": "- Signals added/changed: durable `report_generation_completed` / `report_generation_failed` / `sales_session_finalized` state transitions from the trigger's own DB session.\n- How a future agent inspects this: rerun `backend/tests/integration/test_report_generation_trigger_fire_and_forget.py` and inspect persisted `PracticeSession.status`, `report_status`, and `report_error` after the background trigger returns.\n- Failure state exposed: whether the fire-and-forget path still leaves sessions stuck in `scoring` even though canonical report evidence is already readable.",
+      "full_plan_md": "",
+      "sequence": 0
+    },
+    {
+      "milestone_id": "M007",
+      "slice_id": "S04",
+      "id": "T02",
+      "title": "Lock same-session lifecycle, report, replay, and frontend contract behavior around the persisted completion transition",
+      "status": "pending",
+      "one_liner": "",
+      "narrative": "",
+      "verification_result": "",
+      "duration": "",
+      "completed_at": null,
+      "blocker_discovered": false,
+      "deviations": "",
+      "known_issues": "",
+      "key_files": [],
+      "key_decisions": [],
+      "full_summary_md": "",
+      "description": "Load `safe-grow` and `verification-before-completion`. Once persistence is fixed, lock the same-session contract on current APIs/pages rather than trusting ad hoc manual checks. Steps: 1. Tighten backend contract/integration suites so the route family proves report stays readable during `scoring`, replay/highlights remain blocked before persisted completion, and unlocked replay/highlights match the canonical issue/goal family after background finalization. 2. Extend report/replay page tests only where needed to prove the frontend does not add a workaround or regress its blocked-versus-unlocked copy while backend completion semantics change. 3. Run the focused backend and frontend packs sequentially; if any failure suggests relaxing `ReplayService._check_session_completed()`, treat that as a regression instead of a fix direction. Must-haves: no new debug/status API; no replay-gate relaxation; same-session report/replay/highlights semantics stay on `SessionEvidenceService` projection authority; all Next.js test paths stay shell-quoted exactly as written. Failure modes: replay becomes readable during `scoring`, report loses same-session readability while the background trigger runs, or the frontend masks a backend regression with new fallback copy instead of preserving the existing truth line. Load profile: shared resources are sequential backend pytest DB usage and repo-root web Vitest shims; per-operation cost stays on current projection-backed reads with no extra fetch loop; at 10x load the first breakpoint is parallel pytest coverage contention, so keep suites sequential. Negative tests: report readable during `scoring`, replay/highlights blocked pre-completion, replay/highlights unlocked post-completion on the same session, and report/replay family parity still strips replay-only `replay_anchor` before comparison.",
+      "estimate": "1h",
+      "files": [
+        "backend/tests/contract/test_practice_evidence_contract.py",
+        "backend/tests/integration/test_practice_evidence_flow.py",
+        "backend/tests/integration/test_session_lifecycle_api.py",
+        "backend/tests/integration/test_replay_api.py",
+        "web/src/app/(user)/practice/[sessionId]/report/page.test.tsx",
+        "web/src/app/(user)/practice/[sessionId]/replay/page.test.tsx"
+      ],
+      "verify": "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/integration/test_session_lifecycle_api.py -k \"report_generation or scoring\"\nbackend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/contract/test_practice_evidence_contract.py -k \"same_session or knowledge_check or replay\"\nbackend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/integration/test_practice_evidence_flow.py backend/tests/integration/test_replay_api.py -k \"finalization or scoring or replay_unlock\"\nnpm test -- --run 'web/src/app/(user)/practice/[sessionId]/report/page.test.tsx' 'web/src/app/(user)/practice/[sessionId]/replay/page.test.tsx'",
+      "inputs": [
+        "backend/src/evaluation/services/report_generation_trigger.py",
+        "backend/src/common/api/practice.py",
+        "backend/src/common/conversation/replay.py",
+        "backend/src/common/conversation/session_evidence.py",
+        "backend/tests/contract/test_practice_evidence_contract.py",
+        "backend/tests/integration/test_practice_evidence_flow.py",
+        "backend/tests/integration/test_session_lifecycle_api.py",
+        "backend/tests/integration/test_replay_api.py",
+        "web/src/app/(user)/practice/[sessionId]/report/page.test.tsx",
+        "web/src/app/(user)/practice/[sessionId]/replay/page.test.tsx"
+      ],
+      "expected_output": [
+        "backend/tests/contract/test_practice_evidence_contract.py",
+        "backend/tests/integration/test_practice_evidence_flow.py",
+        "backend/tests/integration/test_session_lifecycle_api.py",
+        "backend/tests/integration/test_replay_api.py",
+        "web/src/app/(user)/practice/[sessionId]/report/page.test.tsx",
+        "web/src/app/(user)/practice/[sessionId]/replay/page.test.tsx"
+      ],
+      "observability_impact": "- Signals added/changed: route-family proofs around persisted `PracticeSession.status/report_status` and replay `[SESSION_NOT_COMPLETED]` versus post-finalization 200 responses.\n- How a future agent inspects this: run the focused backend suites plus the quoted report/replay Vitest command from repo root.\n- Failure state exposed: whether the boundary drift lives in backend lifecycle persistence, replay gating, or frontend blocked/unlocked copy.",
+      "full_plan_md": "",
+      "sequence": 0
+    },
+    {
+      "milestone_id": "M007",
+      "slice_id": "S04",
+      "id": "T03",
+      "title": "Capture one fresh localhost same-session closure proof on the shipped route family",
+      "status": "pending",
+      "one_liner": "",
+      "narrative": "",
+      "verification_result": "",
+      "duration": "",
+      "completed_at": null,
+      "blocker_discovered": false,
+      "deviations": "",
+      "known_issues": "",
+      "key_files": [],
+      "key_decisions": [],
+      "full_summary_md": "",
+      "description": "Load `agent-browser`, `safe-grow`, and `verification-before-completion`. Use the real localhost route family as the final product proof bar. Steps: 1. Start backend and web from repo root on the same host (`localhost:3444` and `localhost:3445`) with `bg_shell`, create one real sales session, and keep the practice flow on `/practice/{sessionId}` instead of alternate debug routes or mixed hosts. 2. Follow that exact session through `/practice/{sessionId}`, `/practice/{sessionId}/report`, `/practice/{sessionId}/replay`, and the supporting `/api/v1/practice/sessions/{id}` / `/knowledge-check` / replay/highlights APIs so the artifact records the truthful sequence: report readable during `scoring`, persisted promotion to `completed`, then replay unlock on the same session. 3. Save a compact proof artifact with session ID, commands, browser assertions, and any acceptable optional-noise diagnostics, then stop every temporary background process before leaving the task. Must-haves: same-host cookies only (`localhost` ↔ `localhost`); one real same-session path, no cross-session stitching; proof artifact names the persisted-state transition and replay unlock explicitly; all temporary servers/jobs are stopped before the task ends. Failure modes: mixed `localhost` / `127.0.0.1` hosts fake a 401 regression, another app is mistaken for this repo, StepFun optional-enhancement noise is misclassified as a blocker, or stale servers/jobs pollute the result. Load profile: one end-to-end session only, no parallel pytest jobs, and no extra polling loop beyond `bg_shell wait_for_ready` plus bounded browser waits. Negative tests: replay still blocked before completion, report remains readable while `status=\"scoring\"`, and the final artifact distinguishes optional enhanced-report noise from canonical report/replay truth.",
+      "estimate": "0.75d",
+      "files": [
+        "backend/src/common/api/practice.py",
+        "backend/src/common/conversation/replay.py",
+        "web/src/app/(user)/practice/[sessionId]/page.tsx",
+        "web/src/app/(user)/practice/[sessionId]/report/page.tsx",
+        "web/src/app/(user)/practice/[sessionId]/replay/page.tsx",
+        ".artifacts/m007-s04-final-closure-proof.md"
+      ],
+      "verify": "Use `bg_shell` to run `PYTHONPATH=backend/src backend/venv/bin/uvicorn main:app --app-dir backend/src --port 3444` and `pnpm --dir web exec next dev --hostname localhost --port 3445`, wait for readiness, then prove one session through `/practice/{sessionId}` -> `/practice/{sessionId}/report` -> `/practice/{sessionId}/replay` with browser assertions and supporting API checks on the same session. After saving `.artifacts/m007-s04-final-closure-proof.md`, stop every temporary `bg_shell` process before finishing.",
+      "inputs": [
+        "backend/src/common/api/practice.py",
+        "backend/src/common/conversation/replay.py",
+        "web/src/app/(user)/practice/[sessionId]/page.tsx",
+        "web/src/app/(user)/practice/[sessionId]/report/page.tsx",
+        "web/src/app/(user)/practice/[sessionId]/replay/page.tsx",
+        ".artifacts/m007-s02-same-session/session-proof.md",
+        ".artifacts/m007-s03-authority-audit.md",
+        ".gsd/KNOWLEDGE.md"
+      ],
+      "expected_output": [
+        ".artifacts/m007-s04-final-closure-proof.md"
+      ],
+      "observability_impact": "- Signals added/changed: localhost proof records `report_generation_triggered`, `sales_session_finalized`, `report_generation_failed`/`no_scoring_context_available` when present, plus the persisted session status transition.\n- How a future agent inspects this: read `.artifacts/m007-s04-final-closure-proof.md`, replay the browser/API steps, and check that no stray dev servers remain.\n- Failure state exposed: whether live product truth still wedges at `status=\"scoring\"`, whether replay unlock regressed, or whether the issue is only host/cookie or optional-noise confusion.",
+      "full_plan_md": "",
+      "sequence": 0
+    },
+    {
+      "milestone_id": "M007",
+      "slice_id": "S04",
+      "id": "T04",
+      "title": "Validate and close M007 through GSD render flows, then read back generated state truthfully",
+      "status": "pending",
+      "one_liner": "",
+      "narrative": "",
+      "verification_result": "",
+      "duration": "",
+      "completed_at": null,
+      "blocker_discovered": false,
+      "deviations": "",
+      "known_issues": "",
+      "key_files": [],
+      "key_decisions": [],
+      "full_summary_md": "",
+      "description": "Load `safe-grow` and `verification-before-completion`. The slice is only done if the proof and the generated project state agree. Steps: 1. Re-read the focused regression evidence plus `.artifacts/m007-s04-final-closure-proof.md`; if they do not prove the same-session route family and persisted completion transition, stop and surface a blocker instead of forcing close-out. 2. Move R009 to validated with concrete proof notes, then use the GSD tool flow (`gsd_complete_task`, `gsd_complete_slice`, `gsd_validate_milestone`, `gsd_complete_milestone`) to render slice and milestone artifacts instead of editing generated files. 3. Read back `.gsd/STATE.md` and `.gsd/state-manifest.json`; if M007 or R009 still look stale after the render flow, treat that as an unresolved blocker and do not hand-edit system-managed state. Must-haves: R009 advances only with explicit proof references from T01-T03; generated slice/milestone artifacts are created through GSD tools only; rendered state no longer reports M007 as queued or M002 as active. Failure modes: close-out runs before proof exists, R009 is marked validated without the same-session artifact, or generated-state drift is hidden by manual edits. Load profile: one DB-backed render pass plus read-back checks; avoid duplicate completion calls with changing payloads unless the tool itself requires a clean rerun. Negative tests: missing proof artifact, milestone validation returning anything but `pass`, or state-manifest still showing stale milestone ownership/status after the render path completes.",
+      "estimate": "45m",
+      "files": [
+        ".artifacts/m007-s04-final-closure-proof.md",
+        ".gsd/REQUIREMENTS.md",
+        ".gsd/milestones/M007/slices/S04/S04-SUMMARY.md",
+        ".gsd/milestones/M007/slices/S04/S04-UAT.md",
+        ".gsd/milestones/M007/M007-VALIDATION.md",
+        ".gsd/milestones/M007/M007-SUMMARY.md",
+        ".gsd/STATE.md",
+        ".gsd/state-manifest.json"
+      ],
+      "verify": "test -s .gsd/milestones/M007/slices/S04/S04-SUMMARY.md && test -s .gsd/milestones/M007/slices/S04/S04-UAT.md && test -s .gsd/milestones/M007/M007-VALIDATION.md && test -s .gsd/milestones/M007/M007-SUMMARY.md\nrg -n \"^R009 .*\\(validated\\)\" .gsd/REQUIREMENTS.md\npython - <<'PY'\nimport json\nfrom pathlib import Path\nmanifest = json.loads(Path('.gsd/state-manifest.json').read_text())\nmilestones = {item['id']: item for item in manifest['milestones']}\nassert milestones['M007']['status'] == 'complete', milestones['M007']\nassert milestones['M007']['title'], milestones['M007']\nassert milestones['M002']['status'] != 'active', milestones['M002']\nprint('state-manifest ok')\nPY",
+      "inputs": [
+        ".artifacts/m007-s04-final-closure-proof.md",
+        ".artifacts/m007-s03-authority-audit.md",
+        ".gsd/REQUIREMENTS.md",
+        ".gsd/STATE.md",
+        ".gsd/state-manifest.json",
+        ".gsd/milestones/M007/M007-ROADMAP.md"
+      ],
+      "expected_output": [
+        ".gsd/REQUIREMENTS.md",
+        ".gsd/milestones/M007/slices/S04/S04-SUMMARY.md",
+        ".gsd/milestones/M007/slices/S04/S04-UAT.md",
+        ".gsd/milestones/M007/M007-VALIDATION.md",
+        ".gsd/milestones/M007/M007-SUMMARY.md",
+        ".gsd/STATE.md",
+        ".gsd/state-manifest.json"
+      ],
+      "observability_impact": "- Signals added/changed: milestone validation verdict, rendered slice/milestone summaries, and generated-state read-back for M007/R009.\n- How a future agent inspects this: read the rendered S04 summary/UAT, M007 validation/summary, `.gsd/STATE.md`, and `.gsd/state-manifest.json` after the GSD tool flow completes.\n- Failure state exposed: whether close-out failed because proof was insufficient, validation failed, or generated state remained stale despite canonical DB/render operations.",
+      "full_plan_md": "",
+      "sequence": 0
     }
   ],
   "decisions": [
@@ -5972,6 +6173,42 @@
       "decision": "Which milestone owns the remaining realtime-coaching closure authority after M007 absorbed unfinished M002 remediation work",
       "choice": "Preserve M002 as the historical failed close-out/foundation milestone, and treat M007 as the sole current authority for unfinished R009 closure work and final proof, with historical `M002/S07-S08` intent mapped forward to `M007/S01-S04`.",
       "rationale": "Current runtime/product truth already moved to M007 through S01-S02, while M002 artifacts remain accurate only as preserved historical failed-closeout records. Making the authority switch explicit prevents future agents from chasing nonexistent M002 remediation slices, preserves the failed 2026-03-25 audit as history, and gives S04 one unambiguous milestone story for final validation and close-out.",
+      "revisable": "Yes",
+      "made_by": "agent",
+      "superseded_by": null
+    },
+    {
+      "seq": 1467,
+      "id": "D107",
+      "when_context": "M007/S03",
+      "scope": "milestone-governance",
+      "decision": "How generated GSD state should be handled after milestone authority switches",
+      "choice": "Align canonical docs first, then audit generated STATE.md/state-manifest.json separately; never hand-edit generated surfaces to fake agreement.",
+      "rationale": "S03 proved the M002→M007 authority switch can be fully correct in PROJECT/REQUIREMENTS/DECISIONS and preserved milestone artifacts while STATE.md and state-manifest.json still lag. Treating generated surfaces as evidence rather than editable primary sources keeps close-out honest and leaves S04 with a clear generator-backed reconciliation target.",
+      "revisable": "Yes",
+      "made_by": "agent",
+      "superseded_by": null
+    },
+    {
+      "seq": 1468,
+      "id": "D108",
+      "when_context": "M007/S04 planning",
+      "scope": "runtime-lifecycle",
+      "decision": "How S04 retires the remaining realtime-coaching closure blocker without masking lifecycle truth",
+      "choice": "For M007/S04, fix the fire-and-forget report trigger's own-session persistence seam first, keep replay/highlights completion-gated until persisted `completed`, and treat generator-backed close-out as a separate final step after live proof passes.",
+      "rationale": "Research and code inspection both point at the background trigger's missing own-session persistence as the mechanical blocker behind `status=\"scoring\"` wedges. Relaxing replay gating would hide that bug instead of retiring it, and combining product proof with generator-backed close-out in one task would blur whether failures come from runtime behavior or GSD state rendering.",
+      "revisable": "Yes",
+      "made_by": "agent",
+      "superseded_by": null
+    },
+    {
+      "seq": 1469,
+      "id": "D109",
+      "when_context": "M007/S04/T01",
+      "scope": "architecture",
+      "decision": "How the report-generation trigger should persist state on fire-and-forget execution",
+      "choice": "Commit report/finalization writes only when ReportGenerationTrigger owns the async DB session; keep injected-session execution flush-only",
+      "rationale": "The production fire-and-forget path creates its own AsyncSessionLocal, so it must durably commit processing, report_status/report_error, and sales completion transitions itself. Caller-owned paths still follow the repository's explicit-commit policy and must not auto-commit from inside the trigger.",
       "revisable": "Yes",
       "made_by": "agent",
       "superseded_by": null
@@ -7946,6 +8183,28 @@
       "verdict": "✅ pass",
       "duration_ms": 50,
       "created_at": "2026-03-28T10:11:04.442Z"
+    },
+    {
+      "id": 180,
+      "task_id": "T01",
+      "slice_id": "S04",
+      "milestone_id": "M007",
+      "command": "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/test_report_generation_trigger.py backend/tests/integration/test_report_generation_trigger_fire_and_forget.py",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 37900,
+      "created_at": "2026-03-28T11:18:04.994Z"
+    },
+    {
+      "id": 181,
+      "task_id": "T01",
+      "slice_id": "S04",
+      "milestone_id": "M007",
+      "command": "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/integration/test_session_lifecycle_api.py -k 'background_finalization_can_complete_session'",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 4900,
+      "created_at": "2026-03-28T11:18:04.994Z"
     }
   ]
 }
