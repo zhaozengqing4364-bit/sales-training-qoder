@@ -43,6 +43,8 @@ completed_at: null
 
 **M002 delivered the core realtime-sales coaching semantics through S01-S04, but the milestone close-out audit did not pass: coach degraded/resumed visibility and the final live end-to-end closure proof are still missing, so the milestone cannot be marked complete.**
 
+> **Historical handoff note (2026-03-28):** This preserved failed close-out summary remains the authoritative record of M002's 2026-03-25 audit outcome. The unresolved remediation/closure work referenced here was later absorbed into **M007** under decision **D106**; treat `M007/S01-S04` as the current live owner of the remaining R009 closure proof rather than reading this file as an active M002 execution plan.
+
 ## What Happened
 
 M002 materially advanced the product beyond “post-session report only.” S01 put classic and StepFun practice on one five-dimension sales rubric and stopped the practice page from dropping same-turn score/stage refinements. S02 then constrained feedback rhythm so the learner sees one primary action direction per turn instead of competing fuzzy/stage/score/action prompts. S03 made that surviving action direction stage-aware by routing both runtimes through one shared coaching-focus resolver. S04 carried the same sales-first conclusion family onto completed-session read surfaces so report, replay, history, and admin can override stale snapshots without changing the public contract.

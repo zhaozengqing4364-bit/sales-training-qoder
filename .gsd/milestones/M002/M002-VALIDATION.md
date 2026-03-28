@@ -8,6 +8,8 @@ slices_added:
 
 # Milestone Validation: M002
 
+> **Historical handoff note (2026-03-28):** This preserved validation record keeps the original `needs-remediation` verdict from the 2026-03-25 M002 close-out audit. The unfinished remediation/closure work was later absorbed into **M007** under decision **D106**; use `M007/S01-S04` as the live closure authority and read this file as historical audit evidence, not as an active M002 remediation plan.
+
 ## Success Criteria Checklist
 - [x] Criterion 1 — evidence: S01 substantiates the sales-first realtime rubric boundary. Its summary proves classic + StepFun now emit one canonical five-dimension `score_update` / `stage_update` / `action_card` contract, the practice page preserves same-turn score/stage refinement, and `ScorePanel` / websocket focused tests lock the sales labels instead of the legacy generic dimensions.
 - [x] Criterion 2 — evidence: S02 and S03 substantiate the single-primary-direction goal. S02 adds the shared realtime-feedback arbiter, same-turn duplicate suppression, reconnect-safe pacing state, transcript-driven stale-hint clearing, and `action_card` precedence on the right panel; S03 then makes stage context + weakest/declining dimensions converge through one shared next-turn coaching rule instead of parallel hints.

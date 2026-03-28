@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "exported_at": "2026-03-28T10:00:48.170Z",
+  "exported_at": "2026-03-28T10:05:02.453Z",
   "milestones": [
     {
       "id": "M001",
@@ -4609,19 +4609,25 @@
       "milestone_id": "M007",
       "slice_id": "S03",
       "id": "T02",
-      "title": "Add dated M007 handoff notes to preserved M002 close-out artifacts",
-      "status": "pending",
-      "one_liner": "",
-      "narrative": "",
-      "verification_result": "",
+      "title": "Added dated historical handoff notes to the preserved M002 summary and validation so they point forward to M007 without rewriting the failed 2026-03-25 close-out record.",
+      "status": "complete",
+      "one_liner": "Added dated historical handoff notes to the preserved M002 summary and validation so they point forward to M007 without rewriting the failed 2026-03-25 close-out record.",
+      "narrative": "Updated the preserved M002 close-out artifacts in place rather than changing roadmap structure or inventing missing slices. `M002-SUMMARY.md` now carries a dated historical handoff note immediately after the preserved failed-closeout statement, and `M002-VALIDATION.md` now carries a matching dated note immediately after the validation title. Both notes explicitly preserve the original 2026-03-25 failed/`needs-remediation` record, point readers to decision D106, and redirect any remaining closure interpretation to `M007/S01-S04` as the live owner. The original failed verdict, slice inventory, remediation gaps, and timeline remain intact, so the M002 files now read as preserved history with a forward pointer instead of a second live plan.",
+      "verification_result": "Re-read both modified M002 artifacts to confirm the notes sit on top of the preserved failed-closeout story rather than replacing it. Ran the exact T02 grep from the task plan and re-ran the prior T01 authority-line grep as the intermediate slice-level check. Both passing checks confirm the live authority still points to M007 while the preserved M002 summary/validation now contain explicit dated forward pointers. T03’s generated-state audit remains pending by design because this task does not create `.artifacts/m007-s03-authority-audit.md` yet.",
       "duration": "",
-      "completed_at": null,
+      "completed_at": "2026-03-28T10:05:02.040Z",
       "blocker_discovered": false,
-      "deviations": "",
-      "known_issues": "",
-      "key_files": [],
-      "key_decisions": [],
-      "full_summary_md": "",
+      "deviations": "None.",
+      "known_issues": "None.",
+      "key_files": [
+        ".gsd/milestones/M002/M002-SUMMARY.md",
+        ".gsd/milestones/M002/M002-VALIDATION.md",
+        ".gsd/milestones/M007/slices/S03/tasks/T02-SUMMARY.md"
+      ],
+      "key_decisions": [
+        "Reused D106’s authority-switch wording inside preserved M002 close-out artifacts instead of rewriting M002 history or fabricating executable M002 remediation slices."
+      ],
+      "full_summary_md": "---\nid: T02\nparent: S03\nmilestone: M007\nkey_files:\n  - .gsd/milestones/M002/M002-SUMMARY.md\n  - .gsd/milestones/M002/M002-VALIDATION.md\n  - .gsd/milestones/M007/slices/S03/tasks/T02-SUMMARY.md\nkey_decisions:\n  - Reused D106’s authority-switch wording inside preserved M002 close-out artifacts instead of rewriting M002 history or fabricating executable M002 remediation slices.\nduration: \"\"\nverification_result: passed\ncompleted_at: 2026-03-28T10:05:02.041Z\nblocker_discovered: false\n---\n\n# T02: Added dated historical handoff notes to the preserved M002 summary and validation so they point forward to M007 without rewriting the failed 2026-03-25 close-out record.\n\n**Added dated historical handoff notes to the preserved M002 summary and validation so they point forward to M007 without rewriting the failed 2026-03-25 close-out record.**\n\n## What Happened\n\nUpdated the preserved M002 close-out artifacts in place rather than changing roadmap structure or inventing missing slices. `M002-SUMMARY.md` now carries a dated historical handoff note immediately after the preserved failed-closeout statement, and `M002-VALIDATION.md` now carries a matching dated note immediately after the validation title. Both notes explicitly preserve the original 2026-03-25 failed/`needs-remediation` record, point readers to decision D106, and redirect any remaining closure interpretation to `M007/S01-S04` as the live owner. The original failed verdict, slice inventory, remediation gaps, and timeline remain intact, so the M002 files now read as preserved history with a forward pointer instead of a second live plan.\n\n## Verification\n\nRe-read both modified M002 artifacts to confirm the notes sit on top of the preserved failed-closeout story rather than replacing it. Ran the exact T02 grep from the task plan and re-ran the prior T01 authority-line grep as the intermediate slice-level check. Both passing checks confirm the live authority still points to M007 while the preserved M002 summary/validation now contain explicit dated forward pointers. T03’s generated-state audit remains pending by design because this task does not create `.artifacts/m007-s03-authority-audit.md` yet.\n\n## Verification Evidence\n\n| # | Command | Exit Code | Verdict | Duration |\n|---|---------|-----------|---------|----------|\n| 1 | `rg -n \"M002|M007|R009|S07|S08|authority|historical\" .gsd/DECISIONS.md .gsd/PROJECT.md .gsd/REQUIREMENTS.md .gsd/milestones/M007/M007-CONTEXT.md .gsd/milestones/M007/M007-ROADMAP.md` | 0 | ✅ pass | 54ms |\n| 2 | `rg -n \"M007|S07|S08|2026-03-25|historical|failed|needs-remediation\" .gsd/milestones/M002/M002-SUMMARY.md .gsd/milestones/M002/M002-VALIDATION.md` | 0 | ✅ pass | 54ms |\n\n\n## Deviations\n\nNone.\n\n## Known Issues\n\nNone.\n\n## Files Created/Modified\n\n- `.gsd/milestones/M002/M002-SUMMARY.md`\n- `.gsd/milestones/M002/M002-VALIDATION.md`\n- `.gsd/milestones/M007/slices/S03/tasks/T02-SUMMARY.md`\n",
       "description": "Once the active authority is clear, reconcile the preserved M002 record without rewriting history. Steps: 1. Update `.gsd/milestones/M002/M002-SUMMARY.md` and `.gsd/milestones/M002/M002-VALIDATION.md` with a short dated note that the unresolved close-out/remediation work was later absorbed by M007, and point readers to the current M007 slices instead of missing M002 remediation artifacts. 2. Keep the original failed-audit verdict, slice inventory, and timeline intact; do not create fake `M002/S07` or `M002/S08` directories or language that implies M002 later completed. 3. Re-read the M002 artifacts and confirm they now act as preserved history with a forward pointer rather than a second live plan. Must-haves: preserved M002 docs still read as historical records first; the forward pointer names M007 as the current closure owner; no task fabricates missing M002 slices. Failure modes: over-correcting M002 into a completed milestone, or under-correcting so readers still infer that unfinished work belongs under M002. Load profile: trivial file updates only. Negative tests: M002 artifacts still mention unresolved remediation without a forward owner, or a pointer note contradicts the 2026-03-25 failed validation.",
       "estimate": "45m",
       "files": [
@@ -7890,6 +7896,28 @@
       "verdict": "✅ pass",
       "duration_ms": 40,
       "created_at": "2026-03-28T10:00:48.138Z"
+    },
+    {
+      "id": 176,
+      "task_id": "T02",
+      "slice_id": "S03",
+      "milestone_id": "M007",
+      "command": "rg -n \"M002|M007|R009|S07|S08|authority|historical\" .gsd/DECISIONS.md .gsd/PROJECT.md .gsd/REQUIREMENTS.md .gsd/milestones/M007/M007-CONTEXT.md .gsd/milestones/M007/M007-ROADMAP.md",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 54,
+      "created_at": "2026-03-28T10:05:02.040Z"
+    },
+    {
+      "id": 177,
+      "task_id": "T02",
+      "slice_id": "S03",
+      "milestone_id": "M007",
+      "command": "rg -n \"M007|S07|S08|2026-03-25|historical|failed|needs-remediation\" .gsd/milestones/M002/M002-SUMMARY.md .gsd/milestones/M002/M002-VALIDATION.md",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 54,
+      "created_at": "2026-03-28T10:05:02.040Z"
     }
   ]
 }
