@@ -12,6 +12,7 @@ import { cn } from "@/lib/utils";
 import { usePracticeWebSocket } from "@/hooks/use-practice-websocket";
 import type { ConnectionState, SessionStatus } from "@/hooks/use-practice-websocket";
 import { useAudioRecorder } from "@/hooks/use-audio-recorder";
+import { useContinuousAudioUploader } from "@/hooks/use-continuous-audio-uploader";
 import { RightPanelContent } from "@/components/practice/RightPanelContent";
 import { CoachHealthNotice } from "@/components/practice/CoachHealthNotice";
 import { usePracticeRuntimeLock, normalizeVoiceMode } from "./runtime-lock";
@@ -139,6 +140,13 @@ export default function PracticeSessionPage() {
         },
     });
 
+    // 持续音频留痕 — 与 useAudioRecorder 并行运行
+    // 录音开始时启动 OSS 直传；录音结束时落地最后一个分片
+    const continuousUploader = useContinuousAudioUploader({
+        sessionId,
+        enabled: true,
+    });
+
     const {
         lockedScenarioType: runtimeScenarioType,
         lockedVoiceMode: runtimeVoiceMode,
@@ -239,6 +247,14 @@ export default function PracticeSessionPage() {
         isRecordingRef,
         stopRecording,
     });
+
+    // 会话进入终态时停止持续上传器
+    React.useEffect(() => {
+        if (isSessionTerminal && continuousUploader.isUploading) {
+            void continuousUploader.stopUpload();
+        }
+    }, [isSessionTerminal, continuousUploader]);
+
     const practiceError = lifecycleError || wsError || audioError || sessionMetaError;
     const canToggleRecordingBase =
         connectionState === "connected"
@@ -261,6 +277,7 @@ export default function PracticeSessionPage() {
                 if (isRecordingRef.current) return;
                 unlockAudio();
                 startRecording();
+                void continuousUploader.startUpload();
             });
             return;
         }
@@ -274,16 +291,18 @@ export default function PracticeSessionPage() {
         if (isRecordingRef.current) {
             // 正在录音 → 停止
             stopRecording();
+            void continuousUploader.stopUpload();
         } else {
             // 没在录音 → 开始
             isStartingRef.current = true;
             unlockAudio();
             startRecording();
+            void continuousUploader.startUpload();
             setTimeout(() => {
                 isStartingRef.current = false;
             }, 300);
         }
-    }, [connectionState, hasPermission, isConnected, pendingLifecycleAction, requestPermission, sessionStatus, unlockAudio, startRecording, stopRecording]);
+    }, [connectionState, hasPermission, isConnected, pendingLifecycleAction, requestPermission, sessionStatus, unlockAudio, startRecording, stopRecording, continuousUploader]);
 
     usePracticeRecordingHotkeys({
         onToggleRecording: toggleRecording,

@@ -2280,6 +2280,52 @@ async def register_audio_segment(
     if session.audio_url is None:
         session.audio_url = f"audio/{session_id}/"
 
+    await db.flush()
+
+    # Persist audio-audit runtime metrics without clobbering existing voice policy data.
+    audio_audit_result = await db.execute(
+        select(
+            func.count(SessionAudioSegment.id),
+            func.coalesce(func.sum(SessionAudioSegment.size_bytes), 0),
+        ).where(
+            SessionAudioSegment.session_id == session_id,
+            SessionAudioSegment.upload_status == "uploaded",
+        )
+    )
+    uploaded_segment_count, total_uploaded_bytes = audio_audit_result.one()
+
+    base_snapshot = (
+        deepcopy(session.voice_policy_snapshot)
+        if isinstance(session.voice_policy_snapshot, dict)
+        else {}
+    )
+    runtime_metrics = base_snapshot.get("runtime_metrics")
+    if not isinstance(runtime_metrics, dict):
+        runtime_metrics = {}
+    else:
+        runtime_metrics = deepcopy(runtime_metrics)
+
+    audio_audit = runtime_metrics.get("audio_audit")
+    if not isinstance(audio_audit, dict):
+        audio_audit = {}
+    else:
+        audio_audit = deepcopy(audio_audit)
+
+    audio_audit.update(
+        {
+            "segment_count": int(uploaded_segment_count or 0),
+            "uploaded_segment_count": int(uploaded_segment_count or 0),
+            "total_uploaded_bytes": int(total_uploaded_bytes or 0),
+            "last_segment_sequence": segment_sequence,
+            "last_object_key": object_key,
+            "last_uploaded_at": datetime.now(UTC).isoformat(),
+            "storage_prefix": f"audio/{session_id}/",
+        }
+    )
+    runtime_metrics["audio_audit"] = audio_audit
+    base_snapshot["runtime_metrics"] = runtime_metrics
+    session.voice_policy_snapshot = base_snapshot
+
     await db.commit()
     await db.refresh(segment)
 

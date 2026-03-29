@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "exported_at": "2026-03-29T20:55:35.580Z",
+  "exported_at": "2026-03-29T21:19:42.040Z",
   "milestones": [
     {
       "id": "M001",
@@ -5731,19 +5731,28 @@
       "milestone_id": "M009",
       "slice_id": "S01",
       "id": "T03",
-      "title": "Integrate uploader into practice session page and add contract tests",
-      "status": "pending",
-      "one_liner": "",
-      "narrative": "",
-      "verification_result": "",
+      "title": "Practice sessions now mirror live recording into OSS audio-audit uploads and persist segment runtime metrics with backend contract coverage.",
+      "status": "complete",
+      "one_liner": "Practice sessions now mirror live recording into OSS audio-audit uploads and persist segment runtime metrics with backend contract coverage.",
+      "narrative": "Integrated `useContinuousAudioUploader` into the practice-session page so the uploader starts with the existing microphone recorder, stops with it, restarts after successful permission recovery, and is shut down if the session becomes terminal while uploads are active. On the backend, updated audio-segment registration to merge `voice_policy_snapshot.runtime_metrics.audio_audit` into the persisted session snapshot after each successful segment registration, preserving existing runtime metrics while tracking segment count, total bytes, latest sequence, object key, and storage prefix. Added a focused backend contract suite that proves signing, metadata registration, ordered listing, outsider denial, idempotent re-registration, first-segment `audio_url` initialization, and persisted audio-audit metrics. Also corrected the OSS test fixture to use `ALI_OSS_BUCKET`, which is the actual env key expected by the signing service.",
+      "verification_result": "Focused verification passed for both required checks. `backend/tests/contract/test_audio_audit_contract.py` passed 6/6 and proved sign → register → list plus persisted `voice_policy_snapshot.runtime_metrics.audio_audit`. `web/src/hooks/use-continuous-audio-uploader.test.ts` passed 13/13 after the page integration, covering uploader lifecycle and error handling. No local browser UAT server was running during this unit, so browser verification was not added beyond the page integration readback.",
       "duration": "",
-      "completed_at": null,
+      "completed_at": "2026-03-29T21:19:41.999Z",
       "blocker_discovered": false,
-      "deviations": "",
-      "known_issues": "",
-      "key_files": [],
-      "key_decisions": [],
-      "full_summary_md": "",
+      "deviations": "Skipped browser UAT because no local verification server was listening on the repository ports during this unit; retired the runtime proof with focused backend contract coverage instead.",
+      "known_issues": "None.",
+      "key_files": [
+        "web/src/app/(user)/practice/[sessionId]/page.tsx",
+        "backend/src/common/api/practice.py",
+        "backend/tests/contract/test_audio_audit_contract.py",
+        ".gsd/KNOWLEDGE.md"
+      ],
+      "key_decisions": [
+        "Reused the existing recording toggle as the single orchestration point so realtime recording and continuous OSS uploads stay in lockstep.",
+        "Persisted audio-audit observability by merging `voice_policy_snapshot.runtime_metrics.audio_audit` into the existing snapshot instead of overwriting the full snapshot.",
+        "Contract tests patch `common.oss.signing` directly and must provide `ALI_OSS_BUCKET` to reach the mocked OSS layer."
+      ],
+      "full_summary_md": "---\nid: T03\nparent: S01\nmilestone: M009\nkey_files:\n  - web/src/app/(user)/practice/[sessionId]/page.tsx\n  - backend/src/common/api/practice.py\n  - backend/tests/contract/test_audio_audit_contract.py\n  - .gsd/KNOWLEDGE.md\nkey_decisions:\n  - Reused the existing recording toggle as the single orchestration point so realtime recording and continuous OSS uploads stay in lockstep.\n  - Persisted audio-audit observability by merging `voice_policy_snapshot.runtime_metrics.audio_audit` into the existing snapshot instead of overwriting the full snapshot.\n  - Contract tests patch `common.oss.signing` directly and must provide `ALI_OSS_BUCKET` to reach the mocked OSS layer.\nduration: \"\"\nverification_result: passed\ncompleted_at: 2026-03-29T21:19:42.001Z\nblocker_discovered: false\n---\n\n# T03: Practice sessions now mirror live recording into OSS audio-audit uploads and persist segment runtime metrics with backend contract coverage.\n\n**Practice sessions now mirror live recording into OSS audio-audit uploads and persist segment runtime metrics with backend contract coverage.**\n\n## What Happened\n\nIntegrated `useContinuousAudioUploader` into the practice-session page so the uploader starts with the existing microphone recorder, stops with it, restarts after successful permission recovery, and is shut down if the session becomes terminal while uploads are active. On the backend, updated audio-segment registration to merge `voice_policy_snapshot.runtime_metrics.audio_audit` into the persisted session snapshot after each successful segment registration, preserving existing runtime metrics while tracking segment count, total bytes, latest sequence, object key, and storage prefix. Added a focused backend contract suite that proves signing, metadata registration, ordered listing, outsider denial, idempotent re-registration, first-segment `audio_url` initialization, and persisted audio-audit metrics. Also corrected the OSS test fixture to use `ALI_OSS_BUCKET`, which is the actual env key expected by the signing service.\n\n## Verification\n\nFocused verification passed for both required checks. `backend/tests/contract/test_audio_audit_contract.py` passed 6/6 and proved sign → register → list plus persisted `voice_policy_snapshot.runtime_metrics.audio_audit`. `web/src/hooks/use-continuous-audio-uploader.test.ts` passed 13/13 after the page integration, covering uploader lifecycle and error handling. No local browser UAT server was running during this unit, so browser verification was not added beyond the page integration readback.\n\n## Verification Evidence\n\n| # | Command | Exit Code | Verdict | Duration |\n|---|---------|-----------|---------|----------|\n| 1 | `cd /Users/zhaozengqing/github/销售训练qoder/backend && /usr/bin/time -p venv/bin/python -m pytest -c pyproject.toml tests/contract/test_audio_audit_contract.py -v` | 0 | ✅ pass | 6540ms |\n| 2 | `cd /Users/zhaozengqing/github/销售训练qoder/web && /usr/bin/time -p npx vitest run src/hooks/use-continuous-audio-uploader.test.ts` | 0 | ✅ pass | 1680ms |\n\n\n## Deviations\n\nSkipped browser UAT because no local verification server was listening on the repository ports during this unit; retired the runtime proof with focused backend contract coverage instead.\n\n## Known Issues\n\nNone.\n\n## Files Created/Modified\n\n- `web/src/app/(user)/practice/[sessionId]/page.tsx`\n- `backend/src/common/api/practice.py`\n- `backend/tests/contract/test_audio_audit_contract.py`\n- `.gsd/KNOWLEDGE.md`\n",
       "description": "Wire useContinuousAudioUploader into the practice session page alongside the existing useAudioRecorder. When recording starts, also start the continuous uploader. When recording stops, finalize the last segment. Add backend+frontend contract tests proving the full cycle: backend signs URL -> mock upload -> metadata registered -> segments queryable.",
       "estimate": "1.5h",
       "files": [
@@ -9500,6 +9509,28 @@
       "verdict": "✅ pass",
       "duration_ms": 1800,
       "created_at": "2026-03-29T20:55:35.554Z"
+    },
+    {
+      "id": 205,
+      "task_id": "T03",
+      "slice_id": "S01",
+      "milestone_id": "M009",
+      "command": "cd /Users/zhaozengqing/github/销售训练qoder/backend && /usr/bin/time -p venv/bin/python -m pytest -c pyproject.toml tests/contract/test_audio_audit_contract.py -v",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 6540,
+      "created_at": "2026-03-29T21:19:42.000Z"
+    },
+    {
+      "id": 206,
+      "task_id": "T03",
+      "slice_id": "S01",
+      "milestone_id": "M009",
+      "command": "cd /Users/zhaozengqing/github/销售训练qoder/web && /usr/bin/time -p npx vitest run src/hooks/use-continuous-audio-uploader.test.ts",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 1680,
+      "created_at": "2026-03-29T21:19:42.000Z"
     }
   ]
 }

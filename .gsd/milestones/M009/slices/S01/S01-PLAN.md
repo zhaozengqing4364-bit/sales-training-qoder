@@ -12,7 +12,7 @@
   - Estimate: 2h
   - Files: web/src/hooks/use-continuous-audio-uploader.ts, web/src/hooks/use-continuous-audio-uploader.test.ts
   - Verify: cd web && npx vitest run src/hooks/use-continuous-audio-uploader.test.ts
-- [ ] **T03: Integrate uploader into practice session page and add contract tests** — Wire useContinuousAudioUploader into the practice session page alongside the existing useAudioRecorder. When recording starts, also start the continuous uploader. When recording stops, finalize the last segment. Add backend+frontend contract tests proving the full cycle: backend signs URL -> mock upload -> metadata registered -> segments queryable.
+- [x] **T03: Practice sessions now mirror live recording into OSS audio-audit uploads and persist segment runtime metrics with backend contract coverage.** — Wire useContinuousAudioUploader into the practice session page alongside the existing useAudioRecorder. When recording starts, also start the continuous uploader. When recording stops, finalize the last segment. Add backend+frontend contract tests proving the full cycle: backend signs URL -> mock upload -> metadata registered -> segments queryable.
   - Estimate: 1.5h
   - Files: web/src/app/(user)/practice/[sessionId]/page.tsx, backend/tests/contract/test_audio_audit_contract.py
   - Verify: cd backend && venv/bin/python -m pytest -c pyproject.toml tests/contract/test_audio_audit_contract.py -v && cd ../web && npx vitest run src/hooks/use-continuous-audio-uploader.test.ts
