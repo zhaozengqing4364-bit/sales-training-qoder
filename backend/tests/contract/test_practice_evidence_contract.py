@@ -1383,11 +1383,13 @@ async def test_report_payload_includes_available_audio_audit_for_uploaded_segmen
         "recording_status": "completed",
         "total_segments": 2,
         "uploaded_segments": 2,
+        "failed_segments": 0,
         "total_bytes": 30720,
         "latest_segment_sequence": 1,
         "storage_prefix": "sessions/session-audio-available/audio",
         "last_uploaded_at": "2026-03-28T04:00:12",
         "learner_status": "available",
+        "degraded_reasons": [],
     }
     assert [segment["playback_path"] for segment in audio_audit["segments"]] == [
         f"/api/v1/sessions/{session.session_id}/audio-segments/0",
@@ -1995,3 +1997,253 @@ async def test_retrieval_facts_parity_with_miss_status(
     assert report_rf["miss_explanation"] is not None
     assert kc_rf["miss_explanation"] is not None
     assert report_rf == kc_rf
+
+
+# ---------------------------------------------------------------------------
+# Audio Audit degraded_reasons and failed_segments contract tests
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_report_audio_audit_includes_degraded_reasons_when_segments_failed(
+    async_client: AsyncClient,
+    db_session: AsyncSession,
+    owner: User,
+    owner_headers: dict[str, str],
+):
+    """When some segments failed and some uploaded, audio_audit.summary should have
+    degraded_reasons=['upload_failed'] and learner_status='partial'."""
+    scenario = Scenario(
+        scenario_id=str(uuid.uuid4()),
+        scenario_type="sales",
+        name="audio failed report scenario",
+        is_active=True,
+    )
+    session = PracticeSession(
+        session_id=str(uuid.uuid4()),
+        user_id=str(owner.user_id),
+        scenario_id=scenario.scenario_id,
+        status=SessionStatus.COMPLETED.value,
+        voice_policy_snapshot=_make_audio_audit_runtime_metrics(),
+    )
+    db_session.add_all([scenario, session])
+    await db_session.commit()
+
+    await _persist_audio_segments(
+        db_session,
+        session_id=session.session_id,
+        segments=[
+            {
+                "segment_sequence": 0,
+                "size_bytes": 8192,
+                "duration_ms": 3000,
+                "upload_status": "uploaded",
+                "created_at": datetime(2026, 3, 28, 5, 0, 0, tzinfo=UTC),
+            },
+            {
+                "segment_sequence": 1,
+                "upload_status": "failed",
+                "error_message": "oss_put_failed",
+                "created_at": datetime(2026, 3, 28, 5, 0, 5, tzinfo=UTC),
+            },
+        ],
+    )
+
+    response = await async_client.get(
+        f"/api/v1/practice/sessions/{session.session_id}/report",
+        headers=owner_headers,
+    )
+    assert response.status_code == 200
+    audio_audit = response.json()["data"]["audio_audit"]
+    assert audio_audit is not None
+    assert audio_audit["summary"]["learner_status"] == "partial"
+    assert audio_audit["summary"]["uploaded_segments"] == 1
+    assert audio_audit["summary"]["failed_segments"] == 1
+    assert audio_audit["summary"]["total_segments"] == 2
+    assert "upload_failed" in audio_audit["summary"]["degraded_reasons"]
+    # Failed segment should have error_message exposed
+    failed_seg = audio_audit["segments"][1]
+    assert failed_seg["upload_status"] == "failed"
+    assert failed_seg["error_message"] == "oss_put_failed"
+    assert failed_seg["playback_path"] is None
+
+
+@pytest.mark.asyncio
+async def test_report_audio_audit_all_failed_yields_missing_with_degraded_reasons(
+    async_client: AsyncClient,
+    db_session: AsyncSession,
+    owner: User,
+    owner_headers: dict[str, str],
+):
+    """When all segments failed, learner_status should be 'missing' with
+    degraded_reasons=['upload_failed']."""
+    scenario = Scenario(
+        scenario_id=str(uuid.uuid4()),
+        scenario_type="sales",
+        name="audio all-failed report scenario",
+        is_active=True,
+    )
+    session = PracticeSession(
+        session_id=str(uuid.uuid4()),
+        user_id=str(owner.user_id),
+        scenario_id=scenario.scenario_id,
+        status=SessionStatus.COMPLETED.value,
+        voice_policy_snapshot=_make_audio_audit_runtime_metrics(),
+    )
+    db_session.add_all([scenario, session])
+    await db_session.commit()
+
+    await _persist_audio_segments(
+        db_session,
+        session_id=session.session_id,
+        segments=[
+            {
+                "segment_sequence": 0,
+                "upload_status": "failed",
+                "error_message": "signing_failed",
+                "created_at": datetime(2026, 3, 28, 5, 1, 0, tzinfo=UTC),
+            },
+            {
+                "segment_sequence": 1,
+                "upload_status": "failed",
+                "error_message": "network_error",
+                "created_at": datetime(2026, 3, 28, 5, 1, 5, tzinfo=UTC),
+            },
+        ],
+    )
+
+    response = await async_client.get(
+        f"/api/v1/practice/sessions/{session.session_id}/report",
+        headers=owner_headers,
+    )
+    assert response.status_code == 200
+    audio_audit = response.json()["data"]["audio_audit"]
+    assert audio_audit is not None
+    assert audio_audit["summary"]["learner_status"] == "missing"
+    assert audio_audit["summary"]["uploaded_segments"] == 0
+    assert audio_audit["summary"]["failed_segments"] == 2
+    assert audio_audit["summary"]["degraded_reasons"] == ["upload_failed"]
+
+
+@pytest.mark.asyncio
+async def test_report_audio_audit_no_degraded_reasons_when_all_uploaded(
+    async_client: AsyncClient,
+    db_session: AsyncSession,
+    owner: User,
+    owner_headers: dict[str, str],
+):
+    """When all segments are uploaded, degraded_reasons should be empty."""
+    scenario = Scenario(
+        scenario_id=str(uuid.uuid4()),
+        scenario_type="sales",
+        name="audio all-uploaded degraded check",
+        is_active=True,
+    )
+    session = PracticeSession(
+        session_id=str(uuid.uuid4()),
+        user_id=str(owner.user_id),
+        scenario_id=scenario.scenario_id,
+        status=SessionStatus.COMPLETED.value,
+        voice_policy_snapshot=_make_audio_audit_runtime_metrics(
+            storage_prefix="sessions/audio-all-uploaded"
+        ),
+    )
+    db_session.add_all([scenario, session])
+    await db_session.commit()
+
+    await _persist_audio_segments(
+        db_session,
+        session_id=session.session_id,
+        segments=[
+            {
+                "segment_sequence": 0,
+                "size_bytes": 20480,
+                "duration_ms": 12000,
+                "upload_status": "uploaded",
+                "created_at": datetime(2026, 3, 28, 5, 2, 0, tzinfo=UTC),
+            },
+        ],
+    )
+
+    response = await async_client.get(
+        f"/api/v1/practice/sessions/{session.session_id}/report",
+        headers=owner_headers,
+    )
+    assert response.status_code == 200
+    audio_audit = response.json()["data"]["audio_audit"]
+    assert audio_audit["summary"]["learner_status"] == "available"
+    assert audio_audit["summary"]["failed_segments"] == 0
+    assert audio_audit["summary"]["degraded_reasons"] == []
+
+
+@pytest.mark.asyncio
+async def test_replay_audio_audit_includes_degraded_reasons_for_failed_segments(
+    async_client: AsyncClient,
+    db_session: AsyncSession,
+    owner: User,
+    owner_headers: dict[str, str],
+):
+    """Replay audio_audit should share the same degraded_reasons structure as report."""
+    scenario = Scenario(
+        scenario_id=str(uuid.uuid4()),
+        scenario_type="sales",
+        name="replay degraded audio scenario",
+        is_active=True,
+    )
+    session = PracticeSession(
+        session_id=str(uuid.uuid4()),
+        user_id=str(owner.user_id),
+        scenario_id=scenario.scenario_id,
+        status=SessionStatus.COMPLETED.value,
+        voice_policy_snapshot=_make_audio_audit_runtime_metrics(
+            storage_prefix="sessions/replay-degraded"
+        ),
+    )
+    db_session.add_all([scenario, session])
+    await db_session.commit()
+
+    await _persist_audio_segments(
+        db_session,
+        session_id=session.session_id,
+        segments=[
+            {
+                "segment_sequence": 0,
+                "size_bytes": 8192,
+                "upload_status": "uploaded",
+                "created_at": datetime(2026, 3, 28, 5, 3, 0, tzinfo=UTC),
+            },
+            {
+                "segment_sequence": 1,
+                "upload_status": "failed",
+                "error_message": "oss_put_failed",
+                "created_at": datetime(2026, 3, 28, 5, 3, 5, tzinfo=UTC),
+            },
+            {
+                "segment_sequence": 2,
+                "upload_status": "pending",
+                "created_at": datetime(2026, 3, 28, 5, 3, 10, tzinfo=UTC),
+            },
+        ],
+    )
+
+    # Fetch report
+    report_resp = await async_client.get(
+        f"/api/v1/practice/sessions/{session.session_id}/report",
+        headers=owner_headers,
+    )
+    assert report_resp.status_code == 200
+
+    # Fetch replay
+    replay_resp = await async_client.get(
+        f"/api/v1/sessions/{session.session_id}/replay",
+        headers=owner_headers,
+    )
+    assert replay_resp.status_code == 200
+
+    report_audit = report_resp.json()["data"]["audio_audit"]
+    replay_audit = replay_resp.json()["data"]["audio_audit"]
+
+    # Both should have same degraded reasons
+    assert report_audit["summary"]["degraded_reasons"] == replay_audit["summary"]["degraded_reasons"]
+    assert set(report_audit["summary"]["degraded_reasons"]) == {"upload_failed", "segments_pending"}
+    assert report_audit["summary"]["failed_segments"] == 1

@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "exported_at": "2026-03-29T22:40:21.160Z",
+  "exported_at": "2026-03-29T23:19:51.784Z",
   "milestones": [
     {
       "id": "M001",
@@ -1161,16 +1161,16 @@
       "milestone_id": "M009",
       "id": "S02",
       "title": "Report/Replay 原始录音可查",
-      "status": "pending",
+      "status": "complete",
       "risk": "medium",
       "depends": [
         "S01"
       ],
       "demo": "After this, a learner can open /practice/{sessionId}/report and see a raw audio audit section showing recording status, segment count, and playable segments. The same audio evidence is available in /sessions/{id}/replay.",
       "created_at": "2026-03-29T20:08:50.266Z",
-      "completed_at": null,
-      "full_summary_md": "",
-      "full_uat_md": "",
+      "completed_at": "2026-03-29T22:45:26.807Z",
+      "full_summary_md": "---\nid: S02\nparent: M009\nmilestone: M009\nprovides:\n  - Shared audio_audit payload (summary + segments) on both GET /practice/sessions/{id}/report and GET /sessions/{id}/replay\n  - Segment playback handoff route GET /sessions/{id}/audio-segments/{seq} with ownership validation\n  - Shared AudioAuditCard component rendering available/partial/missing states\nrequires:\n  - slice: S01\n    provides: SessionAudioSegment table, voice_policy_snapshot.runtime_metrics.audio_audit, OssSigningService for segment playback signing\naffects:\n  - S03\nkey_files:\n  - backend/src/common/db/schemas.py\n  - backend/src/common/conversation/schemas.py\n  - backend/src/common/api/practice.py\n  - backend/src/common/conversation/replay.py\n  - backend/src/common/conversation/api.py\n  - web/src/lib/api/types.ts\n  - web/src/lib/api/client.ts\n  - web/src/components/audio/AudioAuditCard.tsx\n  - web/src/app/(user)/practice/[sessionId]/report/page.tsx\n  - web/src/app/(user)/practice/[sessionId]/replay/page.tsx\n  - backend/tests/contract/test_practice_evidence_contract.py\nkey_decisions:\n  - audio_audit field is optional (None) to avoid breaking existing sessions without audio segments\n  - replay.py wraps audio_audit build in try/except so mock-based unit tests don't break on missing segment tables\n  - playback handoff uses stable path /sessions/{id}/audio-segments/{seq}, signs at read time with 1-hour expiry\n  - AudioAuditCard treats backend learner_status as canonical while tolerating summary.status as defensive alias\n  - Backend returns audio_audit: null for sessions without segments; frontend renders missing-audio fallback state\npatterns_established:\n  - Shared build_session_audio_audit() helper used by both report and replay payloads\n  - AudioAuditCard shared component consumed by both report and replay pages\n  - Stable playback handoff path with read-time signing (never persist signed URLs)\nobservability_surfaces:\n  - GET /sessions/{session_id}/audio-segments/{segment_sequence} returns 307 signed redirect for uploaded segments, 404 for missing, 403 for unauthorized\ndrill_down_paths:\n  - milestones/M009/slices/S02/tasks/T01-SUMMARY.md\n  - milestones/M009/slices/S02/tasks/T02-SUMMARY.md\n  - milestones/M009/slices/S02/tasks/T03-SUMMARY.md\nduration: \"\"\nverification_result: passed\ncompleted_at: 2026-03-29T22:45:26.811Z\nblocker_discovered: false\n---\n\n# S02: Report/Replay 原始录音可查\n\n**Extended learner report and replay routes with audio_audit payload and shared AudioAuditCard UI, giving learners visibility into raw training audio segments with playback capability.**\n\n## What Happened\n\nS02 exposes raw audio audit evidence on learner-facing report and replay routes through three tasks:\n\n**T01 (Backend read model + playback handoff):** Built a shared `build_session_audio_audit()` helper that queries `SessionAudioSegment` rows and derives `learner_status` (available/partial/missing). Extended `SessionReport` and `ReplayDataResponse` schemas with optional `audio_audit: AudioAuditPayloadSchema`. Wired the helper into all three SessionReport construction sites and replay.py's `get_replay_data()`. Added `GET /sessions/{session_id}/audio-segments/{segment_sequence}` playback handoff route with ownership validation and 1-hour signed GET redirect. Replay integration uses try/except guard to avoid breaking existing mock-based tests. 83 backend tests pass.\n\n**T02 (Frontend UI + contract wiring):** Added `AudioAuditPayload` types to `web/src/lib/api/types.ts`, `getSegmentAudioBlobUrl` client method to `web/src/lib/api/client.ts`, and a shared `AudioAuditCard.tsx` component. The card renders three states: available (summary + segment list with play buttons), partial (badge + partial segments), and missing/null (\"本次训练未录制原始音频\"). Integrated into both report and replay pages. 28 frontend tests pass (18 report + 10 replay).\n\n**T03 (Contract regressions):** Added 4 focused backend contract tests proving report/replay audio_audit payload inclusion (available/partial/null), segment playback redirect (307), missing segment 404, outsider 403, and non-persistence of signed URLs. Added report-page missing-audio assertion. All existing tests continue to pass.\n\nKey design decisions: `audio_audit` field is optional (None) to avoid breaking existing sessions; signed URLs derived at read time, never persisted; `learner_status` is the canonical backend field with `status` as defensive frontend alias.\n\n## Verification\n\nSlice-level verification passed:\n- Backend: `cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_replay_service.py tests/integration/test_replay_api.py tests/contract/test_practice_evidence_contract.py tests/unit/test_oss_signing_service.py` — 83 passed, 0 failed\n- Frontend: `pnpm --dir web exec vitest run 'src/app/(user)/practice/[sessionId]/report/page.test.tsx' 'src/app/(user)/practice/[sessionId]/replay/page.test.tsx'` — 28 passed, 0 failed\n- Focused audio_audit contract tests: 4 passed including available/partial/null states, signed redirect, 404, 403\n\n## Requirements Advanced\n\nNone.\n\n## Requirements Validated\n\nNone.\n\n## New Requirements Surfaced\n\nNone.\n\n## Requirements Invalidated or Re-scoped\n\nNone.\n\n## Deviations\n\nT03 deviated from plan: the shipped read model returns `audio_audit: null` (not a synthesized `learner_status=\"missing\"`) when no SessionAudioSegment rows exist. The contract tests lock this real behavior, and the frontend handles the null state with \"本次训练未录制原始音频\".\n\n## Known Limitations\n\nT02 browser verification confirmed the replay route rendered the audio-audit card, but the report-route browser pass was aborted during navigation; report page correctness relies on the passing 18-test Vitest suite instead of live browser proof.\n\n## Follow-ups\n\nS03 will add audio-audit degradation diagnostics to admin/support runtime surfaces alongside existing diagnostic categories.\n\n## Files Created/Modified\n\n- `backend/src/common/db/schemas.py` — Added AudioAuditSegmentSchema, AudioAuditSummarySchema, AudioAuditPayloadSchema; extended SessionReport with optional audio_audit field\n- `backend/src/common/conversation/schemas.py` — Extended ReplayDataResponse with optional audio_audit field\n- `backend/src/common/api/practice.py` — Added build_session_audio_audit() shared helper; wired audio_audit into all SessionReport construction sites\n- `backend/src/common/conversation/replay.py` — Added audio_audit to get_replay_data() with try/except guard\n- `backend/src/common/conversation/api.py` — Added GET /sessions/{session_id}/audio-segments/{segment_sequence} playback handoff route\n- `web/src/lib/api/types.ts` — Added AudioAuditSegment, AudioAuditSummary, AudioAuditPayload TypeScript types\n- `web/src/lib/api/client.ts` — Added getSegmentAudioBlobUrl method for segment playback\n- `web/src/components/audio/AudioAuditCard.tsx` — New shared component with available/partial/missing states and HTML5 Audio playback\n- `web/src/app/(user)/practice/[sessionId]/report/page.tsx` — Integrated AudioAuditCard after highlights section\n- `web/src/app/(user)/practice/[sessionId]/replay/page.tsx` — Integrated AudioAuditCard between highlights and full-dialogue sections\n- `backend/tests/contract/test_practice_evidence_contract.py` — Added 4 audio_audit contract tests (payload inclusion, playback redirect, ownership, non-persistence)\n",
+      "full_uat_md": "# S02: Report/Replay 原始录音可查 — UAT\n\n**Milestone:** M009\n**Written:** 2026-03-29T22:45:26.811Z\n\n# S02 UAT: Report/Replay 原始录音可查\n\n## Preconditions\n- Backend running on localhost:3444 with latest migrations applied (`session_audio_segments` table exists)\n- Frontend dev server running on localhost:3445\n- At least one completed session with uploaded audio segments (from S01 flow)\n- At least one completed session with NO audio segments (legacy session)\n\n---\n\n## Test Case 1: Report page shows audio audit for session with uploaded segments\n\n**Precondition:** Session `SID_WITH_AUDIO` has ≥2 uploaded `SessionAudioSegment` rows.\n\n1. Navigate to `/practice/{SID_WITH_AUDIO}/report`\n2. **Expected:** Page renders normally with existing report sections\n3. **Expected:** A section titled \"原始录音\" appears below highlights/comprehensive-insights\n4. **Expected:** Section shows segment count (e.g., \"共 2 段录音\")\n5. **Expected:** Each segment has a play button\n6. **Expected:** Status badge reads \"完整\" (all uploaded) or \"部分\" (partial uploads)\n7. **Expected:** Total duration is displayed in mm:ss format (or \"未知时长\" if duration_ms missing)\n\n## Test Case 2: Report page shows missing-audio state for session without segments\n\n**Precondition:** Session `SID_NO_AUDIO` has zero `SessionAudioSegment` rows.\n\n1. Navigate to `/practice/{SID_NO_AUDIO}/report`\n2. **Expected:** Page renders normally with existing report sections\n3. **Expected:** A section shows \"本次训练未录制原始音频\" with brief explanation\n4. **Expected:** No play buttons or segment list rendered\n\n## Test Case 3: Replay page shows audio audit for session with uploaded segments\n\n**Precondition:** Session `SID_WITH_AUDIO` is completed and has uploaded segments.\n\n1. Navigate to `/practice/{SID_WITH_AUDIO}/replay`\n2. **Expected:** Page renders normally with existing replay sections (highlights, full dialogue)\n3. **Expected:** Audio audit section appears between highlights and full-dialogue areas\n4. **Expected:** Same audio audit content as report page (shared AudioAuditCard)\n\n## Test Case 4: Replay page shows missing-audio state for session without segments\n\n**Precondition:** Session `SID_NO_AUDIO` is completed and has zero audio segments.\n\n1. Navigate to `/practice/{SID_NO_AUDIO}/replay`\n2. **Expected:** Page renders normally\n3. **Expected:** \"本次训练未录制原始音频\" text visible\n\n## Test Case 5: Segment playback handoff returns signed redirect\n\n**Precondition:** Session `SID_WITH_AUDIO` has an uploaded segment at sequence 1.\n\n1. `GET /api/v1/sessions/{SID_WITH_AUDIO}/audio-segments/1` (authenticated as session owner)\n2. **Expected:** 307 redirect to a short-lived signed OSS URL\n3. **Expected:** Signed URL expires within ~1 hour\n4. **Expected:** Following redirect returns the audio blob\n\n## Test Case 6: Segment playback rejects unauthorized access\n\n1. `GET /api/v1/sessions/{SID_WITH_AUDIO}/audio-segments/1` (authenticated as different user)\n2. **Expected:** 403 Forbidden\n\n## Test Case 7: Segment playback returns 404 for missing segment\n\n1. `GET /api/v1/sessions/{SID_WITH_AUDIO}/audio-segments/999` (authenticated as session owner)\n2. **Expected:** 404 with diagnostic message\n\n## Test Case 8: Signed URLs never appear in persisted state\n\n**Precondition:** Any session with audio segments.\n\n1. `GET /api/v1/practice/sessions/{SID}/report` — verify `audio_audit.segments[*].playback_path` contains stable `/api/v1/sessions/...` paths, NOT `https://oss-...` signed URLs\n2. `GET /api/v1/sessions/{SID}/replay` — same check on `audio_audit.segments[*].playback_path`\n3. **Expected:** No signed URLs in any persisted or returned payload field; signing only happens at playback time\n\n## Test Case 9: Existing report/replay functionality unaffected\n\n1. Open report page for any session — verify existing sections (result, main_issue, next_goal, evidence, highlights) render correctly\n2. Open replay page for any completed session — verify highlights, full dialogue, and deep-link anchors still work\n3. **Expected:** No regressions in existing functionality\n\n",
       "goal": "Expose raw audio audit evidence on learner-facing report and replay routes. A shared backend read model builds a session-level audio-audit payload (summary + ordered segments with stable playback handoff paths) from SessionAudioSegment rows and voice_policy_snapshot.runtime_metrics.audio_audit. Both GET /practice/sessions/{id}/report and GET /sessions/{id}/replay include this payload. A segment playback route validates ownership and returns a short-lived signed GET redirect. Frontend renders a shared AudioAuditCard component on both report and replay pages.",
       "success_criteria": "- Report payload includes audio_audit with status, segment count, total bytes, and per-segment playback paths\n- Replay payload includes the same audio_audit after completion\n- Segment playback route validates ownership, signs GET URLs at read time, and never persists signed URLs\n- Outsider gets 403 on playback route\n- Report page renders AudioAuditCard with segment count and playable segments\n- Replay page renders the same card without breaking existing highlights/full-dialogue flows\n- Empty/no-audio state renders clear non-fatal wording",
       "proof_level": "contract",
@@ -1194,11 +1194,11 @@
       "completed_at": null,
       "full_summary_md": "",
       "full_uat_md": "",
-      "goal": "Add audio-specific degradation classification, diagnostic integration, and learner-facing degraded wording so that audio audit gaps never silently look like complete recordings.",
-      "success_criteria": "1. Audio audit status machine covers: uploading / uploaded / failed / partial / missing, and each state maps to learner-visible wording.\n2. Runtime diagnostics (build_session_runtime_diagnostics) includes audio_audit layer: upload failure rate, latest failure reason, segment gap detection.\n3. Support runtime service classifies audio anomalies (e.g. audio_upload_degraded, audio_upload_blocked) alongside existing anomaly categories.\n4. Report/replay pages render shared degraded wording from web/src/lib/session-evidence.ts when audio audit status is not fully uploaded.\n5. Existing report/replay/highlights behavior does not regress when audio audit is absent (backward compatible for sessions without audio segments).",
-      "proof_level": "contract — focused backend + frontend tests prove degradation classification and wording",
-      "integration_closure": "S03 completes the audio audit chain with failure visibility. M010 can use the same diagnostics for report provenance traceability.",
-      "observability_impact": "Audio anomaly events appear in support/runtime diagnostics. Degraded wording visibility testable via frontend focused tests.",
+      "goal": "When audio upload fails, signing expires, or segments are partially missing, the learner sees clear degraded wording in report/replay explaining what happened. Admin/support runtime surfaces audio anomalies alongside existing diagnostic categories.",
+      "success_criteria": "- Backend registers failed/pending audio segments durably with compact error tokens\n- Report and replay expose enriched audio_audit payload with degraded reasons and failed counts\n- AudioAuditCard renders differentiated degraded wording for partial/failed states\n- Playback error messages preserve structured error codes from backend\n- RuntimeStatusService emits typed audio anomaly kinds (audio_upload_degraded, audio_missing)\n- Existing tests continue to pass with no regressions",
+      "proof_level": "contract",
+      "integration_closure": "- Upstream surfaces consumed: S01 audio-segment table + registration flow, S02 shared build_session_audio_audit() + AudioAuditCard, existing RuntimeStatusService typed anomaly system\n- New wiring introduced: browser failure registration → failed segment rows + bounded failure metrics → enriched summary → learner UI degraded wording + support/runtime audio anomaly classification\n- What remains before milestone is truly usable end-to-end: nothing — S03 closes M009",
+      "observability_impact": "- voice_policy_snapshot.runtime_metrics.audio_audit gains failed_segment_count, last_failure_reason, last_failure_at fields for bounded failure summary\n- support/runtime emits audio anomaly items with kind, severity, summary, and diagnostics fields\n- session_audio_segments rows now durably store upload_status=failed with compact error_message tokens",
       "sequence": 0,
       "replan_triggered_at": null
     }
@@ -5941,6 +5941,135 @@
       "observability_impact": "",
       "full_plan_md": "",
       "sequence": 0
+    },
+    {
+      "milestone_id": "M009",
+      "slice_id": "S03",
+      "id": "T01",
+      "title": "Add failure registration endpoint and enrich audio audit read model with degraded_reasons, failed_segments, and per-segment error_message",
+      "status": "complete",
+      "one_liner": "Add failure registration endpoint and enrich audio audit read model with degraded_reasons, failed_segments, and per-segment error_message",
+      "narrative": "Extended the audio segment contract in three layers: (1) Schema extensions — added error_message to AudioAuditSegmentSchema, failed_segments and degraded_reasons to AudioAuditSummarySchema. (2) New POST /audio-segments/failure endpoint that accepts segment_sequence + error_token (closed enum: signing_failed, oss_put_failed, register_failed, network_error, unknown), upserts SessionAudioSegment with upload_status='failed', preserves already-uploaded segments, and updates voice_policy_snapshot.runtime_metrics.audio_audit with bounded failure summary. (3) Enriched build_session_audio_audit() to compute degraded_reasons from segment states (upload_failed if any failed, segments_pending if any pending), failed_segments count, and per-segment error_message. Also extended register_audio_segment() to persist failed_segment_count alongside existing upload metrics. Fixed a bug where the failure metrics helper was called without await. Updated one existing contract test to include new schema fields in exact-match assertion.",
+      "verification_result": "53 tests pass across 3 test files: 21 unit tests (test_audio_segment_api.py), 26 contract tests (test_practice_evidence_contract.py), 6 contract tests (test_audio_audit_contract.py). No regressions. All new failure-registration, degraded-reason, and voice-policy-snapshot assertions verified.",
+      "duration": "",
+      "completed_at": "2026-03-29T23:19:51.743Z",
+      "blocker_discovered": false,
+      "deviations": "None",
+      "known_issues": "None",
+      "key_files": [
+        "backend/src/common/db/schemas.py",
+        "backend/src/common/api/practice.py",
+        "backend/tests/unit/test_audio_segment_api.py",
+        "backend/tests/contract/test_practice_evidence_contract.py"
+      ],
+      "key_decisions": [
+        "Failure endpoint only overwrites non-uploaded segments (failed/pending), preserving successful uploads",
+        "Error tokens are a closed enum (signing_failed, oss_put_failed, register_failed, network_error, unknown)",
+        "Shared async helper _update_audio_audit_failure_metrics for failure metric persistence"
+      ],
+      "full_summary_md": "---\nid: T01\nparent: S03\nmilestone: M009\nkey_files:\n  - backend/src/common/db/schemas.py\n  - backend/src/common/api/practice.py\n  - backend/tests/unit/test_audio_segment_api.py\n  - backend/tests/contract/test_practice_evidence_contract.py\nkey_decisions:\n  - Failure endpoint only overwrites non-uploaded segments (failed/pending), preserving successful uploads\n  - Error tokens are a closed enum (signing_failed, oss_put_failed, register_failed, network_error, unknown)\n  - Shared async helper _update_audio_audit_failure_metrics for failure metric persistence\nduration: \"\"\nverification_result: passed\ncompleted_at: 2026-03-29T23:19:51.745Z\nblocker_discovered: false\n---\n\n# T01: Add failure registration endpoint and enrich audio audit read model with degraded_reasons, failed_segments, and per-segment error_message\n\n**Add failure registration endpoint and enrich audio audit read model with degraded_reasons, failed_segments, and per-segment error_message**\n\n## What Happened\n\nExtended the audio segment contract in three layers: (1) Schema extensions — added error_message to AudioAuditSegmentSchema, failed_segments and degraded_reasons to AudioAuditSummarySchema. (2) New POST /audio-segments/failure endpoint that accepts segment_sequence + error_token (closed enum: signing_failed, oss_put_failed, register_failed, network_error, unknown), upserts SessionAudioSegment with upload_status='failed', preserves already-uploaded segments, and updates voice_policy_snapshot.runtime_metrics.audio_audit with bounded failure summary. (3) Enriched build_session_audio_audit() to compute degraded_reasons from segment states (upload_failed if any failed, segments_pending if any pending), failed_segments count, and per-segment error_message. Also extended register_audio_segment() to persist failed_segment_count alongside existing upload metrics. Fixed a bug where the failure metrics helper was called without await. Updated one existing contract test to include new schema fields in exact-match assertion.\n\n## Verification\n\n53 tests pass across 3 test files: 21 unit tests (test_audio_segment_api.py), 26 contract tests (test_practice_evidence_contract.py), 6 contract tests (test_audio_audit_contract.py). No regressions. All new failure-registration, degraded-reason, and voice-policy-snapshot assertions verified.\n\n## Verification Evidence\n\n| # | Command | Exit Code | Verdict | Duration |\n|---|---------|-----------|---------|----------|\n| 1 | `cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_audio_segment_api.py tests/contract/test_practice_evidence_contract.py tests/contract/test_audio_audit_contract.py -v` | 0 | ✅ pass | 9800ms |\n\n\n## Deviations\n\nNone\n\n## Known Issues\n\nNone\n\n## Files Created/Modified\n\n- `backend/src/common/db/schemas.py`\n- `backend/src/common/api/practice.py`\n- `backend/tests/unit/test_audio_segment_api.py`\n- `backend/tests/contract/test_practice_evidence_contract.py`\n",
+      "description": "Extend the audio-segment write contract so browser failures can be durably registered (upload_status=failed with compact error token). Extend build_session_audio_audit() to expose degraded reasons, failed counts, and per-segment error messages in the shared payload. Extend voice_policy_snapshot.runtime_metrics.audio_audit with bounded failure summary fields.",
+      "estimate": "45m",
+      "files": [
+        "backend/src/common/api/practice.py",
+        "backend/src/common/db/schemas.py"
+      ],
+      "verify": "cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_audio_segment_api.py tests/contract/test_practice_evidence_contract.py tests/contract/test_audio_audit_contract.py -v",
+      "inputs": [
+        "backend/src/common/api/practice.py",
+        "backend/src/common/db/schemas.py",
+        "backend/src/common/db/models.py",
+        "backend/tests/unit/test_audio_segment_api.py",
+        "backend/tests/contract/test_practice_evidence_contract.py",
+        "backend/tests/contract/test_audio_audit_contract.py"
+      ],
+      "expected_output": [
+        "backend/src/common/api/practice.py",
+        "backend/src/common/db/schemas.py",
+        "backend/tests/unit/test_audio_segment_api.py",
+        "backend/tests/contract/test_practice_evidence_contract.py"
+      ],
+      "observability_impact": "voice_policy_snapshot.runtime_metrics.audio_audit now tracks failed_segment_count and last_failure_reason for bounded failure summary",
+      "full_plan_md": "",
+      "sequence": 0
+    },
+    {
+      "milestone_id": "M009",
+      "slice_id": "S03",
+      "id": "T02",
+      "title": "Frontend: consume degraded truth in AudioAuditCard and normalize playback errors",
+      "status": "pending",
+      "one_liner": "",
+      "narrative": "",
+      "verification_result": "",
+      "duration": "",
+      "completed_at": null,
+      "blocker_discovered": false,
+      "deviations": "",
+      "known_issues": "",
+      "key_files": [],
+      "key_decisions": [],
+      "full_summary_md": "",
+      "description": "Update AudioAuditCard to consume canonical degraded fields (degraded_reasons, failed_segments, per-segment error_message) from the enriched backend payload. Render differentiated learner-facing wording for partial/failed states. Fix getSegmentAudioBlobUrl to preserve structured error codes instead of collapsing to generic HTTP status.",
+      "estimate": "30m",
+      "files": [
+        "web/src/components/audio/AudioAuditCard.tsx",
+        "web/src/lib/api/client.ts",
+        "web/src/lib/api/types.ts"
+      ],
+      "verify": "cd web && pnpm dlx npm@11.6.1 test -- --run 'src/app/(user)/practice/[sessionId]/report/page.test.tsx' 'src/app/(user)/practice/[sessionId]/replay/page.test.tsx'",
+      "inputs": [
+        "web/src/components/audio/AudioAuditCard.tsx",
+        "web/src/lib/api/client.ts",
+        "web/src/lib/api/types.ts",
+        "web/src/app/(user)/practice/[sessionId]/report/page.test.tsx",
+        "web/src/app/(user)/practice/[sessionId]/replay/page.test.tsx"
+      ],
+      "expected_output": [
+        "web/src/components/audio/AudioAuditCard.tsx",
+        "web/src/lib/api/client.ts",
+        "web/src/lib/api/types.ts",
+        "web/src/app/(user)/practice/[sessionId]/report/page.test.tsx",
+        "web/src/app/(user)/practice/[sessionId]/replay/page.test.tsx"
+      ],
+      "observability_impact": "",
+      "full_plan_md": "",
+      "sequence": 0
+    },
+    {
+      "milestone_id": "M009",
+      "slice_id": "S03",
+      "id": "T03",
+      "title": "Support runtime: classify audio anomalies in RuntimeStatusService",
+      "status": "pending",
+      "one_liner": "",
+      "narrative": "",
+      "verification_result": "",
+      "duration": "",
+      "completed_at": null,
+      "blocker_discovered": false,
+      "deviations": "",
+      "known_issues": "",
+      "key_files": [],
+      "key_decisions": [],
+      "full_summary_md": "",
+      "description": "Add audio anomaly kinds (audio_upload_degraded, audio_missing) to _build_fault_items(). Derive audio anomaly state from voice_policy_snapshot.runtime_metrics.audio_audit bounded summary on RuntimeSessionRecord. Reuse existing typed anomaly pattern so /support/runtime renders them generically.",
+      "estimate": "30m",
+      "files": [
+        "backend/src/support/services/runtime_status_service.py"
+      ],
+      "verify": "cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_support_runtime_service.py -v -k audio",
+      "inputs": [
+        "backend/src/support/services/runtime_status_service.py",
+        "backend/tests/unit/test_support_runtime_service.py"
+      ],
+      "expected_output": [
+        "backend/src/support/services/runtime_status_service.py",
+        "backend/tests/unit/test_support_runtime_service.py"
+      ],
+      "observability_impact": "support/runtime overview and faults endpoints now include audio anomaly items with kind severity summary and diagnostics for admin diagnosis",
+      "full_plan_md": "",
+      "sequence": 0
     }
   ],
   "decisions": [
@@ -9776,6 +9905,17 @@
       "verdict": "✅ pass",
       "duration_ms": 14600,
       "created_at": "2026-03-29T22:40:21.128Z"
+    },
+    {
+      "id": 214,
+      "task_id": "T01",
+      "slice_id": "S03",
+      "milestone_id": "M009",
+      "command": "cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_audio_segment_api.py tests/contract/test_practice_evidence_contract.py tests/contract/test_audio_audit_contract.py -v",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 9800,
+      "created_at": "2026-03-29T23:19:51.743Z"
     }
   ]
 }

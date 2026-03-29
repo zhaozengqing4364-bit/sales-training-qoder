@@ -342,3 +342,137 @@ class TestListAudioSegments:
             headers=_auth,
         )
         assert resp.status_code == 404
+
+
+# ---------------------------------------------------------------------------
+# POST /audio-segments/failure (failure registration)
+# ---------------------------------------------------------------------------
+
+
+class TestRegisterAudioSegmentFailure:
+    @pytest.mark.asyncio
+    async def test_register_failure_creates_failed_row(self, _client, _auth, _session_id, _db):
+        resp = await _client.post(
+            f"/api/v1/practice/sessions/{_session_id}/audio-segments/failure",
+            json={
+                "segment_sequence": 0,
+                "error_token": "oss_put_failed",
+            },
+            headers=_auth,
+        )
+        assert resp.status_code == 200
+        data = resp.json()["data"]
+        assert data["upload_status"] == "failed"
+        assert data["error_message"] == "oss_put_failed"
+        assert data["segment_sequence"] == 0
+
+        # Verify DB row
+        result = await _db.execute(
+            select(SessionAudioSegment).where(
+                SessionAudioSegment.session_id == _session_id,
+                SessionAudioSegment.segment_sequence == 0,
+            )
+        )
+        row = result.scalar_one()
+        assert row.upload_status == "failed"
+        assert row.error_message == "oss_put_failed"
+
+    @pytest.mark.asyncio
+    async def test_failure_updates_voice_policy_snapshot(self, _client, _auth, _session_id, _db):
+        await _client.post(
+            f"/api/v1/practice/sessions/{_session_id}/audio-segments/failure",
+            json={"segment_sequence": 0, "error_token": "signing_failed"},
+            headers=_auth,
+        )
+
+        result = await _db.execute(
+            select(PracticeSession).where(PracticeSession.session_id == _session_id)
+        )
+        session = result.scalar_one()
+        snapshot = session.voice_policy_snapshot or {}
+        audio_audit = snapshot.get("runtime_metrics", {}).get("audio_audit", {})
+        assert audio_audit["failed_segment_count"] == 1
+        assert audio_audit["last_failure_reason"] == "signing_failed"
+
+    @pytest.mark.asyncio
+    async def test_failure_does_not_overwrite_uploaded_segment(self, _client, _auth, _session_id, _db):
+        # Register a successful upload first
+        await _client.post(
+            f"/api/v1/practice/sessions/{_session_id}/audio-segments",
+            json={
+                "segment_sequence": 0,
+                "object_key": f"audio/{_session_id}/seg_0000.webm",
+                "size_bytes": 5000,
+            },
+            headers=_auth,
+        )
+        # Try to register failure for the same segment
+        resp = await _client.post(
+            f"/api/v1/practice/sessions/{_session_id}/audio-segments/failure",
+            json={"segment_sequence": 0, "error_token": "network_error"},
+            headers=_auth,
+        )
+        assert resp.status_code == 200
+        data = resp.json()["data"]
+        # Should remain as uploaded, not overwritten
+        assert data["upload_status"] == "uploaded"
+
+    @pytest.mark.asyncio
+    async def test_failure_upserts_existing_pending_segment(self, _client, _auth, _session_id, _db):
+        # Register failure for segment 0
+        await _client.post(
+            f"/api/v1/practice/sessions/{_session_id}/audio-segments/failure",
+            json={"segment_sequence": 0, "error_token": "network_error"},
+            headers=_auth,
+        )
+        # Register failure again (upsert)
+        resp = await _client.post(
+            f"/api/v1/practice/sessions/{_session_id}/audio-segments/failure",
+            json={"segment_sequence": 0, "error_token": "oss_put_failed"},
+            headers=_auth,
+        )
+        assert resp.status_code == 200
+        data = resp.json()["data"]
+        assert data["upload_status"] == "failed"
+        assert data["error_message"] == "oss_put_failed"
+
+    @pytest.mark.asyncio
+    async def test_invalid_error_token(self, _client, _auth, _session_id):
+        resp = await _client.post(
+            f"/api/v1/practice/sessions/{_session_id}/audio-segments/failure",
+            json={"segment_sequence": 0, "error_token": "bogus_error"},
+            headers=_auth,
+        )
+        assert resp.status_code == 422
+
+    @pytest.mark.asyncio
+    async def test_missing_error_token(self, _client, _auth, _session_id):
+        resp = await _client.post(
+            f"/api/v1/practice/sessions/{_session_id}/audio-segments/failure",
+            json={"segment_sequence": 0},
+            headers=_auth,
+        )
+        assert resp.status_code == 422
+
+    @pytest.mark.asyncio
+    async def test_session_not_found(self, _client, _auth):
+        fake_id = str(uuid.uuid4())
+        resp = await _client.post(
+            f"/api/v1/practice/sessions/{fake_id}/audio-segments/failure",
+            json={"segment_sequence": 0, "error_token": "unknown"},
+            headers=_auth,
+        )
+        assert resp.status_code == 404
+
+    @pytest.mark.asyncio
+    async def test_audio_url_set_on_first_failure(self, _client, _auth, _session_id, _db):
+        await _client.post(
+            f"/api/v1/practice/sessions/{_session_id}/audio-segments/failure",
+            json={"segment_sequence": 0, "error_token": "unknown"},
+            headers=_auth,
+        )
+        result = await _db.execute(
+            select(PracticeSession).where(PracticeSession.session_id == _session_id)
+        )
+        session = result.scalar_one()
+        assert session.audio_url == f"audio/{_session_id}/"

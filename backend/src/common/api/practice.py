@@ -276,6 +276,8 @@ async def build_session_audio_audit(
 
     # Compute aggregates from actual segment rows
     uploaded_count = 0
+    failed_count = 0
+    pending_count = 0
     total_bytes = 0
     latest_sequence: int | None = None
     last_uploaded_at: str | None = None
@@ -289,6 +291,10 @@ async def build_session_audio_audit(
                 latest_sequence = seg.segment_sequence
             if seg.created_at is not None:
                 last_uploaded_at = seg.created_at.isoformat()
+        elif seg.upload_status == "failed":
+            failed_count += 1
+        elif seg.upload_status == "pending":
+            pending_count += 1
 
         playback_path = None
         if seg.upload_status == "uploaded":
@@ -302,6 +308,7 @@ async def build_session_audio_audit(
                 size_bytes=seg.size_bytes,
                 upload_status=seg.upload_status,
                 playback_path=playback_path,
+                error_message=seg.error_message,
             )
         )
 
@@ -315,15 +322,24 @@ async def build_session_audio_audit(
     else:
         learner_status = "missing"
 
+    # Derive degraded_reasons
+    degraded_reasons: list[str] = []
+    if failed_count > 0:
+        degraded_reasons.append("upload_failed")
+    if pending_count > 0:
+        degraded_reasons.append("segments_pending")
+
     summary = AudioAuditSummarySchema(
         recording_status=audio_audit_raw.get("recording_status", "active"),
         total_segments=total_segments,
         uploaded_segments=uploaded_count,
+        failed_segments=failed_count,
         total_bytes=total_bytes,
         latest_segment_sequence=latest_sequence,
         storage_prefix=audio_audit_raw.get("storage_prefix", f"audio/{session_id}/"),
         last_uploaded_at=last_uploaded_at,
         learner_status=learner_status,
+        degraded_reasons=degraded_reasons,
     )
 
     return AudioAuditPayloadSchema(summary=summary, segments=segment_schemas)
@@ -2394,6 +2410,15 @@ async def register_audio_segment(
     )
     uploaded_segment_count, total_uploaded_bytes = audio_audit_result.one()
 
+    # Query failed segment count for bounded failure summary.
+    failed_count_result = await db.execute(
+        select(func.count(SessionAudioSegment.id)).where(
+            SessionAudioSegment.session_id == session_id,
+            SessionAudioSegment.upload_status == "failed",
+        )
+    )
+    failed_segment_count_in_register = failed_count_result.scalar() or 0
+
     base_snapshot = (
         deepcopy(session.voice_policy_snapshot)
         if isinstance(session.voice_policy_snapshot, dict)
@@ -2420,6 +2445,7 @@ async def register_audio_segment(
             "last_object_key": object_key,
             "last_uploaded_at": datetime.now(UTC).isoformat(),
             "storage_prefix": f"audio/{session_id}/",
+            "failed_segment_count": int(failed_segment_count_in_register),
         }
     )
     runtime_metrics["audio_audit"] = audio_audit
@@ -2494,3 +2520,167 @@ async def list_audio_segments(
             for s in segments
         ]
     )
+
+
+# Allowed error tokens for audio segment failure registration.
+_AUDIO_FAILURE_TOKENS = frozenset({
+    "signing_failed",
+    "oss_put_failed",
+    "register_failed",
+    "network_error",
+    "unknown",
+})
+
+
+@router.post("/practice/sessions/{session_id}/audio-segments/failure")
+async def register_audio_segment_failure(
+    session_id: str,
+    body: dict[str, Any],
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Register a failed audio segment upload attempt.
+
+    Request body:
+        segment_sequence (int): Segment index that failed.
+        error_token (str): One of signing_failed, oss_put_failed,
+                           register_failed, network_error, unknown.
+
+    Creates/upserts a SessionAudioSegment row with upload_status="failed"
+    and stores the compact error token in error_message. Also updates
+    voice_policy_snapshot.runtime_metrics.audio_audit with a bounded
+    failure summary (failed_segment_count, last_failure_reason).
+    """
+    # --- input validation ---
+    segment_sequence = body.get("segment_sequence")
+    if segment_sequence is None or not isinstance(segment_sequence, int) or segment_sequence < 0:
+        return error_response(
+            "[INVALID_SEGMENT_SEQUENCE]",
+            status_code=422,
+            message="segment_sequence must be a non-negative integer",
+        )
+
+    error_token = body.get("error_token")
+    if not error_token or not isinstance(error_token, str):
+        return error_response(
+            "[INVALID_ERROR_TOKEN]",
+            status_code=422,
+            message="error_token must be a non-empty string",
+        )
+    if error_token not in _AUDIO_FAILURE_TOKENS:
+        return error_response(
+            "[INVALID_ERROR_TOKEN]",
+            status_code=422,
+            message=f"error_token must be one of: {', '.join(sorted(_AUDIO_FAILURE_TOKENS))}",
+        )
+
+    # --- session ownership check ---
+    result = await db.execute(
+        select(PracticeSession).where(PracticeSession.session_id == session_id)
+    )
+    session = result.scalar_one_or_none()
+    if not session:
+        return error_response("[SESSION_NOT_FOUND]", status_code=404)
+    if not _can_read_session(session, current_user):
+        return error_response("[ACCESS_DENIED]", status_code=403)
+
+    # --- upsert segment row as failed ---
+    existing = await db.execute(
+        select(SessionAudioSegment).where(
+            SessionAudioSegment.session_id == session_id,
+            SessionAudioSegment.segment_sequence == segment_sequence,
+        )
+    )
+    segment = existing.scalar_one_or_none()
+
+    if segment:
+        # Only overwrite if not already successfully uploaded
+        if segment.upload_status != "uploaded":
+            segment.upload_status = "failed"
+            segment.error_message = error_token
+    else:
+        segment = SessionAudioSegment(
+            session_id=session_id,
+            segment_sequence=segment_sequence,
+            object_key=f"audio/{session_id}/seg_{segment_sequence:04d}.webm",
+            content_type="audio/webm",
+            upload_status="failed",
+            error_message=error_token,
+        )
+        db.add(segment)
+
+    # Ensure PracticeSession.audio_url is set
+    if session.audio_url is None:
+        session.audio_url = f"audio/{session_id}/"
+
+    await db.flush()
+
+    # --- update voice_policy_snapshot.runtime_metrics.audio_audit ---
+    await _update_audio_audit_failure_metrics(db, session, session_id, error_token)
+
+    await db.commit()
+    await db.refresh(segment)
+
+    logger.info(
+        "audio_segment_failure_registered",
+        session_id=session_id,
+        segment_sequence=segment_sequence,
+        error_token=error_token,
+        upload_status="failed",
+    )
+
+    return success_response(
+        {
+            "id": segment.id,
+            "session_id": session_id,
+            "segment_sequence": segment.segment_sequence,
+            "upload_status": segment.upload_status,
+            "error_message": segment.error_message,
+            "created_at": segment.created_at.isoformat() if segment.created_at else None,
+        }
+    )
+
+
+async def _update_audio_audit_failure_metrics(
+    db: AsyncSession,
+    session: PracticeSession,
+    session_id: str,
+    error_token: str,
+) -> None:
+    """Update voice_policy_snapshot.runtime_metrics.audio_audit with failure summary."""
+    from sqlalchemy import func as sa_func
+
+    failed_count_result = await db.execute(
+        select(sa_func.count(SessionAudioSegment.id)).where(
+            SessionAudioSegment.session_id == session_id,
+            SessionAudioSegment.upload_status == "failed",
+        )
+    )
+    failed_segment_count = failed_count_result.scalar() or 0
+
+    base_snapshot = (
+        deepcopy(session.voice_policy_snapshot)
+        if isinstance(session.voice_policy_snapshot, dict)
+        else {}
+    )
+    runtime_metrics = base_snapshot.get("runtime_metrics")
+    if not isinstance(runtime_metrics, dict):
+        runtime_metrics = {}
+    else:
+        runtime_metrics = deepcopy(runtime_metrics)
+
+    audio_audit = runtime_metrics.get("audio_audit")
+    if not isinstance(audio_audit, dict):
+        audio_audit = {}
+    else:
+        audio_audit = deepcopy(audio_audit)
+
+    audio_audit.update(
+        {
+            "failed_segment_count": int(failed_segment_count),
+            "last_failure_reason": error_token,
+        }
+    )
+    runtime_metrics["audio_audit"] = audio_audit
+    base_snapshot["runtime_metrics"] = runtime_metrics
+    session.voice_policy_snapshot = base_snapshot

@@ -429,6 +429,7 @@ class AudioAuditSegmentSchema(BaseModel):
     size_bytes: int | None = Field(None, description="Segment upload size in bytes")
     upload_status: str = Field(..., description="Upload status: pending | uploaded | failed")
     playback_path: str | None = Field(None, description="Stable handoff path for signed-URL redirect")
+    error_message: str | None = Field(None, description="Compact error token when upload_status is 'failed'")
 
 
 class AudioAuditSummarySchema(BaseModel):
@@ -436,6 +437,7 @@ class AudioAuditSummarySchema(BaseModel):
     recording_status: str = Field(..., description="Raw recording status from runtime metrics")
     total_segments: int = Field(0, description="Total segments registered")
     uploaded_segments: int = Field(0, description="Segments successfully uploaded")
+    failed_segments: int = Field(0, description="Segments that failed to upload")
     total_bytes: int = Field(0, description="Total uploaded bytes across all segments")
     latest_segment_sequence: int | None = Field(None, description="Highest segment sequence seen")
     storage_prefix: str | None = Field(None, description="OSS storage prefix for this session's audio")
@@ -443,6 +445,10 @@ class AudioAuditSummarySchema(BaseModel):
     learner_status: Literal["available", "partial", "missing"] = Field(
         "missing",
         description="Derived learner-facing status: available if all uploaded, partial if some, missing if none",
+    )
+    degraded_reasons: list[str] = Field(
+        default_factory=list,
+        description="List of degradation reasons: 'upload_failed' if any segments failed, 'segments_pending' if any are still pending",
     )
 
 
