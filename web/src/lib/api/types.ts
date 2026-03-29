@@ -1489,6 +1489,52 @@ export interface HistoryTrendPoint extends Pick<SessionEvidenceContract,
     scenario_type?: string;
 }
 
+// Canonical retrieval truth — produced by the backend read-model
+// `build_retrieval_facts` and persisted in `effectiveness_snapshot.retrieval_facts`.
+export type RetrievalFactsStatus =
+    | "hit"
+    | "miss"
+    | "search_failed"
+    | "kb_not_ready"
+    | "not_triggered"
+    | "no_knowledge_base"
+    | "disabled";
+
+export interface RetrievalAttemptSummary {
+    knowledge_base_id: string;
+    knowledge_base_name?: string;
+    snippet?: string;
+    retrieval_mode?: string;
+    score?: number;
+}
+
+export interface RetrievalLatestAttempt {
+    status: string;
+    query?: string;
+    attempted_at?: string | null;
+    retrieval_mode?: string | null;
+    error_summary?: string | null;
+    result_count?: number;
+    knowledge_base_ids?: string[];
+    result_summaries?: RetrievalAttemptSummary[];
+}
+
+export interface RetrievalFacts {
+    kb_bound: boolean;
+    knowledge_base_ids: string[];
+    knowledge_base_count: number;
+    retrieval_enabled: boolean;
+    status: RetrievalFactsStatus;
+    summary: string;
+    attempt_count: number;
+    hit_count: number;
+    hit_rate: number;
+    latest_attempt?: RetrievalLatestAttempt | null;
+    recent_attempts?: RetrievalLatestAttempt[];
+    miss_explanation?: string | null;
+    failure_explanation?: string | null;
+}
+
 export interface KnowledgeCheckDiagnostics {
     session_id: string;
     voice_mode?: "legacy" | "stepfun_realtime" | string;

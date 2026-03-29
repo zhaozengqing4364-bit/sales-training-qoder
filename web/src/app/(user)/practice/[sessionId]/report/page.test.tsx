@@ -78,6 +78,44 @@ vi.mock("@/lib/api/client", async () => {
     };
 });
 
+const baseRetrievalFacts = {
+    kb_bound: true,
+    knowledge_base_ids: ["kb-product"],
+    knowledge_base_count: 1,
+    retrieval_enabled: true,
+    status: "hit" as const,
+    summary: "知识检索已触发并命中知识库",
+    attempt_count: 2,
+    hit_count: 1,
+    hit_rate: 0.5,
+    latest_attempt: {
+        status: "hit",
+        query: "这个方案的 ROI 怎么证明？",
+        attempted_at: "2026-03-27T08:00:00Z",
+        retrieval_mode: "hybrid",
+        result_count: 2,
+        knowledge_base_ids: ["kb-product"],
+        result_summaries: [
+            {
+                knowledge_base_id: "kb-product",
+                knowledge_base_name: "产品知识库",
+                snippet: "某制造业客户上线后 3 个月回款周期缩短 18%，库存周转提升 12%。",
+                retrieval_mode: "hybrid",
+                score: 0.93,
+            },
+            {
+                knowledge_base_id: "kb-product",
+                knowledge_base_name: "产品知识库",
+                snippet: "历史项目里，首年 ROI 通常在 1.6 到 2.1 之间。",
+                retrieval_mode: "hybrid",
+                score: 0.81,
+            },
+        ],
+    },
+    miss_explanation: null,
+    failure_explanation: null,
+};
+
 const baseReport = {
     session_id: "session-1",
     scenario_type: "sales" as const,
@@ -622,6 +660,130 @@ describe("ReportPage", () => {
         expect(screen.getByText("未被证据支撑")).toBeTruthy();
         expect(screen.getByText("当前这场对话里的收益或能力主张还没有被案例、数据或 ROI 证据支撑。")).toBeTruthy();
         expect(screen.getByText("证据强度：42 分。")).toBeTruthy();
+    });
+
+    it("renders canonical retrieval truth from the report payload even when the supplemental knowledge-check request fails", async () => {
+        getReportMock.mockResolvedValue({
+            ...baseReport,
+            evaluable: true,
+            not_evaluable_reason: null,
+            effectiveness_snapshot: {
+                claim_truth: {
+                    status: "weak_evidence",
+                    label: "证据偏弱",
+                    source: "score_snapshot",
+                    reason: "low_evidence_score",
+                    evidence_score: 63,
+                },
+                retrieval_facts: baseRetrievalFacts,
+            },
+        });
+        getComprehensiveReportMock.mockResolvedValue({
+            session_id: "session-1",
+            generated_at: "2026-03-23T00:00:00Z",
+            overall_score: 72,
+            dimension_scores: [],
+            stage_summaries: [],
+            key_strengths: [],
+            key_improvements: [],
+            detailed_feedback: "",
+            recommendations: [],
+            voice_policy_snapshot_ref: null,
+        });
+
+        render(<ReportPage />);
+
+        expect(await screen.findByText("知识库检索事实")).toBeTruthy();
+        expect(screen.getAllByText("已命中").length).toBeGreaterThan(0);
+        expect(screen.getByText("知识检索已触发并命中知识库")).toBeTruthy();
+        expect(screen.getByText("证据偏弱")).toBeTruthy();
+        expect(screen.getByText("知识库已命中相关内容，但当前证据力度仍不够——建议引用更具体的数据或案例。")).toBeTruthy();
+        expect(screen.getByText(/最近检索问题：这个方案的 ROI 怎么证明/)).toBeTruthy();
+        expect(screen.getByText("某制造业客户上线后 3 个月回款周期缩短 18%，库存周转提升 12%。")).toBeTruthy();
+        expect(screen.queryByText("知识库命中检测")).toBeNull();
+    });
+
+    it("omits the canonical retrieval section when retrieval_facts are absent from the report payload", async () => {
+        getReportMock.mockResolvedValue({
+            ...baseReport,
+            evaluable: true,
+            not_evaluable_reason: null,
+            effectiveness_snapshot: {
+                claim_truth: {
+                    status: "weak_evidence",
+                    label: "证据偏弱",
+                    source: "score_snapshot",
+                    reason: "low_evidence_score",
+                },
+            },
+        });
+        getComprehensiveReportMock.mockResolvedValue({
+            session_id: "session-1",
+            generated_at: "2026-03-23T00:00:00Z",
+            overall_score: 72,
+            dimension_scores: [],
+            stage_summaries: [],
+            key_strengths: [],
+            key_improvements: [],
+            detailed_feedback: "",
+            recommendations: [],
+            voice_policy_snapshot_ref: null,
+        });
+
+        render(<ReportPage />);
+
+        expect(await screen.findByText("主张证据状态")).toBeTruthy();
+        expect(screen.queryByText("知识库检索事实")).toBeNull();
+    });
+
+    it("keeps canonical retrieval status visible when latest_attempt and result_summaries are malformed", async () => {
+        getReportMock.mockResolvedValue({
+            ...baseReport,
+            evaluable: true,
+            not_evaluable_reason: null,
+            effectiveness_snapshot: {
+                claim_truth: {
+                    status: "weak_evidence",
+                    label: "证据偏弱",
+                    source: "score_snapshot",
+                    reason: "low_evidence_score",
+                },
+                retrieval_facts: {
+                    ...baseRetrievalFacts,
+                    latest_attempt: {
+                        status: "hit",
+                        query: 42,
+                        result_count: "two",
+                        result_summaries: [
+                            { knowledge_base_id: "", snippet: "should-drop" },
+                            { knowledge_base_id: "kb-product", snippet: "保留下来的唯一片段。" },
+                            "bad-entry",
+                        ],
+                    },
+                },
+            },
+        });
+        getComprehensiveReportMock.mockResolvedValue({
+            session_id: "session-1",
+            generated_at: "2026-03-23T00:00:00Z",
+            overall_score: 72,
+            dimension_scores: [],
+            stage_summaries: [],
+            key_strengths: [],
+            key_improvements: [],
+            detailed_feedback: "",
+            recommendations: [],
+            voice_policy_snapshot_ref: null,
+        });
+
+        render(<ReportPage />);
+
+        expect(await screen.findByText("知识库检索事实")).toBeTruthy();
+        expect(screen.getByText("知识检索已触发并命中知识库")).toBeTruthy();
+        expect(screen.getByText("保留下来的唯一片段。")).toBeTruthy();
+        expect(screen.queryByText(/最近检索问题：/)).toBeNull();
+        expect(screen.queryByText(/命中片段：/)).toBeNull();
+        expect(screen.queryByText("should-drop")).toBeNull();
     });
 
     it("renders canonical presentation review, skips knowledge-check noise, and keeps retry linked to the same presentation", async () => {

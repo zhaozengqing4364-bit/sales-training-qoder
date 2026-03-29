@@ -39,6 +39,13 @@ import {
     formatSessionStageLabel,
     extractSessionClaimTruth,
     getClaimTruthTone,
+    extractRetrievalFacts,
+    formatRetrievalStatusLabel,
+    formatRetrievalStatusTone,
+    formatLatestAttemptCopy,
+    formatMissExplanation,
+    formatSearchFailedExplanation,
+    formatWeakEvidenceRetrievalNote,
     type SessionClaimTruthTone,
 } from "@/lib/session-evidence";
 import { cn } from "@/lib/utils";
@@ -102,6 +109,42 @@ function getClaimTruthClasses(tone: SessionClaimTruthTone) {
         badge: "text-blue-700 bg-white/80 border-blue-200",
         text: "text-blue-900",
         note: "text-blue-700",
+    };
+}
+
+function getRetrievalStatusClasses(tone: ReturnType<typeof formatRetrievalStatusTone>) {
+    if (tone === "success") {
+        return {
+            card: "border-emerald-200 bg-emerald-50/80",
+            badge: "text-emerald-700 bg-white/80 border-emerald-200",
+            text: "text-emerald-900",
+            note: "text-emerald-700",
+        };
+    }
+
+    if (tone === "warning") {
+        return {
+            card: "border-amber-200 bg-amber-50/80",
+            badge: "text-amber-700 bg-white/80 border-amber-200",
+            text: "text-amber-900",
+            note: "text-amber-700",
+        };
+    }
+
+    if (tone === "error") {
+        return {
+            card: "border-rose-200 bg-rose-50/80",
+            badge: "text-rose-700 bg-white/80 border-rose-200",
+            text: "text-rose-900",
+            note: "text-rose-700",
+        };
+    }
+
+    return {
+        card: "border-slate-200 bg-slate-50/80",
+        badge: "text-slate-700 bg-white/80 border-slate-200",
+        text: "text-slate-900",
+        note: "text-slate-600",
     };
 }
 
@@ -640,17 +683,6 @@ export default function ComprehensiveReportPage() {
             : overallResult === "fail"
                 ? "text-rose-700 bg-rose-50 border-rose-200"
                 : "text-slate-700 bg-slate-50 border-slate-200";
-    const knowledgeStatusTone = knowledgeCheck?.status === "hit"
-        ? "text-green-700 bg-green-50 border-green-200"
-        : knowledgeCheck?.status === "kb_not_ready"
-            ? "text-amber-700 bg-amber-50 border-amber-200"
-            : knowledgeCheck?.status === "search_failed"
-                ? "text-red-700 bg-red-50 border-red-200"
-                : knowledgeCheck?.status === "miss"
-                    ? "text-amber-700 bg-amber-50 border-amber-200"
-                    : knowledgeCheck?.status === "disabled" || knowledgeCheck?.status === "no_knowledge_base"
-                        ? "text-red-700 bg-red-50 border-red-200"
-                        : "text-slate-700 bg-slate-50 border-slate-200";
     const claimTruth = !isPresentationScenario
         ? extractSessionClaimTruth(report?.effectiveness_snapshot)
         : null;
@@ -661,6 +693,16 @@ export default function ComprehensiveReportPage() {
     const claimTruthSummary = formatClaimTruthSummary(claimTruth);
     const claimTruthEvidenceNote = formatClaimTruthEvidenceNote(claimTruth);
     const claimTruthClasses = getClaimTruthClasses(getClaimTruthTone(claimTruth?.status));
+    const retrievalFacts = !isPresentationScenario
+        ? extractRetrievalFacts(report?.effectiveness_snapshot)
+        : null;
+    const retrievalStatusTone = formatRetrievalStatusTone(retrievalFacts?.status);
+    const retrievalClasses = getRetrievalStatusClasses(retrievalStatusTone);
+    const retrievalLatestAttemptCopy = retrievalFacts ? formatLatestAttemptCopy(retrievalFacts) : null;
+    const retrievalMissExplanation = retrievalFacts ? formatMissExplanation(retrievalFacts) : null;
+    const retrievalFailureExplanation = retrievalFacts ? formatSearchFailedExplanation(retrievalFacts) : null;
+    const retrievalWeakEvidenceNote = formatWeakEvidenceRetrievalNote(claimTruth, retrievalFacts);
+    const retrievalResultSummaries = retrievalFacts?.latest_attempt?.result_summaries ?? [];
 
     if (loading) {
         return (
@@ -1160,61 +1202,89 @@ export default function ComprehensiveReportPage() {
                 </GlassCard>
             )}
 
-            {!isPresentationScenario && knowledgeCheck && (
-                <GlassCard className="p-6 mb-6">
+            {!isPresentationScenario && retrievalFacts && (
+                <GlassCard className={cn("p-6 mb-6 border", retrievalClasses.card)}>
                     <div className="flex items-center justify-between gap-3 mb-4 flex-wrap">
-                        <h2 className="text-lg font-semibold text-zinc-900">知识库命中检测</h2>
-                        <span className={cn("text-xs font-semibold px-3 py-1 rounded-full border", knowledgeStatusTone)}>
-                            {knowledgeCheck.status === "hit"
-                                ? "已命中"
-                                : knowledgeCheck.status === "kb_not_ready"
-                                    ? "知识库处理中"
-                                    : knowledgeCheck.status === "search_failed"
-                                        ? "检索失败"
-                                        : knowledgeCheck.status === "miss"
-                                            ? "未命中"
-                                            : knowledgeCheck.status === "not_triggered"
-                                                ? "未触发检索"
-                                                : knowledgeCheck.status === "no_knowledge_base"
-                                                    ? "未绑定知识库"
-                                                    : "已关闭检索"}
+                        <h2 className="text-lg font-semibold text-zinc-900">知识库检索事实</h2>
+                        <span className={cn("text-xs font-semibold px-3 py-1 rounded-full border", retrievalClasses.badge)}>
+                            {formatRetrievalStatusLabel(retrievalFacts.status)}
                         </span>
                     </div>
 
-                    <p className="text-sm text-zinc-600 mb-4">{knowledgeCheck.summary}</p>
+                    <p className={cn("text-sm mb-4", retrievalClasses.text)}>{retrievalFacts.summary}</p>
 
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
-                        <div className="rounded-xl bg-zinc-50 p-3">
+                        <div className="rounded-xl bg-white/70 p-3">
                             <div className="text-xs text-zinc-500">绑定知识库</div>
-                            <div className="text-lg font-bold text-zinc-900">{knowledgeCheck.knowledge_base_count}</div>
+                            <div className="text-lg font-bold text-zinc-900">{retrievalFacts.knowledge_base_count}</div>
                         </div>
-                        <div className="rounded-xl bg-zinc-50 p-3">
+                        <div className="rounded-xl bg-white/70 p-3">
                             <div className="text-xs text-zinc-500">检索次数</div>
-                            <div className="text-lg font-bold text-zinc-900">{knowledgeCheck.attempt_count}</div>
+                            <div className="text-lg font-bold text-zinc-900">{retrievalFacts.attempt_count}</div>
                         </div>
-                        <div className="rounded-xl bg-zinc-50 p-3">
-                            <div className="text-xs text-zinc-500">命中问答</div>
-                            <div className="text-lg font-bold text-zinc-900">{knowledgeCheck.hit_query_count}</div>
+                        <div className="rounded-xl bg-white/70 p-3">
+                            <div className="text-xs text-zinc-500">命中次数</div>
+                            <div className="text-lg font-bold text-zinc-900">{retrievalFacts.hit_count}</div>
                         </div>
-                        <div className="rounded-xl bg-zinc-50 p-3">
+                        <div className="rounded-xl bg-white/70 p-3">
                             <div className="text-xs text-zinc-500">命中率</div>
-                            <div className="text-lg font-bold text-zinc-900">{(knowledgeCheck.hit_rate * 100).toFixed(0)}%</div>
+                            <div className="text-lg font-bold text-zinc-900">{(retrievalFacts.hit_rate * 100).toFixed(0)}%</div>
                         </div>
                     </div>
 
-                    {knowledgeCheck.last_query && (
-                        <div className="rounded-xl bg-blue-50 border border-blue-100 p-3 mb-3">
-                            <div className="text-xs text-blue-600 mb-1">最近一次检索问题</div>
-                            <div className="text-sm text-blue-900">{knowledgeCheck.last_query}</div>
-                            <div className="text-xs text-blue-700 mt-1">命中片段数：{knowledgeCheck.last_result_count}</div>
-                        </div>
-                    )}
+                    <div className="space-y-3">
+                        {retrievalFacts.knowledge_base_ids.length > 0 && (
+                            <p className="text-xs text-zinc-600">
+                                绑定 KB：{retrievalFacts.knowledge_base_ids.join(" · ")}
+                            </p>
+                        )}
 
-                    {knowledgeCheck.recent_queries.length > 0 && (
-                        <div className="text-xs text-zinc-500">
-                            近期检索：{knowledgeCheck.recent_queries.join(" · ")}
-                        </div>
-                    )}
+                        {retrievalLatestAttemptCopy && (
+                            <div className="rounded-xl bg-white/70 p-3">
+                                <p className="text-xs text-zinc-500 mb-1">最近一次检索</p>
+                                <p className={cn("text-sm", retrievalClasses.text)}>{retrievalLatestAttemptCopy}</p>
+                            </div>
+                        )}
+
+                        {retrievalResultSummaries.length > 0 && (
+                            <div className="space-y-2">
+                                <p className="text-xs text-zinc-500">最近命中的知识片段</p>
+                                {retrievalResultSummaries.map((summary, index) => (
+                                    <div key={`${summary.knowledge_base_id}-${index}`} className="rounded-xl border border-white/70 bg-white/70 p-3">
+                                        <div className="flex items-center justify-between gap-3 flex-wrap mb-1">
+                                            <p className="text-xs font-semibold text-zinc-700">
+                                                {summary.knowledge_base_name || summary.knowledge_base_id}
+                                            </p>
+                                            {typeof summary.score === "number" && (
+                                                <span className="text-xs text-zinc-500">相关度 {summary.score.toFixed(2)}</span>
+                                            )}
+                                        </div>
+                                        {summary.snippet && (
+                                            <p className="text-sm text-zinc-800">{summary.snippet}</p>
+                                        )}
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+
+                        {retrievalMissExplanation && (
+                            <p className={cn("text-xs", retrievalClasses.note)}>{retrievalMissExplanation}</p>
+                        )}
+
+                        {retrievalFailureExplanation && (
+                            <p className={cn("text-xs", retrievalClasses.note)}>{retrievalFailureExplanation}</p>
+                        )}
+
+                        {retrievalWeakEvidenceNote && (
+                            <p className="text-xs text-amber-700">{retrievalWeakEvidenceNote}</p>
+                        )}
+
+                        {knowledgeCheck && knowledgeCheck.recent_queries.length > 0 && (
+                            <p className="text-xs text-zinc-500">
+                                补充诊断记录：{knowledgeCheck.recent_queries.join(" · ")}
+                            </p>
+                        )}
+                    </div>
                 </GlassCard>
             )}
 

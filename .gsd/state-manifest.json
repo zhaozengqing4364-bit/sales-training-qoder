@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "exported_at": "2026-03-29T17:52:57.640Z",
+  "exported_at": "2026-03-29T19:04:35.987Z",
   "milestones": [
     {
       "id": "M001",
@@ -1056,16 +1056,16 @@
       "milestone_id": "M008",
       "id": "S02",
       "title": "knowledge-check 与 report 共用检索真相",
-      "status": "pending",
+      "status": "complete",
       "risk": "high",
       "depends": [
         "S01"
       ],
       "demo": "对同一条 completed session 连续请求 `/api/v1/practice/sessions/{id}/knowledge-check` 和 `/api/v1/practice/sessions/{id}/report`，两边返回一致的 retrieval 事实与分层解释。",
       "created_at": "2026-03-29T13:57:33.465Z",
-      "completed_at": null,
-      "full_summary_md": "",
-      "full_uat_md": "",
+      "completed_at": "2026-03-29T18:03:44.619Z",
+      "full_summary_md": "---\nid: S02\nparent: M008\nmilestone: M008\nprovides:\n  - Structured retrieval_facts payload available on both GET /api/v1/practice/sessions/{id}/knowledge-check and GET /api/v1/practice/sessions/{id}/report for completed sales sessions\n  - Guaranteed parity: same session returns identical retrieval_facts through both routes\n  - retrieval_facts includes: kb_binding status, latest_attempt with knowledge_base_ids and result_summaries, bounded recent_attempts, structured miss/failure explanations\nrequires:\n  - slice: S01\n    provides: Persisted voice_policy_snapshot.runtime_metrics.knowledge_retrieval ledger with bounded recent_attempts entries\naffects:\n  - S03\nkey_files:\n  - backend/src/common/conversation/runtime_diagnostics.py\n  - backend/src/common/conversation/session_evidence.py\n  - backend/tests/unit/test_runtime_diagnostics_knowledge_retrieval.py\n  - backend/tests/unit/test_session_evidence_service.py\n  - backend/tests/contract/test_practice_evidence_contract.py\n  - backend/tests/integration/test_voice_runtime_session_snapshot.py\nkey_decisions:\n  - Single build_retrieval_facts() pure function as canonical normalizer for both report and knowledge-check routes (D120)\n  - Copy-on-write projection overlay (sales-gated) for completed sessions; live sessions use live handler truth (D121)\n  - Gated retrieval_facts on resolved_scenario_type==sales to avoid polluting presentation sessions which have a separate review path\n  - Extracted _derive_retrieval_status_and_summary() to prevent vocabulary drift between build_retrieval_facts and build_session_runtime_diagnostics\n  - Replicated bounds from stepfun_knowledge_helpers as module-level constants with source references\n  - Contract tests assert exact structural parity while integration tests verify through real HTTP route handlers\npatterns_established:\n  - Pure normalizer → projection overlay → diagnostics passthrough: three-layer architecture for adding read-side facts without mutating persisted state\n  - Sales-gated projection overlay: new evidence fields only attach to sales sessions, leaving presentation path untouched\n  - Claim-truth independence: retrieval_facts and claim_truth are orthogonal surfaces tested explicitly at both contract and integration level\nobservability_surfaces:\n  - practice_session_evidence_projection_built structured log now includes retrieval_facts_status field\ndrill_down_paths:\n  - .gsd/milestones/M008/slices/S02/tasks/T01-SUMMARY.md\n  - .gsd/milestones/M008/slices/S02/tasks/T02-SUMMARY.md\n  - .gsd/milestones/M008/slices/S02/tasks/T03-SUMMARY.md\n  - .gsd/milestones/M008/slices/S02/tasks/T04-SUMMARY.md\nduration: \"\"\nverification_result: passed\ncompleted_at: 2026-03-29T18:03:44.623Z\nblocker_discovered: false\n---\n\n# S02: knowledge-check 与 report 共用检索真相\n\n**Report and knowledge-check routes now return identical retrieval_facts for completed sales sessions through a shared build_retrieval_facts() normalizer wired as a projection-overlay seam**\n\n## What Happened\n\nS02 established a single-source-of-truth normalizer for retrieval facts and proved parity between the two canonical read surfaces.\n\n**T01** created `build_retrieval_facts(voice_policy_snapshot)` in `runtime_diagnostics.py` — a pure function that reads from the persisted retrieval ledger (`voice_policy_snapshot.runtime_metrics.knowledge_retrieval`) and produces a structured `retrieval_facts` dict. This normalizer preserves `knowledge_base_ids` and `result_summaries` that the existing lean normalizer `_normalize_knowledge_retrieval_attempt` drops. A shared `_derive_retrieval_status_and_summary()` helper prevents status/summary vocabulary drift between the new function and the existing `build_session_runtime_diagnostics`. Bounds (MAX 10 entries, 8 KB IDs, 3 summaries, 240-char snippets) are replicated as module-level constants with source references. 17 new unit tests cover hit/miss/failure/empty/malformed/bounded/disabled/no-kb/not-ready scenarios.\n\n**T02** wired the normalizer into `SessionEvidenceService.build_projection()` as a copy-on-write overlay gated on `resolved_scenario_type == \"sales\"`. This ensures completed sales sessions get `effectiveness_snapshot[\"retrieval_facts\"]` derived from the persisted ledger without mutating the persisted `session.effectiveness_snapshot`. A `retrieval_facts_status` field was added to the structured log. 3 unit tests prove field appearance, non-mutation, and graceful skip.\n\n**T03** extended `build_session_runtime_diagnostics()` to pass through `retrieval_facts` from the projection_effectiveness_snapshot when `live_runtime_active=False`. This means knowledge-check diagnostics for completed sessions reuse the exact same payload that the report route already computed. Live sessions always derive truth from the live handler. 4 unit tests prove reuse, live-session isolation, backward compatibility, and live-session projection ignore.\n\n**T04** added contract and integration tests proving the parity guarantee. The same completed sales session returns structurally identical `retrieval_facts` through both report projection and knowledge-check diagnostics. Claim-truth independence is explicitly tested: retrieval status=hit with claim_truth=weak_evidence proves the fields are orthogonal. 5 tests (3 contract + 2 integration) all pass.\n\n## Verification\n\nAll 4 task-level verification commands pass. Combined slice-level verification: 11 retrieval_facts-filtered tests across unit/contract/integration suites pass (0 failures). Full regression check: 34 unit tests + 26 contract/integration tests all pass. Key files verified: runtime_diagnostics.py (build_retrieval_facts + passthrough), session_evidence.py (sales-gated overlay), test_runtime_diagnostics_knowledge_retrieval.py (24 tests), test_session_evidence_service.py (10 tests), test_practice_evidence_contract.py (3 retrieval_facts tests), test_voice_runtime_session_snapshot.py (2 retrieval_facts tests).\n\n## Requirements Advanced\n\n- R010 — knowledge-check and report routes now share a single retrieval truth normalizer, so knowledge-backed sessions show consistent retrieval facts on both canonical surfaces\n- R011 — retrieval_facts is persisted via projection overlay, making retrieval occurrence/hit-miss/failure explainable in report and replay contexts\n\n## Requirements Validated\n\nNone.\n\n## New Requirements Surfaced\n\nNone.\n\n## Requirements Invalidated or Re-scoped\n\nNone.\n\n## Deviations\n\nNone.\n\n## Known Limitations\n\nLive-session retrieval_facts is always None — live truth continues to come from the live handler, not from persisted projection. Presentation sessions do not get retrieval_facts (sales-gated). The retrieval_facts contract is limited to occurrence/hit-miss-failure/weak-evidence; it does not include `used_in_reasoning` (per D114/D116).\n\n## Follow-ups\n\nS03 will surface retrieval_facts in the report page UI. The frontend currently has no visibility into retrieval_facts — the data is available on both routes but not yet rendered.\n\n## Files Created/Modified\n\n- `backend/src/common/conversation/runtime_diagnostics.py` — Added build_retrieval_facts() pure normalizer with _normalize_retrieval_attempt_full() and _derive_retrieval_status_and_summary(); extended build_session_runtime_diagnostics() with retrieval_facts passthrough for completed sessions\n- `backend/src/common/conversation/session_evidence.py` — Wired build_retrieval_facts() into build_projection() as sales-gated copy-on-write overlay with retrieval_facts_status structured log\n- `backend/tests/unit/test_runtime_diagnostics_knowledge_retrieval.py` — 21 new unit tests: 17 for build_retrieval_facts (hit/miss/failure/empty/malformed/bounded/disabled/no-kb/not-ready) + 4 for diagnostics passthrough (reuse/live-session/backward-compat/ignore-projection)\n- `backend/tests/unit/test_session_evidence_service.py` — 3 new unit tests for projection overlay: field appearance, non-mutation, graceful skip on missing voice_policy_snapshot\n- `backend/tests/contract/test_practice_evidence_contract.py` — 3 contract tests: report/knowledge-check retrieval_facts parity, claim-truth independence (hit + weak_evidence), miss status parity\n- `backend/tests/integration/test_voice_runtime_session_snapshot.py` — 2 integration tests: retrieval_facts parity through real HTTP handlers, claim-truth independence at integration level\n",
+      "full_uat_md": "# S02: knowledge-check 与 report 共用检索真相 — UAT\n\n**Milestone:** M008\n**Written:** 2026-03-29T18:03:44.623Z\n\n# S02: knowledge-check 与 report 共用检索真相 — UAT\n\n**Milestone:** M008\n**Written:** 2026-03-28\n\n## UAT Type\n\n- UAT mode: artifact-driven\n- Why this mode is sufficient: The slice delivers backend read-model parity between two API routes. All behavior is verifiable through automated contract and integration tests. No browser or live-runtime verification is needed — the contract is purely about data shape consistency across route handlers.\n\n## Preconditions\n\n- Backend test environment with `backend/venv` and dependencies installed\n- SQLite test database (in-memory, auto-created by test fixtures)\n- No running server required — tests use FastAPI TestClient\n\n## Smoke Test\n\n```bash\ncd backend && venv/bin/python -m pytest -c pyproject.toml \\\n  tests/contract/test_practice_evidence_contract.py \\\n  tests/integration/test_voice_runtime_session_snapshot.py \\\n  -v -k retrieval_facts\n```\n\n**Expected:** 5 tests pass (3 contract + 2 integration), 0 failures.\n\n## Test Cases\n\n### 1. Report and knowledge-check return identical retrieval_facts for a completed sales session with retrieval hits\n\n1. Create a mock completed sales session with `voice_policy_snapshot.runtime_metrics.knowledge_retrieval.recent_attempts` containing one hit entry (status=hit, result_count=3, knowledge_base_ids=[\"kb-1\"], result_summaries=[\"summary text\"])\n2. Request report projection via `SessionEvidenceService.build_projection()` — assert `effectiveness_snapshot[\"retrieval_facts\"][\"latest_attempt\"][\"status\"] == \"hit\"`\n3. Request knowledge-check diagnostics via `build_session_runtime_diagnostics()` with `live_runtime_active=False` — assert `result[\"retrieval_facts\"][\"latest_attempt\"][\"status\"] == \"hit\"`\n4. **Expected:** Both payloads have structurally identical `retrieval_facts` including `knowledge_base_ids` and `result_summaries` on the hit entry. All canonical keys present (kb_binding, retrieval_status, latest_attempt, recent_attempts, miss_explanation, failure_details).\n\n**Covered by:** `test_report_and_knowledge_check_return_identical_retrieval_facts_for_completed_sales_session` (contract), `test_completed_sales_session_returns_identical_retrieval_facts_through_report_and_knowledge_check` (integration)\n\n### 2. Retrieval status=hit does not force claim_truth=evidence_verified (claim-truth independence)\n\n1. Create a session with retrieval hits AND claim_truth=weak_evidence\n2. Request both report and knowledge-check routes\n3. **Expected:** `retrieval_facts.retrieval_status == \"hit\"` AND `claim_truth == \"weak_evidence\"` on both surfaces. Neither field overrides the other.\n\n**Covered by:** `test_retrieval_facts_and_claim_truth_are_independent_retrieval_hit_with_weak_evidence` (contract), `test_retrieval_facts_hit_with_weak_evidence_claim_truth_proves_independence` (integration)\n\n### 3. Miss status retrieval_facts parity between report and knowledge-check\n\n1. Create a session where the latest retrieval attempt was a miss (status=miss, miss_reason=\"no_relevant_results\")\n2. Request both routes\n3. **Expected:** Both surfaces return `retrieval_status == \"miss\"` with the same `miss_explanation`.\n\n**Covered by:** `test_retrieval_facts_parity_with_miss_status` (contract)\n\n### 4. Live session does not get retrieval_facts from projection\n\n1. Call `build_session_runtime_diagnostics()` with `live_runtime_active=True` even though projection_effectiveness_snapshot contains retrieval_facts\n2. **Expected:** `result[\"retrieval_facts\"] == None` — live sessions always use live handler truth.\n\n**Covered by:** `test_diagnostics_returns_none_retrieval_facts_for_live_session`, `test_diagnostics_ignores_retrieval_facts_in_projection_for_live_session` (unit)\n\n### 5. Projection overlay does not mutate persisted session\n\n1. Create a sales session with voice_policy_snapshot containing retrieval ledger data\n2. Call `build_projection()` twice\n3. **Expected:** `session.effectiveness_snapshot` remains unchanged after both calls (copy-on-write overlay only).\n\n**Covered by:** `test_get_projection_attaches_retrieval_facts_for_completed_sales_session` (unit)\n\n## Edge Cases\n\n### Empty voice_policy_snapshot\n\n1. Create a session with `voice_policy_snapshot=None`\n2. **Expected:** Projection completes without error, no retrieval_facts attached.\n\n**Covered by:** `test_get_projection_skips_retrieval_facts_when_voice_policy_snapshot_missing`\n\n### Presentation session excluded\n\n1. Create a presentation-type session with retrieval ledger data\n2. Call `build_projection()`\n3. **Expected:** No `retrieval_facts` in projection (sales-gated overlay).\n\n**Covered by:** Existing projection tests confirm presentation path is unaffected.\n\n### Disabled knowledge retrieval\n\n1. Create a session where `knowledge_retrieval.enabled == False`\n2. **Expected:** `retrieval_status == \"disabled\"` in retrieval_facts.\n\n**Covered by:** Unit test `test_build_retrieval_facts_disabled_kb`\n\n### Malformed recent_attempts entry\n\n1. Create a session with a recent_attempts entry missing required fields\n2. **Expected:** Entry is skipped gracefully; retrieval_facts still populated from valid entries.\n\n**Covered by:** Unit test `test_build_retrieval_facts_malformed_entry_skipped`\n\n## Failure Signals\n\n- Any test in the retrieval_facts filter fails → parity contract is broken\n- `retrieval_facts` appears in live-session diagnostics → live/projection truth confusion\n- `retrieval_facts` appears in presentation session projection → sales-gate regression\n\n## Requirements Proved By This UAT\n\n- R010 (integration) — knowledge-check and report now share a single retrieval truth normalizer\n- R011 (continuity) — retrieval facts are persisted via projection overlay, making them available for report/replay contexts\n\n## Not Proven By This UAT\n\n- Live-runtime retrieval fact delivery (live sessions use handler truth, not projection)\n- Frontend rendering of retrieval_facts (deferred to S03)\n- `used_in_reasoning` inference (explicitly out of scope per D114/D116)\n\n## Notes for Tester\n\n- All tests run against in-memory SQLite — no external dependencies needed\n- Contract tests use mock sessions; integration tests use FastAPI TestClient with real route handlers\n- If any test in the filtered suite fails, check `runtime_diagnostics.py` for the `build_retrieval_facts` function and `session_evidence.py` for the projection overlay — these are the two seams that maintain parity\n",
       "goal": "对同一条 completed sales session 连续请求 /api/v1/practice/sessions/{id}/knowledge-check 和 /api/v1/practice/sessions/{id}/report，两边返回一致的 retrieval 事实与分层解释：是否触发检索、何时检索、命中了什么、为什么 miss 或失败。",
       "success_criteria": "- Shared retrieval-truth read model (build_retrieval_facts) normalizes persisted ledger entries once and is reused by both projection and diagnostics.\n- SessionEvidenceService.build_projection(...) attaches effectiveness_snapshot[\"retrieval_facts\"] for completed sales sessions, derived from voice_policy_snapshot.runtime_metrics.knowledge_retrieval, without mutating the persisted session row.\n- build_session_runtime_diagnostics(...) exposes a top-level retrieval_facts field that prefers the projection's shared payload for completed sales sessions.\n- Same-session contract test proves /knowledge-check and /report return identical retrieval_facts for the same completed session.\n- claim_truth and retrieval_facts remain distinct — retrieval_facts covers retrieval occurrence/hit/miss/failure; claim_truth covers claim support strength.\n- No frontend changes; nested retrieval_facts stays inside the existing dict-shaped effectiveness_snapshot.",
       "proof_level": "contract",
@@ -1088,11 +1088,11 @@
       "completed_at": null,
       "full_summary_md": "",
       "full_uat_md": "",
-      "goal": "把共享 retrieval truth 接到现有 learner-facing report UI 和共享 wording seam 上，让用户在 shipped report surface 直接看懂 KB binding、检索结果与降级原因。",
-      "success_criteria": "- `web/src/lib/api/types.ts`、`web/src/lib/session-evidence.ts` 与 report page 共享 retrieval fact contract 和文案规则。\n- report 页在不增加新入口的前提下展示 retrieval facts，并区分未触发 / miss / failure / hit-but-weak。\n- 浏览器或同等 route-family proof 显示 learner 能从同一 report 页面看懂 KB binding 与 retrieval truth。",
-      "proof_level": "Focused web tests plus browser/UAT on the existing report page.",
-      "integration_closure": "只扩展现有 `/practice/{sessionId}/report` knowledge-check / evidence 区域，不新增 audit console 或工程师专用页面。",
-      "observability_impact": "把 retrieval degradation 从 backend-only truth 变成 learner-facing、可解释、稳定的现有产品表面。",
+      "goal": "让学员在现有 `/practice/{sessionId}/report` 页面上直接看到 canonical retrieval truth：知识库绑定、最近一次检索事实、命中/未命中/失败解释，以及它与 `claim_truth` 弱证据提示的关系；页面不能再依赖 supplemental `/knowledge-check` 请求成功才显示这些事实。",
+      "success_criteria": "**Demo:** 打开现有 `/practice/{sessionId}/report` 的 sales 报告时，页面直接从 `report.effectiveness_snapshot.retrieval_facts` 展示知识库绑定、retrieval status、latest attempt 查询/模式/结果数、bounded result summaries 与 miss/failure explanation；`claim_truth` 的弱证据提示继续独立呈现；presentation 报告仍隐藏这块 retrieval/knowledge UI。\n**Requirements:** Advances `R010` and `R011` by making retrieval occurrence / hit-miss / failure / weak-evidence context visible on the canonical learner report surface instead of leaving it stranded in diagnostics-only payloads.\n\n## Must-Haves\n\n- `web/src/lib/api/types.ts` 只补齐 narrow `retrieval_facts` interfaces；不要把 `effectiveness_snapshot` 整体扩大成一整个 massive typed object。\n- `web/src/lib/session-evidence.ts` 成为 learner-facing retrieval wording / extraction authority；不要把 hit/miss/failure 文案散落在 `page.tsx` 里。\n- `web/src/app/(user)/practice/[sessionId]/report/page.tsx` 必须优先使用 `report.effectiveness_snapshot.retrieval_facts`；`/knowledge-check` 请求最多补充旧 counters，不能决定 canonical retrieval truth 是否可见。\n- `retrieval_facts.status=\"hit\"` 与 `claim_truth.status=\"weak_evidence\"` 必须能在同一份报告里同时可见，并明确表现为两条不同事实。\n- presentation 场景继续跳过 retrieval/knowledge section 与 `/knowledge-check` fetch，不引入 unrelated churn。\n\n## Threat Surface\n\n- **Abuse**: malformed 或 partial `effectiveness_snapshot` 不能把 retrieval section 错误地渲染成“未触发检索”；同时不能因为 UI 想解释更多而越界展示 full KB content 或 raw provider payload。\n- **Data exposure**: learner-visible data 仅限 KB 绑定标识/名称、latest query、bounded result summaries、miss/failure explanations；不要新增 transcript 原文、knowledge doc 全文或其他敏感字段暴露面。\n- **Input trust**: `effectiveness_snapshot.retrieval_facts` 与 optional `/knowledge-check` payload 都视作不可信服务端输入；前端只提取预期字段，遇到 malformed shape 时安全跳过而不是 crash 或回退到误导性旧文案。\n\n## Requirement Impact\n\n- **Requirements touched**: `R010`, `R011`\n- **Re-verify**: shared `/practice/{sessionId}/report` sales report rendering、retrieval hit/miss/search_failed copy、canonical report payload 在 `getKnowledgeCheck` rejection 下仍可见、presentation skip-path 不回归。\n- **Decisions revisited**: `D113`, `D120`, `D121`\n\n## Verification\n\n- `pnpm --dir web exec vitest run 'src/app/(user)/practice/[sessionId]/report/page.test.tsx'`\n- Failure-path signal inside that suite must explicitly prove that a rejected `getKnowledgeCheck` request does not hide canonical `retrieval_facts`, and that presentation sessions still skip the knowledge section / supplemental fetch.",
+      "proof_level": "- This slice proves: integration\n- Real runtime required: no\n- Human/UAT required: no",
+      "integration_closure": "- Upstream surfaces consumed: `web/src/lib/api/types.ts` 中的 `PracticeSessionReport.effectiveness_snapshot` open snapshot、S02 已锁定的 `retrieval_facts` contract、optional `KnowledgeCheckDiagnostics` fetch、`web/src/lib/session-evidence.ts` 共享 learner wording seam、`web/src/app/(user)/practice/[sessionId]/report/page.tsx`。\n- New wiring introduced in this slice: narrow retrieval-facts extraction/formatting helper -> sales report page retrieval section 从 `report.effectiveness_snapshot.retrieval_facts` 直渲染 -> supplemental `/knowledge-check` 请求降级为补充信息而不是 gating dependency。\n- What remains before the milestone is truly usable end-to-end: 对 report-page retrieval truth 这条链路来说没有剩余实现缺口；S03 完成后只剩 milestone close-out 的验证与总结。",
+      "observability_impact": "- Runtime signals: 继续复用 `[Report] Loaded unified evidence contract`、`[Report] Knowledge-check load failed` 等现有 report-page debug 路径，并让 UI 在 supplemental `/knowledge-check` 失败时仍保留 canonical retrieval section，形成可见差异信号。\n- Inspection surfaces: `web/src/app/(user)/practice/[sessionId]/report/page.tsx`、`web/src/lib/session-evidence.ts`、`web/src/app/(user)/practice/[sessionId]/report/page.test.tsx`。\n- Failure visibility: focused report-page tests 会在 retrieval section 缺失、claim/retrieval 语义被错误合并、或 `getKnowledgeCheck` rejection 让 canonical retrieval truth 消失时直接失败。\n- Redaction constraints: 只渲染 `retrieval_facts` 里已经存在的 bounded query / KB name / result summary snippets；不要额外暴露原始知识库内容、整段 transcript 或 secrets。",
       "sequence": 0,
       "replan_triggered_at": null
     }
@@ -5421,6 +5421,97 @@
       "observability_impact": "",
       "full_plan_md": "",
       "sequence": 0
+    },
+    {
+      "milestone_id": "M008",
+      "slice_id": "S03",
+      "id": "T01",
+      "title": "Rendered canonical retrieval truth on the report page from `effectiveness_snapshot.retrieval_facts` with focused regression coverage.",
+      "status": "complete",
+      "one_liner": "Rendered canonical retrieval truth on the report page from `effectiveness_snapshot.retrieval_facts` with focused regression coverage.",
+      "narrative": "Added typed retrieval-facts support on the frontend, normalized canonical retrieval payloads through shared session-evidence helpers, and rewired the report page so the sales knowledge section renders from `effectiveness_snapshot.retrieval_facts` instead of depending on `/knowledge-check`. The report now keeps claim-truth messaging separate, renders bounded latest-attempt/result-summary copy when present, omits the retrieval card when canonical facts are absent, and survives malformed latest-attempt data by only showing normalized fields. Focused Vitest coverage now proves canonical retrieval hit + weak-evidence coexistence, omission when retrieval facts are absent, and continued rendering when the supplemental knowledge-check request rejects.",
+      "verification_result": "Passed the slice task verification command `pnpm --dir web exec vitest run 'src/app/(user)/practice/[sessionId]/report/page.test.tsx'` after adding canonical retrieval fixtures. The suite finished with 15/15 tests passing, covering the new retrieval-truth rendering behavior and existing report-page regressions.",
+      "duration": "",
+      "completed_at": "2026-03-29T19:04:35.930Z",
+      "blocker_discovered": false,
+      "deviations": "None.",
+      "known_issues": "None.",
+      "key_files": [
+        "web/src/lib/api/types.ts",
+        "web/src/lib/session-evidence.ts",
+        "web/src/app/(user)/practice/[sessionId]/report/page.tsx",
+        "web/src/app/(user)/practice/[sessionId]/report/page.test.tsx",
+        ".gsd/milestones/M008/slices/S03/tasks/T01-SUMMARY.md"
+      ],
+      "key_decisions": [
+        "Made `report.effectiveness_snapshot.retrieval_facts` the learner-facing authority for retrieval truth on the report page.",
+        "Kept `/knowledge-check` as a supplemental fetch only, so its failure no longer hides canonical retrieval facts."
+      ],
+      "full_summary_md": "---\nid: T01\nparent: S03\nmilestone: M008\nkey_files:\n  - web/src/lib/api/types.ts\n  - web/src/lib/session-evidence.ts\n  - web/src/app/(user)/practice/[sessionId]/report/page.tsx\n  - web/src/app/(user)/practice/[sessionId]/report/page.test.tsx\n  - .gsd/milestones/M008/slices/S03/tasks/T01-SUMMARY.md\nkey_decisions:\n  - Made `report.effectiveness_snapshot.retrieval_facts` the learner-facing authority for retrieval truth on the report page.\n  - Kept `/knowledge-check` as a supplemental fetch only, so its failure no longer hides canonical retrieval facts.\nduration: \"\"\nverification_result: passed\ncompleted_at: 2026-03-29T19:04:35.931Z\nblocker_discovered: false\n---\n\n# T01: Rendered canonical retrieval truth on the report page from `effectiveness_snapshot.retrieval_facts` with focused regression coverage.\n\n**Rendered canonical retrieval truth on the report page from `effectiveness_snapshot.retrieval_facts` with focused regression coverage.**\n\n## What Happened\n\nAdded typed retrieval-facts support on the frontend, normalized canonical retrieval payloads through shared session-evidence helpers, and rewired the report page so the sales knowledge section renders from `effectiveness_snapshot.retrieval_facts` instead of depending on `/knowledge-check`. The report now keeps claim-truth messaging separate, renders bounded latest-attempt/result-summary copy when present, omits the retrieval card when canonical facts are absent, and survives malformed latest-attempt data by only showing normalized fields. Focused Vitest coverage now proves canonical retrieval hit + weak-evidence coexistence, omission when retrieval facts are absent, and continued rendering when the supplemental knowledge-check request rejects.\n\n## Verification\n\nPassed the slice task verification command `pnpm --dir web exec vitest run 'src/app/(user)/practice/[sessionId]/report/page.test.tsx'` after adding canonical retrieval fixtures. The suite finished with 15/15 tests passing, covering the new retrieval-truth rendering behavior and existing report-page regressions.\n\n## Verification Evidence\n\n| # | Command | Exit Code | Verdict | Duration |\n|---|---------|-----------|---------|----------|\n| 1 | `pnpm --dir web exec vitest run 'src/app/(user)/practice/[sessionId]/report/page.test.tsx'` | 0 | ✅ pass | 17300ms |\n\n\n## Deviations\n\nNone.\n\n## Known Issues\n\nNone.\n\n## Files Created/Modified\n\n- `web/src/lib/api/types.ts`\n- `web/src/lib/session-evidence.ts`\n- `web/src/app/(user)/practice/[sessionId]/report/page.tsx`\n- `web/src/app/(user)/practice/[sessionId]/report/page.test.tsx`\n- `.gsd/milestones/M008/slices/S03/tasks/T01-SUMMARY.md`\n",
+      "description": "Load `react-best-practices` before coding and use `test` when adding the focused assertion. Add narrow retrieval-facts interfaces in `web/src/lib/api/types.ts`, then extend `web/src/lib/session-evidence.ts` with shared extraction / formatting helpers for retrieval status labels, latest-attempt summaries, miss/failure explanations, and bounded result-summary copy. Wire `web/src/app/(user)/practice/[sessionId]/report/page.tsx` so the sales knowledge section renders from `report.effectiveness_snapshot.retrieval_facts` first, keeps `claim_truth` separate, and treats `/knowledge-check` as supplemental only. Add one primary focused assertion in `web/src/app/(user)/practice/[sessionId]/report/page.test.tsx` that proves a retrieval hit and `weak_evidence` can coexist even when `getKnowledgeCheck` rejects.\n\nFailure Modes: if the canonical report payload lacks `retrieval_facts`, the page must safely omit the retrieval section instead of showing stale diagnostics copy; if the optional `/knowledge-check` request fails, keep the canonical retrieval section visible; if `latest_attempt` or `result_summaries` is malformed, render only the fields that survived helper normalization.\n\nLoad Profile: this task adds no new network calls and should stay bounded to the latest attempt plus a small number of result summaries, so the first 10x breakpoint is DOM noise if the page forgets to respect the backend bounds.\n\nNegative Tests: hit + weak_evidence coexistence, missing latest_attempt, empty result_summaries, and rejected `/knowledge-check` supplemental fetch.",
+      "estimate": "2h",
+      "files": [
+        "web/src/lib/api/types.ts",
+        "web/src/lib/session-evidence.ts",
+        "web/src/app/(user)/practice/[sessionId]/report/page.tsx",
+        "web/src/app/(user)/practice/[sessionId]/report/page.test.tsx"
+      ],
+      "verify": "pnpm --dir web exec vitest run 'src/app/(user)/practice/[sessionId]/report/page.test.tsx'",
+      "inputs": [
+        "web/src/lib/api/types.ts",
+        "web/src/lib/session-evidence.ts",
+        "web/src/app/(user)/practice/[sessionId]/report/page.tsx",
+        "web/src/app/(user)/practice/[sessionId]/report/page.test.tsx",
+        "backend/tests/contract/test_practice_evidence_contract.py"
+      ],
+      "expected_output": [
+        "web/src/lib/api/types.ts",
+        "web/src/lib/session-evidence.ts",
+        "web/src/app/(user)/practice/[sessionId]/report/page.tsx",
+        "web/src/app/(user)/practice/[sessionId]/report/page.test.tsx"
+      ],
+      "observability_impact": "Keeps the existing report-page debug/log seam meaningful by making canonical retrieval visibility diverge from supplemental `/knowledge-check` failures; future agents can inspect the focused test fixture plus the visible retrieval card to tell whether drift is in extraction, rendering, or request-gating.",
+      "full_plan_md": "",
+      "sequence": 0
+    },
+    {
+      "milestone_id": "M008",
+      "slice_id": "S03",
+      "id": "T02",
+      "title": "Lock miss/failure fallback and presentation safety in the focused report-page suite",
+      "status": "pending",
+      "one_liner": "",
+      "narrative": "",
+      "verification_result": "",
+      "duration": "",
+      "completed_at": null,
+      "blocker_discovered": false,
+      "deviations": "",
+      "known_issues": "",
+      "key_files": [],
+      "key_decisions": [],
+      "full_summary_md": "",
+      "description": "Load `test` before editing assertions and keep `react-best-practices` in mind for selector/copy stability. Expand `web/src/app/(user)/practice/[sessionId]/report/page.test.tsx` with canonical report fixtures for `retrieval_facts.status=\"miss\"` and `retrieval_facts.status=\"search_failed\"`, plus explicit assertions that `getKnowledgeCheckMock` rejection never hides canonical retrieval truth and that presentation reports still hide the retrieval section while skipping the supplemental fetch. Adjust `web/src/app/(user)/practice/[sessionId]/report/page.tsx` or `web/src/lib/session-evidence.ts` only where these assertions reveal copy drift or malformed-guard gaps.\n\nFailure Modes: brittle tests can accidentally couple to duplicated copy or the old diagnostics card; malformed fixtures can mask whether the page is using canonical report payload or the supplemental fetch.\n\nLoad Profile: this is still a single focused Vitest file in jsdom; the main 10x risk is selector brittleness if wording lives in multiple places instead of the shared helper seam.\n\nNegative Tests: `miss` explanation visible, `search_failed` explanation visible, canonical retrieval still visible when `/knowledge-check` rejects, presentation path keeps retrieval section absent and `getKnowledgeCheck` uncalled.",
+      "estimate": "90m",
+      "files": [
+        "web/src/app/(user)/practice/[sessionId]/report/page.test.tsx",
+        "web/src/app/(user)/practice/[sessionId]/report/page.tsx",
+        "web/src/lib/session-evidence.ts"
+      ],
+      "verify": "pnpm --dir web exec vitest run 'src/app/(user)/practice/[sessionId]/report/page.test.tsx'",
+      "inputs": [
+        "web/src/app/(user)/practice/[sessionId]/report/page.test.tsx",
+        "web/src/app/(user)/practice/[sessionId]/report/page.tsx",
+        "web/src/lib/session-evidence.ts",
+        "backend/tests/contract/test_practice_evidence_contract.py"
+      ],
+      "expected_output": [
+        "web/src/app/(user)/practice/[sessionId]/report/page.test.tsx",
+        "web/src/app/(user)/practice/[sessionId]/report/page.tsx"
+      ],
+      "observability_impact": "",
+      "full_plan_md": "",
+      "sequence": 0
     }
   ],
   "decisions": [
@@ -6848,6 +6939,42 @@
       "decision": "How current session diagnostics read retrieval truth from persisted snapshots",
       "choice": "Keep knowledge-check and related current-session readers backward-compatible by preferring the latest valid knowledge_retrieval.recent_attempts entry only as a fallback for missing or stale flat last_* fields, while leaving the existing counter/status contract and route family unchanged.",
       "rationale": "T02 already persists the provider-neutral retrieval ledger in runtime_metrics. Using that bounded ledger as a read-side fallback fixes snapshot drift for hit/miss/search_failed truth without introducing a new audit route, report redesign, or a second persistence seam.",
+      "revisable": "Yes",
+      "made_by": "agent",
+      "superseded_by": null
+    },
+    {
+      "seq": 1482,
+      "id": "D120",
+      "when_context": "M008/S02",
+      "scope": "architecture",
+      "decision": "How retrieval facts are normalized from persisted ledger for report/knowledge-check parity",
+      "choice": "Single `build_retrieval_facts(voice_policy_snapshot)` pure function in `runtime_diagnostics.py` as the canonical normalizer, preserving `knowledge_base_ids` and `result_summaries` that the existing lean normalizer `_normalize_knowledge_retrieval_attempt` drops",
+      "rationale": "Without a single normalizer, report projection and knowledge-check diagnostics would each derive their own retrieval fact shape from the raw ledger, causing vocabulary drift. The pure function approach avoids side effects and makes parity trivially testable — both routes call the same function on the same persisted data.",
+      "revisable": "Yes",
+      "made_by": "agent",
+      "superseded_by": null
+    },
+    {
+      "seq": 1483,
+      "id": "D121",
+      "when_context": "M008/S02",
+      "scope": "architecture",
+      "decision": "How retrieval facts reach knowledge-check and report without recomputation",
+      "choice": "Copy-on-write overlay in `SessionEvidenceService.build_projection()` (sales-gated) → passthrough in `build_session_runtime_diagnostics()` when `live_runtime_active=False`; live sessions always derive truth from the live handler, not from persisted snapshots",
+      "rationale": "The projection layer is already the canonical read model for completed sessions. Adding retrieval_facts as a copy-on-write overlay means (1) the persisted session.effectiveness_snapshot is not mutated, (2) both report and knowledge-check routes consume the same projection-derived payload, and (3) live sessions continue to use live handler truth without stale projection interference.",
+      "revisable": "Yes",
+      "made_by": "agent",
+      "superseded_by": null
+    },
+    {
+      "seq": 1484,
+      "id": "D122",
+      "when_context": "M008/S03 planning",
+      "scope": "frontend architecture",
+      "decision": "What data source should the learner report page use for retrieval truth in M008/S03",
+      "choice": "Treat `PracticeSessionReport.effectiveness_snapshot.retrieval_facts` as the report page's primary retrieval-truth source and keep `/api/v1/practice/sessions/{id}/knowledge-check` supplemental-only on that page.",
+      "rationale": "S02 already proved report and knowledge-check parity through the shared `build_retrieval_facts()` normalizer and projection overlay. Reading retrieval truth from the canonical report payload prevents the learner UI from blanking whenever the supplemental request fails, keeps the user-visible route family aligned with D113, and preserves `claim_truth` as a separate orthogonal signal instead of merging it into diagnostics status copy.",
       "revisable": "Yes",
       "made_by": "agent",
       "superseded_by": null
@@ -9053,6 +9180,17 @@
       "verdict": "✅ pass",
       "duration_ms": 5800,
       "created_at": "2026-03-29T17:52:57.615Z"
+    },
+    {
+      "id": 201,
+      "task_id": "T01",
+      "slice_id": "S03",
+      "milestone_id": "M008",
+      "command": "pnpm --dir web exec vitest run 'src/app/(user)/practice/[sessionId]/report/page.test.tsx'",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 17300,
+      "created_at": "2026-03-29T19:04:35.930Z"
     }
   ]
 }

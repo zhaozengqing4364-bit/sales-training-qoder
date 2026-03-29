@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "taskId": "T04",
+  "unitId": "M008/S02/T04",
+  "timestamp": 1774807130655,
+  "passed": true,
+  "discoverySource": "task-plan",
+  "checks": [
+    {
+      "command": "cd backend",
+      "exitCode": 0,
+      "durationMs": 4,
+      "verdict": "pass"
+    },
+    {
+      "command": "venv/bin/python -m pytest -c pyproject.toml tests/contract/test_practice_evidence_contract.py tests/integration/test_voice_runtime_session_snapshot.py -v -k 'retrieval_facts'",
+      "exitCode": 0,
+      "durationMs": 4599,
+      "verdict": "pass"
+    }
+  ]
+}

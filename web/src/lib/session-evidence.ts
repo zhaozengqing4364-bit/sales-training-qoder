@@ -2,6 +2,10 @@ import type {
     LiveSessionConclusionSummary,
     PresentationReview,
     PresentationReviewPageIssueCluster,
+    RetrievalAttemptSummary,
+    RetrievalFacts,
+    RetrievalFactsStatus,
+    RetrievalLatestAttempt,
     SessionClaimTruthPayload,
     SessionEvidenceCompleteness,
     SessionEvidenceStage,
@@ -67,6 +71,237 @@ const PRESENTATION_ISSUE_LABELS: Record<string, string> = {
 const PRESENTATION_DEGRADED_REASON_LABELS: Record<string, string> = {
     missing_page_metadata: "当前会话缺少页码证据，逐页总结和要点覆盖仅展示已确认部分。",
 };
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Retrieval truth — canonical labels and extraction helpers
+// ─────────────────────────────────────────────────────────────────────────────
+
+const RETRIEVAL_STATUS_LABELS: Record<RetrievalFactsStatus, string> = {
+    hit: "已命中",
+    miss: "未命中",
+    search_failed: "检索失败",
+    kb_not_ready: "知识库处理中",
+    not_triggered: "未触发检索",
+    no_knowledge_base: "未绑定知识库",
+    disabled: "检索已关闭",
+};
+
+const MAX_RESULT_SUMMARIES = 3;
+
+function isRetrievalFactsStatus(value: unknown): value is RetrievalFactsStatus {
+    return typeof value === "string" && value in RETRIEVAL_STATUS_LABELS;
+}
+
+export function extractRetrievalFacts(
+    effectivenessSnapshot?: Record<string, unknown> | null,
+): RetrievalFacts | null {
+    if (!effectivenessSnapshot || typeof effectivenessSnapshot !== "object") {
+        return null;
+    }
+
+    const rawValue = effectivenessSnapshot.retrieval_facts;
+    if (!rawValue || typeof rawValue !== "object") {
+        return null;
+    }
+    const raw = rawValue as Record<string, unknown>;
+
+    const kbBound = Boolean(raw.kb_bound);
+    const knowledgeBaseIds = Array.isArray(raw.knowledge_base_ids)
+        ? raw.knowledge_base_ids.filter((id: unknown): id is string => typeof id === "string" && Boolean(id.trim()))
+        : [];
+    const knowledgeBaseCount = typeof raw.knowledge_base_count === "number"
+        ? raw.knowledge_base_count
+        : knowledgeBaseIds.length;
+    const retrievalEnabled = Boolean(raw.retrieval_enabled);
+    const status = isRetrievalFactsStatus(raw.status)
+        ? raw.status
+        : "disabled";
+    const summary = typeof raw.summary === "string" && raw.summary.trim()
+        ? raw.summary.trim()
+        : RETRIEVAL_STATUS_LABELS[status];
+    const attemptCount = typeof raw.attempt_count === "number"
+        ? raw.attempt_count
+        : 0;
+    const hitCount = typeof raw.hit_count === "number"
+        ? raw.hit_count
+        : 0;
+    const hitRate = typeof raw.hit_rate === "number"
+        ? raw.hit_rate
+        : 0;
+
+    let latestAttempt: RetrievalLatestAttempt | null = null;
+    if (raw.latest_attempt && typeof raw.latest_attempt === "object") {
+        const la = raw.latest_attempt as Record<string, unknown>;
+        const resultSummaries = normalizeResultSummaries(la.result_summaries);
+        latestAttempt = {
+            status: typeof la.status === "string" && la.status.trim() ? la.status.trim() : status,
+            ...(typeof la.query === "string" && la.query.trim() ? { query: la.query.trim() } : {}),
+            ...(typeof la.attempted_at === "string" && la.attempted_at.trim()
+                ? { attempted_at: la.attempted_at.trim() }
+                : {}),
+            ...(typeof la.retrieval_mode === "string" && la.retrieval_mode.trim()
+                ? { retrieval_mode: la.retrieval_mode.trim() }
+                : {}),
+            ...(typeof la.error_summary === "string" && la.error_summary.trim()
+                ? { error_summary: la.error_summary.trim() }
+                : {}),
+            ...(typeof la.result_count === "number" ? { result_count: la.result_count } : {}),
+            ...(Array.isArray(la.knowledge_base_ids)
+                ? {
+                    knowledge_base_ids: la.knowledge_base_ids.filter(
+                        (id: unknown): id is string => typeof id === "string" && Boolean(id.trim()),
+                    ),
+                }
+                : {}),
+            ...(resultSummaries.length > 0 ? { result_summaries: resultSummaries } : {}),
+        };
+    }
+
+    return {
+        kb_bound: kbBound,
+        knowledge_base_ids: knowledgeBaseIds,
+        knowledge_base_count: knowledgeBaseCount,
+        retrieval_enabled: retrievalEnabled,
+        status,
+        summary,
+        attempt_count: attemptCount,
+        hit_count: hitCount,
+        hit_rate: hitRate,
+        ...(latestAttempt ? { latest_attempt: latestAttempt } : {}),
+    };
+}
+
+function normalizeResultSummaries(
+    raw?: unknown,
+): RetrievalAttemptSummary[] {
+    if (!Array.isArray(raw)) {
+        return [];
+    }
+
+    return raw
+        .filter((item: unknown): item is Record<string, unknown> => Boolean(item) && typeof item === "object")
+        .slice(0, MAX_RESULT_SUMMARIES)
+        .map((item) => ({
+            knowledge_base_id: typeof item.knowledge_base_id === "string" ? item.knowledge_base_id : "",
+            ...(typeof item.knowledge_base_name === "string" && item.knowledge_base_name.trim()
+                ? { knowledge_base_name: item.knowledge_base_name }
+                : {}),
+            ...(typeof item.snippet === "string" && item.snippet.trim()
+                ? { snippet: item.snippet.trim() }
+                : {}),
+            ...(typeof item.retrieval_mode === "string"
+                ? { retrieval_mode: item.retrieval_mode }
+                : {}),
+            ...(typeof item.score === "number"
+                ? { score: item.score }
+                : {}),
+        }))
+        .filter((item) => item.knowledge_base_id);
+}
+
+export function formatRetrievalStatusLabel(status?: string | null): string {
+    if (!status) {
+        return "--";
+    }
+    return RETRIEVAL_STATUS_LABELS[String(status)] || String(status);
+}
+
+export function formatRetrievalStatusTone(
+    status?: string | null,
+): "success" | "warning" | "error" | "neutral" {
+    if (status === "hit") {
+        return "success";
+    }
+    if (status === "miss" || status === "kb_not_ready") {
+        return "warning";
+    }
+    if (status === "search_failed" || status === "no_knowledge_base" || status === "disabled") {
+        return "error";
+    }
+    return "neutral";
+}
+
+export function formatLatestAttemptCopy(facts: RetrievalFacts): string | null {
+    const la = facts.latest_attempt;
+    if (!la) {
+        return null;
+    }
+
+    const parts: string[] = [];
+
+    if (typeof la.query === "string" && la.query.trim()) {
+        parts.push(`最近检索问题：${la.query.trim()}`);
+    }
+
+    if (typeof la.result_count === "number") {
+        parts.push(`命中片段：${la.result_count}`);
+    }
+
+    if (typeof la.error_summary === "string" && la.error_summary.trim()) {
+        parts.push(la.error_summary);
+    }
+
+    if (la.result_summaries && la.result_summaries.length > 0) {
+        const snippetCopy = la.result_summaries
+            .filter((s) => s.snippet)
+            .map((s) => s.snippet)
+            .join("；");
+        if (snippetCopy) {
+            parts.push(`相关片段：${snippetCopy}`);
+        }
+    }
+
+    return parts.length > 0 ? parts.join("。") : null;
+}
+
+export function formatMissExplanation(facts: RetrievalFacts): string | null {
+    if (facts.status !== "miss") {
+        return null;
+    }
+
+    const la = facts.latest_attempt;
+    const query = la?.query;
+    if (typeof query === "string" && query.trim()) {
+        return `检索「${query}」未在知识库中找到相关内容，建议优化检索词或补充知识库文档。`;
+    }
+    return "最近一次检索未在知识库中命中有效内容，建议优化提问或补充知识库。";
+}
+
+export function formatSearchFailedExplanation(facts: RetrievalFacts): string | null {
+    if (facts.status !== "search_failed") {
+        return null;
+    }
+
+    const la = facts.latest_attempt;
+    const errorSummary = la?.error_summary;
+    if (typeof errorSummary === "string" && errorSummary.trim()) {
+        return `知识检索服务异常：${errorSummary}`;
+    }
+    return "知识检索服务暂不可用，请稍后重试或联系管理员。";
+}
+
+export function formatWeakEvidenceRetrievalNote(
+    claimTruth: SessionClaimTruth | null,
+    retrievalFacts: RetrievalFacts | null,
+): string | null {
+    if (!claimTruth || claimTruth.status !== "weak_evidence") {
+        return null;
+    }
+    if (!retrievalFacts || !retrievalFacts.retrieval_enabled) {
+        return null;
+    }
+
+    if (retrievalFacts.status === "hit") {
+        return "知识库已命中相关内容，但当前证据力度仍不够——建议引用更具体的数据或案例。";
+    }
+    if (retrievalFacts.status === "miss") {
+        return "知识库检索未命中，可能缺少对应文档——建议补充相关产品或案例资料。";
+    }
+    if (retrievalFacts.status === "search_failed") {
+        return "知识库检索暂时异常，无法确认是否有相关内容支撑当前主张。";
+    }
+    return null;
+}
 
 const CLAIM_TRUTH_LABELS = {
     unsupported_claim: "未被证据支撑",
