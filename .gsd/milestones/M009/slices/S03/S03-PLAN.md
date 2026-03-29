@@ -12,7 +12,7 @@
   - Estimate: 30m
   - Files: web/src/components/audio/AudioAuditCard.tsx, web/src/lib/api/client.ts, web/src/lib/api/types.ts
   - Verify: cd web && pnpm dlx npm@11.6.1 test -- --run 'src/app/(user)/practice/[sessionId]/report/page.test.tsx' 'src/app/(user)/practice/[sessionId]/replay/page.test.tsx'
-- [ ] **T03: Support runtime: classify audio anomalies in RuntimeStatusService** — Add audio anomaly kinds (audio_upload_degraded, audio_missing) to _build_fault_items(). Derive audio anomaly state from voice_policy_snapshot.runtime_metrics.audio_audit bounded summary on RuntimeSessionRecord. Reuse existing typed anomaly pattern so /support/runtime renders them generically.
+- [x] **T03: Added audio_upload_degraded and audio_missing anomaly kinds to RuntimeStatusService with severity escalation and bounded-summary extraction from voice_policy_snapshot** — Add audio anomaly kinds (audio_upload_degraded, audio_missing) to _build_fault_items(). Derive audio anomaly state from voice_policy_snapshot.runtime_metrics.audio_audit bounded summary on RuntimeSessionRecord. Reuse existing typed anomaly pattern so /support/runtime renders them generically.
   - Estimate: 30m
   - Files: backend/src/support/services/runtime_status_service.py
   - Verify: cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_support_runtime_service.py -v -k audio

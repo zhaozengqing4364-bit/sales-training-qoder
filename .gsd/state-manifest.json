@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "exported_at": "2026-03-29T23:36:03.045Z",
+  "exported_at": "2026-03-29T23:44:46.172Z",
   "milestones": [
     {
       "id": "M001",
@@ -6051,19 +6051,26 @@
       "milestone_id": "M009",
       "slice_id": "S03",
       "id": "T03",
-      "title": "Support runtime: classify audio anomalies in RuntimeStatusService",
-      "status": "pending",
-      "one_liner": "",
-      "narrative": "",
-      "verification_result": "",
+      "title": "Added audio_upload_degraded and audio_missing anomaly kinds to RuntimeStatusService with severity escalation and bounded-summary extraction from voice_policy_snapshot",
+      "status": "complete",
+      "one_liner": "Added audio_upload_degraded and audio_missing anomaly kinds to RuntimeStatusService with severity escalation and bounded-summary extraction from voice_policy_snapshot",
+      "narrative": "Extended the support runtime diagnostic pipeline to classify audio anomalies. Added audio_diagnostics field to RuntimeSessionRecord (extracted from voice_policy_snapshot.runtime_metrics.audio_audit). Added _build_fault_items() classification: audio_missing (warning) when all segments failed, audio_upload_degraded (warning/blocking) when partial with severity escalation when >50% failed. Five new unit tests cover all scenarios plus edge cases. All 8 tests pass with no regressions.",
+      "verification_result": "Ran focused audio tests (-k audio) and full suite: 8/8 pass (3 existing + 5 new). No regressions. Verified _extract_audio_diagnostics() handles missing/empty/malformed voice_policy_snapshot gracefully.",
       "duration": "",
-      "completed_at": null,
+      "completed_at": "2026-03-29T23:44:46.110Z",
       "blocker_discovered": false,
-      "deviations": "",
-      "known_issues": "",
-      "key_files": [],
-      "key_decisions": [],
-      "full_summary_md": "",
+      "deviations": "None.",
+      "known_issues": "None.",
+      "key_files": [
+        "backend/src/support/services/runtime_status_service.py",
+        "backend/tests/unit/test_support_runtime_service.py"
+      ],
+      "key_decisions": [
+        "Audio anomaly state derived from voice_policy_snapshot.runtime_metrics.audio_audit bounded summary rather than querying SessionAudioSegment rows directly, keeping the runtime read model lightweight",
+        "Severity escalation from warning to blocking when failed_segment_count exceeds 50% of total segments",
+        "learner_status computed from audio_audit counts (available/partial/missing) rather than stored as a field, matching the canonical derivation in build_session_audio_audit()"
+      ],
+      "full_summary_md": "---\nid: T03\nparent: S03\nmilestone: M009\nkey_files:\n  - backend/src/support/services/runtime_status_service.py\n  - backend/tests/unit/test_support_runtime_service.py\nkey_decisions:\n  - Audio anomaly state derived from voice_policy_snapshot.runtime_metrics.audio_audit bounded summary rather than querying SessionAudioSegment rows directly, keeping the runtime read model lightweight\n  - Severity escalation from warning to blocking when failed_segment_count exceeds 50% of total segments\n  - learner_status computed from audio_audit counts (available/partial/missing) rather than stored as a field, matching the canonical derivation in build_session_audio_audit()\nduration: \"\"\nverification_result: passed\ncompleted_at: 2026-03-29T23:44:46.111Z\nblocker_discovered: false\n---\n\n# T03: Added audio_upload_degraded and audio_missing anomaly kinds to RuntimeStatusService with severity escalation and bounded-summary extraction from voice_policy_snapshot\n\n**Added audio_upload_degraded and audio_missing anomaly kinds to RuntimeStatusService with severity escalation and bounded-summary extraction from voice_policy_snapshot**\n\n## What Happened\n\nExtended the support runtime diagnostic pipeline to classify audio anomalies. Added audio_diagnostics field to RuntimeSessionRecord (extracted from voice_policy_snapshot.runtime_metrics.audio_audit). Added _build_fault_items() classification: audio_missing (warning) when all segments failed, audio_upload_degraded (warning/blocking) when partial with severity escalation when >50% failed. Five new unit tests cover all scenarios plus edge cases. All 8 tests pass with no regressions.\n\n## Verification\n\nRan focused audio tests (-k audio) and full suite: 8/8 pass (3 existing + 5 new). No regressions. Verified _extract_audio_diagnostics() handles missing/empty/malformed voice_policy_snapshot gracefully.\n\n## Verification Evidence\n\n| # | Command | Exit Code | Verdict | Duration |\n|---|---------|-----------|---------|----------|\n| 1 | `cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_support_runtime_service.py -v -k audio` | 0 | ✅ pass | 6900ms |\n| 2 | `cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_support_runtime_service.py -v` | 0 | ✅ pass | 5800ms |\n\n\n## Deviations\n\nNone.\n\n## Known Issues\n\nNone.\n\n## Files Created/Modified\n\n- `backend/src/support/services/runtime_status_service.py`\n- `backend/tests/unit/test_support_runtime_service.py`\n",
       "description": "Add audio anomaly kinds (audio_upload_degraded, audio_missing) to _build_fault_items(). Derive audio anomaly state from voice_policy_snapshot.runtime_metrics.audio_audit bounded summary on RuntimeSessionRecord. Reuse existing typed anomaly pattern so /support/runtime renders them generically.",
       "estimate": "30m",
       "files": [
@@ -9938,6 +9945,28 @@
       "verdict": "✅ pass",
       "duration_ms": 17400,
       "created_at": "2026-03-29T23:36:03.016Z"
+    },
+    {
+      "id": 216,
+      "task_id": "T03",
+      "slice_id": "S03",
+      "milestone_id": "M009",
+      "command": "cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_support_runtime_service.py -v -k audio",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 6900,
+      "created_at": "2026-03-29T23:44:46.110Z"
+    },
+    {
+      "id": 217,
+      "task_id": "T03",
+      "slice_id": "S03",
+      "milestone_id": "M009",
+      "command": "cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_support_runtime_service.py -v",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 5800,
+      "created_at": "2026-03-29T23:44:46.110Z"
     }
   ]
 }

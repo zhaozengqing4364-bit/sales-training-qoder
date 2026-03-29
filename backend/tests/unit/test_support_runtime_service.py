@@ -108,6 +108,7 @@ def _make_record(
     projection: object | None = None,
     projection_error: str | None = None,
     presentation_review: dict[str, object] | None = None,
+    audio_diagnostics: dict[str, object] | None = None,
 ) -> RuntimeSessionRecord:
     return RuntimeSessionRecord(
         session=session,
@@ -117,6 +118,7 @@ def _make_record(
         projection=projection,
         projection_error=projection_error,
         presentation_review=presentation_review,
+        audio_diagnostics=audio_diagnostics or {},
     )
 
 
@@ -397,3 +399,208 @@ def test_asset_registry_covers_current_asset_types_and_extracts_refs() -> None:
     assert runtime_registration.build_admin_path("runtime-1") == "/admin/voice-runtime"
     assert knowledge_registration.label == "知识库"
     assert knowledge_registration.build_admin_path("kb-1") == "/admin/knowledge"
+
+
+# ---------------------------------------------------------------------------
+# Audio anomaly classification tests
+# ---------------------------------------------------------------------------
+
+
+def test_audio_upload_degraded_partial_warning() -> None:
+    """Session with partial uploads and failed segments → audio_upload_degraded warning."""
+    now = datetime(2026, 3, 28, 12, 0, tzinfo=UTC)
+    session = _make_session(
+        status="completed",
+        start_time=now - timedelta(hours=1),
+        end_time=now - timedelta(minutes=50),
+        scenario_type="sales",
+    )
+
+    record = _make_record(
+        session=session,
+        projection=SimpleNamespace(evaluable=True, not_evaluable_reason=None),
+        audio_diagnostics={
+            "learner_status": "partial",
+            "failed_segment_count": 2,
+            "total_segment_count": 6,
+            "uploaded_segment_count": 4,
+        },
+    )
+
+    faults = RuntimeStatusService.build_faults_payload(
+        [record],
+        now=now,
+        limit=20,
+        supplemental_logs=[],
+    )
+
+    by_kind = {item["kind"]: item for item in faults["items"]}
+    assert "audio_upload_degraded" in by_kind
+    item = by_kind["audio_upload_degraded"]
+    assert item["severity"] == "warning"
+    assert item["diagnostics"]["learner_status"] == "partial"
+    assert item["diagnostics"]["failed_segment_count"] == 2
+    assert item["diagnostics"]["total_segment_count"] == 6
+    assert item["session_id"] == session.session_id
+
+
+def test_audio_missing_all_failed_warning() -> None:
+    """Session with segments but zero uploads → audio_missing warning."""
+    now = datetime(2026, 3, 28, 12, 0, tzinfo=UTC)
+    session = _make_session(
+        status="completed",
+        start_time=now - timedelta(hours=1),
+        end_time=now - timedelta(minutes=45),
+        scenario_type="sales",
+    )
+
+    record = _make_record(
+        session=session,
+        projection=SimpleNamespace(evaluable=True, not_evaluable_reason=None),
+        audio_diagnostics={
+            "learner_status": "missing",
+            "failed_segment_count": 5,
+            "total_segment_count": 5,
+            "uploaded_segment_count": 0,
+        },
+    )
+
+    faults = RuntimeStatusService.build_faults_payload(
+        [record],
+        now=now,
+        limit=20,
+        supplemental_logs=[],
+    )
+
+    by_kind = {item["kind"]: item for item in faults["items"]}
+    assert "audio_missing" in by_kind
+    item = by_kind["audio_missing"]
+    assert item["severity"] == "warning"
+    assert item["diagnostics"]["learner_status"] == "missing"
+    assert item["diagnostics"]["failed_segment_count"] == 5
+
+
+def test_audio_upload_degraded_majority_failed_blocking() -> None:
+    """Session where >50% segments failed → audio_upload_degraded blocking."""
+    now = datetime(2026, 3, 28, 12, 0, tzinfo=UTC)
+    session = _make_session(
+        status="completed",
+        start_time=now - timedelta(hours=1),
+        end_time=now - timedelta(minutes=40),
+        scenario_type="sales",
+    )
+
+    record = _make_record(
+        session=session,
+        projection=SimpleNamespace(evaluable=True, not_evaluable_reason=None),
+        audio_diagnostics={
+            "learner_status": "partial",
+            "failed_segment_count": 5,
+            "total_segment_count": 6,
+            "uploaded_segment_count": 1,
+        },
+    )
+
+    faults = RuntimeStatusService.build_faults_payload(
+        [record],
+        now=now,
+        limit=20,
+        supplemental_logs=[],
+    )
+
+    by_kind = {item["kind"]: item for item in faults["items"]}
+    assert "audio_upload_degraded" in by_kind
+    item = by_kind["audio_upload_degraded"]
+    assert item["severity"] == "blocking"
+    assert item["diagnostics"]["failed_segment_count"] == 5
+    assert item["diagnostics"]["total_segment_count"] == 6
+
+
+def test_audio_available_produces_no_audio_anomaly() -> None:
+    """Session with full audio uploads → no audio anomaly items."""
+    now = datetime(2026, 3, 28, 12, 0, tzinfo=UTC)
+    session = _make_session(
+        status="completed",
+        start_time=now - timedelta(hours=1),
+        end_time=now - timedelta(minutes=30),
+        scenario_type="sales",
+        effectiveness_snapshot=_make_effectiveness_snapshot(evaluable=True),
+    )
+
+    record = _make_record(
+        session=session,
+        projection=SimpleNamespace(evaluable=True, not_evaluable_reason=None),
+        audio_diagnostics={
+            "learner_status": "available",
+            "failed_segment_count": 0,
+            "total_segment_count": 6,
+            "uploaded_segment_count": 6,
+        },
+    )
+
+    faults = RuntimeStatusService.build_faults_payload(
+        [record],
+        now=now,
+        limit=20,
+        supplemental_logs=[],
+    )
+
+    audio_kinds = [
+        item["kind"]
+        for item in faults["items"]
+        if item["kind"].startswith("audio_")
+    ]
+    assert audio_kinds == []
+
+
+def test_extract_audio_diagnostics_from_voice_policy_snapshot() -> None:
+    """_extract_audio_diagnostics correctly derives learner_status from bounded summary."""
+    # partial: some uploaded, some failed
+    snapshot_partial = {
+        "runtime_metrics": {
+            "audio_audit": {
+                "segment_count": 8,
+                "uploaded_segment_count": 5,
+                "failed_segment_count": 3,
+            }
+        }
+    }
+    diag = RuntimeStatusService._extract_audio_diagnostics(snapshot_partial)
+    assert diag["learner_status"] == "partial"
+    assert diag["failed_segment_count"] == 3
+    assert diag["total_segment_count"] == 8
+
+    # available: all uploaded
+    snapshot_available = {
+        "runtime_metrics": {
+            "audio_audit": {
+                "segment_count": 4,
+                "uploaded_segment_count": 4,
+                "failed_segment_count": 0,
+            }
+        }
+    }
+    diag = RuntimeStatusService._extract_audio_diagnostics(snapshot_available)
+    assert diag["learner_status"] == "available"
+
+    # missing: zero uploaded
+    snapshot_missing = {
+        "runtime_metrics": {
+            "audio_audit": {
+                "segment_count": 3,
+                "uploaded_segment_count": 0,
+                "failed_segment_count": 3,
+            }
+        }
+    }
+    diag = RuntimeStatusService._extract_audio_diagnostics(snapshot_missing)
+    assert diag["learner_status"] == "missing"
+
+    # empty snapshot → no diagnostics
+    assert RuntimeStatusService._extract_audio_diagnostics({}) == {}
+    assert RuntimeStatusService._extract_audio_diagnostics({"runtime_metrics": {}}) == {}
+    assert RuntimeStatusService._extract_audio_diagnostics({"runtime_metrics": {"audio_audit": {}}}) == {}
+    # segment_count == 0 → skip
+    assert RuntimeStatusService._extract_audio_diagnostics(
+        {"runtime_metrics": {"audio_audit": {"segment_count": 0}}}
+    ) == {}

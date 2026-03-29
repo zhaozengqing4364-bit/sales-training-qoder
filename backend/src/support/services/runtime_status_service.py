@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 from collections import Counter
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -50,6 +50,7 @@ class RuntimeSessionRecord:
     projection: Any | None = None
     projection_error: str | None = None
     presentation_review: dict[str, Any] | None = None
+    audio_diagnostics: dict[str, Any] = field(default_factory=dict)
 
 
 class RuntimeStatusService:
@@ -609,6 +610,9 @@ class RuntimeStatusService:
                             review_result.fallback or "[PRESENTATION_REVIEW_FAILED]"
                         )
 
+            # Extract audio audit diagnostics from voice_policy_snapshot.runtime_metrics
+            audio_diagnostics = self._extract_audio_diagnostics(snapshot)
+
             records.append(
                 RuntimeSessionRecord(
                     session=session,
@@ -618,10 +622,46 @@ class RuntimeStatusService:
                     projection=projection,
                     projection_error=projection_error,
                     presentation_review=presentation_review,
+                    audio_diagnostics=audio_diagnostics,
                 )
             )
 
         return records
+
+    @staticmethod
+    def _extract_audio_diagnostics(
+        voice_policy_snapshot: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Derive audio anomaly state from voice_policy_snapshot.runtime_metrics.audio_audit."""
+        if not isinstance(voice_policy_snapshot, dict):
+            return {}
+        runtime_metrics = voice_policy_snapshot.get("runtime_metrics")
+        if not isinstance(runtime_metrics, dict):
+            return {}
+        audio_audit = runtime_metrics.get("audio_audit")
+        if not isinstance(audio_audit, dict):
+            return {}
+
+        total_segment_count = int(audio_audit.get("segment_count") or 0)
+        uploaded_segment_count = int(audio_audit.get("uploaded_segment_count") or 0)
+        failed_segment_count = int(audio_audit.get("failed_segment_count") or 0)
+
+        if total_segment_count == 0:
+            return {}
+
+        if uploaded_segment_count > 0 and uploaded_segment_count >= total_segment_count:
+            learner_status = "available"
+        elif uploaded_segment_count > 0:
+            learner_status = "partial"
+        else:
+            learner_status = "missing"
+
+        return {
+            "learner_status": learner_status,
+            "failed_segment_count": failed_segment_count,
+            "total_segment_count": total_segment_count,
+            "uploaded_segment_count": uploaded_segment_count,
+        }
 
     async def _load_supplemental_logs(
         self,
@@ -952,6 +992,46 @@ class RuntimeStatusService:
                         "upstream_disconnect_count_5m": disconnect_count,
                     },
                 )
+
+            # --- Audio anomaly detection ---
+            audio_diag = record.audio_diagnostics
+            if isinstance(audio_diag, dict) and audio_diag:
+                learner_status = str(audio_diag.get("learner_status") or "")
+                failed_seg = int(audio_diag.get("failed_segment_count") or 0)
+                total_seg = int(audio_diag.get("total_segment_count") or 0)
+
+                if learner_status == "missing" and total_seg > 0:
+                    add_item(
+                        severity="warning",
+                        kind="audio_missing",
+                        summary="会话存在音频分段但全部上传失败或未上传，无法回放录音。",
+                        detected_at=getattr(session, "end_time", None)
+                        or getattr(session, "start_time", None),
+                        diagnostics={
+                            "learner_status": learner_status,
+                            "failed_segment_count": failed_seg,
+                            "total_segment_count": total_seg,
+                        },
+                    )
+                elif learner_status == "partial" and failed_seg > 0:
+                    severity = "blocking" if (total_seg > 0 and failed_seg > total_seg / 2) else "warning"
+                    summary = (
+                        "会话音频上传大部分失败，录音严重缺失。"
+                        if severity == "blocking"
+                        else "会话音频部分上传失败，部分录音不可回放。"
+                    )
+                    add_item(
+                        severity=severity,
+                        kind="audio_upload_degraded",
+                        summary=summary,
+                        detected_at=getattr(session, "end_time", None)
+                        or getattr(session, "start_time", None),
+                        diagnostics={
+                            "learner_status": learner_status,
+                            "failed_segment_count": failed_seg,
+                            "total_segment_count": total_seg,
+                        },
+                    )
 
         return items
 
