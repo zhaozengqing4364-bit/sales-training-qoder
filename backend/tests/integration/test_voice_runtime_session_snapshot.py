@@ -724,3 +724,225 @@ async def test_session_snapshot_access_control_owner_admin_only(
         assert outsider_body["error"] == "[ACCESS_DENIED]"
         assert outsider_body.get("trace_id")
         assert admin_resp.status_code == 200
+
+
+# ---------------------------------------------------------------------------
+# S02: retrieval_facts parity integration tests
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.asyncio
+async def test_completed_sales_session_returns_identical_retrieval_facts_through_report_and_knowledge_check(
+    async_client: AsyncClient,
+    auth_headers: dict,
+    test_db: AsyncSession,
+):
+    """S02 parity: same completed session yields identical retrieval_facts via both routes."""
+    _, agent, persona = await _create_runtime_entities(test_db)
+
+    create_resp = await async_client.post(
+        "/api/v1/practice/sessions",
+        headers=auth_headers,
+        json={
+            "scenario_type": "sales",
+            "agent_id": agent.id,
+            "persona_id": persona.id,
+            "voice_mode": "stepfun_realtime",
+        },
+    )
+    assert create_resp.status_code == 201
+    session_id = create_resp.json()["data"]["session_id"]
+
+    session_result = await test_db.execute(
+        select(PracticeSession).where(PracticeSession.session_id == session_id)
+    )
+    session = session_result.scalar_one()
+    snapshot = deepcopy(session.voice_policy_snapshot)
+    snapshot["tool_policy"] = {"enable_internal_retrieval": True}
+    snapshot["knowledge_base_ids"] = ["kb_test_1", "kb_test_2"]
+    snapshot["runtime_metrics"] = {
+        "knowledge_retrieval": {
+            "attempt_count": 3,
+            "hit_query_count": 2,
+            "hit_rate": 0.6667,
+            "recent_attempts": [
+                {
+                    "attempted_at": "2026-03-28T12:10:00Z",
+                    "query": "ROI 回本案例",
+                    "status": "hit",
+                    "result_count": 2,
+                    "retrieval_mode": "hybrid",
+                    "knowledge_base_ids": ["kb_test_1"],
+                    "result_summaries": [
+                        {
+                            "knowledge_base_id": "kb_test_1",
+                            "knowledge_base_name": "Agent知识库",
+                            "snippet": "客户A在6个月内实现ROI回本",
+                            "score": 0.92,
+                            "retrieval_mode": "vector",
+                        },
+                    ],
+                },
+                {
+                    "attempted_at": "2026-03-28T12:05:00Z",
+                    "query": "竞品对比",
+                    "status": "miss",
+                    "result_count": 0,
+                    "retrieval_mode": "vector",
+                    "knowledge_base_ids": ["kb_test_1"],
+                    "result_summaries": [],
+                },
+                {
+                    "attempted_at": "2026-03-28T12:00:00Z",
+                    "query": "报价方案",
+                    "status": "hit",
+                    "result_count": 1,
+                    "retrieval_mode": "keyword",
+                    "knowledge_base_ids": ["kb_test_2"],
+                    "result_summaries": [
+                        {
+                            "knowledge_base_id": "kb_test_2",
+                            "knowledge_base_name": "Persona知识库",
+                            "snippet": "标准报价方案：¥12,000/年",
+                            "score": 0.88,
+                            "retrieval_mode": "keyword",
+                        },
+                    ],
+                },
+            ],
+        }
+    }
+    session.voice_policy_snapshot = snapshot
+    session.status = "completed"
+    await test_db.commit()
+
+    report_resp = await async_client.get(
+        f"/api/v1/practice/sessions/{session_id}/report",
+        headers=auth_headers,
+    )
+    knowledge_check_resp = await async_client.get(
+        f"/api/v1/practice/sessions/{session_id}/knowledge-check",
+        headers=auth_headers,
+    )
+
+    assert report_resp.status_code == 200
+    assert knowledge_check_resp.status_code == 200
+
+    report_rf = report_resp.json()["data"]["effectiveness_snapshot"]["retrieval_facts"]
+    kc_rf = knowledge_check_resp.json()["data"]["retrieval_facts"]
+
+    assert report_rf is not None
+    assert kc_rf is not None
+
+    # Canonical fields must match exactly
+    for key in (
+        "kb_bound", "knowledge_base_ids", "knowledge_base_count",
+        "retrieval_enabled", "status", "summary",
+        "attempt_count", "hit_count", "hit_rate",
+    ):
+        assert report_rf[key] == kc_rf[key], f"retrieval_facts.{key} mismatch"
+
+    # latest_attempt parity (preserves knowledge_base_ids and result_summaries)
+    assert report_rf["latest_attempt"]["status"] == kc_rf["latest_attempt"]["status"]
+    assert report_rf["latest_attempt"]["query"] == kc_rf["latest_attempt"]["query"]
+    assert report_rf["latest_attempt"]["result_count"] == kc_rf["latest_attempt"]["result_count"]
+    assert report_rf["latest_attempt"]["knowledge_base_ids"] == kc_rf["latest_attempt"]["knowledge_base_ids"]
+    assert report_rf["latest_attempt"]["result_summaries"] == kc_rf["latest_attempt"]["result_summaries"]
+
+    # recent_attempts count and structural parity
+    assert len(report_rf["recent_attempts"]) == len(kc_rf["recent_attempts"]) == 3
+    for i in range(3):
+        assert report_rf["recent_attempts"][i] == kc_rf["recent_attempts"][i]
+
+
+@pytest.mark.asyncio
+async def test_retrieval_facts_hit_with_weak_evidence_claim_truth_proves_independence(
+    async_client: AsyncClient,
+    auth_headers: dict,
+    test_db: AsyncSession,
+):
+    """retrieval_facts and claim_truth are orthogonal: retrieval hit + weak_evidence coexist on both surfaces."""
+    _, agent, persona = await _create_runtime_entities(test_db)
+
+    create_resp = await async_client.post(
+        "/api/v1/practice/sessions",
+        headers=auth_headers,
+        json={
+            "scenario_type": "sales",
+            "agent_id": agent.id,
+            "persona_id": persona.id,
+            "voice_mode": "stepfun_realtime",
+        },
+    )
+    assert create_resp.status_code == 201
+    session_id = create_resp.json()["data"]["session_id"]
+
+    session_result = await test_db.execute(
+        select(PracticeSession).where(PracticeSession.session_id == session_id)
+    )
+    session = session_result.scalar_one()
+    snapshot = deepcopy(session.voice_policy_snapshot)
+    snapshot["tool_policy"] = {"enable_internal_retrieval": True}
+    snapshot["knowledge_base_ids"] = ["kb_test_2"]
+    snapshot["runtime_metrics"] = {
+        "knowledge_retrieval": {
+            "attempt_count": 1,
+            "hit_query_count": 1,
+            "hit_rate": 1.0,
+            "recent_attempts": [
+                {
+                    "attempted_at": "2026-03-28T12:00:00Z",
+                    "query": "产品报价",
+                    "status": "hit",
+                    "result_count": 2,
+                    "retrieval_mode": "vector",
+                    "knowledge_base_ids": ["kb_test_2"],
+                    "result_summaries": [
+                        {
+                            "knowledge_base_id": "kb_test_2",
+                            "knowledge_base_name": "Persona知识库",
+                            "snippet": "标准报价方案：¥12,000/年",
+                            "score": 0.91,
+                            "retrieval_mode": "vector",
+                        },
+                    ],
+                },
+            ],
+        }
+    }
+    session.voice_policy_snapshot = snapshot
+    session.status = "completed"
+    await test_db.commit()
+
+    report_resp = await async_client.get(
+        f"/api/v1/practice/sessions/{session_id}/report",
+        headers=auth_headers,
+    )
+    kc_resp = await async_client.get(
+        f"/api/v1/practice/sessions/{session_id}/knowledge-check",
+        headers=auth_headers,
+    )
+
+    assert report_resp.status_code == 200
+    assert kc_resp.status_code == 200
+
+    report_rf = report_resp.json()["data"]["effectiveness_snapshot"]["retrieval_facts"]
+    kc_rf = kc_resp.json()["data"]["retrieval_facts"]
+
+    # retrieval_facts shows "hit"
+    assert report_rf["status"] == "hit"
+    assert kc_rf["status"] == "hit"
+    assert report_rf["latest_attempt"]["result_count"] > 0
+    assert kc_rf["latest_attempt"]["result_count"] > 0
+
+    # claim_truth is present and independent from retrieval_facts
+    report_ct = report_resp.json()["data"]["effectiveness_snapshot"]["claim_truth"]
+    kc_ct = kc_resp.json()["data"]["claim_truth"]
+    assert isinstance(report_ct, dict), "report claim_truth should be present"
+    assert isinstance(kc_ct, dict), "knowledge-check claim_truth should be present"
+    assert "status" in report_ct
+    assert "source" in kc_ct
+
+    # Orthogonality proof: retrieval hit coexists with a distinct claim_truth status
+    assert report_rf["status"] != report_ct["status"]
+    assert kc_rf["status"] != kc_ct["status"]

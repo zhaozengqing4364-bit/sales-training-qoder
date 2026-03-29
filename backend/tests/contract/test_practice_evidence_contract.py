@@ -1219,3 +1219,319 @@ async def test_same_session_report_stays_available_during_scoring_and_replay_mat
     ]
     assert completed_replay_data["main_issue"]["replay_anchor"]["status"] == "resolved"
     assert completed_replay_data["next_goal"]["replay_anchor"]["status"] == "resolved"
+# ---------------------------------------------------------------------------
+# S02: retrieval_facts parity contract tests
+# ---------------------------------------------------------------------------
+
+
+def _make_voice_policy_snapshot_with_retrieval_ledger(
+    *,
+    kb_ids: list[str] | None = None,
+    enable_internal_retrieval: bool = True,
+    attempt_count: int = 2,
+    hit_query_count: int = 1,
+    hit_rate: float = 0.5,
+    recent_attempts: list[dict[str, object]] | None = None,
+) -> dict[str, object]:
+    """Build a realistic voice_policy_snapshot with populated retrieval ledger."""
+    kb_ids = kb_ids or ["kb-retrieval-1"]
+    recent_attempts = recent_attempts or [
+        {
+            "attempted_at": "2026-03-28T11:50:00Z",
+            "query": "竞品对比数据",
+            "status": "miss",
+            "result_count": 0,
+            "retrieval_mode": "vector",
+            "knowledge_base_ids": ["kb-retrieval-1"],
+            "result_summaries": [],
+        },
+        {
+            "attempted_at": "2026-03-28T12:00:00Z",
+            "query": "ROI 回本案例",
+            "status": "hit",
+            "result_count": 2,
+            "retrieval_mode": "hybrid",
+            "knowledge_base_ids": ["kb-retrieval-1"],
+            "result_summaries": [
+                {
+                    "knowledge_base_id": "kb-retrieval-1",
+                    "knowledge_base_name": "产品知识库",
+                    "snippet": "客户A在6个月内实现ROI回本，迁移期SLA 99.9%",
+                    "score": 0.92,
+                    "retrieval_mode": "vector",
+                },
+            ],
+        },
+    ]
+    return {
+        "voice_mode": "stepfun_realtime",
+        "runtime_profile_id": "runtime-retrieval-test",
+        "instruction_contract_hash": "retrieval-contract-hash",
+        "network_access_mode": "off",
+        "resolved_at": datetime.now(UTC).isoformat(),
+        "knowledge_base_ids": kb_ids,
+        "tool_policy": {
+            "enable_internal_retrieval": enable_internal_retrieval,
+            "require_kb_grounding": False,
+        },
+        "source": {
+            "voice_mode": "runtime_profile",
+            "knowledge_base_ids": "agent",
+        },
+        "runtime_metrics": {
+            "knowledge_retrieval": {
+                "attempt_count": attempt_count,
+                "hit_query_count": hit_query_count,
+                "hit_rate": hit_rate,
+                "recent_attempts": recent_attempts,
+            }
+        },
+    }
+
+
+@pytest.mark.asyncio
+async def test_report_and_knowledge_check_return_identical_retrieval_facts_for_completed_sales_session(
+    async_client: AsyncClient,
+    db_session: AsyncSession,
+    owner: User,
+    owner_headers: dict[str, str],
+):
+    """S02 parity guarantee: retrieval_facts from report projection equals retrieval_facts from knowledge-check diagnostics."""
+    scenario = Scenario(
+        scenario_id=str(uuid.uuid4()),
+        scenario_type="sales",
+        name="retrieval facts parity scenario",
+        is_active=True,
+    )
+    session = PracticeSession(
+        session_id=str(uuid.uuid4()),
+        user_id=str(owner.user_id),
+        scenario_id=scenario.scenario_id,
+        status=SessionStatus.COMPLETED.value,
+        voice_mode="stepfun_realtime",
+        logic_score=75.6,
+        accuracy_score=62.1,
+        completeness_score=72.8,
+        total_duration_seconds=180,
+        effectiveness_snapshot=_make_effectiveness_snapshot(evaluable=True, reason=None),
+        voice_policy_snapshot=_make_voice_policy_snapshot_with_retrieval_ledger(),
+    )
+    db_session.add_all([scenario, session])
+    db_session.add_all(
+        [
+            ConversationMessage(
+                session_id=session.session_id,
+                turn_number=1,
+                role="user",
+                content="我想看看ROI案例。",
+                timestamp=datetime.now(UTC),
+                duration_ms=1200,
+                sales_stage="discovery",
+                score_snapshot={"overall": 76},
+            ),
+            ConversationMessage(
+                session_id=session.session_id,
+                turn_number=2,
+                role="assistant",
+                content="我们有三家客户在六个月内回本。",
+                timestamp=datetime.now(UTC),
+                duration_ms=1800,
+                sales_stage="objection",
+                score_snapshot={"overall_score": 84},
+            ),
+        ]
+    )
+    await db_session.commit()
+
+    report_resp = await async_client.get(
+        f"/api/v1/practice/sessions/{session.session_id}/report",
+        headers=owner_headers,
+    )
+    knowledge_check_resp = await async_client.get(
+        f"/api/v1/practice/sessions/{session.session_id}/knowledge-check",
+        headers=owner_headers,
+    )
+
+    assert report_resp.status_code == 200
+    assert knowledge_check_resp.status_code == 200
+
+    report_rf = report_resp.json()["data"]["effectiveness_snapshot"]["retrieval_facts"]
+    kc_rf = knowledge_check_resp.json()["data"]["retrieval_facts"]
+
+    # Structural parity: same canonical keys
+    for key in (
+        "kb_bound", "knowledge_base_ids", "knowledge_base_count",
+        "retrieval_enabled", "status", "summary",
+        "attempt_count", "hit_count", "hit_rate",
+        "latest_attempt", "recent_attempts",
+    ):
+        assert report_rf[key] == kc_rf[key], f"retrieval_facts.{key} mismatch: report={report_rf[key]!r} vs kc={kc_rf[key]!r}"
+
+    assert report_rf["status"] == "hit"
+    assert kc_rf["status"] == "hit"
+    assert report_rf["attempt_count"] == 2
+    assert kc_rf["attempt_count"] == 2
+    assert report_rf["hit_count"] == 1
+    assert kc_rf["hit_count"] == 1
+    assert len(report_rf["recent_attempts"]) == 2
+    assert len(kc_rf["recent_attempts"]) == 2
+
+    # latest_attempt preserves knowledge_base_ids and result_summaries
+    assert report_rf["latest_attempt"]["knowledge_base_ids"] == ["kb-retrieval-1"]
+    assert kc_rf["latest_attempt"]["knowledge_base_ids"] == ["kb-retrieval-1"]
+    assert len(report_rf["latest_attempt"]["result_summaries"]) == 1
+    assert len(kc_rf["latest_attempt"]["result_summaries"]) == 1
+
+
+@pytest.mark.asyncio
+async def test_retrieval_facts_and_claim_truth_are_independent_retrieval_hit_with_weak_evidence(
+    async_client: AsyncClient,
+    db_session: AsyncSession,
+    owner: User,
+    owner_headers: dict[str, str],
+):
+    """Claim-truth and retrieval_facts are orthogonal: retrieval can hit while claim truth stays weak_evidence."""
+    scenario = Scenario(
+        scenario_id=str(uuid.uuid4()),
+        scenario_type="sales",
+        name="claim truth independence scenario",
+        is_active=True,
+    )
+    session = PracticeSession(
+        session_id=str(uuid.uuid4()),
+        user_id=str(owner.user_id),
+        scenario_id=scenario.scenario_id,
+        status=SessionStatus.COMPLETED.value,
+        voice_mode="stepfun_realtime",
+        logic_score=75.6,
+        accuracy_score=62.1,
+        completeness_score=72.8,
+        total_duration_seconds=180,
+        effectiveness_snapshot=_make_effectiveness_snapshot(evaluable=True, reason=None),
+        voice_policy_snapshot=_make_voice_policy_snapshot_with_retrieval_ledger(),
+    )
+    db_session.add_all([scenario, session])
+    db_session.add(
+        ConversationMessage(
+            session_id=session.session_id,
+            turn_number=1,
+            role="user",
+            content="ROI 这一块你们有真实案例吗？",
+            timestamp=datetime.now(UTC),
+            duration_ms=1600,
+            sales_stage="discovery",
+            score_snapshot={
+                "overall_score": 82.0,
+                "dimension_scores": {
+                    "价值表达": 84.0,
+                    "客户收益连接": 80.0,
+                    "证据使用": 58.0,
+                    "异议处理": 76.0,
+                    "推进下一步": 72.0,
+                },
+            },
+        )
+    )
+    await db_session.commit()
+
+    report_resp = await async_client.get(
+        f"/api/v1/practice/sessions/{session.session_id}/report",
+        headers=owner_headers,
+    )
+    knowledge_check_resp = await async_client.get(
+        f"/api/v1/practice/sessions/{session.session_id}/knowledge-check",
+        headers=owner_headers,
+    )
+
+    assert report_resp.status_code == 200
+    assert knowledge_check_resp.status_code == 200
+
+    report_data = report_resp.json()["data"]
+    kc_data = knowledge_check_resp.json()["data"]
+
+    # retrieval_facts shows "hit"
+    report_rf = report_data["effectiveness_snapshot"]["retrieval_facts"]
+    kc_rf = kc_data["retrieval_facts"]
+    assert report_rf["status"] == "hit"
+    assert kc_rf["status"] == "hit"
+    assert report_rf["latest_attempt"]["result_count"] > 0
+    assert kc_rf["latest_attempt"]["result_count"] > 0
+
+    # claim_truth shows "weak_evidence" — independent from retrieval hit
+    report_ct = report_data["effectiveness_snapshot"]["claim_truth"]
+    kc_ct = kc_data["claim_truth"]
+    assert report_ct["status"] == "weak_evidence"
+    assert kc_ct["status"] == "weak_evidence"
+    assert report_ct["source"] == "score_snapshot"
+    assert kc_ct["source"] == "score_snapshot"
+
+    # Orthogonality: different statuses coexist
+    assert report_rf["status"] != report_ct["status"]
+    assert kc_rf["status"] != kc_ct["status"]
+
+
+@pytest.mark.asyncio
+async def test_retrieval_facts_parity_with_miss_status(
+    async_client: AsyncClient,
+    db_session: AsyncSession,
+    owner: User,
+    owner_headers: dict[str, str],
+):
+    """Parity holds when retrieval status is miss (triggered but no hits)."""
+    scenario = Scenario(
+        scenario_id=str(uuid.uuid4()),
+        scenario_type="sales",
+        name="retrieval miss parity scenario",
+        is_active=True,
+    )
+    session = PracticeSession(
+        session_id=str(uuid.uuid4()),
+        user_id=str(owner.user_id),
+        scenario_id=scenario.scenario_id,
+        status=SessionStatus.COMPLETED.value,
+        voice_mode="stepfun_realtime",
+        logic_score=70.0,
+        accuracy_score=65.0,
+        completeness_score=68.0,
+        total_duration_seconds=150,
+        effectiveness_snapshot=_make_effectiveness_snapshot(evaluable=True, reason=None),
+        voice_policy_snapshot=_make_voice_policy_snapshot_with_retrieval_ledger(
+            attempt_count=1,
+            hit_query_count=0,
+            hit_rate=0.0,
+            recent_attempts=[
+                {
+                    "attempted_at": "2026-03-28T12:00:00Z",
+                    "query": "竞品对比",
+                    "status": "miss",
+                    "result_count": 0,
+                    "retrieval_mode": "vector",
+                    "knowledge_base_ids": ["kb-retrieval-1"],
+                    "result_summaries": [],
+                },
+            ],
+        ),
+    )
+    db_session.add_all([scenario, session])
+    await db_session.commit()
+
+    report_resp = await async_client.get(
+        f"/api/v1/practice/sessions/{session.session_id}/report",
+        headers=owner_headers,
+    )
+    knowledge_check_resp = await async_client.get(
+        f"/api/v1/practice/sessions/{session.session_id}/knowledge-check",
+        headers=owner_headers,
+    )
+
+    assert report_resp.status_code == 200
+    assert knowledge_check_resp.status_code == 200
+
+    report_rf = report_resp.json()["data"]["effectiveness_snapshot"]["retrieval_facts"]
+    kc_rf = knowledge_check_resp.json()["data"]["retrieval_facts"]
+
+    assert report_rf["status"] == "miss"
+    assert kc_rf["status"] == "miss"
+    assert report_rf["miss_explanation"] is not None
+    assert kc_rf["miss_explanation"] is not None
+    assert report_rf == kc_rf
