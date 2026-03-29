@@ -531,3 +531,154 @@ class TestBuildRetrievalFacts:
         assert result["status"] == "search_failed"
         assert result["failure_explanation"] is not None
         assert "Embedding 服务" in result["failure_explanation"]
+
+
+# ---------------------------------------------------------------------------
+# Tests for retrieval_facts passthrough in build_session_runtime_diagnostics
+# (T03: knowledge-check reuses projected retrieval_facts)
+# ---------------------------------------------------------------------------
+
+
+def _projection_with_retrieval_facts() -> dict[str, object]:
+    """A completed-session projection snapshot containing retrieval_facts."""
+    return {
+        "retrieval_facts": {
+            "kb_bound": True,
+            "knowledge_base_ids": ["kb-1"],
+            "knowledge_base_count": 1,
+            "retrieval_enabled": True,
+            "status": "hit",
+            "summary": "知识检索已触发并命中知识库",
+            "attempt_count": 3,
+            "hit_count": 2,
+            "hit_rate": 0.6667,
+            "latest_attempt": {
+                "status": "hit",
+                "query": "产品价格",
+                "result_count": 5,
+                "retrieval_mode": "hybrid",
+                "knowledge_base_ids": ["kb-1"],
+                "result_summaries": [
+                    {
+                        "knowledge_base_id": "kb-1",
+                        "knowledge_base_name": "产品手册",
+                        "snippet": "产品A的价格为...",
+                        "retrieval_mode": "hybrid",
+                        "score": 0.89,
+                    },
+                ],
+                "attempted_at": "2026-03-28T12:00:00Z",
+                "error_summary": None,
+            },
+            "recent_attempts": [],
+            "miss_explanation": None,
+            "failure_explanation": None,
+        },
+    }
+
+
+def test_diagnostics_reuses_projection_retrieval_facts_for_completed_session():
+    """Completed session: retrieval_facts from projection appear verbatim in diagnostics output."""
+    diagnostics = build_session_runtime_diagnostics(
+        session=_session_stub(),
+        snapshot=_snapshot_with_knowledge_metrics(
+            {
+                "attempt_count": 3,
+                "hit_query_count": 2,
+                "hit_rate": 0.6667,
+                "last_status": "hit",
+                "last_query": "产品价格",
+            }
+        ),
+        live_runtime_active=False,
+        projection_effectiveness_snapshot=_projection_with_retrieval_facts(),
+    )
+
+    rf = diagnostics["retrieval_facts"]
+    assert rf is not None
+    assert rf["status"] == "hit"
+    assert rf["kb_bound"] is True
+    assert rf["knowledge_base_ids"] == ["kb-1"]
+    assert rf["attempt_count"] == 3
+    assert rf["hit_count"] == 2
+    assert rf["latest_attempt"]["query"] == "产品价格"
+    assert len(rf["latest_attempt"]["result_summaries"]) == 1
+    assert rf["latest_attempt"]["result_summaries"][0]["score"] == 0.89
+
+
+def test_diagnostics_returns_none_retrieval_facts_for_live_session():
+    """Live session: retrieval_facts should be None regardless of projection content."""
+    diagnostics = build_session_runtime_diagnostics(
+        session=_session_stub(),
+        snapshot=_snapshot_with_knowledge_metrics({"attempt_count": 1}),
+        live_runtime_active=True,
+        projection_effectiveness_snapshot=_projection_with_retrieval_facts(),
+    )
+
+    assert diagnostics["retrieval_facts"] is None
+
+
+def test_diagnostics_preserves_backward_compatible_fields_with_retrieval_facts():
+    """When retrieval_facts is present, all existing fields are still correct."""
+    diagnostics = build_session_runtime_diagnostics(
+        session=_session_stub(),
+        snapshot=_snapshot_with_knowledge_metrics(
+            {
+                "attempt_count": 2,
+                "hit_query_count": 1,
+                "total_results": 5,
+                "last_status": "hit",
+                "last_query": "测试查询",
+                "last_result_count": 3,
+                "last_retrieval_mode": "hybrid",
+                "updated_at": "2026-03-28T12:00:00Z",
+                "recent_queries": ["测试查询", "上一次查询"],
+            }
+        ),
+        live_runtime_active=False,
+        projection_effectiveness_snapshot=_projection_with_retrieval_facts(),
+    )
+
+    # retrieval_facts present
+    assert diagnostics["retrieval_facts"] is not None
+
+    # Existing backward-compatible fields still correct
+    assert diagnostics["session_id"] == "session-ledger-test"
+    assert diagnostics["voice_mode"] == "stepfun_realtime"
+    assert diagnostics["status"] == "hit"
+    assert diagnostics["summary"] == "知识检索已触发并命中知识库"
+    assert diagnostics["attempt_count"] == 2
+    assert diagnostics["hit_query_count"] == 1
+    assert diagnostics["total_results"] == 5
+    assert diagnostics["last_query"] == "测试查询"
+    assert diagnostics["last_result_count"] == 3
+    assert diagnostics["last_retrieval_mode"] == "hybrid"
+    assert diagnostics["updated_at"] == "2026-03-28T12:00:00Z"
+    assert diagnostics["recent_queries"] == ["测试查询", "上一次查询"]
+    assert diagnostics["kb_bound"] is True
+    assert diagnostics["internal_retrieval_enabled"] is True
+    assert diagnostics["upstream_unstable"] is False
+
+
+def test_diagnostics_ignores_retrieval_facts_in_projection_for_live_session():
+    """Even when projection has retrieval_facts, a live session returns None.
+
+    Live session truth comes from the live handler, not the projection overlay.
+    """
+    diagnostics = build_session_runtime_diagnostics(
+        session=_session_stub(),
+        snapshot=_snapshot_with_knowledge_metrics(
+            {"attempt_count": 5, "hit_query_count": 3, "last_status": "hit"}
+        ),
+        live_runtime_active=True,
+        projection_effectiveness_snapshot=_projection_with_retrieval_facts(),
+    )
+
+    # Live session must not carry projection retrieval_facts
+    assert diagnostics["retrieval_facts"] is None
+
+    # But other fields derived from live snapshot should still work
+    assert diagnostics["attempt_count"] == 5
+    assert diagnostics["hit_query_count"] == 3
+    assert diagnostics["last_status"] == "hit"
+

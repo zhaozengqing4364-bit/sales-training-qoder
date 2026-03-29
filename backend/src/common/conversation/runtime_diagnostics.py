@@ -555,6 +555,11 @@ def build_session_runtime_diagnostics(
             )
             or _normalize_claim_truth_payload(session_effectiveness_snapshot.get("claim_truth"))
         )
+    # --- retrieval_facts: reuse projection truth for completed sessions ---
+    retrieval_facts = None
+    if not live_runtime_active and isinstance(projection_effectiveness_snapshot, dict):
+        retrieval_facts = projection_effectiveness_snapshot.get("retrieval_facts")
+
     coach_health = _normalize_coach_health_payload(live_coach_health)
 
     kb_lock_timeout_budget_ms = _bounded_int_env(
@@ -659,6 +664,7 @@ def build_session_runtime_diagnostics(
         else None,
         "upstream_disconnect_count_5m": upstream_disconnect_count_5m,
         "upstream_unstable": upstream_unstable,
+        "retrieval_facts": retrieval_facts,
     }
 
 

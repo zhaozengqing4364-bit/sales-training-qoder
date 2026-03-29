@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "exported_at": "2026-03-29T17:23:34.556Z",
+  "exported_at": "2026-03-29T17:29:08.496Z",
   "milestones": [
     {
       "id": "M001",
@@ -5340,19 +5340,25 @@
       "milestone_id": "M008",
       "slice_id": "S02",
       "id": "T03",
-      "title": "Make knowledge-check reuse projected retrieval_facts for completed sessions",
-      "status": "pending",
-      "one_liner": "",
-      "narrative": "",
-      "verification_result": "",
+      "title": "Added retrieval_facts passthrough in build_session_runtime_diagnostics so knowledge-check and report routes return identical retrieval truth for completed sessions",
+      "status": "complete",
+      "one_liner": "Added retrieval_facts passthrough in build_session_runtime_diagnostics so knowledge-check and report routes return identical retrieval truth for completed sessions",
+      "narrative": "Extended `build_session_runtime_diagnostics(...)` to extract `retrieval_facts` from `projection_effectiveness_snapshot` when `live_runtime_active=False`. The field is passed through verbatim (not recomputed), preserving the single-source-of-truth property established in T01 and wired into projection in T02. For live sessions, `retrieval_facts` is always `None` — live truth comes from the handler. Added 4 unit tests proving reuse, live-session isolation, backward compatibility, and live-session ignores projection. All 34 tests pass across runtime_diagnostics and session_evidence suites.",
+      "verification_result": "Ran `-k 'retrieval_facts'` filter — 4 new tests pass. Ran full combined suite (runtime_diagnostics + session_evidence) — 34/34 pass. No regressions.",
       "duration": "",
-      "completed_at": null,
+      "completed_at": "2026-03-29T17:29:08.457Z",
       "blocker_discovered": false,
-      "deviations": "",
-      "known_issues": "",
-      "key_files": [],
-      "key_decisions": [],
-      "full_summary_md": "",
+      "deviations": "None.",
+      "known_issues": "None.",
+      "key_files": [
+        "backend/src/common/conversation/runtime_diagnostics.py",
+        "backend/tests/unit/test_runtime_diagnostics_knowledge_retrieval.py"
+      ],
+      "key_decisions": [
+        "retrieval_facts extracted from projection_effectiveness_snapshot only when live_runtime_active=False, preserving single-source-of-truth where live sessions derive truth from the live handler",
+        "retrieval_facts placed after upstream_unstable in the return dict to keep the new field at the boundary"
+      ],
+      "full_summary_md": "---\nid: T03\nparent: S02\nmilestone: M008\nkey_files:\n  - backend/src/common/conversation/runtime_diagnostics.py\n  - backend/tests/unit/test_runtime_diagnostics_knowledge_retrieval.py\nkey_decisions:\n  - retrieval_facts extracted from projection_effectiveness_snapshot only when live_runtime_active=False, preserving single-source-of-truth where live sessions derive truth from the live handler\n  - retrieval_facts placed after upstream_unstable in the return dict to keep the new field at the boundary\nduration: \"\"\nverification_result: passed\ncompleted_at: 2026-03-29T17:29:08.458Z\nblocker_discovered: false\n---\n\n# T03: Added retrieval_facts passthrough in build_session_runtime_diagnostics so knowledge-check and report routes return identical retrieval truth for completed sessions\n\n**Added retrieval_facts passthrough in build_session_runtime_diagnostics so knowledge-check and report routes return identical retrieval truth for completed sessions**\n\n## What Happened\n\nExtended `build_session_runtime_diagnostics(...)` to extract `retrieval_facts` from `projection_effectiveness_snapshot` when `live_runtime_active=False`. The field is passed through verbatim (not recomputed), preserving the single-source-of-truth property established in T01 and wired into projection in T02. For live sessions, `retrieval_facts` is always `None` — live truth comes from the handler. Added 4 unit tests proving reuse, live-session isolation, backward compatibility, and live-session ignores projection. All 34 tests pass across runtime_diagnostics and session_evidence suites.\n\n## Verification\n\nRan `-k 'retrieval_facts'` filter — 4 new tests pass. Ran full combined suite (runtime_diagnostics + session_evidence) — 34/34 pass. No regressions.\n\n## Verification Evidence\n\n| # | Command | Exit Code | Verdict | Duration |\n|---|---------|-----------|---------|----------|\n| 1 | `cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_runtime_diagnostics_knowledge_retrieval.py -v -k 'retrieval_facts'` | 0 | ✅ pass | 2710ms |\n| 2 | `cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_runtime_diagnostics_knowledge_retrieval.py tests/unit/test_session_evidence_service.py -v` | 0 | ✅ pass | 2710ms |\n\n\n## Deviations\n\nNone.\n\n## Known Issues\n\nNone.\n\n## Files Created/Modified\n\n- `backend/src/common/conversation/runtime_diagnostics.py`\n- `backend/tests/unit/test_runtime_diagnostics_knowledge_retrieval.py`\n",
       "description": "Extend build_session_runtime_diagnostics(...) so that when projection_effectiveness_snapshot already contains retrieval_facts (i.e., the route has already resolved a completed-session projection), the diagnostics response includes that same retrieval_facts payload as a top-level field. Keep all existing backward-compatible fields (status, summary, last_*, recent_queries, etc.) unchanged. The live-session path remains unchanged. Add unit tests proving reuse and backward compatibility.",
       "estimate": "30m",
       "files": [
@@ -9008,6 +9014,28 @@
       "verdict": "✅ pass",
       "duration_ms": 2810,
       "created_at": "2026-03-29T17:23:34.522Z"
+    },
+    {
+      "id": 198,
+      "task_id": "T03",
+      "slice_id": "S02",
+      "milestone_id": "M008",
+      "command": "cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_runtime_diagnostics_knowledge_retrieval.py -v -k 'retrieval_facts'",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 2710,
+      "created_at": "2026-03-29T17:29:08.458Z"
+    },
+    {
+      "id": 199,
+      "task_id": "T03",
+      "slice_id": "S02",
+      "milestone_id": "M008",
+      "command": "cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_runtime_diagnostics_knowledge_retrieval.py tests/unit/test_session_evidence_service.py -v",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 2710,
+      "created_at": "2026-03-29T17:29:08.458Z"
     }
   ]
 }
