@@ -2,7 +2,7 @@
   "version": 1,
   "projectName": "销售训练qoder",
   "projectPath": "/Users/zhaozengqing/github/销售训练qoder",
-  "gsdVersion": "2.46.0",
+  "gsdVersion": "2.53.0",
   "entries": [
     {
       "filename": "M001-2026-03-24T10-38-09.html",
@@ -51,6 +51,22 @@
       "doneMilestones": 4,
       "totalMilestones": 5,
       "phase": "executing"
+    },
+    {
+      "filename": "M008-2026-03-29T19-37-22.html",
+      "generatedAt": "2026-03-29T19:37:22.887Z",
+      "milestoneId": "M008",
+      "milestoneTitle": "M008: 检索事实链收口",
+      "label": "M008: M008: 检索事实链收口",
+      "kind": "milestone",
+      "totalCost": 0,
+      "totalTokens": 1487172860,
+      "totalDuration": 209732186,
+      "doneSlices": 37,
+      "totalSlices": 37,
+      "doneMilestones": 8,
+      "totalMilestones": 10,
+      "phase": "pre-planning"
     }
   ]
 }

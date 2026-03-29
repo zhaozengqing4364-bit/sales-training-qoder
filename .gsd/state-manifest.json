@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "exported_at": "2026-03-29T19:34:16.202Z",
+  "exported_at": "2026-03-29T20:43:44.016Z",
   "milestones": [
     {
       "id": "M001",
@@ -429,17 +429,58 @@
       "depends_on": [],
       "created_at": "2026-03-28T15:43:53.820Z",
       "completed_at": null,
-      "vision": "",
-      "success_criteria": [],
-      "key_risks": [],
-      "proof_strategy": [],
-      "verification_contract": "",
-      "verification_integration": "",
-      "verification_operational": "",
-      "verification_uat": "",
-      "definition_of_done": [],
-      "requirement_coverage": "",
-      "boundary_map_markdown": ""
+      "vision": "M009 把训练音频从\"训练过程中的流式输入/输出副产物\"升级为真正的审计资产：浏览器在训练过程中持续录制用户原始语音并直传阿里云 OSS，服务端只负责签名和元数据登记；学员能在现有 report/replay 路径里反查和播放自己的原始训练录音证据。",
+      "success_criteria": [
+        "一场真实训练的原始音频在训练过程中持续留痕到 OSS（训练未结束时已有递增的 segment metadata），而不是训练结束后才尝试补存。",
+        "浏览器直连 OSS 完成音频上传和下载，服务端日志和 network 只出现签名请求与 metadata 登记，不出现音频内容经 FastAPI 中转。",
+        "学员能在现有 /practice/{sessionId}/report 和 /sessions/{id}/replay 路径里看到原始录音留痕状态，并播放自己训练过程中的原始录音 segment。",
+        "训练中断、上传失败、签名过期等情况下，前序已上传 segment 仍有稳定留痕，当前失败状态在 report/replay 上有明确降级文案。"
+      ],
+      "key_risks": [
+        {
+          "risk": "当前 backend/src 没有任何 OSS client 或配置 wiring；OSS signed URL + CORS 组合需要真实 bucket 验证，不能只靠本地 mock。",
+          "whyItMatters": "如果签名 URL/CORS 配置有误，浏览器直传在本地开发环境无法走通，整个第一个 slice 的 proof 就无法成立。"
+        },
+        {
+          "risk": "训练是多次 push-to-talk 流，useAudioRecorder.stopRecording() 每次会关闭 stream；浏览器 MediaRecorder 编码格式在不同浏览器/codec 组合下可能不稳定。",
+          "whyItMatters": "如果 MediaRecorder 方案不可靠，需要回退到 PCM→WAV segment 方案，会改变 S01 的实现路径和复杂度。"
+        },
+        {
+          "risk": "per-segment signing/register 的服务端请求量可能在短按录音频繁的训练场景下偏多。",
+          "whyItMatters": "需要平衡'每次发言一段'与'固定 timeslice 段'之间的请求频率，避免签名风暴。"
+        }
+      ],
+      "proof_strategy": [
+        {
+          "riskOrUnknown": "OSS signed PUT + CORS + 浏览器播放组合是否可靠",
+          "retireIn": "S01 live integration proof",
+          "whatWillBeProven": "浏览器能用服务端签发的 PUT signed URL 成功上传音频 segment 到 OSS，且上传后的对象可通过 GET signed URL 在 <audio> 元素中播放。"
+        },
+        {
+          "riskOrUnknown": "浏览器并行 audit recorder 是否能稳定捕获 push-to-talk 语音",
+          "retireIn": "S01 live integration proof",
+          "whatWillBeProven": "并行 audit recorder 在现有 useAudioRecorder 的 MediaStream 上独立工作，不影响主 websocket PCM 链路，且每个 push-to-talk 段都能产出独立 segment。"
+        },
+        {
+          "riskOrUnknown": "训练中断后前序 segment 是否仍可读",
+          "retireIn": "S01 + S03 integration proof",
+          "whatWillBeProven": "模拟训练中断（websocket 断开、页面关闭），已上传的 segment metadata 和 OSS 对象仍可通过 report/replay route 正常读取。"
+        }
+      ],
+      "verification_contract": "Upload lease endpoint 不返回音频内容，只返回 signed PUT URL + object key。Metadata register endpoint 只接受已上传 segment 的元数据登记，不接受音频上传。只有 session owner / admin 能拿到 playback signed GET URL。Report 和 replay payload 对同一 session 暴露一致的 audio audit summary。",
+      "verification_integration": "Backend contract tests 验证 upload lease → direct PUT → metadata register → signed GET 全链路。Frontend focused tests 验证 practice page live audit state、report page raw-audio section、replay page raw-audio playback。Live UAT 验证训练进行中 OSS segment 递增、中途打断后前序可读、结束后 learner 可播放。",
+      "verification_operational": "训练中断时已有 segment 保留明确 metadata 状态。上传失败时当前 segment 标记为 failed 且 report/replay 显示降级文案。签名过期时前端能感知并重新申请。缺失音频的 session 不会呈现为'完整录音可用'。",
+      "verification_uat": "以 learner 身份进入训练页，完成 3+ 轮 push-to-talk 后结束训练，在 /practice/{sessionId}/report 页面看到原始录音留痕状态和可播放入口。在 /sessions/{id}/replay 页面能播放同一场训练的原始录音 segment。中途打断后前序段仍可播放。",
+      "definition_of_done": [
+        "所有 slices 完成，每个 slice 有 SUMMARY + UAT artifacts",
+        "Backend focused tests 通过（upload lease / metadata register / signed GET / replay integration）",
+        "Frontend focused tests 通过（practice live state / report audio section / replay audio playback）",
+        "Live localhost proof 存在（训练中 OSS segment 递增 + 中断后可恢复 + learner report/replay 可播放）",
+        "真实实现代码存在于 .gsd/ 之外（backend OSS service + migration + frontend audit recorder + report/replay UI）",
+        "R024/R025/R026 全部至少达到 mapped 状态"
+      ],
+      "requirement_coverage": "R024 (训练原始音频持续留痕落 OSS): primary S01, supporting S02, S03\nR025 (浏览器直连 OSS 服务端不做中转): primary S01, supporting S02\nR026 (学员在现有 report/replay 可查原始录音): primary S02, supporting S03\nR027 (报告结论可回到 audio evidence): foundation only in S02, full closure deferred to M010\nR028 (降级分层说明): supporting S03 (audio degradation layer)",
+      "boundary_map_markdown": "```boundary-map\nS01: backend/src/common/storage/oss_signing_service.py (new)\n    backend/src/common/db/models.py (SessionAudioSegment table)\n    backend/src/common/db/schemas.py (audio segment schemas)\n    backend/src/common/api/practice.py (upload lease + register endpoints)\n    backend/alembic/versions/*_add_session_audio_segments.py (new migration)\n    web/src/lib/oss-audit-recorder.ts (new — parallel audit recorder)\n    web/src/hooks/use-audio-recorder.ts (minor — expose stream ref)\n    web/src/app/(user)/practice/[sessionId]/page.tsx (wire audit recorder lifecycle)\n\nS02: backend/src/common/conversation/session_evidence.py (audio audit summary in projection)\n    backend/src/common/conversation/replay.py (audio evidence in replay payload)\n    backend/src/common/conversation/api.py (signed GET handoff)\n    backend/src/common/api/practice.py (report payload extension)\n    web/src/app/(user)/practice/[sessionId]/report/page.tsx (raw audio section)\n    web/src/app/(user)/practice/[sessionId]/replay/page.tsx (raw audio playback)\n    web/src/lib/api/types.ts (audio audit types)\n\nS03: backend/src/common/conversation/runtime_diagnostics.py (audio degradation diagnostics)\n    backend/src/support/services/runtime_status_service.py (audio anomaly classification)\n    web/src/lib/session-evidence.ts (shared degraded wording)\n    web/src/app/(user)/practice/[sessionId]/report/page.tsx (degraded wording)\n    web/src/app/(user)/practice/[sessionId]/replay/page.tsx (degraded wording)\n```"
     },
     {
       "id": "M010",
@@ -1093,6 +1134,71 @@
       "proof_level": "- This slice proves: integration\n- Real runtime required: no\n- Human/UAT required: no",
       "integration_closure": "- Upstream surfaces consumed: `web/src/lib/api/types.ts` 中的 `PracticeSessionReport.effectiveness_snapshot` open snapshot、S02 已锁定的 `retrieval_facts` contract、optional `KnowledgeCheckDiagnostics` fetch、`web/src/lib/session-evidence.ts` 共享 learner wording seam、`web/src/app/(user)/practice/[sessionId]/report/page.tsx`。\n- New wiring introduced in this slice: narrow retrieval-facts extraction/formatting helper -> sales report page retrieval section 从 `report.effectiveness_snapshot.retrieval_facts` 直渲染 -> supplemental `/knowledge-check` 请求降级为补充信息而不是 gating dependency。\n- What remains before the milestone is truly usable end-to-end: 对 report-page retrieval truth 这条链路来说没有剩余实现缺口；S03 完成后只剩 milestone close-out 的验证与总结。",
       "observability_impact": "- Runtime signals: 继续复用 `[Report] Loaded unified evidence contract`、`[Report] Knowledge-check load failed` 等现有 report-page debug 路径，并让 UI 在 supplemental `/knowledge-check` 失败时仍保留 canonical retrieval section，形成可见差异信号。\n- Inspection surfaces: `web/src/app/(user)/practice/[sessionId]/report/page.tsx`、`web/src/lib/session-evidence.ts`、`web/src/app/(user)/practice/[sessionId]/report/page.test.tsx`。\n- Failure visibility: focused report-page tests 会在 retrieval section 缺失、claim/retrieval 语义被错误合并、或 `getKnowledgeCheck` rejection 让 canonical retrieval truth 消失时直接失败。\n- Redaction constraints: 只渲染 `retrieval_facts` 里已经存在的 bounded query / KB name / result summary snippets；不要额外暴露原始知识库内容、整段 transcript 或 secrets。",
+      "sequence": 0,
+      "replan_triggered_at": null
+    },
+    {
+      "milestone_id": "M009",
+      "id": "S01",
+      "title": "OSS 直传音频留痕基础链路",
+      "status": "pending",
+      "risk": "high",
+      "depends": [],
+      "demo": "After this, a learner can start a training session and during the session the browser continuously uploads raw audio segments to Alibaba Cloud OSS via signed PUT URLs, with metadata registered in backend. Training interruption leaves prior segments durable and queryable.",
+      "created_at": "2026-03-29T20:08:50.266Z",
+      "completed_at": null,
+      "full_summary_md": "",
+      "full_uat_md": "",
+      "goal": "浏览器在训练过程中持续录制用户原始语音并直传阿里云 OSS，服务端只负责签名和元数据登记；训练中断时已上传的分段保持持久可查。",
+      "success_criteria": "- Backend OSS signing service 可对任意 session 生成 signed PUT URL，浏览器能直接 PUT audio/webm 分段到 OSS\n- `session_audio_segments` 表记录每个分段的 object_key、序号、大小、上传状态\n- 前端 useContinuousAudioUploader hook 在录音期间每 15 秒切分一次音频并通过 signed URL 直传 OSS\n- 分段上传后前端通知 backend 注册 metadata（POST /api/v1/practice/sessions/{id}/audio-segments）\n- 训练中断后已上传分段仍可在 DB 中查到，不会丢失\n- Backend 单元测试覆盖签名 URL 生成、分段 metadata 注册、查询\n- Frontend 单元测试覆盖 hook 状态机和分段切分逻辑",
+      "proof_level": "contract",
+      "integration_closure": "- Upstream surfaces consumed: `PracticeSession.session_id` (model), `get_db` (session), `oss2` SDK, `ALI_OSS_*` env vars\n- New wiring introduced: `backend/src/common/oss/signing.py` (OSS service), `backend/src/common/oss/__init__.py`, `backend/src/common/db/models.py` (SessionAudioSegment model), `backend/alembic/versions/...` (migration), `backend/src/common/api/practice.py` (3 new endpoints), `web/src/hooks/use-continuous-audio-uploader.ts` (upload hook), `web/src/app/(user)/practice/[sessionId]/page.tsx` (integration)\n- What remains before the milestone is truly usable end-to-end: S02 wires the registered segments into report/replay routes for learner playback",
+      "observability_impact": "- Runtime signals: per-segment upload_status (pending/uploaded/failed), structured log with session_id + segment_seq + size_bytes + duration_ms\n- Inspection surfaces: GET /api/v1/practice/sessions/{id}/audio-segments returns segment list; voice_policy_snapshot.runtime_metrics.audio_audit carries live summary (latest segment, counts, upload status)\n- Failure state exposed: per-segment error_message when upload fails; session-level audio_audit.last_error when signing is unavailable\n- Redaction constraints: signed URLs are time-limited (15 min TTL); object keys contain only session_id + sequence, no PII",
+      "sequence": 0,
+      "replan_triggered_at": null
+    },
+    {
+      "milestone_id": "M009",
+      "id": "S02",
+      "title": "Report/Replay 原始录音可查",
+      "status": "pending",
+      "risk": "medium",
+      "depends": [
+        "S01"
+      ],
+      "demo": "After this, a learner can open /practice/{sessionId}/report and see a raw audio audit section showing recording status, segment count, and playable segments. The same audio evidence is available in /sessions/{id}/replay.",
+      "created_at": "2026-03-29T20:08:50.266Z",
+      "completed_at": null,
+      "full_summary_md": "",
+      "full_uat_md": "",
+      "goal": "Wire the durable segment catalog into the existing report and replay route family so learners can see audio audit status and play raw training recordings through signed GET URLs.",
+      "success_criteria": "1. Report API (/api/v1/practice/sessions/{id}/report) includes audio_audit_summary in its payload: segment_count, uploaded_count, failed_count, total_duration_ms, status, and playback entries with signed GET URLs.\n2. Replay API (/api/v1/sessions/{id}/replay) includes session-level audio evidence in its payload with the same audio_audit_summary shape.\n3. Signed GET URLs are short-lived, user-scoped, and generated on demand — never permanently stored in database.\n4. Report page (/practice/{sessionId}/report) renders an audio audit section: segment status overview, per-segment playback controls (using HTMLAudioElement), and failure reasons where applicable.\n5. Replay page (/sessions/{id}/replay) exposes raw audio playback affordance alongside existing message replay.\n6. PPT sessions gracefully suppress the audio audit section (consistent with existing pattern).\n7. Audio playback uses browser-native <audio> / new Audio() pattern (consistent with existing highlights playback).",
+      "proof_level": "full — learner-facing report and replay pages show audio evidence with playback",
+      "integration_closure": "S02 produces audio_audit_summary in report and replay payloads. Downstream S03 adds degradation diagnostics on top. M010 can use the same segment catalog for turn-level audio provenance.",
+      "observability_impact": "Signed GET URL generation count and latency logged. Report/replay audio section render failures surface in frontend console.",
+      "sequence": 0,
+      "replan_triggered_at": null
+    },
+    {
+      "milestone_id": "M009",
+      "id": "S03",
+      "title": "音频审计降级与诊断",
+      "status": "pending",
+      "risk": "low",
+      "depends": [
+        "S01",
+        "S02"
+      ],
+      "demo": "After this, when audio upload fails, signing expires, or segments are partially missing, the learner sees clear degraded wording in report/replay explaining what happened. Admin/support runtime surfaces audio anomalies alongside existing diagnostic categories.",
+      "created_at": "2026-03-29T20:08:50.266Z",
+      "completed_at": null,
+      "full_summary_md": "",
+      "full_uat_md": "",
+      "goal": "Add audio-specific degradation classification, diagnostic integration, and learner-facing degraded wording so that audio audit gaps never silently look like complete recordings.",
+      "success_criteria": "1. Audio audit status machine covers: uploading / uploaded / failed / partial / missing, and each state maps to learner-visible wording.\n2. Runtime diagnostics (build_session_runtime_diagnostics) includes audio_audit layer: upload failure rate, latest failure reason, segment gap detection.\n3. Support runtime service classifies audio anomalies (e.g. audio_upload_degraded, audio_upload_blocked) alongside existing anomaly categories.\n4. Report/replay pages render shared degraded wording from web/src/lib/session-evidence.ts when audio audit status is not fully uploaded.\n5. Existing report/replay/highlights behavior does not regress when audio audit is absent (backward compatible for sessions without audio segments).",
+      "proof_level": "contract — focused backend + frontend tests prove degradation classification and wording",
+      "integration_closure": "S03 completes the audio audit chain with failure visibility. M010 can use the same diagnostics for report provenance traceability.",
+      "observability_impact": "Audio anomaly events appear in support/runtime diagnostics. Degraded wording visibility testable via frontend focused tests.",
       "sequence": 0,
       "replan_triggered_at": null
     }
@@ -5518,6 +5624,139 @@
       "observability_impact": "",
       "full_plan_md": "",
       "sequence": 0
+    },
+    {
+      "milestone_id": "M009",
+      "slice_id": "S01",
+      "id": "T01",
+      "title": "Add OSS signing service, SessionAudioSegment model, Alembic migration, and three audio-segment API endpoints",
+      "status": "complete",
+      "one_liner": "Add OSS signing service, SessionAudioSegment model, Alembic migration, and three audio-segment API endpoints",
+      "narrative": "Built the complete server-side foundation for audio audit trail via OSS direct upload.\n\nStep 1: Created `OssSigningService` in `backend/src/common/oss/signing.py`. It reads `ALI_OSS_*` env vars at construction time, Uses `oss2.Auth` + `oss2.Bucket` for pure HMAC signing (no network I/O). Provides `generate_put_url()`, `generate_get_url()`, and `build_object_key()`. Missing env vars raise `OssConfigError` with an actionable message listing which vars are absent.\n\nStep 2: Added `SessionAudioSegment` model to `models.py` with fields: id (UUID PK), session_id (FK), segment_sequence, object_key, content_type, size_bytes, duration_ms, upload_status, error_message, created_at. Includes unique constraint on (session_id, segment_sequence) and check constraint on upload_status. Added `audio_segments` relationship to `PracticeSession`.\n\nStep 3: Created Alembic migration `20260328_1000_022` revising `20260326_1000_021`. Creates the `session_audio_segments` table with all columns, constraints, and indexes.\n\nStep 4: Added three endpoints to the practice router:\n- `POST /practice/sessions/{id}/audio-upload-urls` — generates presigned PUT URL\n- `POST /practice/sessions/{id}/audio-segments` — registers uploaded segment (idempotent upsert)\n- `GET /practice/sessions/{id}/audio-segments` — lists all segments ordered by sequence\n\nAll endpoints validate session ownership, return proper error codes (404/403/422/503), and emit structured logs.\n\nStep 5: Created comprehensive test suites — 22 tests total, all passing. Signing tests cover config errors, URL generation, object key formatting, singleton behavior. API tests cover success flows, error paths (missing session, negative sequence, missing object_key, OSS not configured), idempotent upsert, audio_url update, and ordered listing.\n\nAlso fixed a broken `pycryptodome` native module in the backend venv that was preventing `oss2` from importing.",
+      "verification_result": "Ran 22 unit tests covering OSS signing service (9 tests) and audio segment API endpoints (13 tests). All pass.\n\nTests cover: config error on missing env vars, presigned PUT/GET URL generation, object key format, singleton, session ownership checks, 404/403/422/503 error codes, idempotent segment registration, audio_url directory update on first segment, ordered segment listing.",
+      "duration": "",
+      "completed_at": "2026-03-29T20:43:43.987Z",
+      "blocker_discovered": false,
+      "deviations": "None.",
+      "known_issues": "None.",
+      "key_files": [
+        "backend/src/common/oss/__init__.py",
+        "backend/src/common/oss/signing.py",
+        "backend/src/common/db/models.py",
+        "backend/alembic/versions/20260328_1000_022_add_session_audio_segments.py",
+        "backend/src/common/api/practice.py",
+        "backend/tests/unit/test_oss_signing_service.py",
+        "backend/tests/unit/test_audio_segment_api.py"
+      ],
+      "key_decisions": [
+        "OSS signing uses module-level singleton (get_oss_signing_service()) to validate env vars once at first use",
+        "Endpoints use dict body instead of Pydantic request models to match existing practice.py pattern",
+        "Segment registration is idempotent via upsert on (session_id, segment_sequence)"
+      ],
+      "full_summary_md": "---\nid: T01\nparent: S01\nmilestone: M009\nkey_files:\n  - backend/src/common/oss/__init__.py\n  - backend/src/common/oss/signing.py\n  - backend/src/common/db/models.py\n  - backend/alembic/versions/20260328_1000_022_add_session_audio_segments.py\n  - backend/src/common/api/practice.py\n  - backend/tests/unit/test_oss_signing_service.py\n  - backend/tests/unit/test_audio_segment_api.py\nkey_decisions:\n  - OSS signing uses module-level singleton (get_oss_signing_service()) to validate env vars once at first use\n  - Endpoints use dict body instead of Pydantic request models to match existing practice.py pattern\n  - Segment registration is idempotent via upsert on (session_id, segment_sequence)\nduration: \"\"\nverification_result: passed\ncompleted_at: 2026-03-29T20:43:43.988Z\nblocker_discovered: false\n---\n\n# T01: Add OSS signing service, SessionAudioSegment model, Alembic migration, and three audio-segment API endpoints\n\n**Add OSS signing service, SessionAudioSegment model, Alembic migration, and three audio-segment API endpoints**\n\n## What Happened\n\nBuilt the complete server-side foundation for audio audit trail via OSS direct upload.\n\nStep 1: Created `OssSigningService` in `backend/src/common/oss/signing.py`. It reads `ALI_OSS_*` env vars at construction time, Uses `oss2.Auth` + `oss2.Bucket` for pure HMAC signing (no network I/O). Provides `generate_put_url()`, `generate_get_url()`, and `build_object_key()`. Missing env vars raise `OssConfigError` with an actionable message listing which vars are absent.\n\nStep 2: Added `SessionAudioSegment` model to `models.py` with fields: id (UUID PK), session_id (FK), segment_sequence, object_key, content_type, size_bytes, duration_ms, upload_status, error_message, created_at. Includes unique constraint on (session_id, segment_sequence) and check constraint on upload_status. Added `audio_segments` relationship to `PracticeSession`.\n\nStep 3: Created Alembic migration `20260328_1000_022` revising `20260326_1000_021`. Creates the `session_audio_segments` table with all columns, constraints, and indexes.\n\nStep 4: Added three endpoints to the practice router:\n- `POST /practice/sessions/{id}/audio-upload-urls` — generates presigned PUT URL\n- `POST /practice/sessions/{id}/audio-segments` — registers uploaded segment (idempotent upsert)\n- `GET /practice/sessions/{id}/audio-segments` — lists all segments ordered by sequence\n\nAll endpoints validate session ownership, return proper error codes (404/403/422/503), and emit structured logs.\n\nStep 5: Created comprehensive test suites — 22 tests total, all passing. Signing tests cover config errors, URL generation, object key formatting, singleton behavior. API tests cover success flows, error paths (missing session, negative sequence, missing object_key, OSS not configured), idempotent upsert, audio_url update, and ordered listing.\n\nAlso fixed a broken `pycryptodome` native module in the backend venv that was preventing `oss2` from importing.\n\n## Verification\n\nRan 22 unit tests covering OSS signing service (9 tests) and audio segment API endpoints (13 tests). All pass.\n\nTests cover: config error on missing env vars, presigned PUT/GET URL generation, object key format, singleton, session ownership checks, 404/403/422/503 error codes, idempotent segment registration, audio_url directory update on first segment, ordered segment listing.\n\n## Verification Evidence\n\n| # | Command | Exit Code | Verdict | Duration |\n|---|---------|-----------|---------|----------|\n| 1 | `cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_oss_signing_service.py tests/unit/test_audio_segment_api.py -v` | 0 | ✅ pass | 14500ms |\n\n\n## Deviations\n\nNone.\n\n## Known Issues\n\nNone.\n\n## Files Created/Modified\n\n- `backend/src/common/oss/__init__.py`\n- `backend/src/common/oss/signing.py`\n- `backend/src/common/db/models.py`\n- `backend/alembic/versions/20260328_1000_022_add_session_audio_segments.py`\n- `backend/src/common/api/practice.py`\n- `backend/tests/unit/test_oss_signing_service.py`\n- `backend/tests/unit/test_audio_segment_api.py`\n",
+      "description": "Build the server-side foundation: an OSS signing service using oss2, a session_audio_segments table with Alembic migration, and three new FastAPI endpoints (generate signed PUT URL, register segment metadata, list segments for a session). Tests cover signing, metadata registration, and query.",
+      "estimate": "2h",
+      "files": [
+        "backend/src/common/oss/signing.py",
+        "backend/src/common/oss/__init__.py",
+        "backend/src/common/db/models.py",
+        "backend/alembic/versions/20260328_1000_022_add_session_audio_segments.py",
+        "backend/src/common/api/practice.py",
+        "backend/tests/unit/test_oss_signing_service.py",
+        "backend/tests/unit/test_audio_segment_api.py"
+      ],
+      "verify": "cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_oss_signing_service.py tests/unit/test_audio_segment_api.py -v",
+      "inputs": [
+        "backend/src/common/db/models.py",
+        "backend/src/common/db/session.py",
+        "backend/src/common/api/practice.py"
+      ],
+      "expected_output": [
+        "backend/src/common/oss/__init__.py",
+        "backend/src/common/oss/signing.py",
+        "backend/src/common/db/models.py",
+        "backend/alembic/versions/20260328_1000_022_add_session_audio_segments.py",
+        "backend/src/common/api/practice.py",
+        "backend/tests/unit/test_oss_signing_service.py",
+        "backend/tests/unit/test_audio_segment_api.py"
+      ],
+      "observability_impact": "Structured log on each signed URL request and segment registration. Per-segment upload_status field queryable via API. Error propagation when ALI_OSS credentials are missing or expired.",
+      "full_plan_md": "",
+      "sequence": 0
+    },
+    {
+      "milestone_id": "M009",
+      "slice_id": "S01",
+      "id": "T02",
+      "title": "Build frontend useContinuousAudioUploader hook with segment splitting",
+      "status": "pending",
+      "one_liner": "",
+      "narrative": "",
+      "verification_result": "",
+      "duration": "",
+      "completed_at": null,
+      "blocker_discovered": false,
+      "deviations": "",
+      "known_issues": "",
+      "key_files": [],
+      "key_decisions": [],
+      "full_summary_md": "",
+      "description": "Create a React hook that uses MediaRecorder to capture audio in webm/opus format, splits it into ~15-second segments, requests signed PUT URLs from backend, uploads each segment directly to OSS, and notifies backend to register metadata. Handles pause/resume, errors, and cleanup.",
+      "estimate": "2h",
+      "files": [
+        "web/src/hooks/use-continuous-audio-uploader.ts",
+        "web/src/hooks/use-continuous-audio-uploader.test.ts"
+      ],
+      "verify": "cd web && npx vitest run src/hooks/use-continuous-audio-uploader.test.ts",
+      "inputs": [
+        "web/src/lib/api/client.ts",
+        "web/src/lib/api/types.ts"
+      ],
+      "expected_output": [
+        "web/src/hooks/use-continuous-audio-uploader.ts",
+        "web/src/hooks/use-continuous-audio-uploader.test.ts"
+      ],
+      "observability_impact": "Hook exposes segmentCount, uploadStatus, and lastError for UI display. Upload failures are logged with segment sequence for debugging.",
+      "full_plan_md": "",
+      "sequence": 0
+    },
+    {
+      "milestone_id": "M009",
+      "slice_id": "S01",
+      "id": "T03",
+      "title": "Integrate uploader into practice session page and add contract tests",
+      "status": "pending",
+      "one_liner": "",
+      "narrative": "",
+      "verification_result": "",
+      "duration": "",
+      "completed_at": null,
+      "blocker_discovered": false,
+      "deviations": "",
+      "known_issues": "",
+      "key_files": [],
+      "key_decisions": [],
+      "full_summary_md": "",
+      "description": "Wire useContinuousAudioUploader into the practice session page alongside the existing useAudioRecorder. When recording starts, also start the continuous uploader. When recording stops, finalize the last segment. Add backend+frontend contract tests proving the full cycle: backend signs URL -> mock upload -> metadata registered -> segments queryable.",
+      "estimate": "1.5h",
+      "files": [
+        "web/src/app/(user)/practice/[sessionId]/page.tsx",
+        "backend/tests/contract/test_audio_audit_contract.py"
+      ],
+      "verify": "cd backend && venv/bin/python -m pytest -c pyproject.toml tests/contract/test_audio_audit_contract.py -v && cd ../web && npx vitest run src/hooks/use-continuous-audio-uploader.test.ts",
+      "inputs": [
+        "web/src/app/(user)/practice/[sessionId]/page.tsx",
+        "web/src/hooks/use-continuous-audio-uploader.ts",
+        "backend/src/common/api/practice.py",
+        "backend/src/common/oss/signing.py"
+      ],
+      "expected_output": [
+        "web/src/app/(user)/practice/[sessionId]/page.tsx",
+        "backend/tests/contract/test_audio_audit_contract.py"
+      ],
+      "observability_impact": "Integration adds runtime_metrics.audio_audit to voice_policy_snapshot on segment registration. Contract test proves the full signing -> upload -> metadata -> query cycle.",
+      "full_plan_md": "",
+      "sequence": 0
     }
   ],
   "decisions": [
@@ -6981,6 +7220,30 @@
       "decision": "What data source should the learner report page use for retrieval truth in M008/S03",
       "choice": "Treat `PracticeSessionReport.effectiveness_snapshot.retrieval_facts` as the report page's primary retrieval-truth source and keep `/api/v1/practice/sessions/{id}/knowledge-check` supplemental-only on that page.",
       "rationale": "S02 already proved report and knowledge-check parity through the shared `build_retrieval_facts()` normalizer and projection overlay. Reading retrieval truth from the canonical report payload prevents the learner UI from blanking whenever the supplemental request fails, keeps the user-visible route family aligned with D113, and preserves `claim_truth` as a separate orthogonal signal instead of merging it into diagnostics status copy.",
+      "revisable": "Yes",
+      "made_by": "agent",
+      "superseded_by": null
+    },
+    {
+      "seq": 1488,
+      "id": "D123",
+      "when_context": "M009 planning",
+      "scope": "architecture",
+      "decision": "How M009 OSS integration is structured in the current FastAPI backend",
+      "choice": "Build a new OSS signing service in backend/src that uses the already-installed oss2 Python SDK with env-configured ALI_OSS_* credentials. Backend only issues signed PUT/GET URLs and registers metadata; browser does all actual audio transfer to/from OSS.",
+      "rationale": "The current FastAPI backend has no OSS client code despite oss2 being installed and ALI_OSS_* credentials documented in oss配置.md. A new signing service follows the same pattern as the legacy NestJS OssService (documented in oss配置.md) but adapted for FastAPI. Server bandwidth is explicitly constrained — no audio content may transit through FastAPI.",
+      "revisable": "Yes",
+      "made_by": "agent",
+      "superseded_by": null
+    },
+    {
+      "seq": 1489,
+      "id": "D124",
+      "when_context": "M009 planning",
+      "scope": "architecture",
+      "decision": "Where M009 audio segment metadata is persisted",
+      "choice": "Create a new session_audio_segments table for durable per-segment metadata. Use voice_policy_snapshot.runtime_metrics.audio_audit only for bounded live summary (latest segment, counts, upload status). PracticeSession.audio_url becomes the session-level manifest pointer.",
+      "rationale": "voice_policy_snapshot is proven suitable for bounded runtime facts (D115, D117, D120) but inappropriate for unbounded asset catalogs. A dedicated table gives proper query support, status tracking, and failure attribution per segment without bloating the session snapshot. PracticeSession.audio_url already exists as a seam and can point to the manifest entry.",
       "revisable": "Yes",
       "made_by": "agent",
       "superseded_by": null
@@ -9208,6 +9471,17 @@
       "verdict": "✅ pass",
       "duration_ms": 9500,
       "created_at": "2026-03-29T19:13:43.826Z"
+    },
+    {
+      "id": 203,
+      "task_id": "T01",
+      "slice_id": "S01",
+      "milestone_id": "M009",
+      "command": "cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_oss_signing_service.py tests/unit/test_audio_segment_api.py -v",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 14500,
+      "created_at": "2026-03-29T20:43:43.987Z"
     }
   ]
 }

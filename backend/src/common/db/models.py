@@ -261,6 +261,8 @@ class PracticeSession(Base):
     persona = relationship("Persona", back_populates="sessions")
     # Conversation messages (R9: Conversation Message Storage)
     messages = relationship("ConversationMessage", back_populates="session", cascade="all, delete-orphan")
+    # Audio segments for browser-direct OSS upload audit trail
+    audio_segments = relationship("SessionAudioSegment", back_populates="session", cascade="all, delete-orphan")
 
 
 class ConversationMessage(Base):
@@ -665,3 +667,55 @@ class ReleaseVerificationSummary(Base):
 
     # Relationships
     finalizer = relationship("User", foreign_keys=[finalized_by])
+
+
+class UploadStatus(str, enum.Enum):
+    """Upload status for audio segments."""
+    PENDING = "pending"
+    UPLOADED = "uploaded"
+    FAILED = "failed"
+
+
+class SessionAudioSegment(Base):
+    """Audio segment metadata for browser-direct OSS uploads.
+
+    Each row represents one audio chunk uploaded during a training session.
+    The actual audio bytes live in Alibaba Cloud OSS; this table only stores
+    metadata and upload status.
+    """
+    __tablename__ = "session_audio_segments"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    session_id = Column(
+        String(36),
+        ForeignKey("practice_sessions.session_id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    segment_sequence = Column(Integer, nullable=False)
+    object_key = Column(String(500), nullable=False)
+    content_type = Column(String(100), nullable=False, default="audio/webm")
+    size_bytes = Column(Integer, nullable=True)
+    duration_ms = Column(Integer, nullable=True)
+    upload_status = Column(String(20), nullable=False, default="pending")
+    error_message = Column(Text, nullable=True)
+    created_at = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        nullable=False,
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "upload_status IN ('pending', 'uploaded', 'failed')",
+            name="ck_audio_segment_upload_status",
+        ),
+        UniqueConstraint(
+            "session_id", "segment_sequence",
+            name="uq_audio_segment_session_sequence",
+        ),
+        Index("idx_audio_segments_session", "session_id"),
+    )
+
+    # Relationships
+    session = relationship("PracticeSession", back_populates="audio_segments")

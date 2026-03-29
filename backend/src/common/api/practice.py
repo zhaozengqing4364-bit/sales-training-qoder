@@ -38,7 +38,7 @@ from common.conversation.runtime_diagnostics import (
     extract_voice_policy_snapshot,
 )
 from common.conversation.session_evidence import SessionEvidenceService
-from common.db.models import PracticeSession, Scenario, SessionStatus, User
+from common.db.models import PracticeSession, Scenario, SessionAudioSegment, SessionStatus, User
 from common.db.schemas import (
     SessionCreate,
     SessionDetail,
@@ -62,6 +62,7 @@ from common.effectiveness import (
     evaluate_effectiveness_snapshot,
 )
 from common.monitoring.logger import get_logger, get_trace_id
+from common.oss.signing import OssConfigError, get_oss_signing_service
 from common.websocket.base_handler import get_connection_manager
 from common.websocket.session_manager import get_session_manager
 from presentation_coach.services.coach_service import PresentationCoachService
@@ -2127,4 +2128,223 @@ async def get_report_generation_status(
             else None,
             "report_error": session.report_error,
         }
+    )
+
+
+# ---------------------------------------------------------------------------
+# Audio Segment OSS Direct-Upload Endpoints
+# ---------------------------------------------------------------------------
+
+
+@router.post("/practice/sessions/{session_id}/audio-upload-urls")
+async def generate_audio_upload_url(
+    session_id: str,
+    body: dict[str, Any],
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Generate a presigned PUT URL for browser-direct audio segment upload.
+
+    Request body:
+        segment_sequence (int): Zero-based segment index within the session.
+        content_type (str): MIME type, default "audio/webm".
+
+    Returns:
+        {url, object_key, expires_at} — the browser PUTs raw audio bytes to *url*.
+    """
+    # --- input validation ---
+    segment_sequence = body.get("segment_sequence")
+    if segment_sequence is None or not isinstance(segment_sequence, int) or segment_sequence < 0:
+        return error_response(
+            "[INVALID_SEGMENT_SEQUENCE]",
+            status_code=422,
+            message="segment_sequence must be a non-negative integer",
+        )
+
+    content_type = body.get("content_type", "audio/webm")
+    if not isinstance(content_type, str) or not content_type:
+        return error_response(
+            "[INVALID_CONTENT_TYPE]",
+            status_code=422,
+            message="content_type must be a non-empty string",
+        )
+
+    # --- session ownership check ---
+    result = await db.execute(
+        select(PracticeSession).where(PracticeSession.session_id == session_id)
+    )
+    session = result.scalar_one_or_none()
+    if not session:
+        return error_response("[SESSION_NOT_FOUND]", status_code=404)
+    if not _can_read_session(session, current_user):
+        return error_response("[ACCESS_DENIED]", status_code=403)
+
+    # --- generate signed URL ---
+    try:
+        svc = get_oss_signing_service()
+    except OssConfigError as exc:
+        return error_response(
+            "[OSS_NOT_CONFIGURED]",
+            status_code=503,
+            message=str(exc),
+        )
+
+    object_key = svc.build_object_key(session_id, segment_sequence)
+    presigned = svc.generate_put_url(object_key, content_type=content_type)
+
+    return success_response(
+        {
+            "url": presigned.url,
+            "object_key": presigned.object_key,
+            "expires_at": presigned.expires_at,
+        }
+    )
+
+
+@router.post("/practice/sessions/{session_id}/audio-segments")
+async def register_audio_segment(
+    session_id: str,
+    body: dict[str, Any],
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Register a successfully uploaded audio segment.
+
+    Request body:
+        segment_sequence (int): Segment index.
+        object_key (str): OSS object key that was uploaded.
+        size_bytes (int | null): Upload size in bytes.
+        duration_ms (int | null): Segment duration in milliseconds.
+
+    Creates/updates a SessionAudioSegment row with upload_status="uploaded".
+    """
+    segment_sequence = body.get("segment_sequence")
+    if segment_sequence is None or not isinstance(segment_sequence, int) or segment_sequence < 0:
+        return error_response(
+            "[INVALID_SEGMENT_SEQUENCE]",
+            status_code=422,
+            message="segment_sequence must be a non-negative integer",
+        )
+
+    object_key = body.get("object_key")
+    if not object_key or not isinstance(object_key, str):
+        return error_response(
+            "[INVALID_OBJECT_KEY]",
+            status_code=422,
+            message="object_key must be a non-empty string",
+        )
+
+    size_bytes = body.get("size_bytes")
+    duration_ms = body.get("duration_ms")
+
+    # --- session ownership check ---
+    result = await db.execute(
+        select(PracticeSession).where(PracticeSession.session_id == session_id)
+    )
+    session = result.scalar_one_or_none()
+    if not session:
+        return error_response("[SESSION_NOT_FOUND]", status_code=404)
+    if not _can_read_session(session, current_user):
+        return error_response("[ACCESS_DENIED]", status_code=403)
+
+    # --- upsert segment row ---
+    existing = await db.execute(
+        select(SessionAudioSegment).where(
+            SessionAudioSegment.session_id == session_id,
+            SessionAudioSegment.segment_sequence == segment_sequence,
+        )
+    )
+    segment = existing.scalar_one_or_none()
+
+    if segment:
+        segment.object_key = object_key
+        segment.upload_status = "uploaded"
+        segment.error_message = None
+        if size_bytes is not None:
+            segment.size_bytes = size_bytes
+        if duration_ms is not None:
+            segment.duration_ms = duration_ms
+    else:
+        segment = SessionAudioSegment(
+            session_id=session_id,
+            segment_sequence=segment_sequence,
+            object_key=object_key,
+            content_type="audio/webm",
+            size_bytes=size_bytes,
+            duration_ms=duration_ms,
+            upload_status="uploaded",
+        )
+        db.add(segment)
+
+    # Update PracticeSession.audio_url to point to the first segment's directory
+    if session.audio_url is None:
+        session.audio_url = f"audio/{session_id}/"
+
+    await db.commit()
+    await db.refresh(segment)
+
+    logger.info(
+        "audio_segment_registered",
+        session_id=session_id,
+        segment_sequence=segment_sequence,
+        object_key=object_key,
+        upload_status="uploaded",
+    )
+
+    return success_response(
+        {
+            "id": segment.id,
+            "session_id": session_id,
+            "segment_sequence": segment.segment_sequence,
+            "object_key": segment.object_key,
+            "upload_status": segment.upload_status,
+            "size_bytes": segment.size_bytes,
+            "duration_ms": segment.duration_ms,
+            "created_at": segment.created_at.isoformat() if segment.created_at else None,
+        }
+    )
+
+
+@router.get("/practice/sessions/{session_id}/audio-segments")
+async def list_audio_segments(
+    session_id: str,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """List all audio segments registered for a session.
+
+    Returns an array of segment metadata including upload status.
+    """
+    # --- session ownership check ---
+    result = await db.execute(
+        select(PracticeSession).where(PracticeSession.session_id == session_id)
+    )
+    session = result.scalar_one_or_none()
+    if not session:
+        return error_response("[SESSION_NOT_FOUND]", status_code=404)
+    if not _can_read_session(session, current_user):
+        return error_response("[ACCESS_DENIED]", status_code=403)
+
+    seg_result = await db.execute(
+        select(SessionAudioSegment)
+        .where(SessionAudioSegment.session_id == session_id)
+        .order_by(SessionAudioSegment.segment_sequence)
+    )
+    segments = seg_result.scalars().all()
+
+    return success_response(
+        [
+            {
+                "id": s.id,
+                "segment_sequence": s.segment_sequence,
+                "object_key": s.object_key,
+                "content_type": s.content_type,
+                "size_bytes": s.size_bytes,
+                "duration_ms": s.duration_ms,
+                "upload_status": s.upload_status,
+                "error_message": s.error_message,
+                "created_at": s.created_at.isoformat() if s.created_at else None,
+            }
+            for s in segments
+        ]
     )
