@@ -8,7 +8,7 @@
   - Estimate: 2h
   - Files: backend/src/common/oss/signing.py, backend/src/common/oss/__init__.py, backend/src/common/db/models.py, backend/alembic/versions/20260328_1000_022_add_session_audio_segments.py, backend/src/common/api/practice.py, backend/tests/unit/test_oss_signing_service.py, backend/tests/unit/test_audio_segment_api.py
   - Verify: cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_oss_signing_service.py tests/unit/test_audio_segment_api.py -v
-- [ ] **T02: Build frontend useContinuousAudioUploader hook with segment splitting** — Create a React hook that uses MediaRecorder to capture audio in webm/opus format, splits it into ~15-second segments, requests signed PUT URLs from backend, uploads each segment directly to OSS, and notifies backend to register metadata. Handles pause/resume, errors, and cleanup.
+- [x] **T02: Add useContinuousAudioUploader hook with 15s segment splitting, OSS presigned-URL upload, and backend metadata registration** — Create a React hook that uses MediaRecorder to capture audio in webm/opus format, splits it into ~15-second segments, requests signed PUT URLs from backend, uploads each segment directly to OSS, and notifies backend to register metadata. Handles pause/resume, errors, and cleanup.
   - Estimate: 2h
   - Files: web/src/hooks/use-continuous-audio-uploader.ts, web/src/hooks/use-continuous-audio-uploader.test.ts
   - Verify: cd web && npx vitest run src/hooks/use-continuous-audio-uploader.test.ts
