@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
+from datetime import UTC, datetime
 import re
 from typing import Any
 
@@ -15,6 +16,12 @@ SALES_OBJECTION_QUERY_RE = re.compile(
     r"roi|预算|报价|价格|竞品|竞对|对比|替代|实施|落地|风险|案例|证据|收益|回报|proof|evidence|competitor|pricing|price|budget|case",
     re.IGNORECASE,
 )
+MAX_KNOWLEDGE_RETRIEVAL_LEDGER_ENTRIES = 10
+MAX_KNOWLEDGE_RETRIEVAL_RESULT_SUMMARIES = 3
+MAX_KNOWLEDGE_RETRIEVAL_QUERY_CHARS = 160
+MAX_KNOWLEDGE_RETRIEVAL_ERROR_CHARS = 240
+MAX_KNOWLEDGE_RETRIEVAL_SNIPPET_CHARS = 240
+MAX_KNOWLEDGE_RETRIEVAL_LEDGER_KB_IDS = 8
 
 
 def is_sales_objection_query(query: str) -> bool:

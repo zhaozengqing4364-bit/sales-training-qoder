@@ -4,8 +4,13 @@ from __future__ import annotations
 
 import pytest
 
+from sales_bot.websocket.components.stepfun_helpers import (
+    ensure_knowledge_runtime_metrics,
+    update_knowledge_runtime_metrics,
+)
 from sales_bot.websocket.components.stepfun_knowledge_helpers import (
     build_kb_not_ready_payload,
+    build_knowledge_retrieval_ledger_event,
     build_missing_query_payload,
     build_no_kb_payload,
     build_search_failed_payload,
@@ -265,6 +270,97 @@ def test_sales_objection_queries_expand_helper_limits_across_roi_price_competito
     assert keyword_limit == 48
     assert len(results) == 1
     assert len(results[0]["snippet"]) == 420
+
+
+def test_build_knowledge_retrieval_ledger_event_normalizes_and_bounds_result_summaries():
+    event = build_knowledge_retrieval_ledger_event(
+        query="  竞品A   价格 更低  ",
+        status="hit",
+        result_count=5,
+        retrieval_mode="hybrid",
+        knowledge_base_ids=["kb-1", "", None, "kb-2"],
+        error_message="  embedding timeout  ",
+        results=[
+            {
+                "knowledge_base_id": "kb-1",
+                "knowledge_base_name": "产品知识库",
+                "score": 0.91,
+                "snippet": "A" * 400,
+                "retrieval_mode": "hybrid",
+                "raw_payload": {"provider": "stepfun"},
+            },
+            {
+                "knowledge_base_id": "kb-2",
+                "knowledge_base_name": "案例库",
+                "score": "0.87",
+                "snippet": "B" * 32,
+                "retrieval_mode": "vector",
+            },
+            {
+                "knowledge_base_id": "kb-3",
+                "knowledge_base_name": "FAQ",
+                "score": 0.51,
+                "snippet": "C" * 32,
+                "retrieval_mode": "keyword_fallback",
+            },
+            {
+                "knowledge_base_id": "kb-4",
+                "knowledge_base_name": "raw-row-should-be-trimmed-by-cap",
+                "score": 0.49,
+                "snippet": "D" * 32,
+                "retrieval_mode": "vector",
+            },
+            {
+                "content": "raw provider row should be rejected",
+                "score": 0.99,
+            },
+        ],
+    )
+
+    assert event["query"] == "竞品A 价格 更低"
+    assert event["status"] == "hit"
+    assert event["result_count"] == 5
+    assert event["retrieval_mode"] == "hybrid"
+    assert event["knowledge_base_ids"] == ["kb-1", "kb-2"]
+    assert event["error_summary"] == "embedding timeout"
+    assert len(event["result_summaries"]) == 3
+    assert len(event["result_summaries"][0]["snippet"]) <= 240
+    assert "raw_payload" not in event["result_summaries"][0]
+    assert event["result_summaries"][2]["knowledge_base_id"] == "kb-3"
+
+
+def test_update_knowledge_runtime_metrics_caps_recent_attempt_ledger():
+    effective_policy: dict[str, object] = {}
+    metrics = ensure_knowledge_runtime_metrics(effective_policy)
+
+    for index in range(12):
+        update_knowledge_runtime_metrics(
+            metrics,
+            query=f"问题 {index}",
+            result_count=index % 2,
+            status="hit" if index % 2 else "miss",
+            knowledge_base_ids=["kb-1"],
+            ledger_event={
+                "attempted_at": f"2026-03-28T12:00:{index:02d}Z",
+                "query": f"问题 {index}",
+                "status": "hit" if index % 2 else "miss",
+                "result_count": index % 2,
+                "retrieval_mode": "vector",
+                "result_summaries": [
+                    {
+                        "knowledge_base_id": "kb-1",
+                        "knowledge_base_name": "产品知识库",
+                        "score": 0.8,
+                        "snippet": "命中摘要",
+                        "retrieval_mode": "vector",
+                    }
+                ],
+            },
+        )
+
+    assert len(metrics["recent_attempts"]) == 10
+    assert metrics["recent_attempts"][0]["query"] == "问题 2"
+    assert metrics["recent_attempts"][-1]["query"] == "问题 11"
 
 
 def test_resolve_rerank_params_with_defaults_and_invalid_values():

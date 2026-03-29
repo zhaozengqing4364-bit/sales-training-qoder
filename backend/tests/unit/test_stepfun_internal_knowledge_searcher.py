@@ -26,12 +26,16 @@ async def test_search_internal_knowledge_returns_missing_query_payload():
 
     assert payload["count"] == 0
     assert payload["message"] == "缺少 query 参数"
-    record_metric.assert_awaited_once_with(
-        query="",
-        result_count=0,
-        status="missing_query",
-        knowledge_base_ids=["kb-1"],
-    )
+    assert record_metric.await_args is not None
+    kwargs = record_metric.await_args.kwargs
+    assert kwargs["query"] == ""
+    assert kwargs["result_count"] == 0
+    assert kwargs["status"] == "missing_query"
+    assert kwargs["knowledge_base_ids"] == ["kb-1"]
+    assert kwargs["ledger_event"]["status"] == "missing_query"
+    assert kwargs["ledger_event"]["query"] == ""
+    assert kwargs["ledger_event"]["error_summary"] == "缺少 query 参数"
+    assert kwargs["ledger_event"]["result_summaries"] == []
 
 
 @pytest.mark.asyncio
@@ -48,12 +52,16 @@ async def test_search_internal_knowledge_returns_no_kb_payload_when_unbound():
 
     assert payload["count"] == 0
     assert payload["message"] == "当前会话未关联内部知识库"
-    record_metric.assert_awaited_once_with(
-        query="产品定价",
-        result_count=0,
-        status="no_kb_bound",
-        knowledge_base_ids=[],
-    )
+    assert record_metric.await_args is not None
+    kwargs = record_metric.await_args.kwargs
+    assert kwargs["query"] == "产品定价"
+    assert kwargs["result_count"] == 0
+    assert kwargs["status"] == "no_kb_bound"
+    assert kwargs["knowledge_base_ids"] == []
+    assert kwargs["ledger_event"]["status"] == "no_kb_bound"
+    assert kwargs["ledger_event"]["query"] == "产品定价"
+    assert kwargs["ledger_event"]["error_summary"] == "当前会话未关联内部知识库"
+    assert kwargs["ledger_event"]["result_summaries"] == []
 
 
 @pytest.mark.asyncio
@@ -95,6 +103,10 @@ async def test_search_internal_knowledge_records_search_failed_detail():
     assert kwargs["knowledge_base_ids"] == ["kb-1"]
     assert kwargs["top_k"] == 3
     assert kwargs["similarity_threshold"] == 0.57
+    assert kwargs["ledger_event"]["status"] == "search_failed"
+    assert kwargs["ledger_event"]["query"] == "十七科技实习产品"
+    assert kwargs["ledger_event"]["error_summary"] == "[KNOWLEDGE_SEARCH_UNAVAILABLE] [EMBEDDING_API_ERROR]"
+    assert kwargs["ledger_event"]["result_summaries"] == []
 
 
 @pytest.mark.asyncio
@@ -137,6 +149,9 @@ async def test_search_internal_knowledge_handles_unexpected_exception():
     assert kwargs["knowledge_base_ids"] == ["kb-1"]
     assert kwargs["top_k"] == 2
     assert kwargs["similarity_threshold"] == 0.62
+    assert kwargs["ledger_event"]["status"] == "search_failed"
+    assert kwargs["ledger_event"]["query"] == "实习产品"
+    assert "RuntimeError" in kwargs["ledger_event"]["error_summary"]
 
 
 @pytest.mark.asyncio
@@ -184,6 +199,9 @@ async def test_search_internal_knowledge_returns_kb_not_ready_payload_when_no_re
     kwargs = record_metric.await_args.kwargs
     assert kwargs["status"] == "kb_not_ready"
     assert kwargs["knowledge_base_ids"] == ["kb-1"]
+    assert kwargs["ledger_event"]["status"] == "kb_not_ready"
+    assert kwargs["ledger_event"]["query"] == "公司产品有哪些"
+    assert kwargs["ledger_event"]["error_summary"] == "内部知识库文档尚未处理完成，请稍后重试"
 
 
 @pytest.mark.asyncio
@@ -234,10 +252,13 @@ async def test_search_internal_knowledge_returns_kb_not_ready_payload_when_healt
     assert kwargs["status"] == "kb_not_ready"
     assert kwargs["knowledge_base_ids"] == ["kb-1"]
     assert "vector_chunks=0" in str(kwargs["error_message"])
+    assert kwargs["ledger_event"]["status"] == "kb_not_ready"
+    assert kwargs["ledger_event"]["query"] == "公司产品有哪些"
+    assert kwargs["ledger_event"]["error_summary"] == "内部知识库文档尚未处理完成，请稍后重试"
 
 
 @pytest.mark.asyncio
-async def test_search_internal_knowledge_passes_hybrid_and_metadata_filter():
+async def test_search_internal_knowledge_records_hit_ledger_event_from_transformed_results():
     record_metric = AsyncMock()
     captured: dict[str, object] = {}
 
@@ -259,7 +280,7 @@ async def test_search_internal_knowledge_passes_hybrid_and_metadata_filter():
                     {
                         "knowledge_base_id": "kb-1",
                         "knowledge_base_name": "产品知识库",
-                        "content": "命中内容",
+                        "content": "命中内容" * 40,
                         "score": 0.91,
                         "retrieval_mode": "vector",
                     }
@@ -295,10 +316,20 @@ async def test_search_internal_knowledge_passes_hybrid_and_metadata_filter():
         "product_line": "enterprise",
         "regions": ["cn", "sg"],
     }
+    assert record_metric.await_args is not None
+    kwargs = record_metric.await_args.kwargs
+    assert kwargs["status"] == "hit"
+    assert kwargs["retrieval_mode"] == "vector"
+    assert kwargs["ledger_event"]["status"] == "hit"
+    assert kwargs["ledger_event"]["query"] == "十七科技企业版"
+    assert kwargs["ledger_event"]["result_count"] == 1
+    assert kwargs["ledger_event"]["retrieval_mode"] == "vector"
+    assert len(kwargs["ledger_event"]["result_summaries"]) == 1
+    assert kwargs["ledger_event"]["result_summaries"][0]["knowledge_base_id"] == "kb-1"
 
 
 @pytest.mark.asyncio
-async def test_search_internal_knowledge_passes_rerank_params():
+async def test_search_internal_knowledge_records_miss_ledger_event_with_empty_results():
     record_metric = AsyncMock()
     captured: dict[str, object] = {}
 
@@ -317,7 +348,7 @@ async def test_search_internal_knowledge_passes_rerank_params():
             captured.update(kwargs)
             return Result.ok([])
 
-    await search_internal_knowledge(
+    payload = await search_internal_knowledge(
         arguments_obj={"query": "石犀产品"},
         effective_policy={
             "knowledge_base_ids": ["kb-1"],
@@ -331,5 +362,13 @@ async def test_search_internal_knowledge_passes_rerank_params():
         record_metric=record_metric,
     )
 
+    assert payload["count"] == 0
     assert captured["enable_rerank"] is True
     assert captured["rerank_top_k"] == 10
+    assert record_metric.await_args is not None
+    kwargs = record_metric.await_args.kwargs
+    assert kwargs["status"] == "miss"
+    assert kwargs["ledger_event"]["status"] == "miss"
+    assert kwargs["ledger_event"]["query"] == "石犀产品"
+    assert kwargs["ledger_event"]["result_count"] == 0
+    assert kwargs["ledger_event"]["result_summaries"] == []
