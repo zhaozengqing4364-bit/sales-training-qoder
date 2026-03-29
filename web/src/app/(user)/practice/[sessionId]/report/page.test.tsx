@@ -1194,6 +1194,32 @@ describe("ReportPage", () => {
         expect(screen.queryByText("95")).toBeNull();
     });
 
+    it("renders the learner-facing missing raw-audio copy when audio_audit is absent", async () => {
+        getReportMock.mockResolvedValue({
+            ...baseReport,
+            audio_audit: null,
+        });
+        getComprehensiveReportMock.mockResolvedValue({
+            session_id: "session-1",
+            generated_at: "2026-03-23T00:00:00Z",
+            overall_score: 72,
+            dimension_scores: [],
+            stage_summaries: [],
+            key_strengths: [],
+            key_improvements: [],
+            detailed_feedback: "",
+            recommendations: [],
+            voice_policy_snapshot_ref: null,
+        });
+
+        render(<ReportPage />);
+
+        expect(await screen.findByTestId("audio-audit-card")).toBeTruthy();
+        expect(screen.getByText("原始录音")).toBeTruthy();
+        expect(screen.getByText("本次训练未录制原始音频")).toBeTruthy();
+        expect(screen.queryByText(/共 2 个片段/)).toBeNull();
+    });
+
     it("keeps the evidence view stable when enhanced report and highlights are unavailable", async () => {
         getReportMock.mockResolvedValue({
             ...baseReport,

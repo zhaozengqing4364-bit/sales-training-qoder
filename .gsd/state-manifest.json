@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "exported_at": "2026-03-29T22:29:04.084Z",
+  "exported_at": "2026-03-29T22:40:21.160Z",
   "milestones": [
     {
       "id": "M001",
@@ -5899,19 +5899,27 @@
       "milestone_id": "M009",
       "slice_id": "S02",
       "id": "T03",
-      "title": "Focused contract regression for audio-audit evidence chain",
-      "status": "pending",
-      "one_liner": "",
-      "narrative": "",
-      "verification_result": "",
+      "title": "Added focused audio-audit regressions for report/replay payloads, playback ownership, and missing-audio learner UI.",
+      "status": "complete",
+      "one_liner": "Added focused audio-audit regressions for report/replay payloads, playback ownership, and missing-audio learner UI.",
+      "narrative": "Extended the backend contract suite with focused audio-audit regressions covering report available/partial states, replay parity, playback redirect ownership, missing-segment 404 handling, outsider 403 handling, and the guarantee that signed GET URLs never leak into persisted state or learner payloads. Updated the report page test suite with an explicit missing raw-audio fallback assertion for `audio_audit: null`, while preserving the existing shared-card assertions already proving available audio on both report and replay pages. Recorded the non-obvious no-segment backend contract seam in project knowledge so future tasks keep the current authority line intact.",
+      "verification_result": "Focused backend and frontend verification passed. `cd backend && venv/bin/python -m pytest -c pyproject.toml tests/contract/test_practice_evidence_contract.py -v -k audio_audit` proved the report/replay audio-audit payload cases. `cd backend && venv/bin/python -m pytest -c pyproject.toml tests/contract/test_practice_evidence_contract.py -v -k 'audio_audit or audio_segment_playback or signed_audio_segment_urls'` proved the full evidence chain including signed redirect ownership and non-persistence. `cd web && pnpm exec vitest run 'src/app/(user)/practice/[sessionId]/report/page.test.tsx' 'src/app/(user)/practice/[sessionId]/replay/page.test.tsx'` passed with the new report missing-audio assertion and the existing shared audio-audit UI assertions.",
       "duration": "",
-      "completed_at": null,
+      "completed_at": "2026-03-29T22:40:21.128Z",
       "blocker_discovered": false,
-      "deviations": "",
-      "known_issues": "",
-      "key_files": [],
-      "key_decisions": [],
-      "full_summary_md": "",
+      "deviations": "The task plan described a backend \"missing\" audio-audit status case, but the shipped read model intentionally returns `audio_audit: null` when a session has no `SessionAudioSegment` rows. I locked that real backend contract in the contract suite and added the learner-facing missing-audio UI assertion on the report page instead of synthesizing a backend `learner_status=\"missing\"` payload.",
+      "known_issues": "None.",
+      "key_files": [
+        "backend/tests/contract/test_practice_evidence_contract.py",
+        "web/src/app/(user)/practice/[sessionId]/report/page.test.tsx",
+        ".gsd/KNOWLEDGE.md",
+        ".gsd/milestones/M009/slices/S02/tasks/T03-SUMMARY.md"
+      ],
+      "key_decisions": [
+        "Keep the shipped backend authority seam where sessions with no SessionAudioSegment rows return `audio_audit: null`, and prove the learner-facing missing-audio state in the frontend contract instead of synthesizing a backend `missing` payload.",
+        "Patch `common.oss.signing.get_oss_signing_service` in contract tests so playback handoff assertions verify owner-only signed redirects without persisting signed OSS URLs into DB or report/replay payloads."
+      ],
+      "full_summary_md": "---\nid: T03\nparent: S02\nmilestone: M009\nkey_files:\n  - backend/tests/contract/test_practice_evidence_contract.py\n  - web/src/app/(user)/practice/[sessionId]/report/page.test.tsx\n  - .gsd/KNOWLEDGE.md\n  - .gsd/milestones/M009/slices/S02/tasks/T03-SUMMARY.md\nkey_decisions:\n  - Keep the shipped backend authority seam where sessions with no SessionAudioSegment rows return `audio_audit: null`, and prove the learner-facing missing-audio state in the frontend contract instead of synthesizing a backend `missing` payload.\n  - Patch `common.oss.signing.get_oss_signing_service` in contract tests so playback handoff assertions verify owner-only signed redirects without persisting signed OSS URLs into DB or report/replay payloads.\nduration: \"\"\nverification_result: passed\ncompleted_at: 2026-03-29T22:40:21.129Z\nblocker_discovered: false\n---\n\n# T03: Added focused audio-audit regressions for report/replay payloads, playback ownership, and missing-audio learner UI.\n\n**Added focused audio-audit regressions for report/replay payloads, playback ownership, and missing-audio learner UI.**\n\n## What Happened\n\nExtended the backend contract suite with focused audio-audit regressions covering report available/partial states, replay parity, playback redirect ownership, missing-segment 404 handling, outsider 403 handling, and the guarantee that signed GET URLs never leak into persisted state or learner payloads. Updated the report page test suite with an explicit missing raw-audio fallback assertion for `audio_audit: null`, while preserving the existing shared-card assertions already proving available audio on both report and replay pages. Recorded the non-obvious no-segment backend contract seam in project knowledge so future tasks keep the current authority line intact.\n\n## Verification\n\nFocused backend and frontend verification passed. `cd backend && venv/bin/python -m pytest -c pyproject.toml tests/contract/test_practice_evidence_contract.py -v -k audio_audit` proved the report/replay audio-audit payload cases. `cd backend && venv/bin/python -m pytest -c pyproject.toml tests/contract/test_practice_evidence_contract.py -v -k 'audio_audit or audio_segment_playback or signed_audio_segment_urls'` proved the full evidence chain including signed redirect ownership and non-persistence. `cd web && pnpm exec vitest run 'src/app/(user)/practice/[sessionId]/report/page.test.tsx' 'src/app/(user)/practice/[sessionId]/replay/page.test.tsx'` passed with the new report missing-audio assertion and the existing shared audio-audit UI assertions.\n\n## Verification Evidence\n\n| # | Command | Exit Code | Verdict | Duration |\n|---|---------|-----------|---------|----------|\n| 1 | `cd backend && venv/bin/python -m pytest -c pyproject.toml tests/contract/test_practice_evidence_contract.py -v -k audio_audit` | 0 | ✅ pass | 14600ms |\n| 2 | `cd backend && venv/bin/python -m pytest -c pyproject.toml tests/contract/test_practice_evidence_contract.py -v -k 'audio_audit or audio_segment_playback or signed_audio_segment_urls'` | 0 | ✅ pass | 52200ms |\n| 3 | `cd web && pnpm exec vitest run 'src/app/(user)/practice/[sessionId]/report/page.test.tsx' 'src/app/(user)/practice/[sessionId]/replay/page.test.tsx'` | 0 | ✅ pass | 14600ms |\n\n\n## Deviations\n\nThe task plan described a backend \"missing\" audio-audit status case, but the shipped read model intentionally returns `audio_audit: null` when a session has no `SessionAudioSegment` rows. I locked that real backend contract in the contract suite and added the learner-facing missing-audio UI assertion on the report page instead of synthesizing a backend `learner_status=\"missing\"` payload.\n\n## Known Issues\n\nNone.\n\n## Files Created/Modified\n\n- `backend/tests/contract/test_practice_evidence_contract.py`\n- `web/src/app/(user)/practice/[sessionId]/report/page.test.tsx`\n- `.gsd/KNOWLEDGE.md`\n- `.gsd/milestones/M009/slices/S02/tasks/T03-SUMMARY.md`\n",
       "description": "Add dedicated backend contract tests proving the audio-audit read model, playback handoff, and ownership semantics. Add frontend test assertions proving report and replay render audio audit sections correctly.\n\n## Steps\n\n1. Add backend contract tests in `backend/tests/contract/test_practice_evidence_contract.py` (extend existing file):\n   - Test that report payload for a session with uploaded audio segments includes audio_audit with correct summary (status=available, segment count, total bytes)\n   - Test that report payload for a session with no segments includes audio_audit with status=missing\n   - Test that report payload for a session with partial uploads shows status=partial\n   - Test that replay payload after completion includes the same audio_audit structure\n   - Test that segment playback route returns signed redirect (307) for uploaded segment with correct ownership\n   - Test that segment playback route returns 404 for non-existent segment sequence\n   - Test that outsider user gets 403 on playback route\n   - Test that signed GET URLs are never persisted in DB state\n\n2. Add frontend test assertions in report page test:\n   - Add audio_audit to baseReport mock with available status and 2 segments\n   - Assert \"原始录音\" heading is visible\n   - Assert segment count is displayed\n   - Assert play buttons are rendered\n   - Add test for missing audio state: no audio_audit → renders \"本次训练未录制原始音频\"\n   - Assert existing report assertions still pass\n\n3. Add frontend test assertions in replay page test:\n   - Add audio_audit to baseReplayData mock\n   - Assert audio audit section renders without breaking highlights/full-dialogue\n   - Assert existing blocked replay behavior still renders the current explicit message\n\n## Must-Haves\n\n- [ ] Backend contract tests for report/replay audio_audit inclusion with available/partial/missing states\n- [ ] Backend contract tests for playback handoff (signed redirect, 404, 403)\n- [ ] Frontend report test asserts audio audit section renders\n- [ ] Frontend replay test asserts audio audit section renders without regressions\n- [ ] All existing tests continue to pass",
       "estimate": "1.5h",
       "files": [
@@ -9735,6 +9743,39 @@
       "verdict": "❌ fail",
       "duration_ms": 15000,
       "created_at": "2026-03-29T22:29:04.046Z"
+    },
+    {
+      "id": 211,
+      "task_id": "T03",
+      "slice_id": "S02",
+      "milestone_id": "M009",
+      "command": "cd backend && venv/bin/python -m pytest -c pyproject.toml tests/contract/test_practice_evidence_contract.py -v -k audio_audit",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 14600,
+      "created_at": "2026-03-29T22:40:21.128Z"
+    },
+    {
+      "id": 212,
+      "task_id": "T03",
+      "slice_id": "S02",
+      "milestone_id": "M009",
+      "command": "cd backend && venv/bin/python -m pytest -c pyproject.toml tests/contract/test_practice_evidence_contract.py -v -k 'audio_audit or audio_segment_playback or signed_audio_segment_urls'",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 52200,
+      "created_at": "2026-03-29T22:40:21.128Z"
+    },
+    {
+      "id": 213,
+      "task_id": "T03",
+      "slice_id": "S02",
+      "milestone_id": "M009",
+      "command": "cd web && pnpm exec vitest run 'src/app/(user)/practice/[sessionId]/report/page.test.tsx' 'src/app/(user)/practice/[sessionId]/replay/page.test.tsx'",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 14600,
+      "created_at": "2026-03-29T22:40:21.128Z"
     }
   ]
 }

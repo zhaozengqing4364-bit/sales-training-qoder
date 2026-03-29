@@ -3,17 +3,18 @@ from __future__ import annotations
 import uuid
 from datetime import UTC, datetime
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 
 from common.auth.service import create_access_token
 from common.conversation.models import ConversationMessage
-from common.db.models import Base, PracticeSession, Scenario, SessionStatus, User
+from common.db.models import Base, PracticeSession, Scenario, SessionAudioSegment, SessionStatus, User
 from common.db.session import get_db
 from common.error_handling.result import Result
 from common.websocket.session_manager import get_session_manager
@@ -1287,6 +1288,465 @@ def _make_voice_policy_snapshot_with_retrieval_ledger(
             }
         },
     }
+
+
+def _make_audio_audit_runtime_metrics(*, recording_status: str = "completed", storage_prefix: str = "sessions/audio") -> dict[str, object]:
+    return {
+        "runtime_metrics": {
+            "audio_audit": {
+                "recording_status": recording_status,
+                "storage_prefix": storage_prefix,
+            }
+        }
+    }
+
+
+async def _persist_audio_segments(
+    db_session: AsyncSession,
+    *,
+    session_id: str,
+    segments: list[dict[str, object]],
+) -> None:
+    db_session.add_all(
+        [
+            SessionAudioSegment(
+                session_id=session_id,
+                segment_sequence=segment["segment_sequence"],
+                object_key=segment.get("object_key") or f"audio/{session_id}/seg_{segment['segment_sequence']:04d}.webm",
+                content_type=segment.get("content_type") or "audio/webm",
+                size_bytes=segment.get("size_bytes"),
+                duration_ms=segment.get("duration_ms"),
+                upload_status=segment.get("upload_status") or "pending",
+                error_message=segment.get("error_message"),
+                created_at=segment.get("created_at") or datetime.now(UTC),
+            )
+            for segment in segments
+        ]
+    )
+    await db_session.commit()
+
+
+@pytest.mark.asyncio
+async def test_report_payload_includes_available_audio_audit_for_uploaded_segments(
+    async_client: AsyncClient,
+    db_session: AsyncSession,
+    owner: User,
+    owner_headers: dict[str, str],
+):
+    scenario = Scenario(
+        scenario_id=str(uuid.uuid4()),
+        scenario_type="sales",
+        name="audio available report scenario",
+        is_active=True,
+    )
+    session = PracticeSession(
+        session_id=str(uuid.uuid4()),
+        user_id=str(owner.user_id),
+        scenario_id=scenario.scenario_id,
+        status=SessionStatus.COMPLETED.value,
+        voice_policy_snapshot=_make_audio_audit_runtime_metrics(
+            storage_prefix="sessions/session-audio-available/audio"
+        ),
+    )
+    db_session.add_all([scenario, session])
+    await db_session.commit()
+
+    await _persist_audio_segments(
+        db_session,
+        session_id=session.session_id,
+        segments=[
+            {
+                "segment_sequence": 0,
+                "size_bytes": 20480,
+                "duration_ms": 12000,
+                "upload_status": "uploaded",
+                "created_at": datetime(2026, 3, 28, 4, 0, 0, tzinfo=UTC),
+            },
+            {
+                "segment_sequence": 1,
+                "size_bytes": 10240,
+                "duration_ms": 8000,
+                "upload_status": "uploaded",
+                "created_at": datetime(2026, 3, 28, 4, 0, 12, tzinfo=UTC),
+            },
+        ],
+    )
+
+    response = await async_client.get(
+        f"/api/v1/practice/sessions/{session.session_id}/report",
+        headers=owner_headers,
+    )
+
+    assert response.status_code == 200
+    audio_audit = response.json()["data"]["audio_audit"]
+    assert audio_audit["summary"] == {
+        "recording_status": "completed",
+        "total_segments": 2,
+        "uploaded_segments": 2,
+        "total_bytes": 30720,
+        "latest_segment_sequence": 1,
+        "storage_prefix": "sessions/session-audio-available/audio",
+        "last_uploaded_at": "2026-03-28T04:00:12",
+        "learner_status": "available",
+    }
+    assert [segment["playback_path"] for segment in audio_audit["segments"]] == [
+        f"/api/v1/sessions/{session.session_id}/audio-segments/0",
+        f"/api/v1/sessions/{session.session_id}/audio-segments/1",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_report_payload_omits_audio_audit_when_session_has_no_audio_segments(
+    async_client: AsyncClient,
+    db_session: AsyncSession,
+    owner: User,
+    owner_headers: dict[str, str],
+):
+    scenario = Scenario(
+        scenario_id=str(uuid.uuid4()),
+        scenario_type="sales",
+        name="audio missing report scenario",
+        is_active=True,
+    )
+    session = PracticeSession(
+        session_id=str(uuid.uuid4()),
+        user_id=str(owner.user_id),
+        scenario_id=scenario.scenario_id,
+        status=SessionStatus.COMPLETED.value,
+        voice_policy_snapshot=_make_audio_audit_runtime_metrics(),
+    )
+    db_session.add_all([scenario, session])
+    await db_session.commit()
+
+    response = await async_client.get(
+        f"/api/v1/practice/sessions/{session.session_id}/report",
+        headers=owner_headers,
+    )
+
+    assert response.status_code == 200
+    assert response.json()["data"]["audio_audit"] is None
+
+
+@pytest.mark.asyncio
+async def test_report_payload_marks_audio_audit_partial_when_uploads_incomplete(
+    async_client: AsyncClient,
+    db_session: AsyncSession,
+    owner: User,
+    owner_headers: dict[str, str],
+):
+    scenario = Scenario(
+        scenario_id=str(uuid.uuid4()),
+        scenario_type="sales",
+        name="audio partial report scenario",
+        is_active=True,
+    )
+    session = PracticeSession(
+        session_id=str(uuid.uuid4()),
+        user_id=str(owner.user_id),
+        scenario_id=scenario.scenario_id,
+        status=SessionStatus.COMPLETED.value,
+        voice_policy_snapshot=_make_audio_audit_runtime_metrics(),
+    )
+    db_session.add_all([scenario, session])
+    await db_session.commit()
+
+    await _persist_audio_segments(
+        db_session,
+        session_id=session.session_id,
+        segments=[
+            {
+                "segment_sequence": 0,
+                "size_bytes": 12288,
+                "duration_ms": 5000,
+                "upload_status": "uploaded",
+                "created_at": datetime(2026, 3, 28, 4, 2, 0, tzinfo=UTC),
+            },
+            {
+                "segment_sequence": 1,
+                "size_bytes": None,
+                "duration_ms": None,
+                "upload_status": "pending",
+                "created_at": datetime(2026, 3, 28, 4, 2, 5, tzinfo=UTC),
+            },
+        ],
+    )
+
+    response = await async_client.get(
+        f"/api/v1/practice/sessions/{session.session_id}/report",
+        headers=owner_headers,
+    )
+
+    assert response.status_code == 200
+    audio_audit = response.json()["data"]["audio_audit"]
+    assert audio_audit["summary"]["learner_status"] == "partial"
+    assert audio_audit["summary"]["uploaded_segments"] == 1
+    assert audio_audit["summary"]["total_segments"] == 2
+    assert audio_audit["summary"]["total_bytes"] == 12288
+    assert audio_audit["segments"][1]["playback_path"] is None
+
+
+@pytest.mark.asyncio
+async def test_replay_payload_includes_same_audio_audit_structure_as_report(
+    async_client: AsyncClient,
+    db_session: AsyncSession,
+    owner: User,
+    owner_headers: dict[str, str],
+):
+    scenario = Scenario(
+        scenario_id=str(uuid.uuid4()),
+        scenario_type="sales",
+        name="audio replay parity scenario",
+        is_active=True,
+    )
+    session = PracticeSession(
+        session_id=str(uuid.uuid4()),
+        user_id=str(owner.user_id),
+        scenario_id=scenario.scenario_id,
+        status=SessionStatus.COMPLETED.value,
+        voice_policy_snapshot=_make_audio_audit_runtime_metrics(
+            storage_prefix="sessions/session-audio-replay/audio"
+        ),
+    )
+    db_session.add_all([scenario, session])
+    await db_session.commit()
+
+    await _persist_audio_segments(
+        db_session,
+        session_id=session.session_id,
+        segments=[
+            {
+                "segment_sequence": 0,
+                "size_bytes": 20480,
+                "duration_ms": 12000,
+                "upload_status": "uploaded",
+                "created_at": datetime(2026, 3, 28, 4, 5, 0, tzinfo=UTC),
+            },
+            {
+                "segment_sequence": 1,
+                "size_bytes": 10240,
+                "duration_ms": None,
+                "upload_status": "uploaded",
+                "created_at": datetime(2026, 3, 28, 4, 5, 12, tzinfo=UTC),
+            },
+        ],
+    )
+
+    report_response = await async_client.get(
+        f"/api/v1/practice/sessions/{session.session_id}/report",
+        headers=owner_headers,
+    )
+    replay_response = await async_client.get(
+        f"/api/v1/sessions/{session.session_id}/replay",
+        headers=owner_headers,
+    )
+
+    assert report_response.status_code == 200
+    assert replay_response.status_code == 200
+    assert replay_response.json()["data"]["audio_audit"] == report_response.json()["data"]["audio_audit"]
+
+
+@pytest.mark.asyncio
+async def test_audio_segment_playback_redirects_to_signed_url_for_owner(
+    async_client: AsyncClient,
+    db_session: AsyncSession,
+    owner: User,
+    owner_headers: dict[str, str],
+):
+    scenario = Scenario(
+        scenario_id=str(uuid.uuid4()),
+        scenario_type="sales",
+        name="audio playback owner scenario",
+        is_active=True,
+    )
+    session = PracticeSession(
+        session_id=str(uuid.uuid4()),
+        user_id=str(owner.user_id),
+        scenario_id=scenario.scenario_id,
+        status=SessionStatus.COMPLETED.value,
+    )
+    db_session.add_all([scenario, session])
+    await db_session.commit()
+
+    object_key = f"audio/{session.session_id}/seg_0000.webm"
+    await _persist_audio_segments(
+        db_session,
+        session_id=session.session_id,
+        segments=[
+            {
+                "segment_sequence": 0,
+                "object_key": object_key,
+                "size_bytes": 20480,
+                "duration_ms": 12000,
+                "upload_status": "uploaded",
+            },
+        ],
+    )
+
+    signing_service = MagicMock()
+    signing_service.generate_get_url.return_value = "https://signed.example.com/audio/seg_0000.webm"
+
+    with patch("common.oss.signing.get_oss_signing_service", return_value=signing_service):
+        response = await async_client.get(
+            f"/api/v1/sessions/{session.session_id}/audio-segments/0",
+            headers=owner_headers,
+            follow_redirects=False,
+        )
+
+    assert response.status_code == 307
+    assert response.headers["location"] == "https://signed.example.com/audio/seg_0000.webm"
+    signing_service.generate_get_url.assert_called_once_with(object_key, expires=3600)
+
+
+@pytest.mark.asyncio
+async def test_audio_segment_playback_returns_404_for_missing_segment_sequence(
+    async_client: AsyncClient,
+    db_session: AsyncSession,
+    owner: User,
+    owner_headers: dict[str, str],
+):
+    scenario = Scenario(
+        scenario_id=str(uuid.uuid4()),
+        scenario_type="sales",
+        name="audio playback missing segment scenario",
+        is_active=True,
+    )
+    session = PracticeSession(
+        session_id=str(uuid.uuid4()),
+        user_id=str(owner.user_id),
+        scenario_id=scenario.scenario_id,
+        status=SessionStatus.COMPLETED.value,
+    )
+    db_session.add_all([scenario, session])
+    await db_session.commit()
+
+    response = await async_client.get(
+        f"/api/v1/sessions/{session.session_id}/audio-segments/99",
+        headers=owner_headers,
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 404
+    assert response.json()["error"] == "[SEGMENT_NOT_FOUND]"
+
+
+@pytest.mark.asyncio
+async def test_audio_segment_playback_denies_outsider_access(
+    async_client: AsyncClient,
+    db_session: AsyncSession,
+    owner: User,
+    owner_headers: dict[str, str],
+    outsider_headers: dict[str, str],
+):
+    scenario = Scenario(
+        scenario_id=str(uuid.uuid4()),
+        scenario_type="sales",
+        name="audio playback ownership scenario",
+        is_active=True,
+    )
+    session = PracticeSession(
+        session_id=str(uuid.uuid4()),
+        user_id=str(owner.user_id),
+        scenario_id=scenario.scenario_id,
+        status=SessionStatus.COMPLETED.value,
+    )
+    db_session.add_all([scenario, session])
+    await db_session.commit()
+
+    await _persist_audio_segments(
+        db_session,
+        session_id=session.session_id,
+        segments=[
+            {
+                "segment_sequence": 0,
+                "size_bytes": 20480,
+                "duration_ms": 12000,
+                "upload_status": "uploaded",
+            },
+        ],
+    )
+
+    response = await async_client.get(
+        f"/api/v1/sessions/{session.session_id}/audio-segments/0",
+        headers=outsider_headers,
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 403
+    assert response.json()["error"] == "[ACCESS_DENIED]"
+
+
+@pytest.mark.asyncio
+async def test_signed_audio_segment_urls_are_not_persisted_in_database_state(
+    async_client: AsyncClient,
+    db_session: AsyncSession,
+    owner: User,
+    owner_headers: dict[str, str],
+):
+    scenario = Scenario(
+        scenario_id=str(uuid.uuid4()),
+        scenario_type="sales",
+        name="audio signed url persistence scenario",
+        is_active=True,
+    )
+    session = PracticeSession(
+        session_id=str(uuid.uuid4()),
+        user_id=str(owner.user_id),
+        scenario_id=scenario.scenario_id,
+        status=SessionStatus.COMPLETED.value,
+        voice_policy_snapshot=_make_audio_audit_runtime_metrics(),
+    )
+    db_session.add_all([scenario, session])
+    await db_session.commit()
+
+    object_key = f"audio/{session.session_id}/seg_0000.webm"
+    await _persist_audio_segments(
+        db_session,
+        session_id=session.session_id,
+        segments=[
+            {
+                "segment_sequence": 0,
+                "object_key": object_key,
+                "size_bytes": 20480,
+                "duration_ms": 12000,
+                "upload_status": "uploaded",
+            },
+        ],
+    )
+
+    signing_service = MagicMock()
+    signing_service.generate_get_url.return_value = "https://signed.example.com/audio/seg_0000.webm?signature=secret"
+
+    with patch("common.oss.signing.get_oss_signing_service", return_value=signing_service):
+        playback_response = await async_client.get(
+            f"/api/v1/sessions/{session.session_id}/audio-segments/0",
+            headers=owner_headers,
+            follow_redirects=False,
+        )
+
+    assert playback_response.status_code == 307
+
+    report_response = await async_client.get(
+        f"/api/v1/practice/sessions/{session.session_id}/report",
+        headers=owner_headers,
+    )
+    assert report_response.status_code == 200
+    report_audio_audit = report_response.json()["data"]["audio_audit"]
+    assert report_audio_audit["segments"][0]["playback_path"] == (
+        f"/api/v1/sessions/{session.session_id}/audio-segments/0"
+    )
+    assert "signed.example.com" not in str(report_audio_audit)
+    assert "signature=" not in str(report_audio_audit)
+
+    persisted_segment = (
+        await db_session.execute(
+            select(SessionAudioSegment).where(
+                SessionAudioSegment.session_id == session.session_id,
+                SessionAudioSegment.segment_sequence == 0,
+            )
+        )
+    ).scalar_one()
+    assert persisted_segment.object_key == object_key
+    assert "signed.example.com" not in persisted_segment.object_key
 
 
 @pytest.mark.asyncio

@@ -95,7 +95,7 @@
   - Estimate: 2h
   - Files: web/src/lib/api/types.ts, web/src/lib/api/client.ts, web/src/components/audio/AudioAuditCard.tsx, web/src/app/(user)/practice/[sessionId]/report/page.tsx, web/src/app/(user)/practice/[sessionId]/replay/page.tsx, web/src/app/(user)/practice/[sessionId]/report/page.test.tsx, web/src/app/(user)/practice/[sessionId]/replay/page.test.tsx
   - Verify: pnpm --dir web exec vitest run 'src/app/(user)/practice/[sessionId]/report/page.test.tsx' 'src/app/(user)/practice/[sessionId]/replay/page.test.tsx'
-- [ ] **T03: Focused contract regression for audio-audit evidence chain** — Add dedicated backend contract tests proving the audio-audit read model, playback handoff, and ownership semantics. Add frontend test assertions proving report and replay render audio audit sections correctly.
+- [x] **T03: Added focused audio-audit regressions for report/replay payloads, playback ownership, and missing-audio learner UI.** — Add dedicated backend contract tests proving the audio-audit read model, playback handoff, and ownership semantics. Add frontend test assertions proving report and replay render audio audit sections correctly.
 
 ## Steps
 
