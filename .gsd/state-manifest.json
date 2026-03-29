@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "exported_at": "2026-03-29T19:04:35.987Z",
+  "exported_at": "2026-03-29T19:13:43.860Z",
   "milestones": [
     {
       "id": "M001",
@@ -5478,19 +5478,25 @@
       "milestone_id": "M008",
       "slice_id": "S03",
       "id": "T02",
-      "title": "Lock miss/failure fallback and presentation safety in the focused report-page suite",
-      "status": "pending",
-      "one_liner": "",
-      "narrative": "",
-      "verification_result": "",
+      "title": "Locked report-page regression coverage for canonical retrieval miss/search_failed fallback copy and PPT retrieval safety.",
+      "status": "complete",
+      "one_liner": "Locked report-page regression coverage for canonical retrieval miss/search_failed fallback copy and PPT retrieval safety.",
+      "narrative": "Expanded the focused report-page Vitest suite with canonical retrieval-facts fixtures for `status=\"miss\"` and `status=\"search_failed\"`, both under the default rejected supplemental knowledge-check path. The new assertions verify that the report page continues to render canonical retrieval truth, the correct miss/failure explanation, and the weak-evidence retrieval note directly from the unified report payload. I also tightened the presentation regression to assert that PPT reports keep the retrieval section absent while `getKnowledgeCheck` remains uncalled. The runtime code already matched the intended contract, so no production code changes were needed.",
+      "verification_result": "Ran `pnpm --dir web exec vitest run 'src/app/(user)/practice/[sessionId]/report/page.test.tsx'` and confirmed the focused report-page suite passed 17/17 tests, including the new canonical retrieval miss/search_failed fallback cases and the tightened PPT retrieval-suppression assertion.",
       "duration": "",
-      "completed_at": null,
+      "completed_at": "2026-03-29T19:13:43.825Z",
       "blocker_discovered": false,
-      "deviations": "",
-      "known_issues": "",
-      "key_files": [],
-      "key_decisions": [],
-      "full_summary_md": "",
+      "deviations": "None.",
+      "known_issues": "None.",
+      "key_files": [
+        "web/src/app/(user)/practice/[sessionId]/report/page.test.tsx",
+        ".gsd/milestones/M008/slices/S03/tasks/T02-SUMMARY.md"
+      ],
+      "key_decisions": [
+        "Treated canonical `effectiveness_snapshot.retrieval_facts` as the authority for miss/search_failed learner copy in the report-page suite.",
+        "Kept presentation coverage explicit about both hiding the retrieval section and skipping `/knowledge-check`."
+      ],
+      "full_summary_md": "---\nid: T02\nparent: S03\nmilestone: M008\nkey_files:\n  - web/src/app/(user)/practice/[sessionId]/report/page.test.tsx\n  - .gsd/milestones/M008/slices/S03/tasks/T02-SUMMARY.md\nkey_decisions:\n  - Treated canonical `effectiveness_snapshot.retrieval_facts` as the authority for miss/search_failed learner copy in the report-page suite.\n  - Kept presentation coverage explicit about both hiding the retrieval section and skipping `/knowledge-check`.\nduration: \"\"\nverification_result: passed\ncompleted_at: 2026-03-29T19:13:43.826Z\nblocker_discovered: false\n---\n\n# T02: Locked report-page regression coverage for canonical retrieval miss/search_failed fallback copy and PPT retrieval safety.\n\n**Locked report-page regression coverage for canonical retrieval miss/search_failed fallback copy and PPT retrieval safety.**\n\n## What Happened\n\nExpanded the focused report-page Vitest suite with canonical retrieval-facts fixtures for `status=\"miss\"` and `status=\"search_failed\"`, both under the default rejected supplemental knowledge-check path. The new assertions verify that the report page continues to render canonical retrieval truth, the correct miss/failure explanation, and the weak-evidence retrieval note directly from the unified report payload. I also tightened the presentation regression to assert that PPT reports keep the retrieval section absent while `getKnowledgeCheck` remains uncalled. The runtime code already matched the intended contract, so no production code changes were needed.\n\n## Verification\n\nRan `pnpm --dir web exec vitest run 'src/app/(user)/practice/[sessionId]/report/page.test.tsx'` and confirmed the focused report-page suite passed 17/17 tests, including the new canonical retrieval miss/search_failed fallback cases and the tightened PPT retrieval-suppression assertion.\n\n## Verification Evidence\n\n| # | Command | Exit Code | Verdict | Duration |\n|---|---------|-----------|---------|----------|\n| 1 | `pnpm --dir web exec vitest run 'src/app/(user)/practice/[sessionId]/report/page.test.tsx'` | 0 | ✅ pass | 9500ms |\n\n\n## Deviations\n\nNone.\n\n## Known Issues\n\nNone.\n\n## Files Created/Modified\n\n- `web/src/app/(user)/practice/[sessionId]/report/page.test.tsx`\n- `.gsd/milestones/M008/slices/S03/tasks/T02-SUMMARY.md`\n",
       "description": "Load `test` before editing assertions and keep `react-best-practices` in mind for selector/copy stability. Expand `web/src/app/(user)/practice/[sessionId]/report/page.test.tsx` with canonical report fixtures for `retrieval_facts.status=\"miss\"` and `retrieval_facts.status=\"search_failed\"`, plus explicit assertions that `getKnowledgeCheckMock` rejection never hides canonical retrieval truth and that presentation reports still hide the retrieval section while skipping the supplemental fetch. Adjust `web/src/app/(user)/practice/[sessionId]/report/page.tsx` or `web/src/lib/session-evidence.ts` only where these assertions reveal copy drift or malformed-guard gaps.\n\nFailure Modes: brittle tests can accidentally couple to duplicated copy or the old diagnostics card; malformed fixtures can mask whether the page is using canonical report payload or the supplemental fetch.\n\nLoad Profile: this is still a single focused Vitest file in jsdom; the main 10x risk is selector brittleness if wording lives in multiple places instead of the shared helper seam.\n\nNegative Tests: `miss` explanation visible, `search_failed` explanation visible, canonical retrieval still visible when `/knowledge-check` rejects, presentation path keeps retrieval section absent and `getKnowledgeCheck` uncalled.",
       "estimate": "90m",
       "files": [
@@ -9191,6 +9197,17 @@
       "verdict": "✅ pass",
       "duration_ms": 17300,
       "created_at": "2026-03-29T19:04:35.930Z"
+    },
+    {
+      "id": 202,
+      "task_id": "T02",
+      "slice_id": "S03",
+      "milestone_id": "M008",
+      "command": "pnpm --dir web exec vitest run 'src/app/(user)/practice/[sessionId]/report/page.test.tsx'",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 9500,
+      "created_at": "2026-03-29T19:13:43.826Z"
     }
   ]
 }

@@ -703,6 +703,109 @@ describe("ReportPage", () => {
         expect(screen.queryByText("知识库命中检测")).toBeNull();
     });
 
+    it("keeps canonical miss fallback visible when the supplemental knowledge-check request rejects", async () => {
+        getReportMock.mockResolvedValue({
+            ...baseReport,
+            evaluable: true,
+            not_evaluable_reason: null,
+            effectiveness_snapshot: {
+                claim_truth: {
+                    status: "weak_evidence",
+                    label: "证据偏弱",
+                    source: "score_snapshot",
+                    reason: "low_evidence_score",
+                    evidence_score: 63,
+                },
+                retrieval_facts: {
+                    ...baseRetrievalFacts,
+                    status: "miss",
+                    summary: "知识检索已触发，但未命中知识库内容",
+                    hit_count: 0,
+                    hit_rate: 0,
+                    latest_attempt: {
+                        ...baseRetrievalFacts.latest_attempt,
+                        status: "miss",
+                        result_count: 0,
+                        result_summaries: [],
+                    },
+                },
+            },
+        });
+        getComprehensiveReportMock.mockResolvedValue({
+            session_id: "session-1",
+            generated_at: "2026-03-23T00:00:00Z",
+            overall_score: 72,
+            dimension_scores: [],
+            stage_summaries: [],
+            key_strengths: [],
+            key_improvements: [],
+            detailed_feedback: "",
+            recommendations: [],
+            voice_policy_snapshot_ref: null,
+        });
+
+        render(<ReportPage />);
+
+        expect(await screen.findByText("知识库检索事实")).toBeTruthy();
+        expect(screen.getAllByText("未命中").length).toBeGreaterThan(0);
+        expect(screen.getByText("知识检索已触发，但未命中知识库内容")).toBeTruthy();
+        expect(screen.getByText("检索「这个方案的 ROI 怎么证明？」未在知识库中找到相关内容，建议优化检索词或补充知识库文档。")).toBeTruthy();
+        expect(screen.getByText("知识库检索未命中，可能缺少对应文档——建议补充相关产品或案例资料。")).toBeTruthy();
+        expect(screen.queryByText("知识库命中检测")).toBeNull();
+    });
+
+    it("keeps canonical search-failed fallback visible when the supplemental knowledge-check request rejects", async () => {
+        getReportMock.mockResolvedValue({
+            ...baseReport,
+            evaluable: true,
+            not_evaluable_reason: null,
+            effectiveness_snapshot: {
+                claim_truth: {
+                    status: "weak_evidence",
+                    label: "证据偏弱",
+                    source: "score_snapshot",
+                    reason: "low_evidence_score",
+                    evidence_score: 63,
+                },
+                retrieval_facts: {
+                    ...baseRetrievalFacts,
+                    status: "search_failed",
+                    summary: "知识检索触发失败，当前无法获取知识库证据",
+                    hit_count: 0,
+                    hit_rate: 0,
+                    latest_attempt: {
+                        ...baseRetrievalFacts.latest_attempt,
+                        status: "search_failed",
+                        result_count: 0,
+                        result_summaries: [],
+                        error_summary: "向量检索服务超时",
+                    },
+                },
+            },
+        });
+        getComprehensiveReportMock.mockResolvedValue({
+            session_id: "session-1",
+            generated_at: "2026-03-23T00:00:00Z",
+            overall_score: 72,
+            dimension_scores: [],
+            stage_summaries: [],
+            key_strengths: [],
+            key_improvements: [],
+            detailed_feedback: "",
+            recommendations: [],
+            voice_policy_snapshot_ref: null,
+        });
+
+        render(<ReportPage />);
+
+        expect(await screen.findByText("知识库检索事实")).toBeTruthy();
+        expect(screen.getAllByText("检索失败").length).toBeGreaterThan(0);
+        expect(screen.getByText("知识检索触发失败，当前无法获取知识库证据")).toBeTruthy();
+        expect(screen.getByText("知识检索服务异常：向量检索服务超时")).toBeTruthy();
+        expect(screen.getByText("知识库检索暂时异常，无法确认是否有相关内容支撑当前主张。")).toBeTruthy();
+        expect(screen.queryByText("知识库命中检测")).toBeNull();
+    });
+
     it("omits the canonical retrieval section when retrieval_facts are absent from the report payload", async () => {
         getReportMock.mockResolvedValue({
             ...baseReport,
@@ -813,6 +916,7 @@ describe("ReportPage", () => {
         expect(await screen.findByText("综合洞察暂不可用，当前页面仍展示基于课件证据的 PPT 复盘。")).toBeTruthy();
         expect(screen.queryByText("销售推进结果")).toBeNull();
         expect(screen.queryByText("销售推进基线")).toBeNull();
+        expect(screen.queryByText("知识库检索事实")).toBeNull();
         expect(screen.queryByText("知识库命中检测")).toBeNull();
         expect(getKnowledgeCheckMock).not.toHaveBeenCalled();
 
