@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "exported_at": "2026-03-28T13:32:21.742Z",
+  "exported_at": "2026-03-29T14:17:16.715Z",
   "milestones": [
     {
       "id": "M001",
@@ -23,8 +23,8 @@
     },
     {
       "id": "M002",
-      "title": "",
-      "status": "active",
+      "title": "实时教练闭环",
+      "status": "needs-remediation",
       "depends_on": [],
       "created_at": "2026-03-24T23:42:39.174Z",
       "completed_at": null,
@@ -306,11 +306,11 @@
     },
     {
       "id": "M007",
-      "title": "",
-      "status": "queued",
+      "title": "实时教练闭环正式封板",
+      "status": "complete",
       "depends_on": [],
       "created_at": "2026-03-28T01:19:06.795Z",
-      "completed_at": null,
+      "completed_at": "2026-03-28T13:39:47.822Z",
       "vision": "把现有 realtime coaching 能力在当前 learner/runtime/report/replay 路由族上做成可证明完成的正式闭环，并把旧 M002 remediation 事实线和工件线正式吸收到 M007，结束“产品看起来差不多完成，但 live proof 和 milestone authority 还没真正收口”的状态。",
       "success_criteria": [
         "On the current `/practice/{sessionId}` learner route, coach degraded/resumed is explicit, understandable, and non-disruptive while training remains usable.",
@@ -363,6 +363,102 @@
       ],
       "requirement_coverage": "Covers: R009.\nPartially reinforces: R002, R005, R011.\nLeaves for later: R016, R017, R018, R019.\nOrphan risks: none — the remaining unreconciled risks are exactly coach-health truth, same-session closure proof, and authority/artifact reconciliation, all owned inside M007.",
       "boundary_map_markdown": "## Boundary Map\n\n### S01 → S02\nProduces:\n- `coach_health` canonical runtime contract on existing learner/runtime surfaces: `healthy | degraded | resumed` plus stable reason/message semantics.\n- Handler/runtime snapshot invariants across `backend/src/sales_bot/websocket/stepfun_realtime_handler.py`, `backend/src/sales_bot/websocket/enhanced_handler.py`, and `backend/src/common/api/practice.py` so reconnect and diagnostics reuse one truth line.\n- Learner-facing practice-page rendering contract on the current right-panel surface, with explicit-but-non-blocking degraded/resumed visibility.\n\nConsumes:\n- Current sales realtime coaching, pacing, and completed-session alignment semantics from shipped M002/M004 code.\n\n### S01 → S03\nProduces:\n- Explicit runtime evidence for coach degraded/resumed transitions that later artifact reconciliation can reference truthfully.\n- A stable definition of what counts as a live coach-health proof versus a partial/mock proof.\n\nConsumes:\n- Current practice/report/replay route family and existing runtime diagnostics seam.\n\n### S02 → S03\nProduces:\n- Same-session closure evidence pack tying `/practice/{sessionId}` realtime coaching direction to `/practice/{sessionId}/report` and `/practice/{sessionId}/replay` conclusions.\n- Regression-verifiable invariants for issue-family / goal-family coherence on one real localhost sales session.\n\nConsumes from S01:\n- Canonical coach-health runtime contract and learner-visible degraded/resumed behavior.\n\n### S01 + S02 + S03 → S04\nProduces:\n- Final M007 validation input: live proof, regression proof, and authority reconciliation of requirement / roadmap / validation / summary / state.\n- The authoritative closure record stating that realtime coaching is now honestly sealed.\n\nConsumes from S01:\n- Coach-health truth line across runtime, reconnect, and learner UI.\n\nConsumes from S02:\n- Same-session end-to-end closure proof on existing practice/report/replay routes.\n\nConsumes from S03:\n- M002 remediation artifact absorption and M007 authority switch."
+    },
+    {
+      "id": "M008",
+      "title": "",
+      "status": "queued",
+      "depends_on": [],
+      "created_at": "2026-03-28T15:43:38.256Z",
+      "completed_at": null,
+      "vision": "在现有训练、knowledge-check 与 canonical report 路由族上，给每条 knowledge-backed session 建立一条小而稳定、可审计、可对照的 retrieval truth：是否触发检索、何时检索、命中了什么、为什么 miss 或失败，以及这些事实如何同时解释 knowledge-check 与 report 的结论。",
+      "success_criteria": [
+        "A knowledge-backed training session durably records retrieval facts that answer whether retrieval happened, what was queried, what was returned, and why it missed or failed.",
+        "The same session's `/knowledge-check` and canonical `/report` endpoints describe the same retrieval truth and degradation tier.",
+        "The learner-facing `/practice/{sessionId}/report` page shows retrieval facts through the existing report surface rather than a new audit/debug UI.",
+        "M008 advances R022 and R023 directly while laying a truthful foundation for R027 and R028 without overreaching into M009/M010 scope."
+      ],
+      "key_risks": [
+        {
+          "risk": "Current runtime retrieval metrics are aggregate-heavy and provider-shaped, so naïvely exposing them could create an unstable long-term contract.",
+          "whyItMatters": "If the ledger shape is too raw or too noisy, later report provenance and audio-audit milestones will be anchored to brittle payloads instead of durable facts."
+        },
+        {
+          "risk": "Adding retrieval truth to report through any seam other than `SessionEvidenceService` would reintroduce route drift between knowledge-check and canonical report.",
+          "whyItMatters": "The whole milestone fails if `/knowledge-check` and `/report` can still tell different stories about the same session."
+        },
+        {
+          "risk": "UI work could drift into a new audit/debug surface instead of strengthening the shipped learner report path.",
+          "whyItMatters": "The user asked to retire fake credibility in the current route family, not to add a second place where engineers can inspect internals."
+        }
+      ],
+      "proof_strategy": [
+        {
+          "riskOrUnknown": "Can the system persist a minimal, bounded retrieval ledger on the real runtime path without inventing a new storage model?",
+          "retireIn": "S01",
+          "whatWillBeProven": "A knowledge-backed session durably stores provider-neutral retrieval entries (hit/miss/failure, query, counts, KB bindings, timestamps/errors) inside the existing runtime metrics snapshot."
+        },
+        {
+          "riskOrUnknown": "Can knowledge-check and canonical report share one retrieval truth instead of parallel interpretations?",
+          "retireIn": "S02",
+          "whatWillBeProven": "The same completed session returns matching retrieval facts through `/knowledge-check` and canonical `/report`, with `SessionEvidenceService` acting as the report authority."
+        },
+        {
+          "riskOrUnknown": "Can the learner-facing report explain retrieval facts clearly on the shipped surface without a new debug route?",
+          "retireIn": "S03",
+          "whatWillBeProven": "The existing `/practice/{sessionId}/report` UI renders shared retrieval facts and layered degradation copy for hit/miss/failure/weak evidence, backed by focused UI tests and route-family proof."
+        }
+      ],
+      "verification_contract": "Run focused backend unit/integration/contract coverage on the runtime-metrics write seam, `SessionEvidenceService`, and practice evidence contracts; verify the milestone only when the same session can be interrogated through both `/knowledge-check` and canonical `/report` with matching retrieval facts.",
+      "verification_integration": "Use the current FastAPI route family only: persist a knowledge-backed session, query `/api/v1/practice/sessions/{id}/knowledge-check` and `/api/v1/practice/sessions/{id}/report`, and confirm both surfaces expose the same retrieval ledger summary and degradation classification.",
+      "verification_operational": "Prove layered failure visibility for at least the main operational tiers — not triggered, miss, retrieval failure, and hit-but-weak — so the system never silently collapses back into an abstract 'knowledge support' conclusion.",
+      "verification_uat": "On `/practice/{sessionId}/report`, verify the learner can see whether KBs were bound, whether retrieval occurred, and the concrete hit/miss/failure explanation for that same session using the shipped report experience.",
+      "definition_of_done": [
+        "A bounded session-level retrieval ledger exists on the current runtime persistence path and is locked by focused backend tests.",
+        "`runtime_diagnostics` and `SessionEvidenceService` both consume the persisted ledger, and contract/integration tests prove parity on the same session.",
+        "The existing report page and shared frontend evidence helpers render retrieval truth and layered degradation wording from the canonical API contract.",
+        "One shipped route-family proof demonstrates that a real or faithfully exercised knowledge-backed session can explain binding, retrieval outcome, and report interpretation without new routes or temporary logs."
+      ],
+      "requirement_coverage": "- **R022** → primary owner **S01**, support **S02**: 在现有 runtime metrics/persistence seam 上落地 session-level retrieval ledger，形成 durable retrieval truth。\n- **R023** → primary owner **S02**, support **S03**: `/api/v1/practice/sessions/{id}/knowledge-check` 与 canonical `/api/v1/practice/sessions/{id}/report` 共享同一条 retrieval truth，而不是各读各的状态。\n- **R027** *(foundation only for M010)* → primary owner **S02**, support **S03**: canonical report projection 增加 retrieval fact basis，为后续 report provenance 铺底，但本里程碑不做全量出处引用模型。\n- **R028** *(foundation only for M010)* → primary owner **S03**, support **S02**: 系统对未触发、miss、failure、hit-but-weak 的分层解释在 API 与 learner-facing report 上保持稳定。\n- **Explicitly out of scope**: 原始音频留痕 / OSS / object storage（M009），完整 report evidence reference model 与 `used_in_reasoning` 证明（M010），新 audit/debug route 或后台。",
+      "boundary_map_markdown": "### Runtime write boundary\n- `stepfun_internal_knowledge_searcher.py` / shared knowledge retrieval path remains the write-side trigger.\n- `stepfun_helpers.update_knowledge_runtime_metrics(...)` and `stepfun_runtime_metrics_helpers.persist_runtime_metrics_to_session(...)` stay the persistence seam.\n- New durable fact lives inside `voice_policy_snapshot.runtime_metrics.knowledge_retrieval.retrieval_ledger` as a bounded, provider-neutral summary.\n\n### Shared read boundary\n- `runtime_diagnostics.build_session_runtime_diagnostics(...)` reads the persisted ledger for `/knowledge-check`.\n- `SessionEvidenceService.build_projection(...)` reads the same persisted ledger and exposes report-facing retrieval facts.\n- No second report-only retrieval source is introduced.\n\n### API / UI boundary\n- `backend/src/common/api/practice.py` keeps the existing shipped route family.\n- `web/src/lib/api/types.ts`, `web/src/lib/session-evidence.ts`, and `web/src/app/(user)/practice/[sessionId]/report/page.tsx` consume the shared retrieval truth.\n\n### Non-goals / exclusions\n- No new audit console, debug route, or separate retrieval table in this milestone.\n- No inference of `used_in_reasoning` from weak evidence.\n- No audio-storage or report-citation expansion beyond the minimum retrieval-facts foundation."
+    },
+    {
+      "id": "M009",
+      "title": "",
+      "status": "queued",
+      "depends_on": [],
+      "created_at": "2026-03-28T15:43:53.820Z",
+      "completed_at": null,
+      "vision": "",
+      "success_criteria": [],
+      "key_risks": [],
+      "proof_strategy": [],
+      "verification_contract": "",
+      "verification_integration": "",
+      "verification_operational": "",
+      "verification_uat": "",
+      "definition_of_done": [],
+      "requirement_coverage": "",
+      "boundary_map_markdown": ""
+    },
+    {
+      "id": "M010",
+      "title": "",
+      "status": "queued",
+      "depends_on": [],
+      "created_at": "2026-03-28T15:44:08.130Z",
+      "completed_at": null,
+      "vision": "",
+      "success_criteria": [],
+      "key_risks": [],
+      "proof_strategy": [],
+      "verification_contract": "",
+      "verification_integration": "",
+      "verification_operational": "",
+      "verification_uat": "",
+      "definition_of_done": [],
+      "requirement_coverage": "",
+      "boundary_map_markdown": ""
     }
   ],
   "slices": [
@@ -916,7 +1012,7 @@
       "milestone_id": "M007",
       "id": "S04",
       "title": "最终集成验证与封板",
-      "status": "pending",
+      "status": "complete",
       "risk": "medium",
       "depends": [
         "S01",
@@ -925,14 +1021,78 @@
       ],
       "demo": "After this: M007 can be validated and closed honestly because live proof and artifact reconciliation pass together, and realtime coaching can be marked complete without caveats.",
       "created_at": "2026-03-28T01:28:14.338Z",
-      "completed_at": null,
-      "full_summary_md": "",
-      "full_uat_md": "",
+      "completed_at": "2026-03-28T13:38:34.999Z",
+      "full_summary_md": "---\nid: S04\nparent: M007\nmilestone: M007\nprovides:\n  - A final same-session closure evidence line tying realtime coaching, canonical report, replay unlock, and generated-state reconciliation together under M007.\n  - Validated R009 proof notes that downstream milestone validation can quote directly without reopening M002 authority drift.\nrequires:\n  - slice: S01\n    provides: Canonical coach degraded/resumed truth on the learner/runtime surfaces, so S04 could close the milestone on an already-honest runtime authority line.\n  - slice: S02\n    provides: Same-session practice/report/replay parity expectations and the localhost route-family proof contract that S04 had to retire fully.\n  - slice: S03\n    provides: Canonical M002→M007 authority alignment plus the generated-state drift audit that S04 had to reconcile through GSD renders.\naffects:\n  []\nkey_files:\n  - backend/src/evaluation/services/report_generation_trigger.py\n  - backend/tests/unit/test_report_generation_trigger.py\n  - backend/tests/integration/test_report_generation_trigger_fire_and_forget.py\n  - backend/tests/contract/test_practice_evidence_contract.py\n  - backend/tests/integration/test_replay_api.py\n  - web/src/lib/api/client.ts\n  - .artifacts/m007-s04-final-closure-proof.md\n  - .artifacts/m007-s03-authority-audit.md\n  - .gsd/REQUIREMENTS.md\nkey_decisions:\n  - Treat persisted same-session completion plus canonical report/replay/highlights unlock as the closure authority; concurrent `kb_not_ready`, `no_scoring_context_available`, and `report_generation_failed [NO_STAGE_RESULTS]` signals stay observable but do not override that authority when the same session still completes and unlocks.\n  - Advance R009 only after re-reading the focused T01-T03 regression/proof chain and the fresh localhost artifact, not from prior milestone intent or manually edited generated state.\n  - Use GSD DB/render flows as the sole authority for S04 and M007 close-out artifacts; generated `STATE.md` and `state-manifest.json` must be read back after those renders instead of patched by hand.\npatterns_established:\n  - Prove close-out on one real same-session route family and only then let requirements or milestone artifacts advance.\n  - When generated state lags canonical proof, use the GSD DB/render path and verify the read-back; do not patch system-managed files by hand.\n  - Keep replay completion-gated and make the blocked state explicit instead of relaxing the gate or masking backend truth with frontend fallbacks.\nobservability_surfaces:\n  - .artifacts/m007-s04-final-closure-proof.md\n  - .artifacts/m007-s03-authority-audit.md\n  - .gsd/REQUIREMENTS.md (R009 validated row)\n  - Rendered S04 summary/UAT artifacts\n  - .gsd/STATE.md and .gsd/state-manifest.json read-back surfaces after the milestone render flow\ndrill_down_paths:\n  - .gsd/milestones/M007/slices/S04/tasks/T01-SUMMARY.md\n  - .gsd/milestones/M007/slices/S04/tasks/T02-SUMMARY.md\n  - .gsd/milestones/M007/slices/S04/tasks/T03-SUMMARY.md\n  - .gsd/milestones/M007/slices/S04/tasks/T04-SUMMARY.md\nduration: \"\"\nverification_result: passed\ncompleted_at: 2026-03-28T13:38:35.000Z\nblocker_discovered: false\n---\n\n# S04: 最终集成验证与封板\n\n**Retired the last R009 closure blocker, validated it from T01-T03 evidence, and closed S04 on the same DB-backed route and artifact truth line.**\n\n## What Happened\n\nS04 retired the last honest-closeout blocker for R009 in four steps. T01 fixed the real fire-and-forget report trigger path so own-session execution durably persists terminal report/session state instead of leaving replay truth dependent on caller-owned commits. T02 then locked the same-session contract on the existing APIs and learner pages: report stays readable during scoring, replay/highlights stay completion-gated until persisted completion, and replay copy stays explicit instead of masking backend truth. T03 added the final localhost product proof on one StepFun sales session: the same session moved `in_progress -> scoring -> completed`, report remained readable on `/practice/{sessionId}/report`, replay/highlights were blocked before completion and unlocked after persisted completion on that same session, and concurrent `kb_not_ready` / trigger-side `report_generation_failed [NO_STAGE_RESULTS]` noise was preserved as optional diagnostics rather than misclassified as the canonical blocker. T04 re-read that full evidence chain, advanced R009 to validated through the requirement-update render flow, and used the DB-backed close-out tools instead of hand-editing generated state. The slice therefore completes with one truthful authority line for realtime coaching closure: explicit regression proof, fresh localhost product proof, and generator-backed artifact reconciliation now all point at the same delivered behavior.\n\n## Verification\n\nS04 closed on the combined task evidence chain. T01 verified the own-session fire-and-forget persistence path with focused unit/integration pytest. T02 verified same-session report readability during scoring, replay/highlights gating before completion, post-finalization parity, and learner replay blocked-state copy. T03 verified the fresh localhost same-session proof on one StepFun session through `/practice/{sessionId}` -> `/report` -> `/replay` plus supporting APIs, with replay/highlights unlocking only after persisted completion on that same session. T04 then re-read the proof artifact and authority audit, advanced R009 through the requirement-update flow, and handed off to the GSD slice/milestone render path for final state reconciliation.\n\n## Requirements Advanced\n\n- R009 — Used T01-T03 regression and localhost proof to retire the remaining close-out blocker, then moved the requirement from active to validated through the GSD requirement-update flow.\n\n## Requirements Validated\n\n- R009 — Validated by the combined S04 evidence chain: T01 own-session fire-and-forget persistence regressions, T02 same-session report/replay/highlights gating and parity suites, and T03’s fresh localhost artifact `.artifacts/m007-s04-final-closure-proof.md` showing one StepFun session move `in_progress -> scoring -> completed` with same-session replay unlock.\n\n## New Requirements Surfaced\n\nNone.\n\n## Requirements Invalidated or Re-scoped\n\nNone.\n\n## Deviations\n\nNone.\n\n## Known Limitations\n\nOptional knowledge-check / enhanced-report noise still exists and remains visible in diagnostics, but S04 proved these signals are non-blocking when the same session persists `completed` and unlocks report/replay/highlights on the shipped route family.\n\n## Follow-ups\n\nNone.\n\n## Files Created/Modified\n\n- `backend/src/evaluation/services/report_generation_trigger.py` — T01 fixed the fire-and-forget own-session finalization path so background report generation durably persists terminal report/session state.\n- `backend/tests/unit/test_report_generation_trigger.py` — T01 locked caller-owned vs own-session persistence behavior and negative finalization paths.\n- `backend/tests/integration/test_report_generation_trigger_fire_and_forget.py` — T01 added real own-session persistence proof for success and failure branches.\n- `backend/tests/contract/test_practice_evidence_contract.py` — T02 locked same-session report readability during scoring plus replay/highlights gating and parity after completion.\n- `backend/tests/integration/test_replay_api.py` — T02 proved replay remains blocked before completion and unlocks truthfully after persisted completion.\n- `web/src/lib/api/client.ts` — T02 mapped `[SESSION_NOT_COMPLETED]` into explicit learner replay-blocked copy instead of leaking raw backend text.\n- `.artifacts/m007-s04-final-closure-proof.md` — T03 recorded the fresh localhost same-session closure proof showing `in_progress -> scoring -> completed` plus replay unlock on the same StepFun session.\n- `.artifacts/m007-s03-authority-audit.md` — S03/T03 carried forward the generated-state drift audit that S04 had to retire through normal render flows.\n- `.gsd/REQUIREMENTS.md` — T04 advanced R009 to validated using explicit T01-T03 proof references through the requirement-update render path.\n",
+      "full_uat_md": "# S04: 最终集成验证与封板 — UAT\n\n**Milestone:** M007\n**Written:** 2026-03-28T13:38:35.000Z\n\n# S04: 最终集成验证与封板 — UAT\n\n**Milestone:** M007\n**Written:** 2026-03-28\n\n## UAT Type\n- UAT mode: integrated proof + generated-state reconciliation\n- Why this mode is sufficient: this slice only closes if the shipped localhost same-session proof and the GSD-rendered project state agree on the same closure story.\n\n## Preconditions\n- `.artifacts/m007-s04-final-closure-proof.md` exists and still records one localhost StepFun session moving `in_progress -> scoring -> completed` with same-session replay unlock.\n- `.artifacts/m007-s03-authority-audit.md` exists and documents the stale pre-closeout `STATE.md` / `state-manifest.json` mismatch.\n- `R009` is rendered as validated in `.gsd/REQUIREMENTS.md` via the requirement-update flow, not by manual edit.\n- The current route family remains `/practice/{sessionId}` -> `/practice/{sessionId}/report` -> `/practice/{sessionId}/replay` on `localhost` hosts.\n\n## Smoke Test\n1. Re-read `.artifacts/m007-s04-final-closure-proof.md`.\n2. Confirm it includes the persisted-completion marker, same-session replay `200` unlock, optional-noise classification, and `Final verdict: Pass`.\n3. Open `.gsd/REQUIREMENTS.md` and confirm R009 now renders as `validated` with explicit T01-T03 proof notes.\n4. **Expected:** the product proof and requirement state agree before slice/milestone render-backed close-out begins.\n\n## Test Cases\n\n### 1. Focused regression and localhost proof still justify close-out\n1. Inspect the completed task summaries for `T01`, `T02`, and `T03`.\n2. Confirm T01 covers the real `db=None` own-session finalization path, T02 covers same-session report/replay gating and parity, and T03 records the localhost route-family proof.\n3. **Expected:** the combined evidence line proves persisted completion plus same-session replay unlock on the shipped route family; there is no need to reopen M002 authority or invent a new debug surface.\n\n### 2. Generated slice and milestone artifacts are render-backed, not hand-edited\n1. Confirm `S04-SUMMARY.md`, `S04-UAT.md`, `M007-VALIDATION.md`, and `M007-SUMMARY.md` exist after the close-out flow.\n2. Confirm they were produced by the GSD completion/validation tools rather than direct manual edits.\n3. **Expected:** the generated artifacts exist, are non-empty, and tell the same closure story as the proof artifact and requirement row.\n\n### 3. Generated state read-back agrees with the closure story\n1. Open `.gsd/STATE.md` and `.gsd/state-manifest.json` after the GSD render flow completes.\n2. Confirm `STATE.md` no longer treats M007 as queued/incomplete and does not keep M002 as the active unresolved owner.\n3. Confirm `state-manifest.json` reports `M007.status == \"complete\"`, carries a non-empty M007 title, and does not leave `M002.status == \"active\"`.\n4. **Expected:** the system-managed read-back surfaces now agree with the canonical proof and no manual patching was required.\n\n## Edge Cases\n- If the proof artifact loses the persisted-completion or same-session replay-unlock markers, stop and rerun live proof instead of forcing close-out.\n- If milestone validation returns anything except `pass`, keep the failure explicit and do not hand-edit generated artifacts to manufacture completion.\n- If `STATE.md` or `state-manifest.json` still show stale milestone ownership/status after the render flow, treat that as unresolved generated-state drift and investigate the generator/DB state rather than patching files.\n\n## Failure Signals\n- R009 says `validated` but its notes do not reference the T01-T03 evidence chain.\n- `S04-SUMMARY.md`, `S04-UAT.md`, `M007-VALIDATION.md`, or `M007-SUMMARY.md` are missing or empty after the close-out flow.\n- `state-manifest.json` still reports `M007` as `queued` or `M002` as `active` after milestone completion.\n- Close-out reasoning depends on suppressing or deleting observable `kb_not_ready` / trigger-side optional-noise diagnostics rather than classifying them correctly.\n\n## Requirement Proved By This UAT\n- R009 — proves realtime coaching can now be marked complete only because the final regression evidence, live localhost same-session proof, requirement status transition, and generated-state read-back all agree on the same closure truth.\n\n## Notes for Tester\n- Treat `.artifacts/m007-s04-final-closure-proof.md` as the canonical live product proof and `.gsd/state-manifest.json` / `.gsd/STATE.md` as the final read-back surfaces.\n- Do not hand-edit system-managed state files if they drift; rerun or investigate the generator-backed GSD flow instead.\n- Concurrent `kb_not_ready`, `no_scoring_context_available`, and `report_generation_failed [NO_STAGE_RESULTS]` signals remain valid diagnostics. They are only non-blocking when the same session still persists `completed` and unlocks report/replay/highlights on the shipped route family.\n",
       "goal": "Retire the last R009 closure blocker by making StepFun sales sessions leave `status=\"scoring\"` truthfully on the existing learner/runtime/report/replay route family, then validate and close M007 only if live proof and generated-state reconciliation both pass.",
       "success_criteria": "## Must-Haves\n- Fix the fire-and-forget report-generation path so a sales session's own background DB session persists `report_status`, `report_error`, and final `status=\"completed\"` once canonical evidence is readable.\n- Keep `ReplayService._check_session_completed()` behavior intact: canonical report may remain readable during `scoring`, but replay/highlights stay completion-gated until the persisted session becomes `completed`.\n- Produce one fresh localhost proof on `localhost:3444` ↔ `localhost:3445` that follows a single sales session through `/practice/{sessionId}` → `/practice/{sessionId}/report` → `/practice/{sessionId}/replay` on the shipped route family.\n- Close the slice and milestone only through GSD DB/render flows, then re-read `.gsd/STATE.md` and `.gsd/state-manifest.json` so M007 and R009 status are truthful without hand-editing generated files.\n\n## Threat Surface\n- **Abuse**: forged session IDs, impatient replay requests, or ad hoc manual DB edits must not bypass the completed-session replay gate or manufacture a false close-out.\n- **Data exposure**: same-session report/replay APIs and proof artifacts touch learner conversation evidence and auth cookies; proof must stay on owner-scoped localhost sessions and never persist secrets/tokens.\n- **Input trust**: websocket/session-end events, persisted score snapshots, background report triggers, browser cookies, and generated GSD state are all untrusted until verified against current APIs and DB-backed render output.\n\n## Requirement Impact\n- **Requirements touched**: R009 directly; re-verify the already-validated same-session replay/highlights completion semantics established under R010 so the fix does not loosen that gate.\n- **Re-verify**: `backend/tests/unit/test_report_generation_trigger.py`, `backend/tests/integration/test_report_generation_trigger_fire_and_forget.py`, `backend/tests/integration/test_session_lifecycle_api.py`, `backend/tests/contract/test_practice_evidence_contract.py`, `backend/tests/integration/test_practice_evidence_flow.py`, `backend/tests/integration/test_replay_api.py`, `web/src/app/(user)/practice/[sessionId]/report/page.test.tsx`, `web/src/app/(user)/practice/[sessionId]/replay/page.test.tsx`, plus one localhost browser proof and GSD rendered-state read-back.\n- **Decisions revisited**: D099, D105, D106, D107.\n\n## Verification\n- `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/test_report_generation_trigger.py backend/tests/integration/test_report_generation_trigger_fire_and_forget.py`\n- `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/integration/test_session_lifecycle_api.py -k \"report_generation or scoring\"`\n- `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/contract/test_practice_evidence_contract.py -k \"same_session or knowledge_check or replay\"`\n- `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/integration/test_practice_evidence_flow.py backend/tests/integration/test_replay_api.py -k \"finalization or scoring or replay_unlock\"`\n- `npm test -- --run 'web/src/app/(user)/practice/[sessionId]/report/page.test.tsx' 'web/src/app/(user)/practice/[sessionId]/replay/page.test.tsx'`\n- One same-host localhost proof on `localhost:3444` and `localhost:3445` shows report readable during `scoring`, persisted completion, replay unlock, and a saved proof artifact.\n- GSD close-out read-back shows `.gsd/milestones/M007/slices/S04/S04-SUMMARY.md`, `.gsd/milestones/M007/slices/S04/S04-UAT.md`, `.gsd/milestones/M007/M007-VALIDATION.md`, `.gsd/milestones/M007/M007-SUMMARY.md`, `.gsd/STATE.md`, and `.gsd/state-manifest.json` agree with M007 completion truth.",
       "proof_level": "- This slice proves: final-assembly\n- Real runtime required: yes\n- Human/UAT required: yes\n- Contract bar: same-session report remains readable during `scoring`, replay unlocks only after persisted `completed`, and GSD close-out state matches the shipped route-family truth.",
       "integration_closure": "- Upstream surfaces consumed: `backend/src/common/db/session_lifecycle.py`, `backend/src/common/api/practice.py`, `backend/src/common/conversation/replay.py`, `backend/src/common/conversation/session_evidence.py`, `web/src/app/(user)/practice/[sessionId]/page.tsx`, `web/src/app/(user)/practice/[sessionId]/report/page.tsx`, `web/src/app/(user)/practice/[sessionId]/replay/page.tsx`, and the GSD render flows behind `gsd_complete_slice`, `gsd_validate_milestone`, and `gsd_complete_milestone`.\n- New wiring introduced in this slice: the fire-and-forget report trigger must persist its own DB-session updates so background finalization can promote `PracticeSession.status/report_status` durably without weakening replay gating or adding a debug-only surface.\n- What remains before the milestone is truly usable end-to-end: nothing once the same-session localhost proof passes, R009 is validated, and generated state no longer reports stale milestone ownership/status.",
       "observability_impact": "- Runtime signals: `report_generation_triggered`, `report_generation_completed`, `report_generation_failed`, `sales_session_finalized`, `sales_session_finalization_deferred`, and `no_scoring_context_available`.\n- Inspection surfaces: `GET /api/v1/practice/sessions/{id}`, `GET /api/v1/practice/sessions/{id}/report`, `GET /api/v1/practice/sessions/{id}/knowledge-check`, `GET /api/v1/sessions/{id}/replay`, `GET /api/v1/sessions/{id}/highlights`, `.artifacts/m007-s04-final-closure-proof.md`, `.gsd/STATE.md`, and `.gsd/state-manifest.json`.\n- Failure visibility: persisted `PracticeSession.status`, `report_status`, `report_error`, replay `[SESSION_NOT_COMPLETED]`, proof-artifact notes, and milestone validation verdict/read-back mismatch.\n- Redaction constraints: never record auth cookies, tokens, raw user audio, or transcript secrets in proof artifacts or logs.",
+      "sequence": 0,
+      "replan_triggered_at": null
+    },
+    {
+      "milestone_id": "M008",
+      "id": "S01",
+      "title": "会话检索账本落库",
+      "status": "pending",
+      "risk": "high",
+      "depends": [],
+      "demo": "查看同一条 knowledge-backed session 的 persisted `voice_policy_snapshot`，可以回答是否发生检索、查了什么、返回了多少结果、为什么 miss 或失败。",
+      "created_at": "2026-03-29T13:57:33.465Z",
+      "completed_at": null,
+      "full_summary_md": "",
+      "full_uat_md": "",
+      "goal": "在不引入新表或新路由的前提下，把每次 StepFun 内部知识检索的 provider-neutral retrieval ledger 落进 `practice_sessions.voice_policy_snapshot.runtime_metrics.knowledge_retrieval`，让同一条 knowledge-backed session 的 persisted snapshot 能回答是否触发检索、何时检索、查了什么、命中了什么、为什么 miss 或失败。",
+      "success_criteria": "## Must-Haves\n- Persist a bounded, provider-neutral retrieval ledger inside `voice_policy_snapshot.runtime_metrics.knowledge_retrieval` without adding a new table or route.\n- Keep existing flat metrics (`attempt_count`, `hit_query_count`, `total_results`, `last_status`, `last_error`) backward-compatible for current `knowledge-check` readers.\n- The persisted snapshot must record enough bounded facts to answer whether retrieval happened, what query ran, what result summaries came back, and why miss/failure happened.\n- `voice_policy_snapshot_ref` must remain stable while runtime metrics mutate.\n\n## Threat Surface\n- **Abuse**: repeated retrieval attempts or oversized result payloads must not bloat the session snapshot; the ledger must stay bounded and normalized.\n- **Data exposure**: persist only provider-neutral query/result summaries that are already safe for session diagnostics; do not persist embeddings, raw provider payloads, or secrets.\n- **Input trust**: query text and KB search results are untrusted runtime inputs and must be truncated/normalized before snapshot persistence.\n\n## Requirement Impact\n- **Requirements touched**: R002, R010, R011.\n- **Re-verify**: StepFun internal retrieval persistence, session detail snapshot reads, existing `knowledge-check` status derivation, and `voice_policy_snapshot_ref` stability on current routes.\n- **Decisions revisited**: D113, D115, D116.\n\n## Verification\n- `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/test_stepfun_knowledge_helpers.py backend/tests/unit/test_stepfun_internal_knowledge_searcher.py`\n- `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/test_stepfun_runtime_metrics_helpers.py backend/tests/unit/test_stepfun_realtime_handler.py`\n- `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/test_runtime_diagnostics_knowledge_retrieval.py backend/tests/integration/test_voice_runtime_session_snapshot.py backend/tests/contract/test_practice_evidence_contract.py`",
+      "proof_level": "Contract + integration. Focused unit tests must prove ledger normalization/persistence and focused integration/contract tests must prove the persisted snapshot stays readable on existing session routes. Real runtime and human UAT are not required in S01.",
+      "integration_closure": "Consume the existing StepFun retrieval seam (`backend/src/sales_bot/websocket/components/stepfun_internal_knowledge_searcher.py` → `backend/src/sales_bot/websocket/components/stepfun_runtime_metrics_helpers.py` → `practice_sessions.voice_policy_snapshot`) and keep current `knowledge-check` flat-counter readers compatible with the richer snapshot. Remaining milestone work after this slice: S02 makes `/api/v1/practice/sessions/{id}/knowledge-check` and `/api/v1/practice/sessions/{id}/report` explain the same persisted ledger, and S03 visualizes that truth on the report page.",
+      "observability_impact": "Failure diagnosis stays on persisted `voice_policy_snapshot.runtime_metrics.knowledge_retrieval`: keep the existing counters/last-status fields, add a bounded recent-attempt ledger, and preserve existing detail/knowledge-check inspection surfaces so a future agent can inspect one session row or the session detail API and see whether retrieval fired, what query/result summary was recorded, and why it missed or failed without reading provider logs.",
+      "sequence": 0,
+      "replan_triggered_at": null
+    },
+    {
+      "milestone_id": "M008",
+      "id": "S02",
+      "title": "knowledge-check 与 report 共用检索真相",
+      "status": "pending",
+      "risk": "high",
+      "depends": [
+        "S01"
+      ],
+      "demo": "对同一条 completed session 连续请求 `/api/v1/practice/sessions/{id}/knowledge-check` 和 `/api/v1/practice/sessions/{id}/report`，两边返回一致的 retrieval 事实与分层解释。",
+      "created_at": "2026-03-29T13:57:33.465Z",
+      "completed_at": null,
+      "full_summary_md": "",
+      "full_uat_md": "",
+      "goal": "让 `/knowledge-check` 和 canonical report 通过 `runtime_diagnostics` + `SessionEvidenceService` 读取同一条 persisted retrieval ledger，并对同一 session 给出一致解释。",
+      "success_criteria": "- `build_session_runtime_diagnostics(...)` 输出 retrieval audit/summary，不再只停在 status 与聚合计数。\n- `SessionEvidenceService.build_projection(...)` 或其 shared snapshot seam 暴露 report-facing retrieval facts，且事实来源就是 persisted ledger。\n- 同一条 session 的 `/knowledge-check` 与 canonical `/report` 在 retrieval happened / hit / miss / failure / weak evidence 上保持一致。",
+      "proof_level": "Backend contract, integration, and projection-level proof across the shared read seams.",
+      "integration_closure": "继续以 `backend/src/common/api/practice.py` 为 shipped route family 入口，以 `SessionEvidenceService` 为 report authority，不新建 report-only retrieval source。",
+      "observability_impact": "knowledge-check 与 report 的 retrieval truth 从“各说各话”收口为同一条 persisted evidence line。",
+      "sequence": 0,
+      "replan_triggered_at": null
+    },
+    {
+      "milestone_id": "M008",
+      "id": "S03",
+      "title": "报告页检索事实可见化",
+      "status": "pending",
+      "risk": "medium",
+      "depends": [
+        "S02"
+      ],
+      "demo": "打开现有 report 页即可看到该 session 的 KB 绑定、最近检索事实与对应的 hit/miss/failure/weak-evidence 说明。",
+      "created_at": "2026-03-29T13:57:33.465Z",
+      "completed_at": null,
+      "full_summary_md": "",
+      "full_uat_md": "",
+      "goal": "把共享 retrieval truth 接到现有 learner-facing report UI 和共享 wording seam 上，让用户在 shipped report surface 直接看懂 KB binding、检索结果与降级原因。",
+      "success_criteria": "- `web/src/lib/api/types.ts`、`web/src/lib/session-evidence.ts` 与 report page 共享 retrieval fact contract 和文案规则。\n- report 页在不增加新入口的前提下展示 retrieval facts，并区分未触发 / miss / failure / hit-but-weak。\n- 浏览器或同等 route-family proof 显示 learner 能从同一 report 页面看懂 KB binding 与 retrieval truth。",
+      "proof_level": "Focused web tests plus browser/UAT on the existing report page.",
+      "integration_closure": "只扩展现有 `/practice/{sessionId}/report` knowledge-check / evidence 区域，不新增 audit console 或工程师专用页面。",
+      "observability_impact": "把 retrieval degradation 从 backend-only truth 变成 learner-facing、可解释、稳定的现有产品表面。",
       "sequence": 0,
       "replan_triggered_at": null
     }
@@ -4875,19 +5035,27 @@
       "milestone_id": "M007",
       "slice_id": "S04",
       "id": "T04",
-      "title": "Validate and close M007 through GSD render flows, then read back generated state truthfully",
-      "status": "pending",
-      "one_liner": "",
-      "narrative": "",
-      "verification_result": "",
+      "title": "Validated the S04 close-out proof line, advanced R009 to validated, and opened the DB-backed slice/milestone render path for final state reconciliation.",
+      "status": "complete",
+      "one_liner": "Validated the S04 close-out proof line, advanced R009 to validated, and opened the DB-backed slice/milestone render path for final state reconciliation.",
+      "narrative": "Re-read the focused S04 evidence chain before touching generated state. T01 proves the fire-and-forget own-session path durably promotes sales sessions out of `status=\"scoring\"`; T02 proves report readability during scoring plus replay/highlights completion gating and post-finalization parity on the canonical route family; T03 adds the fresh localhost artifact for one StepFun sales session that moved `in_progress -> scoring -> completed` and unlocked replay on the same session after persisted completion. Based on that evidence, R009 was moved to validated through the requirement update flow instead of hand-editing `REQUIREMENTS.md`. This task completion call is the sequencing step that allows the slice and milestone close-out renders to run next; the task summary will be rewritten immediately afterward with the final slice/milestone/state read-back evidence.",
+      "verification_result": "Ran a focused precondition check that verified `.artifacts/m007-s04-final-closure-proof.md` still contains the persisted-completion marker, same-session replay `200` unlock, optional-noise classification, and pass verdict, and that the DB-rendered `R009` row now shows `Status: validated` in `.gsd/REQUIREMENTS.md`.",
       "duration": "",
-      "completed_at": null,
+      "completed_at": "2026-03-28T13:37:23.117Z",
       "blocker_discovered": false,
-      "deviations": "",
-      "known_issues": "",
-      "key_files": [],
-      "key_decisions": [],
-      "full_summary_md": "",
+      "deviations": "None.",
+      "known_issues": "Generated state reconciliation and milestone closure still need to be proven through the subsequent GSD render/read-back pass; this task completion call only unlocks that sequence.",
+      "key_files": [
+        ".artifacts/m007-s04-final-closure-proof.md",
+        ".artifacts/m007-s03-authority-audit.md",
+        ".gsd/REQUIREMENTS.md",
+        ".gsd/milestones/M007/slices/S04/tasks/T04-SUMMARY.md"
+      ],
+      "key_decisions": [
+        "Advance R009 only after re-reading T01-T03 evidence and the fresh localhost same-session proof artifact, not from prior milestone intent alone.",
+        "Use the GSD DB/render flow as the only authority for slice and milestone close-out; generated state must be read back after render rather than hand-edited."
+      ],
+      "full_summary_md": "---\nid: T04\nparent: S04\nmilestone: M007\nkey_files:\n  - .artifacts/m007-s04-final-closure-proof.md\n  - .artifacts/m007-s03-authority-audit.md\n  - .gsd/REQUIREMENTS.md\n  - .gsd/milestones/M007/slices/S04/tasks/T04-SUMMARY.md\nkey_decisions:\n  - Advance R009 only after re-reading T01-T03 evidence and the fresh localhost same-session proof artifact, not from prior milestone intent alone.\n  - Use the GSD DB/render flow as the only authority for slice and milestone close-out; generated state must be read back after render rather than hand-edited.\nduration: \"\"\nverification_result: passed\ncompleted_at: 2026-03-28T13:37:23.118Z\nblocker_discovered: false\n---\n\n# T04: Validated the S04 close-out proof line, advanced R009 to validated, and opened the DB-backed slice/milestone render path for final state reconciliation.\n\n**Validated the S04 close-out proof line, advanced R009 to validated, and opened the DB-backed slice/milestone render path for final state reconciliation.**\n\n## What Happened\n\nRe-read the focused S04 evidence chain before touching generated state. T01 proves the fire-and-forget own-session path durably promotes sales sessions out of `status=\"scoring\"`; T02 proves report readability during scoring plus replay/highlights completion gating and post-finalization parity on the canonical route family; T03 adds the fresh localhost artifact for one StepFun sales session that moved `in_progress -> scoring -> completed` and unlocked replay on the same session after persisted completion. Based on that evidence, R009 was moved to validated through the requirement update flow instead of hand-editing `REQUIREMENTS.md`. This task completion call is the sequencing step that allows the slice and milestone close-out renders to run next; the task summary will be rewritten immediately afterward with the final slice/milestone/state read-back evidence.\n\n## Verification\n\nRan a focused precondition check that verified `.artifacts/m007-s04-final-closure-proof.md` still contains the persisted-completion marker, same-session replay `200` unlock, optional-noise classification, and pass verdict, and that the DB-rendered `R009` row now shows `Status: validated` in `.gsd/REQUIREMENTS.md`.\n\n## Verification Evidence\n\n| # | Command | Exit Code | Verdict | Duration |\n|---|---------|-----------|---------|----------|\n| 1 | `python3 - <<'PY' ... verify proof markers and rendered R009 status ... PY` | 0 | ✅ pass | 70ms |\n\n\n## Deviations\n\nNone.\n\n## Known Issues\n\nGenerated state reconciliation and milestone closure still need to be proven through the subsequent GSD render/read-back pass; this task completion call only unlocks that sequence.\n\n## Files Created/Modified\n\n- `.artifacts/m007-s04-final-closure-proof.md`\n- `.artifacts/m007-s03-authority-audit.md`\n- `.gsd/REQUIREMENTS.md`\n- `.gsd/milestones/M007/slices/S04/tasks/T04-SUMMARY.md`\n",
       "description": "Load `safe-grow` and `verification-before-completion`. The slice is only done if the proof and the generated project state agree. Steps: 1. Re-read the focused regression evidence plus `.artifacts/m007-s04-final-closure-proof.md`; if they do not prove the same-session route family and persisted completion transition, stop and surface a blocker instead of forcing close-out. 2. Move R009 to validated with concrete proof notes, then use the GSD tool flow (`gsd_complete_task`, `gsd_complete_slice`, `gsd_validate_milestone`, `gsd_complete_milestone`) to render slice and milestone artifacts instead of editing generated files. 3. Read back `.gsd/STATE.md` and `.gsd/state-manifest.json`; if M007 or R009 still look stale after the render flow, treat that as an unresolved blocker and do not hand-edit system-managed state. Must-haves: R009 advances only with explicit proof references from T01-T03; generated slice/milestone artifacts are created through GSD tools only; rendered state no longer reports M007 as queued or M002 as active. Failure modes: close-out runs before proof exists, R009 is marked validated without the same-session artifact, or generated-state drift is hidden by manual edits. Load profile: one DB-backed render pass plus read-back checks; avoid duplicate completion calls with changing payloads unless the tool itself requires a clean rerun. Negative tests: missing proof artifact, milestone validation returning anything but `pass`, or state-manifest still showing stale milestone ownership/status after the render path completes.",
       "estimate": "45m",
       "files": [
@@ -4919,6 +5087,142 @@
         ".gsd/state-manifest.json"
       ],
       "observability_impact": "- Signals added/changed: milestone validation verdict, rendered slice/milestone summaries, and generated-state read-back for M007/R009.\n- How a future agent inspects this: read the rendered S04 summary/UAT, M007 validation/summary, `.gsd/STATE.md`, and `.gsd/state-manifest.json` after the GSD tool flow completes.\n- Failure state exposed: whether close-out failed because proof was insufficient, validation failed, or generated state remained stale despite canonical DB/render operations.",
+      "full_plan_md": "",
+      "sequence": 0
+    },
+    {
+      "milestone_id": "M008",
+      "slice_id": "S01",
+      "id": "T01",
+      "title": "Normalize retrieval ledger events in the search helper layer",
+      "status": "pending",
+      "one_liner": "",
+      "narrative": "",
+      "verification_result": "",
+      "duration": "",
+      "completed_at": null,
+      "blocker_discovered": false,
+      "deviations": "",
+      "known_issues": "",
+      "key_files": [],
+      "key_decisions": [],
+      "full_summary_md": "",
+      "description": "The executor should load `safe-grow`, `fastapi-python`, `test-driven-development`, and `verification-before-completion` before coding.\n\nExtend the search-helper layer so every internal retrieval outcome can be normalized into one provider-neutral ledger event before persistence is involved.\n\n## Failure Modes\n| Dependency | On error | On timeout | On malformed response |\n|------------|----------|-----------|----------------------|\n| `search_internal_knowledge(...)` orchestration | return a normalized failure event and keep counters compatible | record timeout/failure state as a bounded ledger event instead of dropping the attempt | normalize to safe empty/failure summaries instead of persisting raw rows |\n| transformed retrieval result payload | cap and sanitize result summaries before they reach snapshot persistence | keep the event status truthful even when no result summary is available | reject provider-specific/raw row shapes and reuse the existing transformed result schema |\n\n## Load Profile\n- **Shared resources**: in-memory retrieval payloads and the eventual JSON snapshot row they will feed.\n- **Per-operation cost**: one normalized ledger event plus a bounded subset of transformed result summaries.\n- **10x breakpoint**: snapshot/event bloat if entries or per-entry result previews are not capped.\n\n## Negative Tests\n- **Malformed inputs**: missing query, unbound KBs, and malformed search results still produce safe bounded failure/no-op events.\n- **Error paths**: `kb_not_ready`, explicit search failure, and unexpected exception paths all create truthful ledger events.\n- **Boundary conditions**: repeated hits/misses trim to the configured ledger cap and per-entry result-summary cap.\n\n## Steps\n1. Define the bounded ledger entry shape on top of the current `knowledge_retrieval` metrics, including normalized query text, status, result count, retrieval mode, error summary, and bounded result summaries from the transformed search payload.\n2. Thread that richer event payload through `backend/src/sales_bot/websocket/components/stepfun_internal_knowledge_searcher.py` and helper utilities without inventing a second result schema.\n3. Add focused helper/searcher tests proving normalization, trimming, and truthful hit/miss/failure event creation.\n\n## Must-Haves\n- [ ] Keep current flat metrics backward-compatible while adding the ledger.\n- [ ] Never persist raw provider payloads or unbounded snippets.\n- [ ] Reuse the transformed search result shape so later slices read one truth source.",
+      "estimate": "50m",
+      "files": [
+        "backend/src/sales_bot/websocket/components/stepfun_helpers.py",
+        "backend/src/sales_bot/websocket/components/stepfun_knowledge_helpers.py",
+        "backend/src/sales_bot/websocket/components/stepfun_internal_knowledge_searcher.py",
+        "backend/tests/unit/test_stepfun_knowledge_helpers.py",
+        "backend/tests/unit/test_stepfun_internal_knowledge_searcher.py"
+      ],
+      "verify": "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/test_stepfun_knowledge_helpers.py backend/tests/unit/test_stepfun_internal_knowledge_searcher.py",
+      "inputs": [
+        "backend/src/sales_bot/websocket/components/stepfun_helpers.py",
+        "backend/src/sales_bot/websocket/components/stepfun_knowledge_helpers.py",
+        "backend/src/sales_bot/websocket/components/stepfun_internal_knowledge_searcher.py",
+        "backend/tests/unit/test_stepfun_knowledge_helpers.py",
+        "backend/tests/unit/test_stepfun_internal_knowledge_searcher.py"
+      ],
+      "expected_output": [
+        "backend/src/sales_bot/websocket/components/stepfun_helpers.py",
+        "backend/src/sales_bot/websocket/components/stepfun_knowledge_helpers.py",
+        "backend/src/sales_bot/websocket/components/stepfun_internal_knowledge_searcher.py",
+        "backend/tests/unit/test_stepfun_knowledge_helpers.py",
+        "backend/tests/unit/test_stepfun_internal_knowledge_searcher.py"
+      ],
+      "observability_impact": "Signals added/changed: normalized retrieval ledger events are created for hit/miss/failure before persistence. How a future agent inspects this: rerun the focused helper/searcher unit pack and inspect the event payloads it asserts. Failure state exposed: whether a retrieval attempt was dropped, oversized, or mislabeled before it ever reached snapshot persistence.",
+      "full_plan_md": "",
+      "sequence": 0
+    },
+    {
+      "milestone_id": "M008",
+      "slice_id": "S01",
+      "id": "T02",
+      "title": "Persist retrieval ledger entries through the runtime-metrics path",
+      "status": "pending",
+      "one_liner": "",
+      "narrative": "",
+      "verification_result": "",
+      "duration": "",
+      "completed_at": null,
+      "blocker_discovered": false,
+      "deviations": "",
+      "known_issues": "",
+      "key_files": [],
+      "key_decisions": [],
+      "full_summary_md": "",
+      "description": "The executor should load `safe-grow`, `fastapi-python`, `test-driven-development`, and `verification-before-completion` before coding.\n\nOnce ledger events exist, wire them through the current runtime-metrics persistence path so the session snapshot records them immutably alongside today's counters.\n\n## Failure Modes\n| Dependency | On error | On timeout | On malformed response |\n|------------|----------|-----------|----------------------|\n| `persist_runtime_metrics_to_session(...)` | leave the previous snapshot intact and fail the focused regression instead of mutating in place | treat as incomplete persistence and keep the old snapshot visible | reject invalid runtime metrics rather than half-writing the session row |\n| `StepFunRealtimeHandler._record_knowledge_runtime_metric(...)` | preserve the existing warning path and fail the new regression if ledger events are dropped | keep the preexisting persistence cadence; do not add loops or retries | normalize malformed event payloads before commit or reject them cleanly |\n\n## Load Profile\n- **Shared resources**: async DB session, `practice_sessions.voice_policy_snapshot` JSON field, and deep-copy/merge work.\n- **Per-operation cost**: one bounded ledger append plus the existing snapshot merge/commit.\n- **10x breakpoint**: deep-copy churn or repeated commit amplification if persistence is no longer one-write-per-event.\n\n## Negative Tests\n- **Malformed inputs**: missing runtime metrics or malformed ledger state should fail safely without mutating the original snapshot.\n- **Error paths**: handler-level failure paths must still preserve `last_status`/`last_error` while writing a bounded ledger entry when possible.\n- **Boundary conditions**: repeated persistence keeps the ledger capped and preserves copy-on-write snapshot semantics.\n\n## Steps\n1. Extend `backend/src/sales_bot/websocket/components/stepfun_runtime_metrics_helpers.py` so runtime-metric merges carry the bounded ledger into `practice_sessions.voice_policy_snapshot` without mutating the original snapshot object.\n2. Update `backend/src/sales_bot/websocket/stepfun_realtime_handler.py` to pass the richer ledger-event payload through `_record_knowledge_runtime_metric(...)` while keeping the current warning-only failure surface.\n3. Add focused unit coverage proving copy-on-write persistence, capped repeated writes, and handler-level persistence for hit and failure paths.\n\n## Must-Haves\n- [ ] Snapshot persistence remains copy-on-write.\n- [ ] Existing flat metrics stay readable after ledger writes.\n- [ ] One retrieval attempt still maps to one bounded snapshot update, not a second persistence channel.",
+      "estimate": "45m",
+      "files": [
+        "backend/src/sales_bot/websocket/components/stepfun_runtime_metrics_helpers.py",
+        "backend/src/sales_bot/websocket/stepfun_realtime_handler.py",
+        "backend/tests/unit/test_stepfun_runtime_metrics_helpers.py",
+        "backend/tests/unit/test_stepfun_realtime_handler.py"
+      ],
+      "verify": "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/test_stepfun_runtime_metrics_helpers.py backend/tests/unit/test_stepfun_realtime_handler.py",
+      "inputs": [
+        "backend/src/sales_bot/websocket/components/stepfun_runtime_metrics_helpers.py",
+        "backend/src/sales_bot/websocket/stepfun_realtime_handler.py",
+        "backend/src/sales_bot/websocket/components/stepfun_knowledge_helpers.py",
+        "backend/src/sales_bot/websocket/components/stepfun_internal_knowledge_searcher.py",
+        "backend/tests/unit/test_stepfun_runtime_metrics_helpers.py",
+        "backend/tests/unit/test_stepfun_realtime_handler.py"
+      ],
+      "expected_output": [
+        "backend/src/sales_bot/websocket/components/stepfun_runtime_metrics_helpers.py",
+        "backend/src/sales_bot/websocket/stepfun_realtime_handler.py",
+        "backend/tests/unit/test_stepfun_runtime_metrics_helpers.py",
+        "backend/tests/unit/test_stepfun_realtime_handler.py"
+      ],
+      "observability_impact": "Signals added/changed: persisted session snapshots now retain the bounded retrieval ledger alongside the existing last-status/last-error counters. How a future agent inspects this: read one `PracticeSession.voice_policy_snapshot` row or rerun the persistence-focused unit pack. Failure state exposed: whether ledger events survive merge/commit and whether the original snapshot object was mutated in place.",
+      "full_plan_md": "",
+      "sequence": 0
+    },
+    {
+      "milestone_id": "M008",
+      "slice_id": "S01",
+      "id": "T03",
+      "title": "Keep current session routes readable with ledger-backed snapshots",
+      "status": "pending",
+      "one_liner": "",
+      "narrative": "",
+      "verification_result": "",
+      "duration": "",
+      "completed_at": null,
+      "blocker_discovered": false,
+      "deviations": "",
+      "known_issues": "",
+      "key_files": [],
+      "key_decisions": [],
+      "full_summary_md": "",
+      "description": "The executor should load `safe-grow`, `fastapi-python`, `test-driven-development`, and `verification-before-completion` before coding.\n\nLock the read side on current session routes so ledger-backed snapshots stay truthful and backward-compatible before S02 starts sharing this truth with report.\n\n## Failure Modes\n| Dependency | On error | On timeout | On malformed response |\n|------------|----------|-----------|----------------------|\n| `build_session_runtime_diagnostics(...)` | keep current knowledge-check summary behavior and fail the new regression if ledger-backed snapshots cannot be read | do not add new polling or runtime dependencies to read the ledger | fall back to the latest valid ledger entry or current flat fields instead of throwing |\n| current practice session/detail routes | preserve existing access-control and snapshot-ref behavior | keep current single-read behavior; do not add background fetches | reject runtime-metrics drift that changes `voice_policy_snapshot_ref` |\n\n## Load Profile\n- **Shared resources**: one session fetch and current diagnostics normalization on existing routes.\n- **Per-operation cost**: one read plus lightweight fallback logic from flat fields to the latest bounded ledger entry.\n- **10x breakpoint**: repeated JSON normalization on every read if fallback logic becomes expensive or duplicates work.\n\n## Negative Tests\n- **Malformed inputs**: partial or missing flat `last_*` fields should still allow ledger-backed snapshots to read truthfully when a valid latest event exists.\n- **Error paths**: completed-session hit/miss/failure snapshots still classify correctly on `knowledge-check` and current detail routes.\n- **Boundary conditions**: `voice_policy_snapshot_ref` remains unchanged while runtime metrics churn, and owner/admin access on current session routes does not regress.\n\n## Steps\n1. Teach `backend/src/common/conversation/runtime_diagnostics.py` and only the minimal API glue it needs to tolerate the richer `knowledge_retrieval` payload while preserving today's counter/status summary contract.\n2. Extend snapshot and contract tests so a completed knowledge-backed session proves the bounded ledger is visible on current session/detail surfaces and `voice_policy_snapshot_ref` still ignores runtime-metric churn across detail/report/replay reads.\n3. Re-run the focused route tests sequentially and stop if the implementation starts adding report semantics or new routes that belong to S02 rather than S01.\n\n## Must-Haves\n- [ ] No new audit route or report payload redesign in S01.\n- [ ] Existing `knowledge-check` status summaries stay compatible with ledger-backed snapshots.\n- [ ] Current session routes remain the proof surface for persisted snapshot truth.",
+      "estimate": "50m",
+      "files": [
+        "backend/src/common/conversation/runtime_diagnostics.py",
+        "backend/src/common/api/practice.py",
+        "backend/tests/unit/test_runtime_diagnostics_knowledge_retrieval.py",
+        "backend/tests/integration/test_voice_runtime_session_snapshot.py",
+        "backend/tests/contract/test_practice_evidence_contract.py"
+      ],
+      "verify": "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/test_runtime_diagnostics_knowledge_retrieval.py backend/tests/integration/test_voice_runtime_session_snapshot.py backend/tests/contract/test_practice_evidence_contract.py",
+      "inputs": [
+        "backend/src/common/conversation/runtime_diagnostics.py",
+        "backend/src/common/api/practice.py",
+        "backend/src/common/db/voice_policy_snapshot.py",
+        "backend/src/sales_bot/websocket/components/stepfun_runtime_metrics_helpers.py",
+        "backend/src/sales_bot/websocket/components/stepfun_internal_knowledge_searcher.py",
+        "backend/tests/integration/test_voice_runtime_session_snapshot.py",
+        "backend/tests/contract/test_practice_evidence_contract.py"
+      ],
+      "expected_output": [
+        "backend/src/common/conversation/runtime_diagnostics.py",
+        "backend/src/common/api/practice.py",
+        "backend/tests/unit/test_runtime_diagnostics_knowledge_retrieval.py",
+        "backend/tests/integration/test_voice_runtime_session_snapshot.py",
+        "backend/tests/contract/test_practice_evidence_contract.py"
+      ],
+      "observability_impact": "Signals added/changed: current session detail / knowledge-check readers can inspect the persisted ledger without losing legacy counter-based status summaries. How a future agent inspects this: compare `GET /api/v1/practice/sessions/{id}` and `GET /api/v1/practice/sessions/{id}/knowledge-check` for the same completed session, or rerun the focused integration/contract pack. Failure state exposed: whether richer runtime metrics can still be read consistently on existing session routes or whether snapshot/ref drift reappears.",
       "full_plan_md": "",
       "sequence": 0
     }
@@ -6240,6 +6544,78 @@
       "decision": "What evidence line determines whether the StepFun same-session closure blocker is retired on localhost",
       "choice": "Treat persisted session status plus same-session report/replay/highlights unlock as the closure authority; classify concurrent kb_not_ready and trigger-side no_scoring_context_available/report_generation_failed logs as optional noise when that authority line still passes",
       "rationale": "The fresh localhost proof produced the old trigger-side noise and KB-lock diagnostics, but the same session still advanced to completed and unlocked the shipped report/replay/highlights family on one canonical SessionEvidenceService projection. Judging closure by the raw trigger logs alone would misclassify a passing persisted route-family proof as a blocker and would contradict the learner-visible product truth.",
+      "revisable": "Yes",
+      "made_by": "agent",
+      "superseded_by": null
+    },
+    {
+      "seq": 1471,
+      "id": "D111",
+      "when_context": "M007/S04/T04",
+      "scope": "milestone-governance",
+      "decision": "How to correct stale milestone metadata when `state-manifest.json` still exports blank titles or obsolete statuses after a close-out render",
+      "choice": "Fix the underlying `.gsd/gsd.db` milestone rows, then rebuild `state-manifest.json` and `STATE.md` through the engine’s `writeManifest(...)` and `rebuildState(...)` helpers instead of editing the rendered files directly.",
+      "rationale": "In this repo, the public GSD completion/plan tools can advance milestone status and render summaries, but they do not backfill an already-existing blank milestone `title`, and a historical milestone row can stay on an obsolete status such as `active` even after canonical docs moved on. Because `state-manifest.json` exports the milestone table verbatim, the honest fix is to correct the DB rows first and then rerender the generated surfaces through engine code. Editing the manifest or STATE markdown directly would hide the DB drift without fixing the source of truth.",
+      "revisable": "Yes",
+      "made_by": "agent",
+      "superseded_by": null
+    },
+    {
+      "seq": 1472,
+      "id": "D112",
+      "when_context": "M008 planning",
+      "scope": "scope",
+      "decision": "What product line should own the next growth phase after M007 closes",
+      "choice": "Prioritize the auditable training chain (`knowledge base → retrieval → training → audio evidence → report provenance`) before expanding supervisor workflow, PPT realtime interruption, mobile, or external integrations.",
+      "rationale": "The user explicitly redirected the roadmap away from wider workflow expansion and toward eliminating fake-credible training outputs. Until retrieval truth, audio auditability, and report provenance are hard, larger workflow or channel expansion would rest on an evidence chain the user does not trust.",
+      "revisable": "Yes",
+      "made_by": "human",
+      "superseded_by": null
+    },
+    {
+      "seq": 1473,
+      "id": "D113",
+      "when_context": "M008 planning",
+      "scope": "architecture",
+      "decision": "Where the auditable retrieval/audio/report chain should be exposed",
+      "choice": "Keep M008-M010 on the current `knowledge-check` / report / replay route family; do not introduce a new audit console or debug-only route as the primary proof surface.",
+      "rationale": "The current project already has strong shipped-route authority seams. The user's core complaint is that current user-visible outputs can feel credible without hard evidence, so the fix must land on the same surfaces users already consume. A separate audit console would hide the trust problem instead of solving it.",
+      "revisable": "Yes",
+      "made_by": "collaborative",
+      "superseded_by": null
+    },
+    {
+      "seq": 1476,
+      "id": "D114",
+      "when_context": "M008 planning",
+      "scope": "reporting",
+      "decision": "Whether M008 infers `used_in_reasoning` from current retrieval evidence",
+      "choice": "Do not infer or expose `used_in_reasoning` in M008; limit the contract to retrieval occurrence, hit/miss/failure, and weak-evidence facts.",
+      "rationale": "Current runtime evidence can prove that retrieval happened and what it returned, but not reliably that the model used the retrieved content in reasoning. Pretending otherwise would recreate the fake-credibility problem this milestone is trying to remove.",
+      "revisable": "Yes",
+      "made_by": "agent",
+      "superseded_by": null
+    },
+    {
+      "seq": 1477,
+      "id": "D115",
+      "when_context": "M008 planning",
+      "scope": "architecture",
+      "decision": "How retrieval facts are persisted for M008",
+      "choice": "Persist a bounded, provider-neutral retrieval ledger inside `voice_policy_snapshot.runtime_metrics.knowledge_retrieval` on the existing runtime metrics write path.",
+      "rationale": "This preserves the current runtime persistence seam, avoids inventing a new table or route for a small factual ledger, and gives later report/provenance work one durable source of truth without exposing provider-specific raw payloads.",
+      "revisable": "Yes",
+      "made_by": "agent",
+      "superseded_by": null
+    },
+    {
+      "seq": 1478,
+      "id": "D116",
+      "when_context": "M008 planning",
+      "scope": "reporting",
+      "decision": "Whether M008 infers `used_in_reasoning` from current retrieval evidence",
+      "choice": "Do not infer or expose `used_in_reasoning` in M008; limit the contract to retrieval occurrence, hit/miss/failure, and weak-evidence facts.",
+      "rationale": "Current runtime evidence can prove that retrieval happened and what it returned, but not reliably that the model used the retrieved content in reasoning. Pretending otherwise would recreate the fake-credibility problem this milestone is trying to remove.",
       "revisable": "Yes",
       "made_by": "agent",
       "superseded_by": null
@@ -8313,6 +8689,17 @@
       "verdict": "✅ pass",
       "duration_ms": 0,
       "created_at": "2026-03-28T13:32:21.666Z"
+    },
+    {
+      "id": 189,
+      "task_id": "T04",
+      "slice_id": "S04",
+      "milestone_id": "M007",
+      "command": "python3 - <<'PY' ... verify proof markers and rendered R009 status ... PY",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 70,
+      "created_at": "2026-03-28T13:37:23.118Z"
     }
   ]
 }

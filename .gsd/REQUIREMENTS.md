@@ -4,16 +4,82 @@ This file is the explicit capability and coverage contract for the project.
 
 ## Active
 
-### R009 — 客户演练在训练过程中应逐步提供可用的实时评分、阶段反馈或下一轮建议，帮助用户边练边调整，而不是只能事后看分。
-- Class: differentiator
+### R022 — 每场训练必须记录可审计的检索事实：是否检索、检索摘要、命中数量、命中来源、失败原因。
+- Class: continuity
 - Status: active
-- Description: 客户演练在训练过程中应逐步提供可用的实时评分、阶段反馈或下一轮建议，帮助用户边练边调整，而不是只能事后看分。
-- Why it matters: 这是系统从“训练记录工具”升级为“教练系统”的关键能力。
+- Description: 每一场训练都必须在当前 session 事实上留下 retrieval ledger，能够回答是否发生检索、检索查询/摘要是什么、命中了多少内容、命中来自哪里、失败原因是什么。
+- Why it matters: 如果知识库只是“配置 ready”而训练事实里说不清有没有真正检索，就无法判断知识库是否真的起作用。
 - Source: user
-- Primary owning slice: M007/S04
-- Supporting slices: M007/S01, M007/S02, M007/S03
+- Primary owning slice: M008/S01
+- Supporting slices: M008/S02, M008/S03
 - Validation: mapped
-- Notes: M007 现为 R009 余留 closure/proof 的唯一 live owner。M002 仅保留为 2026-03-25 failed close-out 的 historical foundation；不存在继续执行的 M002/S07 或 M002/S08。S01 已完成训练中 coach degraded / resumed 的真实可见性与恢复语义；S02 已完成同一条真实 session 从 realtime coaching 到 /practice/{sessionId}/report 与 /practice/{sessionId}/replay 的结论同源收口；S03 负责把旧 M002 remediation artifacts、requirement/roadmap/validation/summary/state 的 authority 正式归并到 M007；S04 负责最终 integrated validation 与封板。只有产品真相 proof 与工件对账同轮通过后，R009 才能从 active 升到 validated.
+- Notes: 这一 requirement 优先于更大的主管 workflow 或新页面扩展；必须继续沿当前 `/practice/sessions/{id}/knowledge-check` 与 canonical report route family 收口，而不是先造新的 debug/audit route。
+
+### R023 — `knowledge-check` 与 canonical report 必须表达同一条 retrieval truth line，而不是一个说命中、一个只给抽象结论。
+- Class: continuity
+- Status: active
+- Description: 同一条训练 session 上，knowledge-check 和 canonical report 必须对知识支持情况给出可对照、可解释的一致事实线，而不是相互脱节。
+- Why it matters: 只有 retrieval truth 在诊断面和用户最终阅读的报告面都一致，报告才不是“像真的”。
+- Source: user
+- Primary owning slice: M008/S02
+- Supporting slices: M008/S01, M008/S03
+- Validation: mapped
+- Notes: 第一阶段不追求所有 report conclusion 都可追溯，只先把 retrieval truth line 统一。
+
+### R024 — 训练原始音频必须在训练过程中持续留痕，并作为审计资产落到阿里云 OSS 的固定训练目录。
+- Class: continuity
+- Status: active
+- Description: 每次训练的原始音频都必须在训练过程中持续落盘，并落到阿里云 OSS 的固定训练目录中，形成后续可抽查、可复核的原始审计资产。
+- Why it matters: 如果录音只在训练结束后临时归档或可能因中断丢失，整场训练就无法被完整复核。
+- Source: user
+- Primary owning slice: M009/S01
+- Supporting slices: M009/S02, M009/S03
+- Validation: mapped
+- Notes: 最低通过线不是 turn 级精确对齐，而是先确保原始音频持续留痕、可关联 session、不会因中断整场丢失。
+
+### R025 — 训练音频的上传、下载和后续使用必须走浏览器直连 OSS；服务端只负责签名、登记 metadata 和权限边界，不做音频中转。
+- Class: operability
+- Status: active
+- Description: 训练音频的上传、下载与后续消费必须采用浏览器直连 OSS 的模式，服务端只提供签名 URL、对象 key、元数据登记与访问控制，不承担音频内容转发。
+- Why it matters: 当前云服务器带宽有限，如果让服务端中转音频，后续上传、下载和审计播放都会成为瓶颈。
+- Source: user
+- Primary owning slice: M009/S01
+- Supporting slices: M009/S02
+- Validation: mapped
+- Notes: 代码库里已经存在 meetings 场景的前端直传 OSS 模式；训练音频应沿这条模式扩展，而不是新造服务端代理链。
+
+### R026 — 学员必须能在现有 replay / report 路径里反查自己的原始录音证据，而不只是后台可查。
+- Class: primary-user-loop
+- Status: active
+- Description: 学员在自己的 replay / report 路径中必须能够访问并反查原始录音证据，用来对照 transcript、训练判断和报告结论。
+- Why it matters: 如果只有后台或管理侧能查原始音频，训练证据就无法成为学员自己的复盘资产。
+- Source: user
+- Primary owning slice: M009/S02
+- Supporting slices: M009/S03, M010/S01
+- Validation: mapped
+- Notes: 第一阶段默认至少支持现有 replay/report 路径中的可播放/可反查，不要求先开放任意导出下载。
+
+### R027 — 报告关键结论必须有出处，能够回到 transcript / retrieval / audio evidence，而不是只输出“像真的”结论。
+- Class: launchability
+- Status: active
+- Description: report / replay 中的关键结论（如主问题、下一轮目标、claim truth）必须能够回到明确证据出处，而不是只给抽象总结。
+- Why it matters: 这是避免“假可信报告”的核心 requirement；没有出处，用户无法判断报告是否值得信任。
+- Source: user
+- Primary owning slice: M010/S01
+- Supporting slices: M010/S02, M010/S03
+- Validation: mapped
+- Notes: 这条 requirement 建立在 M008 的 retrieval truth 与 M009 的音频留痕之上，不应先用 prompt 文案或 UI 包装来伪装完成。
+
+### R028 — 当 retrieval / audio / transcript / enhanced-report 任一层降级时，系统必须分层说明原因，避免形成假可信报告。
+- Class: failure-visibility
+- Status: active
+- Description: 一旦检索、音频留痕、转写、增强报告中的任意一层降级，系统必须明确说明是哪一层、为什么降级，以及这会如何影响当前结论可信度。
+- Why it matters: 用户最不能接受的是“报告像真的，但底层证据链其实已经断了”；这条 requirement 用来防止系统静默伪装完整。
+- Source: user
+- Primary owning slice: M010/S02
+- Supporting slices: M010/S03, M008/S03, M009/S03
+- Validation: mapped
+- Notes: 这条 requirement 既影响 backend 归因模型，也影响 replay/report/knowledge-check 的前端 wording 统一。
 
 ## Validated
 
@@ -104,6 +170,17 @@ This file is the explicit capability and coverage contract for the project.
 - Supporting slices: M001/S04
 - Validation: Validated by S07 slice verification: backend presentation unit/degraded-path/contract/integration suites passed, live report API checks proved both complete and degraded presentation sessions keep `scenario_type="presentation"` plus canonical `presentation_review` without falling back to sales `main_issue`/`next_goal`, a fresh local audio-driven page-turn session (`8531c7f6-50da-4934-9fd4-63784c791edf`) completed through the real StepFun presentation websocket and produced page-aware summaries/coverage on `/api/v1/practice/sessions/{id}/report`, and the shared `/practice/{sessionId}/report` page rendered the PPT branch with sales-only sections absent while retry continuity preserved `presentation_id`.
 - Notes: S07 proves the first PPT postmortem is now canonical from the shared report entrypoint; realtime interruption coaching remains deferred.
+
+### R009 — 客户演练在训练过程中应逐步提供可用的实时评分、阶段反馈或下一轮建议，帮助用户边练边调整，而不是只能事后看分。
+- Class: differentiator
+- Status: validated
+- Description: 客户演练在训练过程中应逐步提供可用的实时评分、阶段反馈或下一轮建议，帮助用户边练边调整，而不是只能事后看分。
+- Why it matters: 这是系统从“训练记录工具”升级为“教练系统”的关键能力。
+- Source: user
+- Primary owning slice: M007/S04
+- Supporting slices: M007/S01, M007/S02, M007/S03
+- Validation: Validated by M007/S04 with explicit proof references from T01-T03: T01 proved the real `db=None` fire-and-forget path durably promotes sales sessions out of `status="scoring"` on its own async DB session (`backend/tests/unit/test_report_generation_trigger.py`, `backend/tests/integration/test_report_generation_trigger_fire_and_forget.py`, `backend/tests/integration/test_session_lifecycle_api.py -k background_finalization_can_complete_session`); T02 locked same-session report readability during scoring plus replay/highlights completion gating and post-finalization parity on the existing projection-backed route family (`backend/tests/contract/test_practice_evidence_contract.py`, `backend/tests/integration/test_replay_api.py`, learner report/replay page tests); T03 added the fresh localhost artifact `.artifacts/m007-s04-final-closure-proof.md`, which records one StepFun sales session moving `in_progress -> scoring -> completed`, with `/practice/{sessionId}/report` readable on that same session, `/practice/{sessionId}/replay` blocked before completion and unlocked after persisted completion, and optional `kb_not_ready` / `no_scoring_context_available` / `report_generation_failed [NO_STAGE_RESULTS]` noise explicitly classified as non-blocking when the same-session persisted completion plus replay unlock still pass.
+- Notes: S04 close-out now treats persisted same-session completion plus canonical report/replay/highlights unlock as the closure authority. The final M007 render-backed validation must still confirm generated state surfaces (`STATE.md`, `state-manifest.json`) agree with this proof line; no manual edits to those system-managed files are allowed.
 
 ### R010 — AI 客户必须能在现有 admin Persona/knowledge 配置 → practice 会话创建 → runtime retrieval → knowledge-check/report/replay 业务链路上，基于知识库和 Persona 配置，对价格、竞品、证据等真实销售问题进行持续追问，而不是给出泛泛回答。
 - Class: integration
@@ -245,6 +322,13 @@ This file is the explicit capability and coverage contract for the project.
 
 | ID | Class | Status | Primary owner | Supporting | Proof |
 |---|---|---|---|---|---|
+| R022 | continuity | active | M008/S01 | M008/S02, M008/S03 | mapped |
+| R023 | continuity | active | M008/S02 | M008/S01, M008/S03 | mapped |
+| R024 | continuity | active | M009/S01 | M009/S02, M009/S03 | mapped |
+| R025 | operability | active | M009/S01 | M009/S02 | mapped |
+| R026 | primary-user-loop | active | M009/S02 | M009/S03, M010/S01 | mapped |
+| R027 | launchability | active | M010/S01 | M010/S02, M010/S03 | mapped |
+| R028 | failure-visibility | active | M010/S02 | M010/S03, M008/S03, M009/S03 | mapped |
 | R001 | primary-user-loop | validated | M001/S01 | M001/S08 | validated |
 | R002 | failure-visibility | validated | M001/S01 | M001/S08 | validated |
 | R003 | core-capability | validated | M001/S05 | M001/S04, M001/S07 | Validated by S05 slice verification: backend sales baseline/persona/compiler/contract/integration suites passed, web ScorePanel + websocket handler + report focused tests passed, live StepFun sales runtime showed value/price/competitor/evidence prompts driving sales-specific score_update dimensions and knowledge-check queries, and the canonical /practice/{sessionId}/report surfaced sales-specific main_issue, next_goal, pass_flags labels, and value/evidence/objection rollups from the unified evidence contract. |
@@ -253,7 +337,7 @@ This file is the explicit capability and coverage contract for the project.
 | R006 | admin/support | validated | M001/S03 | M001/S05, M001/S07 | Validated by S03 slice verification: admin sessions integration contract passed, admin detail + manager-lite focused tests passed, and live runtime admin APIs exposed projection-backed supervisor preview fields and canonical /practice/{sessionId}/report drill-in targets for the same completed sessions. |
 | R007 | operability | validated | M001/S06 | M001/S03 | Validated by S06 slice verification: backend HistoryService/admin-user projection suites passed, focused /progress and /stats integration assertions stayed aligned with projection-backed /sessions previews, web admin user-detail tests passed, Alembic was upgraded to head, and live browser review on /admin/users/{id} proved the supervisor-readable continuous-change panel answers whether the learner is improving, what keeps repeating, whether focus should change, and how inline empty/error states behave when progress data is unavailable. |
 | R008 | primary-user-loop | validated | M001/S07 | M001/S04 | Validated by S07 slice verification: backend presentation unit/degraded-path/contract/integration suites passed, live report API checks proved both complete and degraded presentation sessions keep `scenario_type="presentation"` plus canonical `presentation_review` without falling back to sales `main_issue`/`next_goal`, a fresh local audio-driven page-turn session (`8531c7f6-50da-4934-9fd4-63784c791edf`) completed through the real StepFun presentation websocket and produced page-aware summaries/coverage on `/api/v1/practice/sessions/{id}/report`, and the shared `/practice/{sessionId}/report` page rendered the PPT branch with sales-only sections absent while retry continuity preserved `presentation_id`. |
-| R009 | differentiator | active | M007/S04 | M007/S01, M007/S02, M007/S03 | mapped |
+| R009 | differentiator | validated | M007/S04 | M007/S01, M007/S02, M007/S03 | Validated by M007/S04 with explicit proof references from T01-T03: T01 proved the real `db=None` fire-and-forget path durably promotes sales sessions out of `status="scoring"` on its own async DB session (`backend/tests/unit/test_report_generation_trigger.py`, `backend/tests/integration/test_report_generation_trigger_fire_and_forget.py`, `backend/tests/integration/test_session_lifecycle_api.py -k background_finalization_can_complete_session`); T02 locked same-session report readability during scoring plus replay/highlights completion gating and post-finalization parity on the existing projection-backed route family (`backend/tests/contract/test_practice_evidence_contract.py`, `backend/tests/integration/test_replay_api.py`, learner report/replay page tests); T03 added the fresh localhost artifact `.artifacts/m007-s04-final-closure-proof.md`, which records one StepFun sales session moving `in_progress -> scoring -> completed`, with `/practice/{sessionId}/report` readable on that same session, `/practice/{sessionId}/replay` blocked before completion and unlocked after persisted completion, and optional `kb_not_ready` / `no_scoring_context_available` / `report_generation_failed [NO_STAGE_RESULTS]` noise explicitly classified as non-blocking when the same-session persisted completion plus replay unlock still pass. |
 | R010 | integration | validated | M003/S01 | M003/S02, M003/S03, M003/S04, M003/S05, M003/S06 | Validated by M003/S06 completion. Combined evidence: S05 already proved the live admin Persona/knowledge -> practice -> knowledge-check -> canonical report same-session chain on current routes, and S06 added fresh focused regressions plus a fresh localhost same-session proof that preserved the immediate sales `status="scoring"` lifecycle-end contract, promoted the persisted session to `completed` during background finalization even when optional enhanced-report generation failed, and then loaded `GET /api/v1/practice/sessions/{id}/report`, `GET /api/v1/sessions/{id}/replay`, `GET /api/v1/sessions/{id}/highlights`, `/practice/{sessionId}/report`, and `/practice/{sessionId}/replay` truthfully on that same session while truly unfinished sessions still returned `[SESSION_NOT_COMPLETED]`. |
 | R011 | continuity | validated | M004/S01 | M001/S02, M001/S06, M001/S07, M001/S08, M004/S02 | Validated by M004. Evidence chain: S01 delivered explanation-rich `learning_evidence` + shared issue/goal vocabulary across replay/highlight/report/history; S02 delivered canonical `replay_anchor` deep links with resolved/degraded/missing diagnostics; S03 delivered canonical `retry_entry.focus_intent` carried into new session `voice_policy_snapshot` and surfaced via `runtime_descriptor.focus_intent`; S04 delivered PPT page-level `presentation_review.page_summaries[*].issue_clusters` and replay/report evidence on existing routes; S05 completed live sales and PPT learner-loop proof with degraded states still understandable, backed by `.artifacts/m004-s05-t02/` and `.artifacts/m004-s05-t03/` and milestone validation in `.gsd/milestones/M004/M004-VALIDATION.md`. |
 | R012 | operability | validated | M005 (provisional) | none | Validated by M005 close-out: S01 aligned current admin analytics/user drill-in to the projection-backed evidence line; S02 added persistent supervisor focus/reminder/result workflow; S03 added runtime-backed asset governance and linked-asset anomaly context on current pages; S04 added the fixed 7-day operating pack with context-preserving drill-ins; S05 proved the integrated shipped admin workflow. Milestone validation verdict: pass. Fresh close-out verification reran backend admin governance suites (49/49) and web admin governance suites (19/19). |
@@ -269,7 +353,7 @@ This file is the explicit capability and coverage contract for the project.
 
 ## Coverage Summary
 
-- Active requirements: 1
-- Mapped to slices: 1
-- Validated: 14 (R001, R002, R003, R004, R005, R006, R007, R008, R010, R011, R012, R013, R014, R015)
+- Active requirements: 7
+- Mapped to slices: 7
+- Validated: 15 (R001, R002, R003, R004, R005, R006, R007, R008, R009, R010, R011, R012, R013, R014, R015)
 - Unmapped active requirements: 0

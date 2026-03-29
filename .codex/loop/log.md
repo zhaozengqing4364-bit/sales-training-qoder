@@ -2226,3 +2226,30 @@ Append one entry per iteration:
   verification results: passed; same-host localhost auth held, one fresh StepFun session stayed on the shipped route family end to end, replay/highlights were blocked before completion, the persisted session later advanced to completed, report/replay/highlights all unlocked on that same session, and the artifact captures why concurrent kb_not_ready plus no_scoring_context_available / report_generation_failed logs are optional noise rather than the canonical blocker.
   success signal status: M007/S04 now has a fresh localhost artifact proving the final same-session closure path retires status=scoring truthfully and unlocks replay on the completed session without host drift or cross-session stitching.
   rollback note: if T04 close-out ever disagrees with this proof, re-run the same localhost route-family flow before touching generated state, and judge success by persisted session status plus report/replay unlock rather than by trigger-side noise alone.
+
+- time: 2026-03-28T21:52:18+08:00
+  mode: grow
+  item id: M007-S04-T04
+  files changed:
+    - .gsd/REQUIREMENTS.md
+    - .gsd/DECISIONS.md
+    - .gsd/KNOWLEDGE.md
+    - .gsd/milestones/M007/slices/S04/tasks/T04-SUMMARY.md
+    - .gsd/milestones/M007/slices/S04/S04-SUMMARY.md
+    - .gsd/milestones/M007/slices/S04/S04-UAT.md
+    - .gsd/milestones/M007/M007-VALIDATION.md
+    - .gsd/milestones/M007/M007-SUMMARY.md
+    - .gsd/STATE.md
+    - .gsd/state-manifest.json
+    - .gsd/gsd.db
+    - .codex/loop/state.json
+    - .codex/loop/log.md
+  summary: Re-read the T01-T03 closure proof, moved R009 to validated, closed S04 and M007 through GSD render flows, then fixed the last state-manifest drift by correcting stale milestone metadata in .gsd/gsd.db and rebuilding generated state through engine code.
+  verification commands:
+    - python3 precondition check: proof markers present in .artifacts/m007-s04-final-closure-proof.md and R009 renders as validated
+    - sh -c 'test -s .gsd/milestones/M007/slices/S04/S04-SUMMARY.md && test -s .gsd/milestones/M007/slices/S04/S04-UAT.md && test -s .gsd/milestones/M007/M007-VALIDATION.md && test -s .gsd/milestones/M007/M007-SUMMARY.md'
+    - python3 state-manifest gate: assert M007 complete with title and M002 non-active (first run exposed stale DB metadata, final run passed)
+    - node engine rebuild: openDatabase(.gsd/gsd.db) -> writeManifest(.) -> rebuildState(.)
+  verification results: passed; live proof and rendered artifacts were sufficient to validate R009 and close the slice/milestone, the first final manifest gate truthfully failed on blank milestone titles plus stale M002 active status in .gsd/gsd.db, and the final gate passed after correcting those DB rows and rebuilding state-manifest/STATE through engine code.
+  success signal status: M007 is now closed and the generated-state read-back agrees with the same-session localhost proof instead of lagging it.
+  rollback note: if future close-out drift reappears, inspect .gsd/gsd.db milestone rows first and rerender generated state through writeManifest/rebuildState; do not patch state-manifest.json or STATE.md directly.
