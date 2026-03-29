@@ -1346,17 +1346,20 @@ export interface AudioAuditSegment {
     size_bytes?: number | null;
     upload_status: string;
     playback_path?: string | null;
+    error_message?: string | null;
 }
 
 export interface AudioAuditSummary {
     recording_status: string;
     total_segments: number;
     uploaded_segments: number;
+    failed_segments: number;
     total_bytes: number;
     latest_segment_sequence?: number | null;
     storage_prefix?: string | null;
     last_uploaded_at?: string | null;
     learner_status: "available" | "partial" | "missing";
+    degraded_reasons: string[];
     status?: "available" | "partial" | "missing" | null;
 }
 export interface AudioAuditPayload {

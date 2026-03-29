@@ -13,6 +13,17 @@ interface AudioAuditCardProps {
     sessionId: string;
 }
 
+const DEGRADED_REASON_COPY: Record<string, string> = {
+    upload_failed: "部分音频片段上传失败",
+    segments_pending: "部分片段尚未上传完成",
+};
+
+const SEGMENT_PLAYBACK_ERROR_COPY: Record<string, string> = {
+    SEGMENT_NOT_UPLOADED: "该片段未成功上传",
+    SEGMENT_NOT_FOUND: "片段记录不存在",
+    SIGNING_FAILED: "获取播放地址失败",
+};
+
 function resolveLearnerStatus(
     summary: AudioAuditPayload["summary"] | null | undefined,
 ): "available" | "partial" | "missing" {
@@ -34,6 +45,11 @@ function formatTotalDurationMs(ms: number): string {
     const minutes = Math.floor(totalSeconds / 60);
     const seconds = totalSeconds % 60;
     return `${minutes}:${seconds.toString().padStart(2, "0")}`;
+}
+
+function resolvePlaybackErrorMessage(error: unknown): string {
+    const code = error instanceof Error ? error.message : "";
+    return SEGMENT_PLAYBACK_ERROR_COPY[code] ?? "加载失败";
 }
 
 function SegmentPlayer({
@@ -86,13 +102,13 @@ function SegmentPlayer({
                 audio.addEventListener("ended", () => setPlaying(false));
                 audio.addEventListener("error", () => {
                     setPlaying(false);
-                    setError("播放失败");
+                    setError("加载失败");
                 });
 
                 await audio.play();
                 setPlaying(true);
-            } catch {
-                setError("加载失败");
+            } catch (playbackError) {
+                setError(resolvePlaybackErrorMessage(playbackError));
             } finally {
                 setLoading(false);
             }
@@ -108,6 +124,10 @@ function SegmentPlayer({
 
     const isPlayable = segment.upload_status === "uploaded" && Boolean(segment.playback_path);
     const label = `片段 ${segment.segment_sequence + 1}`;
+    const failedUploadMessage =
+        segment.upload_status === "failed" && segment.error_message
+            ? segment.error_message
+            : null;
 
     return (
         <div className="flex items-center gap-3 rounded-xl bg-zinc-50 p-3">
@@ -157,6 +177,9 @@ function SegmentPlayer({
                         ? ` · ${(segment.size_bytes / 1024).toFixed(0)} KB`
                         : ""}
                 </p>
+                {failedUploadMessage ? (
+                    <p className="text-xs text-rose-600 mt-0.5">{failedUploadMessage}</p>
+                ) : null}
                 {error && <p className="text-xs text-rose-600 mt-0.5">{error}</p>}
             </div>
         </div>
@@ -181,12 +204,15 @@ export function AudioAuditCardWithSession({ audioAudit, sessionId }: AudioAuditC
         );
     }
 
-    const { segments } = audioAudit;
+    const { summary, segments } = audioAudit;
     const totalDurationMs = segments.reduce(
         (sum, s) => sum + (typeof s.duration_ms === "number" ? s.duration_ms : 0),
         0,
     );
     const isPartial = learnerStatus === "partial";
+    const degradedReasons = (summary.degraded_reasons ?? [])
+        .map((reason) => DEGRADED_REASON_COPY[reason] ?? reason)
+        .filter(Boolean);
 
     return (
         <GlassCard className="p-6 mb-6" data-testid="audio-audit-card">
@@ -208,6 +234,14 @@ export function AudioAuditCardWithSession({ audioAudit, sessionId }: AudioAuditC
             <p className="text-sm text-zinc-600 mb-4">
                 共 {segments.length} 个片段 · 总时长 {formatTotalDurationMs(totalDurationMs)}
             </p>
+
+            {isPartial && degradedReasons.length > 0 ? (
+                <ul className="mb-4 list-disc space-y-1 pl-5 text-sm text-amber-700">
+                    {degradedReasons.map((reason) => (
+                        <li key={reason}>{reason}</li>
+                    ))}
+                </ul>
+            ) : null}
 
             {segments.length > 0 && (
                 <div className="space-y-2">

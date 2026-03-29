@@ -168,4 +168,28 @@ describe("API client 401 handling", () => {
         expect(secondUrl).toContain("/api/v1/auth/login");
         expect(secondUrl).not.toBe(firstUrl);
     });
+
+    it("preserves structured segment playback error codes from JSON error responses", async () => {
+        vi.stubGlobal(
+            "fetch",
+            vi.fn().mockResolvedValue(
+                new Response(
+                    JSON.stringify({
+                        error_code: "SEGMENT_NOT_UPLOADED",
+                        message: "segment is not uploaded yet",
+                    }),
+                    {
+                        status: 409,
+                        headers: { "Content-Type": "application/json" },
+                    },
+                ),
+            ),
+        );
+
+        await expect(
+            api.sessions.getSegmentAudioBlobUrl("session-1", 3),
+        ).rejects.toMatchObject({
+            message: "SEGMENT_NOT_UPLOADED",
+        });
+    });
 });

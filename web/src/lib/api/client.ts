@@ -1737,6 +1737,26 @@ export const api = {
             );
 
             if (!response.ok) {
+                try {
+                    const payload = await response.json();
+                    const detail = payload && typeof payload === "object"
+                        ? (payload.detail && typeof payload.detail === "object" ? payload.detail : payload)
+                        : {};
+                    const errorCode = typeof detail.error === "string" && detail.error.trim()
+                        ? detail.error.trim()
+                        : typeof detail.error_code === "string" && detail.error_code.trim()
+                            ? detail.error_code.trim()
+                            : null;
+
+                    if (errorCode) {
+                        throw new Error(errorCode);
+                    }
+                } catch (parseError) {
+                    if (parseError instanceof Error && parseError.message) {
+                        throw parseError;
+                    }
+                }
+
                 throw new Error(`HTTP ${response.status}`);
             }
 

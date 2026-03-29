@@ -99,11 +99,13 @@ function buildReplayData(overrides: Record<string, unknown> = {}) {
         recording_status: "completed",
         total_segments: 2,
         uploaded_segments: 2,
+        failed_segments: 0,
         total_bytes: 40960,
         latest_segment_sequence: 1,
         storage_prefix: "sessions/session-1/audio",
         last_uploaded_at: "2026-03-27T08:10:00Z",
         learner_status: "available",
+        degraded_reasons: [],
       },
       segments: [
         {
@@ -113,6 +115,7 @@ function buildReplayData(overrides: Record<string, unknown> = {}) {
           size_bytes: 20480,
           upload_status: "uploaded",
           playback_path: "/api/v1/sessions/session-1/audio-segments/0",
+          error_message: null,
         },
         {
           segment_sequence: 1,
@@ -121,6 +124,7 @@ function buildReplayData(overrides: Record<string, unknown> = {}) {
           size_bytes: 20480,
           upload_status: "uploaded",
           playback_path: "/api/v1/sessions/session-1/audio-segments/1",
+          error_message: null,
         },
       ],
     },
@@ -673,6 +677,50 @@ describe("SessionReplayPage", () => {
       configurable: true,
       value: scrollIntoViewMock,
     });
+  });
+
+  it("renders learner-facing degraded audio wording in replay when partial audio is reported", async () => {
+    renderReplayPage({
+      replayOverrides: {
+        audio_audit: {
+          summary: {
+            recording_status: "completed",
+            total_segments: 2,
+            uploaded_segments: 1,
+            failed_segments: 1,
+            total_bytes: 20480,
+            latest_segment_sequence: 1,
+            storage_prefix: "sessions/session-1/audio",
+            last_uploaded_at: "2026-03-27T08:10:00Z",
+            learner_status: "partial",
+            degraded_reasons: ["upload_failed"],
+          },
+          segments: [
+            {
+              segment_sequence: 0,
+              created_at: "2026-03-27T08:00:00Z",
+              duration_ms: 12000,
+              size_bytes: 20480,
+              upload_status: "uploaded",
+              playback_path: "/api/v1/sessions/session-1/audio-segments/0",
+              error_message: null,
+            },
+            {
+              segment_sequence: 1,
+              created_at: "2026-03-27T08:00:12Z",
+              duration_ms: null,
+              size_bytes: 0,
+              upload_status: "failed",
+              playback_path: null,
+              error_message: "签名已过期，请重新上传",
+            },
+          ],
+        },
+      },
+    });
+
+    expect(await screen.findByText("部分音频片段上传失败")).toBeTruthy();
+    expect(screen.getByText("签名已过期，请重新上传")).toBeTruthy();
   });
 
   it("shows an explicit blocked message when replay is still completion-gated", async () => {

@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "exported_at": "2026-03-29T23:19:51.784Z",
+  "exported_at": "2026-03-29T23:36:03.045Z",
   "milestones": [
     {
       "id": "M001",
@@ -5997,19 +5997,30 @@
       "milestone_id": "M009",
       "slice_id": "S03",
       "id": "T02",
-      "title": "Frontend: consume degraded truth in AudioAuditCard and normalize playback errors",
-      "status": "pending",
-      "one_liner": "",
-      "narrative": "",
-      "verification_result": "",
+      "title": "Shipped canonical degraded audio wording in the shared AudioAuditCard and preserved structured segment playback error codes through the web API client.",
+      "status": "complete",
+      "one_liner": "Shipped canonical degraded audio wording in the shared AudioAuditCard and preserved structured segment playback error codes through the web API client.",
+      "narrative": "Aligned the shared learner audio-audit UI with the enriched backend payload by extending the frontend audio-audit types, rendering explicit degraded wording for partial audio sessions, and showing per-segment failure text when an upload failed. Updated the segment playback client to extract backend error/error_code values from non-OK JSON responses so the UI can distinguish upload/signing/not-found failures instead of collapsing everything to HTTP status. Added focused report/replay tests for the shared degraded wording and a direct API-client regression test for structured error propagation. Focused web verification passed.",
+      "verification_result": "Ran the focused Vitest suite for the report page, replay page, and API-client regression coverage. All targeted tests passed, including the new degraded audio wording assertions and the structured segment playback error assertion.",
       "duration": "",
-      "completed_at": null,
+      "completed_at": "2026-03-29T23:36:03.016Z",
       "blocker_discovered": false,
-      "deviations": "",
-      "known_issues": "",
-      "key_files": [],
-      "key_decisions": [],
-      "full_summary_md": "",
+      "deviations": "Added a small direct API-client regression test in web/src/lib/api/client.auth.test.ts to lock structured segment playback error propagation. The task plan only called for report/replay page tests, but the client seam was the most stable place to prove the fetch-boundary fix.",
+      "known_issues": "None.",
+      "key_files": [
+        "web/src/components/audio/AudioAuditCard.tsx",
+        "web/src/lib/api/client.ts",
+        "web/src/lib/api/types.ts",
+        "web/src/app/(user)/practice/[sessionId]/report/page.test.tsx",
+        "web/src/app/(user)/practice/[sessionId]/replay/page.test.tsx",
+        "web/src/lib/api/client.auth.test.ts",
+        ".gsd/milestones/M009/slices/S03/tasks/T02-SUMMARY.md"
+      ],
+      "key_decisions": [
+        "AudioAuditCard maps canonical degraded_reasons tokens locally to stable Chinese learner copy instead of deriving wording from upload counts.",
+        "Segment playback preserves backend error codes across api.sessions.getSegmentAudioBlobUrl(...) and resolves learner-facing playback copy in SegmentPlayer."
+      ],
+      "full_summary_md": "---\nid: T02\nparent: S03\nmilestone: M009\nkey_files:\n  - web/src/components/audio/AudioAuditCard.tsx\n  - web/src/lib/api/client.ts\n  - web/src/lib/api/types.ts\n  - web/src/app/(user)/practice/[sessionId]/report/page.test.tsx\n  - web/src/app/(user)/practice/[sessionId]/replay/page.test.tsx\n  - web/src/lib/api/client.auth.test.ts\n  - .gsd/milestones/M009/slices/S03/tasks/T02-SUMMARY.md\nkey_decisions:\n  - AudioAuditCard maps canonical degraded_reasons tokens locally to stable Chinese learner copy instead of deriving wording from upload counts.\n  - Segment playback preserves backend error codes across api.sessions.getSegmentAudioBlobUrl(...) and resolves learner-facing playback copy in SegmentPlayer.\nduration: \"\"\nverification_result: passed\ncompleted_at: 2026-03-29T23:36:03.016Z\nblocker_discovered: false\n---\n\n# T02: Shipped canonical degraded audio wording in the shared AudioAuditCard and preserved structured segment playback error codes through the web API client.\n\n**Shipped canonical degraded audio wording in the shared AudioAuditCard and preserved structured segment playback error codes through the web API client.**\n\n## What Happened\n\nAligned the shared learner audio-audit UI with the enriched backend payload by extending the frontend audio-audit types, rendering explicit degraded wording for partial audio sessions, and showing per-segment failure text when an upload failed. Updated the segment playback client to extract backend error/error_code values from non-OK JSON responses so the UI can distinguish upload/signing/not-found failures instead of collapsing everything to HTTP status. Added focused report/replay tests for the shared degraded wording and a direct API-client regression test for structured error propagation. Focused web verification passed.\n\n## Verification\n\nRan the focused Vitest suite for the report page, replay page, and API-client regression coverage. All targeted tests passed, including the new degraded audio wording assertions and the structured segment playback error assertion.\n\n## Verification Evidence\n\n| # | Command | Exit Code | Verdict | Duration |\n|---|---------|-----------|---------|----------|\n| 1 | `cd /Users/zhaozengqing/github/销售训练qoder/web && pnpm dlx npm@11.6.1 test -- --run 'src/app/(user)/practice/[sessionId]/report/page.test.tsx' 'src/app/(user)/practice/[sessionId]/replay/page.test.tsx' 'src/lib/api/client.auth.test.ts'` | 0 | ✅ pass | 17400ms |\n\n\n## Deviations\n\nAdded a small direct API-client regression test in web/src/lib/api/client.auth.test.ts to lock structured segment playback error propagation. The task plan only called for report/replay page tests, but the client seam was the most stable place to prove the fetch-boundary fix.\n\n## Known Issues\n\nNone.\n\n## Files Created/Modified\n\n- `web/src/components/audio/AudioAuditCard.tsx`\n- `web/src/lib/api/client.ts`\n- `web/src/lib/api/types.ts`\n- `web/src/app/(user)/practice/[sessionId]/report/page.test.tsx`\n- `web/src/app/(user)/practice/[sessionId]/replay/page.test.tsx`\n- `web/src/lib/api/client.auth.test.ts`\n- `.gsd/milestones/M009/slices/S03/tasks/T02-SUMMARY.md`\n",
       "description": "Update AudioAuditCard to consume canonical degraded fields (degraded_reasons, failed_segments, per-segment error_message) from the enriched backend payload. Render differentiated learner-facing wording for partial/failed states. Fix getSegmentAudioBlobUrl to preserve structured error codes instead of collapsing to generic HTTP status.",
       "estimate": "30m",
       "files": [
@@ -9916,6 +9927,17 @@
       "verdict": "✅ pass",
       "duration_ms": 9800,
       "created_at": "2026-03-29T23:19:51.743Z"
+    },
+    {
+      "id": 215,
+      "task_id": "T02",
+      "slice_id": "S03",
+      "milestone_id": "M009",
+      "command": "cd /Users/zhaozengqing/github/销售训练qoder/web && pnpm dlx npm@11.6.1 test -- --run 'src/app/(user)/practice/[sessionId]/report/page.test.tsx' 'src/app/(user)/practice/[sessionId]/replay/page.test.tsx' 'src/lib/api/client.auth.test.ts'",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 17400,
+      "created_at": "2026-03-29T23:36:03.016Z"
     }
   ]
 }

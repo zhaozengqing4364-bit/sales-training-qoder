@@ -124,11 +124,13 @@ const baseAudioAudit = {
         recording_status: "completed",
         total_segments: 2,
         uploaded_segments: 2,
+        failed_segments: 0,
         total_bytes: 40960,
         latest_segment_sequence: 1,
         storage_prefix: "sessions/session-1/audio",
         last_uploaded_at: "2026-03-27T08:10:00Z",
         learner_status: "available" as const,
+        degraded_reasons: [],
     },
     segments: [
         {
@@ -138,6 +140,7 @@ const baseAudioAudit = {
             size_bytes: 20480,
             upload_status: "uploaded",
             playback_path: "/api/v1/sessions/session-1/audio-segments/0",
+            error_message: null,
         },
         {
             segment_sequence: 1,
@@ -146,6 +149,7 @@ const baseAudioAudit = {
             size_bytes: 20480,
             upload_status: "uploaded",
             playback_path: "/api/v1/sessions/session-1/audio-segments/1",
+            error_message: null,
         },
     ],
 };
@@ -354,6 +358,47 @@ describe("ReportPage", () => {
         });
         createSessionMock.mockResolvedValue({ session_id: "retry-1" });
         getSegmentAudioBlobUrlMock.mockResolvedValue("blob:audio-segment-1");
+    });
+
+    it("renders learner-facing degraded audio wording when partial audio is reported", async () => {
+        getReportMock.mockResolvedValue({
+            ...baseReport,
+            audio_audit: {
+                summary: {
+                    ...baseAudioAudit.summary,
+                    learner_status: "partial",
+                    uploaded_segments: 1,
+                    failed_segments: 1,
+                    degraded_reasons: ["upload_failed"],
+                },
+                segments: [
+                    baseAudioAudit.segments[0],
+                    {
+                        ...baseAudioAudit.segments[1],
+                        upload_status: "failed",
+                        playback_path: null,
+                        error_message: "签名已过期，请重新上传",
+                    },
+                ],
+            },
+        });
+        getComprehensiveReportMock.mockResolvedValue({
+            session_id: "session-1",
+            generated_at: "2026-03-23T00:00:00Z",
+            overall_score: 72,
+            dimension_scores: [],
+            stage_summaries: [],
+            key_strengths: [],
+            key_improvements: [],
+            detailed_feedback: "",
+            recommendations: [],
+            voice_policy_snapshot_ref: null,
+        });
+
+        render(<ReportPage />);
+
+        expect(await screen.findByText("部分音频片段上传失败")).toBeTruthy();
+        expect(screen.getByText("签名已过期，请重新上传")).toBeTruthy();
     });
 
     it("renders sales rollup cards and sales-specific issue/goal copy from the unified report contract", async () => {

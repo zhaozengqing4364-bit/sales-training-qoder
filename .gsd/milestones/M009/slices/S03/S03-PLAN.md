@@ -8,7 +8,7 @@
   - Estimate: 45m
   - Files: backend/src/common/api/practice.py, backend/src/common/db/schemas.py
   - Verify: cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_audio_segment_api.py tests/contract/test_practice_evidence_contract.py tests/contract/test_audio_audit_contract.py -v
-- [ ] **T02: Frontend: consume degraded truth in AudioAuditCard and normalize playback errors** — Update AudioAuditCard to consume canonical degraded fields (degraded_reasons, failed_segments, per-segment error_message) from the enriched backend payload. Render differentiated learner-facing wording for partial/failed states. Fix getSegmentAudioBlobUrl to preserve structured error codes instead of collapsing to generic HTTP status.
+- [x] **T02: Shipped canonical degraded audio wording in the shared AudioAuditCard and preserved structured segment playback error codes through the web API client.** — Update AudioAuditCard to consume canonical degraded fields (degraded_reasons, failed_segments, per-segment error_message) from the enriched backend payload. Render differentiated learner-facing wording for partial/failed states. Fix getSegmentAudioBlobUrl to preserve structured error codes instead of collapsing to generic HTTP status.
   - Estimate: 30m
   - Files: web/src/components/audio/AudioAuditCard.tsx, web/src/lib/api/client.ts, web/src/lib/api/types.ts
   - Verify: cd web && pnpm dlx npm@11.6.1 test -- --run 'src/app/(user)/practice/[sessionId]/report/page.test.tsx' 'src/app/(user)/practice/[sessionId]/replay/page.test.tsx'
