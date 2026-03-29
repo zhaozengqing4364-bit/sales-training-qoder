@@ -11,6 +11,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.conversation.models import ConversationMessage
+from common.conversation.runtime_diagnostics import build_retrieval_facts
 from common.conversation.storage import normalize_objection_ledger
 from common.db.models import PracticeSession, SessionStatus
 from common.effectiveness import (
@@ -162,6 +163,12 @@ class SessionEvidenceService:
                 ),
                 presentation_degraded_reasons=projection.evidence_completeness.get(
                     "degraded_reasons"
+                ),
+                retrieval_facts_status=(
+                    projection.effectiveness_snapshot.get("retrieval_facts", {}).get("status")
+                    if isinstance(projection.effectiveness_snapshot, dict)
+                    and isinstance(projection.effectiveness_snapshot.get("retrieval_facts"), dict)
+                    else None
                 ),
             )
             return Result.ok(projection)
@@ -441,6 +448,17 @@ class SessionEvidenceService:
                     }
                     main_issue = projection_snapshot["main_issue"]
                     next_goal = projection_snapshot["next_goal"]
+
+        # --- Retrieval facts overlay (sales only, read-time projection) ---
+        if resolved_scenario_type == "sales":
+            retrieval_facts = build_retrieval_facts(
+                getattr(session, "voice_policy_snapshot", None)
+            )
+            if isinstance(retrieval_facts, dict):
+                projection_snapshot = {
+                    **projection_snapshot,
+                    "retrieval_facts": retrieval_facts,
+                }
 
         return SessionEvidenceProjection(
             session=session,

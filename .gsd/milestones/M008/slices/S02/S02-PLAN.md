@@ -8,7 +8,7 @@
   - Estimate: 45m
   - Files: backend/src/common/conversation/runtime_diagnostics.py, backend/tests/unit/test_runtime_diagnostics_knowledge_retrieval.py
   - Verify: cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_runtime_diagnostics_knowledge_retrieval.py -v
-- [ ] **T02: Attach retrieval_facts into report projection for sales sessions** — Wire the shared build_retrieval_facts(...) into SessionEvidenceService.build_projection(...) so that completed sales sessions get effectiveness_snapshot["retrieval_facts"] derived from voice_policy_snapshot.runtime_metrics.knowledge_retrieval. This must be a projection-only overlay (read-time augmentation, not persisted back). Add unit tests proving the field appears in projection.effectiveness_snapshot and that the persisted session.effectiveness_snapshot is not mutated.
+- [x] **T02: Wire build_retrieval_facts() into SessionEvidenceService.build_projection for sales sessions as copy-on-write overlay** — Wire the shared build_retrieval_facts(...) into SessionEvidenceService.build_projection(...) so that completed sales sessions get effectiveness_snapshot["retrieval_facts"] derived from voice_policy_snapshot.runtime_metrics.knowledge_retrieval. This must be a projection-only overlay (read-time augmentation, not persisted back). Add unit tests proving the field appears in projection.effectiveness_snapshot and that the persisted session.effectiveness_snapshot is not mutated.
   - Estimate: 30m
   - Files: backend/src/common/conversation/session_evidence.py, backend/tests/unit/test_session_evidence_service.py
   - Verify: cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_session_evidence_service.py -v -k 'retrieval_facts'

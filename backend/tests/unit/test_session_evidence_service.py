@@ -642,3 +642,216 @@ class TestSessionEvidenceService:
         projection = result.value
         assert projection.effectiveness_snapshot["claim_truth"]["status"] == "evidence_verified"
         assert projection.effectiveness_snapshot["claim_truth"]["source"] == "objection_ledger"
+
+    async def test_get_projection_attaches_retrieval_facts_for_completed_sales_session(
+        self,
+        service: SessionEvidenceService,
+        mock_db: AsyncMock,
+        sample_session_id: str,
+    ) -> None:
+        """Completed sales session with retrieval ledger data gets retrieval_facts in projection."""
+        session = SimpleNamespace(
+            session_id=sample_session_id,
+            status="completed",
+            logic_score=84.0,
+            accuracy_score=82.0,
+            completeness_score=78.0,
+            total_duration_seconds=180,
+            start_time=datetime.now(UTC) - timedelta(seconds=180),
+            end_time=datetime.now(UTC),
+            effectiveness_snapshot=_make_effectiveness_snapshot(
+                evaluable=True,
+                reason=None,
+            ),
+            voice_policy_snapshot={
+                "knowledge_base_ids": ["kb-001", "kb-002"],
+                "tool_policy": {"enable_internal_retrieval": True},
+                "runtime_metrics": {
+                    "knowledge_retrieval": {
+                        "attempt_count": 3,
+                        "hit_query_count": 2,
+                        "hit_rate": 0.67,
+                        "last_status": "hit",
+                        "recent_attempts": [
+                            {
+                                "query": "客户回访方案",
+                                "status": "hit",
+                                "result_count": 5,
+                                "result_summaries": ["文档A", "文档B"],
+                                "knowledge_base_ids": ["kb-001"],
+                            },
+                        ],
+                    }
+                },
+            },
+        )
+        messages = [
+            SimpleNamespace(
+                id="msg-1",
+                session_id=sample_session_id,
+                turn_number=1,
+                role="user",
+                content="你好",
+                audio_url=None,
+                timestamp=datetime.now(UTC),
+                duration_ms=1500,
+                fuzzy_words=None,
+                transcript_metadata=None,
+                sales_stage="opening",
+                score_snapshot={"overall_score": 84.0, "dimension_scores": {"专业度": 84.0}},
+                ai_feedback=None,
+                is_highlight=False,
+                highlight_type=None,
+                highlight_reason=None,
+            ),
+        ]
+
+        mock_session_result = MagicMock()
+        mock_session_result.scalar_one_or_none.return_value = session
+        mock_messages_result = MagicMock()
+        mock_messages_result.scalars.return_value.all.return_value = messages
+        mock_db.execute.side_effect = [mock_session_result, mock_messages_result]
+
+        result = await service.get_projection(session_id=sample_session_id)
+
+        assert result.is_success
+        projection = result.value
+        retrieval_facts = projection.effectiveness_snapshot.get("retrieval_facts")
+        assert isinstance(retrieval_facts, dict)
+        assert retrieval_facts["kb_bound"] is True
+        assert retrieval_facts["knowledge_base_ids"] == ["kb-001", "kb-002"]
+        assert retrieval_facts["knowledge_base_count"] == 2
+        assert retrieval_facts["retrieval_enabled"] is True
+        assert retrieval_facts["status"] == "hit"
+        assert retrieval_facts["attempt_count"] == 3
+        assert retrieval_facts["hit_count"] == 2
+        assert isinstance(retrieval_facts["recent_attempts"], list)
+        assert len(retrieval_facts["recent_attempts"]) >= 1
+
+    async def test_get_projection_does_not_mutate_persisted_effectiveness_snapshot(
+        self,
+        service: SessionEvidenceService,
+        mock_db: AsyncMock,
+        sample_session_id: str,
+    ) -> None:
+        """The projection overlay is copy-on-write; the persisted snapshot dict is not mutated."""
+        original_snapshot = _make_effectiveness_snapshot(evaluable=True, reason=None)
+        # Deep-copy to get a stable reference for comparison
+        original_snapshot_copy = dict(original_snapshot)
+
+        session = SimpleNamespace(
+            session_id=sample_session_id,
+            status="completed",
+            logic_score=84.0,
+            accuracy_score=82.0,
+            completeness_score=78.0,
+            total_duration_seconds=180,
+            start_time=datetime.now(UTC) - timedelta(seconds=180),
+            end_time=datetime.now(UTC),
+            effectiveness_snapshot=original_snapshot,
+            voice_policy_snapshot={
+                "knowledge_base_ids": ["kb-001"],
+                "tool_policy": {"enable_internal_retrieval": True},
+                "runtime_metrics": {
+                    "knowledge_retrieval": {
+                        "attempt_count": 1,
+                        "hit_query_count": 1,
+                        "hit_rate": 1.0,
+                        "last_status": "hit",
+                        "recent_attempts": [
+                            {"query": "测试", "status": "hit", "result_count": 2},
+                        ],
+                    }
+                },
+            },
+        )
+        messages = [
+            SimpleNamespace(
+                id="msg-1",
+                session_id=sample_session_id,
+                turn_number=1,
+                role="user",
+                content="hello",
+                audio_url=None,
+                timestamp=datetime.now(UTC),
+                duration_ms=1500,
+                fuzzy_words=None,
+                transcript_metadata=None,
+                sales_stage="opening",
+                score_snapshot={"overall_score": 84.0},
+                ai_feedback=None,
+                is_highlight=False,
+                highlight_type=None,
+                highlight_reason=None,
+            ),
+        ]
+
+        mock_session_result = MagicMock()
+        mock_session_result.scalar_one_or_none.return_value = session
+        mock_messages_result = MagicMock()
+        mock_messages_result.scalars.return_value.all.return_value = messages
+        mock_db.execute.side_effect = [mock_session_result, mock_messages_result]
+
+        result = await service.get_projection(session_id=sample_session_id)
+
+        assert result.is_success
+        # The projection should have retrieval_facts
+        assert "retrieval_facts" in result.value.effectiveness_snapshot
+        # But the original persisted snapshot must NOT be mutated
+        assert "retrieval_facts" not in original_snapshot
+        assert original_snapshot == original_snapshot_copy
+
+    async def test_get_projection_skips_retrieval_facts_when_voice_policy_snapshot_missing(
+        self,
+        service: SessionEvidenceService,
+        mock_db: AsyncMock,
+        sample_session_id: str,
+    ) -> None:
+        """Sessions without voice_policy_snapshot do not get retrieval_facts."""
+        session = SimpleNamespace(
+            session_id=sample_session_id,
+            status="completed",
+            logic_score=84.0,
+            accuracy_score=82.0,
+            completeness_score=78.0,
+            total_duration_seconds=180,
+            start_time=datetime.now(UTC) - timedelta(seconds=180),
+            end_time=datetime.now(UTC),
+            effectiveness_snapshot=_make_effectiveness_snapshot(
+                evaluable=True,
+                reason=None,
+            ),
+            voice_policy_snapshot=None,
+        )
+        messages = [
+            SimpleNamespace(
+                id="msg-1",
+                session_id=sample_session_id,
+                turn_number=1,
+                role="user",
+                content="hello",
+                audio_url=None,
+                timestamp=datetime.now(UTC),
+                duration_ms=1500,
+                fuzzy_words=None,
+                transcript_metadata=None,
+                sales_stage="opening",
+                score_snapshot={"overall_score": 84.0},
+                ai_feedback=None,
+                is_highlight=False,
+                highlight_type=None,
+                highlight_reason=None,
+            ),
+        ]
+
+        mock_session_result = MagicMock()
+        mock_session_result.scalar_one_or_none.return_value = session
+        mock_messages_result = MagicMock()
+        mock_messages_result.scalars.return_value.all.return_value = messages
+        mock_db.execute.side_effect = [mock_session_result, mock_messages_result]
+
+        result = await service.get_projection(session_id=sample_session_id)
+
+        assert result.is_success
+        projection = result.value
+        assert "retrieval_facts" not in projection.effectiveness_snapshot
