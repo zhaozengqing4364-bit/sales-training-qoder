@@ -99,3 +99,7 @@
 - `retrieval_facts` 的 single-source-of-truth 是 `build_retrieval_facts(voice_policy_snapshot)` 纯函数在 `runtime_diagnostics.py`；report projection 和 knowledge-check diagnostics 都从这个函数派生，不要在 route handler 里重算。live session 的 retrieval truth 仍走 live handler，不读 persisted snapshot。
 - `retrieval_facts` 是 sales-gated overlay：`build_projection()` 只在 `resolved_scenario_type == "sales"` 时附加，不会污染 presentation session 的 effectiveness_snapshot。presentation session 有独立的 review path，不要混用 retrieval_facts。
 - `claim_truth` 和 `retrieval_facts` 是独立字段：retrieval status=hit 不意味着 claim_truth=evidence_verified。contract/integration tests 必须显式验证这种独立性，否则后续 parity 会被隐性假设打破。
+- 报告页的核心内容（scores、issue/goal、retrieval_facts、claim_truth）必须从 canonical report payload 渲染，不要让 optional supplemental fetch（如 `/knowledge-check`）的失败隐藏这些事实。S03 证明了 retrieval hit + weak_evidence 可以在 `/knowledge-check` reject 时仍正常共存显示；后续新增任何报告区块都应遵循同一模式——canonical payload 为 authority，supplemental 为锦上添花。
+- PPT 报告页不渲染 retrieval section，也不调用 `getKnowledgeCheck`；如果后续 PPT 也要显示 retrieval truth，应该走独立的 typed PPT retrieval contract，不要复用 sales retrieval helper 的 miss/search_failed 文案。
+- 往 `voice_policy_snapshot.runtime_metrics.knowledge_retrieval` 写检索账本时，要继续保持 copy-on-write merge，并在 merge 阶段拒绝 malformed `recent_attempts`；否则 frozen snapshot reference 容易在 runtime-metrics churn 下半写脏数据。
+- `build_session_runtime_diagnostics(...)` 对检索事实的读侧修复必须继续遵守“flat `last_*` fields 优先，`recent_attempts` 只做 missing/stale fallback”的规则；直接改成永远读 ledger 会破坏现有 knowledge-check/current-session 向后兼容合同。
