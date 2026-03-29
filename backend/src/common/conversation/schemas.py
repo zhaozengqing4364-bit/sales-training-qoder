@@ -14,7 +14,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from common.db.schemas import PresentationReview
+from common.db.schemas import AudioAuditPayloadSchema, PresentationReview
 
 # ========== Type Aliases for API ==========
 MessageRoleType = str  # "user" | "assistant"
@@ -327,6 +327,10 @@ class ReplayDataResponse(BaseModel):
     stage_summary: list[StageSummarySchema] = Field(
         default_factory=list,
         description="Summary by sales stage"
+    )
+    audio_audit: AudioAuditPayloadSchema | None = Field(
+        None,
+        description="Raw audio recording audit evidence for the session",
     )
 
 

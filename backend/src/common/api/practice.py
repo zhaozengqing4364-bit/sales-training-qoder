@@ -232,6 +232,103 @@ def _can_read_session(session: PracticeSession, user: User) -> bool:
     return _is_admin_user(user) or str(session.user_id) == str(user.user_id)
 
 
+async def build_session_audio_audit(
+    db: AsyncSession,
+    session_id: str,
+    session: PracticeSession,
+) -> "AudioAuditPayloadSchema | None":
+    """Build a shared audio-audit read model for report and replay payloads.
+
+    Queries SessionAudioSegment rows ordered by segment_sequence, reads the
+    bounded summary from voice_policy_snapshot.runtime_metrics.audio_audit, and
+    computes a derived learner_status.
+
+    Returns None (not an empty payload) when the session has no audio segments
+    at all — this distinguishes "audio not applicable" from "audio applicable
+    but nothing uploaded yet".
+    """
+    from common.db.schemas import (
+        AudioAuditPayloadSchema,
+        AudioAuditSegmentSchema,
+        AudioAuditSummarySchema,
+    )
+
+    # Query all segments ordered by sequence
+    seg_result = await db.execute(
+        select(SessionAudioSegment)
+        .where(SessionAudioSegment.session_id == session_id)
+        .order_by(SessionAudioSegment.segment_sequence)
+    )
+    segments = list(seg_result.scalars().all())
+
+    # If the session has never created any audio segments, return None.
+    if not segments:
+        return None
+
+    # Read bounded summary from voice_policy_snapshot.runtime_metrics.audio_audit
+    voice_policy = session.voice_policy_snapshot or {}
+    runtime_metrics = voice_policy.get("runtime_metrics") if isinstance(voice_policy, dict) else None
+    audio_audit_raw = {}
+    if isinstance(runtime_metrics, dict):
+        raw = runtime_metrics.get("audio_audit")
+        if isinstance(raw, dict):
+            audio_audit_raw = raw
+
+    # Compute aggregates from actual segment rows
+    uploaded_count = 0
+    total_bytes = 0
+    latest_sequence: int | None = None
+    last_uploaded_at: str | None = None
+
+    segment_schemas: list[AudioAuditSegmentSchema] = []
+    for seg in segments:
+        if seg.upload_status == "uploaded":
+            uploaded_count += 1
+            total_bytes += seg.size_bytes or 0
+            if latest_sequence is None or seg.segment_sequence > latest_sequence:
+                latest_sequence = seg.segment_sequence
+            if seg.created_at is not None:
+                last_uploaded_at = seg.created_at.isoformat()
+
+        playback_path = None
+        if seg.upload_status == "uploaded":
+            playback_path = f"/api/v1/sessions/{session_id}/audio-segments/{seg.segment_sequence}"
+
+        segment_schemas.append(
+            AudioAuditSegmentSchema(
+                segment_sequence=seg.segment_sequence,
+                created_at=seg.created_at.isoformat() if seg.created_at else None,
+                duration_ms=seg.duration_ms,
+                size_bytes=seg.size_bytes,
+                upload_status=seg.upload_status,
+                playback_path=playback_path,
+            )
+        )
+
+    total_segments = len(segments)
+
+    # Derive learner_status
+    if uploaded_count > 0 and uploaded_count == total_segments:
+        learner_status = "available"
+    elif uploaded_count > 0:
+        learner_status = "partial"
+    else:
+        learner_status = "missing"
+
+    summary = AudioAuditSummarySchema(
+        recording_status=audio_audit_raw.get("recording_status", "active"),
+        total_segments=total_segments,
+        uploaded_segments=uploaded_count,
+        total_bytes=total_bytes,
+        latest_segment_sequence=latest_sequence,
+        storage_prefix=audio_audit_raw.get("storage_prefix", f"audio/{session_id}/"),
+        last_uploaded_at=last_uploaded_at,
+        learner_status=learner_status,
+    )
+
+    return AudioAuditPayloadSchema(summary=summary, segments=segment_schemas)
+
+
 def _build_session_response(
     session: PracticeSession,
     scenario_type: str | None = None,
@@ -1306,6 +1403,7 @@ async def end_session(
                 if session.presentation_id
                 else None,
             },
+            audio_audit=await build_session_audio_audit(db, session_id, session),
         )
     else:
         # Generate comprehensive report using AI evaluation
@@ -1375,6 +1473,7 @@ async def end_session(
                 "agent_id": str(session.agent_id) if session.agent_id else None,
                 "persona_id": str(session.persona_id) if session.persona_id else None,
             },
+            audio_audit=await build_session_audio_audit(db, session_id, session),
         )
 
     return success_response(report)
@@ -1487,6 +1586,7 @@ async def get_session_report(
             main_issue=projection.main_issue,
             next_goal=projection.next_goal,
         ),
+        audio_audit=await build_session_audio_audit(db, session_id, session),
     )
 
     logger.info(

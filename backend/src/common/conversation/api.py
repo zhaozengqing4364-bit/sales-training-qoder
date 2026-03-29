@@ -31,7 +31,7 @@ from common.conversation.schemas import (
     ConversationErrorResponse,
 )
 from common.db.session import get_db
-from common.db.models import PracticeSession, User
+from common.db.models import PracticeSession, SessionAudioSegment, User
 from common.monitoring.logger import get_logger, get_trace_id
 
 logger = get_logger(__name__)
@@ -60,6 +60,9 @@ async def _ensure_session_access(
     if str(session.user_id) != str(current_user.user_id):
         return _error_response(403, "[ACCESS_DENIED]", "Access denied")
     return None
+
+
+
 
 
 @router.get(
@@ -340,6 +343,66 @@ async def get_audio(
         )
 
     return _error_response(404, "[AUDIO_NOT_AVAILABLE]", "Audio file not found")
+
+
+@router.get(
+    "/{session_id}/audio-segments/{segment_sequence}",
+    responses={
+        302: {"description": "Redirect to signed audio URL"},
+        404: {"model": ConversationErrorResponse, "description": "Segment not found or not uploaded"},
+    },
+)
+async def get_audio_segment_playback(
+    session_id: str,
+    segment_sequence: int,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Return a short-lived signed GET redirect for an uploaded audio segment.
+
+    Validates session ownership and segment upload state before signing.
+    """
+    access_error = await _ensure_session_access(session_id, current_user, db)
+    if access_error:
+        return access_error
+
+    seg_result = await db.execute(
+        select(SessionAudioSegment).where(
+            SessionAudioSegment.session_id == session_id,
+            SessionAudioSegment.segment_sequence == segment_sequence,
+        )
+    )
+    segment = seg_result.scalar_one_or_none()
+
+    if segment is None:
+        return _error_response(
+            404, "[SEGMENT_NOT_FOUND]",
+            f"Audio segment {segment_sequence} not found for session {session_id}",
+        )
+
+    if segment.upload_status != "uploaded":
+        return _error_response(
+            404, "[SEGMENT_NOT_UPLOADED]",
+            f"Audio segment {segment_sequence} has status '{segment.upload_status}', expected 'uploaded'",
+        )
+
+    try:
+        from common.oss.signing import get_oss_signing_service
+        signing = get_oss_signing_service()
+        signed_url = signing.generate_get_url(segment.object_key, expires=3600)
+    except Exception as exc:
+        logger.error(
+            "audio_segment_signing_failed",
+            session_id=session_id,
+            segment_sequence=segment_sequence,
+            error=str(exc),
+        )
+        return _error_response(
+            500, "[SIGNING_FAILED]",
+            "Failed to generate audio playback URL",
+        )
+
+    return RedirectResponse(url=signed_url)
 
 
 # ========== Helper Functions ==========

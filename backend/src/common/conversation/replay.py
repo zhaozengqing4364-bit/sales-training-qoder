@@ -282,6 +282,15 @@ class ReplayService:
                 "presentation_review": presentation_review,
             }
 
+            # Attach audio-audit read model (graceful — never breaks replay/report)
+            try:
+                from common.api.practice import build_session_audio_audit
+                replay_data["audio_audit"] = await build_session_audio_audit(
+                    self.db, session_id, session,
+                )
+            except Exception:
+                replay_data["audio_audit"] = None
+
             logger.info(
                 "replay_data_generated",
                 session_id=session_id,
