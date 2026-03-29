@@ -343,6 +343,25 @@ async def test_runtime_metrics_append_keeps_snapshot_reference_baseline(
             "hit_query_count": 2,
             "hit_rate": 0.6667,
             "recent_queries": ["报价", "竞品对比"],
+            "recent_attempts": [
+                {
+                    "attempted_at": "2026-03-28T12:00:00Z",
+                    "query": "报价",
+                    "status": "hit",
+                    "result_count": 2,
+                    "retrieval_mode": "vector",
+                    "knowledge_base_ids": ["kb_test_2"],
+                    "result_summaries": [
+                        {
+                            "knowledge_base_id": "kb_test_2",
+                            "knowledge_base_name": "测试客户角色知识库",
+                            "score": 0.88,
+                            "snippet": "标准报价说明",
+                            "retrieval_mode": "vector",
+                        }
+                    ],
+                }
+            ],
         }
     }
     session.voice_policy_snapshot = mutated_snapshot
@@ -378,6 +397,101 @@ async def test_runtime_metrics_append_keeps_snapshot_reference_baseline(
             "knowledge_retrieval"
         ]["attempt_count"]
         == 3
+    )
+    assert (
+        detail_body["data"]["voice_policy_snapshot"]["runtime_metrics"][
+            "knowledge_retrieval"
+        ]["recent_attempts"][0]["query"]
+        == "报价"
+    )
+
+
+@pytest.mark.asyncio
+async def test_knowledge_check_reads_latest_valid_ledger_entry_when_flat_last_fields_are_missing(
+    async_client: AsyncClient,
+    auth_headers: dict,
+    test_db: AsyncSession,
+):
+    """Current session routes should stay truthful when only the bounded retrieval ledger has the latest attempt details."""
+    _, agent, persona = await _create_runtime_entities(test_db)
+
+    create_resp = await async_client.post(
+        "/api/v1/practice/sessions",
+        headers=auth_headers,
+        json={
+            "scenario_type": "sales",
+            "agent_id": agent.id,
+            "persona_id": persona.id,
+            "voice_mode": "stepfun_realtime",
+        },
+    )
+    assert create_resp.status_code == 201
+    session_id = create_resp.json()["data"]["session_id"]
+
+    session_result = await test_db.execute(
+        select(PracticeSession).where(PracticeSession.session_id == session_id)
+    )
+    session = session_result.scalar_one()
+    snapshot = deepcopy(session.voice_policy_snapshot)
+    snapshot["tool_policy"] = {
+        "enable_internal_retrieval": True,
+    }
+    snapshot["knowledge_base_ids"] = ["kb_test_1"]
+    snapshot["runtime_metrics"] = {
+        "knowledge_retrieval": {
+            "attempt_count": 1,
+            "hit_query_count": 0,
+            "total_results": 0,
+            "recent_attempts": [
+                {
+                    "attempted_at": "2026-03-28T12:00:00Z",
+                    "query": "ROI 案例",
+                    "status": "search_failed",
+                    "result_count": 0,
+                    "retrieval_mode": "hybrid",
+                    "knowledge_base_ids": ["kb_test_1"],
+                    "error_summary": "[KNOWLEDGE_SEARCH_UNAVAILABLE] embedding timeout",
+                    "result_summaries": [],
+                }
+            ],
+        }
+    }
+    session.voice_policy_snapshot = snapshot
+    session.status = "completed"
+    await test_db.commit()
+
+    detail_resp = await async_client.get(
+        f"/api/v1/practice/sessions/{session_id}",
+        headers=auth_headers,
+    )
+    knowledge_check_resp = await async_client.get(
+        f"/api/v1/practice/sessions/{session_id}/knowledge-check",
+        headers=auth_headers,
+    )
+
+    assert detail_resp.status_code == 200
+    assert knowledge_check_resp.status_code == 200
+
+    detail_body = detail_resp.json()
+    knowledge_check_body = knowledge_check_resp.json()
+
+    assert (
+        detail_body["data"]["voice_policy_snapshot"]["runtime_metrics"][
+            "knowledge_retrieval"
+        ]["recent_attempts"][0]["query"]
+        == "ROI 案例"
+    )
+    assert knowledge_check_body["success"] is True
+    assert knowledge_check_body["data"]["status"] == "search_failed"
+    assert (
+        knowledge_check_body["data"]["summary"]
+        == "知识检索触发失败，请检查知识库或 Embedding 服务"
+    )
+    assert knowledge_check_body["data"]["last_status"] == "search_failed"
+    assert knowledge_check_body["data"]["last_query"] == "ROI 案例"
+    assert (
+        knowledge_check_body["data"]["last_error"]
+        == "[KNOWLEDGE_SEARCH_UNAVAILABLE] embedding timeout"
     )
 
 

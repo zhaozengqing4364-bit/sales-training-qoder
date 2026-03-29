@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "exported_at": "2026-03-29T15:57:04.566Z",
+  "exported_at": "2026-03-29T16:33:41.640Z",
   "milestones": [
     {
       "id": "M001",
@@ -5195,19 +5195,31 @@
       "milestone_id": "M008",
       "slice_id": "S01",
       "id": "T03",
-      "title": "Keep current session routes readable with ledger-backed snapshots",
-      "status": "pending",
-      "one_liner": "",
-      "narrative": "",
-      "verification_result": "",
+      "title": "Kept current session diagnostics truthful by falling back to persisted retrieval ledger attempts while preserving route contracts and frozen snapshot refs.",
+      "status": "complete",
+      "one_liner": "Kept current session diagnostics truthful by falling back to persisted retrieval ledger attempts while preserving route contracts and frozen snapshot refs.",
+      "narrative": "T03 closed the read-side gap left after T02. The persisted provider-neutral retrieval ledger already lived under practice_sessions.voice_policy_snapshot.runtime_metrics.knowledge_retrieval.recent_attempts, but current-session diagnostics still trusted flat last_* fields first and could report stale or empty values when those flat fields were missing. I wrote a focused unit regression that reproduced the failure for completed search_failed and malformed-ledger scenarios, confirmed the red phase, then added a bounded fallback path inside build_session_runtime_diagnostics that scans recent_attempts backwards, skips malformed entries, and uses the latest valid attempt only to fill missing or obviously stale last_status/last_query/last_result_count/last_error/last_retrieval_mode/updated_at fields. I then extended the integration and contract suites so the route family proves two things together: the persisted ledger is still readable on current session/detail surfaces, and detail/report/replay keep the same voice_policy_snapshot_ref while runtime_metrics churn underneath. The final focused verification pack passed cleanly and lsp diagnostics reported no file-level diagnostics on the touched files.",
+      "verification_result": "Reproduced the gap with a new focused unit file, implemented the minimal reader-side fallback in backend/src/common/conversation/runtime_diagnostics.py, and reran the full task-plan verification pack. The final command passed with 24 tests green across the new unit file plus the route-level integration and contract proofs. lsp diagnostics also reported no diagnostics for the modified source and test files.",
       "duration": "",
-      "completed_at": null,
+      "completed_at": "2026-03-29T16:33:41.599Z",
       "blocker_discovered": false,
-      "deviations": "",
-      "known_issues": "",
-      "key_files": [],
-      "key_decisions": [],
-      "full_summary_md": "",
+      "deviations": "None.",
+      "known_issues": "Focused pytest still emits the existing pytest-cov warnings about `Module src was never imported` / `No data was collected`; the targeted pack itself passes and this task did not change that coverage configuration.",
+      "key_files": [
+        "backend/src/common/conversation/runtime_diagnostics.py",
+        "backend/tests/unit/test_runtime_diagnostics_knowledge_retrieval.py",
+        "backend/tests/integration/test_voice_runtime_session_snapshot.py",
+        "backend/tests/contract/test_practice_evidence_contract.py",
+        ".gsd/KNOWLEDGE.md",
+        ".gsd/DECISIONS.md",
+        ".gsd/milestones/M008/slices/S01/tasks/T03-SUMMARY.md"
+      ],
+      "key_decisions": [
+        "Prefer the latest valid runtime_metrics.knowledge_retrieval.recent_attempts entry only as a fallback for missing or stale flat last_* fields.",
+        "Keep the fix inside build_session_runtime_diagnostics instead of adding a new audit route or changing report/replay payloads.",
+        "Normalize away optional agent_persona_override_config:null in contract assertions so snapshot-ref tests keep checking the real immutability invariant."
+      ],
+      "full_summary_md": "---\nid: T03\nparent: S01\nmilestone: M008\nkey_files:\n  - backend/src/common/conversation/runtime_diagnostics.py\n  - backend/tests/unit/test_runtime_diagnostics_knowledge_retrieval.py\n  - backend/tests/integration/test_voice_runtime_session_snapshot.py\n  - backend/tests/contract/test_practice_evidence_contract.py\n  - .gsd/KNOWLEDGE.md\n  - .gsd/DECISIONS.md\n  - .gsd/milestones/M008/slices/S01/tasks/T03-SUMMARY.md\nkey_decisions:\n  - Prefer the latest valid runtime_metrics.knowledge_retrieval.recent_attempts entry only as a fallback for missing or stale flat last_* fields.\n  - Keep the fix inside build_session_runtime_diagnostics instead of adding a new audit route or changing report/replay payloads.\n  - Normalize away optional agent_persona_override_config:null in contract assertions so snapshot-ref tests keep checking the real immutability invariant.\nduration: \"\"\nverification_result: passed\ncompleted_at: 2026-03-29T16:33:41.600Z\nblocker_discovered: false\n---\n\n# T03: Kept current session diagnostics truthful by falling back to persisted retrieval ledger attempts while preserving route contracts and frozen snapshot refs.\n\n**Kept current session diagnostics truthful by falling back to persisted retrieval ledger attempts while preserving route contracts and frozen snapshot refs.**\n\n## What Happened\n\nT03 closed the read-side gap left after T02. The persisted provider-neutral retrieval ledger already lived under practice_sessions.voice_policy_snapshot.runtime_metrics.knowledge_retrieval.recent_attempts, but current-session diagnostics still trusted flat last_* fields first and could report stale or empty values when those flat fields were missing. I wrote a focused unit regression that reproduced the failure for completed search_failed and malformed-ledger scenarios, confirmed the red phase, then added a bounded fallback path inside build_session_runtime_diagnostics that scans recent_attempts backwards, skips malformed entries, and uses the latest valid attempt only to fill missing or obviously stale last_status/last_query/last_result_count/last_error/last_retrieval_mode/updated_at fields. I then extended the integration and contract suites so the route family proves two things together: the persisted ledger is still readable on current session/detail surfaces, and detail/report/replay keep the same voice_policy_snapshot_ref while runtime_metrics churn underneath. The final focused verification pack passed cleanly and lsp diagnostics reported no file-level diagnostics on the touched files.\n\n## Verification\n\nReproduced the gap with a new focused unit file, implemented the minimal reader-side fallback in backend/src/common/conversation/runtime_diagnostics.py, and reran the full task-plan verification pack. The final command passed with 24 tests green across the new unit file plus the route-level integration and contract proofs. lsp diagnostics also reported no diagnostics for the modified source and test files.\n\n## Verification Evidence\n\n| # | Command | Exit Code | Verdict | Duration |\n|---|---------|-----------|---------|----------|\n| 1 | `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/test_runtime_diagnostics_knowledge_retrieval.py backend/tests/integration/test_voice_runtime_session_snapshot.py backend/tests/contract/test_practice_evidence_contract.py` | 0 | ✅ pass | 4710ms |\n\n\n## Deviations\n\nNone.\n\n## Known Issues\n\nFocused pytest still emits the existing pytest-cov warnings about `Module src was never imported` / `No data was collected`; the targeted pack itself passes and this task did not change that coverage configuration.\n\n## Files Created/Modified\n\n- `backend/src/common/conversation/runtime_diagnostics.py`\n- `backend/tests/unit/test_runtime_diagnostics_knowledge_retrieval.py`\n- `backend/tests/integration/test_voice_runtime_session_snapshot.py`\n- `backend/tests/contract/test_practice_evidence_contract.py`\n- `.gsd/KNOWLEDGE.md`\n- `.gsd/DECISIONS.md`\n- `.gsd/milestones/M008/slices/S01/tasks/T03-SUMMARY.md`\n",
       "description": "The executor should load `safe-grow`, `fastapi-python`, `test-driven-development`, and `verification-before-completion` before coding.\n\nLock the read side on current session routes so ledger-backed snapshots stay truthful and backward-compatible before S02 starts sharing this truth with report.\n\n## Failure Modes\n| Dependency | On error | On timeout | On malformed response |\n|------------|----------|-----------|----------------------|\n| `build_session_runtime_diagnostics(...)` | keep current knowledge-check summary behavior and fail the new regression if ledger-backed snapshots cannot be read | do not add new polling or runtime dependencies to read the ledger | fall back to the latest valid ledger entry or current flat fields instead of throwing |\n| current practice session/detail routes | preserve existing access-control and snapshot-ref behavior | keep current single-read behavior; do not add background fetches | reject runtime-metrics drift that changes `voice_policy_snapshot_ref` |\n\n## Load Profile\n- **Shared resources**: one session fetch and current diagnostics normalization on existing routes.\n- **Per-operation cost**: one read plus lightweight fallback logic from flat fields to the latest bounded ledger entry.\n- **10x breakpoint**: repeated JSON normalization on every read if fallback logic becomes expensive or duplicates work.\n\n## Negative Tests\n- **Malformed inputs**: partial or missing flat `last_*` fields should still allow ledger-backed snapshots to read truthfully when a valid latest event exists.\n- **Error paths**: completed-session hit/miss/failure snapshots still classify correctly on `knowledge-check` and current detail routes.\n- **Boundary conditions**: `voice_policy_snapshot_ref` remains unchanged while runtime metrics churn, and owner/admin access on current session routes does not regress.\n\n## Steps\n1. Teach `backend/src/common/conversation/runtime_diagnostics.py` and only the minimal API glue it needs to tolerate the richer `knowledge_retrieval` payload while preserving today's counter/status summary contract.\n2. Extend snapshot and contract tests so a completed knowledge-backed session proves the bounded ledger is visible on current session/detail surfaces and `voice_policy_snapshot_ref` still ignores runtime-metric churn across detail/report/replay reads.\n3. Re-run the focused route tests sequentially and stop if the implementation starts adding report semantics or new routes that belong to S02 rather than S01.\n\n## Must-Haves\n- [ ] No new audit route or report payload redesign in S01.\n- [ ] Existing `knowledge-check` status summaries stay compatible with ledger-backed snapshots.\n- [ ] Current session routes remain the proof surface for persisted snapshot truth.",
       "estimate": "50m",
       "files": [
@@ -6652,6 +6664,18 @@
       "decision": "How StepFun retrieval ledger entries should reach persisted session snapshots",
       "choice": "Route one normalized ledger_event through the existing knowledge runtime-metrics update path and reject malformed persisted recent_attempts during snapshot merge instead of creating a second persistence channel or half-writing invalid ledger state.",
       "rationale": "The slice requires one retrieval attempt to map to one bounded snapshot update while keeping flat counters readable and copy-on-write semantics intact. Reusing the current runtime-metrics seam preserves the existing warning-only handler behavior, and rejecting malformed recent_attempts at merge time prevents partial session-row corruption.",
+      "revisable": "Yes",
+      "made_by": "agent",
+      "superseded_by": null
+    },
+    {
+      "seq": 1481,
+      "id": "D119",
+      "when_context": "M008 S01 T03",
+      "scope": "observability",
+      "decision": "How current session diagnostics read retrieval truth from persisted snapshots",
+      "choice": "Keep knowledge-check and related current-session readers backward-compatible by preferring the latest valid knowledge_retrieval.recent_attempts entry only as a fallback for missing or stale flat last_* fields, while leaving the existing counter/status contract and route family unchanged.",
+      "rationale": "T02 already persists the provider-neutral retrieval ledger in runtime_metrics. Using that bounded ledger as a read-side fallback fixes snapshot drift for hit/miss/search_failed truth without introducing a new audit route, report redesign, or a second persistence seam.",
       "revisable": "Yes",
       "made_by": "agent",
       "superseded_by": null
@@ -8769,6 +8793,17 @@
       "verdict": "❌ fail",
       "duration_ms": 11600,
       "created_at": "2026-03-29T15:57:04.537Z"
+    },
+    {
+      "id": 193,
+      "task_id": "T03",
+      "slice_id": "S01",
+      "milestone_id": "M008",
+      "command": "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/test_runtime_diagnostics_knowledge_retrieval.py backend/tests/integration/test_voice_runtime_session_snapshot.py backend/tests/contract/test_practice_evidence_contract.py",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 4710,
+      "created_at": "2026-03-29T16:33:41.599Z"
     }
   ]
 }

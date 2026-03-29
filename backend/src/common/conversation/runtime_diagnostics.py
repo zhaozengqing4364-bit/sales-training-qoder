@@ -107,6 +107,49 @@ def _normalize_coach_health_payload(value: Any) -> dict[str, Any]:
     }
 
 
+def _normalize_knowledge_retrieval_attempt(value: Any) -> dict[str, Any] | None:
+    if not isinstance(value, dict):
+        return None
+
+    status = str(value.get("status") or "").strip()
+    if not status:
+        return None
+
+    query = str(value.get("query") or "").strip()
+    attempted_at = str(value.get("attempted_at") or "").strip() or None
+    retrieval_mode = str(value.get("retrieval_mode") or "").strip() or None
+    error_summary = str(
+        value.get("error_summary") or value.get("error_message") or ""
+    ).strip() or None
+    try:
+        result_count = max(0, int(value.get("result_count") or 0))
+    except (TypeError, ValueError):
+        result_count = 0
+
+    return {
+        "status": status,
+        "query": query,
+        "attempted_at": attempted_at,
+        "retrieval_mode": retrieval_mode,
+        "error_summary": error_summary,
+        "result_count": result_count,
+    }
+
+
+def _resolve_latest_valid_knowledge_retrieval_attempt(
+    knowledge_metrics: dict[str, Any],
+) -> dict[str, Any] | None:
+    recent_attempts = knowledge_metrics.get("recent_attempts")
+    if not isinstance(recent_attempts, list):
+        return None
+
+    for attempt in reversed(recent_attempts):
+        normalized_attempt = _normalize_knowledge_retrieval_attempt(attempt)
+        if normalized_attempt is not None:
+            return normalized_attempt
+    return None
+
+
 def build_session_runtime_diagnostics(
     *,
     session: PracticeSession,
@@ -146,15 +189,49 @@ def build_session_runtime_diagnostics(
     knowledge_metrics = runtime_metrics.get("knowledge_retrieval")
     if not isinstance(knowledge_metrics, dict):
         knowledge_metrics = {}
+    latest_valid_attempt = _resolve_latest_valid_knowledge_retrieval_attempt(
+        knowledge_metrics
+    )
 
     attempt_count = int(knowledge_metrics.get("attempt_count") or 0)
     hit_query_count = int(knowledge_metrics.get("hit_query_count") or 0)
     total_results = int(knowledge_metrics.get("total_results") or 0)
-    last_result_count = int(knowledge_metrics.get("last_result_count") or 0)
+
+    raw_last_result_count = knowledge_metrics.get("last_result_count")
+    if raw_last_result_count is None and latest_valid_attempt is not None:
+        raw_last_result_count = latest_valid_attempt.get("result_count")
+    last_result_count = int(raw_last_result_count or 0)
+
     hit_rate = _coerce_float(knowledge_metrics.get("hit_rate") or 0.0)
 
-    last_status = str(knowledge_metrics.get("last_status") or "not_triggered")
-    last_error = str(knowledge_metrics.get("last_error") or "")
+    last_status = str(knowledge_metrics.get("last_status") or "").strip()
+    if latest_valid_attempt is not None and (
+        not last_status or (attempt_count > 0 and last_status == "not_triggered")
+    ):
+        last_status = str(latest_valid_attempt.get("status") or "").strip()
+    if not last_status:
+        last_status = "not_triggered"
+
+    last_error = str(knowledge_metrics.get("last_error") or "").strip()
+    if not last_error and latest_valid_attempt is not None:
+        last_error = str(latest_valid_attempt.get("error_summary") or "").strip()
+
+    last_query = str(knowledge_metrics.get("last_query") or "").strip()
+    if not last_query and latest_valid_attempt is not None:
+        last_query = str(latest_valid_attempt.get("query") or "").strip()
+
+    last_retrieval_mode = str(
+        knowledge_metrics.get("last_retrieval_mode") or ""
+    ).strip()
+    if not last_retrieval_mode and latest_valid_attempt is not None:
+        last_retrieval_mode = str(
+            latest_valid_attempt.get("retrieval_mode") or ""
+        ).strip()
+
+    updated_at = knowledge_metrics.get("updated_at")
+    if updated_at is None and latest_valid_attempt is not None:
+        updated_at = latest_valid_attempt.get("attempted_at")
+
     kb_lock_required = require_kb_grounding
     kb_lock_block_count = int(knowledge_metrics.get("kb_lock_block_count") or 0)
     kb_lock_last_status = str(
@@ -322,17 +399,17 @@ def build_session_runtime_diagnostics(
         "hit_query_count": hit_query_count,
         "total_results": total_results,
         "hit_rate": round(hit_rate, 4),
-        "last_query": str(knowledge_metrics.get("last_query") or ""),
+        "last_query": last_query,
         "last_result_count": last_result_count,
         "last_status": last_status,
         "last_top_k": knowledge_metrics.get("last_top_k"),
         "last_similarity_threshold": knowledge_metrics.get("last_similarity_threshold"),
         "last_error": last_error,
-        "last_retrieval_mode": str(knowledge_metrics.get("last_retrieval_mode") or ""),
+        "last_retrieval_mode": last_retrieval_mode,
         "recent_queries": knowledge_metrics.get("recent_queries")
         if isinstance(knowledge_metrics.get("recent_queries"), list)
         else [],
-        "updated_at": knowledge_metrics.get("updated_at"),
+        "updated_at": updated_at,
         "kb_lock_required": kb_lock_required,
         "kb_lock_status": kb_lock_status,
         "kb_lock_chain_failure": kb_lock_chain_failure,

@@ -113,6 +113,34 @@ def _without_replay_anchor(value: dict[str, object] | None) -> dict[str, object]
     return {key: item for key, item in value.items() if key != "replay_anchor"}
 
 
+def _snapshot_ref(snapshot: dict[str, object] | None) -> dict[str, object] | None:
+    if not isinstance(snapshot, dict):
+        return None
+
+    source = snapshot.get("source")
+    tool_policy = snapshot.get("tool_policy")
+    ref: dict[str, object] = {
+        "voice_mode": snapshot.get("voice_mode"),
+        "runtime_profile_id": snapshot.get("runtime_profile_id"),
+        "instruction_contract_hash": snapshot.get("instruction_contract_hash"),
+        "network_access_mode": snapshot.get("network_access_mode"),
+        "resolved_at": snapshot.get("resolved_at"),
+        "tool_policy": tool_policy if isinstance(tool_policy, dict) else {},
+        "knowledge_base_ids": [
+            str(item)
+            for item in (snapshot.get("knowledge_base_ids") or [])
+            if item is not None
+        ],
+        "source": {str(k): str(v) for k, v in source.items()}
+        if isinstance(source, dict)
+        else {},
+    }
+    association_override = snapshot.get("agent_persona_override_config")
+    if isinstance(association_override, dict):
+        ref["agent_persona_override_config"] = association_override
+    return ref
+
+
 @pytest_asyncio.fixture(scope="function")
 async def test_engine():
     engine = create_async_engine(TEST_DATABASE_URL, echo=False)
@@ -273,6 +301,148 @@ async def test_report_and_replay_contract_share_same_session_evidence_fields(
     ]
     assert report_data["evidence_completeness"]["legacy_score_key_used"] is True
     assert replay_data["evidence_completeness"]["legacy_score_key_used"] is True
+
+
+@pytest.mark.asyncio
+async def test_current_session_route_family_keeps_voice_policy_snapshot_ref_frozen_while_runtime_metrics_expose_retrieval_ledger(
+    async_client: AsyncClient,
+    db_session: AsyncSession,
+    owner: User,
+    owner_headers: dict[str, str],
+):
+    scenario = Scenario(
+        scenario_id=str(uuid.uuid4()),
+        scenario_type="sales",
+        name="contract snapshot ref scenario",
+        is_active=True,
+    )
+    baseline_snapshot = {
+        "voice_mode": "stepfun_realtime",
+        "runtime_profile_id": "runtime-profile-1",
+        "instruction_contract_hash": "contract-hash-1",
+        "network_access_mode": "off",
+        "resolved_at": datetime.now(UTC).isoformat(),
+        "knowledge_base_ids": ["kb-route-1"],
+        "tool_policy": {
+            "enable_internal_retrieval": True,
+            "require_kb_grounding": False,
+        },
+        "source": {
+            "voice_mode": "runtime_profile",
+            "knowledge_base_ids": "persona",
+        },
+    }
+    baseline_ref = _snapshot_ref(baseline_snapshot)
+    session = PracticeSession(
+        session_id=str(uuid.uuid4()),
+        user_id=str(owner.user_id),
+        scenario_id=scenario.scenario_id,
+        status=SessionStatus.COMPLETED.value,
+        voice_mode="stepfun_realtime",
+        logic_score=75.6,
+        accuracy_score=62.1,
+        completeness_score=72.8,
+        total_duration_seconds=180,
+        effectiveness_snapshot=_make_effectiveness_snapshot(
+            evaluable=False,
+            reason="INSUFFICIENT_TURN_DATA",
+        ),
+        voice_policy_snapshot={
+            **baseline_snapshot,
+            "runtime_metrics": {
+                "knowledge_retrieval": {
+                    "attempt_count": 1,
+                    "hit_query_count": 0,
+                    "total_results": 0,
+                    "recent_attempts": [
+                        {
+                            "attempted_at": "2026-03-28T12:00:00Z",
+                            "query": "ROI 案例",
+                            "status": "search_failed",
+                            "result_count": 0,
+                            "retrieval_mode": "hybrid",
+                            "knowledge_base_ids": ["kb-route-1"],
+                            "error_summary": "[KNOWLEDGE_SEARCH_UNAVAILABLE] embedding timeout",
+                            "result_summaries": [],
+                        }
+                    ],
+                }
+            },
+        },
+    )
+    db_session.add_all([scenario, session])
+    db_session.add_all(
+        [
+            ConversationMessage(
+                session_id=session.session_id,
+                turn_number=1,
+                role="user",
+                content="我想确认 ROI 案例。",
+                timestamp=datetime.now(UTC),
+                duration_ms=1200,
+                sales_stage="opening",
+                score_snapshot={"overall": 76},
+            ),
+            ConversationMessage(
+                session_id=session.session_id,
+                turn_number=2,
+                role="assistant",
+                content="我们后续补充案例。",
+                timestamp=datetime.now(UTC),
+                duration_ms=1800,
+                sales_stage="discovery",
+                score_snapshot={"overall_score": 84},
+            ),
+        ]
+    )
+    await db_session.commit()
+
+    detail_resp = await async_client.get(
+        f"/api/v1/practice/sessions/{session.session_id}",
+        headers=owner_headers,
+    )
+    report_resp = await async_client.get(
+        f"/api/v1/practice/sessions/{session.session_id}/report",
+        headers=owner_headers,
+    )
+    replay_resp = await async_client.get(
+        f"/api/v1/sessions/{session.session_id}/replay",
+        headers=owner_headers,
+    )
+
+    assert detail_resp.status_code == 200
+    assert report_resp.status_code == 200
+    assert replay_resp.status_code == 200
+
+    detail_data = detail_resp.json()["data"]
+    report_data = report_resp.json()["data"]
+    replay_data = replay_resp.json()["data"]
+
+    detail_ref = {
+        key: value
+        for key, value in detail_data["voice_policy_snapshot_ref"].items()
+        if not (key == "agent_persona_override_config" and value is None)
+    }
+    report_ref = {
+        key: value
+        for key, value in report_data["voice_policy_snapshot_ref"].items()
+        if not (key == "agent_persona_override_config" and value is None)
+    }
+    replay_ref = {
+        key: value
+        for key, value in replay_data["voice_policy_snapshot_ref"].items()
+        if not (key == "agent_persona_override_config" and value is None)
+    }
+
+    assert detail_ref == baseline_ref
+    assert report_ref == baseline_ref
+    assert replay_ref == baseline_ref
+    assert (
+        detail_data["voice_policy_snapshot"]["runtime_metrics"]["knowledge_retrieval"][
+            "recent_attempts"
+        ][0]["query"]
+        == "ROI 案例"
+    )
 
 
 @pytest.mark.asyncio

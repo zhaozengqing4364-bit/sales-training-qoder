@@ -68,7 +68,7 @@ Once ledger events exist, wire them through the current runtime-metrics persiste
   - Estimate: 45m
   - Files: backend/src/sales_bot/websocket/components/stepfun_runtime_metrics_helpers.py, backend/src/sales_bot/websocket/stepfun_realtime_handler.py, backend/tests/unit/test_stepfun_runtime_metrics_helpers.py, backend/tests/unit/test_stepfun_realtime_handler.py
   - Verify: backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/test_stepfun_runtime_metrics_helpers.py backend/tests/unit/test_stepfun_realtime_handler.py
-- [ ] **T03: Keep current session routes readable with ledger-backed snapshots** — The executor should load `safe-grow`, `fastapi-python`, `test-driven-development`, and `verification-before-completion` before coding.
+- [x] **T03: Kept current session diagnostics truthful by falling back to persisted retrieval ledger attempts while preserving route contracts and frozen snapshot refs.** — The executor should load `safe-grow`, `fastapi-python`, `test-driven-development`, and `verification-before-completion` before coding.
 
 Lock the read side on current session routes so ledger-backed snapshots stay truthful and backward-compatible before S02 starts sharing this truth with report.
 
