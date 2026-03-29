@@ -46,7 +46,7 @@
   - Estimate: 2h
   - Files: backend/src/common/db/schemas.py, backend/src/common/conversation/schemas.py, backend/src/common/api/practice.py, backend/src/common/conversation/replay.py, backend/src/common/conversation/api.py, backend/src/common/oss/signing.py
   - Verify: cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_replay_service.py tests/integration/test_replay_api.py tests/contract/test_practice_evidence_contract.py tests/unit/test_oss_signing_service.py -v
-- [ ] **T02: Frontend types + shared AudioAuditCard + report/replay integration** — Extend frontend TypeScript types for the new audio_audit payload, create a shared AudioAuditCard component, and integrate it into both report and replay pages.
+- [x] **T02: Added shared audio-audit UI and contract wiring to learner report and replay pages.** — Extend frontend TypeScript types for the new audio_audit payload, create a shared AudioAuditCard component, and integrate it into both report and replay pages.
 
 ## Steps
 

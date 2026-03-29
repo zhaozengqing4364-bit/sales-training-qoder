@@ -13,6 +13,7 @@ const {
     createSessionMock,
     getComprehensiveReportMock,
     generateComprehensiveReportMock,
+    getSegmentAudioBlobUrlMock,
 } = vi.hoisted(() => ({
     pushMock: vi.fn(),
     getReportMock: vi.fn(),
@@ -22,6 +23,7 @@ const {
     createSessionMock: vi.fn(),
     getComprehensiveReportMock: vi.fn(),
     generateComprehensiveReportMock: vi.fn(),
+    getSegmentAudioBlobUrlMock: vi.fn(),
 }));
 
 vi.mock("next/navigation", () => ({
@@ -64,6 +66,7 @@ vi.mock("@/lib/api/client", async () => {
                 getReplay: getReplayMock,
                 getKnowledgeCheck: getKnowledgeCheckMock,
                 getHighlights: getHighlightsMock,
+                getSegmentAudioBlobUrl: getSegmentAudioBlobUrlMock,
             },
             practice: {
                 ...actual.api.practice,
@@ -116,6 +119,37 @@ const baseRetrievalFacts = {
     failure_explanation: null,
 };
 
+const baseAudioAudit = {
+    summary: {
+        recording_status: "completed",
+        total_segments: 2,
+        uploaded_segments: 2,
+        total_bytes: 40960,
+        latest_segment_sequence: 1,
+        storage_prefix: "sessions/session-1/audio",
+        last_uploaded_at: "2026-03-27T08:10:00Z",
+        learner_status: "available" as const,
+    },
+    segments: [
+        {
+            segment_sequence: 0,
+            created_at: "2026-03-27T08:00:00Z",
+            duration_ms: 12000,
+            size_bytes: 20480,
+            upload_status: "uploaded",
+            playback_path: "/api/v1/sessions/session-1/audio-segments/0",
+        },
+        {
+            segment_sequence: 1,
+            created_at: "2026-03-27T08:00:12Z",
+            duration_ms: null,
+            size_bytes: 20480,
+            upload_status: "uploaded",
+            playback_path: "/api/v1/sessions/session-1/audio-segments/1",
+        },
+    ],
+};
+
 const baseReport = {
     session_id: "session-1",
     scenario_type: "sales" as const,
@@ -127,6 +161,7 @@ const baseReport = {
     audio_url: null,
     transcript_url: null,
     voice_policy_snapshot_ref: null,
+    audio_audit: baseAudioAudit,
     effectiveness_snapshot: {
         claim_truth: {
             status: "evidence_pending",
@@ -266,6 +301,7 @@ const basePresentationReport = {
     audio_url: null,
     transcript_url: null,
     voice_policy_snapshot_ref: null,
+    audio_audit: baseAudioAudit,
     effectiveness_snapshot: null,
     pass_flags: null,
     main_capability_passed: null,
@@ -307,6 +343,7 @@ describe("ReportPage", () => {
         createSessionMock.mockReset();
         getComprehensiveReportMock.mockReset();
         generateComprehensiveReportMock.mockReset();
+        getSegmentAudioBlobUrlMock.mockReset();
 
         getReplayMock.mockResolvedValue(baseReplayData);
         getKnowledgeCheckMock.mockRejectedValue(new Error("knowledge check unavailable"));
@@ -316,6 +353,7 @@ describe("ReportPage", () => {
             total_bad: 0,
         });
         createSessionMock.mockResolvedValue({ session_id: "retry-1" });
+        getSegmentAudioBlobUrlMock.mockResolvedValue("blob:audio-segment-1");
     });
 
     it("renders sales rollup cards and sales-specific issue/goal copy from the unified report contract", async () => {
@@ -377,6 +415,11 @@ describe("ReportPage", () => {
         expect(screen.getByText("先补 ROI 证据，再推进一个明确的下一步动作。")).toBeTruthy();
         expect(screen.getByText("综合评分反映价值翻译、证据支撑和异议推进的完成度。"))
             .toBeTruthy();
+        expect(screen.getByTestId("audio-audit-card")).toBeTruthy();
+        expect(screen.getByText("原始录音")).toBeTruthy();
+        expect(screen.getByText("共 2 个片段 · 总时长 0:12")).toBeTruthy();
+        expect(screen.getByText("片段 1")).toBeTruthy();
+        expect(screen.getByText(/未知时长/)).toBeTruthy();
     });
 
     it("deep-links the report issue and goal cards into replay using the stable replay anchors", async () => {

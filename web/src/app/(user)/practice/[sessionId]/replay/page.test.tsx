@@ -12,6 +12,7 @@ const {
   getReportMock,
   getThumbnailBlobMock,
   createSessionMock,
+  getSegmentAudioBlobUrlMock,
   searchParamsState,
   scrollIntoViewMock,
 } = vi.hoisted(() => ({
@@ -22,6 +23,7 @@ const {
   getReportMock: vi.fn(),
   getThumbnailBlobMock: vi.fn(),
   createSessionMock: vi.fn(),
+  getSegmentAudioBlobUrlMock: vi.fn(),
   searchParamsState: {
     current: new URLSearchParams(),
   },
@@ -70,6 +72,7 @@ vi.mock("@/lib/api/client", async () => {
         getReplay: getReplayMock,
         getHighlights: getHighlightsMock,
         getReport: getReportMock,
+        getSegmentAudioBlobUrl: getSegmentAudioBlobUrlMock,
       },
       presentations: {
         ...actual.api.presentations,
@@ -91,6 +94,36 @@ function buildReplayData(overrides: Record<string, unknown> = {}) {
     voice_policy_snapshot_ref: null,
     total_duration_ms: 185000,
     overall_score: 78,
+    audio_audit: {
+      summary: {
+        recording_status: "completed",
+        total_segments: 2,
+        uploaded_segments: 2,
+        total_bytes: 40960,
+        latest_segment_sequence: 1,
+        storage_prefix: "sessions/session-1/audio",
+        last_uploaded_at: "2026-03-27T08:10:00Z",
+        learner_status: "available",
+      },
+      segments: [
+        {
+          segment_sequence: 0,
+          created_at: "2026-03-27T08:00:00Z",
+          duration_ms: 12000,
+          size_bytes: 20480,
+          upload_status: "uploaded",
+          playback_path: "/api/v1/sessions/session-1/audio-segments/0",
+        },
+        {
+          segment_sequence: 1,
+          created_at: "2026-03-27T08:00:12Z",
+          duration_ms: null,
+          size_bytes: 20480,
+          upload_status: "uploaded",
+          playback_path: "/api/v1/sessions/session-1/audio-segments/1",
+        },
+      ],
+    },
     effectiveness_snapshot: {
       claim_truth: {
         status: "evidence_verified",
@@ -633,6 +666,8 @@ describe("SessionReplayPage", () => {
     searchParamsState.current = new URLSearchParams();
     createSessionMock.mockResolvedValue({ session_id: "retry-1" });
     getThumbnailBlobMock.mockRejectedValue(new Error("thumbnail unavailable"));
+    getSegmentAudioBlobUrlMock.mockReset();
+    getSegmentAudioBlobUrlMock.mockResolvedValue("blob:audio-segment-1");
 
     Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
       configurable: true,
@@ -683,6 +718,10 @@ describe("SessionReplayPage", () => {
     expect(screen.getAllByText("先补一条 ROI 证据，再确认客户是否认可。").length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText("高光学习证据:客户已经追问可信度，这一轮决定能否继续推进。")).toBeTruthy();
     expect(screen.getByText("高光问题家族:evidence_gap")).toBeTruthy();
+    expect(screen.getByTestId("audio-audit-card")).toBeTruthy();
+    expect(screen.getByText("原始录音")).toBeTruthy();
+    expect(screen.getByText("共 2 个片段 · 总时长 0:12")).toBeTruthy();
+    expect(screen.getByText(/未知时长/)).toBeTruthy();
   });
 
   it("launches a focused retry from replay using the report retry_entry focus intent", async () => {

@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 
 import { HighlightList } from "@/components/highlights";
+import { AudioAuditCardWithSession as AudioAuditCard } from "@/components/audio/AudioAuditCard";
 import { SlideViewer } from "@/components/practice/presentation/SlideViewer";
 import { Button } from "@/components/ui/button";
 import { GlassCard } from "@/components/ui/glass-card";
@@ -1330,6 +1331,8 @@ export default function SessionReplayPage() {
           <p className="text-sm text-slate-500">当前会话暂无已标记高光片段。</p>
         </GlassCard>
       ) : null}
+
+      <AudioAuditCard audioAudit={replayData?.audio_audit} sessionId={sessionId} />
 
       <GlassCard className="p-4 sm:p-5">
         <div className="flex items-center gap-2 mb-3 sm:mb-4">

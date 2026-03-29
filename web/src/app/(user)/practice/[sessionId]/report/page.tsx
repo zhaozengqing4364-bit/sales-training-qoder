@@ -13,6 +13,7 @@ import {
 } from "lucide-react";
 
 import { HighlightList } from "@/components/highlights";
+import { AudioAuditCardWithSession as AudioAuditCard } from "@/components/audio/AudioAuditCard";
 import { Button } from "@/components/ui/button";
 import { GlassCard } from "@/components/ui/glass-card";
 import { StatusIndicator } from "@/components/ui/status-indicator";
@@ -1466,7 +1467,7 @@ export default function ComprehensiveReportPage() {
             )}
 
             {practiceSuggestions.length > 0 && (
-                <GlassCard className="p-6">
+                <GlassCard className="p-6 mb-6">
                     <div className="flex items-center gap-2 mb-4">
                         <Lightbulb className="w-5 h-5 text-amber-500" />
                         <h2 className="text-lg font-semibold text-zinc-900">
@@ -1483,6 +1484,8 @@ export default function ComprehensiveReportPage() {
                     </ul>
                 </GlassCard>
             )}
+
+            <AudioAuditCard audioAudit={report.audio_audit} sessionId={sessionId} />
         </div>
     );
 }

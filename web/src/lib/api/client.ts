@@ -1729,6 +1729,20 @@ export const api = {
             const blob = await response.blob();
             return URL.createObjectURL(blob);
         },
+
+        getSegmentAudioBlobUrl: async (sessionId: string, segmentSequence: number) => {
+            const response = await fetch(
+                `${resolveApiBaseUrl()}/sessions/${sessionId}/audio-segments/${segmentSequence}`,
+                { credentials: "include" },
+            );
+
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}`);
+            }
+
+            const blob = await response.blob();
+            return URL.createObjectURL(blob);
+        },
     },
 
     // Scenarios (user-facing)

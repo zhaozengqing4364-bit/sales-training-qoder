@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "exported_at": "2026-03-29T21:57:55.585Z",
+  "exported_at": "2026-03-29T22:29:04.084Z",
   "milestones": [
     {
       "id": "M001",
@@ -5836,19 +5836,32 @@
       "milestone_id": "M009",
       "slice_id": "S02",
       "id": "T02",
-      "title": "Frontend types + shared AudioAuditCard + report/replay integration",
-      "status": "pending",
-      "one_liner": "",
-      "narrative": "",
-      "verification_result": "",
+      "title": "Added shared audio-audit UI and contract wiring to learner report and replay pages.",
+      "status": "complete",
+      "one_liner": "Added shared audio-audit UI and contract wiring to learner report and replay pages.",
+      "narrative": "Extended the frontend evidence contract with audio-audit types, added a segment-audio blob helper to the shared API client, and built a reusable AudioAuditCard for learner-facing raw audio evidence. Wired the shared card into both report and replay routes, including available/partial/missing states, aggregate duration formatting, per-segment playback, and graceful unknown-duration rendering. Updated both page-level test suites with concrete `audio_audit` payloads and stubs for the new playback helper so the shared card is exercised on both surfaces. Recorded the backend/frontend field-name mismatch (`learner_status` vs task-plan `status`) in knowledge and handled it defensively in the component without changing the backend authority seam.",
+      "verification_result": "Focused slice verification passed via `pnpm --dir web exec vitest run 'src/app/(user)/practice/[sessionId]/report/page.test.tsx' 'src/app/(user)/practice/[sessionId]/replay/page.test.tsx'` (27 tests green). Additional browser verification on the local Next dev server confirmed the replay route rendered the new audio-audit card, title, summary, and unknown-duration fallback under mocked local API responses. The report-route browser pass was attempted with the same local mock strategy but aborted during navigation; no functional regression was reproduced in the passing page-level test suite.",
       "duration": "",
-      "completed_at": null,
+      "completed_at": "2026-03-29T22:29:04.045Z",
       "blocker_discovered": false,
-      "deviations": "",
-      "known_issues": "",
-      "key_files": [],
-      "key_decisions": [],
-      "full_summary_md": "",
+      "deviations": "Accepted `audio_audit.summary.status` as an optional frontend alias in addition to the shipped backend `learner_status` field so task-plan wording and live payloads do not drift. Browser verification of the report route hit a transient navigation abort; replay browser proof passed and focused Vitest remained the authoritative gate.",
+      "known_issues": "Automated browser verification of `/practice/session-1/report` hit a transient `net::ERR_ABORTED` during navigation in this session. Replay browser proof passed, and the focused report/replay Vitest suites passed with the new audio-audit assertions.",
+      "key_files": [
+        "web/src/lib/api/types.ts",
+        "web/src/lib/api/client.ts",
+        "web/src/components/audio/AudioAuditCard.tsx",
+        "web/src/app/(user)/practice/[sessionId]/report/page.tsx",
+        "web/src/app/(user)/practice/[sessionId]/replay/page.tsx",
+        "web/src/app/(user)/practice/[sessionId]/report/page.test.tsx",
+        "web/src/app/(user)/practice/[sessionId]/replay/page.test.tsx",
+        ".gsd/milestones/M009/slices/S02/tasks/T02-SUMMARY.md",
+        ".gsd/KNOWLEDGE.md"
+      ],
+      "key_decisions": [
+        "AudioAuditCard treats backend `audio_audit.summary.learner_status` as canonical while tolerating optional `summary.status` as a defensive alias.",
+        "Report and replay surfaces both mount the same shared AudioAuditCard and rely on the same `audio_audit` payload shape plus `getSegmentAudioBlobUrl(...)` playback helper."
+      ],
+      "full_summary_md": "---\nid: T02\nparent: S02\nmilestone: M009\nkey_files:\n  - web/src/lib/api/types.ts\n  - web/src/lib/api/client.ts\n  - web/src/components/audio/AudioAuditCard.tsx\n  - web/src/app/(user)/practice/[sessionId]/report/page.tsx\n  - web/src/app/(user)/practice/[sessionId]/replay/page.tsx\n  - web/src/app/(user)/practice/[sessionId]/report/page.test.tsx\n  - web/src/app/(user)/practice/[sessionId]/replay/page.test.tsx\n  - .gsd/milestones/M009/slices/S02/tasks/T02-SUMMARY.md\n  - .gsd/KNOWLEDGE.md\nkey_decisions:\n  - AudioAuditCard treats backend `audio_audit.summary.learner_status` as canonical while tolerating optional `summary.status` as a defensive alias.\n  - Report and replay surfaces both mount the same shared AudioAuditCard and rely on the same `audio_audit` payload shape plus `getSegmentAudioBlobUrl(...)` playback helper.\nduration: \"\"\nverification_result: mixed\ncompleted_at: 2026-03-29T22:29:04.046Z\nblocker_discovered: false\n---\n\n# T02: Added shared audio-audit UI and contract wiring to learner report and replay pages.\n\n**Added shared audio-audit UI and contract wiring to learner report and replay pages.**\n\n## What Happened\n\nExtended the frontend evidence contract with audio-audit types, added a segment-audio blob helper to the shared API client, and built a reusable AudioAuditCard for learner-facing raw audio evidence. Wired the shared card into both report and replay routes, including available/partial/missing states, aggregate duration formatting, per-segment playback, and graceful unknown-duration rendering. Updated both page-level test suites with concrete `audio_audit` payloads and stubs for the new playback helper so the shared card is exercised on both surfaces. Recorded the backend/frontend field-name mismatch (`learner_status` vs task-plan `status`) in knowledge and handled it defensively in the component without changing the backend authority seam.\n\n## Verification\n\nFocused slice verification passed via `pnpm --dir web exec vitest run 'src/app/(user)/practice/[sessionId]/report/page.test.tsx' 'src/app/(user)/practice/[sessionId]/replay/page.test.tsx'` (27 tests green). Additional browser verification on the local Next dev server confirmed the replay route rendered the new audio-audit card, title, summary, and unknown-duration fallback under mocked local API responses. The report-route browser pass was attempted with the same local mock strategy but aborted during navigation; no functional regression was reproduced in the passing page-level test suite.\n\n## Verification Evidence\n\n| # | Command | Exit Code | Verdict | Duration |\n|---|---------|-----------|---------|----------|\n| 1 | `pnpm --dir web exec vitest run 'src/app/(user)/practice/[sessionId]/report/page.test.tsx' 'src/app/(user)/practice/[sessionId]/replay/page.test.tsx'` | 0 | ✅ pass | 1420ms |\n| 2 | `browser_verify http://localhost:3445/practice/session-1/replay` | 0 | ✅ pass | 15000ms |\n| 3 | `browser_verify http://localhost:3445/practice/session-1/report` | 1 | ❌ fail | 15000ms |\n\n\n## Deviations\n\nAccepted `audio_audit.summary.status` as an optional frontend alias in addition to the shipped backend `learner_status` field so task-plan wording and live payloads do not drift. Browser verification of the report route hit a transient navigation abort; replay browser proof passed and focused Vitest remained the authoritative gate.\n\n## Known Issues\n\nAutomated browser verification of `/practice/session-1/report` hit a transient `net::ERR_ABORTED` during navigation in this session. Replay browser proof passed, and the focused report/replay Vitest suites passed with the new audio-audit assertions.\n\n## Files Created/Modified\n\n- `web/src/lib/api/types.ts`\n- `web/src/lib/api/client.ts`\n- `web/src/components/audio/AudioAuditCard.tsx`\n- `web/src/app/(user)/practice/[sessionId]/report/page.tsx`\n- `web/src/app/(user)/practice/[sessionId]/replay/page.tsx`\n- `web/src/app/(user)/practice/[sessionId]/report/page.test.tsx`\n- `web/src/app/(user)/practice/[sessionId]/replay/page.test.tsx`\n- `.gsd/milestones/M009/slices/S02/tasks/T02-SUMMARY.md`\n- `.gsd/KNOWLEDGE.md`\n",
       "description": "Extend frontend TypeScript types for the new audio_audit payload, create a shared AudioAuditCard component, and integrate it into both report and replay pages.\n\n## Steps\n\n1. Extend `SessionEvidenceContract` in `web/src/lib/api/types.ts` to add `audio_audit?: AudioAuditPayload | null` where AudioAuditPayload mirrors the backend schema:\n   - AudioAuditSegment: segment_sequence, created_at, duration_ms, size_bytes, upload_status, playback_path\n   - AudioAuditSummary: recording_status, total_segments, uploaded_segments, total_bytes, latest_segment_sequence, storage_prefix, last_uploaded_at, status (available|partial|missing)\n   - AudioAuditPayload: summary + AudioAuditSegment[]\n\n2. Add `getSegmentAudioBlobUrl` method to `web/src/lib/api/client.ts` in the sessions namespace:\n   - Takes sessionId + segmentSequence\n   - Fetches `/sessions/{sessionId}/audio-segments/{segmentSequence}` with credentials\n   - Returns blob URL (same pattern as existing getAudioBlobUrl for messages)\n\n3. Create `web/src/components/audio/AudioAuditCard.tsx` — a shared component that:\n   - Accepts `audioAudit: AudioAuditPayload | null | undefined`\n   - When null/undefined or status=missing: renders \"本次训练未录制原始音频\" with a brief explanation\n   - When status=available/partial: renders a card with:\n     - Summary line: \"原始录音\" + segment count + total duration (formatted mm:ss from ms)\n     - Status badge: \"完整\" for available, \"部分\" for partial\n     - Ordered list of segments, each with play button using the playback handoff route\n     - Audio playback uses HTML5 Audio element with blob URL from getSegmentAudioBlobUrl\n   - Handles missing duration_ms gracefully (shows \"未知时长\")\n   - Follows existing GlassCard/section styling from HighlightList\n\n4. Integrate AudioAuditCard into `web/src/app/(user)/practice/[sessionId]/report/page.tsx`:\n   - Add AudioAuditCard after the existing highlights/comprehensive-insights area\n   - Pass report.audio_audit\n\n5. Integrate AudioAuditCard into `web/src/app/(user)/practice/[sessionId]/replay/page.tsx`:\n   - Add AudioAuditCard between highlights and full-dialogue sections\n   - Pass replayData.audio_audit\n\n6. Update report page test to add audio_audit to baseReport mock and assert the audio audit section renders.\n\n7. Update replay page test to add audio_audit to baseReplayData mock and assert the audio audit section renders.\n\n## Must-Haves\n\n- [ ] TypeScript types for AudioAuditPayload mirroring backend contract\n- [ ] getSegmentAudioBlobUrl client method\n- [ ] Shared AudioAuditCard component with available/partial/missing states\n- [ ] Report page renders AudioAuditCard from report.audio_audit\n- [ ] Replay page renders AudioAuditCard from replayData.audio_audit\n- [ ] Empty/no-audio state is non-fatal and clear\n- [ ] Existing report/replay functionality unaffected",
       "estimate": "2h",
       "files": [
@@ -9689,6 +9702,39 @@
       "verdict": "✅ pass",
       "duration_ms": 7200,
       "created_at": "2026-03-29T21:57:55.555Z"
+    },
+    {
+      "id": 208,
+      "task_id": "T02",
+      "slice_id": "S02",
+      "milestone_id": "M009",
+      "command": "pnpm --dir web exec vitest run 'src/app/(user)/practice/[sessionId]/report/page.test.tsx' 'src/app/(user)/practice/[sessionId]/replay/page.test.tsx'",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 1420,
+      "created_at": "2026-03-29T22:29:04.046Z"
+    },
+    {
+      "id": 209,
+      "task_id": "T02",
+      "slice_id": "S02",
+      "milestone_id": "M009",
+      "command": "browser_verify http://localhost:3445/practice/session-1/replay",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 15000,
+      "created_at": "2026-03-29T22:29:04.046Z"
+    },
+    {
+      "id": 210,
+      "task_id": "T02",
+      "slice_id": "S02",
+      "milestone_id": "M009",
+      "command": "browser_verify http://localhost:3445/practice/session-1/report",
+      "exit_code": 1,
+      "verdict": "❌ fail",
+      "duration_ms": 15000,
+      "created_at": "2026-03-29T22:29:04.046Z"
     }
   ]
 }

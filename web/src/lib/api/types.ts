@@ -1339,6 +1339,30 @@ export interface RetryEntry {
     focus_intent?: RetryFocusIntent | null;
 }
 
+export interface AudioAuditSegment {
+    segment_sequence: number;
+    created_at?: string | null;
+    duration_ms?: number | null;
+    size_bytes?: number | null;
+    upload_status: string;
+    playback_path?: string | null;
+}
+
+export interface AudioAuditSummary {
+    recording_status: string;
+    total_segments: number;
+    uploaded_segments: number;
+    total_bytes: number;
+    latest_segment_sequence?: number | null;
+    storage_prefix?: string | null;
+    last_uploaded_at?: string | null;
+    learner_status: "available" | "partial" | "missing";
+    status?: "available" | "partial" | "missing" | null;
+}
+export interface AudioAuditPayload {
+    summary: AudioAuditSummary;
+    segments: AudioAuditSegment[];
+}
 export interface SessionEvidenceContract {
     scenario_type?: "sales" | "presentation";
     overall_score: number | null;
@@ -1353,6 +1377,7 @@ export interface SessionEvidenceContract {
     not_evaluable_reason?: SessionNotEvaluableReason | null;
     evidence_completeness?: SessionEvidenceCompleteness | null;
     presentation_review?: PresentationReview | null;
+    audio_audit?: AudioAuditPayload | null;
 }
 
 export interface ReplayStageSummary extends SessionStageSummary {}
@@ -1437,6 +1462,7 @@ export interface PracticeSessionReport extends SessionEvidenceContract {
     voice_policy_snapshot_ref?: VoicePolicySnapshotReference | null;
     presentation_review?: PresentationReview | null;
     retry_entry?: RetryEntry | null;
+    audio_audit?: AudioAuditPayload | null;
 }
 
 export interface HistorySessionSummary extends SessionEvidenceContract {
