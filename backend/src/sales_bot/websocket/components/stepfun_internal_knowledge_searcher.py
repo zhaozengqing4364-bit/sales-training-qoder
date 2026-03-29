@@ -9,6 +9,7 @@ from typing import Any, cast
 
 from sales_bot.websocket.components.stepfun_knowledge_helpers import (
     build_kb_not_ready_payload,
+    build_knowledge_retrieval_ledger_event,
     build_missing_query_payload,
     build_no_kb_payload,
     build_search_failed_payload,
@@ -56,24 +57,38 @@ async def search_internal_knowledge(
     kb_ids = normalize_knowledge_base_ids(effective_policy)
 
     if not query:
+        payload = build_missing_query_payload()
         await record_metric(
             query="",
             result_count=0,
             status="missing_query",
             knowledge_base_ids=kb_ids,
+            ledger_event=build_knowledge_retrieval_ledger_event(
+                query="",
+                status="missing_query",
+                result_count=0,
+                knowledge_base_ids=kb_ids,
+                error_message=payload["message"],
+            ),
         )
-        payload = build_missing_query_payload()
         payload["_diagnostics"] = _build_diagnostics({"status": "missing_query"})
         return payload
 
     if not kb_ids:
+        payload = build_no_kb_payload(query)
         await record_metric(
             query=query,
             result_count=0,
             status="no_kb_bound",
             knowledge_base_ids=[],
+            ledger_event=build_knowledge_retrieval_ledger_event(
+                query=query,
+                status="no_kb_bound",
+                result_count=0,
+                knowledge_base_ids=[],
+                error_message=payload["message"],
+            ),
         )
-        payload = build_no_kb_payload(query)
         payload["_diagnostics"] = _build_diagnostics({"status": "no_kb_bound"})
         return payload
 
@@ -139,6 +154,7 @@ async def search_internal_knowledge(
                     if isinstance(search_health, dict)
                     else "health_unavailable"
                 )
+                payload = build_kb_not_ready_payload(query)
                 await record_metric(
                     query=query,
                     result_count=0,
@@ -147,8 +163,14 @@ async def search_internal_knowledge(
                     top_k=top_k,
                     similarity_threshold=threshold,
                     error_message=f"[KB_NOT_READY] {health_info}",
+                    ledger_event=build_knowledge_retrieval_ledger_event(
+                        query=query,
+                        status="kb_not_ready",
+                        result_count=0,
+                        knowledge_base_ids=kb_ids,
+                        error_message=payload["message"],
+                    ),
                 )
-                payload = build_kb_not_ready_payload(query)
                 payload["_diagnostics"] = _build_diagnostics(
                     {
                         "status": "kb_not_ready",
@@ -199,6 +221,13 @@ async def search_internal_knowledge(
             top_k=top_k,
             similarity_threshold=threshold,
             error_message=error_detail,
+            ledger_event=build_knowledge_retrieval_ledger_event(
+                query=query,
+                status="search_failed",
+                result_count=0,
+                knowledge_base_ids=kb_ids,
+                error_message=error_detail,
+            ),
         )
         payload = build_search_failed_payload(query, error_detail)
         payload["_diagnostics"] = _build_diagnostics({"status": "search_failed"})
@@ -214,6 +243,13 @@ async def search_internal_knowledge(
             top_k=top_k,
             similarity_threshold=threshold,
             error_message=error_detail,
+            ledger_event=build_knowledge_retrieval_ledger_event(
+                query=query,
+                status="search_failed",
+                result_count=0,
+                knowledge_base_ids=kb_ids,
+                error_message=error_detail,
+            ),
         )
         payload = build_search_failed_payload(query, error_detail)
         payload["_diagnostics"] = _build_diagnostics({"status": "search_failed"})
@@ -234,6 +270,14 @@ async def search_internal_knowledge(
         top_k=top_k,
         similarity_threshold=threshold,
         retrieval_mode=effective_retrieval_mode,
+        ledger_event=build_knowledge_retrieval_ledger_event(
+            query=query,
+            status=status,
+            result_count=len(results),
+            retrieval_mode=effective_retrieval_mode,
+            knowledge_base_ids=kb_ids,
+            results=results,
+        ),
     )
 
     response_payload = {

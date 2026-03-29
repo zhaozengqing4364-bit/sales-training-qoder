@@ -29,6 +29,7 @@ def apply_knowledge_runtime_metric(
     similarity_threshold: float | None = None,
     error_message: str | None = None,
     retrieval_mode: str | None = None,
+    ledger_event: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Apply one retrieval metric update on in-memory effective policy."""
     metrics = ensure_knowledge_runtime_metrics(effective_policy)
@@ -42,6 +43,7 @@ def apply_knowledge_runtime_metric(
         similarity_threshold=similarity_threshold,
         error_message=error_message,
         retrieval_mode=retrieval_mode,
+        ledger_event=ledger_event,
     )
     return metrics
 

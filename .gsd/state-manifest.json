@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "exported_at": "2026-03-29T14:17:16.715Z",
+  "exported_at": "2026-03-29T15:57:04.566Z",
   "milestones": [
     {
       "id": "M001",
@@ -5095,7 +5095,7 @@
       "slice_id": "S01",
       "id": "T01",
       "title": "Normalize retrieval ledger events in the search helper layer",
-      "status": "pending",
+      "status": "complete",
       "one_liner": "",
       "narrative": "",
       "verification_result": "",
@@ -5139,19 +5139,31 @@
       "milestone_id": "M008",
       "slice_id": "S01",
       "id": "T02",
-      "title": "Persist retrieval ledger entries through the runtime-metrics path",
-      "status": "pending",
-      "one_liner": "",
-      "narrative": "",
-      "verification_result": "",
+      "title": "Wired provider-neutral retrieval ledger events through the existing StepFun runtime-metrics persistence path with copy-on-write snapshot merges and handler warning-only failure behavior.",
+      "status": "complete",
+      "one_liner": "Wired provider-neutral retrieval ledger events through the existing StepFun runtime-metrics persistence path with copy-on-write snapshot merges and handler warning-only failure behavior.",
+      "narrative": "T02 could not be real on the original code because T01 still had no ledger payload to persist, so I finished that dependency inside the same slice boundary first: helper/searcher code now builds one bounded provider-neutral ledger_event for missing-query, no-kb, kb-not-ready, miss, hit, and failure paths. I then extended the planned T02 seam so apply_knowledge_runtime_metric(...) and StepFunRealtimeHandler._record_knowledge_runtime_metric(...) carry that event through the existing runtime-metrics path, and merge_runtime_metrics_snapshot(...) deep-copies the knowledge metrics into a new snapshot object while rejecting malformed persisted recent_attempts payloads. Focused runtime-metrics and handler tests now prove copy-on-write persistence, bounded ledger retention, and the preexisting warning-only failure surface when persistence raises after the in-memory update.",
+      "verification_result": "Fresh verification passed for the T01 helper/searcher command and the T02 runtime-metrics/handler command. The downstream slice-level read-side command still fails because the planned T03 test file does not exist yet, which is consistent with this being an intermediate task rather than a slice close-out.",
       "duration": "",
-      "completed_at": null,
+      "completed_at": "2026-03-29T15:57:04.534Z",
       "blocker_discovered": false,
-      "deviations": "",
-      "known_issues": "",
-      "key_files": [],
-      "key_decisions": [],
-      "full_summary_md": "",
+      "deviations": "Pulled the unfinished T01 helper/searcher seam into this unit because T02 had no truthful ledger_event payload to persist. I kept the deviation inside the same slice boundary and did not widen into T03 route-reader work.",
+      "known_issues": "The third slice-level verification command still fails immediately because backend/tests/unit/test_runtime_diagnostics_knowledge_retrieval.py is not present on disk yet; that downstream read-side proof remains T03 work. Backend pytest also still emits the existing project coverage warning (Module src was never imported / No data was collected), but the passing task commands exit 0.",
+      "key_files": [
+        "backend/src/sales_bot/websocket/components/stepfun_knowledge_helpers.py",
+        "backend/src/sales_bot/websocket/components/stepfun_helpers.py",
+        "backend/src/sales_bot/websocket/components/stepfun_internal_knowledge_searcher.py",
+        "backend/src/sales_bot/websocket/components/stepfun_runtime_metrics_helpers.py",
+        "backend/src/sales_bot/websocket/stepfun_realtime_handler.py",
+        "backend/tests/unit/test_stepfun_runtime_metrics_helpers.py",
+        "backend/tests/unit/test_stepfun_realtime_handler.py",
+        ".gsd/milestones/M008/slices/S01/tasks/T02-SUMMARY.md"
+      ],
+      "key_decisions": [
+        "Reused the existing knowledge runtime-metrics seam as the only persistence channel for retrieval ledger entries instead of introducing a second write path.",
+        "Rejected malformed persisted recent_attempts payloads at snapshot-merge time so invalid ledger state does not half-write PracticeSession.voice_policy_snapshot."
+      ],
+      "full_summary_md": "---\nid: T02\nparent: S01\nmilestone: M008\nkey_files:\n  - backend/src/sales_bot/websocket/components/stepfun_knowledge_helpers.py\n  - backend/src/sales_bot/websocket/components/stepfun_helpers.py\n  - backend/src/sales_bot/websocket/components/stepfun_internal_knowledge_searcher.py\n  - backend/src/sales_bot/websocket/components/stepfun_runtime_metrics_helpers.py\n  - backend/src/sales_bot/websocket/stepfun_realtime_handler.py\n  - backend/tests/unit/test_stepfun_runtime_metrics_helpers.py\n  - backend/tests/unit/test_stepfun_realtime_handler.py\n  - .gsd/milestones/M008/slices/S01/tasks/T02-SUMMARY.md\nkey_decisions:\n  - Reused the existing knowledge runtime-metrics seam as the only persistence channel for retrieval ledger entries instead of introducing a second write path.\n  - Rejected malformed persisted recent_attempts payloads at snapshot-merge time so invalid ledger state does not half-write PracticeSession.voice_policy_snapshot.\nduration: \"\"\nverification_result: mixed\ncompleted_at: 2026-03-29T15:57:04.537Z\nblocker_discovered: false\n---\n\n# T02: Wired provider-neutral retrieval ledger events through the existing StepFun runtime-metrics persistence path with copy-on-write snapshot merges and handler warning-only failure behavior.\n\n**Wired provider-neutral retrieval ledger events through the existing StepFun runtime-metrics persistence path with copy-on-write snapshot merges and handler warning-only failure behavior.**\n\n## What Happened\n\nT02 could not be real on the original code because T01 still had no ledger payload to persist, so I finished that dependency inside the same slice boundary first: helper/searcher code now builds one bounded provider-neutral ledger_event for missing-query, no-kb, kb-not-ready, miss, hit, and failure paths. I then extended the planned T02 seam so apply_knowledge_runtime_metric(...) and StepFunRealtimeHandler._record_knowledge_runtime_metric(...) carry that event through the existing runtime-metrics path, and merge_runtime_metrics_snapshot(...) deep-copies the knowledge metrics into a new snapshot object while rejecting malformed persisted recent_attempts payloads. Focused runtime-metrics and handler tests now prove copy-on-write persistence, bounded ledger retention, and the preexisting warning-only failure surface when persistence raises after the in-memory update.\n\n## Verification\n\nFresh verification passed for the T01 helper/searcher command and the T02 runtime-metrics/handler command. The downstream slice-level read-side command still fails because the planned T03 test file does not exist yet, which is consistent with this being an intermediate task rather than a slice close-out.\n\n## Verification Evidence\n\n| # | Command | Exit Code | Verdict | Duration |\n|---|---------|-----------|---------|----------|\n| 1 | `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/test_stepfun_knowledge_helpers.py backend/tests/unit/test_stepfun_internal_knowledge_searcher.py` | 0 | ✅ pass | 69200ms |\n| 2 | `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/test_stepfun_runtime_metrics_helpers.py backend/tests/unit/test_stepfun_realtime_handler.py` | 0 | ✅ pass | 116500ms |\n| 3 | `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/test_runtime_diagnostics_knowledge_retrieval.py backend/tests/integration/test_voice_runtime_session_snapshot.py backend/tests/contract/test_practice_evidence_contract.py` | 4 | ❌ fail | 11600ms |\n\n\n## Deviations\n\nPulled the unfinished T01 helper/searcher seam into this unit because T02 had no truthful ledger_event payload to persist. I kept the deviation inside the same slice boundary and did not widen into T03 route-reader work.\n\n## Known Issues\n\nThe third slice-level verification command still fails immediately because backend/tests/unit/test_runtime_diagnostics_knowledge_retrieval.py is not present on disk yet; that downstream read-side proof remains T03 work. Backend pytest also still emits the existing project coverage warning (Module src was never imported / No data was collected), but the passing task commands exit 0.\n\n## Files Created/Modified\n\n- `backend/src/sales_bot/websocket/components/stepfun_knowledge_helpers.py`\n- `backend/src/sales_bot/websocket/components/stepfun_helpers.py`\n- `backend/src/sales_bot/websocket/components/stepfun_internal_knowledge_searcher.py`\n- `backend/src/sales_bot/websocket/components/stepfun_runtime_metrics_helpers.py`\n- `backend/src/sales_bot/websocket/stepfun_realtime_handler.py`\n- `backend/tests/unit/test_stepfun_runtime_metrics_helpers.py`\n- `backend/tests/unit/test_stepfun_realtime_handler.py`\n- `.gsd/milestones/M008/slices/S01/tasks/T02-SUMMARY.md`\n",
       "description": "The executor should load `safe-grow`, `fastapi-python`, `test-driven-development`, and `verification-before-completion` before coding.\n\nOnce ledger events exist, wire them through the current runtime-metrics persistence path so the session snapshot records them immutably alongside today's counters.\n\n## Failure Modes\n| Dependency | On error | On timeout | On malformed response |\n|------------|----------|-----------|----------------------|\n| `persist_runtime_metrics_to_session(...)` | leave the previous snapshot intact and fail the focused regression instead of mutating in place | treat as incomplete persistence and keep the old snapshot visible | reject invalid runtime metrics rather than half-writing the session row |\n| `StepFunRealtimeHandler._record_knowledge_runtime_metric(...)` | preserve the existing warning path and fail the new regression if ledger events are dropped | keep the preexisting persistence cadence; do not add loops or retries | normalize malformed event payloads before commit or reject them cleanly |\n\n## Load Profile\n- **Shared resources**: async DB session, `practice_sessions.voice_policy_snapshot` JSON field, and deep-copy/merge work.\n- **Per-operation cost**: one bounded ledger append plus the existing snapshot merge/commit.\n- **10x breakpoint**: deep-copy churn or repeated commit amplification if persistence is no longer one-write-per-event.\n\n## Negative Tests\n- **Malformed inputs**: missing runtime metrics or malformed ledger state should fail safely without mutating the original snapshot.\n- **Error paths**: handler-level failure paths must still preserve `last_status`/`last_error` while writing a bounded ledger entry when possible.\n- **Boundary conditions**: repeated persistence keeps the ledger capped and preserves copy-on-write snapshot semantics.\n\n## Steps\n1. Extend `backend/src/sales_bot/websocket/components/stepfun_runtime_metrics_helpers.py` so runtime-metric merges carry the bounded ledger into `practice_sessions.voice_policy_snapshot` without mutating the original snapshot object.\n2. Update `backend/src/sales_bot/websocket/stepfun_realtime_handler.py` to pass the richer ledger-event payload through `_record_knowledge_runtime_metric(...)` while keeping the current warning-only failure surface.\n3. Add focused unit coverage proving copy-on-write persistence, capped repeated writes, and handler-level persistence for hit and failure paths.\n\n## Must-Haves\n- [ ] Snapshot persistence remains copy-on-write.\n- [ ] Existing flat metrics stay readable after ledger writes.\n- [ ] One retrieval attempt still maps to one bounded snapshot update, not a second persistence channel.",
       "estimate": "45m",
       "files": [
@@ -6616,6 +6628,30 @@
       "decision": "Whether M008 infers `used_in_reasoning` from current retrieval evidence",
       "choice": "Do not infer or expose `used_in_reasoning` in M008; limit the contract to retrieval occurrence, hit/miss/failure, and weak-evidence facts.",
       "rationale": "Current runtime evidence can prove that retrieval happened and what it returned, but not reliably that the model used the retrieved content in reasoning. Pretending otherwise would recreate the fake-credibility problem this milestone is trying to remove.",
+      "revisable": "Yes",
+      "made_by": "agent",
+      "superseded_by": null
+    },
+    {
+      "seq": 1479,
+      "id": "D117",
+      "when_context": "M008/S01 planning",
+      "scope": "architecture",
+      "decision": "How S01 should shape and prove the persisted retrieval ledger",
+      "choice": "Store a bounded `recent_attempts` ledger under `voice_policy_snapshot.runtime_metrics.knowledge_retrieval`, with each entry normalized to query/status/result_count/retrieval_mode/error summary plus bounded transformed result summaries, and prove S01 on current session snapshot/detail surfaces while keeping existing `knowledge-check` flat counters backward-compatible.",
+      "rationale": "D115 fixed the persistence seam but not the exact ledger boundary. Choosing a bounded `recent_attempts` list prevents snapshot bloat, preserves provider neutrality, and keeps the same transformed result shape available for later slices. Keeping S01 proof on current session/detail surfaces avoids prematurely redesigning report semantics that belong to S02 while still making the persisted truth inspectable on shipped routes.",
+      "revisable": "Yes",
+      "made_by": "agent",
+      "superseded_by": null
+    },
+    {
+      "seq": 1480,
+      "id": "D118",
+      "when_context": "M008/S01/T02",
+      "scope": "observability",
+      "decision": "How StepFun retrieval ledger entries should reach persisted session snapshots",
+      "choice": "Route one normalized ledger_event through the existing knowledge runtime-metrics update path and reject malformed persisted recent_attempts during snapshot merge instead of creating a second persistence channel or half-writing invalid ledger state.",
+      "rationale": "The slice requires one retrieval attempt to map to one bounded snapshot update while keeping flat counters readable and copy-on-write semantics intact. Reusing the current runtime-metrics seam preserves the existing warning-only handler behavior, and rejecting malformed recent_attempts at merge time prevents partial session-row corruption.",
       "revisable": "Yes",
       "made_by": "agent",
       "superseded_by": null
@@ -8700,6 +8736,39 @@
       "verdict": "✅ pass",
       "duration_ms": 70,
       "created_at": "2026-03-28T13:37:23.118Z"
+    },
+    {
+      "id": 190,
+      "task_id": "T02",
+      "slice_id": "S01",
+      "milestone_id": "M008",
+      "command": "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/test_stepfun_knowledge_helpers.py backend/tests/unit/test_stepfun_internal_knowledge_searcher.py",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 69200,
+      "created_at": "2026-03-29T15:57:04.536Z"
+    },
+    {
+      "id": 191,
+      "task_id": "T02",
+      "slice_id": "S01",
+      "milestone_id": "M008",
+      "command": "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/test_stepfun_runtime_metrics_helpers.py backend/tests/unit/test_stepfun_realtime_handler.py",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 116500,
+      "created_at": "2026-03-29T15:57:04.537Z"
+    },
+    {
+      "id": 192,
+      "task_id": "T02",
+      "slice_id": "S01",
+      "milestone_id": "M008",
+      "command": "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/test_runtime_diagnostics_knowledge_retrieval.py backend/tests/integration/test_voice_runtime_session_snapshot.py backend/tests/contract/test_practice_evidence_contract.py",
+      "exit_code": 4,
+      "verdict": "❌ fail",
+      "duration_ms": 11600,
+      "created_at": "2026-03-29T15:57:04.537Z"
     }
   ]
 }

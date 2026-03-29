@@ -24,6 +24,63 @@ MAX_KNOWLEDGE_RETRIEVAL_SNIPPET_CHARS = 240
 MAX_KNOWLEDGE_RETRIEVAL_LEDGER_KB_IDS = 8
 
 
+def _normalize_whitespace(value: Any) -> str:
+    if not isinstance(value, str):
+        value = str(value or "")
+    return " ".join(value.split())
+
+
+def _truncate_text(value: str, limit: int) -> str:
+    if len(value) <= limit:
+        return value
+    return value[:limit]
+
+
+def _normalize_result_summary(result: Any) -> dict[str, Any] | None:
+    if not isinstance(result, dict):
+        return None
+
+    knowledge_base_id = _normalize_whitespace(result.get("knowledge_base_id"))
+    if not knowledge_base_id:
+        return None
+
+    summary: dict[str, Any] = {
+        "knowledge_base_id": knowledge_base_id,
+        "knowledge_base_name": _normalize_whitespace(result.get("knowledge_base_name")),
+        "snippet": _truncate_text(
+            _normalize_whitespace(result.get("snippet") or result.get("content")),
+            MAX_KNOWLEDGE_RETRIEVAL_SNIPPET_CHARS,
+        ),
+        "retrieval_mode": _normalize_whitespace(result.get("retrieval_mode"))
+        or "vector",
+    }
+
+    score = result.get("score")
+    try:
+        if score is not None and str(score).strip() != "":
+            summary["score"] = round(float(score), 4)
+    except (TypeError, ValueError):
+        pass
+
+    return summary
+
+
+def _normalize_recent_attempts(recent_attempts: Any) -> list[dict[str, Any]] | None:
+    if recent_attempts is None:
+        return []
+    if not isinstance(recent_attempts, list):
+        return None
+
+    normalized_attempts: list[dict[str, Any]] = []
+    for item in recent_attempts:
+        normalized_item = normalize_knowledge_retrieval_ledger_event(item)
+        if normalized_item is None:
+            return None
+        normalized_attempts.append(normalized_item)
+
+    return normalized_attempts[-MAX_KNOWLEDGE_RETRIEVAL_LEDGER_ENTRIES:]
+
+
 def is_sales_objection_query(query: str) -> bool:
     normalized = "".join(re.findall(r"[a-z0-9\u4e00-\u9fff]+", query.lower()))
     if not normalized:
@@ -65,7 +122,14 @@ def normalize_knowledge_base_ids(effective_policy: dict[str, Any]) -> list[str]:
     kb_ids = effective_policy.get("knowledge_base_ids") or []
     if not isinstance(kb_ids, list):
         return []
-    return [str(kb_id) for kb_id in kb_ids if kb_id]
+
+    normalized_ids: list[str] = []
+    for kb_id in kb_ids:
+        normalized_kb_id = _normalize_whitespace(kb_id)
+        if not normalized_kb_id or normalized_kb_id in normalized_ids:
+            continue
+        normalized_ids.append(normalized_kb_id)
+    return normalized_ids
 
 
 def resolve_retrieval_params(
@@ -203,6 +267,102 @@ def build_search_failed_payload(query: str, error_detail: str) -> dict[str, Any]
     }
 
 
+def build_knowledge_retrieval_ledger_event(
+    *,
+    query: str,
+    status: str,
+    result_count: Any,
+    retrieval_mode: str | None = None,
+    knowledge_base_ids: list[str] | None = None,
+    error_message: str | None = None,
+    results: list[dict[str, Any]] | None = None,
+    attempted_at: str | None = None,
+) -> dict[str, Any]:
+    """Build one provider-neutral, bounded retrieval ledger event."""
+    try:
+        safe_result_count = max(0, int(result_count))
+    except (TypeError, ValueError):
+        safe_result_count = 0
+
+    normalized_results: list[dict[str, Any]] = []
+    for result in results or []:
+        normalized_result = _normalize_result_summary(result)
+        if normalized_result is None:
+            continue
+        normalized_results.append(normalized_result)
+        if len(normalized_results) >= MAX_KNOWLEDGE_RETRIEVAL_RESULT_SUMMARIES:
+            break
+
+    normalized_kb_ids = normalize_knowledge_base_ids(
+        {"knowledge_base_ids": knowledge_base_ids or []}
+    )[:MAX_KNOWLEDGE_RETRIEVAL_LEDGER_KB_IDS]
+
+    attempted_at_value = _normalize_whitespace(attempted_at)
+    if not attempted_at_value:
+        attempted_at_value = datetime.now(UTC).isoformat()
+
+    return {
+        "attempted_at": attempted_at_value,
+        "query": _truncate_text(
+            _normalize_whitespace(query),
+            MAX_KNOWLEDGE_RETRIEVAL_QUERY_CHARS,
+        ),
+        "status": _normalize_whitespace(status) or "unknown",
+        "result_count": safe_result_count,
+        "retrieval_mode": _normalize_whitespace(retrieval_mode) or None,
+        "knowledge_base_ids": normalized_kb_ids,
+        "error_summary": _truncate_text(
+            _normalize_whitespace(error_message),
+            MAX_KNOWLEDGE_RETRIEVAL_ERROR_CHARS,
+        )
+        or None,
+        "result_summaries": normalized_results,
+    }
+
+
+def normalize_knowledge_retrieval_ledger_event(
+    ledger_event: Any,
+) -> dict[str, Any] | None:
+    """Normalize a possibly malformed ledger event payload for persistence."""
+    if ledger_event is None:
+        return None
+    if not isinstance(ledger_event, dict):
+        return None
+
+    raw_results = ledger_event.get("result_summaries")
+    if raw_results is None:
+        raw_results = ledger_event.get("results")
+    if raw_results is not None and not isinstance(raw_results, list):
+        return None
+
+    return build_knowledge_retrieval_ledger_event(
+        query=str(ledger_event.get("query") or ""),
+        status=str(ledger_event.get("status") or "unknown"),
+        result_count=ledger_event.get("result_count"),
+        retrieval_mode=(
+            str(ledger_event.get("retrieval_mode"))
+            if ledger_event.get("retrieval_mode") is not None
+            else None
+        ),
+        knowledge_base_ids=ledger_event.get("knowledge_base_ids") or [],
+        error_message=(
+            str(ledger_event.get("error_summary"))
+            if ledger_event.get("error_summary") is not None
+            else (
+                str(ledger_event.get("error_message"))
+                if ledger_event.get("error_message") is not None
+                else None
+            )
+        ),
+        results=raw_results,
+        attempted_at=(
+            str(ledger_event.get("attempted_at"))
+            if ledger_event.get("attempted_at") is not None
+            else None
+        ),
+    )
+
+
 def transform_search_rows(
     rows: list[dict[str, Any]],
     top_k: int,
@@ -238,6 +398,8 @@ def transform_search_rows(
         effective_retrieval_mode = "keyword_fallback"
     elif retrieval_modes == {"hybrid"}:
         effective_retrieval_mode = "hybrid"
+    elif retrieval_modes == {"vector"}:
+        effective_retrieval_mode = "vector"
     elif retrieval_modes:
         effective_retrieval_mode = "mixed"
     else:
@@ -260,11 +422,22 @@ def merge_runtime_metrics_snapshot(
     if not isinstance(knowledge_metrics, dict):
         return None
 
+    normalized_recent_attempts = _normalize_recent_attempts(
+        knowledge_metrics.get("recent_attempts")
+    )
+    if normalized_recent_attempts is None:
+        return None
+
+    normalized_knowledge_metrics = deepcopy(knowledge_metrics)
+    normalized_knowledge_metrics["recent_attempts"] = normalized_recent_attempts
+
     snapshot = deepcopy(base_snapshot)
     snapshot_runtime = snapshot.get("runtime_metrics")
     if not isinstance(snapshot_runtime, dict):
         snapshot_runtime = {}
+    else:
+        snapshot_runtime = deepcopy(snapshot_runtime)
 
-    snapshot_runtime["knowledge_retrieval"] = knowledge_metrics
+    snapshot_runtime["knowledge_retrieval"] = normalized_knowledge_metrics
     snapshot["runtime_metrics"] = snapshot_runtime
     return snapshot

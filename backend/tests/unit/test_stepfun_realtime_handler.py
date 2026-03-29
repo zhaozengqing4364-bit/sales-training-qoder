@@ -1064,6 +1064,102 @@ async def test_persist_runtime_metrics_to_session_updates_snapshot_copy(monkeypa
 
 
 @pytest.mark.asyncio
+async def test_record_knowledge_runtime_metric_passes_ledger_event_through_existing_persistence_path(
+    monkeypatch,
+):
+    handler = StepFunRealtimeHandler()
+    handler._effective_policy = {}
+    handler._persist_runtime_metrics_to_session = AsyncMock()
+
+    apply_mock = MagicMock()
+    monkeypatch.setattr(stepfun_module, "apply_knowledge_runtime_metric", apply_mock)
+
+    ledger_event = {
+        "attempted_at": "2026-03-28T12:00:00Z",
+        "query": "企业版报价",
+        "status": "hit",
+        "result_count": 1,
+        "retrieval_mode": "vector",
+        "knowledge_base_ids": ["kb-1"],
+        "result_summaries": [
+            {
+                "knowledge_base_id": "kb-1",
+                "knowledge_base_name": "产品知识库",
+                "score": 0.88,
+                "snippet": "企业版报价支持按年付费。",
+                "retrieval_mode": "vector",
+            }
+        ],
+    }
+
+    await handler._record_knowledge_runtime_metric(
+        query="企业版报价",
+        result_count=1,
+        status="hit",
+        knowledge_base_ids=["kb-1"],
+        top_k=3,
+        similarity_threshold=0.65,
+        retrieval_mode="vector",
+        ledger_event=ledger_event,
+    )
+
+    apply_mock.assert_called_once_with(
+        effective_policy=handler._effective_policy,
+        query="企业版报价",
+        result_count=1,
+        status="hit",
+        knowledge_base_ids=["kb-1"],
+        top_k=3,
+        similarity_threshold=0.65,
+        error_message=None,
+        retrieval_mode="vector",
+        ledger_event=ledger_event,
+    )
+    handler._persist_runtime_metrics_to_session.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_record_knowledge_runtime_metric_keeps_warning_only_failure_surface_after_in_memory_update(
+    monkeypatch,
+):
+    handler = StepFunRealtimeHandler()
+    handler._effective_policy = {}
+    handler._persist_runtime_metrics_to_session = AsyncMock(
+        side_effect=RuntimeError("db down")
+    )
+
+    warning_mock = MagicMock()
+    monkeypatch.setattr(stepfun_module.logger, "warning", warning_mock)
+
+    await handler._record_knowledge_runtime_metric(
+        query="竞品价格",
+        result_count=0,
+        status="search_failed",
+        knowledge_base_ids=["kb-1"],
+        error_message="[EMBEDDING_TIMEOUT]",
+        retrieval_mode="vector",
+        ledger_event={
+            "attempted_at": "2026-03-28T12:00:00Z",
+            "query": "竞品价格",
+            "status": "search_failed",
+            "result_count": 0,
+            "retrieval_mode": "vector",
+            "knowledge_base_ids": ["kb-1"],
+            "error_summary": "[EMBEDDING_TIMEOUT]",
+            "result_summaries": [],
+        },
+    )
+
+    metrics = handler._effective_policy["runtime_metrics"]["knowledge_retrieval"]
+    assert metrics["last_status"] == "search_failed"
+    assert metrics["last_error"] == "[EMBEDDING_TIMEOUT]"
+    assert len(metrics["recent_attempts"]) == 1
+    assert metrics["recent_attempts"][0]["status"] == "search_failed"
+    warning_mock.assert_called_once()
+    assert "Failed to record knowledge runtime metric" in warning_mock.call_args.args[0]
+
+
+@pytest.mark.asyncio
 async def test_load_effective_policy_prefers_frozen_session_snapshot_over_live_resolution(
     monkeypatch,
 ):

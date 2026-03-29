@@ -3859,6 +3859,7 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
         similarity_threshold: float | None = None,
         error_message: str | None = None,
         retrieval_mode: str | None = None,
+        ledger_event: dict[str, Any] | None = None,
     ) -> None:
         """Record knowledge retrieval diagnostics for later report verification."""
         try:
@@ -3872,6 +3873,7 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
                 similarity_threshold=similarity_threshold,
                 error_message=error_message,
                 retrieval_mode=retrieval_mode,
+                ledger_event=ledger_event,
             )
 
             await self._persist_runtime_metrics_to_session()

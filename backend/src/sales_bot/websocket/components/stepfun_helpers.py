@@ -5,6 +5,11 @@ from __future__ import annotations
 from datetime import UTC, datetime
 from typing import Any
 
+from sales_bot.websocket.components.stepfun_knowledge_helpers import (
+    MAX_KNOWLEDGE_RETRIEVAL_LEDGER_ENTRIES,
+    normalize_knowledge_retrieval_ledger_event,
+)
+
 
 def format_stage_name(stage_id: str | None) -> str:
     """Map internal stage IDs to display names."""
@@ -85,6 +90,7 @@ def ensure_knowledge_runtime_metrics(policy: dict[str, Any]) -> dict[str, Any]:
     knowledge_metrics.setdefault("bound_knowledge_base_ids", [])
     knowledge_metrics.setdefault("updated_at", None)
     knowledge_metrics.setdefault("recent_queries", [])
+    knowledge_metrics.setdefault("recent_attempts", [])
     knowledge_metrics.setdefault("last_error", None)
     knowledge_metrics.setdefault("last_retrieval_mode", None)
     knowledge_metrics.setdefault("mode_counts", {})
@@ -122,6 +128,7 @@ def update_knowledge_runtime_metrics(
     similarity_threshold: float | None = None,
     error_message: str | None = None,
     retrieval_mode: str | None = None,
+    ledger_event: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Apply one retrieval event mutation to knowledge runtime metrics."""
     previous_attempt = int(metrics.get("attempt_count") or 0)
@@ -160,6 +167,16 @@ def update_knowledge_runtime_metrics(
             *[str(item) for item in recent_queries if str(item) and str(item) != query],
         ][:5]
     metrics["recent_queries"] = recent_queries
+
+    recent_attempts = metrics.get("recent_attempts")
+    if not isinstance(recent_attempts, list):
+        recent_attempts = []
+    normalized_ledger_event = normalize_knowledge_retrieval_ledger_event(ledger_event)
+    if normalized_ledger_event is not None:
+        recent_attempts = [item for item in recent_attempts if isinstance(item, dict)]
+        recent_attempts.append(normalized_ledger_event)
+        recent_attempts = recent_attempts[-MAX_KNOWLEDGE_RETRIEVAL_LEDGER_ENTRIES:]
+    metrics["recent_attempts"] = recent_attempts
 
     hit_query_count = int(metrics.get("hit_query_count") or 0)
     attempt_count = int(metrics.get("attempt_count") or 0)
