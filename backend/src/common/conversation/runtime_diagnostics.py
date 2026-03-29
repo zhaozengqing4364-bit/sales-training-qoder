@@ -150,6 +150,237 @@ def _resolve_latest_valid_knowledge_retrieval_attempt(
     return None
 
 
+# ---------------------------------------------------------------------------
+# Shared retrieval-facts read model (used by both projection and diagnostics)
+# Bounds reference: stepfun_knowledge_helpers.py
+#   MAX_KNOWLEDGE_RETRIEVAL_LEDGER_ENTRIES = 10
+#   MAX_KNOWLEDGE_RETRIEVAL_RESULT_SUMMARIES = 3
+#   MAX_KNOWLEDGE_RETRIEVAL_SNIPPET_CHARS = 240
+#   MAX_KNOWLEDGE_RETRIEVAL_LEDGER_KB_IDS = 8
+# ---------------------------------------------------------------------------
+_RETRIEVAL_FACTS_MAX_RECENT = 10
+_RETRIEVAL_FACTS_MAX_KB_IDS = 8
+_RETRIEVAL_FACTS_MAX_SUMMARIES = 3
+_RETRIEVAL_FACTS_SNIPPET_CHARS = 240
+
+
+def _normalize_retrieval_attempt_full(value: Any) -> dict[str, Any] | None:
+    """Normalize a single ledger entry, *preserving* knowledge_base_ids and result_summaries.
+
+    Unlike `_normalize_knowledge_retrieval_attempt` which strips those fields for
+    the lean diagnostics summary, this richer normaliser keeps them so that
+    projection (report) and diagnostics (knowledge-check) can share the same
+    truth.
+    """
+    if not isinstance(value, dict):
+        return None
+
+    status = str(value.get("status") or "").strip()
+    if not status:
+        return None
+
+    query = str(value.get("query") or "").strip()
+    attempted_at = str(value.get("attempted_at") or "").strip() or None
+    retrieval_mode = str(value.get("retrieval_mode") or "").strip() or None
+    error_summary = str(
+        value.get("error_summary") or value.get("error_message") or ""
+    ).strip() or None
+    try:
+        result_count = max(0, int(value.get("result_count") or 0))
+    except (TypeError, ValueError):
+        result_count = 0
+
+    # --- Preserve knowledge_base_ids (bounded to 8) ---
+    raw_kb_ids = value.get("knowledge_base_ids")
+    kb_ids: list[str] = []
+    if isinstance(raw_kb_ids, list):
+        for kb_id in raw_kb_ids:
+            s = str(kb_id).strip()
+            if s and len(kb_ids) < _RETRIEVAL_FACTS_MAX_KB_IDS:
+                kb_ids.append(s)
+
+    # --- Preserve result_summaries (bounded to 3, snippet ≤ 240 chars) ---
+    raw_summaries = value.get("result_summaries")
+    summaries: list[dict[str, Any]] = []
+    if isinstance(raw_summaries, list):
+        for item in raw_summaries:
+            if not isinstance(item, dict):
+                continue
+            if len(summaries) >= _RETRIEVAL_FACTS_MAX_SUMMARIES:
+                break
+            kb_id = str(item.get("knowledge_base_id") or "").strip()
+            if not kb_id:
+                continue
+            summary_entry: dict[str, Any] = {
+                "knowledge_base_id": kb_id,
+                "knowledge_base_name": str(item.get("knowledge_base_name") or "").strip(),
+                "snippet": str(item.get("snippet") or item.get("content") or "")[:_RETRIEVAL_FACTS_SNIPPET_CHARS],
+                "retrieval_mode": str(item.get("retrieval_mode") or "vector").strip(),
+            }
+            score = item.get("score")
+            try:
+                if score is not None and str(score).strip() != "":
+                    summary_entry["score"] = round(float(score), 4)
+            except (TypeError, ValueError):
+                pass
+            summaries.append(summary_entry)
+
+    normalized: dict[str, Any] = {
+        "status": status,
+        "query": query,
+        "attempted_at": attempted_at,
+        "retrieval_mode": retrieval_mode,
+        "error_summary": error_summary,
+        "result_count": result_count,
+        "knowledge_base_ids": kb_ids,
+        "result_summaries": summaries,
+    }
+    return normalized
+
+
+def _derive_retrieval_status_and_summary(
+    *,
+    normalized_kb_ids: list[str],
+    internal_retrieval_enabled: bool,
+    last_status: str,
+    last_error: str,
+    attempt_count: int,
+    hit_query_count: int,
+) -> tuple[str, str]:
+    """Derive the canonical retrieval *status* and Chinese *summary* string.
+
+    This logic is extracted from `build_session_runtime_diagnostics` so that
+    both that function and the new `build_retrieval_facts` share the same
+    vocabulary without duplication.
+    """
+    if not normalized_kb_ids:
+        return "no_knowledge_base", "当前会话未绑定知识库"
+    if not internal_retrieval_enabled:
+        return "disabled", "内部知识检索未启用"
+    if last_status == "kb_not_ready" or "[KB_NOT_READY]" in last_error:
+        return "kb_not_ready", "知识库文档尚未处理完成"
+    if last_status == "search_failed" or "[KNOWLEDGE_SEARCH_UNAVAILABLE]" in last_error:
+        return "search_failed", "知识检索触发失败，请检查知识库或 Embedding 服务"
+    if attempt_count == 0:
+        return "not_triggered", "本次对话尚未触发知识检索"
+    if hit_query_count > 0:
+        return "hit", "知识检索已触发并命中知识库"
+    return "miss", "知识检索已触发，但本次未命中有效内容"
+
+
+def build_retrieval_facts(
+    voice_policy_snapshot: dict[str, Any] | None,
+) -> dict[str, Any] | None:
+    """Build the shared retrieval-truth read model from a persisted voice_policy_snapshot.
+
+    Returns ``None`` when the snapshot is absent or has no ``runtime_metrics``.
+    This is the single normalisation point that both projection (report) and
+    diagnostics (knowledge-check) should call to prevent parity drift.
+    """
+    if not isinstance(voice_policy_snapshot, dict):
+        return None
+
+    runtime_metrics = voice_policy_snapshot.get("runtime_metrics")
+    if not isinstance(runtime_metrics, dict):
+        return None
+
+    knowledge_metrics = runtime_metrics.get("knowledge_retrieval")
+    if not isinstance(knowledge_metrics, dict):
+        knowledge_metrics = {}
+
+    # --- KB binding ---
+    raw_kb_ids = voice_policy_snapshot.get("knowledge_base_ids")
+    if not isinstance(raw_kb_ids, list):
+        raw_kb_ids = []
+    normalized_kb_ids = [str(kb_id) for kb_id in raw_kb_ids if kb_id]
+    kb_bound = bool(normalized_kb_ids)
+
+    # --- Tool-policy flags ---
+    tool_policy = voice_policy_snapshot.get("tool_policy")
+    if not isinstance(tool_policy, dict):
+        tool_policy = {}
+    internal_retrieval_enabled = bool(
+        tool_policy.get("enable_internal_retrieval", False)
+    )
+
+    # --- Flat aggregate metrics ---
+    attempt_count = int(knowledge_metrics.get("attempt_count") or 0)
+    hit_query_count = int(knowledge_metrics.get("hit_query_count") or 0)
+    hit_rate = _coerce_float(knowledge_metrics.get("hit_rate") or 0.0)
+
+    # --- Resolve latest status from flat metrics + ledger ---
+    last_status = str(knowledge_metrics.get("last_status") or "").strip()
+    last_error = str(knowledge_metrics.get("last_error") or "").strip()
+
+    # --- Normalise recent_attempts (full, bounded to 10) ---
+    raw_recent = knowledge_metrics.get("recent_attempts")
+    recent_attempts: list[dict[str, Any]] = []
+    if isinstance(raw_recent, list):
+        for entry in reversed(raw_recent):  # iterate from newest
+            normalized_entry = _normalize_retrieval_attempt_full(entry)
+            if normalized_entry is not None:
+                recent_attempts.append(normalized_entry)
+                if len(recent_attempts) >= _RETRIEVAL_FACTS_MAX_RECENT:
+                    break
+    recent_attempts.reverse()  # restore chronological order
+
+    # Fill missing flat status from the latest valid ledger entry
+    latest_attempt: dict[str, Any] | None = recent_attempts[-1] if recent_attempts else None
+    if latest_attempt is not None:
+        ledger_status = str(latest_attempt.get("status") or "").strip()
+        if not last_status or (attempt_count > 0 and last_status == "not_triggered"):
+            last_status = ledger_status
+        if not last_error:
+            last_error = str(latest_attempt.get("error_summary") or "").strip()
+    if not last_status:
+        last_status = "not_triggered"
+
+    # --- Derive canonical status / summary ---
+    status, summary = _derive_retrieval_status_and_summary(
+        normalized_kb_ids=normalized_kb_ids,
+        internal_retrieval_enabled=internal_retrieval_enabled,
+        last_status=last_status,
+        last_error=last_error,
+        attempt_count=attempt_count,
+        hit_query_count=hit_query_count,
+    )
+
+    # --- Miss / failure explanations ---
+    miss_explanation: str | None = None
+    failure_explanation: str | None = None
+    if status == "miss":
+        last_query = ""
+        if latest_attempt:
+            last_query = str(latest_attempt.get("query") or "").strip()
+        if last_query:
+            miss_explanation = f"查询「{last_query}」未命中知识库内容，可能需要补充相关文档"
+        else:
+            miss_explanation = "知识检索已触发但未命中，可能需要补充知识库文档覆盖范围"
+    if status == "search_failed":
+        if latest_attempt:
+            error_msg = str(latest_attempt.get("error_summary") or "").strip()
+            if error_msg:
+                failure_explanation = f"检索失败：{error_msg}"
+        if not failure_explanation:
+            failure_explanation = "检索失败，请检查知识库或 Embedding 服务状态"
+
+    return {
+        "kb_bound": kb_bound,
+        "knowledge_base_ids": normalized_kb_ids,
+        "knowledge_base_count": len(normalized_kb_ids),
+        "retrieval_enabled": internal_retrieval_enabled,
+        "status": status,
+        "summary": summary,
+        "attempt_count": attempt_count,
+        "hit_count": hit_query_count,
+        "hit_rate": round(hit_rate, 4),
+        "latest_attempt": latest_attempt,
+        "recent_attempts": recent_attempts,
+        "miss_explanation": miss_explanation,
+        "failure_explanation": failure_explanation,
+    }
+
+
 def build_session_runtime_diagnostics(
     *,
     session: PracticeSession,
@@ -355,27 +586,14 @@ def build_session_runtime_diagnostics(
             kb_lock_status = "blocked_empty"
     kb_lock_chain_failure = is_kb_lock_chain_failure_status(kb_lock_status)
 
-    if not normalized_kb_ids:
-        status = "no_knowledge_base"
-        summary = "当前会话未绑定知识库"
-    elif not internal_retrieval_enabled:
-        status = "disabled"
-        summary = "内部知识检索未启用"
-    elif last_status == "kb_not_ready" or "[KB_NOT_READY]" in last_error:
-        status = "kb_not_ready"
-        summary = "知识库文档尚未处理完成"
-    elif last_status == "search_failed" or "[KNOWLEDGE_SEARCH_UNAVAILABLE]" in last_error:
-        status = "search_failed"
-        summary = "知识检索触发失败，请检查知识库或 Embedding 服务"
-    elif attempt_count == 0:
-        status = "not_triggered"
-        summary = "本次对话尚未触发知识检索"
-    elif hit_query_count > 0:
-        status = "hit"
-        summary = "知识检索已触发并命中知识库"
-    else:
-        status = "miss"
-        summary = "知识检索已触发，但本次未命中有效内容"
+    status, summary = _derive_retrieval_status_and_summary(
+        normalized_kb_ids=normalized_kb_ids,
+        internal_retrieval_enabled=internal_retrieval_enabled,
+        last_status=last_status,
+        last_error=last_error,
+        attempt_count=attempt_count,
+        hit_query_count=hit_query_count,
+    )
 
     return {
         "session_id": str(getattr(session, "session_id", "")),

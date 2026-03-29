@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "exported_at": "2026-03-29T16:33:41.640Z",
+  "exported_at": "2026-03-29T17:16:43.554Z",
   "milestones": [
     {
       "id": "M001",
@@ -1036,14 +1036,14 @@
       "milestone_id": "M008",
       "id": "S01",
       "title": "会话检索账本落库",
-      "status": "pending",
+      "status": "complete",
       "risk": "high",
       "depends": [],
       "demo": "查看同一条 knowledge-backed session 的 persisted `voice_policy_snapshot`，可以回答是否发生检索、查了什么、返回了多少结果、为什么 miss 或失败。",
       "created_at": "2026-03-29T13:57:33.465Z",
-      "completed_at": null,
-      "full_summary_md": "",
-      "full_uat_md": "",
+      "completed_at": "2026-03-29T16:45:01.285Z",
+      "full_summary_md": "---\nid: S01\nparent: M008\nmilestone: M008\nprovides:\n  - Provider-neutral retrieval ledger entries persisted in voice_policy_snapshot.runtime_metrics.knowledge_retrieval.recent_attempts\n  - Backward-compatible flat knowledge metrics (last_status, last_query, last_result_count, etc.) preserved alongside the ledger\n  - Read-side fallback in build_session_runtime_diagnostics that enriches diagnostics from the ledger when flat fields are stale\nrequires:\n  []\naffects:\n  - S02\nkey_files:\n  - backend/src/sales_bot/websocket/components/stepfun_knowledge_helpers.py\n  - backend/src/sales_bot/websocket/components/stepfun_helpers.py\n  - backend/src/sales_bot/websocket/components/stepfun_internal_knowledge_searcher.py\n  - backend/src/sales_bot/websocket/components/stepfun_runtime_metrics_helpers.py\n  - backend/src/sales_bot/websocket/stepfun_realtime_handler.py\n  - backend/src/common/conversation/runtime_diagnostics.py\n  - backend/tests/unit/test_stepfun_knowledge_helpers.py\n  - backend/tests/unit/test_stepfun_internal_knowledge_searcher.py\n  - backend/tests/unit/test_stepfun_runtime_metrics_helpers.py\n  - backend/tests/unit/test_stepfun_realtime_handler.py\n  - backend/tests/unit/test_runtime_diagnostics_knowledge_retrieval.py\n  - backend/tests/integration/test_voice_runtime_session_snapshot.py\n  - backend/tests/contract/test_practice_evidence_contract.py\nkey_decisions:\n  - Reused the existing knowledge runtime-metrics seam as the only persistence channel for retrieval ledger entries (D118).\n  - Rejected malformed persisted recent_attempts payloads at snapshot-merge time so invalid ledger state does not half-write PracticeSession.voice_policy_snapshot.\n  - Prefer the latest valid runtime_metrics.knowledge_retrieval.recent_attempts entry only as a fallback for missing or stale flat last_* fields (D119).\n  - Keep the read-side fix inside build_session_runtime_diagnostics instead of adding a new audit route or changing report/replay payloads.\n  - Normalize away optional agent_persona_override_config:null in contract assertions so snapshot-ref tests keep checking the real immutability invariant.\npatterns_established:\n  - Provider-neutral retrieval ledger: every internal knowledge search outcome is normalized to one bounded ledger_event before persistence, independent of the underlying search provider.\n  - Copy-on-write snapshot merges: runtime-metrics writes deep-copy the knowledge_retrieval subtree before mutation, so the original snapshot object is never modified in place.\n  - Read-side ledger fallback: diagnostics prefer flat last_* fields first, then fall back to the latest valid recent_attempts entry only when those fields are missing or stale.\nobservability_surfaces:\n  - voice_policy_snapshot.runtime_metrics.knowledge_retrieval.recent_attempts — persisted bounded ledger visible on current session snapshot/detail routes\ndrill_down_paths:\n  - milestones/M008/slices/S01/tasks/T01-SUMMARY.md\n  - milestones/M008/slices/S01/tasks/T02-SUMMARY.md\n  - milestones/M008/slices/S01/tasks/T03-SUMMARY.md\nduration: \"\"\nverification_result: passed\ncompleted_at: 2026-03-29T16:45:01.291Z\nblocker_discovered: false\n---\n\n# S01: 会话检索账本落库\n\n**Provider-neutral retrieval ledger events are now persisted in session voice_policy_snapshot and readable on current session routes, with backward-compatible flat metrics and copy-on-write snapshot semantics.**\n\n## What Happened\n\nS01 delivered the first layer of auditable retrieval truth for knowledge-backed sales sessions. The work spanned three tasks:\n\n**T01 (absorbed into T02):** The original T01 executor left no implementation, so T02 pulled the helper/searcher normalization work into its own unit. The search-helper layer now builds one bounded provider-neutral `ledger_event` for every internal retrieval outcome — missing query, no KB bound, KB not ready, miss, hit, and failure. Each event carries normalized query text, status, result count, retrieval mode, error summary, and bounded transformed result summaries. 28 focused helper/searcher tests prove normalization, trimming, and truthful event creation.\n\n**T02:** Wired the normalized ledger events through the existing `apply_knowledge_runtime_metric(...)` and `StepFunRealtimeHandler._record_knowledge_runtime_metric(...)` persistence path. The `merge_runtime_metrics_snapshot(...)` helper deep-copies knowledge metrics into a new snapshot object (copy-on-write), rejects malformed persisted `recent_attempts` payloads at merge time, and keeps existing flat counters readable. 69 runtime-metrics and handler tests prove copy-on-write persistence, bounded ledger retention, and the preexisting warning-only failure surface when persistence raises after in-memory updates.\n\n**T03:** Closed the read-side gap. `build_session_runtime_diagnostics(...)` now falls back to the latest valid `knowledge_retrieval.recent_attempts` entry when flat `last_*` fields are missing or stale, scanning backwards and skipping malformed entries. Integration and contract suites prove the ledger is visible on current session/detail surfaces while `voice_policy_snapshot_ref` stays frozen across detail/report/replay reads. 24 tests green across unit, integration, and contract levels.\n\nTotal verification: 121 tests across three focused packs, all passing. No new routes, tables, or report payload changes — S01 proof stays on current session snapshot/detail surfaces as planned.\n\n## Verification\n\nAll three task-level verification packs pass:\n1. T01/T02 helper+searcher pack: 28 tests green — normalization, trimming, hit/miss/failure event creation\n2. T02 runtime-metrics+handler pack: 69 tests green — copy-on-write persistence, bounded ledger, warning-only failure surface\n3. T03 read-side pack: 24 tests green — ledger-backed diagnostics fallback, route-level integration, contract-level frozen-ref proof\n\nNo new routes, tables, or report payload changes introduced. Existing flat metrics remain backward-compatible.\n\n## Requirements Advanced\n\nNone.\n\n## Requirements Validated\n\nNone.\n\n## New Requirements Surfaced\n\nNone.\n\n## Requirements Invalidated or Re-scoped\n\nNone.\n\n## Deviations\n\nT02 absorbed the unfinished T01 helper/searcher normalization work because T02 had no ledger_event payload to persist without it. The deviation stayed inside the same slice boundary and did not widen into T03 route-reader work.\n\n## Known Limitations\n\nFocused pytest still emits existing pytest-cov warnings about `Module src was never imported` / `No data was collected`; the targeted packs themselves pass. The ledger is only readable through current session diagnostics and detail routes — report/replay knowledge-check alignment is S02 scope.\n\n## Follow-ups\n\nS02 should now extend the retrieval ledger read side to knowledge-check and report routes, proving they return consistent retrieval facts against the same persisted snapshot. S03 should then surface the ledger on the report page UI.\n\n## Files Created/Modified\n\n- `backend/src/sales_bot/websocket/components/stepfun_knowledge_helpers.py` — Added provider-neutral ledger_event normalization for hit/miss/failure/kb-not-ready/no-kb/missing-query paths\n- `backend/src/sales_bot/websocket/components/stepfun_helpers.py` — Extended helper utilities to carry richer retrieval event payloads\n- `backend/src/sales_bot/websocket/components/stepfun_internal_knowledge_searcher.py` — Searcher now builds bounded ledger events from transformed search results for all outcome paths\n- `backend/src/sales_bot/websocket/components/stepfun_runtime_metrics_helpers.py` — Runtime-metrics merge now deep-copies knowledge_retrieval subtree and rejects malformed recent_attempts at merge time\n- `backend/src/sales_bot/websocket/stepfun_realtime_handler.py` — Handler passes normalized ledger_event through existing _record_knowledge_runtime_metric path with warning-only failure surface\n- `backend/src/common/conversation/runtime_diagnostics.py` — Added bounded fallback that scans recent_attempts backwards to fill missing/stale flat last_* fields\n- `backend/tests/unit/test_stepfun_knowledge_helpers.py` — Tests for helper-level normalization of query, rerank params, and KB binding\n- `backend/tests/unit/test_stepfun_internal_knowledge_searcher.py` — Tests for searcher-level ledger event creation across all outcome paths\n- `backend/tests/unit/test_stepfun_runtime_metrics_helpers.py` — Tests for copy-on-write persistence, bounded ledger retention, and malformed rejection\n- `backend/tests/unit/test_stepfun_realtime_handler.py` — Tests for handler-level persistence with warning-only failure surface\n- `backend/tests/unit/test_runtime_diagnostics_knowledge_retrieval.py` — Tests for read-side ledger fallback when flat fields are missing or stale\n- `backend/tests/integration/test_voice_runtime_session_snapshot.py` — Integration tests proving ledger visible on current session/detail surfaces with frozen ref\n- `backend/tests/contract/test_practice_evidence_contract.py` — Contract tests proving voice_policy_snapshot_ref immutability across runtime-metrics churn\n",
+      "full_uat_md": "# S01: 会话检索账本落库 — UAT\n\n**Milestone:** M008\n**Written:** 2026-03-29T16:45:01.293Z\n\n# S01 UAT: 会话检索账本落库\n\n## Preconditions\n- Backend venv active with all dependencies installed\n- No external services required (all tests use in-memory mocks/fixtures)\n\n## Test Case 1: Provider-neutral ledger normalization — hit path\n\n**Objective:** Verify that a successful internal knowledge search produces a bounded ledger event with correct fields.\n\n**Steps:**\n1. Run: `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/test_stepfun_internal_knowledge_searcher.py::test_search_internal_knowledge_records_hit_ledger_event_from_transformed_results -v`\n2. Confirm exit code 0\n\n**Expected outcome:** Test passes, proving the hit ledger event contains normalized query, status=`hit`, result_count > 0, retrieval_mode, and bounded result summaries.\n\n## Test Case 2: Provider-neutral ledger normalization — miss path\n\n**Objective:** Verify that an empty search result produces a truthful miss ledger event.\n\n**Steps:**\n1. Run: `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/test_stepfun_internal_knowledge_searcher.py::test_search_internal_knowledge_records_miss_ledger_event_with_empty_results -v`\n2. Confirm exit code 0\n\n**Expected outcome:** Test passes, proving the miss event has status=`miss`, result_count=0, and empty result summaries.\n\n## Test Case 3: Provider-neutral ledger normalization — failure paths\n\n**Objective:** Verify that missing query, no KB, KB not ready, search failure, and unexpected exception all produce safe bounded failure/no-op events.\n\n**Steps:**\n1. Run: `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/test_stepfun_internal_knowledge_searcher.py -k \"missing_query or no_kb or kb_not_ready or search_failed or unexpected_exception\" -v`\n2. Confirm exit code 0\n\n**Expected outcome:** All tests pass, each producing a truthful ledger event (no raw provider payloads, no unbounded data).\n\n## Test Case 4: Copy-on-write snapshot persistence\n\n**Objective:** Verify that ledger persistence deep-copies the snapshot and never mutates the original object.\n\n**Steps:**\n1. Run: `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/test_stepfun_runtime_metrics_helpers.py -v`\n2. Confirm exit code 0\n\n**Expected outcome:** All tests pass, including copy-on-write verification tests that prove the original snapshot object is unchanged after a merge.\n\n## Test Case 5: Handler warning-only failure surface\n\n**Objective:** Verify that persistence failures in the handler log a warning but do not crash or change training session status.\n\n**Steps:**\n1. Run: `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/test_stepfun_realtime_handler.py -k \"knowledge_runtime\" -v`\n2. Confirm exit code 0\n\n**Expected outcome:** Tests pass proving handler catches persistence errors, logs warnings, and keeps the training session running.\n\n## Test Case 6: Read-side ledger fallback\n\n**Objective:** Verify that diagnostics fall back to the latest valid recent_attempts entry when flat fields are stale.\n\n**Steps:**\n1. Run: `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/test_runtime_diagnostics_knowledge_retrieval.py -v`\n2. Confirm exit code 0\n\n**Expected outcome:** Tests pass proving that when flat last_* fields are missing or stale, the latest valid ledger entry fills the gap truthfully.\n\n## Test Case 7: Route-level frozen ref proof\n\n**Objective:** Verify that runtime-metrics churn does not change voice_policy_snapshot_ref across detail/report/replay reads.\n\n**Steps:**\n1. Run: `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/integration/test_voice_runtime_session_snapshot.py backend/tests/contract/test_practice_evidence_contract.py -v`\n2. Confirm exit code 0\n\n**Expected outcome:** All tests pass, including snapshot-ref immutability assertions and route-level contract proofs.\n\n## Test Case 8: Full regression pack\n\n**Objective:** Run the entire S01 verification suite to confirm nothing regresses.\n\n**Steps:**\n1. Run: `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/test_stepfun_knowledge_helpers.py backend/tests/unit/test_stepfun_internal_knowledge_searcher.py backend/tests/unit/test_stepfun_runtime_metrics_helpers.py backend/tests/unit/test_stepfun_realtime_handler.py backend/tests/unit/test_runtime_diagnostics_knowledge_retrieval.py backend/tests/integration/test_voice_runtime_session_snapshot.py backend/tests/contract/test_practice_evidence_contract.py`\n2. Confirm exit code 0\n\n**Expected outcome:** All 121 tests pass. No regressions in existing flat metrics, snapshot semantics, or route contracts.\n\n## Edge Cases Covered\n- Malformed persisted recent_attempts are rejected at merge time\n- Ledger cap is enforced on repeated writes\n- Missing query, no KB, KB not ready, search failure, and unexpected exception all produce bounded truthful events\n- Stale flat fields are correctly overridden by valid ledger entries\n- Frozen snapshot ref survives runtime-metrics churn\n",
       "goal": "在不引入新表或新路由的前提下，把每次 StepFun 内部知识检索的 provider-neutral retrieval ledger 落进 `practice_sessions.voice_policy_snapshot.runtime_metrics.knowledge_retrieval`，让同一条 knowledge-backed session 的 persisted snapshot 能回答是否触发检索、何时检索、查了什么、命中了什么、为什么 miss 或失败。",
       "success_criteria": "## Must-Haves\n- Persist a bounded, provider-neutral retrieval ledger inside `voice_policy_snapshot.runtime_metrics.knowledge_retrieval` without adding a new table or route.\n- Keep existing flat metrics (`attempt_count`, `hit_query_count`, `total_results`, `last_status`, `last_error`) backward-compatible for current `knowledge-check` readers.\n- The persisted snapshot must record enough bounded facts to answer whether retrieval happened, what query ran, what result summaries came back, and why miss/failure happened.\n- `voice_policy_snapshot_ref` must remain stable while runtime metrics mutate.\n\n## Threat Surface\n- **Abuse**: repeated retrieval attempts or oversized result payloads must not bloat the session snapshot; the ledger must stay bounded and normalized.\n- **Data exposure**: persist only provider-neutral query/result summaries that are already safe for session diagnostics; do not persist embeddings, raw provider payloads, or secrets.\n- **Input trust**: query text and KB search results are untrusted runtime inputs and must be truncated/normalized before snapshot persistence.\n\n## Requirement Impact\n- **Requirements touched**: R002, R010, R011.\n- **Re-verify**: StepFun internal retrieval persistence, session detail snapshot reads, existing `knowledge-check` status derivation, and `voice_policy_snapshot_ref` stability on current routes.\n- **Decisions revisited**: D113, D115, D116.\n\n## Verification\n- `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/test_stepfun_knowledge_helpers.py backend/tests/unit/test_stepfun_internal_knowledge_searcher.py`\n- `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/test_stepfun_runtime_metrics_helpers.py backend/tests/unit/test_stepfun_realtime_handler.py`\n- `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/test_runtime_diagnostics_knowledge_retrieval.py backend/tests/integration/test_voice_runtime_session_snapshot.py backend/tests/contract/test_practice_evidence_contract.py`",
       "proof_level": "Contract + integration. Focused unit tests must prove ledger normalization/persistence and focused integration/contract tests must prove the persisted snapshot stays readable on existing session routes. Real runtime and human UAT are not required in S01.",
@@ -1066,11 +1066,11 @@
       "completed_at": null,
       "full_summary_md": "",
       "full_uat_md": "",
-      "goal": "让 `/knowledge-check` 和 canonical report 通过 `runtime_diagnostics` + `SessionEvidenceService` 读取同一条 persisted retrieval ledger，并对同一 session 给出一致解释。",
-      "success_criteria": "- `build_session_runtime_diagnostics(...)` 输出 retrieval audit/summary，不再只停在 status 与聚合计数。\n- `SessionEvidenceService.build_projection(...)` 或其 shared snapshot seam 暴露 report-facing retrieval facts，且事实来源就是 persisted ledger。\n- 同一条 session 的 `/knowledge-check` 与 canonical `/report` 在 retrieval happened / hit / miss / failure / weak evidence 上保持一致。",
-      "proof_level": "Backend contract, integration, and projection-level proof across the shared read seams.",
-      "integration_closure": "继续以 `backend/src/common/api/practice.py` 为 shipped route family 入口，以 `SessionEvidenceService` 为 report authority，不新建 report-only retrieval source。",
-      "observability_impact": "knowledge-check 与 report 的 retrieval truth 从“各说各话”收口为同一条 persisted evidence line。",
+      "goal": "对同一条 completed sales session 连续请求 /api/v1/practice/sessions/{id}/knowledge-check 和 /api/v1/practice/sessions/{id}/report，两边返回一致的 retrieval 事实与分层解释：是否触发检索、何时检索、命中了什么、为什么 miss 或失败。",
+      "success_criteria": "- Shared retrieval-truth read model (build_retrieval_facts) normalizes persisted ledger entries once and is reused by both projection and diagnostics.\n- SessionEvidenceService.build_projection(...) attaches effectiveness_snapshot[\"retrieval_facts\"] for completed sales sessions, derived from voice_policy_snapshot.runtime_metrics.knowledge_retrieval, without mutating the persisted session row.\n- build_session_runtime_diagnostics(...) exposes a top-level retrieval_facts field that prefers the projection's shared payload for completed sales sessions.\n- Same-session contract test proves /knowledge-check and /report return identical retrieval_facts for the same completed session.\n- claim_truth and retrieval_facts remain distinct — retrieval_facts covers retrieval occurrence/hit/miss/failure; claim_truth covers claim support strength.\n- No frontend changes; nested retrieval_facts stays inside the existing dict-shaped effectiveness_snapshot.",
+      "proof_level": "contract",
+      "integration_closure": "- Upstream surfaces consumed: voice_policy_snapshot.runtime_metrics.knowledge_retrieval.recent_attempts (S01), existing knowledge-check route glue, existing report projection seam.\n- New wiring introduced: build_retrieval_facts(...) shared normalizer, projection attachment in build_projection(...), diagnostics reuse of projected retrieval_facts.\n- What remains: S03 renders retrieval_facts on the report page UI.",
+      "observability_impact": "- Structured retrieval_facts now appears in both report and knowledge-check responses, giving future agents a consistent place to inspect \"did retrieval happen, what was returned, why did it miss/fail\".\n- The shared normalizer logs nothing on its own; projection attachment adds an info-level log with retrieval_facts_available=True/False.\n- Failure visibility: if voice_policy_snapshot or runtime_metrics are malformed, retrieval_facts gracefully degrades to null rather than failing the entire report/knowledge-check response.",
       "sequence": 0,
       "replan_triggered_at": null
     },
@@ -5249,6 +5249,160 @@
       "observability_impact": "Signals added/changed: current session detail / knowledge-check readers can inspect the persisted ledger without losing legacy counter-based status summaries. How a future agent inspects this: compare `GET /api/v1/practice/sessions/{id}` and `GET /api/v1/practice/sessions/{id}/knowledge-check` for the same completed session, or rerun the focused integration/contract pack. Failure state exposed: whether richer runtime metrics can still be read consistently on existing session routes or whether snapshot/ref drift reappears.",
       "full_plan_md": "",
       "sequence": 0
+    },
+    {
+      "milestone_id": "M008",
+      "slice_id": "S02",
+      "id": "T01",
+      "title": "Add build_retrieval_facts() shared read model that preserves knowledge_base_ids and result_summaries from persisted ledger",
+      "status": "complete",
+      "one_liner": "Add build_retrieval_facts() shared read model that preserves knowledge_base_ids and result_summaries from persisted ledger",
+      "narrative": "Implemented `build_retrieval_facts(voice_policy_snapshot)` as a pure function in `runtime_diagnostics.py` — the single normalization point for retrieval truth. Added `_normalize_retrieval_attempt_full()` that preserves `knowledge_base_ids` (bounded to 8) and `result_summaries` (bounded to 3, snippet ≤ 240 chars), closing the key gap vs the existing lean normalizer. Extracted `_derive_retrieval_status_and_summary()` to deduplicate the status/summary if-else block between the new function and existing `build_session_runtime_diagnostics`. Added 17 unit tests covering hit/miss/failure/empty/malformed/bounded/disabled/no-kb/not-ready scenarios. All 20 tests (3 existing + 17 new) pass.",
+      "verification_result": "Ran `cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_runtime_diagnostics_knowledge_retrieval.py -v` — all 20 tests pass (exit code 0, 2.92s).",
+      "duration": "",
+      "completed_at": "2026-03-29T17:16:43.530Z",
+      "blocker_discovered": false,
+      "deviations": "None.",
+      "known_issues": "None.",
+      "key_files": [
+        "backend/src/common/conversation/runtime_diagnostics.py",
+        "backend/tests/unit/test_runtime_diagnostics_knowledge_retrieval.py"
+      ],
+      "key_decisions": [
+        "Extracted _derive_retrieval_status_and_summary() to prevent vocabulary drift between build_retrieval_facts and build_session_runtime_diagnostics",
+        "Replicated bounds from stepfun_knowledge_helpers (MAX 10 entries, 8 KB IDs, 3 summaries, 240-char snippet) as module-level constants with comments referencing the source"
+      ],
+      "full_summary_md": "---\nid: T01\nparent: S02\nmilestone: M008\nkey_files:\n  - backend/src/common/conversation/runtime_diagnostics.py\n  - backend/tests/unit/test_runtime_diagnostics_knowledge_retrieval.py\nkey_decisions:\n  - Extracted _derive_retrieval_status_and_summary() to prevent vocabulary drift between build_retrieval_facts and build_session_runtime_diagnostics\n  - Replicated bounds from stepfun_knowledge_helpers (MAX 10 entries, 8 KB IDs, 3 summaries, 240-char snippet) as module-level constants with comments referencing the source\nduration: \"\"\nverification_result: passed\ncompleted_at: 2026-03-29T17:16:43.531Z\nblocker_discovered: false\n---\n\n# T01: Add build_retrieval_facts() shared read model that preserves knowledge_base_ids and result_summaries from persisted ledger\n\n**Add build_retrieval_facts() shared read model that preserves knowledge_base_ids and result_summaries from persisted ledger**\n\n## What Happened\n\nImplemented `build_retrieval_facts(voice_policy_snapshot)` as a pure function in `runtime_diagnostics.py` — the single normalization point for retrieval truth. Added `_normalize_retrieval_attempt_full()` that preserves `knowledge_base_ids` (bounded to 8) and `result_summaries` (bounded to 3, snippet ≤ 240 chars), closing the key gap vs the existing lean normalizer. Extracted `_derive_retrieval_status_and_summary()` to deduplicate the status/summary if-else block between the new function and existing `build_session_runtime_diagnostics`. Added 17 unit tests covering hit/miss/failure/empty/malformed/bounded/disabled/no-kb/not-ready scenarios. All 20 tests (3 existing + 17 new) pass.\n\n## Verification\n\nRan `cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_runtime_diagnostics_knowledge_retrieval.py -v` — all 20 tests pass (exit code 0, 2.92s).\n\n## Verification Evidence\n\n| # | Command | Exit Code | Verdict | Duration |\n|---|---------|-----------|---------|----------|\n| 1 | `cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_runtime_diagnostics_knowledge_retrieval.py -v` | 0 | ✅ pass | 2920ms |\n\n\n## Deviations\n\nNone.\n\n## Known Issues\n\nNone.\n\n## Files Created/Modified\n\n- `backend/src/common/conversation/runtime_diagnostics.py`\n- `backend/tests/unit/test_runtime_diagnostics_knowledge_retrieval.py`\n",
+      "description": "Create a pure build_retrieval_facts(...) function in runtime_diagnostics.py that reads from persisted voice_policy_snapshot.runtime_metrics.knowledge_retrieval and produces a structured retrieval_facts dict. This normalizer is the single source of truth for how retrieval ledger entries become structured retrieval facts. It preserves knowledge_base_ids and result_summaries (which the existing _normalize_knowledge_retrieval_attempt drops), normalizes KB binding, latest attempt, bounded recent attempts, and structured miss/failure explanations. Include comprehensive unit tests.",
+      "estimate": "45m",
+      "files": [
+        "backend/src/common/conversation/runtime_diagnostics.py",
+        "backend/tests/unit/test_runtime_diagnostics_knowledge_retrieval.py"
+      ],
+      "verify": "cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_runtime_diagnostics_knowledge_retrieval.py -v",
+      "inputs": [
+        "backend/src/common/conversation/runtime_diagnostics.py",
+        "backend/src/sales_bot/websocket/components/stepfun_knowledge_helpers.py",
+        "backend/tests/unit/test_runtime_diagnostics_knowledge_retrieval.py"
+      ],
+      "expected_output": [
+        "backend/src/common/conversation/runtime_diagnostics.py",
+        "backend/tests/unit/test_runtime_diagnostics_knowledge_retrieval.py"
+      ],
+      "observability_impact": "",
+      "full_plan_md": "",
+      "sequence": 0
+    },
+    {
+      "milestone_id": "M008",
+      "slice_id": "S02",
+      "id": "T02",
+      "title": "Attach retrieval_facts into report projection for sales sessions",
+      "status": "pending",
+      "one_liner": "",
+      "narrative": "",
+      "verification_result": "",
+      "duration": "",
+      "completed_at": null,
+      "blocker_discovered": false,
+      "deviations": "",
+      "known_issues": "",
+      "key_files": [],
+      "key_decisions": [],
+      "full_summary_md": "",
+      "description": "Wire the shared build_retrieval_facts(...) into SessionEvidenceService.build_projection(...) so that completed sales sessions get effectiveness_snapshot[\"retrieval_facts\"] derived from voice_policy_snapshot.runtime_metrics.knowledge_retrieval. This must be a projection-only overlay (read-time augmentation, not persisted back). Add unit tests proving the field appears in projection.effectiveness_snapshot and that the persisted session.effectiveness_snapshot is not mutated.",
+      "estimate": "30m",
+      "files": [
+        "backend/src/common/conversation/session_evidence.py",
+        "backend/tests/unit/test_session_evidence_service.py"
+      ],
+      "verify": "cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_session_evidence_service.py -v -k 'retrieval_facts'",
+      "inputs": [
+        "backend/src/common/conversation/session_evidence.py",
+        "backend/src/common/conversation/runtime_diagnostics.py",
+        "backend/tests/unit/test_session_evidence_service.py"
+      ],
+      "expected_output": [
+        "backend/src/common/conversation/session_evidence.py",
+        "backend/tests/unit/test_session_evidence_service.py"
+      ],
+      "observability_impact": "",
+      "full_plan_md": "",
+      "sequence": 0
+    },
+    {
+      "milestone_id": "M008",
+      "slice_id": "S02",
+      "id": "T03",
+      "title": "Make knowledge-check reuse projected retrieval_facts for completed sessions",
+      "status": "pending",
+      "one_liner": "",
+      "narrative": "",
+      "verification_result": "",
+      "duration": "",
+      "completed_at": null,
+      "blocker_discovered": false,
+      "deviations": "",
+      "known_issues": "",
+      "key_files": [],
+      "key_decisions": [],
+      "full_summary_md": "",
+      "description": "Extend build_session_runtime_diagnostics(...) so that when projection_effectiveness_snapshot already contains retrieval_facts (i.e., the route has already resolved a completed-session projection), the diagnostics response includes that same retrieval_facts payload as a top-level field. Keep all existing backward-compatible fields (status, summary, last_*, recent_queries, etc.) unchanged. The live-session path remains unchanged. Add unit tests proving reuse and backward compatibility.",
+      "estimate": "30m",
+      "files": [
+        "backend/src/common/conversation/runtime_diagnostics.py",
+        "backend/tests/unit/test_runtime_diagnostics_knowledge_retrieval.py"
+      ],
+      "verify": "cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_runtime_diagnostics_knowledge_retrieval.py -v -k 'retrieval_facts'",
+      "inputs": [
+        "backend/src/common/conversation/runtime_diagnostics.py",
+        "backend/tests/unit/test_runtime_diagnostics_knowledge_retrieval.py"
+      ],
+      "expected_output": [
+        "backend/src/common/conversation/runtime_diagnostics.py",
+        "backend/tests/unit/test_runtime_diagnostics_knowledge_retrieval.py"
+      ],
+      "observability_impact": "",
+      "full_plan_md": "",
+      "sequence": 0
+    },
+    {
+      "milestone_id": "M008",
+      "slice_id": "S02",
+      "id": "T04",
+      "title": "Contract/integration proof: same-session retrieval facts parity",
+      "status": "pending",
+      "one_liner": "",
+      "narrative": "",
+      "verification_result": "",
+      "duration": "",
+      "completed_at": null,
+      "blocker_discovered": false,
+      "deviations": "",
+      "known_issues": "",
+      "key_files": [],
+      "key_decisions": [],
+      "full_summary_md": "",
+      "description": "Add contract and integration tests proving that the same completed sales session returns consistent retrieval_facts through both GET /api/v1/practice/sessions/{id}/knowledge-check and GET /api/v1/practice/sessions/{id}/report. The contract test uses mock sessions with populated voice_policy_snapshot.runtime_metrics.knowledge_retrieval.recent_attempts and asserts the retrieval_facts payloads are structurally identical. The integration test extends the existing test_voice_runtime_session_snapshot.py suite. Also verify that claim_truth and retrieval_facts remain distinct — a session with retrieval hits can still have claim_truth=weak_evidence.",
+      "estimate": "30m",
+      "files": [
+        "backend/tests/contract/test_practice_evidence_contract.py",
+        "backend/tests/integration/test_voice_runtime_session_snapshot.py"
+      ],
+      "verify": "cd backend && venv/bin/python -m pytest -c pyproject.toml tests/contract/test_practice_evidence_contract.py tests/integration/test_voice_runtime_session_snapshot.py -v -k 'retrieval_facts'",
+      "inputs": [
+        "backend/src/common/conversation/runtime_diagnostics.py",
+        "backend/src/common/conversation/session_evidence.py",
+        "backend/tests/contract/test_practice_evidence_contract.py",
+        "backend/tests/integration/test_voice_runtime_session_snapshot.py"
+      ],
+      "expected_output": [
+        "backend/tests/contract/test_practice_evidence_contract.py",
+        "backend/tests/integration/test_voice_runtime_session_snapshot.py"
+      ],
+      "observability_impact": "",
+      "full_plan_md": "",
+      "sequence": 0
     }
   ],
   "decisions": [
@@ -8804,6 +8958,17 @@
       "verdict": "✅ pass",
       "duration_ms": 4710,
       "created_at": "2026-03-29T16:33:41.599Z"
+    },
+    {
+      "id": 194,
+      "task_id": "T01",
+      "slice_id": "S02",
+      "milestone_id": "M008",
+      "command": "cd backend && venv/bin/python -m pytest -c pyproject.toml tests/unit/test_runtime_diagnostics_knowledge_retrieval.py -v",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 2920,
+      "created_at": "2026-03-29T17:16:43.530Z"
     }
   ]
 }
