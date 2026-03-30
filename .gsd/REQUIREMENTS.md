@@ -26,17 +26,6 @@ This file is the explicit capability and coverage contract for the project.
 - Validation: mapped
 - Notes: 第一阶段不追求所有 report conclusion 都可追溯，只先把 retrieval truth line 统一。
 
-### R027 — 报告关键结论必须有出处，能够回到 transcript / retrieval / audio evidence，而不是只输出“像真的”结论。
-- Class: launchability
-- Status: active
-- Description: 报告关键结论必须有出处，能够回到 transcript / retrieval / audio evidence，而不是只输出“像真的”结论。
-- Why it matters: 这是避免“假可信报告”的核心 requirement；没有出处，用户无法判断报告是否值得信任。
-- Source: user
-- Primary owning slice: M010/S01
-- Supporting slices: M010/S02, M010/S03
-- Validation: mapped
-- Notes: 这条 requirement 建立在 M008 的 retrieval truth 与 M009 的音频留痕之上，不应先用 prompt 文案或 UI 包装来伪装完成。
-
 ### R028 — 当 retrieval / audio / transcript / enhanced-report 任一层降级时，系统必须分层说明原因，避免形成假可信报告。
 - Class: failure-visibility
 - Status: active
@@ -248,6 +237,17 @@ This file is the explicit capability and coverage contract for the project.
 - Validation: Validated by M009 close-out: canonical learner report and replay routes now expose `audio_audit` with recording status, segment counts, degraded states, and playable raw-audio evidence through the shared `AudioAuditCard` and signed playback handoff route. Fresh verification passed backend contract/integration coverage for available/partial/null payloads and playback ownership, plus web report/replay page suites on the current branch.
 - Notes: 第一阶段默认至少支持现有 replay/report 路径中的可播放/可反查，不要求先开放任意导出下载。
 
+### R027 — 报告关键结论必须有出处，能够回到 transcript / retrieval / audio evidence，而不是只输出“像真的”结论。
+- Class: launchability
+- Status: validated
+- Description: 报告关键结论必须有出处，能够回到 transcript / retrieval / audio evidence，而不是只输出“像真的”结论。
+- Why it matters: 这是避免“假可信报告”的核心 requirement；没有出处，用户无法判断报告是否值得信任。
+- Source: user
+- Primary owning slice: M010/S01
+- Supporting slices: M010/S02, M010/S03
+- Validation: Validated by M010/S01 completion. T01 built `build_conclusion_evidence_bundle()` inside `SessionEvidenceService.build_projection()` and threaded it into report and replay routes. T02 mirrored the same projection-backed evidence into knowledge-check via `build_session_runtime_diagnostics()` and locked cross-route parity with dedicated contract tests (`test_conclusion_evidence_parity.py`). 83/83 backend contract tests pass, including 3 parity tests asserting report/replay/knowledge-check produce identical `conclusion_evidence` for happy-path, degraded, and presentation sessions.
+- Notes: 这条 requirement 建立在 M008 的 retrieval truth 与 M009 的音频留痕之上，不应先用 prompt 文案或 UI 包装来伪装完成。
+
 ## Deferred
 
 ### R016 — 在 PPT 对练过程中实时识别讲偏、讲错、讲太多并当场打断纠偏。
@@ -348,12 +348,12 @@ This file is the explicit capability and coverage contract for the project.
 | R024 | continuity | validated | M009/S01 | M009/S02, M009/S03 | Validated by M009 close-out: S01 delivered browser-direct OSS upload with `OssSigningService`, `SessionAudioSegment`, sign/register/list APIs, practice-page `useContinuousAudioUploader`, and persisted `voice_policy_snapshot.runtime_metrics.audio_audit`; S02/S03 carried that chain through report/replay playback and degraded states. Fresh close-out verification reran backend OSS/audio-audit/replay/runtime suites (122/122 passed) and web uploader/report/replay/API-client suites (50/50 passed). |
 | R025 | operability | validated | M009/S01 | M009/S02 | Validated by M009 close-out: the shipped implementation keeps audio transfer browser-direct to OSS while FastAPI only signs PUT/GET URLs, registers metadata, and enforces ownership. Evidence includes `backend/src/common/oss/signing.py`, audio sign/register/playback handoff routes, non-persistence of signed URLs, and fresh backend/web verification for signed playback redirect, 403/404 ownership boundaries, uploader flow, and report/replay playback consumers. |
 | R026 | primary-user-loop | validated | M009/S02 | M009/S03, M010/S01 | Validated by M009 close-out: canonical learner report and replay routes now expose `audio_audit` with recording status, segment counts, degraded states, and playable raw-audio evidence through the shared `AudioAuditCard` and signed playback handoff route. Fresh verification passed backend contract/integration coverage for available/partial/null payloads and playback ownership, plus web report/replay page suites on the current branch. |
-| R027 | launchability | active | M010/S01 | M010/S02, M010/S03 | mapped |
+| R027 | launchability | validated | M010/S01 | M010/S02, M010/S03 | Validated by M010/S01 completion. T01 built `build_conclusion_evidence_bundle()` inside `SessionEvidenceService.build_projection()` and threaded it into report and replay routes. T02 mirrored the same projection-backed evidence into knowledge-check via `build_session_runtime_diagnostics()` and locked cross-route parity with dedicated contract tests (`test_conclusion_evidence_parity.py`). 83/83 backend contract tests pass, including 3 parity tests asserting report/replay/knowledge-check produce identical `conclusion_evidence` for happy-path, degraded, and presentation sessions. |
 | R028 | failure-visibility | active | M010/S02 | M010/S03, M008/S03, M009/S03 | mapped |
 
 ## Coverage Summary
 
-- Active requirements: 4
-- Mapped to slices: 4
-- Validated: 18 (R001, R002, R003, R004, R005, R006, R007, R008, R009, R010, R011, R012, R013, R014, R015, R024, R025, R026)
+- Active requirements: 3
+- Mapped to slices: 3
+- Validated: 19 (R001, R002, R003, R004, R005, R006, R007, R008, R009, R010, R011, R012, R013, R014, R015, R024, R025, R026, R027)
 - Unmapped active requirements: 0

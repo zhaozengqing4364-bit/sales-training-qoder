@@ -77,6 +77,60 @@ def _make_stale_sales_snapshot() -> dict[str, object]:
     }
 
 
+def _make_conclusion_evidence(
+    *,
+    retrieval_available: bool = True,
+    retrieval_reason: str | None = None,
+    transcript_available: bool = True,
+    audio_available: bool = True,
+    audio_reason: str | None = None,
+) -> dict[str, object]:
+    return {
+        "main_issue": {
+            "retrieval_source": {
+                "available": retrieval_available,
+                "reason": None if retrieval_available else retrieval_reason,
+            },
+            "transcript_source": {
+                "available": transcript_available,
+                "turn_count": 1 if transcript_available else 0,
+            },
+            "audio_source": {
+                "available": audio_available,
+                "reason": None if audio_available else audio_reason,
+            },
+        },
+        "next_goal": {
+            "retrieval_source": {
+                "available": retrieval_available,
+                "reason": None if retrieval_available else retrieval_reason,
+            },
+            "transcript_source": {
+                "available": transcript_available,
+                "turn_count": 1 if transcript_available else 0,
+            },
+            "audio_source": {
+                "available": audio_available,
+                "reason": None if audio_available else audio_reason,
+            },
+        },
+        "claim_truth": {
+            "retrieval_source": {
+                "available": retrieval_available,
+                "reason": None if retrieval_available else retrieval_reason,
+            },
+            "transcript_source": {
+                "available": transcript_available,
+                "turn_count": 1 if transcript_available else 0,
+            },
+            "audio_source": {
+                "available": audio_available,
+                "reason": None if audio_available else audio_reason,
+            },
+        },
+    }
+
+
 class TestSessionEvidenceService:
     @pytest.fixture
     def mock_db(self):
@@ -181,20 +235,27 @@ class TestSessionEvidenceService:
         assert projection.evidence_completeness["legacy_score_key_used"] is True
         assert projection.evidence_completeness["complete"] is True
 
-        assert logger.info.call_count == 2
+        assert logger.info.call_count == 3
         first_call = logger.info.call_args_list[0]
         second_call = logger.info.call_args_list[1]
+        third_call = logger.info.call_args_list[2]
 
         assert first_call.args[0] == "projection_conclusion_evidence_built"
         assert first_call.kwargs["retrieval_available"] is False
         assert first_call.kwargs["transcript_available"] is True
         assert first_call.kwargs["audio_available"] is True
 
-        assert second_call.args[0] == "practice_session_evidence_projection_built"
-        assert second_call.kwargs["session_id"] == sample_session_id
-        assert second_call.kwargs["message_count"] == 2
-        assert second_call.kwargs["legacy_score_key_used"] is True
-        assert second_call.kwargs["projection_complete"] is True
+        assert second_call.args[0] == "projection_evidence_degradation_built"
+        assert second_call.kwargs["retrieval_status"] == "degraded"
+        assert second_call.kwargs["transcript_status"] == "ok"
+        assert second_call.kwargs["audio_status"] == "ok"
+        assert second_call.kwargs["enhanced_report_status"] == "ok"
+
+        assert third_call.args[0] == "practice_session_evidence_projection_built"
+        assert third_call.kwargs["session_id"] == sample_session_id
+        assert third_call.kwargs["message_count"] == 2
+        assert third_call.kwargs["legacy_score_key_used"] is True
+        assert third_call.kwargs["projection_complete"] is True
 
     @pytest.mark.asyncio
     async def test_get_projection_falls_back_to_latest_message_scores_when_session_scores_missing(
@@ -338,20 +399,27 @@ class TestSessionEvidenceService:
         assert session.effectiveness_snapshot["main_issue"]["issue_type"] == "value_translation_gap"
         assert session.effectiveness_snapshot["next_goal"]["goal_type"] == "value_to_benefit_translation"
 
-        assert logger.info.call_count == 2
+        assert logger.info.call_count == 3
         first_call = logger.info.call_args_list[0]
         second_call = logger.info.call_args_list[1]
+        third_call = logger.info.call_args_list[2]
 
         assert first_call.args[0] == "projection_conclusion_evidence_built"
         assert first_call.kwargs["retrieval_available"] is False
         assert first_call.kwargs["transcript_available"] is True
         assert first_call.kwargs["audio_available"] is True
 
-        assert second_call.args[0] == "practice_session_evidence_projection_built"
-        assert second_call.kwargs["sales_alignment_used"] is True
-        assert second_call.kwargs["sales_alignment_stage_key"] == "discovery"
-        assert second_call.kwargs["sales_alignment_focus_type"] == "evidence_gap"
-        assert second_call.kwargs["sales_alignment_fallback_reason"] is None
+        assert second_call.args[0] == "projection_evidence_degradation_built"
+        assert second_call.kwargs["retrieval_status"] == "degraded"
+        assert second_call.kwargs["transcript_status"] == "ok"
+        assert second_call.kwargs["audio_status"] == "ok"
+        assert second_call.kwargs["enhanced_report_status"] == "ok"
+
+        assert third_call.args[0] == "practice_session_evidence_projection_built"
+        assert third_call.kwargs["sales_alignment_used"] is True
+        assert third_call.kwargs["sales_alignment_stage_key"] == "discovery"
+        assert third_call.kwargs["sales_alignment_focus_type"] == "evidence_gap"
+        assert third_call.kwargs["sales_alignment_fallback_reason"] is None
 
     @pytest.mark.asyncio
     async def test_get_projection_sales_alignment_preserves_insufficient_sales_evidence_fallback(
@@ -420,20 +488,27 @@ class TestSessionEvidenceService:
         assert projection.evidence_completeness["message_scores"] == 1
         assert projection.evidence_completeness["stage_evidence"] == 1
 
-        assert logger.info.call_count == 2
+        assert logger.info.call_count == 3
         first_call = logger.info.call_args_list[0]
         second_call = logger.info.call_args_list[1]
+        third_call = logger.info.call_args_list[2]
 
         assert first_call.args[0] == "projection_conclusion_evidence_built"
         assert first_call.kwargs["retrieval_available"] is False
         assert first_call.kwargs["transcript_available"] is True
         assert first_call.kwargs["audio_available"] is True
 
-        assert second_call.args[0] == "practice_session_evidence_projection_built"
-        assert second_call.kwargs["sales_alignment_used"] is False
-        assert second_call.kwargs["sales_alignment_stage_key"] == "discovery"
-        assert second_call.kwargs["sales_alignment_focus_type"] is None
-        assert second_call.kwargs["sales_alignment_fallback_reason"] == "missing_dimension_scores"
+        assert second_call.args[0] == "projection_evidence_degradation_built"
+        assert second_call.kwargs["retrieval_status"] == "degraded"
+        assert second_call.kwargs["transcript_status"] == "ok"
+        assert second_call.kwargs["audio_status"] == "ok"
+        assert second_call.kwargs["enhanced_report_status"] == "ok"
+
+        assert third_call.args[0] == "practice_session_evidence_projection_built"
+        assert third_call.kwargs["sales_alignment_used"] is False
+        assert third_call.kwargs["sales_alignment_stage_key"] == "discovery"
+        assert third_call.kwargs["sales_alignment_focus_type"] is None
+        assert third_call.kwargs["sales_alignment_fallback_reason"] == "missing_dimension_scores"
 
     @pytest.mark.asyncio
     async def test_get_projection_prefers_latest_open_objection_ledger_for_sales_issue_and_next_goal(
@@ -984,5 +1059,118 @@ class TestSessionEvidenceService:
                 "retrieval_source": {"available": True, "reason": None},
                 "transcript_source": {"available": True, "turn_count": 1},
                 "audio_source": {"available": True, "reason": None},
+            },
+        }
+
+    def test_build_evidence_degradation_returns_none_for_presentation_sessions(self) -> None:
+        session = SimpleNamespace(report_status=None, report_error=None)
+        conclusion_evidence = {
+            "main_issue": {
+                "retrieval_source": {"available": True, "reason": None},
+                "transcript_source": {"available": True, "turn_count": 1},
+                "audio_source": {"available": True, "reason": None},
+            }
+        }
+
+        assert (
+            SessionEvidenceService._build_evidence_degradation(
+                session=session,
+                conclusion_evidence=conclusion_evidence,
+                scenario_type="presentation",
+            )
+            is None
+        )
+
+    def test_build_evidence_degradation_marks_all_layers_ok_for_happy_path(self) -> None:
+        session = SimpleNamespace(report_status="completed", report_error=None)
+        conclusion_evidence = {
+            "main_issue": {
+                "retrieval_source": {"available": True, "reason": None},
+                "transcript_source": {"available": True, "turn_count": 1},
+                "audio_source": {"available": True, "reason": None},
+            },
+            "next_goal": {
+                "retrieval_source": {"available": True, "reason": None},
+                "transcript_source": {"available": True, "turn_count": 1},
+                "audio_source": {"available": True, "reason": None},
+            },
+            "claim_truth": {
+                "retrieval_source": {"available": True, "reason": None},
+                "transcript_source": {"available": True, "turn_count": 1},
+                "audio_source": {"available": True, "reason": None},
+            },
+        }
+
+        assert SessionEvidenceService._build_evidence_degradation(
+            session=session,
+            conclusion_evidence=conclusion_evidence,
+            scenario_type="sales",
+        ) == {
+            "retrieval": {"status": "ok", "token": "retrieval_ok", "explanation": None},
+            "transcript": {"status": "ok", "token": "transcript_ok", "explanation": None},
+            "audio": {"status": "ok", "token": "audio_ok", "explanation": None},
+            "enhanced_report": {
+                "status": "ok",
+                "token": "enhanced_report_ok",
+                "explanation": None,
+            },
+        }
+
+    def test_build_evidence_degradation_derives_reason_specific_degraded_layers(self) -> None:
+        session = SimpleNamespace(
+            report_status="failed",
+            report_error="REPORT_GENERATION_FAILED",
+        )
+        conclusion_evidence = {
+            "main_issue": {
+                "retrieval_source": {
+                    "available": False,
+                    "reason": "no_voice_policy_snapshot",
+                },
+                "transcript_source": {"available": False, "turn_count": 0},
+                "audio_source": {"available": False, "reason": "no_audio_segments"},
+            },
+            "next_goal": {
+                "retrieval_source": {
+                    "available": False,
+                    "reason": "no_voice_policy_snapshot",
+                },
+                "transcript_source": {"available": False, "turn_count": 0},
+                "audio_source": {"available": False, "reason": "no_audio_segments"},
+            },
+            "claim_truth": {
+                "retrieval_source": {
+                    "available": False,
+                    "reason": "no_voice_policy_snapshot",
+                },
+                "transcript_source": {"available": False, "turn_count": 0},
+                "audio_source": {"available": False, "reason": "no_audio_segments"},
+            },
+        }
+
+        assert SessionEvidenceService._build_evidence_degradation(
+            session=session,
+            conclusion_evidence=conclusion_evidence,
+            scenario_type="sales",
+        ) == {
+            "retrieval": {
+                "status": "degraded",
+                "token": "no_retrieval_facts",
+                "explanation": "no_voice_policy_snapshot",
+            },
+            "transcript": {
+                "status": "degraded",
+                "token": "no_scored_turns",
+                "explanation": "no_scored_turns",
+            },
+            "audio": {
+                "status": "degraded",
+                "token": "no_audio_segments",
+                "explanation": "no_audio_segments",
+            },
+            "enhanced_report": {
+                "status": "degraded",
+                "token": "report_generation_failed",
+                "explanation": "REPORT_GENERATION_FAILED",
             },
         }

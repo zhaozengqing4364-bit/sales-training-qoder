@@ -392,6 +392,7 @@ def build_session_runtime_diagnostics(
     live_runtime_active: bool = False,
     projection_effectiveness_snapshot: dict[str, Any] | None = None,
     conclusion_evidence: dict[str, Any] | None = None,
+    evidence_degradation: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     snapshot = snapshot if isinstance(snapshot, dict) else {}
     tool_policy = snapshot.get("tool_policy")
@@ -667,6 +668,7 @@ def build_session_runtime_diagnostics(
         "upstream_unstable": upstream_unstable,
         "retrieval_facts": retrieval_facts,
         "conclusion_evidence": conclusion_evidence,
+        "evidence_degradation": None if live_runtime_active else evidence_degradation,
     }
 
 

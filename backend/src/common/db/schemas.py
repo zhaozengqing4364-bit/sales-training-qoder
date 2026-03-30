@@ -484,6 +484,7 @@ class SessionReport(BaseModel):
     retry_entry: dict[str, Any] | None = None
     audio_audit: "AudioAuditPayloadSchema | None" = None
     conclusion_evidence: dict[str, Any] | None = None
+    evidence_degradation: dict[str, Any] | None = None
 
 
 # ========== Manager Intervention Schemas ==========

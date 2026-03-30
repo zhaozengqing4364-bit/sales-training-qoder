@@ -1,6 +1,15 @@
 # S02: 统一分层降级分类
 
-**Goal:** Introduce a unified degradation taxonomy that explains which evidence layer is missing and how it affects conclusion credibility, replacing the current scattered degraded_reasons with one consistent model.
+**Goal:** Introduce a unified four-layer degradation taxonomy (retrieval, transcript, audio, enhanced_report) on the existing projection seam, so sessions with partial evidence produce explicit layered degradation tokens that are consistent across report, replay, and knowledge-check.
 **Demo:** After this: After this slice, sessions with partial evidence (missing retrieval, missing audio, or degraded transcript) produce explicit layered degradation tokens that are consistent across report, replay, and knowledge-check.
 
 ## Tasks
+- [x] **T01: Added projection-level evidence_degradation and partial route wiring, but replay parity is still blocked by the replay response schema dropping the new field.** — Add `evidence_degradation` as a new computed field on SessionEvidenceProjection, built from existing S01 provenance signals and session state. The field carries four canonical layers (retrieval, transcript, audio, enhanced_report) with status/token/explanation per layer. Wire it through report, replay, and knowledge-check routes. Extend the parity contract test to assert identical degradation payloads across all three routes for happy-path, retrieval-missing, audio-missing, and enhanced-report-failed scenarios.
+  - Estimate: 2h
+  - Files: backend/src/common/conversation/session_evidence.py, backend/src/common/conversation/runtime_diagnostics.py, backend/src/common/api/practice.py, backend/src/common/conversation/replay.py, backend/tests/contract/test_conclusion_evidence_parity.py
+  - Verify: backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/contract/test_conclusion_evidence_parity.py backend/tests/contract/test_practice_evidence_contract.py backend/tests/unit/test_session_evidence_service.py -x -q
+  - Blocker: Replay parity is still broken because backend/src/common/conversation/schemas.py replay response models do not yet declare evidence_degradation, so replay serializes the field as null/missing even though ReplayService adds it to the response dict.
+- [ ] **T02: Update Pydantic response models, TS types, and compatibility mirrors** — Declare the new evidence_degradation field in Pydantic response schemas (replay, report) and the SessionReport schema so FastAPI does not silently trim it. Add the TS type for EvidenceDegradation in web/src/lib/api/types.ts and update SessionEvidenceContract and KnowledgeCheckDiagnostics. Mirror canonical degradation tokens into evidence_completeness.degraded_reasons so admin analytics and history consumers continue seeing degradation signals. Verify backward compatibility with admin analytics and history projection tests.
+  - Estimate: 1.5h
+  - Files: backend/src/common/conversation/schemas.py, backend/src/common/db/schemas.py, backend/src/common/conversation/session_evidence.py, web/src/lib/api/types.ts, backend/tests/unit/common/test_admin_analytics_service.py
+  - Verify: backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/common/test_admin_analytics_service.py backend/tests/unit/test_history_service_evidence_projection.py backend/tests/contract/test_conclusion_evidence_parity.py -x -q

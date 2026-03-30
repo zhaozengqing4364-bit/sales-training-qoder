@@ -1606,6 +1606,9 @@ async def get_session_report(
         conclusion_evidence=(
             None if scenario_type_enum == ScenarioType.PRESENTATION else projection.conclusion_evidence
         ),
+        evidence_degradation=(
+            None if scenario_type_enum == ScenarioType.PRESENTATION else projection.evidence_degradation
+        ),
     )
 
     logger.info(
@@ -1687,6 +1690,7 @@ async def get_session_knowledge_check(
 
     projection_effectiveness_snapshot = None
     projection_conclusion_evidence = None
+    projection_evidence_degradation = None
     resolved_scenario_type = SessionEvidenceService.resolve_scenario_type(session)
     if resolved_scenario_type == "sales" and session.status == SessionStatus.COMPLETED.value:
         projection_result = await SessionEvidenceService(db).get_projection(
@@ -1702,6 +1706,7 @@ async def get_session_knowledge_check(
                 projection_result.value.effectiveness_snapshot
             )
             projection_conclusion_evidence = projection_result.value.conclusion_evidence
+            projection_evidence_degradation = projection_result.value.evidence_degradation
         elif not projection_result.is_success:
             logger.warning(
                 "practice_session_knowledge_check_projection_unavailable",
@@ -1720,6 +1725,9 @@ async def get_session_knowledge_check(
         live_runtime_active=live_runtime_active,
         projection_effectiveness_snapshot=projection_effectiveness_snapshot,
         conclusion_evidence=projection_conclusion_evidence,
+        evidence_degradation=(
+            None if live_runtime_active else projection_evidence_degradation
+        ),
     )
 
     return success_response(diagnostics)

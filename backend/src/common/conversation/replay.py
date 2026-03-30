@@ -294,6 +294,9 @@ class ReplayService:
             replay_data["conclusion_evidence"] = (
                 None if is_presentation_scenario else projection.conclusion_evidence
             )
+            replay_data["evidence_degradation"] = (
+                None if is_presentation_scenario else projection.evidence_degradation
+            )
 
             logger.info(
                 "replay_data_generated",

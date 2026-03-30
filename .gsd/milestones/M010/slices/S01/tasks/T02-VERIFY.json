@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "taskId": "T02",
+  "unitId": "M010/S01/T02",
+  "timestamp": 1774835852614,
+  "passed": true,
+  "discoverySource": "task-plan",
+  "checks": [
+    {
+      "command": "cd backend",
+      "exitCode": 0,
+      "durationMs": 10,
+      "verdict": "pass"
+    },
+    {
+      "command": "venv/bin/python -m pytest -c pyproject.toml tests/contract/test_conclusion_evidence_parity.py tests/contract/test_practice_evidence_contract.py -x -q",
+      "exitCode": 0,
+      "durationMs": 26091,
+      "verdict": "pass"
+    }
+  ]
+}

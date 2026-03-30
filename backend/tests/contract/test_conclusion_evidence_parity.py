@@ -153,6 +153,8 @@ async def _seed_completed_sales_session(
     owner: User,
     include_retrieval_hit: bool,
     include_audio_segments: bool,
+    report_status: str | None = None,
+    report_error: str | None = None,
 ) -> PracticeSession:
     scenario = Scenario(
         scenario_id=str(uuid.uuid4()),
@@ -174,6 +176,8 @@ async def _seed_completed_sales_session(
         total_duration_seconds=180,
         effectiveness_snapshot=_make_sales_effectiveness_snapshot(),
         voice_policy_snapshot=voice_policy_snapshot,
+        report_status=report_status,
+        report_error=report_error,
     )
     db_session.add_all([scenario, session])
     db_session.add_all(
@@ -307,6 +311,11 @@ async def _seed_completed_presentation_session(
     return session
 
 
+def _extract_evidence_degradation(data: dict[str, object]) -> dict[str, object] | None:
+    value = data.get("evidence_degradation")
+    return value if isinstance(value, dict) else None
+
+
 async def _fetch_route_family(
     async_client: AsyncClient,
     *,
@@ -379,7 +388,41 @@ async def test_report_replay_and_knowledge_check_share_same_conclusion_evidence_
 
 
 @pytest.mark.asyncio
-async def test_report_replay_and_knowledge_check_keep_degraded_conclusion_evidence_in_sync(
+async def test_report_replay_and_knowledge_check_share_same_evidence_degradation_for_happy_path_sales_session(
+    async_client: AsyncClient,
+    test_db: AsyncSession,
+    test_user: User,
+    contract_auth_headers: dict[str, str],
+):
+    session = await _seed_completed_sales_session(
+        test_db,
+        owner=test_user,
+        include_retrieval_hit=True,
+        include_audio_segments=True,
+    )
+
+    report_data, replay_data, knowledge_check_data = await _fetch_route_family(
+        async_client,
+        session_id=session.session_id,
+        headers=contract_auth_headers,
+    )
+
+    expected = {
+        "retrieval": {"status": "ok", "token": "retrieval_ok", "explanation": None},
+        "transcript": {"status": "ok", "token": "transcript_ok", "explanation": None},
+        "audio": {"status": "ok", "token": "audio_ok", "explanation": None},
+        "enhanced_report": {
+            "status": "ok",
+            "token": "enhanced_report_ok",
+            "explanation": None,
+        },
+    }
+
+    assert _extract_evidence_degradation(report_data) == _extract_evidence_degradation(replay_data) == _extract_evidence_degradation(knowledge_check_data) == expected
+
+
+@pytest.mark.asyncio
+async def test_report_replay_and_knowledge_check_share_same_evidence_degradation_when_retrieval_missing(
     async_client: AsyncClient,
     test_db: AsyncSession,
     test_user: User,
@@ -389,6 +432,44 @@ async def test_report_replay_and_knowledge_check_keep_degraded_conclusion_eviden
         test_db,
         owner=test_user,
         include_retrieval_hit=False,
+        include_audio_segments=True,
+    )
+
+    report_data, replay_data, knowledge_check_data = await _fetch_route_family(
+        async_client,
+        session_id=session.session_id,
+        headers=contract_auth_headers,
+    )
+
+    expected = {
+        "retrieval": {
+            "status": "degraded",
+            "token": "no_retrieval_facts",
+            "explanation": "no_voice_policy_snapshot",
+        },
+        "transcript": {"status": "ok", "token": "transcript_ok", "explanation": None},
+        "audio": {"status": "ok", "token": "audio_ok", "explanation": None},
+        "enhanced_report": {
+            "status": "ok",
+            "token": "enhanced_report_ok",
+            "explanation": None,
+        },
+    }
+
+    assert _extract_evidence_degradation(report_data) == _extract_evidence_degradation(replay_data) == _extract_evidence_degradation(knowledge_check_data) == expected
+
+
+@pytest.mark.asyncio
+async def test_report_replay_and_knowledge_check_share_same_evidence_degradation_when_audio_missing(
+    async_client: AsyncClient,
+    test_db: AsyncSession,
+    test_user: User,
+    contract_auth_headers: dict[str, str],
+):
+    session = await _seed_completed_sales_session(
+        test_db,
+        owner=test_user,
+        include_retrieval_hit=True,
         include_audio_segments=False,
     )
 
@@ -399,24 +480,21 @@ async def test_report_replay_and_knowledge_check_keep_degraded_conclusion_eviden
     )
 
     expected = {
-        "main_issue": {
-            "retrieval_source": {"available": False, "reason": "no_voice_policy_snapshot"},
-            "transcript_source": {"available": True, "turn_count": 1},
-            "audio_source": {"available": False, "reason": "no_audio_segments"},
+        "retrieval": {"status": "ok", "token": "retrieval_ok", "explanation": None},
+        "transcript": {"status": "ok", "token": "transcript_ok", "explanation": None},
+        "audio": {
+            "status": "degraded",
+            "token": "no_audio_segments",
+            "explanation": "no_audio_segments",
         },
-        "next_goal": {
-            "retrieval_source": {"available": False, "reason": "no_voice_policy_snapshot"},
-            "transcript_source": {"available": True, "turn_count": 1},
-            "audio_source": {"available": False, "reason": "no_audio_segments"},
-        },
-        "claim_truth": {
-            "retrieval_source": {"available": False, "reason": "no_voice_policy_snapshot"},
-            "transcript_source": {"available": True, "turn_count": 1},
-            "audio_source": {"available": False, "reason": "no_audio_segments"},
+        "enhanced_report": {
+            "status": "ok",
+            "token": "enhanced_report_ok",
+            "explanation": None,
         },
     }
 
-    assert report_data["conclusion_evidence"] == replay_data["conclusion_evidence"] == knowledge_check_data["conclusion_evidence"] == expected
+    assert _extract_evidence_degradation(report_data) == _extract_evidence_degradation(replay_data) == _extract_evidence_degradation(knowledge_check_data) == expected
 
 
 @pytest.mark.asyncio
@@ -439,3 +517,59 @@ async def test_route_family_keeps_conclusion_evidence_null_for_presentation_sess
     assert report_data["conclusion_evidence"] is None
     assert replay_data["conclusion_evidence"] is None
     assert knowledge_check_data["conclusion_evidence"] is None
+
+
+@pytest.mark.asyncio
+async def test_evidence_degradation_null_for_presentation_sessions(
+    async_client: AsyncClient,
+    test_db: AsyncSession,
+    test_user: User,
+    contract_auth_headers: dict[str, str],
+):
+    session = await _seed_completed_presentation_session(test_db, owner=test_user)
+
+    report_data, replay_data, knowledge_check_data = await _fetch_route_family(
+        async_client,
+        session_id=session.session_id,
+        headers=contract_auth_headers,
+    )
+
+    assert report_data["evidence_degradation"] is None
+    assert replay_data["evidence_degradation"] is None
+    assert knowledge_check_data["evidence_degradation"] is None
+
+
+@pytest.mark.asyncio
+async def test_evidence_degradation_marks_enhanced_report_degraded_when_report_failed(
+    async_client: AsyncClient,
+    test_db: AsyncSession,
+    test_user: User,
+    contract_auth_headers: dict[str, str],
+):
+    session = await _seed_completed_sales_session(
+        test_db,
+        owner=test_user,
+        include_retrieval_hit=True,
+        include_audio_segments=True,
+        report_status="failed",
+        report_error="REPORT_GENERATION_FAILED",
+    )
+
+    report_data, replay_data, knowledge_check_data = await _fetch_route_family(
+        async_client,
+        session_id=session.session_id,
+        headers=contract_auth_headers,
+    )
+
+    expected = {
+        "retrieval": {"status": "ok", "token": "retrieval_ok", "explanation": None},
+        "transcript": {"status": "ok", "token": "transcript_ok", "explanation": None},
+        "audio": {"status": "ok", "token": "audio_ok", "explanation": None},
+        "enhanced_report": {
+            "status": "degraded",
+            "token": "report_generation_failed",
+            "explanation": "REPORT_GENERATION_FAILED",
+        },
+    }
+
+    assert _extract_evidence_degradation(report_data) == _extract_evidence_degradation(replay_data) == _extract_evidence_degradation(knowledge_check_data) == expected

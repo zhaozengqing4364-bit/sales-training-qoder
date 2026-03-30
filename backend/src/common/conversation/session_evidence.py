@@ -72,6 +72,7 @@ class SessionEvidenceProjection:
     sales_alignment_fallback_reason: str | None = None
     presentation_review: dict[str, Any] | None = None
     conclusion_evidence: dict[str, Any] | None = None
+    evidence_degradation: dict[str, Any] | None = None
 
 
 class SessionEvidenceService:
@@ -493,6 +494,120 @@ class SessionEvidenceService:
         return bundle
 
     @classmethod
+    def _build_evidence_degradation(
+        cls,
+        *,
+        session: Any,
+        conclusion_evidence: dict[str, Any] | None,
+        scenario_type: str,
+    ) -> dict[str, Any] | None:
+        """Build a four-layer degradation taxonomy from conclusion evidence and session state.
+
+        Returns ``None`` for non-sales sessions (presentation stays ``null``).
+        Each layer has ``status`` (ok/degraded), a canonical ``token``, and an
+        optional ``explanation``.
+        """
+        if scenario_type != "sales":
+            return None
+
+        # --- Retrieval layer ---
+        retrieval_degraded = False
+        retrieval_reason: str | None = None
+        if isinstance(conclusion_evidence, dict):
+            for _conclusion_key, sources in conclusion_evidence.items():
+                if not isinstance(sources, dict):
+                    continue
+                retrieval_src = sources.get("retrieval_source")
+                if isinstance(retrieval_src, dict) and not retrieval_src.get("available", True):
+                    retrieval_degraded = True
+                    retrieval_reason = retrieval_src.get("reason") or "no_retrieval_facts"
+                    break
+
+        retrieval_layer: dict[str, Any] = (
+            {
+                "status": "degraded",
+                "token": "no_retrieval_facts",
+                "explanation": retrieval_reason or "no_retrieval_facts",
+            }
+            if retrieval_degraded
+            else {"status": "ok", "token": "retrieval_ok", "explanation": None}
+        )
+
+        # --- Transcript layer ---
+        transcript_degraded = False
+        if isinstance(conclusion_evidence, dict):
+            for _conclusion_key, sources in conclusion_evidence.items():
+                if not isinstance(sources, dict):
+                    continue
+                transcript_src = sources.get("transcript_source")
+                if isinstance(transcript_src, dict) and not transcript_src.get("available", True):
+                    transcript_degraded = True
+                    break
+
+        transcript_layer: dict[str, Any] = (
+            {
+                "status": "degraded",
+                "token": "no_scored_turns",
+                "explanation": "no_scored_turns",
+            }
+            if transcript_degraded
+            else {"status": "ok", "token": "transcript_ok", "explanation": None}
+        )
+
+        # --- Audio layer ---
+        audio_degraded = False
+        audio_reason: str | None = None
+        if isinstance(conclusion_evidence, dict):
+            for _conclusion_key, sources in conclusion_evidence.items():
+                if not isinstance(sources, dict):
+                    continue
+                audio_src = sources.get("audio_source")
+                if isinstance(audio_src, dict) and not audio_src.get("available", True):
+                    audio_degraded = True
+                    audio_reason = audio_src.get("reason") or "no_audio_segments"
+                    break
+
+        audio_layer: dict[str, Any] = (
+            {
+                "status": "degraded",
+                "token": audio_reason or "no_audio_segments",
+                "explanation": audio_reason or "no_audio_segments",
+            }
+            if audio_degraded
+            else {"status": "ok", "token": "audio_ok", "explanation": None}
+        )
+
+        # --- Enhanced report layer ---
+        report_status = getattr(session, "report_status", None)
+        report_error = getattr(session, "report_error", None)
+        enhanced_report_degraded = str(report_status) == "failed"
+        enhanced_report_reason = str(report_error).strip() if isinstance(report_error, str) and report_error else None
+
+        enhanced_report_layer: dict[str, Any] = (
+            {"status": "degraded", "token": "report_generation_failed", "explanation": enhanced_report_reason or "report_generation_failed"}
+            if enhanced_report_degraded
+            else {"status": "ok", "token": "enhanced_report_ok", "explanation": None}
+        )
+
+        degradation = {
+            "retrieval": retrieval_layer,
+            "transcript": transcript_layer,
+            "audio": audio_layer,
+            "enhanced_report": enhanced_report_layer,
+        }
+
+        logger.info(
+            "projection_evidence_degradation_built",
+            retrieval_status=retrieval_layer["status"],
+            transcript_status=transcript_layer["status"],
+            audio_status=audio_layer["status"],
+            enhanced_report_status=enhanced_report_layer["status"],
+            scenario_type=scenario_type,
+        )
+
+        return degradation
+
+    @classmethod
     def build_projection(
         cls,
         session: PracticeSession,
@@ -596,6 +711,13 @@ class SessionEvidenceService:
             scenario_type=resolved_scenario_type,
         )
 
+        # --- Evidence degradation taxonomy ---
+        evidence_degradation = cls._build_evidence_degradation(
+            session=session,
+            conclusion_evidence=conclusion_evidence,
+            scenario_type=resolved_scenario_type,
+        )
+
         return SessionEvidenceProjection(
             session=session,
             session_id=str(session.session_id),
@@ -637,6 +759,7 @@ class SessionEvidenceService:
             sales_alignment_focus_type=sales_alignment_focus_type,
             sales_alignment_fallback_reason=sales_alignment_fallback_reason,
             conclusion_evidence=conclusion_evidence,
+            evidence_degradation=evidence_degradation,
         )
 
     @staticmethod
