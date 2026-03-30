@@ -40,7 +40,7 @@
   - Estimate: 2h
   - Files: web/src/lib/api/types.ts, web/src/lib/session-evidence.ts, web/src/app/(user)/practice/[sessionId]/report/page.tsx, web/src/app/(user)/practice/[sessionId]/report/page.test.tsx
   - Verify: npm --prefix web test -- --run "src/app/(user)/practice/[sessionId]/report/page.test.tsx"
-- [ ] **T02: Mirror the shared provenance/degradation vocabulary on replay and lock cross-page parity** — Load `safe-grow`, `react-best-practices`, `test`, and `verification-before-completion` before coding. This task mirrors the report vocabulary on replay without creating a second parser or falling back to stale report snapshots.
+- [x] **T02: Replay now renders canonical helper-owned provenance/degradation copy and ignores stale report snapshots for those surfaces.** — Load `safe-grow`, `react-best-practices`, `test`, and `verification-before-completion` before coding. This task mirrors the report vocabulary on replay without creating a second parser or falling back to stale report snapshots.
 
 ## Failure Modes
 

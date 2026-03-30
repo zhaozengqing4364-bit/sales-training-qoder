@@ -96,3 +96,19 @@ Append one entry per iteration:
   verification results: passed; focused report-page Vitest finished 21/21 green, including happy-path sales provenance/degradation, malformed payload omission, rejected supplemental knowledge-check, and presentation-null suppression.
   success signal status: the learner report now exposes a visible helper-driven authority seam for conclusion provenance and degradation distinct from optional knowledge-check diagnostics.
   rollback note: if T02 replay parity reopens this path, keep token-to-copy mapping and malformed-fragment filtering in session-evidence.ts rather than duplicating page-local parsing.
+
+- time: 2026-03-30T16:01:26+0800
+  mode: grow
+  item id: M010-S03-T02
+  files changed:
+    - web/src/app/(user)/practice/[sessionId]/replay/page.tsx
+    - web/src/app/(user)/practice/[sessionId]/replay/page.test.tsx
+    - .gsd/DECISIONS.md
+    - .codex/loop/state.json
+    - .codex/loop/log.md
+  summary: Wired replay to render shared conclusion provenance and four-layer degradation from canonical replay payload fields, preserved retry/highlight/presentation flows, and locked cross-page parity with stale-report-snapshot regression coverage.
+  verification commands:
+    - npm --prefix web test -- --run "src/app/(user)/practice/[sessionId]/report/page.test.tsx" "src/app/(user)/practice/[sessionId]/replay/page.test.tsx"
+  verification results: passed; focused report+replay Vitest finished 33/33 green, covering shared provenance/degradation copy, malformed replay payload omission, stale report-snapshot non-authority, replay completion-gate behavior, retry CTA, highlight anchors, and presentation-null suppression.
+  success signal status: replay now exposes the same helper-owned provenance/degradation seam as report while trusting replay payload truth over stale report snapshots.
+  rollback note: if a future contract moves provenance/degradation again, keep report and replay on the shared session-evidence helper seam and avoid reintroducing report-snapshot fallback authority.

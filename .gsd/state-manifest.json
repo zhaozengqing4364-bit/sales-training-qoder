@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "exported_at": "2026-03-30T07:53:17.460Z",
+  "exported_at": "2026-03-30T08:04:19.129Z",
   "milestones": [
     {
       "id": "M001",
@@ -6450,19 +6450,26 @@
       "milestone_id": "M010",
       "slice_id": "S03",
       "id": "T02",
-      "title": "Mirror the shared provenance/degradation vocabulary on replay and lock cross-page parity",
-      "status": "pending",
-      "one_liner": "",
-      "narrative": "",
-      "verification_result": "",
+      "title": "Replay now renders canonical helper-owned provenance/degradation copy and ignores stale report snapshots for those surfaces.",
+      "status": "complete",
+      "one_liner": "Replay now renders canonical helper-owned provenance/degradation copy and ignores stale report snapshots for those surfaces.",
+      "narrative": "Updated the learner replay page to render conclusion provenance and four-layer degradation from canonical replay payload fields through the shared session-evidence helper seam established in T01. Preserved replay-specific behavior for retry metadata, anchor banners, highlights, audio audit, and presentation flows, while ensuring presentation sessions still suppress the sales-only sections when replay returns null. Expanded replay tests with happy-path parity, malformed replay payload omission, stale report snapshot non-authority, degraded-layer rendering, and presentation-null assertions, then reran the paired report/replay suite as the slice gate.",
+      "verification_result": "Ran the planned slice verification command `npm --prefix web test -- --run \"src/app/(user)/practice/[sessionId]/report/page.test.tsx\" \"src/app/(user)/practice/[sessionId]/replay/page.test.tsx\"`. The focused gate passed with 33/33 Vitest tests green, covering shared provenance/degradation vocabulary, malformed replay inputs, stale report-snapshot non-authority, replay completion-gate behavior, retry CTA behavior, highlight/deep-link anchors, and presentation suppression.",
       "duration": "",
-      "completed_at": null,
+      "completed_at": "2026-03-30T08:04:19.091Z",
       "blocker_discovered": false,
-      "deviations": "",
-      "known_issues": "",
-      "key_files": [],
-      "key_decisions": [],
-      "full_summary_md": "",
+      "deviations": "None.",
+      "known_issues": "None.",
+      "key_files": [
+        "web/src/app/(user)/practice/[sessionId]/replay/page.tsx",
+        "web/src/app/(user)/practice/[sessionId]/replay/page.test.tsx",
+        ".gsd/milestones/M010/slices/S03/tasks/T02-SUMMARY.md"
+      ],
+      "key_decisions": [
+        "Replay uses replayData.conclusion_evidence and replayData.evidence_degradation as the canonical provenance/degradation source, while the report snapshot remains retry-metadata-only.",
+        "Cross-page learner evidence vocabulary stays helper-owned in session-evidence.ts and is defended by paired report/replay focused tests."
+      ],
+      "full_summary_md": "---\nid: T02\nparent: S03\nmilestone: M010\nkey_files:\n  - web/src/app/(user)/practice/[sessionId]/replay/page.tsx\n  - web/src/app/(user)/practice/[sessionId]/replay/page.test.tsx\n  - .gsd/milestones/M010/slices/S03/tasks/T02-SUMMARY.md\nkey_decisions:\n  - Replay uses replayData.conclusion_evidence and replayData.evidence_degradation as the canonical provenance/degradation source, while the report snapshot remains retry-metadata-only.\n  - Cross-page learner evidence vocabulary stays helper-owned in session-evidence.ts and is defended by paired report/replay focused tests.\nduration: \"\"\nverification_result: passed\ncompleted_at: 2026-03-30T08:04:19.091Z\nblocker_discovered: false\n---\n\n# T02: Replay now renders canonical helper-owned provenance/degradation copy and ignores stale report snapshots for those surfaces.\n\n**Replay now renders canonical helper-owned provenance/degradation copy and ignores stale report snapshots for those surfaces.**\n\n## What Happened\n\nUpdated the learner replay page to render conclusion provenance and four-layer degradation from canonical replay payload fields through the shared session-evidence helper seam established in T01. Preserved replay-specific behavior for retry metadata, anchor banners, highlights, audio audit, and presentation flows, while ensuring presentation sessions still suppress the sales-only sections when replay returns null. Expanded replay tests with happy-path parity, malformed replay payload omission, stale report snapshot non-authority, degraded-layer rendering, and presentation-null assertions, then reran the paired report/replay suite as the slice gate.\n\n## Verification\n\nRan the planned slice verification command `npm --prefix web test -- --run \"src/app/(user)/practice/[sessionId]/report/page.test.tsx\" \"src/app/(user)/practice/[sessionId]/replay/page.test.tsx\"`. The focused gate passed with 33/33 Vitest tests green, covering shared provenance/degradation vocabulary, malformed replay inputs, stale report-snapshot non-authority, replay completion-gate behavior, retry CTA behavior, highlight/deep-link anchors, and presentation suppression.\n\n## Verification Evidence\n\n| # | Command | Exit Code | Verdict | Duration |\n|---|---------|-----------|---------|----------|\n| 1 | `npm --prefix web test -- --run \"src/app/(user)/practice/[sessionId]/report/page.test.tsx\" \"src/app/(user)/practice/[sessionId]/replay/page.test.tsx\"` | 0 | ✅ pass | 9200ms |\n\n\n## Deviations\n\nNone.\n\n## Known Issues\n\nNone.\n\n## Files Created/Modified\n\n- `web/src/app/(user)/practice/[sessionId]/replay/page.tsx`\n- `web/src/app/(user)/practice/[sessionId]/replay/page.test.tsx`\n- `.gsd/milestones/M010/slices/S03/tasks/T02-SUMMARY.md`\n",
       "description": "Load `safe-grow`, `react-best-practices`, `test`, and `verification-before-completion` before coding. This task mirrors the report vocabulary on replay without creating a second parser or falling back to stale report snapshots.\n\n## Failure Modes\n\n| Dependency | On error | On timeout | On malformed response |\n|------------|----------|-----------|----------------------|\n| `GET /sessions/{id}/replay` payload | Keep existing replay error / completion-gate behavior; no report-snapshot fallback authority is introduced for the new surfaces | Existing replay loading/error state remains unchanged | Helper normalization omits malformed provenance/degradation rows while leaving the rest of replay usable |\n| Optional report snapshot loaded for retry metadata | Continue to use it only for retry/fallback metadata, never for canonical provenance/degradation when replay payload provides those fields | Same as error | Ignore malformed report snapshot for the new surfaces |\n\n## Load Profile\n\n- **Shared resources**: existing replay render path, highlight rendering, and jsdom test runtime.\n- **Per-operation cost**: zero new network calls; reuse the same helper output over three conclusion entries and four degradation layers.\n- **10x breakpoint**: duplicated token-to-copy logic across replay/report would become the first drift point, so this task must keep all wording in the helper seam.\n\n## Negative Tests\n\n- **Malformed inputs**: missing replay `conclusion_evidence`, partial degradation layers, and stale report snapshot carrying conflicting provenance copy.\n- **Error paths**: replay completion-gated errors and highlight/presentation flows must remain intact after the new section is added.\n- **Boundary conditions**: happy-path sales payload, degraded-layer sales payload, and presentation payload with sales-only fields intentionally null.\n\n## Steps\n\n1. Wire `web/src/app/(user)/practice/[sessionId]/replay/page.tsx` to render the shared provenance/degradation helper output from `replayData.conclusion_evidence` and `replayData.evidence_degradation`, keeping replay-specific anchor/retry/highlight flows separate and never deriving these fields from the report snapshot.\n2. Extend `web/src/app/(user)/practice/[sessionId]/replay/page.test.tsx` with happy-path, degraded, presentation-null, and stale-report-snapshot assertions that prove replay shows the same learner-facing vocabulary as report while still trusting replay payload truth.\n3. Re-run the report and replay suites together as the slice gate so copy drift between the two pages is caught before completion.\n\n## Must-Haves\n\n- [ ] Replay renders the same helper-generated provenance/degradation labels as report for equivalent payloads.\n- [ ] Replay never falls back to stale report-snapshot provenance/degradation when the replay contract already carries canonical fields.\n- [ ] Existing replay-specific behaviors (anchor banners, retry, audio audit, presentation page evidence) continue to pass focused tests.",
       "estimate": "90m",
       "files": [
@@ -8153,6 +8160,18 @@
       "decision": "How learner-facing conclusion provenance and evidence degradation are rendered on report/replay pages",
       "choice": "Normalize conclusion_evidence and evidence_degradation through shared session-evidence.ts helper formatters before page rendering",
       "rationale": "The backend contract now carries shared provenance/degradation payloads across report, replay, and knowledge-check. Keeping token-to-copy mapping and malformed-fragment filtering inside session-evidence.ts gives report and replay one frontend authority seam, prevents page-local truth drift, and localizes failures to helper normalization versus route wiring.",
+      "revisable": "Yes",
+      "made_by": "agent",
+      "superseded_by": null
+    },
+    {
+      "seq": 1506,
+      "id": "D140",
+      "when_context": "M010/S03/T02",
+      "scope": "frontend-reader-contract",
+      "decision": "How replay should source conclusion provenance and evidence degradation after S03 parity work",
+      "choice": "Replay renders provenance/degradation exclusively from replayData.conclusion_evidence and replayData.evidence_degradation via shared session-evidence helpers, while the report snapshot remains retry-metadata-only.",
+      "rationale": "This keeps report and replay on the same helper-owned learner vocabulary without introducing a second parser or letting stale report snapshots overwrite canonical replay payload truth. Focused cross-page tests now fail if either wording or authority source drifts.",
       "revisable": "Yes",
       "made_by": "agent",
       "superseded_by": null
@@ -10677,6 +10696,17 @@
       "verdict": "✅ pass",
       "duration_ms": 8000,
       "created_at": "2026-03-30T07:53:17.433Z"
+    },
+    {
+      "id": 230,
+      "task_id": "T02",
+      "slice_id": "S03",
+      "milestone_id": "M010",
+      "command": "npm --prefix web test -- --run \"src/app/(user)/practice/[sessionId]/report/page.test.tsx\" \"src/app/(user)/practice/[sessionId]/replay/page.test.tsx\"",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 9200,
+      "created_at": "2026-03-30T08:04:19.091Z"
     }
   ]
 }

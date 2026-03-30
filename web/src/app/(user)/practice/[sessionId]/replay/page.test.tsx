@@ -94,6 +94,29 @@ function buildReplayData(overrides: Record<string, unknown> = {}) {
     voice_policy_snapshot_ref: null,
     total_duration_ms: 185000,
     overall_score: 78,
+    conclusion_evidence: {
+      main_issue: {
+        retrieval_source: { available: true, reason: null },
+        transcript_source: { available: true, turn_count: 1 },
+        audio_source: { available: true, reason: null },
+      },
+      next_goal: {
+        retrieval_source: { available: true, reason: null },
+        transcript_source: { available: true, turn_count: 2 },
+        audio_source: { available: false, reason: "no_audio_segments" },
+      },
+      claim_truth: {
+        retrieval_source: { available: false, reason: "report_generation_failed" },
+        transcript_source: { available: true, turn_count: 1 },
+        audio_source: { available: true, reason: null },
+      },
+    },
+    evidence_degradation: {
+      retrieval: { status: "degraded", token: "no_retrieval_facts", explanation: "no_voice_policy_snapshot" },
+      transcript: { status: "ok", token: "transcript_ok", explanation: null },
+      audio: { status: "degraded", token: "no_audio_segments", explanation: "no_audio_segments" },
+      enhanced_report: { status: "degraded", token: "report_generation_failed", explanation: "REPORT_GENERATION_FAILED" },
+    },
     audio_audit: {
       summary: {
         recording_status: "completed",
@@ -343,6 +366,29 @@ function buildRetryReport(overrides: Record<string, unknown> = {}) {
     pass_flags: null,
     main_capability_passed: false,
     overall_result: "fail",
+    conclusion_evidence: {
+      main_issue: {
+        retrieval_source: { available: false, reason: "no_retrieval_facts" },
+        transcript_source: { available: true, turn_count: 9 },
+        audio_source: { available: false, reason: "no_audio_segments" },
+      },
+      next_goal: {
+        retrieval_source: { available: false, reason: "no_retrieval_facts" },
+        transcript_source: { available: true, turn_count: 9 },
+        audio_source: { available: false, reason: "no_audio_segments" },
+      },
+      claim_truth: {
+        retrieval_source: { available: false, reason: "no_retrieval_facts" },
+        transcript_source: { available: true, turn_count: 9 },
+        audio_source: { available: false, reason: "no_audio_segments" },
+      },
+    },
+    evidence_degradation: {
+      retrieval: { status: "ok", token: "retrieval_ok", explanation: null },
+      transcript: { status: "ok", token: "transcript_ok", explanation: null },
+      audio: { status: "ok", token: "audio_ok", explanation: null },
+      enhanced_report: { status: "ok", token: "enhanced_report_ok", explanation: null },
+    },
     main_issue: {
       issue_type: "evidence_gap",
       issue_text: "客户收益提到了，但还没有补上可信证据。",
@@ -749,7 +795,7 @@ describe("SessionReplayPage", () => {
     const overallScore = await screen.findByTestId("replay-overall-score");
     expect(overallScore.textContent).toContain("78");
     expect(screen.getByText("当前会话暂不可评估")).toBeTruthy();
-    expect(screen.getByText("主张证据状态")).toBeTruthy();
+    expect(screen.getAllByText("主张证据状态").length).toBeGreaterThan(0);
     expect(screen.getByText("证据已验证")).toBeTruthy();
     expect(screen.getByText("当前主张已有足够证据支撑，可以继续沿着这条事实线推进下一步。")).toBeTruthy();
     expect(screen.getByText("证据强度：82 分。本轮补充的证据已达到可验证水平。")).toBeTruthy();
@@ -926,6 +972,19 @@ describe("SessionReplayPage", () => {
     renderReplayPage({
       reportOverrides: {
         overall_score: 55,
+        conclusion_evidence: {
+          main_issue: {
+            retrieval_source: { available: false, reason: "no_retrieval_facts" },
+            transcript_source: { available: true, turn_count: 9 },
+            audio_source: { available: false, reason: "no_audio_segments" },
+          },
+        },
+        evidence_degradation: {
+          retrieval: { status: "ok", token: "retrieval_ok", explanation: null },
+          transcript: { status: "ok", token: "transcript_ok", explanation: null },
+          audio: { status: "ok", token: "audio_ok", explanation: null },
+          enhanced_report: { status: "ok", token: "enhanced_report_ok", explanation: null },
+        },
         main_issue: {
           issue_type: "objection_handling_gap",
           issue_text: "这是报告快照里的过期主问题，不应覆盖 replay contract。",
@@ -949,10 +1008,58 @@ describe("SessionReplayPage", () => {
 
     expect((await screen.findByTestId("replay-overall-score")).textContent).toContain("78");
     expect(screen.getByText("证据已验证")).toBeTruthy();
+    expect(screen.getByText("结论出处")).toBeTruthy();
+    expect(screen.getByText("证据降级状态")).toBeTruthy();
+    expect(screen.getAllByText("知识库证据可用").length).toBeGreaterThanOrEqual(2);
+    expect(screen.getByText("音频证据缺失：当前未录制可用音频片段。")).toBeTruthy();
+    expect(screen.getByText("知识库证据缺失：综合洞察生成失败，当前无法补充增强证据。")).toBeTruthy();
+    expect(screen.getByText("Retrieval 事实缺失，当前无法确认知识库命中情况。")).toBeTruthy();
+    expect(screen.getByText("综合洞察生成失败，但基础结论仍来自统一证据。")).toBeTruthy();
     expect(screen.getAllByText("客户收益提到了，但还没有补上可信证据。").length).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByText("先补 ROI 证据，再继续推进下一步。").length).toBeGreaterThanOrEqual(1);
     expect(screen.queryByText("这是报告快照里的过期主问题，不应覆盖 replay contract。")).toBeNull();
     expect(screen.queryByText("这是报告快照里的过期目标，不应覆盖 replay contract。")).toBeNull();
     expect(screen.queryByText("未被证据支撑")).toBeNull();
+    expect(screen.queryByText("对话证据 9 轮")).toBeNull();
+  });
+
+  it("omits malformed replay provenance rows and partial degradation layers without breaking the rest of replay", async () => {
+    renderReplayPage({
+      replayOverrides: {
+        conclusion_evidence: {
+          main_issue: {
+            retrieval_source: { available: true, reason: null },
+            transcript_source: { available: true, turn_count: 1 },
+            audio_source: { available: true, reason: null },
+          },
+          next_goal: {
+            retrieval_source: { available: false },
+            transcript_source: { available: true },
+            audio_source: null,
+          },
+          claim_truth: null,
+        },
+        evidence_degradation: {
+          retrieval: { status: "degraded", token: "no_retrieval_facts", explanation: "no_voice_policy_snapshot" },
+          transcript: { status: "ok", token: "transcript_ok", explanation: null },
+          audio: { status: "degraded", token: 404, explanation: "no_audio_segments" },
+          enhanced_report: null,
+        },
+      },
+    });
+
+    expect(await screen.findByText("结论出处")).toBeTruthy();
+    expect(screen.getByText("知识库证据可用")).toBeTruthy();
+    expect(screen.getByText("对话证据 1 轮")).toBeTruthy();
+    expect(screen.getByText("音频证据可用")).toBeTruthy();
+    expect(screen.queryByText("知识库证据缺失：当前未产出检索事实。")).toBeNull();
+    expect(screen.queryByText("音频证据缺失：当前未录制可用音频片段。")).toBeNull();
+    expect(screen.getByText("证据降级状态")).toBeTruthy();
+    expect(screen.getByText("Retrieval 事实缺失，当前无法确认知识库命中情况。")).toBeTruthy();
+    expect(screen.getByText("对话转写证据完整。")).toBeTruthy();
+    expect(screen.queryByText("原始音频缺失，本轮只能依赖文字证据。")).toBeNull();
+    expect(screen.queryByText("综合洞察生成失败，但基础结论仍来自统一证据。")).toBeNull();
+    expect(screen.getByText("本场教练结论")).toBeTruthy();
+    expect(screen.getByTestId("audio-audit-card")).toBeTruthy();
   });
 });

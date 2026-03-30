@@ -1,6 +1,6 @@
 {
   "mode": "grow",
-  "current_issue_id": "M010-S03-T01",
+  "current_issue_id": "M010-S03-T02",
   "current_issue_type": "task",
   "current_issue_status": "done",
   "pending_issue_ids": [],
@@ -125,24 +125,23 @@
     "M007-S04-T03",
     "M007-S04-T04",
     "M007-S04",
-    "M010-S03-T01"
+    "M010-S03-T01",
+    "M010-S03-T02"
   ],
   "blocked_issue_ids": [],
   "deferred_issue_ids": [],
   "last_modified_files": [
-    "web/src/lib/api/types.ts",
-    "web/src/lib/session-evidence.ts",
-    "web/src/app/(user)/practice/[sessionId]/report/page.tsx",
-    "web/src/app/(user)/practice/[sessionId]/report/page.test.tsx",
+    "web/src/app/(user)/practice/[sessionId]/replay/page.tsx",
+    "web/src/app/(user)/practice/[sessionId]/replay/page.test.tsx",
     ".gsd/DECISIONS.md",
     ".codex/loop/state.json",
     ".codex/loop/log.md"
   ],
   "last_verification_commands": [
-    "npm --prefix web test -- --run \"src/app/(user)/practice/[sessionId]/report/page.test.tsx\""
+    "npm --prefix web test -- --run \"src/app/(user)/practice/[sessionId]/report/page.test.tsx\" \"src/app/(user)/practice/[sessionId]/replay/page.test.tsx\""
   ],
-  "last_verification_result": "Fresh focused report-page verification passed: 21/21 Vitest cases green, covering happy-path sales provenance/degradation, malformed helper inputs, supplemental knowledge-check failure, and presentation-null suppression.",
-  "last_success_signal": "The learner report now renders canonical conclusion provenance and four-layer degradation from shared session-evidence.ts helpers without parsing raw contract fragments in the page.",
+  "last_verification_result": "Fresh focused report+replay verification passed: 33/33 Vitest cases green, covering shared provenance/degradation copy, malformed replay payload omission, stale report-snapshot non-authority, replay completion-gate behavior, retry CTA, highlight anchors, and presentation-null suppression.",
+  "last_success_signal": "Replay now renders the same helper-owned conclusion provenance and four-layer degradation vocabulary as report while trusting replay payload truth over stale report snapshots.",
   "last_growth_scan": null,
-  "next_action": "M010/S03/T01 is done. T02 can mirror the same helper-owned provenance/degradation seam onto replay."
+  "next_action": "M010/S03/T02 is done. Slice S03 can proceed to slice-level close-out or reassessment."
 }
