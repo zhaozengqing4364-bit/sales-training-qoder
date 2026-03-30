@@ -1,7 +1,7 @@
 {
   "mode": "grow",
-  "current_issue_id": "M010-S03-T02",
-  "current_issue_type": "task",
+  "current_issue_id": "M010-S03",
+  "current_issue_type": "slice",
   "current_issue_status": "done",
   "pending_issue_ids": [],
   "completed_issue_ids": [
@@ -95,9 +95,9 @@
     "M005-S04-T01",
     "M005-S04-T02",
     "M005-S04-T03",
+    "M005-S04",
     "M005-S05-T01",
     "M005-S05-T02",
-    "M005-S04",
     "M005-S05-T03",
     "M005-S05",
     "M006-S01-T01",
@@ -126,22 +126,28 @@
     "M007-S04-T04",
     "M007-S04",
     "M010-S03-T01",
-    "M010-S03-T02"
+    "M010-S03-T02",
+    "M010-S03"
   ],
   "blocked_issue_ids": [],
   "deferred_issue_ids": [],
   "last_modified_files": [
+    "web/src/lib/api/types.ts",
+    "web/src/lib/session-evidence.ts",
+    "web/src/app/(user)/practice/[sessionId]/report/page.tsx",
+    "web/src/app/(user)/practice/[sessionId]/report/page.test.tsx",
     "web/src/app/(user)/practice/[sessionId]/replay/page.tsx",
     "web/src/app/(user)/practice/[sessionId]/replay/page.test.tsx",
-    ".gsd/DECISIONS.md",
+    ".gsd/KNOWLEDGE.md",
+    ".gsd/PROJECT.md",
     ".codex/loop/state.json",
     ".codex/loop/log.md"
   ],
   "last_verification_commands": [
     "npm --prefix web test -- --run \"src/app/(user)/practice/[sessionId]/report/page.test.tsx\" \"src/app/(user)/practice/[sessionId]/replay/page.test.tsx\""
   ],
-  "last_verification_result": "Fresh focused report+replay verification passed: 33/33 Vitest cases green, covering shared provenance/degradation copy, malformed replay payload omission, stale report-snapshot non-authority, replay completion-gate behavior, retry CTA, highlight anchors, and presentation-null suppression.",
-  "last_success_signal": "Replay now renders the same helper-owned conclusion provenance and four-layer degradation vocabulary as report while trusting replay payload truth over stale report snapshots.",
+  "last_verification_result": "Fresh slice-close report+replay verification passed: 33/33 Vitest cases green, covering shared provenance/degradation copy, malformed helper inputs, supplemental knowledge-check failure isolation, stale report-snapshot non-authority on replay, replay completion-gate behavior, retry CTA behavior, highlight/deep-link anchors, and presentation-null suppression.",
+  "last_success_signal": "Learner report and replay now render the same helper-owned conclusion provenance and four-layer degradation vocabulary from canonical payload fields without inventing page-local truth or letting replay fall back to stale report snapshots.",
   "last_growth_scan": null,
-  "next_action": "M010/S03/T02 is done. Slice S03 can proceed to slice-level close-out or reassessment."
+  "next_action": "M010/S03 is complete. Reassess the remaining M010 roadmap now that learner-facing report/replay provenance and degradation rendering is shipped."
 }

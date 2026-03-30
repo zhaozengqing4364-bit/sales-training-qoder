@@ -97,18 +97,23 @@ Append one entry per iteration:
   success signal status: the learner report now exposes a visible helper-driven authority seam for conclusion provenance and degradation distinct from optional knowledge-check diagnostics.
   rollback note: if T02 replay parity reopens this path, keep token-to-copy mapping and malformed-fragment filtering in session-evidence.ts rather than duplicating page-local parsing.
 
-- time: 2026-03-30T16:01:26+0800
+- time: 2026-03-30T16:09:30+0800
   mode: grow
-  item id: M010-S03-T02
+  item id: M010-S03
   files changed:
+    - web/src/lib/api/types.ts
+    - web/src/lib/session-evidence.ts
+    - web/src/app/(user)/practice/[sessionId]/report/page.tsx
+    - web/src/app/(user)/practice/[sessionId]/report/page.test.tsx
     - web/src/app/(user)/practice/[sessionId]/replay/page.tsx
     - web/src/app/(user)/practice/[sessionId]/replay/page.test.tsx
-    - .gsd/DECISIONS.md
+    - .gsd/KNOWLEDGE.md
+    - .gsd/PROJECT.md
     - .codex/loop/state.json
     - .codex/loop/log.md
-  summary: Wired replay to render shared conclusion provenance and four-layer degradation from canonical replay payload fields, preserved retry/highlight/presentation flows, and locked cross-page parity with stale-report-snapshot regression coverage.
+  summary: Closed M010/S03 after fresh slice-level verification confirmed learner report and replay both render helper-owned conclusion provenance and four-layer degradation from canonical payload fields, while replay keeps report snapshots retry-metadata-only.
   verification commands:
     - npm --prefix web test -- --run "src/app/(user)/practice/[sessionId]/report/page.test.tsx" "src/app/(user)/practice/[sessionId]/replay/page.test.tsx"
-  verification results: passed; focused report+replay Vitest finished 33/33 green, covering shared provenance/degradation copy, malformed replay payload omission, stale report-snapshot non-authority, replay completion-gate behavior, retry CTA, highlight anchors, and presentation-null suppression.
-  success signal status: replay now exposes the same helper-owned provenance/degradation seam as report while trusting replay payload truth over stale report snapshots.
-  rollback note: if a future contract moves provenance/degradation again, keep report and replay on the shared session-evidence helper seam and avoid reintroducing report-snapshot fallback authority.
+  verification results: passed; focused report+replay Vitest finished 33/33 green, covering shared provenance/degradation vocabulary, malformed helper inputs, supplemental knowledge-check failure isolation, stale report-snapshot non-authority, replay completion-gate behavior, retry CTA behavior, highlight/deep-link anchors, and presentation-null suppression.
+  success signal status: learner-facing report and replay now show the same explanation of why each conclusion is believed and which evidence layers are degraded, without page-local truth derivation.
+  rollback note: if future work changes conclusion provenance/degradation fields, keep report and replay on the shared session-evidence helper seam and preserve replay payload authority over any cached report snapshot.
