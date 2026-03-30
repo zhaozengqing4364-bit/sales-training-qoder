@@ -7,7 +7,7 @@ This file is the explicit capability and coverage contract for the project.
 ### R022 — 每场训练必须记录可审计的检索事实：是否检索、检索摘要、命中数量、命中来源、失败原因。
 - Class: continuity
 - Status: active
-- Description: 每一场训练都必须在当前 session 事实上留下 retrieval ledger，能够回答是否发生检索、检索查询/摘要是什么、命中了多少内容、命中来自哪里、失败原因是什么。
+- Description: 每场训练必须记录可审计的检索事实：是否检索、检索摘要、命中数量、命中来源、失败原因。
 - Why it matters: 如果知识库只是“配置 ready”而训练事实里说不清有没有真正检索，就无法判断知识库是否真的起作用。
 - Source: user
 - Primary owning slice: M008/S01
@@ -18,7 +18,7 @@ This file is the explicit capability and coverage contract for the project.
 ### R023 — `knowledge-check` 与 canonical report 必须表达同一条 retrieval truth line，而不是一个说命中、一个只给抽象结论。
 - Class: continuity
 - Status: active
-- Description: 同一条训练 session 上，knowledge-check 和 canonical report 必须对知识支持情况给出可对照、可解释的一致事实线，而不是相互脱节。
+- Description: `knowledge-check` 与 canonical report 必须表达同一条 retrieval truth line，而不是一个说命中、一个只给抽象结论。
 - Why it matters: 只有 retrieval truth 在诊断面和用户最终阅读的报告面都一致，报告才不是“像真的”。
 - Source: user
 - Primary owning slice: M008/S02
@@ -26,43 +26,10 @@ This file is the explicit capability and coverage contract for the project.
 - Validation: mapped
 - Notes: 第一阶段不追求所有 report conclusion 都可追溯，只先把 retrieval truth line 统一。
 
-### R024 — 训练原始音频必须在训练过程中持续留痕，并作为审计资产落到阿里云 OSS 的固定训练目录。
-- Class: continuity
-- Status: active
-- Description: 每次训练的原始音频都必须在训练过程中持续落盘，并落到阿里云 OSS 的固定训练目录中，形成后续可抽查、可复核的原始审计资产。
-- Why it matters: 如果录音只在训练结束后临时归档或可能因中断丢失，整场训练就无法被完整复核。
-- Source: user
-- Primary owning slice: M009/S01
-- Supporting slices: M009/S02, M009/S03
-- Validation: mapped
-- Notes: 最低通过线不是 turn 级精确对齐，而是先确保原始音频持续留痕、可关联 session、不会因中断整场丢失。
-
-### R025 — 训练音频的上传、下载和后续使用必须走浏览器直连 OSS；服务端只负责签名、登记 metadata 和权限边界，不做音频中转。
-- Class: operability
-- Status: active
-- Description: 训练音频的上传、下载与后续消费必须采用浏览器直连 OSS 的模式，服务端只提供签名 URL、对象 key、元数据登记与访问控制，不承担音频内容转发。
-- Why it matters: 当前云服务器带宽有限，如果让服务端中转音频，后续上传、下载和审计播放都会成为瓶颈。
-- Source: user
-- Primary owning slice: M009/S01
-- Supporting slices: M009/S02
-- Validation: mapped
-- Notes: 代码库里已经存在 meetings 场景的前端直传 OSS 模式；训练音频应沿这条模式扩展，而不是新造服务端代理链。
-
-### R026 — 学员必须能在现有 replay / report 路径里反查自己的原始录音证据，而不只是后台可查。
-- Class: primary-user-loop
-- Status: active
-- Description: 学员在自己的 replay / report 路径中必须能够访问并反查原始录音证据，用来对照 transcript、训练判断和报告结论。
-- Why it matters: 如果只有后台或管理侧能查原始音频，训练证据就无法成为学员自己的复盘资产。
-- Source: user
-- Primary owning slice: M009/S02
-- Supporting slices: M009/S03, M010/S01
-- Validation: mapped
-- Notes: 第一阶段默认至少支持现有 replay/report 路径中的可播放/可反查，不要求先开放任意导出下载。
-
 ### R027 — 报告关键结论必须有出处，能够回到 transcript / retrieval / audio evidence，而不是只输出“像真的”结论。
 - Class: launchability
 - Status: active
-- Description: report / replay 中的关键结论（如主问题、下一轮目标、claim truth）必须能够回到明确证据出处，而不是只给抽象总结。
+- Description: 报告关键结论必须有出处，能够回到 transcript / retrieval / audio evidence，而不是只输出“像真的”结论。
 - Why it matters: 这是避免“假可信报告”的核心 requirement；没有出处，用户无法判断报告是否值得信任。
 - Source: user
 - Primary owning slice: M010/S01
@@ -73,7 +40,7 @@ This file is the explicit capability and coverage contract for the project.
 ### R028 — 当 retrieval / audio / transcript / enhanced-report 任一层降级时，系统必须分层说明原因，避免形成假可信报告。
 - Class: failure-visibility
 - Status: active
-- Description: 一旦检索、音频留痕、转写、增强报告中的任意一层降级，系统必须明确说明是哪一层、为什么降级，以及这会如何影响当前结论可信度。
+- Description: 当 retrieval / audio / transcript / enhanced-report 任一层降级时，系统必须分层说明原因，避免形成假可信报告。
 - Why it matters: 用户最不能接受的是“报告像真的，但底层证据链其实已经断了”；这条 requirement 用来防止系统静默伪装完整。
 - Source: user
 - Primary owning slice: M010/S02
@@ -248,6 +215,39 @@ This file is the explicit capability and coverage contract for the project.
 - Validation: validated
 - Notes: 证据来自 `web/src/hooks/websocket/message-handlers.ts`、`backend/src/common/conversation/replay.py`、`web/src/app/(user)/practice/[sessionId]/report/page.tsx` 等现有实现。
 
+### R024 — 训练原始音频必须在训练过程中持续留痕，并作为审计资产落到阿里云 OSS 的固定训练目录。
+- Class: continuity
+- Status: validated
+- Description: 训练原始音频必须在训练过程中持续留痕，并作为审计资产落到阿里云 OSS 的固定训练目录。
+- Why it matters: 如果录音只在训练结束后临时归档或可能因中断丢失，整场训练就无法被完整复核。
+- Source: user
+- Primary owning slice: M009/S01
+- Supporting slices: M009/S02, M009/S03
+- Validation: Validated by M009 close-out: S01 delivered browser-direct OSS upload with `OssSigningService`, `SessionAudioSegment`, sign/register/list APIs, practice-page `useContinuousAudioUploader`, and persisted `voice_policy_snapshot.runtime_metrics.audio_audit`; S02/S03 carried that chain through report/replay playback and degraded states. Fresh close-out verification reran backend OSS/audio-audit/replay/runtime suites (122/122 passed) and web uploader/report/replay/API-client suites (50/50 passed).
+- Notes: 最低通过线不是 turn 级精确对齐，而是先确保原始音频持续留痕、可关联 session、不会因中断整场丢失。
+
+### R025 — 训练音频的上传、下载和后续使用必须走浏览器直连 OSS；服务端只负责签名、登记 metadata 和权限边界，不做音频中转。
+- Class: operability
+- Status: validated
+- Description: 训练音频的上传、下载和后续使用必须走浏览器直连 OSS；服务端只负责签名、登记 metadata 和权限边界，不做音频中转。
+- Why it matters: 当前云服务器带宽有限，如果让服务端中转音频，后续上传、下载和审计播放都会成为瓶颈。
+- Source: user
+- Primary owning slice: M009/S01
+- Supporting slices: M009/S02
+- Validation: Validated by M009 close-out: the shipped implementation keeps audio transfer browser-direct to OSS while FastAPI only signs PUT/GET URLs, registers metadata, and enforces ownership. Evidence includes `backend/src/common/oss/signing.py`, audio sign/register/playback handoff routes, non-persistence of signed URLs, and fresh backend/web verification for signed playback redirect, 403/404 ownership boundaries, uploader flow, and report/replay playback consumers.
+- Notes: 代码库里已经存在 meetings 场景的前端直传 OSS 模式；训练音频应沿这条模式扩展，而不是新造服务端代理链。
+
+### R026 — 学员必须能在现有 replay / report 路径里反查自己的原始录音证据，而不只是后台可查。
+- Class: primary-user-loop
+- Status: validated
+- Description: 学员必须能在现有 replay / report 路径里反查自己的原始录音证据，而不只是后台可查。
+- Why it matters: 如果只有后台或管理侧能查原始音频，训练证据就无法成为学员自己的复盘资产。
+- Source: user
+- Primary owning slice: M009/S02
+- Supporting slices: M009/S03, M010/S01
+- Validation: Validated by M009 close-out: canonical learner report and replay routes now expose `audio_audit` with recording status, segment counts, degraded states, and playable raw-audio evidence through the shared `AudioAuditCard` and signed playback handoff route. Fresh verification passed backend contract/integration coverage for available/partial/null payloads and playback ownership, plus web report/replay page suites on the current branch.
+- Notes: 第一阶段默认至少支持现有 replay/report 路径中的可播放/可反查，不要求先开放任意导出下载。
+
 ## Deferred
 
 ### R016 — 在 PPT 对练过程中实时识别讲偏、讲错、讲太多并当场打断纠偏。
@@ -322,13 +322,6 @@ This file is the explicit capability and coverage contract for the project.
 
 | ID | Class | Status | Primary owner | Supporting | Proof |
 |---|---|---|---|---|---|
-| R022 | continuity | active | M008/S01 | M008/S02, M008/S03 | mapped |
-| R023 | continuity | active | M008/S02 | M008/S01, M008/S03 | mapped |
-| R024 | continuity | active | M009/S01 | M009/S02, M009/S03 | mapped |
-| R025 | operability | active | M009/S01 | M009/S02 | mapped |
-| R026 | primary-user-loop | active | M009/S02 | M009/S03, M010/S01 | mapped |
-| R027 | launchability | active | M010/S01 | M010/S02, M010/S03 | mapped |
-| R028 | failure-visibility | active | M010/S02 | M010/S03, M008/S03, M009/S03 | mapped |
 | R001 | primary-user-loop | validated | M001/S01 | M001/S08 | validated |
 | R002 | failure-visibility | validated | M001/S01 | M001/S08 | validated |
 | R003 | core-capability | validated | M001/S05 | M001/S04, M001/S07 | Validated by S05 slice verification: backend sales baseline/persona/compiler/contract/integration suites passed, web ScorePanel + websocket handler + report focused tests passed, live StepFun sales runtime showed value/price/competitor/evidence prompts driving sales-specific score_update dimensions and knowledge-check queries, and the canonical /practice/{sessionId}/report surfaced sales-specific main_issue, next_goal, pass_flags labels, and value/evidence/objection rollups from the unified evidence contract. |
@@ -350,10 +343,17 @@ This file is the explicit capability and coverage contract for the project.
 | R019 | integration | deferred | none | none | unmapped |
 | R020 | anti-feature | out-of-scope | none | none | n/a |
 | R021 | anti-feature | out-of-scope | none | none | n/a |
+| R022 | continuity | active | M008/S01 | M008/S02, M008/S03 | mapped |
+| R023 | continuity | active | M008/S02 | M008/S01, M008/S03 | mapped |
+| R024 | continuity | validated | M009/S01 | M009/S02, M009/S03 | Validated by M009 close-out: S01 delivered browser-direct OSS upload with `OssSigningService`, `SessionAudioSegment`, sign/register/list APIs, practice-page `useContinuousAudioUploader`, and persisted `voice_policy_snapshot.runtime_metrics.audio_audit`; S02/S03 carried that chain through report/replay playback and degraded states. Fresh close-out verification reran backend OSS/audio-audit/replay/runtime suites (122/122 passed) and web uploader/report/replay/API-client suites (50/50 passed). |
+| R025 | operability | validated | M009/S01 | M009/S02 | Validated by M009 close-out: the shipped implementation keeps audio transfer browser-direct to OSS while FastAPI only signs PUT/GET URLs, registers metadata, and enforces ownership. Evidence includes `backend/src/common/oss/signing.py`, audio sign/register/playback handoff routes, non-persistence of signed URLs, and fresh backend/web verification for signed playback redirect, 403/404 ownership boundaries, uploader flow, and report/replay playback consumers. |
+| R026 | primary-user-loop | validated | M009/S02 | M009/S03, M010/S01 | Validated by M009 close-out: canonical learner report and replay routes now expose `audio_audit` with recording status, segment counts, degraded states, and playable raw-audio evidence through the shared `AudioAuditCard` and signed playback handoff route. Fresh verification passed backend contract/integration coverage for available/partial/null payloads and playback ownership, plus web report/replay page suites on the current branch. |
+| R027 | launchability | active | M010/S01 | M010/S02, M010/S03 | mapped |
+| R028 | failure-visibility | active | M010/S02 | M010/S03, M008/S03, M009/S03 | mapped |
 
 ## Coverage Summary
 
-- Active requirements: 7
-- Mapped to slices: 7
-- Validated: 15 (R001, R002, R003, R004, R005, R006, R007, R008, R009, R010, R011, R012, R013, R014, R015)
+- Active requirements: 4
+- Mapped to slices: 4
+- Validated: 18 (R001, R002, R003, R004, R005, R006, R007, R008, R009, R010, R011, R012, R013, R014, R015, R024, R025, R026)
 - Unmapped active requirements: 0
