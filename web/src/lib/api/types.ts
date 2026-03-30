@@ -1366,6 +1366,25 @@ export interface AudioAuditPayload {
     summary: AudioAuditSummary;
     segments: AudioAuditSegment[];
 }
+
+export interface ConclusionEvidenceSource {
+    available: boolean;
+    reason?: string | null;
+    turn_count?: number | null;
+}
+
+export interface ConclusionEvidenceEntry {
+    retrieval_source?: ConclusionEvidenceSource | null;
+    transcript_source?: ConclusionEvidenceSource | null;
+    audio_source?: ConclusionEvidenceSource | null;
+}
+
+export interface ConclusionEvidence {
+    main_issue?: ConclusionEvidenceEntry | null;
+    next_goal?: ConclusionEvidenceEntry | null;
+    claim_truth?: ConclusionEvidenceEntry | null;
+}
+
 export interface EvidenceDegradationLayer {
     status: "ok" | "degraded";
     token?: string;
@@ -1392,6 +1411,7 @@ export interface SessionEvidenceContract {
     evaluable?: boolean | null;
     not_evaluable_reason?: SessionNotEvaluableReason | null;
     evidence_completeness?: SessionEvidenceCompleteness | null;
+    conclusion_evidence?: ConclusionEvidence | null;
     evidence_degradation?: EvidenceDegradation | null;
     presentation_review?: PresentationReview | null;
     audio_audit?: AudioAuditPayload | null;

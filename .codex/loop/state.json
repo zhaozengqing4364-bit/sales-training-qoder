@@ -1,6 +1,6 @@
 {
   "mode": "grow",
-  "current_issue_id": "M007-S04-T04",
+  "current_issue_id": "M010-S03-T01",
   "current_issue_type": "task",
   "current_issue_status": "done",
   "pending_issue_ids": [],
@@ -124,33 +124,25 @@
     "M007-S04-T02",
     "M007-S04-T03",
     "M007-S04-T04",
-    "M007-S04"
+    "M007-S04",
+    "M010-S03-T01"
   ],
   "blocked_issue_ids": [],
   "deferred_issue_ids": [],
   "last_modified_files": [
-    ".gsd/REQUIREMENTS.md",
+    "web/src/lib/api/types.ts",
+    "web/src/lib/session-evidence.ts",
+    "web/src/app/(user)/practice/[sessionId]/report/page.tsx",
+    "web/src/app/(user)/practice/[sessionId]/report/page.test.tsx",
     ".gsd/DECISIONS.md",
-    ".gsd/KNOWLEDGE.md",
-    ".gsd/milestones/M007/slices/S04/tasks/T04-SUMMARY.md",
-    ".gsd/milestones/M007/slices/S04/S04-SUMMARY.md",
-    ".gsd/milestones/M007/slices/S04/S04-UAT.md",
-    ".gsd/milestones/M007/M007-VALIDATION.md",
-    ".gsd/milestones/M007/M007-SUMMARY.md",
-    ".gsd/STATE.md",
-    ".gsd/state-manifest.json",
-    ".gsd/gsd.db",
     ".codex/loop/state.json",
     ".codex/loop/log.md"
   ],
   "last_verification_commands": [
-    "python3 precondition check: proof markers present in .artifacts/m007-s04-final-closure-proof.md and R009 renders as validated",
-    "sh -c 'test -s .gsd/milestones/M007/slices/S04/S04-SUMMARY.md && test -s .gsd/milestones/M007/slices/S04/S04-UAT.md && test -s .gsd/milestones/M007/M007-VALIDATION.md && test -s .gsd/milestones/M007/M007-SUMMARY.md'",
-    "python3 state-manifest gate: assert M007 complete with title and M002 non-active (first run exposed stale DB metadata, final run passed)",
-    "node engine rebuild: openDatabase(.gsd/gsd.db) -> writeManifest(.) -> rebuildState(.)"
+    "npm --prefix web test -- --run \"src/app/(user)/practice/[sessionId]/report/page.test.tsx\""
   ],
-  "last_verification_result": "Fresh close-out verification passed. The first final manifest gate exposed a real workflow-DB mismatch (blank milestone titles plus stale M002 active status) even though STATE.md already looked reconciled. After correcting the underlying .gsd/gsd.db milestone rows and rebuilding state-manifest/STATE through engine code, the final read-back passed: R009 is validated, S04 and M007 artifacts exist, M007 is complete with a real title, and M002 is no longer active in the manifest.",
-  "last_success_signal": "M007 is closed on the same truthful line across localhost same-session proof, rendered close-out artifacts, and final generated-state read-back.",
+  "last_verification_result": "Fresh focused report-page verification passed: 21/21 Vitest cases green, covering happy-path sales provenance/degradation, malformed helper inputs, supplemental knowledge-check failure, and presentation-null suppression.",
+  "last_success_signal": "The learner report now renders canonical conclusion provenance and four-layer degradation from shared session-evidence.ts helpers without parsing raw contract fragments in the page.",
   "last_growth_scan": null,
-  "next_action": "M007/S04/T04 is done. Milestone M007 is closed; no pending issue ids remain."
+  "next_action": "M010/S03/T01 is done. T02 can mirror the same helper-owned provenance/degradation seam onto replay."
 }

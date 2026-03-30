@@ -32,7 +32,9 @@ import {
     extractSessionLearningCue,
     formatClaimTruthEvidenceNote,
     formatClaimTruthSummary,
+    formatConclusionEvidenceSections,
     formatEvidenceCompletenessNote,
+    formatEvidenceDegradationItems,
     formatNotEvaluableReason,
     formatPresentationDegradedNote,
     formatPresentationIssueContextLines,
@@ -697,6 +699,12 @@ export default function ComprehensiveReportPage() {
     const retrievalFacts = !isPresentationScenario
         ? extractRetrievalFacts(report?.effectiveness_snapshot)
         : null;
+    const conclusionEvidenceSections = !isPresentationScenario
+        ? formatConclusionEvidenceSections(report?.conclusion_evidence)
+        : [];
+    const evidenceDegradationItems = !isPresentationScenario
+        ? formatEvidenceDegradationItems(report?.evidence_degradation)
+        : [];
     const retrievalStatusTone = formatRetrievalStatusTone(retrievalFacts?.status);
     const retrievalClasses = getRetrievalStatusClasses(retrievalStatusTone);
     const retrievalLatestAttemptCopy = retrievalFacts ? formatLatestAttemptCopy(retrievalFacts) : null;
@@ -1199,6 +1207,61 @@ export default function ComprehensiveReportPage() {
                                 {report.pass_flags.pass_4step_structure ? "已达标" : "未达标"}
                             </p>
                         </div>
+                    </div>
+                </GlassCard>
+            )}
+
+            {!isPresentationScenario && conclusionEvidenceSections.length > 0 && (
+                <GlassCard className="p-6 mb-6">
+                    <h2 className="text-lg font-semibold text-zinc-900 mb-4">结论出处</h2>
+                    <div className="space-y-4">
+                        {conclusionEvidenceSections.map((section) => (
+                            <div key={section.key} className="rounded-xl bg-zinc-50 p-4">
+                                <p className="text-sm font-semibold text-zinc-900 mb-3">{section.title}</p>
+                                <div className="flex flex-wrap gap-2">
+                                    {section.rows.map((row) => (
+                                        <span
+                                            key={`${section.key}-${row.key}`}
+                                            className="inline-flex items-center rounded-full border border-zinc-200 bg-white px-3 py-1 text-xs font-medium text-zinc-700"
+                                        >
+                                            {row.summary}
+                                        </span>
+                                    ))}
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </GlassCard>
+            )}
+
+            {!isPresentationScenario && evidenceDegradationItems.length > 0 && (
+                <GlassCard className="p-6 mb-6">
+                    <h2 className="text-lg font-semibold text-zinc-900 mb-4">证据降级状态</h2>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {evidenceDegradationItems.map((item) => (
+                            <div
+                                key={item.key}
+                                className={cn(
+                                    "rounded-xl border p-4",
+                                    item.status === "ok"
+                                        ? "border-emerald-200 bg-emerald-50/70"
+                                        : "border-amber-200 bg-amber-50/70",
+                                )}
+                            >
+                                <div className="flex items-center justify-between gap-3 mb-2 flex-wrap">
+                                    <p className="text-sm font-semibold text-zinc-900">{item.label}</p>
+                                    <span className={cn(
+                                        "inline-flex rounded-full border px-2.5 py-1 text-xs font-medium",
+                                        item.status === "ok"
+                                            ? "border-emerald-200 bg-white text-emerald-700"
+                                            : "border-amber-200 bg-white text-amber-700",
+                                    )}>
+                                        {item.status === "ok" ? "正常" : "降级"}
+                                    </span>
+                                </div>
+                                <p className="text-sm text-zinc-700">{item.summary}</p>
+                            </div>
+                        ))}
                     </div>
                 </GlassCard>
             )}

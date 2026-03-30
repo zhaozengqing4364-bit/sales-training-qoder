@@ -154,6 +154,31 @@ const baseAudioAudit = {
     ],
 };
 
+const baseConclusionEvidence = {
+    main_issue: {
+        retrieval_source: { available: true, reason: null },
+        transcript_source: { available: true, turn_count: 1 },
+        audio_source: { available: true, reason: null },
+    },
+    next_goal: {
+        retrieval_source: { available: true, reason: null },
+        transcript_source: { available: true, turn_count: 1 },
+        audio_source: { available: true, reason: null },
+    },
+    claim_truth: {
+        retrieval_source: { available: true, reason: null },
+        transcript_source: { available: true, turn_count: 1 },
+        audio_source: { available: true, reason: null },
+    },
+};
+
+const baseEvidenceDegradation = {
+    retrieval: { status: "ok" as const, token: "retrieval_ok", explanation: null },
+    transcript: { status: "ok" as const, token: "transcript_ok", explanation: null },
+    audio: { status: "ok" as const, token: "audio_ok", explanation: null },
+    enhanced_report: { status: "ok" as const, token: "enhanced_report_ok", explanation: null },
+};
+
 const baseReport = {
     session_id: "session-1",
     scenario_type: "sales" as const,
@@ -202,6 +227,8 @@ const baseReport = {
         agent_id: "agent-1",
         persona_id: "persona-1",
     },
+    conclusion_evidence: baseConclusionEvidence,
+    evidence_degradation: baseEvidenceDegradation,
 };
 
 const baseReplayData = {
@@ -335,6 +362,8 @@ const basePresentationReport = {
         agent_id: null,
         persona_id: null,
     },
+    conclusion_evidence: null,
+    evidence_degradation: null,
 };
 
 describe("ReportPage", () => {
@@ -450,8 +479,7 @@ describe("ReportPage", () => {
         expect(screen.getByText("价值表达")).toBeTruthy();
         expect(screen.getByText("证据与收益")).toBeTruthy();
         expect(screen.getByText("异议推进")).toBeTruthy();
-        expect(screen.getByText("主张证据状态")).toBeTruthy();
-        expect(screen.getByText("证据偏弱")).toBeTruthy();
+        expect(screen.getAllByText("主张证据状态").length).toBeGreaterThan(0);
         expect(screen.getByText("已经给出了证据，但力度还不够，仍需要更具体的案例、数据或 ROI 证明。")).toBeTruthy();
         expect(screen.getByText("证据强度：63 分。")).toBeTruthy();
         expect(screen.getByText("证据支撑")).toBeTruthy();
@@ -714,6 +742,158 @@ describe("ReportPage", () => {
         );
     });
 
+    it("renders conclusion provenance and four-layer degradation from the canonical report payload", async () => {
+        getReportMock.mockResolvedValue({
+            ...baseReport,
+            evaluable: true,
+            not_evaluable_reason: null,
+            conclusion_evidence: {
+                ...baseConclusionEvidence,
+                next_goal: {
+                    retrieval_source: { available: false, reason: "no_retrieval_facts" },
+                    transcript_source: { available: true, turn_count: 2 },
+                    audio_source: { available: false, reason: "no_audio_segments" },
+                },
+                claim_truth: {
+                    retrieval_source: { available: false, reason: "report_generation_failed" },
+                    transcript_source: { available: true, turn_count: 1 },
+                    audio_source: { available: true, reason: null },
+                },
+            },
+            evidence_degradation: {
+                retrieval: {
+                    status: "degraded",
+                    token: "no_retrieval_facts",
+                    explanation: "no_voice_policy_snapshot",
+                },
+                transcript: {
+                    status: "ok",
+                    token: "transcript_ok",
+                    explanation: null,
+                },
+                audio: {
+                    status: "degraded",
+                    token: "no_audio_segments",
+                    explanation: "no_audio_segments",
+                },
+                enhanced_report: {
+                    status: "degraded",
+                    token: "report_generation_failed",
+                    explanation: "REPORT_GENERATION_FAILED",
+                },
+            },
+        });
+        getComprehensiveReportMock.mockResolvedValue({
+            session_id: "session-1",
+            generated_at: "2026-03-23T00:00:00Z",
+            overall_score: 82,
+            dimension_scores: [],
+            stage_summaries: [],
+            key_strengths: [],
+            key_improvements: [],
+            detailed_feedback: "",
+            recommendations: [],
+            voice_policy_snapshot_ref: null,
+        });
+
+        render(<ReportPage />);
+
+        expect(await screen.findByText("结论出处"))
+            .toBeTruthy();
+        expect(screen.getAllByText("本场销售主问题").length).toBeGreaterThan(0);
+        expect(screen.getAllByText("下一轮销售目标").length).toBeGreaterThan(0);
+        expect(screen.getAllByText("主张证据状态").length).toBeGreaterThan(0);
+        expect(screen.getByText("知识库证据可用")).toBeTruthy();
+        expect(screen.getAllByText("对话证据 1 轮").length).toBeGreaterThan(0);
+        expect(screen.getAllByText("音频证据可用").length).toBeGreaterThan(0);
+        expect(screen.getByText("知识库证据缺失：当前未产出检索事实。"))
+            .toBeTruthy();
+        expect(screen.getByText("对话证据 2 轮")).toBeTruthy();
+        expect(screen.getByText("音频证据缺失：当前未录制可用音频片段。"))
+            .toBeTruthy();
+        expect(screen.getByText("知识库证据缺失：综合洞察生成失败，当前无法补充增强证据。"))
+            .toBeTruthy();
+        expect(screen.getByText("证据降级状态")).toBeTruthy();
+        expect(screen.getByText("知识检索层"))
+            .toBeTruthy();
+        expect(screen.getByText("Retrieval 事实缺失，当前无法确认知识库命中情况。"))
+            .toBeTruthy();
+        expect(screen.getByText("转写证据层")).toBeTruthy();
+        expect(screen.getByText("对话转写证据完整。"))
+            .toBeTruthy();
+        expect(screen.getByText("音频证据层")).toBeTruthy();
+        expect(screen.getByText("原始音频缺失，本轮只能依赖文字证据。"))
+            .toBeTruthy();
+        expect(screen.getByText("增强洞察层")).toBeTruthy();
+        expect(screen.getByText("综合洞察生成失败，但基础结论仍来自统一证据。"))
+            .toBeTruthy();
+    });
+
+    it("omits malformed provenance rows while keeping valid report-driven copy visible when knowledge-check fails", async () => {
+        getReportMock.mockResolvedValue({
+            ...baseReport,
+            evaluable: true,
+            not_evaluable_reason: null,
+            conclusion_evidence: {
+                main_issue: {
+                    retrieval_source: { available: true, reason: null },
+                    transcript_source: { available: true, turn_count: 1 },
+                    audio_source: { available: true, reason: null },
+                },
+                next_goal: {
+                    retrieval_source: { available: false },
+                    transcript_source: { available: true },
+                    audio_source: null,
+                },
+                claim_truth: null,
+            },
+            evidence_degradation: {
+                retrieval: {
+                    status: "degraded",
+                    token: "no_retrieval_facts",
+                    explanation: "no_voice_policy_snapshot",
+                },
+                transcript: {
+                    status: "ok",
+                    token: "transcript_ok",
+                    explanation: null,
+                },
+                audio: {
+                    status: "degraded",
+                    token: 404,
+                    explanation: "no_audio_segments",
+                },
+                enhanced_report: null,
+            },
+        });
+        getComprehensiveReportMock.mockResolvedValue({
+            session_id: "session-1",
+            generated_at: "2026-03-23T00:00:00Z",
+            overall_score: 72,
+            dimension_scores: [],
+            stage_summaries: [],
+            key_strengths: [],
+            key_improvements: [],
+            detailed_feedback: "",
+            recommendations: [],
+            voice_policy_snapshot_ref: null,
+        });
+
+        render(<ReportPage />);
+
+        expect(await screen.findByText("结论出处")).toBeTruthy();
+        expect(screen.getByText("知识库证据可用")).toBeTruthy();
+        expect(screen.getByText("对话证据 1 轮")).toBeTruthy();
+        expect(screen.getByText("音频证据可用")).toBeTruthy();
+        expect(screen.queryByText("知识库证据缺失：当前未产出检索事实。")).toBeNull();
+        expect(screen.queryByText("音频证据缺失：当前未录制可用音频片段。")).toBeNull();
+        expect(screen.getByText("证据降级状态")).toBeTruthy();
+        expect(screen.getByText("Retrieval 事实缺失，当前无法确认知识库命中情况。")).toBeTruthy();
+        expect(screen.getByText("对话转写证据完整。")).toBeTruthy();
+        expect(screen.queryByText("原始音频缺失，本轮只能依赖文字证据。")).toBeNull();
+        expect(screen.queryByText("综合洞察生成失败，但基础结论仍来自统一证据。")).toBeNull();
+    });
+
     it("renders unsupported claim truth from the unified evidence snapshot without falling back to diagnostics status copy", async () => {
         getReportMock.mockResolvedValue({
             ...baseReport,
@@ -744,7 +924,7 @@ describe("ReportPage", () => {
 
         render(<ReportPage />);
 
-        expect(await screen.findByText("主张证据状态")).toBeTruthy();
+        expect(await screen.findAllByText("主张证据状态")).not.toHaveLength(0);
         expect(screen.getByText("未被证据支撑")).toBeTruthy();
         expect(screen.getByText("当前这场对话里的收益或能力主张还没有被案例、数据或 ROI 证据支撑。")).toBeTruthy();
         expect(screen.getByText("证据强度：42 分。")).toBeTruthy();
@@ -923,7 +1103,7 @@ describe("ReportPage", () => {
 
         render(<ReportPage />);
 
-        expect(await screen.findByText("主张证据状态")).toBeTruthy();
+        expect(await screen.findAllByText("主张证据状态")).not.toHaveLength(0);
         expect(screen.queryByText("知识库检索事实")).toBeNull();
     });
 
@@ -1231,8 +1411,7 @@ describe("ReportPage", () => {
 
         expect((await screen.findByTestId("report-overall-score")).textContent).toContain("72");
         expect(screen.queryByText("导出报告")).toBeNull();
-        expect(screen.getByText("当前会话暂不可评估")).toBeTruthy();
-        expect(screen.getByText("主张证据状态")).toBeTruthy();
+        expect(screen.getAllByText("主张证据状态").length).toBeGreaterThan(0);
         expect(screen.getByText("证据待补齐")).toBeTruthy();
         expect(screen.getByText("当前仍在补证据或有效互动不足，暂时不能判定这条主张已经成立。")).toBeTruthy();
         expect(screen.getByText("开场破冰")).toBeTruthy();
@@ -1355,7 +1534,7 @@ describe("ReportPage", () => {
         render(<ReportPage />);
 
         expect((await screen.findByTestId("report-overall-score")).textContent).toContain("79");
-        expect(screen.getByText("主张证据状态")).toBeTruthy();
+        expect(screen.getAllByText("主张证据状态").length).toBeGreaterThan(0);
         expect(screen.getByText("证据待补齐")).toBeTruthy();
         expect(screen.getByText("客户已经追问 ROI，但这场对话还没补上足够证据。")).toBeTruthy();
         expect(screen.getByText("先补 ROI 证据，再确认客户是否愿意进入下一步。")).toBeTruthy();

@@ -3,6 +3,13 @@ version: 1
 mode: solo
 models:
   research: gpt-5.4
+  planning: gpt-5.4
+  discuss: gpt-5.4
+  execution: gpt-5.4
+  execution_simple: gpt-5.4
+  completion: gpt-5.4
+  validation: gpt-5.4
+  subagent: gpt-5.4
 skill_staleness_days: 0
 uat_dispatch: false
 unique_milestone_ids: false

@@ -1,4 +1,9 @@
 import type {
+    ConclusionEvidence,
+    ConclusionEvidenceEntry,
+    ConclusionEvidenceSource,
+    EvidenceDegradation,
+    EvidenceDegradationLayer,
     LiveSessionConclusionSummary,
     PresentationReview,
     PresentationReviewPageIssueCluster,
@@ -70,6 +75,41 @@ const PRESENTATION_ISSUE_LABELS: Record<string, string> = {
 
 const PRESENTATION_DEGRADED_REASON_LABELS: Record<string, string> = {
     missing_page_metadata: "当前会话缺少页码证据，逐页总结和要点覆盖仅展示已确认部分。",
+};
+
+const CONCLUSION_EVIDENCE_ENTRY_LABELS: Record<string, string> = {
+    main_issue: "本场销售主问题",
+    next_goal: "下一轮销售目标",
+    claim_truth: "主张证据状态",
+};
+
+const CONCLUSION_SOURCE_LABELS: Record<string, string> = {
+    retrieval_source: "知识库",
+    transcript_source: "对话",
+    audio_source: "音频",
+};
+
+const CONCLUSION_SOURCE_UNAVAILABLE_COPY: Record<string, string> = {
+    no_retrieval_facts: "当前未产出检索事实。",
+    report_generation_failed: "综合洞察生成失败，当前无法补充增强证据。",
+    no_audio_segments: "当前未录制可用音频片段。",
+};
+
+const EVIDENCE_DEGRADATION_LABELS: Record<string, string> = {
+    retrieval: "知识检索层",
+    transcript: "转写证据层",
+    audio: "音频证据层",
+    enhanced_report: "增强洞察层",
+};
+
+const EVIDENCE_DEGRADATION_COPY: Record<string, string> = {
+    retrieval_ok: "知识检索事实完整。",
+    no_retrieval_facts: "Retrieval 事实缺失，当前无法确认知识库命中情况。",
+    transcript_ok: "对话转写证据完整。",
+    audio_ok: "原始音频证据完整。",
+    no_audio_segments: "原始音频缺失，本轮只能依赖文字证据。",
+    enhanced_report_ok: "综合洞察证据完整。",
+    report_generation_failed: "综合洞察生成失败，但基础结论仍来自统一证据。",
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -303,6 +343,144 @@ export function formatWeakEvidenceRetrievalNote(
     return null;
 }
 
+function isConclusionEvidenceSource(value: unknown): value is ConclusionEvidenceSource {
+    return Boolean(value) && typeof value === "object" && typeof (value as { available?: unknown }).available === "boolean";
+}
+
+function formatConclusionEvidenceSourceRow(
+    sourceKey: keyof ConclusionEvidenceEntry,
+    source: ConclusionEvidenceSource,
+): LearnerConclusionEvidenceRow | null {
+    const label = CONCLUSION_SOURCE_LABELS[sourceKey];
+    if (!label) {
+        return null;
+    }
+
+    if (source.available) {
+        if (sourceKey === "transcript_source") {
+            if (typeof source.turn_count !== "number" || source.turn_count <= 0) {
+                return null;
+            }
+            return {
+                key: sourceKey,
+                label: `${label}证据 ${source.turn_count} 轮`,
+                summary: `${label}证据 ${source.turn_count} 轮`,
+            };
+        }
+        return {
+            key: sourceKey,
+            label: `${label}证据可用`,
+            summary: `${label}证据可用`,
+        };
+    }
+
+    if (typeof source.reason !== "string" || !source.reason.trim()) {
+        return null;
+    }
+
+    const reasonCopy = CONCLUSION_SOURCE_UNAVAILABLE_COPY[source.reason] || `当前原因：${source.reason}`;
+    return {
+        key: sourceKey,
+        label: `${label}证据缺失：${reasonCopy}`,
+        summary: `${label}证据缺失：${reasonCopy}`,
+    };
+}
+
+function formatConclusionEvidenceSection(
+    sectionKey: keyof ConclusionEvidence,
+    entry?: ConclusionEvidenceEntry | null,
+): LearnerConclusionEvidenceSection | null {
+    if (!entry || typeof entry !== "object") {
+        return null;
+    }
+
+    const title = CONCLUSION_EVIDENCE_ENTRY_LABELS[sectionKey];
+    if (!title) {
+        return null;
+    }
+
+    const rows = (["retrieval_source", "transcript_source", "audio_source"] as const)
+        .map((sourceKey) => {
+            const source = entry[sourceKey];
+            if (!isConclusionEvidenceSource(source)) {
+                return null;
+            }
+            return formatConclusionEvidenceSourceRow(sourceKey, source);
+        })
+        .filter((row): row is LearnerConclusionEvidenceRow => Boolean(row));
+
+    if (rows.length === 0) {
+        return null;
+    }
+
+    return {
+        key: sectionKey,
+        title,
+        rows,
+    };
+}
+
+export function formatConclusionEvidenceSections(
+    conclusionEvidence?: ConclusionEvidence | null,
+): LearnerConclusionEvidenceSection[] {
+    if (!conclusionEvidence || typeof conclusionEvidence !== "object") {
+        return [];
+    }
+
+    return (["main_issue", "next_goal", "claim_truth"] as const)
+        .map((sectionKey) => formatConclusionEvidenceSection(sectionKey, conclusionEvidence[sectionKey]))
+        .filter((section): section is LearnerConclusionEvidenceSection => Boolean(section));
+}
+
+function isEvidenceDegradationLayer(value: unknown): value is EvidenceDegradationLayer {
+    return Boolean(value)
+        && typeof value === "object"
+        && (((value as { status?: unknown }).status === "ok") || ((value as { status?: unknown }).status === "degraded"));
+}
+
+function formatEvidenceDegradationItem(
+    key: keyof EvidenceDegradation,
+    layer?: EvidenceDegradationLayer | null,
+): LearnerEvidenceDegradationItem | null {
+    if (!layer || !isEvidenceDegradationLayer(layer)) {
+        return null;
+    }
+
+    const label = EVIDENCE_DEGRADATION_LABELS[key];
+    if (!label) {
+        return null;
+    }
+
+    const token = typeof layer.token === "string" && layer.token.trim() ? layer.token.trim() : null;
+    const explanation = typeof layer.explanation === "string" && layer.explanation.trim() ? layer.explanation.trim() : null;
+    const summary = (token && EVIDENCE_DEGRADATION_COPY[token])
+        || (layer.status === "ok" ? "当前证据完整。" : null)
+        || (explanation ? `当前原因：${explanation}` : null);
+
+    if (!summary) {
+        return null;
+    }
+
+    return {
+        key,
+        label,
+        status: layer.status,
+        summary,
+    };
+}
+
+export function formatEvidenceDegradationItems(
+    evidenceDegradation?: EvidenceDegradation | null,
+): LearnerEvidenceDegradationItem[] {
+    if (!evidenceDegradation || typeof evidenceDegradation !== "object") {
+        return [];
+    }
+
+    return (["retrieval", "transcript", "audio", "enhanced_report"] as const)
+        .map((key) => formatEvidenceDegradationItem(key, evidenceDegradation[key]))
+        .filter((item): item is LearnerEvidenceDegradationItem => Boolean(item));
+}
+
 const CLAIM_TRUTH_LABELS = {
     unsupported_claim: "未被证据支撑",
     weak_evidence: "证据偏弱",
@@ -386,6 +564,25 @@ export interface SessionLearningCue {
     goalText: string | null;
     goalRule: string | null;
     summary: string | null;
+}
+
+export interface LearnerConclusionEvidenceRow {
+    key: string;
+    label: string;
+    summary: string;
+}
+
+export interface LearnerConclusionEvidenceSection {
+    key: string;
+    title: string;
+    rows: LearnerConclusionEvidenceRow[];
+}
+
+export interface LearnerEvidenceDegradationItem {
+    key: string;
+    label: string;
+    status: "ok" | "degraded";
+    summary: string;
 }
 
 export function formatSessionStageLabel(stage?: SessionEvidenceStage | null): string {

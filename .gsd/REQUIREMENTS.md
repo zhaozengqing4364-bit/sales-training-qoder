@@ -26,17 +26,6 @@ This file is the explicit capability and coverage contract for the project.
 - Validation: mapped
 - Notes: 第一阶段不追求所有 report conclusion 都可追溯，只先把 retrieval truth line 统一。
 
-### R028 — 当 retrieval / audio / transcript / enhanced-report 任一层降级时，系统必须分层说明原因，避免形成假可信报告。
-- Class: failure-visibility
-- Status: active
-- Description: 当 retrieval / audio / transcript / enhanced-report 任一层降级时，系统必须分层说明原因，避免形成假可信报告。
-- Why it matters: 用户最不能接受的是“报告像真的，但底层证据链其实已经断了”；这条 requirement 用来防止系统静默伪装完整。
-- Source: user
-- Primary owning slice: M010/S02
-- Supporting slices: M010/S03, M008/S03, M009/S03
-- Validation: mapped
-- Notes: 这条 requirement 既影响 backend 归因模型，也影响 replay/report/knowledge-check 的前端 wording 统一。
-
 ## Validated
 
 ### R001 — 桌面端销售客户演练必须能稳定完成多轮来回，不能在第二轮录音、第二轮响应、会话结束或重连时频繁失效。
@@ -248,6 +237,17 @@ This file is the explicit capability and coverage contract for the project.
 - Validation: Validated by M010/S01 completion. T01 built `build_conclusion_evidence_bundle()` inside `SessionEvidenceService.build_projection()` and threaded it into report and replay routes. T02 mirrored the same projection-backed evidence into knowledge-check via `build_session_runtime_diagnostics()` and locked cross-route parity with dedicated contract tests (`test_conclusion_evidence_parity.py`). 83/83 backend contract tests pass, including 3 parity tests asserting report/replay/knowledge-check produce identical `conclusion_evidence` for happy-path, degraded, and presentation sessions.
 - Notes: 这条 requirement 建立在 M008 的 retrieval truth 与 M009 的音频留痕之上，不应先用 prompt 文案或 UI 包装来伪装完成。
 
+### R028 — 当 retrieval / audio / transcript / enhanced-report 任一层降级时，系统必须分层说明原因，避免形成假可信报告。
+- Class: failure-visibility
+- Status: validated
+- Description: 当 retrieval / audio / transcript / enhanced-report 任一层降级时，系统必须分层说明原因，避免形成假可信报告。
+- Why it matters: 用户最不能接受的是“报告像真的，但底层证据链其实已经断了”；这条 requirement 用来防止系统静默伪装完整。
+- Source: user
+- Primary owning slice: M010/S02
+- Supporting slices: M010/S03, M008/S03, M009/S03
+- Validation: Validated by M010/S02 completion. SessionEvidenceService now builds one projection-backed `evidence_degradation` taxonomy with four canonical layers (`retrieval`, `transcript`, `audio`, `enhanced_report`), report/replay/knowledge-check mirror the same payload, and compatibility readers still receive mirrored `evidence_completeness.degraded_reasons`. Fresh slice-close verification passed 47 focused parity/contract/unit tests (`test_conclusion_evidence_parity.py`, `test_practice_evidence_contract.py`, `test_session_evidence_service.py`) plus 7 admin/history compatibility tests (`test_admin_analytics_service.py`, `test_history_service_evidence_projection.py`).
+- Notes: Validated on the backend authority seam first; frontend rendering of the layered taxonomy remains the follow-on work in M010/S03.
+
 ## Deferred
 
 ### R016 — 在 PPT 对练过程中实时识别讲偏、讲错、讲太多并当场打断纠偏。
@@ -349,11 +349,11 @@ This file is the explicit capability and coverage contract for the project.
 | R025 | operability | validated | M009/S01 | M009/S02 | Validated by M009 close-out: the shipped implementation keeps audio transfer browser-direct to OSS while FastAPI only signs PUT/GET URLs, registers metadata, and enforces ownership. Evidence includes `backend/src/common/oss/signing.py`, audio sign/register/playback handoff routes, non-persistence of signed URLs, and fresh backend/web verification for signed playback redirect, 403/404 ownership boundaries, uploader flow, and report/replay playback consumers. |
 | R026 | primary-user-loop | validated | M009/S02 | M009/S03, M010/S01 | Validated by M009 close-out: canonical learner report and replay routes now expose `audio_audit` with recording status, segment counts, degraded states, and playable raw-audio evidence through the shared `AudioAuditCard` and signed playback handoff route. Fresh verification passed backend contract/integration coverage for available/partial/null payloads and playback ownership, plus web report/replay page suites on the current branch. |
 | R027 | launchability | validated | M010/S01 | M010/S02, M010/S03 | Validated by M010/S01 completion. T01 built `build_conclusion_evidence_bundle()` inside `SessionEvidenceService.build_projection()` and threaded it into report and replay routes. T02 mirrored the same projection-backed evidence into knowledge-check via `build_session_runtime_diagnostics()` and locked cross-route parity with dedicated contract tests (`test_conclusion_evidence_parity.py`). 83/83 backend contract tests pass, including 3 parity tests asserting report/replay/knowledge-check produce identical `conclusion_evidence` for happy-path, degraded, and presentation sessions. |
-| R028 | failure-visibility | active | M010/S02 | M010/S03, M008/S03, M009/S03 | mapped |
+| R028 | failure-visibility | validated | M010/S02 | M010/S03, M008/S03, M009/S03 | Validated by M010/S02 completion. SessionEvidenceService now builds one projection-backed `evidence_degradation` taxonomy with four canonical layers (`retrieval`, `transcript`, `audio`, `enhanced_report`), report/replay/knowledge-check mirror the same payload, and compatibility readers still receive mirrored `evidence_completeness.degraded_reasons`. Fresh slice-close verification passed 47 focused parity/contract/unit tests (`test_conclusion_evidence_parity.py`, `test_practice_evidence_contract.py`, `test_session_evidence_service.py`) plus 7 admin/history compatibility tests (`test_admin_analytics_service.py`, `test_history_service_evidence_projection.py`). |
 
 ## Coverage Summary
 
-- Active requirements: 3
-- Mapped to slices: 3
-- Validated: 19 (R001, R002, R003, R004, R005, R006, R007, R008, R009, R010, R011, R012, R013, R014, R015, R024, R025, R026, R027)
+- Active requirements: 2
+- Mapped to slices: 2
+- Validated: 20 (R001, R002, R003, R004, R005, R006, R007, R008, R009, R010, R011, R012, R013, R014, R015, R024, R025, R026, R027, R028)
 - Unmapped active requirements: 0
