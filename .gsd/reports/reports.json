@@ -67,6 +67,22 @@
       "doneMilestones": 8,
       "totalMilestones": 10,
       "phase": "pre-planning"
+    },
+    {
+      "filename": "M009-2026-03-30T00-05-45.html",
+      "generatedAt": "2026-03-30T00:05:45.142Z",
+      "milestoneId": "M009",
+      "milestoneTitle": "M009: 录音审计链收口",
+      "label": "M009: M009: 录音审计链收口",
+      "kind": "milestone",
+      "totalCost": 0,
+      "totalTokens": 1581485691,
+      "totalDuration": 225744173,
+      "doneSlices": 40,
+      "totalSlices": 40,
+      "doneMilestones": 9,
+      "totalMilestones": 10,
+      "phase": "pre-planning"
     }
   ]
 }

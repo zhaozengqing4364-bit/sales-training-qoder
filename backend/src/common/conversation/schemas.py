@@ -332,6 +332,10 @@ class ReplayDataResponse(BaseModel):
         None,
         description="Raw audio recording audit evidence for the session",
     )
+    conclusion_evidence: dict[str, Any] | None = Field(
+        None,
+        description="Structured provenance for main_issue, next_goal, and claim_truth conclusions",
+    )
 
 
 # ========== Request Schemas ==========

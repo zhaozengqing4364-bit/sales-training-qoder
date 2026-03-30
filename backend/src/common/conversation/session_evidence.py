@@ -71,6 +71,7 @@ class SessionEvidenceProjection:
     sales_alignment_focus_type: str | None = None
     sales_alignment_fallback_reason: str | None = None
     presentation_review: dict[str, Any] | None = None
+    conclusion_evidence: dict[str, Any] | None = None
 
 
 class SessionEvidenceService:
@@ -365,6 +366,133 @@ class SessionEvidenceService:
         }
 
     @classmethod
+    def build_conclusion_evidence_bundle(
+        cls,
+        *,
+        messages: list[dict[str, Any]],
+        effectiveness_snapshot: dict[str, Any] | None,
+        voice_policy_snapshot: dict[str, Any] | None,
+        scenario_type: str,
+    ) -> dict[str, Any] | None:
+        """Build structured provenance for each canonical conclusion.
+
+        For each of main_issue / next_goal / claim_truth, produce an
+        ``evidence_sources`` dict with ``retrieval_source``, ``transcript_source``,
+        and ``audio_source`` entries that describe whether retrieval facts,
+        transcript turns, or audio segments contributed to that conclusion.
+
+        Returns ``None`` for presentation scenarios (not in scope for M010).
+        """
+        if scenario_type != "sales":
+            return None
+
+        snapshot = effectiveness_snapshot if isinstance(effectiveness_snapshot, dict) else {}
+
+        # --- Per-source availability detection ---
+        retrieval_facts = build_retrieval_facts(voice_policy_snapshot)
+        retrieval_available = isinstance(retrieval_facts, dict) and retrieval_facts.get("status") == "hit"
+
+        # Transcript: look for user messages with score_snapshot (scored turns)
+        scored_user_turns = [
+            msg for msg in messages
+            if msg.get("role") == "user" and isinstance(msg.get("score_snapshot"), dict)
+        ]
+        transcript_available = len(scored_user_turns) > 0
+
+        # Audio: look for messages with audio_url or duration_ms
+        audio_turns = [
+            msg for msg in messages
+            if msg.get("audio_url") or (isinstance(msg.get("duration_ms"), int) and msg["duration_ms"] > 0)
+        ]
+        audio_available = len(audio_turns) > 0
+
+        # --- Build per-conclusion source entries ---
+        def _source_entry(
+            retrieval: bool,
+            transcript_turn_count: int,
+            audio: bool,
+            *,
+            reason_unavailable: str | None = None,
+        ) -> dict[str, Any]:
+            return {
+                "retrieval_source": {
+                    "available": retrieval,
+                    "reason": None if retrieval else (reason_unavailable or "no_retrieval_hits"),
+                },
+                "transcript_source": {
+                    "available": transcript_turn_count > 0,
+                    "turn_count": transcript_turn_count,
+                },
+                "audio_source": {
+                    "available": audio,
+                    "reason": None if audio else "no_audio_segments",
+                },
+            }
+
+        # Count transcript turns that are relevant for each conclusion
+        # main_issue: all scored user turns contribute
+        main_issue_turns = len(scored_user_turns)
+        # next_goal: same evidence base
+        next_goal_turns = len(scored_user_turns)
+        # claim_truth: turns that specifically have evidence_score in dimension_scores
+        claim_truth_turns = 0
+        for msg in scored_user_turns:
+            dims = msg.get("score_snapshot", {}).get("dimension_scores", {})
+            if isinstance(dims, dict) and any(k in dims for k in ("证据使用", "evidence_usage")):
+                claim_truth_turns += 1
+        if claim_truth_turns == 0:
+            # Fallback: all scored turns contribute to claim_truth assessment
+            claim_truth_turns = main_issue_turns
+
+        retrieval_reason = None
+        if not retrieval_available:
+            if voice_policy_snapshot is None:
+                retrieval_reason = "no_voice_policy_snapshot"
+            elif not isinstance(voice_policy_snapshot.get("runtime_metrics"), dict):
+                retrieval_reason = "no_runtime_metrics"
+            else:
+                retrieval_reason = "no_retrieval_hits"
+
+        unavailable_reason = retrieval_reason if not retrieval_available else None
+
+        main_issue_sources = _source_entry(
+            retrieval_available,
+            main_issue_turns,
+            audio_available,
+            reason_unavailable=unavailable_reason,
+        )
+        next_goal_sources = _source_entry(
+            retrieval_available,
+            next_goal_turns,
+            audio_available,
+            reason_unavailable=unavailable_reason,
+        )
+        claim_truth_sources = _source_entry(
+            retrieval_available,
+            claim_truth_turns,
+            audio_available,
+            reason_unavailable=unavailable_reason,
+        )
+
+        bundle = {
+            "main_issue": main_issue_sources,
+            "next_goal": next_goal_sources,
+            "claim_truth": claim_truth_sources,
+        }
+
+        logger.info(
+            "projection_conclusion_evidence_built",
+            retrieval_available=retrieval_available,
+            transcript_available=transcript_available,
+            audio_available=audio_available,
+            main_issue_turn_count=main_issue_turns,
+            claim_truth_turn_count=claim_truth_turns,
+            scenario_type=scenario_type,
+        )
+
+        return bundle
+
+    @classmethod
     def build_projection(
         cls,
         session: PracticeSession,
@@ -460,6 +588,14 @@ class SessionEvidenceService:
                     "retrieval_facts": retrieval_facts,
                 }
 
+        # --- Conclusion evidence bundle ---
+        conclusion_evidence = cls.build_conclusion_evidence_bundle(
+            messages=normalized_messages,
+            effectiveness_snapshot=projection_snapshot,
+            voice_policy_snapshot=getattr(session, "voice_policy_snapshot", None),
+            scenario_type=resolved_scenario_type,
+        )
+
         return SessionEvidenceProjection(
             session=session,
             session_id=str(session.session_id),
@@ -500,6 +636,7 @@ class SessionEvidenceService:
             sales_alignment_stage_key=sales_alignment_stage_key,
             sales_alignment_focus_type=sales_alignment_focus_type,
             sales_alignment_fallback_reason=sales_alignment_fallback_reason,
+            conclusion_evidence=conclusion_evidence,
         )
 
     @staticmethod

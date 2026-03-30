@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "exported_at": "2026-03-30T00:01:42.437Z",
+  "exported_at": "2026-03-30T01:57:26.603Z",
   "milestones": [
     {
       "id": "M001",
@@ -489,17 +489,53 @@
       "depends_on": [],
       "created_at": "2026-03-28T15:44:08.130Z",
       "completed_at": null,
-      "vision": "",
-      "success_criteria": [],
-      "key_risks": [],
-      "proof_strategy": [],
-      "verification_contract": "",
-      "verification_integration": "",
-      "verification_operational": "",
-      "verification_uat": "",
-      "definition_of_done": [],
-      "requirement_coverage": "",
-      "boundary_map_markdown": ""
+      "vision": "M010 closes the \"fake-credible report\" gap by attaching evidence provenance to key conclusions (main_issue, next_goal, claim_truth) and establishing a unified degradation taxonomy across report, replay, and knowledge-check routes. The user will see not just \"what went wrong\" but \"why we believe this\" — backed by retrieval, transcript, and audio evidence on the same authority seam that already powers the shipped product.",
+      "success_criteria": [
+        "A completed sales session exposes the same conclusion-evidence bundle (main_issue, next_goal, claim_truth each pointing to their retrieval/transcript/audio sources) on report, replay, and knowledge-check with identical vocabulary.",
+        "Retrieval, transcript, and audio evidence degradation are explained with a single layered taxonomy that is consistent across all three route families — no route-family-specific wording.",
+        "When retrieval or audio evidence is missing or degraded, the system does not silently present conclusions as fully supported; instead it explicitly marks the conclusion as partially sourced and names which evidence layer is missing.",
+        "No new report-only heuristic or second truth source is introduced; all provenance stays on SessionEvidenceService + build_retrieval_facts + build_session_audio_audit.",
+        "Frontend report/replay pages render conclusion provenance and degradation through shared helpers in session-evidence.ts, not through page-local derivation."
+      ],
+      "key_risks": [
+        {
+          "risk": "Evidence reference model could bloat the existing projection payload and break existing consumers if not kept strictly additive.",
+          "whyItMatters": "SessionEvidenceService.build_projection() is consumed by report, replay, history, admin, and trends — any non-additive change would cascade regressions."
+        },
+        {
+          "risk": "Knowledge-check uses a different code path (runtime_diagnostics) from report/replay (session_evidence projection); provenance vocabulary could drift between them.",
+          "whyItMatters": "The whole point of M010 is unified vocabulary across route families; if knowledge-check speaks a different provenance language, the milestone fails its core promise."
+        },
+        {
+          "risk": "Enhanced-report failures may be conflated with canonical evidence degradation, causing false alarm or missed real gaps.",
+          "whyItMatters": "M009 already established that optional enhancement failures must remain optional; M010 must not let them overwrite canonical evidence signals."
+        }
+      ],
+      "proof_strategy": [
+        {
+          "riskOrUnknown": "Can the same conclusion evidence bundle be produced identically by projection and runtime-diagnostics?",
+          "retireIn": "S01 contract tests",
+          "whatWillBeProven": "One completed session with retrieval hit, transcript messages, and audio segments will produce the same evidence_references payload on GET report, GET replay, and GET knowledge-check."
+        },
+        {
+          "riskOrUnknown": "Can degradation be expressed in a single taxonomy that all three routes understand?",
+          "retireIn": "S02 contract tests + S03 frontend rendering",
+          "whatWillBeProven": "A session with partial evidence (e.g. retrieval miss + audio available) produces consistent degradation explanations across all routes, and the frontend renders them identically."
+        }
+      ],
+      "verification_contract": "Backend contract tests in test_practice_evidence_contract.py prove report↔replay↔knowledge-check parity for conclusion evidence and degradation vocabulary.",
+      "verification_integration": "A real completed sales session with retrieval attempts, transcript messages, and audio segments produces consistent provenance across all three route families through live HTTP calls in integration tests.",
+      "verification_operational": "Degraded sessions (missing retrieval, missing audio, missing transcript evidence) produce explicit degradation tokens that the frontend renders without silent fallback.",
+      "verification_uat": "Report page shows conclusion provenance (which evidence sources support each conclusion). Replay page shows the same provenance. Knowledge-check shows the same degradation vocabulary. A session with partial evidence shows explicit missing-layer indicators.",
+      "definition_of_done": [
+        "All slices complete with SUMMARY.md and UAT.md artifacts.",
+        "Contract tests pass proving report↔replay↔knowledge-check parity for conclusion evidence_references and degradation taxonomy.",
+        "Frontend focused tests pass for report and replay provenance rendering.",
+        "No new breaking changes to existing report/replay/knowledge-check payload fields — all new fields are additive.",
+        "SessionEvidenceService remains the single report authority; no second truth source introduced."
+      ],
+      "requirement_coverage": "R023 (retrieval parity) — maintained by S01 contract tests extending existing M008 parity guarantees with provenance cross-references.\nR026 (learner audio evidence) — maintained by S01; audio provenance is one layer of the evidence reference model.\nR027 (conclusion provenance) — S01 builds the evidence reference model, S02 adds degradation, S03 renders it.\nR028 (layered degradation) — S02 owns the unified taxonomy, S03 renders it on frontend.",
+      "boundary_map_markdown": "```boundary-map\nS01: backend/src/common/conversation/session_evidence.py, backend/src/common/conversation/runtime_diagnostics.py, backend/tests/contract/test_practice_evidence_contract.py, backend/src/common/db/schemas.py\nS02: backend/src/common/conversation/session_evidence.py, backend/src/common/conversation/runtime_diagnostics.py, backend/src/common/api/practice.py, backend/tests/contract/test_practice_evidence_contract.py\nS03: web/src/lib/api/types.ts, web/src/lib/session-evidence.ts, web/src/app/(user)/practice/[sessionId]/report/page.tsx, web/src/app/(user)/practice/[sessionId]/replay/page.tsx\n```"
     }
   ],
   "slices": [
@@ -1199,6 +1235,71 @@
       "proof_level": "contract",
       "integration_closure": "- Upstream surfaces consumed: S01 audio-segment table + registration flow, S02 shared build_session_audio_audit() + AudioAuditCard, existing RuntimeStatusService typed anomaly system\n- New wiring introduced: browser failure registration → failed segment rows + bounded failure metrics → enriched summary → learner UI degraded wording + support/runtime audio anomaly classification\n- What remains before milestone is truly usable end-to-end: nothing — S03 closes M009",
       "observability_impact": "- voice_policy_snapshot.runtime_metrics.audio_audit gains failed_segment_count, last_failure_reason, last_failure_at fields for bounded failure summary\n- support/runtime emits audio anomaly items with kind, severity, summary, and diagnostics fields\n- session_audio_segments rows now durably store upload_status=failed with compact error_message tokens",
+      "sequence": 0,
+      "replan_triggered_at": null
+    },
+    {
+      "milestone_id": "M010",
+      "id": "S01",
+      "title": "后端结论证据合同与跨路由一致性",
+      "status": "pending",
+      "risk": "high",
+      "depends": [],
+      "demo": "After this slice, contract tests prove one completed session produces the same evidence_references (retrieval/transcript/audio sources for main_issue/next_goal/claim_truth) on report, replay, and knowledge-check.",
+      "created_at": "2026-03-30T00:27:39.205Z",
+      "completed_at": null,
+      "full_summary_md": "",
+      "full_uat_md": "",
+      "goal": "Build a shared conclusion-evidence builder that attaches provenance (retrieval/transcript/audio sources) to each canonical conclusion (main_issue, next_goal, claim_truth) and prove that one completed session produces identical evidence_references on report, replay, and knowledge-check routes.",
+      "success_criteria": "- `build_conclusion_evidence_bundle()` produces structured provenance with retrieval_source, transcript_source, and audio_source for each conclusion in the canonical family (main_issue, next_goal, claim_truth).\n- Report route (`/api/v1/practice/sessions/{id}/report`) includes `conclusion_evidence` in its response payload.\n- Replay route (`/api/v1/sessions/{id}/replay`) includes `conclusion_evidence` in its response payload.\n- Knowledge-check route (`/api/v1/practice/sessions/{id}/knowledge-check`) includes `conclusion_evidence` in its response payload.\n- Cross-route contract test proves all three routes return identical `conclusion_evidence` for the same completed session.\n- Existing report/replay contract tests continue to pass without modification (backward-compatible additive field).",
+      "proof_level": "contract",
+      "integration_closure": "Upstream surfaces consumed: `SessionEvidenceService.build_projection()`, `build_retrieval_facts()`, `build_session_runtime_diagnostics()`, `build_session_audio_audit()`, `resolve_sales_report_alignment()`.\nNew wiring introduced in this slice: `build_conclusion_evidence_bundle()` called inside `build_projection()`; its output mirrored into knowledge-check via `projection_effectiveness_snapshot`.\nWhat remains before the milestone is truly usable end-to-end: S02 (unified degradation taxonomy) and S03 (frontend provenance rendering).",
+      "observability_impact": "Runtime signals: `projection_conclusion_evidence_built` structured log in `SessionEvidenceService.get_projection()`, including evidence_source counts per conclusion.\nInspection surfaces: `conclusion_evidence` field visible in report/replay/knowledge-check JSON responses.\nFailure visibility: When a source layer is missing, the corresponding source entry has `available: false` with an explicit reason (e.g., `no_retrieval_ledger`, `no_transcript_turns`, `no_audio_segments`).",
+      "sequence": 0,
+      "replan_triggered_at": null
+    },
+    {
+      "milestone_id": "M010",
+      "id": "S02",
+      "title": "统一分层降级分类",
+      "status": "pending",
+      "risk": "medium",
+      "depends": [
+        "S01"
+      ],
+      "demo": "After this slice, sessions with partial evidence (missing retrieval, missing audio, or degraded transcript) produce explicit layered degradation tokens that are consistent across report, replay, and knowledge-check.",
+      "created_at": "2026-03-30T00:27:39.206Z",
+      "completed_at": null,
+      "full_summary_md": "",
+      "full_uat_md": "",
+      "goal": "Introduce a unified degradation taxonomy that explains which evidence layer is missing and how it affects conclusion credibility, replacing the current scattered degraded_reasons with one consistent model.",
+      "success_criteria": "```\n- One shared degradation taxonomy distinguishes: retrieval_degraded, transcript_degraded, audio_degraded, enhanced_report_degraded\n- Each degraded layer has a canonical token and human-readable explanation\n- Optional enhanced_report degradation does NOT override canonical evidence signals\n- Contract tests prove report, replay, and knowledge-check use the same degradation tokens for the same session\n- Existing evidence_completeness remains backward-compatible; new degradation_detail is additive\n```",
+      "proof_level": "contract",
+      "integration_closure": "S02 establishes the degradation vocabulary that S03 renders on the frontend.",
+      "observability_impact": "Unified degradation tokens make it possible to monitor evidence-chain health across the fleet without parsing route-specific wording.",
+      "sequence": 0,
+      "replan_triggered_at": null
+    },
+    {
+      "milestone_id": "M010",
+      "id": "S03",
+      "title": "前端出处渲染与端到端验证",
+      "status": "pending",
+      "risk": "low",
+      "depends": [
+        "S01",
+        "S02"
+      ],
+      "demo": "After this slice, report and replay pages render conclusion provenance (which evidence sources support each conclusion) and degradation indicators (which layers are missing) using shared helpers from session-evidence.ts.",
+      "created_at": "2026-03-30T00:27:39.206Z",
+      "completed_at": null,
+      "full_summary_md": "",
+      "full_uat_md": "",
+      "goal": "Wire the backend conclusion-evidence and degradation contracts into the frontend shared types and helpers, then render provenance and degradation on existing report/replay pages.",
+      "success_criteria": "```\n- web/src/lib/api/types.ts includes typed ConclusionEvidenceReference and DegradationDetail\n- web/src/lib/session-evidence.ts exposes shared helpers for rendering provenance and degradation\n- Report page renders evidence sources for main_issue/next_goal/claim_truth\n- Replay page renders the same provenance with the same shared helpers\n- Focused Vitest tests pass for report and replay provenance rendering\n- No page-local heuristic or second truth derivation\n```",
+      "proof_level": "focused-tests",
+      "integration_closure": "S03 completes the milestone by making evidence provenance user-visible on shipped routes.",
+      "observability_impact": "User-visible provenance and degradation indicators give learners and reviewers direct insight into report credibility without needing admin access.",
       "sequence": 0,
       "replan_triggered_at": null
     }
@@ -6088,6 +6189,109 @@
       "observability_impact": "support/runtime overview and faults endpoints now include audio anomaly items with kind severity summary and diagnostics for admin diagnosis",
       "full_plan_md": "",
       "sequence": 0
+    },
+    {
+      "milestone_id": "M010",
+      "slice_id": "S01",
+      "id": "T01",
+      "title": "Added projection-backed conclusion provenance to completed-session report and replay responses.",
+      "status": "complete",
+      "one_liner": "Added projection-backed conclusion provenance to completed-session report and replay responses.",
+      "narrative": "Implemented a shared completed-session conclusion provenance bundle in `SessionEvidenceService` and threaded it through the existing report and replay read paths. Added the new additive `conclusion_evidence` field to the report and replay schemas so FastAPI preserves it, and added structured `projection_conclusion_evidence_built` logging with retrieval/transcript/audio availability flags. Extended focused contract and unit coverage, then updated a few logger assertions because the new observability event adds a second `info` log per projection build. The final focused pytest gate passed.",
+      "verification_result": "Ran the task verification command from the plan: `cd backend && venv/bin/python -m pytest -c pyproject.toml tests/contract/test_practice_evidence_contract.py tests/unit/test_session_evidence_service.py -x -q`. The suite passed with 37 tests green.",
+      "duration": "",
+      "completed_at": "2026-03-30T01:29:12.878Z",
+      "blocker_discovered": false,
+      "deviations": "None.",
+      "known_issues": "Knowledge-check parity is not implemented in this task; it remains for T02.",
+      "key_files": [
+        "backend/src/common/conversation/session_evidence.py",
+        "backend/src/common/conversation/replay.py",
+        "backend/src/common/conversation/schemas.py",
+        "backend/src/common/db/schemas.py",
+        "backend/src/common/api/practice.py",
+        "backend/tests/unit/test_session_evidence_service.py",
+        "backend/tests/contract/test_practice_evidence_contract.py",
+        ".gsd/milestones/M010/slices/S01/tasks/T01-SUMMARY.md"
+      ],
+      "key_decisions": [
+        "Built `conclusion_evidence` inside `SessionEvidenceService.build_projection()` so report and replay share one provenance bundle.",
+        "Kept the new field additive and `null` for presentation sessions to preserve backward compatibility."
+      ],
+      "full_summary_md": "---\nid: T01\nparent: S01\nmilestone: M010\nkey_files:\n  - backend/src/common/conversation/session_evidence.py\n  - backend/src/common/conversation/replay.py\n  - backend/src/common/conversation/schemas.py\n  - backend/src/common/db/schemas.py\n  - backend/src/common/api/practice.py\n  - backend/tests/unit/test_session_evidence_service.py\n  - backend/tests/contract/test_practice_evidence_contract.py\n  - .gsd/milestones/M010/slices/S01/tasks/T01-SUMMARY.md\nkey_decisions:\n  - Built `conclusion_evidence` inside `SessionEvidenceService.build_projection()` so report and replay share one provenance bundle.\n  - Kept the new field additive and `null` for presentation sessions to preserve backward compatibility.\nduration: \"\"\nverification_result: passed\ncompleted_at: 2026-03-30T01:29:12.881Z\nblocker_discovered: false\n---\n\n# T01: Added projection-backed conclusion provenance to completed-session report and replay responses.\n\n**Added projection-backed conclusion provenance to completed-session report and replay responses.**\n\n## What Happened\n\nImplemented a shared completed-session conclusion provenance bundle in `SessionEvidenceService` and threaded it through the existing report and replay read paths. Added the new additive `conclusion_evidence` field to the report and replay schemas so FastAPI preserves it, and added structured `projection_conclusion_evidence_built` logging with retrieval/transcript/audio availability flags. Extended focused contract and unit coverage, then updated a few logger assertions because the new observability event adds a second `info` log per projection build. The final focused pytest gate passed.\n\n## Verification\n\nRan the task verification command from the plan: `cd backend && venv/bin/python -m pytest -c pyproject.toml tests/contract/test_practice_evidence_contract.py tests/unit/test_session_evidence_service.py -x -q`. The suite passed with 37 tests green.\n\n## Verification Evidence\n\n| # | Command | Exit Code | Verdict | Duration |\n|---|---------|-----------|---------|----------|\n| 1 | `cd backend && venv/bin/python -m pytest -c pyproject.toml tests/contract/test_practice_evidence_contract.py tests/unit/test_session_evidence_service.py -x -q` | 0 | ✅ pass | 12530ms |\n\n\n## Deviations\n\nNone.\n\n## Known Issues\n\nKnowledge-check parity is not implemented in this task; it remains for T02.\n\n## Files Created/Modified\n\n- `backend/src/common/conversation/session_evidence.py`\n- `backend/src/common/conversation/replay.py`\n- `backend/src/common/conversation/schemas.py`\n- `backend/src/common/db/schemas.py`\n- `backend/src/common/api/practice.py`\n- `backend/tests/unit/test_session_evidence_service.py`\n- `backend/tests/contract/test_practice_evidence_contract.py`\n- `.gsd/milestones/M010/slices/S01/tasks/T01-SUMMARY.md`\n",
+      "description": "Implement `build_conclusion_evidence_bundle()` in `backend/src/common/conversation/session_evidence.py` that inspects a `SessionEvidenceProjection` and produces structured provenance for each canonical conclusion (main_issue, next_goal, claim_truth). Each conclusion gets an `evidence_sources` dict with `retrieval_source`, `transcript_source`, and `audio_source` entries that describe whether retrieval facts, transcript turns, or audio segments contributed to that conclusion.\n\nWire the bundle into `SessionEvidenceService.build_projection()` so it is always present on the projection. Update the report route (`/practice/sessions/{id}/report`) and replay route (`/sessions/{id}/replay`) to include the new `conclusion_evidence` field in their responses.\n\nUpdate `SessionReport` schema and replay response dict to carry the new field. Ensure the field is additive and backward-compatible — existing consumers that don't read it are unaffected.\n\nAdd structured logging for when the bundle is built, including per-source availability flags.",
+      "estimate": "2h",
+      "files": [
+        "backend/src/common/conversation/session_evidence.py",
+        "backend/src/common/conversation/replay.py",
+        "backend/src/common/db/schemas.py",
+        "backend/src/common/api/practice.py"
+      ],
+      "verify": "cd backend && venv/bin/python -m pytest -c pyproject.toml tests/contract/test_practice_evidence_contract.py tests/unit/test_session_evidence_service.py -x -q",
+      "inputs": [
+        "backend/src/common/conversation/session_evidence.py",
+        "backend/src/common/conversation/runtime_diagnostics.py",
+        "backend/src/common/conversation/replay.py",
+        "backend/src/common/db/schemas.py",
+        "backend/src/common/api/practice.py"
+      ],
+      "expected_output": [
+        "backend/src/common/conversation/session_evidence.py",
+        "backend/src/common/conversation/replay.py",
+        "backend/src/common/db/schemas.py",
+        "backend/src/common/api/practice.py"
+      ],
+      "observability_impact": "Signals added: `projection_conclusion_evidence_built` log with retrieval_available / transcript_available / audio_available flags. How a future agent inspects: read the `conclusion_evidence` field from any report/replay JSON response. Failure state exposed: individual source entries show `available: false` with reason when evidence layer is absent.",
+      "full_plan_md": "",
+      "sequence": 0
+    },
+    {
+      "milestone_id": "M010",
+      "slice_id": "S01",
+      "id": "T02",
+      "title": "Mirrored projection-backed conclusion evidence into knowledge-check and added cross-route parity contracts.",
+      "status": "complete",
+      "one_liner": "Mirrored projection-backed conclusion evidence into knowledge-check and added cross-route parity contracts.",
+      "narrative": "Extended the completed-session knowledge-check path to reuse the same SessionEvidenceService projection that already feeds report and replay, extracted projection.value.conclusion_evidence in the route, and threaded it through build_session_runtime_diagnostics(...) so the diagnostics payload now exposes the same provenance bundle. Added backend/tests/contract/test_conclusion_evidence_parity.py to seed canonical completed sales and presentation sessions, then assert report, replay, and knowledge-check stay aligned for the happy path, degraded sales sessions without retrieval/audio evidence, and presentation sessions where the field must remain null. Verified the targeted task gate and the full backend contract suite after tightening the degraded fixture so it truly exercised a no-audio path rather than inheriting audio availability from message durations.",
+      "verification_result": "Ran the task verification command from the plan: `cd backend && venv/bin/python -m pytest -c pyproject.toml tests/contract/test_conclusion_evidence_parity.py tests/contract/test_practice_evidence_contract.py -x -q` and confirmed 29 tests passed. Then ran `cd backend && venv/bin/python -m pytest -c pyproject.toml tests/contract -x -q` to verify backward compatibility across the existing contract suite; all 83 contract tests passed.",
+      "duration": "",
+      "completed_at": "2026-03-30T01:57:26.502Z",
+      "blocker_discovered": false,
+      "deviations": "None.",
+      "known_issues": "None.",
+      "key_files": [
+        "backend/src/common/conversation/runtime_diagnostics.py",
+        "backend/src/common/api/practice.py",
+        "backend/tests/contract/test_conclusion_evidence_parity.py",
+        ".gsd/milestones/M010/slices/S01/tasks/T02-SUMMARY.md"
+      ],
+      "key_decisions": [
+        "Kept knowledge-check on the existing SessionEvidenceService.get_projection(...) read path and passed projection.value.conclusion_evidence through build_session_runtime_diagnostics(...) instead of rebuilding provenance inside diagnostics.",
+        "Locked route-family parity with a dedicated contract module that compares report, replay, and knowledge-check directly for sales happy-path, degraded, and presentation sessions."
+      ],
+      "full_summary_md": "---\nid: T02\nparent: S01\nmilestone: M010\nkey_files:\n  - backend/src/common/conversation/runtime_diagnostics.py\n  - backend/src/common/api/practice.py\n  - backend/tests/contract/test_conclusion_evidence_parity.py\n  - .gsd/milestones/M010/slices/S01/tasks/T02-SUMMARY.md\nkey_decisions:\n  - Kept knowledge-check on the existing SessionEvidenceService.get_projection(...) read path and passed projection.value.conclusion_evidence through build_session_runtime_diagnostics(...) instead of rebuilding provenance inside diagnostics.\n  - Locked route-family parity with a dedicated contract module that compares report, replay, and knowledge-check directly for sales happy-path, degraded, and presentation sessions.\nduration: \"\"\nverification_result: passed\ncompleted_at: 2026-03-30T01:57:26.514Z\nblocker_discovered: false\n---\n\n# T02: Mirrored projection-backed conclusion evidence into knowledge-check and added cross-route parity contracts.\n\n**Mirrored projection-backed conclusion evidence into knowledge-check and added cross-route parity contracts.**\n\n## What Happened\n\nExtended the completed-session knowledge-check path to reuse the same SessionEvidenceService projection that already feeds report and replay, extracted projection.value.conclusion_evidence in the route, and threaded it through build_session_runtime_diagnostics(...) so the diagnostics payload now exposes the same provenance bundle. Added backend/tests/contract/test_conclusion_evidence_parity.py to seed canonical completed sales and presentation sessions, then assert report, replay, and knowledge-check stay aligned for the happy path, degraded sales sessions without retrieval/audio evidence, and presentation sessions where the field must remain null. Verified the targeted task gate and the full backend contract suite after tightening the degraded fixture so it truly exercised a no-audio path rather than inheriting audio availability from message durations.\n\n## Verification\n\nRan the task verification command from the plan: `cd backend && venv/bin/python -m pytest -c pyproject.toml tests/contract/test_conclusion_evidence_parity.py tests/contract/test_practice_evidence_contract.py -x -q` and confirmed 29 tests passed. Then ran `cd backend && venv/bin/python -m pytest -c pyproject.toml tests/contract -x -q` to verify backward compatibility across the existing contract suite; all 83 contract tests passed.\n\n## Verification Evidence\n\n| # | Command | Exit Code | Verdict | Duration |\n|---|---------|-----------|---------|----------|\n| 1 | `cd backend && venv/bin/python -m pytest -c pyproject.toml tests/contract/test_conclusion_evidence_parity.py tests/contract/test_practice_evidence_contract.py -x -q` | 0 | ✅ pass | 45300ms |\n| 2 | `cd backend && venv/bin/python -m pytest -c pyproject.toml tests/contract -x -q` | 0 | ✅ pass | 45300ms |\n\n\n## Deviations\n\nNone.\n\n## Known Issues\n\nNone.\n\n## Files Created/Modified\n\n- `backend/src/common/conversation/runtime_diagnostics.py`\n- `backend/src/common/api/practice.py`\n- `backend/tests/contract/test_conclusion_evidence_parity.py`\n- `.gsd/milestones/M010/slices/S01/tasks/T02-SUMMARY.md`\n",
+      "description": "Wire the knowledge-check route (`/practice/sessions/{id}/knowledge-check`) to include `conclusion_evidence` from the projection snapshot. The knowledge-check already builds `projection_effectiveness_snapshot` for completed sales sessions — extract `conclusion_evidence` from it and surface it in the diagnostics response.\n\nUpdate `build_session_runtime_diagnostics()` to accept and pass through `conclusion_evidence` from the projection snapshot.\n\nWrite focused contract tests in `backend/tests/contract/test_conclusion_evidence_parity.py` that:\n1. Create one completed sales session with retrieval ledger, transcript turns, and audio segments.\n2. Hit report, replay, and knowledge-check routes.\n3. Assert all three return the same `conclusion_evidence` structure with identical source availability, hit counts, and turn references.\n4. Assert degraded sessions (no retrieval, no audio) still produce consistent `conclusion_evidence` across all routes.\n5. Assert the field is `null` for presentation scenarios (not in scope for M010).\n\nRun the full existing contract test suite to verify backward compatibility.",
+      "estimate": "1.5h",
+      "files": [
+        "backend/src/common/conversation/runtime_diagnostics.py",
+        "backend/src/common/api/practice.py",
+        "backend/tests/contract/test_conclusion_evidence_parity.py"
+      ],
+      "verify": "cd backend && venv/bin/python -m pytest -c pyproject.toml tests/contract/test_conclusion_evidence_parity.py tests/contract/test_practice_evidence_contract.py -x -q",
+      "inputs": [
+        "backend/src/common/conversation/session_evidence.py",
+        "backend/src/common/conversation/runtime_diagnostics.py",
+        "backend/src/common/api/practice.py",
+        "backend/tests/contract/test_practice_evidence_contract.py"
+      ],
+      "expected_output": [
+        "backend/src/common/conversation/runtime_diagnostics.py",
+        "backend/src/common/api/practice.py",
+        "backend/tests/contract/test_conclusion_evidence_parity.py"
+      ],
+      "observability_impact": "How a future agent inspects: call GET /api/v1/practice/sessions/{id}/knowledge-check and check `conclusion_evidence` field matches report/replay. Failure state exposed: parity test explicitly compares all three routes and reports which field diverged.",
+      "full_plan_md": "",
+      "sequence": 0
     }
   ],
   "decisions": [
@@ -7575,6 +7779,138 @@
       "decision": "Where M009 audio segment metadata is persisted",
       "choice": "Create a new session_audio_segments table for durable per-segment metadata. Use voice_policy_snapshot.runtime_metrics.audio_audit only for bounded live summary (latest segment, counts, upload status). PracticeSession.audio_url becomes the session-level manifest pointer.",
       "rationale": "voice_policy_snapshot is proven suitable for bounded runtime facts (D115, D117, D120) but inappropriate for unbounded asset catalogs. A dedicated table gives proper query support, status tracking, and failure attribution per segment without bloating the session snapshot. PracticeSession.audio_url already exists as a seam and can point to the manifest entry.",
+      "revisable": "Yes",
+      "made_by": "agent",
+      "superseded_by": null
+    },
+    {
+      "seq": 1490,
+      "id": "D125",
+      "when_context": "M010 planning",
+      "scope": "evidence-contract",
+      "decision": "How M010 conclusion provenance should be shaped — conclusion-level vs per-suggestion",
+      "choice": "Attach provenance only to the canonical conclusion family (main_issue, next_goal, claim_truth); do not attempt per-suggestion provenance in M010.",
+      "rationale": "The milestone context explicitly leans toward conclusion-level first. Per-suggestion provenance would explode scope into a second replay/highlight redesign without proving the core trust chain first.",
+      "revisable": "Yes",
+      "made_by": "agent",
+      "superseded_by": null
+    },
+    {
+      "seq": 1491,
+      "id": "D126",
+      "when_context": "M010/S01 planning",
+      "scope": "evidence-contract",
+      "decision": "How conclusion evidence should be produced for report vs knowledge-check without creating two separate provenance paths",
+      "choice": "Implement one shared build_conclusion_evidence_bundle() in SessionEvidenceService.build_projection() and mirror its output through build_session_runtime_diagnostics(), so both projection-backed and diagnostics-backed routes speak the same provenance vocabulary.",
+      "rationale": "Report/replay use SessionEvidenceService.build_projection(); knowledge-check uses build_session_runtime_diagnostics(). These already share build_retrieval_facts() but derive main_issue/claim_truth independently. A single shared builder prevents vocabulary drift at the source.",
+      "revisable": "Yes",
+      "made_by": "agent",
+      "superseded_by": null
+    },
+    {
+      "seq": 1492,
+      "id": "D127",
+      "when_context": "M010/S02 planning",
+      "scope": "degradation-taxonomy",
+      "decision": "How M010 should unify degradation semantics across route families",
+      "choice": "Introduce a layered degradation taxonomy with canonical tokens (retrieval_degraded, transcript_degraded, audio_degraded, enhanced_report_degraded) as a new additive degradation_detail field; keep existing evidence_completeness and degraded_reasons backward-compatible.",
+      "rationale": "Current degradation signals are scattered: evidence_completeness.missing_fields is coarse, audio degraded_reasons are audio-specific, and presentation degraded_reasons are presentation-specific. A new additive field with canonical tokens lets all three routes share one vocabulary without breaking existing consumers.",
+      "revisable": "Yes",
+      "made_by": "agent",
+      "superseded_by": null
+    },
+    {
+      "seq": 1493,
+      "id": "D128",
+      "when_context": "M010/S03 planning",
+      "scope": "frontend-contract",
+      "decision": "How frontend should consume conclusion provenance without recreating page-local truth derivation",
+      "choice": "Render provenance and degradation through web/src/lib/session-evidence.ts shared helpers; do not let report or replay pages derive provenance from local stage names, highlight text, or action-card copy.",
+      "rationale": "This repo already burned by page-local heuristics (D016, D104). session-evidence.ts is the established anti-drift seam. If M010 adds provenance derivation in page components, it will immediately drift from the backend contract.",
+      "revisable": "Yes",
+      "made_by": "agent",
+      "superseded_by": null
+    },
+    {
+      "seq": 1494,
+      "id": "D129",
+      "when_context": "M010 planning",
+      "scope": "evidence-contract",
+      "decision": "How M010 backend provenance should be structured — one shared builder ( not a second.",
+      "choice": "Build one shared conclusion-evidence builder in shared conclusion-evidence projection (, and mirror it for runtime_diagnostics; no new truth source.",
+      "rationale": "M009 showed this pattern works well ( the report/replay/history route already uses it pattern. The keeping the second builder and shared shape requires the page-local heuristics. Adding a page-local proof from not an writing provenance code, M010's provenance should build backend parity-first, frontend next, approach is the risky, trust drift, silent degradation.",
+      "revisable": "Yes",
+      "made_by": "agent",
+      "superseded_by": null
+    },
+    {
+      "seq": 1495,
+      "id": "D130",
+      "when_context": "M010 planning",
+      "scope": "evidence-contract",
+      "decision": "How M010 degradation tokens are be surfaced vs the monitoring and diagnostics",
+      "choice": "Unified degradation taxonomy must have:4 layers (retrieval, transcript, audio, enhanced_report) each with one canonical token and human-readable explanation, not by route-specific wording.",
+      "rationale": "M009 showed this pattern works: but this repo has already been burned by conflating enhanced-report failures with \"canonical evidence signals. The Research warned against route-local mapping from a page-level heuristics, re-deriving the report/replay conclusions support, from stale stage/suggestion text or the solution vocabulary. S03 makes proven report↔replay parity by conclusion-level first, report/knowledge-check parity through the same shared `build_conclusion_evidence_bundle` builder. Knowledge-check diagnostics would route through the now-in `runtime_diagnostics.py` instead of `build_session_runtime_diagnostics()`.",
+      "revisable": "Yes",
+      "made_by": "agent",
+      "superseded_by": null
+    },
+    {
+      "seq": 1496,
+      "id": "D131",
+      "when_context": "M010 planning",
+      "scope": "milestone-planning",
+      "decision": "Slice ordering for M010",
+      "choice": "S01 backend contract first → S02 degradation taxonomy → S03 frontend rendering. Do not reverse this order.",
+      "rationale": "The research showed this repo has been repeatedly burned by frontend work that preceded backend contract hardening. If S03 starts before S01, the frontend will necessarily invent page-local provenance derivation that drifts from whatever backend model S01 eventually produces. S01 must prove the contract before any UI work begins.",
+      "revisable": "Yes",
+      "made_by": "agent",
+      "superseded_by": null
+    },
+    {
+      "seq": 1497,
+      "id": "D132",
+      "when_context": "M010 planning correction",
+      "scope": "evidence-contract",
+      "decision": "Correction for malformed M010 backend provenance planning decision",
+      "choice": "Supersede malformed decision D129: M010 backend provenance uses one shared conclusion-evidence builder on the existing authority seam, shared by projection-backed report/replay and mirrored into knowledge-check diagnostics; no second truth source is introduced.",
+      "rationale": "D129 was saved with corrupted text. The intended decision is already reflected in the roadmap and other M010 decisions: provenance must be built once on the existing backend authority seam and reused across route families.",
+      "revisable": "Yes — supersedes malformed D129",
+      "made_by": "agent",
+      "superseded_by": null
+    },
+    {
+      "seq": 1498,
+      "id": "D133",
+      "when_context": "M010 planning correction",
+      "scope": "degradation-taxonomy",
+      "decision": "Correction for malformed M010 degradation-taxonomy planning decision",
+      "choice": "Supersede malformed decision D130: M010 degradation semantics use a four-layer additive taxonomy — retrieval_degraded, transcript_degraded, audio_degraded, enhanced_report_degraded — with one canonical token set shared by report, replay, and knowledge-check.",
+      "rationale": "D130 was saved with corrupted text. The intended choice is the additive four-layer taxonomy already captured in the milestone roadmap and D127; this correction makes the durable record readable and usable for later slices.",
+      "revisable": "Yes — supersedes malformed D130",
+      "made_by": "agent",
+      "superseded_by": null
+    },
+    {
+      "seq": 1499,
+      "id": "D134",
+      "when_context": "M010/S01 planning",
+      "scope": "evidence-contract",
+      "decision": "Where to place the shared conclusion-evidence builder function",
+      "choice": "Place `build_conclusion_evidence_bundle()` as a static method on `SessionEvidenceService` in `session_evidence.py`, called inside `build_projection()` so report and replay automatically carry the bundle. Knowledge-check reads it from the already-built projection_effectiveness_snapshot.",
+      "rationale": "The builder needs access to SessionEvidenceProjection fields (messages, effectiveness_snapshot, retrieval_facts, session). Keeping it on SessionEvidenceService avoids a circular import with runtime_diagnostics.py and maintains the existing authority seam pattern where projection is the single truth source. Knowledge-check already copies retrieval_facts from projection_effectiveness_snapshot; the same pattern works for conclusion_evidence.",
+      "revisable": "Yes",
+      "made_by": "agent",
+      "superseded_by": null
+    },
+    {
+      "seq": 1500,
+      "id": "D135",
+      "when_context": "M010/S01/T01",
+      "scope": "reader-contract",
+      "decision": "How conclusion-evidence provenance is surfaced on existing completed-session routes",
+      "choice": "Build `conclusion_evidence` inside `SessionEvidenceService.build_projection()` and expose it additively on report/replay payloads while keeping presentation sessions `null`",
+      "rationale": "The shared projection is already the authority line for completed-session sales conclusions. Building provenance there keeps report and replay on the same evidence bundle, preserves backward compatibility for existing consumers, and avoids introducing route-local provenance logic that would drift.",
       "revisable": "Yes",
       "made_by": "agent",
       "superseded_by": null
@@ -9967,6 +10303,39 @@
       "verdict": "✅ pass",
       "duration_ms": 5800,
       "created_at": "2026-03-29T23:44:46.110Z"
+    },
+    {
+      "id": 218,
+      "task_id": "T01",
+      "slice_id": "S01",
+      "milestone_id": "M010",
+      "command": "cd backend && venv/bin/python -m pytest -c pyproject.toml tests/contract/test_practice_evidence_contract.py tests/unit/test_session_evidence_service.py -x -q",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 12530,
+      "created_at": "2026-03-30T01:29:12.879Z"
+    },
+    {
+      "id": 219,
+      "task_id": "T02",
+      "slice_id": "S01",
+      "milestone_id": "M010",
+      "command": "cd backend && venv/bin/python -m pytest -c pyproject.toml tests/contract/test_conclusion_evidence_parity.py tests/contract/test_practice_evidence_contract.py -x -q",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 45300,
+      "created_at": "2026-03-30T01:57:26.511Z"
+    },
+    {
+      "id": 220,
+      "task_id": "T02",
+      "slice_id": "S01",
+      "milestone_id": "M010",
+      "command": "cd backend && venv/bin/python -m pytest -c pyproject.toml tests/contract -x -q",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 45300,
+      "created_at": "2026-03-30T01:57:26.512Z"
     }
   ]
 }

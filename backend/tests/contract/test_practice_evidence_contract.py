@@ -302,6 +302,23 @@ async def test_report_and_replay_contract_share_same_session_evidence_fields(
     ]
     assert report_data["evidence_completeness"]["legacy_score_key_used"] is True
     assert replay_data["evidence_completeness"]["legacy_score_key_used"] is True
+    assert report_data["conclusion_evidence"] == replay_data["conclusion_evidence"] == {
+        "main_issue": {
+            "retrieval_source": {"available": False, "reason": "no_voice_policy_snapshot"},
+            "transcript_source": {"available": True, "turn_count": 1},
+            "audio_source": {"available": True, "reason": None},
+        },
+        "next_goal": {
+            "retrieval_source": {"available": False, "reason": "no_voice_policy_snapshot"},
+            "transcript_source": {"available": True, "turn_count": 1},
+            "audio_source": {"available": True, "reason": None},
+        },
+        "claim_truth": {
+            "retrieval_source": {"available": False, "reason": "no_voice_policy_snapshot"},
+            "transcript_source": {"available": True, "turn_count": 1},
+            "audio_source": {"available": True, "reason": None},
+        },
+    }
 
 
 @pytest.mark.asyncio

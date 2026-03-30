@@ -391,6 +391,7 @@ def build_session_runtime_diagnostics(
     live_session_summary: dict[str, Any] | None = None,
     live_runtime_active: bool = False,
     projection_effectiveness_snapshot: dict[str, Any] | None = None,
+    conclusion_evidence: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     snapshot = snapshot if isinstance(snapshot, dict) else {}
     tool_policy = snapshot.get("tool_policy")
@@ -665,6 +666,7 @@ def build_session_runtime_diagnostics(
         "upstream_disconnect_count_5m": upstream_disconnect_count_5m,
         "upstream_unstable": upstream_unstable,
         "retrieval_facts": retrieval_facts,
+        "conclusion_evidence": conclusion_evidence,
     }
 
 

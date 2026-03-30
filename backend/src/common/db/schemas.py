@@ -483,6 +483,7 @@ class SessionReport(BaseModel):
     presentation_review: PresentationReview | None = None
     retry_entry: dict[str, Any] | None = None
     audio_audit: "AudioAuditPayloadSchema | None" = None
+    conclusion_evidence: dict[str, Any] | None = None
 
 
 # ========== Manager Intervention Schemas ==========

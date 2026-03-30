@@ -291,6 +291,10 @@ class ReplayService:
             except Exception:
                 replay_data["audio_audit"] = None
 
+            replay_data["conclusion_evidence"] = (
+                None if is_presentation_scenario else projection.conclusion_evidence
+            )
+
             logger.info(
                 "replay_data_generated",
                 session_id=session_id,
