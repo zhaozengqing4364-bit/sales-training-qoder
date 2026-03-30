@@ -336,6 +336,10 @@ class ReplayDataResponse(BaseModel):
         None,
         description="Structured provenance for main_issue, next_goal, and claim_truth conclusions",
     )
+    evidence_degradation: dict[str, Any] | None = Field(
+        None,
+        description="Layered degradation taxonomy (retrieval, transcript, audio, enhanced_report)",
+    )
 
 
 # ========== Request Schemas ==========

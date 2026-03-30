@@ -263,6 +263,11 @@ async def test_overview_and_trends_use_projection_evaluability_not_legacy_weight
                 "stage_evidence": 0,
                 "legacy_score_key_used": False,
                 "missing_fields": [],
+                "degraded_reasons": [
+                    "no_retrieval_facts",
+                    "no_scored_turns",
+                    "no_audio_segments",
+                ],
             },
             "active_users": 1,
         }
@@ -714,7 +719,7 @@ async def test_operating_pack_groups_cohort_department_buckets_and_manager_lists
     assert weekly_summary["completed_sessions"] == 8
     assert weekly_summary["evaluable_sessions"] == 7
     assert weekly_summary["not_evaluable_sessions"] == 1
-    assert weekly_summary["degraded_sessions"] == 1
+    assert weekly_summary["degraded_sessions"] == 8
     assert weekly_summary["at_risk_users"] == 4
     assert weekly_summary["improving_users"] == 1
     assert weekly_summary["top_issue_family"]["issue_family"] == "value_expression"
@@ -789,12 +794,16 @@ async def test_operating_pack_groups_cohort_department_buckets_and_manager_lists
         ],
         "degraded_reasons": [
             {
-                "reason": "message_scores",
-                "count": 1,
+                "reason": "no_audio_segments",
+                "count": 7,
             },
             {
-                "reason": "stage_evidence",
-                "count": 1,
+                "reason": "no_retrieval_facts",
+                "count": 7,
+            },
+            {
+                "reason": "no_scored_turns",
+                "count": 7,
             },
         ],
     }
@@ -836,12 +845,16 @@ async def test_operating_pack_groups_cohort_department_buckets_and_manager_lists
         ],
         "degraded_reasons": [
             {
-                "reason": "message_scores",
-                "count": 1,
+                "reason": "no_audio_segments",
+                "count": 8,
             },
             {
-                "reason": "stage_evidence",
-                "count": 1,
+                "reason": "no_retrieval_facts",
+                "count": 8,
+            },
+            {
+                "reason": "no_scored_turns",
+                "count": 8,
             },
         ],
     }

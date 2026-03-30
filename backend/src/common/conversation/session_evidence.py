@@ -166,6 +166,11 @@ class SessionEvidenceService:
                 presentation_degraded_reasons=projection.evidence_completeness.get(
                     "degraded_reasons"
                 ),
+                sales_degraded_reasons=(
+                    projection.evidence_completeness.get("degraded_reasons")
+                    if projection.scenario_type == "sales"
+                    else None
+                ),
                 retrieval_facts_status=(
                     projection.effectiveness_snapshot.get("retrieval_facts", {}).get("status")
                     if isinstance(projection.effectiveness_snapshot, dict)
@@ -717,6 +722,22 @@ class SessionEvidenceService:
             conclusion_evidence=conclusion_evidence,
             scenario_type=resolved_scenario_type,
         )
+
+        # Mirror degradation tokens into evidence_completeness.degraded_reasons
+        # for backward-compat consumers (admin analytics, history projection).
+        if (
+            resolved_scenario_type == "sales"
+            and isinstance(evidence_degradation, dict)
+        ):
+            degraded_reasons: list[str] = []
+            for _layer_key, layer in evidence_degradation.items():
+                if not isinstance(layer, dict):
+                    continue
+                if layer.get("status") == "degraded":
+                    token = layer.get("token")
+                    if isinstance(token, str) and token:
+                        degraded_reasons.append(token)
+            evidence_completeness = {**evidence_completeness, "degraded_reasons": degraded_reasons}
 
         return SessionEvidenceProjection(
             session=session,

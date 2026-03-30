@@ -1366,6 +1366,19 @@ export interface AudioAuditPayload {
     summary: AudioAuditSummary;
     segments: AudioAuditSegment[];
 }
+export interface EvidenceDegradationLayer {
+    status: "ok" | "degraded";
+    token?: string;
+    explanation?: string | null;
+}
+
+export interface EvidenceDegradation {
+    retrieval: EvidenceDegradationLayer;
+    transcript: EvidenceDegradationLayer;
+    audio: EvidenceDegradationLayer;
+    enhanced_report: EvidenceDegradationLayer;
+}
+
 export interface SessionEvidenceContract {
     scenario_type?: "sales" | "presentation";
     overall_score: number | null;
@@ -1379,6 +1392,7 @@ export interface SessionEvidenceContract {
     evaluable?: boolean | null;
     not_evaluable_reason?: SessionNotEvaluableReason | null;
     evidence_completeness?: SessionEvidenceCompleteness | null;
+    evidence_degradation?: EvidenceDegradation | null;
     presentation_review?: PresentationReview | null;
     audio_audit?: AudioAuditPayload | null;
 }
@@ -1585,6 +1599,7 @@ export interface KnowledgeCheckDiagnostics {
     last_retrieval_mode?: string;
     recent_queries: string[];
     updated_at?: string | null;
+    evidence_degradation?: EvidenceDegradation | null;
 }
 
 export interface OpenAnalyticsDashboard {
