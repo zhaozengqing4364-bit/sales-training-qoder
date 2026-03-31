@@ -4,7 +4,7 @@
 **Demo:** After this: 一次真实问答后，可以从 replay/report/runtime diagnostics 追到同一条 audit run，并看到 answerability/citations。
 
 ## Tasks
-- [ ] **T01: 实现 coverage-based answerability** — 实现 coverage-based answerability。按 profile required/optional slots 判 sufficient / partial / insufficient / blocked，不再只看命中条数。
+- [x] **T01: Added a slot-coverage-based answerability evaluator that classifies grounded answers from required/optional profile slots, preserves blocked retrieval semantics, and degrades to count-based verdicts when no answerability profile is configured yet.** — 实现 coverage-based answerability。按 profile required/optional slots 判 sufficient / partial / insufficient / blocked，不再只看命中条数。
   - Estimate: 25-35m
   - Files: backend/src/common/knowledge_engine/answerability.py, backend/tests/unit/common/test_knowledge_answerability.py
   - Verify: backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/common/test_knowledge_answerability.py -q

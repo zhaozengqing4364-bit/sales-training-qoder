@@ -1,3 +1,7 @@
+from common.knowledge_engine.answerability import (
+    KnowledgeAnswerabilityEvaluator,
+    KnowledgeAnswerabilityResult,
+)
 from common.knowledge_engine.config_repo import (
     KnowledgeAnswerConfigRepository,
     KnowledgeAnswerConfigSnapshot,
@@ -39,6 +43,8 @@ from common.knowledge_engine.schemas import (
 __all__ = [
     "KnowledgeAnswerConfigRepository",
     "KnowledgeAnswerConfigSnapshot",
+    "KnowledgeAnswerabilityEvaluator",
+    "KnowledgeAnswerabilityResult",
     "KnowledgeAnswerabilityProfileConfig",
     "KnowledgeEntityAliasConfig",
     "KnowledgeIntentRuleConfig",

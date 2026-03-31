@@ -1,6 +1,6 @@
 {
   "mode": "grow",
-  "current_issue_id": "M011-S02-T03",
+  "current_issue_id": "M011-S03-T01",
   "current_issue_type": "task",
   "current_issue_status": "done",
   "pending_issue_ids": [],
@@ -131,27 +131,23 @@
     "M011-S01-T02",
     "M011-S01",
     "M011-S02-T02",
-    "M011-S02-T03"
+    "M011-S02-T03",
+    "M011-S03-T01"
   ],
   "blocked_issue_ids": [],
   "deferred_issue_ids": [],
   "last_modified_files": [
-    "backend/src/common/knowledge_engine/haystack_adapter.py",
-    "backend/src/common/knowledge_engine/reranker.py",
-    "backend/src/sales_bot/websocket/components/stepfun_internal_knowledge_searcher.py",
-    "backend/src/sales_bot/websocket/components/stepfun_knowledge_helpers.py",
+    "backend/src/common/knowledge_engine/answerability.py",
     "backend/src/common/knowledge_engine/__init__.py",
-    "backend/tests/unit/common/test_haystack_adapter.py",
-    "backend/tests/unit/common/test_knowledge_reranker.py",
-    "backend/tests/unit/test_stepfun_internal_knowledge_searcher.py",
+    "backend/tests/unit/common/test_knowledge_answerability.py",
     ".gsd/DECISIONS.md",
     ".gsd/KNOWLEDGE.md"
   ],
   "last_verification_commands": [
-    "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/common/test_haystack_adapter.py backend/tests/unit/common/test_knowledge_reranker.py backend/tests/unit/test_stepfun_internal_knowledge_searcher.py -q"
+    "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/common/test_knowledge_answerability.py -q"
   ],
-  "last_verification_result": "Focused M011/S02/T03 pytest passed 16/16 after a red-to-green TDD cycle across the new Haystack adapter, business reranker, and StepFun runtime seam, and fresh LSP diagnostics reported no issues on the touched runtime or test files.",
-  "last_success_signal": "Given a query like '请介绍一下世袭科技', the StepFun internal knowledge search path now resolves the canonical entity, classifies the intent, emits a retrieval plan, executes only the needed query steps with early-stop tracing, and returns reranked results with per-document score breakdowns.",
+  "last_verification_result": "Focused M011/S03/T01 pytest passed 5/5 after a red-to-green TDD cycle for the new coverage-based answerability evaluator, and fresh LSP diagnostics reported no issues on the new module or focused test file.",
+  "last_success_signal": "The knowledge engine can now classify grounded-answer evidence as sufficient/partial/insufficient/blocked from configured required/optional slot coverage instead of raw hit count, while still degrading safely for callers that do not have an answerability profile yet.",
   "last_growth_scan": null,
-  "next_action": "Continue M011/S02 by validating the slice-level demo and carrying the new execution/rerank observability into downstream answerability work."
+  "next_action": "Continue M011/S03 with the evidence-driven answer assembler, feeding it the new answerability result and slot-aware audit payloads."
 }

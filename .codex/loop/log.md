@@ -179,3 +179,20 @@
   verification results: passed; focused backend slice-close gate finished 14/14 tests green and LSP diagnostics reported no issues on the engine, schemas, repository, migration, and focused test files
   success signal status: downstream slices can now instantiate a project-owned knowledge-answer engine and read one latest enabled active query/ranking/answerability configuration snapshot from the database without leaking Haystack types, ORM rows, or raw JSON control-plane shapes
   rollback note: if S02/S03 reshape the control-plane schema or repository snapshot, keep the project-owned engine/repository seam intact and update migration-presence plus repository-normalization regressions in lockstep rather than bypassing them in runtime handlers
+
+- time: 2026-03-31T12:06:08+08:00
+  mode: grow
+  item id: M011-S03-T01
+  files changed:
+    - backend/src/common/knowledge_engine/answerability.py
+    - backend/src/common/knowledge_engine/__init__.py
+    - backend/tests/unit/common/test_knowledge_answerability.py
+    - .gsd/DECISIONS.md
+    - .gsd/KNOWLEDGE.md
+    - .codex/loop/state.json
+  summary: Added a slot-coverage-based answerability evaluator that classifies grounded answers from required/optional profile slots, preserves blocked retrieval semantics, and degrades to count-based verdicts when no answerability profile is configured yet.
+  verification commands:
+    - backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/common/test_knowledge_answerability.py -q
+  verification results: passed; focused backend pytest finished 5/5 green after the red-to-green TDD cycle, and fresh LSP diagnostics reported no issues on the new module or focused test file.
+  success signal status: retrieval/rerank callers can now hand slot-annotated evidence rows into a project-owned evaluator and get sufficient/partial/insufficient/blocked verdicts plus audit-ready slot coverage diagnostics instead of raw hit-count heuristics.
+  rollback note: if downstream slices change how evidence rows encode slot coverage, keep the evaluator on the project-owned slot-hit seam (row or metadata slot arrays) and update its focused tests in lockstep rather than reintroducing hit-count-only answerability.
