@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "exported_at": "2026-03-31T06:40:27.932Z",
+  "exported_at": "2026-03-31T07:00:18.445Z",
   "milestones": [
     {
       "id": "M001",
@@ -540,10 +540,10 @@
     {
       "id": "M011",
       "title": "",
-      "status": "queued",
+      "status": "complete",
       "depends_on": [],
       "created_at": "2026-03-31T02:29:18.778Z",
-      "completed_at": null,
+      "completed_at": "2026-03-31T07:00:18.419Z",
       "vision": "把当前 patch 化的知识问答链升级成数据库驱动、可配置、可审计、可调试的后端系统能力；用 Haystack 作为 retrieval/reranking/evaluation 执行底座，同时保留项目自有的控制面、answerability 逻辑与 learner-facing contracts。",
       "success_criteria": [
         "知识问答逻辑不再主要依赖 handler/prompt 中的硬编码 case，而是由数据库驱动配置和统一引擎编排控制。",
