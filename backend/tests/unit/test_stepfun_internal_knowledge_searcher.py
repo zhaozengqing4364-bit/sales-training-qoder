@@ -602,8 +602,13 @@ async def _seed_runtime_config(factory: async_sessionmaker[AsyncSession]) -> Non
 
 
 @pytest.mark.asyncio
-async def test_search_internal_knowledge_uses_config_driven_resolution_planning_adapter_and_reranking(async_session_factory):
+async def test_search_internal_knowledge_uses_config_driven_resolution_planning_adapter_and_reranking(
+    async_session_factory,
+    monkeypatch: pytest.MonkeyPatch,
+):
     await _seed_runtime_config(async_session_factory)
+    monkeypatch.setenv("KNOWLEDGE_ANSWER_ENGINE_ENABLED", "true")
+    monkeypatch.setenv("KNOWLEDGE_ANSWER_ENGINE_DUAL_RUN", "false")
     record_metric = AsyncMock()
     captured_queries: list[str] = []
 

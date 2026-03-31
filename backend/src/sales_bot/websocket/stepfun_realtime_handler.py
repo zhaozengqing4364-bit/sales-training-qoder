@@ -3944,7 +3944,10 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
             output = {}
             try:
                 output = await search_internal_knowledge(
-                    arguments_obj=arguments_obj,
+                    arguments_obj={
+                        **arguments_obj,
+                        "session_id": self.session_id,
+                    },
                     effective_policy=self._effective_policy,
                     session_factory=AsyncSessionLocal,
                     knowledge_service_cls=KnowledgeService,

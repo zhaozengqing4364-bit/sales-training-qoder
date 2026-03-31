@@ -7,10 +7,12 @@ from collections.abc import Awaitable, Callable
 import time
 from typing import Any, cast
 
-from common.knowledge_engine.audit_repo import KnowledgeAnswerAuditRepository
-from common.knowledge_engine.compat import build_search_payload_from_answer_result
+from common.knowledge_engine.compat import (
+    attach_rollout_diagnostics,
+    execute_knowledge_answer_engine,
+    resolve_knowledge_answer_rollout_mode,
+)
 from common.knowledge_engine.config_repo import KnowledgeAnswerConfigRepository
-from common.knowledge_engine.engine import KnowledgeAnswerEngine
 from sales_bot.websocket.components.stepfun_knowledge_helpers import (
     build_answerability_assessment,
     build_kb_not_ready_payload,
@@ -135,11 +137,14 @@ async def search_internal_knowledge(
     embedding_timeout_ms = max(0, min(10000, embedding_timeout_ms))
     metadata_filter = resolve_metadata_filter(arguments_obj, tool_policy)
     rewritten_queries = build_rewritten_queries(query)
+    session_id = str(arguments_obj.get("session_id") or "").strip() or None
+    rollout_mode = resolve_knowledge_answer_rollout_mode()
 
     entity_resolution_payload: dict[str, Any] | None = None
     intent_payload: dict[str, Any] | None = None
     retrieval_plan_payload: dict[str, Any] | None = None
     execution_trace_payload: dict[str, Any] | None = None
+    shadow_audit_run_id: str | None = None
 
     try:
         async with session_factory() as db:
@@ -224,141 +229,89 @@ async def search_internal_knowledge(
             search_started_at = time.monotonic()
             search_failures: list[str] = []
 
-            if config_snapshot is not None and config_snapshot.query_profiles:
-                entity_resolution = KnowledgeEntityResolver(
-                    entity_aliases=config_snapshot.entity_aliases
-                ).resolve_query(query)
-                response_query = entity_resolution.normalized_query or query
-                classifier = KnowledgeIntentClassifier(
-                    query_profiles=config_snapshot.query_profiles,
-                    intent_rules=config_snapshot.intent_rules,
+            if (
+                config_snapshot is not None
+                and config_snapshot.query_profiles
+                and rollout_mode in {"enabled", "dual_run"}
+            ):
+                engine_outcome = await execute_knowledge_answer_engine(
+                    db=db,
+                    config_snapshot=config_snapshot,
+                    search_multiple=knowledge_service.search_multiple,
+                    request_query=query,
+                    session_id=session_id,
+                    knowledge_base_ids=kb_ids,
+                    entrypoint="stepfun_realtime",
+                    runtime_options={
+                        "top_k": top_k,
+                        "similarity_threshold": threshold,
+                        "enable_hybrid": enable_hybrid,
+                        "keyword_candidate_limit": keyword_candidate_limit,
+                        "embedding_timeout_ms": embedding_timeout_ms,
+                        "enable_rerank": enable_rerank,
+                        "rerank_top_k": rerank_top_k,
+                        "metadata_filter": metadata_filter or {},
+                    },
+                    strict_kb_mode=strict_kb_mode,
                 )
-                classification = classifier.classify(
-                    query,
-                    entity_resolution=entity_resolution,
-                )
+                search_ms = (time.monotonic() - search_started_at) * 1000
 
-                if classification.profile_key and classification.profile_key in config_snapshot.query_profiles:
-                    retrieval_plan = KnowledgeRetrievalPlanner(
-                        query_profiles=config_snapshot.query_profiles
-                    ).build_plan(classification)
-                    adapter = KnowledgeHaystackAdapter(
-                        search_multiple=knowledge_service.search_multiple
-                    )
-                    execution_result = await adapter.execute_plan(
-                        plan=retrieval_plan,
+                if rollout_mode == "enabled":
+                    payload = engine_outcome.payload
+                    compat_status = str(payload.get("status") or "hit").strip() or "hit"
+                    compat_retrieval_mode = str(payload.get("retrieval_mode") or "vector").strip() or "vector"
+                    await record_metric(
+                        query=str(payload.get("query") or query),
+                        result_count=int(payload.get("count") or 0),
+                        status=compat_status,
                         knowledge_base_ids=kb_ids,
                         top_k=top_k,
                         similarity_threshold=threshold,
-                        metadata_filter=metadata_filter,
-                        enable_hybrid=enable_hybrid,
-                        keyword_candidate_limit=keyword_candidate_limit,
-                        embedding_timeout_ms=embedding_timeout_ms,
-                        enable_rerank=enable_rerank,
-                        rerank_top_k=rerank_top_k,
+                        retrieval_mode=compat_retrieval_mode,
+                        ledger_event=build_knowledge_retrieval_ledger_event(
+                            query=str(payload.get("query") or query),
+                            status=compat_status,
+                            result_count=int(payload.get("count") or 0),
+                            retrieval_mode=compat_retrieval_mode,
+                            knowledge_base_ids=kb_ids,
+                            results=payload.get("results") if isinstance(payload.get("results"), list) else [],
+                        ),
                     )
-                    aggregated_rows = execution_result.rows
-                    search_failures = execution_result.search_failures
-                    rewritten_queries = [step.query for step in execution_result.executed_steps]
-                    reranker = KnowledgeReranker(
-                        ranking_profiles=config_snapshot.ranking_profiles
+                    payload["_diagnostics"] = _build_diagnostics(
+                        {
+                            "status": compat_status,
+                            "retrieval_mode": compat_retrieval_mode,
+                            "result_count": int(payload.get("count") or 0),
+                            "rewritten_queries": list(payload.get("rewritten_queries") or []),
+                            "execution_trace": dict(payload.get("execution_trace") or {}),
+                        }
                     )
-                    aggregated_rows = reranker.rerank(
-                        rows=aggregated_rows,
-                        profile_key=retrieval_plan.profile_key,
-                        query=query,
-                        normalized_query=response_query,
-                        resolved_entities=classification.resolved_entities,
-                        top_k=max(top_k, 6),
+                    attach_rollout_diagnostics(
+                        payload,
+                        rollout_mode="enabled",
+                        live_audit_run_id=engine_outcome.result.audit_run_id,
                     )
-                    entity_resolution_payload = {
-                        "resolved": entity_resolution.resolved,
-                        "normalized_query": entity_resolution.normalized_query,
-                        "canonical_entities": list(entity_resolution.canonical_entities),
-                        "matches": [
-                            {
-                                "canonical_entity": match.canonical_entity,
-                                "matched_text": match.matched_text,
-                                "entity_type": match.entity_type,
-                                "confidence": match.confidence,
-                                "match_source": match.match_source,
-                                "start_index": match.start_index,
-                                "end_index": match.end_index,
-                            }
-                            for match in entity_resolution.matches
-                        ],
-                    }
-                    intent_payload = {
-                        "intent_key": classification.intent_key,
-                        "profile_key": classification.profile_key,
-                        "matched": classification.matched,
-                        "matched_terms": list(classification.matched_terms),
-                        "resolved_entities": list(classification.resolved_entities),
-                        "fallback_reason": classification.fallback_reason,
-                    }
-                    retrieval_plan_payload = {
-                        "profile_key": retrieval_plan.profile_key,
-                        "intent_key": retrieval_plan.intent_key,
-                        "strategy": retrieval_plan.strategy,
-                        "stop_after_first_success": retrieval_plan.stop_after_first_success,
-                        "resolved_entities": list(retrieval_plan.resolved_entities),
-                        "steps": [
-                            {
-                                "query": step.query,
-                                "stage": step.stage,
-                                "profile_key": step.profile_key,
-                            }
-                            for step in retrieval_plan.steps
-                        ],
-                        "audit": dict(retrieval_plan.audit),
-                    }
-                    execution_trace_payload = {
-                        "stopped_early": execution_result.stopped_early,
-                        "search_failures": list(execution_result.search_failures),
-                        "executed_steps": [
-                            {
-                                "query": step.query,
-                                "stage": step.stage,
-                                "profile_key": step.profile_key,
-                                "status": step.status,
-                                "hit_count": step.hit_count,
-                                "retrieval_modes": list(step.retrieval_modes),
-                                "error": step.error,
-                                "early_stopped": step.early_stopped,
-                            }
-                            for step in execution_result.executed_steps
-                        ],
-                    }
-                else:
-                    aggregated_rows, search_failures, rewritten_queries = await _execute_legacy_retrieval(
-                        knowledge_service=knowledge_service,
-                        kb_ids=kb_ids,
-                        rewritten_queries=rewritten_queries,
-                        top_k=top_k,
-                        threshold=threshold,
-                        metadata_filter=metadata_filter,
-                        enable_hybrid=enable_hybrid,
-                        keyword_candidate_limit=keyword_candidate_limit,
-                        embedding_timeout_ms=embedding_timeout_ms,
-                        enable_rerank=enable_rerank,
-                        rerank_top_k=rerank_top_k,
-                        stop_after_first_success=is_product_overview_query(query),
-                    )
-            else:
-                aggregated_rows, search_failures, rewritten_queries = await _execute_legacy_retrieval(
-                    knowledge_service=knowledge_service,
-                    kb_ids=kb_ids,
-                    rewritten_queries=rewritten_queries,
-                    top_k=top_k,
-                    threshold=threshold,
-                    metadata_filter=metadata_filter,
-                    enable_hybrid=enable_hybrid,
-                    keyword_candidate_limit=keyword_candidate_limit,
-                    embedding_timeout_ms=embedding_timeout_ms,
-                    enable_rerank=enable_rerank,
-                    rerank_top_k=rerank_top_k,
-                    stop_after_first_success=is_product_overview_query(query),
-                )
+                    return payload
+
+                shadow_audit_run_id = engine_outcome.result.audit_run_id
+
+            if config_snapshot is not None and config_snapshot.query_profiles and rollout_mode == "legacy":
+                pass
+
+            aggregated_rows, search_failures, rewritten_queries = await _execute_legacy_retrieval(
+                knowledge_service=knowledge_service,
+                kb_ids=kb_ids,
+                rewritten_queries=rewritten_queries,
+                top_k=top_k,
+                threshold=threshold,
+                metadata_filter=metadata_filter,
+                enable_hybrid=enable_hybrid,
+                keyword_candidate_limit=keyword_candidate_limit,
+                embedding_timeout_ms=embedding_timeout_ms,
+                enable_rerank=enable_rerank,
+                rerank_top_k=rerank_top_k,
+                stop_after_first_success=is_product_overview_query(query),
+            )
 
             search_ms = (time.monotonic() - search_started_at) * 1000
             if search_failures and not aggregated_rows:
@@ -402,6 +355,12 @@ async def search_internal_knowledge(
                     payload["retrieval_plan"] = retrieval_plan_payload
                 if execution_trace_payload is not None:
                     payload["execution_trace"] = execution_trace_payload
+                if rollout_mode == "dual_run":
+                    attach_rollout_diagnostics(
+                        payload,
+                        rollout_mode="dual_run",
+                        shadow_audit_run_id=shadow_audit_run_id,
+                    )
                 return payload
 
             if callable(getattr(knowledge_service, "get_last_search_timing", None)):
@@ -449,6 +408,12 @@ async def search_internal_knowledge(
             strict_kb_mode=strict_kb_mode,
             rewritten_queries=rewritten_queries,
         )
+        if rollout_mode == "dual_run":
+            attach_rollout_diagnostics(
+                payload,
+                rollout_mode="dual_run",
+                shadow_audit_run_id=shadow_audit_run_id,
+            )
         return payload
 
     rows = aggregated_rows
@@ -507,6 +472,12 @@ async def search_internal_knowledge(
         strict_kb_mode=strict_kb_mode,
         rewritten_queries=rewritten_queries,
     )
+    if rollout_mode == "dual_run":
+        attach_rollout_diagnostics(
+            response_payload,
+            rollout_mode="dual_run",
+            shadow_audit_run_id=shadow_audit_run_id,
+        )
     return response_payload
 
 

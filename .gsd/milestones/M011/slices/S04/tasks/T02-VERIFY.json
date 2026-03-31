@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "taskId": "T02",
+  "unitId": "M011/S04/T02",
+  "timestamp": 1774936709134,
+  "passed": true,
+  "discoverySource": "task-plan",
+  "checks": [
+    {
+      "command": "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/integration/test_knowledge_debug_api.py -q",
+      "exitCode": 0,
+      "durationMs": 5379,
+      "verdict": "pass"
+    }
+  ]
+}

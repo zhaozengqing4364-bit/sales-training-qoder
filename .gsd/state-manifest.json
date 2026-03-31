@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "exported_at": "2026-03-31T05:58:24.699Z",
+  "exported_at": "2026-03-31T06:27:37.817Z",
   "milestones": [
     {
       "id": "M001",
@@ -7187,19 +7187,33 @@
       "milestone_id": "M011",
       "slice_id": "S04",
       "id": "T03",
-      "title": "增加 seed config、feature flags 与 rollout",
-      "status": "pending",
-      "one_liner": "",
-      "narrative": "",
-      "verification_result": "",
+      "title": "Added seedable knowledge-answer rollout controls with enabled/dual-run compat gating, shadow audit persistence, and full backend/web verification green.",
+      "status": "complete",
+      "one_liner": "Added seedable knowledge-answer rollout controls with enabled/dual-run compat gating, shadow audit persistence, and full backend/web verification green.",
+      "narrative": "Executed T03 in TDD order. I first added failing tests for the new seed script and rollout flags, then extracted rollout control into `backend/src/common/knowledge_engine/compat.py` so one seam now owns legacy default, enabled cutover, and dual-run shadow-audit modes. `stepfun_internal_knowledge_searcher.py` now routes through that compat seam, preserves the existing runtime metric ledger in enabled mode, and attaches `_diagnostics.knowledge_answer_rollout` for enabled/dual-run inspection. `StepFunRealtimeHandler` now forwards `session_id` so enabled and dual-run modes can truthfully persist `KnowledgeAnswerRun` / `KnowledgeAnswerRunStep` rows. I added `backend/scripts/seed_knowledge_answer_config.py` with explicit starter profiles for product overview, pricing, version comparison, and coaching guidance; the script is idempotent by `version_name` and reactivates existing versions instead of duplicating rows. I also added `docs/plans/knowledge-answer-config-seed-notes.md` to document seeded profiles, CLI usage, activation behavior, and rollout order. During final verification I fixed two real compatibility gaps instead of weakening tests: the older config-driven StepFun search test now explicitly opts into enabled mode, and the enabled-path compat wrapper now normalizes legacy content-only rows plus emits the existing runtime metric ledger before returning. Final focused backend and web compatibility gates passed end to end.",
+      "verification_result": "Focused T03 tests passed first (`test_seed_knowledge_answer_config.py` and `test_knowledge_answer_feature_flag.py`), then the full task-plan gate passed from repo root: backend focused compatibility suite finished 197/197 green across StepFun search/runtime, replay/runtime diagnostics, engine/eval, and new rollout tests; the chained web compatibility suite finished 68/68 green across websocket message handlers plus learner report/replay pages. LSP diagnostics reported no issues on all touched Python files and tests.",
       "duration": "",
-      "completed_at": null,
+      "completed_at": "2026-03-31T06:27:37.784Z",
       "blocker_discovered": false,
-      "deviations": "",
-      "known_issues": "",
-      "key_files": [],
-      "key_decisions": [],
-      "full_summary_md": "",
+      "deviations": "The runtime already contained a partially inlined config-driven engine branch inside `stepfun_internal_knowledge_searcher.py`, so I extracted the feature-flag/dual-run behavior into the compat seam instead of adding another parallel path. The seed script also had to own its own sync SQLAlchemy session bootstrap because the repo’s shared DB session module only exposes async factories.",
+      "known_issues": "The full backend gate still emits the pre-existing narrow-run pytest-cov warnings (`Module src was never imported` / `No data was collected`) from repo-root focused pytest usage, and the replay suite still emits the existing `RuntimeWarning: coroutine 'AsyncMockMixin._execute_mock_call' was never awaited` warning from `backend/src/common/conversation/replay.py:292`. All required backend/web verification commands passed.",
+      "key_files": [
+        "backend/src/common/knowledge_engine/compat.py",
+        "backend/src/sales_bot/websocket/components/stepfun_internal_knowledge_searcher.py",
+        "backend/src/sales_bot/websocket/stepfun_realtime_handler.py",
+        "backend/scripts/seed_knowledge_answer_config.py",
+        "backend/tests/unit/common/test_seed_knowledge_answer_config.py",
+        "backend/tests/unit/common/test_knowledge_answer_feature_flag.py",
+        "backend/tests/unit/test_stepfun_internal_knowledge_searcher.py",
+        "docs/plans/knowledge-answer-config-seed-notes.md",
+        ".gsd/DECISIONS.md",
+        ".gsd/KNOWLEDGE.md"
+      ],
+      "key_decisions": [
+        "Gate the new engine at the compat seam with three explicit modes: legacy default, engine-enabled cutover, and dual-run shadow audit.",
+        "Persist shadow/live answer-run audits only when a real session_id is available, and surface rollout state through `_diagnostics.knowledge_answer_rollout` plus the existing runtime metric ledger."
+      ],
+      "full_summary_md": "---\nid: T03\nparent: S04\nmilestone: M011\nkey_files:\n  - backend/src/common/knowledge_engine/compat.py\n  - backend/src/sales_bot/websocket/components/stepfun_internal_knowledge_searcher.py\n  - backend/src/sales_bot/websocket/stepfun_realtime_handler.py\n  - backend/scripts/seed_knowledge_answer_config.py\n  - backend/tests/unit/common/test_seed_knowledge_answer_config.py\n  - backend/tests/unit/common/test_knowledge_answer_feature_flag.py\n  - backend/tests/unit/test_stepfun_internal_knowledge_searcher.py\n  - docs/plans/knowledge-answer-config-seed-notes.md\n  - .gsd/DECISIONS.md\n  - .gsd/KNOWLEDGE.md\nkey_decisions:\n  - Gate the new engine at the compat seam with three explicit modes: legacy default, engine-enabled cutover, and dual-run shadow audit.\n  - Persist shadow/live answer-run audits only when a real session_id is available, and surface rollout state through `_diagnostics.knowledge_answer_rollout` plus the existing runtime metric ledger.\nduration: \"\"\nverification_result: passed\ncompleted_at: 2026-03-31T06:27:37.785Z\nblocker_discovered: false\n---\n\n# T03: Added seedable knowledge-answer rollout controls with enabled/dual-run compat gating, shadow audit persistence, and full backend/web verification green.\n\n**Added seedable knowledge-answer rollout controls with enabled/dual-run compat gating, shadow audit persistence, and full backend/web verification green.**\n\n## What Happened\n\nExecuted T03 in TDD order. I first added failing tests for the new seed script and rollout flags, then extracted rollout control into `backend/src/common/knowledge_engine/compat.py` so one seam now owns legacy default, enabled cutover, and dual-run shadow-audit modes. `stepfun_internal_knowledge_searcher.py` now routes through that compat seam, preserves the existing runtime metric ledger in enabled mode, and attaches `_diagnostics.knowledge_answer_rollout` for enabled/dual-run inspection. `StepFunRealtimeHandler` now forwards `session_id` so enabled and dual-run modes can truthfully persist `KnowledgeAnswerRun` / `KnowledgeAnswerRunStep` rows. I added `backend/scripts/seed_knowledge_answer_config.py` with explicit starter profiles for product overview, pricing, version comparison, and coaching guidance; the script is idempotent by `version_name` and reactivates existing versions instead of duplicating rows. I also added `docs/plans/knowledge-answer-config-seed-notes.md` to document seeded profiles, CLI usage, activation behavior, and rollout order. During final verification I fixed two real compatibility gaps instead of weakening tests: the older config-driven StepFun search test now explicitly opts into enabled mode, and the enabled-path compat wrapper now normalizes legacy content-only rows plus emits the existing runtime metric ledger before returning. Final focused backend and web compatibility gates passed end to end.\n\n## Verification\n\nFocused T03 tests passed first (`test_seed_knowledge_answer_config.py` and `test_knowledge_answer_feature_flag.py`), then the full task-plan gate passed from repo root: backend focused compatibility suite finished 197/197 green across StepFun search/runtime, replay/runtime diagnostics, engine/eval, and new rollout tests; the chained web compatibility suite finished 68/68 green across websocket message handlers plus learner report/replay pages. LSP diagnostics reported no issues on all touched Python files and tests.\n\n## Verification Evidence\n\n| # | Command | Exit Code | Verdict | Duration |\n|---|---------|-----------|---------|----------|\n| 1 | `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/common/test_seed_knowledge_answer_config.py backend/tests/unit/common/test_knowledge_answer_feature_flag.py -q` | 0 | ✅ pass | 750ms |\n| 2 | `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/test_stepfun_internal_knowledge_searcher.py::test_search_internal_knowledge_uses_config_driven_resolution_planning_adapter_and_reranking -q` | 0 | ✅ pass | 550ms |\n| 3 | `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/test_stepfun_internal_knowledge_searcher.py backend/tests/unit/test_stepfun_realtime_handler.py backend/tests/unit/test_runtime_diagnostics_knowledge_retrieval.py backend/tests/unit/test_replay_service.py backend/tests/unit/common/test_kb_lock_guard.py backend/tests/unit/common/test_knowledge_answer_engine.py backend/tests/unit/common/test_knowledge_answer_control_plane_models.py backend/tests/unit/common/test_knowledge_answer_config_repo.py backend/tests/unit/common/test_knowledge_entity_resolver.py backend/tests/unit/common/test_knowledge_intent_classifier.py backend/tests/unit/common/test_knowledge_retrieval_planner.py backend/tests/unit/common/test_haystack_adapter.py backend/tests/unit/common/test_knowledge_reranker.py backend/tests/unit/common/test_knowledge_answerability.py backend/tests/unit/common/test_knowledge_answer_assembler.py backend/tests/unit/common/test_knowledge_answer_audit_repo.py backend/tests/evaluation/test_knowledge_answer_engine_eval.py backend/tests/unit/common/test_seed_knowledge_answer_config.py backend/tests/unit/common/test_knowledge_answer_feature_flag.py -q && npm --prefix web test -- --run src/hooks/websocket/message-handlers.test.ts src/components/ui/chat-bubble.test.tsx \"src/app/(user)/practice/[sessionId]/report/page.test.tsx\" \"src/app/(user)/practice/[sessionId]/replay/page.test.tsx\"` | 0 | ✅ pass | 15800ms |\n\n\n## Deviations\n\nThe runtime already contained a partially inlined config-driven engine branch inside `stepfun_internal_knowledge_searcher.py`, so I extracted the feature-flag/dual-run behavior into the compat seam instead of adding another parallel path. The seed script also had to own its own sync SQLAlchemy session bootstrap because the repo’s shared DB session module only exposes async factories.\n\n## Known Issues\n\nThe full backend gate still emits the pre-existing narrow-run pytest-cov warnings (`Module src was never imported` / `No data was collected`) from repo-root focused pytest usage, and the replay suite still emits the existing `RuntimeWarning: coroutine 'AsyncMockMixin._execute_mock_call' was never awaited` warning from `backend/src/common/conversation/replay.py:292`. All required backend/web verification commands passed.\n\n## Files Created/Modified\n\n- `backend/src/common/knowledge_engine/compat.py`\n- `backend/src/sales_bot/websocket/components/stepfun_internal_knowledge_searcher.py`\n- `backend/src/sales_bot/websocket/stepfun_realtime_handler.py`\n- `backend/scripts/seed_knowledge_answer_config.py`\n- `backend/tests/unit/common/test_seed_knowledge_answer_config.py`\n- `backend/tests/unit/common/test_knowledge_answer_feature_flag.py`\n- `backend/tests/unit/test_stepfun_internal_knowledge_searcher.py`\n- `docs/plans/knowledge-answer-config-seed-notes.md`\n- `.gsd/DECISIONS.md`\n- `.gsd/KNOWLEDGE.md`\n",
       "description": "增加 seed config 与 feature flags/dual-run rollout。支持初始化 active profiles，并通过 `KNOWLEDGE_ANSWER_ENGINE_ENABLED` / `KNOWLEDGE_ANSWER_ENGINE_DUAL_RUN` 控制切换。最后跑完整 focused backend + web compatibility suites。",
       "estimate": "45-60m",
       "files": [
@@ -9069,6 +9083,18 @@
       "decision": "How the knowledge-answer debug API should expose run inspection without rebuilding runtime-local traces",
       "choice": "Ship a read-only admin/support debug router backed directly by persisted KnowledgeAnswerRun and KnowledgeAnswerRunStep rows, with separate list/detail/steps endpoints under /api/v1/knowledge-debug.",
       "rationale": "The persisted audit rows are already the cross-entrypoint authority seam established in S03. Reading them directly gives downstream debugging and operational inspection one truthful surface, keeps permissions narrow, and avoids reconstructing traces from StepFun handler-local state or replay-specific projections.",
+      "revisable": "Yes",
+      "made_by": "agent",
+      "superseded_by": null
+    },
+    {
+      "seq": 1521,
+      "id": "D155",
+      "when_context": "M011/S04/T03",
+      "scope": "architecture",
+      "decision": "How the new knowledge-answer engine should be rolled out on the existing StepFun internal search seam",
+      "choice": "Gate the engine at the compat seam with three explicit modes: legacy default, engine-enabled cutover, and dual-run shadow audit; keep the legacy payload user-visible in dual-run while persisting a shadow audit run when session_id is available.",
+      "rationale": "The current runtime still serves stable learner/report/replay contracts through the legacy search payload shape, so rollout safety depends on making the engine an additive compat-layer choice instead of inlining a second partially visible path. A seam-owned rollout mode preserves existing behavior by default, enables truthful shadow comparisons through persisted KnowledgeAnswerRun rows, and limits the cutover blast radius to one place.",
       "revisable": "Yes",
       "made_by": "agent",
       "superseded_by": null
@@ -11923,6 +11949,39 @@
       "verdict": "✅ pass",
       "duration_ms": 33,
       "created_at": "2026-03-31T05:58:24.676Z"
+    },
+    {
+      "id": 260,
+      "task_id": "T03",
+      "slice_id": "S04",
+      "milestone_id": "M011",
+      "command": "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/common/test_seed_knowledge_answer_config.py backend/tests/unit/common/test_knowledge_answer_feature_flag.py -q",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 750,
+      "created_at": "2026-03-31T06:27:37.784Z"
+    },
+    {
+      "id": 261,
+      "task_id": "T03",
+      "slice_id": "S04",
+      "milestone_id": "M011",
+      "command": "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/test_stepfun_internal_knowledge_searcher.py::test_search_internal_knowledge_uses_config_driven_resolution_planning_adapter_and_reranking -q",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 550,
+      "created_at": "2026-03-31T06:27:37.784Z"
+    },
+    {
+      "id": 262,
+      "task_id": "T03",
+      "slice_id": "S04",
+      "milestone_id": "M011",
+      "command": "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/test_stepfun_internal_knowledge_searcher.py backend/tests/unit/test_stepfun_realtime_handler.py backend/tests/unit/test_runtime_diagnostics_knowledge_retrieval.py backend/tests/unit/test_replay_service.py backend/tests/unit/common/test_kb_lock_guard.py backend/tests/unit/common/test_knowledge_answer_engine.py backend/tests/unit/common/test_knowledge_answer_control_plane_models.py backend/tests/unit/common/test_knowledge_answer_config_repo.py backend/tests/unit/common/test_knowledge_entity_resolver.py backend/tests/unit/common/test_knowledge_intent_classifier.py backend/tests/unit/common/test_knowledge_retrieval_planner.py backend/tests/unit/common/test_haystack_adapter.py backend/tests/unit/common/test_knowledge_reranker.py backend/tests/unit/common/test_knowledge_answerability.py backend/tests/unit/common/test_knowledge_answer_assembler.py backend/tests/unit/common/test_knowledge_answer_audit_repo.py backend/tests/evaluation/test_knowledge_answer_engine_eval.py backend/tests/unit/common/test_seed_knowledge_answer_config.py backend/tests/unit/common/test_knowledge_answer_feature_flag.py -q && npm --prefix web test -- --run src/hooks/websocket/message-handlers.test.ts src/components/ui/chat-bubble.test.tsx \"src/app/(user)/practice/[sessionId]/report/page.test.tsx\" \"src/app/(user)/practice/[sessionId]/replay/page.test.tsx\"",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 15800,
+      "created_at": "2026-03-31T06:27:37.784Z"
     }
   ]
 }
