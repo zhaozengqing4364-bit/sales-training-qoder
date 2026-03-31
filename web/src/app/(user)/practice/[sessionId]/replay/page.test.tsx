@@ -769,6 +769,57 @@ describe("SessionReplayPage", () => {
     expect(screen.getByText("签名已过期，请重新上传")).toBeTruthy();
   });
 
+  it("renders answer-level knowledge diagnostics for assistant replay messages", async () => {
+    getReplayMock.mockResolvedValue(buildReplayData({
+      messages: [
+        {
+          id: "turn-1",
+          session_id: "session-1",
+          turn_number: 1,
+          role: "assistant",
+          content: "实习专家是一款企业内部智能演练平台。",
+          timestamp: "2026-03-23T00:00:00Z",
+          audio_url: null,
+          duration_ms: 1200,
+          sales_stage: "presentation",
+          stage_name: "方案呈现",
+          score_snapshot: { overall_score: 88 },
+          ai_feedback: null,
+          is_highlight: false,
+          highlight_type: null,
+          highlight_reason: null,
+          learning_evidence: null,
+          transcript_metadata: {
+            knowledge_answer_diagnostics: {
+              mode: "grounded_strict",
+              answerability: "sufficient",
+              source_status: "hit",
+              rewritten_queries: ["实习 产品介绍", "实习 核心能力"],
+              citations: [
+                {
+                  claim: "实习专家是一款企业内部智能演练平台。",
+                  knowledge_base_name: "产品知识库",
+                  document_title: "实习专家产品手册",
+                  snippet: "实习专家是一款企业内部智能演练平台。",
+                  score: 0.92,
+                },
+              ],
+            },
+          },
+        },
+      ],
+    }));
+    getReportMock.mockResolvedValue(buildRetryReport());
+    getHighlightsMock.mockResolvedValue(buildHighlightsResponse({ highlights: [] }));
+
+    render(<SessionReplayPage />);
+
+    expect(await screen.findByText("回答级知识依据")).toBeTruthy();
+    expect(screen.getByText(/检索改写：实习 产品介绍；实习 核心能力/)).toBeTruthy();
+    expect(screen.getByText("实习专家产品手册", { exact: false })).toBeTruthy();
+    expect(screen.getAllByText("实习专家是一款企业内部智能演练平台。", { exact: false }).length).toBeGreaterThanOrEqual(2);
+  });
+
   it("shows an explicit blocked message when replay is still completion-gated", async () => {
     getReplayMock.mockRejectedValue(new ApiRequestError({
       status: 400,

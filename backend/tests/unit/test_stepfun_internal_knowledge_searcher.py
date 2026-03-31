@@ -12,6 +12,16 @@ from sales_bot.websocket.components.stepfun_internal_knowledge_searcher import (
 )
 
 
+class DummySearchHealthMixin:
+    async def get_search_health(self, **kwargs):
+        return {
+            "knowledge_base_count": 1,
+            "ready_document_count": 1,
+            "ready_chunk_count": 4,
+            "vector_chunk_count": 4,
+        }
+
+
 @pytest.mark.asyncio
 async def test_search_internal_knowledge_returns_missing_query_payload():
     record_metric = AsyncMock()
@@ -255,6 +265,155 @@ async def test_search_internal_knowledge_returns_kb_not_ready_payload_when_healt
     assert kwargs["ledger_event"]["status"] == "kb_not_ready"
     assert kwargs["ledger_event"]["query"] == "公司产品有哪些"
     assert kwargs["ledger_event"]["error_summary"] == "内部知识库文档尚未处理完成，请稍后重试"
+
+
+@pytest.mark.asyncio
+async def test_search_internal_knowledge_stops_rewritten_queries_after_first_success_for_product_overview():
+    effective_policy = {
+        "knowledge_base_ids": ["kb-1"],
+        "tool_policy": {
+            "require_kb_grounding": True,
+            "retrieval_top_k": 5,
+        },
+    }
+    record_metric = AsyncMock()
+    captured_queries: list[str] = []
+
+    class FakeKnowledgeService:
+        def __init__(self, _db):
+            pass
+
+        def get_search_health(self, kb_ids):
+            return {
+                "is_ready": True,
+                "ready_document_count": 1,
+                "ready_chunk_count": 1,
+                "vector_chunk_count": 1,
+            }
+
+        async def search_multiple(
+            self,
+            *,
+            kb_ids,
+            query,
+            top_k,
+            similarity_threshold,
+            metadata_filter,
+            enable_hybrid,
+            keyword_candidate_limit,
+            embedding_timeout_ms,
+            enable_rerank,
+            rerank_top_k,
+        ):
+            captured_queries.append(query)
+            if query.endswith("产品介绍"):
+                return Result.ok([
+                    {
+                        "knowledge_base_id": "kb-1",
+                        "knowledge_base_name": "产品知识库",
+                        "document_title": "世袭科技产品手册",
+                        "content": "世袭科技是一家面向企业训练场景的智能销售训练平台。",
+                        "score": 0.93,
+                        "retrieval_mode": "keyword_fallback",
+                    }
+                ])
+            return Result.ok([])
+
+        def get_last_search_timing(self):
+            return {
+                "phase_vector_ms": 1200.0,
+                "phase_keyword_ms": 20.0,
+                "cache_hit_ready_docs": False,
+            }
+
+    class FakeSession:
+        async def __aenter__(self):
+            return object()
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+    payload = await search_internal_knowledge(
+        arguments_obj={
+            "query": "请你介绍一下世袭科技",
+            "top_k": 5,
+            "embedding_timeout_ms": 1200,
+        },
+        effective_policy=effective_policy,
+        session_factory=lambda: FakeSession(),
+        knowledge_service_cls=FakeKnowledgeService,
+        record_metric=record_metric,
+    )
+
+    assert payload["count"] == 1
+    assert payload["results"][0]["document_title"] == "世袭科技产品手册"
+    assert captured_queries == ["请你介绍一下世袭科技", "请你介绍一下世袭科技 产品介绍"]
+    assert payload["_answerability"]["source_status"] in {"hit", "hit_keyword_fallback"}
+
+
+@pytest.mark.asyncio
+async def test_search_internal_knowledge_rewrites_product_overview_query_and_aggregates_results():
+    record_metric = AsyncMock()
+    captured_queries: list[str] = []
+
+    class DummyDbSessionContext:
+        async def __aenter__(self):
+            return MagicMock()
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+    class DummyKnowledgeService(DummySearchHealthMixin):
+        def __init__(self, _db):
+            pass
+
+        async def search_multiple(self, **kwargs):
+            captured_queries.append(str(kwargs["query"]))
+            query = str(kwargs["query"])
+            if "产品介绍" in query:
+                return Result.ok([
+                    {
+                        "knowledge_base_id": "kb-1",
+                        "knowledge_base_name": "产品知识库",
+                        "content": "实习专家是一款面向企业内部训练的智能演练平台。",
+                        "score": 0.92,
+                        "retrieval_mode": "hybrid",
+                    }
+                ])
+            if "核心能力" in query:
+                return Result.ok([
+                    {
+                        "knowledge_base_id": "kb-1",
+                        "knowledge_base_name": "产品知识库",
+                        "content": "它支持销售对练、报告复盘、回放与知识库约束问答。",
+                        "score": 0.89,
+                        "retrieval_mode": "hybrid",
+                    }
+                ])
+            return Result.ok([])
+
+    payload = await search_internal_knowledge(
+        arguments_obj={"query": "请你讲一下实习，介绍一下实习这个产品。", "top_k": 3},
+        effective_policy={
+            "knowledge_base_ids": ["kb-1"],
+            "tool_policy": {
+                "retrieval_similarity_threshold": 0.65,
+                "retrieval_enable_hybrid": True,
+                "retrieval_enable_rerank": True,
+                "retrieval_rerank_top_k": 8,
+            },
+        },
+        session_factory=lambda: DummyDbSessionContext(),
+        knowledge_service_cls=DummyKnowledgeService,
+        record_metric=record_metric,
+    )
+
+    assert payload["count"] == 1
+    assert any("产品介绍" in query for query in captured_queries)
+    assert not any("核心能力" in query for query in captured_queries)
+    assert payload["results"][0]["knowledge_base_name"] == "产品知识库"
+    assert record_metric.await_args is not None
+    assert record_metric.await_args.kwargs["status"] == "hit"
 
 
 @pytest.mark.asyncio

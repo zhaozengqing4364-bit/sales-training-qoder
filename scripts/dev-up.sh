@@ -21,8 +21,11 @@ POSTGRES_DB="${POSTGRES_DB:-sales_training}"
 
 BACKEND_DATABASE_URL_DEFAULT="postgresql+asyncpg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@127.0.0.1:${POSTGRES_PORT}/${POSTGRES_DB}"
 BACKEND_REDIS_URL_DEFAULT="redis://127.0.0.1:${REDIS_PORT}/0"
-FRONTEND_API_URL_DEFAULT="http://127.0.0.1:${BACKEND_PORT}/api/v1"
-FRONTEND_WS_URL_DEFAULT="ws://127.0.0.1:${BACKEND_PORT}"
+# Keep frontend and backend on the same loopback hostname by default.
+# Using 127.0.0.1 for API while opening the frontend on localhost (or vice versa)
+# creates host-only auth cookies that the Next.js app cannot read after login.
+FRONTEND_API_URL_DEFAULT="http://localhost:${BACKEND_PORT}/api/v1"
+FRONTEND_WS_URL_DEFAULT="ws://localhost:${BACKEND_PORT}"
 
 EFFECTIVE_DATABASE_URL=""
 EFFECTIVE_REDIS_URL=""
@@ -327,7 +330,7 @@ start_backend() {
     die "Backend 启动失败，请查看日志 ${LOG_DIR}/backend.log"
   }
 
-  log "Backend 已启动：http://127.0.0.1:${BACKEND_PORT}"
+  log "Backend 已启动：http://localhost:${BACKEND_PORT}"
 }
 
 start_frontend() {
@@ -349,7 +352,7 @@ start_frontend() {
     die "Frontend 启动失败，请查看日志 ${LOG_DIR}/frontend.log"
   }
 
-  log "Frontend 已启动：http://127.0.0.1:${FRONTEND_PORT}"
+  log "Frontend 已启动：http://localhost:${FRONTEND_PORT}"
 }
 
 print_summary() {
@@ -357,9 +360,9 @@ print_summary() {
 
 ✅ 一键开发环境启动完成（纯本机模式，无 Docker）
 
-- Frontend: http://127.0.0.1:${FRONTEND_PORT}
-- Backend API: http://127.0.0.1:${BACKEND_PORT}/api/v1
-- Backend Docs: http://127.0.0.1:${BACKEND_PORT}/docs
+- Frontend: http://localhost:${FRONTEND_PORT}
+- Backend API: http://localhost:${BACKEND_PORT}/api/v1
+- Backend Docs: http://localhost:${BACKEND_PORT}/docs
 - DATABASE_URL: ${EFFECTIVE_DATABASE_URL}
 - REDIS_URL: ${EFFECTIVE_REDIS_URL}
 

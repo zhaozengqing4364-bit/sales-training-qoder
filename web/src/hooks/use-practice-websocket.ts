@@ -162,7 +162,7 @@ export function usePracticeWebSocket(options: UsePracticeWebSocketOptions) {
     const seenAiMessagesRef = useRef<Set<string>>(new Set());
 
     // P1-7 + P2-15: Extracted helper for adding AI messages with O(1) Set-based dedup
-    const addAiMessageIfNew = useCallback((text: string, extraState?: Partial<PracticeState>) => {
+    const addAiMessageIfNew = useCallback((text: string, extraState?: Partial<PracticeState> & { knowledgeAnswerDiagnostics?: import("./websocket/types").KnowledgeAnswerDiagnostics | null }) => {
         if (!text) return;
         if (seenAiMessagesRef.current.has(text)) return;
         // NEW-4 Fix: Cap Set size to prevent unbounded memory growth
@@ -176,12 +176,16 @@ export function usePracticeWebSocket(options: UsePracticeWebSocketOptions) {
             sender: "ai",
             message: text,
             timestamp: new Date().toLocaleTimeString("zh-CN", { hour: "2-digit", minute: "2-digit" }),
+            ...(extraState?.knowledgeAnswerDiagnostics
+                ? { knowledgeAnswerDiagnostics: extraState.knowledgeAnswerDiagnostics }
+                : {}),
         };
         setState(prev => {
             const nextMessages = [...prev.messages, newMsg];
+            const { knowledgeAnswerDiagnostics: _ignoredKnowledgeDiagnostics, ...restExtraState } = extraState || {};
             return {
                 ...prev,
-                ...extraState,
+                ...restExtraState,
                 messages:
                     nextMessages.length > MAX_CHAT_MESSAGES
                         ? nextMessages.slice(-MAX_CHAT_MESSAGES)

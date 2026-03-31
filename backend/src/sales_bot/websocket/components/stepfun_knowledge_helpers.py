@@ -16,12 +16,18 @@ SALES_OBJECTION_QUERY_RE = re.compile(
     r"roi|预算|报价|价格|竞品|竞对|对比|替代|实施|落地|风险|案例|证据|收益|回报|proof|evidence|competitor|pricing|price|budget|case",
     re.IGNORECASE,
 )
+PRODUCT_OVERVIEW_QUERY_RE = re.compile(
+    r"介绍|是什么|做什么|产品|平台|方案|系统|能力|功能|版本|定位|适用|场景",
+    re.IGNORECASE,
+)
 MAX_KNOWLEDGE_RETRIEVAL_LEDGER_ENTRIES = 10
 MAX_KNOWLEDGE_RETRIEVAL_RESULT_SUMMARIES = 3
 MAX_KNOWLEDGE_RETRIEVAL_QUERY_CHARS = 160
 MAX_KNOWLEDGE_RETRIEVAL_ERROR_CHARS = 240
 MAX_KNOWLEDGE_RETRIEVAL_SNIPPET_CHARS = 240
 MAX_KNOWLEDGE_RETRIEVAL_LEDGER_KB_IDS = 8
+MAX_RETRIEVAL_QUERY_VARIANTS = 4
+MAX_ANSWER_CITATIONS = 6
 
 
 def _normalize_whitespace(value: Any) -> str:
@@ -62,6 +68,16 @@ def _normalize_result_summary(result: Any) -> dict[str, Any] | None:
     except (TypeError, ValueError):
         pass
 
+    document_title = _normalize_whitespace(
+        result.get("document_title")
+        or result.get("source")
+        or (result.get("metadata") or {}).get("document_title")
+        if isinstance(result.get("metadata"), dict)
+        else result.get("document_title") or result.get("source")
+    )
+    if document_title:
+        summary["document_title"] = document_title
+
     return summary
 
 
@@ -99,6 +115,40 @@ def is_entity_focused_query(query: str) -> bool:
     if ENTITY_TOKEN_RE.search(normalized):
         return True
     return bool(re.search(r"产品|型号|版本|名录|清单|报价|价格|参数", normalized))
+
+
+def is_product_overview_query(query: str) -> bool:
+    normalized = _normalize_whitespace(query)
+    if not normalized:
+        return False
+    return bool(PRODUCT_OVERVIEW_QUERY_RE.search(normalized))
+
+
+def build_rewritten_queries(query: str) -> list[str]:
+    normalized = _normalize_whitespace(query)
+    if not normalized:
+        return []
+
+    variants: list[str] = [normalized]
+    if is_product_overview_query(normalized):
+        entity_hint = normalized
+        variants.extend(
+            [
+                f"{entity_hint} 产品介绍",
+                f"{entity_hint} 核心能力",
+                f"{entity_hint} 适用场景",
+            ]
+        )
+
+    deduped: list[str] = []
+    for item in variants:
+        candidate = _normalize_whitespace(item)
+        if not candidate or candidate in deduped:
+            continue
+        deduped.append(candidate)
+        if len(deduped) >= MAX_RETRIEVAL_QUERY_VARIANTS:
+            break
+    return deduped
 
 
 def resolve_grounding_context_limits(query: str) -> tuple[int, int]:
@@ -164,6 +214,8 @@ def resolve_retrieval_params(
             top_k = min(10, max(top_k, 7))
         elif entity_focused_query:
             top_k = min(8, max(top_k, 6))
+        elif is_product_overview_query(query):
+            top_k = min(8, max(top_k, 5))
 
     if sales_objection_query:
         threshold = max(0.42, threshold - 0.10)
@@ -264,6 +316,46 @@ def build_search_failed_payload(query: str, error_detail: str) -> dict[str, Any]
         "results": [],
         "message": "知识检索失败",
         "error": error_detail,
+    }
+
+
+def build_answerability_assessment(
+    *,
+    query: str,
+    results: list[dict[str, Any]],
+    source_status: str,
+    strict_kb_mode: bool,
+    rewritten_queries: list[str] | None = None,
+) -> dict[str, Any]:
+    citations = [
+        {
+            "claim": _truncate_text(_normalize_whitespace(item.get("snippet") or ""), 120),
+            "knowledge_base_id": item.get("knowledge_base_id"),
+            "knowledge_base_name": item.get("knowledge_base_name"),
+            "document_title": item.get("document_title") or None,
+            "snippet": item.get("snippet"),
+            "score": item.get("score"),
+        }
+        for item in results[:MAX_ANSWER_CITATIONS]
+        if isinstance(item, dict) and _normalize_whitespace(item.get("snippet"))
+    ]
+
+    if source_status in {"search_failed", "kb_not_ready", "no_kb_bound", "missing_query"}:
+        answerability = "blocked"
+    elif not results:
+        answerability = "insufficient"
+    elif is_product_overview_query(query) and len(results) < 2:
+        answerability = "partial"
+    else:
+        answerability = "sufficient"
+
+    return {
+        "mode": "grounded_strict" if strict_kb_mode else "grounded_preferred",
+        "answerability": answerability,
+        "source_status": source_status,
+        "query": query,
+        "rewritten_queries": list(rewritten_queries or []),
+        "citations": citations,
     }
 
 
@@ -384,6 +476,7 @@ def transform_search_rows(
         if retrieval_mode:
             retrieval_modes.add(retrieval_mode)
 
+        metadata = row.get("metadata") if isinstance(row.get("metadata"), dict) else {}
         results.append(
             {
                 "knowledge_base_id": row.get("knowledge_base_id"),
@@ -391,6 +484,7 @@ def transform_search_rows(
                 "score": row.get("score"),
                 "snippet": snippet,
                 "retrieval_mode": retrieval_mode or "vector",
+                "document_title": row.get("document_title") or row.get("source") or metadata.get("document_title"),
             }
         )
 

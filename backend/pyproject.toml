@@ -2,6 +2,9 @@
 name = "ai-practice-backend"
 version = "1.0.0"
 requires-python = ">=3.11"
+dependencies = [
+    "haystack-ai>=2.0.0",
+]
 
 [tool.ruff]
 line-length = 88

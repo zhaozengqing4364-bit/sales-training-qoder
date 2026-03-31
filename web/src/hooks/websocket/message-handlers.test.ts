@@ -54,6 +54,43 @@ function createDeps(initialState: PracticeState) {
 }
 
 describe("handleWebSocketMessage connection/status behavior", () => {
+    it("captures runtime answer diagnostics and citations from tts_audio messages", () => {
+        const { deps, getState } = createDeps(INITIAL_PRACTICE_STATE);
+
+        handleWebSocketMessage(
+            createMessageEvent({
+                type: "tts_audio",
+                timestamp: new Date().toISOString(),
+                data: {
+                    text: "实习专家是一款企业内部智能演练平台。",
+                    audio: "",
+                    duration_ms: 1200,
+                    fallback: "browser_tts",
+                    knowledge_answer_diagnostics: {
+                        mode: "grounded_strict",
+                        answerability: "sufficient",
+                        source_status: "hit",
+                        citations: [
+                            {
+                                claim: "实习专家是一款企业内部智能演练平台。",
+                                knowledge_base_id: "kb-1",
+                                knowledge_base_name: "产品知识库",
+                                document_title: "实习专家产品手册",
+                                snippet: "实习专家是一款面向企业内部训练的智能演练平台。",
+                                score: 0.92,
+                            },
+                        ],
+                    },
+                },
+            }),
+            deps as never,
+        );
+
+        expect(deps.addAiMessageIfNew).toHaveBeenCalledWith(
+            "实习专家是一款企业内部智能演练平台。",
+            expect.objectContaining({ aiState: "speaking" }),
+        );
+    });
     it("shows coach degraded state without breaking the active practice session", () => {
         const { deps, getState } = createDeps({
             ...INITIAL_PRACTICE_STATE,

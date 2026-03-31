@@ -1722,6 +1722,7 @@ async def get_session_knowledge_check(
         live_claim_truth=live_claim_truth,
         live_coach_health=live_coach_health,
         live_session_summary=live_session_summary,
+        live_knowledge_answer_diagnostics=live_knowledge_answer_diagnostics,
         live_runtime_active=live_runtime_active,
         projection_effectiveness_snapshot=projection_effectiveness_snapshot,
         conclusion_evidence=projection_conclusion_evidence,

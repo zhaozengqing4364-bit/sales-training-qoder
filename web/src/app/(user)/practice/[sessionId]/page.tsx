@@ -553,6 +553,7 @@ export default function PracticeSessionPage() {
                                 message={msg.message}
                                 sender={msg.sender}
                                 timestamp={msg.timestamp}
+                                knowledgeAnswerDiagnostics={msg.knowledgeAnswerDiagnostics}
                                 avatar={
                                     msg.sender === "ai"
                                         ? "/ai-avatar.svg"

@@ -62,6 +62,44 @@ def test_build_session_runtime_diagnostics_uses_latest_valid_ledger_entry_for_se
     assert diagnostics["updated_at"] == "2026-03-28T12:00:00Z"
 
 
+def test_build_session_runtime_diagnostics_surfaces_live_answer_diagnostics_when_present():
+    diagnostics = build_session_runtime_diagnostics(
+        session=_session_stub(),
+        snapshot=_snapshot_with_knowledge_metrics(
+            {
+                "attempt_count": 2,
+                "hit_query_count": 1,
+                "total_results": 2,
+                "last_status": "hit",
+                "last_query": "介绍一下实习产品",
+                "last_result_count": 2,
+                "last_retrieval_mode": "hybrid",
+            }
+        ),
+        live_knowledge_answer_diagnostics={
+            "mode": "grounded_strict",
+            "answerability": "sufficient",
+            "source_status": "hit",
+            "rewritten_queries": ["实习 产品介绍", "实习 核心能力"],
+            "citations": [
+                {
+                    "claim": "实习专家是一款企业内部智能演练平台。",
+                    "knowledge_base_id": "kb-1",
+                    "knowledge_base_name": "产品知识库",
+                    "document_title": "实习专家产品手册",
+                    "snippet": "实习专家是一款面向企业内部训练的智能演练平台。",
+                    "score": 0.92,
+                }
+            ],
+        },
+        live_runtime_active=True,
+    )
+
+    assert diagnostics["knowledge_answer_diagnostics"]["answerability"] == "sufficient"
+    assert diagnostics["knowledge_answer_diagnostics"]["rewritten_queries"] == ["实习 产品介绍", "实习 核心能力"]
+    assert diagnostics["knowledge_answer_diagnostics"]["citations"][0]["document_title"] == "实习专家产品手册"
+
+
 def test_build_session_runtime_diagnostics_ignores_malformed_recent_attempts_and_uses_latest_valid_event():
     diagnostics = build_session_runtime_diagnostics(
         session=_session_stub(),

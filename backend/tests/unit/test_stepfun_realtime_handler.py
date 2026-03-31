@@ -6,6 +6,7 @@ Includes degraded/resumed coach health state tests for S07.
 
 from __future__ import annotations
 
+import asyncio
 import json
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
@@ -464,8 +465,10 @@ async def test_prepare_grounding_context_applies_internal_only_guardrail_when_kb
 
     await handler._prepare_grounding_context("我们的产品线有哪些")
 
-    assert "仅依据企业内部知识库回答" in handler._pending_grounding_context
+    assert "当前内部知识库未检索到充分证据" in handler._pending_grounding_context
     assert "我们的产品线有哪些" in handler._pending_grounding_context
+    assert "以下回答不以内部知识库确认为准" in handler._pending_grounding_context
+    assert "一般性参考" in handler._pending_grounding_context
 
 
 @pytest.mark.asyncio
@@ -488,9 +491,9 @@ async def test_prepare_grounding_context_applies_internal_only_guardrail_when_kb
 
     await handler._prepare_grounding_context("请介绍实习专家产品名录")
 
-    assert "仅依据企业内部知识库回答" in handler._pending_grounding_context
+    assert "以下回答不以内部知识库确认为准" in handler._pending_grounding_context
     assert "请介绍实习专家产品名录" in handler._pending_grounding_context
-    assert "提供更具体的产品关键词或版本信息" in handler._pending_grounding_context
+    assert "一般性参考" in handler._pending_grounding_context
 
 
 @pytest.mark.asyncio
@@ -549,11 +552,11 @@ async def test_prepare_grounding_context_timeout_degrades_to_coach_mode(monkeypa
 
     monkeypatch.setattr(stepfun_module.asyncio, "wait_for", _raise_timeout)
 
-    await handler._prepare_grounding_context("请介绍石溪产品方案")
+    await handler._prepare_grounding_context("我这轮话术应该怎么讲更清楚")
 
     assert handler._pending_blocked_response_text == ""
     assert "训练辅导模式" in handler._pending_grounding_context
-    assert "请介绍石溪产品方案" in handler._pending_grounding_context
+    assert "我这轮话术应该怎么讲更清楚" in handler._pending_grounding_context
     decision_kwargs = handler._record_kb_lock_decision.await_args.kwargs
     assert decision_kwargs["status"] == "coach_search_timeout"
     assert decision_kwargs["blocked"] is False
@@ -1630,6 +1633,322 @@ async def test_create_response_merges_base_contract_and_grounding_instructions()
     assert "始终扮演采购总监" in instructions
     assert "用户问题：最新报价策略" in instructions
     handler._send_status.assert_awaited_once_with("thinking")
+
+
+@pytest.mark.asyncio
+async def test_create_response_keeps_hard_no_hallucination_guardrail_when_bound_kb_retrieval_is_empty():
+    handler = StepFunRealtimeHandler()
+    handler._effective_policy = {
+        "knowledge_base_ids": ["kb-1"],
+        "tool_policy": {
+            "enable_internal_retrieval": True,
+            "retrieval_top_k": 3,
+            "require_kb_grounding": False,
+        },
+    }
+    handler._stepfun_instructions = "【系统总指令】你是企业产品专家。"
+    handler._tool_search_internal_knowledge = AsyncMock(
+        return_value={
+            "count": 0,
+            "results": [],
+            "message": "未命中",
+        }
+    )
+    handler._send_status = AsyncMock()
+    handler._send_upstream = AsyncMock()
+
+    await handler._prepare_grounding_context("请你讲一下实习，介绍一下实习这个产品。")
+    created = await handler._create_response(count_turn=True)
+
+    assert created is True
+    payload = handler._send_upstream.await_args.args[0]
+    assert payload["type"] == "response.create"
+    instructions = payload["response"]["instructions"]
+    assert "当前内部知识库未检索到充分证据" in instructions
+    assert "请你讲一下实习，介绍一下实习这个产品。" in instructions
+    assert "以下回答不以内部知识库确认为准" in instructions
+    assert "一般性参考" in instructions
+    assert "不得将一般性知识表述为企业内部资料" in instructions
+
+
+@pytest.mark.asyncio
+async def test_create_response_blocks_when_strict_kb_answerability_is_insufficient():
+    handler = StepFunRealtimeHandler()
+    handler._effective_policy = {
+        "knowledge_base_ids": ["kb-1"],
+        "tool_policy": {
+            "enable_internal_retrieval": True,
+            "retrieval_top_k": 3,
+            "require_kb_grounding": True,
+        },
+    }
+    handler._stepfun_instructions = "【系统总指令】你是企业产品专家。"
+    handler._send_status = AsyncMock()
+    handler._send_upstream = AsyncMock()
+    handler.manager = MagicMock()
+    handler.manager.send_json = AsyncMock()
+    handler.websocket = MagicMock()
+    handler._persist_message = AsyncMock()
+    handler._sales_stage_lock = asyncio.Lock()
+    handler._feedback_context = None
+    handler._latest_knowledge_answer_diagnostics = {
+        "mode": "grounded_strict",
+        "answerability": "insufficient",
+        "source_status": "miss",
+        "rewritten_queries": ["实习 产品介绍"],
+        "citations": [],
+    }
+    handler._pending_blocked_response_text = "当前内部知识库没有足够依据回答这个问题，请补充更具体的产品关键词或版本信息。"
+
+    created = await handler._create_response(count_turn=True)
+
+    assert created is True
+    handler._send_upstream.assert_not_awaited()
+    handler.manager.send_json.assert_awaited_once()
+    blocked_payload = handler.manager.send_json.await_args.args[1]
+    assert blocked_payload["type"] == "tts_audio"
+    assert "没有足够依据" in blocked_payload["data"]["text"]
+
+
+@pytest.mark.asyncio
+async def test_create_response_marks_partial_answerability_when_overview_query_only_has_one_citation():
+    handler = StepFunRealtimeHandler()
+    handler._effective_policy = {
+        "knowledge_base_ids": ["kb-1"],
+        "tool_policy": {
+            "enable_internal_retrieval": True,
+            "retrieval_top_k": 3,
+            "require_kb_grounding": False,
+        },
+    }
+    handler._stepfun_instructions = "【系统总指令】你是企业产品专家。"
+    handler._tool_search_internal_knowledge = AsyncMock(
+        return_value={
+            "count": 1,
+            "results": [
+                {
+                    "knowledge_base_id": "kb-1",
+                    "knowledge_base_name": "产品知识库",
+                    "document_title": "实习专家产品手册",
+                    "snippet": "实习专家是一款企业内部智能演练平台。",
+                    "score": 0.91,
+                    "retrieval_mode": "hybrid",
+                }
+            ],
+            "_answerability": {
+                "mode": "grounded_preferred",
+                "answerability": "partial",
+                "source_status": "hit",
+                "rewritten_queries": ["实习 产品介绍"],
+                "citations": [
+                    {
+                        "claim": "实习专家是一款企业内部智能演练平台。",
+                        "knowledge_base_id": "kb-1",
+                        "knowledge_base_name": "产品知识库",
+                        "document_title": "实习专家产品手册",
+                        "snippet": "实习专家是一款企业内部智能演练平台。",
+                        "score": 0.91,
+                    }
+                ],
+            },
+        }
+    )
+    handler._send_status = AsyncMock()
+    handler._send_upstream = AsyncMock()
+
+    await handler._prepare_grounding_context("请介绍一下实习这个产品")
+    created = await handler._create_response(count_turn=True)
+
+    assert created is True
+    assert handler._latest_knowledge_answer_diagnostics is not None
+    assert handler._latest_knowledge_answer_diagnostics["answerability"] == "partial"
+    payload = handler._send_upstream.await_args.args[0]
+    instructions = payload["response"]["instructions"]
+    assert "若信息不足，请明确说明不确定之处" in instructions
+
+
+@pytest.mark.asyncio
+async def test_flush_active_response_trims_unsupported_sentences_in_partial_mode():
+    handler = StepFunRealtimeHandler()
+    handler.websocket = MagicMock()
+    handler.manager = MagicMock()
+    handler.manager.send_json = AsyncMock()
+    handler._send_status = AsyncMock()
+    handler._persist_message = AsyncMock()
+    handler._sales_stage_context = None
+    handler._feedback_context = None
+    handler.turn_count = 1
+    handler._active_response = RealtimeResponseState(
+        request_id=1,
+        stream_id="stream-1",
+    )
+    handler._active_response.text_parts = [
+        "实习专家是一款企业内部智能演练平台。它覆盖所有海外市场并且已经支持 200 个国家。"
+    ]
+    handler._latest_knowledge_answer_diagnostics = {
+        "mode": "grounded_preferred",
+        "answerability": "partial",
+        "source_status": "hit",
+        "rewritten_queries": ["实习专家 产品介绍"],
+        "citations": [
+            {
+                "claim": "实习专家是一款企业内部智能演练平台。",
+                "knowledge_base_id": "kb-1",
+                "knowledge_base_name": "产品知识库",
+                "document_title": "实习专家产品手册",
+                "snippet": "实习专家是一款企业内部智能演练平台。",
+                "score": 0.92,
+            }
+        ],
+    }
+
+    await handler._flush_active_response({"type": "response.done", "response": {"id": "resp-1"}})
+
+    sent_payload = handler.manager.send_json.await_args_list[0].args[1]
+    assert sent_payload["type"] == "tts_audio"
+    assert sent_payload["data"]["text"] == "实习专家是一款企业内部智能演练平台。"
+    handler._persist_message.assert_awaited_once()
+    persisted_text = handler._persist_message.await_args.kwargs["content"]
+    assert persisted_text == "实习专家是一款企业内部智能演练平台。"
+
+
+@pytest.mark.asyncio
+async def test_flush_active_response_falls_back_when_partial_mode_has_no_supported_sentence():
+    handler = StepFunRealtimeHandler()
+    handler.websocket = MagicMock()
+    handler.manager = MagicMock()
+    handler.manager.send_json = AsyncMock()
+    handler._send_status = AsyncMock()
+    handler._persist_message = AsyncMock()
+    handler._sales_stage_context = None
+    handler._feedback_context = None
+    handler.turn_count = 1
+    handler._active_response = RealtimeResponseState(
+        request_id=1,
+        stream_id="stream-1",
+    )
+    handler._active_response.text_parts = ["它覆盖所有海外市场并且已经支持 200 个国家。"]
+    handler._latest_knowledge_answer_diagnostics = {
+        "mode": "grounded_preferred",
+        "answerability": "partial",
+        "source_status": "hit",
+        "rewritten_queries": ["实习专家 产品介绍"],
+        "citations": [
+            {
+                "claim": "实习专家是一款企业内部智能演练平台。",
+                "knowledge_base_id": "kb-1",
+                "knowledge_base_name": "产品知识库",
+                "document_title": "实习专家产品手册",
+                "snippet": "实习专家是一款企业内部智能演练平台。",
+                "score": 0.92,
+            }
+        ],
+    }
+
+    await handler._flush_active_response({"type": "response.done", "response": {"id": "resp-1"}})
+
+    sent_payload = handler.manager.send_json.await_args_list[0].args[1]
+    assert sent_payload["data"]["text"] == "当前内部知识库仅支持部分信息，暂无法确认更多细节。"
+    persisted_text = handler._persist_message.await_args.kwargs["content"]
+    assert persisted_text == "当前内部知识库仅支持部分信息，暂无法确认更多细节。"
+
+
+@pytest.mark.asyncio
+async def test_prepare_grounding_context_blocks_product_overview_when_coach_mode_times_out():
+    handler = StepFunRealtimeHandler()
+    handler._effective_policy = {
+        "knowledge_base_ids": ["kb-1"],
+        "tool_policy": {
+            "enable_internal_retrieval": True,
+            "retrieval_top_k": 3,
+            "require_kb_grounding": True,
+            "kb_lock_mode": "coach_mode",
+        },
+    }
+    handler._kb_lock_decision_timeout_seconds = 0.001
+
+    async def _never_returns(*_args, **_kwargs):
+        await asyncio.sleep(0.02)
+        return {}
+
+    original_wait_for = stepfun_module.asyncio.wait_for
+
+    async def fake_wait_for(awaitable, timeout):
+        awaitable.close()
+        raise asyncio.TimeoutError
+
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr(stepfun_module, "evaluate_kb_lock_decision", _never_returns)
+        mp.setattr(stepfun_module.asyncio, "wait_for", fake_wait_for)
+        mp.setattr(handler, "_record_kb_lock_decision", AsyncMock())
+        await handler._prepare_grounding_context("请你讲一下实习，介绍一下实习这个产品。")
+
+    assert handler._pending_grounding_context == ""
+    assert "暂时无法基于内部资料确认" in handler._pending_blocked_response_text
+
+
+@pytest.mark.asyncio
+async def test_handle_upstream_response_text_delta_does_not_cancel_stream_on_question_limit():
+    handler = StepFunRealtimeHandler()
+    handler._effective_policy = {
+        "tool_policy": {
+            "max_questions_per_turn": 1,
+        }
+    }
+    handler._send_upstream = AsyncMock()
+    handler._active_response = RealtimeResponseState(request_id=1, stream_id="stream-1")
+
+    await handler._handle_upstream_response_text_delta(
+        {"type": "response.text.delta", "delta": "好的，我先介绍产品。你更关心哪个方向？还想了解价格吗？"}
+    )
+
+    assert handler._active_response is not None
+    assert handler._active_response.text_parts == ["好的，我先介绍产品。你更关心哪个方向？还想了解价格吗？"]
+    handler._send_upstream.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_flush_active_response_emits_runtime_answer_diagnostics_and_citations():
+    handler = StepFunRealtimeHandler()
+    handler.websocket = MagicMock()
+    handler.manager = MagicMock()
+    handler.manager.send_json = AsyncMock()
+    handler._send_status = AsyncMock()
+    handler._persist_message = AsyncMock()
+    handler._sales_stage_context = None
+    handler._feedback_context = None
+    handler.turn_count = 1
+    handler._active_response = RealtimeResponseState(
+        request_id=1,
+        stream_id="stream-1",
+    )
+    handler._active_response.text_parts = ["实习专家是一款企业内部智能演练平台。"]
+    handler._latest_knowledge_answer_diagnostics = {
+        "mode": "grounded_strict",
+        "answerability": "sufficient",
+        "source_status": "hit",
+        "rewritten_queries": ["实习专家 产品介绍", "实习专家 核心能力"],
+        "citations": [
+            {
+                "claim": "实习专家是一款企业内部智能演练平台。",
+                "knowledge_base_id": "kb-1",
+                "knowledge_base_name": "产品知识库",
+                "document_title": "实习专家产品手册",
+                "snippet": "实习专家是一款面向企业内部训练的智能演练平台。",
+                "score": 0.92,
+            }
+        ],
+    }
+
+    await handler._flush_active_response({"type": "response.done", "response": {"id": "resp-1"}})
+
+    sent_payload = handler.manager.send_json.await_args_list[0].args[1]
+    assert sent_payload["type"] == "tts_audio"
+    assert sent_payload["data"]["text"] == "实习专家是一款企业内部智能演练平台。"
+    assert sent_payload["data"]["knowledge_answer_diagnostics"]["answerability"] == "sufficient"
+    assert sent_payload["data"]["knowledge_answer_diagnostics"]["rewritten_queries"] == ["实习专家 产品介绍", "实习专家 核心能力"]
+    assert sent_payload["data"]["knowledge_answer_diagnostics"]["citations"][0]["document_title"] == "实习专家产品手册"
+    handler._persist_message.assert_awaited_once()
 
 
 def test_enforce_tool_policy_guardrails_disables_web_search_without_kb():
@@ -2720,6 +3039,10 @@ async def test_capability_pipeline_fails_does_not_change_training_session_status
     )
 
     # Training session must still be usable
+    assert handler.session_status == "in_progress"
+    assert handler._coach_health == "degraded"
+
+
     assert handler.session_status == "in_progress"
     assert handler._coach_health == "degraded"
 

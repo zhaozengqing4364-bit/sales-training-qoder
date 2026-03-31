@@ -389,6 +389,7 @@ def build_session_runtime_diagnostics(
     live_claim_truth: dict[str, Any] | None = None,
     live_coach_health: dict[str, Any] | None = None,
     live_session_summary: dict[str, Any] | None = None,
+    live_knowledge_answer_diagnostics: dict[str, Any] | None = None,
     live_runtime_active: bool = False,
     projection_effectiveness_snapshot: dict[str, Any] | None = None,
     conclusion_evidence: dict[str, Any] | None = None,
@@ -500,6 +501,13 @@ def build_session_runtime_diagnostics(
     normalized_live_session_summary = coerce_live_session_conclusion_summary(
         live_session_summary
     )
+    knowledge_answer_diagnostics = None
+    if isinstance(live_knowledge_answer_diagnostics, dict):
+        knowledge_answer_diagnostics = dict(live_knowledge_answer_diagnostics)
+    elif isinstance(live_session_summary, dict):
+        raw_answer_diagnostics = live_session_summary.get("knowledge_answer_diagnostics")
+        if isinstance(raw_answer_diagnostics, dict):
+            knowledge_answer_diagnostics = dict(raw_answer_diagnostics)
 
     if live_runtime_active:
         main_issue = (
@@ -635,6 +643,7 @@ def build_session_runtime_diagnostics(
         if isinstance(knowledge_metrics.get("recent_queries"), list)
         else [],
         "updated_at": updated_at,
+        "knowledge_answer_diagnostics": knowledge_answer_diagnostics,
         "kb_lock_required": kb_lock_required,
         "kb_lock_status": kb_lock_status,
         "kb_lock_chain_failure": kb_lock_chain_failure,

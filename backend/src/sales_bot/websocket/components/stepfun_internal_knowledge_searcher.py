@@ -8,11 +8,14 @@ import time
 from typing import Any, cast
 
 from sales_bot.websocket.components.stepfun_knowledge_helpers import (
+    build_answerability_assessment,
     build_kb_not_ready_payload,
     build_knowledge_retrieval_ledger_event,
     build_missing_query_payload,
     build_no_kb_payload,
+    build_rewritten_queries,
     build_search_failed_payload,
+    is_product_overview_query,
     normalize_knowledge_base_ids,
     normalize_query,
     resolve_metadata_filter,
@@ -55,6 +58,10 @@ async def search_internal_knowledge(
 
     query = normalize_query(arguments_obj)
     kb_ids = normalize_knowledge_base_ids(effective_policy)
+    strict_kb_mode = bool(
+        isinstance(effective_policy.get("tool_policy"), dict)
+        and effective_policy.get("tool_policy", {}).get("require_kb_grounding", False)
+    )
 
     if not query:
         payload = build_missing_query_payload()
@@ -72,6 +79,13 @@ async def search_internal_knowledge(
             ),
         )
         payload["_diagnostics"] = _build_diagnostics({"status": "missing_query"})
+        payload["_answerability"] = build_answerability_assessment(
+            query="",
+            results=[],
+            source_status="missing_query",
+            strict_kb_mode=strict_kb_mode,
+            rewritten_queries=[],
+        )
         return payload
 
     if not kb_ids:
@@ -90,6 +104,13 @@ async def search_internal_knowledge(
             ),
         )
         payload["_diagnostics"] = _build_diagnostics({"status": "no_kb_bound"})
+        payload["_answerability"] = build_answerability_assessment(
+            query=query,
+            results=[],
+            source_status="no_kb_bound",
+            strict_kb_mode=strict_kb_mode,
+            rewritten_queries=[],
+        )
         return payload
 
     tool_policy = effective_policy.get("tool_policy")
@@ -108,6 +129,7 @@ async def search_internal_knowledge(
         embedding_timeout_ms = 0
     embedding_timeout_ms = max(0, min(10000, embedding_timeout_ms))
     metadata_filter = resolve_metadata_filter(arguments_obj, tool_policy)
+    rewritten_queries = build_rewritten_queries(query)
 
     try:
         async with session_factory() as db:
@@ -175,24 +197,86 @@ async def search_internal_knowledge(
                     {
                         "status": "kb_not_ready",
                         "search_health": search_health or {},
+                        "rewritten_queries": rewritten_queries,
                     }
+                )
+                payload["_answerability"] = build_answerability_assessment(
+                    query=query,
+                    results=[],
+                    source_status="kb_not_ready",
+                    strict_kb_mode=strict_kb_mode,
+                    rewritten_queries=rewritten_queries,
                 )
                 return payload
 
+            aggregated_rows: list[dict[str, Any]] = []
+            seen_row_keys: set[tuple[str, str, str]] = set()
             search_started_at = time.monotonic()
-            search_result = await knowledge_service.search_multiple(
-                kb_ids=kb_ids,
-                query=query,
-                top_k=top_k,
-                similarity_threshold=threshold,
-                metadata_filter=metadata_filter,
-                enable_hybrid=enable_hybrid,
-                keyword_candidate_limit=keyword_candidate_limit,
-                embedding_timeout_ms=embedding_timeout_ms,
-                enable_rerank=enable_rerank,
-                rerank_top_k=rerank_top_k,
-            )
+            search_failures: list[str] = []
+            stop_after_first_success = is_product_overview_query(query)
+            for rewritten_query in rewritten_queries:
+                search_result = await knowledge_service.search_multiple(
+                    kb_ids=kb_ids,
+                    query=rewritten_query,
+                    top_k=top_k,
+                    similarity_threshold=threshold,
+                    metadata_filter=metadata_filter,
+                    enable_hybrid=enable_hybrid,
+                    keyword_candidate_limit=keyword_candidate_limit,
+                    embedding_timeout_ms=embedding_timeout_ms,
+                    enable_rerank=enable_rerank,
+                    rerank_top_k=rerank_top_k,
+                )
+                if not search_result.is_success:
+                    search_failures.append(str(search_result.fallback or "unknown_error"))
+                    continue
+                new_rows_added = 0
+                for row in search_result.value or []:
+                    if not isinstance(row, dict):
+                        continue
+                    row_key = (
+                        str(row.get("knowledge_base_id") or ""),
+                        str(row.get("document_title") or row.get("source") or ""),
+                        str(row.get("content") or ""),
+                    )
+                    if row_key in seen_row_keys:
+                        continue
+                    seen_row_keys.add(row_key)
+                    aggregated_rows.append(dict(row))
+                    new_rows_added += 1
+                if stop_after_first_success and new_rows_added > 0:
+                    break
             search_ms = (time.monotonic() - search_started_at) * 1000
+            if search_failures and not aggregated_rows:
+                error_detail = search_failures[0]
+                await record_metric(
+                    query=query,
+                    result_count=0,
+                    status="search_failed",
+                    knowledge_base_ids=kb_ids,
+                    top_k=top_k,
+                    similarity_threshold=threshold,
+                    error_message=error_detail,
+                    ledger_event=build_knowledge_retrieval_ledger_event(
+                        query=query,
+                        status="search_failed",
+                        result_count=0,
+                        knowledge_base_ids=kb_ids,
+                        error_message=error_detail,
+                    ),
+                )
+                payload = build_search_failed_payload(query, error_detail)
+                payload["_diagnostics"] = _build_diagnostics(
+                    {"status": "search_failed", "rewritten_queries": rewritten_queries}
+                )
+                payload["_answerability"] = build_answerability_assessment(
+                    query=query,
+                    results=[],
+                    source_status="search_failed",
+                    strict_kb_mode=strict_kb_mode,
+                    rewritten_queries=rewritten_queries,
+                )
+                return payload
             if callable(getattr(knowledge_service, "get_last_search_timing", None)):
                 timing = knowledge_service.get_last_search_timing()
                 if isinstance(timing, dict):
@@ -230,35 +314,20 @@ async def search_internal_knowledge(
             ),
         )
         payload = build_search_failed_payload(query, error_detail)
-        payload["_diagnostics"] = _build_diagnostics({"status": "search_failed"})
-        return payload
-
-    if not search_result.is_success:
-        error_detail = str(search_result.fallback or "unknown_error")
-        await record_metric(
+        payload["_diagnostics"] = _build_diagnostics({"status": "search_failed", "rewritten_queries": rewritten_queries})
+        payload["_answerability"] = build_answerability_assessment(
             query=query,
-            result_count=0,
-            status="search_failed",
-            knowledge_base_ids=kb_ids,
-            top_k=top_k,
-            similarity_threshold=threshold,
-            error_message=error_detail,
-            ledger_event=build_knowledge_retrieval_ledger_event(
-                query=query,
-                status="search_failed",
-                result_count=0,
-                knowledge_base_ids=kb_ids,
-                error_message=error_detail,
-            ),
+            results=[],
+            source_status="search_failed",
+            strict_kb_mode=strict_kb_mode,
+            rewritten_queries=rewritten_queries,
         )
-        payload = build_search_failed_payload(query, error_detail)
-        payload["_diagnostics"] = _build_diagnostics({"status": "search_failed"})
         return payload
 
-    rows = search_result.value or []
+    rows = aggregated_rows
     results, effective_retrieval_mode, status = transform_search_rows(
         rows,
-        top_k,
+        top_k=max(top_k, 6),
         query=query,
     )
 
@@ -285,12 +354,21 @@ async def search_internal_knowledge(
         "count": len(results),
         "results": results,
         "retrieval_mode": effective_retrieval_mode,
+        "rewritten_queries": rewritten_queries,
     }
     response_payload["_diagnostics"] = _build_diagnostics(
         {
             "status": status,
             "retrieval_mode": effective_retrieval_mode,
             "result_count": len(results),
+            "rewritten_queries": rewritten_queries,
         }
+    )
+    response_payload["_answerability"] = build_answerability_assessment(
+        query=query,
+        results=results,
+        source_status=status,
+        strict_kb_mode=strict_kb_mode,
+        rewritten_queries=rewritten_queries,
     )
     return response_payload

@@ -124,6 +124,7 @@ export interface TTSChunkMessage {
     total_duration_ms?: number;  // Only on final chunk
     audio_format?: string; // e.g. mp3 | pcm16
     sample_rate?: number;  // e.g. 24000 for pcm16
+    knowledge_answer_diagnostics?: KnowledgeAnswerDiagnostics | null;
 }
 
 export type SessionStatus =

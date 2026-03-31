@@ -1343,6 +1343,38 @@ export default function ComprehensiveReportPage() {
                             <p className="text-xs text-amber-700">{retrievalWeakEvidenceNote}</p>
                         )}
 
+                        {knowledgeCheck?.knowledge_answer_diagnostics && (
+                            <div className="rounded-xl bg-white/70 p-3 space-y-2">
+                                <p className="text-xs text-zinc-500 mb-1">回答级诊断</p>
+                                {knowledgeCheck.knowledge_answer_diagnostics.answerability && (
+                                    <p className="text-sm text-zinc-800">
+                                        回答约束：{knowledgeCheck.knowledge_answer_diagnostics.answerability}
+                                    </p>
+                                )}
+                                {Array.isArray(knowledgeCheck.knowledge_answer_diagnostics.rewritten_queries)
+                                    && knowledgeCheck.knowledge_answer_diagnostics.rewritten_queries.length > 0 && (
+                                    <p className="text-xs text-zinc-600">
+                                        检索改写：{knowledgeCheck.knowledge_answer_diagnostics.rewritten_queries.join(" · ")}
+                                    </p>
+                                )}
+                                {Array.isArray(knowledgeCheck.knowledge_answer_diagnostics.citations)
+                                    && knowledgeCheck.knowledge_answer_diagnostics.citations.length > 0 && (
+                                    <div className="space-y-2">
+                                        {knowledgeCheck.knowledge_answer_diagnostics.citations.map((citation, index) => (
+                                            <div key={`${citation.document_title || citation.knowledge_base_id || index}-${index}`} className="rounded-lg border border-white/70 bg-white/90 p-3">
+                                                <p className="text-xs font-semibold text-zinc-700 mb-1">
+                                                    {[citation.knowledge_base_name, citation.document_title].filter(Boolean).join(" · ") || citation.knowledge_base_id || "内部知识片段"}
+                                                </p>
+                                                {citation.snippet && (
+                                                    <p className="text-sm text-zinc-800">{citation.snippet}</p>
+                                                )}
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
                         {knowledgeCheck && knowledgeCheck.recent_queries.length > 0 && (
                             <p className="text-xs text-zinc-500">
                                 补充诊断记录：{knowledgeCheck.recent_queries.join(" · ")}

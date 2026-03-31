@@ -14,6 +14,7 @@ import base64
 import copy
 import json
 import os
+import re
 import time
 import uuid
 from dataclasses import dataclass, field
@@ -102,6 +103,7 @@ from sales_bot.websocket.components.stepfun_internal_knowledge_searcher import (
     search_internal_knowledge,
 )
 from sales_bot.websocket.components.stepfun_knowledge_helpers import (
+    is_product_overview_query,
     resolve_grounding_context_limits,
 )
 from sales_bot.websocket.components.stepfun_message_helpers import (
@@ -269,6 +271,7 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
         self._latest_live_session_summary: dict[str, Any] | None = None
         self._latest_claim_truth: dict[str, Any] | None = None
         self._latest_action_card: dict[str, Any] | None = None
+        self._latest_knowledge_answer_diagnostics: dict[str, Any] | None = None
         self._objection_ledger: dict[str, Any] | None = None
         self._feedback_arbiter = RealtimeFeedbackArbiter()
         self._feedback_pacing_state = RealtimeFeedbackPacingState()
@@ -373,6 +376,128 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
         if not isinstance(tool_policy, dict):
             return False
         return bool(tool_policy.get("require_kb_grounding", False))
+
+    def _resolve_answerability_mode(self) -> tuple[str, dict[str, Any] | None]:
+        diagnostics = self._latest_knowledge_answer_diagnostics
+        if not isinstance(diagnostics, dict):
+            return "default", None
+
+        answerability = str(diagnostics.get("answerability") or "").strip().lower()
+        source_status = str(diagnostics.get("source_status") or "").strip().lower()
+        kb_lock_required = self._is_kb_lock_required_for_current_policy()
+
+        if kb_lock_required and answerability in {"blocked", "insufficient"}:
+            return "blocked", diagnostics
+        if answerability == "partial":
+            return "partial", diagnostics
+        if answerability in {"blocked", "insufficient"} or source_status in {"miss", "kb_not_ready", "search_failed"}:
+            return "ungrounded", diagnostics
+        return "grounded", diagnostics
+
+    @staticmethod
+    def _build_answerability_instruction_overlay(
+        mode: str,
+        diagnostics: dict[str, Any] | None,
+    ) -> str:
+        if not isinstance(diagnostics, dict):
+            return ""
+
+        answerability = str(diagnostics.get("answerability") or "").strip().lower()
+        rewritten_queries = diagnostics.get("rewritten_queries")
+        citations = diagnostics.get("citations")
+        query_line = ""
+        if isinstance(rewritten_queries, list):
+            normalized_queries = [str(item).strip() for item in rewritten_queries if str(item).strip()]
+            if normalized_queries:
+                query_line = "\n本轮检索改写：" + "；".join(normalized_queries[:4])
+        citation_count = len(citations) if isinstance(citations, list) else 0
+
+        if mode == "partial":
+            return (
+                "\n【回答约束】当前仅有部分内部证据可用。"
+                "你只能回答已被当前内部片段直接支持的部分；未被支持的部分必须明确说“当前内部知识库未提供足够依据”。"
+                "禁止把推测、常识补充或模型记忆写成内部事实。"
+                f"\n当前 answerability：{answerability or 'partial'}；可引用片段数：{citation_count}"
+                f"{query_line}"
+            )
+        if mode == "ungrounded":
+            return (
+                "\n【回答约束】当前回答不以内部知识库确认为准。"
+                "如果继续回答，只能提供一般性参考，并必须明确标注“以下回答不以内部知识库确认为准”。"
+                "不得把一般性知识描述成企业内部资料、正式产品事实、报价、版本承诺或客户案例。"
+                f"\n当前 answerability：{answerability or 'unknown'}；可引用片段数：{citation_count}"
+                f"{query_line}"
+            )
+        if mode == "grounded":
+            return (
+                "\n【回答约束】当前轮应优先依据已命中的内部片段回答；若片段未覆盖某部分，请明确说明不确定。"
+                f"\n当前 answerability：{answerability or 'sufficient'}；可引用片段数：{citation_count}"
+                f"{query_line}"
+            )
+        return ""
+
+    def _build_blocked_response_from_answerability(
+        self,
+        diagnostics: dict[str, Any] | None,
+    ) -> str:
+        if not isinstance(diagnostics, dict):
+            return "当前内部知识库没有足够依据回答这个问题，请补充更具体的产品关键词或版本信息。"
+        source_status = str(diagnostics.get("source_status") or "").strip().lower()
+        if source_status == "kb_not_ready":
+            return "当前内部知识库尚未就绪，暂时无法基于内部资料回答。请稍后重试，或补充更具体的产品关键词。"
+        if source_status == "search_failed":
+            return "当前内部知识检索失败，暂时无法基于内部资料安全回答。请稍后重试。"
+        return "当前内部知识库没有足够依据回答这个问题，请补充更具体的产品关键词或版本信息。"
+
+    @staticmethod
+    def _split_response_sentences(text: str) -> list[str]:
+        normalized = str(text or "").strip()
+        if not normalized:
+            return []
+        sentences = re.findall(r"[^。！？!?]+[。！？!?]?", normalized)
+        cleaned = [sentence.strip() for sentence in sentences if sentence.strip()]
+        return cleaned or [normalized]
+
+    def _apply_answerability_output_guard(self, response_text: str) -> str:
+        diagnostics = self._latest_knowledge_answer_diagnostics
+        if not isinstance(diagnostics, dict):
+            return response_text
+
+        answerability = str(diagnostics.get("answerability") or "").strip().lower()
+        if answerability != "partial":
+            return response_text
+
+        citations = diagnostics.get("citations")
+        if not isinstance(citations, list) or not citations:
+            return "当前内部知识库仅支持部分信息，暂无法确认更多细节。"
+
+        support_texts: list[str] = []
+        for citation in citations:
+            if not isinstance(citation, dict):
+                continue
+            for key in ("claim", "snippet"):
+                value = str(citation.get(key) or "").strip()
+                if value:
+                    support_texts.append(value)
+
+        if not support_texts:
+            return "当前内部知识库仅支持部分信息，暂无法确认更多细节。"
+
+        kept_sentences: list[str] = []
+        for sentence in self._split_response_sentences(response_text):
+            compact_sentence = sentence.replace(" ", "")
+            if any(
+                compact_sentence and (
+                    compact_sentence in support_text.replace(" ", "")
+                    or support_text.replace(" ", "") in compact_sentence
+                )
+                for support_text in support_texts
+            ):
+                kept_sentences.append(sentence)
+
+        if kept_sentences:
+            return "".join(kept_sentences)
+        return "当前内部知识库仅支持部分信息，暂无法确认更多细节。"
 
     def _get_effective_tool_policy(self) -> dict[str, Any]:
         tool_policy = self._effective_policy.get("tool_policy")
@@ -1997,6 +2122,11 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
             else None,
             "claim_truth": claim_truth,
             "coach_health": self._coach_health_payload(),
+            "knowledge_answer_diagnostics": copy.deepcopy(
+                self._latest_knowledge_answer_diagnostics
+            )
+            if isinstance(self._latest_knowledge_answer_diagnostics, dict)
+            else None,
         }
 
     async def _send_coach_health(self) -> None:
@@ -2325,7 +2455,8 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
                     "cache_hit_internal_retrieval": False,
                 }
                 kb_lock_mode = resolve_kb_lock_mode(tool_policy)
-                if kb_lock_mode == "coach_mode":
+                product_overview_query = is_product_overview_query(normalized_query)
+                if kb_lock_mode == "coach_mode" and not product_overview_query:
                     decision_status = "coach_search_timeout"
                     blocked = False
                     self._pending_blocked_response_text = ""
@@ -2337,8 +2468,8 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
                     decision_status = "blocked_search_timeout"
                     blocked = True
                     self._pending_blocked_response_text = (
-                        "当前会话已开启知识库强制模式，但本轮知识检索超时，"
-                        "请换更具体的关键词后重试。"
+                        "当前内部知识检索超时，暂时无法基于内部资料确认该产品信息。"
+                        "请稍后重试，或补充更具体的产品关键词、版本或业务场景。"
                     )
                     self._pending_grounding_context = ""
                 await self._record_kb_lock_decision(
@@ -2529,6 +2660,12 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
                 query_length=len(normalized_query),
             )
             return
+        knowledge_answer_diagnostics = retrieval.get("_answerability")
+        self._latest_knowledge_answer_diagnostics = (
+            copy.deepcopy(knowledge_answer_diagnostics)
+            if isinstance(knowledge_answer_diagnostics, dict)
+            else None
+        )
         if int(retrieval.get("count") or 0) <= 0:
             self._log_grounding_debug(
                 "prefetch_skipped",
@@ -2537,12 +2674,22 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
                 retrieval_message=str(retrieval.get("message") or ""),
             )
             if has_bound_knowledge_base:
-                self._pending_grounding_context = (
-                    "你必须仅依据企业内部知识库回答，禁止联网搜索或臆测。\n"
-                    f"用户问题：{normalized_query}\n"
-                    "当前内部知识库未检索到充分证据，请明确说明暂未命中相关内部资料，"
-                    "并引导用户提供更具体的产品关键词或版本信息。"
-                )
+                retrieval_message = str(retrieval.get("message") or "").strip()
+                if "尚未处理完成" in retrieval_message or "kb_not_ready" in retrieval_message.lower():
+                    self._pending_grounding_context = (
+                        "当前内部知识库尚未就绪。\n"
+                        f"用户问题：{normalized_query}\n"
+                        "如果继续回答，只能给出一般性参考，并必须明确标注“以下回答不以内部知识库确认为准”。\n"
+                        "请优先提示用户稍后重试，或改问已确认录入的产品关键词。"
+                    )
+                else:
+                    self._pending_grounding_context = (
+                        "当前内部知识库未检索到充分证据。\n"
+                        f"用户问题：{normalized_query}\n"
+                        "如果继续回答，只能给出一般性参考，并必须明确标注“以下回答不以内部知识库确认为准”。\n"
+                        "不得将一般性知识表述为企业内部资料、正式产品事实、报价、版本承诺或客户案例。\n"
+                        "请优先引导用户补充更具体的产品关键词、版本信息或场景。"
+                    )
                 self._log_grounding_debug(
                     "prefetch_guardrail_applied",
                     reason="retrieval_empty",
@@ -2574,9 +2721,10 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
                 query_length=len(normalized_query),
             )
             self._pending_grounding_context = (
-                "你必须仅依据企业内部知识库回答，禁止联网搜索或臆测。\n"
+                "当前检索结果缺少可直接引用的内部片段。\n"
                 f"用户问题：{normalized_query}\n"
-                "当前检索结果缺少可引用片段，请明确告知用户未检索到可用内部依据。"
+                "如果继续回答，只能给出一般性参考，并必须明确标注“以下回答不以内部知识库确认为准”。\n"
+                "不得把未被内部片段支持的内容说成公司正式资料或确定产品事实。"
             )
             self._log_grounding_debug(
                 "prefetch_guardrail_applied",
@@ -2591,10 +2739,30 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
             + "\n".join(snippets)
             + "\n若信息不足，请明确说明不确定之处。"
         )
+        answerability_mode, answerability_diagnostics = self._resolve_answerability_mode()
+        if answerability_mode == "blocked":
+            self._pending_grounding_context = ""
+            self._pending_blocked_response_text = self._build_blocked_response_from_answerability(
+                answerability_diagnostics,
+            )
+            self._log_grounding_debug(
+                "prefetch_answerability_blocked",
+                query_length=len(normalized_query),
+                answerability=str((answerability_diagnostics or {}).get("answerability") or ""),
+                source_status=str((answerability_diagnostics or {}).get("source_status") or ""),
+            )
+            return
+        answerability_overlay = self._build_answerability_instruction_overlay(
+            answerability_mode,
+            answerability_diagnostics,
+        )
+        if answerability_overlay:
+            self._pending_grounding_context += answerability_overlay
         self._log_grounding_debug(
             "prefetch_applied",
             query_length=len(normalized_query),
             snippet_count=len(snippets),
+            answerability_mode=answerability_mode,
         )
 
     async def _schedule_response_after_commit(self) -> None:
@@ -3413,22 +3581,7 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
         """Accumulate response text/audio transcript delta for fallback flush."""
         delta = event.get("delta", "")
         if self._active_response and delta:
-            if self._active_response.question_limit_enforced:
-                return
             self._active_response.text_parts.append(delta)
-            composed_text = "".join(self._active_response.text_parts).strip()
-            limited_text = enforce_question_limit(
-                composed_text,
-                self._get_max_questions_per_turn(),
-            )
-            if limited_text != composed_text:
-                self._active_response.text_parts = [limited_text]
-                self._active_response.question_limit_enforced = True
-                self._log_grounding_debug(
-                    "assistant_question_limit_enforced",
-                    question_limit=self._get_max_questions_per_turn(),
-                )
-                await self._send_upstream({"type": "response.cancel"})
 
     async def _handle_upstream_response_audio_delta(self, event: dict) -> None:
         """Forward realtime audio chunk to frontend."""
@@ -3496,6 +3649,7 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
             response_text,
             self._get_max_questions_per_turn(),
         )
+        response_text = self._apply_answerability_output_guard(response_text)
 
         if response_text:
             await self._persist_message(
@@ -3552,6 +3706,10 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
             "duration_ms": len(response_text) * 100,
             "fallback": "browser_tts",
         }
+        if isinstance(self._latest_knowledge_answer_diagnostics, dict):
+            payload_data["knowledge_answer_diagnostics"] = copy.deepcopy(
+                self._latest_knowledge_answer_diagnostics
+            )
         await self.manager.send_json(
             self.websocket,
             {

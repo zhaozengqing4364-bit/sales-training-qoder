@@ -16,6 +16,7 @@ from sales_bot.websocket.components.stepfun_internal_knowledge_searcher import (
     search_internal_knowledge,
 )
 from sales_bot.websocket.components.stepfun_knowledge_helpers import (
+    is_product_overview_query,
     resolve_grounding_context_limits,
 )
 
@@ -455,7 +456,7 @@ async def evaluate_kb_lock_decision(
         status = "pass"
 
     if status != "pass":
-        if kb_lock_mode == "coach_mode":
+        if kb_lock_mode == "coach_mode" and not is_product_overview_query(normalized_query):
             coach_status_map = {
                 "blocked_search_failed": "coach_search_failed",
                 "blocked_no_kb": "coach_no_kb",

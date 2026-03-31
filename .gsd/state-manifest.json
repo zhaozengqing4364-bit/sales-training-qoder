@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "exported_at": "2026-03-30T08:24:22.374Z",
+  "exported_at": "2026-03-31T02:39:06.260Z",
   "milestones": [
     {
       "id": "M001",
@@ -536,6 +536,69 @@
       ],
       "requirement_coverage": "R023 (retrieval parity) — maintained by S01 contract tests extending existing M008 parity guarantees with provenance cross-references.\nR026 (learner audio evidence) — maintained by S01; audio provenance is one layer of the evidence reference model.\nR027 (conclusion provenance) — S01 builds the evidence reference model, S02 adds degradation, S03 renders it.\nR028 (layered degradation) — S02 owns the unified taxonomy, S03 renders it on frontend.",
       "boundary_map_markdown": "```boundary-map\nS01: backend/src/common/conversation/session_evidence.py, backend/src/common/conversation/runtime_diagnostics.py, backend/tests/contract/test_practice_evidence_contract.py, backend/src/common/db/schemas.py\nS02: backend/src/common/conversation/session_evidence.py, backend/src/common/conversation/runtime_diagnostics.py, backend/src/common/api/practice.py, backend/tests/contract/test_practice_evidence_contract.py\nS03: web/src/lib/api/types.ts, web/src/lib/session-evidence.ts, web/src/app/(user)/practice/[sessionId]/report/page.tsx, web/src/app/(user)/practice/[sessionId]/replay/page.tsx\n```"
+    },
+    {
+      "id": "M011",
+      "title": "",
+      "status": "queued",
+      "depends_on": [],
+      "created_at": "2026-03-31T02:29:18.778Z",
+      "completed_at": null,
+      "vision": "把当前 patch 化的知识问答链升级成数据库驱动、可配置、可审计、可调试的后端系统能力；用 Haystack 作为 retrieval/reranking/evaluation 执行底座，同时保留项目自有的控制面、answerability 逻辑与 learner-facing contracts。",
+      "success_criteria": [
+        "知识问答逻辑不再主要依赖 handler/prompt 中的硬编码 case，而是由数据库驱动配置和统一引擎编排控制。",
+        "Haystack 只作为执行底座，项目仍完整掌握 query policy、ranking policy、answerability、audit/debug 与 rollout。",
+        "现有 realtime/report/replay learner-facing contracts 继续可用，且 answer diagnostics/citations 不回归。",
+        "系统具备后续可持续优化能力：配置可改、行为可审计、问题可调试、效果可评估。"
+      ],
+      "key_risks": [
+        {
+          "risk": "把 Haystack 直接当业务真相源，导致项目失去对 query/ranking/answerability 的治理控制。",
+          "whyItMatters": "用户明确要求该能力必须数据库驱动、可审计、可调试，不能把关键规则重新埋进框架默认逻辑。"
+        },
+        {
+          "risk": "迁移过程中破坏现有 realtime/report/replay learner contracts。",
+          "whyItMatters": "这几条 surface 已经接上 diagnostics/citations，任何兼容性回归都会直接影响用户感知和复盘能力。"
+        },
+        {
+          "risk": "重构后仍然无法把产品介绍类 query 的命中稳定性和排序质量拉起来。",
+          "whyItMatters": "如果只换框架不解决实体解析、业务排序、coverage 判断，系统只会从一套 patch 迁移到另一套 patch。"
+        }
+      ],
+      "proof_strategy": [
+        {
+          "riskOrUnknown": "Haystack 是否适合作为执行底座而不吞掉项目控制面。",
+          "retireIn": "S01",
+          "whatWillBeProven": "引擎 seam 能用 Haystack 跑 retrieval/reranking/evaluation，同时由项目 DB 配置驱动 query profile、ranking profile、answerability profile。"
+        },
+        {
+          "riskOrUnknown": "产品介绍类 query 是否能在新的 planner/reranker 下更快、更稳地命中。",
+          "retireIn": "S02",
+          "whatWillBeProven": "progressive retrieval plan + early-stop + business reranker 能通过 focused regression 证明产品介绍类 query 不再无脑 fan-out 串行拖慢整轮。"
+        },
+        {
+          "riskOrUnknown": "统一引擎输出能否不破坏 realtime/report/replay 现有 contracts。",
+          "retireIn": "S03",
+          "whatWillBeProven": "compat seam 能让 learner-facing diagnostics/citations 继续工作，并新增 audit/debug 能力。"
+        },
+        {
+          "riskOrUnknown": "该能力是否可持续优化，而不是一次性重构。",
+          "retireIn": "S04",
+          "whatWillBeProven": "DB 配置、audit run、evaluation harness、rollout flag 能形成后续调参与回滚机制。"
+        }
+      ],
+      "verification_contract": "通过 focused unit/integration suites 证明：control plane schema、config repository、entity resolver、intent planner、Haystack adapter、reranker、answerability、assembler、audit repo、compat seam 均满足契约。",
+      "verification_integration": "通过 realtime/report/replay 现有契约测试与新增 engine compatibility tests 证明 learner-facing contract 未回归。",
+      "verification_operational": "通过 debug API、audit run step 持久化、feature flags/dual-run 证明该能力可审计、可调试、可灰度。",
+      "verification_uat": "在本地 running app 中复测产品介绍类 query、辅导类 query 与降级场景，确认用户体验与 diagnostics 符合预期。",
+      "definition_of_done": [
+        "新的 KnowledgeAnswerEngine 与数据库控制面 schema 已落库并有迁移。",
+        "realtime handler、runtime diagnostics、report/replay compatibility seam 已接上引擎输出。",
+        "focused backend suites 与 web compatibility suites 通过。",
+        "至少一组产品介绍类 query 的 live 行为验证完成：不胡说、不异常截断、命中时能给 citation，证据不足时能明确降级。"
+      ],
+      "requirement_coverage": "本 milestone 覆盖现有知识问答问题的系统化重构：不再把 query 规则、排序偏好、answerability 判断写死在 handler/prompt 中，而是通过 DB 驱动配置、统一引擎编排、审计落库与评测回归把该能力提升为稳定的后端基础设施。它延续当前 runtime/report/replay diagnostics 面，不破坏 learner-facing surface，同时为后续持续优化 query understanding、entity resolution、ranking、coverage answerability 提供统一执行与治理框架。",
+      "boundary_map_markdown": "- **Control Plane（项目自有）**：DB 配置、版本管理、审计日志、debug API、rollout flags\n- **Execution Plane（Haystack 底座）**：retrieval pipeline、ranker pipeline、evaluation primitives\n- **Compatibility Seam（项目自有）**：把引擎输出映射到 realtime/report/replay 现有 contracts\n- **Out of Scope（本 milestone 不做）**：前台可视化配置后台、复杂 LLM planner、全量多模型 A/B 平台"
     }
   ],
   "slices": [
@@ -1300,6 +1363,92 @@
       "proof_level": "- This slice proves: integration\n- Real runtime required: no\n- Human/UAT required: no",
       "integration_closure": "- Upstream surfaces consumed: `web/src/lib/api/types.ts`, `web/src/lib/session-evidence.ts`, `web/src/app/(user)/practice/[sessionId]/report/page.tsx`, `web/src/app/(user)/practice/[sessionId]/replay/page.tsx`, and the S01/S02 backend contract documented by `backend/tests/contract/test_conclusion_evidence_parity.py`.\n- New wiring introduced in this slice: report and replay pages read `conclusion_evidence` and `evidence_degradation` from their own canonical payloads, normalize them once in `session-evidence.ts`, and render one shared learner-facing vocabulary for source provenance and degradation reasons.\n- What remains before the milestone is truly usable end-to-end: nothing inside M010 scope once both focused report/replay suites pass; S01/S02 already proved backend parity and this slice closes the learner-facing read seam.",
       "observability_impact": "- Runtime signals: keep existing `[Report]` and `[Replay]` debug logs as the page-level inspection seam; helper normalization must fail closed by omitting malformed provenance/degradation rows instead of throwing.\n- Inspection surfaces: `web/src/app/(user)/practice/[sessionId]/report/page.test.tsx`, `web/src/app/(user)/practice/[sessionId]/replay/page.test.tsx`, and the visible report/replay evidence cards make it clear whether drift lives in helper normalization or page wiring.\n- Failure visibility: malformed or partial `conclusion_evidence` / `evidence_degradation` payloads should degrade to hidden rows or partial copy, not crash the page or silently switch authority to stale report snapshots or supplemental fetches.\n- Redaction constraints: only render current-session provenance/degradation status already present in canonical payloads; do not surface transcript raw text, audio URLs, or cross-session data in new copy.",
+      "sequence": 0,
+      "replan_triggered_at": null
+    },
+    {
+      "milestone_id": "M011",
+      "id": "S01",
+      "title": "引擎 seam 与数据库控制面骨架",
+      "status": "pending",
+      "risk": "high",
+      "depends": [],
+      "demo": "可以在代码里实例化新的 KnowledgeAnswerEngine，并从数据库读取一套 active query/ranking/answerability 配置。",
+      "created_at": "2026-03-31T02:30:11.250Z",
+      "completed_at": null,
+      "full_summary_md": "",
+      "full_uat_md": "",
+      "goal": "建立 KnowledgeAnswerEngine seam、DB control plane schema、配置仓储与基础契约，先把系统能力边界立住。",
+      "success_criteria": "- KnowledgeAnswerEngine 独立模块可构造与返回统一 contract\\n- 新增 control plane / audit tables 并完成迁移\\n- DB config repository 能读取 active 配置版本\\n- focused tests 覆盖 schema/repo/engine seam",
+      "proof_level": "contract + persistence",
+      "integration_closure": "引擎 seam 与 control plane 可独立存在，不改 learner-facing 行为；migration、model、repo 契约通过后再进入下一 slice。",
+      "observability_impact": "新增 config version / audit run 的基础持久化结构，为后续 answer run 审计做准备。",
+      "sequence": 0,
+      "replan_triggered_at": null
+    },
+    {
+      "milestone_id": "M011",
+      "id": "S02",
+      "title": "Query understanding、planner 与 Haystack 检索执行",
+      "status": "pending",
+      "risk": "high",
+      "depends": [
+        "S01"
+      ],
+      "demo": "给定“请介绍一下世袭科技”这类 query，引擎能输出实体解析、intent、retrieval plan、执行查询列表和排序结果。",
+      "created_at": "2026-03-31T02:30:11.250Z",
+      "completed_at": null,
+      "full_summary_md": "",
+      "full_uat_md": "",
+      "goal": "把 query normalization / entity resolution / intent classification / retrieval planning 与 Haystack execution adapter 接起来，解决命中与排序前的根问题。",
+      "success_criteria": "- entity alias / canonical entity resolution 可配置\\n- intent classifier 与 retrieval planner 由 DB 规则驱动\\n- Haystack adapter 可执行 retrieval / ranker pipeline\\n- 产品介绍类 query 支持 progressive retrieval 与 early-stop\\n- focused tests 覆盖产品介绍类命中/排序行为",
+      "proof_level": "behavior + latency-sensitive regression",
+      "integration_closure": "引擎内部形成完整 query→plan→retrieve→rank 流水线，并通过 focused tests 证明产品介绍类 query 不再无脑 fan-out。",
+      "observability_impact": "新增 retrieval plan、executed queries、rerank breakdown 的 step-level 审计输出。",
+      "sequence": 0,
+      "replan_triggered_at": null
+    },
+    {
+      "milestone_id": "M011",
+      "id": "S03",
+      "title": "Coverage answerability、answer assembly 与 compatibility seam",
+      "status": "pending",
+      "risk": "medium",
+      "depends": [
+        "S02"
+      ],
+      "demo": "一次真实问答后，可以从 replay/report/runtime diagnostics 追到同一条 audit run，并看到 answerability/citations。",
+      "created_at": "2026-03-31T02:30:11.250Z",
+      "completed_at": null,
+      "full_summary_md": "",
+      "full_uat_md": "",
+      "goal": "把 coverage-based answerability、evidence-driven answer assembly 和 audit 持久化接起来，并通过 compatibility seam 接入 realtime/report/replay。",
+      "success_criteria": "- answerability 升级为 coverage profile 驱动\\n- answer assembly 基于证据而不是自由 prompt 拼接\\n- audit run / step 持久化可回放\\n- realtime handler 改走 engine seam\\n- report/replay diagnostics 不回归",
+      "proof_level": "contract + learner-surface compatibility",
+      "integration_closure": "此 slice 完成后，现有 learner contracts 继续工作，但其内部来源切到新引擎输出。",
+      "observability_impact": "完整 answer run / run step 落库，diagnostics 可关联 audit_run_id。",
+      "sequence": 0,
+      "replan_triggered_at": null
+    },
+    {
+      "milestone_id": "M011",
+      "id": "S04",
+      "title": "评测、debug API 与 rollout",
+      "status": "pending",
+      "risk": "medium",
+      "depends": [
+        "S03"
+      ],
+      "demo": "可以查询最近一次知识问答 run 的完整执行轨迹，并通过 eval cases 验证产品介绍类 query 行为。",
+      "created_at": "2026-03-31T02:30:11.250Z",
+      "completed_at": null,
+      "full_summary_md": "",
+      "full_uat_md": "",
+      "goal": "给新引擎补上 evaluation harness、debug API、seed config 和 feature flag/dual-run rollout。",
+      "success_criteria": "- evaluation harness 能覆盖产品介绍/价格/版本/辅导类样例\\n- debug API 可查 answer runs 与 step breakdown\\n- seed config 可初始化 active profiles\\n- feature flags 支持 engine enable / dual-run\\n- focused backend/web suites 全绿",
+      "proof_level": "evaluation + rollout safety",
+      "integration_closure": "此 slice 完成后，系统具备继续调优和回滚的工程能力，而不依赖继续改 handler 补丁。",
+      "observability_impact": "debug API、evaluation results、dual-run diff 为后续运营和排障提供统一入口。",
       "sequence": 0,
       "replan_triggered_at": null
     }
@@ -6493,6 +6642,491 @@
       "observability_impact": "- Signals added/changed: replay gets the same visible provenance/degradation seam as report, making cross-page drift inspectable from UI and focused tests.\n- How a future agent inspects this: run both focused suites together and compare replay rendering against the shared helper output and stale-report-snapshot regression fixture.\n- Failure state exposed: any divergence between report and replay vocabulary or authority source becomes a targeted page-test failure instead of a vague UX regression.",
       "full_plan_md": "",
       "sequence": 0
+    },
+    {
+      "milestone_id": "M011",
+      "slice_id": "S01",
+      "id": "T01",
+      "title": "Added the initial KnowledgeAnswerEngine seam, project-owned request/result schemas, and Haystack dependency entrypoints behind a constructable placeholder engine.",
+      "status": "complete",
+      "one_liner": "Added the initial KnowledgeAnswerEngine seam, project-owned request/result schemas, and Haystack dependency entrypoints behind a constructable placeholder engine.",
+      "narrative": "Started from a failing seam test, confirmed the package did not exist, then implemented the smallest constructable `common.knowledge_engine` boundary. Added project-owned request/result/audit schemas with stable observability fields (`audit_run_id`, `retrieval_summary`, `unsupported_claims`), a minimal `KnowledgeAnswerEngine` that can be instantiated before retrieval logic lands, and a soft-imported Haystack pipeline factory seam so future slices can wire execution without leaking framework types into callers. Updated both `backend/pyproject.toml` and `backend/requirements.txt` because local repository installs still flow through the requirements file even when task plans cite pyproject metadata.",
+      "verification_result": "Focused backend seam verification passed: `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/common/test_knowledge_answer_engine.py -q` completed successfully with 2/2 tests green. LSP diagnostics on the new engine, schema, and test files reported no issues.",
+      "duration": "",
+      "completed_at": "2026-03-31T02:39:06.226Z",
+      "blocker_discovered": false,
+      "deviations": "Minor local adaptation only: updated `backend/requirements.txt` in addition to `backend/pyproject.toml` because the repository’s actual backend install path still consumes the requirements file.",
+      "known_issues": "Focused pytest emits pre-existing coverage warnings because repo-level pytest config forces coverage even for this small seam test. No functional failures remain in the new seam.",
+      "key_files": [
+        "backend/src/common/knowledge_engine/__init__.py",
+        "backend/src/common/knowledge_engine/engine.py",
+        "backend/src/common/knowledge_engine/schemas.py",
+        "backend/tests/unit/common/test_knowledge_answer_engine.py",
+        "backend/pyproject.toml",
+        "backend/requirements.txt",
+        ".gsd/KNOWLEDGE.md"
+      ],
+      "key_decisions": [
+        "Use a project-owned KnowledgeAnswerEngine seam instead of exposing Haystack types directly to callers.",
+        "Make Haystack a soft-imported pipeline factory dependency so engine construction stays safe before runtime installation is guaranteed.",
+        "Stabilize observability fields on the placeholder result contract from the first slice rather than adding them later ad hoc."
+      ],
+      "full_summary_md": "---\nid: T01\nparent: S01\nmilestone: M011\nkey_files:\n  - backend/src/common/knowledge_engine/__init__.py\n  - backend/src/common/knowledge_engine/engine.py\n  - backend/src/common/knowledge_engine/schemas.py\n  - backend/tests/unit/common/test_knowledge_answer_engine.py\n  - backend/pyproject.toml\n  - backend/requirements.txt\n  - .gsd/KNOWLEDGE.md\nkey_decisions:\n  - Use a project-owned KnowledgeAnswerEngine seam instead of exposing Haystack types directly to callers.\n  - Make Haystack a soft-imported pipeline factory dependency so engine construction stays safe before runtime installation is guaranteed.\n  - Stabilize observability fields on the placeholder result contract from the first slice rather than adding them later ad hoc.\nduration: \"\"\nverification_result: passed\ncompleted_at: 2026-03-31T02:39:06.229Z\nblocker_discovered: false\n---\n\n# T01: Added the initial KnowledgeAnswerEngine seam, project-owned request/result schemas, and Haystack dependency entrypoints behind a constructable placeholder engine.\n\n**Added the initial KnowledgeAnswerEngine seam, project-owned request/result schemas, and Haystack dependency entrypoints behind a constructable placeholder engine.**\n\n## What Happened\n\nStarted from a failing seam test, confirmed the package did not exist, then implemented the smallest constructable `common.knowledge_engine` boundary. Added project-owned request/result/audit schemas with stable observability fields (`audit_run_id`, `retrieval_summary`, `unsupported_claims`), a minimal `KnowledgeAnswerEngine` that can be instantiated before retrieval logic lands, and a soft-imported Haystack pipeline factory seam so future slices can wire execution without leaking framework types into callers. Updated both `backend/pyproject.toml` and `backend/requirements.txt` because local repository installs still flow through the requirements file even when task plans cite pyproject metadata.\n\n## Verification\n\nFocused backend seam verification passed: `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/common/test_knowledge_answer_engine.py -q` completed successfully with 2/2 tests green. LSP diagnostics on the new engine, schema, and test files reported no issues.\n\n## Verification Evidence\n\n| # | Command | Exit Code | Verdict | Duration |\n|---|---------|-----------|---------|----------|\n| 1 | `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/common/test_knowledge_answer_engine.py -q` | 0 | ✅ pass | 611ms |\n| 2 | `lsp diagnostics backend/src/common/knowledge_engine/engine.py` | 0 | ✅ pass | 0ms |\n| 3 | `lsp diagnostics backend/src/common/knowledge_engine/schemas.py` | 0 | ✅ pass | 0ms |\n| 4 | `lsp diagnostics backend/tests/unit/common/test_knowledge_answer_engine.py` | 0 | ✅ pass | 0ms |\n\n\n## Deviations\n\nMinor local adaptation only: updated `backend/requirements.txt` in addition to `backend/pyproject.toml` because the repository’s actual backend install path still consumes the requirements file.\n\n## Known Issues\n\nFocused pytest emits pre-existing coverage warnings because repo-level pytest config forces coverage even for this small seam test. No functional failures remain in the new seam.\n\n## Files Created/Modified\n\n- `backend/src/common/knowledge_engine/__init__.py`\n- `backend/src/common/knowledge_engine/engine.py`\n- `backend/src/common/knowledge_engine/schemas.py`\n- `backend/tests/unit/common/test_knowledge_answer_engine.py`\n- `backend/pyproject.toml`\n- `backend/requirements.txt`\n- `.gsd/KNOWLEDGE.md`\n",
+      "description": "先写 engine seam 的失败测试，再创建 `common/knowledge_engine` 包、基础 request/result contract 和 Haystack dependency 接入点。保持只有最小构造能力，不提前引入复杂逻辑。",
+      "estimate": "20-30m",
+      "files": [
+        "backend/pyproject.toml",
+        "backend/src/common/knowledge_engine/__init__.py",
+        "backend/src/common/knowledge_engine/engine.py",
+        "backend/src/common/knowledge_engine/schemas.py",
+        "backend/tests/unit/common/test_knowledge_answer_engine.py"
+      ],
+      "verify": "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/common/test_knowledge_answer_engine.py -q",
+      "inputs": [
+        "docs/plans/2026-03-31-haystack-knowledge-answering-engine.md"
+      ],
+      "expected_output": [
+        "backend/src/common/knowledge_engine/__init__.py",
+        "backend/src/common/knowledge_engine/engine.py",
+        "backend/src/common/knowledge_engine/schemas.py",
+        "backend/tests/unit/common/test_knowledge_answer_engine.py",
+        "backend/pyproject.toml"
+      ],
+      "observability_impact": "定义 engine result contract 中的 audit_run_id / retrieval_summary / unsupported_claims 字段。",
+      "full_plan_md": "",
+      "sequence": 0
+    },
+    {
+      "milestone_id": "M011",
+      "slice_id": "S01",
+      "id": "T02",
+      "title": "增加控制面与审计数据模型",
+      "status": "pending",
+      "one_liner": "",
+      "narrative": "",
+      "verification_result": "",
+      "duration": "",
+      "completed_at": null,
+      "blocker_discovered": false,
+      "deviations": "",
+      "known_issues": "",
+      "key_files": [],
+      "key_decisions": [],
+      "full_summary_md": "",
+      "description": "新增 Alembic migration 与 SQLAlchemy models：query profiles、intent rules、entity aliases、ranking profiles、answerability profiles、config versions、answer runs、run steps。先只做最小字段，确保可版本化与可审计。",
+      "estimate": "30-45m",
+      "files": [
+        "backend/alembic/versions",
+        "backend/src/common/db/models.py",
+        "backend/tests/unit/common/test_knowledge_answer_control_plane_models.py"
+      ],
+      "verify": "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/common/test_knowledge_answer_control_plane_models.py -q",
+      "inputs": [
+        "backend/src/common/db/models.py",
+        "docs/plans/2026-03-31-haystack-knowledge-answering-engine.md"
+      ],
+      "expected_output": [
+        "backend/alembic/versions/*_knowledge_answer_control_plane.py",
+        "backend/src/common/db/models.py",
+        "backend/tests/unit/common/test_knowledge_answer_control_plane_models.py"
+      ],
+      "observability_impact": "answer run / step 表为后续完整执行轨迹提供存储。",
+      "full_plan_md": "",
+      "sequence": 0
+    },
+    {
+      "milestone_id": "M011",
+      "slice_id": "S01",
+      "id": "T03",
+      "title": "实现数据库配置仓储",
+      "status": "pending",
+      "one_liner": "",
+      "narrative": "",
+      "verification_result": "",
+      "duration": "",
+      "completed_at": null,
+      "blocker_discovered": false,
+      "deviations": "",
+      "known_issues": "",
+      "key_files": [],
+      "key_decisions": [],
+      "full_summary_md": "",
+      "description": "实现 DB-backed config repository。先只支持 active config version 读取 query profile、intent rules、entity aliases、ranking profile、answerability profile，返回归一化 DTO，不把 ORM 泄漏到 engine。",
+      "estimate": "25-35m",
+      "files": [
+        "backend/src/common/knowledge_engine/config_repo.py",
+        "backend/tests/unit/common/test_knowledge_answer_config_repo.py"
+      ],
+      "verify": "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/common/test_knowledge_answer_config_repo.py -q",
+      "inputs": [
+        "backend/src/common/db/models.py",
+        "backend/src/common/knowledge_engine/schemas.py"
+      ],
+      "expected_output": [
+        "backend/src/common/knowledge_engine/config_repo.py",
+        "backend/tests/unit/common/test_knowledge_answer_config_repo.py"
+      ],
+      "observability_impact": "为后续 debug API 暴露 config_version 与 profile source 奠定基础。",
+      "full_plan_md": "",
+      "sequence": 0
+    },
+    {
+      "milestone_id": "M011",
+      "slice_id": "S02",
+      "id": "T01",
+      "title": "实现实体解析层",
+      "status": "pending",
+      "one_liner": "",
+      "narrative": "",
+      "verification_result": "",
+      "duration": "",
+      "completed_at": null,
+      "blocker_discovered": false,
+      "deviations": "",
+      "known_issues": "",
+      "key_files": [],
+      "key_decisions": [],
+      "full_summary_md": "",
+      "description": "实现 entity resolver。先做 deterministic alias → canonical entity mapping，不上复杂 NLP。测试覆盖 alias、canonical passthrough、no-match 三条基本路径。",
+      "estimate": "20-30m",
+      "files": [
+        "backend/src/common/knowledge_engine/entity_resolver.py",
+        "backend/tests/unit/common/test_knowledge_entity_resolver.py"
+      ],
+      "verify": "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/common/test_knowledge_entity_resolver.py -q",
+      "inputs": [
+        "backend/src/common/knowledge_engine/config_repo.py",
+        "docs/plans/2026-03-31-haystack-knowledge-answering-engine.md"
+      ],
+      "expected_output": [
+        "backend/src/common/knowledge_engine/entity_resolver.py",
+        "backend/tests/unit/common/test_knowledge_entity_resolver.py"
+      ],
+      "observability_impact": "",
+      "full_plan_md": "",
+      "sequence": 0
+    },
+    {
+      "milestone_id": "M011",
+      "slice_id": "S02",
+      "id": "T02",
+      "title": "实现意图分类与检索规划器",
+      "status": "pending",
+      "one_liner": "",
+      "narrative": "",
+      "verification_result": "",
+      "duration": "",
+      "completed_at": null,
+      "blocker_discovered": false,
+      "deviations": "",
+      "known_issues": "",
+      "key_files": [],
+      "key_decisions": [],
+      "full_summary_md": "",
+      "description": "实现 DB-driven intent classifier 与 retrieval planner。支持 regex / keyword / entity+keyword 三种 rule，输出 profile_key 与 progressive retrieval plan。",
+      "estimate": "35-45m",
+      "files": [
+        "backend/src/common/knowledge_engine/intent_classifier.py",
+        "backend/src/common/knowledge_engine/retrieval_planner.py",
+        "backend/tests/unit/common/test_knowledge_intent_classifier.py",
+        "backend/tests/unit/common/test_knowledge_retrieval_planner.py"
+      ],
+      "verify": "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/common/test_knowledge_intent_classifier.py backend/tests/unit/common/test_knowledge_retrieval_planner.py -q",
+      "inputs": [
+        "backend/src/common/knowledge_engine/config_repo.py",
+        "backend/src/common/knowledge_engine/entity_resolver.py"
+      ],
+      "expected_output": [
+        "backend/src/common/knowledge_engine/intent_classifier.py",
+        "backend/src/common/knowledge_engine/retrieval_planner.py",
+        "backend/tests/unit/common/test_knowledge_intent_classifier.py",
+        "backend/tests/unit/common/test_knowledge_retrieval_planner.py"
+      ],
+      "observability_impact": "",
+      "full_plan_md": "",
+      "sequence": 0
+    },
+    {
+      "milestone_id": "M011",
+      "slice_id": "S02",
+      "id": "T03",
+      "title": "接 Haystack 检索执行与业务排序",
+      "status": "pending",
+      "one_liner": "",
+      "narrative": "",
+      "verification_result": "",
+      "duration": "",
+      "completed_at": null,
+      "blocker_discovered": false,
+      "deviations": "",
+      "known_issues": "",
+      "key_files": [],
+      "key_decisions": [],
+      "full_summary_md": "",
+      "description": "实现 Haystack execution adapter 与项目自有 reranker。先保证 adapter 能跑 retrieval steps，reranker 能按 title/entity/doc_type/section/diversity 给出可解释分数。产品介绍类 query 命中后必须 early-stop。",
+      "estimate": "45-60m",
+      "files": [
+        "backend/src/common/knowledge_engine/haystack_adapter.py",
+        "backend/src/common/knowledge_engine/reranker.py",
+        "backend/tests/unit/common/test_haystack_adapter.py",
+        "backend/tests/unit/common/test_knowledge_reranker.py",
+        "backend/tests/unit/test_stepfun_internal_knowledge_searcher.py"
+      ],
+      "verify": "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/common/test_haystack_adapter.py backend/tests/unit/common/test_knowledge_reranker.py backend/tests/unit/test_stepfun_internal_knowledge_searcher.py -q",
+      "inputs": [
+        "backend/src/sales_bot/websocket/components/stepfun_internal_knowledge_searcher.py",
+        "backend/src/common/knowledge_engine/retrieval_planner.py"
+      ],
+      "expected_output": [
+        "backend/src/common/knowledge_engine/haystack_adapter.py",
+        "backend/src/common/knowledge_engine/reranker.py",
+        "backend/tests/unit/common/test_haystack_adapter.py",
+        "backend/tests/unit/common/test_knowledge_reranker.py",
+        "backend/tests/unit/test_stepfun_internal_knowledge_searcher.py"
+      ],
+      "observability_impact": "输出每个候选文档的 score breakdown 和执行过的 query steps。",
+      "full_plan_md": "",
+      "sequence": 0
+    },
+    {
+      "milestone_id": "M011",
+      "slice_id": "S03",
+      "id": "T01",
+      "title": "实现 coverage-based answerability",
+      "status": "pending",
+      "one_liner": "",
+      "narrative": "",
+      "verification_result": "",
+      "duration": "",
+      "completed_at": null,
+      "blocker_discovered": false,
+      "deviations": "",
+      "known_issues": "",
+      "key_files": [],
+      "key_decisions": [],
+      "full_summary_md": "",
+      "description": "实现 coverage-based answerability。按 profile required/optional slots 判 sufficient / partial / insufficient / blocked，不再只看命中条数。",
+      "estimate": "25-35m",
+      "files": [
+        "backend/src/common/knowledge_engine/answerability.py",
+        "backend/tests/unit/common/test_knowledge_answerability.py"
+      ],
+      "verify": "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/common/test_knowledge_answerability.py -q",
+      "inputs": [
+        "backend/src/common/knowledge_engine/retrieval_planner.py",
+        "backend/src/common/knowledge_engine/reranker.py"
+      ],
+      "expected_output": [
+        "backend/src/common/knowledge_engine/answerability.py",
+        "backend/tests/unit/common/test_knowledge_answerability.py"
+      ],
+      "observability_impact": "",
+      "full_plan_md": "",
+      "sequence": 0
+    },
+    {
+      "milestone_id": "M011",
+      "slice_id": "S03",
+      "id": "T02",
+      "title": "实现基于证据的回答组装器",
+      "status": "pending",
+      "one_liner": "",
+      "narrative": "",
+      "verification_result": "",
+      "duration": "",
+      "completed_at": null,
+      "blocker_discovered": false,
+      "deviations": "",
+      "known_issues": "",
+      "key_files": [],
+      "key_decisions": [],
+      "full_summary_md": "",
+      "description": "实现 evidence-driven answer assembler。先从 deterministic structured assembly 开始，输出 final_text、blocked_text、citations、unsupported_claims。",
+      "estimate": "30-40m",
+      "files": [
+        "backend/src/common/knowledge_engine/assembler.py",
+        "backend/tests/unit/common/test_knowledge_answer_assembler.py"
+      ],
+      "verify": "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/common/test_knowledge_answer_assembler.py -q",
+      "inputs": [
+        "backend/src/common/knowledge_engine/answerability.py",
+        "backend/src/common/knowledge_engine/schemas.py"
+      ],
+      "expected_output": [
+        "backend/src/common/knowledge_engine/assembler.py",
+        "backend/tests/unit/common/test_knowledge_answer_assembler.py"
+      ],
+      "observability_impact": "",
+      "full_plan_md": "",
+      "sequence": 0
+    },
+    {
+      "milestone_id": "M011",
+      "slice_id": "S03",
+      "id": "T03",
+      "title": "串起引擎并接入 compatibility seam",
+      "status": "pending",
+      "one_liner": "",
+      "narrative": "",
+      "verification_result": "",
+      "duration": "",
+      "completed_at": null,
+      "blocker_discovered": false,
+      "deviations": "",
+      "known_issues": "",
+      "key_files": [],
+      "key_decisions": [],
+      "full_summary_md": "",
+      "description": "实现 audit persistence，并把 engine orchestration 串起来：config → resolve → classify → plan → retrieve → rank → answerability → assemble → audit。随后通过 compat seam 接入 StepFunRealtimeHandler 和 runtime/report/replay diagnostics。",
+      "estimate": "60-75m",
+      "files": [
+        "backend/src/common/knowledge_engine/audit_repo.py",
+        "backend/src/common/knowledge_engine/engine.py",
+        "backend/src/common/knowledge_engine/compat.py",
+        "backend/src/sales_bot/websocket/stepfun_realtime_handler.py",
+        "backend/src/common/conversation/runtime_diagnostics.py",
+        "backend/src/common/conversation/replay.py",
+        "backend/src/common/api/practice.py",
+        "backend/tests/unit/common/test_knowledge_answer_audit_repo.py",
+        "backend/tests/unit/common/test_knowledge_answer_engine.py",
+        "backend/tests/unit/test_stepfun_realtime_handler.py",
+        "backend/tests/unit/test_runtime_diagnostics_knowledge_retrieval.py",
+        "backend/tests/unit/test_replay_service.py"
+      ],
+      "verify": "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/common/test_knowledge_answer_audit_repo.py backend/tests/unit/common/test_knowledge_answer_engine.py backend/tests/unit/test_stepfun_realtime_handler.py backend/tests/unit/test_runtime_diagnostics_knowledge_retrieval.py backend/tests/unit/test_replay_service.py -q",
+      "inputs": [
+        "backend/src/sales_bot/websocket/stepfun_realtime_handler.py",
+        "backend/src/common/conversation/runtime_diagnostics.py",
+        "backend/src/common/conversation/replay.py"
+      ],
+      "expected_output": [
+        "backend/src/common/knowledge_engine/audit_repo.py",
+        "backend/src/common/knowledge_engine/engine.py",
+        "backend/src/common/knowledge_engine/compat.py",
+        "backend/tests/unit/common/test_knowledge_answer_audit_repo.py",
+        "backend/tests/unit/common/test_knowledge_answer_engine.py",
+        "backend/tests/unit/test_stepfun_realtime_handler.py",
+        "backend/tests/unit/test_runtime_diagnostics_knowledge_retrieval.py",
+        "backend/tests/unit/test_replay_service.py"
+      ],
+      "observability_impact": "每次回答写入 knowledge_answer_runs / knowledge_answer_run_steps，并在 diagnostics 中保留关联 ID。",
+      "full_plan_md": "",
+      "sequence": 0
+    },
+    {
+      "milestone_id": "M011",
+      "slice_id": "S04",
+      "id": "T01",
+      "title": "增加知识问答评测 harness",
+      "status": "pending",
+      "one_liner": "",
+      "narrative": "",
+      "verification_result": "",
+      "duration": "",
+      "completed_at": null,
+      "blocker_discovered": false,
+      "deviations": "",
+      "known_issues": "",
+      "key_files": [],
+      "key_decisions": [],
+      "full_summary_md": "",
+      "description": "实现 evaluation harness 与初始 fixture case 集。先覆盖产品介绍、价格、版本比较、辅导类、blocked/timeout 降级等样例。",
+      "estimate": "35-45m",
+      "files": [
+        "backend/src/common/knowledge_engine/evaluation.py",
+        "backend/tests/evaluation/test_knowledge_answer_engine_eval.py",
+        "backend/tests/fixtures/knowledge_answer_eval_cases.json"
+      ],
+      "verify": "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/evaluation/test_knowledge_answer_engine_eval.py -q",
+      "inputs": [
+        "backend/src/common/knowledge_engine/engine.py",
+        "backend/src/common/knowledge_engine/assembler.py"
+      ],
+      "expected_output": [
+        "backend/src/common/knowledge_engine/evaluation.py",
+        "backend/tests/evaluation/test_knowledge_answer_engine_eval.py",
+        "backend/tests/fixtures/knowledge_answer_eval_cases.json"
+      ],
+      "observability_impact": "",
+      "full_plan_md": "",
+      "sequence": 0
+    },
+    {
+      "milestone_id": "M011",
+      "slice_id": "S04",
+      "id": "T02",
+      "title": "增加知识问答 debug API",
+      "status": "pending",
+      "one_liner": "",
+      "narrative": "",
+      "verification_result": "",
+      "duration": "",
+      "completed_at": null,
+      "blocker_discovered": false,
+      "deviations": "",
+      "known_issues": "",
+      "key_files": [],
+      "key_decisions": [],
+      "full_summary_md": "",
+      "description": "实现 read-only debug API。支持列出 answer runs、查看单次 run、查看 step breakdown，让后续可以按 run_id 调试。",
+      "estimate": "30-40m",
+      "files": [
+        "backend/src/common/api/knowledge_debug.py",
+        "backend/src/main.py",
+        "backend/tests/integration/test_knowledge_debug_api.py"
+      ],
+      "verify": "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/integration/test_knowledge_debug_api.py -q",
+      "inputs": [
+        "backend/src/common/knowledge_engine/audit_repo.py",
+        "backend/src/common/knowledge_engine/schemas.py"
+      ],
+      "expected_output": [
+        "backend/src/common/api/knowledge_debug.py",
+        "backend/tests/integration/test_knowledge_debug_api.py"
+      ],
+      "observability_impact": "形成面向后续排障和运营调优的统一 debug surface。",
+      "full_plan_md": "",
+      "sequence": 0
+    },
+    {
+      "milestone_id": "M011",
+      "slice_id": "S04",
+      "id": "T03",
+      "title": "增加 seed config、feature flags 与 rollout",
+      "status": "pending",
+      "one_liner": "",
+      "narrative": "",
+      "verification_result": "",
+      "duration": "",
+      "completed_at": null,
+      "blocker_discovered": false,
+      "deviations": "",
+      "known_issues": "",
+      "key_files": [],
+      "key_decisions": [],
+      "full_summary_md": "",
+      "description": "增加 seed config 与 feature flags/dual-run rollout。支持初始化 active profiles，并通过 `KNOWLEDGE_ANSWER_ENGINE_ENABLED` / `KNOWLEDGE_ANSWER_ENGINE_DUAL_RUN` 控制切换。最后跑完整 focused backend + web compatibility suites。",
+      "estimate": "45-60m",
+      "files": [
+        "backend/scripts/seed_knowledge_answer_config.py",
+        "backend/tests/unit/common/test_seed_knowledge_answer_config.py",
+        "backend/tests/unit/common/test_knowledge_answer_feature_flag.py",
+        "backend/src/common/knowledge_engine/compat.py",
+        "docs/plans/knowledge-answer-config-seed-notes.md"
+      ],
+      "verify": "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/test_stepfun_internal_knowledge_searcher.py backend/tests/unit/test_stepfun_realtime_handler.py backend/tests/unit/test_runtime_diagnostics_knowledge_retrieval.py backend/tests/unit/test_replay_service.py backend/tests/unit/common/test_kb_lock_guard.py backend/tests/unit/common/test_knowledge_answer_engine.py backend/tests/unit/common/test_knowledge_answer_control_plane_models.py backend/tests/unit/common/test_knowledge_answer_config_repo.py backend/tests/unit/common/test_knowledge_entity_resolver.py backend/tests/unit/common/test_knowledge_intent_classifier.py backend/tests/unit/common/test_knowledge_retrieval_planner.py backend/tests/unit/common/test_haystack_adapter.py backend/tests/unit/common/test_knowledge_reranker.py backend/tests/unit/common/test_knowledge_answerability.py backend/tests/unit/common/test_knowledge_answer_assembler.py backend/tests/unit/common/test_knowledge_answer_audit_repo.py backend/tests/evaluation/test_knowledge_answer_engine_eval.py backend/tests/unit/common/test_seed_knowledge_answer_config.py backend/tests/unit/common/test_knowledge_answer_feature_flag.py -q && npm --prefix web test -- --run src/hooks/websocket/message-handlers.test.ts src/components/ui/chat-bubble.test.tsx \"src/app/(user)/practice/[sessionId]/report/page.test.tsx\" \"src/app/(user)/practice/[sessionId]/replay/page.test.tsx\"",
+      "inputs": [
+        "docs/plans/2026-03-31-haystack-knowledge-answering-engine.md"
+      ],
+      "expected_output": [
+        "backend/scripts/seed_knowledge_answer_config.py",
+        "backend/tests/unit/common/test_seed_knowledge_answer_config.py",
+        "backend/tests/unit/common/test_knowledge_answer_feature_flag.py",
+        "docs/plans/knowledge-answer-config-seed-notes.md"
+      ],
+      "observability_impact": "",
+      "full_plan_md": "",
+      "sequence": 0
     }
   ],
   "decisions": [
@@ -8184,6 +8818,30 @@
       "decision": "R027",
       "choice": "validated",
       "rationale": "M010/S03 completed the learner-facing half of the provenance contract: fresh slice-close verification passed `npm --prefix web test -- --run \"src/app/(user)/practice/[sessionId]/report/page.test.tsx\" \"src/app/(user)/practice/[sessionId]/replay/page.test.tsx\"` (33/33), proving report and replay both render canonical conclusion provenance and four-layer degradation from shared session-evidence helpers without page-local truth derivation or replay fallback to stale report snapshots.",
+      "revisable": "Yes",
+      "made_by": "agent",
+      "superseded_by": null
+    },
+    {
+      "seq": 1508,
+      "id": "D142",
+      "when_context": "Post-runtime KB-QA hardening; moving from patch fixes to systemized knowledge-answering architecture",
+      "scope": "architecture",
+      "decision": "What execution substrate to use for the configurable knowledge-grounded answering system",
+      "choice": "Adopt Haystack as the retrieval/reranking/evaluation execution substrate while keeping project-owned database-driven control plane, audit trail, answerability logic, and runtime/report/replay contracts",
+      "rationale": "Haystack provides mature pipeline composition, retriever/ranker components, and evaluation primitives that fit the Python backend well, but it should not replace project-specific entity resolution, business ranking policy, answerability, or audit/debug surfaces. Using it as the execution substrate lets the project stop hardcoding retrieval flow in handlers while preserving full control over configurable behavior in the database.",
+      "revisable": "Yes",
+      "made_by": "collaborative",
+      "superseded_by": null
+    },
+    {
+      "seq": 1509,
+      "id": "D143",
+      "when_context": "M011/S01/T01",
+      "scope": "architecture",
+      "decision": "How the initial KnowledgeAnswerEngine seam should isolate Haystack and expose engine output",
+      "choice": "Use a project-owned KnowledgeAnswerEngine with project-owned request/result schemas and a soft-imported Haystack pipeline factory seam.",
+      "rationale": "This keeps the engine constructable before retrieval logic lands, prevents Haystack types from leaking into runtime/report/replay contracts, and establishes stable observability fields (audit_run_id, retrieval_summary, unsupported_claims) on the result contract from the first slice.",
       "revisable": "Yes",
       "made_by": "agent",
       "superseded_by": null
@@ -10719,6 +11377,50 @@
       "verdict": "✅ pass",
       "duration_ms": 9200,
       "created_at": "2026-03-30T08:04:19.091Z"
+    },
+    {
+      "id": 231,
+      "task_id": "T01",
+      "slice_id": "S01",
+      "milestone_id": "M011",
+      "command": "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/common/test_knowledge_answer_engine.py -q",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 611,
+      "created_at": "2026-03-31T02:39:06.228Z"
+    },
+    {
+      "id": 232,
+      "task_id": "T01",
+      "slice_id": "S01",
+      "milestone_id": "M011",
+      "command": "lsp diagnostics backend/src/common/knowledge_engine/engine.py",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 0,
+      "created_at": "2026-03-31T02:39:06.228Z"
+    },
+    {
+      "id": 233,
+      "task_id": "T01",
+      "slice_id": "S01",
+      "milestone_id": "M011",
+      "command": "lsp diagnostics backend/src/common/knowledge_engine/schemas.py",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 0,
+      "created_at": "2026-03-31T02:39:06.228Z"
+    },
+    {
+      "id": 234,
+      "task_id": "T01",
+      "slice_id": "S01",
+      "milestone_id": "M011",
+      "command": "lsp diagnostics backend/tests/unit/common/test_knowledge_answer_engine.py",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 0,
+      "created_at": "2026-03-31T02:39:06.228Z"
     }
   ]
 }

@@ -604,7 +604,11 @@ export function handleWebSocketMessage(
                 // Handle final chunk - add message and end stream
                 if (chunkData.is_final) {
                     if (chunkData.text) {
-                        addAiMessageIfNew(chunkData.text);
+                        addAiMessageIfNew(chunkData.text, {
+                            ...(chunkData.knowledge_answer_diagnostics
+                                ? { knowledgeAnswerDiagnostics: chunkData.knowledge_answer_diagnostics }
+                                : {}),
+                        });
                     }
                     streamingPlayer.end();
                     debug.log("[TTS Streaming] Stream ended, total duration:", chunkData.total_duration_ms, "ms");

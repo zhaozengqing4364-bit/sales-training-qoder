@@ -1074,6 +1074,73 @@ describe("ReportPage", () => {
         expect(screen.queryByText("知识库命中检测")).toBeNull();
     });
 
+    it("renders answer-level retrieval diagnostics from knowledge-check when available", async () => {
+        getReportMock.mockResolvedValue({
+            ...baseReport,
+            evaluable: true,
+            not_evaluable_reason: null,
+            effectiveness_snapshot: {
+                claim_truth: {
+                    status: "weak_evidence",
+                    label: "证据偏弱",
+                    source: "score_snapshot",
+                    reason: "low_evidence_score",
+                    evidence_score: 63,
+                },
+                retrieval_facts: baseRetrievalFacts,
+            },
+        });
+        getKnowledgeCheckMock.mockResolvedValue({
+            session_id: "session-1",
+            status: "hit",
+            summary: "知识检索已触发并命中知识库",
+            internal_retrieval_enabled: true,
+            knowledge_base_ids: ["kb-product"],
+            knowledge_base_count: 1,
+            attempt_count: 2,
+            hit_query_count: 1,
+            total_results: 2,
+            hit_rate: 0.5,
+            last_query: "请介绍一下实习产品",
+            last_result_count: 2,
+            last_status: "hit",
+            recent_queries: ["请介绍一下实习产品"],
+            knowledge_answer_diagnostics: {
+                mode: "grounded_strict",
+                answerability: "sufficient",
+                source_status: "hit",
+                rewritten_queries: ["实习 产品介绍", "实习 核心能力"],
+                citations: [
+                    {
+                        claim: "实习专家是一款企业内部智能演练平台。",
+                        knowledge_base_name: "产品知识库",
+                        document_title: "实习专家产品手册",
+                        snippet: "实习专家是一款面向企业内部训练的智能演练平台。",
+                        score: 0.92,
+                    },
+                ],
+            },
+        } as never);
+        getComprehensiveReportMock.mockResolvedValue({
+            session_id: "session-1",
+            generated_at: "2026-03-23T00:00:00Z",
+            overall_score: 72,
+            dimension_scores: [],
+            stage_summaries: [],
+            key_strengths: [],
+            key_improvements: [],
+            detailed_feedback: "",
+            recommendations: [],
+            voice_policy_snapshot_ref: null,
+        });
+
+        render(<ReportPage />);
+
+        expect(await screen.findByText("回答约束：sufficient")).toBeTruthy();
+        expect(screen.getByText("检索改写：实习 产品介绍 · 实习 核心能力")).toBeTruthy();
+        expect(screen.getByText("实习专家是一款面向企业内部训练的智能演练平台。")).toBeTruthy();
+    });
+
     it("omits the canonical retrieval section when retrieval_facts are absent from the report payload", async () => {
         getReportMock.mockResolvedValue({
             ...baseReport,

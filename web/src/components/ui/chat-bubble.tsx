@@ -3,6 +3,7 @@ import * as React from "react";
 import { cn } from "@/lib/utils";
 import { User, Sparkles, AlertCircle, Loader2 } from "lucide-react";
 import { motion } from "framer-motion";
+import type { KnowledgeAnswerDiagnostics } from "@/hooks/websocket/types";
 
 export interface ChatBubbleProps {
     message: string;
@@ -11,6 +12,7 @@ export interface ChatBubbleProps {
     status?: "sending" | "sent" | "error" | "typing";
     avatar?: string;
     className?: string;
+    knowledgeAnswerDiagnostics?: KnowledgeAnswerDiagnostics | null;
 }
 
 export function ChatBubble({
@@ -20,8 +22,12 @@ export function ChatBubble({
     status = "sent",
     avatar,
     className,
+    knowledgeAnswerDiagnostics,
 }: ChatBubbleProps) {
     const isUser = sender === "user";
+    const citations = !isUser && Array.isArray(knowledgeAnswerDiagnostics?.citations)
+        ? knowledgeAnswerDiagnostics.citations.filter((item) => Boolean(item?.snippet))
+        : [];
 
     return (
         <motion.div
@@ -67,7 +73,6 @@ export function ChatBubble({
 
                 {/* Message Content */}
                 <div className={cn("flex flex-col", isUser ? "items-end" : "items-start")}>
-                    {/* Sender Name (Optional) */}
                     <span className="text-xs text-slate-400 mb-1 px-1">
                         {isUser ? "You" : "AI"}
                     </span>
@@ -87,17 +92,32 @@ export function ChatBubble({
                                 <span className="w-1.5 h-1.5 bg-current rounded-full animate-bounce" />
                             </div>
                         ) : (
-                            message
+                            <div className="space-y-3">
+                                <p>{message}</p>
+                                {citations.length > 0 && (
+                                    <div className="rounded-xl border border-slate-200 bg-slate-50/90 p-3 text-slate-700">
+                                        <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500 mb-2">知识库依据</p>
+                                        <div className="space-y-2">
+                                            {citations.map((citation, index) => (
+                                                <div key={`${citation.document_title || citation.knowledge_base_id || index}-${index}`} className="rounded-lg bg-white/90 px-3 py-2 border border-slate-200">
+                                                    <p className="text-[11px] font-medium text-slate-500 mb-1">
+                                                        {[citation.knowledge_base_name, citation.document_title].filter(Boolean).join(" · ") || citation.knowledge_base_id || "内部知识片段"}
+                                                    </p>
+                                                    <p className="text-sm text-slate-800">{citation.snippet}</p>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
                         )}
 
-                        {/* Error Indicator */}
                         {status === "error" && (
                             <div className="absolute -right-6 top-1/2 -translate-y-1/2 text-red-500">
                                 <AlertCircle size={16} />
                             </div>
                         )}
 
-                        {/* Sending Indicator */}
                         {status === "sending" && (
                             <div className="absolute -right-6 top-1/2 -translate-y-1/2 text-slate-400">
                                 <Loader2 size={16} className="animate-spin" />
@@ -105,7 +125,6 @@ export function ChatBubble({
                         )}
                     </div>
 
-                    {/* Timestamp */}
                     {timestamp && (
                         <span className="text-[10px] md:text-xs text-slate-400 mt-1 px-1">
                             {timestamp}

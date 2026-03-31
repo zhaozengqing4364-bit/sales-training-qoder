@@ -1434,6 +1434,14 @@ export default function SessionReplayPage() {
               const linkedIssue = learningEvidence?.linked_issue ?? null;
               const linkedGoal = learningEvidence?.linked_goal ?? null;
               const linkedGoalTypeLabel = formatGoalTypeLabel(linkedGoal?.goal_type ?? null);
+              const knowledgeAnswerDiagnostics = message.transcript_metadata?.knowledge_answer_diagnostics ?? null;
+              const knowledgeCitations = Array.isArray(knowledgeAnswerDiagnostics?.citations)
+                ? knowledgeAnswerDiagnostics.citations.filter((item) => Boolean(item?.snippet))
+                : [];
+              const answerabilityLabel = knowledgeAnswerDiagnostics?.answerability ?? null;
+              const rewrittenQueries = Array.isArray(knowledgeAnswerDiagnostics?.rewritten_queries)
+                ? knowledgeAnswerDiagnostics.rewritten_queries.filter((item) => Boolean(item?.trim?.() ?? item))
+                : [];
               const hasLearningEvidence = Boolean(
                 evidenceReason
                 || stageName
@@ -1511,6 +1519,38 @@ export default function SessionReplayPage() {
                   {message.ai_feedback ? (
                     <div className="mt-2 text-xs text-slate-500 bg-slate-50 rounded-lg px-2 py-1">
                       AI 点评：{message.ai_feedback}
+                    </div>
+                  ) : null}
+                  {message.role === "assistant" && knowledgeAnswerDiagnostics ? (
+                    <div className="mt-3 rounded-xl border border-blue-200 bg-blue-50/70 p-3 space-y-2">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-xs font-semibold text-blue-700">回答级知识依据</span>
+                        {answerabilityLabel ? (
+                          <span className="text-[11px] rounded-full bg-white/80 px-2 py-1 text-blue-700 border border-blue-100">
+                            回答约束：{answerabilityLabel}
+                          </span>
+                        ) : null}
+                      </div>
+                      {rewrittenQueries.length > 0 ? (
+                        <p className="text-xs text-blue-700">
+                          检索改写：{rewrittenQueries.join("；")}
+                        </p>
+                      ) : null}
+                      {knowledgeCitations.length > 0 ? (
+                        <div className="space-y-2">
+                          {knowledgeCitations.slice(0, 3).map((citation, index) => (
+                            <div key={`${message.id}-citation-${index}`} className="rounded-lg border border-white/80 bg-white/80 px-3 py-2">
+                              <p className="text-[11px] font-semibold text-slate-600">
+                                {citation.knowledge_base_name || "内部知识库"}
+                                {citation.document_title ? ` · ${citation.document_title}` : ""}
+                              </p>
+                              <p className="mt-1 text-sm leading-relaxed text-slate-700">{citation.snippet}</p>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-xs text-blue-700">当前回答未附带可展示的内部引用片段。</p>
+                      )}
                     </div>
                   ) : null}
                   {message.is_highlight && hasLearningEvidence ? (

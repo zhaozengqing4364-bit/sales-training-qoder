@@ -1153,6 +1153,10 @@ export interface ReplayMessage {
         stage_name?: string | null;
         suggestions?: string[];
     } | null;
+    transcript_metadata?: {
+        knowledge_answer_diagnostics?: KnowledgeAnswerDiagnostics | null;
+        [key: string]: unknown;
+    } | null;
     ai_feedback?: string | null;
     is_highlight?: boolean;
     highlight_type?: string | null;
@@ -1620,6 +1624,7 @@ export interface KnowledgeCheckDiagnostics {
     recent_queries: string[];
     updated_at?: string | null;
     evidence_degradation?: EvidenceDegradation | null;
+    knowledge_answer_diagnostics?: KnowledgeAnswerDiagnostics | null;
 }
 
 export interface OpenAnalyticsDashboard {
@@ -1734,6 +1739,27 @@ export interface AdminOperatingPackResponse {
     cohort_issue_buckets: AdminOperatingPackIssueBucket[];
     department_issue_buckets: AdminOperatingPackDepartmentBucket[];
     repeated_blocker_families: AdminOperatingPackIssueBucket[];
+    degradation_breakdown: AdminOperatingPackDegradationBreakdown;
+    manager_lists: ManagerLiteListsResponse;
+}
+
+export interface ManagerLiteRemindResponse {
+    sent: boolean;
+    reminder_id: string;
+    user_id: string;
+}
+
+export interface OpenScoreDistribution {
+    scenario_type?: string | null;
+    days: number;
+    distribution: {
+        excellent: number;
+        good: number;
+        fair: number;
+        poor: number;
+    };
+}
+IssueBucket[];
     degradation_breakdown: AdminOperatingPackDegradationBreakdown;
     manager_lists: ManagerLiteListsResponse;
 }

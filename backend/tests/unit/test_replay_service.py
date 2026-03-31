@@ -736,6 +736,72 @@ class TestReplayService:
         assert goal_anchor["degraded_reason"] == "missing_marker"
 
     @pytest.mark.asyncio
+    async def test_get_replay_data_keeps_message_knowledge_answer_diagnostics_in_transcript_metadata(
+        self,
+        service,
+        mock_completed_session,
+    ):
+        replay_messages = [
+            {
+                "id": "msg-assistant-1",
+                "session_id": mock_completed_session.session_id,
+                "turn_number": 1,
+                "role": "assistant",
+                "content": "实习专家是一款企业内部智能演练平台。",
+                "audio_url": None,
+                "timestamp": "2026-03-25T00:00:00+00:00",
+                "duration_ms": 1200,
+                "fuzzy_words": None,
+                "transcript_metadata": {
+                    "knowledge_answer_diagnostics": {
+                        "mode": "grounded_strict",
+                        "answerability": "sufficient",
+                        "source_status": "hit",
+                        "rewritten_queries": ["实习 产品介绍"],
+                        "citations": [
+                            {
+                                "claim": "实习专家是一款企业内部智能演练平台。",
+                                "document_title": "实习专家产品手册",
+                                "snippet": "实习专家是一款企业内部智能演练平台。",
+                            }
+                        ],
+                    }
+                },
+                "sales_stage": "presentation",
+                "score_snapshot": None,
+                "ai_feedback": None,
+                "is_highlight": False,
+                "highlight_type": None,
+                "highlight_reason": None,
+            }
+        ]
+        projection = _make_projection(
+            mock_completed_session,
+            messages=replay_messages,
+            main_issue={
+                "issue_type": "value_translation_gap",
+                "issue_text": "价值翻译不足",
+                "recovery_rule": "先讲客户收益",
+            },
+            next_goal={
+                "goal_type": "value_to_benefit_translation",
+                "goal_text": "补客户收益",
+                "rule": "至少给出一个收益指标",
+            },
+        )
+
+        with patch(
+            "common.conversation.replay.SessionEvidenceService.get_projection",
+            new=AsyncMock(return_value=Result.ok(projection)),
+        ):
+            result = await service.get_replay_data(mock_completed_session.session_id)
+
+        assert result.is_success
+        data = result.value
+        assert data["messages"][0]["transcript_metadata"]["knowledge_answer_diagnostics"]["answerability"] == "sufficient"
+        assert data["messages"][0]["transcript_metadata"]["knowledge_answer_diagnostics"]["citations"][0]["document_title"] == "实习专家产品手册"
+
+    @pytest.mark.asyncio
     async def test_get_replay_data_marks_replay_anchor_degraded_when_falling_back_to_stage(
         self,
         service,

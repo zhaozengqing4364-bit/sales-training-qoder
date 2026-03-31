@@ -192,7 +192,42 @@ async def test_evaluate_kb_lock_decision_respects_explicit_persona_disable(
 
 
 @pytest.mark.asyncio
-async def test_evaluate_kb_lock_decision_coach_mode_allows_generation_on_empty_retrieval(
+async def test_evaluate_kb_lock_decision_coach_mode_allows_generation_on_empty_retrieval_for_non_product_coaching_query(
+    monkeypatch,
+):
+    monkeypatch.setattr(
+        guard_module,
+        "search_internal_knowledge",
+        AsyncMock(
+            return_value={
+                "count": 0,
+                "results": [],
+                "message": "未命中",
+            }
+        ),
+    )
+
+    decision = await evaluate_kb_lock_decision(
+        query="我这轮话术应该怎么讲更清楚",
+        effective_policy={
+            "tool_policy": {
+                "require_kb_grounding": True,
+                "kb_lock_mode": "coach_mode",
+                "retrieval_top_k": 3,
+            },
+            "knowledge_base_ids": ["kb-1"],
+        },
+    )
+
+    assert decision.lock_required is True
+    assert decision.allow_generation is True
+    assert decision.status == "coach_missing_evidence"
+    assert "训练辅导模式" in decision.grounding_context
+    assert "最多提出1个主问题" in decision.grounding_context
+
+
+@pytest.mark.asyncio
+async def test_evaluate_kb_lock_decision_coach_mode_blocks_product_overview_on_empty_retrieval(
     monkeypatch,
 ):
     monkeypatch.setattr(
@@ -220,7 +255,6 @@ async def test_evaluate_kb_lock_decision_coach_mode_allows_generation_on_empty_r
     )
 
     assert decision.lock_required is True
-    assert decision.allow_generation is True
-    assert decision.status == "coach_missing_evidence"
-    assert "训练辅导模式" in decision.grounding_context
-    assert "最多提出1个主问题" in decision.grounding_context
+    assert decision.allow_generation is False
+    assert decision.status == "blocked_empty"
+    assert decision.user_message
