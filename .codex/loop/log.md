@@ -196,3 +196,19 @@
   verification results: passed; focused backend pytest finished 5/5 green after the red-to-green TDD cycle, and fresh LSP diagnostics reported no issues on the new module or focused test file.
   success signal status: retrieval/rerank callers can now hand slot-annotated evidence rows into a project-owned evaluator and get sufficient/partial/insufficient/blocked verdicts plus audit-ready slot coverage diagnostics instead of raw hit-count heuristics.
   rollback note: if downstream slices change how evidence rows encode slot coverage, keep the evaluator on the project-owned slot-hit seam (row or metadata slot arrays) and update its focused tests in lockstep rather than reintroducing hit-count-only answerability.
+
+- time: 2026-03-31T12:39:45+0800
+  mode: grow
+  item id: M011-S03-T02
+  files changed:
+    - backend/src/common/knowledge_engine/assembler.py
+    - backend/src/common/knowledge_engine/__init__.py
+    - backend/tests/unit/common/test_knowledge_answer_assembler.py
+    - .gsd/DECISIONS.md
+    - .codex/loop/state.json
+  summary: Added a deterministic evidence-driven answer assembler that turns answerability plus evidence rows into learner-safe blocked copy, numbered grounded final_text, normalized citations, unsupported_claims, rewritten_queries, and compact retrieval diagnostics.
+  verification commands:
+    - backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/common/test_knowledge_answer_assembler.py -q
+  verification results: passed; focused backend pytest finished 3/3 green after the red-to-green TDD cycle, and fresh LSP diagnostics reported no issues on the new module, export seam, or focused test file.
+  success signal status: downstream engine wiring can now assemble one stable answer payload from answerability plus ranked evidence without leaking retrieval failures into learner-facing copy, while preserving unsupported claims and citation metadata for audit/report/replay.
+  rollback note: if later slices introduce richer claim extraction or templating, keep the assembler on the current supported-snippet versus unsupported-content seam and evolve the focused tests in lockstep rather than moving learner copy generation into runtime handlers.

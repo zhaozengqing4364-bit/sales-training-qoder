@@ -8,7 +8,7 @@
   - Estimate: 25-35m
   - Files: backend/src/common/knowledge_engine/answerability.py, backend/tests/unit/common/test_knowledge_answerability.py
   - Verify: backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/common/test_knowledge_answerability.py -q
-- [ ] **T02: 实现基于证据的回答组装器** — 实现 evidence-driven answer assembler。先从 deterministic structured assembly 开始，输出 final_text、blocked_text、citations、unsupported_claims。
+- [x] **T02: Added a deterministic evidence-driven answer assembler that turns answerability plus evidence rows into learner-safe blocked copy, numbered grounded final_text, normalized citations, unsupported_claims, rewritten_queries, and compact retrieval diagnostics.** — 实现 evidence-driven answer assembler。先从 deterministic structured assembly 开始，输出 final_text、blocked_text、citations、unsupported_claims。
   - Estimate: 30-40m
   - Files: backend/src/common/knowledge_engine/assembler.py, backend/tests/unit/common/test_knowledge_answer_assembler.py
   - Verify: backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/common/test_knowledge_answer_assembler.py -q

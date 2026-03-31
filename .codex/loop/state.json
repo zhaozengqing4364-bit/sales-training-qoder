@@ -1,6 +1,6 @@
 {
   "mode": "grow",
-  "current_issue_id": "M011-S03-T01",
+  "current_issue_id": "M011-S03-T02",
   "current_issue_type": "task",
   "current_issue_status": "done",
   "pending_issue_ids": [],
@@ -132,22 +132,22 @@
     "M011-S01",
     "M011-S02-T02",
     "M011-S02-T03",
-    "M011-S03-T01"
+    "M011-S03-T01",
+    "M011-S03-T02"
   ],
   "blocked_issue_ids": [],
   "deferred_issue_ids": [],
   "last_modified_files": [
-    "backend/src/common/knowledge_engine/answerability.py",
+    "backend/src/common/knowledge_engine/assembler.py",
     "backend/src/common/knowledge_engine/__init__.py",
-    "backend/tests/unit/common/test_knowledge_answerability.py",
-    ".gsd/DECISIONS.md",
-    ".gsd/KNOWLEDGE.md"
+    "backend/tests/unit/common/test_knowledge_answer_assembler.py",
+    ".gsd/DECISIONS.md"
   ],
   "last_verification_commands": [
-    "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/common/test_knowledge_answerability.py -q"
+    "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/common/test_knowledge_answer_assembler.py -q"
   ],
-  "last_verification_result": "Focused M011/S03/T01 pytest passed 5/5 after a red-to-green TDD cycle for the new coverage-based answerability evaluator, and fresh LSP diagnostics reported no issues on the new module or focused test file.",
-  "last_success_signal": "The knowledge engine can now classify grounded-answer evidence as sufficient/partial/insufficient/blocked from configured required/optional slot coverage instead of raw hit count, while still degrading safely for callers that do not have an answerability profile yet.",
+  "last_verification_result": "Focused M011/S03/T02 pytest passed 3/3 after a red-to-green TDD cycle for the deterministic evidence-driven answer assembler, and fresh LSP diagnostics reported no issues on the new module, export seam, or focused test file.",
+  "last_success_signal": "The knowledge engine can now deterministically assemble learner-safe blocked copy, numbered grounded final_text, normalized citations, unsupported_claims, rewritten_queries, and compact retrieval summary from answerability plus evidence rows.",
   "last_growth_scan": null,
-  "next_action": "Continue M011/S03 with the evidence-driven answer assembler, feeding it the new answerability result and slot-aware audit payloads."
+  "next_action": "Continue M011/S03 with engine orchestration, audit persistence, and compatibility seam wiring for realtime/report/replay."
 }
