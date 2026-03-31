@@ -1,3 +1,12 @@
+from common.knowledge_engine.config_repo import (
+    KnowledgeAnswerConfigRepository,
+    KnowledgeAnswerConfigSnapshot,
+    KnowledgeAnswerabilityProfileConfig,
+    KnowledgeEntityAliasConfig,
+    KnowledgeIntentRuleConfig,
+    KnowledgeQueryProfileConfig,
+    KnowledgeRankingProfileConfig,
+)
 from common.knowledge_engine.engine import KnowledgeAnswerEngine
 from common.knowledge_engine.schemas import (
     KnowledgeAnswerRequest,
@@ -7,6 +16,13 @@ from common.knowledge_engine.schemas import (
 )
 
 __all__ = [
+    "KnowledgeAnswerConfigRepository",
+    "KnowledgeAnswerConfigSnapshot",
+    "KnowledgeAnswerabilityProfileConfig",
+    "KnowledgeEntityAliasConfig",
+    "KnowledgeIntentRuleConfig",
+    "KnowledgeQueryProfileConfig",
+    "KnowledgeRankingProfileConfig",
     "KnowledgeAnswerEngine",
     "KnowledgeAnswerRequest",
     "KnowledgeAnswerResult",

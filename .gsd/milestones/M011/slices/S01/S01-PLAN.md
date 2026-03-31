@@ -12,7 +12,7 @@
   - Estimate: 30-45m
   - Files: backend/alembic/versions, backend/src/common/db/models.py, backend/tests/unit/common/test_knowledge_answer_control_plane_models.py
   - Verify: backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/common/test_knowledge_answer_control_plane_models.py -q
-- [ ] **T03: 实现数据库配置仓储** — 实现 DB-backed config repository。先只支持 active config version 读取 query profile、intent rules、entity aliases、ranking profile、answerability profile，返回归一化 DTO，不把 ORM 泄漏到 engine。
+- [x] **T03: Added the DB-backed knowledge-answer config repository that reads the active control-plane version and returns normalized engine-safe DTO snapshots.** — 实现 DB-backed config repository。先只支持 active config version 读取 query profile、intent rules、entity aliases、ranking profile、answerability profile，返回归一化 DTO，不把 ORM 泄漏到 engine。
   - Estimate: 25-35m
   - Files: backend/src/common/knowledge_engine/config_repo.py, backend/tests/unit/common/test_knowledge_answer_config_repo.py
   - Verify: backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/common/test_knowledge_answer_config_repo.py -q

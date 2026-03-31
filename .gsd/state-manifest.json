@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "exported_at": "2026-03-31T03:14:14.228Z",
+  "exported_at": "2026-03-31T03:22:47.878Z",
   "milestones": [
     {
       "id": "M001",
@@ -6745,19 +6745,28 @@
       "milestone_id": "M011",
       "slice_id": "S01",
       "id": "T03",
-      "title": "实现数据库配置仓储",
-      "status": "pending",
-      "one_liner": "",
-      "narrative": "",
-      "verification_result": "",
+      "title": "Added the DB-backed knowledge-answer config repository that reads the active control-plane version and returns normalized engine-safe DTO snapshots.",
+      "status": "complete",
+      "one_liner": "Added the DB-backed knowledge-answer config repository that reads the active control-plane version and returns normalized engine-safe DTO snapshots.",
+      "narrative": "Followed TDD by first adding a focused repository regression test and confirming it failed because `common.knowledge_engine.config_repo` did not exist. Then implemented `backend/src/common/knowledge_engine/config_repo.py` with a `KnowledgeAnswerConfigRepository` that selects the latest enabled active config version and loads enabled query profiles, intent rules, entity aliases, ranking profiles, and answerability profiles into plain dataclass DTOs. The repository normalizes JSON/list-backed ORM columns at the boundary and preserves `config_version_id`, `config_version_name`, and `profile_source` for future debug/runtime observability. Finally, exported the repository/snapshot types from `common.knowledge_engine` and reran focused verification plus LSP diagnostics successfully.",
+      "verification_result": "Focused backend verification passed with `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/common/test_knowledge_answer_config_repo.py -q` (2/2 tests green). LSP diagnostics on `backend/src/common/knowledge_engine/__init__.py`, `backend/src/common/knowledge_engine/config_repo.py`, and `backend/tests/unit/common/test_knowledge_answer_config_repo.py` reported no issues.",
       "duration": "",
-      "completed_at": null,
+      "completed_at": "2026-03-31T03:22:47.844Z",
       "blocker_discovered": false,
-      "deviations": "",
-      "known_issues": "",
-      "key_files": [],
-      "key_decisions": [],
-      "full_summary_md": "",
+      "deviations": "None.",
+      "known_issues": "Focused pytest still emits the pre-existing backend coverage warnings caused by the repo-level coverage configuration when running a narrow file-level suite. The repository behavior and focused test suite pass.",
+      "key_files": [
+        "backend/src/common/knowledge_engine/config_repo.py",
+        "backend/src/common/knowledge_engine/__init__.py",
+        "backend/tests/unit/common/test_knowledge_answer_config_repo.py",
+        ".gsd/KNOWLEDGE.md",
+        ".gsd/milestones/M011/slices/S01/tasks/T03-SUMMARY.md"
+      ],
+      "key_decisions": [
+        "Expose a repository-owned normalized snapshot DTO carrying config_version_id, config_version_name, and profile_source instead of returning SQLAlchemy ORM rows.",
+        "Normalize control-plane JSON/list columns inside the repository boundary so the engine seam only consumes plain DTO data."
+      ],
+      "full_summary_md": "---\nid: T03\nparent: S01\nmilestone: M011\nkey_files:\n  - backend/src/common/knowledge_engine/config_repo.py\n  - backend/src/common/knowledge_engine/__init__.py\n  - backend/tests/unit/common/test_knowledge_answer_config_repo.py\n  - .gsd/KNOWLEDGE.md\n  - .gsd/milestones/M011/slices/S01/tasks/T03-SUMMARY.md\nkey_decisions:\n  - Expose a repository-owned normalized snapshot DTO carrying config_version_id, config_version_name, and profile_source instead of returning SQLAlchemy ORM rows.\n  - Normalize control-plane JSON/list columns inside the repository boundary so the engine seam only consumes plain DTO data.\nduration: \"\"\nverification_result: passed\ncompleted_at: 2026-03-31T03:22:47.845Z\nblocker_discovered: false\n---\n\n# T03: Added the DB-backed knowledge-answer config repository that reads the active control-plane version and returns normalized engine-safe DTO snapshots.\n\n**Added the DB-backed knowledge-answer config repository that reads the active control-plane version and returns normalized engine-safe DTO snapshots.**\n\n## What Happened\n\nFollowed TDD by first adding a focused repository regression test and confirming it failed because `common.knowledge_engine.config_repo` did not exist. Then implemented `backend/src/common/knowledge_engine/config_repo.py` with a `KnowledgeAnswerConfigRepository` that selects the latest enabled active config version and loads enabled query profiles, intent rules, entity aliases, ranking profiles, and answerability profiles into plain dataclass DTOs. The repository normalizes JSON/list-backed ORM columns at the boundary and preserves `config_version_id`, `config_version_name`, and `profile_source` for future debug/runtime observability. Finally, exported the repository/snapshot types from `common.knowledge_engine` and reran focused verification plus LSP diagnostics successfully.\n\n## Verification\n\nFocused backend verification passed with `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/common/test_knowledge_answer_config_repo.py -q` (2/2 tests green). LSP diagnostics on `backend/src/common/knowledge_engine/__init__.py`, `backend/src/common/knowledge_engine/config_repo.py`, and `backend/tests/unit/common/test_knowledge_answer_config_repo.py` reported no issues.\n\n## Verification Evidence\n\n| # | Command | Exit Code | Verdict | Duration |\n|---|---------|-----------|---------|----------|\n| 1 | `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/common/test_knowledge_answer_config_repo.py -q` | 0 | ✅ pass | 1753ms |\n| 2 | `lsp diagnostics backend/src/common/knowledge_engine/__init__.py` | 0 | ✅ pass | 0ms |\n| 3 | `lsp diagnostics backend/src/common/knowledge_engine/config_repo.py` | 0 | ✅ pass | 0ms |\n| 4 | `lsp diagnostics backend/tests/unit/common/test_knowledge_answer_config_repo.py` | 0 | ✅ pass | 0ms |\n\n\n## Deviations\n\nNone.\n\n## Known Issues\n\nFocused pytest still emits the pre-existing backend coverage warnings caused by the repo-level coverage configuration when running a narrow file-level suite. The repository behavior and focused test suite pass.\n\n## Files Created/Modified\n\n- `backend/src/common/knowledge_engine/config_repo.py`\n- `backend/src/common/knowledge_engine/__init__.py`\n- `backend/tests/unit/common/test_knowledge_answer_config_repo.py`\n- `.gsd/KNOWLEDGE.md`\n- `.gsd/milestones/M011/slices/S01/tasks/T03-SUMMARY.md`\n",
       "description": "实现 DB-backed config repository。先只支持 active config version 读取 query profile、intent rules、entity aliases、ranking profile、answerability profile，返回归一化 DTO，不把 ORM 泄漏到 engine。",
       "estimate": "25-35m",
       "files": [
@@ -8849,6 +8858,18 @@
       "decision": "How the initial KnowledgeAnswerEngine seam should isolate Haystack and expose engine output",
       "choice": "Use a project-owned KnowledgeAnswerEngine with project-owned request/result schemas and a soft-imported Haystack pipeline factory seam.",
       "rationale": "This keeps the engine constructable before retrieval logic lands, prevents Haystack types from leaking into runtime/report/replay contracts, and establishes stable observability fields (audit_run_id, retrieval_summary, unsupported_claims) on the result contract from the first slice.",
+      "revisable": "Yes",
+      "made_by": "agent",
+      "superseded_by": null
+    },
+    {
+      "seq": 1510,
+      "id": "D144",
+      "when_context": "M011/S01/T03",
+      "scope": "architecture",
+      "decision": "How the knowledge-answer engine consumes active control-plane configuration from the database",
+      "choice": "Expose a repository-owned normalized snapshot DTO that carries config_version_id, config_version_name, and profile_source instead of returning SQLAlchemy ORM rows",
+      "rationale": "This keeps ORM types out of the engine seam while preserving the observability fields downstream debug APIs need to explain which active config version and source produced a run.",
       "revisable": "Yes",
       "made_by": "agent",
       "superseded_by": null
@@ -11472,6 +11493,50 @@
       "verdict": "✅ pass",
       "duration_ms": 0,
       "created_at": "2026-03-31T03:14:14.201Z"
+    },
+    {
+      "id": 239,
+      "task_id": "T03",
+      "slice_id": "S01",
+      "milestone_id": "M011",
+      "command": "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/common/test_knowledge_answer_config_repo.py -q",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 1753,
+      "created_at": "2026-03-31T03:22:47.844Z"
+    },
+    {
+      "id": 240,
+      "task_id": "T03",
+      "slice_id": "S01",
+      "milestone_id": "M011",
+      "command": "lsp diagnostics backend/src/common/knowledge_engine/__init__.py",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 0,
+      "created_at": "2026-03-31T03:22:47.845Z"
+    },
+    {
+      "id": 241,
+      "task_id": "T03",
+      "slice_id": "S01",
+      "milestone_id": "M011",
+      "command": "lsp diagnostics backend/src/common/knowledge_engine/config_repo.py",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 0,
+      "created_at": "2026-03-31T03:22:47.845Z"
+    },
+    {
+      "id": 242,
+      "task_id": "T03",
+      "slice_id": "S01",
+      "milestone_id": "M011",
+      "command": "lsp diagnostics backend/tests/unit/common/test_knowledge_answer_config_repo.py",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 0,
+      "created_at": "2026-03-31T03:22:47.845Z"
     }
   ]
 }
