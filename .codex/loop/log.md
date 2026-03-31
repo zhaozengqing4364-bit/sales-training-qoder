@@ -117,3 +117,17 @@ Append one entry per iteration:
   verification results: passed; focused report+replay Vitest finished 33/33 green, covering shared provenance/degradation vocabulary, malformed helper inputs, supplemental knowledge-check failure isolation, stale report-snapshot non-authority, replay completion-gate behavior, retry CTA behavior, highlight/deep-link anchors, and presentation-null suppression.
   success signal status: learner-facing report and replay now show the same explanation of why each conclusion is believed and which evidence layers are degraded, without page-local truth derivation.
   rollback note: if future work changes conclusion provenance/degradation fields, keep report and replay on the shared session-evidence helper seam and preserve replay payload authority over any cached report snapshot.
+
+- time: 2026-03-31T11:06:08+08:00
+  mode: grow
+  item id: M011-S01-T02
+  files changed:
+    - backend/alembic/versions/20260331_1100_023_knowledge_answer_control_plane.py
+    - backend/tests/unit/common/test_knowledge_answer_control_plane_models.py
+    - .gsd/KNOWLEDGE.md
+  summary: Added the missing Alembic control-plane revision for knowledge config and answer-run audit tables, and extended the focused backend model test to fail when the migration file is absent or stops declaring the expected schema.
+  verification commands:
+    - backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/common/test_knowledge_answer_control_plane_models.py -q
+  verification results: passed; focused backend pytest finished 10/10 green, and the new migration-presence assertions verified the revision exists, points to 20260328_1000_022, and names all expected control-plane/audit tables.
+  success signal status: knowledge answer control-plane schema history now contains the versioned config plus answer run/step audit tables needed for future DB-backed config reads and execution-trace persistence.
+  rollback note: if a future migration reshapes these tables, update the focused regression test in lockstep so ORM definitions and Alembic history cannot drift again.

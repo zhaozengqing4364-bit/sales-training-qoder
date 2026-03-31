@@ -8,7 +8,7 @@
   - Estimate: 20-30m
   - Files: backend/pyproject.toml, backend/src/common/knowledge_engine/__init__.py, backend/src/common/knowledge_engine/engine.py, backend/src/common/knowledge_engine/schemas.py, backend/tests/unit/common/test_knowledge_answer_engine.py
   - Verify: backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/common/test_knowledge_answer_engine.py -q
-- [ ] **T02: 增加控制面与审计数据模型** — 新增 Alembic migration 与 SQLAlchemy models：query profiles、intent rules、entity aliases、ranking profiles、answerability profiles、config versions、answer runs、run steps。先只做最小字段，确保可版本化与可审计。
+- [x] **T02: Added the missing knowledge-answer control-plane Alembic revision and locked it in with focused backend regression coverage.** — 新增 Alembic migration 与 SQLAlchemy models：query profiles、intent rules、entity aliases、ranking profiles、answerability profiles、config versions、answer runs、run steps。先只做最小字段，确保可版本化与可审计。
   - Estimate: 30-45m
   - Files: backend/alembic/versions, backend/src/common/db/models.py, backend/tests/unit/common/test_knowledge_answer_control_plane_models.py
   - Verify: backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/common/test_knowledge_answer_control_plane_models.py -q

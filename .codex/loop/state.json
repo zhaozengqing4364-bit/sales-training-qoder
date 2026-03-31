@@ -1,7 +1,7 @@
 {
   "mode": "grow",
-  "current_issue_id": "M010-S03",
-  "current_issue_type": "slice",
+  "current_issue_id": "M011-S01-T02",
+  "current_issue_type": "task",
   "current_issue_status": "done",
   "pending_issue_ids": [],
   "completed_issue_ids": [
@@ -127,27 +127,21 @@
     "M007-S04",
     "M010-S03-T01",
     "M010-S03-T02",
-    "M010-S03"
+    "M010-S03",
+    "M011-S01-T02"
   ],
   "blocked_issue_ids": [],
   "deferred_issue_ids": [],
   "last_modified_files": [
-    "web/src/lib/api/types.ts",
-    "web/src/lib/session-evidence.ts",
-    "web/src/app/(user)/practice/[sessionId]/report/page.tsx",
-    "web/src/app/(user)/practice/[sessionId]/report/page.test.tsx",
-    "web/src/app/(user)/practice/[sessionId]/replay/page.tsx",
-    "web/src/app/(user)/practice/[sessionId]/replay/page.test.tsx",
-    ".gsd/KNOWLEDGE.md",
-    ".gsd/PROJECT.md",
-    ".codex/loop/state.json",
-    ".codex/loop/log.md"
+    "backend/alembic/versions/20260331_1100_023_knowledge_answer_control_plane.py",
+    "backend/tests/unit/common/test_knowledge_answer_control_plane_models.py",
+    ".gsd/KNOWLEDGE.md"
   ],
   "last_verification_commands": [
-    "npm --prefix web test -- --run \"src/app/(user)/practice/[sessionId]/report/page.test.tsx\" \"src/app/(user)/practice/[sessionId]/replay/page.test.tsx\""
+    "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/common/test_knowledge_answer_control_plane_models.py -q"
   ],
-  "last_verification_result": "Fresh slice-close report+replay verification passed: 33/33 Vitest cases green, covering shared provenance/degradation copy, malformed helper inputs, supplemental knowledge-check failure isolation, stale report-snapshot non-authority on replay, replay completion-gate behavior, retry CTA behavior, highlight/deep-link anchors, and presentation-null suppression.",
-  "last_success_signal": "Learner report and replay now render the same helper-owned conclusion provenance and four-layer degradation vocabulary from canonical payload fields without inventing page-local truth or letting replay fall back to stale report snapshots.",
+  "last_verification_result": "Focused knowledge control-plane model verification passed: 10/10 backend pytest cases green, including regression coverage that the Alembic revision exists and declares the expected knowledge config/audit tables.",
+  "last_success_signal": "Knowledge answer control-plane schema history now includes the versioned config and answer run/step audit tables required for future DB-backed repository and execution-trace work.",
   "last_growth_scan": null,
-  "next_action": "M010/S03 is complete. Reassess the remaining M010 roadmap now that learner-facing report/replay provenance and degradation rendering is shipped."
+  "next_action": "Continue M011/S01 with T03 to implement the DB-backed knowledge answer config repository against the new control-plane tables."
 }
