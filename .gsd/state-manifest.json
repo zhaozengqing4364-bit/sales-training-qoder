@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "exported_at": "2026-03-31T03:37:59.932Z",
+  "exported_at": "2026-03-31T03:50:56.046Z",
   "milestones": [
     {
       "id": "M001",
@@ -6834,19 +6834,29 @@
       "milestone_id": "M011",
       "slice_id": "S02",
       "id": "T02",
-      "title": "实现意图分类与检索规划器",
-      "status": "pending",
-      "one_liner": "",
-      "narrative": "",
-      "verification_result": "",
+      "title": "Added DB-backed intent classification and progressive retrieval planning for normalized knowledge queries.",
+      "status": "complete",
+      "one_liner": "Added DB-backed intent classification and progressive retrieval planning for normalized knowledge queries.",
+      "narrative": "Implemented a project-owned knowledge intent classifier plus retrieval planner on top of the DB-normalized config snapshot and T01 entity-resolution seam. The classifier now supports deterministic `regex`, `keyword_contains`, and `entity_keyword_contains` rules, returns the chosen profile and trace metadata, and falls back to the first available profile when no explicit rule matches. The planner consumes that classification and emits progressive retrieval steps with audit metadata, preserving the existing product-overview rewritten-query behavior while keeping legacy websocket helper state out of the new engine seam. Focused tests were written first, confirmed red because the modules were missing, then turned green after the minimal implementation landed; package exports and LSP diagnostics were also updated and verified.",
+      "verification_result": "Followed TDD by writing the focused classifier and planner tests first, confirming the initial pytest run failed with `ModuleNotFoundError` for the missing modules, then implementing the minimal DTO-backed behavior and rerunning the same focused pytest command to green. Fresh LSP diagnostics on the new modules, package exports, and focused tests all reported no issues.",
       "duration": "",
-      "completed_at": null,
+      "completed_at": "2026-03-31T03:50:56.013Z",
       "blocker_discovered": false,
-      "deviations": "",
-      "known_issues": "",
-      "key_files": [],
-      "key_decisions": [],
-      "full_summary_md": "",
+      "deviations": "None.",
+      "known_issues": "Focused pytest still emits the pre-existing pytest-cov warnings (`Module src was never imported` / `No data was collected`) from the current backend coverage configuration, but the targeted classifier/planner suite passed all assertions and LSP found no code issues.",
+      "key_files": [
+        "backend/src/common/knowledge_engine/intent_classifier.py",
+        "backend/src/common/knowledge_engine/retrieval_planner.py",
+        "backend/tests/unit/common/test_knowledge_intent_classifier.py",
+        "backend/tests/unit/common/test_knowledge_retrieval_planner.py",
+        "backend/src/common/knowledge_engine/__init__.py",
+        ".gsd/milestones/M011/slices/S02/tasks/T02-SUMMARY.md"
+      ],
+      "key_decisions": [
+        "Keep intent classification and retrieval planning on project-owned DTOs, with `entity_keyword_contains` encoded as a classifier-side rule type instead of adding new control-plane columns before Haystack wiring.",
+        "Preserve the existing product-overview rewritten-query behavior by letting the planner emit deterministic progressive query steps from the selected profile rather than reaching back into legacy websocket helpers."
+      ],
+      "full_summary_md": "---\nid: T02\nparent: S02\nmilestone: M011\nkey_files:\n  - backend/src/common/knowledge_engine/intent_classifier.py\n  - backend/src/common/knowledge_engine/retrieval_planner.py\n  - backend/tests/unit/common/test_knowledge_intent_classifier.py\n  - backend/tests/unit/common/test_knowledge_retrieval_planner.py\n  - backend/src/common/knowledge_engine/__init__.py\n  - .gsd/milestones/M011/slices/S02/tasks/T02-SUMMARY.md\nkey_decisions:\n  - Keep intent classification and retrieval planning on project-owned DTOs, with `entity_keyword_contains` encoded as a classifier-side rule type instead of adding new control-plane columns before Haystack wiring.\n  - Preserve the existing product-overview rewritten-query behavior by letting the planner emit deterministic progressive query steps from the selected profile rather than reaching back into legacy websocket helpers.\nduration: \"\"\nverification_result: mixed\ncompleted_at: 2026-03-31T03:50:56.014Z\nblocker_discovered: false\n---\n\n# T02: Added DB-backed intent classification and progressive retrieval planning for normalized knowledge queries.\n\n**Added DB-backed intent classification and progressive retrieval planning for normalized knowledge queries.**\n\n## What Happened\n\nImplemented a project-owned knowledge intent classifier plus retrieval planner on top of the DB-normalized config snapshot and T01 entity-resolution seam. The classifier now supports deterministic `regex`, `keyword_contains`, and `entity_keyword_contains` rules, returns the chosen profile and trace metadata, and falls back to the first available profile when no explicit rule matches. The planner consumes that classification and emits progressive retrieval steps with audit metadata, preserving the existing product-overview rewritten-query behavior while keeping legacy websocket helper state out of the new engine seam. Focused tests were written first, confirmed red because the modules were missing, then turned green after the minimal implementation landed; package exports and LSP diagnostics were also updated and verified.\n\n## Verification\n\nFollowed TDD by writing the focused classifier and planner tests first, confirming the initial pytest run failed with `ModuleNotFoundError` for the missing modules, then implementing the minimal DTO-backed behavior and rerunning the same focused pytest command to green. Fresh LSP diagnostics on the new modules, package exports, and focused tests all reported no issues.\n\n## Verification Evidence\n\n| # | Command | Exit Code | Verdict | Duration |\n|---|---------|-----------|---------|----------|\n| 1 | `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/common/test_knowledge_intent_classifier.py backend/tests/unit/common/test_knowledge_retrieval_planner.py -q` | 2 | ❌ fail | 350ms |\n| 2 | `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/common/test_knowledge_intent_classifier.py backend/tests/unit/common/test_knowledge_retrieval_planner.py -q` | 0 | ✅ pass | 90ms |\n| 3 | `LSP diagnostics on backend/src/common/knowledge_engine/intent_classifier.py, backend/src/common/knowledge_engine/retrieval_planner.py, backend/src/common/knowledge_engine/__init__.py, backend/tests/unit/common/test_knowledge_intent_classifier.py, backend/tests/unit/common/test_knowledge_retrieval_planner.py` | 0 | ✅ pass | 0ms |\n\n\n## Deviations\n\nNone.\n\n## Known Issues\n\nFocused pytest still emits the pre-existing pytest-cov warnings (`Module src was never imported` / `No data was collected`) from the current backend coverage configuration, but the targeted classifier/planner suite passed all assertions and LSP found no code issues.\n\n## Files Created/Modified\n\n- `backend/src/common/knowledge_engine/intent_classifier.py`\n- `backend/src/common/knowledge_engine/retrieval_planner.py`\n- `backend/tests/unit/common/test_knowledge_intent_classifier.py`\n- `backend/tests/unit/common/test_knowledge_retrieval_planner.py`\n- `backend/src/common/knowledge_engine/__init__.py`\n- `.gsd/milestones/M011/slices/S02/tasks/T02-SUMMARY.md`\n",
       "description": "实现 DB-driven intent classifier 与 retrieval planner。支持 regex / keyword / entity+keyword 三种 rule，输出 profile_key 与 progressive retrieval plan。",
       "estimate": "35-45m",
       "files": [
@@ -8902,6 +8912,18 @@
       "decision": "How entity resolution should behave in M011/S02",
       "choice": "Use deterministic alias/canonical string matching with explicit resolution trace, and defer fuzzy NLP",
       "rationale": "The slice goal is to fix retrieval misses before ranking with the smallest auditable change. Deterministic matching is enough to normalize known aliases, preserve canonical pass-through, and expose exact match evidence for downstream intent/planner debugging without introducing opaque NLP behavior.",
+      "revisable": "Yes",
+      "made_by": "agent",
+      "superseded_by": null
+    },
+    {
+      "seq": 1513,
+      "id": "D147",
+      "when_context": "M011/S02/T02",
+      "scope": "architecture",
+      "decision": "How M011/S02 should encode intent-classifier rules and planner output before Haystack execution lands",
+      "choice": "Keep intent classification and retrieval planning on project-owned DTOs; support regex, keyword_contains, and entity_keyword_contains rules, then emit profile-owned progressive query steps instead of reusing legacy websocket helper state.",
+      "rationale": "T02 needed a stable seam between the DB-backed control plane and the upcoming Haystack adapter. Encoding entity+keyword gating in a project-owned classifier result plus planner output keeps ORM rows and old websocket retrieval helpers out of the engine path, while preserving auditable traces and compatible rewritten-query behavior for downstream execution.",
       "revisable": "Yes",
       "made_by": "agent",
       "superseded_by": null
@@ -11580,6 +11602,39 @@
       "verdict": "✅ pass",
       "duration_ms": 662,
       "created_at": "2026-03-31T03:37:59.912Z"
+    },
+    {
+      "id": 244,
+      "task_id": "T02",
+      "slice_id": "S02",
+      "milestone_id": "M011",
+      "command": "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/common/test_knowledge_intent_classifier.py backend/tests/unit/common/test_knowledge_retrieval_planner.py -q",
+      "exit_code": 2,
+      "verdict": "❌ fail",
+      "duration_ms": 350,
+      "created_at": "2026-03-31T03:50:56.013Z"
+    },
+    {
+      "id": 245,
+      "task_id": "T02",
+      "slice_id": "S02",
+      "milestone_id": "M011",
+      "command": "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/common/test_knowledge_intent_classifier.py backend/tests/unit/common/test_knowledge_retrieval_planner.py -q",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 90,
+      "created_at": "2026-03-31T03:50:56.013Z"
+    },
+    {
+      "id": 246,
+      "task_id": "T02",
+      "slice_id": "S02",
+      "milestone_id": "M011",
+      "command": "LSP diagnostics on backend/src/common/knowledge_engine/intent_classifier.py, backend/src/common/knowledge_engine/retrieval_planner.py, backend/src/common/knowledge_engine/__init__.py, backend/tests/unit/common/test_knowledge_intent_classifier.py, backend/tests/unit/common/test_knowledge_retrieval_planner.py",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 0,
+      "created_at": "2026-03-31T03:50:56.013Z"
     }
   ]
 }

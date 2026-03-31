@@ -1,7 +1,7 @@
 {
   "mode": "grow",
-  "current_issue_id": "M011-S01",
-  "current_issue_type": "slice",
+  "current_issue_id": "M011-S02-T02",
+  "current_issue_type": "task",
   "current_issue_status": "done",
   "pending_issue_ids": [],
   "completed_issue_ids": [
@@ -129,26 +129,25 @@
     "M010-S03-T02",
     "M010-S03",
     "M011-S01-T02",
-    "M011-S01"
+    "M011-S01",
+    "M011-S02-T02"
   ],
   "blocked_issue_ids": [],
   "deferred_issue_ids": [],
   "last_modified_files": [
+    "backend/src/common/knowledge_engine/intent_classifier.py",
+    "backend/src/common/knowledge_engine/retrieval_planner.py",
     "backend/src/common/knowledge_engine/__init__.py",
-    "backend/src/common/knowledge_engine/engine.py",
-    "backend/src/common/knowledge_engine/schemas.py",
-    "backend/src/common/knowledge_engine/config_repo.py",
-    "backend/alembic/versions/20260331_1100_023_knowledge_answer_control_plane.py",
+    "backend/tests/unit/common/test_knowledge_intent_classifier.py",
+    "backend/tests/unit/common/test_knowledge_retrieval_planner.py",
     ".gsd/DECISIONS.md",
-    ".gsd/PROJECT.md"
+    ".gsd/KNOWLEDGE.md"
   ],
   "last_verification_commands": [
-    "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/common/test_knowledge_answer_engine.py -q",
-    "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/common/test_knowledge_answer_control_plane_models.py -q",
-    "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/common/test_knowledge_answer_config_repo.py -q"
+    "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/common/test_knowledge_intent_classifier.py backend/tests/unit/common/test_knowledge_retrieval_planner.py -q"
   ],
-  "last_verification_result": "Fresh slice-close verification passed all three focused backend gates: engine seam 2/2 green, control-plane model/migration suite 10/10 green, and active-config repository suite 2/2 green; LSP diagnostics reported no issues on the engine, schemas, repository, migration, and focused test files.",
-  "last_success_signal": "M011/S01 now delivers a constructable project-owned KnowledgeAnswerEngine seam, versioned control-plane schema history, and a DB-backed normalized active-config repository that downstream slices can wire directly into query planning and Haystack execution.",
+  "last_verification_result": "Focused M011/S02/T02 pytest passed 4/4 after a red-to-green TDD cycle, and LSP diagnostics reported no issues on the new classifier/planner modules, package exports, or focused tests.",
+  "last_success_signal": "The knowledge-engine seam can now classify normalized queries into DB-backed profiles and emit auditable progressive retrieval plans that preserve the existing product-overview rewritten-query behavior for downstream Haystack execution.",
   "last_growth_scan": null,
-  "next_action": "Reassess roadmap after S01 close-out and start M011/S02 on query understanding, planner output, and Haystack retrieval execution using the new engine seam and repository snapshot."
+  "next_action": "Continue M011/S02 with T03 by wiring the Haystack execution adapter and business reranker onto the new classifier/planner outputs."
 }

@@ -13,6 +13,16 @@ from common.knowledge_engine.entity_resolver import (
     KnowledgeEntityResolver,
     KnowledgeResolvedEntityMatch,
 )
+from common.knowledge_engine.intent_classifier import (
+    KnowledgeIntentClassification,
+    KnowledgeIntentClassifier,
+    KnowledgeIntentMatchTrace,
+)
+from common.knowledge_engine.retrieval_planner import (
+    KnowledgeRetrievalPlan,
+    KnowledgeRetrievalPlanner,
+    KnowledgeRetrievalStep,
+)
 from common.knowledge_engine.schemas import (
     KnowledgeAnswerRequest,
     KnowledgeAnswerResult,
@@ -32,6 +42,12 @@ __all__ = [
     "KnowledgeEntityResolution",
     "KnowledgeEntityResolver",
     "KnowledgeResolvedEntityMatch",
+    "KnowledgeIntentClassification",
+    "KnowledgeIntentClassifier",
+    "KnowledgeIntentMatchTrace",
+    "KnowledgeRetrievalPlan",
+    "KnowledgeRetrievalPlanner",
+    "KnowledgeRetrievalStep",
     "KnowledgeAnswerRequest",
     "KnowledgeAnswerResult",
     "KnowledgeAuditStep",

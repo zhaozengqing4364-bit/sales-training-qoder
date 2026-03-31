@@ -12,6 +12,25 @@ Append one entry per iteration:
 - success signal status
 - rollback note
 
+- time: 2026-03-31T11:52:40+08:00
+  mode: grow
+  item id: M011-S02-T02
+  files changed:
+    - backend/src/common/knowledge_engine/intent_classifier.py
+    - backend/src/common/knowledge_engine/retrieval_planner.py
+    - backend/src/common/knowledge_engine/__init__.py
+    - backend/tests/unit/common/test_knowledge_intent_classifier.py
+    - backend/tests/unit/common/test_knowledge_retrieval_planner.py
+    - .gsd/DECISIONS.md
+    - .gsd/KNOWLEDGE.md
+    - .codex/loop/state.json
+  summary: Added a project-owned intent classifier plus progressive retrieval planner that consume DB-normalized config and entity-resolution output, support regex/keyword/entity+keyword rules, and emit auditable rewritten query steps for downstream Haystack execution.
+  verification commands:
+    - backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/common/test_knowledge_intent_classifier.py backend/tests/unit/common/test_knowledge_retrieval_planner.py -q
+  verification results: passed; focused backend pytest finished 4/4 green after confirming the initial red state was missing classifier/planner modules, and fresh LSP diagnostics reported no issues on the new modules, exports, or focused tests.
+  success signal status: normalized entity-aware queries can now be classified into DB-backed profiles and turned into deterministic progressive retrieval plans that preserve existing product-overview rewrite behavior while exposing trace/audit metadata.
+  rollback note: if later control-plane work changes rule syntax or rewrite expansion vocabulary, keep the classifier/planner seam on project-owned DTOs and update the focused rule/plan tests in lockstep rather than bypassing the new modules from the Haystack adapter.
+
 - time: 2026-03-23T02:10:18+08:00
   mode: stabilize
   item id: M001-S01-T02
