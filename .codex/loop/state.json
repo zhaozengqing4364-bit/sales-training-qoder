@@ -1,7 +1,7 @@
 {
   "mode": "grow",
-  "current_issue_id": "M011-S03",
-  "current_issue_type": "slice",
+  "current_issue_id": "M011-S04-T02",
+  "current_issue_type": "task",
   "current_issue_status": "done",
   "pending_issue_ids": [],
   "completed_issue_ids": [
@@ -135,37 +135,24 @@
     "M011-S03-T01",
     "M011-S03-T02",
     "M011-S03",
-    "M011-S04-T01"
+    "M011-S04-T01",
+    "M011-S04-T02"
   ],
   "blocked_issue_ids": [],
   "deferred_issue_ids": [],
   "last_modified_files": [
-    "backend/src/common/knowledge_engine/audit_repo.py",
-    "backend/src/common/knowledge_engine/engine.py",
-    "backend/src/common/knowledge_engine/compat.py",
-    "backend/src/common/api/practice.py",
-    "backend/src/sales_bot/websocket/components/stepfun_internal_knowledge_searcher.py",
-    "backend/src/sales_bot/websocket/stepfun_realtime_handler.py",
-    "backend/src/common/conversation/runtime_diagnostics.py",
-    "backend/src/common/conversation/replay.py",
-    "backend/tests/unit/common/test_knowledge_answer_audit_repo.py",
-    "backend/tests/unit/common/test_knowledge_answer_engine.py",
-    "backend/tests/unit/test_stepfun_realtime_handler.py",
-    "backend/tests/unit/test_runtime_diagnostics_knowledge_retrieval.py",
-    "backend/tests/unit/test_replay_service.py",
+    "backend/src/common/api/knowledge_debug.py",
+    "backend/src/main.py",
+    "backend/tests/integration/test_knowledge_debug_api.py",
     ".gsd/DECISIONS.md",
-    ".gsd/KNOWLEDGE.md",
-    ".gsd/PROJECT.md"
+    ".gsd/KNOWLEDGE.md"
   ],
   "last_verification_commands": [
-    "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/common/test_knowledge_answerability.py -q",
-    "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/common/test_knowledge_answer_assembler.py -q",
-    "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/common/test_knowledge_answer_audit_repo.py backend/tests/unit/common/test_knowledge_answer_engine.py backend/tests/unit/test_stepfun_realtime_handler.py backend/tests/unit/test_runtime_diagnostics_knowledge_retrieval.py backend/tests/unit/test_replay_service.py -q"
+    "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/integration/test_knowledge_debug_api.py -q",
+    "backend/venv/bin/python -m py_compile backend/src/common/api/knowledge_debug.py backend/tests/integration/test_knowledge_debug_api.py"
   ],
-  "last_verification_result": "Fresh slice-close verification passed all S03 plan gates serially from repo root: answerability suite 5/5, assembler suite 3/3, and the combined audit/engine/runtime/replay seam suite 134/134. Fresh LSP diagnostics also reported no issues on engine, compat, audit_repo, StepFun helper, practice runtime diagnostics, and replay files.",
-  "last_success_signal": "The knowledge-answer chain now produces coverage-based answerability, deterministic grounded final_text/citations, persisted KnowledgeAnswerRun + ordered KnowledgeAnswerRunStep audit rows, and compatibility payloads that surface audit_run_id/answerability/citations across realtime payloads, runtime diagnostics, and replay transcript metadata.",
+  "last_verification_result": "Fresh repo-root verification passed for the new knowledge debug API: focused integration pytest finished 5/5 green against list/detail/steps/admin-support RBAC/not-found behaviors, and a follow-up py_compile check passed on the new router and focused test module. LSP diagnostics also reported no issues on backend/src/common/api/knowledge_debug.py or backend/src/main.py.",
+  "last_success_signal": "Admin/support users can now inspect recent persisted knowledge-answer runs, open one run's normalized audit payload, and fetch ordered step breakdowns from one read-only /api/v1/knowledge-debug surface backed directly by KnowledgeAnswerRun and KnowledgeAnswerRunStep rows.",
   "last_growth_scan": null,
-  "next_action": "Proceed to M011/S04: expose recent knowledge-answer runs through debug/eval/report inspection surfaces using the persisted audit seam instead of rebuilding execution traces from handler-local state."
-}
-ing the persisted audit seam instead of rebuilding execution traces from handler-local state."
+  "next_action": "Proceed to M011/S04/T03: seed active knowledge-answer config profiles and gate the new engine through feature flags / dual-run rollout without breaking the existing compatibility seams."
 }

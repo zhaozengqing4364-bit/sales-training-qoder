@@ -116,7 +116,6 @@
     - web/src/app/(user)/practice/[sessionId]/report/page.test.tsx
     - .gsd/DECISIONS.md
     - .codex/loop/state.json
-    - .codex/loop/log.md
   summary: Added shared frontend conclusion-evidence types and helper-owned provenance/degradation formatters, then wired the learner report page to render canonical report-driven conclusion provenance plus four-layer degradation without parsing raw contract fragments in the page.
   verification commands:
     - npm --prefix web test -- --run "src/app/(user)/practice/[sessionId]/report/page.test.tsx"
@@ -167,7 +166,7 @@
     - backend/alembic/versions/20260331_1100_023_knowledge_answer_control_plane.py
     - backend/tests/unit/common/test_knowledge_answer_control_plane_models.py
     - .gsd/KNOWLEDGE.md
-  summary: Added the missing Alembic control-plane revision for knowledge config and answer-run audit tables, and extended the focused backend model test to fail when the migration file is absent or stops declaring the expected schema.
+  summary: Added the missing Alembic control-plane revision for knowledge config and answer run/step audit tables, and extended the focused backend model test to fail when the migration file is absent or stops declaring the expected schema.
   verification commands:
     - backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/common/test_knowledge_answer_control_plane_models.py -q
   verification results: passed; focused backend pytest finished 10/10 green, and the new migration-presence assertions verified the revision exists, points to 20260328_1000_022, and names all expected control-plane/audit tables.
@@ -195,69 +194,20 @@
   success signal status: downstream slices can now instantiate a project-owned knowledge-answer engine and read one latest enabled active query/ranking/answerability configuration snapshot from the database without leaking Haystack types, ORM rows, or raw JSON control-plane shapes
   rollback note: if S02/S03 reshape the control-plane schema or repository snapshot, keep the project-owned engine/repository seam intact and update migration-presence plus repository-normalization regressions in lockstep rather than bypassing them in runtime handlers
 
-- time: 2026-03-31T12:06:08+08:00
+- time: 2026-03-31T13:55:34+0800
   mode: grow
-  item id: M011-S03-T01
+  item id: M011-S04-T02
   files changed:
-    - backend/src/common/knowledge_engine/answerability.py
-    - backend/src/common/knowledge_engine/__init__.py
-    - backend/tests/unit/common/test_knowledge_answerability.py
+    - backend/src/common/api/knowledge_debug.py
+    - backend/src/main.py
+    - backend/tests/integration/test_knowledge_debug_api.py
     - .gsd/DECISIONS.md
     - .gsd/KNOWLEDGE.md
     - .codex/loop/state.json
-  summary: Added a slot-coverage-based answerability evaluator that classifies grounded answers from required/optional profile slots, preserves blocked retrieval semantics, and degrades to count-based verdicts when no answerability profile is configured yet.
+  summary: Added a read-only knowledge debug API for admin/support users that lists recent answer runs, returns one run’s persisted audit payload, and exposes ordered step breakdowns directly from KnowledgeAnswerRun and KnowledgeAnswerRunStep rows.
   verification commands:
-    - backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/common/test_knowledge_answerability.py -q
-  verification results: passed; focused backend pytest finished 5/5 green after the red-to-green TDD cycle, and fresh LSP diagnostics reported no issues on the new module or focused test file.
-  success signal status: retrieval/rerank callers can now hand slot-annotated evidence rows into a project-owned evaluator and get sufficient/partial/insufficient/blocked verdicts plus audit-ready slot coverage diagnostics instead of raw hit-count heuristics.
-  rollback note: if downstream slices change how evidence rows encode slot coverage, keep the evaluator on the project-owned slot-hit seam (row or metadata slot arrays) and update its focused tests in lockstep rather than reintroducing hit-count-only answerability.
-
-- time: 2026-03-31T12:39:45+0800
-  mode: grow
-  item id: M011-S03-T02
-  files changed:
-    - backend/src/common/knowledge_engine/assembler.py
-    - backend/src/common/knowledge_engine/__init__.py
-    - backend/tests/unit/common/test_knowledge_answer_assembler.py
-    - .gsd/DECISIONS.md
-    - .codex/loop/state.json
-  summary: Added a deterministic evidence-driven answer assembler that turns answerability plus evidence rows into learner-safe blocked copy, numbered grounded final_text, normalized citations, unsupported_claims, rewritten_queries, and compact retrieval diagnostics.
-  verification commands:
-    - backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/common/test_knowledge_answer_assembler.py -q
-  verification results: passed; focused backend pytest finished 3/3 green after the red-to-green TDD cycle, and fresh LSP diagnostics reported no issues on the new module, export seam, or focused test file.
-  success signal status: downstream engine wiring can now assemble one stable answer payload from answerability plus ranked evidence without leaking retrieval failures into learner-facing copy, while preserving unsupported claims and citation metadata for audit/report/replay.
-  rollback note: if later slices introduce richer claim extraction or templating, keep the assembler on the current supported-snippet versus unsupported-content seam and evolve the focused tests in lockstep rather than moving learner copy generation into runtime handlers.
-
-- time: 2026-03-31T13:29:32+0800
-  mode: grow
-  item id: M011-S03
-  files changed:
-    - backend/src/common/knowledge_engine/answerability.py
-    - backend/src/common/knowledge_engine/assembler.py
-    - backend/src/common/knowledge_engine/audit_repo.py
-    - backend/src/common/knowledge_engine/engine.py
-    - backend/src/common/knowledge_engine/compat.py
-    - backend/src/common/api/practice.py
-    - backend/src/common/conversation/runtime_diagnostics.py
-    - backend/src/common/conversation/replay.py
-    - backend/src/sales_bot/websocket/components/stepfun_internal_knowledge_searcher.py
-    - backend/src/sales_bot/websocket/stepfun_realtime_handler.py
-    - backend/tests/unit/common/test_knowledge_answerability.py
-    - backend/tests/unit/common/test_knowledge_answer_assembler.py
-    - backend/tests/unit/common/test_knowledge_answer_audit_repo.py
-    - backend/tests/unit/common/test_knowledge_answer_engine.py
-    - backend/tests/unit/test_stepfun_realtime_handler.py
-    - backend/tests/unit/test_runtime_diagnostics_knowledge_retrieval.py
-    - backend/tests/unit/test_replay_service.py
-    - .gsd/DECISIONS.md
-    - .gsd/KNOWLEDGE.md
-    - .gsd/PROJECT.md
-    - .codex/loop/state.json
-  summary: Closed M011/S03 after fresh slice-level verification confirmed the knowledge-answer chain now classifies slot coverage, assembles learner-safe grounded answers with citations, persists ordered answer-run audit rows, and exposes the same audit/answerability truth through realtime payloads, runtime diagnostics, and replay transcript metadata.
-  verification commands:
-    - backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/common/test_knowledge_answerability.py -q
-    - backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/common/test_knowledge_answer_assembler.py -q
-    - backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/common/test_knowledge_answer_audit_repo.py backend/tests/unit/common/test_knowledge_answer_engine.py backend/tests/unit/test_stepfun_realtime_handler.py backend/tests/unit/test_runtime_diagnostics_knowledge_retrieval.py backend/tests/unit/test_replay_service.py -q
-  verification results: passed; fresh serial slice-close verification reached 5/5, 3/3, and 134/134 green respectively, and fresh LSP diagnostics reported no issues on engine, compat, audit_repo, StepFun helper, practice runtime diagnostics, and replay files.
-  success signal status: after one grounded knowledge answer, the system can now preserve the same audit_run_id/answerability/citations line from engine output into StepFun runtime payloads, runtime diagnostics, and replay message metadata, with persisted KnowledgeAnswerRun + KnowledgeAnswerRunStep rows ready for S04 inspection/debug work.
-  rollback note: if S04 expands the debug or report surfaces, keep the persisted audit tables plus compat payloads as the authority seam and do not rebuild execution traces from handler-local state or assume the async StepFun helper must be rewritten to call the synchronous engine directly.
+    - backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/integration/test_knowledge_debug_api.py -q
+    - backend/venv/bin/python -m py_compile backend/src/common/api/knowledge_debug.py backend/tests/integration/test_knowledge_debug_api.py
+  verification results: passed; fresh repo-root focused integration pytest finished 5/5 green for list/detail/steps/RBAC/not-found coverage, py_compile passed on the new router and focused test module, and fresh LSP diagnostics reported no issues on backend/src/common/api/knowledge_debug.py or backend/src/main.py.
+  success signal status: admin/support can now inspect recent persisted knowledge-answer runs and their ordered step traces from one stable /api/v1/knowledge-debug surface without reconstructing runtime-local traces.
+  rollback note: if T03 or later slices extend report/debug inspection, keep this surface read-only and backed by the persisted audit rows plus compat payload fields rather than teaching runtime handlers to rebuild traces for API consumers.

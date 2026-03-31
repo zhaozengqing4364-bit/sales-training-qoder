@@ -39,6 +39,7 @@ from agent.api.agents import admin_router as agent_admin_router
 from agent.api.agents import user_router as agent_user_router
 from agent.api.personas import admin_router as persona_admin_router
 from common.api import analytics, dashboard, practice, training, users
+from common.api.knowledge_debug import router as knowledge_debug_router
 from common.auth.api import router as auth_router
 from common.auth.api import get_auth_config_diagnostics
 
@@ -461,6 +462,12 @@ app.include_router(
     support_runtime_router,
     prefix="/api/v1",
     tags=["support-runtime"],
+    dependencies=[Depends(require_role(["admin", "support"]))],
+)
+app.include_router(
+    knowledge_debug_router,
+    prefix="/api/v1",
+    tags=["knowledge-debug"],
     dependencies=[Depends(require_role(["admin", "support"]))],
 )
 

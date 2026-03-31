@@ -8,7 +8,7 @@
   - Estimate: 35-45m
   - Files: backend/src/common/knowledge_engine/evaluation.py, backend/tests/evaluation/test_knowledge_answer_engine_eval.py, backend/tests/fixtures/knowledge_answer_eval_cases.json
   - Verify: backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/evaluation/test_knowledge_answer_engine_eval.py -q
-- [ ] **T02: 增加知识问答 debug API** — 实现 read-only debug API。支持列出 answer runs、查看单次 run、查看 step breakdown，让后续可以按 run_id 调试。
+- [x] **T02: Added a read-only knowledge debug API that lists persisted answer runs, returns single-run audit details, and exposes ordered step breakdowns for admin/support inspection.** — 实现 read-only debug API。支持列出 answer runs、查看单次 run、查看 step breakdown，让后续可以按 run_id 调试。
   - Estimate: 30-40m
   - Files: backend/src/common/api/knowledge_debug.py, backend/src/main.py, backend/tests/integration/test_knowledge_debug_api.py
   - Verify: backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/integration/test_knowledge_debug_api.py -q

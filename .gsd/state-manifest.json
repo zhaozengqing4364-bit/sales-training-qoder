@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "exported_at": "2026-03-31T05:48:37.037Z",
+  "exported_at": "2026-03-31T05:58:24.699Z",
   "milestones": [
     {
       "id": "M001",
@@ -7140,19 +7140,29 @@
       "milestone_id": "M011",
       "slice_id": "S04",
       "id": "T02",
-      "title": "增加知识问答 debug API",
-      "status": "pending",
-      "one_liner": "",
-      "narrative": "",
-      "verification_result": "",
+      "title": "Added a read-only knowledge debug API that lists persisted answer runs, returns single-run audit details, and exposes ordered step breakdowns for admin/support inspection.",
+      "status": "complete",
+      "one_liner": "Added a read-only knowledge debug API that lists persisted answer runs, returns single-run audit details, and exposes ordered step breakdowns for admin/support inspection.",
+      "narrative": "Executed T02 in TDD order. After reading the task plan plus the existing audit repository, audit schemas, DB models, and FastAPI router-registration pattern, I defined the smallest truthful debug surface: list recent runs, fetch one run, and fetch that run’s ordered steps. I wrote the integration test first to lock the intended contract on the real app seam, including latest-first ordering, normalized detail payloads, ordered step breakdowns, admin/support-only access, and a structured not-found response. The first red run exposed a local test-fixture issue rather than a product issue: the new module needed to import agent.models so Base.metadata.create_all() could resolve PracticeSession foreign keys in the in-memory async DB. After fixing that test setup issue, the suite failed for the expected reason: the knowledge debug routes did not exist yet. I then implemented backend/src/common/api/knowledge_debug.py as a read-only router backed directly by persisted KnowledgeAnswerRun and KnowledgeAnswerRunStep rows, normalized JSON payload fields defensively, and returned the backend’s standard success/error envelope shape. Finally, I registered the new router in backend/src/main.py behind require_role([\"admin\", \"support\"]) so the inspection surface stays narrow and operationally useful. Fresh focused verification passed, py_compile passed, and LSP diagnostics reported no issues in the new router or main.py registration changes.",
+      "verification_result": "Ran the task-plan verification command fresh from repo root and confirmed the new focused integration suite passed 5/5 against list/detail/steps, RBAC, and not-found behaviors. Then ran a follow-up py_compile check on the new router and focused test module, which also passed. Fresh LSP diagnostics reported no issues on backend/src/common/api/knowledge_debug.py and backend/src/main.py.",
       "duration": "",
-      "completed_at": null,
+      "completed_at": "2026-03-31T05:58:24.676Z",
       "blocker_discovered": false,
-      "deviations": "",
-      "known_issues": "",
-      "key_files": [],
-      "key_decisions": [],
-      "full_summary_md": "",
+      "deviations": "The task plan did not mention a local async test-fixture requirement: the new integration test module needed to import agent.models so Base.metadata.create_all() could resolve PracticeSession foreign keys. This was a local test-environment correction only; the shipped API scope and behavior still match the plan.",
+      "known_issues": "Focused repo-root backend pytest still emits the pre-existing pytest-cov warning about src not being imported / no coverage data collected for this narrow invocation, but the task verification command itself passed and no task-specific failures remain.",
+      "key_files": [
+        "backend/src/common/api/knowledge_debug.py",
+        "backend/src/main.py",
+        "backend/tests/integration/test_knowledge_debug_api.py",
+        ".gsd/DECISIONS.md",
+        ".gsd/KNOWLEDGE.md",
+        ".gsd/milestones/M011/slices/S04/tasks/T02-SUMMARY.md"
+      ],
+      "key_decisions": [
+        "Read the debug API directly from persisted KnowledgeAnswerRun and KnowledgeAnswerRunStep rows instead of reconstructing traces from runtime-local StepFun state.",
+        "Keep the new inspection surface read-only and restricted to admin/support roles via the existing require_role dependency seam."
+      ],
+      "full_summary_md": "---\nid: T02\nparent: S04\nmilestone: M011\nkey_files:\n  - backend/src/common/api/knowledge_debug.py\n  - backend/src/main.py\n  - backend/tests/integration/test_knowledge_debug_api.py\n  - .gsd/DECISIONS.md\n  - .gsd/KNOWLEDGE.md\n  - .gsd/milestones/M011/slices/S04/tasks/T02-SUMMARY.md\nkey_decisions:\n  - Read the debug API directly from persisted KnowledgeAnswerRun and KnowledgeAnswerRunStep rows instead of reconstructing traces from runtime-local StepFun state.\n  - Keep the new inspection surface read-only and restricted to admin/support roles via the existing require_role dependency seam.\nduration: \"\"\nverification_result: passed\ncompleted_at: 2026-03-31T05:58:24.676Z\nblocker_discovered: false\n---\n\n# T02: Added a read-only knowledge debug API that lists persisted answer runs, returns single-run audit details, and exposes ordered step breakdowns for admin/support inspection.\n\n**Added a read-only knowledge debug API that lists persisted answer runs, returns single-run audit details, and exposes ordered step breakdowns for admin/support inspection.**\n\n## What Happened\n\nExecuted T02 in TDD order. After reading the task plan plus the existing audit repository, audit schemas, DB models, and FastAPI router-registration pattern, I defined the smallest truthful debug surface: list recent runs, fetch one run, and fetch that run’s ordered steps. I wrote the integration test first to lock the intended contract on the real app seam, including latest-first ordering, normalized detail payloads, ordered step breakdowns, admin/support-only access, and a structured not-found response. The first red run exposed a local test-fixture issue rather than a product issue: the new module needed to import agent.models so Base.metadata.create_all() could resolve PracticeSession foreign keys in the in-memory async DB. After fixing that test setup issue, the suite failed for the expected reason: the knowledge debug routes did not exist yet. I then implemented backend/src/common/api/knowledge_debug.py as a read-only router backed directly by persisted KnowledgeAnswerRun and KnowledgeAnswerRunStep rows, normalized JSON payload fields defensively, and returned the backend’s standard success/error envelope shape. Finally, I registered the new router in backend/src/main.py behind require_role([\"admin\", \"support\"]) so the inspection surface stays narrow and operationally useful. Fresh focused verification passed, py_compile passed, and LSP diagnostics reported no issues in the new router or main.py registration changes.\n\n## Verification\n\nRan the task-plan verification command fresh from repo root and confirmed the new focused integration suite passed 5/5 against list/detail/steps, RBAC, and not-found behaviors. Then ran a follow-up py_compile check on the new router and focused test module, which also passed. Fresh LSP diagnostics reported no issues on backend/src/common/api/knowledge_debug.py and backend/src/main.py.\n\n## Verification Evidence\n\n| # | Command | Exit Code | Verdict | Duration |\n|---|---------|-----------|---------|----------|\n| 1 | `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/integration/test_knowledge_debug_api.py -q` | 0 | ✅ pass | 3757ms |\n| 2 | `backend/venv/bin/python -m py_compile backend/src/common/api/knowledge_debug.py backend/tests/integration/test_knowledge_debug_api.py` | 0 | ✅ pass | 33ms |\n\n\n## Deviations\n\nThe task plan did not mention a local async test-fixture requirement: the new integration test module needed to import agent.models so Base.metadata.create_all() could resolve PracticeSession foreign keys. This was a local test-environment correction only; the shipped API scope and behavior still match the plan.\n\n## Known Issues\n\nFocused repo-root backend pytest still emits the pre-existing pytest-cov warning about src not being imported / no coverage data collected for this narrow invocation, but the task verification command itself passed and no task-specific failures remain.\n\n## Files Created/Modified\n\n- `backend/src/common/api/knowledge_debug.py`\n- `backend/src/main.py`\n- `backend/tests/integration/test_knowledge_debug_api.py`\n- `.gsd/DECISIONS.md`\n- `.gsd/KNOWLEDGE.md`\n- `.gsd/milestones/M011/slices/S04/tasks/T02-SUMMARY.md`\n",
       "description": "实现 read-only debug API。支持列出 answer runs、查看单次 run、查看 step breakdown，让后续可以按 run_id 调试。",
       "estimate": "30-40m",
       "files": [
@@ -9047,6 +9057,18 @@
       "decision": "How to evaluate the new knowledge-answer engine deterministically before rollout",
       "choice": "Use a fixture-driven evaluation harness that runs the real KnowledgeAnswerEngine seam with stubbed retrieval responses and compares shipped answer payloads, including exact multiline final_text formatting.",
       "rationale": "This keeps evaluation coverage on the project-owned engine contract instead of runtime-specific handlers, makes product/pricing/compare/coaching/blocked cases reproducible without a live knowledge base, and prevents false negatives caused by whitespace-normalizing the assembler's numbered answer text.",
+      "revisable": "Yes",
+      "made_by": "agent",
+      "superseded_by": null
+    },
+    {
+      "seq": 1520,
+      "id": "D154",
+      "when_context": "M011/S04/T02",
+      "scope": "observability",
+      "decision": "How the knowledge-answer debug API should expose run inspection without rebuilding runtime-local traces",
+      "choice": "Ship a read-only admin/support debug router backed directly by persisted KnowledgeAnswerRun and KnowledgeAnswerRunStep rows, with separate list/detail/steps endpoints under /api/v1/knowledge-debug.",
+      "rationale": "The persisted audit rows are already the cross-entrypoint authority seam established in S03. Reading them directly gives downstream debugging and operational inspection one truthful surface, keeps permissions narrow, and avoids reconstructing traces from StepFun handler-local state or replay-specific projections.",
       "revisable": "Yes",
       "made_by": "agent",
       "superseded_by": null
@@ -11879,6 +11901,28 @@
       "verdict": "✅ pass",
       "duration_ms": 61,
       "created_at": "2026-03-31T05:48:37.003Z"
+    },
+    {
+      "id": 258,
+      "task_id": "T02",
+      "slice_id": "S04",
+      "milestone_id": "M011",
+      "command": "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/integration/test_knowledge_debug_api.py -q",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 3757,
+      "created_at": "2026-03-31T05:58:24.676Z"
+    },
+    {
+      "id": 259,
+      "task_id": "T02",
+      "slice_id": "S04",
+      "milestone_id": "M011",
+      "command": "backend/venv/bin/python -m py_compile backend/src/common/api/knowledge_debug.py backend/tests/integration/test_knowledge_debug_api.py",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 33,
+      "created_at": "2026-03-31T05:58:24.676Z"
     }
   ]
 }
