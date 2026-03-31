@@ -13,11 +13,17 @@ from common.knowledge_engine.entity_resolver import (
     KnowledgeEntityResolver,
     KnowledgeResolvedEntityMatch,
 )
+from common.knowledge_engine.haystack_adapter import (
+    KnowledgeExecutedQueryStep,
+    KnowledgeHaystackAdapter,
+    KnowledgeHaystackExecutionResult,
+)
 from common.knowledge_engine.intent_classifier import (
     KnowledgeIntentClassification,
     KnowledgeIntentClassifier,
     KnowledgeIntentMatchTrace,
 )
+from common.knowledge_engine.reranker import KnowledgeReranker
 from common.knowledge_engine.retrieval_planner import (
     KnowledgeRetrievalPlan,
     KnowledgeRetrievalPlanner,
@@ -45,6 +51,10 @@ __all__ = [
     "KnowledgeIntentClassification",
     "KnowledgeIntentClassifier",
     "KnowledgeIntentMatchTrace",
+    "KnowledgeExecutedQueryStep",
+    "KnowledgeHaystackAdapter",
+    "KnowledgeHaystackExecutionResult",
+    "KnowledgeReranker",
     "KnowledgeRetrievalPlan",
     "KnowledgeRetrievalPlanner",
     "KnowledgeRetrievalStep",

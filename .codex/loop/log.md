@@ -1,16 +1,24 @@
-# Safe Grow Log
-
-Append one entry per iteration:
-
-- time
-- mode
-- item id
-- files changed
-- summary
-- verification commands
-- verification results
-- success signal status
-- rollback note
+- time: 2026-03-31T11:06:08+08:00
+  mode: grow
+  item id: M011-S02-T03
+  files changed:
+    - backend/src/common/knowledge_engine/haystack_adapter.py
+    - backend/src/common/knowledge_engine/reranker.py
+    - backend/src/sales_bot/websocket/components/stepfun_internal_knowledge_searcher.py
+    - backend/src/sales_bot/websocket/components/stepfun_knowledge_helpers.py
+    - backend/src/common/knowledge_engine/__init__.py
+    - backend/tests/unit/common/test_haystack_adapter.py
+    - backend/tests/unit/common/test_knowledge_reranker.py
+    - backend/tests/unit/test_stepfun_internal_knowledge_searcher.py
+    - .gsd/DECISIONS.md
+    - .gsd/KNOWLEDGE.md
+    - .codex/loop/state.json
+  summary: Added a config-driven knowledge-engine execution seam to StepFun internal retrieval, including entity resolution + intent classification + retrieval planning, a Haystack-style step executor with early-stop tracing, and a business reranker that returns explainable score breakdowns on final candidates.
+  verification commands:
+    - backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/common/test_haystack_adapter.py backend/tests/unit/common/test_knowledge_reranker.py backend/tests/unit/test_stepfun_internal_knowledge_searcher.py -q
+  verification results: passed; focused backend pytest finished 16/16 green after the red-to-green TDD cycle, and fresh LSP diagnostics reported no issues on the touched runtime or test files.
+  success signal status: StepFun internal knowledge search can now turn queries like '请介绍一下世袭科技' into canonical entity resolution, intent classification, retrieval planning, executed query-step traces, and reranked results with per-document score breakdowns while preserving legacy fallback behavior when no active config snapshot is present.
+  rollback note: if downstream slices reshape the answerability flow, keep the StepFun runtime on the new project-owned seam (config snapshot -> resolver -> classifier -> planner -> adapter -> reranker) and preserve the actual-executed query trace contract instead of falling back to ad hoc rewritten-query logic.
 
 - time: 2026-03-31T11:52:40+08:00
   mode: grow

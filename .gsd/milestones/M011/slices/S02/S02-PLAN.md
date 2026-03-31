@@ -12,7 +12,7 @@
   - Estimate: 35-45m
   - Files: backend/src/common/knowledge_engine/intent_classifier.py, backend/src/common/knowledge_engine/retrieval_planner.py, backend/tests/unit/common/test_knowledge_intent_classifier.py, backend/tests/unit/common/test_knowledge_retrieval_planner.py
   - Verify: backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/common/test_knowledge_intent_classifier.py backend/tests/unit/common/test_knowledge_retrieval_planner.py -q
-- [ ] **T03: 接 Haystack 检索执行与业务排序** — 实现 Haystack execution adapter 与项目自有 reranker。先保证 adapter 能跑 retrieval steps，reranker 能按 title/entity/doc_type/section/diversity 给出可解释分数。产品介绍类 query 命中后必须 early-stop。
+- [x] **T03: Added a config-driven Haystack execution adapter and explainable business reranker to the StepFun internal knowledge search path, including early-stop query execution traces and per-result score breakdowns.** — 实现 Haystack execution adapter 与项目自有 reranker。先保证 adapter 能跑 retrieval steps，reranker 能按 title/entity/doc_type/section/diversity 给出可解释分数。产品介绍类 query 命中后必须 early-stop。
   - Estimate: 45-60m
   - Files: backend/src/common/knowledge_engine/haystack_adapter.py, backend/src/common/knowledge_engine/reranker.py, backend/tests/unit/common/test_haystack_adapter.py, backend/tests/unit/common/test_knowledge_reranker.py, backend/tests/unit/test_stepfun_internal_knowledge_searcher.py
   - Verify: backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/common/test_haystack_adapter.py backend/tests/unit/common/test_knowledge_reranker.py backend/tests/unit/test_stepfun_internal_knowledge_searcher.py -q

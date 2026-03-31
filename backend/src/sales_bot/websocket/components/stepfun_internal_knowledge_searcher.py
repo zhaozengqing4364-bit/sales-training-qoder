@@ -7,6 +7,12 @@ from collections.abc import Awaitable, Callable
 import time
 from typing import Any, cast
 
+from common.knowledge_engine.config_repo import KnowledgeAnswerConfigRepository
+from common.knowledge_engine.entity_resolver import KnowledgeEntityResolver
+from common.knowledge_engine.haystack_adapter import KnowledgeHaystackAdapter
+from common.knowledge_engine.intent_classifier import KnowledgeIntentClassifier
+from common.knowledge_engine.reranker import KnowledgeReranker
+from common.knowledge_engine.retrieval_planner import KnowledgeRetrievalPlanner
 from sales_bot.websocket.components.stepfun_knowledge_helpers import (
     build_answerability_assessment,
     build_kb_not_ready_payload,
@@ -57,6 +63,7 @@ async def search_internal_knowledge(
         return diagnostics
 
     query = normalize_query(arguments_obj)
+    response_query = query
     kb_ids = normalize_knowledge_base_ids(effective_policy)
     strict_kb_mode = bool(
         isinstance(effective_policy.get("tool_policy"), dict)
@@ -130,6 +137,11 @@ async def search_internal_knowledge(
     embedding_timeout_ms = max(0, min(10000, embedding_timeout_ms))
     metadata_filter = resolve_metadata_filter(arguments_obj, tool_policy)
     rewritten_queries = build_rewritten_queries(query)
+
+    entity_resolution_payload: dict[str, Any] | None = None
+    intent_payload: dict[str, Any] | None = None
+    retrieval_plan_payload: dict[str, Any] | None = None
+    execution_trace_payload: dict[str, Any] | None = None
 
     try:
         async with session_factory() as db:
@@ -209,48 +221,152 @@ async def search_internal_knowledge(
                 )
                 return payload
 
+            config_snapshot = await _load_active_config_snapshot(db)
             aggregated_rows: list[dict[str, Any]] = []
-            seen_row_keys: set[tuple[str, str, str]] = set()
             search_started_at = time.monotonic()
             search_failures: list[str] = []
-            stop_after_first_success = is_product_overview_query(query)
-            for rewritten_query in rewritten_queries:
-                search_result = await knowledge_service.search_multiple(
+
+            if config_snapshot is not None and config_snapshot.query_profiles:
+                entity_resolution = KnowledgeEntityResolver(
+                    entity_aliases=config_snapshot.entity_aliases
+                ).resolve_query(query)
+                response_query = entity_resolution.normalized_query or query
+                classifier = KnowledgeIntentClassifier(
+                    query_profiles=config_snapshot.query_profiles,
+                    intent_rules=config_snapshot.intent_rules,
+                )
+                classification = classifier.classify(
+                    query,
+                    entity_resolution=entity_resolution,
+                )
+
+                if classification.profile_key and classification.profile_key in config_snapshot.query_profiles:
+                    retrieval_plan = KnowledgeRetrievalPlanner(
+                        query_profiles=config_snapshot.query_profiles
+                    ).build_plan(classification)
+                    adapter = KnowledgeHaystackAdapter(
+                        search_multiple=knowledge_service.search_multiple
+                    )
+                    execution_result = await adapter.execute_plan(
+                        plan=retrieval_plan,
+                        knowledge_base_ids=kb_ids,
+                        top_k=top_k,
+                        similarity_threshold=threshold,
+                        metadata_filter=metadata_filter,
+                        enable_hybrid=enable_hybrid,
+                        keyword_candidate_limit=keyword_candidate_limit,
+                        embedding_timeout_ms=embedding_timeout_ms,
+                        enable_rerank=enable_rerank,
+                        rerank_top_k=rerank_top_k,
+                    )
+                    aggregated_rows = execution_result.rows
+                    search_failures = execution_result.search_failures
+                    rewritten_queries = [step.query for step in execution_result.executed_steps]
+                    reranker = KnowledgeReranker(
+                        ranking_profiles=config_snapshot.ranking_profiles
+                    )
+                    aggregated_rows = reranker.rerank(
+                        rows=aggregated_rows,
+                        profile_key=retrieval_plan.profile_key,
+                        query=query,
+                        normalized_query=response_query,
+                        resolved_entities=classification.resolved_entities,
+                        top_k=max(top_k, 6),
+                    )
+                    entity_resolution_payload = {
+                        "resolved": entity_resolution.resolved,
+                        "normalized_query": entity_resolution.normalized_query,
+                        "canonical_entities": list(entity_resolution.canonical_entities),
+                        "matches": [
+                            {
+                                "canonical_entity": match.canonical_entity,
+                                "matched_text": match.matched_text,
+                                "entity_type": match.entity_type,
+                                "confidence": match.confidence,
+                                "match_source": match.match_source,
+                                "start_index": match.start_index,
+                                "end_index": match.end_index,
+                            }
+                            for match in entity_resolution.matches
+                        ],
+                    }
+                    intent_payload = {
+                        "intent_key": classification.intent_key,
+                        "profile_key": classification.profile_key,
+                        "matched": classification.matched,
+                        "matched_terms": list(classification.matched_terms),
+                        "resolved_entities": list(classification.resolved_entities),
+                        "fallback_reason": classification.fallback_reason,
+                    }
+                    retrieval_plan_payload = {
+                        "profile_key": retrieval_plan.profile_key,
+                        "intent_key": retrieval_plan.intent_key,
+                        "strategy": retrieval_plan.strategy,
+                        "stop_after_first_success": retrieval_plan.stop_after_first_success,
+                        "resolved_entities": list(retrieval_plan.resolved_entities),
+                        "steps": [
+                            {
+                                "query": step.query,
+                                "stage": step.stage,
+                                "profile_key": step.profile_key,
+                            }
+                            for step in retrieval_plan.steps
+                        ],
+                        "audit": dict(retrieval_plan.audit),
+                    }
+                    execution_trace_payload = {
+                        "stopped_early": execution_result.stopped_early,
+                        "search_failures": list(execution_result.search_failures),
+                        "executed_steps": [
+                            {
+                                "query": step.query,
+                                "stage": step.stage,
+                                "profile_key": step.profile_key,
+                                "status": step.status,
+                                "hit_count": step.hit_count,
+                                "retrieval_modes": list(step.retrieval_modes),
+                                "error": step.error,
+                                "early_stopped": step.early_stopped,
+                            }
+                            for step in execution_result.executed_steps
+                        ],
+                    }
+                else:
+                    aggregated_rows, search_failures, rewritten_queries = await _execute_legacy_retrieval(
+                        knowledge_service=knowledge_service,
+                        kb_ids=kb_ids,
+                        rewritten_queries=rewritten_queries,
+                        top_k=top_k,
+                        threshold=threshold,
+                        metadata_filter=metadata_filter,
+                        enable_hybrid=enable_hybrid,
+                        keyword_candidate_limit=keyword_candidate_limit,
+                        embedding_timeout_ms=embedding_timeout_ms,
+                        enable_rerank=enable_rerank,
+                        rerank_top_k=rerank_top_k,
+                        stop_after_first_success=is_product_overview_query(query),
+                    )
+            else:
+                aggregated_rows, search_failures, rewritten_queries = await _execute_legacy_retrieval(
+                    knowledge_service=knowledge_service,
                     kb_ids=kb_ids,
-                    query=rewritten_query,
+                    rewritten_queries=rewritten_queries,
                     top_k=top_k,
-                    similarity_threshold=threshold,
+                    threshold=threshold,
                     metadata_filter=metadata_filter,
                     enable_hybrid=enable_hybrid,
                     keyword_candidate_limit=keyword_candidate_limit,
                     embedding_timeout_ms=embedding_timeout_ms,
                     enable_rerank=enable_rerank,
                     rerank_top_k=rerank_top_k,
+                    stop_after_first_success=is_product_overview_query(query),
                 )
-                if not search_result.is_success:
-                    search_failures.append(str(search_result.fallback or "unknown_error"))
-                    continue
-                new_rows_added = 0
-                for row in search_result.value or []:
-                    if not isinstance(row, dict):
-                        continue
-                    row_key = (
-                        str(row.get("knowledge_base_id") or ""),
-                        str(row.get("document_title") or row.get("source") or ""),
-                        str(row.get("content") or ""),
-                    )
-                    if row_key in seen_row_keys:
-                        continue
-                    seen_row_keys.add(row_key)
-                    aggregated_rows.append(dict(row))
-                    new_rows_added += 1
-                if stop_after_first_success and new_rows_added > 0:
-                    break
+
             search_ms = (time.monotonic() - search_started_at) * 1000
             if search_failures and not aggregated_rows:
                 error_detail = search_failures[0]
                 await record_metric(
-                    query=query,
+                    query=response_query,
                     result_count=0,
                     status="search_failed",
                     knowledge_base_ids=kb_ids,
@@ -258,25 +374,38 @@ async def search_internal_knowledge(
                     similarity_threshold=threshold,
                     error_message=error_detail,
                     ledger_event=build_knowledge_retrieval_ledger_event(
-                        query=query,
+                        query=response_query,
                         status="search_failed",
                         result_count=0,
                         knowledge_base_ids=kb_ids,
                         error_message=error_detail,
                     ),
                 )
-                payload = build_search_failed_payload(query, error_detail)
+                payload = build_search_failed_payload(response_query, error_detail)
                 payload["_diagnostics"] = _build_diagnostics(
-                    {"status": "search_failed", "rewritten_queries": rewritten_queries}
+                    {
+                        "status": "search_failed",
+                        "rewritten_queries": rewritten_queries,
+                        "execution_trace": execution_trace_payload or {},
+                    }
                 )
                 payload["_answerability"] = build_answerability_assessment(
-                    query=query,
+                    query=response_query,
                     results=[],
                     source_status="search_failed",
                     strict_kb_mode=strict_kb_mode,
                     rewritten_queries=rewritten_queries,
                 )
+                if entity_resolution_payload is not None:
+                    payload["entity_resolution"] = entity_resolution_payload
+                if intent_payload is not None:
+                    payload["intent"] = intent_payload
+                if retrieval_plan_payload is not None:
+                    payload["retrieval_plan"] = retrieval_plan_payload
+                if execution_trace_payload is not None:
+                    payload["execution_trace"] = execution_trace_payload
                 return payload
+
             if callable(getattr(knowledge_service, "get_last_search_timing", None)):
                 timing = knowledge_service.get_last_search_timing()
                 if isinstance(timing, dict):
@@ -298,7 +427,7 @@ async def search_internal_knowledge(
     except Exception as exc:
         error_detail = f"[KNOWLEDGE_SEARCH_EXCEPTION] {exc.__class__.__name__}: {exc}"
         await record_metric(
-            query=query,
+            query=response_query,
             result_count=0,
             status="search_failed",
             knowledge_base_ids=kb_ids,
@@ -306,17 +435,17 @@ async def search_internal_knowledge(
             similarity_threshold=threshold,
             error_message=error_detail,
             ledger_event=build_knowledge_retrieval_ledger_event(
-                query=query,
+                query=response_query,
                 status="search_failed",
                 result_count=0,
                 knowledge_base_ids=kb_ids,
                 error_message=error_detail,
             ),
         )
-        payload = build_search_failed_payload(query, error_detail)
+        payload = build_search_failed_payload(response_query, error_detail)
         payload["_diagnostics"] = _build_diagnostics({"status": "search_failed", "rewritten_queries": rewritten_queries})
         payload["_answerability"] = build_answerability_assessment(
-            query=query,
+            query=response_query,
             results=[],
             source_status="search_failed",
             strict_kb_mode=strict_kb_mode,
@@ -328,11 +457,11 @@ async def search_internal_knowledge(
     results, effective_retrieval_mode, status = transform_search_rows(
         rows,
         top_k=max(top_k, 6),
-        query=query,
+        query=response_query,
     )
 
     await record_metric(
-        query=query,
+        query=response_query,
         result_count=len(results),
         status=status,
         knowledge_base_ids=kb_ids,
@@ -340,7 +469,7 @@ async def search_internal_knowledge(
         similarity_threshold=threshold,
         retrieval_mode=effective_retrieval_mode,
         ledger_event=build_knowledge_retrieval_ledger_event(
-            query=query,
+            query=response_query,
             status=status,
             result_count=len(results),
             retrieval_mode=effective_retrieval_mode,
@@ -350,25 +479,101 @@ async def search_internal_knowledge(
     )
 
     response_payload = {
-        "query": query,
+        "query": response_query,
         "count": len(results),
         "results": results,
         "retrieval_mode": effective_retrieval_mode,
         "rewritten_queries": rewritten_queries,
     }
+    if entity_resolution_payload is not None:
+        response_payload["entity_resolution"] = entity_resolution_payload
+    if intent_payload is not None:
+        response_payload["intent"] = intent_payload
+    if retrieval_plan_payload is not None:
+        response_payload["retrieval_plan"] = retrieval_plan_payload
+    if execution_trace_payload is not None:
+        response_payload["execution_trace"] = execution_trace_payload
     response_payload["_diagnostics"] = _build_diagnostics(
         {
             "status": status,
             "retrieval_mode": effective_retrieval_mode,
             "result_count": len(results),
             "rewritten_queries": rewritten_queries,
+            "execution_trace": execution_trace_payload or {},
         }
     )
     response_payload["_answerability"] = build_answerability_assessment(
-        query=query,
+        query=response_query,
         results=results,
         source_status=status,
         strict_kb_mode=strict_kb_mode,
         rewritten_queries=rewritten_queries,
     )
     return response_payload
+
+
+async def _load_active_config_snapshot(db: Any):
+    try:
+        run_sync = getattr(db, "run_sync", None)
+        if callable(run_sync):
+            return await run_sync(
+                lambda sync_session: KnowledgeAnswerConfigRepository(sync_session).get_active_config()
+            )
+        return KnowledgeAnswerConfigRepository(db).get_active_config()
+    except Exception:
+        return None
+
+
+async def _execute_legacy_retrieval(
+    *,
+    knowledge_service: Any,
+    kb_ids: list[str],
+    rewritten_queries: list[str],
+    top_k: int,
+    threshold: float,
+    metadata_filter: dict[str, Any] | None,
+    enable_hybrid: bool,
+    keyword_candidate_limit: int,
+    embedding_timeout_ms: int,
+    enable_rerank: bool,
+    rerank_top_k: int,
+    stop_after_first_success: bool,
+) -> tuple[list[dict[str, Any]], list[str], list[str]]:
+    aggregated_rows: list[dict[str, Any]] = []
+    seen_row_keys: set[tuple[str, str, str]] = set()
+    search_failures: list[str] = []
+
+    for rewritten_query in rewritten_queries:
+        search_result = await knowledge_service.search_multiple(
+            kb_ids=kb_ids,
+            query=rewritten_query,
+            top_k=top_k,
+            similarity_threshold=threshold,
+            metadata_filter=metadata_filter,
+            enable_hybrid=enable_hybrid,
+            keyword_candidate_limit=keyword_candidate_limit,
+            embedding_timeout_ms=embedding_timeout_ms,
+            enable_rerank=enable_rerank,
+            rerank_top_k=rerank_top_k,
+        )
+        if not search_result.is_success:
+            search_failures.append(str(search_result.fallback or "unknown_error"))
+            continue
+        new_rows_added = 0
+        for row in search_result.value or []:
+            if not isinstance(row, dict):
+                continue
+            row_key = (
+                str(row.get("knowledge_base_id") or ""),
+                str(row.get("document_title") or row.get("source") or ""),
+                str(row.get("content") or ""),
+            )
+            if row_key in seen_row_keys:
+                continue
+            seen_row_keys.add(row_key)
+            aggregated_rows.append(dict(row))
+            new_rows_added += 1
+        if stop_after_first_success and new_rows_added > 0:
+            break
+
+    return aggregated_rows, search_failures, rewritten_queries

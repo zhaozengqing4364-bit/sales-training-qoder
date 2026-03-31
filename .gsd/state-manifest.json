@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "exported_at": "2026-03-31T03:50:56.046Z",
+  "exported_at": "2026-03-31T04:09:15.436Z",
   "milestones": [
     {
       "id": "M001",
@@ -6884,19 +6884,31 @@
       "milestone_id": "M011",
       "slice_id": "S02",
       "id": "T03",
-      "title": "接 Haystack 检索执行与业务排序",
-      "status": "pending",
-      "one_liner": "",
-      "narrative": "",
-      "verification_result": "",
+      "title": "Added a config-driven Haystack execution adapter and explainable business reranker to the StepFun internal knowledge search path, including early-stop query execution traces and per-result score breakdowns.",
+      "status": "complete",
+      "one_liner": "Added a config-driven Haystack execution adapter and explainable business reranker to the StepFun internal knowledge search path, including early-stop query execution traces and per-result score breakdowns.",
+      "narrative": "Implemented `backend/src/common/knowledge_engine/haystack_adapter.py` to execute planner-generated retrieval steps against the existing `KnowledgeService.search_multiple(...)` contract with deduplication, per-step execution status, failure capture, and product-overview early-stop behavior. Implemented `backend/src/common/knowledge_engine/reranker.py` to apply title/entity/doc_type/section weighting plus duplicate-title diversity suppression, and attach explainable `score_breakdown` / `ranking_passed` metadata to retained rows. Wired `backend/src/sales_bot/websocket/components/stepfun_internal_knowledge_searcher.py` to load the active knowledge-engine config snapshot, run entity resolution -> intent classification -> retrieval planning -> adapter execution -> reranking when config is present, preserve the existing legacy rewritten-query path as fallback when it is not, and expose `entity_resolution`, `intent`, `retrieval_plan`, `execution_trace`, and actually executed `rewritten_queries` in the StepFun response. Updated `backend/src/sales_bot/websocket/components/stepfun_knowledge_helpers.py` so transformed response rows retain the reranker’s explainability fields instead of dropping them.",
+      "verification_result": "Followed TDD by writing focused adapter/reranker/runtime tests first, confirming the initial pytest gate failed because the new modules did not exist, then implementing the minimal runtime seam and rerunning the exact task verification command until it passed 16/16. Fresh LSP diagnostics on the touched runtime and test files reported no issues.",
       "duration": "",
-      "completed_at": null,
+      "completed_at": "2026-03-31T04:09:15.406Z",
       "blocker_discovered": false,
-      "deviations": "",
-      "known_issues": "",
-      "key_files": [],
-      "key_decisions": [],
-      "full_summary_md": "",
+      "deviations": "None.",
+      "known_issues": "Focused pytest still emits the pre-existing pytest-cov warnings (`Module src was never imported` / `No data was collected`) from the current backend coverage configuration, but all targeted assertions passed and LSP found no code issues.",
+      "key_files": [
+        "backend/src/common/knowledge_engine/haystack_adapter.py",
+        "backend/src/common/knowledge_engine/reranker.py",
+        "backend/src/sales_bot/websocket/components/stepfun_internal_knowledge_searcher.py",
+        "backend/src/sales_bot/websocket/components/stepfun_knowledge_helpers.py",
+        "backend/src/common/knowledge_engine/__init__.py",
+        "backend/tests/unit/common/test_haystack_adapter.py",
+        "backend/tests/unit/common/test_knowledge_reranker.py",
+        "backend/tests/unit/test_stepfun_internal_knowledge_searcher.py",
+        ".gsd/milestones/M011/slices/S02/tasks/T03-SUMMARY.md"
+      ],
+      "key_decisions": [
+        "Load the active knowledge-engine config snapshot inside the StepFun runtime, run entity resolution -> intent classification -> retrieval planning -> execution adapter -> business reranker when config exists, and fall back to the legacy rewritten-query loop when it does not."
+      ],
+      "full_summary_md": "---\nid: T03\nparent: S02\nmilestone: M011\nkey_files:\n  - backend/src/common/knowledge_engine/haystack_adapter.py\n  - backend/src/common/knowledge_engine/reranker.py\n  - backend/src/sales_bot/websocket/components/stepfun_internal_knowledge_searcher.py\n  - backend/src/sales_bot/websocket/components/stepfun_knowledge_helpers.py\n  - backend/src/common/knowledge_engine/__init__.py\n  - backend/tests/unit/common/test_haystack_adapter.py\n  - backend/tests/unit/common/test_knowledge_reranker.py\n  - backend/tests/unit/test_stepfun_internal_knowledge_searcher.py\n  - .gsd/milestones/M011/slices/S02/tasks/T03-SUMMARY.md\nkey_decisions:\n  - Load the active knowledge-engine config snapshot inside the StepFun runtime, run entity resolution -> intent classification -> retrieval planning -> execution adapter -> business reranker when config exists, and fall back to the legacy rewritten-query loop when it does not.\nduration: \"\"\nverification_result: mixed\ncompleted_at: 2026-03-31T04:09:15.408Z\nblocker_discovered: false\n---\n\n# T03: Added a config-driven Haystack execution adapter and explainable business reranker to the StepFun internal knowledge search path, including early-stop query execution traces and per-result score breakdowns.\n\n**Added a config-driven Haystack execution adapter and explainable business reranker to the StepFun internal knowledge search path, including early-stop query execution traces and per-result score breakdowns.**\n\n## What Happened\n\nImplemented `backend/src/common/knowledge_engine/haystack_adapter.py` to execute planner-generated retrieval steps against the existing `KnowledgeService.search_multiple(...)` contract with deduplication, per-step execution status, failure capture, and product-overview early-stop behavior. Implemented `backend/src/common/knowledge_engine/reranker.py` to apply title/entity/doc_type/section weighting plus duplicate-title diversity suppression, and attach explainable `score_breakdown` / `ranking_passed` metadata to retained rows. Wired `backend/src/sales_bot/websocket/components/stepfun_internal_knowledge_searcher.py` to load the active knowledge-engine config snapshot, run entity resolution -> intent classification -> retrieval planning -> adapter execution -> reranking when config is present, preserve the existing legacy rewritten-query path as fallback when it is not, and expose `entity_resolution`, `intent`, `retrieval_plan`, `execution_trace`, and actually executed `rewritten_queries` in the StepFun response. Updated `backend/src/sales_bot/websocket/components/stepfun_knowledge_helpers.py` so transformed response rows retain the reranker’s explainability fields instead of dropping them.\n\n## Verification\n\nFollowed TDD by writing focused adapter/reranker/runtime tests first, confirming the initial pytest gate failed because the new modules did not exist, then implementing the minimal runtime seam and rerunning the exact task verification command until it passed 16/16. Fresh LSP diagnostics on the touched runtime and test files reported no issues.\n\n## Verification Evidence\n\n| # | Command | Exit Code | Verdict | Duration |\n|---|---------|-----------|---------|----------|\n| 1 | `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/common/test_haystack_adapter.py backend/tests/unit/common/test_knowledge_reranker.py backend/tests/unit/test_stepfun_internal_knowledge_searcher.py -q` | 2 | ❌ fail | 640ms |\n| 2 | `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/common/test_haystack_adapter.py backend/tests/unit/common/test_knowledge_reranker.py backend/tests/unit/test_stepfun_internal_knowledge_searcher.py -q` | 1 | ❌ fail | 570ms |\n| 3 | `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/common/test_haystack_adapter.py backend/tests/unit/common/test_knowledge_reranker.py backend/tests/unit/test_stepfun_internal_knowledge_searcher.py -q` | 1 | ❌ fail | 630ms |\n| 4 | `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/common/test_haystack_adapter.py backend/tests/unit/common/test_knowledge_reranker.py backend/tests/unit/test_stepfun_internal_knowledge_searcher.py -q` | 0 | ✅ pass | 670ms |\n| 5 | `LSP diagnostics on backend/src/common/knowledge_engine/haystack_adapter.py, backend/src/common/knowledge_engine/reranker.py, backend/src/sales_bot/websocket/components/stepfun_internal_knowledge_searcher.py, backend/src/sales_bot/websocket/components/stepfun_knowledge_helpers.py, backend/tests/unit/common/test_haystack_adapter.py, backend/tests/unit/common/test_knowledge_reranker.py, backend/tests/unit/test_stepfun_internal_knowledge_searcher.py` | 0 | ✅ pass | 0ms |\n\n\n## Deviations\n\nNone.\n\n## Known Issues\n\nFocused pytest still emits the pre-existing pytest-cov warnings (`Module src was never imported` / `No data was collected`) from the current backend coverage configuration, but all targeted assertions passed and LSP found no code issues.\n\n## Files Created/Modified\n\n- `backend/src/common/knowledge_engine/haystack_adapter.py`\n- `backend/src/common/knowledge_engine/reranker.py`\n- `backend/src/sales_bot/websocket/components/stepfun_internal_knowledge_searcher.py`\n- `backend/src/sales_bot/websocket/components/stepfun_knowledge_helpers.py`\n- `backend/src/common/knowledge_engine/__init__.py`\n- `backend/tests/unit/common/test_haystack_adapter.py`\n- `backend/tests/unit/common/test_knowledge_reranker.py`\n- `backend/tests/unit/test_stepfun_internal_knowledge_searcher.py`\n- `.gsd/milestones/M011/slices/S02/tasks/T03-SUMMARY.md`\n",
       "description": "实现 Haystack execution adapter 与项目自有 reranker。先保证 adapter 能跑 retrieval steps，reranker 能按 title/entity/doc_type/section/diversity 给出可解释分数。产品介绍类 query 命中后必须 early-stop。",
       "estimate": "45-60m",
       "files": [
@@ -8924,6 +8936,18 @@
       "decision": "How M011/S02 should encode intent-classifier rules and planner output before Haystack execution lands",
       "choice": "Keep intent classification and retrieval planning on project-owned DTOs; support regex, keyword_contains, and entity_keyword_contains rules, then emit profile-owned progressive query steps instead of reusing legacy websocket helper state.",
       "rationale": "T02 needed a stable seam between the DB-backed control plane and the upcoming Haystack adapter. Encoding entity+keyword gating in a project-owned classifier result plus planner output keeps ORM rows and old websocket retrieval helpers out of the engine path, while preserving auditable traces and compatible rewritten-query behavior for downstream execution.",
+      "revisable": "Yes",
+      "made_by": "agent",
+      "superseded_by": null
+    },
+    {
+      "seq": 1514,
+      "id": "D148",
+      "when_context": "M011/S02/T03",
+      "scope": "architecture",
+      "decision": "How the new knowledge-engine retrieval seam should integrate with the existing StepFun internal knowledge search runtime",
+      "choice": "Load the active knowledge-engine config snapshot inside the StepFun runtime, use entity resolution → intent classification → retrieval planning → Haystack adapter → business reranker when config is available, and fall back to the legacy rewritten-query loop when it is not.",
+      "rationale": "This keeps the shipped StepFun entrypoint on a single real retrieval path, preserves existing runtime guardrails and error semantics, exposes explainable execution/ranking observability, and avoids breaking sessions when the control-plane snapshot is absent or not yet configured.",
       "revisable": "Yes",
       "made_by": "agent",
       "superseded_by": null
@@ -11635,6 +11659,61 @@
       "verdict": "✅ pass",
       "duration_ms": 0,
       "created_at": "2026-03-31T03:50:56.013Z"
+    },
+    {
+      "id": 247,
+      "task_id": "T03",
+      "slice_id": "S02",
+      "milestone_id": "M011",
+      "command": "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/common/test_haystack_adapter.py backend/tests/unit/common/test_knowledge_reranker.py backend/tests/unit/test_stepfun_internal_knowledge_searcher.py -q",
+      "exit_code": 2,
+      "verdict": "❌ fail",
+      "duration_ms": 640,
+      "created_at": "2026-03-31T04:09:15.407Z"
+    },
+    {
+      "id": 248,
+      "task_id": "T03",
+      "slice_id": "S02",
+      "milestone_id": "M011",
+      "command": "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/common/test_haystack_adapter.py backend/tests/unit/common/test_knowledge_reranker.py backend/tests/unit/test_stepfun_internal_knowledge_searcher.py -q",
+      "exit_code": 1,
+      "verdict": "❌ fail",
+      "duration_ms": 570,
+      "created_at": "2026-03-31T04:09:15.407Z"
+    },
+    {
+      "id": 249,
+      "task_id": "T03",
+      "slice_id": "S02",
+      "milestone_id": "M011",
+      "command": "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/common/test_haystack_adapter.py backend/tests/unit/common/test_knowledge_reranker.py backend/tests/unit/test_stepfun_internal_knowledge_searcher.py -q",
+      "exit_code": 1,
+      "verdict": "❌ fail",
+      "duration_ms": 630,
+      "created_at": "2026-03-31T04:09:15.407Z"
+    },
+    {
+      "id": 250,
+      "task_id": "T03",
+      "slice_id": "S02",
+      "milestone_id": "M011",
+      "command": "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/common/test_haystack_adapter.py backend/tests/unit/common/test_knowledge_reranker.py backend/tests/unit/test_stepfun_internal_knowledge_searcher.py -q",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 670,
+      "created_at": "2026-03-31T04:09:15.407Z"
+    },
+    {
+      "id": 251,
+      "task_id": "T03",
+      "slice_id": "S02",
+      "milestone_id": "M011",
+      "command": "LSP diagnostics on backend/src/common/knowledge_engine/haystack_adapter.py, backend/src/common/knowledge_engine/reranker.py, backend/src/sales_bot/websocket/components/stepfun_internal_knowledge_searcher.py, backend/src/sales_bot/websocket/components/stepfun_knowledge_helpers.py, backend/tests/unit/common/test_haystack_adapter.py, backend/tests/unit/common/test_knowledge_reranker.py, backend/tests/unit/test_stepfun_internal_knowledge_searcher.py",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 0,
+      "created_at": "2026-03-31T04:09:15.407Z"
     }
   ]
 }

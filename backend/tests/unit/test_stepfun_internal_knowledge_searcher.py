@@ -5,7 +5,10 @@ from __future__ import annotations
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
+import agent.models  # noqa: F401
+from common.db.models import Base, KnowledgeConfigVersion, KnowledgeEntityAlias, KnowledgeIntentRule, KnowledgeQueryProfile, KnowledgeRankingProfile
 from common.error_handling.result import Result
 from sales_bot.websocket.components.stepfun_internal_knowledge_searcher import (
     search_internal_knowledge,
@@ -531,3 +534,156 @@ async def test_search_internal_knowledge_records_miss_ledger_event_with_empty_re
     assert kwargs["ledger_event"]["query"] == "石犀产品"
     assert kwargs["ledger_event"]["result_count"] == 0
     assert kwargs["ledger_event"]["result_summaries"] == []
+
+
+@pytest.fixture
+async def async_session_factory():
+    engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+
+    factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    try:
+        yield factory
+    finally:
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.drop_all)
+        await engine.dispose()
+
+
+async def _seed_runtime_config(factory: async_sessionmaker[AsyncSession]) -> None:
+    async with factory() as session:
+        version = KnowledgeConfigVersion(
+            version_name="runtime-v1",
+            status="active",
+            enabled=True,
+            notes="runtime seed",
+        )
+        session.add(version)
+        await session.flush()
+        session.add_all(
+            [
+                KnowledgeQueryProfile(
+                    config_version_id=version.id,
+                    profile_key="product_overview",
+                    description="产品介绍",
+                    rewrite_strategy="multi_query",
+                    max_rewrite_queries=4,
+                    stop_after_first_success=True,
+                ),
+                KnowledgeIntentRule(
+                    config_version_id=version.id,
+                    intent_key="company_intro",
+                    priority=10,
+                    match_type="regex",
+                    pattern="介绍一下.*石犀科技",
+                    profile_key="product_overview",
+                ),
+                KnowledgeEntityAlias(
+                    config_version_id=version.id,
+                    canonical_entity="石犀科技",
+                    alias="世袭科技",
+                    entity_type="company",
+                    confidence=0.96,
+                ),
+                KnowledgeRankingProfile(
+                    config_version_id=version.id,
+                    profile_key="product_overview",
+                    title_exact_boost=0.25,
+                    entity_match_boost=0.2,
+                    doc_type_weights_json={"product": 0.18},
+                    section_weights_json={"overview": 0.14},
+                    min_pass_score=0.45,
+                    min_pass_score_keyword=0.35,
+                ),
+            ]
+        )
+        await session.commit()
+
+
+@pytest.mark.asyncio
+async def test_search_internal_knowledge_uses_config_driven_resolution_planning_adapter_and_reranking(async_session_factory):
+    await _seed_runtime_config(async_session_factory)
+    record_metric = AsyncMock()
+    captured_queries: list[str] = []
+
+    class RuntimeKnowledgeService:
+        def __init__(self, _db):
+            pass
+
+        async def get_search_health(self, **kwargs):
+            return {
+                "is_ready": True,
+                "ready_document_count": 1,
+                "ready_chunk_count": 2,
+                "vector_chunk_count": 2,
+            }
+
+        async def search_multiple(self, **kwargs):
+            captured_queries.append(str(kwargs["query"]))
+            query = str(kwargs["query"])
+            if query == "石犀科技 产品介绍":
+                return Result.ok(
+                    [
+                        {
+                            "knowledge_base_id": "kb-1",
+                            "knowledge_base_name": "产品知识库",
+                            "document_title": "石犀科技产品介绍",
+                            "content": "石犀科技是一家销售训练平台。",
+                            "score": 0.52,
+                            "retrieval_mode": "hybrid",
+                            "metadata": {"doc_type": "product", "section": "overview"},
+                        },
+                        {
+                            "knowledge_base_id": "kb-1",
+                            "knowledge_base_name": "产品知识库",
+                            "document_title": "常见问题",
+                            "content": "平台支持销售训练。",
+                            "score": 0.66,
+                            "retrieval_mode": "hybrid",
+                            "metadata": {"doc_type": "faq", "section": "pricing"},
+                        },
+                    ]
+                )
+            return Result.ok([])
+
+        def get_last_search_timing(self):
+            return {
+                "phase_vector_ms": 18.0,
+                "phase_keyword_ms": 4.0,
+                "cache_hit_ready_docs": False,
+            }
+
+    payload = await search_internal_knowledge(
+        arguments_obj={"query": "请介绍一下世袭科技", "top_k": 3},
+        effective_policy={
+            "knowledge_base_ids": ["kb-1"],
+            "tool_policy": {
+                "retrieval_similarity_threshold": 0.65,
+                "retrieval_enable_hybrid": True,
+                "retrieval_enable_rerank": True,
+                "retrieval_rerank_top_k": 8,
+            },
+        },
+        session_factory=async_session_factory,
+        knowledge_service_cls=RuntimeKnowledgeService,
+        record_metric=record_metric,
+    )
+
+    assert captured_queries == ["请介绍一下石犀科技", "石犀科技 产品介绍"]
+    assert payload["query"] == "请介绍一下石犀科技"
+    assert payload["rewritten_queries"] == ["请介绍一下石犀科技", "石犀科技 产品介绍"]
+    assert payload["intent"]["intent_key"] == "company_intro"
+    assert payload["entity_resolution"]["canonical_entities"] == ["石犀科技"]
+    assert payload["retrieval_plan"]["stop_after_first_success"] is True
+    assert payload["execution_trace"]["stopped_early"] is True
+    assert [step["status"] for step in payload["execution_trace"]["executed_steps"]] == ["miss", "hit"]
+    assert payload["results"][0]["document_title"] == "石犀科技产品介绍"
+    assert payload["results"][0]["score_breakdown"]["title_exact"] == pytest.approx(0.25)
+    assert payload["results"][0]["score_breakdown"]["entity_match"] == pytest.approx(0.2)
+    assert payload["results"][0]["score_breakdown"]["doc_type"] == pytest.approx(0.18)
+    assert payload["results"][0]["score_breakdown"]["section"] == pytest.approx(0.14)
+    assert record_metric.await_args is not None
+    metric_kwargs = record_metric.await_args.kwargs
+    assert metric_kwargs["status"] == "hit"
+    assert metric_kwargs["ledger_event"]["result_summaries"][0]["document_title"] == "石犀科技产品介绍"
