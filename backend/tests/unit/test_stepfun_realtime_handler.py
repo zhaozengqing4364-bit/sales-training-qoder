@@ -1927,6 +1927,7 @@ async def test_flush_active_response_emits_runtime_answer_diagnostics_and_citati
         "mode": "grounded_strict",
         "answerability": "sufficient",
         "source_status": "hit",
+        "audit_run_id": "run-knowledge-1",
         "rewritten_queries": ["实习专家 产品介绍", "实习专家 核心能力"],
         "citations": [
             {
@@ -1946,6 +1947,7 @@ async def test_flush_active_response_emits_runtime_answer_diagnostics_and_citati
     assert sent_payload["type"] == "tts_audio"
     assert sent_payload["data"]["text"] == "实习专家是一款企业内部智能演练平台。"
     assert sent_payload["data"]["knowledge_answer_diagnostics"]["answerability"] == "sufficient"
+    assert sent_payload["data"]["knowledge_answer_diagnostics"]["audit_run_id"] == "run-knowledge-1"
     assert sent_payload["data"]["knowledge_answer_diagnostics"]["rewritten_queries"] == ["实习专家 产品介绍", "实习专家 核心能力"]
     assert sent_payload["data"]["knowledge_answer_diagnostics"]["citations"][0]["document_title"] == "实习专家产品手册"
     handler._persist_message.assert_awaited_once()

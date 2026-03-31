@@ -80,6 +80,7 @@ def test_build_session_runtime_diagnostics_surfaces_live_answer_diagnostics_when
             "mode": "grounded_strict",
             "answerability": "sufficient",
             "source_status": "hit",
+            "audit_run_id": "run-knowledge-1",
             "rewritten_queries": ["实习 产品介绍", "实习 核心能力"],
             "citations": [
                 {
@@ -96,6 +97,7 @@ def test_build_session_runtime_diagnostics_surfaces_live_answer_diagnostics_when
     )
 
     assert diagnostics["knowledge_answer_diagnostics"]["answerability"] == "sufficient"
+    assert diagnostics["knowledge_answer_diagnostics"]["audit_run_id"] == "run-knowledge-1"
     assert diagnostics["knowledge_answer_diagnostics"]["rewritten_queries"] == ["实习 产品介绍", "实习 核心能力"]
     assert diagnostics["knowledge_answer_diagnostics"]["citations"][0]["document_title"] == "实习专家产品手册"
 

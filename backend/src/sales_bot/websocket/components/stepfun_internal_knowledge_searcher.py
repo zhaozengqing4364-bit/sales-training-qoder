@@ -7,12 +7,10 @@ from collections.abc import Awaitable, Callable
 import time
 from typing import Any, cast
 
+from common.knowledge_engine.audit_repo import KnowledgeAnswerAuditRepository
+from common.knowledge_engine.compat import build_search_payload_from_answer_result
 from common.knowledge_engine.config_repo import KnowledgeAnswerConfigRepository
-from common.knowledge_engine.entity_resolver import KnowledgeEntityResolver
-from common.knowledge_engine.haystack_adapter import KnowledgeHaystackAdapter
-from common.knowledge_engine.intent_classifier import KnowledgeIntentClassifier
-from common.knowledge_engine.reranker import KnowledgeReranker
-from common.knowledge_engine.retrieval_planner import KnowledgeRetrievalPlanner
+from common.knowledge_engine.engine import KnowledgeAnswerEngine
 from sales_bot.websocket.components.stepfun_knowledge_helpers import (
     build_answerability_assessment,
     build_kb_not_ready_payload,

@@ -757,6 +757,7 @@ class TestReplayService:
                         "mode": "grounded_strict",
                         "answerability": "sufficient",
                         "source_status": "hit",
+                        "audit_run_id": "run-knowledge-1",
                         "rewritten_queries": ["实习 产品介绍"],
                         "citations": [
                             {
@@ -799,6 +800,7 @@ class TestReplayService:
         assert result.is_success
         data = result.value
         assert data["messages"][0]["transcript_metadata"]["knowledge_answer_diagnostics"]["answerability"] == "sufficient"
+        assert data["messages"][0]["transcript_metadata"]["knowledge_answer_diagnostics"]["audit_run_id"] == "run-knowledge-1"
         assert data["messages"][0]["transcript_metadata"]["knowledge_answer_diagnostics"]["citations"][0]["document_title"] == "实习专家产品手册"
 
     @pytest.mark.asyncio

@@ -3,6 +3,14 @@ from common.knowledge_engine.answerability import (
     KnowledgeAnswerabilityResult,
 )
 from common.knowledge_engine.assembler import KnowledgeAnswerAssembler
+from common.knowledge_engine.audit_repo import KnowledgeAnswerAuditRepository
+from common.knowledge_engine.compat import (
+    assemble_answer_from_rows,
+    build_answerability_diagnostics,
+    build_message_transcript_metadata,
+    build_search_payload_from_answer_result,
+    evaluate_answerability_from_rows,
+)
 from common.knowledge_engine.config_repo import (
     KnowledgeAnswerConfigRepository,
     KnowledgeAnswerConfigSnapshot,
@@ -48,6 +56,12 @@ __all__ = [
     "KnowledgeAnswerabilityResult",
     "KnowledgeAnswerabilityProfileConfig",
     "KnowledgeAnswerAssembler",
+    "KnowledgeAnswerAuditRepository",
+    "assemble_answer_from_rows",
+    "build_answerability_diagnostics",
+    "build_message_transcript_metadata",
+    "build_search_payload_from_answer_result",
+    "evaluate_answerability_from_rows",
     "KnowledgeEntityAliasConfig",
     "KnowledgeIntentRuleConfig",
     "KnowledgeQueryProfileConfig",
