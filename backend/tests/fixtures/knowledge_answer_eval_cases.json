@@ -1,0 +1,190 @@
+[
+  {
+    "id": "product_overview_intro",
+    "query": "请介绍一下世袭科技",
+    "rows_by_query": {
+      "请介绍一下石犀科技": [],
+      "石犀科技 产品介绍": [
+        {
+          "knowledge_base_id": "kb-eval",
+          "knowledge_base_name": "产品知识库",
+          "document_id": "doc-product-1",
+          "chunk_id": "chunk-product-1",
+          "document_title": "石犀科技产品手册",
+          "content": "石犀科技是一家销售训练平台，支持企业知识驱动演练。",
+          "snippet": "石犀科技是一家销售训练平台。",
+          "score": 0.52,
+          "retrieval_mode": "hybrid",
+          "slot_hits": ["definition", "capability"],
+          "metadata": {
+            "doc_type": "product",
+            "section": "overview"
+          }
+        },
+        {
+          "knowledge_base_id": "kb-eval",
+          "knowledge_base_name": "产品知识库",
+          "document_id": "doc-product-2",
+          "chunk_id": "chunk-product-2",
+          "document_title": "常见问题",
+          "content": "石犀科技适合售前培训与话术演练。",
+          "score": 0.41,
+          "retrieval_mode": "hybrid",
+          "slot_hits": ["use_case"],
+          "metadata": {
+            "doc_type": "faq",
+            "section": "overview"
+          }
+        }
+      ]
+    },
+    "expected": {
+      "answerability": "sufficient",
+      "source_status": "ready",
+      "blocked_text": null,
+      "final_text": "根据知识库证据：\n1. 石犀科技是一家销售训练平台。",
+      "unsupported_claims": ["石犀科技适合售前培训与话术演练。"],
+      "citation_titles": ["石犀科技产品手册"],
+      "rewritten_queries": ["请介绍一下石犀科技", "石犀科技 产品介绍"],
+      "executed_queries": ["请介绍一下石犀科技", "石犀科技 产品介绍"],
+      "profile_key": "product_overview",
+      "compat_source_status": "hit",
+      "search_failure_count": 0,
+      "blocked_reason": null
+    }
+  },
+  {
+    "id": "pricing_lookup_price",
+    "query": "石犀科技价格是多少",
+    "rows_by_query": {
+      "石犀科技价格是多少": [
+        {
+          "knowledge_base_id": "kb-eval",
+          "knowledge_base_name": "价格知识库",
+          "document_id": "doc-price-1",
+          "chunk_id": "chunk-price-1",
+          "document_title": "石犀科技价格说明",
+          "content": "标准版年费为 5 万元起。",
+          "snippet": "标准版年费为 5 万元起。",
+          "score": 0.55,
+          "retrieval_mode": "hybrid",
+          "slot_hits": ["price", "edition"],
+          "metadata": {
+            "doc_type": "pricing",
+            "section": "pricing"
+          }
+        }
+      ]
+    },
+    "expected": {
+      "answerability": "sufficient",
+      "source_status": "ready",
+      "blocked_text": null,
+      "final_text": "根据知识库证据：\n1. 标准版年费为 5 万元起。",
+      "unsupported_claims": [],
+      "citation_titles": ["石犀科技价格说明"],
+      "rewritten_queries": ["石犀科技价格是多少"],
+      "executed_queries": ["石犀科技价格是多少"],
+      "profile_key": "pricing_lookup",
+      "compat_source_status": "hit",
+      "search_failure_count": 0,
+      "blocked_reason": null
+    }
+  },
+  {
+    "id": "version_compare_diff",
+    "query": "专业版和企业版有什么区别",
+    "rows_by_query": {
+      "专业版和企业版有什么区别": [
+        {
+          "knowledge_base_id": "kb-eval",
+          "knowledge_base_name": "版本知识库",
+          "document_id": "doc-compare-1",
+          "chunk_id": "chunk-compare-1",
+          "document_title": "版本对比矩阵",
+          "content": "专业版适合单团队训练，企业版支持多部门协作。",
+          "snippet": "专业版适合单团队训练，企业版支持多部门协作。",
+          "score": 0.58,
+          "retrieval_mode": "hybrid",
+          "slot_hits": ["version_a", "version_b", "difference"],
+          "metadata": {
+            "doc_type": "comparison",
+            "section": "comparison"
+          }
+        }
+      ]
+    },
+    "expected": {
+      "answerability": "sufficient",
+      "source_status": "ready",
+      "blocked_text": null,
+      "final_text": "根据知识库证据：\n1. 专业版适合单团队训练，企业版支持多部门协作。",
+      "unsupported_claims": [],
+      "citation_titles": ["版本对比矩阵"],
+      "rewritten_queries": ["专业版和企业版有什么区别", "专业版和企业版有什么区别 产品介绍", "专业版和企业版有什么区别 核心能力"],
+      "executed_queries": ["专业版和企业版有什么区别", "专业版和企业版有什么区别 产品介绍", "专业版和企业版有什么区别 核心能力"],
+      "profile_key": "version_compare",
+      "compat_source_status": "hit",
+      "search_failure_count": 0,
+      "blocked_reason": null
+    }
+  },
+  {
+    "id": "coaching_guidance_answer",
+    "query": "客户问价格太贵了我该怎么回答",
+    "rows_by_query": {
+      "客户问价格太贵了我该怎么回答": [
+        {
+          "knowledge_base_id": "kb-eval",
+          "knowledge_base_name": "辅导知识库",
+          "document_id": "doc-coach-1",
+          "chunk_id": "chunk-coach-1",
+          "document_title": "异议处理辅导卡",
+          "content": "先确认预算约束，再用价值回收周期回应价格异议。",
+          "snippet": "先确认预算约束，再用价值回收周期回应价格异议。",
+          "score": 0.51,
+          "retrieval_mode": "keyword_fallback",
+          "slot_hits": ["guidance", "example"],
+          "metadata": {
+            "doc_type": "coach",
+            "section": "guidance"
+          }
+        }
+      ]
+    },
+    "expected": {
+      "answerability": "sufficient",
+      "source_status": "ready",
+      "blocked_text": null,
+      "final_text": "根据知识库证据：\n1. 先确认预算约束，再用价值回收周期回应价格异议。",
+      "unsupported_claims": [],
+      "citation_titles": ["异议处理辅导卡"],
+      "rewritten_queries": ["客户问价格太贵了我该怎么回答"],
+      "executed_queries": ["客户问价格太贵了我该怎么回答"],
+      "profile_key": "coaching_guidance",
+      "compat_source_status": "hit",
+      "search_failure_count": 0,
+      "blocked_reason": null
+    }
+  },
+  {
+    "id": "blocked_timeout_fallback",
+    "query": "请介绍一下石犀科技",
+    "timeout_query": "请介绍一下石犀科技",
+    "rows_by_query": {},
+    "expected": {
+      "answerability": "blocked",
+      "source_status": "blocked",
+      "blocked_text": "当前无法基于知识库证据生成回答，请稍后重试。",
+      "final_text": null,
+      "unsupported_claims": [],
+      "citation_titles": [],
+      "rewritten_queries": ["请介绍一下石犀科技", "石犀科技 产品介绍", "石犀科技 核心能力", "石犀科技 适用场景"],
+      "executed_queries": ["请介绍一下石犀科技", "石犀科技 产品介绍", "石犀科技 核心能力", "石犀科技 适用场景"],
+      "profile_key": "product_overview",
+      "compat_source_status": "search_failed",
+      "search_failure_count": 1,
+      "blocked_reason": "retrieval_failed"
+    }
+  }
+]

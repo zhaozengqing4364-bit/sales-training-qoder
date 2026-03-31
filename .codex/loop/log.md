@@ -145,9 +145,24 @@
   success signal status: learner-facing report and replay now show the same explanation of why each conclusion is believed and which evidence layers are degraded, without page-local truth derivation.
   rollback note: if future work changes conclusion provenance/degradation fields, keep report and replay on the shared session-evidence helper seam and preserve replay payload authority over any cached report snapshot.
 
-- time: 2026-03-31T11:06:08+08:00
+- time: 2026-03-31T14:06:08+08:00
   mode: grow
-  item id: M011-S01-T02
+  item id: M011-S04-T01
+  files changed:
+    - backend/src/common/knowledge_engine/evaluation.py
+    - backend/tests/evaluation/test_knowledge_answer_engine_eval.py
+    - backend/tests/fixtures/knowledge_answer_eval_cases.json
+    - .gsd/DECISIONS.md
+    - .gsd/KNOWLEDGE.md
+    - .codex/loop/state.json
+  summary: Added a fixture-driven knowledge-answer evaluation harness plus an initial deterministic case set that runs the real engine seam through product intro, pricing, version comparison, coaching guidance, and blocked-timeout degradation behaviors.
+  verification commands:
+    - backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/evaluation/test_knowledge_answer_engine_eval.py -q
+    - backend/venv/bin/python -m py_compile backend/src/common/knowledge_engine/evaluation.py backend/tests/evaluation/test_knowledge_answer_engine_eval.py
+  verification results: passed; fresh repo-root pytest finished 6/6 green for the new harness and fixture cases, and a follow-up py_compile check passed on the new evaluation module and focused test file.
+  success signal status: the backend can now replay a stable eval fixture suite against the project-owned knowledge-answer engine without a live knowledge base, while preserving exact multiline answer formatting and blocked-timeout degradation expectations.
+  rollback note: if later slices evolve answer copy or retrieval-summary fields, keep the eval harness on the real engine seam and update fixture expectations in lockstep instead of moving assertions into runtime-handler-specific tests.
+
   files changed:
     - backend/alembic/versions/20260331_1100_023_knowledge_answer_control_plane.py
     - backend/tests/unit/common/test_knowledge_answer_control_plane_models.py
@@ -212,3 +227,37 @@
   verification results: passed; focused backend pytest finished 3/3 green after the red-to-green TDD cycle, and fresh LSP diagnostics reported no issues on the new module, export seam, or focused test file.
   success signal status: downstream engine wiring can now assemble one stable answer payload from answerability plus ranked evidence without leaking retrieval failures into learner-facing copy, while preserving unsupported claims and citation metadata for audit/report/replay.
   rollback note: if later slices introduce richer claim extraction or templating, keep the assembler on the current supported-snippet versus unsupported-content seam and evolve the focused tests in lockstep rather than moving learner copy generation into runtime handlers.
+
+- time: 2026-03-31T13:29:32+0800
+  mode: grow
+  item id: M011-S03
+  files changed:
+    - backend/src/common/knowledge_engine/answerability.py
+    - backend/src/common/knowledge_engine/assembler.py
+    - backend/src/common/knowledge_engine/audit_repo.py
+    - backend/src/common/knowledge_engine/engine.py
+    - backend/src/common/knowledge_engine/compat.py
+    - backend/src/common/api/practice.py
+    - backend/src/common/conversation/runtime_diagnostics.py
+    - backend/src/common/conversation/replay.py
+    - backend/src/sales_bot/websocket/components/stepfun_internal_knowledge_searcher.py
+    - backend/src/sales_bot/websocket/stepfun_realtime_handler.py
+    - backend/tests/unit/common/test_knowledge_answerability.py
+    - backend/tests/unit/common/test_knowledge_answer_assembler.py
+    - backend/tests/unit/common/test_knowledge_answer_audit_repo.py
+    - backend/tests/unit/common/test_knowledge_answer_engine.py
+    - backend/tests/unit/test_stepfun_realtime_handler.py
+    - backend/tests/unit/test_runtime_diagnostics_knowledge_retrieval.py
+    - backend/tests/unit/test_replay_service.py
+    - .gsd/DECISIONS.md
+    - .gsd/KNOWLEDGE.md
+    - .gsd/PROJECT.md
+    - .codex/loop/state.json
+  summary: Closed M011/S03 after fresh slice-level verification confirmed the knowledge-answer chain now classifies slot coverage, assembles learner-safe grounded answers with citations, persists ordered answer-run audit rows, and exposes the same audit/answerability truth through realtime payloads, runtime diagnostics, and replay transcript metadata.
+  verification commands:
+    - backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/common/test_knowledge_answerability.py -q
+    - backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/common/test_knowledge_answer_assembler.py -q
+    - backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/common/test_knowledge_answer_audit_repo.py backend/tests/unit/common/test_knowledge_answer_engine.py backend/tests/unit/test_stepfun_realtime_handler.py backend/tests/unit/test_runtime_diagnostics_knowledge_retrieval.py backend/tests/unit/test_replay_service.py -q
+  verification results: passed; fresh serial slice-close verification reached 5/5, 3/3, and 134/134 green respectively, and fresh LSP diagnostics reported no issues on engine, compat, audit_repo, StepFun helper, practice runtime diagnostics, and replay files.
+  success signal status: after one grounded knowledge answer, the system can now preserve the same audit_run_id/answerability/citations line from engine output into StepFun runtime payloads, runtime diagnostics, and replay message metadata, with persisted KnowledgeAnswerRun + KnowledgeAnswerRunStep rows ready for S04 inspection/debug work.
+  rollback note: if S04 expands the debug or report surfaces, keep the persisted audit tables plus compat payloads as the authority seam and do not rebuild execution traces from handler-local state or assume the async StepFun helper must be rewritten to call the synchronous engine directly.
