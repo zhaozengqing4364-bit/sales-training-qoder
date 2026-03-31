@@ -8,6 +8,11 @@ from common.knowledge_engine.config_repo import (
     KnowledgeRankingProfileConfig,
 )
 from common.knowledge_engine.engine import KnowledgeAnswerEngine
+from common.knowledge_engine.entity_resolver import (
+    KnowledgeEntityResolution,
+    KnowledgeEntityResolver,
+    KnowledgeResolvedEntityMatch,
+)
 from common.knowledge_engine.schemas import (
     KnowledgeAnswerRequest,
     KnowledgeAnswerResult,
@@ -24,6 +29,9 @@ __all__ = [
     "KnowledgeQueryProfileConfig",
     "KnowledgeRankingProfileConfig",
     "KnowledgeAnswerEngine",
+    "KnowledgeEntityResolution",
+    "KnowledgeEntityResolver",
+    "KnowledgeResolvedEntityMatch",
     "KnowledgeAnswerRequest",
     "KnowledgeAnswerResult",
     "KnowledgeAuditStep",

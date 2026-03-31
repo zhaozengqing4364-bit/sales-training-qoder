@@ -4,7 +4,7 @@
 **Demo:** After this: 给定“请介绍一下世袭科技”这类 query，引擎能输出实体解析、intent、retrieval plan、执行查询列表和排序结果。
 
 ## Tasks
-- [ ] **T01: 实现实体解析层** — 实现 entity resolver。先做 deterministic alias → canonical entity mapping，不上复杂 NLP。测试覆盖 alias、canonical passthrough、no-match 三条基本路径。
+- [x] **T01: Added a deterministic entity resolver that rewrites configured aliases to canonical entities and returns auditable match traces for downstream query planning.** — 实现 entity resolver。先做 deterministic alias → canonical entity mapping，不上复杂 NLP。测试覆盖 alias、canonical passthrough、no-match 三条基本路径。
   - Estimate: 20-30m
   - Files: backend/src/common/knowledge_engine/entity_resolver.py, backend/tests/unit/common/test_knowledge_entity_resolver.py
   - Verify: backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/common/test_knowledge_entity_resolver.py -q
