@@ -9,7 +9,7 @@ import { api } from "@/lib/api/client";
 import type { CurrentUser } from "@/lib/auth/current-user";
 import { authHandler } from "@/lib/auth-handler";
 import { currentUserQueryKey } from "@/lib/query/auth";
-import { Bell, Briefcase, Loader2, LogOut, Mail, Settings, Volume2 } from "lucide-react";
+import { Bell, Briefcase, Key, Loader2, LogOut, Mail, Settings, Volume2 } from "lucide-react";
 
 type ProfileForm = {
     display_name: string;
@@ -308,26 +308,48 @@ export default function ProfilePage() {
                                 <div className="text-xs text-slate-400">调节 AI 回复的语速</div>
                             </div>
                         </div>
-                        <select className="bg-slate-50 border border-slate-200 rounded-md text-sm p-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-500/20">
-                            <option>0.75x</option>
-                            <option>1.0x</option>
-                            <option>1.25x</option>
+                        <select
+                            className="bg-slate-50 border border-slate-200 rounded-md text-sm p-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                            value={(() => {
+                                if (typeof window === "undefined") return "1.0";
+                                return localStorage.getItem("voice_speed_preference") || "1.0";
+                            })()}
+                            onChange={(e) => {
+                                const value = e.target.value;
+                                localStorage.setItem("voice_speed_preference", value);
+                                // Persist to user profile API when available
+                                try {
+                                    api.user.updateProfile({ voice_speed_preference: parseFloat(value) } as Parameters<typeof api.user.updateProfile>[0]);
+                                } catch {
+                                    // Silently ignore - will be persisted when API supports it
+                                }
+                            }}
+                        >
+                            <option value="0.75">0.75x</option>
+                            <option value="1.0">1.0x</option>
+                            <option value="1.25">1.25x</option>
+                            <option value="1.5">1.5x</option>
                         </select>
                     </div>
 
-                    <div className="flex items-center justify-between py-2">
+                    <div className="flex items-center justify-between py-2 border-b border-slate-100">
                         <div className="flex items-center gap-3">
-                            <div className="w-8 h-8 rounded-full bg-amber-50 flex items-center justify-center text-amber-600">
-                                <Bell className="w-4 h-4" />
+                            <div className="w-8 h-8 rounded-full bg-emerald-50 flex items-center justify-center text-emerald-600">
+                                <Key className="w-4 h-4" />
                             </div>
                             <div>
-                                <div className="text-slate-700 font-medium">消息通知</div>
-                                <div className="text-xs text-slate-400">接收练习提醒和报告推送</div>
+                                <div className="text-slate-700 font-medium">修改密码</div>
+                                <div className="text-xs text-slate-400">更新您的登录密码</div>
                             </div>
                         </div>
-                        <div className="relative inline-flex h-6 w-11 items-center rounded-full bg-indigo-600">
-                            <span className="translate-x-6 inline-block h-4 w-4 transform rounded-full bg-white transition" />
-                        </div>
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            className="rounded-full text-sm"
+                            onClick={() => window.location.href = "/forgot-password"}
+                        >
+                            修改
+                        </Button>
                     </div>
                 </div>
             </GlassCard>

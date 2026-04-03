@@ -28,6 +28,20 @@ import {
     AdminKnowledgeDocument,
     AdminKnowledgeDocumentPreviewResponse,
     AdminKnowledgeSearchResponse,
+    AdminKnowledgeAnswerAdminConfig,
+    AdminKnowledgeAnswerConfigOptions,
+    AdminKnowledgeAnswerRunDetail,
+    AdminKnowledgeAnswerRunListResponse,
+    AdminKnowledgeAnswerRunStepsResponse,
+    AdminKnowledgeConfigVersionResponse,
+    AdminKnowledgeConfigVersionListResponse,
+    AdminKnowledgeQueryProfile,
+    AdminKnowledgeIntentRule,
+    AdminKnowledgeEntityAlias,
+    AdminKnowledgeRankingProfile,
+    AdminKnowledgeAnswerabilityProfile,
+    AdminKnowledgeDebugTriggerRequest,
+    AdminKnowledgeDebugTriggerResponse,
     AdminSystemLog,
     AdminSystemLogListResponse,
     AdminVoiceRuntimeProfile,
@@ -85,6 +99,12 @@ import {
     AssetGovernanceSummary,
     LinkedAssetChangeReference,
     SupportRuntimeFaultDiagnostics,
+    RagProfile,
+    CreateRagProfileRequest,
+    UpdateRagProfileRequest,
+    AdminKnowledgeChunkingPreset,
+    CreateKnowledgeChunkingPresetRequest,
+    UpdateKnowledgeChunkingPresetRequest,
 } from "./types";
 import { authHandler } from "@/lib/auth-handler";
 import { normalizeCurrentUser } from "@/lib/auth/current-user";
@@ -1358,6 +1378,22 @@ export const api = {
                 skipSessionExpiredHandling: true,
             });
         },
+
+        forgotPassword: async (email: string) => {
+            return apiFetch<{ message: string }>("/auth/forgot-password", {
+                method: "POST",
+                body: JSON.stringify({ email }),
+                skipSessionExpiredHandling: true,
+            });
+        },
+
+        resetPassword: async (token: string, newPassword: string) => {
+            return apiFetch<{ message: string }>("/auth/reset-password", {
+                method: "POST",
+                body: JSON.stringify({ token, new_password: newPassword }),
+                skipSessionExpiredHandling: true,
+            });
+        },
     },
 
     // User
@@ -1374,7 +1410,7 @@ export const api = {
             return normalizeCurrentUser(profile);
         },
 
-        updateProfile: async (data: Partial<User> & { display_name?: string }) => {
+        updateProfile: async (data: Partial<User> & { display_name?: string; voice_speed_preference?: number }) => {
             const payload: Record<string, unknown> = {};
 
             if (typeof data.name === "string") {
@@ -2243,6 +2279,314 @@ export const api = {
 
         deleteKnowledgeBase: async (id: string) => {
             return apiFetch<void>(`/admin/knowledge/${id}`, { method: "DELETE" });
+        },
+
+        // ── RAG Profile Management ──
+        listRagProfiles: async () => {
+            const result = await apiFetch<{ success: boolean; data: RagProfile[] }>("/admin/rag-profiles");
+            return result.data;
+        },
+
+        getRagProfile: async (id: string) => {
+            const result = await apiFetch<{ success: boolean; data: RagProfile }>(`/admin/rag-profiles/${id}`);
+            return result.data;
+        },
+
+        createRagProfile: async (data: CreateRagProfileRequest) => {
+            const result = await apiFetch<{ success: boolean; data: RagProfile }>("/admin/rag-profiles", {
+                method: "POST",
+                body: JSON.stringify(data),
+            });
+            return result.data;
+        },
+
+        updateRagProfile: async (id: string, data: UpdateRagProfileRequest) => {
+            const result = await apiFetch<{ success: boolean; data: RagProfile }>(`/admin/rag-profiles/${id}`, {
+                method: "PUT",
+                body: JSON.stringify(data),
+            });
+            return result.data;
+        },
+
+        deleteRagProfile: async (id: string) => {
+            return apiFetch<{ success: boolean; message: string }>(`/admin/rag-profiles/${id}`, {
+                method: "DELETE",
+            });
+        },
+
+        setRagProfileDefault: async (id: string) => {
+            const result = await apiFetch<{ success: boolean; data: RagProfile }>(
+                `/admin/rag-profiles/${id}/set-default`,
+                { method: "POST" },
+            );
+            return result.data;
+        },
+
+        getRagProfileKnowledgeBases: async (id: string) => {
+            const result = await apiFetch<{ success: boolean; data: { id: string; name: string; category: string; document_count: number; status: string }[] }>(
+                `/admin/rag-profiles/${id}/knowledge-bases`,
+            );
+            return result.data;
+        },
+
+        assignRagProfileToKb: async (kbId: string, ragProfileId: string | null) => {
+            return apiFetch<{ success: boolean; data: { rag_profile_id: string | null } }>(
+                `/admin/knowledge/${kbId}/rag-profile`,
+                {
+                    method: "PATCH",
+                    body: JSON.stringify({ rag_profile_id: ragProfileId }),
+                },
+            );
+        },
+
+        getKnowledgeAnswerAdminConfig: async () => {
+            return apiFetch<AdminKnowledgeAnswerAdminConfig>("/admin/knowledge-answer/config");
+        },
+
+        getKnowledgeAnswerAdminConfigOptions: async () => {
+            return apiFetch<AdminKnowledgeAnswerConfigOptions>("/admin/knowledge-answer/config/options");
+        },
+
+        updateKnowledgeAnswerAdminConfig: async (data: { config_version_id: string }) => {
+            return apiFetch<AdminKnowledgeAnswerAdminConfig>("/admin/knowledge-answer/config", {
+                method: "PUT",
+                body: JSON.stringify(data),
+            });
+        },
+
+        // ─── Knowledge Config Version CRUD ───
+
+        getKnowledgeConfigVersions: async (params?: { page?: number; page_size?: number; status?: string }) => {
+            const searchParams = new URLSearchParams();
+            if (params?.page) searchParams.set("page", String(params.page));
+            if (params?.page_size) searchParams.set("page_size", String(params.page_size));
+            if (params?.status) searchParams.set("status", params.status);
+            const query = searchParams.toString() ? `?${searchParams.toString()}` : "";
+            return apiFetch<AdminKnowledgeConfigVersionListResponse>(`/admin/knowledge-answer/versions${query}`);
+        },
+
+        getKnowledgeConfigVersion: async (versionId: string) => {
+            return apiFetch<AdminKnowledgeConfigVersionResponse>(`/admin/knowledge-answer/versions/${versionId}`);
+        },
+
+        createKnowledgeConfigVersion: async (data: { version_name: string; notes?: string; enabled?: boolean }) => {
+            return apiFetch<AdminKnowledgeConfigVersionResponse>("/admin/knowledge-answer/versions", {
+                method: "POST",
+                body: JSON.stringify(data),
+            });
+        },
+
+        updateKnowledgeConfigVersion: async (versionId: string, data: { version_name?: string; status?: string; notes?: string; enabled?: boolean }) => {
+            return apiFetch<AdminKnowledgeConfigVersionResponse>(`/admin/knowledge-answer/versions/${versionId}`, {
+                method: "PUT",
+                body: JSON.stringify(data),
+            });
+        },
+
+        deleteKnowledgeConfigVersion: async (versionId: string) => {
+            return apiFetch<{ deleted: boolean }>(`/admin/knowledge-answer/versions/${versionId}`, {
+                method: "DELETE",
+            });
+        },
+
+        // ─── Knowledge Query Profiles CRUD ───
+
+        getKnowledgeQueryProfiles: async (versionId: string) => {
+            const result = await apiFetch<{ items: AdminKnowledgeQueryProfile[]; total: number }>(`/admin/knowledge-answer/versions/${versionId}/query-profiles`);
+            return result.items || [];
+        },
+
+        createKnowledgeQueryProfile: async (versionId: string, data: Partial<AdminKnowledgeQueryProfile>) => {
+            return apiFetch<AdminKnowledgeQueryProfile>(`/admin/knowledge-answer/versions/${versionId}/query-profiles`, {
+                method: "POST",
+                body: JSON.stringify(data),
+            });
+        },
+
+        updateKnowledgeQueryProfile: async (versionId: string, profileId: string, data: Partial<AdminKnowledgeQueryProfile>) => {
+            return apiFetch<AdminKnowledgeQueryProfile>(`/admin/knowledge-answer/versions/${versionId}/query-profiles/${profileId}`, {
+                method: "PUT",
+                body: JSON.stringify(data),
+            });
+        },
+
+        deleteKnowledgeQueryProfile: async (versionId: string, profileId: string) => {
+            return apiFetch<{ deleted: boolean }>(`/admin/knowledge-answer/versions/${versionId}/query-profiles/${profileId}`, {
+                method: "DELETE",
+            });
+        },
+
+        // ─── Knowledge Intent Rules CRUD ───
+
+        getKnowledgeIntentRules: async (versionId: string) => {
+            const result = await apiFetch<{ items: AdminKnowledgeIntentRule[]; total: number }>(`/admin/knowledge-answer/versions/${versionId}/intent-rules`);
+            return result.items || [];
+        },
+
+        createKnowledgeIntentRule: async (versionId: string, data: Partial<AdminKnowledgeIntentRule>) => {
+            return apiFetch<AdminKnowledgeIntentRule>(`/admin/knowledge-answer/versions/${versionId}/intent-rules`, {
+                method: "POST",
+                body: JSON.stringify(data),
+            });
+        },
+
+        updateKnowledgeIntentRule: async (versionId: string, ruleId: string, data: Partial<AdminKnowledgeIntentRule>) => {
+            return apiFetch<AdminKnowledgeIntentRule>(`/admin/knowledge-answer/versions/${versionId}/intent-rules/${ruleId}`, {
+                method: "PUT",
+                body: JSON.stringify(data),
+            });
+        },
+
+        deleteKnowledgeIntentRule: async (versionId: string, ruleId: string) => {
+            return apiFetch<{ deleted: boolean }>(`/admin/knowledge-answer/versions/${versionId}/intent-rules/${ruleId}`, {
+                method: "DELETE",
+            });
+        },
+
+        // ─── Knowledge Entity Aliases CRUD ───
+
+        getKnowledgeEntityAliases: async (versionId: string) => {
+            const result = await apiFetch<{ items: AdminKnowledgeEntityAlias[]; total: number }>(`/admin/knowledge-answer/versions/${versionId}/entity-aliases`);
+            return result.items || [];
+        },
+
+        createKnowledgeEntityAlias: async (versionId: string, data: Partial<AdminKnowledgeEntityAlias>) => {
+            return apiFetch<AdminKnowledgeEntityAlias>(`/admin/knowledge-answer/versions/${versionId}/entity-aliases`, {
+                method: "POST",
+                body: JSON.stringify(data),
+            });
+        },
+
+        updateKnowledgeEntityAlias: async (versionId: string, aliasId: string, data: Partial<AdminKnowledgeEntityAlias>) => {
+            return apiFetch<AdminKnowledgeEntityAlias>(`/admin/knowledge-answer/versions/${versionId}/entity-aliases/${aliasId}`, {
+                method: "PUT",
+                body: JSON.stringify(data),
+            });
+        },
+
+        deleteKnowledgeEntityAlias: async (versionId: string, aliasId: string) => {
+            return apiFetch<{ deleted: boolean }>(`/admin/knowledge-answer/versions/${versionId}/entity-aliases/${aliasId}`, {
+                method: "DELETE",
+            });
+        },
+
+        // ─── Knowledge Ranking Profiles CRUD ───
+
+        getKnowledgeRankingProfiles: async (versionId: string) => {
+            const result = await apiFetch<{ items: AdminKnowledgeRankingProfile[]; total: number }>(`/admin/knowledge-answer/versions/${versionId}/ranking-profiles`);
+            return result.items || [];
+        },
+
+        createKnowledgeRankingProfile: async (versionId: string, data: Partial<AdminKnowledgeRankingProfile>) => {
+            return apiFetch<AdminKnowledgeRankingProfile>(`/admin/knowledge-answer/versions/${versionId}/ranking-profiles`, {
+                method: "POST",
+                body: JSON.stringify(data),
+            });
+        },
+
+        updateKnowledgeRankingProfile: async (versionId: string, profileId: string, data: Partial<AdminKnowledgeRankingProfile>) => {
+            return apiFetch<AdminKnowledgeRankingProfile>(`/admin/knowledge-answer/versions/${versionId}/ranking-profiles/${profileId}`, {
+                method: "PUT",
+                body: JSON.stringify(data),
+            });
+        },
+
+        deleteKnowledgeRankingProfile: async (versionId: string, profileId: string) => {
+            return apiFetch<{ deleted: boolean }>(`/admin/knowledge-answer/versions/${versionId}/ranking-profiles/${profileId}`, {
+                method: "DELETE",
+            });
+        },
+
+        // ─── Knowledge Chunking Presets CRUD ───
+
+        getKnowledgeChunkingPresets: async (versionId: string) => {
+            const result = await apiFetch<{ success: boolean; data: { items: AdminKnowledgeChunkingPreset[]; total: number } }>(`/admin/knowledge-answer/versions/${versionId}/chunking-presets`);
+            return result.data?.items || [];
+        },
+
+        createKnowledgeChunkingPreset: async (versionId: string, data: CreateKnowledgeChunkingPresetRequest) => {
+            const result = await apiFetch<{ success: boolean; data: AdminKnowledgeChunkingPreset }>(`/admin/knowledge-answer/versions/${versionId}/chunking-presets`, {
+                method: "POST",
+                body: JSON.stringify(data),
+            });
+            return result.data;
+        },
+
+        updateKnowledgeChunkingPreset: async (versionId: string, presetId: string, data: UpdateKnowledgeChunkingPresetRequest) => {
+            const result = await apiFetch<{ success: boolean; data: AdminKnowledgeChunkingPreset }>(`/admin/knowledge-answer/versions/${versionId}/chunking-presets/${presetId}`, {
+                method: "PUT",
+                body: JSON.stringify(data),
+            });
+            return result.data;
+        },
+
+        deleteKnowledgeChunkingPreset: async (versionId: string, presetId: string) => {
+            return apiFetch<{ deleted: boolean }>(`/admin/knowledge-answer/versions/${versionId}/chunking-presets/${presetId}`, {
+                method: "DELETE",
+            });
+        },
+
+        setDefaultChunkingPreset: async (versionId: string, presetId: string) => {
+            const result = await apiFetch<{ success: boolean; data: AdminKnowledgeChunkingPreset }>(`/admin/knowledge-answer/versions/${versionId}/chunking-presets/${presetId}/set-default`, {
+                method: "POST",
+            });
+            return result.data;
+        },
+
+        // ─── Knowledge Answerability Profiles CRUD ───
+
+        getKnowledgeAnswerabilityProfiles: async (versionId: string) => {
+            const result = await apiFetch<{ items: AdminKnowledgeAnswerabilityProfile[]; total: number }>(`/admin/knowledge-answer/versions/${versionId}/answerability-profiles`);
+            return result.items || [];
+        },
+
+        createKnowledgeAnswerabilityProfile: async (versionId: string, data: Partial<AdminKnowledgeAnswerabilityProfile>) => {
+            return apiFetch<AdminKnowledgeAnswerabilityProfile>(`/admin/knowledge-answer/versions/${versionId}/answerability-profiles`, {
+                method: "POST",
+                body: JSON.stringify(data),
+            });
+        },
+
+        updateKnowledgeAnswerabilityProfile: async (versionId: string, profileId: string, data: Partial<AdminKnowledgeAnswerabilityProfile>) => {
+            return apiFetch<AdminKnowledgeAnswerabilityProfile>(`/admin/knowledge-answer/versions/${versionId}/answerability-profiles/${profileId}`, {
+                method: "PUT",
+                body: JSON.stringify(data),
+            });
+        },
+
+        deleteKnowledgeAnswerabilityProfile: async (versionId: string, profileId: string) => {
+            return apiFetch<{ deleted: boolean }>(`/admin/knowledge-answer/versions/${versionId}/answerability-profiles/${profileId}`, {
+                method: "DELETE",
+            });
+        },
+
+        // ─── Knowledge Debug Trigger ───
+
+        debugTriggerKnowledgeAnswer: async (data: AdminKnowledgeDebugTriggerRequest) => {
+            return apiFetch<AdminKnowledgeDebugTriggerResponse>("/admin/knowledge-answer/debug/trigger", {
+                method: "POST",
+                body: JSON.stringify(data),
+            });
+        },
+
+        listKnowledgeAnswerRuns: async (params?: { limit?: number; page?: number; session_id?: string; query?: string; answerability?: string; final_status?: string }) => {
+            const queryParams = new URLSearchParams();
+            if (params?.limit) queryParams.set("limit", String(params.limit));
+            if (params?.page) queryParams.set("page", String(params.page));
+            if (params?.session_id) queryParams.set("session_id", params.session_id);
+            if (params?.query) queryParams.set("query", params.query);
+            if (params?.answerability) queryParams.set("answerability", params.answerability);
+            if (params?.final_status) queryParams.set("final_status", params.final_status);
+            const query = queryParams.toString() ? `?${queryParams.toString()}` : "";
+            return apiFetch<AdminKnowledgeAnswerRunListResponse>(`/knowledge-debug/runs${query}`);
+        },
+
+        getKnowledgeAnswerRunDetail: async (runId: string) => {
+            return apiFetch<AdminKnowledgeAnswerRunDetail>(`/knowledge-debug/runs/${runId}`);
+        },
+
+        getKnowledgeAnswerRunSteps: async (runId: string) => {
+            return apiFetch<AdminKnowledgeAnswerRunStepsResponse>(`/knowledge-debug/runs/${runId}/steps`);
         },
 
         // Knowledge Base Documents

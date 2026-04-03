@@ -1346,30 +1346,37 @@ export default function ComprehensiveReportPage() {
                         {knowledgeCheck?.knowledge_answer_diagnostics && (
                             <div className="rounded-xl bg-white/70 p-3 space-y-2">
                                 <p className="text-xs text-zinc-500 mb-1">回答级诊断</p>
-                                {knowledgeCheck.knowledge_answer_diagnostics.answerability && (
+                                {typeof knowledgeCheck.knowledge_answer_diagnostics.answerability === 'string' && knowledgeCheck.knowledge_answer_diagnostics.answerability && (
                                     <p className="text-sm text-zinc-800">
-                                        回答约束：{knowledgeCheck.knowledge_answer_diagnostics.answerability}
+                                        回答约束：{knowledgeCheck.knowledge_answer_diagnostics.answerability as string}
                                     </p>
                                 )}
                                 {Array.isArray(knowledgeCheck.knowledge_answer_diagnostics.rewritten_queries)
                                     && knowledgeCheck.knowledge_answer_diagnostics.rewritten_queries.length > 0 && (
                                     <p className="text-xs text-zinc-600">
-                                        检索改写：{knowledgeCheck.knowledge_answer_diagnostics.rewritten_queries.join(" · ")}
+                                        检索改写：{(knowledgeCheck.knowledge_answer_diagnostics.rewritten_queries as string[]).join(" · ")}
                                     </p>
                                 )}
                                 {Array.isArray(knowledgeCheck.knowledge_answer_diagnostics.citations)
                                     && knowledgeCheck.knowledge_answer_diagnostics.citations.length > 0 && (
                                     <div className="space-y-2">
-                                        {knowledgeCheck.knowledge_answer_diagnostics.citations.map((citation, index) => (
-                                            <div key={`${citation.document_title || citation.knowledge_base_id || index}-${index}`} className="rounded-lg border border-white/70 bg-white/90 p-3">
+                                        {(knowledgeCheck.knowledge_answer_diagnostics.citations as Array<Record<string, unknown>>).map((citation, index) => {
+                                            const kbName = typeof citation.knowledge_base_name === 'string' ? citation.knowledge_base_name : '';
+                                            const docTitle = typeof citation.document_title === 'string' ? citation.document_title : '';
+                                            const kbId = typeof citation.knowledge_base_id === 'string' ? citation.knowledge_base_id : '';
+                                            const snippet = typeof citation.snippet === 'string' ? citation.snippet : '';
+                                            const label = [kbName, docTitle].filter(Boolean).join(" · ") || kbId || "内部知识片段";
+                                            return (
+                                            <div key={`${docTitle || kbId || index}-${index}`} className="rounded-lg border border-white/70 bg-white/90 p-3">
                                                 <p className="text-xs font-semibold text-zinc-700 mb-1">
-                                                    {[citation.knowledge_base_name, citation.document_title].filter(Boolean).join(" · ") || citation.knowledge_base_id || "内部知识片段"}
+                                                    {label}
                                                 </p>
-                                                {citation.snippet && (
-                                                    <p className="text-sm text-zinc-800">{citation.snippet}</p>
+                                                {snippet && (
+                                                    <p className="text-sm text-zinc-800">{snippet}</p>
                                                 )}
                                             </div>
-                                        ))}
+                                            );
+                                        })}
                                     </div>
                                 )}
                             </div>

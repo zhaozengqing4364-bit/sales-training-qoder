@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { GlassCard } from "@/components/ui/glass-card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -13,6 +13,9 @@ import {
     Calendar, CheckCircle2, Zap, ArrowRight, Presentation
 } from "lucide-react";
 import Link from "next/link";
+import { api } from "@/lib/api/client";
+import { DashboardStats, SessionItem, Recommendation } from "@/lib/api/types";
+import { useCurrentUser } from "@/hooks/use-current-user";
 import {
     Dialog,
     DialogContent,
@@ -23,8 +26,6 @@ import {
     DialogTrigger,
 } from "@/components/ui/glass-modal";
 import { useRouter } from "next/navigation";
-import { api } from "@/lib/api/client";
-import { DashboardStats, SessionItem, Recommendation } from "@/lib/api/types";
 
 // Helper Functions
 const formatDuration = (seconds: number) => {
@@ -63,8 +64,25 @@ const DEFAULT_RECOMMENDATION: Recommendation = {
     target_path: "/training",
 };
 
+function getGreeting(): string {
+    const hour = new Date().getHours();
+    if (hour < 12) return "早安";
+    if (hour < 18) return "午安";
+    return "晚安";
+}
+
+function getVersionBadge(): string {
+    const envVersion = process.env.NEXT_PUBLIC_APP_VERSION;
+    if (envVersion) return `v${envVersion}`;
+    // fallback: read from package.json at build time via Next.js public runtime config
+    return "抢先体验";
+}
+
 export default function HomePage() {
     const router = useRouter();
+    const { data: currentUser } = useCurrentUser();
+    const displayName = currentUser?.display_name || currentUser?.name || currentUser?.email?.split("@")[0] || "用户";
+    const versionBadge = getVersionBadge();
     // State for modals
     const [isWeeklyStatsOpen, setIsWeeklyStatsOpen] = useState(false);
     const [isFilterOpen, setIsFilterOpen] = useState(false);
@@ -112,13 +130,13 @@ export default function HomePage() {
                         <Dialog>
                             <DialogTrigger asChild>
                                 <button className="bg-yellow-100/50 text-yellow-700 border border-yellow-200/50 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider hover:bg-yellow-100 transition-colors">
-                                    抢先体验 v2.4.0
+                                    {versionBadge}
                                 </button>
                             </DialogTrigger>
                             <DialogContent>
                                 <DialogHeader>
-                                    <DialogTitle>版本 2.4.0 更新日志</DialogTitle>
-                                    <DialogDescription>发布于 2026年1月10日</DialogDescription>
+                                    <DialogTitle>版本更新日志</DialogTitle>
+                                    <DialogDescription>感谢使用 AI 销售教练平台</DialogDescription>
                                 </DialogHeader>
                                 <div className="space-y-4 py-4">
                                     <div className="flex gap-3">
@@ -151,7 +169,7 @@ export default function HomePage() {
                         </Dialog>
                     </div>
                     <h1 className="text-4xl font-black text-slate-900 tracking-tight leading-tight">
-                        早安, <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-indigo-600 cursor-pointer hover:opacity-80 transition-opacity">亚历山大</span> 👋
+                        {getGreeting()}, <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-indigo-600 cursor-pointer hover:opacity-80 transition-opacity">{displayName}</span> 👋
                     </h1>
                     <p className="text-slate-500 mt-2 text-lg font-medium">查看您的训练概览与最新进展。</p>
                 </div>
@@ -225,8 +243,10 @@ export default function HomePage() {
                                 </div>
                             </div>
                             <DialogFooter>
-                                <Button variant="outline" className="rounded-full">下载报告</Button>
-                                <Button className="rounded-full bg-slate-900 text-white">设定目标</Button>
+                                <Button variant="outline" className="rounded-full" onClick={() => setIsWeeklyStatsOpen(false)}>关闭</Button>
+                                <Link href="/history">
+                                    <Button className="rounded-full bg-slate-900 text-white">查看历史报告</Button>
+                                </Link>
                             </DialogFooter>
                         </DialogContent>
                     </Dialog>
@@ -440,7 +460,9 @@ export default function HomePage() {
                                             </div>
                                         </div>
                                         <DialogFooter>
-                                            <Button variant="outline" className="rounded-full">分享分析</Button>
+                                            <Link href={`/practice/${item.id || item.session_id}/report`}>
+                                                <Button variant="outline" className="rounded-full">查看报告</Button>
+                                            </Link>
                                             <Button className="rounded-full bg-slate-900 text-white">查看详情</Button>
                                         </DialogFooter>
                                     </DialogContent>

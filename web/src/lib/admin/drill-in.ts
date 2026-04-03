@@ -66,9 +66,8 @@ export function buildAdminUserDrillInHref({
 }
 
 export function readAdminUserDrillInContext(searchParams: SearchParamsReader): AdminUserDrillInContext {
-  const focusBucket = isAdminUserDrillInBucket(searchParams.get("focusBucket"))
-    ? searchParams.get("focusBucket")
-    : null;
+  const rawFocusBucket = searchParams.get("focusBucket");
+  const focusBucket = isAdminUserDrillInBucket(rawFocusBucket) ? rawFocusBucket : null;
   const focusIssueFamily = toOptionalSearchParam(searchParams.get("focusIssueFamily"));
   const focusNote = toOptionalSearchParam(searchParams.get("focusNote"));
 

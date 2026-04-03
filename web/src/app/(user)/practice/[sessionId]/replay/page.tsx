@@ -1436,11 +1436,13 @@ export default function SessionReplayPage() {
               const linkedGoalTypeLabel = formatGoalTypeLabel(linkedGoal?.goal_type ?? null);
               const knowledgeAnswerDiagnostics = message.transcript_metadata?.knowledge_answer_diagnostics ?? null;
               const knowledgeCitations = Array.isArray(knowledgeAnswerDiagnostics?.citations)
-                ? knowledgeAnswerDiagnostics.citations.filter((item) => Boolean(item?.snippet))
+                ? (knowledgeAnswerDiagnostics.citations as Array<Record<string, unknown>>).filter((item) => Boolean(item?.snippet))
                 : [];
-              const answerabilityLabel = knowledgeAnswerDiagnostics?.answerability ?? null;
+              const answerabilityLabel = typeof knowledgeAnswerDiagnostics?.answerability === 'string'
+                ? knowledgeAnswerDiagnostics.answerability
+                : null;
               const rewrittenQueries = Array.isArray(knowledgeAnswerDiagnostics?.rewritten_queries)
-                ? knowledgeAnswerDiagnostics.rewritten_queries.filter((item) => Boolean(item?.trim?.() ?? item))
+                ? (knowledgeAnswerDiagnostics.rewritten_queries as Array<unknown>).filter((item) => Boolean(typeof item === 'string' ? item.trim() : item))
                 : [];
               const hasLearningEvidence = Boolean(
                 evidenceReason
@@ -1538,15 +1540,20 @@ export default function SessionReplayPage() {
                       ) : null}
                       {knowledgeCitations.length > 0 ? (
                         <div className="space-y-2">
-                          {knowledgeCitations.slice(0, 3).map((citation, index) => (
+                          {knowledgeCitations.slice(0, 3).map((citation, index) => {
+                            const kbName = (typeof citation.knowledge_base_name === 'string' && citation.knowledge_base_name) ? citation.knowledge_base_name : "内部知识库";
+                            const docTitle = typeof citation.document_title === 'string' && citation.document_title ? citation.document_title : "";
+                            const snippet = typeof citation.snippet === 'string' ? citation.snippet : "";
+                            return (
                             <div key={`${message.id}-citation-${index}`} className="rounded-lg border border-white/80 bg-white/80 px-3 py-2">
                               <p className="text-[11px] font-semibold text-slate-600">
-                                {citation.knowledge_base_name || "内部知识库"}
-                                {citation.document_title ? ` · ${citation.document_title}` : ""}
+                                {kbName}
+                                {docTitle ? ` · ${docTitle}` : ""}
                               </p>
-                              <p className="mt-1 text-sm leading-relaxed text-slate-700">{citation.snippet}</p>
+                              <p className="mt-1 text-sm leading-relaxed text-slate-700">{snippet}</p>
                             </div>
-                          ))}
+                            );
+                          })}
                         </div>
                       ) : (
                         <p className="text-xs text-blue-700">当前回答未附带可展示的内部引用片段。</p>

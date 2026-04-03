@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -13,6 +14,7 @@ import {
     PanelLeftOpen,
     LayoutGrid,
     LogOut,
+    History,
     type LucideIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -50,6 +52,7 @@ export const navItems = [
     { label: "首页", icon: Home, href: "/" },
     { label: "训练模式", icon: LayoutGrid, href: "/training" },
     { label: "排行榜", icon: BarChart2, href: "/leaderboard" },
+    { label: "历史记录", icon: History, href: "/history" },
 ];
 
 export function Sidebar({ currentUser }: { currentUser: CurrentUser }) {
@@ -183,8 +186,30 @@ export function SidebarContent({
 }
 
 function SidebarUser({ isCollapsed, userInfo }: { isCollapsed: boolean; userInfo: UserInfo | null }) {
+    const [mounted, setMounted] = useState(false);
+    useEffect(() => { setMounted(true); }, []);
+
     const displayName = userInfo?.display_name || userInfo?.name || "用户";
     const department = userInfo?.department || "未设置部门";
+
+    // Render a lightweight placeholder during SSR to avoid Radix Dialog
+    // generating mismatched aria-controls IDs between server and client.
+    if (!mounted) {
+        return (
+            <div className={isCollapsed
+                ? "mx-auto w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center text-slate-500 shadow-sm border border-slate-200"
+                : "bg-white/60 p-1.5 rounded-[1.2rem] border border-white/50 shadow-sm flex items-center gap-3 overflow-hidden whitespace-nowrap"
+            }>
+                <User className={isCollapsed ? "w-5 h-5" : "w-5 h-5 shrink-0"} />
+                {!isCollapsed && (
+                    <div className="flex flex-col min-w-0">
+                        <span className="text-sm font-bold text-slate-800 truncate">{displayName}</span>
+                        <span className="text-[10px] text-slate-400 font-medium bg-slate-100 px-1.5 py-0.5 rounded-full w-fit truncate">{department}</span>
+                    </div>
+                )}
+            </div>
+        );
+    }
 
     if (isCollapsed) {
         return (

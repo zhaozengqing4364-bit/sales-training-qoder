@@ -569,13 +569,85 @@ export interface AdminKnowledgeBase {
     document_count: number;
     total_chunks: number;
     doc_count?: number;
+    settings?: KnowledgeBaseSettings | null;
+    rag_profile_id?: string | null;
+    rag_profile_name?: string | null;
     created_at: string;
     updated_at: string;
     governance_summary?: AssetGovernanceSummary | null;
 }
 
+export interface KnowledgeBaseSettings {
+    chunking: ChunkingSettings;
+    semantic_cache: SemanticCacheSettings;
+}
+
+export interface ChunkingSettings {
+    strategy: "element_boundary" | "fixed_size" | "parent_child";
+    chunk_size: number;
+    chunk_overlap: number;
+}
+
+export interface SemanticCacheSettings {
+    enabled: boolean;
+    similarity_threshold: number;
+    ttl_seconds: number;
+}
+
 export interface AssetGovernanceSubject {
     governance_summary?: AssetGovernanceSummary | null;
+}
+
+// ── RAG Profile Types ──
+
+export interface RagProfile {
+    id: string;
+    name: string;
+    description: string | null;
+    is_system_default: boolean;
+    chunking: RagProfileChunking;
+    semantic_cache: RagProfileSemanticCache;
+    cross_encoder: RagProfileCrossEncoder;
+    applied_kb_count: number;
+    created_at: string | null;
+    updated_at: string | null;
+}
+
+export interface RagProfileChunking {
+    strategy: "element_boundary" | "fixed_size" | "parent_child";
+    chunk_size: number;
+    chunk_overlap: number;
+}
+
+export interface RagProfileSemanticCache {
+    enabled: boolean;
+    similarity_threshold: number;
+    ttl_seconds: number;
+}
+
+export interface RagProfileCrossEncoder {
+    backend: string | null;
+    model: string | null;
+    device: string | null;
+    has_api_key: boolean;
+}
+
+export interface CreateRagProfileRequest {
+    name: string;
+    description?: string | null;
+    is_system_default?: boolean;
+    chunking?: RagProfileChunking;
+    semantic_cache?: RagProfileSemanticCache;
+    cross_encoder?: RagProfileCrossEncoder & { api_key?: string | null };
+}
+
+export interface UpdateRagProfileRequest {
+    name?: string | null;
+    description?: string | null;
+    is_system_default?: boolean | null;
+    chunking?: RagProfileChunking | null;
+    semantic_cache?: RagProfileSemanticCache | null;
+    cross_encoder?: (RagProfileCrossEncoder & { api_key?: string | null }) | null;
 }
 
 export interface AdminVoiceRuntimeToolPolicyLexiconItem {
@@ -652,6 +724,271 @@ export interface AdminKnowledgeDocument {
     status: string;
     created_at: string;
     error_message?: string | null;
+}
+
+export interface AdminKnowledgeAnswerConfigVersion {
+    id: string;
+    version_name: string;
+    status: string;
+    enabled: boolean;
+    updated_at: string;
+}
+
+export interface AdminKnowledgeAnswerConfigSummary {
+    query_profile_count: number;
+    intent_rule_count: number;
+    entity_alias_count: number;
+    ranking_profile_count: number;
+    answerability_profile_count: number;
+}
+
+export interface AdminKnowledgeAnswerSelectedProfiles {
+    query_profile_keys: string[];
+    ranking_profile_keys: string[];
+    answerability_profile_keys: string[];
+}
+
+export interface AdminKnowledgeAnswerAdminConfig {
+    active_version: AdminKnowledgeAnswerConfigVersion | null;
+    profile_source: string | null;
+    summary: AdminKnowledgeAnswerConfigSummary;
+    selected_profiles: AdminKnowledgeAnswerSelectedProfiles;
+}
+
+export interface AdminKnowledgeAnswerConfigOptions {
+    versions: AdminKnowledgeAnswerConfigVersion[];
+}
+
+export interface AdminKnowledgeAnswerRunListItem {
+    id: string;
+    session_id: string;
+    config_version_id?: string | null;
+    entrypoint: string;
+    query_text: string;
+    answerability: string;
+    final_status: string;
+    blocked_reason?: string | null;
+    step_count: number;
+    created_at: string;
+    updated_at: string;
+}
+
+export interface AdminKnowledgeAnswerRunDetail {
+    id: string;
+    session_id: string;
+    config_version_id?: string | null;
+    entrypoint: string;
+    query_text: string;
+    answerability: string;
+    final_status: string;
+    blocked_reason?: string | null;
+    citations: Array<Record<string, unknown>>;
+    retrieval_summary: Record<string, unknown>;
+    created_at: string;
+    updated_at: string;
+}
+
+export interface AdminKnowledgeAnswerRunStep {
+    id: string;
+    answer_run_id: string;
+    step_name: string;
+    step_order: number;
+    status: string;
+    input_payload: Record<string, unknown>;
+    output_payload: Record<string, unknown>;
+    duration_ms?: number | null;
+    created_at: string;
+    updated_at: string;
+}
+
+export interface AdminKnowledgeAnswerRunListResponse {
+    items: AdminKnowledgeAnswerRunListItem[];
+    total: number;
+    limit: number;
+    page: number;
+    offset: number;
+    session_id?: string | null;
+}
+
+export interface AdminKnowledgeAnswerRunStepsResponse {
+    run_id: string;
+    items: AdminKnowledgeAnswerRunStep[];
+    total: number;
+}
+
+// ─── Knowledge Config Version CRUD ───
+
+export interface AdminKnowledgeConfigVersionResponse {
+    id: string;
+    version_name: string;
+    status: string;
+    notes: string | null;
+    enabled: boolean;
+    created_by: string | null;
+    updated_by: string | null;
+    created_at: string;
+    updated_at: string;
+}
+
+export interface AdminKnowledgeConfigVersionListResponse {
+    items: AdminKnowledgeConfigVersionResponse[];
+    total: number;
+    page: number;
+    page_size: number;
+    has_more: boolean;
+}
+
+export interface AdminKnowledgeConfigVersionCreateRequest {
+    version_name: string;
+    notes?: string | null;
+    enabled?: boolean;
+}
+
+export interface AdminKnowledgeConfigVersionUpdateRequest {
+    version_name?: string | null;
+    status?: string | null;
+    notes?: string | null;
+    enabled?: boolean | null;
+}
+
+// ─── Knowledge Query Profile ───
+
+export interface AdminKnowledgeQueryProfile {
+    id: string;
+    config_version_id: string;
+    profile_key: string;
+    description: string | null;
+    rewrite_strategy: string;
+    max_rewrite_queries: number;
+    stop_after_first_success: boolean;
+    enabled: boolean;
+    created_at: string;
+    updated_at: string;
+}
+
+// ─── Knowledge Intent Rule ───
+
+export interface AdminKnowledgeIntentRule {
+    id: string;
+    config_version_id: string;
+    intent_key: string;
+    priority: number;
+    match_type: string;
+    pattern: string;
+    profile_key: string;
+    enabled: boolean;
+    created_at: string;
+    updated_at: string;
+}
+
+// ─── Knowledge Entity Alias ───
+
+export interface AdminKnowledgeEntityAlias {
+    id: string;
+    config_version_id: string;
+    canonical_entity: string;
+    alias: string;
+    entity_type: string;
+    confidence: number;
+    enabled: boolean;
+    created_at: string;
+    updated_at: string;
+}
+
+// ─── Knowledge Ranking Profile ───
+
+export interface AdminKnowledgeRankingProfile {
+    id: string;
+    config_version_id: string;
+    profile_key: string;
+    title_exact_boost: number;
+    entity_match_boost: number;
+    doc_type_weights: Record<string, number>;
+    section_weights: Record<string, number>;
+    min_pass_score: number;
+    min_pass_score_keyword: number;
+    // Unified scoring weights
+    base_weight: number;
+    coverage_weight: number;
+    phrase_bonus: number;
+    title_bonus_max: number;
+    ratio_bonus_max: number;
+    cross_encoder_weight: number;
+    diversity_penalty: number;
+    enabled: boolean;
+    created_at: string;
+    updated_at: string;
+}
+
+// ─── Knowledge Chunking Preset ───
+
+export interface AdminKnowledgeChunkingPreset {
+    id: string;
+    config_version_id: string;
+    profile_key: string;
+    description: string | null;
+    chunking_strategy: string;
+    chunk_size: number;
+    chunk_overlap: number;
+    is_default: boolean;
+    enabled: boolean;
+    created_at: string;
+    updated_at: string;
+}
+
+export interface CreateKnowledgeChunkingPresetRequest {
+    profile_key: string;
+    description?: string | null;
+    chunking_strategy?: string;
+    chunk_size?: number;
+    chunk_overlap?: number;
+    is_default?: boolean;
+    enabled?: boolean;
+}
+
+export interface UpdateKnowledgeChunkingPresetRequest {
+    profile_key?: string;
+    description?: string | null;
+    chunking_strategy?: string;
+    chunk_size?: number;
+    chunk_overlap?: number;
+    is_default?: boolean;
+    enabled?: boolean;
+}
+
+// ─── Knowledge Answerability Profile ───
+
+export interface AdminKnowledgeAnswerabilityProfile {
+    id: string;
+    config_version_id: string;
+    profile_key: string;
+    required_slots: string[];
+    optional_slots: string[];
+    sufficient_threshold: number;
+    partial_threshold: number;
+    enabled: boolean;
+    created_at: string;
+    updated_at: string;
+}
+
+// ─── Knowledge Debug Trigger ───
+
+export interface AdminKnowledgeDebugTriggerRequest {
+    query: string;
+    knowledge_base_ids: string[];
+    runtime_options?: Record<string, unknown>;
+    strict_kb_mode?: boolean;
+}
+
+export interface AdminKnowledgeDebugTriggerResponse {
+    query: string;
+    count: number;
+    results: Array<Record<string, unknown>>;
+    retrieval_mode: string;
+    rewritten_queries: string[];
+    status: string;
+    _answerability?: Record<string, unknown>;
+    _diagnostics?: Record<string, unknown>;
 }
 
 export interface AdminKnowledgeDocumentPreviewChunk {
@@ -1154,7 +1491,7 @@ export interface ReplayMessage {
         suggestions?: string[];
     } | null;
     transcript_metadata?: {
-        knowledge_answer_diagnostics?: KnowledgeAnswerDiagnostics | null;
+        knowledge_answer_diagnostics?: Record<string, unknown> | null;
         [key: string]: unknown;
     } | null;
     ai_feedback?: string | null;
@@ -1624,7 +1961,7 @@ export interface KnowledgeCheckDiagnostics {
     recent_queries: string[];
     updated_at?: string | null;
     evidence_degradation?: EvidenceDegradation | null;
-    knowledge_answer_diagnostics?: KnowledgeAnswerDiagnostics | null;
+    knowledge_answer_diagnostics?: Record<string, unknown> | null;
 }
 
 export interface OpenAnalyticsDashboard {
@@ -1758,8 +2095,6 @@ export interface OpenScoreDistribution {
         fair: number;
         poor: number;
     };
-}
-IssueBucket[];
     degradation_breakdown: AdminOperatingPackDegradationBreakdown;
     manager_lists: ManagerLiteListsResponse;
 }

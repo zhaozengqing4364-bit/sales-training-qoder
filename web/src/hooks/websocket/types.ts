@@ -36,6 +36,21 @@ export interface ChatMessage {
     sender: "user" | "ai";
     message: string;
     timestamp: string;
+    /** Optional knowledge-answer diagnostics attached to AI messages */
+    knowledgeAnswerDiagnostics?: KnowledgeAnswerDiagnostics;
+}
+
+export interface KnowledgeAnswerDiagnostics {
+    answerability?: string;
+    citations?: Array<{
+        knowledge_base_name?: string;
+        knowledge_base_id?: string;
+        document_title?: string;
+        snippet?: string;
+    }>;
+    rewritten_queries?: string[];
+    audit_run_id?: string;
+    [key: string]: unknown;
 }
 
 export interface FuzzyDetection {

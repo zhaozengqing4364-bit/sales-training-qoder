@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ArrowRight, Loader2, AlertCircle } from "lucide-react";
 import { api, getApiErrorMessage } from "@/lib/api/client";
+import Link from "next/link";
 
 export default function LoginPage() {
     const router = useRouter();
@@ -46,8 +47,12 @@ export default function LoginPage() {
                 </div>
 
                 <div className="space-y-4">
-                    <Button className="w-full h-12 bg-[#3370ff] hover:bg-[#2060f0] text-white shadow-md rounded-full border-none font-medium">
-                        企业微信登录 (WeCom)
+                    <Button
+                        disabled
+                        className="w-full h-12 bg-slate-200 text-slate-400 shadow-md rounded-full border-none font-medium cursor-not-allowed"
+                        title="即将支持，敬请期待"
+                    >
+                        企业微信登录 (WeCom) — 即将支持
                     </Button>
 
                     <div className="relative flex justify-center text-xs uppercase my-6">
@@ -75,11 +80,19 @@ export default function LoginPage() {
                             />
                         </div>
                         <div className="space-y-2">
-                            <Input 
-                                type="password" 
+                            <div className="flex justify-end">
+                                <Link
+                                    href="/forgot-password"
+                                    className="text-xs text-slate-500 hover:text-slate-900 transition-colors"
+                                >
+                                    忘记密码？
+                                </Link>
+                            </div>
+                            <Input
+                                type="password"
                                 name="password"
                                 autoComplete="current-password"
-                                placeholder="••••••••" 
+                                placeholder="••••••••"
                                 className="bg-white/50 focus:bg-white transition-colors h-12 rounded-full px-6"
                                 value={password}
                                 onChange={(e) => setPassword(e.target.value)}

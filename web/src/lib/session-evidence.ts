@@ -243,7 +243,7 @@ export function formatRetrievalStatusLabel(status?: string | null): string {
     if (!status) {
         return "--";
     }
-    return RETRIEVAL_STATUS_LABELS[String(status)] || String(status);
+    return (RETRIEVAL_STATUS_LABELS as Record<string, string>)[String(status)] || String(status);
 }
 
 export function formatRetrievalStatusTone(

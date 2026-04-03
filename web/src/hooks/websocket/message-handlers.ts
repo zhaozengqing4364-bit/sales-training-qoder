@@ -5,7 +5,7 @@ import type {
     WSMessage, ChatMessage, PracticeState, TTSAudioData,
     FuzzyDetection, SalesStage, ScoreUpdate, SlideUpdate,
     PointCovered, ForbiddenWordDetection, TTSChunkMessage, SessionStatus, ConnectionState, ActionCard, CoachHealth,
-    LiveSessionConclusionSummary, SessionClaimTruthPayload,
+    LiveSessionConclusionSummary, SessionClaimTruthPayload, KnowledgeAnswerDiagnostics,
 } from "./types";
 
 /**
@@ -19,7 +19,7 @@ export interface MessageHandlerDeps {
     useStreamingTTS: boolean;
     setState: Dispatch<SetStateAction<PracticeState>>;
     queueTTSAudio: (data: TTSAudioData) => void;
-    addAiMessageIfNew: (text: string, extraState?: Partial<PracticeState>) => void;
+    addAiMessageIfNew: (text: string, extraState?: Partial<PracticeState> & { knowledgeAnswerDiagnostics?: KnowledgeAnswerDiagnostics | null }) => void;
     streamingPlayer: UseStreamingAudioPlayerReturn;
     currentStreamIdRef: MutableRefObject<string | null>;
     currentRequestIdRef: MutableRefObject<number>;
