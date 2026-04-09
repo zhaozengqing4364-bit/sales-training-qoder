@@ -12,7 +12,7 @@
   - Estimate: 20m
   - Files: docs/plans/2026-04-08-system-audit-remediation-plan.md, .gsd/plans/GSD_PLAN_system-audit-repair.md
   - Verify: rg -n "串行|coverage|backend/venv/bin/python -m pytest -c backend/pyproject.toml" docs/plans/2026-04-08-system-audit-remediation-plan.md .gsd/plans/GSD_PLAN_system-audit-repair.md
-- [ ] **T03: 回填后续 slices 的 verification baseline** — 把每个后续 slice 所需的 focused command 回填到里程碑/切片计划中，形成统一 verification contract。
+- [x] **T03: Added a centralized downstream verification baseline map for M014-M018 so later repair slices can reuse real focused proof commands directly.** — 把每个后续 slice 所需的 focused command 回填到里程碑/切片计划中，形成统一 verification contract。
   - Estimate: 25m
   - Files: docs/plans/2026-04-08-system-audit-remediation-plan.md, .gsd/milestones/M013/M013-ROADMAP.md
   - Verify: rg -n "npm --prefix web test|backend/venv/bin/python -m pytest" .gsd/milestones/M01{4,5,6,7,8}*/**/*.md docs/plans/2026-04-08-system-audit-remediation-plan.md

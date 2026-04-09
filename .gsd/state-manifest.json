@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "exported_at": "2026-04-09T17:03:35.586Z",
+  "exported_at": "2026-04-09T17:17:36.042Z",
   "milestones": [
     {
       "id": "M001",
@@ -8760,19 +8760,29 @@
       "milestone_id": "M013",
       "slice_id": "S02",
       "id": "T03",
-      "title": "回填后续 slices 的 verification baseline",
-      "status": "pending",
-      "one_liner": "",
-      "narrative": "",
-      "verification_result": "",
+      "title": "Added a centralized downstream verification baseline map for M014-M018 so later repair slices can reuse real focused proof commands directly.",
+      "status": "complete",
+      "one_liner": "Added a centralized downstream verification baseline map for M014-M018 so later repair slices can reuse real focused proof commands directly.",
+      "narrative": "Reviewed the T03 contract, future M014-M018 roadmap/slice/task plans, and the current remediation-plan inventory to confirm the local state before editing. The downstream slice plans already carried focused `Verify` lines, so the real gap was the absence of one authority crosswalk that tells later executors which existing command belongs to which slice. I updated `docs/plans/2026-04-08-system-audit-remediation-plan.md` with a downstream slice verification baseline map covering every M014-M018 slice, mirrored the same contract into `.gsd/milestones/M013/M013-ROADMAP.md`, then recorded decision D170 to preserve the M018/S02 and M018/S03 governance/runbook slices as explicit verification exceptions. During verification I found that the task-plan `rg ... **/*.md` form fails in this shell harness because `**` is passed literally, so I documented that recurring gotcha in `.gsd/KNOWLEDGE.md` and verified the intended contract with an equivalent explicit-directory gate instead.",
+      "verification_result": "Fresh repo-root verification passed for the new authority contract. An explicit-directory `rg` gate confirmed the downstream plans and the remediation handoff now expose reusable `npm --prefix web test` / `backend/venv/bin/python -m pytest` baselines, and a structured scan confirmed every downstream slice from M014-M018 either has a focused baseline command or is an explicitly documented exception (M018/S02 and M018/S03). The literal task-plan `rg ... .gsd/milestones/M01{4,5,6,7,8}*/**/*.md ...` form was also exercised during execution and failed only because this shell harness does not expand `**`, not because any milestone files were missing.",
       "duration": "",
-      "completed_at": null,
+      "completed_at": "2026-04-09T17:17:36.009Z",
       "blocker_discovered": false,
-      "deviations": "",
-      "known_issues": "",
-      "key_files": [],
-      "key_decisions": [],
-      "full_summary_md": "",
+      "deviations": "Minor local adaptation only: the task-plan grep used a shell `**` glob that this harness does not expand, so I verified the same content with explicit milestone directories and documented the gotcha in `.gsd/KNOWLEDGE.md`.",
+      "known_issues": "None.",
+      "key_files": [
+        "docs/plans/2026-04-08-system-audit-remediation-plan.md",
+        ".gsd/milestones/M013/M013-ROADMAP.md",
+        ".gsd/DECISIONS.md",
+        ".gsd/KNOWLEDGE.md",
+        ".gsd/milestones/M013/slices/S02/tasks/T03-SUMMARY.md"
+      ],
+      "key_decisions": [
+        "Centralized the downstream M014-M018 verification crosswalk in the remediation handoff and M013 roadmap instead of editing future slice/task checkboxes by hand.",
+        "Kept M018/S02 dependency-governance and M018/S03 backup-recovery work as explicit verification exceptions that preserve ops/runbook proof commands instead of forcing fake web/backend feature tests.",
+        "Recorded the local shell `**` glob-expansion gotcha in `.gsd/KNOWLEDGE.md` so later agents do not misread the plan grep as a real contract failure."
+      ],
+      "full_summary_md": "---\nid: T03\nparent: S02\nmilestone: M013\nkey_files:\n  - docs/plans/2026-04-08-system-audit-remediation-plan.md\n  - .gsd/milestones/M013/M013-ROADMAP.md\n  - .gsd/DECISIONS.md\n  - .gsd/KNOWLEDGE.md\n  - .gsd/milestones/M013/slices/S02/tasks/T03-SUMMARY.md\nkey_decisions:\n  - Centralized the downstream M014-M018 verification crosswalk in the remediation handoff and M013 roadmap instead of editing future slice/task checkboxes by hand.\n  - Kept M018/S02 dependency-governance and M018/S03 backup-recovery work as explicit verification exceptions that preserve ops/runbook proof commands instead of forcing fake web/backend feature tests.\n  - Recorded the local shell `**` glob-expansion gotcha in `.gsd/KNOWLEDGE.md` so later agents do not misread the plan grep as a real contract failure.\nduration: \"\"\nverification_result: passed\ncompleted_at: 2026-04-09T17:17:36.010Z\nblocker_discovered: false\n---\n\n# T03: Added a centralized downstream verification baseline map for M014-M018 so later repair slices can reuse real focused proof commands directly.\n\n**Added a centralized downstream verification baseline map for M014-M018 so later repair slices can reuse real focused proof commands directly.**\n\n## What Happened\n\nReviewed the T03 contract, future M014-M018 roadmap/slice/task plans, and the current remediation-plan inventory to confirm the local state before editing. The downstream slice plans already carried focused `Verify` lines, so the real gap was the absence of one authority crosswalk that tells later executors which existing command belongs to which slice. I updated `docs/plans/2026-04-08-system-audit-remediation-plan.md` with a downstream slice verification baseline map covering every M014-M018 slice, mirrored the same contract into `.gsd/milestones/M013/M013-ROADMAP.md`, then recorded decision D170 to preserve the M018/S02 and M018/S03 governance/runbook slices as explicit verification exceptions. During verification I found that the task-plan `rg ... **/*.md` form fails in this shell harness because `**` is passed literally, so I documented that recurring gotcha in `.gsd/KNOWLEDGE.md` and verified the intended contract with an equivalent explicit-directory gate instead.\n\n## Verification\n\nFresh repo-root verification passed for the new authority contract. An explicit-directory `rg` gate confirmed the downstream plans and the remediation handoff now expose reusable `npm --prefix web test` / `backend/venv/bin/python -m pytest` baselines, and a structured scan confirmed every downstream slice from M014-M018 either has a focused baseline command or is an explicitly documented exception (M018/S02 and M018/S03). The literal task-plan `rg ... .gsd/milestones/M01{4,5,6,7,8}*/**/*.md ...` form was also exercised during execution and failed only because this shell harness does not expand `**`, not because any milestone files were missing.\n\n## Verification Evidence\n\n| # | Command | Exit Code | Verdict | Duration |\n|---|---------|-----------|---------|----------|\n| 1 | `rg -n \"npm --prefix web test|backend/venv/bin/python -m pytest\" .gsd/milestones/M014 .gsd/milestones/M015 .gsd/milestones/M016 .gsd/milestones/M017 .gsd/milestones/M018 docs/plans/2026-04-08-system-audit-remediation-plan.md` | 0 | ✅ pass | 9ms |\n| 2 | `python3 - <<'PY' ... verify every M014-M018 slice has a focused baseline or documented exception ... PY` | 0 | ✅ pass | 5ms |\n\n\n## Deviations\n\nMinor local adaptation only: the task-plan grep used a shell `**` glob that this harness does not expand, so I verified the same content with explicit milestone directories and documented the gotcha in `.gsd/KNOWLEDGE.md`.\n\n## Known Issues\n\nNone.\n\n## Files Created/Modified\n\n- `docs/plans/2026-04-08-system-audit-remediation-plan.md`\n- `.gsd/milestones/M013/M013-ROADMAP.md`\n- `.gsd/DECISIONS.md`\n- `.gsd/KNOWLEDGE.md`\n- `.gsd/milestones/M013/slices/S02/tasks/T03-SUMMARY.md`\n",
       "description": "把每个后续 slice 所需的 focused command 回填到里程碑/切片计划中，形成统一 verification contract。",
       "estimate": "25m",
       "files": [
@@ -12626,6 +12636,18 @@
       "revisable": "Yes",
       "made_by": "agent",
       "superseded_by": null
+    },
+    {
+      "seq": 1539,
+      "id": "D170",
+      "when_context": "M013/S02/T03",
+      "scope": "verification",
+      "decision": "How downstream audit-repair slices should handle verification baselines for non-feature governance work",
+      "choice": "Keep M018/S02 dependency-governance and M018/S03 backup-recovery slices as explicit verification exceptions that use their existing ops/runbook proof commands instead of forcing them into web/backend focused test shapes.",
+      "rationale": "All feature-facing repair slices from M014-M018/S01 already map cleanly to reusable repo-root web/backend focused commands, but the governance/runbook slices are materially different work. Preserving npm audit, pip_audit, file-presence, and runbook-content checks as first-class exceptions keeps the verification contract honest and prevents later executors from inventing fake feature-surface tests just to satisfy the baseline pattern.",
+      "revisable": "Yes",
+      "made_by": "agent",
+      "superseded_by": null
     }
   ],
   "verification_evidence": [
@@ -15774,6 +15796,28 @@
       "verdict": "✅ pass",
       "duration_ms": 39,
       "created_at": "2026-04-09T17:03:35.561Z"
+    },
+    {
+      "id": 287,
+      "task_id": "T03",
+      "slice_id": "S02",
+      "milestone_id": "M013",
+      "command": "rg -n \"npm --prefix web test|backend/venv/bin/python -m pytest\" .gsd/milestones/M014 .gsd/milestones/M015 .gsd/milestones/M016 .gsd/milestones/M017 .gsd/milestones/M018 docs/plans/2026-04-08-system-audit-remediation-plan.md",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 9,
+      "created_at": "2026-04-09T17:17:36.009Z"
+    },
+    {
+      "id": 288,
+      "task_id": "T03",
+      "slice_id": "S02",
+      "milestone_id": "M013",
+      "command": "python3 - <<'PY' ... verify every M014-M018 slice has a focused baseline or documented exception ... PY",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 5,
+      "created_at": "2026-04-09T17:17:36.009Z"
     }
   ]
 }

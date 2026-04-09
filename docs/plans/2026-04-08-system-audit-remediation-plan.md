@@ -36,6 +36,31 @@ Use the smallest existing focused command below before inventing a broader regre
 - Reason: the repo-root pytest-cov runs share the top-level `.coverage` SQLite file, so parallel backend shards can fail with `coverage_schema` / `no such table` races even when the target tests themselves are healthy.
 - If a slice needs more than one backend proof, list them as separate repo-root commands and execute them one after another.
 
+### Downstream slice verification baseline map
+
+Use this map as the handoff contract for M014-M018. Each slice below already has its focused command written into its own slice/task plan; this table exists so later executors can find the smallest reusable command without re-research.
+
+| Slice | Primary surface | Focused verification baseline |
+| --- | --- | --- |
+| M014 / S01 首页硬编码与空壳动作收口 | dashboard | `npm --prefix web test -- --run "src/app/(dashboard)/history/page.test.tsx"` |
+| M014 / S02 认证与个人中心体验补齐 | auth + profile | `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/integration/test_auth_login_api.py -x -q` + `npm --prefix web test -- --run "src/app/(auth)/login/page.test.tsx"` |
+| M014 / S03 Learner 导航、反馈入口与系统壳层补齐 | dashboard/history | `npm --prefix web test -- --run "src/app/(dashboard)/history/page.test.tsx" "src/app/(dashboard)/**/*.test.tsx"` |
+| M014 / S04 训练前预期管理与中断恢复 UX 收口 | practice + lifecycle | `npm --prefix web test -- --run "src/app/(user)/practice/[sessionId]/page.test.tsx" "src/app/(user)/practice/[sessionId]/use-practice-session-lifecycle.test.ts"` |
+| M015 / S01 前端日志出口统一化 | practice + websocket | `npm --prefix web test -- --run "src/app/(user)/practice/[sessionId]/page.test.tsx" "src/hooks/use-practice-websocket.test.ts"` |
+| M015 / S02 原生弹窗与 window.location 跳转清理 | admin + auth | `npm --prefix web test -- --run "src/app/admin/personas/[id]/page.test.tsx" "src/app/(auth)/login/page.test.tsx"` |
+| M015 / S03 Learner error/loading 覆盖与 responsive/a11y/timezone baseline | history + practice | `npm --prefix web test -- --run "src/app/(dashboard)/history/page.test.tsx" "src/app/(user)/practice/[sessionId]/report/page.test.tsx" "src/app/(user)/practice/[sessionId]/replay/page.test.tsx"` |
+| M016 / S01 Password reset / auth backend 正式化 | auth backend | `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/integration/test_auth_login_api.py -x -q` |
+| M016 / S02 API 错误契约与异常分类收口 | presentation + practice contract | `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/contract/test_presentations.py backend/tests/contract/test_practice_evidence_contract.py backend/tests/integration/test_presentation_flow.py -x -q` |
+| M016 / S03 RBAC、敏感日志与 admin 安全面 audit | admin backend | `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/integration/test_admin_users_api.py backend/tests/unit/admin/test_admin_users_api_models.py -x -q` |
+| M017 / S01 Session lifecycle 并发安全 proof | lifecycle backend | `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/test_session_lifecycle_service.py backend/tests/integration/test_session_lifecycle_api.py -x -q` |
+| M017 / S02 Practice WebSocket 复杂度与重连策略收口 | websocket + practice | `npm --prefix web test -- --run "src/hooks/use-practice-websocket.test.ts" "src/hooks/use-practice-websocket.presentation-flow.test.ts" "src/app/(user)/practice/[sessionId]/page.test.tsx"` |
+| M017 / S03 文件上传 / 资源竞争 / 分布式锁风险 discovery | presentation backend | `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/contract/test_presentations.py backend/tests/integration/test_presentation_flow.py backend/tests/integration/test_presentation_delete_permissions.py -x -q` |
+| M018 / S01 数据库性能基线 discovery | analytics backend | `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/contract/test_analytics.py backend/tests/unit/common/test_admin_analytics_service.py backend/tests/unit/common/test_leaderboard_service.py -x -q` |
+| M018 / S02 依赖安全、许可证与更新策略基线 | ops/governance exception | `npm audit --prefix web` and `backend/venv/bin/python -m pip_audit` (not a web/backend feature-surface test; keep these as governance proofs) |
+| M018 / S03 备份 / 故障恢复 / 容灾 runbook 基线 | ops/runbook exception | `test -f docs/backup-recovery-runbook.md || test -f .gsd/analysis/BACKUP_RECOVERY_BASELINE.md` plus `grep -n "备份\|恢复\|演练" docs/backup-recovery-runbook.md .gsd/analysis/BACKUP_RECOVERY_BASELINE.md` |
+
+Rule of thumb for later repair slices: copy the exact command from the row above into the task summary and verification evidence first; only widen beyond it when the changed behavior demonstrably crosses the listed seam.
+
 ---
 
 ### Task 1: Normalize the audit before touching code
