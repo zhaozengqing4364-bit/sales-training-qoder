@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -9,7 +10,7 @@ import { api } from "@/lib/api/client";
 import type { CurrentUser } from "@/lib/auth/current-user";
 import { authHandler } from "@/lib/auth-handler";
 import { currentUserQueryKey } from "@/lib/query/auth";
-import { Bell, Briefcase, Key, Loader2, LogOut, Mail, Settings, Volume2 } from "lucide-react";
+import { Briefcase, Key, Loader2, LogOut, Mail, Settings, Volume2 } from "lucide-react";
 
 type ProfileForm = {
     display_name: string;
@@ -339,16 +340,11 @@ export default function ProfilePage() {
                             </div>
                             <div>
                                 <div className="text-slate-700 font-medium">修改密码</div>
-                                <div className="text-xs text-slate-400">更新您的登录密码</div>
+                                <div className="text-xs text-slate-400">通过邮箱重置密码，沿用现有邮箱找回流程</div>
                             </div>
                         </div>
-                        <Button
-                            variant="outline"
-                            size="sm"
-                            className="rounded-full text-sm"
-                            onClick={() => window.location.href = "/forgot-password"}
-                        >
-                            修改
+                        <Button variant="outline" size="sm" className="rounded-full text-sm" asChild>
+                            <Link href="/forgot-password">通过邮箱重置密码</Link>
                         </Button>
                     </div>
                 </div>

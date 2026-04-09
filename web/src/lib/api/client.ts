@@ -1477,6 +1477,12 @@ export const api = {
 
             return (result.items || []).map<SessionItem>((item, index) => ({
                 id: item.session_id || item.id || `session-${index}`,
+                session_id:
+                    typeof item.session_id === "string"
+                        ? item.session_id
+                        : typeof item.id === "string"
+                            ? item.id
+                            : undefined,
                 title: item.title || item.agent_name || item.scenario_name || "练习记录",
                 scenario_type: item.scenario_type === "presentation" ? "presentation" : "sales",
                 overall_score: Number(item.overall_score || 0),

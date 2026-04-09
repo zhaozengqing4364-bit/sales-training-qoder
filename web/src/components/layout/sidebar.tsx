@@ -346,7 +346,9 @@ function UserProfileModal({ userInfo }: { userInfo: UserInfo | null }) {
                 >
                     退出登录
                 </Button>
-                <Button className="rounded-full bg-slate-900 text-white">编辑资料</Button>
+                <Button asChild className="rounded-full bg-slate-900 text-white">
+                    <Link href="/profile">编辑资料</Link>
+                </Button>
             </DialogFooter>
         </DialogContent>
     );

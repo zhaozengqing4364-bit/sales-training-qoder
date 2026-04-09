@@ -94,6 +94,29 @@ describe("SidebarContent learner seams", () => {
         expect(historyLink.getAttribute("href")).toBe("/history");
     });
 
+    it("keeps the profile affordance reachable on the expanded learner user menu", async () => {
+        render(<SidebarContent currentUser={learnerUser} />);
+
+        const profileLink = await screen.findByRole("link", { name: "编辑资料" }) as HTMLAnchorElement;
+        expect(profileLink.getAttribute("href")).toBe("/profile");
+    });
+
+    it("keeps the profile affordance reachable in collapsed mode even when learner fields are missing", async () => {
+        render(
+            <SidebarContent
+                currentUser={{
+                    ...learnerUser,
+                    display_name: "",
+                    email: "",
+                }}
+                isCollapsed={true}
+            />,
+        );
+
+        const profileLink = await screen.findByRole("link", { name: "编辑资料" }) as HTMLAnchorElement;
+        expect(profileLink.getAttribute("href")).toBe("/profile");
+    });
+
     it("renders the compact learner help entry in collapsed sidebar mode with bounded route context", () => {
         usePathnameMock.mockReturnValue("/practice/session-123");
         useParamsMock.mockReturnValue({ sessionId: "session-123" });

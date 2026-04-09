@@ -41,7 +41,7 @@ Close R032 at the real authority seam (`SidebarContent`) instead of page-by-page
   - Estimate: 1.5h
   - Files: web/src/components/layout/sidebar.tsx, web/src/components/layout/dashboard-shell.tsx, web/src/app/(user)/practice/layout.tsx, web/src/components/layout/learner-help-entry.tsx, web/src/components/layout/sidebar.test.tsx, web/src/components/layout/dashboard-shell.test.tsx, web/src/app/(user)/practice/layout.test.tsx
   - Verify: npm --prefix web test -- --run "src/components/layout/sidebar.test.tsx" "src/components/layout/dashboard-shell.test.tsx" "src/app/(user)/practice/layout.test.tsx"
-- [ ] **T02: Replace dashboard-home dead ends with real history/report actions** — ## Description
+- [x] **T02: Locked dashboard-home learner CTA coverage so history failures still degrade to real /history or training actions without hollow controls.** — ## Description
 Remove the remaining hollow learner actions from `web/src/app/(dashboard)/page.tsx`. Reuse the already-working `/history` and `/practice/{sessionId}/report` route family instead of inventing dashboard-only filter/detail APIs. Any learner-visible control that cannot perform a real action in this slice must become explicitly disabled with clear copy.
 
 ## Failure Modes
@@ -78,7 +78,7 @@ Remove the remaining hollow learner actions from `web/src/app/(dashboard)/page.t
   - Estimate: 1.25h
   - Files: web/src/app/(dashboard)/page.tsx, web/src/app/(dashboard)/page.test.tsx, web/src/app/(dashboard)/history/page.test.tsx
   - Verify: npm --prefix web test -- --run "src/app/(dashboard)/page.test.tsx" "src/app/(dashboard)/history/page.test.tsx"
-- [ ] **T03: Add a shared learner route fallback and cover the live practice error boundary** — ## Description
+- [x] **T03: Added a shared learner route error presenter, wired practice/report/replay App Router boundaries to it, and locked the live practice fallback with focused Vitest coverage.** — ## Description
 Close the remaining learner white-screen gap by adding `web/src/app/(user)/practice/[sessionId]/error.tsx`, then unify the learner route fallback presentation used by practice/report/replay behind one shared component. Keep the framework-native App Router boundary seam (`error.tsx`), not the legacy class `ErrorBoundary`, and preserve the existing dev-only raw-message diagnostics rule.
 
 ## Failure Modes

@@ -289,4 +289,52 @@ describe("HistoryPage", () => {
         expect(screen.getByText("对话轮次不足，暂无法形成稳定评估。")).toBeTruthy();
         expect(screen.queryByText("评分中")).toBeNull();
     });
+
+    it("keeps incomplete sessions explicit by disabling the shared report CTA until completion", async () => {
+        getMyHistoryMock.mockResolvedValue({
+            sessions: [
+                {
+                    session_id: "session-in-progress",
+                    scenario_name: "销售演练",
+                    scenario_type: "sales",
+                    persona_name: "采购经理",
+                    agent_name: "销售教练",
+                    start_time: "2026-03-23T00:00:00Z",
+                    duration_seconds: 120,
+                    overall_score: null,
+                    report_status: "processing",
+                    report_generated_at: null,
+                    status: "in_progress",
+                    evaluable: true,
+                    not_evaluable_reason: null,
+                    evidence_completeness: { complete: true },
+                    effectiveness_snapshot: null,
+                    feedback_summary: null,
+                    stage_summary: [],
+                    main_issue: null,
+                    next_goal: null,
+                },
+            ],
+            total: 1,
+            page: 1,
+            page_size: 50,
+            total_pages: 1,
+        });
+        getHistoryStatisticsMock.mockResolvedValue({
+            total_sessions: 1,
+            evaluable_sessions: 1,
+            not_evaluable_sessions: 0,
+            average_score: 0,
+            best_score: 0,
+            total_practice_time_seconds: 120,
+            total_practice_time_minutes: 2,
+        });
+        getHistoryTrendsMock.mockResolvedValue([]);
+
+        render(<HistoryPage />);
+
+        const reportButton = await screen.findByRole("button", { name: "报告" }) as HTMLButtonElement;
+        expect(reportButton.disabled).toBe(true);
+        expect(screen.getByText("进行中")).toBeTruthy();
+    });
 });

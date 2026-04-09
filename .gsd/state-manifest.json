@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "exported_at": "2026-04-09T03:36:13.496Z",
+  "exported_at": "2026-04-09T10:46:51.298Z",
   "milestones": [
     {
       "id": "M001",
@@ -1869,16 +1869,16 @@
       "milestone_id": "M012",
       "id": "S02",
       "title": "导航与系统体验基础",
-      "status": "pending",
+      "status": "complete",
       "risk": "medium",
       "depends": [
         "S01"
       ],
       "demo": "侧边栏有历史入口，所有 learner 页面有 error boundary，首页空壳按钮已处理，有反馈入口",
       "created_at": "2026-04-03T02:36:13.175Z",
-      "completed_at": null,
-      "full_summary_md": "",
-      "full_uat_md": "",
+      "completed_at": "2026-04-09T10:12:29.540Z",
+      "full_summary_md": "---\nid: S02\nparent: M012\nmilestone: M012\nprovides:\n  - 共享 learner navigation/help seam，可直接被后续 learner 页面与 shell 扩展复用。\n  - 一个无静默 no-op 的 dashboard learner CTA contract，后续首页/个人中心扩展可沿用。\n  - practice / report / replay 共用的 route error fallback seam，避免白屏和 copy/行为漂移。\nrequires:\n  - slice: S01\n    provides: 已落地的真实登录/首页用户信息与 learner dashboard 基线，使 S02 能在现有 learner shell 和 dashboard 首页之上收口导航、CTA 与 route fallback。\naffects:\n  - S03\nkey_files:\n  - web/src/components/layout/sidebar.tsx\n  - web/src/components/layout/dashboard-shell.tsx\n  - web/src/app/(user)/practice/layout.tsx\n  - web/src/components/layout/learner-help-entry.tsx\n  - web/src/app/(dashboard)/page.tsx\n  - web/src/components/learner/learner-route-error-state.tsx\n  - web/src/app/(user)/practice/[sessionId]/error.tsx\n  - web/src/app/(user)/practice/[sessionId]/report/error.tsx\n  - web/src/app/(user)/practice/[sessionId]/replay/error.tsx\n  - web/src/app/(user)/practice/[sessionId]/error.test.tsx\nkey_decisions:\n  - 继续把 `SidebarContent` 作为 learner 导航 authority seam，并把帮助/反馈挂在共享 shell seam，而不是在单个页面上零散补入口。\n  - dashboard 首页 learner CTA 只允许复用已经存在的 `/history` 与 `/practice/{sessionId}/report` 路由族；做不到真实动作的能力必须显式禁用并写清说明。\n  - practice / report / replay 全部使用 App Router `error.tsx` + 共享 `LearnerRouteErrorState` presenter，并只在 development 暴露受限 raw message。\npatterns_established:\n  - Learner 导航 authority 继续集中在 `SidebarContent`，新增辅助入口通过共享 shell seam 接入而不是页面级复制。\n  - Learner-visible CTA 只复用已存在的真实 route family；暂不支持的能力用显式禁用态说明而不是静默 no-op。\n  - App Router learner route 统一使用共享 fallback presenter，并把 raw diagnostics 限定在 development。\nobservability_surfaces:\n  - `LearnerRouteErrorState` 带 tag 的 `console.error` 日志：`[LearnerRouteErrorState:practice-live]`、`[LearnerRouteErrorState:practice-report]`、`[LearnerRouteErrorState:practice-replay]`。\n  - 三条 focused Vitest gate 分别锁定 learner shell 导航/帮助入口、dashboard CTA 退化策略与 practice route fallback。\n  - close-out LSP diagnostics 覆盖 learner shell、dashboard 首页与 practice route 文件，结果为 clean。\ndrill_down_paths:\n  - .gsd/milestones/M012/slices/S02/tasks/T01-SUMMARY.md\n  - .gsd/milestones/M012/slices/S02/tasks/T02-SUMMARY.md\n  - .gsd/milestones/M012/slices/S02/tasks/T03-SUMMARY.md\nduration: \"\"\nverification_result: passed\ncompleted_at: 2026-04-09T10:12:29.546Z\nblocker_discovered: false\n---\n\n# S02: 导航与系统体验基础\n\n**S02 把 learner 侧共享导航/反馈入口、dashboard 首页 CTA 以及 practice 路由 fallback 收口到真实可用 seams，避免新用户在首练闭环里被隐藏入口、空壳按钮或白屏卡住。**\n\n## What Happened\n\nS02 围绕“首练闭环里最容易把新人卡住的 learner 体验断点”做了三段收口。T01 没有在页面上分散补按钮，而是把 `SidebarContent` 继续作为 learner 导航 authority seam，稳定保留 `历史记录`，同时新增前端本地的 `LearnerHelpEntry` 并通过 dashboard shell 与 practice shell 两条共享壳层复用，保证 desktop / collapsed / mobile / practice 四类展示面都能看到一致的帮助与反馈入口。T02 则把 dashboard 首页剩余 learner CTA 全部逼回真实已存在的 route family：能工作的入口只指向 `/history` 或 `/practice/{sessionId}/report`，暂时不支持的筛选/详情能力改成显式禁用态和说明文案，避免继续留下看起来可点、实际什么都不做的空壳控件。T03 补齐了 live practice route 缺失的 App Router `error.tsx` 边界，并把 practice / report / replay 三个 learner 路由统一收口到 `LearnerRouteErrorState` presenter：用户在 route 报错时至少能看到友好的 fallback、`重试` 行为和安全返回路径，而开发环境下仍保留受限的 `error.message` 可见性和带 tag 的 `console.error` 诊断。\n\n这组改动给下游 slice 提供了三条可复用模式：一是 learner 导航/辅助入口要挂在 shared shell seam，而不是页面本地补丁；二是 learner-visible CTA 只能复用已经存在的真实 route family，做不到就显式禁用；三是 App Router learner route 异常统一走共享 presenter + route-specific copy，避免 report/replay/practice 各自漂移。\n\n## Operational Readiness (Q8)\n- **Health signal:** learner dashboard 与 practice shell 都能稳定暴露 `历史记录`/帮助入口；dashboard 首页 CTA 只通向真实 `/history` / `/practice/{sessionId}/report`；practice/report/replay route 出错时都出现统一 fallback、`重试` 和返回路径。\n- **Failure signal:** `历史记录` 或帮助入口在任一 learner shell 消失；dashboard 再次出现静默空壳 CTA；控制台出现 `[LearnerRouteErrorState:practice-live|practice-report|practice-replay]` 说明 route fallback 被触发。\n- **Recovery procedure:** 先用 fallback 上的 `重试` 与返回链接恢复用户路径；若问题持续，优先检查共享 shell seam 与 presenter seam，然后重跑本 slice 三条 focused Vitest gate 来确认导航、CTA 和 route fallback 是否回归。\n- **Monitoring gaps:** 当前帮助/反馈入口仍是 frontend-only affordance，没有持久化工单或使用量埋点；route fallback 也还没有集中式 boundary-hit telemetry，只能依赖页面表现与 tagged console 日志。\n\n## Verification\n\n已按 slice plan 重新运行三条 focused Vitest gate，并在 close-out 时额外确认 learner shell / dashboard / practice route 相关 TypeScript diagnostics 为 clean：\n\n1. `npm --prefix web test -- --run \"src/components/layout/sidebar.test.tsx\" \"src/components/layout/dashboard-shell.test.tsx\" \"src/app/(user)/practice/layout.test.tsx\"` 通过，锁定 `SidebarContent` 仍是 learner nav authority seam，`历史记录` 与共享帮助入口在 dashboard/practice 两套 shell 中都可见。\n2. `npm --prefix web test -- --run \"src/app/(dashboard)/page.test.tsx\" \"src/app/(dashboard)/history/page.test.tsx\"` 通过，锁定 dashboard 首页 learner CTA 只落到真实 `/history` / `/practice/{sessionId}/report` 动作或显式禁用态，没有静默 no-op。\n3. `npm --prefix web test -- --run \"src/app/(user)/practice/[sessionId]/error.test.tsx\"` 通过，锁定 live practice route fallback 的 `重试` / 安全返回路径，以及 dev/prod 诊断显隐规则。\n4. `lsp diagnostics web/src/components/layout/sidebar.tsx`、`dashboard-shell.tsx`、`learner-help-entry.tsx`、`web/src/app/(dashboard)/page.tsx` 以及 `web/src/app/(user)/practice/**/*.tsx` 全部无诊断问题。\n\n## Requirements Advanced\n\n- R032 — 把 `历史记录` 继续钉在 `SidebarContent` learner-nav authority seam 上，并通过 dashboard/practice 两套 learner shell 验证该入口不会再被隐藏。\n\n## Requirements Validated\n\n- R032 — Fresh Vitest gate `src/components/layout/sidebar.test.tsx` + `src/components/layout/dashboard-shell.test.tsx` + `src/app/(user)/practice/layout.test.tsx` 全绿，且 close-out diagnostics 对 learner shell/practice route 文件均无问题。\n\n## New Requirements Surfaced\n\nNone.\n\n## Requirements Invalidated or Re-scoped\n\nNone.\n\n## Deviations\n\nNone.\n\n## Known Limitations\n\n帮助/反馈入口当前仍是 frontend-only affordance，不会创建工单、发送请求或读取 admin support-email 配置。dashboard 首页也只收口到了现有 history/report 路由族，尚未实现新的筛选器或详情工作流。\n\n## Follow-ups\n\nS03 可以直接复用当前 learner shell seam 继续收口个人中心与排行榜体验；如果后续要把“帮助与反馈”升级成真实支持流程，优先在 `LearnerHelpEntry` 这条共享 shell seam 上接入后端联系方式/工单能力，而不是重新分散到各页面实现。\n\n## Files Created/Modified\n\n- `web/src/components/layout/sidebar.tsx` — 保留 `SidebarContent` 作为 learner 导航 authority seam，并锁定 `历史记录` 入口仍在共享侧边栏内。\n- `web/src/components/layout/dashboard-shell.tsx` — 把共享 learner help/feedback affordance 挂到 dashboard learner shell。\n- `web/src/app/(user)/practice/layout.tsx` — 在 practice learner shell 复用同一帮助/反馈入口。\n- `web/src/components/layout/learner-help-entry.tsx` — 新增前端本地的 learner 帮助/反馈组件，使用有界 route/session 上下文而不依赖后台配置。\n- `web/src/app/(dashboard)/page.tsx` — 把首页 learner CTA 收口到真实 `/history` / `/practice/{sessionId}/report` 动作或显式禁用态。\n- `web/src/app/(dashboard)/page.test.tsx` — 补 dashboard 首页 CTA 回归，防止空壳按钮重新出现。\n- `web/src/app/(dashboard)/history/page.test.tsx` — 锁定首页与 history 路由族之间的真实 learner 行为衔接。\n- `web/src/components/learner/learner-route-error-state.tsx` — 新增 practice/report/replay 共用的 learner route fallback presenter，带 tagged console diagnostics。\n- `web/src/app/(user)/practice/[sessionId]/error.tsx` — 为 live practice route 新增 App Router `error.tsx` 边界。\n- `web/src/app/(user)/practice/[sessionId]/report/error.tsx` — 把 report route error boundary 改为复用共享 learner fallback presenter。\n- `web/src/app/(user)/practice/[sessionId]/replay/error.tsx` — 把 replay route error boundary 改为复用共享 learner fallback presenter。\n- `web/src/app/(user)/practice/[sessionId]/error.test.tsx` — 新增 focused Vitest 覆盖 live practice route fallback 的 retry / back / diagnostics 行为。\n",
+      "full_uat_md": "# S02: 导航与系统体验基础 — UAT\n\n**Milestone:** M012\n**Written:** 2026-04-09T10:12:29.546Z\n\n# S02 UAT — 导航与系统体验基础\n\n## Preconditions\n- 使用一个可正常登录的 learner 账号。\n- 浏览器可访问当前 web 环境，并能进入 `/dashboard`、`/training`、`/history`。\n- 准备一条已有报告的训练记录，用于验证 dashboard → report 跳转。\n- 如需验证 route fallback，使用本地开发环境并准备一个可触发 `/practice/[sessionId]` 渲染报错的测试开关或临时抛错夹具。\n\n## Case 1 — Dashboard learner shell 保留历史入口并暴露帮助入口\n1. 登录后进入 dashboard 首页。\n2. 在桌面侧边栏中查看 learner 导航。\n3. 确认能看到 `历史记录` 入口，且侧边栏中还出现统一的帮助/反馈入口。\n4. 点击 `历史记录`。\n5. 预期：成功进入 `/history`，不需要手动改 URL；返回 dashboard 后，帮助/反馈入口仍存在。\n\n## Case 2 — Collapsed / mobile learner shell 仍可找到同一帮助入口\n1. 在 dashboard 壳层切换到 collapsed sidebar，或把浏览器缩到移动端宽度并打开移动导航抽屉。\n2. 查看 learner 导航和辅助入口。\n3. 预期：`历史记录` 仍可被访问；帮助/反馈入口仍存在，没有因为壳层形态变化而消失。\n\n## Case 3 — Practice learner shell 复用同一帮助/反馈 affordance\n1. 从 dashboard 进入任意训练页 `/practice/{sessionId}`。\n2. 查看 practice 页面外层 learner shell。\n3. 预期：可以看到与 dashboard 一致的帮助/反馈入口；入口文案与位置语义保持稳定，不依赖后台 support-email 配置才显示。\n\n## Case 4 — Dashboard 首页 CTA 只走真实路径，不再出现静默空壳\n1. 回到 dashboard 首页。\n2. 分别检查首页 learner 可见 CTA（如历史、最近训练卡片上的报告入口等）。\n3. 点击所有处于可用态的 CTA。\n4. 预期：每个可用 CTA 都会真正跳转到 `/history` 或 `/practice/{sessionId}/report`；不存在点击后无反应、无提示的静默 no-op。\n\n## Case 5 — 暂不支持的首页筛选/详情能力表现为显式禁用态\n1. 在 dashboard 首页查看最近训练/历史相关区域中暂未实现的筛选或详情 affordance。\n2. 尝试与这些 affordance 交互。\n3. 预期：它们应表现为显式禁用态，并给出“请前往历史页查看”之类的说明；不会出现看起来能点、但什么都不发生的空壳交互。\n\n## Case 6 — Live practice route 报错时出现统一 fallback，而不是白屏\n1. 在本地开发环境触发 `/practice/{sessionId}` 的渲染错误。\n2. 观察页面是否出现统一的 learner route fallback。\n3. 点击 `重试`。\n4. 预期：页面显示“训练页面暂时不可用”标题、解释文案、`重试` 按钮以及“返回训练大厅”链接；点击 `重试` 会重新触发 route reset，而不是停留白屏。\n\n## Case 7 — Report / replay route 也复用统一 fallback presenter\n1. 分别触发 `/practice/{sessionId}/report` 与 `/practice/{sessionId}/replay` 的渲染错误。\n2. 观察 fallback UI。\n3. 预期：两条路由都使用同一视觉与交互模式的 fallback presenter，但文案和返回路径与各自路由语境匹配；report / replay 都能安全返回历史或上一级可用页面。\n\n## Edge Checks\n- **Dev diagnostics:** 在 development 环境触发 practice route 报错时，fallback 内可以看到受限长度的 `error.message`，控制台会记录带 tag 的 `LearnerRouteErrorState:*` 错误日志。\n- **Production diagnostics:** 在 production/staging 构建下触发同类错误时，用户界面不显示 raw error message，但仍保留 `重试` 和安全返回路径。\n- **No-history learner:** 对没有训练历史的新账号，dashboard 首页不应因为缺历史数据而重新出现空壳 CTA；应显示已有的 empty/degraded state，并继续允许用户去训练或查看真实可访问入口。\n",
       "goal": "锁定 learner 共享导航与反馈入口、清理首页死路按钮、补齐 practice 路由错误边界，让新人从首页进入训练闭环时不会因为隐藏入口、空壳操作或白屏而卡住。",
       "success_criteria": "- Shared learner navigation keeps `历史记录` visible at the `SidebarContent` seam on dashboard shells, so R032 no longer depends on manual URL entry.\n- Dashboard and practice shells expose a lightweight learner help/feedback affordance that does not depend on the unwired admin support-email setting and does not leak raw diagnostics in production.\n- The dashboard homepage contains no learner-facing dead-end controls: visible history/detail/filter actions route to existing `/history` or report surfaces, or are explicitly disabled with clear copy.\n- `/practice/[sessionId]`, `/practice/[sessionId]/report`, and `/practice/[sessionId]/replay` all render friendly App Router error fallbacks with retry + safe navigation instead of white-screening.",
       "proof_level": "Integration — focused Vitest shell/page/error-boundary tests prove the shared navigation seam, homepage CTA closure, and learner route fallback behavior without requiring a live backend runtime.",
@@ -1902,11 +1902,11 @@
       "completed_at": null,
       "full_summary_md": "",
       "full_uat_md": "",
-      "goal": "Profile 摆设功能持久化或隐藏，排行榜有评分规则说明，修改密码功能可用",
-      "success_criteria": "1. 语速设置持久化到后端\n2. 通知开关已移除\n3. 排行榜有评分规则说明\n4. 个人中心可修改密码",
-      "proof_level": "contract",
-      "integration_closure": "Profile API 扩展 voice_speed_preference 字段；排行榜页面添加评分说明组件",
-      "observability_impact": "none",
+      "goal": "在不扩张 backend 用户设置或排行榜契约的前提下，把 learner 侧个人中心与排行榜收口成真实可达、语义可信、行为闭环的体验：用户能从共享壳层进入 `/profile`，在个人中心里管理真实会影响训练体验的语速偏好，清楚知道如何修改密码，并看懂排行榜分数是按什么口径计算的。",
+      "success_criteria": "## Demo\nAfter this: learner shell 里的账户入口可以真实进入 `/profile`；Profile 页的语速设置通过一个 SSR-safe 前端 authority seam 持久化并真正影响训练音频播放；通知开关不会被重新引入；个人中心里的密码动作以真实文案复用 S01 的 forgot/reset 流程；排行榜明确说明只有可评估的已完成训练会计入均分/排行。\n\n## Must-Haves\n- `SidebarContent` 的用户入口不再是 dead button，且不影响已锁定的 `历史记录` 导航 authority seam。\n- `web/src/app/(dashboard)/profile/page.tsx` 不再在 render 期间直接读写 `localStorage`，也不再尝试发送假的 `voice_speed_preference` PATCH；同一个前端 preference seam 同时被 profile 页与训练音频播放链消费。\n- 音频播放的 MediaSource、fallback `Audio`、PCM Web Audio 三条路径都应用同一 `voice_speed_preference`。\n- 个人中心密码 CTA 使用 truthful copy 和 Next 路由跳转复用 `/forgot-password`，不新增 backend 密码接口。\n- learner 排行榜文案收敛到当前 admin analytics 的“只纳入可评估已完成训练”语义，但不修改 learner leaderboard backend 排序契约。\n- Focused Vitest 覆盖 shell/profile/voice-speed/leaderboard 行为，且触达文件的 TypeScript diagnostics 保持 clean。\n\n## Threat Surface\n- **Abuse**: `localStorage` 被手工篡改或手动访问 `/profile` / `/forgot-password` 时，前端只接受受限语速枚举值并复用既有鉴权/密码重置边界；不能因为 S03 引入新的高权限动作或隐藏 toggle。\n- **Data exposure**: 个人中心继续展示已有的 display name / email / department，不新增 token、reset secret 或额外敏感资料暴露面。\n- **Input trust**: learner 编辑资料字段与本地语速值都属于不可信输入；语速必须先做客户端归一化再驱动 UI / runtime 播放链，密码 CTA 只允许导航到 S01 已验证的 reset flow。\n\n## Requirement Impact\n- **Requirements touched**: R029, R031, R032\n- **Re-verify**: forgot/reset handoff、learner shell account entry、`历史记录` 入口仍留在共享 sidebar seam、profile 保存后 learner shell 身份文案不漂移\n- **Decisions revisited**: D161, D162\n\n## Verification\n- `npm --prefix web test -- --run \"src/components/layout/sidebar.test.tsx\" \"src/app/(dashboard)/profile/page.test.tsx\" \"src/hooks/use-voice-speed-preference.test.ts\" \"src/hooks/use-streaming-audio-player.test.ts\" \"src/app/(dashboard)/leaderboard/page.test.tsx\"`\n- `lsp diagnostics web/src/components/layout/sidebar.tsx`\n- `lsp diagnostics web/src/app/(dashboard)/profile/page.tsx`\n- `lsp diagnostics web/src/hooks/use-voice-speed-preference.ts`\n- `lsp diagnostics web/src/hooks/use-streaming-audio-player.ts`\n- `lsp diagnostics web/src/app/(dashboard)/leaderboard/page.tsx`",
+      "proof_level": "- This slice proves: integration\n- Real runtime required: no\n- Human/UAT required: no",
+      "integration_closure": "- Upstream surfaces consumed: `web/src/components/layout/sidebar.tsx` learner shell seam、`web/src/app/(dashboard)/profile/page.tsx` 现有资料编辑流、S01 已交付的 `/forgot-password` route family、`web/src/hooks/use-practice-websocket.ts` / `web/src/hooks/use-streaming-audio-player.ts` 音频播放链、`web/src/app/admin/analytics/page.tsx` 当前权威 leaderboard 文案。\n- New wiring introduced in this slice: sidebar 用户 affordance 真实导航到 `/profile`；`useVoiceSpeedPreference` 成为 profile 与 practice playback 共用的前端 authority seam；learner leaderboard 文案对齐 admin evaluable-session semantics。\n- What remains before the milestone is truly usable end-to-end: nothing for M012 roadmap scope if the focused web tests and diagnostics all pass.",
+      "observability_impact": "- Runtime signals: `localStorage[\"voice_speed_preference\"]` 成为唯一 learner 语速 authority；focused tests 直接断言 profile 选项、`HTMLAudioElement.playbackRate` 与 PCM `AudioBufferSourceNode.playbackRate` 是否被正确应用；排行榜页文案明确暴露当前 score basis。\n- Inspection surfaces: `web/src/app/(dashboard)/profile/page.test.tsx`、`web/src/hooks/use-voice-speed-preference.test.ts`、`web/src/hooks/use-streaming-audio-player.test.ts`、`web/src/app/(dashboard)/leaderboard/page.test.tsx`，以及浏览器 devtools 的 `localStorage` / learner shell 页面状态。\n- Failure visibility: `/profile` 入口回退成 dead button、语速 select 与存储值漂移、播放速度卡在 `1.0`、或排行榜 copy 回到旧加权语义时，focused Vitest 会直接报错并定位到相应 seam。\n- Redaction constraints: 测试与 copy 不得暴露 reset token、认证 header 或额外 PII。",
       "sequence": 0,
       "replan_triggered_at": null
     },
@@ -8303,19 +8303,24 @@
       "milestone_id": "M012",
       "slice_id": "S02",
       "id": "T02",
-      "title": "Replace dashboard-home dead ends with real history/report actions",
-      "status": "pending",
-      "one_liner": "",
-      "narrative": "",
-      "verification_result": "",
+      "title": "Locked dashboard-home learner CTA coverage so history failures still degrade to real /history or training actions without hollow controls.",
+      "status": "complete",
+      "one_liner": "Locked dashboard-home learner CTA coverage so history failures still degrade to real /history or training actions without hollow controls.",
+      "narrative": "I verified the local dashboard-home runtime before editing and found that `web/src/app/(dashboard)/page.tsx` already met the task contract: the fake filter had been replaced with a real `/history` action, recent-history cards only exposed real `/history` or `/practice/{sessionId}/report` destinations, and malformed or incomplete sessions already rendered explicit disabled states with learner-safe copy. To avoid unnecessary churn, I kept the working runtime intact and added the missing regression coverage in `web/src/app/(dashboard)/page.test.tsx` for the dashboard-history failure path so learners still see real history/training actions and never a silent no-op CTA. My first pass at the new test failed because the page legitimately renders both the recommendation CTA and the empty-state CTA with the label `开始训练`; I narrowed the assertion to the intended behavior instead of changing product code. Fresh slice verification then passed for the dashboard/home and history route-family tests, and LSP diagnostics stayed clean.",
+      "verification_result": "Ran the slice-plan Vitest command fresh and confirmed all dashboard-home and history route-family assertions pass, including happy-path report links, malformed and incomplete session disabled states, presentation route-family coverage, and the new history-load failure fallback behavior. Re-ran LSP diagnostics on `web/src/app/(dashboard)/page.tsx`, `web/src/app/(dashboard)/page.test.tsx`, and `web/src/app/(dashboard)/history/page.test.tsx`; no issues were reported.",
       "duration": "",
-      "completed_at": null,
+      "completed_at": "2026-04-09T07:35:33.260Z",
       "blocker_discovered": false,
-      "deviations": "",
-      "known_issues": "",
-      "key_files": [],
-      "key_decisions": [],
-      "full_summary_md": "",
+      "deviations": "The planner expected runtime edits in `web/src/app/(dashboard)/page.tsx`, but local reality already satisfied the task contract. I therefore limited execution to adding the missing degraded-path regression coverage instead of rewriting working homepage CTA logic.",
+      "known_issues": "None.",
+      "key_files": [
+        "web/src/app/(dashboard)/page.test.tsx",
+        ".gsd/milestones/M012/slices/S02/tasks/T02-SUMMARY.md"
+      ],
+      "key_decisions": [
+        "When the local dashboard-home runtime already satisfies the contract, preserve the existing implementation and close the task by adding the missing failure-path regression instead of rewriting live CTA behavior."
+      ],
+      "full_summary_md": "---\nid: T02\nparent: S02\nmilestone: M012\nkey_files:\n  - web/src/app/(dashboard)/page.test.tsx\n  - .gsd/milestones/M012/slices/S02/tasks/T02-SUMMARY.md\nkey_decisions:\n  - When the local dashboard-home runtime already satisfies the contract, preserve the existing implementation and close the task by adding the missing failure-path regression instead of rewriting live CTA behavior.\nduration: \"\"\nverification_result: passed\ncompleted_at: 2026-04-09T07:35:33.261Z\nblocker_discovered: false\n---\n\n# T02: Locked dashboard-home learner CTA coverage so history failures still degrade to real /history or training actions without hollow controls.\n\n**Locked dashboard-home learner CTA coverage so history failures still degrade to real /history or training actions without hollow controls.**\n\n## What Happened\n\nI verified the local dashboard-home runtime before editing and found that `web/src/app/(dashboard)/page.tsx` already met the task contract: the fake filter had been replaced with a real `/history` action, recent-history cards only exposed real `/history` or `/practice/{sessionId}/report` destinations, and malformed or incomplete sessions already rendered explicit disabled states with learner-safe copy. To avoid unnecessary churn, I kept the working runtime intact and added the missing regression coverage in `web/src/app/(dashboard)/page.test.tsx` for the dashboard-history failure path so learners still see real history/training actions and never a silent no-op CTA. My first pass at the new test failed because the page legitimately renders both the recommendation CTA and the empty-state CTA with the label `开始训练`; I narrowed the assertion to the intended behavior instead of changing product code. Fresh slice verification then passed for the dashboard/home and history route-family tests, and LSP diagnostics stayed clean.\n\n## Verification\n\nRan the slice-plan Vitest command fresh and confirmed all dashboard-home and history route-family assertions pass, including happy-path report links, malformed and incomplete session disabled states, presentation route-family coverage, and the new history-load failure fallback behavior. Re-ran LSP diagnostics on `web/src/app/(dashboard)/page.tsx`, `web/src/app/(dashboard)/page.test.tsx`, and `web/src/app/(dashboard)/history/page.test.tsx`; no issues were reported.\n\n## Verification Evidence\n\n| # | Command | Exit Code | Verdict | Duration |\n|---|---------|-----------|---------|----------|\n| 1 | `npm --prefix web test -- --run \"src/app/(dashboard)/page.test.tsx\" \"src/app/(dashboard)/history/page.test.tsx\"` | 0 | ✅ pass | 1010ms |\n| 2 | `LSP diagnostics on web/src/app/(dashboard)/page.tsx, web/src/app/(dashboard)/page.test.tsx, web/src/app/(dashboard)/history/page.test.tsx` | 0 | ✅ pass | 0ms |\n\n\n## Deviations\n\nThe planner expected runtime edits in `web/src/app/(dashboard)/page.tsx`, but local reality already satisfied the task contract. I therefore limited execution to adding the missing degraded-path regression coverage instead of rewriting working homepage CTA logic.\n\n## Known Issues\n\nNone.\n\n## Files Created/Modified\n\n- `web/src/app/(dashboard)/page.test.tsx`\n- `.gsd/milestones/M012/slices/S02/tasks/T02-SUMMARY.md`\n",
       "description": "## Description\nRemove the remaining hollow learner actions from `web/src/app/(dashboard)/page.tsx`. Reuse the already-working `/history` and `/practice/{sessionId}/report` route family instead of inventing dashboard-only filter/detail APIs. Any learner-visible control that cannot perform a real action in this slice must become explicitly disabled with clear copy.\n\n## Failure Modes\n\n| Dependency | On error | On timeout | On malformed response |\n|------------|----------|-----------|----------------------|\n| `api.dashboard.getHistory()` / dashboard payload | Keep the existing empty/degraded state and route users to `/history`; never strand them behind a fake filter/detail UI. | Keep loading fallback, then degrade to existing empty-state/retry behavior. | Guard missing `session_id`, `scenario_type`, or reportability fields by hiding or disabling the dependent CTA with explicit copy. |\n| Existing `/history` + `/practice/{sessionId}/report` routes | Use those routes as the only active destinations; if an item is not reportable yet, keep the CTA explicit/disabled rather than inert. | Same as error: no fake modal flow. | Never synthesize unsupported filter parameters or unsupported detail routes. |\n\n## Load Profile\n\n- **Shared resources**: Existing dashboard stats/recommendation/history API calls only.\n- **Per-operation cost**: No new network requests; only client-side link/disabled-state decisions on already-fetched history items.\n- **10x breakpoint**: The existing dashboard history list rendering would degrade before this task adds any new cost.\n\n## Negative Tests\n\n- **Malformed inputs**: Missing `session_id`, pending/incomplete sessions, or empty history still produce clear learner-safe CTAs.\n- **Error paths**: Failed dashboard history load falls back to empty/retry states without reintroducing hollow controls.\n- **Boundary conditions**: Sales + presentation entries keep the existing shared report/history route family.\n\n## Steps\n\n1. Replace the fake homepage filter flow with a real action (for example, routing to `/history`) or an explicitly disabled affordance that explains filtering belongs on the history page.\n2. Replace the inert detail/overflow affordances in recent-history cards and dialogs with real report/history links or explicit disabled states driven by the current session data.\n3. Extend the existing homepage tests (and any route-family regression assertions they need) so no learner-visible dashboard CTA is left as a silent no-op.\n\n## Must-Haves\n\n- [ ] No learner-visible homepage CTA silently does nothing.\n- [ ] Active homepage actions only target already-working `/history` or `/practice/{sessionId}/report` routes.\n- [ ] Unsupported detail/filter behaviors are explicit disabled states, not fake interactive UI.\n- [ ] Existing dynamic greeting/version and empty-history behavior stay intact.",
       "estimate": "1.25h",
       "files": [
@@ -8343,19 +8348,29 @@
       "milestone_id": "M012",
       "slice_id": "S02",
       "id": "T03",
-      "title": "Add a shared learner route fallback and cover the live practice error boundary",
-      "status": "pending",
-      "one_liner": "",
-      "narrative": "",
-      "verification_result": "",
+      "title": "Added a shared learner route error presenter, wired practice/report/replay App Router boundaries to it, and locked the live practice fallback with focused Vitest coverage.",
+      "status": "complete",
+      "one_liner": "Added a shared learner route error presenter, wired practice/report/replay App Router boundaries to it, and locked the live practice fallback with focused Vitest coverage.",
+      "narrative": "T03 was still incomplete in the working tree, so I finished it directly with a test-first pass. I first added `web/src/app/(user)/practice/[sessionId]/error.test.tsx` and confirmed the focused Vitest run failed because `./error` did not exist yet, which proved the live practice route still lacked the planned App Router boundary. I then introduced `web/src/components/learner/learner-route-error-state.tsx` as the shared learner fallback presenter: it logs a tagged `console.error`, keeps retry plus safe navigation actions on-screen, and only exposes a bounded `error.message` in development. With that presenter in place, I added the missing live `web/src/app/(user)/practice/[sessionId]/error.tsx` boundary and refactored the existing report/replay `error.tsx` files to reuse the same presenter instead of maintaining duplicate copy and behavior. I also recorded two future-agent gotchas in `.gsd/KNOWLEDGE.md`: dashboard degraded states can legitimately render multiple `开始训练` buttons, and route-error tests must stub `NODE_ENV=development` if they expect raw diagnostics. Fresh focused verification then passed for the live practice boundary, and diagnostics were clean for the shared presenter plus all practice/report/replay error routes.",
+      "verification_result": "Fresh focused Vitest verification passed for `src/app/(user)/practice/[sessionId]/error.test.tsx`, proving the live practice fallback renders retry + safe navigation and hides raw diagnostics in production while keeping them bounded in development. LSP diagnostics then confirmed the new shared presenter and all three learner `error.tsx` routes are clean.",
       "duration": "",
-      "completed_at": null,
+      "completed_at": "2026-04-09T09:50:21.971Z",
       "blocker_discovered": false,
-      "deviations": "",
-      "known_issues": "",
-      "key_files": [],
-      "key_decisions": [],
-      "full_summary_md": "",
+      "deviations": "None.",
+      "known_issues": "None.",
+      "key_files": [
+        "web/src/components/learner/learner-route-error-state.tsx",
+        "web/src/app/(user)/practice/[sessionId]/error.tsx",
+        "web/src/app/(user)/practice/[sessionId]/report/error.tsx",
+        "web/src/app/(user)/practice/[sessionId]/replay/error.tsx",
+        "web/src/app/(user)/practice/[sessionId]/error.test.tsx",
+        ".gsd/KNOWLEDGE.md"
+      ],
+      "key_decisions": [
+        "Use a shared `LearnerRouteErrorState` presenter so practice/report/replay App Router boundaries keep one retry, logging, and diagnostic contract.",
+        "Route the live practice fallback back to `/training`, while report and replay keep `/history`, so each boundary returns users to the nearest real recovery surface."
+      ],
+      "full_summary_md": "---\nid: T03\nparent: S02\nmilestone: M012\nkey_files:\n  - web/src/components/learner/learner-route-error-state.tsx\n  - web/src/app/(user)/practice/[sessionId]/error.tsx\n  - web/src/app/(user)/practice/[sessionId]/report/error.tsx\n  - web/src/app/(user)/practice/[sessionId]/replay/error.tsx\n  - web/src/app/(user)/practice/[sessionId]/error.test.tsx\n  - .gsd/KNOWLEDGE.md\nkey_decisions:\n  - Use a shared `LearnerRouteErrorState` presenter so practice/report/replay App Router boundaries keep one retry, logging, and diagnostic contract.\n  - Route the live practice fallback back to `/training`, while report and replay keep `/history`, so each boundary returns users to the nearest real recovery surface.\nduration: \"\"\nverification_result: passed\ncompleted_at: 2026-04-09T09:50:21.972Z\nblocker_discovered: false\n---\n\n# T03: Added a shared learner route error presenter, wired practice/report/replay App Router boundaries to it, and locked the live practice fallback with focused Vitest coverage.\n\n**Added a shared learner route error presenter, wired practice/report/replay App Router boundaries to it, and locked the live practice fallback with focused Vitest coverage.**\n\n## What Happened\n\nT03 was still incomplete in the working tree, so I finished it directly with a test-first pass. I first added `web/src/app/(user)/practice/[sessionId]/error.test.tsx` and confirmed the focused Vitest run failed because `./error` did not exist yet, which proved the live practice route still lacked the planned App Router boundary. I then introduced `web/src/components/learner/learner-route-error-state.tsx` as the shared learner fallback presenter: it logs a tagged `console.error`, keeps retry plus safe navigation actions on-screen, and only exposes a bounded `error.message` in development. With that presenter in place, I added the missing live `web/src/app/(user)/practice/[sessionId]/error.tsx` boundary and refactored the existing report/replay `error.tsx` files to reuse the same presenter instead of maintaining duplicate copy and behavior. I also recorded two future-agent gotchas in `.gsd/KNOWLEDGE.md`: dashboard degraded states can legitimately render multiple `开始训练` buttons, and route-error tests must stub `NODE_ENV=development` if they expect raw diagnostics. Fresh focused verification then passed for the live practice boundary, and diagnostics were clean for the shared presenter plus all practice/report/replay error routes.\n\n## Verification\n\nFresh focused Vitest verification passed for `src/app/(user)/practice/[sessionId]/error.test.tsx`, proving the live practice fallback renders retry + safe navigation and hides raw diagnostics in production while keeping them bounded in development. LSP diagnostics then confirmed the new shared presenter and all three learner `error.tsx` routes are clean.\n\n## Verification Evidence\n\n| # | Command | Exit Code | Verdict | Duration |\n|---|---------|-----------|---------|----------|\n| 1 | `npm --prefix web test -- --run \"src/app/(user)/practice/[sessionId]/error.test.tsx\"` | 0 | ✅ pass | 534ms |\n| 2 | `LSP diagnostics on web/src/app/**/error.tsx` | 0 | ✅ pass | 0ms |\n| 3 | `LSP diagnostics on web/src/components/learner/learner-route-error-state.tsx and web/src/app/**/error.test.tsx` | 0 | ✅ pass | 0ms |\n\n\n## Deviations\n\nNone.\n\n## Known Issues\n\nNone.\n\n## Files Created/Modified\n\n- `web/src/components/learner/learner-route-error-state.tsx`\n- `web/src/app/(user)/practice/[sessionId]/error.tsx`\n- `web/src/app/(user)/practice/[sessionId]/report/error.tsx`\n- `web/src/app/(user)/practice/[sessionId]/replay/error.tsx`\n- `web/src/app/(user)/practice/[sessionId]/error.test.tsx`\n- `.gsd/KNOWLEDGE.md`\n",
       "description": "## Description\nClose the remaining learner white-screen gap by adding `web/src/app/(user)/practice/[sessionId]/error.tsx`, then unify the learner route fallback presentation used by practice/report/replay behind one shared component. Keep the framework-native App Router boundary seam (`error.tsx`), not the legacy class `ErrorBoundary`, and preserve the existing dev-only raw-message diagnostics rule.\n\n## Failure Modes\n\n| Dependency | On error | On timeout | On malformed response |\n|------------|----------|-----------|----------------------|\n| Next App Router `error.tsx` + `reset()` contract | Render a friendly fallback with retry and safe navigation; do not bubble to a blank shell. | Same as error — fallback stays local and retryable. | Ignore malformed/non-Error values and show generic copy in production. |\n| Shared learner error presenter | If route-specific props are missing, fall back to generic title/body/navigation copy. | Same as error. | Never expose raw stacks outside dev; only show bounded `error.message` in development. |\n\n## Load Profile\n\n- **Shared resources**: Client-side fallback render only.\n- **Per-operation cost**: One extra small presenter render when a route throws; trivial in the success path.\n- **10x breakpoint**: N/A — if many route failures happen, diagnosis clarity matters more than render cost.\n\n## Negative Tests\n\n- **Malformed inputs**: Missing `error.message`, unexpected thrown values, and absent route metadata still render safe fallback copy.\n- **Error paths**: `reset()` can be triggered from the live practice boundary; production mode hides raw diagnostics while development mode shows bounded detail.\n- **Boundary conditions**: Practice, report, and replay each keep route-appropriate title/navigation while sharing the same fallback presenter.\n\n## Steps\n\n1. Create a shared learner route-error presenter component with configurable title/body/back-link copy plus dev-only diagnostic rendering and tagged console logging.\n2. Add `web/src/app/(user)/practice/[sessionId]/error.tsx` and migrate report/replay `error.tsx` files to reuse the shared presenter.\n3. Add focused Vitest coverage proving the live practice route fallback renders retry + safe navigation and that production/dev diagnostic behavior stays bounded.\n\n## Must-Haves\n\n- [ ] `/practice/[sessionId]` gets a real App Router `error.tsx` boundary.\n- [ ] Practice/report/replay reuse one shared learner fallback presenter instead of drifting copy/behavior.\n- [ ] Production hides raw error diagnostics; development keeps bounded visibility for debugging.\n- [ ] Tests lock retry + safe navigation behavior for the live practice fallback.",
       "estimate": "1.25h",
       "files": [
@@ -8379,6 +8394,134 @@
         "web/src/app/(user)/practice/[sessionId]/error.test.tsx"
       ],
       "observability_impact": "Gives learner route failures one tagged, reusable inspection surface and a focused regression test instead of a silent blank page.",
+      "full_plan_md": "",
+      "sequence": 0
+    },
+    {
+      "milestone_id": "M012",
+      "slice_id": "S03",
+      "id": "T01",
+      "title": "让 learner 壳层个人中心入口和密码动作都落到真实路由",
+      "status": "pending",
+      "one_liner": "",
+      "narrative": "",
+      "verification_result": "",
+      "duration": "",
+      "completed_at": null,
+      "blocker_discovered": false,
+      "deviations": "",
+      "known_issues": "",
+      "key_files": [],
+      "key_decisions": [],
+      "full_summary_md": "",
+      "description": "Skills: safe-grow, react-best-practices, vitest, verification-before-completion\n\n把 `/profile` 的可达性收口在现有 learner shell authority seam，而不是额外发明新导航。`web/src/components/layout/sidebar.tsx` 里的用户弹窗目前把“编辑资料”渲染成了无动作按钮；这个任务要把它变成真实的 `/profile` 导航，同时保持 `历史记录` 继续留在 `SidebarContent` 里，不回归 S02 已关闭的问题。`web/src/app/(dashboard)/profile/page.tsx` 里的密码动作则要保持复用 S01 的 forgot/reset 流程：用 truthful copy（例如“通过邮箱重置密码”）和 Next 路由跳转替换 `window.location.href`，但不要新增 authenticated password API。\n\n## Failure Modes\n\n| Dependency | On error | On timeout | On malformed response |\n|------------|----------|-----------|----------------------|\n| `next/link` / `next/navigation` routing | 保持按钮退化成明确可见的 link/button affordance，不能回到静默 dead button。 | 同 error：优先保留明确目标路由。 | 仅导航到受控的 `/profile` 与 `/forgot-password`，绝不拼接不可信 query。 |\n| `api.user.getMe()` / 现有 profile 加载流 | 保持当前 loading/error fallback，不因路由改造新增白屏。 | 维持现有 skeleton / 错误文案。 | 缺失用户字段时继续回退到既有 display-name / email fallback。 |\n\n## Load Profile\n\n- **Shared resources**: learner shell render tree 与现有 profile 数据请求；不新增 backend/shared infra。\n- **Per-operation cost**: 一次本地路由跳转 + 既有 profile 页面加载，成本与当前页面一致。\n- **10x breakpoint**: 首先暴露的问题会是 dead CTA 或错误目标路由，而不是资源耗尽。\n\n## Negative Tests\n\n- **Malformed inputs**: 缺失 `currentUser`、缺失 display name / email 时，sidebar 用户入口与 profile 页面仍保持可达与安全 fallback。\n- **Error paths**: profile 页面数据加载失败时仍显示现有错误态，不因为密码 CTA 改造而阻塞页面。\n- **Boundary conditions**: expanded / collapsed learner user affordance 都能到 `/profile`；密码 CTA 始终指向 `/forgot-password` 而不是浏览器硬跳转字符串拼接。\n\n## Steps\n\n1. 把 `sidebar.tsx` 里的用户弹窗“编辑资料”改成真实 `/profile` 导航，并补齐 focused tests，确认 `历史记录` 入口仍在共享 nav seam。\n2. 在 `profile/page.tsx` 内把密码动作改成 truthful copy + Next 路由导航到 `/forgot-password`，避免 `window.location.href`。\n3. 新增/扩展 profile focused Vitest，锁定 learner shell `/profile` 入口与密码 CTA 的真实 route handoff。\n\n## Must-Haves\n\n- [ ] learner shell 用户弹窗不再存在无动作的“编辑资料”按钮。\n- [ ] `SidebarContent` 中的 `历史记录` 入口保持不变。\n- [ ] profile 页密码 CTA 明确说明通过既有 forgot/reset 流程修改密码。\n- [ ] focused tests 直接断言 `/profile` 与 `/forgot-password` 的目标路由。\n",
+      "estimate": "1.25h",
+      "files": [
+        "web/src/components/layout/sidebar.tsx",
+        "web/src/components/layout/sidebar.test.tsx",
+        "web/src/app/(dashboard)/profile/page.tsx",
+        "web/src/app/(dashboard)/profile/page.test.tsx"
+      ],
+      "verify": "npm --prefix web test -- --run \"src/components/layout/sidebar.test.tsx\" \"src/app/(dashboard)/profile/page.test.tsx\"",
+      "inputs": [
+        "web/src/components/layout/sidebar.tsx",
+        "web/src/components/layout/sidebar.test.tsx",
+        "web/src/app/(dashboard)/profile/page.tsx",
+        "web/src/lib/query/auth.ts"
+      ],
+      "expected_output": [
+        "web/src/components/layout/sidebar.tsx",
+        "web/src/components/layout/sidebar.test.tsx",
+        "web/src/app/(dashboard)/profile/page.tsx",
+        "web/src/app/(dashboard)/profile/page.test.tsx"
+      ],
+      "observability_impact": "- Signals added/changed: learner shell 账户 affordance 与 profile 密码 CTA 都暴露明确目标路由。\n- How a future agent inspects this: 运行 `sidebar.test.tsx` 与 `profile/page.test.tsx`，检查 `/profile`、`/forgot-password` href / router push 断言。\n- Failure state exposed: dead button、错误目标路由、或 `历史记录` nav 回归会被 focused tests 直接指出。",
+      "full_plan_md": "",
+      "sequence": 0
+    },
+    {
+      "milestone_id": "M012",
+      "slice_id": "S03",
+      "id": "T02",
+      "title": "建立单一语速偏好 seam 并把它真正接到训练音频播放链",
+      "status": "pending",
+      "one_liner": "",
+      "narrative": "",
+      "verification_result": "",
+      "duration": "",
+      "completed_at": null,
+      "blocker_discovered": false,
+      "deviations": "",
+      "known_issues": "",
+      "key_files": [],
+      "key_decisions": [],
+      "full_summary_md": "",
+      "description": "Skills: safe-grow, react-best-practices, tanstack-query-best-practices, vitest, verification-before-completion\n\n把“语音播放速度”从 profile 页里的页面内小把戏收口成一个真正影响训练体验的前端 seam。当前实现同时存在三个问题：render 期间直接读 `localStorage`、尝试发一个实际上不会落盘的 `voice_speed_preference` PATCH、以及训练音频播放链根本不消费这个值。这个任务应以 `web/src/hooks/use-theme.ts` 为参考，新增一个 SSR-safe 的 `useVoiceSpeedPreference` hook，限定支持值枚举并负责本地持久化；profile 页面只通过这个 hook 读写状态，不再伪装 backend persistence。随后把该偏好接到 `usePracticeWebSocket` / `useStreamingAudioPlayer` 所覆盖的三条播放路径：MediaSource `HTMLAudioElement`、fallback `new Audio(audioUrl)`、以及 PCM Web Audio `AudioBufferSourceNode`。\n\n## Failure Modes\n\n| Dependency | On error | On timeout | On malformed response |\n|------------|----------|-----------|----------------------|\n| Browser `localStorage` | 回退到默认 `1.0x`，UI 仍可操作；不能崩溃或无限重渲染。 | 视为读取失败并使用默认值。 | 非法值必须被归一化到受支持枚举，而不是直接喂给播放链。 |\n| `HTMLAudioElement` / MediaSource / Web Audio | 在不支持或 autoplay 被拦截时保留现有播放错误/缓冲行为，只修正 `playbackRate` 应用。 | 不新增额外重试循环；保留当前 stop/reset 逻辑。 | 只对受支持 rate 赋值；PCM / fallback / MediaSource 任一路径缺字段时回退到 `1.0`。 |\n\n## Load Profile\n\n- **Shared resources**: browser `localStorage`、当前 audio element、MediaSource、`AudioContext` / `AudioBufferSourceNode`。\n- **Per-operation cost**: 一次本地 storage 读写 + 每条播放路径一次 `playbackRate` 赋值；无新网络请求。\n- **10x breakpoint**: 高频开练/中断时首先暴露的是播放链资源清理或默认值漂移，而不是业务 API 压力。\n\n## Negative Tests\n\n- **Malformed inputs**: `localStorage` 缺失、空字符串、非法数字、超出枚举范围时统一回退到默认值。\n- **Error paths**: autoplay blocked、fallback audio、PCM chunk 流、MediaSource 不支持场景都不会因为新增语速逻辑而失效。\n- **Boundary conditions**: `0.75x`、`1.0x`、`1.25x`、`1.5x` 四个受支持值都能被 profile UI 选中并应用到播放链。\n\n## Steps\n\n1. 新增 `use-voice-speed-preference.ts`（必要时连同 focused test），实现 SSR-safe 默认值、枚举归一化和 `localStorage` 持久化。\n2. 重构 `profile/page.tsx` 的语速设置，只通过新 hook 读写状态；移除 inline `localStorage` IIFE 和伪造的 `voice_speed_preference` PATCH，同时确保通知 toggle 不会被重新引入。\n3. 给 `use-streaming-audio-player.ts`（必要时经 `use-practice-websocket.ts` 传参）补齐 playbackRate wiring，并新增 focused Vitest 覆盖 hook 归一化和三条播放路径的 rate 应用。\n\n## Must-Haves\n\n- [ ] 语速偏好只有一个前端 authority seam，并限制在受支持枚举值内。\n- [ ] profile 页不再 render-time 读取 `localStorage`，也不再调用假的 `voice_speed_preference` PATCH。\n- [ ] MediaSource、fallback `Audio`、PCM Web Audio 三条播放路径都应用同一个 rate。\n- [ ] profile 设置区不会重新出现通知开关。\n",
+      "estimate": "2h",
+      "files": [
+        "web/src/hooks/use-voice-speed-preference.ts",
+        "web/src/hooks/use-voice-speed-preference.test.ts",
+        "web/src/app/(dashboard)/profile/page.tsx",
+        "web/src/hooks/use-practice-websocket.ts",
+        "web/src/hooks/use-streaming-audio-player.ts",
+        "web/src/hooks/use-streaming-audio-player.test.ts"
+      ],
+      "verify": "npm --prefix web test -- --run \"src/app/(dashboard)/profile/page.test.tsx\" \"src/hooks/use-voice-speed-preference.test.ts\" \"src/hooks/use-streaming-audio-player.test.ts\"",
+      "inputs": [
+        "web/src/hooks/use-theme.ts",
+        "web/src/app/(dashboard)/profile/page.tsx",
+        "web/src/hooks/use-practice-websocket.ts",
+        "web/src/hooks/use-streaming-audio-player.ts",
+        "web/src/hooks/use-streaming-audio-player.test.ts",
+        "web/src/lib/api/client.ts"
+      ],
+      "expected_output": [
+        "web/src/hooks/use-voice-speed-preference.ts",
+        "web/src/hooks/use-voice-speed-preference.test.ts",
+        "web/src/app/(dashboard)/profile/page.tsx",
+        "web/src/hooks/use-practice-websocket.ts",
+        "web/src/hooks/use-streaming-audio-player.ts",
+        "web/src/hooks/use-streaming-audio-player.test.ts",
+        "web/src/app/(dashboard)/profile/page.test.tsx"
+      ],
+      "observability_impact": "- Signals added/changed: `voice_speed_preference` 的归一化值可从 profile UI、`localStorage` 和 player focused tests 三处交叉确认。\n- How a future agent inspects this: 运行 `use-voice-speed-preference.test.ts` 与 `use-streaming-audio-player.test.ts`，并在浏览器里检查 `localStorage[\"voice_speed_preference\"]` 与 profile select 当前值。\n- Failure state exposed: 默认值漂移、非法 storage 值未归一化、或任一播放路径仍停在 `1.0` 都会被 focused tests 直接定位。",
+      "full_plan_md": "",
+      "sequence": 0
+    },
+    {
+      "milestone_id": "M012",
+      "slice_id": "S03",
+      "id": "T03",
+      "title": "把 learner 排行榜评分说明收口到当前 evaluable-session 语义",
+      "status": "pending",
+      "one_liner": "",
+      "narrative": "",
+      "verification_result": "",
+      "duration": "",
+      "completed_at": null,
+      "blocker_discovered": false,
+      "deviations": "",
+      "known_issues": "",
+      "key_files": [],
+      "key_decisions": [],
+      "full_summary_md": "",
+      "description": "Skills: safe-grow, react-best-practices, vitest, verification-before-completion\n\n排行榜现在已经有“说明”占位，但仍停留在旧 learner weighted-score 语义；而 admin analytics 已经把“只纳入可评估训练、证据不足单独记账”作为当前权威口径。这个任务不做 backend 契约或排序逻辑变更，只把 learner 排行榜的 header/footer 说明收口到真实语义，让新人知道为什么自己会/不会上榜以及均分是怎么算的。保留现有的周期/场景筛选、`myRank` fallback 与空态行为，不要把 S03 扩张成 analytics backend slice。\n\n## Failure Modes\n\n| Dependency | On error | On timeout | On malformed response |\n|------------|----------|-----------|----------------------|\n| `api.dashboard.getPublicLeaderboard()` | 保持现有空态/加载态，不因为 copy 调整引入新异常。 | 继续显示 loading -> empty/fallback 行为。 | 缺失 `entries` / `my_rank` 时使用既有 fallback fetch 与默认空态。 |\n| `api.dashboard.getMyRank()` fallback | 若失败则隐藏我的排名卡片，不能影响主榜单 copy。 | 同 error：保留榜单主体与说明文案。 | 对缺失 rank / totals 的响应保持现有 defensive fallback。 |\n\n## Load Profile\n\n- **Shared resources**: 现有 leaderboard 两次 API fetch（主榜单 + 可选 my-rank fallback）；不新增请求种类。\n- **Per-operation cost**: 仅文案与测试断言变化；运行时成本基本不变。\n- **10x breakpoint**: 首先受限于现有 leaderboard API，而不是这次 copy 收口。\n\n## Negative Tests\n\n- **Malformed inputs**: 空榜单、缺失 `my_rank`、缺失 `entries` 时仍显示 learner-safe 说明和空态。\n- **Error paths**: 主榜单或 my-rank fallback 失败时不回退到旧 weighted-score 语义，也不抛出白屏。\n- **Boundary conditions**: 周榜/月榜/总榜与不同场景筛选切换后，说明文案仍保持 evaluable-session 语义。\n\n## Steps\n\n1. 以 `web/src/app/admin/analytics/page.tsx` 的权威 copy 为参考，更新 learner leaderboard 页头/页尾说明，明确只纳入可评估已完成训练，证据不足会话不混入均分。\n2. 保持当前筛选、加载、空态与 `myRank` fallback 行为不变，不修改 backend 排序/字段契约。\n3. 新增 focused Vitest 覆盖正常榜单、空榜单和 fallback `myRank` 场景下的说明文案与现有交互状态。\n\n## Must-Haves\n\n- [ ] learner leaderboard 明确说明均分/排行只纳入可评估已完成训练。\n- [ ] 证据不足/未评估会话不会再被文案描述成旧 weighted-score 统计。\n- [ ] 现有 time-period / scenario filters 与 `myRank` fallback 继续工作。\n- [ ] 不新增 backend leaderboard 变更。\n",
+      "estimate": "1h",
+      "files": [
+        "web/src/app/(dashboard)/leaderboard/page.tsx",
+        "web/src/app/(dashboard)/leaderboard/page.test.tsx"
+      ],
+      "verify": "npm --prefix web test -- --run \"src/app/(dashboard)/leaderboard/page.test.tsx\"",
+      "inputs": [
+        "web/src/app/(dashboard)/leaderboard/page.tsx",
+        "web/src/app/admin/analytics/page.tsx",
+        "web/src/lib/api/client.ts"
+      ],
+      "expected_output": [
+        "web/src/app/(dashboard)/leaderboard/page.tsx",
+        "web/src/app/(dashboard)/leaderboard/page.test.tsx"
+      ],
+      "observability_impact": "- Signals added/changed: learner leaderboard 直接暴露当前 score-basis 文案，避免用户在 UI 上读到与 admin analytics 相冲突的语义。\n- How a future agent inspects this: 运行 `leaderboard/page.test.tsx` 并查看页头/页尾 copy 是否仍保持 evaluable-session 说明。\n- Failure state exposed: 一旦 copy 回退到旧 weighted-score 语义、或空态/fallback 场景丢失说明，focused tests 会直接失败。",
       "full_plan_md": "",
       "sequence": 0
     },
@@ -12351,6 +12494,18 @@
       "revisable": "Yes",
       "made_by": "agent",
       "superseded_by": null
+    },
+    {
+      "seq": 1531,
+      "id": "D163",
+      "when_context": "M012/S02 close-out",
+      "scope": "requirement",
+      "decision": "R032",
+      "choice": "validated",
+      "rationale": "S02 proved the learner navigation authority seam (`SidebarContent`) keeps `历史记录` visible in the shared sidebar, reuses that seam across dashboard shells, and preserved the route with fresh Vitest verification (`src/components/layout/sidebar.test.tsx`, `src/components/layout/dashboard-shell.test.tsx`, `src/app/(user)/practice/layout.test.tsx`) plus clean diagnostics on the learner shell files.",
+      "revisable": "Yes",
+      "made_by": "agent",
+      "superseded_by": null
     }
   ],
   "verification_evidence": [
@@ -15290,6 +15445,61 @@
       "verdict": "✅ pass",
       "duration_ms": 0,
       "created_at": "2026-04-09T03:36:13.468Z"
+    },
+    {
+      "id": 268,
+      "task_id": "T02",
+      "slice_id": "S02",
+      "milestone_id": "M012",
+      "command": "npm --prefix web test -- --run \"src/app/(dashboard)/page.test.tsx\" \"src/app/(dashboard)/history/page.test.tsx\"",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 1010,
+      "created_at": "2026-04-09T07:35:33.260Z"
+    },
+    {
+      "id": 269,
+      "task_id": "T02",
+      "slice_id": "S02",
+      "milestone_id": "M012",
+      "command": "LSP diagnostics on web/src/app/(dashboard)/page.tsx, web/src/app/(dashboard)/page.test.tsx, web/src/app/(dashboard)/history/page.test.tsx",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 0,
+      "created_at": "2026-04-09T07:35:33.260Z"
+    },
+    {
+      "id": 270,
+      "task_id": "T03",
+      "slice_id": "S02",
+      "milestone_id": "M012",
+      "command": "npm --prefix web test -- --run \"src/app/(user)/practice/[sessionId]/error.test.tsx\"",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 534,
+      "created_at": "2026-04-09T09:50:21.972Z"
+    },
+    {
+      "id": 271,
+      "task_id": "T03",
+      "slice_id": "S02",
+      "milestone_id": "M012",
+      "command": "LSP diagnostics on web/src/app/**/error.tsx",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 0,
+      "created_at": "2026-04-09T09:50:21.972Z"
+    },
+    {
+      "id": 272,
+      "task_id": "T03",
+      "slice_id": "S02",
+      "milestone_id": "M012",
+      "command": "LSP diagnostics on web/src/components/learner/learner-route-error-state.tsx and web/src/app/**/error.test.tsx",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 0,
+      "created_at": "2026-04-09T09:50:21.972Z"
     }
   ]
 }

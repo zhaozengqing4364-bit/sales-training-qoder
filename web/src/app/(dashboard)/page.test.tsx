@@ -41,12 +41,6 @@ vi.mock("@/components/ui/button", () => ({
     ),
 }));
 
-vi.mock("@/components/ui/badge", () => ({
-    Badge: ({ children, className }: { children: ReactNode; className?: string }) => (
-        <span className={className}>{children}</span>
-    ),
-}));
-
 vi.mock("@/components/dashboard-skeleton", () => ({
     DashboardSkeleton: () => <div>loading dashboard</div>,
 }));
@@ -95,6 +89,13 @@ vi.mock("@/hooks/use-current-user", () => ({
     useCurrentUser: useCurrentUserMock,
 }));
 
+async function flushDashboardData() {
+    await act(async () => {
+        await Promise.resolve();
+        await Promise.resolve();
+    });
+}
+
 describe("HomePage dashboard header", () => {
     beforeEach(() => {
         vi.useRealTimers();
@@ -120,6 +121,7 @@ describe("HomePage dashboard header", () => {
             target_path: "/training",
         });
         getHistoryMock.mockResolvedValue([]);
+        useCurrentUserMock.mockReturnValue({ data: null });
     });
 
     it("shows the current user's display name with a time-based greeting and the package version badge", async () => {
@@ -139,11 +141,7 @@ describe("HomePage dashboard header", () => {
         });
 
         render(<HomePage />);
-
-        await act(async () => {
-            await Promise.resolve();
-            await Promise.resolve();
-        });
+        await flushDashboardData();
 
         expect(getStatsMock).toHaveBeenCalled();
         expect(screen.getByRole("heading", { name: /早安, 王小明/i })).toBeTruthy();
@@ -168,13 +166,99 @@ describe("HomePage dashboard header", () => {
         });
 
         render(<HomePage />);
-
-        await act(async () => {
-            await Promise.resolve();
-            await Promise.resolve();
-        });
+        await flushDashboardData();
 
         expect(getRecommendationMock).toHaveBeenCalled();
         expect(screen.getByRole("heading", { name: /晚安, fallback.user/i })).toBeTruthy();
+    });
+
+    it("replaces fake filter and detail affordances with real history/report links", async () => {
+        getHistoryMock.mockResolvedValue([
+            {
+                id: "sales-session-1",
+                session_id: "sales-session-1",
+                title: "销售复盘",
+                scenario_type: "sales",
+                overall_score: 88,
+                duration_seconds: 180,
+                start_time: "2026-04-09T00:00:00Z",
+                status: "completed",
+                feedback_summary: "继续补强成交证据。",
+            },
+            {
+                id: "ppt-session-2",
+                session_id: "ppt-session-2",
+                title: "PPT 演讲复盘",
+                scenario_type: "presentation",
+                overall_score: 92,
+                duration_seconds: 360,
+                start_time: "2026-04-08T00:00:00Z",
+                status: "completed",
+                feedback_summary: "封面后需要更快进入客户价值。",
+            },
+        ]);
+
+        render(<HomePage />);
+        await flushDashboardData();
+
+        expect(screen.getByText("高级筛选请在历史页进行")).toBeTruthy();
+        expect(screen.getByRole("link", { name: "去历史页筛选" }).getAttribute("href")).toBe("/history");
+        expect(screen.queryByText("应用筛选")).toBeNull();
+        expect(screen.queryByRole("button", { name: "查看详情" })).toBeNull();
+
+        const reportLinks = screen.getAllByRole("link", { name: "查看报告" });
+        expect(reportLinks.map((link) => link.getAttribute("href"))).toEqual([
+            "/practice/sales-session-1/report",
+            "/practice/ppt-session-2/report",
+        ]);
+        expect(screen.getAllByRole("link", { name: "查看历史" }).every((link) => link.getAttribute("href") === "/history")).toBe(true);
+        expect(screen.getAllByRole("link", { name: "历史页" }).every((link) => link.getAttribute("href") === "/history")).toBe(true);
+    });
+
+    it("keeps malformed or incomplete sessions on explicit disabled report states with learner-safe copy", async () => {
+        getHistoryMock.mockResolvedValue([
+            {
+                id: "session-0",
+                title: "坏数据记录",
+                scenario_type: "sales",
+                overall_score: 0,
+                duration_seconds: 10,
+                start_time: "2026-04-09T00:00:00Z",
+                status: "completed",
+            },
+            {
+                id: "in-progress-session",
+                session_id: "in-progress-session",
+                title: "进行中练习",
+                scenario_type: "sales",
+                overall_score: 42,
+                duration_seconds: 75,
+                start_time: "2026-04-09T01:00:00Z",
+                status: "in_progress",
+            },
+        ]);
+
+        render(<HomePage />);
+        await flushDashboardData();
+
+        expect(screen.getByText("缺少会话编号，请到历史页核对这条记录。")).toBeTruthy();
+        expect(screen.getByText("会话完成并生成统一训练证据后即可查看报告。")).toBeTruthy();
+        expect((screen.getByRole("button", { name: "报告暂不可用" }) as HTMLButtonElement).disabled).toBe(true);
+        expect((screen.getByRole("button", { name: "报告生成中" }) as HTMLButtonElement).disabled).toBe(true);
+        expect(screen.queryByRole("link", { name: "报告暂不可用" })).toBeNull();
+    });
+
+    it("falls back to history and training actions when dashboard history fails", async () => {
+        getHistoryMock.mockRejectedValue(new Error("history unavailable"));
+
+        render(<HomePage />);
+        await flushDashboardData();
+
+        expect(screen.getByText("暂无历史记录")).toBeTruthy();
+        expect(screen.getByRole("link", { name: "去历史页筛选" }).getAttribute("href")).toBe("/history");
+        expect(screen.getAllByRole("button", { name: "开始训练" }).length).toBeGreaterThan(0);
+        expect(screen.queryByRole("link", { name: "查看报告" })).toBeNull();
+        expect(screen.queryByRole("button", { name: "查看详情" })).toBeNull();
+        expect(screen.queryByText("应用筛选")).toBeNull();
     });
 });
