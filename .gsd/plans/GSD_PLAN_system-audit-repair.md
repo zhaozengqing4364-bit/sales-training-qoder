@@ -141,6 +141,64 @@
 - 第 10 节“总结与优先级排序”是对前述 finding 的重新排序，不新增独立 backlog 项。
 - 第 18 节“需要补充的信息”是 discovery 证据缺口列表，已被折叠进 `needs-discovery` disposition，而不是另起 5 个实现型问题。
 
+#### 1.5.13 T02 disposition 复核补遗
+- 复核结果：`51 / 51` finding 仍全部落入五类 disposition，本次补齐后不再存在“只有 disposition 名称、但缺少关闭证据 / 冲突来源 / 后续归属解释”的条目。
+- 解释规则：
+  - `already-fixed` 必须锚到真实 retirement seam，而不是只写“已修”。
+  - `deferred-by-product` / `contradicted-by-project-knowledge` 必须明确写出冲突来源，避免后续执行时把产品边界误当 defect。
+  - `needs-discovery` 必须写清承接 slice 与需要补出的 proof，避免 discovery 项在后续里程碑中漂成无主 TODO。
+
+##### 已修项 retirement 证据
+
+| Audit ID | Retirement seam | Why the risk is retired |
+|---|---|---|
+| 4.1.1 | `backend/src/common/auth/service.py` 仍保留本地开发默认 `JWT_SECRET` 兜底，但 `backend/src/main.py` 在 `ENVIRONMENT != development` 时会对默认值或缺失值直接 `raise RuntimeError("JWT_SECRET must be set in production via environment variable")` | 该风险已由真实启动门禁退休：非开发环境无法带着默认 secret 启动，所以 audit 所说的“默认值落生产”不再是待办实现项。 |
+
+##### deferred / contradicted 条目的冲突来源
+
+| Audit ID | Disposition | Conflict source | Why it stays out of the implementation backlog |
+|---|---|---|---|
+| 1.1.4 | deferred-by-product | `.codex/loop/PROJECT_GROWTH.md` 的 anti-goal 明确禁止 `cosmetic churn without evidence`；`.gsd/PROJECT.md` 也把当前主线定义为训练真相链与稳定性收口，而不是视觉细抠 | 视觉 token 不统一确实存在，但当前没有用户结果证据证明它值得挤占 launchability / truthfulness 修复主线。 |
+| 1.2.1 | deferred-by-product | `.gsd/PROJECT.md` 已明确“先把桌面端稳定性做满，不在第一阶段绑定移动端 / 企业微信 / 外部系统集成”；`R018` 也把移动端首发列为 deferred | 这条是产品边界，不是当前 launch blocker；后续若首发边界变化，再单独升格为移动端专项。 |
+| 5.1.1 | contradicted-by-project-knowledge | `backend/src/common/db/models.py` 顶部兼容性说明明确写明“使用 String(36) 存储 UUID 以兼容 SQLite 和 PostgreSQL” | audit 把这一点当 schema defect，但对当前仓库来说它是既有兼容策略；若直接改成数据库方言特化，反而会破坏现有跨 SQLite/PostgreSQL 运行假设。 |
+| 6.1 | deferred-by-product | `.gsd/PROJECT.md` 把当前系统的北极星限定在“训练 → 反馈 → 复盘 → 再训练”的闭环；`R021` 也要求不要新增更多页面 / 控制台表层功能去掩盖主训练闭环问题 | admin “新增公告”属于外围运营表面，不是当前训练核心能力或 launchability 缺口。 |
+| 6.3 | deferred-by-product | `.gsd/PROJECT.md` 当前治理主线集中在知识库 / Persona / PPT / runtime 等训练资产；`R021` 禁止用新的表层控制台能力替代核心链路修复 | admin 全局搜索是运营增强项，不应在 audit repair wave 中伪装成必修基础设施。 |
+| 6.4 | deferred-by-product | `.gsd/PROJECT.md` 当前优先级是训练事实链、报告可信度和现有治理页 truthfulness；`R021` 约束本轮不要扩表层控制台能力 | 日志导出没有进入当前产品闭环目标；在没有明确运维使用场景和 owner 前，不应先当成当前必做功能。 |
+| 9.2 | deferred-by-product | `.codex/loop/PROJECT_GROWTH.md` 明确反对 `cosmetic churn without evidence`；本计划 §2 Out of Scope 也排除了为 maintainability 建议做大规模注释 churn | “复杂逻辑缺少注释”是泛化工程建议，现阶段更应优先补 contract / test / runtime proof，而不是做大面积注释改写。 |
+| 15.1 | deferred-by-product | 本计划 §2 Out of Scope 已把 `i18n / 多语言` 排除在当前 repair wave 之外；`.gsd/PROJECT.md` 也明确当前首发先做桌面端内部训练稳定性 | 硬编码中文是已知国际化议题，但当前不是首发桌面训练闭环的阻塞项。 |
+| 15.2 | deferred-by-product | 本计划 §2 Out of Scope 已把 `i18n / 多语言` 排除在当前 repair wave 之外；`.gsd/PROJECT.md` 当前产品定位仍是企业内部中文训练闭环 | 多语言支持缺失是后续产品扩展方向，不属于本轮 audit repair 的“真实缺口马上修”。 |
+
+##### needs-discovery 条目的后续归属
+
+| Audit ID | Owning slice | Discovery proof required before implementation |
+|---|---|---|
+| 2.3.1 | `M5-S01` | 用 race-oriented lifecycle tests 证明 `pause / resume / end` 是否真的存在并发写冲突，再决定是否引入行锁或乐观并发控制。 |
+| 3.2.1 | `M5-S02` | 先沿现有 shipped websocket contract 画出 hook / runtime 职责边界，再决定是否需要进一步拆分 `usePracticeWebSocket` 或 realtime handler。 |
+| 4.1.2 | `M4-S03` | 先产出 admin route permission matrix，明确每个 surface 的角色边界，再切具体 RBAC 改动。 |
+| 4.2.1 | `M4-S03` | 先做高风险日志出口盘点，给出 token / password / cookie / email 的脱敏规则与受影响入口。 |
+| 5.2.1 | `M5-S01` | 先补 session transition matrix 与 negative proof，证明哪些非法状态迁移真的会穿透当前 lifecycle seam。 |
+| 7.1 | `M6-S01` | 先对 dashboard / practice 热路径建立前端性能 baseline，确认真实热点后再决定是否做性能修复切片。 |
+| 7.2 | `M6-S01` | 先收集后端 query baseline 与 slow-path 证据，避免把泛化性能建议直接当成待实现缺陷。 |
+| 7.3 | `M5-S02` | 先拿到 websocket 热点与序列化成本证据，再判断 backpressure / batching / queue 策略是否需要调整。 |
+| 8.1 | `M1-S02` | 先锁定 learner 关键面的 focused web verification baseline，再决定哪里是真正的测试缺口。 |
+| 8.2 | `M1-S02` | 先锁定 auth / lifecycle / evidence 等核心 backend focused gates，再决定哪些模块确实需要新增测试。 |
+| 9.1 | `M6-S02` | 先做 spec-vs-code 一致性审计，给出 openapi / api-spec 与 live route contract 的漂移清单。 |
+| 11.1 | `M6-S01` | 先对 admin / history 等读取链做 query count / explain proof，确认是否真的存在 N+1。 |
+| 11.2 | `M6-S01` | 先基于真实 PostgreSQL 查询面列出索引缺口证据，而不是从 ORM 定义静态猜测。 |
+| 11.3 | `M6-S01` | 先明确慢查询监控现状、可采集指标和告警基线，再决定是否需要新监控面。 |
+| 12.1 | `M5-S02` | 先为 websocket close / cleanup 路径建立 runtime evidence，确认是否存在连接泄漏或清理遗漏。 |
+| 12.2 | `M5-S02` | 先对关键 hooks 做 cleanup 审计，证明哪些 `useEffect` teardown 真缺失、哪些只是代码体量大。 |
+| 12.3 | `M5-S02` | 先对全局事件监听 attach/remove 配对做专项 walkthrough，再决定是否需要统一 listener seam。 |
+| 13.1 | `M5-S03` | 先沿 presentation upload / replace 真实链路做并发复现，确认文件替换时是否真有竞争窗口。 |
+| 13.2 | `M5-S03` | 先列出共享资源访问面并拿到 runtime contention 证据，再决定资源锁或隔离策略。 |
+| 13.3 | `M5-S03` | 先按多实例场景画出“哪些流程真的需要锁”的 necessity matrix，而不是把分布式锁缺失单独当 defect。 |
+| 14.1 | `M6-S02` | 先跑出 `npm audit` / `pip-audit` 的真实清单，再把高风险依赖漏洞转成 implementation backlog。 |
+| 14.2 | `M6-S02` | 先做 license scan baseline，明确仓库当前许可证清单与风险分级，再决定治理动作。 |
+| 15.3 | `M3-S03` | 先在 history / leaderboard 等真实 learner surfaces 上确认 formatter 与时区展示行为，再决定是否需要用户态时区策略。 |
+| 16.1 | `M3-S03` | 先做 ARIA baseline audit，确定关键路径上哪些控件缺 label / role，避免全仓盲改。 |
+| 16.2 | `M3-S03` | 先做键盘导航 walkthrough，证明 learner 关键任务链上哪些步骤不能仅靠键盘完成。 |
+| 16.3 | `M3-S03` | 先建立 design / a11y contrast baseline，确认真实对比度问题后再做调色或 token 调整。 |
+
 ---
 
 ## 2. 范围定义（In / Out）

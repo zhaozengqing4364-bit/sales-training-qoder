@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "exported_at": "2026-04-09T16:01:26.483Z",
+  "exported_at": "2026-04-09T16:18:11.369Z",
   "milestones": [
     {
       "id": "M001",
@@ -8594,19 +8594,26 @@
       "milestone_id": "M013",
       "slice_id": "S01",
       "id": "T02",
-      "title": "补齐 disposition 证据与冲突来源",
-      "status": "pending",
-      "one_liner": "",
-      "narrative": "",
-      "verification_result": "",
+      "title": "Added a T02 closeout appendix that retires the fixed audit item with code proof, records deferred/contradicted conflict sources, and assigns proof-bearing follow-up ownership for all needs-discovery findings.",
+      "status": "complete",
+      "one_liner": "Added a T02 closeout appendix that retires the fixed audit item with code proof, records deferred/contradicted conflict sources, and assigns proof-bearing follow-up ownership for all needs-discovery findings.",
+      "narrative": "Resumed from the T01-normalized audit matrix and kept the existing per-finding tables stable so downstream T03 mapping can continue to use the same audit-ID structure. Added a dedicated T02 closeout appendix to `.gsd/plans/GSD_PLAN_system-audit-repair.md` that anchors the single already-fixed finding to the real JWT startup gate, records concrete product or compatibility conflict sources for every deferred/contradicted finding, and turns every needs-discovery row into an explicit downstream handoff by naming the owning slice and the proof it must produce before implementation. While verifying the result, I hit one false structural failure because a naive parser counted the new appendix tables as findings; I fixed the validation scope and recorded that gotcha in `.gsd/KNOWLEDGE.md` for future agents.",
+      "verification_result": "Ran the task-plan verifier `rg -n \"deferred-by-product|contradicted-by-project-knowledge|needs-discovery\" .gsd/plans/GSD_PLAN_system-audit-repair.md` and confirmed the targeted dispositions remain present after the appendix landed. Ran a scoped Python coverage check against the original 1.5.3-1.5.11 matrix block and confirmed there are still 51 total findings, no invalid dispositions, and the expected five-way rollup counts. Ran the slice-level verifier `rg -n \"already-fixed|actionable-now|needs-discovery|deferred-by-product|contradicted-by-project-knowledge\" .gsd/plans/GSD_PLAN_system-audit-repair.md` and confirmed the full normalized matrix still exposes all five dispositions for downstream work.",
       "duration": "",
-      "completed_at": null,
+      "completed_at": "2026-04-09T16:18:11.335Z",
       "blocker_discovered": false,
-      "deviations": "",
-      "known_issues": "",
-      "key_files": [],
-      "key_decisions": [],
-      "full_summary_md": "",
+      "deviations": "None.",
+      "known_issues": "None.",
+      "key_files": [
+        ".gsd/plans/GSD_PLAN_system-audit-repair.md",
+        ".gsd/KNOWLEDGE.md",
+        ".gsd/milestones/M013/slices/S01/tasks/T02-SUMMARY.md"
+      ],
+      "key_decisions": [
+        "Keep the original T01 per-finding matrix unchanged and add a dedicated T02 closeout appendix for retirement proof, conflict sources, and discovery ownership.",
+        "Scope structural validation of the audit matrix to the original 1.5.3-1.5.11 finding block so appendix tables do not get double-counted as findings."
+      ],
+      "full_summary_md": "---\nid: T02\nparent: S01\nmilestone: M013\nkey_files:\n  - .gsd/plans/GSD_PLAN_system-audit-repair.md\n  - .gsd/KNOWLEDGE.md\n  - .gsd/milestones/M013/slices/S01/tasks/T02-SUMMARY.md\nkey_decisions:\n  - Keep the original T01 per-finding matrix unchanged and add a dedicated T02 closeout appendix for retirement proof, conflict sources, and discovery ownership.\n  - Scope structural validation of the audit matrix to the original 1.5.3-1.5.11 finding block so appendix tables do not get double-counted as findings.\nduration: \"\"\nverification_result: passed\ncompleted_at: 2026-04-09T16:18:11.336Z\nblocker_discovered: false\n---\n\n# T02: Added a T02 closeout appendix that retires the fixed audit item with code proof, records deferred/contradicted conflict sources, and assigns proof-bearing follow-up ownership for all needs-discovery findings.\n\n**Added a T02 closeout appendix that retires the fixed audit item with code proof, records deferred/contradicted conflict sources, and assigns proof-bearing follow-up ownership for all needs-discovery findings.**\n\n## What Happened\n\nResumed from the T01-normalized audit matrix and kept the existing per-finding tables stable so downstream T03 mapping can continue to use the same audit-ID structure. Added a dedicated T02 closeout appendix to `.gsd/plans/GSD_PLAN_system-audit-repair.md` that anchors the single already-fixed finding to the real JWT startup gate, records concrete product or compatibility conflict sources for every deferred/contradicted finding, and turns every needs-discovery row into an explicit downstream handoff by naming the owning slice and the proof it must produce before implementation. While verifying the result, I hit one false structural failure because a naive parser counted the new appendix tables as findings; I fixed the validation scope and recorded that gotcha in `.gsd/KNOWLEDGE.md` for future agents.\n\n## Verification\n\nRan the task-plan verifier `rg -n \"deferred-by-product|contradicted-by-project-knowledge|needs-discovery\" .gsd/plans/GSD_PLAN_system-audit-repair.md` and confirmed the targeted dispositions remain present after the appendix landed. Ran a scoped Python coverage check against the original 1.5.3-1.5.11 matrix block and confirmed there are still 51 total findings, no invalid dispositions, and the expected five-way rollup counts. Ran the slice-level verifier `rg -n \"already-fixed|actionable-now|needs-discovery|deferred-by-product|contradicted-by-project-knowledge\" .gsd/plans/GSD_PLAN_system-audit-repair.md` and confirmed the full normalized matrix still exposes all five dispositions for downstream work.\n\n## Verification Evidence\n\n| # | Command | Exit Code | Verdict | Duration |\n|---|---------|-----------|---------|----------|\n| 1 | `rg -n \"deferred-by-product|contradicted-by-project-knowledge|needs-discovery\" .gsd/plans/GSD_PLAN_system-audit-repair.md` | 0 | ✅ pass | 15ms |\n| 2 | `python3 audit-matrix-coverage-check` | 0 | ✅ pass | 1ms |\n| 3 | `rg -n \"already-fixed|actionable-now|needs-discovery|deferred-by-product|contradicted-by-project-knowledge\" .gsd/plans/GSD_PLAN_system-audit-repair.md` | 0 | ✅ pass | 23ms |\n\n\n## Deviations\n\nNone.\n\n## Known Issues\n\nNone.\n\n## Files Created/Modified\n\n- `.gsd/plans/GSD_PLAN_system-audit-repair.md`\n- `.gsd/KNOWLEDGE.md`\n- `.gsd/milestones/M013/slices/S01/tasks/T02-SUMMARY.md`\n",
       "description": "对每个 section 的 disposition 进行复核：已修项补代码证据，deferred 项补冲突来源，needs-discovery 项补后续归属；确保不存在未分类 finding。",
       "estimate": "30m",
       "files": [
@@ -12565,6 +12572,18 @@
       "revisable": "Yes",
       "made_by": "agent",
       "superseded_by": null
+    },
+    {
+      "seq": 1536,
+      "id": "D167",
+      "when_context": "M013/S01/T02",
+      "scope": "planning",
+      "decision": "How to add T02 evidence/ownership detail to the normalized audit plan without destabilizing downstream slice mapping",
+      "choice": "Keep the original T01 per-finding matrix unchanged and add a dedicated T02 closeout appendix for retirement proof, conflict sources, and discovery ownership.",
+      "rationale": "T03 and later slices still need the original audit-section matrix to remain a stable primary map keyed by audit ID. Appending the new closeout evidence avoids row-schema churn while still making each already-fixed, deferred/contradicted, and needs-discovery disposition explicit and auditable.",
+      "revisable": "Yes",
+      "made_by": "agent",
+      "superseded_by": null
     }
   ],
   "verification_evidence": [
@@ -15603,6 +15622,39 @@
       "verdict": "✅ pass",
       "duration_ms": 18,
       "created_at": "2026-04-09T16:01:26.449Z"
+    },
+    {
+      "id": 277,
+      "task_id": "T02",
+      "slice_id": "S01",
+      "milestone_id": "M013",
+      "command": "rg -n \"deferred-by-product|contradicted-by-project-knowledge|needs-discovery\" .gsd/plans/GSD_PLAN_system-audit-repair.md",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 15,
+      "created_at": "2026-04-09T16:18:11.335Z"
+    },
+    {
+      "id": 278,
+      "task_id": "T02",
+      "slice_id": "S01",
+      "milestone_id": "M013",
+      "command": "python3 audit-matrix-coverage-check",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 1,
+      "created_at": "2026-04-09T16:18:11.335Z"
+    },
+    {
+      "id": 279,
+      "task_id": "T02",
+      "slice_id": "S01",
+      "milestone_id": "M013",
+      "command": "rg -n \"already-fixed|actionable-now|needs-discovery|deferred-by-product|contradicted-by-project-knowledge\" .gsd/plans/GSD_PLAN_system-audit-repair.md",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 23,
+      "created_at": "2026-04-09T16:18:11.335Z"
     }
   ]
 }
