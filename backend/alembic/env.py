@@ -21,6 +21,7 @@ from agent.models import Agent, Persona, AgentPersona  # noqa: F401
 
 # Knowledge Base models (R5)
 from common.knowledge.models import KnowledgeBase, KnowledgeDocument  # noqa: F401
+from common.knowledge.rag_profile_models import RagProfile  # noqa: F401
 
 # Conversation models (R9)
 from common.conversation.models import ConversationMessage  # noqa: F401

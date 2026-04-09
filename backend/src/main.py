@@ -29,6 +29,8 @@ from admin.api.interventions import router as admin_interventions_router
 from admin.api.voice_runtime import router as voice_runtime_router
 from admin.api.presentation_ai import router as presentation_ai_router
 from admin.api.release_verification import router as release_verification_router
+from admin.api.knowledge_answer_config import router as knowledge_answer_config_router
+from admin.api.rag_profiles import router as rag_profiles_router
 
 # Admin API (users, training records, system logs)
 from admin.api.users import router as admin_users_router
@@ -455,6 +457,16 @@ app.include_router(
     prefix="/api/v1",
     tags=["admin-system-logs"],
     dependencies=[Depends(get_current_admin_user)],
+)
+app.include_router(
+    knowledge_answer_config_router,
+    prefix="/api/v1/admin",
+    tags=["admin-knowledge-answer"],
+)
+app.include_router(
+    rag_profiles_router,
+    prefix="/api/v1/admin",
+    tags=["admin-rag-profiles"],
 )
 
 # Support runtime status API routes (read-only)

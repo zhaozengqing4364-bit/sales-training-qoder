@@ -1,0 +1,19 @@
+- generic [ref=e1]:
+  - generic [ref=e4]:
+    - generic [ref=e6]:
+      - generic [ref=e7]: AI
+      - heading "欢迎回来" [level=1] [ref=e8]
+      - paragraph [ref=e9]: 登录 AI 智能练习平台 开始训练
+    - generic [ref=e10]:
+      - button "企业微信登录 (WeCom)" [active] [ref=e11]
+      - generic [ref=e13]: 或者使用账号登录
+      - generic [ref=e15]:
+        - textbox "name@company.com" [ref=e17]
+        - textbox "••••••••" [ref=e19]
+        - button "登录" [ref=e20]:
+          - text: 登录
+          - img [ref=e21]
+      - paragraph [ref=e23]: 仅供内部人员使用，如需帮助请联系管理员
+  - button "Open Next.js Dev Tools" [ref=e29] [cursor=pointer]:
+    - img [ref=e30]
+  - alert [ref=e33]

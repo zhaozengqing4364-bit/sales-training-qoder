@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "exported_at": "2026-03-31T07:00:18.445Z",
+  "exported_at": "2026-04-08T09:29:23.920Z",
   "milestones": [
     {
       "id": "M001",
@@ -599,6 +599,399 @@
       ],
       "requirement_coverage": "本 milestone 覆盖现有知识问答问题的系统化重构：不再把 query 规则、排序偏好、answerability 判断写死在 handler/prompt 中，而是通过 DB 驱动配置、统一引擎编排、审计落库与评测回归把该能力提升为稳定的后端基础设施。它延续当前 runtime/report/replay diagnostics 面，不破坏 learner-facing surface，同时为后续持续优化 query understanding、entity resolution、ranking、coverage answerability 提供统一执行与治理框架。",
       "boundary_map_markdown": "- **Control Plane（项目自有）**：DB 配置、版本管理、审计日志、debug API、rollout flags\n- **Execution Plane（Haystack 底座）**：retrieval pipeline、ranker pipeline、evaluation primitives\n- **Compatibility Seam（项目自有）**：把引擎输出映射到 realtime/report/replay 现有 contracts\n- **Out of Scope（本 milestone 不做）**：前台可视化配置后台、复杂 LLM planner、全量多模型 A/B 平台"
+    },
+    {
+      "id": "M012",
+      "title": "",
+      "status": "queued",
+      "depends_on": [],
+      "created_at": "2026-04-03T02:28:43.034Z",
+      "completed_at": null,
+      "vision": "让一个刚入职的销售新人第一次打开系统能顺畅走完\"登录 → 看懂首页 → 选对训练 → 完成首练 → 看到报告 → 想再练一次\"，中间不会因为硬编码、空壳按钮、缺失入口或白屏而卡住。",
+      "success_criteria": [
+        "登录页有",
+        "忘记密码",
+        "可走通完整重置流程（含后端API + 前端表单 + 邮件服务抽象）",
+        "首页",
+        "早安，{真实用户名}",
+        "读 currentUser，版本号动态读取",
+        "侧边栏包含",
+        "历史记录",
+        "导航入口",
+        "Learner 侧所有页面有 error boundary，不再白屏",
+        "首页所有空壳按钮（下载报告/设定目标/分享分析/筛选）要么有真实功能要么移除",
+        "Profile 页语速设置持久化到后端，通知开关隐藏",
+        "排行榜有评分规则说明",
+        "有统一的意见反馈入口",
+        "企业微信按钮标注",
+        "即将支持",
+        "或移除",
+        "个人中心可修改密码"
+      ],
+      "key_risks": [
+        {
+          "risk": "忘记密码涉及邮件服务配置，本地开发/演示环境可能无法验证完整流程",
+          "whyItMatters": "如果邮件服务不可用，密码重置流程无法端到端验证"
+        },
+        {
+          "risk": "首页空壳按钮改动可能影响已有交互逻辑",
+          "whyItMatters": "需要确保移除或实现空壳按钮时不破坏现有功能"
+        }
+      ],
+      "proof_strategy": [
+        {
+          "riskOrUnknown": "邮件服务可用性",
+          "retireIn": "S01",
+          "whatWillBeProven": "忘记密码完整流程可端到端走通（含本地 console mock fallback）"
+        },
+        {
+          "riskOrUnknown": "空壳按钮改动不破坏现有功能",
+          "retireIn": "S02",
+          "whatWillBeProven": "首页所有可交互元素都有明确响应，无空壳按钮"
+        }
+      ],
+      "verification_contract": "Frontend focused tests (vitest) + backend API contract tests (pytest)",
+      "verification_integration": "Frontend components interact with real API client; backend routes tested via pytest",
+      "verification_operational": "App starts without crash; all pages load without white screen",
+      "verification_uat": "New user sees personalized greeting; sidebar has history entry; error pages show friendly messages",
+      "definition_of_done": [
+        "All slice deliverables complete",
+        "All 10 success criteria verified against live behavior",
+        "Existing validated requirements (R001-R028) regression verified",
+        "New requirements (R029-R038) status updated correctly"
+      ],
+      "requirement_coverage": "Covers: R029-R038 (new). Confirms no conflict: R022/R023 (active retrieval truth). Leaves for later: R016-R019 (deferred).",
+      "boundary_map_markdown": "### S01 → S02\\nProduces: forgot-password/reset-password API routes, currentUser read on dashboard\\nConsumes: nothing (first slice)\\n\\n### S02 → S03\\nProduces: sidebar with history entry, error boundaries, feedback entry, clean dashboard buttons\\nConsumes: S01 currentUser fix\\n\\n### S03 → S04\\nProduces: voice_speed_preference persistence, notification toggle removed, scoring explanation, change-password\\nConsumes: S01 auth API, S02 sidebar"
+    },
+    {
+      "id": "M013",
+      "title": "",
+      "status": "queued",
+      "depends_on": [],
+      "created_at": "2026-04-08T08:36:20.778Z",
+      "completed_at": null,
+      "vision": "把 SYSTEM_AUDIT_REPORT 中的所有条目分成\"已修 / 真实缺口 / 需 discovery / 当前 defer\"，形成可信 backlog；同时锁定后续所有 repair slice 的验证命令集合，确保后续执行模型只处理真实问题，不被 stale finding 误导。",
+      "success_criteria": [
+        "SYSTEM_AUDIT_REPORT 每个条目都有明确 disposition（already-fixed / actionable-now / needs-discovery / deferred-by-product / contradicted-by-project-knowledge）",
+        "每个后续执行 slice 至少有一个已存在的 focused verification command 可复用",
+        "stale finding 与 deferred feature 明确标注来源（如 PROJECT.md 桌面优先首发策略），不混入真实缺陷"
+      ],
+      "key_risks": [
+        {
+          "risk": "审计文档与真实代码状态漂移严重，直接执行会浪费工时",
+          "whyItMatters": "如果不在执行前先纠偏，后续 milestone 会把已修项当新 bug 做，或把产品策略 defer 项当缺陷修"
+        },
+        {
+          "risk": "验证命令集合不完整导致后续 slice 做了但无法证明",
+          "whyItMatters": "audit 覆盖面大，没有统一验证基线会让每个 slice 的 done-when 变成主观判断"
+        }
+      ],
+      "proof_strategy": [
+        {
+          "riskOrUnknown": "审计文档漂移程度",
+          "retireIn": "S01",
+          "whatWillBeProven": "每个 audit section 的条目都经过代码/KNOWLEDGE/REQUIREMENTS/M012 对照，漂移条目被明确标注"
+        },
+        {
+          "riskOrUnknown": "验证覆盖是否足够支撑后续 5 个执行 milestone",
+          "retireIn": "S02",
+          "whatWillBeProven": "auth/dashboard/history/profile/practice/lifecycle/websocket/admin 每个领域至少有 1 条可执行的 focused verification command"
+        }
+      ],
+      "verification_contract": "Backend focused pytest 串行执行（repo-root `backend/venv/bin/python -m pytest -c backend/pyproject.toml ...`），避免 `.coverage` SQLite 竞争。前端使用 `npm --prefix web test -- --run ...`。",
+      "verification_integration": "归一化矩阵文件存在且包含所有 audit section 的 disposition 条目标记；验证命令集合覆盖后续 milestone 涉及的所有主要模块。",
+      "verification_operational": "N/A — 本 milestone 不涉及运行时服务变更，仅产出分析文档。",
+      "verification_uat": "人工核对归一化矩阵中不存在未归类条目。",
+      "definition_of_done": [
+        "SYSTEM_AUDIT_REPORT 每个条目都落到某个 disposition 类别",
+        "验证命令集合文档覆盖 auth/dashboard/history/profile/practice/lifecycle/websocket/admin",
+        "stale finding 和 deferred 条目有明确冲突来源说明"
+      ],
+      "requirement_coverage": "[\"Covers: 无新 requirement（本 milestone 是分析/基线阶段）\", \"Supports: 后续 M014-M018 的所有 requirement mapping\", \"Leaves for later: 具体修复的 requirement 在后续 milestone 中映射\"]",
+      "boundary_map_markdown": "### S01 → S02\n\nProduces:\n- `.gsd/plans/GSD_PLAN_system-audit-repair.md` 中的归一化矩阵（每个 audit 条目的 disposition + 证据路径 + 后续 slice 归属）\n\nConsumes:\n- `SYSTEM_AUDIT_REPORT.md`、`.gsd/PROJECT.md`、`.gsd/REQUIREMENTS.md`、`.gsd/KNOWLEDGE.md`、M012 路线图\n\n### S01 → 后续所有 milestone\n\nProduces:\n- 可信的 audit normalization matrix，后续执行模型直接消费\n\nConsumes:\n- 当前代码状态、已有 GSD 事实"
+    },
+    {
+      "id": "M014",
+      "title": "Learner 入口与体验闭环补齐",
+      "status": "active",
+      "depends_on": [],
+      "created_at": "2026-04-08T08:40:41.990Z",
+      "completed_at": null,
+      "vision": "把首页 / auth / history / profile / practice 里真正影响首次使用和复练的缺口补齐，确保第一次打开系统能顺畅走完\"登录 → 看懂首页 → 选对训练 → 完成首练 → 看到报告 → 想再练一次\"。",
+      "success_criteria": [
+        "首页不再有硬编码内容或空壳 CTA，新人能看到最小 onboarding 指引并找到真实训练入口",
+        "forgot/reset 体验完整，profile 内有可理解的修改密码路径",
+        "语速偏好刷新后保留或有明确移除/隐藏策略",
+        "learner shell 有统一反馈/帮助入口",
+        "practice 首屏有训练前目标预告，中断时有可理解指引"
+      ],
+      "key_risks": [
+        {
+          "risk": "容易把产品策略问题（移动端 / export / self-registration）误拉进 learner 修复范围",
+          "whyItMatters": "scope 膨胀会把 launchability 修复拖成全产品重构"
+        },
+        {
+          "risk": "auth seam 改动影响现有登录路径兼容性",
+          "whyItMatters": "password reset/formalization 必须保持现有登录 flow 不 regression"
+        },
+        {
+          "risk": "practice preflight 和中断恢复涉及实时状态语义",
+          "whyItMatters": "websocket 暂停/恢复状态机复杂，改文案需要和现有 overlay/banner 模式兼容"
+        }
+      ],
+      "proof_strategy": [
+        {
+          "riskOrUnknown": "首页空壳动作范围是否可控",
+          "retireIn": "S01",
+          "whatWillBeProven": "所有空壳 CTA 有明确 disposition（实现/深链/禁用/删除），report export 不被误引入"
+        },
+        {
+          "riskOrUnknown": "auth 正式化是否保持现有登录兼容",
+          "retireIn": "S02",
+          "whatWillBeProven": "forgot/reset 走正式持久化 token，现有登录路径仍有 focused tests 通过"
+        },
+        {
+          "riskOrUnknown": "practice preflight 是否能在现有 overlay 模式内实现",
+          "retireIn": "S04",
+          "whatWillBeProven": "训练前预告用现有 overlay/banner 实现，不新增复杂路由"
+        }
+      ],
+      "verification_contract": "Frontend: `npm --prefix web test -- --run ...`。Backend: `backend/venv/bin/python -m pytest -c backend/pyproject.toml ... -x -q`。Backend proof 串行执行。",
+      "verification_integration": "浏览器人工验证：首页首屏 CTA 至少一条通向真实训练入口；从首页/profile/history 能找到帮助入口；practice 首屏有训练目标预告。",
+      "verification_operational": "本地 `cd backend && PYTHONPATH=src venv/bin/uvicorn main:app --port 3444` + `npm --prefix web dev` 联合验证 auth flow 与 practice preflight。",
+      "verification_uat": "人工验证新人首次使用路径：登录 → 看懂首页 → 选对训练 → 完成/中断练习 → 找到帮助。",
+      "definition_of_done": [
+        "首页无主按钮空壳，首屏有最小 onboarding 指引",
+        "forgot/reset 正式化（token 持久化 + migration + lifecycle 校验）",
+        "profile 内有可理解的修改密码路径，语速偏好刷新后保留或明确移除",
+        "learner 至少有一个稳定的反馈/帮助入口",
+        "practice 首屏有训练前目标预告，暂停/恢复/结束失败有清晰指引",
+        "test-mic 不以普通 learner 功能暴露"
+      ],
+      "requirement_coverage": "[\"Covers: R029（忘记密码自助完成）、R030（首页不硬编码）、R031（登录页忘记密码入口）\", \"Partially covers: R032（侧边栏历史入口在 S03 shell 补全中处理）\", \"Leaves for later: 自助注册、完整帮助中心、消息通知系统\"]",
+      "boundary_map_markdown": "### S01 → S02\n\nProduces:\n- 首页清理后的 CTA 收口策略表与实现代码（空壳动作已 disposition）\n- `web/src/components/dashboard/*` 可能新增的 onboarding 组件\n\nConsumes:\n- M013/S01 的归一化矩阵（确认哪些首页问题是真的）\n\n### S02 → S03\n\nProduces:\n- 正式化的 forgot/reset auth seam（token 持久化、migration、lifecycle 校验）\n- profile 内可理解的修改密码路径\n- 语速偏好持久化或明确移除策略\n\nConsumes:\n- `web/src/app/(auth)/*`、`backend/src/common/auth/api.py`、`backend/src/common/auth/service.py`\n\n### S03 → S04\n\nProduces:\n- learner shell 统一反馈/帮助入口\n\nConsumes:\n- 已清理的首页、profile 页\n\n### S04 → 后续\n\nProduces:\n- practice preflight 目标/评价标准/角色简介最小预告\n- 暂停/恢复/结束失败的用户可理解文案\n\nConsumes:\n- `web/src/app/(user)/practice/[sessionId]/page.tsx`、`usePracticeSessionLifecycle`、`usePracticeWebSocket`"
+    },
+    {
+      "id": "M015",
+      "title": "",
+      "status": "queued",
+      "depends_on": [],
+      "created_at": "2026-04-08T08:52:38.458Z",
+      "completed_at": null,
+      "vision": "系统性替换 console / alert / confirm / window.location 等不一致模式，补齐 learner 壳层 error/loading 覆盖，把大面积、低层级、跨页面的一致性问题独立收口，而不是扩成重写整个前端。",
+      "success_criteria": [
+        "前端业务页面不再散落 console.*、alert()/confirm()、window.location.assign/href 这类不一致模式",
+        "learner 核心路由具备统一 error/loading fallback",
+        "responsive/a11y/timezone 条目收口为 baseline audit + 低风险修复，而非扩成产品策略重构"
+      ],
+      "key_risks": [
+        {
+          "risk": "如果不设边界，会扩成“重写整个前端架构”",
+          "whyItMatters": "这类 hygiene 问题分布广，容易在执行中变成无止境统一化工程"
+        },
+        {
+          "risk": "responsive/a11y/timezone 条目容易被误解成全量移动端/WCAG/时区系统重构",
+          "whyItMatters": "真实目标只是补 baseline 和低风险高价值项，不是把 deferred 产品策略偷偷做掉"
+        }
+      ],
+      "proof_strategy": [
+        {
+          "riskOrUnknown": "console 清理是否会破坏必要 observability",
+          "retireIn": "S01",
+          "whatWillBeProven": "instrumentation 与 durable error 出口仍保留，业务页面散落 console 收口到共享 seam"
+        },
+        {
+          "riskOrUnknown": "原生弹窗/直接 location 跳转替换是否影响现有安全确认与 auth flow",
+          "retireIn": "S02",
+          "whatWillBeProven": "删除确认保留，auth redirect 走 shared auth-handler/router，业务代码不再直接调用 alert/confirm/location href/assign"
+        },
+        {
+          "riskOrUnknown": "learner 壳层缺口是否能在有限范围内收口",
+          "retireIn": "S03",
+          "whatWillBeProven": "核心 learner route family 有 error/loading fallback，且只修 baseline responsive/a11y/timezone 问题"
+        }
+      ],
+      "verification_contract": "`rg -n \"console\\.(log|error|warn|info)\" web/src`、`rg -n \"\\b(alert|confirm)\\s*\\(|window\\.location(\\.assign|\\.href)\" web/src`，以及 focused vitest：`npm --prefix web test -- --run ...`",
+      "verification_integration": "前端 focused regressions 覆盖 practice websocket、auth/login、history/report/replay、admin personas 等现有 surface。",
+      "verification_operational": "本地浏览器验证 learner/admin 页面上的错误、加载、确认、跳转路径。",
+      "verification_uat": "人工确认主要 learner/admin 页面不再出现浏览器原生中断式弹窗与断裂式跳转。",
+      "definition_of_done": [
+        "业务页面中不再散落随意 console.*（保留 instrumentation/dev-only 例外）",
+        "业务页面中不再存在 alert()/confirm() 与 window.location.assign/href",
+        "learner 核心路由都有明确 error/loading 策略",
+        "responsive/a11y/timezone 风险有 baseline 记录与明确 disposition"
+      ],
+      "requirement_coverage": "[\"Supports: M014 的 learner UX 主链路稳定性\", \"Partially covers: learner 页面 error boundary 与壳层保护（与现有 launchability requirement 对齐）\", \"Leaves for later: 全量移动端适配、全站 WCAG、大规模 timezone preference 系统\"]",
+      "boundary_map_markdown": "### S01 → S02\n\nProduces:\n- `web/src/lib/debug.ts` 与业务页面/route error 的统一日志出口规则\n- dev-only / durable error / instrumentation 分类结果\n\nConsumes:\n- 现有 `web/src/lib/debug.ts`、`web/src/components/ErrorBoundary.tsx`\n\n### S02 → S03\n\nProduces:\n- 统一的非中断式交互与跳转模式（toast/dialog/router/auth-handler seam）\n\nConsumes:\n- S01 的日志/错误出口规则\n- `web/src/lib/auth-handler.ts`\n\n### S03 → 后续\n\nProduces:\n- learner 核心路由 error/loading 覆盖矩阵\n- responsive/a11y/timezone baseline 及低风险修复\n\nConsumes:\n- learner route family、shared components"
+    },
+    {
+      "id": "M016",
+      "title": "",
+      "status": "queued",
+      "depends_on": [],
+      "created_at": "2026-04-08T08:53:20.494Z",
+      "completed_at": null,
+      "vision": "把 password reset、鉴权模式、错误响应、RBAC、日志脱敏从“能用”升到“可依赖”，让认证与错误表面成为后续治理和扩展的稳定基线。",
+      "success_criteria": [
+        "password reset / auth recovery 成为正式 contract，而不是 request-path DDL + 过渡实现",
+        "高频 API surface 共享统一错误 shape",
+        "admin route 权限与敏感日志风险形成可验证基线并完成第一轮 hardening"
+      ],
+      "key_risks": [
+        {
+          "risk": "shared auth seam 改动可能破坏现有登录与恢复路径",
+          "whyItMatters": "password reset 正式化直接触及认证安全与兼容性"
+        },
+        {
+          "risk": "错误契约统一化跨 route / service / frontend client，容易引入兼容回归",
+          "whyItMatters": "如果错误 shape 漂移，现有前端页面会出现 page-local 解析分叉或静默失败"
+        },
+        {
+          "risk": "RBAC 与日志脱敏缺少现成 closeout 证据",
+          "whyItMatters": "必须先形成权限矩阵和敏感字段出口清单，避免表面修补"
+        }
+      ],
+      "proof_strategy": [
+        {
+          "riskOrUnknown": "password reset 是否已具备正式安全 contract",
+          "retireIn": "S01",
+          "whatWillBeProven": "token 持久化、一次性消费、过期校验、rate limit 都有 focused tests 和 migration 证明"
+        },
+        {
+          "riskOrUnknown": "错误 shape 收口是否保持 frontend 兼容",
+          "retireIn": "S02",
+          "whatWillBeProven": "frontend api client 无需 page-local 猜测错误格式，contract/integration tests 证明高频 surface 统一"
+        },
+        {
+          "riskOrUnknown": "admin 权限与敏感日志风险是否被真实定位并修复",
+          "retireIn": "S03",
+          "whatWillBeProven": "admin route permission matrix 和日志 redaction 规则形成可验证基线，重点出口已 harden"
+        }
+      ],
+      "verification_contract": "Backend focused proof 串行运行：`backend/venv/bin/python -m pytest -c backend/pyproject.toml ... -x -q`；配套前端 `npm --prefix web test -- --run ...` 验证 client 兼容。",
+      "verification_integration": "auth forgot/reset flow、presentations/prompt-templates contract、admin users/integration tests 必须通过。",
+      "verification_operational": "本地后端启动后联调 forgot/reset 与 admin API surface，检查日志输出不暴露敏感字段。",
+      "verification_uat": "人工确认 forgot/reset 用户路径、admin 权限拒绝路径和错误提示文案可理解。",
+      "definition_of_done": [
+        "password reset 有正式持久化与 migration，不再在 request path 执行 DDL",
+        "forgot/reset 生命周期、一次性消费、过期校验与 rate limit 有 focused proof",
+        "高频 API surface 返回统一错误 shape，frontend 无需 page-local 猜测错误格式",
+        "admin 高风险接口有权限证明，敏感日志脱敏规则落到高风险出口"
+      ],
+      "requirement_coverage": "[\"Covers: R029、R031 的 backend auth 正式化部分\", \"Supports: admin / API surface 的长期可依赖性\", \"Leaves for later: WeCom SSO、完整 SIEM、自定义 RBAC 重写\"]",
+      "boundary_map_markdown": "### S01 → S02\n\nProduces:\n- 正式化的 PasswordResetToken 模型 / migration / lifecycle contract\n- EmailService seam 与 rate limit 策略\n\nConsumes:\n- `backend/src/common/auth/api.py`、`backend/src/common/auth/service.py`、`backend/src/common/db/models.py`\n\n### S02 → S03\n\nProduces:\n- 高噪声 route family 的统一错误 shape（prompt templates / presentations / auth 等）\n- frontend `apiFetch` 可稳定解析的错误 contract\n\nConsumes:\n- S01 的 auth/domain error 分类\n- `web/src/lib/api/client.ts`\n\n### S03 → 后续\n\nProduces:\n- admin route permission matrix\n- token/password/cookie/email 等敏感字段脱敏规则及高风险出口修复\n\nConsumes:\n- admin APIs、auth dependencies、monitoring/logging seam"
+    },
+    {
+      "id": "M017",
+      "title": "",
+      "status": "queued",
+      "depends_on": [],
+      "created_at": "2026-04-08T08:53:59.932Z",
+      "completed_at": null,
+      "vision": "围绕 session lifecycle、practice websocket、上传并发与资源竞争建立明确的事实线和修复边界，把高风险但证据不足的问题从表面 patch 转成可证伪、可维护的 contract。",
+      "success_criteria": [
+        "session lifecycle 的 pause/resume/end 并发行为有测试证明和收敛策略",
+        "practice websocket 的 reconnect/backpressure/interrupt contract 清晰且不破坏现有 shipped realtime facts",
+        "上传与共享资源竞争从审计猜测转成 evidence-backed discovery backlog"
+      ],
+      "key_risks": [
+        {
+          "risk": "状态机与 DB 行为耦合高，错误修复会影响 practice 主链路",
+          "whyItMatters": "session lifecycle 的并发策略一旦错，会把训练暂停/恢复/结束搞成数据竞争"
+        },
+        {
+          "risk": "practice websocket 已承载 reconnect/backpressure/binary frame negotiation 等 shipped facts",
+          "whyItMatters": "如果只因“文件大”就强拆，容易破坏真实协议边界"
+        },
+        {
+          "risk": "上传/资源竞争项现在更多是风险猜测而非已证实故障",
+          "whyItMatters": "必须先做 discovery，不能直接上全系统分布式锁"
+        }
+      ],
+      "proof_strategy": [
+        {
+          "riskOrUnknown": "session lifecycle 是否存在真实竞态且如何收敛",
+          "retireIn": "S01",
+          "whatWillBeProven": "pause/resume/end race 有 failing-to-passing tests 和明确锁/版本控制策略"
+        },
+        {
+          "riskOrUnknown": "websocket hook 复杂度是否可在不破坏协议事实的前提下降低",
+          "retireIn": "S02",
+          "whatWillBeProven": "reconnect/backpressure/interrupt contract 更清晰，现有 practice/page tests 保持通过"
+        },
+        {
+          "riskOrUnknown": "上传/共享资源竞争点是否真的需要分布式锁",
+          "retireIn": "S03",
+          "whatWillBeProven": "并发风险点有明确复现路径和锁需求列表，而不是停留在想象层"
+        }
+      ],
+      "verification_contract": "Backend focused pytest 串行：`backend/venv/bin/python -m pytest -c backend/pyproject.toml ... -x -q`；前端 websocket regressions：`npm --prefix web test -- --run ...`。",
+      "verification_integration": "lifecycle API + websocket hook + practice page + presentations contract/integration tests 必须全部通过。",
+      "verification_operational": "本地联合启动 backend/web，验证 practice realtime 的 reconnect/pause/resume/end 行为和 upload blocker 行为。",
+      "verification_uat": "人工确认训练中断/恢复/结束的用户感知与后台真实状态一致。",
+      "definition_of_done": [
+        "pause/resume/end 并发场景有测试与明确收敛策略",
+        "use-practice-websocket 的 reconnect/backpressure/interrupt contract 更清晰，复杂度下降且测试仍通过",
+        "upload/resource race 风险点有明确列表、可复现路径和下一步建议"
+      ],
+      "requirement_coverage": "[\"Supports: 训练主链路稳定性与失败可恢复性（既有 validated requirements 延续）\", \"Leaves for later: 若 discovery 证明需要，再单独起更大规模 distributed lock / queue milestone\"]",
+      "boundary_map_markdown": "### S01 → S02\n\nProduces:\n- SessionLifecycleService 的并发状态转移 proof\n- 锁策略或乐观并发控制选择结论\n\nConsumes:\n- `backend/src/common/db/session_lifecycle.py` 与现有 lifecycle API/runtime\n\n### S02 → S03\n\nProduces:\n- websocket reconnect/backpressure/interrupt 的更清晰 contract\n- hook 职责拆分边界\n\nConsumes:\n- S01 的 lifecycle 语义边界\n- `web/src/hooks/use-practice-websocket.ts`、practice page、backend websocket runtime\n\n### S03 → 后续\n\nProduces:\n- upload/resource race discovery 报告\n- 多实例场景下需要锁的关键点清单\n\nConsumes:\n- presentations API/service/tests、现有 active-session blocker 机制"
+    },
+    {
+      "id": "M018",
+      "title": "",
+      "status": "queued",
+      "depends_on": [],
+      "created_at": "2026-04-08T08:54:41.755Z",
+      "completed_at": null,
+      "vision": "把审计里“像问题但未证实”的性能、安全、容灾类条目转成有证据的后续 backlog，让慢查询、索引、依赖漏洞、许可证、备份恢复现状都有真实基线，而不是被伪装成已知 fix。",
+      "success_criteria": [
+        "数据库性能条目从 audit 猜测转成 evidence-backed backlog",
+        "依赖安全/许可证/更新策略形成仓库内可执行流程",
+        "备份/恢复/容灾有最小可执行 runbook"
+      ],
+      "key_risks": [
+        {
+          "risk": "N+1、索引、slow query 目前大多是“像问题”，不是已证实问题",
+          "whyItMatters": "如果不先做 discovery，会把性能治理伪装成已知 bug 修复"
+        },
+        {
+          "risk": "依赖安全/许可证/更新策略容易变成一次性升级所有包",
+          "whyItMatters": "真实目标是先建立可执行流程，而不是把整个依赖树一口气改坏"
+        },
+        {
+          "risk": "备份/容灾条目重要但信息分散，容易写成空泛理想架构",
+          "whyItMatters": "runbook 必须写当前真实现状和恢复步骤，否则对后续运维没有价值"
+        }
+      ],
+      "proof_strategy": [
+        {
+          "riskOrUnknown": "数据库性能问题是否真实且集中在哪些读路径",
+          "retireIn": "S01",
+          "whatWillBeProven": "projection/history/admin/leaderboard 热点查询和索引缺口形成 evidence-backed baseline"
+        },
+        {
+          "riskOrUnknown": "依赖治理是否可在当前仓库中以低成本落地",
+          "retireIn": "S02",
+          "whatWillBeProven": "npm/pip audit 与 license/update cadence 形成可执行流程，不要求一次性升级全量依赖"
+        },
+        {
+          "riskOrUnknown": "备份/恢复是否有真实可执行路径",
+          "retireIn": "S03",
+          "whatWillBeProven": "runbook 按当前部署与数据库路径可人工走查执行"
+        }
+      ],
+      "verification_contract": "Backend focused pytest 串行执行；依赖检查用 `npm audit --prefix web`、`backend/venv/bin/python -m pip_audit`（若环境具备）；runbook 采用人工走查。",
+      "verification_integration": "analytics/admin/leaderboard focused tests 与依赖扫描命令能在当前仓库中运行。",
+      "verification_operational": "人工按 runbook 检查命令/路径/负责人是否真实可执行。",
+      "verification_uat": "人工评审 discovery artifact 是否基于真实证据而非空泛建议。",
+      "definition_of_done": [
+        "有一份真实的 query/index baseline，而不是审计猜测",
+        "有明确的依赖扫描和升级策略文档，且可在仓库中执行",
+        "有一份可跟着操作的 backup/recovery baseline 文档"
+      ],
+      "requirement_coverage": "[\"Supports: 系统 launchability 之外的长期治理基线\", \"Leaves for later: 大规模性能优化、自动化容灾、依赖机器人平台、异地备份系统\"]",
+      "boundary_map_markdown": "### S01 → S02\n\nProduces:\n- query/index baseline 与后续优化候选列表\n\nConsumes:\n- analytics/history/admin/leaderboard/projection 路径\n\n### S02 → S03\n\nProduces:\n- dependency governance baseline（npm/pip 漏洞扫描、license/update strategy）\n\nConsumes:\n- `web/package.json`、`backend/requirements.txt`、现有 workflow\n\n### S03 → 后续\n\nProduces:\n- backup/recovery baseline runbook\n\nConsumes:\n- 当前部署方式、scripts、数据库连接方式"
     }
   ],
   "slices": [
@@ -1449,6 +1842,456 @@
       "proof_level": "evaluation + rollout safety",
       "integration_closure": "此 slice 完成后，系统具备继续调优和回滚的工程能力，而不依赖继续改 handler 补丁。",
       "observability_impact": "debug API、evaluation results、dual-run diff 为后续运营和排障提供统一入口。",
+      "sequence": 0,
+      "replan_triggered_at": null
+    },
+    {
+      "milestone_id": "M012",
+      "id": "S01",
+      "title": "认证与首页修复",
+      "status": "pending",
+      "risk": "high",
+      "depends": [],
+      "demo": "用户可自助登录、重置密码，首页显示真实用户名和动态版本号，企业微信按钮已标注即将支持",
+      "created_at": "2026-04-03T02:36:13.175Z",
+      "completed_at": null,
+      "full_summary_md": "",
+      "full_uat_md": "",
+      "goal": "修复认证层缺失功能和首页硬编码问题，让用户能自助重置密码，登录后首页显示真实个人信息。",
+      "success_criteria": "1. 忘记密码完整流程可走通（前端入口 + 后端 API + 邮件服务抽象）\\n2. 首页显示真实用户名而非硬编码\\n3. 版本号动态读取\\n4. 企业微信按钮标注即将支持且不可点击",
+      "proof_level": "contract + integration",
+      "integration_closure": "Auth API 新增 forgot-password/reset-password 路由；首页读取 currentUser；企业微信按钮标注即将支持",
+      "observability_impact": "Password reset tokens logged on create/use/expire; no secrets in logs",
+      "sequence": 0,
+      "replan_triggered_at": null
+    },
+    {
+      "milestone_id": "M012",
+      "id": "S02",
+      "title": "导航与系统体验基础",
+      "status": "pending",
+      "risk": "medium",
+      "depends": [
+        "S01"
+      ],
+      "demo": "侧边栏有历史入口，所有 learner 页面有 error boundary，首页空壳按钮已处理，有反馈入口",
+      "created_at": "2026-04-03T02:36:13.175Z",
+      "completed_at": null,
+      "full_summary_md": "",
+      "full_uat_md": "",
+      "goal": "补齐导航缺失入口、建立 error boundary、处理空壳按钮、添加意见反馈入口",
+      "success_criteria": "1. 侧边栏有历史记录导航项\n2. Learner 侧有 error boundary\n3. 首页空壳按钮已处理\n4. 历史筛选有真实逻辑\n5. 意见反馈入口存在",
+      "proof_level": "contract + integration",
+      "integration_closure": "Sidebar navItems 更新；error.tsx 添加到 learner routes；dashboard 按钮连接真实行为",
+      "observability_impact": "none",
+      "sequence": 0,
+      "replan_triggered_at": null
+    },
+    {
+      "milestone_id": "M012",
+      "id": "S03",
+      "title": "个人中心与排行榜体验收敛",
+      "status": "pending",
+      "risk": "low",
+      "depends": [
+        "S01",
+        "S02"
+      ],
+      "demo": "Profile 语速设置持久化，通知开关移除，排行榜有评分说明，个人中心可修改密码",
+      "created_at": "2026-04-03T02:36:13.176Z",
+      "completed_at": null,
+      "full_summary_md": "",
+      "full_uat_md": "",
+      "goal": "Profile 摆设功能持久化或隐藏，排行榜有评分规则说明，修改密码功能可用",
+      "success_criteria": "1. 语速设置持久化到后端\n2. 通知开关已移除\n3. 排行榜有评分规则说明\n4. 个人中心可修改密码",
+      "proof_level": "contract",
+      "integration_closure": "Profile API 扩展 voice_speed_preference 字段；排行榜页面添加评分说明组件",
+      "observability_impact": "none",
+      "sequence": 0,
+      "replan_triggered_at": null
+    },
+    {
+      "milestone_id": "M013",
+      "id": "S01",
+      "title": "SYSTEM_AUDIT_REPORT 条目归一化",
+      "status": "pending",
+      "risk": "medium",
+      "depends": [],
+      "demo": "归一化矩阵覆盖所有 audit section，每个条目有 disposition、证据路径和后续 slice 归属",
+      "created_at": "2026-04-08T08:38:10.615Z",
+      "completed_at": null,
+      "full_summary_md": "",
+      "full_uat_md": "",
+      "goal": "对 SYSTEM_AUDIT_REPORT 全文逐条建立 disposition：already-fixed / actionable-now / needs-discovery / deferred-by-product / contradicted-by-project-knowledge",
+      "success_criteria": "- 每个 audit section 的所有条目都有 disposition\n- stale finding 标注了代码证据文件路径\n- deferred 条目写明了冲突来源（如 PROJECT.md 桌面优先首发策略）",
+      "proof_level": "contract",
+      "integration_closure": "归一化矩阵成为后续 M014-M018 的单一 backlog authority，不改代码、不改 requirement/milestone 状态",
+      "observability_impact": "none",
+      "sequence": 0,
+      "replan_triggered_at": null
+    },
+    {
+      "milestone_id": "M013",
+      "id": "S02",
+      "title": "审计相关验证基线补齐",
+      "status": "pending",
+      "risk": "low",
+      "depends": [
+        "S01"
+      ],
+      "demo": "每个后续 slice 至少有一条已存在的 focused verification command 可直接执行",
+      "created_at": "2026-04-08T08:38:10.616Z",
+      "completed_at": null,
+      "full_summary_md": "",
+      "full_uat_md": "",
+      "goal": "为后续所有 repair slice 锁定可复用的 web/backend focused 验证命令集合",
+      "success_criteria": "- auth/dashboard/history/profile/practice/lifecycle/websocket/admin 每个领域至少有 1 条可执行 focused command\n- backend repo-root pytest 命令明确标注串行要求\n- 无需大规模新增测试即可覆盖核心验证面",
+      "proof_level": "contract",
+      "integration_closure": "每个后续 slice 都能直接引用已知可执行 command，backend proof 明确串行",
+      "observability_impact": "none",
+      "sequence": 0,
+      "replan_triggered_at": null
+    },
+    {
+      "milestone_id": "M014",
+      "id": "S01",
+      "title": "首页硬编码与空壳动作收口",
+      "status": "pending",
+      "risk": "medium",
+      "depends": [],
+      "demo": "首页不再有“点了没反应”的主按钮/CTA，首屏有最小 onboarding 指引",
+      "created_at": "2026-04-08T08:40:41.990Z",
+      "completed_at": null,
+      "full_summary_md": "",
+      "full_uat_md": "",
+      "goal": "清理 dashboard 首页静态更新内容、无动作按钮、假筛选与缺少 onboarding 的问题",
+      "success_criteria": "- 首页不再存在“点了没反应”的主按钮/弹窗 CTA\n- 首页首屏存在最小 onboarding 指引\n- report export affordance 未被重新引入",
+      "proof_level": "contract",
+      "integration_closure": "首页 CTA 与真实训练入口/历史页/report 深链对齐，不重新引入 report export affordance",
+      "observability_impact": "none",
+      "sequence": 0,
+      "replan_triggered_at": null
+    },
+    {
+      "milestone_id": "M014",
+      "id": "S02",
+      "title": "认证与个人中心体验补齐",
+      "status": "pending",
+      "risk": "high",
+      "depends": [
+        "S01"
+      ],
+      "demo": "用户可从 profile 走到正式修改密码路径，语速偏好刷新后保留，forgot/reset 体验完整",
+      "created_at": "2026-04-08T08:40:41.990Z",
+      "completed_at": null,
+      "full_summary_md": "",
+      "full_uat_md": "",
+      "goal": "把 learner 侧“能登录”提升到“能维护账号”：forgot/reset 正式化、profile 修改密码体验闭合、语速偏好持久化补齐",
+      "success_criteria": "- password reset 有正式持久化与 migration\n- forgot/reset 的安全与生命周期行为可被 focused tests 证明\n- profile 内有可理解的修改密码路径\n- 语速偏好刷新后保留或有明确移除策略\n- profile 中“修改密码”不再使用 window.location.href",
+      "proof_level": "integration",
+      "integration_closure": "frontend auth/profile route、backend auth API/service、migration 与 focused tests 共同形成正式维护账号路径",
+      "observability_impact": "token 使用、过期、一次性消费日志",
+      "sequence": 0,
+      "replan_triggered_at": null
+    },
+    {
+      "milestone_id": "M014",
+      "id": "S03",
+      "title": "Learner 导航、反馈入口与系统壳层补齐",
+      "status": "pending",
+      "risk": "medium",
+      "depends": [
+        "S01"
+      ],
+      "demo": "从首页/profile/history 任一页都能找到帮助/反馈入口",
+      "created_at": "2026-04-08T08:40:41.990Z",
+      "completed_at": null,
+      "full_summary_md": "",
+      "full_uat_md": "",
+      "goal": "补齐 learner 侧统一反馈入口、角色/使用说明、缺失导航和壳层级帮助信息",
+      "success_criteria": "- learner 至少有一个稳定的“遇到问题怎么办”入口\n- 不再需要靠隐性文案解释权限或联系管理员方式\n- learner shell 导航一致性检查通过",
+      "proof_level": "contract",
+      "integration_closure": "learner shell 提供统一帮助/反馈入口，不在每页分散堆按钮",
+      "observability_impact": "none",
+      "sequence": 0,
+      "replan_triggered_at": null
+    },
+    {
+      "milestone_id": "M014",
+      "id": "S04",
+      "title": "训练前预期管理与中断恢复 UX 收口",
+      "status": "pending",
+      "risk": "medium",
+      "depends": [
+        "S01",
+        "S02"
+      ],
+      "demo": "用户在开始录音前能理解本次练习目标，暂停/恢复/结束失败时有清晰指引",
+      "created_at": "2026-04-08T08:40:41.990Z",
+      "completed_at": null,
+      "full_summary_md": "",
+      "full_uat_md": "",
+      "goal": "补齐 practice 页的训练前目标/评价标准/角色简介最小预告，以及暂停/恢复/结束失败的用户可理解文案",
+      "success_criteria": "- 用户在开始录音前能理解本次练习在练什么\n- 暂停/恢复/结束失败时页面有清晰指引\n- test-mic 不以普通 learner 功能暴露",
+      "proof_level": "integration",
+      "integration_closure": "复用现有 overlay/banner 模式，不新增复杂 preflight route",
+      "observability_impact": "训练前预告内容来自 session 创建时的 persona/scenario 数据",
+      "sequence": 0,
+      "replan_triggered_at": null
+    },
+    {
+      "milestone_id": "M015",
+      "id": "S01",
+      "title": "前端日志出口统一化",
+      "status": "pending",
+      "risk": "medium",
+      "depends": [],
+      "demo": "前端业务页面中的 console 输出被统一收口到共享 debug/observability seam",
+      "created_at": "2026-04-08T08:53:16.023Z",
+      "completed_at": null,
+      "full_summary_md": "",
+      "full_uat_md": "",
+      "goal": "把前端大量 console.* 调用收口到明确的 debug/observability seam，并区分 dev-only 与 durable error reporting",
+      "success_criteria": "- 除 instrumentation/dev-only 例外外，不再有随意 console.log/error 散落业务页面\n- route error.tsx 内的 console.error 也纳入统一规则\n- instrumentation 层允许保留少量结构化 console 输出，但规则成文",
+      "proof_level": "contract",
+      "integration_closure": "route error.tsx、ErrorBoundary、practice/audio hooks 等高噪声 surface 共用同一日志规则",
+      "observability_impact": "shared debug seam 成为前端日志唯一出口",
+      "sequence": 0,
+      "replan_triggered_at": null
+    },
+    {
+      "milestone_id": "M015",
+      "id": "S02",
+      "title": "原生弹窗与 window.location 跳转清理",
+      "status": "pending",
+      "risk": "medium",
+      "depends": [
+        "S01"
+      ],
+      "demo": "业务页面中的原生弹窗和直接浏览器跳转被替换为 toast/dialog/router/auth-handler seam",
+      "created_at": "2026-04-08T08:53:16.023Z",
+      "completed_at": null,
+      "full_summary_md": "",
+      "full_uat_md": "",
+      "goal": "消除 admin/learner 中断式交互与直接浏览器跳转，统一到 toast/dialog/router/auth-handler seam",
+      "success_criteria": "- 业务页面中不再存在 alert()/confirm()\n- 业务跳转不再使用 window.location.assign/href\n- ErrorBoundary 中 reload 作为少数例外被保留",
+      "proof_level": "integration",
+      "integration_closure": "admin records/rag-profiles/personas、profile、dashboard shell、auth redirect 都共用统一交互模式",
+      "observability_impact": "confirm dialog/action hook 成为用户确认唯一 UI seam",
+      "sequence": 0,
+      "replan_triggered_at": null
+    },
+    {
+      "milestone_id": "M015",
+      "id": "S03",
+      "title": "Learner error/loading 覆盖与 responsive/a11y/timezone baseline",
+      "status": "pending",
+      "risk": "medium",
+      "depends": [
+        "S02"
+      ],
+      "demo": "learner 核心路由都有 error/loading fallback，且 baseline responsive/a11y/timezone 风险有记录和低风险修复",
+      "created_at": "2026-04-08T08:53:16.023Z",
+      "completed_at": null,
+      "full_summary_md": "",
+      "full_uat_md": "",
+      "goal": "补齐 learner 路由簇中缺失的 error/loading 壳层，并对响应式、a11y、时区问题形成最小基线",
+      "success_criteria": "- learner 核心路由（auth/home/training/history/profile/practice/report/replay）都有明确 error/loading 策略\n- baseline a11y/responsive/timezone 风险有证据记录和明确 disposition\n- 不把 mobile full support / 全站 WCAG / 全量时区系统混入实现",
+      "proof_level": "integration",
+      "integration_closure": "auth/home/training/history/profile/practice/report/replay 统一纳入 learner shell 保护矩阵",
+      "observability_impact": "route-level fallback 让错误/加载状态可见",
+      "sequence": 0,
+      "replan_triggered_at": null
+    },
+    {
+      "milestone_id": "M016",
+      "id": "S01",
+      "title": "Password reset / auth backend 正式化",
+      "status": "pending",
+      "risk": "high",
+      "depends": [],
+      "demo": "forgot/reset 走正式 token 持久化与 lifecycle contract，现有登录兼容路径保持可证明",
+      "created_at": "2026-04-08T08:53:52.133Z",
+      "completed_at": null,
+      "full_summary_md": "",
+      "full_uat_md": "",
+      "goal": "把当前 password reset 和 auth 实现从“演示可用”升级为“正式 contract 可维护”",
+      "success_criteria": "- password reset 有正式持久化与 migration\n- forgot/reset 的安全与生命周期行为可被 focused tests 证明\n- request path 中不再执行 CREATE TABLE IF NOT EXISTS\n- shared password / user-specific password / reset password 三层逻辑显式建模",
+      "proof_level": "integration",
+      "integration_closure": "auth api/service/models/migration/tests 共同形成正式 recovery seam",
+      "observability_impact": "token 生命周期、过期、一次性使用、rate limit 事件可诊断",
+      "sequence": 0,
+      "replan_triggered_at": null
+    },
+    {
+      "milestone_id": "M016",
+      "id": "S02",
+      "title": "API 错误契约与异常分类收口",
+      "status": "pending",
+      "risk": "high",
+      "depends": [
+        "S01"
+      ],
+      "demo": "audit 命中的高频 API surface 返回统一错误 shape，frontend client 不再 page-local 猜测",
+      "created_at": "2026-04-08T08:53:52.133Z",
+      "completed_at": null,
+      "full_summary_md": "",
+      "full_uat_md": "",
+      "goal": "统一后端 API 的错误响应格式，减少裸 HTTPException 与通用 except Exception 在业务层直接暴露",
+      "success_criteria": "- audit 命中的高频 API surface 都返回统一错误 shape\n- frontend client 不需要 page-local 猜测错误格式\n- auth dependency 的 framework-level rejection 与 outward JSON contract 保持一致",
+      "proof_level": "contract",
+      "integration_closure": "prompt templates / presentations / auth 等高噪声 route family 先收口，frontend apiFetch 对齐",
+      "observability_impact": "domain/permission/not-found/validation error 分类更可观测",
+      "sequence": 0,
+      "replan_triggered_at": null
+    },
+    {
+      "milestone_id": "M016",
+      "id": "S03",
+      "title": "RBAC、敏感日志与 admin 安全面 audit",
+      "status": "pending",
+      "risk": "high",
+      "depends": [
+        "S02"
+      ],
+      "demo": "admin 高风险接口有权限证明，日志敏感字段脱敏规则落到高风险出口",
+      "created_at": "2026-04-08T08:53:52.133Z",
+      "completed_at": null,
+      "full_summary_md": "",
+      "full_uat_md": "",
+      "goal": "为 admin routes 的权限粒度与日志脱敏建立明确的风险图谱，并先修高确定性问题",
+      "success_criteria": "- admin 高风险接口有明确权限证明\n- 日志敏感字段脱敏规则成文并落到高风险出口\n- 最小权限审计日志策略形成 baseline",
+      "proof_level": "integration",
+      "integration_closure": "admin APIs、auth dependencies、logger/middleware/helper 共用统一权限/脱敏规则",
+      "observability_impact": "token/password/cookie/email 等敏感字段在日志出口被 redaction",
+      "sequence": 0,
+      "replan_triggered_at": null
+    },
+    {
+      "milestone_id": "M017",
+      "id": "S01",
+      "title": "Session lifecycle 并发安全 proof",
+      "status": "pending",
+      "risk": "high",
+      "depends": [],
+      "demo": "pause/resume/end 并发行为有可重复证明，状态收敛策略清晰",
+      "created_at": "2026-04-08T08:54:31.246Z",
+      "completed_at": null,
+      "full_summary_md": "",
+      "full_uat_md": "",
+      "goal": "为 SessionLifecycleService 建立并发安全证据，并在需要时引入行锁/乐观并发控制",
+      "success_criteria": "- pause/resume/end 并发场景有明确测试与收敛策略\n- 保持 sales scoring / presentation completed 的现有终态差异\n- 不再只有“理论上可能竞态”的审计描述",
+      "proof_level": "integration",
+      "integration_closure": "lifecycle service、API 与 runtime 的状态机语义重新对齐到可证明 contract",
+      "observability_impact": "状态转移失败、竞态冲突、终态差异可诊断",
+      "sequence": 0,
+      "replan_triggered_at": null
+    },
+    {
+      "milestone_id": "M017",
+      "id": "S02",
+      "title": "Practice WebSocket 复杂度与重连策略收口",
+      "status": "pending",
+      "risk": "high",
+      "depends": [
+        "S01"
+      ],
+      "demo": "practice websocket 的 reconnect/backpressure/interrupt contract 更清晰，测试保持通过",
+      "created_at": "2026-04-08T08:54:31.246Z",
+      "completed_at": null,
+      "full_summary_md": "",
+      "full_uat_md": "",
+      "goal": "把当前 practice websocket orchestrator 的复杂度、重连策略和 backpressure 规则再收口一轮",
+      "success_criteria": "- reconnect/backpressure/interrupt 的 contract 更清晰\n- hook 职责拆分围绕真实 seam，而不是为拆分而拆分\n- 复杂度下降且现有测试保持通过",
+      "proof_level": "integration",
+      "integration_closure": "frontend hook、practice page 与 backend websocket runtime 共享更明确的 realtime contract",
+      "observability_impact": "reconnect 次数、backpressure 队列清理、interrupt 状态更易检查",
+      "sequence": 0,
+      "replan_triggered_at": null
+    },
+    {
+      "milestone_id": "M017",
+      "id": "S03",
+      "title": "文件上传 / 资源竞争 / 分布式锁风险 discovery",
+      "status": "pending",
+      "risk": "medium",
+      "depends": [
+        "S01"
+      ],
+      "demo": "presentation upload / replace 等并发风险点被列成可证据化清单，并给出下一步建议",
+      "created_at": "2026-04-08T08:54:31.246Z",
+      "completed_at": null,
+      "full_summary_md": "",
+      "full_uat_md": "",
+      "goal": "把文件上传并发、资源竞争、分布式锁缺失这类“风险项”先转成可证据化的 discovery 结论",
+      "success_criteria": "- 并发风险点有明确列表、可复现路径和下一步建议\n- 先回答哪里真的存在竞争，再决定是否上锁\n- 不直接引入 Redis 分布式锁到全系统",
+      "proof_level": "contract",
+      "integration_closure": "presentations API/service/tests 与现有 active-session blocker 机制一起评估，而不是重复治理已覆盖场景",
+      "observability_impact": "并发冲突点、共享资源访问路径、锁需求候选清单形成 discovery artifact",
+      "sequence": 0,
+      "replan_triggered_at": null
+    },
+    {
+      "milestone_id": "M018",
+      "id": "S01",
+      "title": "数据库性能基线 discovery",
+      "status": "pending",
+      "risk": "medium",
+      "depends": [],
+      "demo": "有一份 query/index baseline，后续优化 backlog 基于真实证据而不是 audit 猜测",
+      "created_at": "2026-04-08T08:55:14.383Z",
+      "completed_at": null,
+      "full_summary_md": "",
+      "full_uat_md": "",
+      "goal": "对 N+1、索引、slow query 做第一轮基线审计，产出真实优化 backlog",
+      "success_criteria": "- 有一份真实的 query/index baseline，而不是审计猜测\n- projection/history/admin/leaderboard 热点查询被梳理\n- 不把 SQLite 测试表现当 PostgreSQL 真结论",
+      "proof_level": "contract",
+      "integration_closure": "shared projection 路径与 admin/history/leaderboard 消费面统一纳入 SQL 基线检查",
+      "observability_impact": "slow query / explain 分析方案形成可复用 discovery 方法",
+      "sequence": 0,
+      "replan_triggered_at": null
+    },
+    {
+      "milestone_id": "M018",
+      "id": "S02",
+      "title": "依赖安全、许可证与更新策略基线",
+      "status": "pending",
+      "risk": "low",
+      "depends": [
+        "S01"
+      ],
+      "demo": "仓库里有可执行的依赖扫描与升级策略文档/流程",
+      "created_at": "2026-04-08T08:55:14.383Z",
+      "completed_at": null,
+      "full_summary_md": "",
+      "full_uat_md": "",
+      "goal": "把依赖安全、许可证、更新策略从口头建议变成明确维护流程",
+      "success_criteria": "- 有明确的依赖扫描和升级策略文档，且可在仓库中执行\n- backend 依赖变更仍要求同步 backend/requirements.txt\n- 不一次性升级所有依赖",
+      "proof_level": "contract",
+      "integration_closure": "web/package.json、backend/requirements.txt 与现有 workflow 被纳入统一治理 baseline",
+      "observability_impact": "依赖漏洞、license、升级 cadence 有固定检查入口",
+      "sequence": 0,
+      "replan_triggered_at": null
+    },
+    {
+      "milestone_id": "M018",
+      "id": "S03",
+      "title": "备份 / 故障恢复 / 容灾 runbook 基线",
+      "status": "pending",
+      "risk": "medium",
+      "depends": [
+        "S01"
+      ],
+      "demo": "有一份按当前部署现状可执行的 backup/recovery runbook",
+      "created_at": "2026-04-08T08:55:14.383Z",
+      "completed_at": null,
+      "full_summary_md": "",
+      "full_uat_md": "",
+      "goal": "把备份频率、恢复流程、灾难恢复演练从“缺失”转成最小可执行 runbook",
+      "success_criteria": "- 有一份可跟着操作的 backup/recovery baseline 文档\n- 文档基于真实现状与命令路径\n- 不承诺自动故障转移或异地备份平台建设",
+      "proof_level": "contract",
+      "integration_closure": "runbook 直接基于当前部署方式、脚本、数据库连接方式，而不是理想架构",
+      "observability_impact": "备份频率、恢复证据位置、负责人和季度演练建议可追踪",
       "sequence": 0,
       "replan_triggered_at": null
     }
@@ -7236,6 +8079,2189 @@
       "observability_impact": "",
       "full_plan_md": "",
       "sequence": 0
+    },
+    {
+      "milestone_id": "M012",
+      "slice_id": "S01",
+      "id": "T01",
+      "title": "Added a real forgot/reset-password backend flow with persisted reset tokens, user-specific password login, rate limiting, migration support, and contract tests.",
+      "status": "complete",
+      "one_liner": "Added a real forgot/reset-password backend flow with persisted reset tokens, user-specific password login, rate limiting, migration support, and contract tests.",
+      "narrative": "Replaced the inline password-reset prototype in common.auth.api with a service-backed implementation in common.services.password_reset. Added the PasswordResetToken ORM model plus a matching Alembic migration, added users.hashed_password so reset passwords persist durably, and made login treat that per-user password as authoritative once present. The service now hashes reset tokens with SHA-256 for exact lookup, expires them after 30 minutes, invalidates prior unused tokens, and emits structured logs with user_id/token_id only. Added an IP-scoped 1/minute rate limit to forgot-password and a redacted console email mock for local development. Wrote password-reset integration tests first, watched the old implementation fail, then implemented until the focused suite passed. During execution I also found the local passlib+bcrypt backend cannot mint new bcrypt hashes reliably, so I switched the shared CryptContext to pbkdf2_sha256 primary with bcrypt verify fallback and recorded that as D156 plus a knowledge note.",
+      "verification_result": "Focused verification passed with `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/integration/test_password_reset_api.py -x -q` (5 tests covering token creation, non-enumeration, rate limiting, one-time use, and login with the reset password). Static diagnostics on the edited Python files reported no LSP issues. The exact planner command was also run and failed for an unrelated pre-existing import dependency in the websocket-status test collection path, not in the password-reset flow.",
+      "duration": "",
+      "completed_at": "2026-04-08T09:29:23.879Z",
+      "blocker_discovered": false,
+      "deviations": "Added users.hashed_password to the schema and login flow even though the planner only named PasswordResetToken, because the existing auth path already depended on a per-user password field for reset passwords to be usable. Also changed the shared CryptContext to pbkdf2_sha256 primary with bcrypt verify fallback because the local passlib+bcrypt backend cannot mint fresh bcrypt hashes reliably.",
+      "known_issues": "The exact slice/task verification command `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/ -k password_reset -x -q` still fails during unrelated test collection in `backend/tests/integration/test_websocket_status_contract.py` because the local environment is missing `multidict._multidict_py` through the `edge_tts` import chain. The dedicated password-reset suite passes.",
+      "key_files": [
+        "backend/src/common/db/models.py",
+        "backend/src/common/auth/api.py",
+        "backend/src/common/auth/service.py",
+        "backend/src/common/services/__init__.py",
+        "backend/src/common/services/password_reset.py",
+        "backend/alembic/versions/20260408_1718_026_password_reset_tokens.py",
+        "backend/tests/integration/test_password_reset_api.py",
+        ".gsd/KNOWLEDGE.md",
+        ".gsd/milestones/M012/slices/S01/tasks/T01-SUMMARY.md"
+      ],
+      "key_decisions": [
+        "Recorded D156: use pbkdf2_sha256 as the primary password-reset hashing scheme with bcrypt verify fallback in the shared CryptContext.",
+        "Treat users.hashed_password as authoritative at login once a user has reset their password, instead of continuing to accept the shared env password for that account."
+      ],
+      "full_summary_md": "---\nid: T01\nparent: S01\nmilestone: M012\nkey_files:\n  - backend/src/common/db/models.py\n  - backend/src/common/auth/api.py\n  - backend/src/common/auth/service.py\n  - backend/src/common/services/__init__.py\n  - backend/src/common/services/password_reset.py\n  - backend/alembic/versions/20260408_1718_026_password_reset_tokens.py\n  - backend/tests/integration/test_password_reset_api.py\n  - .gsd/KNOWLEDGE.md\n  - .gsd/milestones/M012/slices/S01/tasks/T01-SUMMARY.md\nkey_decisions:\n  - Recorded D156: use pbkdf2_sha256 as the primary password-reset hashing scheme with bcrypt verify fallback in the shared CryptContext.\n  - Treat users.hashed_password as authoritative at login once a user has reset their password, instead of continuing to accept the shared env password for that account.\nduration: \"\"\nverification_result: mixed\ncompleted_at: 2026-04-08T09:29:23.881Z\nblocker_discovered: false\n---\n\n# T01: Added a real forgot/reset-password backend flow with persisted reset tokens, user-specific password login, rate limiting, migration support, and contract tests.\n\n**Added a real forgot/reset-password backend flow with persisted reset tokens, user-specific password login, rate limiting, migration support, and contract tests.**\n\n## What Happened\n\nReplaced the inline password-reset prototype in common.auth.api with a service-backed implementation in common.services.password_reset. Added the PasswordResetToken ORM model plus a matching Alembic migration, added users.hashed_password so reset passwords persist durably, and made login treat that per-user password as authoritative once present. The service now hashes reset tokens with SHA-256 for exact lookup, expires them after 30 minutes, invalidates prior unused tokens, and emits structured logs with user_id/token_id only. Added an IP-scoped 1/minute rate limit to forgot-password and a redacted console email mock for local development. Wrote password-reset integration tests first, watched the old implementation fail, then implemented until the focused suite passed. During execution I also found the local passlib+bcrypt backend cannot mint new bcrypt hashes reliably, so I switched the shared CryptContext to pbkdf2_sha256 primary with bcrypt verify fallback and recorded that as D156 plus a knowledge note.\n\n## Verification\n\nFocused verification passed with `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/integration/test_password_reset_api.py -x -q` (5 tests covering token creation, non-enumeration, rate limiting, one-time use, and login with the reset password). Static diagnostics on the edited Python files reported no LSP issues. The exact planner command was also run and failed for an unrelated pre-existing import dependency in the websocket-status test collection path, not in the password-reset flow.\n\n## Verification Evidence\n\n| # | Command | Exit Code | Verdict | Duration |\n|---|---------|-----------|---------|----------|\n| 1 | `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/integration/test_password_reset_api.py -x -q` | 0 | ✅ pass | 4270ms |\n| 2 | `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/ -k password_reset -x -q` | 1 | ❌ fail | 4220ms |\n\n\n## Deviations\n\nAdded users.hashed_password to the schema and login flow even though the planner only named PasswordResetToken, because the existing auth path already depended on a per-user password field for reset passwords to be usable. Also changed the shared CryptContext to pbkdf2_sha256 primary with bcrypt verify fallback because the local passlib+bcrypt backend cannot mint fresh bcrypt hashes reliably.\n\n## Known Issues\n\nThe exact slice/task verification command `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/ -k password_reset -x -q` still fails during unrelated test collection in `backend/tests/integration/test_websocket_status_contract.py` because the local environment is missing `multidict._multidict_py` through the `edge_tts` import chain. The dedicated password-reset suite passes.\n\n## Files Created/Modified\n\n- `backend/src/common/db/models.py`\n- `backend/src/common/auth/api.py`\n- `backend/src/common/auth/service.py`\n- `backend/src/common/services/__init__.py`\n- `backend/src/common/services/password_reset.py`\n- `backend/alembic/versions/20260408_1718_026_password_reset_tokens.py`\n- `backend/tests/integration/test_password_reset_api.py`\n- `.gsd/KNOWLEDGE.md`\n- `.gsd/milestones/M012/slices/S01/tasks/T01-SUMMARY.md`\n",
+      "description": "后端：新增 PasswordResetToken 模型、Alembic migration、forgot-password/reset-password 服务和路由。Token 有效期 30 分钟、一次性使用。邮件服务抽象为接口，本地开发用 console 打印 mock。Rate limit 1次/分钟/IP。\n\nSteps:\n1. 在 models.py 新增 PasswordResetToken 模型\n2. 新增 Alembic migration\n3. 在 services/ 下新增 password_reset.py 服务\n4. 在 auth/api.py 新增 forgot-password 和 reset-password 路由\n5. 新增 EmailService 抽象接口\n6. 编写 pytest contract tests",
+      "estimate": "2h",
+      "files": [
+        "backend/src/common/db/models.py",
+        "backend/src/common/services/password_reset.py",
+        "backend/src/common/auth/api.py"
+      ],
+      "verify": "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/ -k password_reset -x -q",
+      "inputs": [
+        "backend/src/common/db/models.py",
+        "backend/src/common/auth/api.py",
+        "backend/src/common/auth/service.py"
+      ],
+      "expected_output": [
+        "backend/src/common/db/models.py",
+        "backend/alembic/versions/*_password_reset_token.py",
+        "backend/src/common/services/password_reset.py",
+        "backend/src/common/auth/api.py"
+      ],
+      "observability_impact": "Password reset token creation/use logged with user_id, no token value in logs",
+      "full_plan_md": "",
+      "sequence": 0
+    },
+    {
+      "milestone_id": "M012",
+      "slice_id": "S01",
+      "id": "T02",
+      "title": "忘记密码前端流程",
+      "status": "pending",
+      "one_liner": "",
+      "narrative": "",
+      "verification_result": "",
+      "duration": "",
+      "completed_at": null,
+      "blocker_discovered": false,
+      "deviations": "",
+      "known_issues": "",
+      "key_files": [],
+      "key_decisions": [],
+      "full_summary_md": "",
+      "description": "前端：在登录页添加'忘记密码？'链接，新建 forgot-password 和 reset-password 页面，表单校验完整。\n\nSteps:\n1. 登录页 email+password 表单下方添加'忘记密码？'链接\n2. 新建 forgot-password 页面：email 输入 → 调用 API → 成功提示\n3. 新建 reset-password 页面：token + 新密码 + 确认密码 → 调用 API → 跳转登录\n4. 在 api client 添加对应方法\n5. 表单校验：密码最小长度 8 位、两次输入一致",
+      "estimate": "1.5h",
+      "files": [
+        "web/src/app/(auth)/login/page.tsx",
+        "web/src/app/(auth)/forgot-password/page.tsx",
+        "web/src/app/(auth)/reset-password/page.tsx",
+        "web/src/lib/api/client.ts"
+      ],
+      "verify": "npm --prefix web test -- --run login",
+      "inputs": [
+        "web/src/app/(auth)/login/page.tsx",
+        "web/src/lib/api/client.ts"
+      ],
+      "expected_output": [
+        "web/src/app/(auth)/login/page.tsx",
+        "web/src/app/(auth)/forgot-password/page.tsx",
+        "web/src/app/(auth)/reset-password/page.tsx"
+      ],
+      "observability_impact": "none",
+      "full_plan_md": "",
+      "sequence": 0
+    },
+    {
+      "milestone_id": "M012",
+      "slice_id": "S01",
+      "id": "T03",
+      "title": "首页硬编码用户名和版本号修复",
+      "status": "pending",
+      "one_liner": "",
+      "narrative": "",
+      "verification_result": "",
+      "duration": "",
+      "completed_at": null,
+      "blocker_discovered": false,
+      "deviations": "",
+      "known_issues": "",
+      "key_files": [],
+      "key_decisions": [],
+      "full_summary_md": "",
+      "description": "首页修复：将'早安，亚历山大'改为读 currentUser 真实姓名，问候语根据时段动态切换，版本号从 package.json 动态读取，移除硬编码日期。\n\nSteps:\n1. 首页从 useCurrentUser hook 读取真实用户名\n2. 根据时段切换早安/午安/晚安\n3. 无姓名 fallback 到 email 前缀\n4. 版本号从 package.json version 读取\n5. 移除硬编码的 2026年1月10日",
+      "estimate": "1h",
+      "files": [
+        "web/src/app/(dashboard)/page.tsx"
+      ],
+      "verify": "npm --prefix web test -- --run dashboard",
+      "inputs": [
+        "web/src/app/(dashboard)/page.tsx",
+        "web/package.json"
+      ],
+      "expected_output": [
+        "web/src/app/(dashboard)/page.tsx"
+      ],
+      "observability_impact": "none",
+      "full_plan_md": "",
+      "sequence": 0
+    },
+    {
+      "milestone_id": "M012",
+      "slice_id": "S01",
+      "id": "T04",
+      "title": "企业微信按钮处理",
+      "status": "pending",
+      "one_liner": "",
+      "narrative": "",
+      "verification_result": "",
+      "duration": "",
+      "completed_at": null,
+      "blocker_discovered": false,
+      "deviations": "",
+      "known_issues": "",
+      "key_files": [],
+      "key_decisions": [],
+      "full_summary_md": "",
+      "description": "将企业微信登录按钮改为 disabled 状态并添加提示，或完全移除。确保视觉上明确标识为不可用。\n\nSteps:\n1. 将企业微信按钮改为 disabled\n2. 添加 title='即将支持，敬请期待' 提示\n3. 视觉上降低对比度表示不可用",
+      "estimate": "30m",
+      "files": [
+        "web/src/app/(auth)/login/page.tsx"
+      ],
+      "verify": "npm --prefix web test -- --run login",
+      "inputs": [
+        "web/src/app/(auth)/login/page.tsx"
+      ],
+      "expected_output": [
+        "web/src/app/(auth)/login/page.tsx"
+      ],
+      "observability_impact": "none",
+      "full_plan_md": "",
+      "sequence": 0
+    },
+    {
+      "milestone_id": "M013",
+      "slice_id": "S01",
+      "id": "T01",
+      "title": "建立 audit 条目原始归一化矩阵",
+      "status": "pending",
+      "one_liner": "",
+      "narrative": "",
+      "verification_result": "",
+      "duration": "",
+      "completed_at": null,
+      "blocker_discovered": false,
+      "deviations": "",
+      "known_issues": "",
+      "key_files": [],
+      "key_decisions": [],
+      "full_summary_md": "",
+      "description": "逐条阅读 SYSTEM_AUDIT_REPORT、PROJECT、REQUIREMENTS、KNOWLEDGE、M012 路线图，建立 audit section → finding → disposition 的原始矩阵；每条 finding 至少记录一条代码/文档证据路径，避免把已修项或 deferred 项混入 actionable backlog。",
+      "estimate": "45m",
+      "files": [
+        "SYSTEM_AUDIT_REPORT.md",
+        ".gsd/PROJECT.md",
+        ".gsd/REQUIREMENTS.md",
+        ".gsd/KNOWLEDGE.md",
+        ".gsd/milestones/M012/M012-ROADMAP.md"
+      ],
+      "verify": "rg -n \"already-fixed|actionable-now|needs-discovery|deferred-by-product|contradicted-by-project-knowledge\" .gsd/plans/GSD_PLAN_system-audit-repair.md",
+      "inputs": [
+        "SYSTEM_AUDIT_REPORT.md",
+        ".gsd/PROJECT.md",
+        ".gsd/REQUIREMENTS.md",
+        ".gsd/KNOWLEDGE.md",
+        ".gsd/milestones/M012/M012-ROADMAP.md"
+      ],
+      "expected_output": [
+        ".gsd/analysis/ARCHITECTURE_SCAN_SYSTEM_AUDIT_2026-04-08.md",
+        ".gsd/plans/GSD_PLAN_system-audit-repair.md"
+      ],
+      "observability_impact": "none",
+      "full_plan_md": "",
+      "sequence": 0
+    },
+    {
+      "milestone_id": "M013",
+      "slice_id": "S01",
+      "id": "T02",
+      "title": "补齐 disposition 证据与冲突来源",
+      "status": "pending",
+      "one_liner": "",
+      "narrative": "",
+      "verification_result": "",
+      "duration": "",
+      "completed_at": null,
+      "blocker_discovered": false,
+      "deviations": "",
+      "known_issues": "",
+      "key_files": [],
+      "key_decisions": [],
+      "full_summary_md": "",
+      "description": "对每个 section 的 disposition 进行复核：已修项补代码证据，deferred 项补冲突来源，needs-discovery 项补后续归属；确保不存在未分类 finding。",
+      "estimate": "30m",
+      "files": [
+        ".gsd/plans/GSD_PLAN_system-audit-repair.md"
+      ],
+      "verify": "rg -n \"deferred-by-product|contradicted-by-project-knowledge|needs-discovery\" .gsd/plans/GSD_PLAN_system-audit-repair.md",
+      "inputs": [
+        ".gsd/plans/GSD_PLAN_system-audit-repair.md",
+        ".gsd/PROJECT.md",
+        ".gsd/REQUIREMENTS.md",
+        ".gsd/KNOWLEDGE.md"
+      ],
+      "expected_output": [
+        ".gsd/plans/GSD_PLAN_system-audit-repair.md"
+      ],
+      "observability_impact": "none",
+      "full_plan_md": "",
+      "sequence": 0
+    },
+    {
+      "milestone_id": "M013",
+      "slice_id": "S01",
+      "id": "T03",
+      "title": "把归一化 finding 映射到后续 milestones/slices",
+      "status": "pending",
+      "one_liner": "",
+      "narrative": "",
+      "verification_result": "",
+      "duration": "",
+      "completed_at": null,
+      "blocker_discovered": false,
+      "deviations": "",
+      "known_issues": "",
+      "key_files": [],
+      "key_decisions": [],
+      "full_summary_md": "",
+      "description": "按后续执行面把 actionable-now 与 needs-discovery finding 重新映射到 M014-M018 的具体 slices，形成可直接消费的 backlog 对照表。",
+      "estimate": "30m",
+      "files": [
+        ".gsd/plans/GSD_PLAN_system-audit-repair.md"
+      ],
+      "verify": "rg -n \"M014|M015|M016|M017|M018\" .gsd/plans/GSD_PLAN_system-audit-repair.md",
+      "inputs": [
+        ".gsd/plans/GSD_PLAN_system-audit-repair.md",
+        ".gsd/milestones/M013/M013-ROADMAP.md"
+      ],
+      "expected_output": [
+        ".gsd/plans/GSD_PLAN_system-audit-repair.md"
+      ],
+      "observability_impact": "none",
+      "full_plan_md": "",
+      "sequence": 0
+    },
+    {
+      "milestone_id": "M013",
+      "slice_id": "S02",
+      "id": "T01",
+      "title": "盘点现有 focused verification commands",
+      "status": "pending",
+      "one_liner": "",
+      "narrative": "",
+      "verification_result": "",
+      "duration": "",
+      "completed_at": null,
+      "blocker_discovered": false,
+      "deviations": "",
+      "known_issues": "",
+      "key_files": [],
+      "key_decisions": [],
+      "full_summary_md": "",
+      "description": "盘点现有 web/backend focused tests，把 auth/dashboard/history/profile/practice/lifecycle/websocket/admin 这几类验证面各自映射到一组真实命令。优先复用现有 focused tests，不引入大规模新测试。",
+      "estimate": "30m",
+      "files": [
+        "docs/plans/2026-04-08-system-audit-remediation-plan.md"
+      ],
+      "verify": "rg -n \"npm --prefix web test|backend/venv/bin/python -m pytest\" docs/plans/2026-04-08-system-audit-remediation-plan.md",
+      "inputs": [
+        "web/src/**/*.test.tsx",
+        "backend/tests/**/*",
+        ".gsd/KNOWLEDGE.md"
+      ],
+      "expected_output": [
+        "docs/plans/2026-04-08-system-audit-remediation-plan.md"
+      ],
+      "observability_impact": "none",
+      "full_plan_md": "",
+      "sequence": 0
+    },
+    {
+      "milestone_id": "M013",
+      "slice_id": "S02",
+      "id": "T02",
+      "title": "收口 repo-root verification contract",
+      "status": "pending",
+      "one_liner": "",
+      "narrative": "",
+      "verification_result": "",
+      "duration": "",
+      "completed_at": null,
+      "blocker_discovered": false,
+      "deviations": "",
+      "known_issues": "",
+      "key_files": [],
+      "key_decisions": [],
+      "full_summary_md": "",
+      "description": "把 repo-root 可直接执行的 backend pytest 命令与必须串行的约束写进 remediation plan，避免 auto-mode 把 `cd backend && pytest` 拆散后误报失败。",
+      "estimate": "20m",
+      "files": [
+        "docs/plans/2026-04-08-system-audit-remediation-plan.md",
+        ".gsd/plans/GSD_PLAN_system-audit-repair.md"
+      ],
+      "verify": "rg -n \"串行|coverage|backend/venv/bin/python -m pytest -c backend/pyproject.toml\" docs/plans/2026-04-08-system-audit-remediation-plan.md .gsd/plans/GSD_PLAN_system-audit-repair.md",
+      "inputs": [
+        "docs/plans/2026-04-08-system-audit-remediation-plan.md",
+        ".gsd/KNOWLEDGE.md"
+      ],
+      "expected_output": [
+        "docs/plans/2026-04-08-system-audit-remediation-plan.md",
+        ".gsd/plans/GSD_PLAN_system-audit-repair.md"
+      ],
+      "observability_impact": "none",
+      "full_plan_md": "",
+      "sequence": 0
+    },
+    {
+      "milestone_id": "M013",
+      "slice_id": "S02",
+      "id": "T03",
+      "title": "回填后续 slices 的 verification baseline",
+      "status": "pending",
+      "one_liner": "",
+      "narrative": "",
+      "verification_result": "",
+      "duration": "",
+      "completed_at": null,
+      "blocker_discovered": false,
+      "deviations": "",
+      "known_issues": "",
+      "key_files": [],
+      "key_decisions": [],
+      "full_summary_md": "",
+      "description": "把每个后续 slice 所需的 focused command 回填到里程碑/切片计划中，形成统一 verification contract。",
+      "estimate": "25m",
+      "files": [
+        "docs/plans/2026-04-08-system-audit-remediation-plan.md",
+        ".gsd/milestones/M013/M013-ROADMAP.md"
+      ],
+      "verify": "rg -n \"npm --prefix web test|backend/venv/bin/python -m pytest\" .gsd/milestones/M01{4,5,6,7,8}*/**/*.md docs/plans/2026-04-08-system-audit-remediation-plan.md",
+      "inputs": [
+        "docs/plans/2026-04-08-system-audit-remediation-plan.md",
+        ".gsd/milestones/M014/M014-ROADMAP.md",
+        ".gsd/milestones/M015/M015-ROADMAP.md",
+        ".gsd/milestones/M016/M016-ROADMAP.md",
+        ".gsd/milestones/M017/M017-ROADMAP.md",
+        ".gsd/milestones/M018/M018-ROADMAP.md"
+      ],
+      "expected_output": [
+        "docs/plans/2026-04-08-system-audit-remediation-plan.md",
+        ".gsd/milestones/M013/M013-ROADMAP.md"
+      ],
+      "observability_impact": "none",
+      "full_plan_md": "",
+      "sequence": 0
+    },
+    {
+      "milestone_id": "M014",
+      "slice_id": "S01",
+      "id": "T01",
+      "title": "清点首页空壳动作并确定收口策略",
+      "status": "pending",
+      "one_liner": "",
+      "narrative": "",
+      "verification_result": "",
+      "duration": "",
+      "completed_at": null,
+      "blocker_discovered": false,
+      "deviations": "",
+      "known_issues": "",
+      "key_files": [],
+      "key_decisions": [],
+      "full_summary_md": "",
+      "description": "逐项清点 dashboard 首页按钮、版本弹窗、筛选弹窗、分享/设定目标类 CTA，按“实现 / 深链 / disabled 文案 / 删除”形成动作收口策略表。优先确认 report export 继续保持缺失。",
+      "estimate": "30m",
+      "files": [
+        "web/src/app/(dashboard)/page.tsx",
+        ".gsd/plans/GSD_PLAN_system-audit-repair.md"
+      ],
+      "verify": "rg -n \"导出报告|设定目标|分享分析|筛选\" web/src/app/\\(dashboard\\)/page.tsx",
+      "inputs": [
+        "web/src/app/(dashboard)/page.tsx",
+        "web/src/app/(dashboard)/history/page.tsx",
+        ".gsd/KNOWLEDGE.md"
+      ],
+      "expected_output": [
+        "web/src/app/(dashboard)/page.tsx",
+        ".gsd/plans/GSD_PLAN_system-audit-repair.md"
+      ],
+      "observability_impact": "none",
+      "full_plan_md": "",
+      "sequence": 0
+    },
+    {
+      "milestone_id": "M014",
+      "slice_id": "S01",
+      "id": "T02",
+      "title": "实现首页 CTA 收口与 onboarding 最小指引",
+      "status": "pending",
+      "one_liner": "",
+      "narrative": "",
+      "verification_result": "",
+      "duration": "",
+      "completed_at": null,
+      "blocker_discovered": false,
+      "deviations": "",
+      "known_issues": "",
+      "key_files": [],
+      "key_decisions": [],
+      "full_summary_md": "",
+      "description": "按策略修改首页：动态化硬编码内容，清理空壳 CTA，必要时增加最小 onboarding 卡片或深链入口。优先复用现有 dashboard 组件模式。",
+      "estimate": "45m",
+      "files": [
+        "web/src/app/(dashboard)/page.tsx",
+        "web/src/components/dashboard/*"
+      ],
+      "verify": "npm --prefix web test -- --run \"src/app/(dashboard)/history/page.test.tsx\"",
+      "inputs": [
+        "web/src/app/(dashboard)/page.tsx",
+        "web/src/components/layout/sidebar.tsx"
+      ],
+      "expected_output": [
+        "web/src/app/(dashboard)/page.tsx",
+        "web/src/components/dashboard/*"
+      ],
+      "observability_impact": "none",
+      "full_plan_md": "",
+      "sequence": 0
+    },
+    {
+      "milestone_id": "M014",
+      "slice_id": "S01",
+      "id": "T03",
+      "title": "为首页闭环补 focused proof",
+      "status": "pending",
+      "one_liner": "",
+      "narrative": "",
+      "verification_result": "",
+      "duration": "",
+      "completed_at": null,
+      "blocker_discovered": false,
+      "deviations": "",
+      "known_issues": "",
+      "key_files": [],
+      "key_decisions": [],
+      "full_summary_md": "",
+      "description": "补 focused 测试或更新现有测试，锁定首页无空壳主按钮、首屏有 onboarding、至少一条 CTA 通向真实训练入口。",
+      "estimate": "30m",
+      "files": [
+        "web/src/app/(dashboard)/**/*.test.tsx"
+      ],
+      "verify": "npm --prefix web test -- --run \"src/app/(dashboard)/history/page.test.tsx\" \"src/app/(dashboard)/**/*.test.tsx\"",
+      "inputs": [
+        "web/src/app/(dashboard)/page.tsx",
+        "web/src/app/(dashboard)/history/page.test.tsx"
+      ],
+      "expected_output": [
+        "web/src/app/(dashboard)/**/*.test.tsx"
+      ],
+      "observability_impact": "none",
+      "full_plan_md": "",
+      "sequence": 0
+    },
+    {
+      "milestone_id": "M014",
+      "slice_id": "S02",
+      "id": "T01",
+      "title": "盘点现有 forgot/reset、profile 修改密码与语速偏好现状",
+      "status": "pending",
+      "one_liner": "",
+      "narrative": "",
+      "verification_result": "",
+      "duration": "",
+      "completed_at": null,
+      "blocker_discovered": false,
+      "deviations": "",
+      "known_issues": "",
+      "key_files": [],
+      "key_decisions": [],
+      "full_summary_md": "",
+      "description": "梳理现有 forgot/reset 前后端路径、profile 修改密码入口和语速偏好存储现状，确认哪些是过渡实现，哪些可以沿用。",
+      "estimate": "30m",
+      "files": [
+        "web/src/app/(auth)/*",
+        "web/src/app/(dashboard)/profile/page.tsx",
+        "backend/src/common/auth/api.py",
+        "backend/src/common/auth/service.py"
+      ],
+      "verify": "rg -n \"forgot|reset|password|speech|rate|window.location\" web/src/app/\\(auth\\) web/src/app/\\(dashboard\\)/profile backend/src/common/auth",
+      "inputs": [
+        "web/src/app/(auth)/*",
+        "web/src/app/(dashboard)/profile/page.tsx",
+        "backend/src/common/auth/api.py",
+        "backend/src/common/auth/service.py"
+      ],
+      "expected_output": [
+        "web/src/app/(auth)/*",
+        "web/src/app/(dashboard)/profile/page.tsx",
+        "backend/src/common/auth/api.py",
+        "backend/src/common/auth/service.py"
+      ],
+      "observability_impact": "current auth/profile seam inventory",
+      "full_plan_md": "",
+      "sequence": 0
+    },
+    {
+      "milestone_id": "M014",
+      "slice_id": "S02",
+      "id": "T02",
+      "title": "把 forgot/reset 升级为正式 auth seam",
+      "status": "pending",
+      "one_liner": "",
+      "narrative": "",
+      "verification_result": "",
+      "duration": "",
+      "completed_at": null,
+      "blocker_discovered": false,
+      "deviations": "",
+      "known_issues": "",
+      "key_files": [],
+      "key_decisions": [],
+      "full_summary_md": "",
+      "description": "正式化 password reset token 存储、过期/一次性使用、email abstraction 与 rate limit；补 migration，并保持现有登录路径兼容。",
+      "estimate": "1.5h",
+      "files": [
+        "backend/src/common/auth/api.py",
+        "backend/src/common/auth/service.py",
+        "backend/src/common/db/models.py",
+        "backend/alembic/versions/*",
+        "backend/tests/integration/test_auth_login_api.py"
+      ],
+      "verify": "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/integration/test_auth_login_api.py -x -q",
+      "inputs": [
+        "backend/src/common/auth/api.py",
+        "backend/src/common/auth/service.py",
+        "backend/src/common/db/models.py",
+        "backend/tests/integration/test_auth_login_api.py"
+      ],
+      "expected_output": [
+        "backend/src/common/auth/api.py",
+        "backend/src/common/auth/service.py",
+        "backend/src/common/db/models.py",
+        "backend/alembic/versions/*",
+        "backend/tests/integration/test_auth_login_api.py"
+      ],
+      "observability_impact": "token 生命周期、过期、一次性使用、rate limit 事件",
+      "full_plan_md": "",
+      "sequence": 0
+    },
+    {
+      "milestone_id": "M014",
+      "slice_id": "S02",
+      "id": "T03",
+      "title": "闭合 profile 修改密码与语速偏好体验",
+      "status": "pending",
+      "one_liner": "",
+      "narrative": "",
+      "verification_result": "",
+      "duration": "",
+      "completed_at": null,
+      "blocker_discovered": false,
+      "deviations": "",
+      "known_issues": "",
+      "key_files": [],
+      "key_decisions": [],
+      "full_summary_md": "",
+      "description": "收口前端 auth/profile 体验：profile 内改为正式修改密码路径，去掉 window.location 跳转；语速偏好接到真实存储或明确隐藏/移除；补 focused tests。",
+      "estimate": "1h",
+      "files": [
+        "web/src/app/(auth)/*",
+        "web/src/app/(dashboard)/profile/page.tsx",
+        "web/src/app/(auth)/login/page.test.tsx"
+      ],
+      "verify": "npm --prefix web test -- --run \"src/app/(auth)/login/page.test.tsx\"",
+      "inputs": [
+        "web/src/app/(auth)/*",
+        "web/src/app/(dashboard)/profile/page.tsx",
+        "backend/src/common/auth/api.py"
+      ],
+      "expected_output": [
+        "web/src/app/(auth)/*",
+        "web/src/app/(dashboard)/profile/page.tsx",
+        "web/src/app/(auth)/login/page.test.tsx"
+      ],
+      "observability_impact": "profile settings 保存/失败状态可见",
+      "full_plan_md": "",
+      "sequence": 0
+    },
+    {
+      "milestone_id": "M014",
+      "slice_id": "S03",
+      "id": "T01",
+      "title": "定位 learner shell 帮助与导航缺口",
+      "status": "pending",
+      "one_liner": "",
+      "narrative": "",
+      "verification_result": "",
+      "duration": "",
+      "completed_at": null,
+      "blocker_discovered": false,
+      "deviations": "",
+      "known_issues": "",
+      "key_files": [],
+      "key_decisions": [],
+      "full_summary_md": "",
+      "description": "盘点 learner shell、首页、profile、history 当前可见导航与帮助入口，确认缺口集中在哪个 shared shell seam，而不是散页缺按钮。",
+      "estimate": "20m",
+      "files": [
+        "web/src/components/layout/sidebar.tsx"
+      ],
+      "verify": "rg -n \"反馈|帮助|管理员|support|history\" web/src/components/layout web/src/app/\\(dashboard\\)",
+      "inputs": [
+        "web/src/components/layout/sidebar.tsx",
+        "web/src/app/(dashboard)/page.tsx",
+        "web/src/app/(dashboard)/profile/page.tsx",
+        "web/src/app/(dashboard)/history/page.tsx"
+      ],
+      "expected_output": [
+        "web/src/components/layout/sidebar.tsx"
+      ],
+      "observability_impact": "none",
+      "full_plan_md": "",
+      "sequence": 0
+    },
+    {
+      "milestone_id": "M014",
+      "slice_id": "S03",
+      "id": "T02",
+      "title": "补齐 learner 统一帮助/反馈入口",
+      "status": "pending",
+      "one_liner": "",
+      "narrative": "",
+      "verification_result": "",
+      "duration": "",
+      "completed_at": null,
+      "blocker_discovered": false,
+      "deviations": "",
+      "known_issues": "",
+      "key_files": [],
+      "key_decisions": [],
+      "full_summary_md": "",
+      "description": "在 learner shell 或首页/profile 合适位置增加统一帮助/反馈入口与最小角色/权限说明，优先复用现有 sidebar/home 卡片模式。",
+      "estimate": "35m",
+      "files": [
+        "web/src/components/layout/sidebar.tsx",
+        "web/src/app/(dashboard)/*",
+        "web/src/components/dashboard/*"
+      ],
+      "verify": "npm --prefix web test -- --run \"src/app/(dashboard)/history/page.test.tsx\"",
+      "inputs": [
+        "web/src/components/layout/sidebar.tsx",
+        "web/src/app/(dashboard)/page.tsx",
+        "web/src/app/(dashboard)/profile/page.tsx"
+      ],
+      "expected_output": [
+        "web/src/components/layout/sidebar.tsx",
+        "web/src/app/(dashboard)/*",
+        "web/src/components/dashboard/*"
+      ],
+      "observability_impact": "none",
+      "full_plan_md": "",
+      "sequence": 0
+    },
+    {
+      "milestone_id": "M014",
+      "slice_id": "S03",
+      "id": "T03",
+      "title": "为 learner shell 帮助入口补 proof",
+      "status": "pending",
+      "one_liner": "",
+      "narrative": "",
+      "verification_result": "",
+      "duration": "",
+      "completed_at": null,
+      "blocker_discovered": false,
+      "deviations": "",
+      "known_issues": "",
+      "key_files": [],
+      "key_decisions": [],
+      "full_summary_md": "",
+      "description": "补或更新 focused UI proof，锁定从首页/profile/history 任一页都能找到帮助入口。",
+      "estimate": "20m",
+      "files": [
+        "web/src/app/(dashboard)/**/*.test.tsx"
+      ],
+      "verify": "npm --prefix web test -- --run \"src/app/(dashboard)/history/page.test.tsx\" \"src/app/(dashboard)/**/*.test.tsx\"",
+      "inputs": [
+        "web/src/components/layout/sidebar.tsx",
+        "web/src/app/(dashboard)/*"
+      ],
+      "expected_output": [
+        "web/src/app/(dashboard)/**/*.test.tsx"
+      ],
+      "observability_impact": "none",
+      "full_plan_md": "",
+      "sequence": 0
+    },
+    {
+      "milestone_id": "M014",
+      "slice_id": "S04",
+      "id": "T01",
+      "title": "梳理 practice preflight 与 interruption 当前表面",
+      "status": "pending",
+      "one_liner": "",
+      "narrative": "",
+      "verification_result": "",
+      "duration": "",
+      "completed_at": null,
+      "blocker_discovered": false,
+      "deviations": "",
+      "known_issues": "",
+      "key_files": [],
+      "key_decisions": [],
+      "full_summary_md": "",
+      "description": "阅读 practice page、lifecycle hook、websocket hook，梳理训练前可用的 persona/scenario 信息以及暂停/恢复/结束失败目前如何呈现。",
+      "estimate": "30m",
+      "files": [
+        "web/src/app/(user)/practice/[sessionId]/page.tsx",
+        "web/src/app/(user)/practice/[sessionId]/use-practice-session-lifecycle.test.ts"
+      ],
+      "verify": "rg -n \"pause|resume|end|test-mic|persona|scenario|goal\" web/src/app/\\(user\\)/practice/\\[sessionId\\]/page.tsx web/src/hooks/use-practice-websocket.ts",
+      "inputs": [
+        "web/src/app/(user)/practice/[sessionId]/page.tsx",
+        "web/src/hooks/use-practice-websocket.ts",
+        "web/src/app/(user)/practice/[sessionId]/use-practice-session-lifecycle.test.ts"
+      ],
+      "expected_output": [
+        "web/src/app/(user)/practice/[sessionId]/page.tsx",
+        "web/src/app/(user)/practice/[sessionId]/use-practice-session-lifecycle.test.ts"
+      ],
+      "observability_impact": "current preflight/interruption UX inventory",
+      "full_plan_md": "",
+      "sequence": 0
+    },
+    {
+      "milestone_id": "M014",
+      "slice_id": "S04",
+      "id": "T02",
+      "title": "实现 practice preflight 与 interruption UX 收口",
+      "status": "pending",
+      "one_liner": "",
+      "narrative": "",
+      "verification_result": "",
+      "duration": "",
+      "completed_at": null,
+      "blocker_discovered": false,
+      "deviations": "",
+      "known_issues": "",
+      "key_files": [],
+      "key_decisions": [],
+      "full_summary_md": "",
+      "description": "在现有页面内增加训练前目标/评价标准/角色简介预告，并补清晰的暂停/恢复/结束失败文案；把 test-mic 标记为开发工具或隐藏出 learner 主路径。",
+      "estimate": "1h",
+      "files": [
+        "web/src/app/(user)/practice/[sessionId]/page.tsx",
+        "web/src/app/(user)/practice/test-mic/*"
+      ],
+      "verify": "npm --prefix web test -- --run \"src/app/(user)/practice/[sessionId]/page.test.tsx\" \"src/app/(user)/practice/[sessionId]/use-practice-session-lifecycle.test.ts\"",
+      "inputs": [
+        "web/src/app/(user)/practice/[sessionId]/page.tsx",
+        "web/src/app/(user)/practice/test-mic/*"
+      ],
+      "expected_output": [
+        "web/src/app/(user)/practice/[sessionId]/page.tsx",
+        "web/src/app/(user)/practice/test-mic/*"
+      ],
+      "observability_impact": "失败提示与下一步动作可见",
+      "full_plan_md": "",
+      "sequence": 0
+    },
+    {
+      "milestone_id": "M014",
+      "slice_id": "S04",
+      "id": "T03",
+      "title": "为 practice preflight/interruption UX 补 proof",
+      "status": "pending",
+      "one_liner": "",
+      "narrative": "",
+      "verification_result": "",
+      "duration": "",
+      "completed_at": null,
+      "blocker_discovered": false,
+      "deviations": "",
+      "known_issues": "",
+      "key_files": [],
+      "key_decisions": [],
+      "full_summary_md": "",
+      "description": "补 focused tests，锁定训练前预告、中断错误提示和 test-mic 非主路径暴露规则。",
+      "estimate": "35m",
+      "files": [
+        "web/src/app/(user)/practice/[sessionId]/page.test.tsx",
+        "web/src/app/(user)/practice/[sessionId]/use-practice-session-lifecycle.test.ts"
+      ],
+      "verify": "npm --prefix web test -- --run \"src/app/(user)/practice/[sessionId]/page.test.tsx\" \"src/app/(user)/practice/[sessionId]/use-practice-session-lifecycle.test.ts\"",
+      "inputs": [
+        "web/src/app/(user)/practice/[sessionId]/page.tsx"
+      ],
+      "expected_output": [
+        "web/src/app/(user)/practice/[sessionId]/page.test.tsx",
+        "web/src/app/(user)/practice/[sessionId]/use-practice-session-lifecycle.test.ts"
+      ],
+      "observability_impact": "none",
+      "full_plan_md": "",
+      "sequence": 0
+    },
+    {
+      "milestone_id": "M015",
+      "slice_id": "S01",
+      "id": "T01",
+      "title": "盘点并分类前端 console 使用点",
+      "status": "pending",
+      "one_liner": "",
+      "narrative": "",
+      "verification_result": "",
+      "duration": "",
+      "completed_at": null,
+      "blocker_discovered": false,
+      "deviations": "",
+      "known_issues": "",
+      "key_files": [],
+      "key_decisions": [],
+      "full_summary_md": "",
+      "description": "扫描 web/src 下所有 console.* 使用点，按 debug-only / durable error / instrumentation / tests 分类，明确哪些需要迁到 shared debug seam，哪些是允许例外。",
+      "estimate": "30m",
+      "files": [
+        "web/src/lib/debug.ts",
+        "web/src/components/ErrorBoundary.tsx"
+      ],
+      "verify": "rg -n \"console\\.(log|error|warn|info)\" web/src",
+      "inputs": [
+        "web/src/lib/debug.ts",
+        "web/src/components/ErrorBoundary.tsx",
+        "web/src/instrumentation.ts",
+        "web/src/instrumentation-client.ts"
+      ],
+      "expected_output": [
+        "web/src/lib/debug.ts",
+        "audit console inventory"
+      ],
+      "observability_impact": "console inventory 形成规则清单",
+      "full_plan_md": "",
+      "sequence": 0
+    },
+    {
+      "milestone_id": "M015",
+      "slice_id": "S01",
+      "id": "T02",
+      "title": "实现 shared debug seam 收口",
+      "status": "pending",
+      "one_liner": "",
+      "narrative": "",
+      "verification_result": "",
+      "duration": "",
+      "completed_at": null,
+      "blocker_discovered": false,
+      "deviations": "",
+      "known_issues": "",
+      "key_files": [],
+      "key_decisions": [],
+      "full_summary_md": "",
+      "description": "扩展或收口 shared debug/observability helper，把业务页面与 route error surface 的日志出口统一到这条 seam；保留必要 instrumentation 例外。",
+      "estimate": "45m",
+      "files": [
+        "web/src/lib/debug.ts",
+        "web/src/components/ErrorBoundary.tsx",
+        "web/src/app/**/error.tsx"
+      ],
+      "verify": "npm --prefix web test -- --run \"src/app/(user)/practice/[sessionId]/page.test.tsx\" \"src/hooks/use-practice-websocket.test.ts\"",
+      "inputs": [
+        "web/src/lib/debug.ts",
+        "web/src/components/ErrorBoundary.tsx"
+      ],
+      "expected_output": [
+        "web/src/lib/debug.ts",
+        "web/src/components/ErrorBoundary.tsx",
+        "web/src/app/**/error.tsx"
+      ],
+      "observability_impact": "前端 durable error 出口统一",
+      "full_plan_md": "",
+      "sequence": 0
+    },
+    {
+      "milestone_id": "M015",
+      "slice_id": "S01",
+      "id": "T03",
+      "title": "清理业务页面与 hooks 中的散落 console",
+      "status": "pending",
+      "one_liner": "",
+      "narrative": "",
+      "verification_result": "",
+      "duration": "",
+      "completed_at": null,
+      "blocker_discovered": false,
+      "deviations": "",
+      "known_issues": "",
+      "key_files": [],
+      "key_decisions": [],
+      "full_summary_md": "",
+      "description": "替换高噪声业务页面和 hooks 中的散落 console，补最小 proof，确保保留 instrumentation/dev-only 例外但业务页面不再直出 console。",
+      "estimate": "45m",
+      "files": [
+        "web/src/**/*.ts",
+        "web/src/**/*.tsx"
+      ],
+      "verify": "rg -n \"console\\.(log|error|warn|info)\" web/src",
+      "inputs": [
+        "web/src/lib/debug.ts"
+      ],
+      "expected_output": [
+        "web/src/**/*.ts",
+        "web/src/**/*.tsx"
+      ],
+      "observability_impact": "none",
+      "full_plan_md": "",
+      "sequence": 0
+    },
+    {
+      "milestone_id": "M015",
+      "slice_id": "S02",
+      "id": "T01",
+      "title": "盘点原生弹窗与直接跳转使用点",
+      "status": "pending",
+      "one_liner": "",
+      "narrative": "",
+      "verification_result": "",
+      "duration": "",
+      "completed_at": null,
+      "blocker_discovered": false,
+      "deviations": "",
+      "known_issues": "",
+      "key_files": [],
+      "key_decisions": [],
+      "full_summary_md": "",
+      "description": "扫描 admin/learner 页面中的 alert/confirm/window.location 使用点，区分删除确认、auth redirect、普通导航三类场景，确认可复用的 toast/dialog/router/auth-handler seam。",
+      "estimate": "25m",
+      "files": [
+        "web/src/lib/auth-handler.ts",
+        "web/src/app/admin/records/page.tsx",
+        "web/src/app/admin/rag-profiles/page.tsx",
+        "web/src/app/admin/personas/[id]/page.tsx"
+      ],
+      "verify": "rg -n \"\\b(alert|confirm)\\s*\\(|window\\.location(\\.assign|\\.href)\" web/src",
+      "inputs": [
+        "web/src/app/admin/records/page.tsx",
+        "web/src/app/admin/rag-profiles/page.tsx",
+        "web/src/app/admin/personas/[id]/page.tsx",
+        "web/src/app/(dashboard)/profile/page.tsx",
+        "web/src/lib/auth-handler.ts"
+      ],
+      "expected_output": [
+        "usage inventory",
+        "web/src/lib/auth-handler.ts"
+      ],
+      "observability_impact": "current blocking interaction inventory",
+      "full_plan_md": "",
+      "sequence": 0
+    },
+    {
+      "milestone_id": "M015",
+      "slice_id": "S02",
+      "id": "T02",
+      "title": "收口 confirm/dialog/router/auth-handler 交互模式",
+      "status": "pending",
+      "one_liner": "",
+      "narrative": "",
+      "verification_result": "",
+      "duration": "",
+      "completed_at": null,
+      "blocker_discovered": false,
+      "deviations": "",
+      "known_issues": "",
+      "key_files": [],
+      "key_decisions": [],
+      "full_summary_md": "",
+      "description": "替换删除确认与业务跳转：删除操作统一走 modal confirm，auth redirect 统一走 authHandler/router，业务导航改成 router push/replace。保留 ErrorBoundary reload 例外。",
+      "estimate": "1h",
+      "files": [
+        "web/src/app/admin/records/page.tsx",
+        "web/src/app/admin/rag-profiles/page.tsx",
+        "web/src/app/admin/personas/[id]/page.tsx",
+        "web/src/app/(dashboard)/profile/page.tsx",
+        "web/src/components/layout/*",
+        "web/src/lib/auth-handler.ts"
+      ],
+      "verify": "npm --prefix web test -- --run \"src/app/admin/personas/[id]/page.test.tsx\" \"src/app/(auth)/login/page.test.tsx\"",
+      "inputs": [
+        "web/src/app/admin/records/page.tsx",
+        "web/src/app/admin/rag-profiles/page.tsx",
+        "web/src/app/admin/personas/[id]/page.tsx",
+        "web/src/app/(dashboard)/profile/page.tsx",
+        "web/src/components/layout/*",
+        "web/src/lib/auth-handler.ts"
+      ],
+      "expected_output": [
+        "web/src/app/admin/records/page.tsx",
+        "web/src/app/admin/rag-profiles/page.tsx",
+        "web/src/app/admin/personas/[id]/page.tsx",
+        "web/src/app/(dashboard)/profile/page.tsx",
+        "web/src/components/layout/*",
+        "web/src/lib/auth-handler.ts"
+      ],
+      "observability_impact": "交互确认与 auth redirect 行为统一",
+      "full_plan_md": "",
+      "sequence": 0
+    },
+    {
+      "milestone_id": "M015",
+      "slice_id": "S02",
+      "id": "T03",
+      "title": "为非中断式交互模式补 proof",
+      "status": "pending",
+      "one_liner": "",
+      "narrative": "",
+      "verification_result": "",
+      "duration": "",
+      "completed_at": null,
+      "blocker_discovered": false,
+      "deviations": "",
+      "known_issues": "",
+      "key_files": [],
+      "key_decisions": [],
+      "full_summary_md": "",
+      "description": "回归扫描业务代码，确保 alert/confirm/window.location.assign/href 从业务页面消失，并用 focused tests 锁定删除确认和 auth redirect 行为。",
+      "estimate": "25m",
+      "files": [
+        "web/src/**/*.test.tsx"
+      ],
+      "verify": "rg -n \"\\b(alert|confirm)\\s*\\(|window\\.location(\\.assign|\\.href)\" web/src && npm --prefix web test -- --run \"src/app/admin/personas/[id]/page.test.tsx\" \"src/app/(auth)/login/page.test.tsx\"",
+      "inputs": [
+        "web/src/app/admin/personas/[id]/page.test.tsx",
+        "web/src/app/(auth)/login/page.test.tsx"
+      ],
+      "expected_output": [
+        "web/src/**/*.test.tsx"
+      ],
+      "observability_impact": "none",
+      "full_plan_md": "",
+      "sequence": 0
+    },
+    {
+      "milestone_id": "M015",
+      "slice_id": "S03",
+      "id": "T01",
+      "title": "建立 learner error/loading 与 lightweight UX baseline matrix",
+      "status": "pending",
+      "one_liner": "",
+      "narrative": "",
+      "verification_result": "",
+      "duration": "",
+      "completed_at": null,
+      "blocker_discovered": false,
+      "deviations": "",
+      "known_issues": "",
+      "key_files": [],
+      "key_decisions": [],
+      "full_summary_md": "",
+      "description": "枚举 learner route family 当前已有的 error.tsx / loading.tsx，并标记缺口；同时记录 responsive/a11y/timezone 的明显风险点，但只选低风险高价值项进入修复。",
+      "estimate": "30m",
+      "files": [
+        "web/src/app/(dashboard)/**/error.tsx",
+        "web/src/app/(dashboard)/**/loading.tsx",
+        "web/src/app/(auth)/**"
+      ],
+      "verify": "find web/src/app -type f \\( -name 'error.tsx' -o -name 'loading.tsx' \\) | sort",
+      "inputs": [
+        "web/src/app",
+        "web/src/components"
+      ],
+      "expected_output": [
+        "learner shell coverage matrix"
+      ],
+      "observability_impact": "route coverage matrix 形成基线",
+      "full_plan_md": "",
+      "sequence": 0
+    },
+    {
+      "milestone_id": "M015",
+      "slice_id": "S03",
+      "id": "T02",
+      "title": "补齐 learner route fallbacks 并修低风险 UX 问题",
+      "status": "pending",
+      "one_liner": "",
+      "narrative": "",
+      "verification_result": "",
+      "duration": "",
+      "completed_at": null,
+      "blocker_discovered": false,
+      "deviations": "",
+      "known_issues": "",
+      "key_files": [],
+      "key_decisions": [],
+      "full_summary_md": "",
+      "description": "为核心 learner routes 补 route-level error/loading fallback，优先复用现有 shared components；顺手修复明确的低风险 responsive/a11y/timezone 问题。",
+      "estimate": "1h",
+      "files": [
+        "web/src/app/(dashboard)/**/error.tsx",
+        "web/src/app/(dashboard)/**/loading.tsx",
+        "web/src/app/(auth)/**",
+        "web/src/components/**/*"
+      ],
+      "verify": "npm --prefix web test -- --run \"src/app/(dashboard)/history/page.test.tsx\" \"src/app/(user)/practice/[sessionId]/report/page.test.tsx\" \"src/app/(user)/practice/[sessionId]/replay/page.test.tsx\"",
+      "inputs": [
+        "web/src/app/(dashboard)",
+        "web/src/app/(auth)",
+        "web/src/components"
+      ],
+      "expected_output": [
+        "web/src/app/(dashboard)/**/error.tsx",
+        "web/src/app/(dashboard)/**/loading.tsx",
+        "web/src/app/(auth)/**",
+        "web/src/components/**/*"
+      ],
+      "observability_impact": "错误/加载状态可视化",
+      "full_plan_md": "",
+      "sequence": 0
+    },
+    {
+      "milestone_id": "M015",
+      "slice_id": "S03",
+      "id": "T03",
+      "title": "锁定 learner shell baseline proof 与剩余风险",
+      "status": "pending",
+      "one_liner": "",
+      "narrative": "",
+      "verification_result": "",
+      "duration": "",
+      "completed_at": null,
+      "blocker_discovered": false,
+      "deviations": "",
+      "known_issues": "",
+      "key_files": [],
+      "key_decisions": [],
+      "full_summary_md": "",
+      "description": "记录 remaining responsive/a11y/timezone 风险的 disposition，并补 focused proof，确保 baseline 闭合但不扩 scope。",
+      "estimate": "25m",
+      "files": [
+        "web/src/app/**/*.test.tsx"
+      ],
+      "verify": "find web/src/app -type f \\( -name 'error.tsx' -o -name 'loading.tsx' \\) | sort && npm --prefix web test -- --run \"src/app/(dashboard)/history/page.test.tsx\" \"src/app/(user)/practice/[sessionId]/report/page.test.tsx\" \"src/app/(user)/practice/[sessionId]/replay/page.test.tsx\"",
+      "inputs": [
+        "web/src/app",
+        "web/src/components"
+      ],
+      "expected_output": [
+        "slice notes",
+        "web/src/app/**/*.test.tsx"
+      ],
+      "observability_impact": "remaining risks documented",
+      "full_plan_md": "",
+      "sequence": 0
+    },
+    {
+      "milestone_id": "M016",
+      "slice_id": "S01",
+      "id": "T01",
+      "title": "定位 password reset 正式化的最窄接入点",
+      "status": "pending",
+      "one_liner": "",
+      "narrative": "",
+      "verification_result": "",
+      "duration": "",
+      "completed_at": null,
+      "blocker_discovered": false,
+      "deviations": "",
+      "known_issues": "",
+      "key_files": [],
+      "key_decisions": [],
+      "full_summary_md": "",
+      "description": "盘点当前 forgot/reset 路径中的 runtime DDL、token 生命周期、email 发送与 rate limit 现状，确认正式模型和 migration 的最窄接入点。",
+      "estimate": "30m",
+      "files": [
+        "backend/src/common/auth/api.py",
+        "backend/src/common/auth/service.py",
+        "backend/src/common/db/models.py"
+      ],
+      "verify": "rg -n \"CREATE TABLE IF NOT EXISTS|reset|forgot|token|email\" backend/src/common/auth backend/src/common/db/models.py",
+      "inputs": [
+        "backend/src/common/auth/api.py",
+        "backend/src/common/auth/service.py",
+        "backend/src/common/db/models.py"
+      ],
+      "expected_output": [
+        "auth seam inventory"
+      ],
+      "observability_impact": "current auth recovery seam inventory",
+      "full_plan_md": "",
+      "sequence": 0
+    },
+    {
+      "milestone_id": "M016",
+      "slice_id": "S01",
+      "id": "T02",
+      "title": "实现正式 PasswordResetToken contract 与 migration",
+      "status": "pending",
+      "one_liner": "",
+      "narrative": "",
+      "verification_result": "",
+      "duration": "",
+      "completed_at": null,
+      "blocker_discovered": false,
+      "deviations": "",
+      "known_issues": "",
+      "key_files": [],
+      "key_decisions": [],
+      "full_summary_md": "",
+      "description": "新增/完善 PasswordResetToken 正式模型、migration、一次性消费与过期校验逻辑，抽出 EmailService seam 和 rate limit 策略。保持现有登录兼容。",
+      "estimate": "1.5h",
+      "files": [
+        "backend/src/common/auth/api.py",
+        "backend/src/common/auth/service.py",
+        "backend/src/common/db/models.py",
+        "backend/alembic/versions/*"
+      ],
+      "verify": "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/integration/test_auth_login_api.py -x -q",
+      "inputs": [
+        "backend/src/common/auth/api.py",
+        "backend/src/common/auth/service.py",
+        "backend/src/common/db/models.py"
+      ],
+      "expected_output": [
+        "backend/src/common/auth/api.py",
+        "backend/src/common/auth/service.py",
+        "backend/src/common/db/models.py",
+        "backend/alembic/versions/*"
+      ],
+      "observability_impact": "token lifecycle / rate limit signals",
+      "full_plan_md": "",
+      "sequence": 0
+    },
+    {
+      "milestone_id": "M016",
+      "slice_id": "S01",
+      "id": "T03",
+      "title": "为 auth recovery contract 补 focused proof",
+      "status": "pending",
+      "one_liner": "",
+      "narrative": "",
+      "verification_result": "",
+      "duration": "",
+      "completed_at": null,
+      "blocker_discovered": false,
+      "deviations": "",
+      "known_issues": "",
+      "key_files": [],
+      "key_decisions": [],
+      "full_summary_md": "",
+      "description": "补 focused tests 覆盖 forgot/reset 成功、过期、重复使用、rate limit 等路径，确认 request-path DDL 已移除。",
+      "estimate": "45m",
+      "files": [
+        "backend/tests/integration/test_auth_login_api.py",
+        "backend/tests/**/*reset*.py"
+      ],
+      "verify": "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/integration/test_auth_login_api.py -x -q",
+      "inputs": [
+        "backend/tests/integration/test_auth_login_api.py",
+        "backend/src/common/auth/api.py",
+        "backend/src/common/auth/service.py"
+      ],
+      "expected_output": [
+        "backend/tests/integration/test_auth_login_api.py",
+        "backend/tests/**/*reset*.py"
+      ],
+      "observability_impact": "failure-path proof",
+      "full_plan_md": "",
+      "sequence": 0
+    },
+    {
+      "milestone_id": "M016",
+      "slice_id": "S02",
+      "id": "T01",
+      "title": "定位高频 API surface 的错误 shape 漂移点",
+      "status": "pending",
+      "one_liner": "",
+      "narrative": "",
+      "verification_result": "",
+      "duration": "",
+      "completed_at": null,
+      "blocker_discovered": false,
+      "deviations": "",
+      "known_issues": "",
+      "key_files": [],
+      "key_decisions": [],
+      "full_summary_md": "",
+      "description": "盘点 prompt templates、presentations、auth 等高噪声 route family 的错误返回形状，标出裸 HTTPException / 通用 except Exception / page-local frontend 解析分叉。",
+      "estimate": "35m",
+      "files": [
+        "backend/src/prompt_templates/api/routes.py",
+        "backend/src/presentation_coach/api/presentations.py",
+        "backend/src/common/auth/service.py",
+        "web/src/lib/api/client.ts"
+      ],
+      "verify": "rg -n \"HTTPException|except Exception\" backend/src/prompt_templates backend/src/presentation_coach backend/src/common/auth",
+      "inputs": [
+        "backend/src/prompt_templates/api/routes.py",
+        "backend/src/presentation_coach/api/presentations.py",
+        "backend/src/common/auth/service.py",
+        "web/src/lib/api/client.ts"
+      ],
+      "expected_output": [
+        "error-shape inventory"
+      ],
+      "observability_impact": "current error-shape inventory",
+      "full_plan_md": "",
+      "sequence": 0
+    },
+    {
+      "milestone_id": "M016",
+      "slice_id": "S02",
+      "id": "T02",
+      "title": "收口 backend error contract 并对齐 frontend client",
+      "status": "pending",
+      "one_liner": "",
+      "narrative": "",
+      "verification_result": "",
+      "duration": "",
+      "completed_at": null,
+      "blocker_discovered": false,
+      "deviations": "",
+      "known_issues": "",
+      "key_files": [],
+      "key_decisions": [],
+      "full_summary_md": "",
+      "description": "实现统一错误 shape：把 domain / permission / not-found / validation error 收口到一致 outward contract，并确保 frontend apiFetch 能稳定解析。",
+      "estimate": "1h",
+      "files": [
+        "backend/src/prompt_templates/api/routes.py",
+        "backend/src/presentation_coach/api/presentations.py",
+        "backend/src/common/auth/service.py",
+        "web/src/lib/api/client.ts"
+      ],
+      "verify": "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/contract/test_presentations.py backend/tests/contract/test_practice_evidence_contract.py backend/tests/integration/test_presentation_flow.py -x -q",
+      "inputs": [
+        "backend/src/prompt_templates/api/routes.py",
+        "backend/src/presentation_coach/api/presentations.py",
+        "backend/src/common/auth/service.py",
+        "web/src/lib/api/client.ts"
+      ],
+      "expected_output": [
+        "backend/src/prompt_templates/api/routes.py",
+        "backend/src/presentation_coach/api/presentations.py",
+        "backend/src/common/auth/service.py",
+        "web/src/lib/api/client.ts"
+      ],
+      "observability_impact": "typed error contract 成形",
+      "full_plan_md": "",
+      "sequence": 0
+    },
+    {
+      "milestone_id": "M016",
+      "slice_id": "S02",
+      "id": "T03",
+      "title": "为统一错误 shape 补跨端 proof",
+      "status": "pending",
+      "one_liner": "",
+      "narrative": "",
+      "verification_result": "",
+      "duration": "",
+      "completed_at": null,
+      "blocker_discovered": false,
+      "deviations": "",
+      "known_issues": "",
+      "key_files": [],
+      "key_decisions": [],
+      "full_summary_md": "",
+      "description": "补 focused contract/integration proof，确认 frontend 不需要 page-local 猜测错误格式。",
+      "estimate": "40m",
+      "files": [
+        "backend/tests/contract/*.py",
+        "web/src/lib/api/*.test.ts"
+      ],
+      "verify": "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/contract/test_presentations.py backend/tests/contract/test_practice_evidence_contract.py backend/tests/integration/test_presentation_flow.py -x -q",
+      "inputs": [
+        "backend/tests/contract/test_presentations.py",
+        "web/src/lib/api/client.ts"
+      ],
+      "expected_output": [
+        "backend/tests/contract/*.py",
+        "web/src/lib/api/*.test.ts"
+      ],
+      "observability_impact": "error-path proof",
+      "full_plan_md": "",
+      "sequence": 0
+    },
+    {
+      "milestone_id": "M016",
+      "slice_id": "S03",
+      "id": "T01",
+      "title": "建立 admin 权限矩阵与敏感日志出口清单",
+      "status": "pending",
+      "one_liner": "",
+      "narrative": "",
+      "verification_result": "",
+      "duration": "",
+      "completed_at": null,
+      "blocker_discovered": false,
+      "deviations": "",
+      "known_issues": "",
+      "key_files": [],
+      "key_decisions": [],
+      "full_summary_md": "",
+      "description": "建立 admin route permission matrix，按接口列出访问角色、拒绝路径和当前证据；同时扫描 logger/middleware/helper 中可能输出 token/password/cookie/email 的高风险点。",
+      "estimate": "40m",
+      "files": [
+        "backend/src/admin/api/*",
+        "backend/src/common/monitoring/*"
+      ],
+      "verify": "rg -n \"token|password|cookie|email\" backend/src/admin backend/src/common/monitoring backend/src/common/auth",
+      "inputs": [
+        "backend/src/admin/api/*",
+        "backend/src/common/monitoring/*",
+        "backend/src/common/auth/*"
+      ],
+      "expected_output": [
+        "permission matrix",
+        "redaction inventory"
+      ],
+      "observability_impact": "current permission / redaction risk inventory",
+      "full_plan_md": "",
+      "sequence": 0
+    },
+    {
+      "milestone_id": "M016",
+      "slice_id": "S03",
+      "id": "T02",
+      "title": "收口 admin 权限与敏感日志高风险出口",
+      "status": "pending",
+      "one_liner": "",
+      "narrative": "",
+      "verification_result": "",
+      "duration": "",
+      "completed_at": null,
+      "blocker_discovered": false,
+      "deviations": "",
+      "known_issues": "",
+      "key_files": [],
+      "key_decisions": [],
+      "full_summary_md": "",
+      "description": "在高风险 admin APIs 和日志出口上落实权限/脱敏规则，优先处理 token、password、cookie、email 全量输出风险。",
+      "estimate": "1h",
+      "files": [
+        "backend/src/admin/api/*",
+        "backend/src/common/monitoring/*",
+        "backend/src/common/auth/*"
+      ],
+      "verify": "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/integration/test_admin_users_api.py backend/tests/unit/admin/test_admin_users_api_models.py -x -q",
+      "inputs": [
+        "backend/src/admin/api/*",
+        "backend/src/common/monitoring/*",
+        "backend/src/common/auth/*"
+      ],
+      "expected_output": [
+        "backend/src/admin/api/*",
+        "backend/src/common/monitoring/*",
+        "backend/src/common/auth/*"
+      ],
+      "observability_impact": "sensitive-field redaction active",
+      "full_plan_md": "",
+      "sequence": 0
+    },
+    {
+      "milestone_id": "M016",
+      "slice_id": "S03",
+      "id": "T03",
+      "title": "为 admin security baseline 补 focused proof",
+      "status": "pending",
+      "one_liner": "",
+      "narrative": "",
+      "verification_result": "",
+      "duration": "",
+      "completed_at": null,
+      "blocker_discovered": false,
+      "deviations": "",
+      "known_issues": "",
+      "key_files": [],
+      "key_decisions": [],
+      "full_summary_md": "",
+      "description": "补 focused tests / assertions，锁定 admin 高风险接口的权限拒绝与日志脱敏行为，并形成最小审计日志策略说明。",
+      "estimate": "40m",
+      "files": [
+        "backend/tests/integration/test_admin_users_api.py",
+        "backend/tests/unit/admin/test_admin_users_api_models.py"
+      ],
+      "verify": "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/integration/test_admin_users_api.py backend/tests/unit/admin/test_admin_users_api_models.py -x -q",
+      "inputs": [
+        "backend/tests/integration/test_admin_users_api.py",
+        "backend/tests/unit/admin/test_admin_users_api_models.py"
+      ],
+      "expected_output": [
+        "backend/tests/integration/test_admin_users_api.py",
+        "backend/tests/unit/admin/test_admin_users_api_models.py"
+      ],
+      "observability_impact": "permission / redaction proof",
+      "full_plan_md": "",
+      "sequence": 0
+    },
+    {
+      "milestone_id": "M017",
+      "slice_id": "S01",
+      "id": "T01",
+      "title": "设计 lifecycle race 场景与失败证明",
+      "status": "pending",
+      "one_liner": "",
+      "narrative": "",
+      "verification_result": "",
+      "duration": "",
+      "completed_at": null,
+      "blocker_discovered": false,
+      "deviations": "",
+      "known_issues": "",
+      "key_files": [],
+      "key_decisions": [],
+      "full_summary_md": "",
+      "description": "阅读 SessionLifecycleService 与现有 unit/integration tests，设计 pause/resume/end 的 race 场景，明确哪些转移最可能竞态。",
+      "estimate": "35m",
+      "files": [
+        "backend/src/common/db/session_lifecycle.py",
+        "backend/tests/unit/test_session_lifecycle_service.py",
+        "backend/tests/integration/test_session_lifecycle_api.py"
+      ],
+      "verify": "rg -n \"pause|resume|end|scoring|completed\" backend/src/common/db/session_lifecycle.py backend/tests/unit/test_session_lifecycle_service.py backend/tests/integration/test_session_lifecycle_api.py",
+      "inputs": [
+        "backend/src/common/db/session_lifecycle.py",
+        "backend/tests/unit/test_session_lifecycle_service.py",
+        "backend/tests/integration/test_session_lifecycle_api.py"
+      ],
+      "expected_output": [
+        "race test plan"
+      ],
+      "observability_impact": "current race surface inventory",
+      "full_plan_md": "",
+      "sequence": 0
+    },
+    {
+      "milestone_id": "M017",
+      "slice_id": "S01",
+      "id": "T02",
+      "title": "实现 lifecycle 并发收敛策略",
+      "status": "pending",
+      "one_liner": "",
+      "narrative": "",
+      "verification_result": "",
+      "duration": "",
+      "completed_at": null,
+      "blocker_discovered": false,
+      "deviations": "",
+      "known_issues": "",
+      "key_files": [],
+      "key_decisions": [],
+      "full_summary_md": "",
+      "description": "先写 failing-to-passing 的并发 proof，用测试明确竞态，再选择行锁或乐观并发策略实现收敛，保持现有终态差异。",
+      "estimate": "1.5h",
+      "files": [
+        "backend/src/common/db/session_lifecycle.py",
+        "backend/tests/unit/test_session_lifecycle_service.py",
+        "backend/tests/integration/test_session_lifecycle_api.py"
+      ],
+      "verify": "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/test_session_lifecycle_service.py backend/tests/integration/test_session_lifecycle_api.py -x -q",
+      "inputs": [
+        "backend/src/common/db/session_lifecycle.py",
+        "backend/tests/unit/test_session_lifecycle_service.py",
+        "backend/tests/integration/test_session_lifecycle_api.py"
+      ],
+      "expected_output": [
+        "backend/src/common/db/session_lifecycle.py",
+        "backend/tests/unit/test_session_lifecycle_service.py",
+        "backend/tests/integration/test_session_lifecycle_api.py"
+      ],
+      "observability_impact": "竞态冲突与终态收敛可诊断",
+      "full_plan_md": "",
+      "sequence": 0
+    },
+    {
+      "milestone_id": "M017",
+      "slice_id": "S01",
+      "id": "T03",
+      "title": "沉淀 lifecycle concurrency contract 证据",
+      "status": "pending",
+      "one_liner": "",
+      "narrative": "",
+      "verification_result": "",
+      "duration": "",
+      "completed_at": null,
+      "blocker_discovered": false,
+      "deviations": "",
+      "known_issues": "",
+      "key_files": [],
+      "key_decisions": [],
+      "full_summary_md": "",
+      "description": "补审计/summary 说明，记录为何选择当前锁策略，以及哪些竞态被证明已收敛。",
+      "estimate": "25m",
+      "files": [
+        "backend/tests/unit/test_session_lifecycle_service.py",
+        "backend/tests/integration/test_session_lifecycle_api.py"
+      ],
+      "verify": "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/test_session_lifecycle_service.py backend/tests/integration/test_session_lifecycle_api.py -x -q",
+      "inputs": [
+        "backend/src/common/db/session_lifecycle.py",
+        "backend/tests/unit/test_session_lifecycle_service.py",
+        "backend/tests/integration/test_session_lifecycle_api.py"
+      ],
+      "expected_output": [
+        "slice notes",
+        "tests proof"
+      ],
+      "observability_impact": "strategy rationale preserved",
+      "full_plan_md": "",
+      "sequence": 0
+    },
+    {
+      "milestone_id": "M017",
+      "slice_id": "S02",
+      "id": "T01",
+      "title": "识别 websocket hook 的真实职责边界",
+      "status": "pending",
+      "one_liner": "",
+      "narrative": "",
+      "verification_result": "",
+      "duration": "",
+      "completed_at": null,
+      "blocker_discovered": false,
+      "deviations": "",
+      "known_issues": "",
+      "key_files": [],
+      "key_decisions": [],
+      "full_summary_md": "",
+      "description": "盘点 use-practice-websocket 当前已承载的 reconnect/backpressure/interrupt/binary frame negotiation 事实，找出真实 seam，而不是仅因文件大而拆分。",
+      "estimate": "35m",
+      "files": [
+        "web/src/hooks/use-practice-websocket.ts",
+        "web/src/hooks/use-practice-websocket.test.ts",
+        "web/src/hooks/use-practice-websocket.presentation-flow.test.ts"
+      ],
+      "verify": "rg -n \"reconnect|backpressure|interrupt|binary\" web/src/hooks/use-practice-websocket.ts web/src/hooks/use-practice-websocket*.test.ts",
+      "inputs": [
+        "web/src/hooks/use-practice-websocket.ts",
+        "web/src/hooks/use-practice-websocket.test.ts",
+        "web/src/hooks/use-practice-websocket.presentation-flow.test.ts",
+        "web/src/app/(user)/practice/[sessionId]/page.test.tsx"
+      ],
+      "expected_output": [
+        "websocket seam inventory"
+      ],
+      "observability_impact": "current websocket contract inventory",
+      "full_plan_md": "",
+      "sequence": 0
+    },
+    {
+      "milestone_id": "M017",
+      "slice_id": "S02",
+      "id": "T02",
+      "title": "实现 websocket reconnect/backpressure/interrupt 收口",
+      "status": "pending",
+      "one_liner": "",
+      "narrative": "",
+      "verification_result": "",
+      "duration": "",
+      "completed_at": null,
+      "blocker_discovered": false,
+      "deviations": "",
+      "known_issues": "",
+      "key_files": [],
+      "key_decisions": [],
+      "full_summary_md": "",
+      "description": "按真实 seam 收口 reconnect 策略、backpressure/队列清理和 interrupt 处理；必要时拆分 hook 内部职责，但不引入重量级状态机框架。",
+      "estimate": "1.5h",
+      "files": [
+        "web/src/hooks/use-practice-websocket.ts",
+        "web/src/hooks/**/*",
+        "web/src/app/(user)/practice/[sessionId]/page.tsx"
+      ],
+      "verify": "npm --prefix web test -- --run \"src/hooks/use-practice-websocket.test.ts\" \"src/hooks/use-practice-websocket.presentation-flow.test.ts\" \"src/app/(user)/practice/[sessionId]/page.test.tsx\"",
+      "inputs": [
+        "web/src/hooks/use-practice-websocket.ts",
+        "web/src/app/(user)/practice/[sessionId]/page.tsx"
+      ],
+      "expected_output": [
+        "web/src/hooks/use-practice-websocket.ts",
+        "web/src/hooks/**/*",
+        "web/src/app/(user)/practice/[sessionId]/page.tsx"
+      ],
+      "observability_impact": "reconnect / queue cleanup 行为更清晰",
+      "full_plan_md": "",
+      "sequence": 0
+    },
+    {
+      "milestone_id": "M017",
+      "slice_id": "S02",
+      "id": "T03",
+      "title": "为 websocket orchestration contract 补 proof",
+      "status": "pending",
+      "one_liner": "",
+      "narrative": "",
+      "verification_result": "",
+      "duration": "",
+      "completed_at": null,
+      "blocker_discovered": false,
+      "deviations": "",
+      "known_issues": "",
+      "key_files": [],
+      "key_decisions": [],
+      "full_summary_md": "",
+      "description": "补 focused tests，锁定 reconnect 退出条件、backpressure 清理和 interrupt contract，不让复杂度回流。",
+      "estimate": "40m",
+      "files": [
+        "web/src/hooks/use-practice-websocket.test.ts",
+        "web/src/hooks/use-practice-websocket.presentation-flow.test.ts",
+        "web/src/app/(user)/practice/[sessionId]/page.test.tsx"
+      ],
+      "verify": "npm --prefix web test -- --run \"src/hooks/use-practice-websocket.test.ts\" \"src/hooks/use-practice-websocket.presentation-flow.test.ts\" \"src/app/(user)/practice/[sessionId]/page.test.tsx\"",
+      "inputs": [
+        "web/src/hooks/use-practice-websocket.ts",
+        "web/src/app/(user)/practice/[sessionId]/page.tsx"
+      ],
+      "expected_output": [
+        "web/src/hooks/use-practice-websocket.test.ts",
+        "web/src/hooks/use-practice-websocket.presentation-flow.test.ts",
+        "web/src/app/(user)/practice/[sessionId]/page.test.tsx"
+      ],
+      "observability_impact": "realtime proof strengthened",
+      "full_plan_md": "",
+      "sequence": 0
+    },
+    {
+      "milestone_id": "M017",
+      "slice_id": "S03",
+      "id": "T01",
+      "title": "定位 upload / resource race 风险点",
+      "status": "pending",
+      "one_liner": "",
+      "narrative": "",
+      "verification_result": "",
+      "duration": "",
+      "completed_at": null,
+      "blocker_discovered": false,
+      "deviations": "",
+      "known_issues": "",
+      "key_files": [],
+      "key_decisions": [],
+      "full_summary_md": "",
+      "description": "梳理 presentation upload / replace / delete 等路径的共享资源访问点，并和现有 active-session blocker 一起看，区分已覆盖与未覆盖的竞争面。",
+      "estimate": "35m",
+      "files": [
+        "backend/src/presentation_coach/api/presentations.py",
+        "backend/tests/contract/test_presentations.py",
+        "backend/tests/integration/test_presentation_flow.py"
+      ],
+      "verify": "rg -n \"replace|upload|delete|active-session|lock\" backend/src/presentation_coach/api/presentations.py backend/tests/contract/test_presentations.py backend/tests/integration/test_presentation_flow.py",
+      "inputs": [
+        "backend/src/presentation_coach/api/presentations.py",
+        "backend/tests/contract/test_presentations.py",
+        "backend/tests/integration/test_presentation_flow.py",
+        "backend/tests/integration/test_presentation_delete_permissions.py"
+      ],
+      "expected_output": [
+        "concurrency risk inventory"
+      ],
+      "observability_impact": "risk inventory",
+      "full_plan_md": "",
+      "sequence": 0
+    },
+    {
+      "milestone_id": "M017",
+      "slice_id": "S03",
+      "id": "T02",
+      "title": "用 focused proof 区分真实并发问题与想象风险",
+      "status": "pending",
+      "one_liner": "",
+      "narrative": "",
+      "verification_result": "",
+      "duration": "",
+      "completed_at": null,
+      "blocker_discovered": false,
+      "deviations": "",
+      "known_issues": "",
+      "key_files": [],
+      "key_decisions": [],
+      "full_summary_md": "",
+      "description": "补最小复现 proof 或测试，确认哪些路径真的会发生竞争、哪些只是 audit 猜测；输出下一步建议（如局部锁、幂等、状态约束）。",
+      "estimate": "1h",
+      "files": [
+        "backend/tests/contract/test_presentations.py",
+        "backend/tests/integration/test_presentation_flow.py"
+      ],
+      "verify": "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/contract/test_presentations.py backend/tests/integration/test_presentation_flow.py backend/tests/integration/test_presentation_delete_permissions.py -x -q",
+      "inputs": [
+        "backend/src/presentation_coach/api/presentations.py",
+        "backend/tests/contract/test_presentations.py",
+        "backend/tests/integration/test_presentation_flow.py"
+      ],
+      "expected_output": [
+        "backend/tests/contract/test_presentations.py",
+        "backend/tests/integration/test_presentation_flow.py",
+        "discovery notes"
+      ],
+      "observability_impact": "repro paths documented",
+      "full_plan_md": "",
+      "sequence": 0
+    },
+    {
+      "milestone_id": "M017",
+      "slice_id": "S03",
+      "id": "T03",
+      "title": "输出 upload/resource race discovery 结论",
+      "status": "pending",
+      "one_liner": "",
+      "narrative": "",
+      "verification_result": "",
+      "duration": "",
+      "completed_at": null,
+      "blocker_discovered": false,
+      "deviations": "",
+      "known_issues": "",
+      "key_files": [],
+      "key_decisions": [],
+      "full_summary_md": "",
+      "description": "沉淀 discovery artifact：列出真实竞争点、共享资源冲突面、多实例锁需求候选和不建议现在做的项。",
+      "estimate": "25m",
+      "files": [
+        "backend/src/presentation_coach/api/presentations.py"
+      ],
+      "verify": "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/contract/test_presentations.py backend/tests/integration/test_presentation_flow.py backend/tests/integration/test_presentation_delete_permissions.py -x -q",
+      "inputs": [
+        "backend/tests/contract/test_presentations.py",
+        "backend/tests/integration/test_presentation_flow.py"
+      ],
+      "expected_output": [
+        "discovery artifact"
+      ],
+      "observability_impact": "follow-up backlog evidence",
+      "full_plan_md": "",
+      "sequence": 0
+    },
+    {
+      "milestone_id": "M018",
+      "slice_id": "S01",
+      "id": "T01",
+      "title": "定位热点查询与索引候选路径",
+      "status": "pending",
+      "one_liner": "",
+      "narrative": "",
+      "verification_result": "",
+      "duration": "",
+      "completed_at": null,
+      "blocker_discovered": false,
+      "deviations": "",
+      "known_issues": "",
+      "key_files": [],
+      "key_decisions": [],
+      "full_summary_md": "",
+      "description": "梳理 analytics/history/admin/leaderboard/projection 的热点读路径，标出最可能的 N+1 / 索引缺口 / slow query 候选。",
+      "estimate": "40m",
+      "files": [
+        "backend/src/common/analytics/*",
+        "backend/src/common/conversation/session_evidence.py",
+        "backend/src/admin/api/*"
+      ],
+      "verify": "rg -n \"select|join|order_by|group_by|SessionEvidence|leaderboard|analytics\" backend/src/common/analytics backend/src/common/conversation backend/src/admin/api",
+      "inputs": [
+        "backend/src/common/analytics/*",
+        "backend/src/common/conversation/session_evidence.py",
+        "backend/src/admin/api/*"
+      ],
+      "expected_output": [
+        "query baseline inventory"
+      ],
+      "observability_impact": "query hotspot inventory",
+      "full_plan_md": "",
+      "sequence": 0
+    },
+    {
+      "milestone_id": "M018",
+      "slice_id": "S01",
+      "id": "T02",
+      "title": "形成 evidence-backed DB performance baseline",
+      "status": "pending",
+      "one_liner": "",
+      "narrative": "",
+      "verification_result": "",
+      "duration": "",
+      "completed_at": null,
+      "blocker_discovered": false,
+      "deviations": "",
+      "known_issues": "",
+      "key_files": [],
+      "key_decisions": [],
+      "full_summary_md": "",
+      "description": "用 focused tests、explain 或代码级查询审视形成第一轮 baseline，明确哪些只是猜测、哪些值得后续起 implementation slice。",
+      "estimate": "1h",
+      "files": [
+        "backend/tests/contract/test_analytics.py",
+        "backend/tests/unit/common/test_admin_analytics_service.py",
+        "backend/tests/unit/common/test_leaderboard_service.py"
+      ],
+      "verify": "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/contract/test_analytics.py backend/tests/unit/common/test_admin_analytics_service.py backend/tests/unit/common/test_leaderboard_service.py -x -q",
+      "inputs": [
+        "backend/tests/contract/test_analytics.py",
+        "backend/tests/unit/common/test_admin_analytics_service.py",
+        "backend/tests/unit/common/test_leaderboard_service.py"
+      ],
+      "expected_output": [
+        "discovery artifact",
+        "follow-up backlog"
+      ],
+      "observability_impact": "query/index baseline",
+      "full_plan_md": "",
+      "sequence": 0
+    },
+    {
+      "milestone_id": "M018",
+      "slice_id": "S01",
+      "id": "T03",
+      "title": "输出 query/index discovery 结论",
+      "status": "pending",
+      "one_liner": "",
+      "narrative": "",
+      "verification_result": "",
+      "duration": "",
+      "completed_at": null,
+      "blocker_discovered": false,
+      "deviations": "",
+      "known_issues": "",
+      "key_files": [],
+      "key_decisions": [],
+      "full_summary_md": "",
+      "description": "沉淀后续优化列表，显式区分“已证实的性能缺口”和“尚需真实 Postgres 证据的猜测项”。",
+      "estimate": "20m",
+      "files": [
+        "backend/tests/contract/test_analytics.py"
+      ],
+      "verify": "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/contract/test_analytics.py backend/tests/unit/common/test_admin_analytics_service.py backend/tests/unit/common/test_leaderboard_service.py -x -q",
+      "inputs": [
+        "backend/tests/contract/test_analytics.py",
+        "backend/tests/unit/common/test_admin_analytics_service.py",
+        "backend/tests/unit/common/test_leaderboard_service.py"
+      ],
+      "expected_output": [
+        "discovery artifact"
+      ],
+      "observability_impact": "future performance backlog evidence",
+      "full_plan_md": "",
+      "sequence": 0
+    },
+    {
+      "milestone_id": "M018",
+      "slice_id": "S02",
+      "id": "T01",
+      "title": "盘点现有依赖治理入口",
+      "status": "pending",
+      "one_liner": "",
+      "narrative": "",
+      "verification_result": "",
+      "duration": "",
+      "completed_at": null,
+      "blocker_discovered": false,
+      "deviations": "",
+      "known_issues": "",
+      "key_files": [],
+      "key_decisions": [],
+      "full_summary_md": "",
+      "description": "梳理当前 web/package.json、backend/requirements.txt 与现有 workflow 中可复用的依赖检查入口，明确 npm audit / pip audit / license scan 的最小流程。",
+      "estimate": "25m",
+      "files": [
+        "web/package.json",
+        "backend/requirements.txt",
+        ".github/workflows/nfr-performance-check.yml"
+      ],
+      "verify": "test -f web/package.json && test -f backend/requirements.txt",
+      "inputs": [
+        "web/package.json",
+        "backend/requirements.txt",
+        ".github/workflows/nfr-performance-check.yml"
+      ],
+      "expected_output": [
+        "dependency governance notes"
+      ],
+      "observability_impact": "dependency scan entrypoints inventory",
+      "full_plan_md": "",
+      "sequence": 0
+    },
+    {
+      "milestone_id": "M018",
+      "slice_id": "S02",
+      "id": "T02",
+      "title": "形成依赖扫描与升级策略 baseline",
+      "status": "pending",
+      "one_liner": "",
+      "narrative": "",
+      "verification_result": "",
+      "duration": "",
+      "completed_at": null,
+      "blocker_discovered": false,
+      "deviations": "",
+      "known_issues": "",
+      "key_files": [],
+      "key_decisions": [],
+      "full_summary_md": "",
+      "description": "落文档/脚本化流程：定义扫描节奏、升级门禁、license 检查建议和 backend requirements.txt 同步规则。",
+      "estimate": "35m",
+      "files": [
+        "docs/*",
+        "scripts/*"
+      ],
+      "verify": "npm audit --prefix web",
+      "inputs": [
+        "web/package.json",
+        "backend/requirements.txt",
+        ".github/workflows/nfr-performance-check.yml"
+      ],
+      "expected_output": [
+        "docs/*",
+        "scripts/*"
+      ],
+      "observability_impact": "dependency governance baseline created",
+      "full_plan_md": "",
+      "sequence": 0
+    },
+    {
+      "milestone_id": "M018",
+      "slice_id": "S02",
+      "id": "T03",
+      "title": "补依赖治理 proof 与执行前置说明",
+      "status": "pending",
+      "one_liner": "",
+      "narrative": "",
+      "verification_result": "",
+      "duration": "",
+      "completed_at": null,
+      "blocker_discovered": false,
+      "deviations": "",
+      "known_issues": "",
+      "key_files": [],
+      "key_decisions": [],
+      "full_summary_md": "",
+      "description": "如果环境具备，跑最小依赖检查 proof；若不具备，则明确 pip_audit 的前置条件与执行方式，避免伪装已验证。",
+      "estimate": "20m",
+      "files": [
+        "docs/*"
+      ],
+      "verify": "backend/venv/bin/python -m pip_audit",
+      "inputs": [
+        "backend/requirements.txt"
+      ],
+      "expected_output": [
+        "docs/*"
+      ],
+      "observability_impact": "scan prerequisites documented",
+      "full_plan_md": "",
+      "sequence": 0
+    },
+    {
+      "milestone_id": "M018",
+      "slice_id": "S03",
+      "id": "T01",
+      "title": "盘点当前 backup/recovery 现状",
+      "status": "pending",
+      "one_liner": "",
+      "narrative": "",
+      "verification_result": "",
+      "duration": "",
+      "completed_at": null,
+      "blocker_discovered": false,
+      "deviations": "",
+      "known_issues": "",
+      "key_files": [],
+      "key_decisions": [],
+      "full_summary_md": "",
+      "description": "梳理当前部署方式、脚本、数据库连接方式与已有备份事实，确认 runbook 能引用的真实命令/路径/证据位置。",
+      "estimate": "30m",
+      "files": [
+        "docs/*",
+        "scripts/*"
+      ],
+      "verify": "find docs scripts -maxdepth 2 -type f | sort | head -n 20",
+      "inputs": [
+        "docs/*",
+        "scripts/*",
+        ".env.example"
+      ],
+      "expected_output": [
+        "backup inventory"
+      ],
+      "observability_impact": "current backup/recovery fact inventory",
+      "full_plan_md": "",
+      "sequence": 0
+    },
+    {
+      "milestone_id": "M018",
+      "slice_id": "S03",
+      "id": "T02",
+      "title": "输出 backup/recovery baseline runbook",
+      "status": "pending",
+      "one_liner": "",
+      "narrative": "",
+      "verification_result": "",
+      "duration": "",
+      "completed_at": null,
+      "blocker_discovered": false,
+      "deviations": "",
+      "known_issues": "",
+      "key_files": [],
+      "key_decisions": [],
+      "full_summary_md": "",
+      "description": "编写最小可执行 backup/recovery runbook：备份频率、恢复步骤、验证步骤、负责人/证据位置、季度演练建议。只写当前真实现状。",
+      "estimate": "40m",
+      "files": [
+        "docs/*",
+        "analysis artifact"
+      ],
+      "verify": "test -f docs/backup-recovery-runbook.md || test -f .gsd/analysis/BACKUP_RECOVERY_BASELINE.md",
+      "inputs": [
+        "docs/*",
+        "scripts/*"
+      ],
+      "expected_output": [
+        "docs/*",
+        "analysis artifact"
+      ],
+      "observability_impact": "runbook baseline created",
+      "full_plan_md": "",
+      "sequence": 0
+    },
+    {
+      "milestone_id": "M018",
+      "slice_id": "S03",
+      "id": "T03",
+      "title": "校正 runbook 为真实可执行现状",
+      "status": "pending",
+      "one_liner": "",
+      "narrative": "",
+      "verification_result": "",
+      "duration": "",
+      "completed_at": null,
+      "blocker_discovered": false,
+      "deviations": "",
+      "known_issues": "",
+      "key_files": [],
+      "key_decisions": [],
+      "full_summary_md": "",
+      "description": "人工走查 runbook 引用的命令与路径，去掉空泛理想架构描述，保留未来演练建议作为 follow-up。",
+      "estimate": "20m",
+      "files": [
+        "docs/*",
+        "analysis artifact"
+      ],
+      "verify": "grep -n \"备份\\|恢复\\|演练\" docs/backup-recovery-runbook.md .gsd/analysis/BACKUP_RECOVERY_BASELINE.md",
+      "inputs": [
+        "docs/*",
+        "analysis artifact"
+      ],
+      "expected_output": [
+        "docs/*",
+        "analysis artifact"
+      ],
+      "observability_impact": "runbook grounded in real paths",
+      "full_plan_md": "",
+      "sequence": 0
     }
   ],
   "decisions": [
@@ -9095,6 +12121,18 @@
       "decision": "How the new knowledge-answer engine should be rolled out on the existing StepFun internal search seam",
       "choice": "Gate the engine at the compat seam with three explicit modes: legacy default, engine-enabled cutover, and dual-run shadow audit; keep the legacy payload user-visible in dual-run while persisting a shadow audit run when session_id is available.",
       "rationale": "The current runtime still serves stable learner/report/replay contracts through the legacy search payload shape, so rollout safety depends on making the engine an additive compat-layer choice instead of inlining a second partially visible path. A seam-owned rollout mode preserves existing behavior by default, enables truthful shadow comparisons through persisted KnowledgeAnswerRun rows, and limits the cutover blast radius to one place.",
+      "revisable": "Yes",
+      "made_by": "agent",
+      "superseded_by": null
+    },
+    {
+      "seq": 1522,
+      "id": "D156",
+      "when_context": "M012/S01/T01",
+      "scope": "authentication",
+      "decision": "What password hashing scheme should password-reset flows use for user-specific passwords?",
+      "choice": "Use a CryptContext with pbkdf2_sha256 as the primary scheme and bcrypt as a legacy verify fallback.",
+      "rationale": "The local passlib+bcrypt backend in this repo cannot reliably mint new bcrypt hashes, so password-reset writes need a stable primary scheme. Keeping bcrypt in the context preserves compatibility for any existing bcrypt hashes while allowing new reset passwords to be stored and verified reliably.",
       "revisable": "Yes",
       "made_by": "agent",
       "superseded_by": null
@@ -11982,6 +15020,28 @@
       "verdict": "✅ pass",
       "duration_ms": 15800,
       "created_at": "2026-03-31T06:27:37.784Z"
+    },
+    {
+      "id": 263,
+      "task_id": "T01",
+      "slice_id": "S01",
+      "milestone_id": "M012",
+      "command": "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/integration/test_password_reset_api.py -x -q",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 4270,
+      "created_at": "2026-04-08T09:29:23.880Z"
+    },
+    {
+      "id": 264,
+      "task_id": "T01",
+      "slice_id": "S01",
+      "milestone_id": "M012",
+      "command": "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/ -k password_reset -x -q",
+      "exit_code": 1,
+      "verdict": "❌ fail",
+      "duration_ms": 4220,
+      "created_at": "2026-04-08T09:29:23.881Z"
     }
   ]
 }

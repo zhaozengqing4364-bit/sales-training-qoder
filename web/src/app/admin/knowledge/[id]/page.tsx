@@ -17,7 +17,10 @@ import {
     Search,
     Trash2,
     Upload,
+
 } from "lucide-react";
+
+import { KnowledgeAnswerConsole } from "@/components/admin/knowledge-answer/knowledge-answer-console";
 
 import { api, getApiErrorMessage } from "@/lib/api/client";
 import {
@@ -142,6 +145,17 @@ export default function KnowledgeDetailPage() {
     const [searchMessage, setSearchMessage] = useState<string | null>(null);
     const [searchError, setSearchError] = useState<string | null>(null);
 
+    // ── RAG Profile State ──
+    const [ragProfiles, setRagProfiles] = useState<Array<{ id: string; name: string }>>([]);
+    const [savingProfile, setSavingProfile] = useState(false);
+
+    // Load available RAG profiles
+    useEffect(() => {
+        api.admin.listRagProfiles()
+            .then(profiles => setRagProfiles(profiles?.map(p => ({ id: p.id, name: p.name })) ?? []))
+            .catch(() => { /* non-blocking */ });
+    }, []);
+
     const loadData = useCallback(async () => {
         setIsLoading(true);
         setError(null);
@@ -159,6 +173,20 @@ export default function KnowledgeDetailPage() {
             setIsLoading(false);
         }
     }, [kbId]);
+
+    const handleAssignProfile = useCallback(async (profileId: string | null) => {
+        if (!kb) return;
+        setSavingProfile(true);
+        try {
+            await api.admin.assignRagProfileToKb(kb.id, profileId);
+            toast.success(profileId ? "已切换 RAG 配置" : "已取消 RAG 配置关联");
+            await loadData();
+        } catch (err) {
+            toast.error(getApiErrorMessage(err));
+        } finally {
+            setSavingProfile(false);
+        }
+    }, [kb, toast, loadData]);
 
     useEffect(() => {
         void loadData();
@@ -291,7 +319,7 @@ export default function KnowledgeDetailPage() {
     const handleReprocess = async (doc: AdminKnowledgeDocument) => {
         setReprocessingDocId(doc.id);
         try {
-            await api.admin.reprocessKnowledgeDocument(kbId, doc.id);
+            await api.adminTools.reprocessKnowledgeDocument(kbId, doc.id);
             setDocs((prev) => prev.map((item) => (
                 item.id === doc.id
                     ? { ...item, status: "pending", chunk_count: 0, error_message: undefined }
@@ -582,6 +610,48 @@ export default function KnowledgeDetailPage() {
                         ))}
                     </div>
                 )}
+            </GlassCard>
+
+
+            <KnowledgeAnswerConsole />
+
+            {/* ── RAG Profile Reference ── */}
+            <GlassCard className="p-6 space-y-3">
+                <div className="flex items-center justify-between gap-3">
+                    <div>
+                        <h2 className="font-bold text-slate-900">RAG 配置</h2>
+                        <p className="text-xs text-slate-500 mt-0.5">
+                            分块策略、语义缓存和重排序由统一的 RAG 配置管理
+                        </p>
+                    </div>
+                    <div className="flex gap-2">
+                        <Link href="/admin/retrieval-strategies">
+                            <Button variant="outline" size="sm" className="rounded-full">
+                                检索策略
+                            </Button>
+                        </Link>
+                        <Link href="/admin/rag-profiles">
+                            <Button variant="outline" size="sm" className="rounded-full">
+                                管理配置
+                            </Button>
+                        </Link>
+                    </div>
+                </div>
+                <div className="flex items-center gap-3">
+                    <label className="text-sm text-slate-600 shrink-0">当前配置</label>
+                    <select
+                        className="flex-1 rounded-lg border border-slate-200 px-3 py-2 text-sm bg-white"
+                        value={kb?.rag_profile_id ?? ""}
+                        onChange={e => void handleAssignProfile(e.target.value || null)}
+                        disabled={savingProfile || ragProfiles.length === 0}
+                    >
+                        <option value="">使用系统默认</option>
+                        {ragProfiles.map(p => (
+                            <option key={p.id} value={p.id}>{p.name}</option>
+                        ))}
+                    </select>
+                    {savingProfile && <Loader2 className="w-4 h-4 animate-spin text-slate-400" />}
+                </div>
             </GlassCard>
 
             <GlassCard className="overflow-hidden">

@@ -7,15 +7,17 @@ describe("authHandler", () => {
         vi.restoreAllMocks();
     });
 
-    it("notifies listeners when session expires without touching browser storage", () => {
+    it("notifies listeners and schedules redirect when session expires", () => {
         const listener = vi.fn();
         const unsubscribe = authHandler.subscribe(listener);
         const removeItemSpy = vi.spyOn(Storage.prototype, "removeItem");
+        vi.spyOn(window, "setTimeout");
 
         authHandler.sessionExpired();
 
         expect(removeItemSpy).not.toHaveBeenCalled();
         expect(listener).toHaveBeenCalledWith("登录已过期，请重新登录");
+        expect(setTimeout).toHaveBeenCalledWith(expect.any(Function), 1500);
 
         unsubscribe();
     });

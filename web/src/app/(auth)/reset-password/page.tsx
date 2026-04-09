@@ -1,21 +1,24 @@
 "use client";
 
-import { useState, Suspense } from "react";
+import { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import Link from "next/link";
+import { ArrowLeft, Loader2, AlertCircle, CheckCircle2, KeyRound } from "lucide-react";
+
 import { GlassCard } from "@/components/ui/glass-card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { ArrowLeft, Loader2, AlertCircle, CheckCircle2, KeyRound } from "lucide-react";
 import { api, getApiErrorMessage } from "@/lib/api/client";
-import Link from "next/link";
 
 export default function ResetPasswordPage() {
     return (
-        <Suspense fallback={
-            <div className="min-h-screen flex items-center justify-center">
-                <p className="text-slate-500">加载中...</p>
-            </div>
-        }>
+        <Suspense
+            fallback={
+                <div className="min-h-screen flex items-center justify-center">
+                    <p className="text-slate-500">加载中...</p>
+                </div>
+            }
+        >
             <ResetPasswordContent />
         </Suspense>
     );
@@ -24,8 +27,9 @@ export default function ResetPasswordPage() {
 function ResetPasswordContent() {
     const router = useRouter();
     const searchParams = useSearchParams();
-    const token = searchParams.get("token") || "";
+    const queryToken = searchParams.get("token")?.trim() || "";
 
+    const [token, setToken] = useState(queryToken);
     const [newPassword, setNewPassword] = useState("");
     const [confirmPassword, setConfirmPassword] = useState("");
     const [isLoading, setIsLoading] = useState(false);
@@ -35,6 +39,13 @@ function ResetPasswordContent() {
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setError("");
+
+        const normalizedToken = token.trim();
+
+        if (!normalizedToken) {
+            setError("请输入邮件中的重置令牌");
+            return;
+        }
 
         if (newPassword.length < 8) {
             setError("密码至少需要 8 个字符");
@@ -46,14 +57,11 @@ function ResetPasswordContent() {
             return;
         }
 
-        if (!token) {
-            setError("重置链接无效或已过期，请重新申请");
-            return;
-        }
-
         setIsLoading(true);
+
         try {
-            await api.auth.resetPassword(token, newPassword);
+            await api.auth.resetPassword(normalizedToken, newPassword);
+            setToken(normalizedToken);
             setIsSuccess(true);
         } catch (err: unknown) {
             setError(getApiErrorMessage(err));
@@ -61,32 +69,6 @@ function ResetPasswordContent() {
             setIsLoading(false);
         }
     };
-
-    if (!token) {
-        return (
-            <div className="min-h-screen flex items-center justify-center relative overflow-hidden">
-                <div className="absolute top-[-20%] left-[-20%] w-[800px] h-[800px] bg-blue-100/30 rounded-full blur-[140px] pointer-events-none" />
-                <div className="absolute bottom-[-20%] right-[-20%] w-[800px] h-[800px] bg-indigo-100/30 rounded-full blur-[140px] pointer-events-none" />
-
-                <GlassCard className="w-full max-w-md p-8 md:p-12 animate-in fade-in zoom-in-95 duration-500 border-white/40 shadow-card">
-                    <div className="text-center space-y-6">
-                        <div className="w-16 h-16 rounded-full bg-red-50 flex items-center justify-center mx-auto">
-                            <AlertCircle className="w-8 h-8 text-red-500" />
-                        </div>
-                        <div>
-                            <h1 className="text-2xl font-bold text-slate-900">链接无效</h1>
-                            <p className="text-slate-500 mt-2">重置链接无效或已过期，请重新申请忘记密码。</p>
-                        </div>
-                        <Link href="/forgot-password">
-                            <Button className="w-full h-12 rounded-full bg-slate-900 hover:bg-slate-800 text-white">
-                                重新申请
-                            </Button>
-                        </Link>
-                    </div>
-                </GlassCard>
-            </div>
-        );
-    }
 
     if (isSuccess) {
         return (
@@ -126,7 +108,7 @@ function ResetPasswordContent() {
                         <KeyRound className="w-6 h-6" />
                     </div>
                     <h1 className="text-2xl font-bold text-slate-900 tracking-tight">设置新密码</h1>
-                    <p className="text-slate-500 mt-2">请输入您的新密码</p>
+                    <p className="text-slate-500 mt-2">请输入邮件中的重置令牌和您的新密码</p>
                 </div>
 
                 <form onSubmit={handleSubmit} className="space-y-4">
@@ -136,6 +118,26 @@ function ResetPasswordContent() {
                             {error}
                         </div>
                     )}
+
+                    <div className="space-y-2">
+                        <label className="text-sm font-medium text-slate-700" htmlFor="token">重置令牌</label>
+                        <Input
+                            id="token"
+                            type="text"
+                            name="token"
+                            autoComplete="off"
+                            placeholder="粘贴邮件中的重置令牌"
+                            className="bg-white/50 focus:bg-white transition-colors h-12 rounded-full px-6"
+                            value={token}
+                            onChange={(e) => setToken(e.target.value)}
+                            required
+                        />
+                        <p className="text-xs text-slate-400">
+                            {queryToken
+                                ? "已从重置链接自动填入，如有需要可手动修改。"
+                                : "若您在本地开发环境，请粘贴邮件或控制台中的重置令牌。"}
+                        </p>
+                    </div>
 
                     <div className="space-y-2">
                         <label className="text-sm font-medium text-slate-700" htmlFor="new-password">新密码</label>
@@ -171,7 +173,7 @@ function ResetPasswordContent() {
 
                     <Button
                         type="submit"
-                        disabled={isLoading || !newPassword || !confirmPassword}
+                        disabled={isLoading || !token.trim() || !newPassword || !confirmPassword}
                         className="w-full h-12 rounded-full mt-4 text-base shadow-lg shadow-slate-900/20 bg-slate-900 hover:bg-slate-800 text-white"
                     >
                         {isLoading ? (

@@ -81,6 +81,7 @@ class User(Base):
     name = Column(String(100), nullable=False)
     department = Column(String(100))
     email = Column(String(255), unique=True)
+    hashed_password = Column(String(255), nullable=True)
     role = Column(String(20), default="user", nullable=False)  # user, admin, support
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     last_login = Column(DateTime(timezone=True))
@@ -93,6 +94,37 @@ class User(Base):
     # Relationships
     practice_sessions = relationship("PracticeSession", back_populates="user")
     leaderboard_entries = relationship("LeaderboardEntry", back_populates="user")
+    password_reset_tokens = relationship(
+        "PasswordResetToken",
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
+
+
+class PasswordResetToken(Base):
+    __tablename__ = "password_reset_tokens"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id = Column(
+        String(36),
+        ForeignKey("users.user_id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    token_hash = Column(String(64), nullable=False, unique=True)
+    expires_at = Column(DateTime(timezone=True), nullable=False, index=True)
+    used_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        nullable=False,
+    )
+
+    __table_args__ = (
+        Index("idx_password_reset_tokens_user_created", "user_id", "created_at"),
+    )
+
+    user = relationship("User", back_populates="password_reset_tokens")
 
 
 class Scenario(Base):
@@ -869,6 +901,14 @@ class KnowledgeRankingProfile(Base):
     section_weights_json = Column(JSON, nullable=False, default=dict)
     min_pass_score = Column(Float, nullable=False, default=0.0)
     min_pass_score_keyword = Column(Float, nullable=False, default=0.0)
+    # Unified scoring weights (elevated from hardcoded values in _rerank_results)
+    base_weight = Column(Float, nullable=False, default=0.50)
+    coverage_weight = Column(Float, nullable=False, default=0.20)
+    phrase_bonus = Column(Float, nullable=False, default=0.15)
+    title_bonus_max = Column(Float, nullable=False, default=0.10)
+    ratio_bonus_max = Column(Float, nullable=False, default=0.05)
+    cross_encoder_weight = Column(Float, nullable=False, default=0.0)
+    diversity_penalty = Column(Float, nullable=False, default=0.12)
     enabled = Column(Boolean, nullable=False, default=True)
     created_by = Column(String(36), ForeignKey("users.user_id"), nullable=True)
     updated_by = Column(String(36), ForeignKey("users.user_id"), nullable=True)
@@ -883,6 +923,40 @@ class KnowledgeRankingProfile(Base):
     __table_args__ = (
         UniqueConstraint("config_version_id", "profile_key", name="uq_knowledge_ranking_profile_version_key"),
         Index("idx_knowledge_ranking_profiles_profile_key", "profile_key"),
+    )
+
+
+class KnowledgeChunkingPreset(Base):
+    """Named chunking configuration that belongs to a config version."""
+    __tablename__ = "knowledge_chunking_presets"
+
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    config_version_id = Column(
+        String(36),
+        ForeignKey("knowledge_config_versions.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    profile_key = Column(String(100), nullable=False)
+    description = Column(Text, nullable=True)
+    chunking_strategy = Column(String(50), nullable=False, default="element_boundary")
+    chunk_size = Column(Integer, nullable=False, default=500)
+    chunk_overlap = Column(Integer, nullable=False, default=50)
+    is_default = Column(Boolean, nullable=False, default=False)
+    enabled = Column(Boolean, nullable=False, default=True)
+    created_by = Column(String(36), ForeignKey("users.user_id"), nullable=True)
+    updated_by = Column(String(36), ForeignKey("users.user_id"), nullable=True)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), nullable=False)
+    updated_at = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+        nullable=False,
+    )
+
+    __table_args__ = (
+        UniqueConstraint("config_version_id", "profile_key", name="uq_chunking_preset_version_key"),
+        Index("idx_knowledge_chunking_presets_profile_key", "profile_key"),
     )
 
 

@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from common.db.models import (
     KnowledgeAnswerabilityProfile,
+    KnowledgeChunkingPreset,
     KnowledgeConfigVersion,
     KnowledgeEntityAlias,
     KnowledgeIntentRule,
@@ -54,6 +55,26 @@ class KnowledgeRankingProfileConfig:
     section_weights: dict[str, float] = field(default_factory=dict)
     min_pass_score: float = 0.0
     min_pass_score_keyword: float = 0.0
+    # Unified scoring weights (elevated from hardcoded _rerank_results)
+    base_weight: float = 0.50
+    coverage_weight: float = 0.20
+    phrase_bonus: float = 0.15
+    title_bonus_max: float = 0.10
+    ratio_bonus_max: float = 0.05
+    cross_encoder_weight: float = 0.0
+    diversity_penalty: float = 0.12
+    profile_source: str = "database"
+
+
+@dataclass(frozen=True)
+class KnowledgeChunkingPresetConfig:
+    """Named chunking configuration within a config version."""
+    profile_key: str
+    description: str | None
+    chunking_strategy: str
+    chunk_size: int
+    chunk_overlap: int
+    is_default: bool
     profile_source: str = "database"
 
 
@@ -77,6 +98,7 @@ class KnowledgeAnswerConfigSnapshot:
     entity_aliases: list[KnowledgeEntityAliasConfig] = field(default_factory=list)
     ranking_profiles: dict[str, KnowledgeRankingProfileConfig] = field(default_factory=dict)
     answerability_profiles: dict[str, KnowledgeAnswerabilityProfileConfig] = field(default_factory=dict)
+    chunking_presets: dict[str, KnowledgeChunkingPresetConfig] = field(default_factory=dict)
 
 
 class KnowledgeAnswerConfigRepository:
@@ -98,6 +120,7 @@ class KnowledgeAnswerConfigRepository:
             entity_aliases=self._load_entity_aliases(active_version.id),
             ranking_profiles=self._load_ranking_profiles(active_version.id),
             answerability_profiles=self._load_answerability_profiles(active_version.id),
+            chunking_presets=self._load_chunking_presets(active_version.id),
         )
 
     def _get_active_version(self) -> KnowledgeConfigVersion | None:
@@ -212,6 +235,13 @@ class KnowledgeAnswerConfigRepository:
                 section_weights=_json_object(profile.section_weights_json),
                 min_pass_score=profile.min_pass_score,
                 min_pass_score_keyword=profile.min_pass_score_keyword,
+                base_weight=getattr(profile, "base_weight", 0.50),
+                coverage_weight=getattr(profile, "coverage_weight", 0.20),
+                phrase_bonus=getattr(profile, "phrase_bonus", 0.15),
+                title_bonus_max=getattr(profile, "title_bonus_max", 0.10),
+                ratio_bonus_max=getattr(profile, "ratio_bonus_max", 0.05),
+                cross_encoder_weight=getattr(profile, "cross_encoder_weight", 0.0),
+                diversity_penalty=getattr(profile, "diversity_penalty", 0.12),
             )
             for profile in profiles
         }
@@ -238,6 +268,31 @@ class KnowledgeAnswerConfigRepository:
                 partial_threshold=profile.partial_threshold,
             )
             for profile in profiles
+        }
+
+    def _load_chunking_presets(
+        self,
+        config_version_id: str,
+    ) -> dict[str, KnowledgeChunkingPresetConfig]:
+        statement = (
+            select(KnowledgeChunkingPreset)
+            .where(
+                KnowledgeChunkingPreset.config_version_id == config_version_id,
+                KnowledgeChunkingPreset.enabled.is_(True),
+            )
+            .order_by(KnowledgeChunkingPreset.profile_key.asc())
+        )
+        presets = self._db_session.execute(statement).scalars().all()
+        return {
+            preset.profile_key: KnowledgeChunkingPresetConfig(
+                profile_key=preset.profile_key,
+                description=preset.description,
+                chunking_strategy=preset.chunking_strategy,
+                chunk_size=preset.chunk_size,
+                chunk_overlap=preset.chunk_overlap,
+                is_default=preset.is_default,
+            )
+            for preset in presets
         }
 
 

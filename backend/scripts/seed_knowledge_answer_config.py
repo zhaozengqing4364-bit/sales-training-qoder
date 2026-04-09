@@ -20,6 +20,7 @@ from sqlalchemy.pool import NullPool
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
+import agent.models as _agent_models  # noqa: F401 — resolve Agent relationship in PracticeSession
 from common.db.models import (  # noqa: E402
     KnowledgeAnswerabilityProfile,
     KnowledgeConfigVersion,

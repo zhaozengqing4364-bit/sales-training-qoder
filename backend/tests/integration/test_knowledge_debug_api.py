@@ -207,6 +207,83 @@ async def test_list_answer_runs_returns_latest_first_with_step_counts(
 
 
 @pytest.mark.asyncio
+async def test_list_answer_runs_supports_limit_query_and_status_filters(
+    async_client: AsyncClient,
+    test_db: AsyncSession,
+    test_user: User,
+):
+    test_user.role = "admin"
+    await test_db.commit()
+
+    practice_session = await _create_sales_session(
+        test_db,
+        user_id=str(test_user.user_id),
+        name="knowledge_debug_filters",
+    )
+    await _seed_run(
+        test_db,
+        session_id=str(practice_session.session_id),
+        query_text="介绍石犀科技",
+        answerability="sufficient",
+        final_status="completed",
+        created_at=datetime.now(UTC) - timedelta(minutes=2),
+    )
+    blocked_run = await _seed_run(
+        test_db,
+        session_id=str(practice_session.session_id),
+        query_text="价格问题",
+        answerability="blocked",
+        final_status="blocked",
+        blocked_reason="timeout",
+        created_at=datetime.now(UTC) - timedelta(minutes=1),
+    )
+    latest_run = await _seed_run(
+        test_db,
+        session_id=str(practice_session.session_id),
+        query_text="版本对比",
+        answerability="partial",
+        final_status="completed",
+        created_at=datetime.now(UTC),
+    )
+
+    filtered = await async_client.get(
+        "/api/v1/knowledge-debug/runs?limit=1&answerability=blocked&final_status=blocked&query=价格",
+        headers=_headers_for(str(test_user.user_id)),
+    )
+
+    assert filtered.status_code == 200
+    body = filtered.json()
+    assert body["data"]["total"] == 1
+    assert body["data"]["limit"] == 1
+    assert len(body["data"]["items"]) == 1
+    assert body["data"]["items"][0]["id"] == blocked_run.id
+    assert body["data"]["items"][0]["query_text"] == "价格问题"
+
+    paged = await async_client.get(
+        "/api/v1/knowledge-debug/runs?limit=1&page=1",
+        headers=_headers_for(str(test_user.user_id)),
+    )
+    assert paged.status_code == 200
+    paged_body = paged.json()
+    assert paged_body["data"]["total"] == 3
+    assert paged_body["data"]["page"] == 1
+    assert paged_body["data"]["offset"] == 0
+    assert len(paged_body["data"]["items"]) == 1
+    assert paged_body["data"]["items"][0]["id"] == latest_run.id
+
+    second_page = await async_client.get(
+        "/api/v1/knowledge-debug/runs?limit=1&page=2",
+        headers=_headers_for(str(test_user.user_id)),
+    )
+    assert second_page.status_code == 200
+    second_page_body = second_page.json()
+    assert second_page_body["data"]["page"] == 2
+    assert second_page_body["data"]["offset"] == 1
+    assert len(second_page_body["data"]["items"]) == 1
+    assert second_page_body["data"]["items"][0]["id"] == blocked_run.id
+
+
+@pytest.mark.asyncio
 async def test_get_answer_run_detail_returns_audit_fields(
     async_client: AsyncClient,
     test_db: AsyncSession,

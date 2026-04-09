@@ -97,10 +97,21 @@ class KnowledgeVectorStore:
         """
         Add document chunks to vector store.
 
+        Supports two chunk types via ``chunk_type`` metadata field:
+
+        * ``"child"``  (default) – normal embedded chunk for retrieval.
+        * ``"parent"`` – context chunk stored with a zero-vector placeholder
+          embedding; it is **not** used for retrieval, only returned when a
+          child hit maps back to its parent.
+
+        Parent-child linkage is maintained via ``parent_id`` / ``child_ids``
+        metadata keys.
+
         Args:
             collection_name: ChromaDB collection name (from KnowledgeBase.vector_collection)
             chunks: List of chunk dicts with 'index', 'content', 'metadata'
-            embeddings: List of embedding vectors
+            embeddings: List of embedding vectors (one per chunk; parent chunks
+                may use an empty/zero vector as placeholder)
             document_id: Document UUID
             document_title: Document title for metadata
 
@@ -125,6 +136,7 @@ class KnowledgeVectorStore:
                 metadatas = []
 
                 for chunk in chunks:
+                    chunk_type = (chunk.get("metadata") or {}).get("chunk_type", "child")
                     chunk_id = f"{document_id}_{chunk['index']}"
                     ids.append(chunk_id)
                     documents.append(chunk["content"])
@@ -132,6 +144,7 @@ class KnowledgeVectorStore:
                         "document_id": document_id,
                         "document_title": document_title,
                         "chunk_index": chunk["index"],
+                        "chunk_type": chunk_type,
                         **chunk.get("metadata", {})
                     })
 
@@ -255,6 +268,55 @@ class KnowledgeVectorStore:
         except Exception as e:  # noqa: BLE001
             logger.error(f"Vector search error: {e}")
             return Result.ok([])  # Graceful degradation
+
+    async def get_parent_chunks(
+        self,
+        collection_name: str,
+        parent_ids: list[str],
+    ) -> Result[list[dict[str, Any]]]:
+        """
+        Fetch parent chunks by their IDs.
+
+        Parent chunks are stored with ``chunk_type == "parent"`` metadata.
+        They carry full section context but are **not** used for vector
+        retrieval – they are only fetched when a child hit needs to expand
+        into its parent's content.
+
+        Args:
+            collection_name: ChromaDB collection name
+            parent_ids: List of parent chunk IDs (``{doc_id}_{chunk_index}``)
+
+        Returns:
+            Result with list of parent chunk dicts
+        """
+        if not parent_ids:
+            return Result.ok([])
+
+        collection = self._get_collection(collection_name)
+        if not collection:
+            return Result.ok([])
+
+        try:
+            results = collection.get(
+                ids=parent_ids,
+                include=["documents", "metadatas"],
+            )
+
+            parents: list[dict[str, Any]] = []
+            if results and results["documents"]:
+                for i, doc in enumerate(results["documents"]):
+                    metadata = results["metadatas"][i] if results["metadatas"] else {}
+                    parents.append({
+                        "content": doc,
+                        "metadata": metadata,
+                        "id": results["ids"][i],
+                    })
+
+            return Result.ok(parents)
+
+        except Exception as e:  # noqa: BLE001
+            logger.error(f"Failed to fetch parent chunks: {e}")
+            return Result.ok([])
 
     async def delete_document_chunks(
         self,

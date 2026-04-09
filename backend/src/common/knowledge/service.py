@@ -13,13 +13,13 @@ References:
 from __future__ import annotations
 
 import asyncio
-from difflib import SequenceMatcher
 import inspect
 import os
 import re
 import time
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
+from difflib import SequenceMatcher
 from hashlib import md5
 from typing import TYPE_CHECKING, Any
 
@@ -28,7 +28,10 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.ai.embedding_service import get_embedding_service
+from common.cache.redis_cache import get_cache
 from common.error_handling.result import Result
+from common.knowledge.bm25_index import get_bm25_index_manager
+from common.knowledge.semantic_cache import get_semantic_search_cache
 from common.monitoring.logger import get_logger
 from common.storage import get_document_storage_service
 
@@ -38,13 +41,13 @@ from .models import (
     KnowledgeBaseStatus,
     KnowledgeDocument,
 )
+from .processor import get_document_processor
 from .schemas import (
     CreateKnowledgeBaseRequest,
     KnowledgeBaseListItem,
     KnowledgeDocumentListItem,
     UpdateKnowledgeBaseRequest,
 )
-from .processor import get_document_processor
 from .vector_store import get_knowledge_vector_store
 
 if TYPE_CHECKING:
@@ -91,10 +94,6 @@ QUERY_STOPWORDS: set[str] = {
 
 VERSION_TOKEN_RE = re.compile(r"\bv?\d+(?:\.\d+){0,2}[a-z]?\b", re.IGNORECASE)
 SEARCH_TERM_RE = re.compile(r"[a-z0-9]+|[\u4e00-\u9fff]{2,12}")
-
-
-def _normalize_text_for_rerank(value: str) -> str:
-    return "".join(re.findall(r"[a-z0-9\u4e00-\u9fff]+", str(value or "").lower()))
 
 
 def _resolve_cache_ttl_seconds(
@@ -182,7 +181,9 @@ class KnowledgeService:
 
     @staticmethod
     def _build_kb_cache_key(kb_ids: list[str]) -> str:
-        unique_ids = sorted({str(kb_id).strip() for kb_id in kb_ids if str(kb_id).strip()})
+        unique_ids = sorted(
+            {str(kb_id).strip() for kb_id in kb_ids if str(kb_id).strip()}
+        )
         return ",".join(unique_ids)
 
     @staticmethod
@@ -403,7 +404,7 @@ class KnowledgeService:
             if value is not None:
                 setattr(kb, field, value)
 
-        kb.updated_at = datetime.now(timezone.utc)
+        kb.updated_at = datetime.now(UTC)
 
         await self.db.flush()
         await self.db.refresh(kb)
@@ -651,6 +652,15 @@ class KnowledgeService:
                 collection_name=kb.vector_collection, document_id=doc_id
             )
 
+            # Invalidate BM25 index for this collection
+            get_bm25_index_manager().invalidate_collection(kb.vector_collection)
+
+            # Invalidate semantic cache for this KB
+            try:
+                await get_semantic_search_cache().invalidate_kb(get_cache(), kb_id)
+            except Exception:  # noqa: BLE001
+                logger.debug("Semantic cache invalidation failed, non-critical")
+
             # Update KB stats
             kb.document_count = max(0, kb.document_count - 1)
             kb.total_chunks = max(0, kb.total_chunks - doc.chunk_count)
@@ -761,6 +771,10 @@ class KnowledgeService:
         Returns:
             Result with merged and sorted results
         """
+        # ── Semantic cache: early check ──
+        sem_cache = get_semantic_search_cache()
+        cache_mgr = get_cache()
+
         search_started_at = time.monotonic()
         embedding_ms = 0.0
         vector_ms = 0.0
@@ -772,7 +786,9 @@ class KnowledgeService:
         ]
         if not normalized_kb_ids:
             self._last_search_timing = {
-                "phase_total_ms": round((time.monotonic() - search_started_at) * 1000, 1),
+                "phase_total_ms": round(
+                    (time.monotonic() - search_started_at) * 1000, 1
+                ),
                 "phase_embedding_ms": 0.0,
                 "phase_vector_ms": 0.0,
                 "phase_keyword_ms": 0.0,
@@ -793,7 +809,9 @@ class KnowledgeService:
                 knowledge_base_ids=normalized_kb_ids,
             )
             self._last_search_timing = {
-                "phase_total_ms": round((time.monotonic() - search_started_at) * 1000, 1),
+                "phase_total_ms": round(
+                    (time.monotonic() - search_started_at) * 1000, 1
+                ),
                 "phase_embedding_ms": 0.0,
                 "phase_vector_ms": 0.0,
                 "phase_keyword_ms": 0.0,
@@ -803,7 +821,9 @@ class KnowledgeService:
             return Result.ok([])
 
         query_variants = self._build_query_variants(query)
-        resolved_embedding_timeout_ms = max(0, min(10000, int(embedding_timeout_ms or 0)))
+        resolved_embedding_timeout_ms = max(
+            0, min(10000, int(embedding_timeout_ms or 0))
+        )
         embedding_timeout_seconds = (
             resolved_embedding_timeout_ms / 1000.0
             if resolved_embedding_timeout_ms > 0
@@ -824,7 +844,9 @@ class KnowledgeService:
 
         if not kb_contexts:
             self._last_search_timing = {
-                "phase_total_ms": round((time.monotonic() - search_started_at) * 1000, 1),
+                "phase_total_ms": round(
+                    (time.monotonic() - search_started_at) * 1000, 1
+                ),
                 "phase_embedding_ms": 0.0,
                 "phase_vector_ms": 0.0,
                 "phase_keyword_ms": 0.0,
@@ -835,7 +857,10 @@ class KnowledgeService:
 
         if embedding_service.is_configured:
             embedding_started_at = time.monotonic()
-            async def _collect_query_embeddings() -> tuple[list[tuple[str, list[float]]], str | None]:
+
+            async def _collect_query_embeddings() -> tuple[
+                list[tuple[str, list[float]]], str | None
+            ]:
                 collected_embeddings: list[tuple[str, list[float]]] = []
                 failure_reason: str | None = None
                 should_use_batch = KNOWLEDGE_EMBED_BATCH_ENABLED
@@ -856,7 +881,9 @@ class KnowledgeService:
                                     query_variants, batch_result.value
                                 ):
                                     if isinstance(embedding, list) and embedding:
-                                        collected_embeddings.append((variant, embedding))
+                                        collected_embeddings.append(
+                                            (variant, embedding)
+                                        )
                             else:
                                 failure_reason = (
                                     batch_result.fallback or "[EMBEDDING_FAILED]"
@@ -868,7 +895,9 @@ class KnowledgeService:
                             collected_embeddings.append((variant, embed_result.value))
                             continue
                         if failure_reason is None:
-                            failure_reason = embed_result.fallback or "[EMBEDDING_FAILED]"
+                            failure_reason = (
+                                embed_result.fallback or "[EMBEDDING_FAILED]"
+                            )
                 return collected_embeddings, failure_reason
 
             try:
@@ -878,16 +907,42 @@ class KnowledgeService:
                         timeout=embedding_timeout_seconds,
                     )
                 else:
-                    query_embeddings, embedding_failure = (
-                        await _collect_query_embeddings()
-                    )
-            except asyncio.TimeoutError:
+                    (
+                        query_embeddings,
+                        embedding_failure,
+                    ) = await _collect_query_embeddings()
+            except TimeoutError:
                 embedding_failure = "[EMBEDDING_TIMEOUT]"
                 logger.warning(
                     "Embedding stage timeout in multi-knowledge search, fallback to keyword matching",
                     timeout_ms=resolved_embedding_timeout_ms,
                 )
             embedding_ms = (time.monotonic() - embedding_started_at) * 1000
+
+            # ── Semantic cache: check after embedding ──
+            if (
+                query_embeddings
+                and len(query_embeddings) > 0
+                and len(query_embeddings[0]) > 1
+            ):
+                first_embedding = query_embeddings[0][1]
+                cached_results = await sem_cache.get(
+                    cache_manager=cache_mgr,
+                    kb_ids=list(kb_contexts.keys()),
+                    query_embedding=first_embedding,
+                    top_k=top_k,
+                )
+                if cached_results is not None:
+                    self._last_search_timing.update(
+                        {
+                            "semantic_cache_hit": True,
+                            "phase_total_ms": round(
+                                (time.monotonic() - search_started_at) * 1000, 1
+                            ),
+                            "phase_embedding_ms": round(embedding_ms, 1),
+                        }
+                    )
+                    return Result.ok(cached_results)
 
             if query_embeddings:
                 vector_started_at = time.monotonic()
@@ -998,6 +1053,7 @@ class KnowledgeService:
         }
 
         candidate_top_k = max(1, max(top_k, rerank_top_k))
+        final_results: list[dict[str, Any]] = []
 
         if enable_hybrid:
             fused_results = self._fuse_retrieval_results(
@@ -1005,17 +1061,7 @@ class KnowledgeService:
                 keyword_results=keyword_results,
                 top_k=candidate_top_k,
             )
-            if fused_results:
-                if enable_rerank:
-                    return Result.ok(
-                        self._rerank_results(
-                            query=query,
-                            rows=fused_results,
-                            top_k=top_k,
-                            rerank_top_k=rerank_top_k,
-                        )
-                    )
-                return Result.ok(fused_results[: max(1, top_k)])
+            final_results = fused_results[: max(1, top_k)] if fused_results else []
         elif vector_results:
             deduped_rows: dict[str, dict[str, Any]] = {}
             for row in vector_results:
@@ -1030,35 +1076,121 @@ class KnowledgeService:
                 key=lambda item: float(item.get("score") or 0),
                 reverse=True,
             )
-            candidate_rows = sorted_rows[:candidate_top_k]
-            if enable_rerank:
-                return Result.ok(
-                    self._rerank_results(
-                        query=query,
-                        rows=candidate_rows,
-                        top_k=top_k,
-                        rerank_top_k=rerank_top_k,
-                    )
-                )
-            return Result.ok(candidate_rows[: max(1, top_k)])
+            final_results = sorted_rows[: max(1, top_k)]
 
-        if keyword_results:
-            candidate_rows = keyword_results[:candidate_top_k]
-            if enable_rerank:
-                return Result.ok(
-                    self._rerank_results(
-                        query=query,
-                        rows=candidate_rows,
-                        top_k=top_k,
-                        rerank_top_k=rerank_top_k,
-                    )
-                )
-            return Result.ok(candidate_rows[: max(1, top_k)])
+        if not final_results and keyword_results:
+            final_results = keyword_results[:candidate_top_k][: max(1, top_k)]
 
-        if embedding_failure:
+        if not final_results and embedding_failure:
             return Result.fail(f"[KNOWLEDGE_SEARCH_UNAVAILABLE] {embedding_failure}")
 
-        return Result.ok([])
+        # ── Parent-child expansion: replace child hit content with parent ──
+        if final_results:
+            child_hits = [
+                row
+                for row in final_results
+                if (row.get("metadata") or {}).get("chunk_type") == "child"
+                and (row.get("metadata") or {}).get("parent_id")
+            ]
+            if child_hits:
+                try:
+                    vector_store = get_knowledge_vector_store()
+                    # Collect unique (collection, parent_id) pairs
+                    parent_id_map: dict[str, tuple[str, str]] = {}
+                    for row in child_hits:
+                        meta = row.get("metadata") or {}
+                        kb_id = str(row.get("knowledge_base_id") or "")
+                        parent_id = str(meta.get("parent_id") or "")
+                        coll_name = ""
+                        kb_ctx = kb_contexts.get(kb_id)
+                        if kb_ctx:
+                            coll_name = kb_ctx.vector_collection
+                        if parent_id and coll_name:
+                            parent_id_map[parent_id] = (coll_name, parent_id)
+
+                    if parent_id_map:
+                        # Batch-fetch all parent chunks
+                        for pid, (coll_name, _raw_id) in parent_id_map.items():
+                            parent_result = await vector_store.get_parent_chunks(
+                                collection_name=coll_name,
+                                parent_ids=[pid],
+                            )
+                            if parent_result.is_success and parent_result.value:
+                                parent_data = parent_result.value[0]
+                                parent_content = parent_data.get("content", "")
+                                if parent_content:
+                                    for row in final_results:
+                                        meta = row.get("metadata") or {}
+                                        if str(meta.get("parent_id") or "") == pid:
+                                            row["_child_content"] = row.get(
+                                                "content", ""
+                                            )
+                                            row["content"] = parent_content
+                                            existing_mode = row.get(
+                                                "retrieval_mode", ""
+                                            )
+                                            row["retrieval_mode"] = (
+                                                f"{existing_mode}+parent_expansion"
+                                                if existing_mode
+                                                else "parent_expansion"
+                                            )
+                except Exception:  # noqa: BLE001
+                    logger.debug("Parent-child expansion failed, using child content")
+
+        # ── Cross-encoder scoring (writes cross_encoder_score for unified reranker) ──
+        if final_results and os.getenv("CROSS_ENCODER_BACKEND", "").strip():
+            try:
+                from common.knowledge_engine.cross_encoder_reranker import (
+                    get_cross_encoder_reranker,
+                )
+
+                ce_reranker = get_cross_encoder_reranker()
+                if ce_reranker is not None:
+                    ce_docs = [
+                        {"content": row.get("content", ""), **row}
+                        for row in final_results
+                    ]
+                    ce_results = await ce_reranker.rerank(
+                        query=query,
+                        documents=ce_docs,
+                        top_k=len(final_results),
+                    )
+                    if ce_results:
+                        # Map CE scores back to original rows by content matching
+                        ce_score_map: dict[str, float] = {}
+                        for ce_row in ce_results:
+                            content_key = str(ce_row.get("content", ""))[:200]
+                            ce_score_map[content_key] = float(
+                                ce_row.get("score") or 0.0
+                            )
+                        for row in final_results:
+                            content_key = str(row.get("content", ""))[:200]
+                            row["cross_encoder_score"] = ce_score_map.get(
+                                content_key, 0.0
+                            )
+                        logger.debug(
+                            "Cross-encoder scores attached",
+                            scored_count=len(ce_score_map),
+                            total_count=len(final_results),
+                        )
+            except Exception:  # noqa: BLE001
+                logger.debug("Cross-encoder scoring failed, skipping CE weights")
+
+        # ── Semantic cache: write back ──
+        if final_results and query_embeddings:
+            try:
+                first_embedding = query_embeddings[0][1]
+                await sem_cache.put(
+                    cache_manager=cache_mgr,
+                    kb_ids=list(kb_contexts.keys()),
+                    query_embedding=first_embedding,
+                    top_k=top_k,
+                    results=final_results,
+                )
+            except Exception:  # noqa: BLE001
+                logger.debug("Semantic cache write failed, non-critical")
+
+        return Result.ok(final_results)
 
     @staticmethod
     def _build_keyword_candidates(query: str, candidate_limit: int = 32) -> list[str]:
@@ -1304,89 +1436,6 @@ class KnowledgeService:
         fused_rows.sort(key=lambda row: float(row.get("score") or 0), reverse=True)
         return fused_rows[: max(1, top_k)]
 
-    def _rerank_results(
-        self,
-        *,
-        query: str,
-        rows: list[dict[str, Any]],
-        top_k: int,
-        rerank_top_k: int,
-    ) -> list[dict[str, Any]]:
-        if not rows:
-            return []
-
-        normalized_query = query.strip().lower()
-        if not normalized_query:
-            return rows[: max(1, top_k)]
-
-        candidate_limit = max(1, max(top_k, rerank_top_k))
-        query_terms = self._build_keyword_candidates(
-            normalized_query,
-            candidate_limit=min(16, max(8, candidate_limit * 2)),
-        )
-        compact_query = "".join(re.findall(r"[a-z0-9\u4e00-\u9fff]+", normalized_query))
-
-        reranked: list[dict[str, Any]] = []
-        for row in rows[:candidate_limit]:
-            content = str(row.get("content") or "")
-            metadata = row.get("metadata") if isinstance(row.get("metadata"), dict) else {}
-            title = str(
-                metadata.get("document_title")
-                or row.get("source")
-                or ""
-            )
-            combined_text = _normalize_text_for_rerank(f"{title} {content}")
-            coverage = self._rerank_coverage_score(
-                combined_text=combined_text,
-                query_terms=query_terms,
-            )
-            phrase_bonus = 0.18 if compact_query and compact_query in combined_text else 0.0
-            title_bonus = self._rerank_title_bonus(title=title, query_terms=query_terms)
-            ratio_bonus = 0.0
-            if compact_query and combined_text:
-                ratio_bonus = SequenceMatcher(
-                    None,
-                    compact_query[:48],
-                    combined_text[: max(64, len(compact_query) * 3)],
-                ).ratio() * 0.08
-
-            base_score = max(0.0, min(1.0, float(row.get("score") or 0.0)))
-            rerank_score = min(
-                0.995,
-                base_score * 0.58 + coverage * 0.26 + phrase_bonus + title_bonus + ratio_bonus,
-            )
-            reranked_row = dict(row)
-            reranked_row["score"] = round(rerank_score, 4)
-            reranked.append(reranked_row)
-
-        reranked.sort(key=lambda item: float(item.get("score") or 0.0), reverse=True)
-        return reranked[: max(1, top_k)]
-
-    @staticmethod
-    def _rerank_title_bonus(title: str, query_terms: list[str]) -> float:
-        normalized_title = _normalize_text_for_rerank(title)
-        if not normalized_title:
-            return 0.0
-        matched_terms = sum(
-            1 for term in query_terms if term and term in normalized_title
-        )
-        if matched_terms <= 0:
-            return 0.0
-        return min(0.12, matched_terms * 0.04)
-
-    @staticmethod
-    def _rerank_coverage_score(
-        *,
-        combined_text: str,
-        query_terms: list[str],
-    ) -> float:
-        if not combined_text or not query_terms:
-            return 0.0
-        matched_terms = sum(
-            1 for term in query_terms if term and term in combined_text
-        )
-        return min(1.0, matched_terms / max(1, len(query_terms)))
-
     @staticmethod
     def _keyword_match_score(
         normalized_content: str,
@@ -1566,18 +1615,25 @@ class KnowledgeService:
         query_variants: list[str] | None = None,
         ready_document_ids_by_kb: dict[str, list[str]] | None = None,
     ) -> list[dict[str, Any]]:
-        """Fallback retrieval strategy that matches chunk text by keywords."""
+        """BM25-based sparse retrieval — replaces brute-force collection scan.
+
+        Uses a lazily-built in-memory BM25 index per ChromaDB collection.
+        Scores are normalized to the same range as the old keyword fallback
+        to stay compatible with `_fuse_retrieval_results()`.
+        """
         normalized_query = query.strip().lower()
         if not normalized_query:
             return []
 
+        # Also run expanded keyword search for very short queries
         variants = [variant for variant in (query_variants or []) if variant.strip()]
         if not variants:
             variants = self._build_query_variants(normalized_query)
 
+        # Build a combined query string for BM25: original + variant keywords
+        expanded_query = normalized_query
         merged_candidates: list[str] = []
         seen_candidates: set[str] = set()
-
         for variant in variants:
             for candidate in self._build_keyword_candidates(
                 variant,
@@ -1592,10 +1648,12 @@ class KnowledgeService:
             if len(merged_candidates) >= max(8, int(candidate_limit or 32)):
                 break
 
-        if not merged_candidates:
-            return []
+        # Augment BM25 query with extracted keywords for better coverage
+        if merged_candidates:
+            expanded_query = normalized_query + " " + " ".join(merged_candidates)
 
         vector_store = get_knowledge_vector_store()
+        bm25_manager = get_bm25_index_manager()
         merged_results: list[dict[str, Any]] = []
 
         for kb_id in kb_ids:
@@ -1614,67 +1672,76 @@ class KnowledgeService:
             if collection is None:
                 continue
 
+            # Ensure BM25 index is built and fresh (lazy + auto-rebuild on stale)
             try:
-                raw_chunks = collection.get(include=["documents", "metadatas"])
+                bm25_manager.ensure_index(
+                    collection_name=kb.vector_collection,
+                    get_all_chunks=lambda c=collection: c.get(
+                        include=["documents", "metadatas"]
+                    ),
+                    get_chunk_count=lambda c=collection: c.count(),
+                )
             except Exception as exc:  # noqa: BLE001
                 logger.warning(
-                    "Keyword fallback collection read failed",
+                    "BM25 index build failed, falling back to legacy scan",
                     knowledge_base_id=kb_id,
                     reason=str(exc),
                 )
                 continue
 
-            documents = (
-                raw_chunks.get("documents") if isinstance(raw_chunks, dict) else []
-            )
-            metadatas = (
-                raw_chunks.get("metadatas") if isinstance(raw_chunks, dict) else []
+            # BM25 search
+            bm25_hits = bm25_manager.search(
+                collection_name=kb.vector_collection,
+                query=expanded_query,
+                top_k=max(top_k, 20),
             )
 
-            if not isinstance(documents, list):
+            if not bm25_hits:
                 continue
 
-            for index, content in enumerate(documents):
-                if not isinstance(content, str):
-                    continue
-                snippet_source = content.strip()
-                if not snippet_source:
-                    continue
+            # Fetch metadata for hit chunk IDs
+            hit_ids = [chunk_id for chunk_id, _ in bm25_hits]
+            id_to_meta = bm25_manager.get_metadatas(kb.vector_collection, hit_ids)
 
-                metadata: dict[str, Any] = {}
-                if isinstance(metadatas, list) and index < len(metadatas):
-                    metadata_candidate = metadatas[index]
-                    if isinstance(metadata_candidate, dict):
-                        metadata = metadata_candidate
+            # Determine score range for normalization
+            max_bm25_score = bm25_hits[0][1] if bm25_hits else 1.0
+            if max_bm25_score <= 0:
+                continue
 
-                title_terms: list[str] = []
-                title_text = str(metadata.get("document_title") or "").strip().lower()
-                if title_text:
-                    title_terms = self._extract_fuzzy_terms(title_text, max_terms=20)
+            for chunk_id, bm25_score in bm25_hits:
+                metadata = id_to_meta.get(chunk_id, {})
 
-                normalized_content = snippet_source.lower()
-                raw_score = self._keyword_match_score(
-                    normalized_content=normalized_content,
-                    normalized_query=normalized_query,
-                    candidates=merged_candidates,
-                    hint_terms=title_terms,
-                )
-                if raw_score < 1.2:
-                    continue
-
+                # Apply metadata filter
                 if not self._metadata_matches(metadata, metadata_filter):
                     continue
 
+                # Apply ready-document filter
                 if ready_document_ids is not None:
                     document_id = str(metadata.get("document_id") or "").strip()
                     if not document_id or document_id not in ready_document_ids:
                         continue
 
-                normalized_score = round(min(0.95, 0.45 + raw_score * 0.07), 4)
+                # Normalize BM25 score to [0.45, 0.95] range for fusion compatibility
+                # Formula mirrors the old: min(0.95, 0.45 + raw_score * 0.07)
+                normalized_score = round(min(0.95, 0.45 + bm25_score * 0.07), 4)
+
+                # Get content from collection for the matched chunk
+                try:
+                    chunk_data = collection.get(ids=[chunk_id], include=["documents"])
+                    content = ""
+                    if isinstance(chunk_data, dict):
+                        docs = chunk_data.get("documents", [])
+                        if docs and isinstance(docs[0], str):
+                            content = docs[0]
+                except Exception:  # noqa: BLE001
+                    content = ""
+
+                if not content.strip():
+                    continue
 
                 merged_results.append(
                     {
-                        "content": snippet_source,
+                        "content": content.strip(),
                         "score": normalized_score,
                         "source": metadata.get("document_title", "未知来源"),
                         "metadata": {

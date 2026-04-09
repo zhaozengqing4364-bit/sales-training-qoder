@@ -11,9 +11,9 @@ References:
 """
 
 from datetime import datetime
-from typing import Any
+from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from common.db.schemas import AssetGovernanceSummary
 
@@ -45,12 +45,57 @@ class CreateKnowledgeBaseRequest(KnowledgeBaseBase):
     pass
 
 
+# ========== Settings Schemas ==========
+
+
+class ChunkingSettings(BaseModel):
+    """Chunking strategy configuration per knowledge base."""
+
+    strategy: Literal["element_boundary", "fixed_size", "parent_child"] = Field(
+        default="element_boundary",
+        description="Chunking strategy: element_boundary (default) | fixed_size | parent_child (small chunks for retrieval, large for context)",
+    )
+    chunk_size: int = Field(default=500, ge=100, le=2000, description="Max chunk size in characters")
+    chunk_overlap: int = Field(default=50, ge=0, le=500, description="Overlap between chunks in characters")
+
+
+class SemanticCacheSettings(BaseModel):
+    """Semantic cache configuration per knowledge base."""
+
+    enabled: bool = Field(default=True, description="Enable semantic caching for this KB")
+    similarity_threshold: float = Field(
+        default=0.95, ge=0.90, le=0.99, description="Min cosine similarity for cache hit"
+    )
+    ttl_seconds: int = Field(default=300, ge=60, le=3600, description="Cache TTL in seconds")
+
+
+class KnowledgeBaseSettings(BaseModel):
+    """Aggregate settings for a knowledge base."""
+
+    chunking: ChunkingSettings = Field(default_factory=ChunkingSettings)
+    semantic_cache: SemanticCacheSettings = Field(default_factory=SemanticCacheSettings)
+
+    @classmethod
+    def _parse_if_str(cls, v: "KnowledgeBaseSettings | str | dict | None") -> "KnowledgeBaseSettings | None":
+        if v is None:
+            return None
+        if isinstance(v, cls):
+            return v
+        if isinstance(v, str):
+            import json
+            return cls.model_validate(json.loads(v))
+        if isinstance(v, dict):
+            return cls.model_validate(v)
+        return v
+
+
 class UpdateKnowledgeBaseRequest(BaseModel):
     """Request schema for updating a KnowledgeBase - R5.3 (partial update)"""
 
     name: str | None = Field(None, max_length=100)
     description: str | None = Field(None, max_length=500)
     category: KnowledgeBaseCategoryType | None = None
+    settings: KnowledgeBaseSettings | None = None
 
 
 class KnowledgeBaseResponse(KnowledgeBaseBase):
@@ -66,9 +111,15 @@ class KnowledgeBaseResponse(KnowledgeBaseBase):
     document_count: int = Field(default=0, description="Number of documents")
     total_chunks: int = Field(default=0, description="Total number of chunks")
     status: KnowledgeBaseStatusType
+    settings: KnowledgeBaseSettings | None = None
     created_at: datetime
     updated_at: datetime
     governance_summary: AssetGovernanceSummary | None = None
+
+    @field_validator("settings", mode="before")
+    @classmethod
+    def _parse_settings(cls, v):
+        return KnowledgeBaseSettings._parse_if_str(v)
 
 
 class KnowledgeBaseListItem(BaseModel):
@@ -83,8 +134,14 @@ class KnowledgeBaseListItem(BaseModel):
     document_count: int = 0
     total_chunks: int = 0
     status: KnowledgeBaseStatusType
+    settings: KnowledgeBaseSettings | None = None
     updated_at: datetime
     governance_summary: AssetGovernanceSummary | None = None
+
+    @field_validator("settings", mode="before")
+    @classmethod
+    def _parse_settings(cls, v):
+        return KnowledgeBaseSettings._parse_if_str(v)
 
 
 class KnowledgeBaseListResponse(BaseModel):

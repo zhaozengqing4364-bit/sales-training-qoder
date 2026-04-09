@@ -112,6 +112,7 @@ const ADMIN_NAV_SECTIONS: AdminNavSection[] = [
             { label: "智能体管理", icon: Bot, href: "/admin/agents" },
             { label: "角色管理", icon: User, href: "/admin/personas" },
             { label: "知识库管理", icon: Database, href: "/admin/knowledge" },
+            { label: "检索策略", icon: Settings, href: "/admin/retrieval-strategies" },
             { label: "PPT 演练管理", icon: Presentation, href: "/admin/presentations" },
         ],
     },

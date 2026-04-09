@@ -142,8 +142,89 @@ async def process_document_background(
             )
             await session.commit()
 
-            # Process document
-            processor = get_document_processor()
+            # Process document — resolve settings from RAG profile
+            kb_result = await service.get_by_id(knowledge_base_id)
+            chunking_strategy = "element_boundary"
+            chunk_size = 500
+            chunk_overlap = 50
+
+            if kb_result.is_success and kb_result.value:
+                kb_obj = kb_result.value
+                # 1. Try active config version's chunking presets (new unified system)
+                chunking_resolved = False
+                if getattr(kb_obj, "chunking_preset_key", None):
+                    try:
+                        from sqlalchemy.orm import Session as SyncSession
+
+                        from common.knowledge_engine.config_repo import (
+                            KnowledgeAnswerConfigRepository,
+                        )
+
+                        sync_engine = engine.sync_engine if engine else None
+                        if sync_engine:
+                            sync_session = SyncSession(sync_engine)
+                            try:
+                                config_repo = KnowledgeAnswerConfigRepository(
+                                    sync_session
+                                )
+                                config_snapshot = config_repo.get_active_config()
+                                if config_snapshot and config_snapshot.chunking_presets:
+                                    preset = config_snapshot.chunking_presets.get(
+                                        kb_obj.chunking_preset_key
+                                    )
+                                    if preset:
+                                        chunking_strategy = preset.chunking_strategy
+                                        chunk_size = preset.chunk_size
+                                        chunk_overlap = preset.chunk_overlap
+                                        chunking_resolved = True
+                                        logger.debug(
+                                            "Chunking resolved from config version preset",
+                                            preset_key=preset.profile_key,
+                                            strategy=chunking_strategy,
+                                            chunk_size=chunk_size,
+                                        )
+                            finally:
+                                sync_session.close()
+                    except Exception:  # noqa: BLE001
+                        logger.debug("Config version chunking preset lookup failed")
+
+                # 2. Try RAG profile (legacy fallback)
+                if not chunking_resolved:
+                    try:
+                        from common.knowledge.rag_profile_service import (
+                            resolve_rag_profile,
+                        )
+
+                        profile = await resolve_rag_profile(session, kb_obj)
+                        if profile:
+                            chunking_strategy = profile.chunking_strategy
+                            chunk_size = profile.chunk_size
+                            chunk_overlap = profile.chunk_overlap
+                            chunking_resolved = True
+                    except Exception:  # noqa: BLE001
+                        logger.debug(
+                            "RAG profile resolution failed, trying KB settings"
+                        )
+
+                # 3. Fall back to KB settings if no profile resolved
+                if not chunking_resolved and kb_obj.settings:
+                    try:
+                        import json
+
+                        settings = kb_obj.settings
+                        if isinstance(settings, str):
+                            settings = json.loads(settings)
+                        chunking_strategy = (settings.get("chunking") or {}).get(
+                            "strategy", "element_boundary"
+                        )
+                    except Exception:  # noqa: BLE001
+                        chunking_strategy = "element_boundary"
+
+            processor = get_document_processor(
+                chunking_strategy=chunking_strategy,
+                chunk_size=chunk_size,
+                chunk_overlap=chunk_overlap,
+            )
             result = await processor.process_document(
                 doc_id=doc_id,
                 file_path=file_path,
@@ -161,6 +242,25 @@ async def process_document_background(
                 error_message=result.get("error_message"),
             )
             await session.commit()
+
+            # Invalidate BM25 index so next keyword search rebuilds it
+            if result["status"] == "ready":
+                from common.knowledge.bm25_index import get_bm25_index_manager
+
+                get_bm25_index_manager().invalidate_collection(vector_collection)
+
+                # Invalidate semantic cache for this KB
+                try:
+                    from common.cache.redis_cache import get_cache
+                    from common.knowledge.semantic_cache import (
+                        get_semantic_search_cache,
+                    )
+
+                    await get_semantic_search_cache().invalidate_kb(
+                        get_cache(), knowledge_base_id
+                    )
+                except Exception:  # noqa: BLE001
+                    logger.debug("Semantic cache invalidation skipped")
 
             logger.info(
                 "Document processing completed",
@@ -241,7 +341,15 @@ async def list_knowledge_bases(
     items, total = await service.list(page=page, page_size=page_size, category=category)
 
     knowledge_base_ids = [item.id for item in items]
-    governance_indexes = await RuntimeStatusService(db).build_asset_governance_indexes()
+    governance_indexes: dict[str, dict[str, dict[str, Any]]] = {}
+    try:
+        governance_indexes = await RuntimeStatusService(
+            db
+        ).build_asset_governance_indexes()
+    except Exception as exc:
+        logger.warning(
+            f"governance_indexes computation failed, continuing without it: {exc}"
+        )
     docs_by_kb: dict[str, list[KnowledgeDocument]] = {}
     if knowledge_base_ids:
         doc_result = await db.execute(
@@ -261,7 +369,9 @@ async def list_knowledge_bases(
         item_updated_at = RuntimeStatusService._coerce_datetime(item.updated_at)
         latest_document = max(
             documents,
-            key=lambda document: RuntimeStatusService._coerce_datetime(document.created_at)
+            key=lambda document: RuntimeStatusService._coerce_datetime(
+                document.created_at
+            )
             or datetime.min.replace(tzinfo=UTC),
             default=None,
         )
@@ -276,7 +386,9 @@ async def list_knowledge_bases(
         if (
             latest_document is not None
             and latest_document_created_at is not None
-            and (item_updated_at is None or latest_document_created_at >= item_updated_at)
+            and (
+                item_updated_at is None or latest_document_created_at >= item_updated_at
+            )
         ):
             last_changed_at = latest_document_created_at
             latest_change_type = "document_uploaded"
@@ -285,14 +397,21 @@ async def list_knowledge_bases(
         change_count_7d = sum(
             1
             for document in documents
-            if (RuntimeStatusService._coerce_datetime(document.created_at) or datetime.min.replace(tzinfo=UTC))
+            if (
+                RuntimeStatusService._coerce_datetime(document.created_at)
+                or datetime.min.replace(tzinfo=UTC)
+            )
             >= seven_days_ago
         )
         if item_updated_at is not None and item_updated_at >= seven_days_ago:
             change_count_7d += 1
 
         extra_anomalies: list[dict[str, Any]] = []
-        failed_documents = [document for document in documents if document.status == DocumentStatus.FAILED.value]
+        failed_documents = [
+            document
+            for document in documents
+            if document.status == DocumentStatus.FAILED.value
+        ]
         if failed_documents:
             latest_failed_at = max(
                 (
@@ -315,7 +434,8 @@ async def list_knowledge_bases(
         processing_documents = [
             document
             for document in documents
-            if document.status in {DocumentStatus.PENDING.value, DocumentStatus.PROCESSING.value}
+            if document.status
+            in {DocumentStatus.PENDING.value, DocumentStatus.PROCESSING.value}
         ]
         if processing_documents:
             latest_processing_at = max(
@@ -433,6 +553,28 @@ async def delete_knowledge_base(
     if commit_error is not None:
         return commit_error
     return {"success": True, "data": {"deleted": True}}
+
+
+@admin_router.patch("/{kb_id}/rag-profile", response_model=dict)
+async def assign_rag_profile(
+    kb_id: str,
+    body: dict[str, Any],
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """Assign or unassign a RAG profile to a knowledge base."""
+    rag_profile_id = body.get("rag_profile_id")
+
+    service = KnowledgeService(db)
+    result = await service.get_by_id(kb_id)
+    if not result.is_success:
+        raise HTTPException(status_code=404, detail="Knowledge base not found")
+
+    kb = result.value
+    kb.rag_profile_id = rag_profile_id
+    await db.commit()
+
+    return {"success": True, "data": {"rag_profile_id": rag_profile_id}}
 
 
 # ========== Document Endpoints ==========
@@ -594,7 +736,7 @@ def _validate_file_content(content: bytes, file_ext: str) -> bool:
         "pdf": b"%PDF",
         "docx": b"PK\x03\x04",  # ZIP format (DOCX is a ZIP)
         "xlsx": b"PK\x03\x04",  # ZIP format (XLSX is a ZIP)
-        "xls": b"\xD0\xCF\x11\xE0",  # Compound File Binary Format
+        "xls": b"\xd0\xcf\x11\xe0",  # Compound File Binary Format
         # txt and md don't have magic bytes, accept any content
     }
 

@@ -103,10 +103,12 @@ class DocumentProcessor:
         chunk_size: int = 500,
         chunk_overlap: int = 50,
         batch_size: int = 10,
+        chunking_strategy: str = "element_boundary",
     ):
         self.chunk_size = chunk_size
         self.chunk_overlap = chunk_overlap
         self.batch_size = batch_size  # Batch size for embedding API calls
+        self.chunking_strategy = chunking_strategy
         self._paddle_ocr_instance: Any | None = None
         self._paddle_ocr_init_failed = False
 
@@ -165,7 +167,10 @@ class DocumentProcessor:
                 )
 
             chunk_started_at = time.monotonic()
-            chunks = self._build_chunks_from_parse_result(parse_result)
+            if self.chunking_strategy == "parent_child":
+                chunks = self._build_parent_child_chunks(parse_result)
+            else:
+                chunks = self._build_chunks_from_parse_result(parse_result)
             phase_timings["chunk_ms"] = round(
                 (time.monotonic() - chunk_started_at) * 1000, 1
             )
@@ -200,28 +205,68 @@ class DocumentProcessor:
                     artifact_path=artifact_path,
                 )
 
-            all_embeddings = []
-            chunk_texts = [c["content"] for c in chunks]
+            all_embeddings: list[list[float]] = []
 
             embed_started_at = time.monotonic()
-            for i in range(0, len(chunk_texts), self.batch_size):
-                batch = chunk_texts[i : i + self.batch_size]
-                result = await embedding_service.embed_batch(batch)
+            if self.chunking_strategy == "parent_child":
+                # Only embed child chunks; parents get zero-vector placeholder
+                child_indices = [
+                    i for i, c in enumerate(chunks)
+                    if (c.get("metadata") or {}).get("chunk_type") != "parent"
+                ]
+                child_texts = [chunks[i]["content"] for i in child_indices]
 
-                if not result.is_success:
-                    failure_message = result.fallback or "[EMBEDDING_FAILED]"
-                    logger.error(f"Embedding failed for batch {i}: {failure_message}")
-                    phase_timings["embed_ms"] = round(
-                        (time.monotonic() - embed_started_at) * 1000, 1
-                    )
-                    return self._build_failure_result(
-                        f"Embedding failed: {failure_message}",
-                        phase_timings=phase_timings,
-                        parse_result=parse_result,
-                        artifact_path=artifact_path,
-                    )
+                child_embeddings: list[list[float]] = []
+                for bi in range(0, len(child_texts), self.batch_size):
+                    batch = child_texts[bi : bi + self.batch_size]
+                    result = await embedding_service.embed_batch(batch)
+                    if not result.is_success:
+                        failure_message = result.fallback or "[EMBEDDING_FAILED]"
+                        logger.error(
+                            f"Embedding failed for batch {bi}: {failure_message}"
+                        )
+                        phase_timings["embed_ms"] = round(
+                            (time.monotonic() - embed_started_at) * 1000, 1
+                        )
+                        return self._build_failure_result(
+                            f"Embedding failed: {failure_message}",
+                            phase_timings=phase_timings,
+                            parse_result=parse_result,
+                            artifact_path=artifact_path,
+                        )
+                    child_embeddings.extend(result.value or [])
 
-                all_embeddings.extend(result.value)
+                # Build full embedding list: children real, parents zero-vector
+                child_embedding_map = dict(zip(child_indices, child_embeddings))
+                first_emb = next(iter(child_embedding_map.values()), [0.0] * 1536)
+                embedding_dim = len(first_emb)
+                zero_vector = [0.0] * embedding_dim
+                for i, chunk in enumerate(chunks):
+                    if (chunk.get("metadata") or {}).get("chunk_type") == "parent":
+                        all_embeddings.append(zero_vector)
+                    else:
+                        all_embeddings.append(child_embedding_map.get(i, zero_vector))
+
+            else:
+                # Standard path: embed all chunks
+                chunk_texts = [c["content"] for c in chunks]
+                for i in range(0, len(chunk_texts), self.batch_size):
+                    batch = chunk_texts[i : i + self.batch_size]
+                    result = await embedding_service.embed_batch(batch)
+                    if not result.is_success:
+                        failure_message = result.fallback or "[EMBEDDING_FAILED]"
+                        logger.error(f"Embedding failed for batch {i}: {failure_message}")
+                        phase_timings["embed_ms"] = round(
+                            (time.monotonic() - embed_started_at) * 1000, 1
+                        )
+                        return self._build_failure_result(
+                            f"Embedding failed: {failure_message}",
+                            phase_timings=phase_timings,
+                            parse_result=parse_result,
+                            artifact_path=artifact_path,
+                        )
+                    all_embeddings.extend(result.value or [])
+
             phase_timings["embed_ms"] = round(
                 (time.monotonic() - embed_started_at) * 1000, 1
             )
@@ -1330,6 +1375,166 @@ class DocumentProcessor:
             "metadata": metadata,
         }
 
+    def _build_parent_child_chunks(
+        self,
+        parse_result: ParseResult,
+    ) -> list[dict[str, Any]]:
+        """Build parent-child chunks from structured elements.
+
+        Parent chunks are large sections (e.g. entire heading groups) used as
+        LLM context.  Child chunks are smaller sub-sections used for retrieval
+        matching.  Each child carries a ``parent_id``; each parent carries
+        ``child_ids`` listing its children.
+        """
+        # ── Step 1: Group elements into "parent" sections by heading ──
+        heading_types = {"title", "heading", "header", "h1", "h2", "h3", "h4", "h5", "h6", "section_header"}
+        parent_sections: list[tuple[list[ParsedElement], str | None]] = []
+        current_elements: list[ParsedElement] = []
+        current_heading: str | None = None
+
+        for element in parse_result.elements:
+            is_heading = element.element_type.lower() in heading_types
+            if is_heading and current_elements:
+                parent_sections.append((current_elements, current_heading))
+                current_elements = []
+                current_heading = element.text.strip()[:120] if element.text.strip() else None
+            elif is_heading and not current_elements:
+                current_heading = element.text.strip()[:120] if element.text.strip() else None
+            current_elements.append(element)
+
+        if current_elements:
+            parent_sections.append((current_elements, current_heading))
+
+        # If no sections were formed (no headings), treat whole doc as one parent
+        if not parent_sections and parse_result.elements:
+            parent_sections = [(list(parse_result.elements), None)]
+
+        # ── Step 2: Build parent and child chunks ──
+        all_chunks: list[dict[str, Any]] = []
+
+        for section_idx, (section_elements, heading_text) in enumerate(parent_sections):
+            parent_content = self._join_element_texts(section_elements).strip()
+            if not parent_content:
+                continue
+
+            # Parent chunk
+            parent_index = len(all_chunks)
+            parent_metadata: dict[str, Any] = {
+                "chunk_type": "parent",
+                "section_index": section_idx,
+                "heading": heading_text,
+                "start_char": int(section_elements[0].metadata.get("char_start") or 0),
+                "end_char": int(section_elements[-1].metadata.get("char_end") or 0),
+                "element_types": self._dedupe_list(
+                    [e.element_type for e in section_elements if e.element_type]
+                ),
+                "source_mode": "native_text",
+                "parser_version": PARSE_ARTIFACT_VERSION,
+                "child_ids": [],  # filled below
+            }
+            pages = [
+                int(e.metadata["page"])
+                for e in section_elements
+                if isinstance(e.metadata.get("page"), int)
+            ]
+            if pages:
+                parent_metadata["page"] = min(pages)
+                parent_metadata["page_end"] = max(pages)
+
+            parent_chunk: dict[str, Any] = {
+                "index": parent_index,
+                "content": parent_content,
+                "metadata": parent_metadata,
+            }
+
+            # Child chunks — split section into smaller pieces
+            child_indices_for_parent: list[str] = []
+            child_buffer: list[ParsedElement] = []
+
+            def _flush_children() -> None:
+                nonlocal child_buffer
+                if not child_buffer:
+                    return
+                child_content = self._join_element_texts(child_buffer).strip()
+                if not child_content:
+                    child_buffer = []
+                    return
+                child_index = len(all_chunks)
+                child_id = str(child_index)
+                child_indices_for_parent.append(child_id)
+
+                child_meta: dict[str, Any] = {
+                    "chunk_type": "child",
+                    "parent_id": str(parent_index),
+                    "section_index": section_idx,
+                    "heading": heading_text,
+                    "start_char": int(child_buffer[0].metadata.get("char_start") or 0),
+                    "end_char": int(child_buffer[-1].metadata.get("char_end") or 0),
+                    "element_types": self._dedupe_list(
+                        [e.element_type for e in child_buffer if e.element_type]
+                    ),
+                    "source_mode": "native_text",
+                    "parser_version": PARSE_ARTIFACT_VERSION,
+                }
+                child_pages = [
+                    int(e.metadata["page"])
+                    for e in child_buffer
+                    if isinstance(e.metadata.get("page"), int)
+                ]
+                if child_pages:
+                    child_meta["page"] = min(child_pages)
+                    child_meta["page_end"] = max(child_pages)
+
+                all_chunks.append({
+                    "index": child_index,
+                    "content": child_content,
+                    "metadata": child_meta,
+                })
+                child_buffer = []
+
+            for elem in section_elements:
+                if elem.element_type.lower() in heading_types:
+                    # Don't put heading text into child chunk; it's already in parent
+                    continue
+
+                prospective = child_buffer + [elem]
+                if child_buffer and len(self._join_element_texts(prospective)) > self.chunk_size:
+                    _flush_children()
+                child_buffer.append(elem)
+
+            _flush_children()
+
+            # If no children were created (e.g. all elements were headings), create one child from whole section
+            if not child_indices_for_parent:
+                child_index = len(all_chunks)
+                child_id = str(child_index)
+                child_indices_for_parent.append(child_id)
+                all_chunks.append({
+                    "index": child_index,
+                    "content": parent_content,
+                    "metadata": {
+                        "chunk_type": "child",
+                        "parent_id": str(parent_index),
+                        "section_index": section_idx,
+                        "heading": heading_text,
+                        "start_char": parent_metadata["start_char"],
+                        "end_char": parent_metadata["end_char"],
+                        "element_types": parent_metadata["element_types"],
+                        "source_mode": "native_text",
+                        "parser_version": PARSE_ARTIFACT_VERSION,
+                    },
+                })
+
+            # Fill parent's child_ids and append parent AFTER children
+            parent_chunk["metadata"]["child_ids"] = child_indices_for_parent
+            all_chunks.append(parent_chunk)
+
+        # Re-index all chunks sequentially
+        for i, chunk in enumerate(all_chunks):
+            chunk["index"] = i
+
+        return all_chunks
+
     def _join_element_texts(self, elements: list[ParsedElement]) -> str:
         return "\n\n".join(element.text for element in elements if element.text).strip()
 
@@ -1390,9 +1595,23 @@ class DocumentProcessor:
 _document_processor: DocumentProcessor | None = None
 
 
-def get_document_processor() -> DocumentProcessor:
-    """Get singleton DocumentProcessor instance."""
+def get_document_processor(
+    chunking_strategy: str = "element_boundary",
+    chunk_size: int = 500,
+    chunk_overlap: int = 50,
+) -> DocumentProcessor:
+    """Get or create a DocumentProcessor with the given settings."""
     global _document_processor
-    if _document_processor is None:
-        _document_processor = DocumentProcessor()
+    needs_recreate = (
+        _document_processor is None
+        or _document_processor.chunking_strategy != chunking_strategy
+        or _document_processor.chunk_size != chunk_size
+        or _document_processor.chunk_overlap != chunk_overlap
+    )
+    if needs_recreate:
+        _document_processor = DocumentProcessor(
+            chunking_strategy=chunking_strategy,
+            chunk_size=chunk_size,
+            chunk_overlap=chunk_overlap,
+        )
     return _document_processor

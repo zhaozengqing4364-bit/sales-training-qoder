@@ -18,11 +18,19 @@ export default function ForgotPasswordPage() {
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
+        const normalizedEmail = email.trim();
+
+        if (!normalizedEmail) {
+            setError("请输入邮箱地址");
+            return;
+        }
+
         setIsLoading(true);
         setError("");
 
         try {
-            await api.auth.forgotPassword(email);
+            await api.auth.forgotPassword(normalizedEmail);
+            setEmail(normalizedEmail);
             setIsSuccess(true);
         } catch (err: unknown) {
             setError(getApiErrorMessage(err));

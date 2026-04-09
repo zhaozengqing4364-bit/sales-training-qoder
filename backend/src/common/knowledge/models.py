@@ -88,6 +88,19 @@ class KnowledgeBase(Base):
     # Lifecycle
     status = Column(String(20), default="active", index=True)
 
+    # Configuration (JSON: chunking, semantic cache, etc.)
+    settings = Column(Text, nullable=True)
+
+    # RAG profile reference (unified config management)
+    rag_profile_id = Column(
+        String(36),
+        ForeignKey("rag_profiles.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+
+    # Chunking preset key referencing active config version's chunking_presets
+    chunking_preset_key = Column(String(100), nullable=True)
+
     # Audit
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
@@ -111,6 +124,10 @@ class KnowledgeBase(Base):
         "KnowledgeDocument",
         back_populates="knowledge_base",
         cascade="all, delete-orphan"
+    )
+    rag_profile = relationship(
+        "RagProfile",
+        back_populates="knowledge_bases",
     )
 
 
@@ -169,3 +186,10 @@ class KnowledgeDocument(Base):
 
     # Relationships
     knowledge_base = relationship("KnowledgeBase", back_populates="documents")
+
+
+# ── Late import to register RagProfile in SQLAlchemy metadata ──
+# KnowledgeBase.rag_profile relationship references RagProfile by string name.
+# SQLAlchemy needs the class to be imported into the same registry at mapper
+# configuration time. Importing here ensures it happens when this module loads.
+from common.knowledge.rag_profile_models import RagProfile  # noqa: E402, F401

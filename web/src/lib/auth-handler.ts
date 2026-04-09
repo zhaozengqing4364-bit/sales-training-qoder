@@ -70,10 +70,16 @@ class AuthHandler {
     }
 
     /**
-     * Handle session expired
+     * Handle session expired — show a brief toast then redirect to login.
      */
     sessionExpired(): void {
         this.logout("登录已过期，请重新登录", { redirectTo: null });
+
+        if (typeof window !== "undefined") {
+            setTimeout(() => {
+                window.location.assign("/login");
+            }, 1500);
+        }
     }
 
     /**

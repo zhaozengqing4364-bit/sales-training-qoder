@@ -26,6 +26,38 @@ This file is the explicit capability and coverage contract for the project.
 - Validation: mapped
 - Notes: 第一阶段不追求所有 report conclusion 都可追溯，只先把 retrieval truth line 统一。
 
+### R029 — 系统没有注册流程是刻意设计（管理员创建账号），但忘记密码必须能自助完成：后端生成限时 token，前端提供 forgot-password + reset-password 页面。
+- Class: launchability
+- Status: active
+- Description: 系统没有注册流程是刻意设计（管理员创建账号），但忘记密码必须能自助完成：后端生成限时 token，前端提供 forgot-password + reset-password 页面。
+- Why it matters: 没有忘记密码入口意味着密码丢失只能找管理员，这是小白用户第一次卡住的常见原因。
+- Source: docs/system-audit-report-2026-04-02.md 一🚪
+- Primary owning slice: M012/S01
+
+### R030 — 首页和仪表盘不得硬编码用户名、日期或版本号。所有用户可见信息必须来自 currentUser hook、package.json 或后端 API。
+- Class: launchability
+- Status: active
+- Description: 首页和仪表盘不得硬编码用户名、日期或版本号。所有用户可见信息必须来自 currentUser hook、package.json 或后端 API。
+- Why it matters: 硬编码"早安，亚历山大"让新用户觉得系统不是给自己用的，严重损害信任。
+- Source: docs/system-audit-report-2026-04-02.md 二🏠
+- Primary owning slice: M012/S01
+
+### R031 — 登录页必须提供忘记密码入口，用户可通过邮箱自助重置密码，不依赖管理员手动操作。
+- Class: launchability
+- Status: active
+- Description: 登录页必须提供忘记密码入口，用户可通过邮箱自助重置密码，不依赖管理员手动操作。
+- Why it matters: 没有忘记密码意味着密码丢失即账号丢失，小白用户无法自助恢复，严重阻碍首次体验。
+- Source: docs/system-audit-report-2026-04-02.md 一🚪
+- Primary owning slice: M012/S01
+
+### R032 — 侧边栏必须包含历史记录入口。用户不应需要手动输入 URL 才能到达历史页。
+- Class: launchability
+- Status: active
+- Description: 侧边栏必须包含历史记录入口。用户不应需要手动输入 URL 才能到达历史页。
+- Why it matters: 历史记录是训练闭环的关键节点（回顾→再练），缺少侧边栏入口等于隐藏功能。
+- Source: docs/system-audit-report-2026-04-02.md 六📜
+- Primary owning slice: M012/S02
+
 ## Validated
 
 ### R001 — 桌面端销售客户演练必须能稳定完成多轮来回，不能在第二轮录音、第二轮响应、会话结束或重连时频繁失效。
@@ -350,10 +382,14 @@ This file is the explicit capability and coverage contract for the project.
 | R026 | primary-user-loop | validated | M009/S02 | M009/S03, M010/S01 | Validated by M009 close-out: canonical learner report and replay routes now expose `audio_audit` with recording status, segment counts, degraded states, and playable raw-audio evidence through the shared `AudioAuditCard` and signed playback handoff route. Fresh verification passed backend contract/integration coverage for available/partial/null payloads and playback ownership, plus web report/replay page suites on the current branch. |
 | R027 | launchability | validated | M010/S01 | M010/S02, M010/S03 | Validated by M010 close-out. `SessionEvidenceService.build_projection()` now builds one canonical `conclusion_evidence` bundle for `main_issue`, `next_goal`, and `claim_truth`, report/replay/knowledge-check all read that shared provenance seam, and learner report/replay pages render the same truth through shared `session-evidence.ts` helpers. Fresh milestone-close verification passed `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/contract/test_conclusion_evidence_parity.py backend/tests/contract/test_practice_evidence_contract.py backend/tests/unit/test_session_evidence_service.py -x -q` (47 passed) plus `npm --prefix web test -- --run "src/app/(user)/practice/[sessionId]/report/page.test.tsx" "src/app/(user)/practice/[sessionId]/replay/page.test.tsx"` (33 passed). |
 | R028 | failure-visibility | validated | M010/S02 | M010/S03, M008/S03, M009/S03 | Validated by M010 close-out. Completed sales sessions now carry one projection-backed four-layer `evidence_degradation` taxonomy (`retrieval`, `transcript`, `audio`, `enhanced_report`) across report/replay/knowledge-check, while admin/history compatibility readers still receive mirrored canonical degraded tokens through `evidence_completeness.degraded_reasons`. Learner report/replay pages render the same shared taxonomy via `session-evidence.ts`. Fresh milestone-close verification passed the backend parity/unit gate (47 passed), admin/history compatibility gate `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/common/test_admin_analytics_service.py backend/tests/unit/test_history_service_evidence_projection.py -x -q` (7 passed), and learner report/replay gate (33 passed). |
+| R029 | launchability | active | M012/S01 | none | unmapped |
+| R030 | launchability | active | M012/S01 | none | unmapped |
+| R031 | launchability | active | M012/S01 | none | unmapped |
+| R032 | launchability | active | M012/S02 | none | unmapped |
 
 ## Coverage Summary
 
-- Active requirements: 2
-- Mapped to slices: 2
+- Active requirements: 6
+- Mapped to slices: 6
 - Validated: 20 (R001, R002, R003, R004, R005, R006, R007, R008, R009, R010, R011, R012, R013, R014, R015, R024, R025, R026, R027, R028)
 - Unmapped active requirements: 0

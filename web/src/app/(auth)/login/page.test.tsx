@@ -34,6 +34,12 @@ describe("LoginPage", () => {
         loginMock.mockReset();
     });
 
+    it("renders a forgot-password link below the password field", () => {
+        render(<LoginPage />);
+
+        expect(screen.getByRole("link", { name: "忘记密码？" }).getAttribute("href")).toBe("/forgot-password");
+    });
+
     it("redirects after a successful cookie-session login without storing auth in localStorage", async () => {
         loginMock.mockResolvedValue({
             token: "legacy-token",

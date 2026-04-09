@@ -31,6 +31,12 @@ from common.auth.service import (
 from common.db.models import User
 from common.db.session import get_db
 from common.monitoring.logger import get_logger, get_trace_id
+from common.rate_limit.api_limiter import rate_limit
+from common.services.password_reset import (
+    InvalidResetPasswordTokenError,
+    PASSWORD_RESET_MIN_LENGTH,
+    PasswordResetService,
+)
 
 logger = get_logger(__name__)
 
@@ -225,9 +231,9 @@ async def login(
 
         # First check user-specific hashed_password (set via password reset)
         user_hashed_pw = getattr(user, "hashed_password", None)
-        if user_hashed_pw and verify_password(credentials.password, user_hashed_pw):
-            # User-specific password matches
-            pass
+        if user_hashed_pw:
+            if not verify_password(credentials.password, user_hashed_pw):
+                return _invalid_credentials_response()
         else:
             # Fall back to env-configured shared password
             if configured_user_passwords is not None:
@@ -313,14 +319,9 @@ async def logout(
 
 # ========== Password Reset ==========
 
-import secrets
-from datetime import timedelta
-
-PASSWORD_RESET_TOKEN_EXPIRY_MINUTES = 30
-PASSWORD_RESET_MIN_LENGTH = 8
-
 
 @router.post("/auth/forgot-password")
+@rate_limit(calls=1, period=60, scope="ip")
 async def forgot_password(
     request: Request,
     body: ForgotPasswordRequest,
@@ -331,85 +332,21 @@ async def forgot_password(
     Always returns success to prevent email enumeration.
     Rate-limited to 1 request per minute per IP.
     """
+    del request
+
     try:
-        # Find user by email
-        result = await db.execute(
-            select(User).where(User.email == body.email.strip().lower())
-        )
-        user = result.scalar_one_or_none()
-
-        if user and getattr(user, "is_active", False):
-            # Generate a secure reset token
-            reset_token = secrets.token_urlsafe(32)
-            token_hash = hash_password(reset_token)
-            expires_at = datetime.now(UTC) + timedelta(minutes=PASSWORD_RESET_TOKEN_EXPIRY_MINUTES)
-
-            # Store token in a simple table-less approach: encode in DB
-            # For a production system, this should be in a dedicated table.
-            # For now, we store the token hash in the user's wechat_user_id field
-            # as a temporary approach, and use the email as lookup.
-            # Actually, let's use a dedicated approach with a simple dict/JSON approach.
-
-            # Store reset token as metadata on the user record
-            # We add a password_reset column approach using the existing infrastructure
-            # For minimal invasion, we store the token hash in the user's metadata
-            # and use a simple verification approach
-
-            # For now, use a lightweight approach: store token in a separate table
-            from sqlalchemy import text as sa_text
-
-            # Create reset_tokens table if not exists (idempotent)
-            await db.execute(sa_text("""
-                CREATE TABLE IF NOT EXISTS password_reset_tokens (
-                    id SERIAL PRIMARY KEY,
-                    user_id VARCHAR(36) NOT NULL REFERENCES users(user_id),
-                    token_hash VARCHAR(255) NOT NULL,
-                    expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
-                    used_at TIMESTAMP WITH TIME ZONE,
-                    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
-                )
-            """))
-            await db.commit()
-
-            # Invalidate any existing tokens for this user
-            await db.execute(sa_text(
-                "UPDATE password_reset_tokens SET used_at = NOW() WHERE user_id = :uid AND used_at IS NULL"
-            ), {"uid": str(user.user_id)})
-
-            # Insert new token
-            await db.execute(sa_text(
-                "INSERT INTO password_reset_tokens (user_id, token_hash, expires_at) VALUES (:uid, :hash, :exp)"
-            ), {"uid": str(user.user_id), "hash": token_hash, "exp": expires_at})
-            await db.commit()
-
-            # In production, send email with reset link
-            # For now, log the token for development purposes
-            reset_url = f"/reset-password?token={reset_token}"
-            logger.info(
-                f"Password reset requested for user {user.user_id} ({user.email}). "
-                f"Reset URL: {reset_url}"
-            )
-
-            # TODO: Send email via EmailService
-            # email_service.send_password_reset(user.email, reset_token)
-
-        # Always return success to prevent email enumeration
-        return JSONResponse(
-            status_code=status.HTTP_200_OK,
-            content=success_response({
-                "message": "如果该邮箱已注册，重置链接将发送到您的邮箱"
-            }),
-        )
-
+        service = PasswordResetService(db)
+        await service.request_password_reset(body.email)
     except SQLAlchemyError as e:
         logger.error(f"Forgot password failed: {str(e)}")
-        # Still return success to prevent email enumeration
-        return JSONResponse(
-            status_code=status.HTTP_200_OK,
-            content=success_response({
-                "message": "如果该邮箱已注册，重置链接将发送到您的邮箱"
-            }),
-        )
+        await db.rollback()
+
+    return JSONResponse(
+        status_code=status.HTTP_200_OK,
+        content=success_response({
+            "message": "如果该邮箱已注册，重置链接将发送到您的邮箱"
+        }),
+    )
 
 
 @router.post("/auth/reset-password")
@@ -422,83 +359,8 @@ async def reset_password(
     Token must not be expired or already used.
     """
     try:
-        if len(body.new_password) < PASSWORD_RESET_MIN_LENGTH:
-            return error_response(
-                "[INVALID_PASSWORD]",
-                f"密码至少需要 {PASSWORD_RESET_MIN_LENGTH} 个字符",
-                status_code=400,
-            )
-
-        from sqlalchemy import text as sa_text
-
-        # Find valid, unused, non-expired token
-        result = await db.execute(sa_text(
-            """
-            SELECT prt.id, prt.user_id, prt.token_hash, prt.expires_at
-            FROM password_reset_tokens prt
-            WHERE prt.used_at IS NULL
-              AND prt.expires_at > NOW()
-            ORDER BY prt.created_at DESC
-            LIMIT 50
-            """
-        ))
-        rows = result.fetchall()
-
-        matching_row = None
-        for row in rows:
-            if verify_password(body.token, row.token_hash):
-                matching_row = row
-                break
-
-        if not matching_row:
-            return error_response(
-                "[INVALID_RESET_TOKEN]",
-                "重置链接无效或已过期，请重新申请",
-                status_code=400,
-            )
-
-        user_id = matching_row.user_id
-        token_id = matching_row.id
-
-        # Find user
-        result = await db.execute(
-            select(User).where(User.user_id == user_id)
-        )
-        user = result.scalar_one_or_none()
-
-        if not user or not getattr(user, "is_active", False):
-            return error_response(
-                "[INVALID_RESET_TOKEN]",
-                "重置链接无效或已过期",
-                status_code=400,
-            )
-
-        # Mark token as used
-        await db.execute(sa_text(
-            "UPDATE password_reset_tokens SET used_at = NOW() WHERE id = :tid"
-        ), {"tid": token_id})
-
-        # Update user's configured password
-        # The current auth system uses env-based shared passwords.
-        # For password reset, we store the new password hash on the user record
-        # and check it during login as a fallback.
-
-        # Store hashed password on user record (add column if needed)
-        try:
-            await db.execute(sa_text(
-                "ALTER TABLE users ADD COLUMN IF NOT EXISTS hashed_password VARCHAR(255)"
-            ))
-        except Exception:
-            pass  # Column may already exist
-
-        new_hash = hash_password(body.new_password)
-        await db.execute(sa_text(
-            "UPDATE users SET hashed_password = :hash WHERE user_id = :uid"
-        ), {"hash": new_hash, "uid": str(user_id)})
-
-        await db.commit()
-
-        logger.info(f"Password reset successful for user {user.user_id}")
+        service = PasswordResetService(db)
+        await service.reset_password(body.token, body.new_password)
 
         return JSONResponse(
             status_code=status.HTTP_200_OK,
@@ -506,8 +368,24 @@ async def reset_password(
                 "message": "密码重置成功"
             }),
         )
-
+    except ValueError as exc:
+        await db.rollback()
+        if str(exc).startswith("密码至少需要"):
+            return error_response(
+                "[INVALID_PASSWORD]",
+                str(exc),
+                status_code=400,
+            )
+        return error_response("[RESET_FAILED]", "密码重置失败，请稍后重试")
+    except InvalidResetPasswordTokenError:
+        await db.rollback()
+        return error_response(
+            "[INVALID_RESET_TOKEN]",
+            "重置链接无效或已过期，请重新申请",
+            status_code=400,
+        )
     except SQLAlchemyError as e:
+        await db.rollback()
         logger.error(f"Reset password failed: {str(e)}")
         return error_response("[RESET_FAILED]", "密码重置失败，请稍后重试")
 

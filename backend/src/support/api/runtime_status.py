@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, UTC
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -11,8 +11,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.db.schemas import LinkedAssetChangeReference
 from common.db.session import get_db
-from common.monitoring.logger import get_trace_id
+from common.monitoring.logger import get_logger, get_trace_id
 from support.services.runtime_status_service import RuntimeStatusService
+
+logger = get_logger(__name__)
 
 router = APIRouter(prefix="/support/runtime", tags=["support-runtime"])
 
@@ -109,7 +111,17 @@ async def get_runtime_overview(
     window_hours: int = Query(24, ge=1, le=168, description="Rolling time window in hours"),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
-    payload = await RuntimeStatusService(db).get_overview(window_hours=window_hours)
+    try:
+        payload = await RuntimeStatusService(db).get_overview(window_hours=window_hours)
+    except Exception as exc:
+        logger.warning(f"runtime overview computation failed: {exc}")
+        payload = SupportRuntimeOverviewData(
+            generated_at=datetime.now(UTC),
+            window_hours=window_hours,
+            session_health=SupportRuntimeSessionHealth(),
+            release_health=SupportRuntimeReleaseHealth(status="unknown"),
+            anomaly_summary=SupportRuntimeAnomalySummary(),
+        )
     return success_response(payload)
 
 
@@ -126,8 +138,18 @@ async def get_fault_summaries(
     if severity is not None and severity not in allowed_severities:
         raise HTTPException(status_code=400, detail="[INVALID_SEVERITY_FILTER]")
 
-    payload = await RuntimeStatusService(db).get_faults(
-        limit=limit,
-        severity=severity,
-    )
+    try:
+        payload = await RuntimeStatusService(db).get_faults(
+            limit=limit,
+            severity=severity,
+        )
+    except Exception as exc:
+        logger.warning(f"runtime faults computation failed: {exc}")
+        payload = SupportRuntimeFaultsData(
+            generated_at=datetime.now(UTC),
+            items=[],
+            count=0,
+            limit=limit,
+            severity=severity,
+        )
     return success_response(payload)

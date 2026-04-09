@@ -87,6 +87,8 @@ class KnowledgeDebugRunListResponse(BaseModel):
     items: list[KnowledgeDebugRunListItem] = Field(default_factory=list)
     total: int = 0
     limit: int = 0
+    page: int = 1
+    offset: int = 0
     session_id: str | None = None
 
 
@@ -105,25 +107,37 @@ class KnowledgeDebugEnvelope(BaseModel):
 @router.get("/runs", response_model=KnowledgeDebugEnvelope)
 async def list_answer_runs(
     limit: int = Query(20, ge=1, le=100, description="Max runs to return"),
+    page: int = Query(1, ge=1, description="1-indexed results page"),
     session_id: str | None = Query(
         None,
         description="Optional session filter for one practice session",
     ),
+    query: str | None = Query(None, description="Optional substring filter for query text"),
+    answerability: str | None = Query(None, description="Optional answerability filter"),
+    final_status: str | None = Query(None, description="Optional final status filter"),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     filters = []
     if session_id:
         filters.append(KnowledgeAnswerRun.session_id == session_id)
+    if query:
+        filters.append(KnowledgeAnswerRun.query_text.ilike(f"%{query.strip()}%"))
+    if answerability:
+        filters.append(KnowledgeAnswerRun.answerability == answerability)
+    if final_status:
+        filters.append(KnowledgeAnswerRun.final_status == final_status)
 
     total_stmt = select(func.count()).select_from(KnowledgeAnswerRun)
     if filters:
         total_stmt = total_stmt.where(*filters)
     total = int((await db.execute(total_stmt)).scalar_one() or 0)
+    offset = (page - 1) * limit
 
     runs_stmt = (
         select(KnowledgeAnswerRun)
         .where(*filters)
         .order_by(KnowledgeAnswerRun.created_at.desc(), KnowledgeAnswerRun.id.desc())
+        .offset(offset)
         .limit(limit)
     )
     runs = list((await db.execute(runs_stmt)).scalars())
@@ -165,6 +179,8 @@ async def list_answer_runs(
         ],
         total=total,
         limit=limit,
+        page=page,
+        offset=offset,
         session_id=session_id,
     )
     return success_response(payload.model_dump(mode="json"))
