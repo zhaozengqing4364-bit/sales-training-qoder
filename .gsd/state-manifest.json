@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "exported_at": "2026-04-09T16:18:11.369Z",
+  "exported_at": "2026-04-09T16:38:21.733Z",
   "milestones": [
     {
       "id": "M001",
@@ -8637,19 +8637,26 @@
       "milestone_id": "M013",
       "slice_id": "S01",
       "id": "T03",
-      "title": "把归一化 finding 映射到后续 milestones/slices",
-      "status": "pending",
-      "one_liner": "",
-      "narrative": "",
-      "verification_result": "",
+      "title": "Added a T03 backlog crosswalk that maps normalized actionable/discovery audit findings onto the real M013-M018 roadmap and refreshed the repair plan’s downstream execution IDs.",
+      "status": "complete",
+      "one_liner": "Added a T03 backlog crosswalk that maps normalized actionable/discovery audit findings onto the real M013-M018 roadmap and refreshed the repair plan’s downstream execution IDs.",
+      "narrative": "Resumed from the T01/T02-normalized audit repair plan and verified the original matrix plus T02 closeout appendix were still intact. To preserve those already-referenced audit tables, I kept the original logical owner tags stable and appended a dedicated T03 crosswalk in .gsd/plans/GSD_PLAN_system-audit-repair.md that maps legacy logical slices onto the actual M013-M018 roadmap. The new crosswalk groups actionable-now and needs-discovery findings by their real consuming slice, calls out the local reality correction that findings 8.1/8.2 stay in M013-S02, and updates the dependency graph, model split, execution order, and sample task cards to reference the live roadmap IDs. I also recorded the matrix-stability choice in .gsd/DECISIONS.md as D168 so downstream work can rely on the new crosswalk without mutating historical references.",
+      "verification_result": "Fresh repo-root grep gates passed after the T03 crosswalk landed: the repair plan still exposes all five disposition classes, still retains the targeted deferred/contradicted/discovery closeout rows, and now contains the required M014-M018 milestone/slice mappings for downstream execution. A follow-up heading scan also confirmed the milestone-overview and slice-title sections now use the real M013-M018 identifiers.",
       "duration": "",
-      "completed_at": null,
+      "completed_at": "2026-04-09T16:38:21.704Z",
       "blocker_discovered": false,
-      "deviations": "",
-      "known_issues": "",
-      "key_files": [],
-      "key_decisions": [],
-      "full_summary_md": "",
+      "deviations": "Minor factual correction from the task-plan wording: the two verification-baseline discovery findings (8.1, 8.2) stay on the already-planned M013-S02 slice instead of moving into M014-M018, because local roadmap reality already reserves that work in the current milestone.",
+      "known_issues": "None.",
+      "key_files": [
+        ".gsd/plans/GSD_PLAN_system-audit-repair.md",
+        ".gsd/DECISIONS.md",
+        ".gsd/milestones/M013/slices/S01/tasks/T03-SUMMARY.md"
+      ],
+      "key_decisions": [
+        "Keep the original T01/T02 matrix owner tags stable and append a dedicated T03 crosswalk to the real M013-M018 milestones/slices instead of rewriting historical references in place.",
+        "Keep findings 8.1 and 8.2 on the already-planned M013-S02 verification-baseline slice rather than forcing them into the downstream M014-M018 roadmap."
+      ],
+      "full_summary_md": "---\nid: T03\nparent: S01\nmilestone: M013\nkey_files:\n  - .gsd/plans/GSD_PLAN_system-audit-repair.md\n  - .gsd/DECISIONS.md\n  - .gsd/milestones/M013/slices/S01/tasks/T03-SUMMARY.md\nkey_decisions:\n  - Keep the original T01/T02 matrix owner tags stable and append a dedicated T03 crosswalk to the real M013-M018 milestones/slices instead of rewriting historical references in place.\n  - Keep findings 8.1 and 8.2 on the already-planned M013-S02 verification-baseline slice rather than forcing them into the downstream M014-M018 roadmap.\nduration: \"\"\nverification_result: passed\ncompleted_at: 2026-04-09T16:38:21.705Z\nblocker_discovered: false\n---\n\n# T03: Added a T03 backlog crosswalk that maps normalized actionable/discovery audit findings onto the real M013-M018 roadmap and refreshed the repair plan’s downstream execution IDs.\n\n**Added a T03 backlog crosswalk that maps normalized actionable/discovery audit findings onto the real M013-M018 roadmap and refreshed the repair plan’s downstream execution IDs.**\n\n## What Happened\n\nResumed from the T01/T02-normalized audit repair plan and verified the original matrix plus T02 closeout appendix were still intact. To preserve those already-referenced audit tables, I kept the original logical owner tags stable and appended a dedicated T03 crosswalk in .gsd/plans/GSD_PLAN_system-audit-repair.md that maps legacy logical slices onto the actual M013-M018 roadmap. The new crosswalk groups actionable-now and needs-discovery findings by their real consuming slice, calls out the local reality correction that findings 8.1/8.2 stay in M013-S02, and updates the dependency graph, model split, execution order, and sample task cards to reference the live roadmap IDs. I also recorded the matrix-stability choice in .gsd/DECISIONS.md as D168 so downstream work can rely on the new crosswalk without mutating historical references.\n\n## Verification\n\nFresh repo-root grep gates passed after the T03 crosswalk landed: the repair plan still exposes all five disposition classes, still retains the targeted deferred/contradicted/discovery closeout rows, and now contains the required M014-M018 milestone/slice mappings for downstream execution. A follow-up heading scan also confirmed the milestone-overview and slice-title sections now use the real M013-M018 identifiers.\n\n## Verification Evidence\n\n| # | Command | Exit Code | Verdict | Duration |\n|---|---------|-----------|---------|----------|\n| 1 | `rg -n \"already-fixed|actionable-now|needs-discovery|deferred-by-product|contradicted-by-project-knowledge\" .gsd/plans/GSD_PLAN_system-audit-repair.md` | 0 | ✅ pass | 7ms |\n| 2 | `rg -n \"deferred-by-product|contradicted-by-project-knowledge|needs-discovery\" .gsd/plans/GSD_PLAN_system-audit-repair.md` | 0 | ✅ pass | 6ms |\n| 3 | `rg -n \"M014|M015|M016|M017|M018\" .gsd/plans/GSD_PLAN_system-audit-repair.md` | 0 | ✅ pass | 7ms |\n| 4 | `rg -n '^### M013\\.|^### M014\\.|^### M015\\.|^### M016\\.|^### M017\\.|^### M018\\.|^### \\[M013-S01\\]|^### \\[M014-S01\\]|^### \\[M018-S03\\]' .gsd/plans/GSD_PLAN_system-audit-repair.md` | 0 | ✅ pass | 10ms |\n\n\n## Deviations\n\nMinor factual correction from the task-plan wording: the two verification-baseline discovery findings (8.1, 8.2) stay on the already-planned M013-S02 slice instead of moving into M014-M018, because local roadmap reality already reserves that work in the current milestone.\n\n## Known Issues\n\nNone.\n\n## Files Created/Modified\n\n- `.gsd/plans/GSD_PLAN_system-audit-repair.md`\n- `.gsd/DECISIONS.md`\n- `.gsd/milestones/M013/slices/S01/tasks/T03-SUMMARY.md`\n",
       "description": "按后续执行面把 actionable-now 与 needs-discovery finding 重新映射到 M014-M018 的具体 slices，形成可直接消费的 backlog 对照表。",
       "estimate": "30m",
       "files": [
@@ -12584,6 +12591,18 @@
       "revisable": "Yes",
       "made_by": "agent",
       "superseded_by": null
+    },
+    {
+      "seq": 1537,
+      "id": "D168",
+      "when_context": "M013/S01/T03",
+      "scope": "planning",
+      "decision": "How to remap normalized SYSTEM_AUDIT_REPORT finding owners onto the real GSD roadmap without breaking T01/T02 references",
+      "choice": "Keep the original T01/T02 matrix owner labels as stable logical slice IDs and append a dedicated T03 crosswalk from legacy logical slices to actual M013-M018 milestones/slices",
+      "rationale": "The normalized matrix is already referenced by prior task summaries and appendices; rewriting those owner tags in place would create avoidable churn and break stable audit references. A dedicated crosswalk preserves traceability while giving downstream executors a directly consumable mapping to the real roadmap.",
+      "revisable": "Yes",
+      "made_by": "agent",
+      "superseded_by": null
     }
   ],
   "verification_evidence": [
@@ -15655,6 +15674,50 @@
       "verdict": "✅ pass",
       "duration_ms": 23,
       "created_at": "2026-04-09T16:18:11.335Z"
+    },
+    {
+      "id": 280,
+      "task_id": "T03",
+      "slice_id": "S01",
+      "milestone_id": "M013",
+      "command": "rg -n \"already-fixed|actionable-now|needs-discovery|deferred-by-product|contradicted-by-project-knowledge\" .gsd/plans/GSD_PLAN_system-audit-repair.md",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 7,
+      "created_at": "2026-04-09T16:38:21.704Z"
+    },
+    {
+      "id": 281,
+      "task_id": "T03",
+      "slice_id": "S01",
+      "milestone_id": "M013",
+      "command": "rg -n \"deferred-by-product|contradicted-by-project-knowledge|needs-discovery\" .gsd/plans/GSD_PLAN_system-audit-repair.md",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 6,
+      "created_at": "2026-04-09T16:38:21.704Z"
+    },
+    {
+      "id": 282,
+      "task_id": "T03",
+      "slice_id": "S01",
+      "milestone_id": "M013",
+      "command": "rg -n \"M014|M015|M016|M017|M018\" .gsd/plans/GSD_PLAN_system-audit-repair.md",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 7,
+      "created_at": "2026-04-09T16:38:21.704Z"
+    },
+    {
+      "id": 283,
+      "task_id": "T03",
+      "slice_id": "S01",
+      "milestone_id": "M013",
+      "command": "rg -n '^### M013\\.|^### M014\\.|^### M015\\.|^### M016\\.|^### M017\\.|^### M018\\.|^### \\[M013-S01\\]|^### \\[M014-S01\\]|^### \\[M018-S03\\]' .gsd/plans/GSD_PLAN_system-audit-repair.md",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 10,
+      "created_at": "2026-04-09T16:38:21.704Z"
     }
   ]
 }

@@ -199,6 +199,59 @@
 | 16.2 | `M3-S03` | 先做键盘导航 walkthrough，证明 learner 关键任务链上哪些步骤不能仅靠键盘完成。 |
 | 16.3 | `M3-S03` | 先建立 design / a11y contrast baseline，确认真实对比度问题后再做调色或 token 调整。 |
 
+
+##### T03 backlog crosswalk（逻辑 slice → 已创建 milestones/slices）
+- 本计划 T01/T02 保留原始矩阵中的逻辑 owner 标签（如 `M2-S04`、`M4-S02`、`M6-S03`）以维持审计归一化引用稳定；T03 在此追加“逻辑 slice → 实际 GSD milestone/slice”对照，供后续执行直接消费。
+- 事实校正：原计划里的 `M1-S02` 已在当前 GSD roadmap 中落为 `M013-S02`；其余 learner / frontend hygiene / auth-security / realtime / ops repair wave 已分别落为 `M014`-`M018`。
+
+| Legacy logical slice | Actual milestone/slice | Current roadmap title |
+|---|---|---|
+| `M1-S01` | `M013-S01` | SYSTEM_AUDIT_REPORT 条目归一化 |
+| `M1-S02` | `M013-S02` | 审计相关验证基线补齐 |
+| `M2-S01` | `M014-S01` | 首页硬编码与空壳动作收口 |
+| `M2-S02` | `M014-S02` | 认证与个人中心体验补齐 |
+| `M2-S03` | `M014-S03` | Learner 导航、反馈入口与系统壳层补齐 |
+| `M2-S04` | `M014-S04` | 训练前预期管理与中断恢复 UX 收口 |
+| `M3-S01` | `M015-S01` | 前端日志出口统一化 |
+| `M3-S02` | `M015-S02` | 原生弹窗与 window.location 跳转清理 |
+| `M3-S03` | `M015-S03` | Learner error/loading 覆盖与 responsive/a11y/timezone baseline |
+| `M4-S01` | `M016-S01` | Password reset / auth backend 正式化 |
+| `M4-S02` | `M016-S02` | API 错误契约与异常分类收口 |
+| `M4-S03` | `M016-S03` | RBAC、敏感日志与 admin 安全面 audit |
+| `M5-S01` | `M017-S01` | Session lifecycle 并发安全 proof |
+| `M5-S02` | `M017-S02` | Practice WebSocket 复杂度与重连策略收口 |
+| `M5-S03` | `M017-S03` | 文件上传 / 资源竞争 / 分布式锁风险 discovery |
+| `M6-S01` | `M018-S01` | 数据库性能基线 discovery |
+| `M6-S02` | `M018-S02` | 依赖安全、许可证与更新策略基线 |
+| `M6-S03` | `M018-S03` | 备份 / 故障恢复 / 容灾 runbook 基线 |
+
+###### actionable-now → 实际 backlog slice 对照
+
+| Actual slice | Legacy logical slice | Audit IDs consumed now | Why this is the direct backlog consumer |
+|---|---|---|---|
+| `M014-S04` | `M2-S04` | `1.3.1` | practice preflight / interruption UX slice owns the recording-toggle guard hardening surfaced by the audit. |
+| `M015-S01` | `M3-S01` | `1.1.1` | frontend hygiene wave owns the console-output consolidation seam. |
+| `M015-S02` | `M3-S02` | `1.1.2`, `1.1.3` | the dialog/router cleanup slice is the concrete execution home for alert/confirm and `window.location` removal. |
+| `M016-S02` | `M4-S02` | `2.1.1`, `2.1.2`, `2.1.3`, `2.2.1`, `3.1.1` | these backend/API hygiene defects converge on one shared error-contract and exception-classification slice. |
+| `M017-S02` | `M5-S02` | `3.2.2` | reconnect policy belongs to the practice websocket contract slice, not a separate UX-only patch. |
+| `M018-S02` | `M6-S02` | `14.3` | dependency update cadence and verification gates land with the dependency-governance baseline slice. |
+| `M018-S03` | `M6-S03` | `6.2`, `17.1`, `17.2`, `17.3` | admin monitoring truthfulness plus backup/recovery/DR runbooks are one ops-readiness execution surface. |
+
+###### needs-discovery → 实际 discovery slice 对照
+
+| Actual slice | Legacy logical slice | Audit IDs handed off | Proof to retire before implementation |
+|---|---|---|---|
+| `M013-S02` | `M1-S02` | `8.1`, `8.2` | lock the reusable focused web/backend verification contract first; these two findings stay in the current milestone instead of moving to M014-M018. |
+| `M015-S03` | `M3-S03` | `15.3`, `16.1`, `16.2`, `16.3` | learner shell baseline audit must first prove timezone, ARIA, keyboard-nav, and contrast failures on real user paths. |
+| `M016-S03` | `M4-S03` | `4.1.2`, `4.2.1` | produce an admin permission matrix plus sensitive-log egress inventory before promising concrete fixes. |
+| `M017-S01` | `M5-S01` | `2.3.1`, `5.2.1` | race-oriented lifecycle proof and transition-matrix negative cases must land before lock/version decisions. |
+| `M017-S02` | `M5-S02` | `3.2.1`, `7.3`, `12.1`, `12.2`, `12.3` | websocket complexity/perf/cleanup concerns all require shipped-contract tracing and runtime evidence before refactor claims. |
+| `M017-S03` | `M5-S03` | `13.1`, `13.2`, `13.3` | upload/resource contention and multi-instance lock need must be proven along the real presentation/runtime chain first. |
+| `M018-S01` | `M6-S01` | `7.1`, `7.2`, `11.1`, `11.2`, `11.3` | performance discovery owns query/index/slow-path evidence gathering before any optimization backlog is promoted. |
+| `M018-S02` | `M6-S02` | `9.1`, `14.1`, `14.2` | spec drift, dependency vulns, and license risk all need repo-wide evidence scans before implementation slicing. |
+
+- `M014-S01` / `M014-S02` / `M014-S03` 与 `M016-S01` 仍保留在 repair roadmap 中，但它们承接的是更广义的 learner/auth closeout 工作，不是当前归一化矩阵里某一条 `actionable-now` / `needs-discovery` finding 的单点 owner。
+
 ---
 
 ## 2. 范围定义（In / Out）
@@ -244,42 +297,42 @@
 
 ## 4. 里程碑总览
 
-### M1. 审计归一化与计划基线收口
+### M013. 审计归一化与计划基线收口
 - 目标：把 SYSTEM_AUDIT_REPORT 中的所有条目分成“已修 / 真实缺口 / 需 discovery / 当前 defer”，形成可信 backlog。
 - 为什么先做：现在审计文档与当前仓库存在显著漂移，直接执行会浪费工时。
 - 完成后得到：后续每个执行模型只处理真实问题，不会被 stale finding 误导。
 - 依赖：现有 `.gsd/PROJECT.md`、`.gsd/REQUIREMENTS.md`、M012。
 - 风险：如果不做，会把现有 requirement / knowledge 冲掉。
 
-### M2. Learner 入口与体验闭环补齐
+### M014. Learner 入口与体验闭环补齐
 - 目标：把首页 / auth / history / profile / practice 里真正影响首次使用和复练的缺口补齐。
 - 为什么先做：这部分最直接影响“第一次打开系统能不能顺利走通”。
 - 完成后得到：launchability 质量明显提升，且与当前 M012 能自然衔接。
 - 依赖：M1。
 - 风险：容易把产品策略问题（移动端 / export / self-registration）误拉进来。
 
-### M3. Frontend hygiene 与中断式交互清理
+### M015. Frontend hygiene 与中断式交互清理
 - 目标：系统性替换 console / alert / confirm / window.location 等不一致模式，补齐 learner 壳层 error/loading 覆盖。
 - 为什么先做：这是大面积、低层级、跨页面的一致性问题，适合在 learner wave 后单独收口。
 - 完成后得到：更稳定的错误表面、可观察性和 UX 一致性。
 - 依赖：M1，可与 M2 后半并行。
 - 风险：如果不设边界，会扩成“重写整个前端架构”。
 
-### M4. Auth / API / Security contract hardening
+### M016. Auth / API / Security contract hardening
 - 目标：把 password reset、鉴权模式、错误响应、RBAC、日志脱敏从“能用”升到“可依赖”。
 - 为什么先做：SYSTEM_AUDIT_REPORT 中真正的高优先级 backend 问题集中在这里。
 - 完成后得到：认证与错误表面更加统一，可作为后续治理基线。
 - 依赖：M1，部分依赖 M2 的 learner flow确认。
 - 风险：会触及 shared auth seam，必须 strong model 牵头。
 
-### M5. 实时状态与并发安全收口
+### M017. 实时状态与并发安全收口
 - 目标：围绕 session lifecycle、practice websocket、上传并发与资源竞争建立明确的事实线和修复边界。
 - 为什么先做：这些问题的风险高，但没有先证据就容易做成表面 patch。
 - 完成后得到：状态机和 realtime 行为更可证伪、可维护。
 - 依赖：M1，部分依赖 M3/M4。
 - 风险：跨前后端、跨状态机、跨测试层。
 
-### M6. 性能 / 依赖 / 运维治理 discovery
+### M018. 性能 / 依赖 / 运维治理 discovery
 - 目标：把审计里“像问题但未证实”的性能、安全、容灾类条目转成有证据的后续 backlog。
 - 为什么先做：这些条目价值高，但不该被伪装成已知 fix。
 - 完成后得到：慢查询、索引、依赖漏洞、许可证、备份恢复现状的真实基线。
@@ -290,7 +343,7 @@
 
 ## 5. 详细切片清单
 
-### [M1-S01] SYSTEM_AUDIT_REPORT 条目归一化
+### [M013-S01] SYSTEM_AUDIT_REPORT 条目归一化
 
 #### Goal
 - 对 `SYSTEM_AUDIT_REPORT.md` 全文逐条建立 disposition：`already-fixed` / `actionable-now` / `needs-discovery` / `deferred-by-product` / `contradicted-by-project-knowledge`。
@@ -343,7 +396,7 @@
 
 ---
 
-### [M1-S02] 审计相关验证基线补齐
+### [M013-S02] 审计相关验证基线补齐
 
 #### Goal
 - 为后续所有 repair slice 先锁定可复用的 web/backend focused 验证命令集合。
@@ -391,7 +444,7 @@
 
 ---
 
-### [M2-S01] 首页硬编码与空壳动作收口
+### [M014-S01] 首页硬编码与空壳动作收口
 
 #### Goal
 - 清理 dashboard 首页当前仍存在的静态更新内容、无动作按钮、假筛选与缺少 onboarding 的问题。
@@ -443,7 +496,7 @@
 
 ---
 
-### [M2-S02] 认证与个人中心体验补齐
+### [M014-S02] 认证与个人中心体验补齐
 
 #### Goal
 - 把 learner 侧“能登录”提升到“能维护账号”：forgot/reset 正式化、profile 修改密码体验闭合、语速偏好持久化补齐。
@@ -498,7 +551,7 @@
 
 ---
 
-### [M2-S03] Learner 导航、反馈入口与系统壳层补齐
+### [M014-S03] Learner 导航、反馈入口与系统壳层补齐
 
 #### Goal
 - 补齐 learner 侧统一反馈入口、角色/使用说明、缺失导航和壳层级帮助信息。
@@ -548,7 +601,7 @@
 
 ---
 
-### [M2-S04] 训练前预期管理与中断恢复 UX 收口
+### [M014-S04] 训练前预期管理与中断恢复 UX 收口
 
 #### Goal
 - 补齐 practice 页的 preflight / pre-context / 中断恢复说明，减少“直接被扔进语音对话”的割裂感。
@@ -599,7 +652,7 @@
 
 ---
 
-### [M3-S01] 前端日志出口统一化
+### [M015-S01] 前端日志出口统一化
 
 #### Goal
 - 把前端大量 `console.*` 调用收口到明确的 debug/observability seam，并区分 dev-only 与 durable error reporting。
@@ -649,7 +702,7 @@
 
 ---
 
-### [M3-S02] 原生弹窗与 window.location 跳转清理
+### [M015-S02] 原生弹窗与 window.location 跳转清理
 
 #### Goal
 - 消除 admin/learner 中断式交互与直接浏览器跳转，统一到 toast/dialog/router/auth-handler seam。
@@ -701,7 +754,7 @@
 
 ---
 
-### [M3-S03] Learner error/loading 覆盖与 responsive/a11y/timezone baseline
+### [M015-S03] Learner error/loading 覆盖与 responsive/a11y/timezone baseline
 
 #### Goal
 - 补齐 learner 路由簇中缺失的 error/loading 壳层，并对响应式、a11y、时区问题形成最小基线。
@@ -752,7 +805,7 @@
 
 ---
 
-### [M4-S01] Password reset / auth backend 正式化
+### [M016-S01] Password reset / auth backend 正式化
 
 #### Goal
 - 把当前 password reset 和 auth 实现从“演示可用”升级为“正式 contract 可维护”。
@@ -804,7 +857,7 @@
 
 ---
 
-### [M4-S02] API 错误契约与异常分类收口
+### [M016-S02] API 错误契约与异常分类收口
 
 #### Goal
 - 统一后端 API 的错误响应格式，减少裸 `HTTPException` 与通用 `except Exception` 在业务层直接暴露。
@@ -853,7 +906,7 @@
 
 ---
 
-### [M4-S03] RBAC、敏感日志与 admin 安全面 audit
+### [M016-S03] RBAC、敏感日志与 admin 安全面 audit
 
 #### Goal
 - 为 admin routes 的权限粒度与日志脱敏建立明确的风险图谱，并先修高确定性问题。
@@ -903,7 +956,7 @@
 
 ---
 
-### [M5-S01] Session lifecycle 并发安全 proof
+### [M017-S01] Session lifecycle 并发安全 proof
 
 #### Goal
 - 为 `SessionLifecycleService` 建立并发安全证据，并在需要时引入行锁/乐观并发控制。
@@ -952,7 +1005,7 @@
 
 ---
 
-### [M5-S02] Practice WebSocket 复杂度与重连策略收口
+### [M017-S02] Practice WebSocket 复杂度与重连策略收口
 
 #### Goal
 - 把当前 practice websocket orchestrator 的复杂度、重连策略和 backpressure 规则再收口一轮。
@@ -1002,7 +1055,7 @@
 
 ---
 
-### [M5-S03] 文件上传 / 资源竞争 / 分布式锁风险 discovery
+### [M017-S03] 文件上传 / 资源竞争 / 分布式锁风险 discovery
 
 #### Goal
 - 把文件上传并发、资源竞争、分布式锁缺失这类“风险项”先转成可证据化的 discovery 结论。
@@ -1049,7 +1102,7 @@
 
 ---
 
-### [M6-S01] 数据库性能基线 discovery
+### [M018-S01] 数据库性能基线 discovery
 
 #### Goal
 - 对 N+1、索引、slow query 做第一轮基线审计，产出真实优化 backlog。
@@ -1098,7 +1151,7 @@
 
 ---
 
-### [M6-S02] 依赖安全、许可证与更新策略基线
+### [M018-S02] 依赖安全、许可证与更新策略基线
 
 #### Goal
 - 把依赖安全、许可证、更新策略从口头建议变成明确维护流程。
@@ -1146,7 +1199,7 @@
 
 ---
 
-### [M6-S03] 备份 / 故障恢复 / 容灾 runbook 基线
+### [M018-S03] 备份 / 故障恢复 / 容灾 runbook 基线
 
 #### Goal
 - 把备份频率、恢复流程、灾难恢复演练从“缺失”转成最小可执行 runbook。
@@ -1193,40 +1246,38 @@
 
 ## 6. 依赖关系图（文字版）
 
-- M1-S01 → M1-S02 → 所有后续切片
-- M2-S01 依赖 M1-S01；M2-S02 / M2-S03 / M2-S04 依赖 M1-S01，可并行但建议按首页→auth/profile→practice 顺序执行
-- M3-S01 → M3-S02 → M3-S03
-- M4-S01 与 M4-S02 共享 auth/api seam，建议先 M4-S01 再 M4-S02
-- M4-S03 依赖 M4-S02 的错误/权限分类结果
-- M5-S01 先于 M5-S02，因为 lifecycle 语义决定 websocket 行为边界
-- M5-S03 可在 M5-S01 后并行
-- M6-S01 / M6-S02 / M6-S03 都依赖 M1-S01 的审计归一化，但彼此可并行
+- `M013-S01` → `M013-S02` → `M014` / `M015` / `M016` / `M017` / `M018` 的所有后续 repair slices。
+- `M014-S01` 先行；`M014-S02` / `M014-S03` 依赖 `M014-S01`，`M014-S04` 依赖 `M014-S01` + `M014-S02`。
+- `M015-S01` → `M015-S02` → `M015-S03`。
+- `M016-S01` 与 `M016-S02` 共享 auth/api seam，建议先 `M016-S01` 再 `M016-S02`；`M016-S03` 依赖 `M016-S02` 的错误/权限分类结果。
+- `M017-S01` 先于 `M017-S02`，因为 lifecycle 语义决定 websocket 行为边界；`M017-S03` 可在 `M017-S01` 后并行。
+- `M018-S01` 先建立性能基线；`M018-S02` / `M018-S03` 依赖该基线，但彼此可并行。
 
 ---
 
 ## 7. 执行模型分流建议
 
 ### 适合 Fast model 的切片
-- M1-S02 审计验证基线补齐
-- M2-S03 learner 导航与反馈入口补齐
-- M3-S01 前端日志出口统一化
-- M3-S02 alert/confirm/window.location 清理
-- M6-S02 依赖安全与更新策略基线
-- M6-S03 备份/恢复 runbook 基线
+- `M013-S02` 审计验证基线补齐
+- `M014-S03` learner 导航与反馈入口补齐
+- `M015-S01` 前端日志出口统一化
+- `M015-S02` alert/confirm/window.location 清理
+- `M018-S02` 依赖安全与更新策略基线
+- `M018-S03` 备份/恢复 runbook 基线
 
 ### 必须 Strong model 处理的切片
-- M1-S01 审计归一化
-- M2-S01 首页硬编码与空壳动作收口
-- M2-S02 认证与个人中心体验补齐
-- M2-S04 practice preflight / interruption UX 收口
-- M3-S03 learner error/loading + responsive/a11y/timezone baseline
-- M4-S01 password reset / auth backend 正式化
-- M4-S02 API 错误契约与异常分类收口
-- M4-S03 RBAC / 敏感日志审计
-- M5-S01 lifecycle 并发安全 proof
-- M5-S02 websocket 复杂度与重连策略收口
-- M5-S03 上传/资源竞争 discovery
-- M6-S01 数据库性能基线 discovery
+- `M013-S01` 审计归一化
+- `M014-S01` 首页硬编码与空壳动作收口
+- `M014-S02` 认证与个人中心体验补齐
+- `M014-S04` practice preflight / interruption UX 收口
+- `M015-S03` learner error/loading + responsive/a11y/timezone baseline
+- `M016-S01` password reset / auth backend 正式化
+- `M016-S02` API 错误契约与异常分类收口
+- `M016-S03` RBAC / 敏感日志审计
+- `M017-S01` lifecycle 并发安全 proof
+- `M017-S02` websocket 复杂度与重连策略收口
+- `M017-S03` 上传/资源竞争 discovery
+- `M018-S01` 数据库性能基线 discovery
 
 ### 分流原则
 - 涉及现有 requirement/knowledge 冲突判断、跨模块 contract、状态机、安全边界的，归 Strong model。
@@ -1243,7 +1294,7 @@
 - 为解决某个 learner UX 问题，不得不引入新的数据模型、鉴权流程或跨页面状态框架。
 - performance/security/ops discovery 证明真实风险远高于当前预期，需要单独新 milestone。
 - 用户明确改变产品边界：例如要求恢复 report export、推进移动端、推进 i18n、自助注册。
-- 现有 M012 与本计划执行面明显冲突，需要将 SYSTEM_AUDIT repair 正式升级成新 milestone。
+- 已创建的 `M013`-`M018` roadmap 被新的审计事实推翻，需要对后续 milestone/slice 结构做 reassess，而不是继续沿旧 crosswalk 盲推。
 
 ---
 
@@ -1256,14 +1307,14 @@
 
 ### 命名建议
 - 继续沿用当前 `.gsd/` 体系，不新造 “specs/tasks/roadmap” 平行体系。
-- 若后续决定把本计划升格为 milestone，再正式生成新的 M 编号，而不是现在手工伪造。
+- 本 repair wave 现已在 GSD 中正式落地为 `M013`-`M018`；若后续 discovery 继续扩容，再通过正式 milestone 生成流程追加新编号，而不是复活旧的逻辑 `M1`-`M6` 标签。
 
 ### 执行顺序建议
-1. 先执行 M1（审计归一化）
-2. 再执行 M2（learner 入口体验）
-3. 同步推进 M3（frontend hygiene）
-4. 再推进 M4 / M5（backend contract + realtime safety）
-5. 最后做 M6（performance/security/ops discovery）
+1. 先完成 `M013`（审计归一化 + 验证基线）
+2. 再推进 `M014`（learner 入口体验）
+3. 同步推进 `M015`（frontend hygiene）
+4. 再推进 `M016` / `M017`（backend contract + realtime safety）
+5. 最后做 `M018`（performance/security/ops discovery）
 
 ### 风险控制建议
 - backend focused pytest 串行跑，避免 `.coverage` 冲突。
@@ -1276,7 +1327,7 @@
 ## 10. 可直接给执行模型的任务单模板（展开 6 个）
 
 ### Task Card 1
-- Task ID: M1-S01-T01
+- Task ID: `M013-S01-T01`
 - Title: 建立 SYSTEM_AUDIT_REPORT 问题归一化矩阵
 - Goal: 逐条整理 SYSTEM_AUDIT_REPORT 的 disposition，并补上代码证据路径。
 - In Scope: 全文 audit 条目、当前代码、M012、REQUIREMENTS、KNOWLEDGE 对照。
@@ -1290,12 +1341,12 @@
 - Recommended Executor: Strong model
 
 ### Task Card 2
-- Task ID: M2-S01-T01
+- Task ID: `M014-S01-T01`
 - Title: 首页空壳动作清点与收口策略
 - Goal: 把 dashboard 首页所有“可点击但无闭环”的动作归类为实现、深链、禁用提示或删除。
 - In Scope: 首页按钮、版本弹窗、筛选弹窗、分享/设定目标类 CTA、新手 onboarding 最小入口。
 - Out of Scope: 报告导出恢复、全量帮助中心。
-- Preconditions: Task 1 完成，已确认 report export 属于当前受限项。
+- Preconditions: `M013` 已完成，且已确认 report export 属于当前受限项。
 - Files/Modules to Inspect: `web/src/app/(dashboard)/page.tsx`, `web/src/app/(dashboard)/history/page.tsx`, `web/src/components/layout/sidebar.tsx`。
 - Constraints: 不得重新引入被 KNOWLEDGE 明确禁止的“导出报告” affordance。
 - Done When: 首页无主按钮空壳；首屏有最小 onboarding 指引。
@@ -1304,7 +1355,7 @@
 - Recommended Executor: Strong model
 
 ### Task Card 3
-- Task ID: M2-S02-T01
+- Task ID: `M016-S01-T01`
 - Title: 把 forgot/reset 从过渡实现升级为正式 auth seam
 - Goal: 正式化 password reset token 存储、过期/一次性使用、email abstraction、rate limit。
 - In Scope: auth api/service/model/migration/tests。
@@ -1318,7 +1369,7 @@
 - Recommended Executor: Strong model
 
 ### Task Card 4
-- Task ID: M3-S02-T01
+- Task ID: `M015-S02-T01`
 - Title: 清理 alert/confirm/window.location 使用点
 - Goal: 系统性替换业务页面里的原生弹窗和直接 location 跳转。
 - In Scope: admin records/rag-profiles/personas、profile、admin shell、dashboard shell、auth redirect。
@@ -1332,7 +1383,7 @@
 - Recommended Executor: Fast model
 
 ### Task Card 5
-- Task ID: M5-S01-T01
+- Task ID: `M017-S01-T01`
 - Title: 为 session lifecycle 写并发证明用例
 - Goal: 用 failing tests 明确 pause/resume/end 的 race 行为，再决定锁策略。
 - In Scope: lifecycle service、API 行为、并发状态转移。
@@ -1346,7 +1397,7 @@
 - Recommended Executor: Strong model
 
 ### Task Card 6
-- Task ID: M6-S01-T01
+- Task ID: `M018-S01-T01`
 - Title: 建立数据库性能 discovery 基线
 - Goal: 把 N+1 / 索引 / slow query 风险从猜测变成证据化 backlog。
 - In Scope: analytics/history/leaderboard/projection 关键路径。
