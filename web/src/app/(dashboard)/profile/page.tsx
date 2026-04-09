@@ -6,6 +6,11 @@ import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { GlassCard } from "@/components/ui/glass-card";
 import { Input } from "@/components/ui/input";
+import {
+    VOICE_SPEED_PREFERENCE_OPTIONS,
+    serializeVoiceSpeedPreference,
+    useVoiceSpeedPreference,
+} from "@/hooks/use-voice-speed-preference";
 import { api } from "@/lib/api/client";
 import type { CurrentUser } from "@/lib/auth/current-user";
 import { authHandler } from "@/lib/auth-handler";
@@ -52,6 +57,7 @@ const DEFAULT_SESSION_STATS: SessionStats = {
 
 export default function ProfilePage() {
     const queryClient = useQueryClient();
+    const { voiceSpeedPreference, setVoiceSpeedPreference } = useVoiceSpeedPreference();
     const [isLoading, setIsLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
     const [isEditing, setIsEditing] = useState(false);
@@ -310,26 +316,18 @@ export default function ProfilePage() {
                             </div>
                         </div>
                         <select
+                            aria-label="语音播放速度"
                             className="bg-slate-50 border border-slate-200 rounded-md text-sm p-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
-                            value={(() => {
-                                if (typeof window === "undefined") return "1.0";
-                                return localStorage.getItem("voice_speed_preference") || "1.0";
-                            })()}
-                            onChange={(e) => {
-                                const value = e.target.value;
-                                localStorage.setItem("voice_speed_preference", value);
-                                // Persist to user profile API when available
-                                try {
-                                    api.user.updateProfile({ voice_speed_preference: parseFloat(value) } as Parameters<typeof api.user.updateProfile>[0]);
-                                } catch {
-                                    // Silently ignore - will be persisted when API supports it
-                                }
+                            value={serializeVoiceSpeedPreference(voiceSpeedPreference)}
+                            onChange={(event) => {
+                                setVoiceSpeedPreference(event.target.value);
                             }}
                         >
-                            <option value="0.75">0.75x</option>
-                            <option value="1.0">1.0x</option>
-                            <option value="1.25">1.25x</option>
-                            <option value="1.5">1.5x</option>
+                            {VOICE_SPEED_PREFERENCE_OPTIONS.map((option) => (
+                                <option key={option.storageValue} value={option.storageValue}>
+                                    {option.label}
+                                </option>
+                            ))}
                         </select>
                     </div>
 

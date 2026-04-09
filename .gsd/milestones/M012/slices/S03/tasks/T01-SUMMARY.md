@@ -1,8 +1,22 @@
-# BLOCKER — auto-mode recovery failed
+---
+id: T01
+parent: S03
+milestone: M012
+provides: []
+requires: []
+affects: []
+key_files: []
+key_decisions: []
+patterns_established: []
+drill_down_paths: []
+observability_surfaces: []
+duration: ""
+verification_result: ""
+completed_at: 2026-04-09T11:19:40.595Z
+blocker_discovered: false
+---
 
-Unit `execute-task` for `M012/S03/T01` failed to produce this artifact after idle recovery exhausted all retries.
+# T01: 让 learner 壳层个人中心入口和密码动作都落到真实路由
 
-**Reason**: hard recovery exhausted 1 attempts. Status: summary missing (.gsd/milestones/M012/slices/S03/tasks/T01-SUMMARY.md); task checkbox unchecked in .gsd/milestones/M012/slices/S03/S03-PLAN.md; must-have gap: 0 of 4 must-haves addressed in summary
-
-This placeholder was written by auto-mode so the pipeline can advance.
-Review and replace this file before relying on downstream artifacts.
+## What Happened
+No summary recorded.

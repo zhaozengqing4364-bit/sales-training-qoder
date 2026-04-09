@@ -11,6 +11,9 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import {
+    useVoiceSpeedPreference,
+} from "./use-voice-speed-preference";
 import { useStreamingAudioPlayer } from "./use-streaming-audio-player";
 import { debug } from "@/lib/debug";
 import { getSharedTraceId } from "@/lib/observability/trace-context";
@@ -88,6 +91,7 @@ export function usePracticeWebSocket(options: UsePracticeWebSocketOptions) {
         useStreamingTTS = true,
         voiceMode = "legacy",
     } = options;
+    const { voiceSpeedPreference } = useVoiceSpeedPreference();
 
     // ── Core refs ──
     const wsRef = useRef<WebSocket | null>(null);
@@ -107,6 +111,7 @@ export function usePracticeWebSocket(options: UsePracticeWebSocketOptions) {
 
     // ── Streaming audio player (for tts_chunk messages) ──
     const streamingPlayer = useStreamingAudioPlayer({
+        playbackRate: voiceSpeedPreference,
         onPlaybackStart: () => {
             setState(prev => ({ ...prev, isPlayingAudio: true, aiState: "speaking" }));
         },

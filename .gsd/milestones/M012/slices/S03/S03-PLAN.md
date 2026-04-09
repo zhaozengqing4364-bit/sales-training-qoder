@@ -4,7 +4,7 @@
 **Demo:** After this: Profile 语速设置持久化，通知开关移除，排行榜有评分说明，个人中心可修改密码
 
 ## Tasks
-- [ ] **T01: 让 learner 壳层个人中心入口和密码动作都落到真实路由** — Skills: safe-grow, react-best-practices, vitest, verification-before-completion
+- [x] **T01: 让 learner 壳层个人中心入口和密码动作都落到真实路由** — Skills: safe-grow, react-best-practices, vitest, verification-before-completion
 
 把 `/profile` 的可达性收口在现有 learner shell authority seam，而不是额外发明新导航。`web/src/components/layout/sidebar.tsx` 里的用户弹窗目前把“编辑资料”渲染成了无动作按钮；这个任务要把它变成真实的 `/profile` 导航，同时保持 `历史记录` 继续留在 `SidebarContent` 里，不回归 S02 已关闭的问题。`web/src/app/(dashboard)/profile/page.tsx` 里的密码动作则要保持复用 S01 的 forgot/reset 流程：用 truthful copy（例如“通过邮箱重置密码”）和 Next 路由跳转替换 `window.location.href`，但不要新增 authenticated password API。
 
@@ -43,7 +43,7 @@
   - Estimate: 1.25h
   - Files: web/src/components/layout/sidebar.tsx, web/src/components/layout/sidebar.test.tsx, web/src/app/(dashboard)/profile/page.tsx, web/src/app/(dashboard)/profile/page.test.tsx
   - Verify: npm --prefix web test -- --run "src/components/layout/sidebar.test.tsx" "src/app/(dashboard)/profile/page.test.tsx"
-- [ ] **T02: 建立单一语速偏好 seam 并把它真正接到训练音频播放链** — Skills: safe-grow, react-best-practices, tanstack-query-best-practices, vitest, verification-before-completion
+- [x] **T02: Added a shared voice-speed preference hook, removed fake profile persistence, and wired the same normalized rate through MediaSource, fallback Audio, and PCM playback.** — Skills: safe-grow, react-best-practices, tanstack-query-best-practices, vitest, verification-before-completion
 
 把“语音播放速度”从 profile 页里的页面内小把戏收口成一个真正影响训练体验的前端 seam。当前实现同时存在三个问题：render 期间直接读 `localStorage`、尝试发一个实际上不会落盘的 `voice_speed_preference` PATCH、以及训练音频播放链根本不消费这个值。这个任务应以 `web/src/hooks/use-theme.ts` 为参考，新增一个 SSR-safe 的 `useVoiceSpeedPreference` hook，限定支持值枚举并负责本地持久化；profile 页面只通过这个 hook 读写状态，不再伪装 backend persistence。随后把该偏好接到 `usePracticeWebSocket` / `useStreamingAudioPlayer` 所覆盖的三条播放路径：MediaSource `HTMLAudioElement`、fallback `new Audio(audioUrl)`、以及 PCM Web Audio `AudioBufferSourceNode`。
 

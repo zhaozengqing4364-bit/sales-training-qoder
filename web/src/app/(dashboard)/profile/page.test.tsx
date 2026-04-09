@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -94,6 +94,7 @@ function renderProfilePage() {
 describe("ProfilePage password route handoff", () => {
     beforeEach(() => {
         vi.clearAllMocks();
+        localStorage.clear();
 
         getMeMock.mockResolvedValue({
             id: "user-1",
@@ -128,8 +129,46 @@ describe("ProfilePage password route handoff", () => {
         });
 
         expect(screen.getByText("通过邮箱重置密码，沿用现有邮箱找回流程")).toBeTruthy();
+        expect(screen.queryByText(/通知/)).toBeNull();
         const resetLink = screen.getByRole("link", { name: "通过邮箱重置密码" }) as HTMLAnchorElement;
         expect(resetLink.getAttribute("href")).toBe("/forgot-password");
+    });
+
+    it("hydrates the voice speed select from the shared preference seam and never PATCHes fake persistence", async () => {
+        localStorage.setItem("voice_speed_preference", "1.25");
+
+        renderProfilePage();
+
+        await waitFor(() => {
+            expect(getMeMock).toHaveBeenCalled();
+        });
+
+        const voiceSpeedSelect = screen.getByRole("combobox", { name: "语音播放速度" }) as HTMLSelectElement;
+        expect(voiceSpeedSelect.value).toBe("1.25");
+
+        fireEvent.change(voiceSpeedSelect, { target: { value: "1.5" } });
+
+        expect(localStorage.getItem("voice_speed_preference")).toBe("1.5");
+        expect(updateProfileMock).not.toHaveBeenCalled();
+    });
+
+    it("normalizes malformed localStorage values back to the default option", async () => {
+        localStorage.setItem("voice_speed_preference", "fast");
+
+        renderProfilePage();
+
+        const voiceSpeedSelect = await screen.findByRole("combobox", { name: "语音播放速度" }) as HTMLSelectElement;
+        expect(voiceSpeedSelect.value).toBe("1.0");
+        expect(localStorage.getItem("voice_speed_preference")).toBe("1.0");
+    });
+
+    it("renders all supported voice speed options from the shared seam", async () => {
+        renderProfilePage();
+
+        const voiceSpeedSelect = await screen.findByRole("combobox", { name: "语音播放速度" });
+        const optionValues = Array.from(voiceSpeedSelect.querySelectorAll("option")).map((option) => option.getAttribute("value"));
+
+        expect(optionValues).toEqual(["0.75", "1.0", "1.25", "1.5"]);
     });
 
     it("keeps the page fallback visible when profile loading fails without breaking the password route", async () => {

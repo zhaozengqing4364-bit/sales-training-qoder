@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "exported_at": "2026-04-09T10:46:51.298Z",
+  "exported_at": "2026-04-09T11:45:45.995Z",
   "milestones": [
     {
       "id": "M001",
@@ -8402,12 +8402,12 @@
       "slice_id": "S03",
       "id": "T01",
       "title": "让 learner 壳层个人中心入口和密码动作都落到真实路由",
-      "status": "pending",
+      "status": "complete",
       "one_liner": "",
       "narrative": "",
       "verification_result": "",
       "duration": "",
-      "completed_at": null,
+      "completed_at": "2026-04-09T11:19:40.595Z",
       "blocker_discovered": false,
       "deviations": "",
       "known_issues": "",
@@ -8443,19 +8443,30 @@
       "milestone_id": "M012",
       "slice_id": "S03",
       "id": "T02",
-      "title": "建立单一语速偏好 seam 并把它真正接到训练音频播放链",
-      "status": "pending",
-      "one_liner": "",
-      "narrative": "",
-      "verification_result": "",
+      "title": "Added a shared voice-speed preference hook, removed fake profile persistence, and wired the same normalized rate through MediaSource, fallback Audio, and PCM playback.",
+      "status": "complete",
+      "one_liner": "Added a shared voice-speed preference hook, removed fake profile persistence, and wired the same normalized rate through MediaSource, fallback Audio, and PCM playback.",
+      "narrative": "Added web/src/hooks/use-voice-speed-preference.ts as the single SSR-safe learner voice-speed authority, including normalization, canonical localStorage serialization, and a hook API consumed by both the profile page and runtime playback. Refactored web/src/app/(dashboard)/profile/page.tsx to use that hook instead of render-time localStorage reads and removed the fake api.user.updateProfile({ voice_speed_preference }) path so the UI stays truthful. Updated web/src/hooks/use-practice-websocket.ts to read the same shared preference and pass it into useStreamingAudioPlayer, then extended web/src/hooks/use-streaming-audio-player.ts so MediaSource HTMLAudioElement, fallback new Audio(audioUrl), and PCM AudioBufferSourceNode all apply the same normalized playbackRate. Added focused tests for normalization, profile hydration/persistence, and the three playback paths; attempted a browser smoke pass against localhost:3445/profile, but the local Next dev server stayed on instrumentation compilation and timed out before the page could be confirmed in-browser.",
+      "verification_result": "Fresh task-level verification passed with npm --prefix web test -- --run \"src/app/(dashboard)/profile/page.test.tsx\" \"src/hooks/use-voice-speed-preference.test.ts\" \"src/hooks/use-streaming-audio-player.test.ts\" (13/13 tests green). The focused suite confirmed malformed storage values normalize to 1.0x, the profile page hydrates/persists the select via the shared seam without calling the fake PATCH, and MediaSource/fallback Audio/PCM playback all receive the configured rate. A browser smoke attempt against http://localhost:3445/profile timed out while the local Next dev server remained on 'Compiling instrumentation Node.js ...', so browser verification was inconclusive in this environment and is documented as a known issue rather than reported as a pass.",
       "duration": "",
-      "completed_at": null,
+      "completed_at": "2026-04-09T11:45:45.948Z",
       "blocker_discovered": false,
-      "deviations": "",
-      "known_issues": "",
-      "key_files": [],
-      "key_decisions": [],
-      "full_summary_md": "",
+      "deviations": "None beyond replacing the previous oversized simulated player spec with focused hook tests that exercise the exact MediaSource, fallback Audio, and PCM branches named by the task contract.",
+      "known_issues": "A browser smoke attempt against http://localhost:3445/profile timed out because the local Next dev server stayed on 'Compiling instrumentation Node.js ...', so real-browser verification was inconclusive in this environment.",
+      "key_files": [
+        "web/src/hooks/use-voice-speed-preference.ts",
+        "web/src/hooks/use-voice-speed-preference.test.ts",
+        "web/src/app/(dashboard)/profile/page.tsx",
+        "web/src/app/(dashboard)/profile/page.test.tsx",
+        "web/src/hooks/use-practice-websocket.ts",
+        "web/src/hooks/use-streaming-audio-player.ts",
+        "web/src/hooks/use-streaming-audio-player.test.ts"
+      ],
+      "key_decisions": [
+        "Kept voice speed frontend-owned and truthful by removing the fake profile PATCH and centralizing normalization plus persistence in one shared hook.",
+        "Applied the normalized playback rate inside useStreamingAudioPlayer so MediaSource HTMLAudioElement, fallback Audio, and PCM Web Audio consume the same authority seam."
+      ],
+      "full_summary_md": "---\nid: T02\nparent: S03\nmilestone: M012\nkey_files:\n  - web/src/hooks/use-voice-speed-preference.ts\n  - web/src/hooks/use-voice-speed-preference.test.ts\n  - web/src/app/(dashboard)/profile/page.tsx\n  - web/src/app/(dashboard)/profile/page.test.tsx\n  - web/src/hooks/use-practice-websocket.ts\n  - web/src/hooks/use-streaming-audio-player.ts\n  - web/src/hooks/use-streaming-audio-player.test.ts\nkey_decisions:\n  - Kept voice speed frontend-owned and truthful by removing the fake profile PATCH and centralizing normalization plus persistence in one shared hook.\n  - Applied the normalized playback rate inside useStreamingAudioPlayer so MediaSource HTMLAudioElement, fallback Audio, and PCM Web Audio consume the same authority seam.\nduration: \"\"\nverification_result: passed\ncompleted_at: 2026-04-09T11:45:45.951Z\nblocker_discovered: false\n---\n\n# T02: Added a shared voice-speed preference hook, removed fake profile persistence, and wired the same normalized rate through MediaSource, fallback Audio, and PCM playback.\n\n**Added a shared voice-speed preference hook, removed fake profile persistence, and wired the same normalized rate through MediaSource, fallback Audio, and PCM playback.**\n\n## What Happened\n\nAdded web/src/hooks/use-voice-speed-preference.ts as the single SSR-safe learner voice-speed authority, including normalization, canonical localStorage serialization, and a hook API consumed by both the profile page and runtime playback. Refactored web/src/app/(dashboard)/profile/page.tsx to use that hook instead of render-time localStorage reads and removed the fake api.user.updateProfile({ voice_speed_preference }) path so the UI stays truthful. Updated web/src/hooks/use-practice-websocket.ts to read the same shared preference and pass it into useStreamingAudioPlayer, then extended web/src/hooks/use-streaming-audio-player.ts so MediaSource HTMLAudioElement, fallback new Audio(audioUrl), and PCM AudioBufferSourceNode all apply the same normalized playbackRate. Added focused tests for normalization, profile hydration/persistence, and the three playback paths; attempted a browser smoke pass against localhost:3445/profile, but the local Next dev server stayed on instrumentation compilation and timed out before the page could be confirmed in-browser.\n\n## Verification\n\nFresh task-level verification passed with npm --prefix web test -- --run \"src/app/(dashboard)/profile/page.test.tsx\" \"src/hooks/use-voice-speed-preference.test.ts\" \"src/hooks/use-streaming-audio-player.test.ts\" (13/13 tests green). The focused suite confirmed malformed storage values normalize to 1.0x, the profile page hydrates/persists the select via the shared seam without calling the fake PATCH, and MediaSource/fallback Audio/PCM playback all receive the configured rate. A browser smoke attempt against http://localhost:3445/profile timed out while the local Next dev server remained on 'Compiling instrumentation Node.js ...', so browser verification was inconclusive in this environment and is documented as a known issue rather than reported as a pass.\n\n## Verification Evidence\n\n| # | Command | Exit Code | Verdict | Duration |\n|---|---------|-----------|---------|----------|\n| 1 | `npm --prefix web test -- --run \"src/app/(dashboard)/profile/page.test.tsx\" \"src/hooks/use-voice-speed-preference.test.ts\" \"src/hooks/use-streaming-audio-player.test.ts\"` | 0 | ✅ pass | 1011ms |\n\n\n## Deviations\n\nNone beyond replacing the previous oversized simulated player spec with focused hook tests that exercise the exact MediaSource, fallback Audio, and PCM branches named by the task contract.\n\n## Known Issues\n\nA browser smoke attempt against http://localhost:3445/profile timed out because the local Next dev server stayed on 'Compiling instrumentation Node.js ...', so real-browser verification was inconclusive in this environment.\n\n## Files Created/Modified\n\n- `web/src/hooks/use-voice-speed-preference.ts`\n- `web/src/hooks/use-voice-speed-preference.test.ts`\n- `web/src/app/(dashboard)/profile/page.tsx`\n- `web/src/app/(dashboard)/profile/page.test.tsx`\n- `web/src/hooks/use-practice-websocket.ts`\n- `web/src/hooks/use-streaming-audio-player.ts`\n- `web/src/hooks/use-streaming-audio-player.test.ts`\n",
       "description": "Skills: safe-grow, react-best-practices, tanstack-query-best-practices, vitest, verification-before-completion\n\n把“语音播放速度”从 profile 页里的页面内小把戏收口成一个真正影响训练体验的前端 seam。当前实现同时存在三个问题：render 期间直接读 `localStorage`、尝试发一个实际上不会落盘的 `voice_speed_preference` PATCH、以及训练音频播放链根本不消费这个值。这个任务应以 `web/src/hooks/use-theme.ts` 为参考，新增一个 SSR-safe 的 `useVoiceSpeedPreference` hook，限定支持值枚举并负责本地持久化；profile 页面只通过这个 hook 读写状态，不再伪装 backend persistence。随后把该偏好接到 `usePracticeWebSocket` / `useStreamingAudioPlayer` 所覆盖的三条播放路径：MediaSource `HTMLAudioElement`、fallback `new Audio(audioUrl)`、以及 PCM Web Audio `AudioBufferSourceNode`。\n\n## Failure Modes\n\n| Dependency | On error | On timeout | On malformed response |\n|------------|----------|-----------|----------------------|\n| Browser `localStorage` | 回退到默认 `1.0x`，UI 仍可操作；不能崩溃或无限重渲染。 | 视为读取失败并使用默认值。 | 非法值必须被归一化到受支持枚举，而不是直接喂给播放链。 |\n| `HTMLAudioElement` / MediaSource / Web Audio | 在不支持或 autoplay 被拦截时保留现有播放错误/缓冲行为，只修正 `playbackRate` 应用。 | 不新增额外重试循环；保留当前 stop/reset 逻辑。 | 只对受支持 rate 赋值；PCM / fallback / MediaSource 任一路径缺字段时回退到 `1.0`。 |\n\n## Load Profile\n\n- **Shared resources**: browser `localStorage`、当前 audio element、MediaSource、`AudioContext` / `AudioBufferSourceNode`。\n- **Per-operation cost**: 一次本地 storage 读写 + 每条播放路径一次 `playbackRate` 赋值；无新网络请求。\n- **10x breakpoint**: 高频开练/中断时首先暴露的是播放链资源清理或默认值漂移，而不是业务 API 压力。\n\n## Negative Tests\n\n- **Malformed inputs**: `localStorage` 缺失、空字符串、非法数字、超出枚举范围时统一回退到默认值。\n- **Error paths**: autoplay blocked、fallback audio、PCM chunk 流、MediaSource 不支持场景都不会因为新增语速逻辑而失效。\n- **Boundary conditions**: `0.75x`、`1.0x`、`1.25x`、`1.5x` 四个受支持值都能被 profile UI 选中并应用到播放链。\n\n## Steps\n\n1. 新增 `use-voice-speed-preference.ts`（必要时连同 focused test），实现 SSR-safe 默认值、枚举归一化和 `localStorage` 持久化。\n2. 重构 `profile/page.tsx` 的语速设置，只通过新 hook 读写状态；移除 inline `localStorage` IIFE 和伪造的 `voice_speed_preference` PATCH，同时确保通知 toggle 不会被重新引入。\n3. 给 `use-streaming-audio-player.ts`（必要时经 `use-practice-websocket.ts` 传参）补齐 playbackRate wiring，并新增 focused Vitest 覆盖 hook 归一化和三条播放路径的 rate 应用。\n\n## Must-Haves\n\n- [ ] 语速偏好只有一个前端 authority seam，并限制在受支持枚举值内。\n- [ ] profile 页不再 render-time 读取 `localStorage`，也不再调用假的 `voice_speed_preference` PATCH。\n- [ ] MediaSource、fallback `Audio`、PCM Web Audio 三条播放路径都应用同一个 rate。\n- [ ] profile 设置区不会重新出现通知开关。\n",
       "estimate": "2h",
       "files": [
@@ -12506,6 +12517,30 @@
       "revisable": "Yes",
       "made_by": "agent",
       "superseded_by": null
+    },
+    {
+      "seq": 1533,
+      "id": "D164",
+      "when_context": "M012/S03 planning",
+      "scope": "leaderboard-ux",
+      "decision": "How should S03 close learner leaderboard semantics drift?",
+      "choice": "Converge learner leaderboard explanation copy to the admin evaluable-session score basis without changing learner leaderboard backend ordering in S03.",
+      "rationale": "The roadmap asks for trustworthy score explanation, and admin analytics already carries the current authoritative copy. Reworking learner leaderboard backend semantics would expand the slice into analytics contract/ranking changes, while copy convergence closes the learner trust gap within the planned UX-only scope.",
+      "revisable": "Yes",
+      "made_by": "agent",
+      "superseded_by": null
+    },
+    {
+      "seq": 1534,
+      "id": "D165",
+      "when_context": "M012/S03 planning",
+      "scope": "leaderboard-ux",
+      "decision": "How should S03 close learner leaderboard semantics drift?",
+      "choice": "Converge learner leaderboard explanation copy to the admin evaluable-session score basis without changing learner leaderboard backend ordering in S03.",
+      "rationale": "The roadmap asks for trustworthy score explanation, and admin analytics already carries the current authoritative copy. Reworking learner leaderboard backend semantics would expand the slice into analytics contract and ranking changes, while copy convergence closes the learner trust gap within the planned UX-only scope.",
+      "revisable": "Yes",
+      "made_by": "agent",
+      "superseded_by": null
     }
   ],
   "verification_evidence": [
@@ -15500,6 +15535,17 @@
       "verdict": "✅ pass",
       "duration_ms": 0,
       "created_at": "2026-04-09T09:50:21.972Z"
+    },
+    {
+      "id": 273,
+      "task_id": "T02",
+      "slice_id": "S03",
+      "milestone_id": "M012",
+      "command": "npm --prefix web test -- --run \"src/app/(dashboard)/profile/page.test.tsx\" \"src/hooks/use-voice-speed-preference.test.ts\" \"src/hooks/use-streaming-audio-player.test.ts\"",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 1011,
+      "created_at": "2026-04-09T11:45:45.949Z"
     }
   ]
 }
