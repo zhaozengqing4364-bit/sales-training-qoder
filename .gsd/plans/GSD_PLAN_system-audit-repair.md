@@ -24,6 +24,123 @@
 - `SYSTEM_AUDIT_REPORT.md` 中的所有条目都需要进入计划，但不代表所有条目都必须进入“马上编码”的 In Scope。
 - 当前应优先清理**真实缺口 + 高价值 stale audit**，再进入性能 / 安全 / 运维 discovery wave。
 
+### 1.5 T01 原始归一化矩阵（audit section → finding → disposition）
+
+#### 1.5.1 disposition 图例
+- `already-fixed`: 当前仓库已用真实代码 / 启动门禁 / 已验证事实退休风险。
+- `actionable-now`: 当前仓库存在可直接执行的真实缺口，可进入后续实现切片。
+- `needs-discovery`: 风险方向成立，但在承诺修复前必须先做专项证据化审计 / contract proof。
+- `deferred-by-product`: 当前产品方向明确不把该项作为近期交付目标。
+- `contradicted-by-project-knowledge`: audit 建议与当前项目知识、既有约束或兼容性前提相冲突，不应直接拉入修复 backlog。
+
+#### 1.5.2 归一化矩阵汇总
+- 总 finding 数：**51**
+- `already-fixed`: **1**
+- `actionable-now`: **15**
+- `needs-discovery`: **26**
+- `deferred-by-product`: **8**
+- `contradicted-by-project-knowledge`: **1**
+
+#### 1.5.3 Frontend UX（第 1 节）
+
+| Audit ID | Finding | Disposition | Evidence path(s) | Preliminary owner |
+|---|---|---|---|---|
+| 1.1.1 | 前端 `console.*` 调试输出散落在业务组件中 | actionable-now | `SYSTEM_AUDIT_REPORT.md`; `web/src/components/ErrorBoundary.tsx`; `web/src/app/(user)/practice/[sessionId]/page.tsx`; `web/src/app/admin/settings/page.tsx` | `M3-S01` |
+| 1.1.2 | admin 页面仍使用 `alert()` / `confirm()` 原生弹窗 | actionable-now | `web/src/app/admin/records/page.tsx`; `web/src/app/admin/rag-profiles/page.tsx`; `web/src/app/admin/personas/[id]/page.tsx` | `M3-S02` |
+| 1.1.3 | 业务跳转仍存在 `window.location.assign/href`（`window.location.reload()` 例外） | actionable-now | `web/src/components/layout/admin-shell.tsx`; `web/src/components/layout/dashboard-shell.tsx`; `web/src/app/admin/error.tsx`; `web/src/components/ErrorBoundary.tsx` | `M3-S02` |
+| 1.1.4 | `bg-white` vs `bg-stone-50` 视觉 token 不统一 | deferred-by-product | `SYSTEM_AUDIT_REPORT.md`; `.codex/loop/PROJECT_GROWTH.md`; `.gsd/PROJECT.md` | `none` |
+| 1.2.1 | 移动端溢出 / 断点适配风险 | deferred-by-product | `SYSTEM_AUDIT_REPORT.md`; `.gsd/PROJECT.md` | `none` |
+| 1.3.1 | 录音切换仅靠 300ms 启动锁，重复触发保护偏弱 | actionable-now | `web/src/app/(user)/practice/[sessionId]/page.tsx` | `M2-S04` |
+
+#### 1.5.4 Backend API / 业务逻辑（第 2 节）
+
+| Audit ID | Finding | Disposition | Evidence path(s) | Preliminary owner |
+|---|---|---|---|---|
+| 2.1.1 | backend 仍存在 `print()` 调试输出 | actionable-now | `backend/src/common/ai/encryption.py`; `backend/src/common/services/password_reset.py` | `M4-S02` |
+| 2.1.2 | backend 路由 / auth 仍大量直接抛 `HTTPException`，未统一到现有错误响应 contract | actionable-now | `backend/src/common/auth/service.py`; `backend/src/admin/api/users.py`; `backend/src/common/knowledge/api.py`; `backend/src/common/api/analytics.py` | `M4-S02` |
+| 2.1.3 | `# TODO: parameterize` 仍留在 staged evaluation | actionable-now | `backend/src/evaluation/services/staged_evaluation.py` | `M4-S02` |
+| 2.2.1 | 通用 `except Exception` / 过宽异常捕获仍存在 | actionable-now | `backend/src/prompt_templates/models.py`; `backend/src/presentation_coach/services/interruption_detector.py` | `M4-S02` |
+| 2.3.1 | `SessionLifecycleService` 没有并发锁或版本控制证明 | needs-discovery | `backend/src/common/db/session_lifecycle.py`; `backend/tests/unit/test_session_lifecycle_service.py`; `backend/tests/integration/test_session_lifecycle_api.py` | `M5-S01` |
+
+#### 1.5.5 前后端联调 / 实时链路（第 3 节）
+
+| Audit ID | Finding | Disposition | Evidence path(s) | Preliminary owner |
+|---|---|---|---|---|
+| 3.1.1 | API error shape 与 frontend `apiFetch` 的期望仍未彻底统一 | actionable-now | `web/src/lib/api/client.ts`; `backend/src/common/api/analytics.py`; `backend/src/common/knowledge/api.py`; `backend/src/common/auth/api.py` | `M4-S02` |
+| 3.2.1 | `usePracticeWebSocket` / realtime handler 体量过大，但“拆哪里”仍需基于已发货 contract 再判定 | needs-discovery | `web/src/hooks/use-practice-websocket.ts`; `backend/src/sales_bot/websocket/stepfun_realtime_handler.py` | `M5-S02` |
+| 3.2.2 | 重连策略仍是固定 `MAX_RECONNECT_ATTEMPTS = 5`，未形成 backoff / stop-condition contract | actionable-now | `web/src/hooks/use-practice-websocket.ts` | `M5-S02` |
+
+#### 1.5.6 权限与安全（第 4 节）
+
+| Audit ID | Finding | Disposition | Evidence path(s) | Preliminary owner |
+|---|---|---|---|---|
+| 4.1.1 | `JWT_SECRET` 默认值风险已被非开发环境启动门禁退休 | already-fixed | `backend/src/common/auth/service.py`; `backend/src/main.py` | `closed` |
+| 4.1.2 | admin 细粒度 RBAC 风险范围过大，需先画 permission matrix 再切真实 fix | needs-discovery | `backend/src/admin/api/users.py`; `backend/src/admin/api/`; `backend/src/common/auth/service.py` | `M4-S03` |
+| 4.2.1 | 敏感信息日志泄露风险需要先做高风险出口清点与脱敏策略 | needs-discovery | `web/src/components/ErrorBoundary.tsx`; `backend/src/common/services/password_reset.py`; `backend/src/common/monitoring/logger.py` | `M4-S03` |
+
+#### 1.5.7 数据模型 / 状态流转（第 5 节）
+
+| Audit ID | Finding | Disposition | Evidence path(s) | Preliminary owner |
+|---|---|---|---|---|
+| 5.1.1 | `String(36)` 存 UUID 是当前 SQLite / PostgreSQL 兼容策略，不应作为修复项推进 | contradicted-by-project-knowledge | `backend/src/common/db/models.py`; `.gsd/PROJECT.md` | `none` |
+| 5.2.1 | session 状态转换边界是否完整，需先补 transition matrix / negative proof | needs-discovery | `backend/src/common/db/session_lifecycle.py`; `backend/tests/unit/test_session_lifecycle_service.py` | `M5-S01` |
+
+#### 1.5.8 功能缺失 / 待完善项（第 6 节）
+
+| Audit ID | Finding | Disposition | Evidence path(s) | Preliminary owner |
+|---|---|---|---|---|
+| 6.1 | admin “新增公告” 仍是空壳能力 | deferred-by-product | `web/src/app/admin/page.tsx`; `.gsd/PROJECT.md` | `none` |
+| 6.2 | admin 系统监控卡片仍展示硬编码数字，truthfulness 不够 | actionable-now | `web/src/app/admin/page.tsx` | `M6-S03` |
+| 6.3 | admin 全局搜索框无真实检索逻辑 | deferred-by-product | `web/src/app/admin/page.tsx`; `.gsd/PROJECT.md` | `none` |
+| 6.4 | 日志导出按钮无真实闭环 | deferred-by-product | `web/src/app/admin/page.tsx`; `.gsd/PROJECT.md` | `none` |
+
+#### 1.5.9 性能 / 测试 / 文档（第 7-9 节）
+
+| Audit ID | Finding | Disposition | Evidence path(s) | Preliminary owner |
+|---|---|---|---|---|
+| 7.1 | 前端性能建议是泛化建议，缺少当前瓶颈证据 | needs-discovery | `web/src/app/(dashboard)/page.tsx`; `web/src/app/(user)/practice/[sessionId]/page.tsx`; `web/src/lib/performance.ts` | `M6-S01` |
+| 7.2 | 后端性能建议缺少 query baseline / slow-path 证据 | needs-discovery | `backend/src/common/analytics/admin_analytics_service.py`; `backend/src/common/conversation/session_evidence.py` | `M6-S01` |
+| 7.3 | WebSocket 性能建议缺少真实热点 / 序列化成本证据 | needs-discovery | `web/src/hooks/use-practice-websocket.ts`; `backend/src/sales_bot/websocket/stepfun_realtime_handler.py` | `M5-S02` |
+| 8.1 | 前端“覆盖率未知”需要先建立 focused verification baseline，而不是直接喊补测试 | needs-discovery | `web/src/app/(dashboard)/page.test.tsx`; `web/src/app/(auth)/login/page.test.tsx`; `web/src/hooks/use-practice-websocket.test.ts` | `M1-S02` |
+| 8.2 | 后端“覆盖率未知”需要先建立 focused verification baseline，而不是直接喊补测试 | needs-discovery | `backend/tests/contract/test_practice_evidence_contract.py`; `backend/tests/integration/test_session_lifecycle_api.py`; `backend/tests/integration/test_password_reset_api.py` | `M1-S02` |
+| 9.1 | API 文档是否与代码同步，当前只能确认文档存在，不能确认一致性 | needs-discovery | `api-spec.md`; `specs/001-ai-practice-system/contracts/openapi.yaml` | `M6-S02` |
+| 9.2 | “部分复杂逻辑缺少注释”是泛化 maintainability 建议，当前不应优先转成注释 churn | deferred-by-product | `SYSTEM_AUDIT_REPORT.md`; `.gsd/PROJECT.md`; `.codex/loop/PROJECT_GROWTH.md` | `none` |
+
+#### 1.5.10 数据库 / 内存 / 并发 / 依赖治理（第 11-14 节）
+
+| Audit ID | Finding | Disposition | Evidence path(s) | Preliminary owner |
+|---|---|---|---|---|
+| 11.1 | N+1 查询风险需要真实 query baseline 才能确认 | needs-discovery | `backend/src/common/analytics/admin_analytics_service.py`; `backend/src/common/analytics/history_service.py` | `M6-S01` |
+| 11.2 | 索引缺口需要基于真实 PostgreSQL 查询面确认 | needs-discovery | `backend/src/common/db/models.py`; `backend/src/common/analytics/admin_analytics_service.py` | `M6-S01` |
+| 11.3 | 慢查询监控缺失需要先建立现状与告警基线 | needs-discovery | `backend/src/common/monitoring/`; `.github/workflows/nfr-performance-check.yml` | `M6-S01` |
+| 12.1 | WebSocket 连接关闭 / 清理是否泄漏，需要 runtime evidence 才能下 fix 结论 | needs-discovery | `web/src/hooks/use-practice-websocket.ts`; `backend/src/sales_bot/websocket/stepfun_realtime_handler.py` | `M5-S02` |
+| 12.2 | `useEffect` cleanup 完整性需要专项审计而不是全文盲改 | needs-discovery | `web/src/hooks/use-practice-websocket.ts`; `web/src/hooks/use-audio-recorder.ts`; `web/src/hooks/use-streaming-audio-player.ts` | `M5-S02` |
+| 12.3 | 全局事件监听器未移除风险需要专项审计而不是全文盲改 | needs-discovery | `web/src/components/layout/admin-shell.tsx`; `web/src/components/layout/dashboard-shell.tsx`; `web/src/app/(user)/practice/[sessionId]/use-practice-recording-hotkeys.ts` | `M5-S02` |
+| 13.1 | 文件上传并发竞争需要沿 presentation upload / replace 真实链路先做 proof | needs-discovery | `backend/src/presentation_coach/api/presentations.py`; `web/src/app/admin/presentations/[id]/page.tsx` | `M5-S03` |
+| 13.2 | 共享资源竞争条件需要先基于真实 runtime surface 出证据 | needs-discovery | `backend/src/common/storage/audio.py`; `backend/src/sales_bot/websocket/stepfun_realtime_handler.py` | `M5-S03` |
+| 13.3 | 分布式锁缺失不是独立 defect，需先确认多实例下哪些流程真的需要锁 | needs-discovery | `backend/src/common/db/session_lifecycle.py`; `backend/src/presentation_coach/api/presentations.py` | `M5-S03` |
+| 14.1 | 依赖安全漏洞需要通过 `npm audit` / `pip-audit` 先生成真实清单 | needs-discovery | `web/package.json`; `backend/requirements.txt` | `M6-S02` |
+| 14.2 | 许可证合规问题需要先做仓库级扫描清单 | needs-discovery | `web/package.json`; `backend/requirements.txt` | `M6-S02` |
+| 14.3 | 仓库当前缺少明确的依赖更新节奏与验证门禁 | actionable-now | `web/package.json`; `backend/requirements.txt`; `.github/workflows/nfr-performance-check.yml` | `M6-S02` |
+
+#### 1.5.11 i18n / a11y / DR（第 15-17 节）
+
+| Audit ID | Finding | Disposition | Evidence path(s) | Preliminary owner |
+|---|---|---|---|---|
+| 15.1 | 硬编码中文字符串 | deferred-by-product | `SYSTEM_AUDIT_REPORT.md`; `.gsd/PROJECT.md` | `none` |
+| 15.2 | 多语言支持缺失 | deferred-by-product | `SYSTEM_AUDIT_REPORT.md`; `.gsd/PROJECT.md` | `none` |
+| 15.3 | 时区展示问题需要先确认真实用户面与 formatter 行为 | needs-discovery | `backend/src/common/db/models.py`; `web/src/app/(dashboard)/history/page.tsx`; `web/src/app/(dashboard)/leaderboard/page.tsx` | `M3-S03` |
+| 16.1 | ARIA 标签缺失范围需要先做 baseline audit，当前代码已存在部分 a11y seam | needs-discovery | `web/src/components/layout/sidebar.tsx`; `web/src/app/(auth)/login/page.tsx`; `web/src/app/(user)/practice/[sessionId]/page.tsx` | `M3-S03` |
+| 16.2 | 键盘导航支持不足需要先做关键路径 walkthrough | needs-discovery | `web/src/components/layout/sidebar.tsx`; `web/src/app/(user)/practice/[sessionId]/use-practice-recording-hotkeys.ts`; `web/src/components/ui/tabs.tsx` | `M3-S03` |
+| 16.3 | 颜色对比度不足需要先做 design / a11y baseline，而不是盲目调色 | needs-discovery | `SYSTEM_AUDIT_REPORT.md`; `web/src/app/(dashboard)/page.tsx`; `web/src/app/admin/page.tsx` | `M3-S03` |
+| 17.1 | 缺少数据库备份策略文档 / runbook | actionable-now | `SYSTEM_AUDIT_REPORT.md`; `.github/workflows/nfr-performance-check.yml` | `M6-S03` |
+| 17.2 | 缺少标准化故障恢复流程 | actionable-now | `SYSTEM_AUDIT_REPORT.md`; `.github/workflows/nfr-performance-check.yml` | `M6-S03` |
+| 17.3 | 缺少容灾演练基线 | actionable-now | `SYSTEM_AUDIT_REPORT.md`; `.github/workflows/nfr-performance-check.yml` | `M6-S03` |
+
+#### 1.5.12 非 finding 性元信息处理
+- 第 10 节“总结与优先级排序”是对前述 finding 的重新排序，不新增独立 backlog 项。
+- 第 18 节“需要补充的信息”是 discovery 证据缺口列表，已被折叠进 `needs-discovery` disposition，而不是另起 5 个实现型问题。
+
 ---
 
 ## 2. 范围定义（In / Out）

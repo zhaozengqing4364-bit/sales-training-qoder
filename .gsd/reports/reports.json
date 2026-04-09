@@ -2,7 +2,7 @@
   "version": 1,
   "projectName": "销售训练qoder",
   "projectPath": "/Users/zhaozengqing/github/销售训练qoder",
-  "gsdVersion": "2.53.0",
+  "gsdVersion": "2.58.0",
   "entries": [
     {
       "filename": "M001-2026-03-24T10-38-09.html",
@@ -83,6 +83,22 @@
       "doneMilestones": 9,
       "totalMilestones": 10,
       "phase": "pre-planning"
+    },
+    {
+      "filename": "M012-2026-04-09T12-26-52.html",
+      "generatedAt": "2026-04-09T12:26:52.617Z",
+      "milestoneId": "M012",
+      "milestoneTitle": "M012: 首登可用性与体验修复",
+      "label": "M012: M012: 首登可用性与体验修复",
+      "kind": "milestone",
+      "totalCost": 0,
+      "totalTokens": 1712352277,
+      "totalDuration": 289475647,
+      "doneSlices": 50,
+      "totalSlices": 68,
+      "doneMilestones": 12,
+      "totalMilestones": 18,
+      "phase": "evaluating-gates"
     }
   ]
 }

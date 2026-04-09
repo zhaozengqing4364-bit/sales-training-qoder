@@ -133,6 +133,17 @@ SYSTEM_AUDIT_REPORT 中存在若干条已经与当前仓库状态不一致：
 
 ## 6. 针对 SYSTEM_AUDIT_REPORT 的归一化结论
 
+### 6.0 原始归一化矩阵汇总
+- 本轮已在 `.gsd/plans/GSD_PLAN_system-audit-repair.md` 建立覆盖全文的原始矩阵，共 **51** 条 finding。
+- disposition 汇总：
+  - `already-fixed`: **1**
+  - `actionable-now`: **15**
+  - `needs-discovery`: **26**
+  - `deferred-by-product`: **8**
+  - `contradicted-by-project-knowledge`: **1**
+- 含义：当前最大的工作量不在“直接编码修复”，而在把高风险但证据不足的条目先收敛成 discovery proof；真正可立刻进入实现切片的，是前后端 hygiene、error contract、reconnect / admin truthfulness、backup/DR runbook 等子集。
+- 约束：后续 repair roadmap 必须引用该矩阵，而不能直接把 SYSTEM_AUDIT_REPORT 的原始措辞当作 backlog 真相。
+
 ### A. 已修复 / 需文档回写关闭
 - 忘记密码入口与 reset-password 页面
 - 企业微信按钮 disabled 提示

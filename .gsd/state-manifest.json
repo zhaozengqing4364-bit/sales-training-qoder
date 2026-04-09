@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "exported_at": "2026-04-09T12:22:03.700Z",
+  "exported_at": "2026-04-09T16:01:26.483Z",
   "milestones": [
     {
       "id": "M001",
@@ -8545,19 +8545,26 @@
       "milestone_id": "M013",
       "slice_id": "S01",
       "id": "T01",
-      "title": "建立 audit 条目原始归一化矩阵",
-      "status": "pending",
-      "one_liner": "",
-      "narrative": "",
-      "verification_result": "",
+      "title": "Normalized all 51 SYSTEM_AUDIT_REPORT findings into a disposition matrix and synced the rollup counts back into the architecture scan.",
+      "status": "complete",
+      "one_liner": "Normalized all 51 SYSTEM_AUDIT_REPORT findings into a disposition matrix and synced the rollup counts back into the architecture scan.",
+      "narrative": "Resumed from the interrupted session by verifying the previously edited repair plan had already landed the full raw normalization matrix. Confirmed the plan now contains 51 findings from SYSTEM_AUDIT_REPORT mapped to the five dispositions (already-fixed, actionable-now, needs-discovery, deferred-by-product, contradicted-by-project-knowledge), each with at least one code or document evidence path and a preliminary owner. Then updated the architecture scan so its normalization section carries the same authoritative rollup counts and explains that downstream repair roadmap work must reference the matrix instead of treating the audit text as backlog truth. Finally wrote the task summary with the delivered outputs and reproducible verification commands.",
+      "verification_result": "Ran the task-plan verification command against .gsd/plans/GSD_PLAN_system-audit-repair.md and confirmed the five required disposition categories are present throughout the matrix. Ran an additional targeted rg check against .gsd/analysis/ARCHITECTURE_SCAN_SYSTEM_AUDIT_2026-04-08.md to confirm the aggregate counts (51 total findings; 1 already-fixed; 15 actionable-now; 26 needs-discovery; 8 deferred-by-product; 1 contradicted-by-project-knowledge) were written to the scan. Both checks passed with exit code 0 after rerunning the timing wrapper with python3.",
       "duration": "",
-      "completed_at": null,
+      "completed_at": "2026-04-09T16:01:26.447Z",
       "blocker_discovered": false,
-      "deviations": "",
-      "known_issues": "",
-      "key_files": [],
-      "key_decisions": [],
-      "full_summary_md": "",
+      "deviations": "None.",
+      "known_issues": "None.",
+      "key_files": [
+        ".gsd/plans/GSD_PLAN_system-audit-repair.md",
+        ".gsd/analysis/ARCHITECTURE_SCAN_SYSTEM_AUDIT_2026-04-08.md",
+        ".gsd/milestones/M013/slices/S01/tasks/T01-SUMMARY.md"
+      ],
+      "key_decisions": [
+        "Normalize all 51 SYSTEM_AUDIT_REPORT findings into a five-way disposition matrix before treating anything as backlog truth.",
+        "Keep per-finding evidence paths in the repair plan, and mirror only aggregate rollup counts plus interpretation in the architecture scan to avoid dual maintenance."
+      ],
+      "full_summary_md": "---\nid: T01\nparent: S01\nmilestone: M013\nkey_files:\n  - .gsd/plans/GSD_PLAN_system-audit-repair.md\n  - .gsd/analysis/ARCHITECTURE_SCAN_SYSTEM_AUDIT_2026-04-08.md\n  - .gsd/milestones/M013/slices/S01/tasks/T01-SUMMARY.md\nkey_decisions:\n  - Normalize all 51 SYSTEM_AUDIT_REPORT findings into a five-way disposition matrix before treating anything as backlog truth.\n  - Keep per-finding evidence paths in the repair plan, and mirror only aggregate rollup counts plus interpretation in the architecture scan to avoid dual maintenance.\nduration: \"\"\nverification_result: passed\ncompleted_at: 2026-04-09T16:01:26.449Z\nblocker_discovered: false\n---\n\n# T01: Normalized all 51 SYSTEM_AUDIT_REPORT findings into a disposition matrix and synced the rollup counts back into the architecture scan.\n\n**Normalized all 51 SYSTEM_AUDIT_REPORT findings into a disposition matrix and synced the rollup counts back into the architecture scan.**\n\n## What Happened\n\nResumed from the interrupted session by verifying the previously edited repair plan had already landed the full raw normalization matrix. Confirmed the plan now contains 51 findings from SYSTEM_AUDIT_REPORT mapped to the five dispositions (already-fixed, actionable-now, needs-discovery, deferred-by-product, contradicted-by-project-knowledge), each with at least one code or document evidence path and a preliminary owner. Then updated the architecture scan so its normalization section carries the same authoritative rollup counts and explains that downstream repair roadmap work must reference the matrix instead of treating the audit text as backlog truth. Finally wrote the task summary with the delivered outputs and reproducible verification commands.\n\n## Verification\n\nRan the task-plan verification command against .gsd/plans/GSD_PLAN_system-audit-repair.md and confirmed the five required disposition categories are present throughout the matrix. Ran an additional targeted rg check against .gsd/analysis/ARCHITECTURE_SCAN_SYSTEM_AUDIT_2026-04-08.md to confirm the aggregate counts (51 total findings; 1 already-fixed; 15 actionable-now; 26 needs-discovery; 8 deferred-by-product; 1 contradicted-by-project-knowledge) were written to the scan. Both checks passed with exit code 0 after rerunning the timing wrapper with python3.\n\n## Verification Evidence\n\n| # | Command | Exit Code | Verdict | Duration |\n|---|---------|-----------|---------|----------|\n| 1 | `rg -n \"already-fixed|actionable-now|needs-discovery|deferred-by-product|contradicted-by-project-knowledge\" .gsd/plans/GSD_PLAN_system-audit-repair.md` | 0 | ✅ pass | 14ms |\n| 2 | `rg -n \"51|already-fixed.*1|actionable-now.*15|needs-discovery.*26|deferred-by-product.*8|contradicted-by-project-knowledge.*1\" .gsd/analysis/ARCHITECTURE_SCAN_SYSTEM_AUDIT_2026-04-08.md` | 0 | ✅ pass | 18ms |\n\n\n## Deviations\n\nNone.\n\n## Known Issues\n\nNone.\n\n## Files Created/Modified\n\n- `.gsd/plans/GSD_PLAN_system-audit-repair.md`\n- `.gsd/analysis/ARCHITECTURE_SCAN_SYSTEM_AUDIT_2026-04-08.md`\n- `.gsd/milestones/M013/slices/S01/tasks/T01-SUMMARY.md`\n",
       "description": "逐条阅读 SYSTEM_AUDIT_REPORT、PROJECT、REQUIREMENTS、KNOWLEDGE、M012 路线图，建立 audit section → finding → disposition 的原始矩阵；每条 finding 至少记录一条代码/文档证据路径，避免把已修项或 deferred 项混入 actionable backlog。",
       "estimate": "45m",
       "files": [
@@ -15574,6 +15581,28 @@
       "verdict": "✅ pass",
       "duration_ms": 1405,
       "created_at": "2026-04-09T11:58:35.643Z"
+    },
+    {
+      "id": 275,
+      "task_id": "T01",
+      "slice_id": "S01",
+      "milestone_id": "M013",
+      "command": "rg -n \"already-fixed|actionable-now|needs-discovery|deferred-by-product|contradicted-by-project-knowledge\" .gsd/plans/GSD_PLAN_system-audit-repair.md",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 14,
+      "created_at": "2026-04-09T16:01:26.448Z"
+    },
+    {
+      "id": 276,
+      "task_id": "T01",
+      "slice_id": "S01",
+      "milestone_id": "M013",
+      "command": "rg -n \"51|already-fixed.*1|actionable-now.*15|needs-discovery.*26|deferred-by-product.*8|contradicted-by-project-knowledge.*1\" .gsd/analysis/ARCHITECTURE_SCAN_SYSTEM_AUDIT_2026-04-08.md",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 18,
+      "created_at": "2026-04-09T16:01:26.449Z"
     }
   ]
 }

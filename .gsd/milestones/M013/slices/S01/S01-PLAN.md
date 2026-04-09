@@ -4,7 +4,7 @@
 **Demo:** After this: 归一化矩阵覆盖所有 audit section，每个条目有 disposition、证据路径和后续 slice 归属
 
 ## Tasks
-- [ ] **T01: 建立 audit 条目原始归一化矩阵** — 逐条阅读 SYSTEM_AUDIT_REPORT、PROJECT、REQUIREMENTS、KNOWLEDGE、M012 路线图，建立 audit section → finding → disposition 的原始矩阵；每条 finding 至少记录一条代码/文档证据路径，避免把已修项或 deferred 项混入 actionable backlog。
+- [x] **T01: Normalized all 51 SYSTEM_AUDIT_REPORT findings into a disposition matrix and synced the rollup counts back into the architecture scan.** — 逐条阅读 SYSTEM_AUDIT_REPORT、PROJECT、REQUIREMENTS、KNOWLEDGE、M012 路线图，建立 audit section → finding → disposition 的原始矩阵；每条 finding 至少记录一条代码/文档证据路径，避免把已修项或 deferred 项混入 actionable backlog。
   - Estimate: 45m
   - Files: SYSTEM_AUDIT_REPORT.md, .gsd/PROJECT.md, .gsd/REQUIREMENTS.md, .gsd/KNOWLEDGE.md, .gsd/milestones/M012/M012-ROADMAP.md
   - Verify: rg -n "already-fixed|actionable-now|needs-discovery|deferred-by-product|contradicted-by-project-knowledge" .gsd/plans/GSD_PLAN_system-audit-repair.md
