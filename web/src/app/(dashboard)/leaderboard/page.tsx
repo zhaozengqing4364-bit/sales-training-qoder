@@ -124,7 +124,9 @@ export default function LeaderboardPage() {
             <header className="flex justify-between items-center gap-4 flex-wrap">
                 <div>
                     <h1 className="text-2xl font-bold text-slate-900">排行榜</h1>
-                    <p className="text-sm text-slate-500 mt-1">基于已完成训练会话的平均得分实时计算</p>
+                    <p className="text-sm text-slate-500 mt-1">
+                        均分与排名只纳入可评估的已完成训练，证据不足会话会单独记账，不会混入榜单。
+                    </p>
                 </div>
                 <div className="flex bg-white p-1 rounded-full shadow-sm border border-slate-100">
                     {TIME_PERIOD_OPTIONS.map((option) => (
@@ -176,7 +178,7 @@ export default function LeaderboardPage() {
                     正在加载排行榜...
                 </GlassCard>
             ) : entries.length === 0 ? (
-                <GlassCard className="p-10 text-center text-slate-500">暂无排行榜数据，完成练习后会自动上榜。</GlassCard>
+                <GlassCard className="p-10 text-center text-slate-500">暂无排行榜数据，完成可评估练习后会自动上榜。</GlassCard>
             ) : (
                 <>
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -223,7 +225,7 @@ export default function LeaderboardPage() {
 
             <div className="text-xs text-slate-400 flex items-center gap-2">
                 <Trophy className="w-3 h-3" />
-                排名根据逻辑/准确性/完整性综合分计算。
+                若某次训练因证据不足暂不可评估，它会保留在训练记录里，但不会拉高或拉低排行榜均分。
             </div>
         </div>
     );

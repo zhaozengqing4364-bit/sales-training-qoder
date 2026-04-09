@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "exported_at": "2026-04-09T11:45:45.995Z",
+  "exported_at": "2026-04-09T11:58:35.678Z",
   "milestones": [
     {
       "id": "M001",
@@ -8503,19 +8503,24 @@
       "milestone_id": "M012",
       "slice_id": "S03",
       "id": "T03",
-      "title": "把 learner 排行榜评分说明收口到当前 evaluable-session 语义",
-      "status": "pending",
-      "one_liner": "",
-      "narrative": "",
-      "verification_result": "",
+      "title": "Updated learner leaderboard copy and regression tests so ranking and averages are clearly limited to evaluable completed sessions.",
+      "status": "complete",
+      "one_liner": "Updated learner leaderboard copy and regression tests so ranking and averages are clearly limited to evaluable completed sessions.",
+      "narrative": "Updated web/src/app/(dashboard)/leaderboard/page.tsx to replace the old learner-facing weighted-score-style wording with truthful evaluable-session copy in the header, empty state, and footer. The page now explains that only evaluable completed sessions contribute to rank and average score, while evidence-insufficient sessions are kept separately and do not get mixed into leaderboard math. The existing api.dashboard.getPublicLeaderboard() fetch, api.dashboard.getMyRank() fallback, time-period filter, scenario filter, loading state, and empty-state control flow were preserved. Added web/src/app/(dashboard)/leaderboard/page.test.tsx to cover populated leaderboard copy, malformed/empty or failed main leaderboard responses, and the fallback my-rank path across filter changes.",
+      "verification_result": "Ran npm --prefix web test -- --run \"src/app/(dashboard)/leaderboard/page.test.tsx\" and confirmed 3/3 focused Vitest cases pass for populated, malformed/empty, and fallback my-rank leaderboard states. Fresh LSP diagnostics on web/src/app/(dashboard)/leaderboard/page.tsx and web/src/app/(dashboard)/leaderboard/page.test.tsx both reported no issues. Browser verification was not run because no local frontend server was listening in this environment.",
       "duration": "",
-      "completed_at": null,
+      "completed_at": "2026-04-09T11:58:35.642Z",
       "blocker_discovered": false,
-      "deviations": "",
-      "known_issues": "",
-      "key_files": [],
-      "key_decisions": [],
-      "full_summary_md": "",
+      "deviations": "None.",
+      "known_issues": "No product issues were found in the leaderboard seam itself. Browser verification was not performed because no local frontend server was available in this execution environment.",
+      "key_files": [
+        "web/src/app/(dashboard)/leaderboard/page.tsx",
+        "web/src/app/(dashboard)/leaderboard/page.test.tsx"
+      ],
+      "key_decisions": [
+        "Kept the learner leaderboard closure frontend-only by updating explanatory copy and regression coverage while preserving the existing leaderboard and my-rank API behavior."
+      ],
+      "full_summary_md": "---\nid: T03\nparent: S03\nmilestone: M012\nkey_files:\n  - web/src/app/(dashboard)/leaderboard/page.tsx\n  - web/src/app/(dashboard)/leaderboard/page.test.tsx\nkey_decisions:\n  - Kept the learner leaderboard closure frontend-only by updating explanatory copy and regression coverage while preserving the existing leaderboard and my-rank API behavior.\nduration: \"\"\nverification_result: passed\ncompleted_at: 2026-04-09T11:58:35.643Z\nblocker_discovered: false\n---\n\n# T03: Updated learner leaderboard copy and regression tests so ranking and averages are clearly limited to evaluable completed sessions.\n\n**Updated learner leaderboard copy and regression tests so ranking and averages are clearly limited to evaluable completed sessions.**\n\n## What Happened\n\nUpdated web/src/app/(dashboard)/leaderboard/page.tsx to replace the old learner-facing weighted-score-style wording with truthful evaluable-session copy in the header, empty state, and footer. The page now explains that only evaluable completed sessions contribute to rank and average score, while evidence-insufficient sessions are kept separately and do not get mixed into leaderboard math. The existing api.dashboard.getPublicLeaderboard() fetch, api.dashboard.getMyRank() fallback, time-period filter, scenario filter, loading state, and empty-state control flow were preserved. Added web/src/app/(dashboard)/leaderboard/page.test.tsx to cover populated leaderboard copy, malformed/empty or failed main leaderboard responses, and the fallback my-rank path across filter changes.\n\n## Verification\n\nRan npm --prefix web test -- --run \"src/app/(dashboard)/leaderboard/page.test.tsx\" and confirmed 3/3 focused Vitest cases pass for populated, malformed/empty, and fallback my-rank leaderboard states. Fresh LSP diagnostics on web/src/app/(dashboard)/leaderboard/page.tsx and web/src/app/(dashboard)/leaderboard/page.test.tsx both reported no issues. Browser verification was not run because no local frontend server was listening in this environment.\n\n## Verification Evidence\n\n| # | Command | Exit Code | Verdict | Duration |\n|---|---------|-----------|---------|----------|\n| 1 | `npm --prefix web test -- --run \"src/app/(dashboard)/leaderboard/page.test.tsx\"` | 0 | ✅ pass | 1405ms |\n\n\n## Deviations\n\nNone.\n\n## Known Issues\n\nNo product issues were found in the leaderboard seam itself. Browser verification was not performed because no local frontend server was available in this execution environment.\n\n## Files Created/Modified\n\n- `web/src/app/(dashboard)/leaderboard/page.tsx`\n- `web/src/app/(dashboard)/leaderboard/page.test.tsx`\n",
       "description": "Skills: safe-grow, react-best-practices, vitest, verification-before-completion\n\n排行榜现在已经有“说明”占位，但仍停留在旧 learner weighted-score 语义；而 admin analytics 已经把“只纳入可评估训练、证据不足单独记账”作为当前权威口径。这个任务不做 backend 契约或排序逻辑变更，只把 learner 排行榜的 header/footer 说明收口到真实语义，让新人知道为什么自己会/不会上榜以及均分是怎么算的。保留现有的周期/场景筛选、`myRank` fallback 与空态行为，不要把 S03 扩张成 analytics backend slice。\n\n## Failure Modes\n\n| Dependency | On error | On timeout | On malformed response |\n|------------|----------|-----------|----------------------|\n| `api.dashboard.getPublicLeaderboard()` | 保持现有空态/加载态，不因为 copy 调整引入新异常。 | 继续显示 loading -> empty/fallback 行为。 | 缺失 `entries` / `my_rank` 时使用既有 fallback fetch 与默认空态。 |\n| `api.dashboard.getMyRank()` fallback | 若失败则隐藏我的排名卡片，不能影响主榜单 copy。 | 同 error：保留榜单主体与说明文案。 | 对缺失 rank / totals 的响应保持现有 defensive fallback。 |\n\n## Load Profile\n\n- **Shared resources**: 现有 leaderboard 两次 API fetch（主榜单 + 可选 my-rank fallback）；不新增请求种类。\n- **Per-operation cost**: 仅文案与测试断言变化；运行时成本基本不变。\n- **10x breakpoint**: 首先受限于现有 leaderboard API，而不是这次 copy 收口。\n\n## Negative Tests\n\n- **Malformed inputs**: 空榜单、缺失 `my_rank`、缺失 `entries` 时仍显示 learner-safe 说明和空态。\n- **Error paths**: 主榜单或 my-rank fallback 失败时不回退到旧 weighted-score 语义，也不抛出白屏。\n- **Boundary conditions**: 周榜/月榜/总榜与不同场景筛选切换后，说明文案仍保持 evaluable-session 语义。\n\n## Steps\n\n1. 以 `web/src/app/admin/analytics/page.tsx` 的权威 copy 为参考，更新 learner leaderboard 页头/页尾说明，明确只纳入可评估已完成训练，证据不足会话不混入均分。\n2. 保持当前筛选、加载、空态与 `myRank` fallback 行为不变，不修改 backend 排序/字段契约。\n3. 新增 focused Vitest 覆盖正常榜单、空榜单和 fallback `myRank` 场景下的说明文案与现有交互状态。\n\n## Must-Haves\n\n- [ ] learner leaderboard 明确说明均分/排行只纳入可评估已完成训练。\n- [ ] 证据不足/未评估会话不会再被文案描述成旧 weighted-score 统计。\n- [ ] 现有 time-period / scenario filters 与 `myRank` fallback 继续工作。\n- [ ] 不新增 backend leaderboard 变更。\n",
       "estimate": "1h",
       "files": [
@@ -15546,6 +15551,17 @@
       "verdict": "✅ pass",
       "duration_ms": 1011,
       "created_at": "2026-04-09T11:45:45.949Z"
+    },
+    {
+      "id": 274,
+      "task_id": "T03",
+      "slice_id": "S03",
+      "milestone_id": "M012",
+      "command": "npm --prefix web test -- --run \"src/app/(dashboard)/leaderboard/page.test.tsx\"",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 1405,
+      "created_at": "2026-04-09T11:58:35.643Z"
     }
   ]
 }

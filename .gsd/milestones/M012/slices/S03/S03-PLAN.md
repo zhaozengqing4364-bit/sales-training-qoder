@@ -82,7 +82,7 @@
   - Estimate: 2h
   - Files: web/src/hooks/use-voice-speed-preference.ts, web/src/hooks/use-voice-speed-preference.test.ts, web/src/app/(dashboard)/profile/page.tsx, web/src/hooks/use-practice-websocket.ts, web/src/hooks/use-streaming-audio-player.ts, web/src/hooks/use-streaming-audio-player.test.ts
   - Verify: npm --prefix web test -- --run "src/app/(dashboard)/profile/page.test.tsx" "src/hooks/use-voice-speed-preference.test.ts" "src/hooks/use-streaming-audio-player.test.ts"
-- [ ] **T03: 把 learner 排行榜评分说明收口到当前 evaluable-session 语义** — Skills: safe-grow, react-best-practices, vitest, verification-before-completion
+- [x] **T03: Updated learner leaderboard copy and regression tests so ranking and averages are clearly limited to evaluable completed sessions.** — Skills: safe-grow, react-best-practices, vitest, verification-before-completion
 
 排行榜现在已经有“说明”占位，但仍停留在旧 learner weighted-score 语义；而 admin analytics 已经把“只纳入可评估训练、证据不足单独记账”作为当前权威口径。这个任务不做 backend 契约或排序逻辑变更，只把 learner 排行榜的 header/footer 说明收口到真实语义，让新人知道为什么自己会/不会上榜以及均分是怎么算的。保留现有的周期/场景筛选、`myRank` fallback 与空态行为，不要把 S03 扩张成 analytics backend slice。
 
