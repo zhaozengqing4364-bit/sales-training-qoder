@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "exported_at": "2026-04-09T17:17:36.042Z",
+  "exported_at": "2026-04-09T17:46:10.077Z",
   "milestones": [
     {
       "id": "M001",
@@ -666,10 +666,10 @@
     {
       "id": "M013",
       "title": "",
-      "status": "queued",
+      "status": "complete",
       "depends_on": [],
       "created_at": "2026-04-08T08:36:20.778Z",
-      "completed_at": null,
+      "completed_at": "2026-04-09T17:46:10.011Z",
       "vision": "把 SYSTEM_AUDIT_REPORT 中的所有条目分成\"已修 / 真实缺口 / 需 discovery / 当前 defer\"，形成可信 backlog；同时锁定后续所有 repair slice 的验证命令集合，确保后续执行模型只处理真实问题，不被 stale finding 误导。",
       "success_criteria": [
         "SYSTEM_AUDIT_REPORT 每个条目都有明确 disposition（already-fixed / actionable-now / needs-discovery / deferred-by-product / contradicted-by-project-knowledge）",
@@ -1934,16 +1934,16 @@
       "milestone_id": "M013",
       "id": "S02",
       "title": "审计相关验证基线补齐",
-      "status": "pending",
+      "status": "complete",
       "risk": "low",
       "depends": [
         "S01"
       ],
       "demo": "每个后续 slice 至少有一条已存在的 focused verification command 可直接执行",
       "created_at": "2026-04-08T08:38:10.616Z",
-      "completed_at": null,
-      "full_summary_md": "",
-      "full_uat_md": "",
+      "completed_at": "2026-04-09T17:32:19.126Z",
+      "full_summary_md": "---\nid: S02\nparent: M013\nmilestone: M013\nprovides:\n  - A repo-root verification inventory for auth, dashboard, history, profile, practice, lifecycle, websocket, and admin surfaces.\n  - An explicit repo-root + serial backend pytest contract that later auto-mode runs can copy safely.\n  - A centralized M014-M018 verification baseline map with honest exceptions for M018/S02 dependency-governance and M018/S03 backup-recovery work.\nrequires:\n  - slice: S01\n    provides: Five-way audit disposition matrix, closeout appendix, and logical-to-real owner crosswalk for all 51 SYSTEM_AUDIT_REPORT findings.\naffects:\n  - M014/S01\n  - M014/S02\n  - M014/S03\n  - M014/S04\n  - M015/S01\n  - M015/S02\n  - M015/S03\n  - M016/S01\n  - M016/S02\n  - M016/S03\n  - M017/S01\n  - M017/S02\n  - M017/S03\n  - M018/S01\n  - M018/S02\n  - M018/S03\nkey_files:\n  - docs/plans/2026-04-08-system-audit-remediation-plan.md\n  - .gsd/plans/GSD_PLAN_system-audit-repair.md\n  - .gsd/milestones/M013/M013-ROADMAP.md\n  - .gsd/DECISIONS.md\n  - .gsd/KNOWLEDGE.md\n  - .gsd/PROJECT.md\nkey_decisions:\n  - Reuse the smallest existing focused web/backend suites per surface instead of inventing umbrella regression commands.\n  - Keep backend-focused pytest proofs repo-root runnable and serial in both the execution handoff and the GSD authority plan.\n  - Preserve M018/S02 dependency-governance and M018/S03 backup-recovery as explicit non-feature verification exceptions.\npatterns_established:\n  - Lock verification baselines by surface and reuse the smallest existing repo-root command instead of inventing umbrella suites.\n  - Document auto-mode-sensitive backend proof rules in both the execution handoff and the GSD authority plan so later executors do not depend on chat memory or knowledge-only context.\n  - Keep non-feature governance/runbook slices as explicit verification exceptions when forcing them into feature-surface tests would make the roadmap less truthful.\nobservability_surfaces:\n  - none\ndrill_down_paths:\n  - .gsd/milestones/M013/slices/S02/tasks/T01-SUMMARY.md\n  - .gsd/milestones/M013/slices/S02/tasks/T02-SUMMARY.md\n  - .gsd/milestones/M013/slices/S02/tasks/T03-SUMMARY.md\nduration: \"\"\nverification_result: passed\ncompleted_at: 2026-04-09T17:32:19.129Z\nblocker_discovered: false\n---\n\n# S02: 审计相关验证基线补齐\n\n**Locked a reusable repo-root verification baseline for every downstream audit-repair slice, including a serial backend-pytest contract and explicit governance/runbook exceptions for non-feature work.**\n\n## What Happened\n\nS02 turned M013 from audit normalization into an execution-ready verification handoff. T01 added a repo-root focused verification inventory to `docs/plans/2026-04-08-system-audit-remediation-plan.md`, mapping the real existing auth, dashboard, history, profile, practice, lifecycle, websocket, and admin surfaces to the smallest reusable web/backend commands instead of inventing new umbrella suites. T02 then made the backend execution contract explicit in both `docs/plans/2026-04-08-system-audit-remediation-plan.md` and `.gsd/plans/GSD_PLAN_system-audit-repair.md`: downstream slices must copy repo-root backend pytest commands verbatim and run them serially so auto-mode does not split `cd backend && pytest ...` into false failures and does not trip the shared top-level `.coverage` SQLite race. T03 finished the slice by centralizing the downstream verification baseline map for every slice in M014-M018, mirroring that contract into `.gsd/milestones/M013/M013-ROADMAP.md`, and preserving M018/S02 dependency-governance plus M018/S03 backup-recovery as explicit ops/runbook verification exceptions instead of forcing fake web/backend feature tests. During closeout I reviewed the task summaries, recorded the missing verification decisions in `.gsd/DECISIONS.md`, added one reusable knowledge note that dashboard/profile remain web-led surfaces until dedicated backend suites exist, and refreshed `.gsd/PROJECT.md` so the current state now reflects S02 as complete. The net result is that later repair/discovery executors can start from one authoritative verification map and spend time on real defects instead of re-researching or mis-running proof commands.\n\n## Verification\n\nFresh slice-close verification reran all planned gates plus one coverage-completeness check from the repo root. 1) `rg -n \"npm --prefix web test|backend/venv/bin/python -m pytest\" docs/plans/2026-04-08-system-audit-remediation-plan.md` passed and confirmed the focused inventory plus downstream map still expose repo-root web/backend commands. 2) `rg -n \"串行|coverage|backend/venv/bin/python -m pytest -c backend/pyproject.toml\" docs/plans/2026-04-08-system-audit-remediation-plan.md .gsd/plans/GSD_PLAN_system-audit-repair.md` passed and confirmed both plan documents still carry the repo-root backend pytest form plus the serial/coverage contract. 3) The T03 plan grep was rerun successfully with a shell that actually expands `**`: `zsh -c 'setopt extended_glob; rg -n \"npm --prefix web test|backend/venv/bin/python -m pytest\" .gsd/milestones/M01{4,5,6,7,8}*/**/*.md docs/plans/2026-04-08-system-audit-remediation-plan.md'` passed and showed the downstream milestone plans plus the remediation handoff all expose the expected reusable baseline commands. 4) A structured scan over every M014-M018 roadmap/slice plan confirmed all 16 downstream slices are covered: 14 slices already carry a focused reusable baseline command and 2 slices (`M018/S02`, `M018/S03`) are explicitly documented as governance/runbook exceptions with honest non-feature proof commands. No missing downstream verification baselines remained.\n\n## Requirements Advanced\n\nNone.\n\n## Requirements Validated\n\nNone.\n\n## New Requirements Surfaced\n\nNone.\n\n## Requirements Invalidated or Re-scoped\n\nNone.\n\n## Deviations\n\nMinor closeout-only adaptation: the literal `**/*.md` T03 grep was rerun under `zsh` because the default shell harness here does not expand `**`. The verification target and path pattern stayed the same, and the structured scan was added only to prove slice-goal completeness beyond grep visibility.\n\n## Known Limitations\n\nThis slice documents and locks reusable verification baselines; it does not add new product tests or retire downstream defects by itself. Dashboard and profile remain web-led surfaces today because the repository still has no dedicated backend-focused suites that map only to those pages.\n\n## Follow-ups\n\nProceed into M014-M018 using the locked baseline map instead of re-researching proof commands. Keep backend pytest proofs repo-root runnable and serial, keep dashboard/profile slices web-led unless the change truly crosses a backend seam, and preserve the documented M018/S02-M018/S03 governance/runbook exceptions rather than forcing them into feature-surface test shapes.\n\n## Files Created/Modified\n\n- `docs/plans/2026-04-08-system-audit-remediation-plan.md` — Added the repo-root focused verification inventory, backend serial pytest contract, and downstream M014-M018 baseline map.\n- `.gsd/plans/GSD_PLAN_system-audit-repair.md` — Mirrored the repo-root backend pytest/serial contract into the GSD authority plan for downstream repair slices.\n- `.gsd/milestones/M013/M013-ROADMAP.md` — Recorded the centralized downstream verification baseline contract for later audit-repair slices.\n- `.gsd/DECISIONS.md` — Appended the missing M013/S02 verification decisions covering reusable focused suites, backend serial pytest, and governance/runbook exceptions.\n- `.gsd/KNOWLEDGE.md` — Added future-agent guidance that dashboard/profile are web-led verification surfaces and retained the shell-glob gotcha for milestone-plan greps.\n- `.gsd/PROJECT.md` — Refreshed current-state tracking so M013/S02 now appears complete and downstream slices are told to consume the new verification crosswalk.\n",
+      "full_uat_md": "# S02: 审计相关验证基线补齐 — UAT\n\n**Milestone:** M013\n**Written:** 2026-04-09T17:32:19.129Z\n\n# S02: 审计相关验证基线补齐 — UAT\n\n**Milestone:** M013  \n**Slice goal:** 为后续所有 repair/discovery slices 锁定可复用的 web/backend focused 验证命令集合，避免执行时重新发明 proof 或被 stale/错误命令误导。\n\n## Preconditions\n- 仓库根目录存在最新的 `docs/plans/2026-04-08-system-audit-remediation-plan.md`、`.gsd/plans/GSD_PLAN_system-audit-repair.md`、`.gsd/milestones/M013/M013-ROADMAP.md`。\n- 评审者可从仓库根目录运行 `rg`、`python3`、`zsh`。\n- 允许读取 `.gsd/DECISIONS.md`、`.gsd/KNOWLEDGE.md`、`.gsd/PROJECT.md` 以确认 closeout 元信息已同步。\n\n## Case 1 — Focused verification inventory must exist for the real audit surfaces\n1. 打开 `docs/plans/2026-04-08-system-audit-remediation-plan.md`，定位到 `Focused Verification Command Inventory (repo-root runnable)`。\n2. 运行：\n   - `rg -n \"npm --prefix web test|backend/venv/bin/python -m pytest\" docs/plans/2026-04-08-system-audit-remediation-plan.md`\n3. 预期：能看到 auth、dashboard、history、profile、practice、lifecycle、websocket、admin 八个 surface 的 focused baseline 行。\n4. 抽查以下两类 surface：\n   - `auth` / `practice`：同时存在 web + backend focused command。\n   - `dashboard` / `profile`：只有 focused web command，没有伪造的 backend-only baseline。\n5. 预期：inventory 明确告诉后续 slices 应复用真实现存命令，而不是发明新的 umbrella suite。\n\n## Case 2 — Backend pytest contract must be explicit in both execution handoff and GSD authority plan\n1. 在 `docs/plans/2026-04-08-system-audit-remediation-plan.md` 中定位 `Backend pytest contract for auto-mode`。\n2. 在 `.gsd/plans/GSD_PLAN_system-audit-repair.md` 中定位对应的 backend repo-root pytest/串行约束段落。\n3. 运行：\n   - `rg -n \"串行|coverage|backend/venv/bin/python -m pytest -c backend/pyproject.toml\" docs/plans/2026-04-08-system-audit-remediation-plan.md .gsd/plans/GSD_PLAN_system-audit-repair.md`\n4. 预期：两个文档都明确写出：\n   - backend focused pytest 必须保持 repo-root runnable 形式；\n   - 不应退回 `cd backend && pytest ...`；\n   - 多条 backend proof 需要串行运行；\n   - 原因是顶层 `.coverage` / pytest-cov SQLite 竞争风险。\n5. 预期：后续执行者即使不看聊天上下文，也能直接从文档复制正确命令和约束。\n\n## Case 3 — Every downstream slice in M014-M018 must have a reusable baseline or an explicit exception\n1. 运行计划里的 downstream grep（使用会展开 `**` 的 shell）：\n   - `zsh -c 'setopt extended_glob; rg -n \"npm --prefix web test|backend/venv/bin/python -m pytest\" .gsd/milestones/M01{4,5,6,7,8}*/**/*.md docs/plans/2026-04-08-system-audit-remediation-plan.md'`\n2. 预期：M014-S01..S04、M015-S01..S03、M016-S01..S03、M017-S01..S03、M018-S01 都能在 slice/task plans 或 remediation handoff 中看到 focused baseline command。\n3. 再运行一个 structured scan（任意等价脚本均可），逐个检查 `M014`-`M018` 的 roadmap 和 slice plans。\n4. 预期：\n   - 16 个 downstream slices 全部被覆盖；\n   - 14 个 slices 具备 focused reusable baseline；\n   - `M018/S02`、`M018/S03` 被识别为显式 documented exceptions，而不是缺失项。\n5. 预期：不存在任何一个后续 slice 处于“没有现成 proof 命令也没有 exception 说明”的状态。\n\n## Case 4 — Governance/runbook slices must stay honest exceptions, not fake feature-test rows\n1. 在 `docs/plans/2026-04-08-system-audit-remediation-plan.md` 的 downstream baseline map 中定位 `M018 / S02` 与 `M018 / S03`。\n2. 打开 `.gsd/DECISIONS.md`，查找 `M013/S02/T03` 对应决策。\n3. 预期：\n   - `M018/S02` 使用 `npm audit --prefix web` / `backend/venv/bin/python -m pip_audit` 之类 governance proof；\n   - `M018/S03` 使用 runbook file-presence / content grep proof；\n   - 文档与决策都明确这些不是 feature-surface test，而是刻意保留的 honest exceptions。\n4. 预期：后续 slices 不需要为了“看起来一致”而伪造 web/backend 页面测试。\n\n## Case 5 — Closeout metadata must teach future executors how to use the baseline correctly\n1. 打开 `.gsd/DECISIONS.md`。\n2. 预期：存在 M013/S02 相关 verification decisions，至少\n",
       "goal": "为后续所有 repair slice 锁定可复用的 web/backend focused 验证命令集合",
       "success_criteria": "- auth/dashboard/history/profile/practice/lifecycle/websocket/admin 每个领域至少有 1 条可执行 focused command\n- backend repo-root pytest 命令明确标注串行要求\n- 无需大规模新增测试即可覆盖核心验证面",
       "proof_level": "contract",
@@ -12645,6 +12645,42 @@
       "decision": "How downstream audit-repair slices should handle verification baselines for non-feature governance work",
       "choice": "Keep M018/S02 dependency-governance and M018/S03 backup-recovery slices as explicit verification exceptions that use their existing ops/runbook proof commands instead of forcing them into web/backend focused test shapes.",
       "rationale": "All feature-facing repair slices from M014-M018/S01 already map cleanly to reusable repo-root web/backend focused commands, but the governance/runbook slices are materially different work. Preserving npm audit, pip_audit, file-presence, and runbook-content checks as first-class exceptions keeps the verification contract honest and prevents later executors from inventing fake feature-surface tests just to satisfy the baseline pattern.",
+      "revisable": "Yes",
+      "made_by": "agent",
+      "superseded_by": null
+    },
+    {
+      "seq": 1541,
+      "id": "D171",
+      "when_context": "M013/S02/T02",
+      "scope": "verification",
+      "decision": "How should auto-mode execute backend-focused pytest proofs in downstream audit-repair slices?",
+      "choice": "Keep backend-focused pytest commands repo-root runnable and serial in both the execution handoff and the GSD authority plan.",
+      "rationale": "Repo-root backend pytest commands are the only form that later executors can copy safely without cwd drift, and this repository's pytest-cov runs still share the top-level .coverage SQLite file. Making repo-root form plus serial execution explicit in both remediation plans prevents false failures from 'cd backend && pytest' split execution and avoids parallel coverage races during closeout.",
+      "revisable": "Yes",
+      "made_by": "agent",
+      "superseded_by": null
+    },
+    {
+      "seq": 1542,
+      "id": "D172",
+      "when_context": "M013/S02/T02",
+      "scope": "verification",
+      "decision": "How should auto-mode execute backend-focused pytest proofs in downstream audit-repair slices?",
+      "choice": "Keep backend-focused pytest commands repo-root runnable and serial in both the execution handoff and the GSD authority plan.",
+      "rationale": "Repo-root backend pytest commands are the only form that later executors can copy safely without cwd drift, and this repository's pytest-cov runs still share the top-level .coverage SQLite file. Making repo-root form plus serial execution explicit in both remediation plans prevents false failures from 'cd backend && pytest' split execution and avoids parallel coverage races during closeout.",
+      "revisable": "Yes",
+      "made_by": "agent",
+      "superseded_by": null
+    },
+    {
+      "seq": 1543,
+      "id": "D173",
+      "when_context": "M013/S02/T01",
+      "scope": "verification",
+      "decision": "How should downstream audit-repair slices choose reusable verification commands?",
+      "choice": "Reuse the smallest existing focused web/backend suites per surface instead of inventing umbrella regression commands.",
+      "rationale": "The M013/S02 verification inventory showed the real repo already contains focused auth, dashboard, history, profile, practice, lifecycle, websocket, and admin seams. Copying the smallest existing repo-root command per surface keeps later slices honest, lowers blast radius, and avoids speculative umbrella suites that do not match the actual changed behavior.",
       "revisable": "Yes",
       "made_by": "agent",
       "superseded_by": null
