@@ -34,6 +34,16 @@ describe("LoginPage", () => {
         loginMock.mockReset();
     });
 
+    it("renders the unavailable WeCom login option as a disabled button with explicit coming-soon copy", () => {
+        render(<LoginPage />);
+
+        const wecomButton = screen.getByRole("button", { name: /企业微信登录/i }) as HTMLButtonElement;
+
+        expect(wecomButton.disabled).toBe(true);
+        expect(wecomButton.getAttribute("title")).toBe("即将支持，敬请期待");
+        expect(screen.getByText("企业微信登录即将支持，敬请期待")).toBeTruthy();
+    });
+
     it("renders a forgot-password link below the password field", () => {
         render(<LoginPage />);
 

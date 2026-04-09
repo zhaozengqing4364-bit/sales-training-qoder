@@ -47,13 +47,22 @@ export default function LoginPage() {
                 </div>
 
                 <div className="space-y-4">
-                    <Button
-                        disabled
-                        className="w-full h-12 bg-slate-200 text-slate-400 shadow-md rounded-full border-none font-medium cursor-not-allowed"
-                        title="即将支持，敬请期待"
-                    >
-                        企业微信登录 (WeCom) — 即将支持
-                    </Button>
+                    <div className="space-y-2">
+                        <Button
+                            disabled
+                            aria-describedby="wecom-login-coming-soon"
+                            className="w-full h-12 bg-slate-100 text-slate-400 border border-slate-200 shadow-none rounded-full font-medium cursor-not-allowed opacity-70"
+                            title="即将支持，敬请期待"
+                        >
+                            企业微信登录 (WeCom) — 即将支持
+                        </Button>
+                        <p
+                            id="wecom-login-coming-soon"
+                            className="text-center text-xs text-slate-400"
+                        >
+                            企业微信登录即将支持，敬请期待
+                        </p>
+                    </div>
 
                     <div className="relative flex justify-center text-xs uppercase my-6">
                         <span className="bg-white/50 px-3 text-slate-400 z-10 font-medium">或者使用账号登录</span>
