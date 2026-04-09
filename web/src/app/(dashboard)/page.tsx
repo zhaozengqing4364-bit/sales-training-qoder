@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import packageJson from "../../../package.json";
+import { useState, useEffect } from "react";
 import { GlassCard } from "@/components/ui/glass-card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -72,16 +73,17 @@ function getGreeting(): string {
 }
 
 function getVersionBadge(): string {
-    const envVersion = process.env.NEXT_PUBLIC_APP_VERSION;
-    if (envVersion) return `v${envVersion}`;
-    // fallback: read from package.json at build time via Next.js public runtime config
-    return "抢先体验";
+    return `v${packageJson.version}`;
+}
+
+function getDisplayName(currentUser: ReturnType<typeof useCurrentUser>["data"]): string {
+    return currentUser?.display_name || currentUser?.name || currentUser?.email?.split("@")[0] || "用户";
 }
 
 export default function HomePage() {
     const router = useRouter();
     const { data: currentUser } = useCurrentUser();
-    const displayName = currentUser?.display_name || currentUser?.name || currentUser?.email?.split("@")[0] || "用户";
+    const displayName = getDisplayName(currentUser);
     const versionBadge = getVersionBadge();
     // State for modals
     const [isWeeklyStatsOpen, setIsWeeklyStatsOpen] = useState(false);
