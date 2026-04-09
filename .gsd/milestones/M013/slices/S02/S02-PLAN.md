@@ -4,7 +4,7 @@
 **Demo:** After this: 每个后续 slice 至少有一条已存在的 focused verification command 可直接执行
 
 ## Tasks
-- [ ] **T01: 盘点现有 focused verification commands** — 盘点现有 web/backend focused tests，把 auth/dashboard/history/profile/practice/lifecycle/websocket/admin 这几类验证面各自映射到一组真实命令。优先复用现有 focused tests，不引入大规模新测试。
+- [x] **T01: Added a repo-root focused verification matrix to the audit remediation plan so later repair slices can reuse real web/backend commands by surface.** — 盘点现有 web/backend focused tests，把 auth/dashboard/history/profile/practice/lifecycle/websocket/admin 这几类验证面各自映射到一组真实命令。优先复用现有 focused tests，不引入大规模新测试。
   - Estimate: 30m
   - Files: docs/plans/2026-04-08-system-audit-remediation-plan.md
   - Verify: rg -n "npm --prefix web test|backend/venv/bin/python -m pytest" docs/plans/2026-04-08-system-audit-remediation-plan.md

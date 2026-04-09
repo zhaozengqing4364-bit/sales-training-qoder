@@ -8,6 +8,27 @@
 
 **Tech Stack:** Next.js 16, React 19, TypeScript, Vitest, FastAPI, SQLAlchemy Async, Alembic, PostgreSQL/SQLite compatibility, Redis, WebSocket, pytest.
 
+## Focused Verification Command Inventory (repo-root runnable)
+
+Use the smallest existing focused command below before inventing a broader regression suite. The intent here is inventory only: later slices can copy one command directly when they touch the matching surface.
+
+| Surface | Focused web command | Focused backend command | Coverage seam locked by the existing tests |
+| --- | --- | --- | --- |
+| auth | `npm --prefix web test -- --run "src/app/(auth)/login/page.test.tsx" "src/app/(auth)/forgot-password/login-recovery.test.tsx" "src/app/(auth)/reset-password/login-reset.test.tsx"` | `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/integration/test_auth_login_api.py backend/tests/integration/test_password_reset_api.py -x -q` | Login page, forgot/reset UX, cookie auth, secure login failures, password-reset token lifecycle |
+| dashboard | `npm --prefix web test -- --run "src/app/(dashboard)/page.test.tsx"` | — | Dashboard hero/header CTA truthfulness and learner entry affordances |
+| history | `npm --prefix web test -- --run "src/app/(dashboard)/history/page.test.tsx"` | `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/integration/test_history_evidence_flow.py -x -q` | Learner history list/statistics UI and projection-backed history/trend evidence |
+| profile | `npm --prefix web test -- --run "src/app/(dashboard)/profile/page.test.tsx" "src/hooks/use-voice-speed-preference.test.ts"` | — | Password-management handoff, profile truthfulness, and persisted voice-speed preferences |
+| practice | `npm --prefix web test -- --run "src/app/(user)/practice/[sessionId]/page.test.tsx" "src/app/(user)/practice/[sessionId]/report/page.test.tsx" "src/app/(user)/practice/[sessionId]/replay/page.test.tsx"` | `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/integration/test_practice_evidence_flow.py -x -q` | Live practice entry, completed report/replay surfaces, retry focus, and shared evidence projection |
+| lifecycle | `npm --prefix web test -- --run "src/app/(user)/practice/[sessionId]/use-practice-session-lifecycle.test.ts"` | `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/test_session_lifecycle_service.py backend/tests/integration/test_session_lifecycle_api.py -x -q` | Start/pause/resume/end transitions, terminal-state semantics, and REST lifecycle contract |
+| websocket | `npm --prefix web test -- --run "src/hooks/use-practice-websocket.test.ts" "src/hooks/use-practice-websocket.presentation-flow.test.ts" "src/hooks/websocket/message-handlers.test.ts"` | `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/integration/test_websocket_status_contract.py backend/tests/integration/test_sales_realtime_reconnect_flow.py -x -q` | Reconnect lifecycle, message/status handling, trace-bearing websocket contract, and persisted reconnect recovery |
+| admin | `npm --prefix web test -- --run "src/app/admin/users/page.test.tsx" "src/app/admin/users/[id]/page.test.tsx" "src/app/admin/analytics/page.test.tsx" "src/app/admin/knowledge/[id]/page.test.tsx"` | `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/integration/test_admin_users_api.py backend/tests/integration/test_admin_knowledge_answer_config_api.py backend/tests/integration/test_support_runtime_api.py -x -q` | Admin user management, supervisor drill-in, analytics/knowledge admin screens, config governance, and support-runtime RBAC |
+
+### Reuse rule for downstream repair slices
+
+- Prefer the repo-root runnable commands above over `cd web && ...` or `cd backend && ...` variants.
+- Pick the smallest surface-specific command that still exercises the changed behavior; do not batch unrelated slices into one verification run.
+- If a slice needs both learner-web and API proof, pair one web command with one backend command from the same row instead of inventing a new umbrella suite.
+
 ---
 
 ### Task 1: Normalize the audit before touching code

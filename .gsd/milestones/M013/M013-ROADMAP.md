@@ -6,5 +6,5 @@
 ## Slice Overview
 | ID | Slice | Risk | Depends | Done | After this |
 |----|-------|------|---------|------|------------|
-| S01 | SYSTEM_AUDIT_REPORT 条目归一化 | medium | — | ⬜ | 归一化矩阵覆盖所有 audit section，每个条目有 disposition、证据路径和后续 slice 归属 |
+| S01 | SYSTEM_AUDIT_REPORT 条目归一化 | medium | — | ✅ | 归一化矩阵覆盖所有 audit section，每个条目有 disposition、证据路径和后续 slice 归属 |
 | S02 | 审计相关验证基线补齐 | low | S01 | ⬜ | 每个后续 slice 至少有一条已存在的 focused verification command 可直接执行 |

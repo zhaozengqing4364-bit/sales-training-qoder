@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "exported_at": "2026-04-09T16:38:21.733Z",
+  "exported_at": "2026-04-09T16:57:45.803Z",
   "milestones": [
     {
       "id": "M001",
@@ -1914,14 +1914,14 @@
       "milestone_id": "M013",
       "id": "S01",
       "title": "SYSTEM_AUDIT_REPORT 条目归一化",
-      "status": "pending",
+      "status": "complete",
       "risk": "medium",
       "depends": [],
       "demo": "归一化矩阵覆盖所有 audit section，每个条目有 disposition、证据路径和后续 slice 归属",
       "created_at": "2026-04-08T08:38:10.615Z",
-      "completed_at": null,
-      "full_summary_md": "",
-      "full_uat_md": "",
+      "completed_at": "2026-04-09T16:45:08.780Z",
+      "full_summary_md": "---\nid: S01\nparent: M013\nmilestone: M013\nprovides:\n  - An evidence-backed five-way disposition matrix for all 51 SYSTEM_AUDIT_REPORT findings.\n  - A closeout appendix that retires the fixed JWT-secret item, records deferred/contradicted conflict sources, and assigns proof-bearing ownership for every needs-discovery finding.\n  - A backlog crosswalk that maps normalized actionable/discovery items onto the real M013-S02 and M014-M018 roadmap slices.\nrequires:\n  []\naffects:\n  - S02\nkey_files:\n  - .gsd/plans/GSD_PLAN_system-audit-repair.md\n  - .gsd/DECISIONS.md\n  - .gsd/KNOWLEDGE.md\n  - .gsd/PROJECT.md\nkey_decisions:\n  - Use a five-way disposition matrix with per-finding evidence paths and stable preliminary owner tags instead of treating every SYSTEM_AUDIT_REPORT item as executable backlog.\n  - Keep the original T01 matrix keyed by audit ID stable and append a dedicated T02 closeout appendix for retirement proof, conflict sources, and discovery ownership.\n  - Keep legacy logical owner tags inside the matrix and use a dedicated T03 crosswalk as the authority mapping to real M013-S02 and M014-M018 slices.\npatterns_established:\n  - Normalize audit findings against current project truth before creating executable backlog; do not treat the raw audit report as a ready-made implementation queue.\n  - When downstream references already depend on a matrix keyed by audit ID, preserve that matrix and append closeout proof/crosswalk appendices instead of rewriting owner tags in place.\n  - Keep one stable distinction between logical owner labels used for audit traceability and the real active roadmap slice IDs used for execution; use an explicit crosswalk to bridge them.\nobservability_surfaces:\n  - Normalized-plan disposition grep gate: `rg -n \"already-fixed|actionable-now|needs-discovery|deferred-by-product|contradicted-by-project-knowledge\" .gsd/plans/GSD_PLAN_system-audit-repair.md`.\n  - T02 appendix grep gate: `rg -n \"deferred-by-product|contradicted-by-project-knowledge|needs-discovery\" .gsd/plans/GSD_PLAN_system-audit-repair.md`.\n  - T03 crosswalk grep gate: `rg -n \"M014|M015|M016|M017|M018\" .gsd/plans/GSD_PLAN_system-audit-repair.md`.\n  - Scoped matrix-integrity parser check for sections 1.5.3-1.5.11, confirming 51 findings and the expected five-class rollup counts without double-counting appendix rows.\ndrill_down_paths:\n  - .gsd/milestones/M013/slices/S01/tasks/T01-SUMMARY.md\n  - .gsd/milestones/M013/slices/S01/tasks/T02-SUMMARY.md\n  - .gsd/milestones/M013/slices/S01/tasks/T03-SUMMARY.md\nduration: \"\"\nverification_result: passed\ncompleted_at: 2026-04-09T16:45:08.784Z\nblocker_discovered: false\n---\n\n# S01: SYSTEM_AUDIT_REPORT 条目归一化\n\n**Normalized all 51 SYSTEM_AUDIT_REPORT findings into one evidence-backed disposition matrix, added closeout proof for retired/deferred/discovery items, and mapped the real execution owners onto M013-S02 and M014-M018.**\n\n## What Happened\n\nS01 closed the planning drift between `SYSTEM_AUDIT_REPORT.md` and the current repository truth before any downstream repair work starts. T01 turned the audit into one normalized matrix inside `.gsd/plans/GSD_PLAN_system-audit-repair.md`, covering every section and every finding with a five-way disposition (`already-fixed`, `actionable-now`, `needs-discovery`, `deferred-by-product`, `contradicted-by-project-knowledge`), at least one evidence path, and a stable preliminary owner tag. The matrix now accounts for all 51 findings and rolls them up into 1 already-fixed item, 15 actionable-now items, 26 needs-discovery items, 8 deferred-by-product items, and 1 contradicted-by-project-knowledge item. T02 then appended a closeout appendix instead of rewriting the original matrix in place: the plan now records the exact retirement seam for the one fixed JWT-secret risk, the project-boundary conflict source for every deferred/contradicted item, and the proof-bearing owning slice for every needs-discovery item. This preserved the original audit-ID keyed matrix while making every non-actionable classification auditable. T03 finished the slice by appending a backlog crosswalk from the original logical owner tags (`M1`-`M6`) onto the real active roadmap slices (`M013-S02`, `M014`-`M018`), including explicit actionable-now and needs-discovery handoffs. Downstream executors no longer need to reinterpret the raw audit report or guess which roadmap slice owns a finding: they can consume the normalized matrix as the stable audit truth and the T03 crosswalk as the executable roadmap mapping. During closeout, I also recorded the missing T01 planning decision in `.gsd/DECISIONS.md`, added a knowledge note clarifying that the matrix owner tags stay logical and the T03 crosswalk is the authority for real slice IDs, and refreshed `.gsd/PROJECT.md` so the current project state explicitly records S01 as complete.\n\n## Verification\n\nFresh slice-close verification reran all three planned gates plus one matrix-integrity check. `rg -n \"already-fixed|actionable-now|needs-discovery|deferred-by-product|contradicted-by-project-knowledge\" .gsd/plans/GSD_PLAN_system-audit-repair.md` passed and showed the five disposition classes plus their rollup counts in the normalized plan. `rg -n \"deferred-by-product|contradicted-by-project-knowledge|needs-discovery\" .gsd/plans/GSD_PLAN_system-audit-repair.md` passed and confirmed the T02 appendix still exposes deferred/conflict sources and discovery ownership detail. `rg -n \"M014|M015|M016|M017|M018\" .gsd/plans/GSD_PLAN_system-audit-repair.md` passed and confirmed the T03 crosswalk plus downstream backlog mapping are present. An additional parser check scoped to sections 1.5.3 through 1.5.11 reported `matrix_rows=51` with the expected disposition counts `{actionable-now: 15, deferred-by-product: 8, needs-discovery: 26, already-fixed: 1, contradicted-by-project-knowledge: 1}`, confirming no finding fell out of classification and no appendix rows were double-counted.\n\n## Requirements Advanced\n\nNone.\n\n## Requirements Validated\n\nNone.\n\n## New Requirements Surfaced\n\nNone.\n\n## Requirements Invalidated or Re-scoped\n\nNone.\n\n## Deviations\n\nNone.\n\n## Known Limitations\n\nThis slice intentionally changes planning artifacts only. It does not implement any of the 15 actionable-now items or retire any needs-discovery risk beyond documenting its required proof path and owning slice, so downstream slices still need to produce the actual code, baseline evidence, and closeout proof.\n\n## Follow-ups\n\nProceed to M013/S02 to lock the reusable focused verification baseline that the normalized matrix assigns to audit items 8.1 and 8.2, then execute the downstream M014-M018 repair/discovery slices against the T03 crosswalk instead of reopening raw SYSTEM_AUDIT_REPORT triage.\n\n## Files Created/Modified\n\n- `.gsd/plans/GSD_PLAN_system-audit-repair.md` — Holds the normalized 51-finding matrix, the T02 closeout appendix, and the T03 executable crosswalk to M013-S02 and M014-M018.\n- `.gsd/DECISIONS.md` — Now records the missing T01 normalization decision (D169) alongside the existing T02/T03 audit-planning decisions.\n- `.gsd/KNOWLEDGE.md` — Adds a downstream-reader note that the audit matrix keeps logical owner tags and the T03 crosswalk is the authority for real slice IDs.\n- `.gsd/PROJECT.md` — Refreshes current project state and milestone sequence to reflect that M013/S01 completed and downstream slices should consume the normalized audit plan.\n",
+      "full_uat_md": "# S01: SYSTEM_AUDIT_REPORT 条目归一化 — UAT\n\n**Milestone:** M013\n**Written:** 2026-04-09T16:45:08.785Z\n\n# S01 UAT — SYSTEM_AUDIT_REPORT 条目归一化\n\n## Preconditions\n- 仓库中存在最新的 `SYSTEM_AUDIT_REPORT.md` 与 `.gsd/plans/GSD_PLAN_system-audit-repair.md`。\n- 评审者可读取 `.gsd/PROJECT.md`、`.gsd/DECISIONS.md`、`.gsd/KNOWLEDGE.md`。\n- 允许从仓库根目录运行 `rg` 与一次 scoped parser check。\n\n## Case 1 — 归一化矩阵必须覆盖全部 51 条 audit finding\n1. 打开 `.gsd/plans/GSD_PLAN_system-audit-repair.md`，定位到 `1.5.3` 到 `1.5.11` 的原始归一化矩阵区块。\n2. 运行 `rg -n \"already-fixed|actionable-now|needs-discovery|deferred-by-product|contradicted-by-project-knowledge\" .gsd/plans/GSD_PLAN_system-audit-repair.md`。\n3. 预期：文档中能看到五类 disposition 图例、rollup counts，以及每个 audit section 的逐条矩阵行。\n4. 运行 scoped parser check（只统计 `1.5.3` 到 `1.5.11`，不包含 `1.5.12+` appendix）。\n5. 预期：输出 `matrix_rows=51`，并得到 `{actionable-now: 15, deferred-by-product: 8, needs-discovery: 26, already-fixed: 1, contradicted-by-project-knowledge: 1}`。\n\n## Case 2 — 每个 deferred / contradicted / discovery finding 都要有 closeout appendix 支撑\n1. 在 `.gsd/plans/GSD_PLAN_system-audit-repair.md` 中定位到 `1.5.13 T02 disposition 复核补遗`。\n2. 运行 `rg -n \"deferred-by-product|contradicted-by-project-knowledge|needs-discovery\" .gsd/plans/GSD_PLAN_system-audit-repair.md`。\n3. 预期：文档中存在三类 appendix 内容：\n   - 已修项 retirement seam（当前为 JWT secret 风险）。\n   - deferred / contradicted 条目的 conflict source 与 why it stays out。\n   - needs-discovery 条目的 owning slice 与 implementation 前必须补出的 proof。\n4. 随机抽查至少三个 finding（例如 `4.1.1`、`5.1.1`、`3.2.1`）。\n5. 预期：每个 finding 都能在原矩阵与 appendix 之间对上 audit ID、disposition、证据路径和后续归属，不存在“只写了 disposition 名称但没有支撑说明”的条目。\n\n## Case 3 — T03 crosswalk 必须把逻辑 owner 映射到真实 roadmap slices\n1. 在 `.gsd/plans/GSD_PLAN_system-audit-repair.md` 中定位到 `T03 backlog crosswalk`。\n2. 运行 `rg -n \"M014|M015|M016|M017|M018\" .gsd/plans/GSD_PLAN_system-audit-repair.md`。\n3. 预期：文档中存在 `Legacy logical slice -> Actual milestone/slice` 对照表，并出现 `M013-S02`、`M014`、`M015`、`M016`、`M017`、`M018` 的真实 slice 编号。\n4. 抽查一条 actionable-now finding（例如 `1.1.2` 或 `14.3`）与一条 needs-discovery finding（例如 `3.2.1` 或 `15.3`）。\n5. 预期：能从原矩阵 owner 标签找到对应 legacy logical slice，再从 crosswalk 找到真实执行 slice；后续执行者不需要重读原 audit 文档也能知道应该去哪一个 roadmap slice 落地。\n\n## Case 4 — 项目元信息必须同步到新的审计归一化事实\n1. 打开 `.gsd/DECISIONS.md`，查找 `M013/S01/T01`、`M013/S01/T02`、`M013/S01/T03`。\n2. 预期：至少存在一条 T01 归一化决策和两条 T02/T03 决策，能解释为什么采用五类 disposition、为什么保留原矩阵、为什么用 crosswalk 而不是重写 owner 标签。\n3. 打开 `.gsd/KNOWLEDGE.md`。\n4. 预期：存在关于 `.gsd/plans/GSD_PLAN_system-audit-repair.md` 的非显然使用约束，至少包括 row-count 校验要避开 appendix，以及逻辑 owner 标签必须通过 T03 crosswalk 解码为真实 slice。\n5. 打开 `.gsd/PROJECT.md`。\n6. 预期：Current State / Milestone Sequence 已反映 M013/S01 完成，并明确后续 repair/discovery slices 应基于这份归一化计划推进。\n\n## Edge Checks\n- **Appendix double-counting guard:** 若有人直接对整份 `GSD_PLAN_system-audit-repair.md` 做表格计数，应识别为错误验证方式；正确方式必须只统计 `1.5.3` 到 `1.5.11`。\n- **Stable audit traceability:** 若下游尝试把原矩阵中的 `M1`-`M6` owner 标签直接改写成 `M013`-`M018`，应视为破坏 traceability；正确做法是保留矩阵 owner 并使用 T03 crosswalk。\n- **No unclassified items:** 任意抽查一个 audit ID，都应能同时回答四件事：它属于哪类 disposition、证据在哪、为什么是这个 disposition、后续由哪个 slice 消费或为什么当前不进入 backlog。\n",
       "goal": "对 SYSTEM_AUDIT_REPORT 全文逐条建立 disposition：already-fixed / actionable-now / needs-discovery / deferred-by-product / contradicted-by-project-knowledge",
       "success_criteria": "- 每个 audit section 的所有条目都有 disposition\n- stale finding 标注了代码证据文件路径\n- deferred 条目写明了冲突来源（如 PROJECT.md 桌面优先首发策略）",
       "proof_level": "contract",
@@ -8678,19 +8678,24 @@
       "milestone_id": "M013",
       "slice_id": "S02",
       "id": "T01",
-      "title": "盘点现有 focused verification commands",
-      "status": "pending",
-      "one_liner": "",
-      "narrative": "",
-      "verification_result": "",
+      "title": "Added a repo-root focused verification matrix to the audit remediation plan so later repair slices can reuse real web/backend commands by surface.",
+      "status": "complete",
+      "one_liner": "Added a repo-root focused verification matrix to the audit remediation plan so later repair slices can reuse real web/backend commands by surface.",
+      "narrative": "Reviewed the slice/task contract plus the current remediation plan, inspected the existing focused web and backend test inventory, and sampled the relevant suites by declared subject to confirm the surfaces were real. Updated docs/plans/2026-04-08-system-audit-remediation-plan.md with a new inventory section that maps auth, dashboard, history, profile, practice, lifecycle, websocket, and admin to repo-root runnable commands, then added reuse guidance so downstream repair slices can pick the smallest matching command instead of inventing broader umbrella suites.",
+      "verification_result": "Confirmed that every documented test target referenced by the new matrix exists at the repo-root paths used in the plan, including the hook-based .test.ts suites used for lifecycle/websocket/profile-state coverage. Ran the task-plan verification command to prove the remediation plan now contains repo-root web and backend focused commands.",
       "duration": "",
-      "completed_at": null,
+      "completed_at": "2026-04-09T16:57:45.768Z",
       "blocker_discovered": false,
-      "deviations": "",
-      "known_issues": "",
-      "key_files": [],
-      "key_decisions": [],
-      "full_summary_md": "",
+      "deviations": "Minor local adaptation only: beyond the planned web/src/**/*.test.tsx inputs, I also inventoried existing web/src/**/*.test.ts hook suites where they are the live focused seams for lifecycle, websocket, and profile-state verification.",
+      "known_issues": "There are still no dedicated backend-focused suites that map only to the dashboard or profile surfaces; those rows remain web-led today, while backend auth/history/practice/lifecycle/admin suites cover the server-side seams most likely to pair with them in later repair slices.",
+      "key_files": [
+        "docs/plans/2026-04-08-system-audit-remediation-plan.md",
+        ".gsd/milestones/M013/slices/S02/tasks/T01-SUMMARY.md"
+      ],
+      "key_decisions": [
+        "Reused the smallest existing focused web/backend suites per surface instead of inventing new umbrella regression commands."
+      ],
+      "full_summary_md": "---\nid: T01\nparent: S02\nmilestone: M013\nkey_files:\n  - docs/plans/2026-04-08-system-audit-remediation-plan.md\n  - .gsd/milestones/M013/slices/S02/tasks/T01-SUMMARY.md\nkey_decisions:\n  - Reused the smallest existing focused web/backend suites per surface instead of inventing new umbrella regression commands.\nduration: \"\"\nverification_result: passed\ncompleted_at: 2026-04-09T16:57:45.769Z\nblocker_discovered: false\n---\n\n# T01: Added a repo-root focused verification matrix to the audit remediation plan so later repair slices can reuse real web/backend commands by surface.\n\n**Added a repo-root focused verification matrix to the audit remediation plan so later repair slices can reuse real web/backend commands by surface.**\n\n## What Happened\n\nReviewed the slice/task contract plus the current remediation plan, inspected the existing focused web and backend test inventory, and sampled the relevant suites by declared subject to confirm the surfaces were real. Updated docs/plans/2026-04-08-system-audit-remediation-plan.md with a new inventory section that maps auth, dashboard, history, profile, practice, lifecycle, websocket, and admin to repo-root runnable commands, then added reuse guidance so downstream repair slices can pick the smallest matching command instead of inventing broader umbrella suites.\n\n## Verification\n\nConfirmed that every documented test target referenced by the new matrix exists at the repo-root paths used in the plan, including the hook-based .test.ts suites used for lifecycle/websocket/profile-state coverage. Ran the task-plan verification command to prove the remediation plan now contains repo-root web and backend focused commands.\n\n## Verification Evidence\n\n| # | Command | Exit Code | Verdict | Duration |\n|---|---------|-----------|---------|----------|\n| 1 | `python3 - <<'PY' ... Path(...).exists() ... PY` | 0 | ✅ pass | 40ms |\n| 2 | `rg -n \"npm --prefix web test|backend/venv/bin/python -m pytest\" docs/plans/2026-04-08-system-audit-remediation-plan.md` | 0 | ✅ pass | 36ms |\n\n\n## Deviations\n\nMinor local adaptation only: beyond the planned web/src/**/*.test.tsx inputs, I also inventoried existing web/src/**/*.test.ts hook suites where they are the live focused seams for lifecycle, websocket, and profile-state verification.\n\n## Known Issues\n\nThere are still no dedicated backend-focused suites that map only to the dashboard or profile surfaces; those rows remain web-led today, while backend auth/history/practice/lifecycle/admin suites cover the server-side seams most likely to pair with them in later repair slices.\n\n## Files Created/Modified\n\n- `docs/plans/2026-04-08-system-audit-remediation-plan.md`\n- `.gsd/milestones/M013/slices/S02/tasks/T01-SUMMARY.md`\n",
       "description": "盘点现有 web/backend focused tests，把 auth/dashboard/history/profile/practice/lifecycle/websocket/admin 这几类验证面各自映射到一组真实命令。优先复用现有 focused tests，不引入大规模新测试。",
       "estimate": "30m",
       "files": [
@@ -12603,6 +12608,18 @@
       "revisable": "Yes",
       "made_by": "agent",
       "superseded_by": null
+    },
+    {
+      "seq": 1538,
+      "id": "D169",
+      "when_context": "M013/S01/T01",
+      "scope": "planning",
+      "decision": "How should SYSTEM_AUDIT_REPORT findings be normalized before downstream repair milestones consume them?",
+      "choice": "Use a five-way disposition matrix (already-fixed, actionable-now, needs-discovery, deferred-by-product, contradicted-by-project-knowledge) with per-finding evidence paths and preliminary owner tags in the repair plan.",
+      "rationale": "The audit report contains a mix of true defects, already-retired risks, product-boundary deferrals, and items that need proof before implementation. Normalizing every finding onto one evidence-backed matrix keeps stale or contradicted findings out of the executable backlog while preserving traceability for later repair slices.",
+      "revisable": "Yes",
+      "made_by": "agent",
+      "superseded_by": null
     }
   ],
   "verification_evidence": [
@@ -15718,6 +15735,28 @@
       "verdict": "✅ pass",
       "duration_ms": 10,
       "created_at": "2026-04-09T16:38:21.704Z"
+    },
+    {
+      "id": 284,
+      "task_id": "T01",
+      "slice_id": "S02",
+      "milestone_id": "M013",
+      "command": "python3 - <<'PY' ... Path(...).exists() ... PY",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 40,
+      "created_at": "2026-04-09T16:57:45.769Z"
+    },
+    {
+      "id": 285,
+      "task_id": "T01",
+      "slice_id": "S02",
+      "milestone_id": "M013",
+      "command": "rg -n \"npm --prefix web test|backend/venv/bin/python -m pytest\" docs/plans/2026-04-08-system-audit-remediation-plan.md",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 36,
+      "created_at": "2026-04-09T16:57:45.769Z"
     }
   ]
 }
