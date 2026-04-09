@@ -8,7 +8,7 @@
   - Estimate: 30m
   - Files: docs/plans/2026-04-08-system-audit-remediation-plan.md
   - Verify: rg -n "npm --prefix web test|backend/venv/bin/python -m pytest" docs/plans/2026-04-08-system-audit-remediation-plan.md
-- [ ] **T02: 收口 repo-root verification contract** — 把 repo-root 可直接执行的 backend pytest 命令与必须串行的约束写进 remediation plan，避免 auto-mode 把 `cd backend && pytest` 拆散后误报失败。
+- [x] **T02: Added an explicit repo-root serial backend pytest contract to both audit remediation plans so downstream slices can reuse focused commands without false auto-mode failures.** — 把 repo-root 可直接执行的 backend pytest 命令与必须串行的约束写进 remediation plan，避免 auto-mode 把 `cd backend && pytest` 拆散后误报失败。
   - Estimate: 20m
   - Files: docs/plans/2026-04-08-system-audit-remediation-plan.md, .gsd/plans/GSD_PLAN_system-audit-repair.md
   - Verify: rg -n "串行|coverage|backend/venv/bin/python -m pytest -c backend/pyproject.toml" docs/plans/2026-04-08-system-audit-remediation-plan.md .gsd/plans/GSD_PLAN_system-audit-repair.md

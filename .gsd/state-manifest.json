@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "exported_at": "2026-04-09T16:57:45.803Z",
+  "exported_at": "2026-04-09T17:03:35.586Z",
   "milestones": [
     {
       "id": "M001",
@@ -8718,19 +8718,25 @@
       "milestone_id": "M013",
       "slice_id": "S02",
       "id": "T02",
-      "title": "收口 repo-root verification contract",
-      "status": "pending",
-      "one_liner": "",
-      "narrative": "",
-      "verification_result": "",
+      "title": "Added an explicit repo-root serial backend pytest contract to both audit remediation plans so downstream slices can reuse focused commands without false auto-mode failures.",
+      "status": "complete",
+      "one_liner": "Added an explicit repo-root serial backend pytest contract to both audit remediation plans so downstream slices can reuse focused commands without false auto-mode failures.",
+      "narrative": "Reviewed the task contract, slice plan, T01 summary, and both remediation-plan documents to confirm the remaining gap. The plans already listed repo-root backend pytest commands, but the execution handoff did not make the auto-mode-safe contract explicit where downstream slices would copy the commands. Updated docs/plans/2026-04-08-system-audit-remediation-plan.md with a dedicated backend pytest contract that preserves the repo-root command form, forbids collapsing it back to `cd backend && pytest ...`, and states that multiple backend proofs must run serially because repo-root pytest-cov runs share the top-level `.coverage` SQLite file. Mirrored the same rule into .gsd/plans/GSD_PLAN_system-audit-repair.md under M013-S02 so the authority plan and the handoff plan now describe the same verification constraint.",
+      "verification_result": "Ran the task-plan verification command exactly as written and confirmed both plan documents now contain the required repo-root backend pytest string plus the serial/coverage wording.",
       "duration": "",
-      "completed_at": null,
+      "completed_at": "2026-04-09T17:03:35.561Z",
       "blocker_discovered": false,
-      "deviations": "",
-      "known_issues": "",
-      "key_files": [],
-      "key_decisions": [],
-      "full_summary_md": "",
+      "deviations": "None.",
+      "known_issues": "None.",
+      "key_files": [
+        "docs/plans/2026-04-08-system-audit-remediation-plan.md",
+        ".gsd/plans/GSD_PLAN_system-audit-repair.md",
+        ".gsd/milestones/M013/slices/S02/tasks/T02-SUMMARY.md"
+      ],
+      "key_decisions": [
+        "Document backend-focused pytest as repo-root-only, serial commands in both the execution handoff and the GSD authority plan instead of relying on KNOWLEDGE-only context."
+      ],
+      "full_summary_md": "---\nid: T02\nparent: S02\nmilestone: M013\nkey_files:\n  - docs/plans/2026-04-08-system-audit-remediation-plan.md\n  - .gsd/plans/GSD_PLAN_system-audit-repair.md\n  - .gsd/milestones/M013/slices/S02/tasks/T02-SUMMARY.md\nkey_decisions:\n  - Document backend-focused pytest as repo-root-only, serial commands in both the execution handoff and the GSD authority plan instead of relying on KNOWLEDGE-only context.\nduration: \"\"\nverification_result: passed\ncompleted_at: 2026-04-09T17:03:35.562Z\nblocker_discovered: false\n---\n\n# T02: Added an explicit repo-root serial backend pytest contract to both audit remediation plans so downstream slices can reuse focused commands without false auto-mode failures.\n\n**Added an explicit repo-root serial backend pytest contract to both audit remediation plans so downstream slices can reuse focused commands without false auto-mode failures.**\n\n## What Happened\n\nReviewed the task contract, slice plan, T01 summary, and both remediation-plan documents to confirm the remaining gap. The plans already listed repo-root backend pytest commands, but the execution handoff did not make the auto-mode-safe contract explicit where downstream slices would copy the commands. Updated docs/plans/2026-04-08-system-audit-remediation-plan.md with a dedicated backend pytest contract that preserves the repo-root command form, forbids collapsing it back to `cd backend && pytest ...`, and states that multiple backend proofs must run serially because repo-root pytest-cov runs share the top-level `.coverage` SQLite file. Mirrored the same rule into .gsd/plans/GSD_PLAN_system-audit-repair.md under M013-S02 so the authority plan and the handoff plan now describe the same verification constraint.\n\n## Verification\n\nRan the task-plan verification command exactly as written and confirmed both plan documents now contain the required repo-root backend pytest string plus the serial/coverage wording.\n\n## Verification Evidence\n\n| # | Command | Exit Code | Verdict | Duration |\n|---|---------|-----------|---------|----------|\n| 1 | `rg -n \"串行|coverage|backend/venv/bin/python -m pytest -c backend/pyproject.toml\" docs/plans/2026-04-08-system-audit-remediation-plan.md .gsd/plans/GSD_PLAN_system-audit-repair.md` | 0 | ✅ pass | 39ms |\n\n\n## Deviations\n\nNone.\n\n## Known Issues\n\nNone.\n\n## Files Created/Modified\n\n- `docs/plans/2026-04-08-system-audit-remediation-plan.md`\n- `.gsd/plans/GSD_PLAN_system-audit-repair.md`\n- `.gsd/milestones/M013/slices/S02/tasks/T02-SUMMARY.md`\n",
       "description": "把 repo-root 可直接执行的 backend pytest 命令与必须串行的约束写进 remediation plan，避免 auto-mode 把 `cd backend && pytest` 拆散后误报失败。",
       "estimate": "20m",
       "files": [
@@ -15757,6 +15763,17 @@
       "verdict": "✅ pass",
       "duration_ms": 36,
       "created_at": "2026-04-09T16:57:45.769Z"
+    },
+    {
+      "id": 286,
+      "task_id": "T02",
+      "slice_id": "S02",
+      "milestone_id": "M013",
+      "command": "rg -n \"串行|coverage|backend/venv/bin/python -m pytest -c backend/pyproject.toml\" docs/plans/2026-04-08-system-audit-remediation-plan.md .gsd/plans/GSD_PLAN_system-audit-repair.md",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 39,
+      "created_at": "2026-04-09T17:03:35.561Z"
     }
   ]
 }

@@ -29,6 +29,13 @@ Use the smallest existing focused command below before inventing a broader regre
 - Pick the smallest surface-specific command that still exercises the changed behavior; do not batch unrelated slices into one verification run.
 - If a slice needs both learner-web and API proof, pair one web command with one backend command from the same row instead of inventing a new umbrella suite.
 
+### Backend pytest contract for auto-mode
+
+- Backend focused verification must stay in repo-root runnable form such as `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/integration/test_auth_login_api.py -x -q`; do not collapse it back into `cd backend && pytest ...` because auto-mode may split the shell steps and report a false failure from repo root.
+- Backend focused pytest commands must run **串行** when multiple proofs are needed in one slice.
+- Reason: the repo-root pytest-cov runs share the top-level `.coverage` SQLite file, so parallel backend shards can fail with `coverage_schema` / `no such table` races even when the target tests themselves are healthy.
+- If a slice needs more than one backend proof, list them as separate repo-root commands and execute them one after another.
+
 ---
 
 ### Task 1: Normalize the audit before touching code

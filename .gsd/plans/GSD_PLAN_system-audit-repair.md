@@ -423,7 +423,8 @@
 - 后续各 slice 的 Verification 段
 
 #### Implementation Notes
-- backend repo-root pytest 命令串行执行，避免 `.coverage` 竞争。
+- downstream slices should copy backend proof commands in repo-root form such as `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/integration/test_auth_login_api.py -x -q`, not `cd backend && pytest ...`, so auto-mode can execute the exact command without losing cwd context.
+- backend repo-root pytest 命令必须串行执行，避免 top-level `.coverage` / pytest-cov SQLite 竞争。
 - 先复用现有 focused tests，再决定哪里补新用例。
 
 #### Done When
