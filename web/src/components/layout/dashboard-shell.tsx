@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { Menu, Sparkles } from "lucide-react";
 
+import { LearnerHelpEntry } from "@/components/layout/learner-help-entry";
 import { Sidebar, SidebarContent } from "@/components/layout/sidebar";
 import { GlassSheet } from "@/components/ui/glass-sheet";
 import { Button } from "@/components/ui/button";
@@ -73,7 +74,12 @@ export function DashboardShell({
                 <div className="absolute bottom-[-10%] left-[20%] w-[600px] h-[600px] bg-indigo-100/30 rounded-full blur-[120px]" />
             </div>
 
-            <Sidebar currentUser={sessionUser || currentUser} />
+            <Sidebar
+                currentUser={sessionUser || currentUser}
+                footerSlot={({ isCollapsed: sidebarCollapsed }) => (
+                    <LearnerHelpEntry compact={sidebarCollapsed} />
+                )}
+            />
 
             <div className="md:hidden fixed top-0 left-0 right-0 z-40 p-4 flex items-center justify-between bg-white/70 backdrop-blur-xl border-b border-white/50 shadow-sm">
                 <div className="flex items-center gap-3">
@@ -82,14 +88,14 @@ export function DashboardShell({
                     </div>
                     <span className="font-bold text-lg text-slate-900">AI 销售教练</span>
                 </div>
-                <Button variant="ghost" size="icon" onClick={() => setIsMobileMenuOpen(true)}>
+                <Button variant="ghost" size="icon" onClick={() => setIsMobileMenuOpen(true)} aria-label="menu">
                     <Menu className="w-6 h-6 text-slate-700" />
                 </Button>
             </div>
 
             <GlassSheet isOpen={isMobileMenuOpen} onClose={() => setIsMobileMenuOpen(false)}>
                 <div className="flex flex-col h-full pt-4">
-                    <SidebarContent currentUser={sessionUser || currentUser} />
+                    <SidebarContent currentUser={sessionUser || currentUser} footerSlot={<LearnerHelpEntry />} />
                 </div>
             </GlassSheet>
 
@@ -99,9 +105,7 @@ export function DashboardShell({
                     isCollapsed ? "md:ml-28" : "md:ml-80",
                 )}
             >
-                <div className="max-w-[1600px] mx-auto space-y-6 md:space-y-10 pb-20 pt-4">
-                    {children}
-                </div>
+                <div className="max-w-[1600px] mx-auto space-y-6 md:space-y-10 pb-20 pt-4">{children}</div>
             </main>
         </div>
     );

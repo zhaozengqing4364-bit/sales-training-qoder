@@ -12,9 +12,17 @@ References:
 """
 from collections.abc import AsyncIterator, Callable, Awaitable
 from dataclasses import dataclass
+from types import SimpleNamespace
 from typing import Any
 
-import edge_tts
+try:
+    import edge_tts as _edge_tts
+    _EDGE_TTS_IMPORT_ERROR: Exception | None = None
+except Exception as exc:  # pragma: no cover - depends on optional runtime deps
+    _edge_tts = SimpleNamespace(Communicate=None)
+    _EDGE_TTS_IMPORT_ERROR = exc
+
+edge_tts = _edge_tts
 
 from common.ai.config_manager import get_config_manager
 from common.ai.models import ModelConfig, ModelType
@@ -22,6 +30,13 @@ from common.error_handling.result import Result
 from common.monitoring.logger import get_logger
 
 logger = get_logger(__name__)
+
+
+def _get_edge_tts_module() -> Any:
+    """Return the edge_tts module or raise the captured import error lazily."""
+    if getattr(edge_tts, "Communicate", None) is None and _EDGE_TTS_IMPORT_ERROR is not None:
+        raise RuntimeError("edge_tts is unavailable") from _EDGE_TTS_IMPORT_ERROR
+    return edge_tts
 
 
 @dataclass
@@ -149,7 +164,7 @@ class TTSService:
         """
         try:
             voice = voice or self.voice
-            communicate = edge_tts.Communicate(
+            communicate = _get_edge_tts_module().Communicate(
                 text,
                 voice,
                 rate=self.rate,
@@ -198,7 +213,7 @@ class TTSService:
         """
         try:
             voice = voice or self.voice
-            communicate = edge_tts.Communicate(
+            communicate = _get_edge_tts_module().Communicate(
                 text,
                 voice,
                 rate=self.rate,
@@ -278,7 +293,7 @@ class TTSService:
         """
         try:
             voice = voice or self.voice
-            communicate = edge_tts.Communicate(
+            communicate = _get_edge_tts_module().Communicate(
                 text,
                 voice,
                 rate=self.rate,

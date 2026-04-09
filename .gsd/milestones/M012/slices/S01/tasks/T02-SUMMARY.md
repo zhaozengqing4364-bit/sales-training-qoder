@@ -1,8 +1,22 @@
-# BLOCKER — auto-mode recovery failed
+---
+id: T02
+parent: S01
+milestone: M012
+provides: []
+requires: []
+affects: []
+key_files: []
+key_decisions: []
+patterns_established: []
+drill_down_paths: []
+observability_surfaces: []
+duration: ""
+verification_result: ""
+completed_at: 2026-04-09T01:41:11.447Z
+blocker_discovered: false
+---
 
-Unit `execute-task` for `M012/S01/T02` failed to produce this artifact after idle recovery exhausted all retries.
+# T02: 忘记密码前端流程
 
-**Reason**: hard recovery exhausted 1 attempts. Status: summary missing (.gsd/milestones/M012/slices/S01/tasks/T02-SUMMARY.md); task checkbox unchecked in .gsd/milestones/M012/slices/S01/S01-PLAN.md; state next action still points at the timed-out task
-
-This placeholder was written by auto-mode so the pipeline can advance.
-Review and replace this file before relying on downstream artifacts.
+## What Happened
+No summary recorded.

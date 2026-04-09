@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import {
@@ -17,6 +17,7 @@ import {
     History,
     type LucideIcon,
 } from "lucide-react";
+
 import { cn } from "@/lib/utils";
 import {
     Dialog,
@@ -48,6 +49,8 @@ interface UserInfo {
     department?: string;
 }
 
+type SidebarFooterSlot = ReactNode | ((options: { isCollapsed: boolean }) => ReactNode);
+
 export const navItems = [
     { label: "首页", icon: Home, href: "/" },
     { label: "训练模式", icon: LayoutGrid, href: "/training" },
@@ -55,14 +58,30 @@ export const navItems = [
     { label: "历史记录", icon: History, href: "/history" },
 ];
 
-export function Sidebar({ currentUser }: { currentUser: CurrentUser }) {
+function resolveSidebarFooterSlot(
+    footerSlot: SidebarFooterSlot | undefined,
+    isCollapsed: boolean,
+): ReactNode {
+    if (typeof footerSlot === "function") {
+        return footerSlot({ isCollapsed });
+    }
+    return footerSlot ?? null;
+}
+
+export function Sidebar({
+    currentUser,
+    footerSlot,
+}: {
+    currentUser: CurrentUser;
+    footerSlot?: SidebarFooterSlot;
+}) {
     const { isCollapsed, toggleSidebar } = useSidebarStore();
 
     return (
         <aside
             className={cn(
                 "hidden md:flex fixed left-4 top-4 h-[calc(100vh-2rem)] rounded-[2.5rem] bg-white/50 backdrop-blur-2xl border border-white/60 shadow-[0_8px_32px_rgba(0,0,0,0.04)] z-50 flex-col pt-8 pb-6 transition-all duration-300 ease-in-out",
-                isCollapsed ? "w-20 px-3" : "w-72 px-5"
+                isCollapsed ? "w-20 px-3" : "w-72 px-5",
             )}
         >
             <SidebarContent
@@ -70,6 +89,7 @@ export function Sidebar({ currentUser }: { currentUser: CurrentUser }) {
                 isCollapsed={isCollapsed}
                 toggleSidebar={toggleSidebar}
                 showToggle={true}
+                footerSlot={resolveSidebarFooterSlot(footerSlot, isCollapsed)}
             />
         </aside>
     );
@@ -80,6 +100,7 @@ interface SidebarContentProps {
     isCollapsed?: boolean;
     toggleSidebar?: () => void;
     showToggle?: boolean;
+    footerSlot?: ReactNode;
 }
 
 export function SidebarContent({
@@ -87,6 +108,7 @@ export function SidebarContent({
     isCollapsed = false,
     toggleSidebar,
     showToggle = false,
+    footerSlot,
 }: SidebarContentProps) {
     const pathname = usePathname();
     const isAdmin = currentUser?.role === "admin";
@@ -95,31 +117,33 @@ export function SidebarContent({
 
     return (
         <div className="flex flex-col h-full w-full overflow-hidden">
-            {/* Brand Identity */}
-            <div className={cn(
-                "mb-8 flex items-center group cursor-default transition-all duration-300 shrink-0",
-                isCollapsed ? "justify-center px-0" : "gap-4 px-2"
-            )}>
+            <div
+                className={cn(
+                    "mb-8 flex items-center group cursor-default transition-all duration-300 shrink-0",
+                    isCollapsed ? "justify-center px-0" : "gap-4 px-2",
+                )}
+            >
                 <div className="w-12 h-12 rounded-2xl bg-slate-900 text-white flex items-center justify-center shadow-lg shadow-slate-900/20 group-hover:scale-105 transition-transform duration-300 shrink-0">
                     <Sparkles className="w-6 h-6 text-yellow-300" strokeWidth={1.5} />
                 </div>
-                <div className={cn(
-                    "flex flex-col overflow-hidden transition-all duration-300",
-                    isCollapsed ? "w-0 opacity-0 hidden" : "w-auto opacity-100"
-                )}>
+                <div
+                    className={cn(
+                        "flex flex-col overflow-hidden transition-all duration-300",
+                        isCollapsed ? "w-0 opacity-0 hidden" : "w-auto opacity-100",
+                    )}
+                >
                     <span className="font-bold text-xl text-slate-900 tracking-tight leading-none whitespace-nowrap">AI 销售教练</span>
                     <span className="text-xs uppercase tracking-[0.2em] text-slate-500 font-semibold mt-1.5 ml-0.5 whitespace-nowrap">平台</span>
                 </div>
             </div>
 
-            {/* Main Navigation - Scrollable Area */}
             <TooltipProvider delayDuration={0}>
                 <nav aria-label="主导航" className="flex-1 flex flex-col w-full overflow-y-auto scrollbar-hide min-h-0 pb-4">
-                    {!isCollapsed && (
+                    {!isCollapsed ? (
                         <div className="px-4 mb-3 text-xs font-bold text-slate-500 uppercase tracking-widest whitespace-nowrap transition-opacity duration-300 shrink-0">
                             菜单
                         </div>
-                    )}
+                    ) : null}
 
                     <ul role="menubar" className="space-y-2 px-1">
                         {navItems.map((item) => (
@@ -129,39 +153,45 @@ export function SidebarContent({
                         ))}
                     </ul>
 
-                    {canViewRuntime && (
+                    {canViewRuntime ? (
                         <>
                             <div className="my-6 px-3 shrink-0">
-                                <div className="h-px w-full bg-gradient-to-r from-transparent via-slate-200 to-transparent"></div>
+                                <div className="h-px w-full bg-gradient-to-r from-transparent via-slate-200 to-transparent" />
                             </div>
 
-                            {!isCollapsed && (
+                            {!isCollapsed ? (
                                 <div className="px-4 mb-3 text-xs font-bold text-slate-500 uppercase tracking-widest whitespace-nowrap transition-opacity duration-300 shrink-0">
                                     系统
                                 </div>
-                            )}
+                            ) : null}
                             <ul role="menubar" className="space-y-2 px-1">
                                 <li role="none">
-                                    <NavLink item={{ label: "运行状态", icon: Activity, href: "/support/runtime" }} pathname={pathname} isCollapsed={isCollapsed} />
+                                    <NavLink
+                                        item={{ label: "运行状态", icon: Activity, href: "/support/runtime" }}
+                                        pathname={pathname}
+                                        isCollapsed={isCollapsed}
+                                    />
                                 </li>
-                                {isAdmin && (
+                                {isAdmin ? (
                                     <li role="none">
-                                        <NavLink item={{ label: "管理后台", icon: Settings, href: "/admin" }} pathname={pathname} isCollapsed={isCollapsed} />
+                                        <NavLink
+                                            item={{ label: "管理后台", icon: Settings, href: "/admin" }}
+                                            pathname={pathname}
+                                            isCollapsed={isCollapsed}
+                                        />
                                     </li>
-                                )}
+                                ) : null}
                             </ul>
                         </>
-                    )}
+                    ) : null}
                 </nav>
             </TooltipProvider>
 
-            {/* Bottom Actions - Fixed */}
             <div className="mt-auto flex flex-col gap-4 pt-4 shrink-0">
-                {/* User Card */}
+                {footerSlot ? <div className="px-1">{footerSlot}</div> : null}
                 <SidebarUser isCollapsed={isCollapsed} userInfo={currentUser} />
 
-                {/* Collapse Trigger - Only shown on Desktop Sidebar */}
-                {showToggle && toggleSidebar && (
+                {showToggle && toggleSidebar ? (
                     <Button
                         variant="ghost"
                         size="icon"
@@ -169,17 +199,19 @@ export function SidebarContent({
                         onClick={toggleSidebar}
                         className={cn(
                             "mx-auto text-slate-500 hover:text-slate-600 hover:bg-black/5 rounded-full transition-all duration-300",
-                            isCollapsed ? "w-10 h-10" : "w-full flex gap-2 items-center justify-center h-10 px-4"
+                            isCollapsed ? "w-10 h-10" : "w-full flex gap-2 items-center justify-center h-10 px-4",
                         )}
                     >
-                        {isCollapsed ? <PanelLeftOpen className="w-5 h-5" /> : (
+                        {isCollapsed ? (
+                            <PanelLeftOpen className="w-5 h-5" />
+                        ) : (
                             <>
                                 <PanelLeftClose className="w-4 h-4" />
                                 <span className="text-sm font-medium">折叠侧边栏</span>
                             </>
                         )}
                     </Button>
-                )}
+                ) : null}
             </div>
         </div>
     );
@@ -187,26 +219,29 @@ export function SidebarContent({
 
 function SidebarUser({ isCollapsed, userInfo }: { isCollapsed: boolean; userInfo: UserInfo | null }) {
     const [mounted, setMounted] = useState(false);
-    useEffect(() => { setMounted(true); }, []);
+    useEffect(() => {
+        setMounted(true);
+    }, []);
 
     const displayName = userInfo?.display_name || userInfo?.name || "用户";
     const department = userInfo?.department || "未设置部门";
 
-    // Render a lightweight placeholder during SSR to avoid Radix Dialog
-    // generating mismatched aria-controls IDs between server and client.
     if (!mounted) {
         return (
-            <div className={isCollapsed
-                ? "mx-auto w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center text-slate-500 shadow-sm border border-slate-200"
-                : "bg-white/60 p-1.5 rounded-[1.2rem] border border-white/50 shadow-sm flex items-center gap-3 overflow-hidden whitespace-nowrap"
-            }>
+            <div
+                className={
+                    isCollapsed
+                        ? "mx-auto w-10 h-10 rounded-full bg-slate-100 flex items-center justify-center text-slate-500 shadow-sm border border-slate-200"
+                        : "bg-white/60 p-1.5 rounded-[1.2rem] border border-white/50 shadow-sm flex items-center gap-3 overflow-hidden whitespace-nowrap"
+                }
+            >
                 <User className={isCollapsed ? "w-5 h-5" : "w-5 h-5 shrink-0"} />
-                {!isCollapsed && (
+                {!isCollapsed ? (
                     <div className="flex flex-col min-w-0">
                         <span className="text-sm font-bold text-slate-800 truncate">{displayName}</span>
                         <span className="text-[10px] text-slate-400 font-medium bg-slate-100 px-1.5 py-0.5 rounded-full w-fit truncate">{department}</span>
                     </div>
-                )}
+                ) : null}
             </div>
         );
     }
@@ -251,7 +286,7 @@ function SidebarUser({ isCollapsed, userInfo }: { isCollapsed: boolean; userInfo
             </DialogTrigger>
             <UserProfileModal userInfo={userInfo} />
         </Dialog>
-    )
+    );
 }
 
 function UserProfileModal({ userInfo }: { userInfo: UserInfo | null }) {
@@ -304,7 +339,13 @@ function UserProfileModal({ userInfo }: { userInfo: UserInfo | null }) {
                 </div>
             </div>
             <DialogFooter>
-                <Button variant="outline" onClick={handleLogout} className="rounded-full text-red-500 border-slate-200 hover:bg-red-50 hover:text-red-600 hover:border-red-100">退出登录</Button>
+                <Button
+                    variant="outline"
+                    onClick={handleLogout}
+                    className="rounded-full text-red-500 border-slate-200 hover:bg-red-50 hover:text-red-600 hover:border-red-100"
+                >
+                    退出登录
+                </Button>
                 <Button className="rounded-full bg-slate-900 text-white">编辑资料</Button>
             </DialogFooter>
         </DialogContent>
@@ -317,47 +358,53 @@ interface SidebarNavItem {
     icon: LucideIcon;
 }
 
-export function NavLink({ item, pathname, isCollapsed }: { item: SidebarNavItem, pathname: string, isCollapsed: boolean }) {
-    // Optimized matching logic:
-    // 1. Home matches '/' or '/dashboard' exactly.
-    // 2. Training matches '/training' and subpaths.
-    // 3. Others match strict prefix.
+export function NavLink({
+    item,
+    pathname,
+    isCollapsed,
+}: {
+    item: SidebarNavItem;
+    pathname: string;
+    isCollapsed: boolean;
+}) {
     let isActive = false;
-    if (item.href === '/') {
-        isActive = pathname === '/' || pathname === '/dashboard';
+    if (item.href === "/") {
+        isActive = pathname === "/" || pathname === "/dashboard";
     } else {
         isActive = pathname.startsWith(item.href);
     }
 
-    const LinkContent = (
+    const linkContent = (
         <Link
             href={item.href}
             role="menuitem"
-            aria-current={isActive ? 'page' : undefined}
+            aria-current={isActive ? "page" : undefined}
             className={cn(
                 "flex items-center gap-4 py-3.5 rounded-2xl transition-all duration-300 group relative",
                 isCollapsed ? "justify-center px-0 w-12 h-12 mx-auto" : "px-5 w-full",
                 isActive
                     ? "text-slate-900 bg-white shadow-[0_2px_20px_rgba(0,0,0,0.04)]"
-                    : "text-slate-500 hover:text-slate-900 hover:bg-white/40"
+                    : "text-slate-500 hover:text-slate-900 hover:bg-white/40",
             )}
         >
-            {isActive && !isCollapsed && (
+            {isActive && !isCollapsed ? (
                 <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-8 bg-slate-900 rounded-r-full" />
-            )}
+            ) : null}
             <item.icon
                 strokeWidth={isActive ? 2.5 : 2}
                 className={cn(
                     "transition-all duration-300 shrink-0",
                     isCollapsed ? "w-6 h-6" : "w-5 h-5",
-                    isActive ? "text-slate-900 scale-110" : "text-slate-500 group-hover:text-slate-600 group-hover:scale-105"
+                    isActive ? "text-slate-900 scale-110" : "text-slate-500 group-hover:text-slate-600 group-hover:scale-105",
                 )}
             />
-            <span className={cn(
-                "text-base font-medium tracking-wide whitespace-nowrap overflow-hidden transition-all duration-300",
-                isActive ? "font-bold" : "",
-                isCollapsed ? "w-0 opacity-0 hidden" : "w-auto opacity-100"
-            )}>
+            <span
+                className={cn(
+                    "text-base font-medium tracking-wide whitespace-nowrap overflow-hidden transition-all duration-300",
+                    isActive ? "font-bold" : "",
+                    isCollapsed ? "w-0 opacity-0 hidden" : "w-auto opacity-100",
+                )}
+            >
                 {item.label}
             </span>
         </Link>
@@ -366,9 +413,7 @@ export function NavLink({ item, pathname, isCollapsed }: { item: SidebarNavItem,
     if (isCollapsed) {
         return (
             <Tooltip>
-                <TooltipTrigger asChild>
-                    {LinkContent}
-                </TooltipTrigger>
+                <TooltipTrigger asChild>{linkContent}</TooltipTrigger>
                 <TooltipContent side="right">
                     <p>{item.label}</p>
                 </TooltipContent>
@@ -376,5 +421,5 @@ export function NavLink({ item, pathname, isCollapsed }: { item: SidebarNavItem,
         );
     }
 
-    return LinkContent;
+    return linkContent;
 }

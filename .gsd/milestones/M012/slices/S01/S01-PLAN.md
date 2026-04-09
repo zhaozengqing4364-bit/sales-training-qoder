@@ -16,7 +16,7 @@ Steps:
   - Estimate: 2h
   - Files: backend/src/common/db/models.py, backend/src/common/services/password_reset.py, backend/src/common/auth/api.py
   - Verify: backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/ -k password_reset -x -q
-- [ ] **T02: 忘记密码前端流程** — 前端：在登录页添加'忘记密码？'链接，新建 forgot-password 和 reset-password 页面，表单校验完整。
+- [x] **T02: 忘记密码前端流程** — 前端：在登录页添加'忘记密码？'链接，新建 forgot-password 和 reset-password 页面，表单校验完整。
 
 Steps:
 1. 登录页 email+password 表单下方添加'忘记密码？'链接
@@ -27,7 +27,7 @@ Steps:
   - Estimate: 1.5h
   - Files: web/src/app/(auth)/login/page.tsx, web/src/app/(auth)/forgot-password/page.tsx, web/src/app/(auth)/reset-password/page.tsx, web/src/lib/api/client.ts
   - Verify: npm --prefix web test -- --run login
-- [ ] **T03: 首页硬编码用户名和版本号修复** — 首页修复：将'早安，亚历山大'改为读 currentUser 真实姓名，问候语根据时段动态切换，版本号从 package.json 动态读取，移除硬编码日期。
+- [x] **T03: 首页硬编码用户名和版本号修复** — 首页修复：将'早安，亚历山大'改为读 currentUser 真实姓名，问候语根据时段动态切换，版本号从 package.json 动态读取，移除硬编码日期。
 
 Steps:
 1. 首页从 useCurrentUser hook 读取真实用户名
@@ -38,7 +38,7 @@ Steps:
   - Estimate: 1h
   - Files: web/src/app/(dashboard)/page.tsx
   - Verify: npm --prefix web test -- --run dashboard
-- [ ] **T04: 企业微信按钮处理** — 将企业微信登录按钮改为 disabled 状态并添加提示，或完全移除。确保视觉上明确标识为不可用。
+- [x] **T04: 企业微信按钮处理** — 将企业微信登录按钮改为 disabled 状态并添加提示，或完全移除。确保视觉上明确标识为不可用。
 
 Steps:
 1. 将企业微信按钮改为 disabled

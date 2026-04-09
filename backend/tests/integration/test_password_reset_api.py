@@ -127,6 +127,28 @@ async def test_forgot_password_rate_limited_per_ip(
 
 
 @pytest.mark.asyncio
+async def test_forgot_password_emits_reset_link_in_console_mock_for_local_recovery(
+    async_client,
+    test_db: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    user = await _create_user(test_db, email="reset-console@example.com")
+    monkeypatch.setattr("secrets.token_urlsafe", lambda _: "known-reset-token")
+
+    response = await async_client.post(
+        "/api/v1/auth/forgot-password",
+        json={"email": user.email},
+        headers={"X-Forwarded-For": "203.0.113.14"},
+    )
+
+    assert response.status_code == 200
+    console_output = capsys.readouterr().out
+    assert "known-reset-token" in console_output
+    assert "/reset-password?token=known-reset-token" in console_output
+
+
+@pytest.mark.asyncio
 async def test_reset_password_consumes_token_and_updates_login_password(
     async_client,
     test_db: AsyncSession,

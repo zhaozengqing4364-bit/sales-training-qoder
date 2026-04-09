@@ -34,13 +34,12 @@ class EmailService(ABC):
 
 
 class ConsoleEmailService(EmailService):
-    """Development email transport that prints a safe mock envelope to stdout."""
+    """Development email transport that prints a local-only reset link to stdout."""
 
     async def send_password_reset_email(self, *, recipient: str, reset_url: str) -> None:
-        del reset_url
         print(
             "[MOCK EMAIL] password reset requested "
-            f"recipient={_mask_email(recipient)} reset_link=[redacted]"
+            f"recipient={_mask_email(recipient)} reset_link={reset_url}"
         )
 
 
