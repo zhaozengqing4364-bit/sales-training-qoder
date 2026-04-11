@@ -1,3 +1,25 @@
+- time: 2026-04-12T05:25:37+08:00
+  mode: grow
+  item id: M017-S02-T01
+  files changed:
+    - web/src/hooks/use-practice-websocket.ts
+    - web/src/hooks/use-practice-websocket.test.ts
+    - web/src/hooks/use-practice-websocket.presentation-flow.test.ts
+    - .gsd/DECISIONS.md
+    - .gsd/KNOWLEDGE.md
+    - .codex/loop/state.json
+    - .codex/loop/log.md
+  summary: Codified the real practice-websocket seam instead of doing a size-driven refactor: the hook now documents that it owns transport lifecycle, binary negotiation, outbound backpressure buffering/flush, and interrupt pre-cleanup, while focused tests prove runtime state changes still come back from inbound status/reconnected/interrupted/backpressure messages.
+  verification commands:
+    - rg -n "reconnect|backpressure|interrupt|binary" web/src/hooks/use-practice-websocket.ts web/src/hooks/use-practice-websocket*.test.ts
+    - npm --prefix web test -- --run "src/hooks/use-practice-websocket.test.ts" "src/hooks/use-practice-websocket.presentation-flow.test.ts"
+    - lsp diagnostics web/src/hooks/use-practice-websocket.ts
+    - lsp diagnostics web/src/hooks/use-practice-websocket.test.ts
+    - lsp diagnostics web/src/hooks/use-practice-websocket.presentation-flow.test.ts
+  verification results: passed; the exact task-plan rg inventory now surfaces the explicit boundary map plus focused reconnect/backpressure/interrupt/binary proofs, the impacted websocket hook suites finished 18/18 green, and diagnostics stayed clean on the touched hook/test files.
+  success signal status: future agents can now start S02/T02 from one explicit seam — outbound orchestration pressure lives in use-practice-websocket, while inbound runtime truth continues to flow through websocket/message-handlers; even presentation control:start is now proved to require backend status before sessionStatus flips to in_progress.
+  rollback note: if later S02 work extracts helpers from use-practice-websocket, keep reconnect budget, binary negotiation, pending-outbound flush, backpressure buffer ownership, and interrupt pre-cleanup on the same coordinator seam; do not split start/pause/resume or interrupt state transitions into local optimistic state that bypasses backend status/reconnected confirmation.
+
 - time: 2026-04-12T04:27:39+08:00
   mode: grow
   item id: M016-S03-T02

@@ -162,6 +162,35 @@ describe("usePracticeWebSocket reconnect lifecycle", () => {
         });
     });
 
+    it("treats binary negotiation as a connect-time transport concern owned by the hook", () => {
+        renderHook(() =>
+            usePracticeWebSocket({
+                sessionId: "session-binary-negotiation",
+                scenarioType: "sales",
+            }),
+        );
+
+        const ws = MockWebSocket.instances.at(-1);
+        expect(ws).toBeDefined();
+
+        act(() => {
+            if (!ws) return;
+            ws.readyState = MockWebSocket.OPEN;
+            ws.onopen?.(new Event("open"));
+        });
+
+        const sentPayloads = ws?.send.mock.calls
+            .map(call => call[0])
+            .filter((payload): payload is string => typeof payload === "string")
+            .map(payload => JSON.parse(payload) as { type: string; data?: { prefer_binary?: boolean }; priority?: string });
+
+        expect(sentPayloads).toContainEqual(expect.objectContaining({
+            type: "negotiate",
+            data: { prefer_binary: true },
+            priority: "normal",
+        }));
+    });
+
     it("switches to reconnecting when abnormal close triggers retry", () => {
         const { result } = renderHook(() =>
             usePracticeWebSocket({
@@ -260,6 +289,140 @@ describe("usePracticeWebSocket reconnect lifecycle", () => {
         });
 
         expect((result.current as unknown as { connectionState?: string }).connectionState).toBe("reconnecting");
+    });
+
+    it("treats backpressure as an inbound resume signal plus hook-owned outbound buffering and flush", async () => {
+        const actualHandlers = await vi.importActual<typeof import("./websocket/message-handlers")>(
+            "./websocket/message-handlers",
+        );
+        vi.mocked(handleWebSocketMessage).mockImplementation((event, deps) =>
+            actualHandlers.handleWebSocketMessage(event, deps),
+        );
+
+        const { result } = renderHook(() =>
+            usePracticeWebSocket({
+                sessionId: "session-backpressure-boundary",
+                scenarioType: "sales",
+            }),
+        );
+
+        const ws = MockWebSocket.instances.at(-1);
+        expect(ws).toBeDefined();
+
+        act(() => {
+            if (!ws) return;
+            ws.readyState = MockWebSocket.OPEN;
+            ws.onopen?.(new Event("open"));
+            emitJsonMessage(ws, {
+                type: "status",
+                data: {
+                    session_status: "in_progress",
+                    ai_state: "listening",
+                    connection_state: "connected",
+                },
+            });
+        });
+
+        ws?.send.mockClear();
+
+        act(() => {
+            if (!ws) return;
+            emitJsonMessage(ws, {
+                type: "backpressure",
+                timestamp: new Date().toISOString(),
+                data: {
+                    action: "slow_down",
+                    queue_size: 12,
+                },
+            });
+        });
+
+        expect(result.current.isBackpressureActive).toBe(true);
+
+        act(() => {
+            result.current.sendAudio("buffered-audio-during-backpressure");
+        });
+
+        expect(ws?.send).not.toHaveBeenCalled();
+
+        act(() => {
+            if (!ws) return;
+            emitJsonMessage(ws, {
+                type: "backpressure",
+                timestamp: new Date().toISOString(),
+                data: {
+                    action: "resume",
+                    queue_size: 0,
+                },
+            });
+            vi.advanceTimersByTime(20);
+        });
+
+        const sentPayloads = ws?.send.mock.calls
+            .map(call => call[0])
+            .filter((payload): payload is string => typeof payload === "string")
+            .map(payload => JSON.parse(payload) as { type: string; data?: { audio?: string; interrupt?: boolean; sample_rate?: number } });
+        const flushedAudioChunk = sentPayloads?.find(payload => payload.type === "audio_chunk");
+
+        expect(result.current.isBackpressureActive).toBe(false);
+        expect(flushedAudioChunk).toMatchObject({
+            type: "audio_chunk",
+            data: {
+                audio: "buffered-audio-during-backpressure",
+                interrupt: false,
+                sample_rate: 16000,
+            },
+        });
+    });
+
+    it("keeps interrupt pre-cleanup in the hook before backend interrupt confirmation arrives", () => {
+        const { result } = renderHook(() =>
+            usePracticeWebSocket({
+                sessionId: "session-interrupt-boundary",
+                scenarioType: "sales",
+            }),
+        );
+
+        const ws = MockWebSocket.instances.at(-1);
+        expect(ws).toBeDefined();
+
+        act(() => {
+            if (!ws) return;
+            ws.readyState = MockWebSocket.OPEN;
+            ws.onopen?.(new Event("open"));
+            emitJsonMessage(ws, {
+                type: "status",
+                data: {
+                    session_status: "in_progress",
+                    ai_state: "listening",
+                    connection_state: "connected",
+                },
+            });
+        });
+
+        ws?.send.mockClear();
+        mockAudioQueueRef.current = [{ chunk: 1 }, { chunk: 2 }];
+        mockIsPlayingRef.current = true;
+        mockStreamingPlayer.interrupt.mockReturnValueOnce({ wasPlaying: true, clearedChunks: 1 });
+
+        let interruptResult: ReturnType<typeof result.current.sendInterrupt> | undefined;
+        act(() => {
+            interruptResult = result.current.sendInterrupt("user_speaking");
+        });
+
+        const sentPayloads = ws?.send.mock.calls
+            .map(call => call[0])
+            .filter((payload): payload is string => typeof payload === "string")
+            .map(payload => JSON.parse(payload) as { type: string; data?: { reason?: string }; priority?: string });
+
+        expect(interruptResult).toEqual({ wasPlaying: true, clearedChunks: 3 });
+        expect(mockAudioQueueRef.current).toEqual([]);
+        expect(mockIsPlayingRef.current).toBe(false);
+        expect(sentPayloads).toContainEqual(expect.objectContaining({
+            type: "interrupt",
+            data: expect.objectContaining({ reason: "user_speaking" }),
+            priority: "high",
+        }));
     });
 
     it("waits for backend paused status before gating audio send", () => {

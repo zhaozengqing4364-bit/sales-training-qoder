@@ -1,5 +1,7 @@
 # Knowledge
 
+- `web/src/hooks/use-practice-websocket.ts` intentionally treats `sendControl("start"|"pause"|"resume"|"end")` as an outbound command only; the authoritative runtime transition back to `sessionStatus` / `aiState` still comes from inbound `status` or `reconnected` messages. If a focused practice/presentation test expects local `start` to flip straight to `in_progress`, that is a test bug, not a product regression.
+
 - `web/src/components/layout/sidebar.tsx` intentionally exposes learner nav anchors as `role="menuitem"` inside a `menubar`, not plain `link`; when locking shared-nav regressions (for example `历史记录`), query them as `menuitem` in focused tests or you will chase a false negative.
 
 - Admin completed-session previews must batch-load `ConversationMessage` rows and run `SessionEvidenceService.build_projection(...)` instead of reusing the legacy 0.4/0.3/0.3 weighting; otherwise admin tables drift from `/practice/{sessionId}/report` even when both point at the same session.

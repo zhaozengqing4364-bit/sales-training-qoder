@@ -23,7 +23,7 @@ S02 在 S01 已证明的 lifecycle 终态上锁定 websocket reconnect/backpress
 
 ## Tasks
 
-- [ ] **T01: 识别 websocket hook 的真实职责边界** `est:35m`
+- [x] **T01: 识别 websocket hook 的真实职责边界** `est:35m`
   Why: 先识别 websocket hook 真实职责边界，才能避免“文件大就拆”的假重构。
 
 Do:

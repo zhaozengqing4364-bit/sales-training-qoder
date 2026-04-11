@@ -72,7 +72,7 @@ class MockWebSocket {
     }
 }
 
-describe("usePracticeWebSocket presentation flow", () => {
+describe("usePracticeWebSocket presentation flow boundary", () => {
     beforeEach(() => {
         MockWebSocket.instances = [];
         mockAudioQueueRef.current = [];
@@ -85,7 +85,7 @@ describe("usePracticeWebSocket presentation flow", () => {
         vi.unstubAllGlobals();
     });
 
-    it("applies slide_update after control:start", () => {
+    it("keeps control:start as an outbound command until backend status advances the presentation session", () => {
         const { result } = renderHook(() =>
             usePracticeWebSocket({
                 sessionId: "ppt-session-1",
@@ -112,10 +112,19 @@ describe("usePracticeWebSocket presentation flow", () => {
                 payload.type === "control" && payload.data?.action === "start"
             ));
         expect(startControlPayload).toBeDefined();
-        expect(result.current.sessionStatus).toBe("in_progress");
-        expect(result.current.aiState).toBe("listening");
+        expect(result.current.sessionStatus).toBe("preparing");
+        expect(result.current.aiState).toBe("idle");
 
         act(() => {
+            ws?.emitMessage({
+                type: "status",
+                timestamp: new Date().toISOString(),
+                data: {
+                    session_status: "in_progress",
+                    ai_state: "listening",
+                    connection_state: "connected",
+                },
+            });
             ws?.emitMessage({
                 type: "slide_update",
                 timestamp: new Date().toISOString(),
@@ -127,6 +136,8 @@ describe("usePracticeWebSocket presentation flow", () => {
             });
         });
 
+        expect(result.current.sessionStatus).toBe("in_progress");
+        expect(result.current.aiState).toBe("listening");
         expect(result.current.currentSlide).toMatchObject({
             current_page: 2,
             total_pages: 5,
@@ -134,7 +145,7 @@ describe("usePracticeWebSocket presentation flow", () => {
         });
     });
 
-    it("keeps speaking on stale interrupt and transitions on matching stream interrupt", () => {
+    it("keeps speaking on stale interrupt and transitions on matching stream interrupt within the inbound presentation boundary", () => {
         const { result } = renderHook(() =>
             usePracticeWebSocket({
                 sessionId: "ppt-session-2",
@@ -192,7 +203,7 @@ describe("usePracticeWebSocket presentation flow", () => {
         expect(result.current.isStreamingTTS).toBe(false);
     });
 
-    it("moves to thinking immediately after user audio ends", () => {
+    it("moves to thinking immediately after user audio ends once backend status marks the presentation session in progress", () => {
         const { result } = renderHook(() =>
             usePracticeWebSocket({
                 sessionId: "ppt-session-3",
@@ -207,6 +218,15 @@ describe("usePracticeWebSocket presentation flow", () => {
             if (!ws) return;
             ws.readyState = MockWebSocket.OPEN;
             ws.onopen?.(new Event("open"));
+            ws.emitMessage({
+                type: "status",
+                timestamp: new Date().toISOString(),
+                data: {
+                    session_status: "in_progress",
+                    ai_state: "listening",
+                    connection_state: "connected",
+                },
+            });
         });
 
         act(() => {

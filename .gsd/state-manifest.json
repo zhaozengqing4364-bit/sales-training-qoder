@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "exported_at": "2026-04-11T21:15:30.864Z",
+  "exported_at": "2026-04-11T21:26:50.687Z",
   "milestones": [
     {
       "id": "M001",
@@ -2424,14 +2424,14 @@
       "milestone_id": "M017",
       "id": "S01",
       "title": "S01",
-      "status": "pending",
+      "status": "complete",
       "risk": "high",
       "depends": [],
       "demo": "pause/resume/end 并发行为有可重复证明，状态收敛策略清晰。",
       "created_at": "2026-04-08T08:54:31.246Z",
-      "completed_at": null,
-      "full_summary_md": "",
-      "full_uat_md": "",
+      "completed_at": "2026-04-11T21:19:54.401Z",
+      "full_summary_md": "---\nid: S01\nparent: M017\nmilestone: M017\nprovides:\n  - A durable backend concurrency contract for pause/resume/end races that downstream websocket and upload/resource-contention work can reuse.\n  - A reusable stale-writer reproduction harness for async SQLite-backed lifecycle races.\n  - An explicit, tested terminal split: sales ends into `scoring`; presentation ends into `completed`.\nrequires:\n  []\naffects:\n  - M017/S02 websocket reconnect/interrupt contract work\n  - M017/S03 upload/resource-contention discovery\n  - SessionLifecycleService terminal-state authority seam\n  - Canonical report/replay/background-finalization behavior that depends on sales=`scoring` vs presentation=`completed`\nkey_files:\n  - backend/src/common/db/session_lifecycle.py\n  - backend/tests/unit/test_session_lifecycle_service.py\n  - backend/tests/integration/test_session_lifecycle_api.py\n  - .gsd/DECISIONS.md\n  - .gsd/KNOWLEDGE.md\n  - .gsd/PROJECT.md\nkey_decisions:\n  - D197 — Use optimistic compare-and-swap on `PracticeSession.status` and converge stale non-terminal writers to the already-persisted terminal state instead of introducing row locks.\n  - D198 — Keep the lifecycle concurrency contract in the focused unit/integration lifecycle tests and use the existing repo-root pytest command as the long-term regression entrypoint; isolate presentation terminal-split proof from unrelated coach-service duration math when the proof target is lifecycle terminal semantics.\n  - Only stale writers that lose to an already-persisted terminal state converge to a no-op; fresh pause/resume requests against terminal sessions remain invalid transitions.\npatterns_established:\n  - Reproduce backend stale-writer races with two independent `AsyncSession` instances bound to the same test engine before choosing a convergence strategy.\n  - Use a write-time status compare-and-swap at the lifecycle authority seam rather than same-session rereads when SQLite-backed async tests can hold stale snapshots.\n  - Keep concurrency contracts as executable constants/assertions adjacent to the focused proof files so downstream slices inherit one durable regression entrypoint instead of a doc-only contract.\nobservability_surfaces:\n  - `backend/src/common/db/session_lifecycle.py` structured warning path `practice_session_lifecycle_concurrency_conflict` for stale-writer conflict visibility.\n  - `backend/tests/unit/test_session_lifecycle_service.py` `LIFECYCLE_CONCURRENCY_CONTRACT` plus conflict-path assertions for stale-writer no-op vs fresh invalid transition semantics.\n  - `backend/tests/integration/test_session_lifecycle_api.py` `LIFECYCLE_API_CONCURRENCY_CONTRACT`, stale-writer race proof, and presentation terminal-split proof as the long-term lifecycle regression gate.\ndrill_down_paths:\n  - .gsd/milestones/M017/slices/S01/tasks/T01-SUMMARY.md\n  - .gsd/milestones/M017/slices/S01/tasks/T02-SUMMARY.md\n  - .gsd/milestones/M017/slices/S01/tasks/T03-SUMMARY.md\nduration: \"\"\nverification_result: passed\ncompleted_at: 2026-04-11T21:19:54.404Z\nblocker_discovered: false\n---\n\n# S01: Session lifecycle 并发安全 proof\n\n**Proved and closed the highest-risk SessionLifecycleService stale-writer races so pause/resume can no longer reopen terminal sessions, while preserving the intentional sales=`scoring` vs presentation=`completed` terminal split.**\n\n## What Happened\n\n## What this slice delivered\n\nS01 turned session lifecycle concurrency from an inferred behavior into a mechanically provable backend contract.\n\n1. **Race catalog plus executable failing proof.** The slice first identified the two terminal regressions worth proving: stale `resume` reopening a sales session after `end` already persisted `scoring`, and stale `pause` reopening a presentation session after `end` already persisted `completed`. Those scenarios are now explicit in the lifecycle race catalog and were first preserved as verified red proofs before the fix landed.\n2. **Optimistic lifecycle convergence at the authority seam.** `SessionLifecycleService` now resolves lifecycle writes with a status compare-and-swap on `PracticeSession.status` instead of relying on caller-local guards or same-session rereads. When a stale writer loses to a terminal commit, the service reloads the durable state, logs `practice_session_lifecycle_concurrency_conflict`, syncs the in-memory row back to the persisted terminal state, and converges that stale writer to `changed=False` instead of reopening the session.\n3. **Intentional terminal split stayed intact.** The slice did not flatten lifecycle semantics. Sales still ends into `scoring` so report-generation/finalization can continue on the existing path; presentation still ends directly into `completed`. Fresh pause/resume calls against already-terminal sessions remain invalid transitions. Only stale non-terminal writers that lost the race to an already-persisted terminal state are collapsed into a no-op.\n4. **The contract is now adjacent to the proof.** The focused lifecycle unit and integration suites now carry explicit concurrency-contract constants and assertions that document why the project chose optimistic compare-and-swap over row locks, which races are intentionally converged, and which regression command future slices should rerun before changing lifecycle behavior.\n\n## Why this matters downstream\n\n- **For S02 (practice websocket):** reconnect/interrupt logic now has one stable terminal-state seam to honor. If websocket work reopens a session after `end`, that is now clearly a websocket-layer bug rather than ambiguous lifecycle behavior.\n- **For S03 (upload/resource contention discovery):** this slice established the pattern of proving the race first, then choosing the smallest durable convergence seam. Future resource-competition work should reuse that proof-first approach instead of preemptively adding retries, locks, or debounce wrappers.\n- **For future lifecycle work:** the authoritative regression entrypoint is the focused lifecycle pytest bundle, not a doc-only contract or a new umbrella suite.\n\n## Operational Readiness (Q8)\n\n- **Health signal:** the focused lifecycle gate passes (`27 passed`) and the concurrency-contract tests still assert the intentional sales/presentation terminal split.\n- **Failure signal:** a reopened terminal session, a regression in `changed=False` stale-writer behavior, or a missing `practice_session_lifecycle_concurrency_conflict` path indicates the lifecycle seam has drifted.\n- **Recovery procedure:** start from `backend/tests/unit/test_session_lifecycle_service.py` and `backend/tests/integration/test_session_lifecycle_api.py`, rerun the exact slice gate, inspect the compare-and-swap path in `backend/src/common/db/session_lifecycle.py`, and restore convergence at the service layer instead of papering over the issue in REST/WebSocket callers.\n- **Monitoring gaps:** the focused proof covers the lifecycle authority seam but not full production telemetry volume or every upstream caller pattern; the pre-existing presentation-coach timezone mismatch and the pre-existing `Connection._cancel` runtime warning remain outside this slice’s scope.\n\n## Requirements Advanced\n\nNone.\n\n## Requirements Validated\n\nNone.\n\n## New Requirements Surfaced\n\nNo new requirement IDs were surfaced. S01 retired a proof gap inside M017 by clarifying lifecycle terminal semantics and their concurrency boundary.\n\n## Requirements Invalidated or Re-scoped\n\nNone.\n\n## Verification\n\n- Ran the exact slice-plan gate: `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/test_session_lifecycle_service.py backend/tests/integration/test_session_lifecycle_api.py -x -q` → **27 passed**.\n- Ran fresh LSP diagnostics on `backend/src/common/db/session_lifecycle.py`, `backend/tests/unit/test_session_lifecycle_service.py`, and `backend/tests/integration/test_session_lifecycle_api.py` → **No diagnostics**.\n- Verified task completion state from GSD milestone status: S01 shows **3/3 tasks done** before slice close-out.\n- Non-blocking warnings still present on the focused pytest run: `pytest-cov` no-data/no-report warnings, `passlib` `crypt` deprecation warning, and the pre-existing `RuntimeWarning: coroutine 'Connection._cancel' was never awaited` in the idempotent lifecycle API test path. The slice gate still exited `0` and all targeted assertions passed.\n\n## Requirements Advanced\n\nNone.\n\n## Requirements Validated\n\nNone.\n\n## New Requirements Surfaced\n\nNone.\n\n## Requirements Invalidated or Re-scoped\n\nNone.\n\n## Deviations\n\nThe slice-level proof for the presentation terminal split intentionally isolated lifecycle semantics from a pre-existing `PresentationCoachService.end_session()` timezone-mismatch bug by stubbing that collaborator in the focused API proof. This kept the slice on lifecycle concurrency rather than expanding into unrelated duration math work.\n\n## Known Limitations\n\nA known presentation-coach aware/naive timestamp mismatch still exists outside the lifecycle seam, and the focused pytest run still emits pre-existing warning noise (`pytest-cov` no-data/no-report, `passlib` `crypt` deprecation, and `Connection._cancel` runtime warning). S01 proves the lifecycle contract but does not broaden into full production telemetry or caller-by-caller runtime audit.\n\n## Follow-ups\n\nS02 should reuse this slice’s terminal-state contract when auditing websocket reconnect/interrupt behavior, especially around already-ended sessions. S03 should reuse the same proof-first pattern for upload/resource-contention discovery instead of jumping straight to retries or locking. If future work ever proposes row locks here, it should first produce evidence that the current compare-and-swap seam no longer captures the real failure mode.\n\n## Files Created/Modified\n\n- `backend/src/common/db/session_lifecycle.py` — Added the lifecycle race catalog, terminal-status helper usage, status compare-and-swap conflict handling, stale-writer convergence, and structured conflict logging.\n- `backend/tests/unit/test_session_lifecycle_service.py` — Added executable lifecycle concurrency contract assertions plus focused unit proof for stale-terminal-writer no-op vs fresh invalid terminal transitions.\n- `backend/tests/integration/test_session_lifecycle_api.py` — Added stale-writer lifecycle race proof, API-side lifecycle contract assertions, and presentation terminal-split proof.\n- `.gsd/DECISIONS.md` — Recorded lifecycle concurrency strategy and authoritative proof-seam decisions as D197 and D198.\n- `.gsd/KNOWLEDGE.md` — Captured the stale-writer reproduction harness, the need for compare-and-swap instead of same-session rereads, and the presentation coach timezone gotcha.\n- `.gsd/PROJECT.md` — Refreshed project state to reflect M017/S01 close-out and the new lifecycle concurrency authority seam.\n",
+      "full_uat_md": "# S01: Session lifecycle 并发安全 proof — UAT\n\n**Milestone:** M017\n**Written:** 2026-04-11T21:19:54.405Z\n\n# S01 UAT — Session lifecycle concurrency contract\n\n## Preconditions\n- Repository state includes the S01 lifecycle concurrency changes.\n- Python dependencies are installed in `backend/venv`.\n- Run commands from repo root: `/Users/zhaozengqing/github/销售训练qoder`.\n\n## Test Case 1 — Sales `end` beats a stale `resume` without reopening the session\n1. Run:\n   ```bash\n   backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/integration/test_session_lifecycle_api.py -k \"lifecycle_race_proof_preserves_terminal_status_against_stale_writer\" -q\n   ```\n2. Wait for the focused integration proof to finish.\n3. Inspect the selected test output.\n\n**Expected outcome**\n- Pytest exits `0`.\n- The sales stale-writer proof passes and shows that once `end` has already persisted the sales terminal handoff (`scoring`), a stale `resume` writer converges to a no-op instead of reopening the session to `in_progress`.\n- The stale writer should observe terminal state semantics rather than claiming a real state change.\n\n## Test Case 2 — Presentation `end` still settles directly to `completed`, and a stale `pause` cannot reopen it\n1. Run:\n   ```bash\n   backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/test_session_lifecycle_service.py backend/tests/integration/test_session_lifecycle_api.py -k \"presentation_completes_without_scoring_handoff or lifecycle_race_proof_preserves_terminal_status_against_stale_writer or contract_documents\" -q\n   ```\n2. Wait for completion.\n3. Review the selected test names in the output.\n\n**Expected outcome**\n- Pytest exits `0`.\n- The presentation API proof confirms `end` still settles directly to `completed` instead of borrowing the sales `scoring` handoff.\n- The same focused bundle proves a stale `pause` writer cannot reopen a presentation session after `end` has already won.\n- The contract-document tests keep the intentional terminal split visible in executable assertions, not just prose.\n\n## Test Case 3 — Service-layer conflict handling distinguishes stale-writer convergence from fresh invalid transitions\n1. Run:\n   ```bash\n   backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/test_session_lifecycle_service.py -k \"stale_terminal_writer_converges_to_persisted_terminal_noop or fresh_terminal_resume_still_raises_invalid_transition\" -q\n   ```\n2. Wait for completion.\n3. Inspect the selected test names.\n\n**Expected outcome**\n- Pytest exits `0`.\n- The stale-writer test proves the compare-and-swap path collapses the loser into `changed=False` once the durable row is already terminal.\n- The fresh-transition test proves this slice did **not** soften real lifecycle validation: a normal resume against a terminal session still fails as an invalid transition.\n\n## Test Case 4 — Full focused lifecycle gate stays green\n1. Run the exact slice-plan verification command:\n   ```bash\n   backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/test_session_lifecycle_service.py backend/tests/integration/test_session_lifecycle_api.py -x -q\n   ```\n2. Wait for completion.\n\n**Expected outcome**\n- Pytest exits `0`.\n- All focused lifecycle tests pass (`27 passed` on the current branch).\n- The only acceptable noise is the known focused-run warning set: `pytest-cov` no-data warnings, the `passlib` `crypt` deprecation warning, and the pre-existing `Connection._cancel` runtime warning. No assertion failures or collection errors are allowed.\n\n## Edge Cases To Confirm\n- Sales and presentation intentionally keep different immediate terminal states: sales ends into `scoring`, presentation ends into `completed`.\n- Only stale non-terminal writers that lost to an already-persisted terminal state are collapsed into no-ops; fresh invalid transitions are still rejected.\n- If a presentation terminal-state proof fails because of timezone-aware vs naive timestamp math inside `PresentationCoachService.end_session()`, treat that as a separate coach-service duration bug, not immediate evidence that lifecycle terminal routing regressed.\n- Lifecycle concurrency fixes must stay on the backend authority seam (`SessionLifecycleService` compare-and-swap / conflict resolution path), not drift into route-local debounce or websocket-only guards.\n",
       "goal": "为 SessionLifecycleService 建立并发安全证据，并在需要时引入行锁/乐观并发控制。",
       "success_criteria": "- 至少一组 pause/resume/end race 场景有可重复 proof。\n- lifecycle 的收敛策略（行锁或乐观并发）被明确选择，并保持现有终态差异。\n- focused backend proof 能说明哪些竞态已被收敛，哪些语义仍是故意保留。",
       "proof_level": "integration",
@@ -2443,12 +2443,10 @@
     {
       "milestone_id": "M017",
       "id": "S02",
-      "title": "Practice WebSocket 复杂度与重连策略收口",
+      "title": "S02",
       "status": "pending",
       "risk": "high",
-      "depends": [
-        "S01"
-      ],
+      "depends": [],
       "demo": "practice websocket 的 reconnect/backpressure/interrupt contract 更清晰，测试保持通过。",
       "created_at": "2026-04-08T08:54:31.246Z",
       "completed_at": null,
@@ -10628,19 +10626,26 @@
       "milestone_id": "M017",
       "slice_id": "S02",
       "id": "T01",
-      "title": "识别 websocket hook 的真实职责边界",
-      "status": "pending",
-      "one_liner": "",
-      "narrative": "",
-      "verification_result": "",
+      "title": "Locked the real practice websocket seam with boundary notes and focused reconnect/backpressure/interrupt proofs.",
+      "status": "complete",
+      "one_liner": "Locked the real practice websocket seam with boundary notes and focused reconnect/backpressure/interrupt proofs.",
+      "narrative": "I inspected `web/src/hooks/use-practice-websocket.ts` together with its focused hook tests and the surrounding `websocket/message-handlers` module to distinguish real orchestration responsibility from superficial file-size complexity. The live code already had one important split in place: inbound protocol application (`status`, `reconnected`, `interrupted`, `backpressure`) belongs in `websocket/message-handlers`, while the hook still legitimately owns transport lifecycle, reconnect retry budget, pending outbound flush, binary negotiation on connect, outbound audio pacing/backpressure buffering, and interrupt pre-cleanup across playback refs and browser speech synthesis. I codified that boundary directly in the hook header instead of doing a fake extract-by-size refactor. I then strengthened the focused tests so future agents can see the seam in behavior: the hook suite now proves binary negotiation happens at connect time, backpressure is an inbound resume signal plus hook-owned outbound buffering/flush, and interrupt pre-cleanup stays in the hook before backend confirmation. On the presentation-focused suite, I corrected the contract proof to match the real runtime truth line: `sendControl(\"start\")` is only an outbound command, and `sessionStatus` / `aiState` advance only after inbound backend `status` confirms the session is actually in progress.",
+      "verification_result": "Ran the exact task-plan inventory command to confirm reconnect/backpressure/interrupt/binary coverage now appears directly in the hook and focused tests. Ran the impacted websocket hook suites with Vitest; both `src/hooks/use-practice-websocket.test.ts` and `src/hooks/use-practice-websocket.presentation-flow.test.ts` passed (18/18). Re-ran LSP diagnostics on `web/src/hooks/use-practice-websocket.ts`, `web/src/hooks/use-practice-websocket.test.ts`, and `web/src/hooks/use-practice-websocket.presentation-flow.test.ts`; all were clean.",
       "duration": "",
-      "completed_at": null,
+      "completed_at": "2026-04-11T21:26:50.634Z",
       "blocker_discovered": false,
-      "deviations": "",
-      "known_issues": "",
-      "key_files": [],
-      "key_decisions": [],
-      "full_summary_md": "",
+      "deviations": "None.",
+      "known_issues": "None.",
+      "key_files": [
+        "web/src/hooks/use-practice-websocket.ts",
+        "web/src/hooks/use-practice-websocket.test.ts",
+        "web/src/hooks/use-practice-websocket.presentation-flow.test.ts",
+        ".gsd/KNOWLEDGE.md"
+      ],
+      "key_decisions": [
+        "D199 — keep `use-practice-websocket` as the transport/outbound orchestrator and keep inbound protocol projection in `websocket/message-handlers`."
+      ],
+      "full_summary_md": "---\nid: T01\nparent: S02\nmilestone: M017\nkey_files:\n  - web/src/hooks/use-practice-websocket.ts\n  - web/src/hooks/use-practice-websocket.test.ts\n  - web/src/hooks/use-practice-websocket.presentation-flow.test.ts\n  - .gsd/KNOWLEDGE.md\nkey_decisions:\n  - D199 — keep `use-practice-websocket` as the transport/outbound orchestrator and keep inbound protocol projection in `websocket/message-handlers`.\nduration: \nverification_result: passed\ncompleted_at: 2026-04-11T21:26:50.632Z\nblocker_discovered: false\n---\n\n# T01: Locked the real practice websocket seam with boundary notes and focused reconnect/backpressure/interrupt proofs.\n\n**Locked the real practice websocket seam with boundary notes and focused reconnect/backpressure/interrupt proofs.**\n\n## What Happened\n\nI inspected `web/src/hooks/use-practice-websocket.ts` together with its focused hook tests and the surrounding `websocket/message-handlers` module to distinguish real orchestration responsibility from superficial file-size complexity. The live code already had one important split in place: inbound protocol application (`status`, `reconnected`, `interrupted`, `backpressure`) belongs in `websocket/message-handlers`, while the hook still legitimately owns transport lifecycle, reconnect retry budget, pending outbound flush, binary negotiation on connect, outbound audio pacing/backpressure buffering, and interrupt pre-cleanup across playback refs and browser speech synthesis. I codified that boundary directly in the hook header instead of doing a fake extract-by-size refactor. I then strengthened the focused tests so future agents can see the seam in behavior: the hook suite now proves binary negotiation happens at connect time, backpressure is an inbound resume signal plus hook-owned outbound buffering/flush, and interrupt pre-cleanup stays in the hook before backend confirmation. On the presentation-focused suite, I corrected the contract proof to match the real runtime truth line: `sendControl(\"start\")` is only an outbound command, and `sessionStatus` / `aiState` advance only after inbound backend `status` confirms the session is actually in progress.\n\n## Verification\n\nRan the exact task-plan inventory command to confirm reconnect/backpressure/interrupt/binary coverage now appears directly in the hook and focused tests. Ran the impacted websocket hook suites with Vitest; both `src/hooks/use-practice-websocket.test.ts` and `src/hooks/use-practice-websocket.presentation-flow.test.ts` passed (18/18). Re-ran LSP diagnostics on `web/src/hooks/use-practice-websocket.ts`, `web/src/hooks/use-practice-websocket.test.ts`, and `web/src/hooks/use-practice-websocket.presentation-flow.test.ts`; all were clean.\n\n## Verification Evidence\n\n| # | Command | Exit Code | Verdict | Duration |\n|---|---------|-----------|---------|----------|\n| 1 | `rg -n \"reconnect|backpressure|interrupt|binary\" web/src/hooks/use-practice-websocket.ts web/src/hooks/use-practice-websocket*.test.ts` | 0 | ✅ pass | 18ms |\n| 2 | `npm --prefix web test -- --run \"src/hooks/use-practice-websocket.test.ts\" \"src/hooks/use-practice-websocket.presentation-flow.test.ts\"` | 0 | ✅ pass | 980ms |\n\n## Deviations\n\nNone.\n\n## Known Issues\n\nNone.\n\n## Files Created/Modified\n\n- `web/src/hooks/use-practice-websocket.ts`\n- `web/src/hooks/use-practice-websocket.test.ts`\n- `web/src/hooks/use-practice-websocket.presentation-flow.test.ts`\n- `.gsd/KNOWLEDGE.md`\n",
       "description": "Why: 先识别 websocket hook 真实职责边界，才能避免“文件大就拆”的假重构。\n\nDo:\n1. 盘点 `use-practice-websocket` 当前承载的 reconnect/backpressure/interrupt/binary negotiation 事实。\n2. 标出真正需要收口的 seam。\n3. 区分复杂度问题与只是职责集中但仍合理的部分。\n\nDone when: 已明确 hook 的真实职责边界，后续实现不会为了拆分而拆分。",
       "estimate": "35m",
       "files": [
@@ -13544,6 +13549,30 @@
       "decision": "Session lifecycle stale-writer convergence strategy",
       "choice": "Use optimistic compare-and-swap on PracticeSession.status and converge stale non-terminal writers to the already-persisted terminal state instead of introducing row locks.",
       "rationale": "The focused lifecycle proof runs on SQLite-backed tests where row-lock behavior is not a reliable or easily provable contract. A status-guarded UPDATE makes the race observable at write time, preserves existing sales/presentation terminal differences plus report/replay semantics, and lets stale pause/resume attempts become explicit no-op convergence when end already won.",
+      "revisable": "Yes",
+      "made_by": "agent",
+      "superseded_by": null
+    },
+    {
+      "seq": 1568,
+      "id": "D198",
+      "when_context": "M017/S01/T03",
+      "scope": "verification",
+      "decision": "Authoritative proof seam for session lifecycle concurrency contract",
+      "choice": "Keep the lifecycle concurrency contract in the focused unit/integration lifecycle tests and use the existing repo-root pytest command as the long-term regression entrypoint; isolate presentation terminal-split assertions from unrelated coach-service duration math when the proof target is lifecycle terminal semantics.",
+      "rationale": "The slice goal is to keep stale pause/resume/end races mechanically provable on the same authority seam that future slices will reuse. Keeping the contract next to the focused lifecycle proofs avoids a second documentation-only source of truth, while stubbing unrelated presentation coach duration behavior prevents a known timezone-mismatch issue from obscuring whether sales still settles to `scoring` and presentation to `completed`.",
+      "revisable": "Yes",
+      "made_by": "agent",
+      "superseded_by": null
+    },
+    {
+      "seq": 1569,
+      "id": "D199",
+      "when_context": "M017/S02/T01",
+      "scope": "websocket-orchestration",
+      "decision": "How to treat the remaining complexity inside use-practice-websocket during M017/S02",
+      "choice": "Keep use-practice-websocket as the transport/outbound orchestrator and target future refactors at the reconnect/backpressure/interrupt seam instead of splitting again by file size; keep inbound protocol projection in websocket/message-handlers.",
+      "rationale": "Reading the live hook and focused tests showed the real coordination burden is shared local runtime cleanup and outbound pacing across websocket state, audio queues, reconnect retry budget, binary negotiation, and interrupt pre-cleanup. Inbound status/reconnected/interrupted/backpressure application is already isolated in message-handlers, so another size-driven split would move code without reducing the true seam.",
       "revisable": "Yes",
       "made_by": "agent",
       "superseded_by": null
@@ -17586,6 +17615,28 @@
       "verdict": "✅ pass",
       "duration_ms": 35,
       "created_at": "2026-04-11T21:15:30.811Z"
+    },
+    {
+      "id": 373,
+      "task_id": "T01",
+      "slice_id": "S02",
+      "milestone_id": "M017",
+      "command": "rg -n \"reconnect|backpressure|interrupt|binary\" web/src/hooks/use-practice-websocket.ts web/src/hooks/use-practice-websocket*.test.ts",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 18,
+      "created_at": "2026-04-11T21:26:50.634Z"
+    },
+    {
+      "id": 374,
+      "task_id": "T01",
+      "slice_id": "S02",
+      "milestone_id": "M017",
+      "command": "npm --prefix web test -- --run \"src/hooks/use-practice-websocket.test.ts\" \"src/hooks/use-practice-websocket.presentation-flow.test.ts\"",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 980,
+      "created_at": "2026-04-11T21:26:50.634Z"
     }
   ]
 }

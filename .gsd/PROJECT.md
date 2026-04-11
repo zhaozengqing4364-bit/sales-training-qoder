@@ -35,6 +35,7 @@
 - **M014**：learner 入口与体验闭环补齐（dashboard CTA、profile→forgot/reset、shared help、practice preflight/interruption guidance）。
 - **M015**：frontend hygiene 与 learner shell 保护收口已完成并封板——raw console 已统一到 shared debug seam，原生 dialog/hard navigation 已收口到 auth-handler/router/dialog/toast seam，learner dashboard/auth/practice 入口已具备明确的 route-level loading/error fallback，并把剩余 responsive/timezone 风险锁成 focused baseline proof。
 - **M016**：auth / API / admin security contract hardening 已完成——password reset 现在沿 `PasswordResetService` + `PasswordResetToken` + Alembic 026/027/028 的 durable seam 演进并由 DB enforce 单 active token；audited prompt-template / presentation / auth dependency surface 已统一到稳定错误契约并由 `ApiRequestError` 单 seam 消费；第一批高风险 admin router family 已在 module 级显式 `get_current_admin_user`，`StructuredLogger` 成为 token/password/cookie/email 的共享脱敏边界，security inventory / log-safety inventory 已把 fix-first 列表收敛到 0。
+- **M017/S01**：session lifecycle 并发 proof 已收口——`pause`/`resume` 对抗 `end` 的 stale-writer race 现在通过 `PracticeSession.status` 的 optimistic compare-and-swap 收敛为 terminal no-op，不再把 sales `scoring` 或 presentation `completed` 重新打开；并发 contract 与 terminal split 已固定在 focused lifecycle tests 与 `practice_session_lifecycle_concurrency_conflict` 日志 seam 上。
 
 ## Current Product Truths
 
@@ -54,13 +55,22 @@
   - admin-only RBAC 必须直接声明在 router module 上，不能只依赖 `main.py` 的外层依赖包装；
   - token/password/cookie/email 的日志保护必须落在 `common.monitoring.logger.StructuredLogger` 共享 sink，而不是零散 call-site masking；
   - `backend/src/admin/api/security_inventory.py` 与 `backend/src/common/monitoring/log_safety_inventory.py` 是后续 admin security widening 的代码级事实源。
+- lifecycle concurrency 权威线现在也已明确：
+  - stale `pause` / `resume` writers 只能在写入时通过 status compare-and-swap 收敛，不能靠同一 `AsyncSession` 的“再读一次”假装并发安全；
+  - sales 终态语义仍是 `end -> scoring`（后续 background finalization 才可能到 `completed`），presentation 终态语义仍是 `end -> completed`；
+  - focused lifecycle proof 的长期入口仍是 `backend/tests/unit/test_session_lifecycle_service.py` + `backend/tests/integration/test_session_lifecycle_api.py`，不是额外的新并发 harness。
 
 ## Current Focus
 
-M016 已完成并封板。当前工作重心应转到 **保持这些 contract seams 稳定，并只在后续 milestone 中按 inventory/watch-list 有界扩展**：
-- 继续把 auth / API / admin 相关改动约束在已经证明过的 authority seam 上，而不是重新回到 page-local parsing、wrapper-local RBAC 或 call-site masking。
-- 如果后续继续做 admin security，只应沿 S03 inventories 的 watch list 递进，不要把安全工作重新膨胀成全仓权限或日志大扫除。
-- 如果后续继续做 auth recovery，只应在现有 password-reset lifecycle seam 与 `EmailService` 交付 seam 上扩展，不要绕过 durable token table。
+M017 已进入并发与 realtime contract 收口阶段，当前状态如下：
+- **S01 已完成**：SessionLifecycleService 的 stale-writer race 已被证明并收敛，pause/resume/end 的 terminal 语义边界已固定。
+- **接下来优先 S02**：围绕 practice websocket 的 reconnect / interrupt / backpressure 复用 S01 锁定的 lifecycle terminal 语义，避免 websocket 层再偷偷重开已终止会话。
+- **随后 S03**：围绕 presentation upload / replace 等资源竞争点做 discovery，但必须沿 S01 的“先做可证伪 proof，再决定是否加锁/重试/幂等”路径推进。
+
+当前不应做的事：
+- 不要把 lifecycle 并发问题重新包装成前端防抖或 route guard 修补。
+- 不要引入新的 report/replay 终态分支去绕过 backend lifecycle contract。
+- 不要在 upload / websocket slice 里重复发明第二套 terminal-state 语义。
 
 ## Capability Contract
 
@@ -84,3 +94,4 @@ M016 已完成并封板。当前工作重心应转到 **保持这些 contract se
 - [x] M014 — learner 入口与体验闭环补齐
 - [x] M015 — Frontend hygiene 与 learner shell 保护收口
 - [x] M016 — Auth / API / admin security contract hardening
+- [ ] M017 — Realtime contract 与 concurrency proof 收口（S01 complete; S02-S03 pending）

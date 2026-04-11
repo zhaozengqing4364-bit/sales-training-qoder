@@ -6,8 +6,18 @@
  * v1-6 Refactor: Split from monolithic 1097-line file into composable modules:
  *   - websocket/types.ts              — All type definitions & constants
  *   - websocket/use-audio-playback.ts — Audio queue, playback, unlock
- *   - websocket/message-handlers.ts   — WebSocket message routing (switch)
- *   - (this file)                     — Orchestrator: state, connection, send, backpressure, interrupt
+ *   - websocket/message-handlers.ts   — Inbound WebSocket protocol → practice state projection
+ *   - (this file)                     — Transport/orchestration boundary for the outward contract
+ *
+ * Real responsibility boundary (M017/S02/T01):
+ *   - This hook owns transport lifecycle: connect/disconnect, reconnect budget, URL/runtime lock,
+ *     pending outbound message flush, and binary negotiation on open.
+ *   - This hook owns outbound realtime pacing: audio send gating, local backpressure buffering/
+ *     flush aborts, and interrupt pre-cleanup across playback refs + browser speech synthesis.
+ *   - message-handlers owns inbound protocol application: status/reconnected/interrupted/
+ *     backpressure events become state updates once the server tells us what runtime state is true.
+ *   - The remaining complexity seam is therefore outbound orchestration around reconnect /
+ *     backpressure / interrupt, not a generic “the file is too large so split it again” problem.
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";

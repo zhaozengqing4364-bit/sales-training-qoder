@@ -1,6 +1,6 @@
 {
   "mode": "grow",
-  "current_issue_id": "M016-S03-T03",
+  "current_issue_id": "M017-S02-T01",
   "current_issue_type": "task",
   "current_issue_status": "done",
   "pending_issue_ids": [],
@@ -167,26 +167,29 @@
     "M016-S02",
     "M016-S03-T01",
     "M016-S03-T02",
-    "M016-S03-T03"
+    "M016-S03-T03",
+    "M017-S02-T01"
   ],
   "blocked_issue_ids": [],
   "deferred_issue_ids": [],
   "last_modified_files": [
-    "backend/tests/integration/test_admin_users_api.py",
-    "backend/tests/unit/admin/test_admin_users_api_models.py",
+    "web/src/hooks/use-practice-websocket.ts",
+    "web/src/hooks/use-practice-websocket.test.ts",
+    "web/src/hooks/use-practice-websocket.presentation-flow.test.ts",
+    ".gsd/DECISIONS.md",
     ".gsd/KNOWLEDGE.md",
     ".codex/loop/state.json",
     ".codex/loop/log.md"
   ],
   "last_verification_commands": [
-    "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/integration/test_admin_users_api.py -k \"admin_security_baseline_inventory_is_closed_and_scoped or admin_router_modules_require_admin_even_without_main_router_guard\" -q",
-    "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/admin/test_admin_users_api_models.py -k \"structured_logger_masks_sensitive_fields_before_sink_emission or sensitive_log_security_baseline_inventory_is_closed_and_scoped\" -q",
-    "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/integration/test_admin_users_api.py backend/tests/unit/admin/test_admin_users_api_models.py -x -q",
-    "lsp diagnostics backend/tests/integration/test_admin_users_api.py",
-    "lsp diagnostics backend/tests/unit/admin/test_admin_users_api_models.py"
+    "rg -n \"reconnect|backpressure|interrupt|binary\" web/src/hooks/use-practice-websocket.ts web/src/hooks/use-practice-websocket*.test.ts",
+    "npm --prefix web test -- --run \"src/hooks/use-practice-websocket.test.ts\" \"src/hooks/use-practice-websocket.presentation-flow.test.ts\"",
+    "lsp diagnostics web/src/hooks/use-practice-websocket.ts",
+    "lsp diagnostics web/src/hooks/use-practice-websocket.test.ts",
+    "lsp diagnostics web/src/hooks/use-practice-websocket.presentation-flow.test.ts"
   ],
-  "last_verification_result": "passed; the focused admin baseline subset finished 6/6 green, the focused logger/inventory subset finished 2/2 green, the exact task-plan pytest gate finished 36/36 green, and fresh LSP diagnostics were clean on both touched proof files.",
-  "last_success_signal": "M016/S03/T03 now locks the admin security baseline to code-owned proof: the five repaired admin route families are still denied outside main.py wrapper guards, the shared structured logger redacts sensitive fields at the sink boundary, and the inventory tests encode which admin/logging surfaces are covered now versus tracked for later follow-up.",
+  "last_verification_result": "passed; the exact task-plan rg inventory now surfaces the explicit boundary map plus focused reconnect/backpressure/interrupt/binary proofs, the impacted websocket hook suites finished 18/18 green, and fresh LSP diagnostics were clean on the touched hook/test files.",
+  "last_success_signal": "M017/S02/T01 now encodes the real websocket seam instead of a fake file-size refactor: use-practice-websocket stays the transport/outbound orchestrator for reconnect/binary negotiation/backpressure/interrupt cleanup, while inbound runtime truth remains on status/reconnected/interrupted/backpressure messages handled by websocket/message-handlers.",
   "last_growth_scan": null,
-  "next_action": "Close or reassess M016/S03 with the now-stable admin RBAC/log-redaction proof bundle."
+  "next_action": "Continue M017/S02 with T02, using the now-explicit outbound-orchestration seam instead of splitting the hook by size."
 }
