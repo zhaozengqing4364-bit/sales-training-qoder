@@ -48,7 +48,7 @@ Done when: 高风险业务页面不再依赖原生弹窗或硬跳转，focused U
   - Files: `web/src/app/admin/records/page.tsx`, `web/src/app/admin/rag-profiles/page.tsx`, `web/src/app/admin/personas/[id]/page.tsx`, `web/src/app/(dashboard)/profile/page.tsx`, `web/src/components/layout/*`, `web/src/lib/auth-handler.ts`
   - Verify: npm --prefix web test -- --run "src/app/admin/personas/[id]/page.test.tsx" "src/app/(auth)/login/page.test.tsx"
 
-- [ ] **T03: 为非中断式交互模式补 proof** `est:25m`
+- [x] **T03: 为非中断式交互模式补 proof** `est:25m`
   Why: 需要一个长期稳定的 proof，防止以后再次引入原生弹窗和硬跳转。
 
 Do:

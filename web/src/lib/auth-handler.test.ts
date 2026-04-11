@@ -30,6 +30,30 @@ describe("authHandler", () => {
         vi.useRealTimers();
     });
 
+    it("holds the auth redirect on the shared seam until the router bridge is available", () => {
+        vi.useFakeTimers();
+        vi.setSystemTime(new Date(Date.now() + 2_000));
+        const listener = vi.fn();
+        const navigateMock = vi.fn();
+        const unsubscribe = authHandler.subscribe(listener);
+
+        authHandler.sessionExpired();
+
+        expect(listener).toHaveBeenCalledWith("登录已过期，请重新登录");
+
+        vi.advanceTimersByTime(1500);
+
+        expect(navigateMock).not.toHaveBeenCalled();
+
+        const unregisterNavigator = authHandler.setNavigator(navigateMock);
+
+        expect(navigateMock).toHaveBeenCalledWith("/login", { mode: "replace" });
+
+        unregisterNavigator();
+        unsubscribe();
+        vi.useRealTimers();
+    });
+
     it("queues logout redirects onto the registered navigator instead of hard browser jumps", () => {
         const navigateMock = vi.fn();
         const unregisterNavigator = authHandler.setNavigator(navigateMock);

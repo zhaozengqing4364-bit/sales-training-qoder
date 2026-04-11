@@ -119,6 +119,7 @@ describe("RecordsPage", () => {
 
     it("routes record deletion through the shared confirm dialog before mutating state", async () => {
         deleteTrainingRecordMock.mockResolvedValue(undefined);
+        const nativeConfirmSpy = vi.spyOn(window, "confirm").mockImplementation(() => true);
 
         render(<RecordsPage />);
 
@@ -129,11 +130,36 @@ describe("RecordsPage", () => {
         fireEvent.click(screen.getAllByRole("button", { name: "删除记录 首通销售演练" })[0]);
 
         expect(screen.getByText("删除训练记录")).toBeTruthy();
+        expect(screen.getByText("确定要删除「首通销售演练」吗？")).toBeTruthy();
+        expect(deleteTrainingRecordMock).not.toHaveBeenCalled();
+        expect(nativeConfirmSpy).not.toHaveBeenCalled();
+
         fireEvent.click(screen.getByRole("button", { name: "删除" }));
 
         await waitFor(() => {
             expect(deleteTrainingRecordMock).toHaveBeenCalledWith("session-1");
         });
         expect(successToastMock).toHaveBeenCalledWith("删除成功");
+    });
+
+    it("keeps deletion failures in toast feedback instead of falling back to alert dialogs", async () => {
+        deleteTrainingRecordMock.mockRejectedValueOnce(new Error("删除失败"));
+        const nativeAlertSpy = vi.spyOn(window, "alert").mockImplementation(() => undefined);
+
+        render(<RecordsPage />);
+
+        await waitFor(() => {
+            expect(getTrainingRecordsMock).toHaveBeenCalled();
+        });
+
+        fireEvent.click(screen.getAllByRole("button", { name: "删除记录 首通销售演练" })[0]);
+        fireEvent.click(screen.getByRole("button", { name: "删除" }));
+
+        await waitFor(() => {
+            expect(deleteTrainingRecordMock).toHaveBeenCalledWith("session-1");
+        });
+
+        expect(errorToastMock).toHaveBeenCalledWith("删除失败");
+        expect(nativeAlertSpy).not.toHaveBeenCalled();
     });
 });
