@@ -14,6 +14,9 @@ from common.monitoring.trace_context import generate_trace_id
 # Context variable for trace_id
 trace_id_var: ContextVar[str] = ContextVar("trace_id", default="")
 
+REDACTED_VALUE = "[REDACTED]"
+SENSITIVE_LOG_FIELD_MARKERS = ("token", "password", "cookie", "email")
+
 
 def get_trace_id() -> str:
     """Get current trace_id from context"""
@@ -29,6 +32,70 @@ def set_trace_id(trace_id: str) -> None:
     trace_id_var.set(trace_id)
 
 
+def _normalize_log_key(field_name: str) -> str:
+    return field_name.strip().replace("-", "_").lower()
+
+
+def is_sensitive_log_key(field_name: str | None) -> bool:
+    """Return whether a log field should be redacted."""
+    if not field_name:
+        return False
+
+    normalized = _normalize_log_key(field_name)
+    return any(marker in normalized for marker in SENSITIVE_LOG_FIELD_MARKERS)
+
+
+def mask_email_for_logs(value: Any) -> str:
+    """Mask email local-part while preserving the domain for diagnostics."""
+    if not isinstance(value, str):
+        return REDACTED_VALUE
+
+    cleaned = value.strip()
+    if "@" not in cleaned:
+        return REDACTED_VALUE
+
+    local_part, domain_part = cleaned.split("@", 1)
+    if not local_part:
+        return f"***@{domain_part}"
+
+    visible_prefix = local_part[: min(2, len(local_part))]
+    return f"{visible_prefix}***@{domain_part}"
+
+
+def sanitize_log_value(value: Any, *, field_name: str | None = None) -> Any:
+    """Recursively sanitize one log value based on its field name."""
+    normalized_field = _normalize_log_key(field_name) if field_name else ""
+    if field_name and is_sensitive_log_key(field_name):
+        if "email" in normalized_field:
+            return mask_email_for_logs(value)
+        return REDACTED_VALUE
+
+    if isinstance(value, dict):
+        return {
+            key: sanitize_log_value(item, field_name=str(key))
+            for key, item in value.items()
+        }
+
+    if isinstance(value, list):
+        return [sanitize_log_value(item, field_name=field_name) for item in value]
+
+    if isinstance(value, tuple):
+        return tuple(sanitize_log_value(item, field_name=field_name) for item in value)
+
+    if isinstance(value, set):
+        return {sanitize_log_value(item, field_name=field_name) for item in value}
+
+    return value
+
+
+def sanitize_log_kwargs(kwargs: dict[str, Any]) -> dict[str, Any]:
+    """Sanitize structured log kwargs before they reach the shared sink."""
+    return {
+        key: sanitize_log_value(value, field_name=key)
+        for key, value in kwargs.items()
+    }
+
+
 class StructuredLogger:
     """Structured logger with trace_id support"""
 
@@ -36,16 +103,16 @@ class StructuredLogger:
         self.logger = structlog.get_logger(name)
 
     def info(self, msg: str, **kwargs: Any) -> None:
-        self.logger.info(msg, trace_id=get_trace_id(), **kwargs)
+        self.logger.info(msg, trace_id=get_trace_id(), **sanitize_log_kwargs(kwargs))
 
     def warning(self, msg: str, **kwargs: Any) -> None:
-        self.logger.warning(msg, trace_id=get_trace_id(), **kwargs)
+        self.logger.warning(msg, trace_id=get_trace_id(), **sanitize_log_kwargs(kwargs))
 
     def error(self, msg: str, **kwargs: Any) -> None:
-        self.logger.error(msg, trace_id=get_trace_id(), **kwargs)
+        self.logger.error(msg, trace_id=get_trace_id(), **sanitize_log_kwargs(kwargs))
 
     def debug(self, msg: str, **kwargs: Any) -> None:
-        self.logger.debug(msg, trace_id=get_trace_id(), **kwargs)
+        self.logger.debug(msg, trace_id=get_trace_id(), **sanitize_log_kwargs(kwargs))
 
 
 # Configure structlog

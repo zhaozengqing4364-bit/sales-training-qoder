@@ -15,6 +15,7 @@ from admin.api.users import (
     _user_audit_snapshot,
 )
 from common.db.models import User
+from common.monitoring.logger import REDACTED_VALUE, sanitize_log_kwargs
 
 
 def test_create_user_request_rejects_invalid_role() -> None:
@@ -136,3 +137,49 @@ def test_role_transition_guard_rejects_removing_last_active_admin() -> None:
 
     assert exc_info.value.status_code == 400
     assert exc_info.value.detail == "[CANNOT_REMOVE_LAST_ADMIN]"
+
+
+def test_sanitize_log_kwargs_redacts_sensitive_top_level_fields() -> None:
+    """Shared logger should redact token/password/cookie/email keys."""
+    sanitized = sanitize_log_kwargs(
+        {
+            "user_email": "sensitive@example.com",
+            "access_token": "secret-token",
+            "session_cookie": "session=abc",
+            "password": "Password123",
+            "safe_value": "kept",
+        }
+    )
+
+    assert sanitized["user_email"] == "se***@example.com"
+    assert sanitized["access_token"] == REDACTED_VALUE
+    assert sanitized["session_cookie"] == REDACTED_VALUE
+    assert sanitized["password"] == REDACTED_VALUE
+    assert sanitized["safe_value"] == "kept"
+
+
+def test_sanitize_log_kwargs_redacts_nested_extra_metadata() -> None:
+    """Shared logger should sanitize nested extra payloads before emission."""
+    sanitized = sanitize_log_kwargs(
+        {
+            "extra": {
+                "operator_email": "operator@example.com",
+                "request": {
+                    "reset_token": "abc123",
+                    "notes": "keep me",
+                },
+                "events": [
+                    {"cookie_value": "session=1"},
+                    {"password_hint": "do not leak"},
+                    {"non_sensitive": "visible"},
+                ],
+            }
+        }
+    )
+
+    assert sanitized["extra"]["operator_email"] == "op***@example.com"
+    assert sanitized["extra"]["request"]["reset_token"] == REDACTED_VALUE
+    assert sanitized["extra"]["request"]["notes"] == "keep me"
+    assert sanitized["extra"]["events"][0]["cookie_value"] == REDACTED_VALUE
+    assert sanitized["extra"]["events"][1]["password_hint"] == REDACTED_VALUE
+    assert sanitized["extra"]["events"][2]["non_sensitive"] == "visible"

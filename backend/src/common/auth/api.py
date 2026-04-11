@@ -286,7 +286,12 @@ async def login(
             )
         )
 
-        logger.info(f"User logged in: {user.user_id}")
+        logger.info(
+            "User logged in",
+            user_id=str(user.user_id),
+            user_email=user.email,
+            role=user_role,
+        )
         response = JSONResponse(
             status_code=status.HTTP_200_OK,
             content=success_response(login_response.model_dump()),
@@ -295,7 +300,11 @@ async def login(
         return response
 
     except SQLAlchemyError as e:
-        logger.error(f"Login failed: {str(e)}")
+        logger.error(
+            "Login failed",
+            auth_email=credentials.email,
+            error_type=type(e).__name__,
+        )
         return error_response("[LOGIN_FAILED]", "登录失败，请稍后重试")
 
 
@@ -317,7 +326,11 @@ async def logout(
         # If using token blacklist or refresh tokens, would invalidate here
 
         # For now, just log the logout event
-        logger.info(f"User logged out: {current_user.email}")
+        logger.info(
+            "User logged out",
+            user_id=str(current_user.user_id),
+            user_email=current_user.email,
+        )
 
         response = JSONResponse(
             status_code=status.HTTP_200_OK,
@@ -329,7 +342,12 @@ async def logout(
         return response
 
     except (SQLAlchemyError, ValueError) as e:
-        logger.error(f"Logout failed: {str(e)}")
+        logger.error(
+            "Logout failed",
+            user_id=str(current_user.user_id),
+            user_email=current_user.email,
+            error_type=type(e).__name__,
+        )
         return error_response("[LOGOUT_FAILED]", "登出失败")
 
 
@@ -358,7 +376,11 @@ async def forgot_password(
         service = PasswordResetService(db)
         await service.request_password_reset(body.email)
     except SQLAlchemyError as e:
-        logger.error(f"Forgot password failed: {str(e)}")
+        logger.error(
+            "Forgot password failed",
+            auth_email=body.email,
+            error_type=type(e).__name__,
+        )
         await db.rollback()
 
     return JSONResponse(
@@ -406,6 +428,9 @@ async def reset_password(
         )
     except SQLAlchemyError as e:
         await db.rollback()
-        logger.error(f"Reset password failed: {str(e)}")
+        logger.error(
+            "Reset password failed",
+            error_type=type(e).__name__,
+        )
         return error_response("[RESET_FAILED]", "密码重置失败，请稍后重试")
 

@@ -1,7 +1,7 @@
 # Codebase Map
 
-Generated: 2026-04-11T20:07:20Z | Files: 500 | Described: 0/500
-<!-- gsd:codebase-meta {"generatedAt":"2026-04-11T20:07:20Z","fingerprint":"bf83a3137cbb72d7b02872c3a63e204adab4e8eb","fileCount":500,"truncated":true} -->
+Generated: 2026-04-11T20:16:23Z | Files: 500 | Described: 0/500
+<!-- gsd:codebase-meta {"generatedAt":"2026-04-11T20:16:23Z","fingerprint":"0db4109962a7b8517be2d68f04885e8c8e15323b","fileCount":500,"truncated":true} -->
 Note: Truncated to first 500 files. Run with higher --max-files to include all.
 
 ### (root)/
@@ -258,6 +258,7 @@ Note: Truncated to first 500 files. Run with higher --max-files to include all.
 - `backend/src/admin/api/presentation_ai.py`
 - `backend/src/admin/api/rag_profiles.py`
 - `backend/src/admin/api/release_verification.py`
+- `backend/src/admin/api/security_inventory.py`
 - `backend/src/admin/api/system_logs.py`
 - `backend/src/admin/api/training_records.py`
 - `backend/src/admin/api/users.py`
@@ -421,6 +422,7 @@ Note: Truncated to first 500 files. Run with higher --max-files to include all.
 
 ### backend/src/common/monitoring/
 - `backend/src/common/monitoring/latency_tracker.py`
+- `backend/src/common/monitoring/log_safety_inventory.py`
 - `backend/src/common/monitoring/logger.py`
 - `backend/src/common/monitoring/metrics.py`
 - `backend/src/common/monitoring/nfr_reporter.py`
@@ -626,4 +628,22 @@ Note: Truncated to first 500 files. Run with higher --max-files to include all.
 - `backend/tests/unit/admin/test_admin_users_api_models.py`
 
 ### backend/tests/unit/common/
-- *(21 files: 21 .py)*
+- `backend/tests/unit/common/test_admin_analytics_service.py`
+- `backend/tests/unit/common/test_analytics_api_normalization.py`
+- `backend/tests/unit/common/test_api_users.py`
+- `backend/tests/unit/common/test_config_manager_embedding_env.py`
+- `backend/tests/unit/common/test_db_session_compatibility.py`
+- `backend/tests/unit/common/test_document_processor_image_ocr.py`
+- `backend/tests/unit/common/test_document_processor_spreadsheet.py`
+- `backend/tests/unit/common/test_document_storage_artifacts.py`
+- `backend/tests/unit/common/test_embedding_service_resilience.py`
+- `backend/tests/unit/common/test_haystack_adapter.py`
+- `backend/tests/unit/common/test_kb_lock_guard.py`
+- `backend/tests/unit/common/test_knowledge_answer_assembler.py`
+- `backend/tests/unit/common/test_knowledge_answer_audit_repo.py`
+- `backend/tests/unit/common/test_knowledge_answer_config_repo.py`
+- `backend/tests/unit/common/test_knowledge_answer_control_plane_models.py`
+- `backend/tests/unit/common/test_knowledge_answer_engine.py`
+- `backend/tests/unit/common/test_knowledge_answer_feature_flag.py`
+- `backend/tests/unit/common/test_knowledge_answerability.py`
+- `backend/tests/unit/common/test_knowledge_entity_resolver.py`

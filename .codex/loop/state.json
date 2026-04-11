@@ -1,6 +1,6 @@
 {
   "mode": "grow",
-  "current_issue_id": "M016-S03-T01",
+  "current_issue_id": "M016-S03-T02",
   "current_issue_type": "task",
   "current_issue_status": "done",
   "pending_issue_ids": [],
@@ -165,29 +165,48 @@
     "M016-S02-T02",
     "M016-S02-T03",
     "M016-S02",
-    "M016-S03-T01"
+    "M016-S03-T01",
+    "M016-S03-T02"
   ],
   "blocked_issue_ids": [],
   "deferred_issue_ids": [],
   "last_modified_files": [
+    "backend/src/common/monitoring/logger.py",
+    "backend/src/common/auth/api.py",
+    "backend/src/common/auth/service.py",
+    "backend/src/admin/api/admin.py",
+    "backend/src/admin/api/analytics.py",
+    "backend/src/admin/api/release_verification.py",
+    "backend/src/admin/api/system_logs.py",
+    "backend/src/admin/api/training_records.py",
     "backend/src/admin/api/security_inventory.py",
     "backend/src/common/monitoring/log_safety_inventory.py",
-    "backend/src/common/auth/service.py",
+    "backend/tests/integration/test_admin_users_api.py",
+    "backend/tests/unit/admin/test_admin_users_api_models.py",
     ".gsd/DECISIONS.md",
     ".gsd/KNOWLEDGE.md",
     ".codex/loop/state.json",
     ".codex/loop/log.md"
   ],
   "last_verification_commands": [
-    "rg -n \"token|password|cookie|email\" backend/src/admin backend/src/common/monitoring backend/src/common/auth",
-    "python3 -m py_compile backend/src/admin/api/security_inventory.py backend/src/common/monitoring/log_safety_inventory.py backend/src/common/auth/service.py",
-    "backend/venv/bin/python -c 'import sys; sys.path.insert(0, \"backend/src\"); from admin.api.security_inventory import FIX_FIRST_ADMIN_ROUTE_FAMILIES; from common.monitoring.log_safety_inventory import FIX_FIRST_SENSITIVE_LOG_SURFACES; print(len(FIX_FIRST_ADMIN_ROUTE_FAMILIES), len(FIX_FIRST_SENSITIVE_LOG_SURFACES))'",
+    "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/integration/test_admin_users_api.py -k \"admin_router_modules_require_admin_even_without_main_router_guard\" -q",
+    "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/admin/test_admin_users_api_models.py -k \"sanitize_log_kwargs\" -q",
+    "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/integration/test_admin_users_api.py backend/tests/unit/admin/test_admin_users_api_models.py -x -q",
+    "lsp diagnostics backend/src/common/monitoring/logger.py",
+    "lsp diagnostics backend/src/common/auth/api.py",
+    "lsp diagnostics backend/src/common/auth/service.py",
+    "lsp diagnostics backend/src/admin/api/admin.py",
+    "lsp diagnostics backend/src/admin/api/analytics.py",
+    "lsp diagnostics backend/src/admin/api/release_verification.py",
+    "lsp diagnostics backend/src/admin/api/system_logs.py",
+    "lsp diagnostics backend/src/admin/api/training_records.py",
     "lsp diagnostics backend/src/admin/api/security_inventory.py",
     "lsp diagnostics backend/src/common/monitoring/log_safety_inventory.py",
-    "lsp diagnostics backend/src/common/auth/service.py"
+    "lsp diagnostics backend/tests/integration/test_admin_users_api.py",
+    "lsp diagnostics backend/tests/unit/admin/test_admin_users_api_models.py"
   ],
-  "last_verification_result": "passed; the task-plan grep gate finished cleanly with the new code-owned inventory surfaces present, py_compile succeeded on the new inventory/auth files, the backend venv imported the fix-first route/log lists successfully (5 route families, 4 log surfaces), and fresh LSP diagnostics stayed clean on the touched Python files.",
-  "last_success_signal": "M016/S03/T01 now gives downstream work one durable admin security map: backend/src/admin/api/security_inventory.py names the admin route families that already prove admin-only access versus the five legacy get_current_user gaps, backend/src/common/monitoring/log_safety_inventory.py identifies the shared log sinks and auth call sites most likely to leak token/password/cookie/email fields, and common/auth/service.py points future agents at those inventories instead of stale string-detail assumptions.",
+  "last_verification_result": "passed; the red-to-green isolated-router RBAC regression tests finished 5/5 green, the shared logger redaction unit tests finished 2/2 green, the exact task-plan pytest gate finished 33/33 green, and fresh LSP diagnostics were clean on every touched backend/runtime/test file.",
+  "last_success_signal": "M016/S03/T02 no longer relies on main.py to make the fix-first admin routes safe: the five legacy admin router modules now declare get_current_admin_user themselves, the shared structured logger redacts token/password/cookie/email fields including nested extra metadata, auth/logout/reset logging emits structured masked fields, and the security inventories now show no remaining fix-first RBAC or sensitive-log surfaces.",
   "last_growth_scan": null,
-  "next_action": "Execute M016/S03/T02 to move the fix-first route families onto an admin-only guard and land redaction on the shared logging/auth sinks named by the new inventories."
+  "next_action": "Execute M016/S03/T03 to deepen the focused backend proof and tighten the remaining security baseline narrative around the now-green admin/logging seams."
 }

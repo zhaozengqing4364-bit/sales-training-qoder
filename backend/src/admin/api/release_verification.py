@@ -23,7 +23,7 @@ from common.analytics.release_verification_service import (
     CheckStatus,
     GoNoGoDecision,
 )
-from common.auth.service import get_current_user
+from common.auth.service import get_current_admin_user
 from common.db.models import User
 from common.db.session import get_db
 from common.monitoring.logger import get_logger, get_trace_id
@@ -91,7 +91,7 @@ def error_response(error_code: str, message: str, trace_id: str | None = None) -
 @router.post("/candidates", response_model=dict)
 async def create_release_candidate(
     request: CreateReleaseCandidateWithChecksRequest,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_admin_user),
     db: AsyncSession = Depends(get_db)
 ) -> dict[str, Any]:
     """
@@ -147,7 +147,7 @@ async def list_release_candidates(
     status: Literal["pending", "passed", "failed"] | None = Query(None, description="Filter by status"),
     limit: int = Query(20, ge=1, le=100, description="Max items to return"),
     offset: int = Query(0, ge=0, description="Pagination offset"),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_admin_user),
     db: AsyncSession = Depends(get_db)
 ) -> dict[str, Any]:
     """
@@ -183,7 +183,7 @@ async def list_release_candidates(
 
 @router.get("/candidates/latest", response_model=dict)
 async def get_latest_release_candidate(
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_admin_user),
     db: AsyncSession = Depends(get_db)
 ) -> dict[str, Any]:
     """
@@ -207,7 +207,7 @@ async def get_latest_release_candidate(
 @router.get("/candidates/{release_candidate_id}/report", response_model=dict)
 async def get_verification_report(
     release_candidate_id: str,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_admin_user),
     db: AsyncSession = Depends(get_db)
 ) -> dict[str, Any]:
     """
@@ -252,7 +252,7 @@ async def get_verification_report(
 async def update_check_result(
     record_id: str,
     request: UpdateCheckResultRequest,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_admin_user),
     db: AsyncSession = Depends(get_db)
 ) -> dict[str, Any]:
     """
@@ -299,7 +299,7 @@ async def update_check_result(
 async def make_go_no_go_decision(
     release_candidate_id: str,
     request: GoNoGoDecisionRequest,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_admin_user),
     db: AsyncSession = Depends(get_db)
 ) -> dict[str, Any]:
     """
@@ -343,7 +343,7 @@ async def make_go_no_go_decision(
 async def run_automated_verification(
     release_candidate_id: str,
     skip_checks: list[str] | None = Query(None, description="List of check types to skip"),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_admin_user),
     db: AsyncSession = Depends(get_db)
 ) -> dict[str, Any]:
     """
@@ -404,7 +404,7 @@ async def run_automated_verification(
 @router.get("/candidates/{release_candidate_id}/quality-gate", response_model=dict)
 async def check_quality_gate_status(
     release_candidate_id: str,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_admin_user),
     db: AsyncSession = Depends(get_db)
 ) -> dict[str, Any]:
     """
@@ -441,7 +441,7 @@ async def check_quality_gate_status(
 @router.post("/candidates/{release_candidate_id}/auto-decision", response_model=dict)
 async def make_automated_decision(
     release_candidate_id: str,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_admin_user),
     db: AsyncSession = Depends(get_db)
 ) -> dict[str, Any]:
     """

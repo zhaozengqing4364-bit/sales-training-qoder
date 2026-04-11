@@ -13,11 +13,17 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 import pytest_asyncio
+from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 
+from admin.api.admin import router as admin_presentations_router
+from admin.api.analytics import router as admin_analytics_router
+from admin.api.release_verification import router as release_verification_router
+from admin.api.system_logs import router as admin_system_logs_router
+from admin.api.training_records import router as admin_training_records_router
 # Import Agent models so Base.metadata has all FK targets used by common models.
 from agent.models import Agent, AgentPersona, Persona, VoiceRuntimeProfile  # noqa: F401
 from common.db.models import (
@@ -33,6 +39,26 @@ from common.db.session import get_db
 from main import app
 
 TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
+ROLE_REQUIRED_DETAIL = {
+    "error": "[ROLE_REQUIRED]",
+    "message": "当前账号权限不足，无法执行该操作。",
+}
+
+
+async def _create_isolated_router_client(
+    *,
+    router,
+    db_session: AsyncSession,
+) -> AsyncClient:
+    isolated_app = FastAPI()
+    isolated_app.include_router(router, prefix="/api/v1")
+
+    async def override_get_db():
+        yield db_session
+
+    isolated_app.dependency_overrides[get_db] = override_get_db
+    transport = ASGITransport(app=isolated_app)
+    return AsyncClient(transport=transport, base_url="http://test")
 
 
 @pytest_asyncio.fixture(scope="function")
@@ -236,7 +262,10 @@ async def test_deactivated_user_blocked_from_authenticated_access(
 
     me_response = await async_client.get("/api/v1/users/me", headers=user_headers)
     assert me_response.status_code == 403
-    assert "disabled" in me_response.json()["detail"].lower()
+    assert me_response.json()["detail"] == {
+        "error": "[AUTH_USER_DISABLED]",
+        "message": "当前账号已被停用。",
+    }
 
 
 @pytest.mark.asyncio
@@ -248,7 +277,32 @@ async def test_non_admin_cannot_access_admin_users_api(
     response = await async_client.get("/api/v1/admin/users", headers=user_headers)
 
     assert response.status_code == 403
-    assert "[ADMIN_REQUIRED]" in response.json()["detail"]
+    assert response.json()["detail"] == ROLE_REQUIRED_DETAIL
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("router", "path"),
+    [
+        (admin_presentations_router, "/api/v1/admin/presentations"),
+        (admin_analytics_router, "/api/v1/admin/analytics/overview"),
+        (admin_system_logs_router, "/api/v1/admin/system-logs"),
+        (admin_training_records_router, "/api/v1/admin/training-records"),
+        (release_verification_router, "/api/v1/admin/release-verification/candidates"),
+    ],
+)
+async def test_admin_router_modules_require_admin_even_without_main_router_guard(
+    db_session: AsyncSession,
+    user_headers: dict[str, str],
+    router,
+    path: str,
+) -> None:
+    """Each fix-first admin router should carry its own admin dependency."""
+    async with await _create_isolated_router_client(router=router, db_session=db_session) as client:
+        response = await client.get(path, headers=user_headers)
+
+    assert response.status_code == 403
+    assert response.json()["detail"] == ROLE_REQUIRED_DETAIL
 
 
 @pytest.mark.asyncio
@@ -431,7 +485,7 @@ async def test_non_admin_cannot_update_user_role(
     )
 
     assert response.status_code == 403
-    assert "[ADMIN_REQUIRED]" in response.json()["detail"]
+    assert response.json()["detail"] == ROLE_REQUIRED_DETAIL
 
 
 @pytest.mark.asyncio
@@ -526,7 +580,7 @@ async def test_promoted_user_can_access_admin_api_immediately_with_same_token(
     """Role promotion should be immediately effective in RBAC checks."""
     before_response = await async_client.get("/api/v1/admin/users", headers=user_headers)
     assert before_response.status_code == 403
-    assert "[ADMIN_REQUIRED]" in before_response.json()["detail"]
+    assert before_response.json()["detail"] == ROLE_REQUIRED_DETAIL
 
     promote_response = await async_client.put(
         f"/api/v1/admin/users/{non_admin_user.user_id}/role",

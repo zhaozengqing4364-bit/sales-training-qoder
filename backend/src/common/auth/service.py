@@ -159,7 +159,10 @@ def verify_token(token: str) -> dict:
         payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
         return payload
     except JWTError as e:
-        logger.warning(f"Token verification failed: {str(e)}")
+        logger.warning(
+            "Token verification failed",
+            error_type=type(e).__name__,
+        )
         raise
 
 

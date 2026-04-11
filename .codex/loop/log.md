@@ -1,3 +1,44 @@
+- time: 2026-04-12T04:27:39+08:00
+  mode: grow
+  item id: M016-S03-T02
+  files changed:
+    - backend/src/common/monitoring/logger.py
+    - backend/src/common/auth/api.py
+    - backend/src/common/auth/service.py
+    - backend/src/admin/api/admin.py
+    - backend/src/admin/api/analytics.py
+    - backend/src/admin/api/release_verification.py
+    - backend/src/admin/api/system_logs.py
+    - backend/src/admin/api/training_records.py
+    - backend/src/admin/api/security_inventory.py
+    - backend/src/common/monitoring/log_safety_inventory.py
+    - backend/tests/integration/test_admin_users_api.py
+    - backend/tests/unit/admin/test_admin_users_api_models.py
+    - .gsd/DECISIONS.md
+    - .gsd/KNOWLEDGE.md
+    - .codex/loop/state.json
+    - .codex/loop/log.md
+  summary: Explicitly closed the M016/S03 fix-first admin and logging seams by moving five legacy admin router modules onto get_current_admin_user, centralizing token/password/cookie/email redaction in the shared structured logger, switching auth logging to structured masked fields, and refreshing the code-owned security inventories to reflect the now-green baseline.
+  verification commands:
+    - backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/integration/test_admin_users_api.py -k "admin_router_modules_require_admin_even_without_main_router_guard" -q
+    - backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/admin/test_admin_users_api_models.py -k "sanitize_log_kwargs" -q
+    - backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/integration/test_admin_users_api.py backend/tests/unit/admin/test_admin_users_api_models.py -x -q
+    - lsp diagnostics backend/src/common/monitoring/logger.py
+    - lsp diagnostics backend/src/common/auth/api.py
+    - lsp diagnostics backend/src/common/auth/service.py
+    - lsp diagnostics backend/src/admin/api/admin.py
+    - lsp diagnostics backend/src/admin/api/analytics.py
+    - lsp diagnostics backend/src/admin/api/release_verification.py
+    - lsp diagnostics backend/src/admin/api/system_logs.py
+    - lsp diagnostics backend/src/admin/api/training_records.py
+    - lsp diagnostics backend/src/admin/api/security_inventory.py
+    - lsp diagnostics backend/src/common/monitoring/log_safety_inventory.py
+    - lsp diagnostics backend/tests/integration/test_admin_users_api.py
+    - lsp diagnostics backend/tests/unit/admin/test_admin_users_api_models.py
+  verification results: passed; the isolated-router RBAC regression proof finished 5/5 green, the shared logger redaction unit proof finished 2/2 green, the exact task-plan pytest gate finished 33/33 green, and diagnostics stayed clean on the touched backend/runtime/test files.
+  success signal status: future agents can now trust the admin security baseline from the code itself — the fix-first routers stay admin-only even when mounted without main.py wrapper dependencies, shared logging strips token/password/cookie/email fields before emission, auth logs preserve observability with masked structured fields, and the code-owned inventories no longer advertise unresolved fix-first surfaces.
+  rollback note: if later work changes admin mounting or adds new structured log sinks, keep the router-local get_current_admin_user declarations, logger sanitizer, inventory files, and the isolated-router/log-redaction tests aligned together; otherwise main.py can hide a module-level RBAC gap and new sinks can bypass redaction by drift.
+
 - time: 2026-04-12T04:14:30+08:00
   mode: grow
   item id: M016-S03-T01

@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "exported_at": "2026-04-11T20:16:09.817Z",
+  "exported_at": "2026-04-11T20:29:11.299Z",
   "milestones": [
     {
       "id": "M001",
@@ -10394,19 +10394,34 @@
       "milestone_id": "M016",
       "slice_id": "S03",
       "id": "T02",
-      "title": "收口 admin 权限与敏感日志高风险出口",
-      "status": "pending",
-      "one_liner": "",
-      "narrative": "",
-      "verification_result": "",
+      "title": "Made the fix-first admin routers self-guarding and centralized structured-log redaction for token/password/cookie/email.",
+      "status": "complete",
+      "one_liner": "Made the fix-first admin routers self-guarding and centralized structured-log redaction for token/password/cookie/email.",
+      "narrative": "I closed the first concrete admin-security seams from the S03 inventory instead of leaving them dependent on wiring outside the modules. In `backend/src/admin/api/admin.py`, `analytics.py`, `release_verification.py`, `system_logs.py`, and `training_records.py`, I replaced the legacy `Depends(get_current_user)` entries with `Depends(get_current_admin_user)` so those routers enforce admin-only access even when mounted without `main.py`’s wrapper dependencies. I then added focused isolated-router regression proof in `backend/tests/integration/test_admin_users_api.py` that mounts each router on a throwaway FastAPI app without global guards and verifies non-admin callers still receive the structured `[ROLE_REQUIRED]` deny payload; while touching that file, I also updated stale auth-contract assertions that still expected string details instead of the current structured `detail={error,message}` shape. On the log-safety side, I turned `backend/src/common/monitoring/logger.py` into the shared redaction boundary by recursively sanitizing token/password/cookie/email fields, including nested `extra` metadata, masking email local-parts while fully redacting the other secret classes. `backend/src/common/auth/api.py` and `backend/src/common/auth/service.py` now emit structured auth/logout/reset/token-verification fields instead of stringifying credential-path exceptions or raw emails, so auth observability remains usable without leaking sensitive values. Finally, I refreshed `backend/src/admin/api/security_inventory.py` and `backend/src/common/monitoring/log_safety_inventory.py` so the code-owned baseline reflects the new reality: the former fix-first admin route families and sensitive-log sinks are now marked as closed, and the fix-first import check returns zero remaining surfaces.",
+      "verification_result": "Fresh proof covered both the new behavior and the slice gate. I first ran the new isolated-router RBAC regression subset in `backend/tests/integration/test_admin_users_api.py`; it finished 5/5 green and proved the five fix-first admin router modules deny non-admin callers even when `main.py` does not wrap them. I then ran the new shared logger redaction subset in `backend/tests/unit/admin/test_admin_users_api_models.py`; it finished 2/2 green and proved the shared logger redacts top-level and nested token/password/cookie/email fields while preserving safe metadata. After fixing one stale structured-detail assertion uncovered by the exact gate, I ran the task-plan command `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/integration/test_admin_users_api.py backend/tests/unit/admin/test_admin_users_api_models.py -x -q`; it finished 33/33 green. I also re-imported `FIX_FIRST_ADMIN_ROUTE_FAMILIES` and `FIX_FIRST_SENSITIVE_LOG_SURFACES` from the backend runtime and confirmed both counts are now `0`, which directly verifies the code-owned security inventory baseline is closed. Fresh LSP diagnostics reported no issues on the touched admin/auth/logger/inventory/test files.",
       "duration": "",
-      "completed_at": null,
+      "completed_at": "2026-04-11T20:29:11.244Z",
       "blocker_discovered": false,
-      "deviations": "",
-      "known_issues": "",
-      "key_files": [],
-      "key_decisions": [],
-      "full_summary_md": "",
+      "deviations": "Local reality differed slightly from the T01 inventory snapshot: `main.py` was already wrapping most of the legacy admin routers in `dependencies=[Depends(get_current_admin_user)]`, so the live app often looked safe even though the router modules themselves still declared only `get_current_user`. Rather than widen scope into a routing refactor, I tightened the module-level dependencies and added isolated-router proof so the boundary is explicit and reuse-safe. I also found that `release_verification_router` is imported in `main.py` but not currently mounted; I still hardened its module-level dependency and covered it with the same isolated-router proof instead of changing product exposure in this task.",
+      "known_issues": "The repo-root pytest commands in this harness still emit the pre-existing pytest-cov warning `Failed to generate report: No data to report.` even when the tests pass; the security gate stays trustworthy because the command exits 0 and all targeted assertions are green. Also, `release_verification_router` remains unmounted in `backend/src/main.py`, so its new admin guard is currently proven through the isolated-router regression test rather than an app-mounted runtime path.",
+      "key_files": [
+        "backend/src/common/monitoring/logger.py",
+        "backend/src/common/auth/api.py",
+        "backend/src/common/auth/service.py",
+        "backend/src/admin/api/admin.py",
+        "backend/src/admin/api/analytics.py",
+        "backend/src/admin/api/release_verification.py",
+        "backend/src/admin/api/system_logs.py",
+        "backend/src/admin/api/training_records.py",
+        "backend/src/admin/api/security_inventory.py",
+        "backend/src/common/monitoring/log_safety_inventory.py",
+        "backend/tests/integration/test_admin_users_api.py",
+        "backend/tests/unit/admin/test_admin_users_api_models.py"
+      ],
+      "key_decisions": [
+        "D195 — Enforce fix-first admin RBAC in router modules themselves and centralize sensitive-field redaction in the shared structured logger instead of relying on main.py wrapper dependencies or route-local masking."
+      ],
+      "full_summary_md": "---\nid: T02\nparent: S03\nmilestone: M016\nkey_files:\n  - backend/src/common/monitoring/logger.py\n  - backend/src/common/auth/api.py\n  - backend/src/common/auth/service.py\n  - backend/src/admin/api/admin.py\n  - backend/src/admin/api/analytics.py\n  - backend/src/admin/api/release_verification.py\n  - backend/src/admin/api/system_logs.py\n  - backend/src/admin/api/training_records.py\n  - backend/src/admin/api/security_inventory.py\n  - backend/src/common/monitoring/log_safety_inventory.py\n  - backend/tests/integration/test_admin_users_api.py\n  - backend/tests/unit/admin/test_admin_users_api_models.py\nkey_decisions:\n  - D195 — Enforce fix-first admin RBAC in router modules themselves and centralize sensitive-field redaction in the shared structured logger instead of relying on main.py wrapper dependencies or route-local masking.\nduration: \nverification_result: passed\ncompleted_at: 2026-04-11T20:29:11.243Z\nblocker_discovered: false\n---\n\n# T02: Made the fix-first admin routers self-guarding and centralized structured-log redaction for token/password/cookie/email.\n\n**Made the fix-first admin routers self-guarding and centralized structured-log redaction for token/password/cookie/email.**\n\n## What Happened\n\nI closed the first concrete admin-security seams from the S03 inventory instead of leaving them dependent on wiring outside the modules. In `backend/src/admin/api/admin.py`, `analytics.py`, `release_verification.py`, `system_logs.py`, and `training_records.py`, I replaced the legacy `Depends(get_current_user)` entries with `Depends(get_current_admin_user)` so those routers enforce admin-only access even when mounted without `main.py`’s wrapper dependencies. I then added focused isolated-router regression proof in `backend/tests/integration/test_admin_users_api.py` that mounts each router on a throwaway FastAPI app without global guards and verifies non-admin callers still receive the structured `[ROLE_REQUIRED]` deny payload; while touching that file, I also updated stale auth-contract assertions that still expected string details instead of the current structured `detail={error,message}` shape. On the log-safety side, I turned `backend/src/common/monitoring/logger.py` into the shared redaction boundary by recursively sanitizing token/password/cookie/email fields, including nested `extra` metadata, masking email local-parts while fully redacting the other secret classes. `backend/src/common/auth/api.py` and `backend/src/common/auth/service.py` now emit structured auth/logout/reset/token-verification fields instead of stringifying credential-path exceptions or raw emails, so auth observability remains usable without leaking sensitive values. Finally, I refreshed `backend/src/admin/api/security_inventory.py` and `backend/src/common/monitoring/log_safety_inventory.py` so the code-owned baseline reflects the new reality: the former fix-first admin route families and sensitive-log sinks are now marked as closed, and the fix-first import check returns zero remaining surfaces.\n\n## Verification\n\nFresh proof covered both the new behavior and the slice gate. I first ran the new isolated-router RBAC regression subset in `backend/tests/integration/test_admin_users_api.py`; it finished 5/5 green and proved the five fix-first admin router modules deny non-admin callers even when `main.py` does not wrap them. I then ran the new shared logger redaction subset in `backend/tests/unit/admin/test_admin_users_api_models.py`; it finished 2/2 green and proved the shared logger redacts top-level and nested token/password/cookie/email fields while preserving safe metadata. After fixing one stale structured-detail assertion uncovered by the exact gate, I ran the task-plan command `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/integration/test_admin_users_api.py backend/tests/unit/admin/test_admin_users_api_models.py -x -q`; it finished 33/33 green. I also re-imported `FIX_FIRST_ADMIN_ROUTE_FAMILIES` and `FIX_FIRST_SENSITIVE_LOG_SURFACES` from the backend runtime and confirmed both counts are now `0`, which directly verifies the code-owned security inventory baseline is closed. Fresh LSP diagnostics reported no issues on the touched admin/auth/logger/inventory/test files.\n\n## Verification Evidence\n\n| # | Command | Exit Code | Verdict | Duration |\n|---|---------|-----------|---------|----------|\n| 1 | `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/integration/test_admin_users_api.py -k 'admin_router_modules_require_admin_even_without_main_router_guard' -q` | 0 | ✅ pass | 3362ms |\n| 2 | `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/admin/test_admin_users_api_models.py -k 'sanitize_log_kwargs' -q` | 0 | ✅ pass | 1781ms |\n| 3 | `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/integration/test_admin_users_api.py backend/tests/unit/admin/test_admin_users_api_models.py -x -q` | 0 | ✅ pass | 4106ms |\n| 4 | `backend/venv/bin/python - <<'INNER'\nimport sys\nsys.path.insert(0, 'backend/src')\nfrom admin.api.security_inventory import FIX_FIRST_ADMIN_ROUTE_FAMILIES\nfrom common.monitoring.log_safety_inventory import FIX_FIRST_SENSITIVE_LOG_SURFACES\nprint({'fix_first_admin_route_families': len(FIX_FIRST_ADMIN_ROUTE_FAMILIES), 'fix_first_sensitive_log_surfaces': len(FIX_FIRST_SENSITIVE_LOG_SURFACES)})\nINNER` | 0 | ✅ pass | 959ms |\n\n## Deviations\n\nLocal reality differed slightly from the T01 inventory snapshot: `main.py` was already wrapping most of the legacy admin routers in `dependencies=[Depends(get_current_admin_user)]`, so the live app often looked safe even though the router modules themselves still declared only `get_current_user`. Rather than widen scope into a routing refactor, I tightened the module-level dependencies and added isolated-router proof so the boundary is explicit and reuse-safe. I also found that `release_verification_router` is imported in `main.py` but not currently mounted; I still hardened its module-level dependency and covered it with the same isolated-router proof instead of changing product exposure in this task.\n\n## Known Issues\n\nThe repo-root pytest commands in this harness still emit the pre-existing pytest-cov warning `Failed to generate report: No data to report.` even when the tests pass; the security gate stays trustworthy because the command exits 0 and all targeted assertions are green. Also, `release_verification_router` remains unmounted in `backend/src/main.py`, so its new admin guard is currently proven through the isolated-router regression test rather than an app-mounted runtime path.\n\n## Files Created/Modified\n\n- `backend/src/common/monitoring/logger.py`\n- `backend/src/common/auth/api.py`\n- `backend/src/common/auth/service.py`\n- `backend/src/admin/api/admin.py`\n- `backend/src/admin/api/analytics.py`\n- `backend/src/admin/api/release_verification.py`\n- `backend/src/admin/api/system_logs.py`\n- `backend/src/admin/api/training_records.py`\n- `backend/src/admin/api/security_inventory.py`\n- `backend/src/common/monitoring/log_safety_inventory.py`\n- `backend/tests/integration/test_admin_users_api.py`\n- `backend/tests/unit/admin/test_admin_users_api_models.py`\n",
       "description": "Why: S03 需要先在最确定、最危险的出口上落权限和脱敏规则，才能把安全风险从 audit 语言变成真实收口。\n\nDo:\n1. 在高风险 admin APIs 上落实权限边界或拒绝路径。\n2. 在高风险日志出口上增加 token/password/cookie/email 的脱敏规则。\n3. 保持与现有 auth/error contract 一致，不做新的 page-local 或 route-local 特例体系。\n\nDone when: 首批高风险 admin APIs 和日志出口的 focused backend proof 通过。",
       "estimate": "1h",
       "files": [
@@ -13463,6 +13478,18 @@
       "decision": "M016/S03 admin security baseline should prioritize one fix-first route/log group",
       "choice": "Treat the legacy admin route families still using get_current_user (admin.py, analytics.py, release_verification.py, system_logs.py, training_records.py) plus the shared logging sinks in common.monitoring.logger and latency_tracker as the first repair group, while using admin.users as the positive-control proof seam.",
       "rationale": "These surfaces combine the highest certainty with the highest blast radius: they are already mounted under /admin yet lack an admin-only role guard, or they sit on shared logging boundaries that can leak token/password/cookie/email fields across many callers. Starting from them keeps S03 focused on real risk reduction instead of broad backend-wide scanning.",
+      "revisable": "Yes",
+      "made_by": "agent",
+      "superseded_by": null
+    },
+    {
+      "seq": 1565,
+      "id": "D195",
+      "when_context": "M016-S03-T02",
+      "scope": "architecture",
+      "decision": "Where admin-route RBAC and sensitive-log redaction are enforced for the M016/S03 fix-first surfaces",
+      "choice": "Make fix-first admin routers declare Depends(get_current_admin_user) in their own modules and centralize token/password/cookie/email redaction in common.monitoring.logger, with auth routes emitting structured fields instead of stringified credential-path exceptions.",
+      "rationale": "Router-local admin dependencies keep the permission boundary visible and safe even when a router is mounted outside main.py, while a shared logger sanitizer covers auth, latency, and future structured sinks uniformly without relying on fragile call-site masking.",
       "revisable": "Yes",
       "made_by": "agent",
       "superseded_by": null
@@ -17329,6 +17356,50 @@
       "verdict": "✅ pass",
       "duration_ms": 1442,
       "created_at": "2026-04-11T20:16:09.755Z"
+    },
+    {
+      "id": 357,
+      "task_id": "T02",
+      "slice_id": "S03",
+      "milestone_id": "M016",
+      "command": "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/integration/test_admin_users_api.py -k 'admin_router_modules_require_admin_even_without_main_router_guard' -q",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 3362,
+      "created_at": "2026-04-11T20:29:11.245Z"
+    },
+    {
+      "id": 358,
+      "task_id": "T02",
+      "slice_id": "S03",
+      "milestone_id": "M016",
+      "command": "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/admin/test_admin_users_api_models.py -k 'sanitize_log_kwargs' -q",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 1781,
+      "created_at": "2026-04-11T20:29:11.245Z"
+    },
+    {
+      "id": 359,
+      "task_id": "T02",
+      "slice_id": "S03",
+      "milestone_id": "M016",
+      "command": "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/integration/test_admin_users_api.py backend/tests/unit/admin/test_admin_users_api_models.py -x -q",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 4106,
+      "created_at": "2026-04-11T20:29:11.245Z"
+    },
+    {
+      "id": 360,
+      "task_id": "T02",
+      "slice_id": "S03",
+      "milestone_id": "M016",
+      "command": "backend/venv/bin/python - <<'INNER'\nimport sys\nsys.path.insert(0, 'backend/src')\nfrom admin.api.security_inventory import FIX_FIRST_ADMIN_ROUTE_FAMILIES\nfrom common.monitoring.log_safety_inventory import FIX_FIRST_SENSITIVE_LOG_SURFACES\nprint({'fix_first_admin_route_families': len(FIX_FIRST_ADMIN_ROUTE_FAMILIES), 'fix_first_sensitive_log_surfaces': len(FIX_FIRST_SENSITIVE_LOG_SURFACES)})\nINNER",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 959,
+      "created_at": "2026-04-11T20:29:11.245Z"
     }
   ]
 }

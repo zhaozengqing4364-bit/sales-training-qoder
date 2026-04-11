@@ -35,7 +35,7 @@ Done when: 后续修复有明确高风险目标，不需要继续扩大扫描范
   - Files: `backend/src/admin/api/*`, `backend/src/common/monitoring/*`, `backend/src/common/auth/*`
   - Verify: rg -n "token|password|cookie|email" backend/src/admin backend/src/common/monitoring backend/src/common/auth
 
-- [ ] **T02: 收口 admin 权限与敏感日志高风险出口** `est:1h`
+- [x] **T02: 收口 admin 权限与敏感日志高风险出口** `est:1h`
   Why: S03 需要先在最确定、最危险的出口上落权限和脱敏规则，才能把安全风险从 audit 语言变成真实收口。
 
 Do:

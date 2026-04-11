@@ -17,7 +17,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.api.server_error import build_server_error
-from common.auth.service import get_current_user
+from common.auth.service import get_current_admin_user
 from common.db.models import (
     ForbiddenWord,
     Page,
@@ -63,7 +63,7 @@ class ForbiddenWordCreate(BaseModel):
 @router.post("/admin/presentations")
 async def create_presentation(
     data: PresentationCreate,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_admin_user),
     db: AsyncSession = Depends(get_db)
 ):
     """Create a new presentation (without file upload)"""
@@ -97,7 +97,7 @@ async def upload_presentation(
     title: str = None,
     description: str = None,
     extract_points: bool = True,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_admin_user),
     db: AsyncSession = Depends(get_db)
 ):
     """
@@ -199,7 +199,7 @@ async def upload_presentation(
 @router.get("/admin/presentations")
 async def list_presentations(
     limit: int = 50,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_admin_user),
     db: AsyncSession = Depends(get_db)
 ):
     """List all presentations"""
@@ -224,7 +224,7 @@ async def list_presentations(
 @router.get("/admin/presentations/{presentation_id}")
 async def get_presentation(
     presentation_id: str,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_admin_user),
     db: AsyncSession = Depends(get_db)
 ):
     """Get presentation details"""
@@ -253,7 +253,7 @@ async def get_presentation(
 @router.delete("/admin/presentations/{presentation_id}")
 async def delete_presentation(
     presentation_id: str,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_admin_user),
     db: AsyncSession = Depends(get_db)
 ):
     """Delete a presentation"""
@@ -291,7 +291,7 @@ async def delete_presentation(
 @router.get("/admin/presentations/{presentation_id}/pages")
 async def list_pages(
     presentation_id: str,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_admin_user),
     db: AsyncSession = Depends(get_db)
 ):
     """List all pages in a presentation"""
@@ -319,7 +319,7 @@ async def update_page(
     presentation_id: str,
     page_number: int,
     data: PageUpdate,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_admin_user),
     db: AsyncSession = Depends(get_db)
 ):
     """Update page content"""
@@ -371,7 +371,7 @@ async def create_talking_point(
     presentation_id: str,
     page_number: int,
     data: TalkingPointCreate,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_admin_user),
     db: AsyncSession = Depends(get_db)
 ):
     """Create a required talking point for a page"""
@@ -405,7 +405,7 @@ async def create_talking_point(
 async def list_talking_points(
     presentation_id: str,
     page_number: int,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_admin_user),
     db: AsyncSession = Depends(get_db)
 ):
     """List talking points for a page"""
@@ -433,7 +433,7 @@ async def list_talking_points(
 @router.delete("/admin/talking-points/{point_id}")
 async def delete_talking_point(
     point_id: str,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_admin_user),
     db: AsyncSession = Depends(get_db)
 ):
     """Delete a talking point"""
@@ -469,7 +469,7 @@ async def delete_talking_point(
 async def create_forbidden_word(
     presentation_id: str,
     data: ForbiddenWordCreate,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_admin_user),
     db: AsyncSession = Depends(get_db)
 ):
     """Create a forbidden word for a presentation"""
@@ -507,7 +507,7 @@ async def create_forbidden_word(
 @router.get("/admin/presentations/{presentation_id}/forbidden-words")
 async def list_forbidden_words(
     presentation_id: str,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_admin_user),
     db: AsyncSession = Depends(get_db)
 ):
     """List forbidden words for a presentation"""
@@ -533,7 +533,7 @@ async def list_forbidden_words(
 @router.delete("/admin/forbidden-words/{word_id}")
 async def delete_forbidden_word(
     word_id: str,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_admin_user),
     db: AsyncSession = Depends(get_db)
 ):
     """Delete a forbidden word"""

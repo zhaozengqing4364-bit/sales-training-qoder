@@ -24,7 +24,7 @@ from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.analytics.admin_analytics_service import admin_analytics_service
-from common.auth.service import get_current_user
+from common.auth.service import get_current_admin_user
 from common.db.models import User
 from common.db.session import get_db
 from common.monitoring.logger import get_logger, get_trace_id
@@ -144,7 +144,7 @@ def error_response(error_code: str, message: str, trace_id: str | None = None) -
 async def get_analytics_overview(
     time_range: Literal["7d", "30d", "90d", "all_time"] = Query("30d", description="Time range filter"),
     scenario_type: Literal["presentation", "sales"] | None = Query(None, description="Filter by scenario type"),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_admin_user),
     db: AsyncSession = Depends(get_db)
 ) -> dict[str, Any]:
     """
@@ -188,7 +188,7 @@ async def get_analytics_overview(
 async def get_trends_data(
     time_range: Literal["7d", "30d", "90d", "all_time"] = Query("30d", description="Time range filter"),
     granularity: Literal["day", "week", "month"] = Query("day", description="Data granularity"),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_admin_user),
     db: AsyncSession = Depends(get_db)
 ) -> dict[str, Any]:
     """
@@ -226,7 +226,7 @@ async def get_trends_data(
 async def get_agent_stats(
     time_range: Literal["7d", "30d", "90d", "all_time"] = Query("30d", description="Time range filter"),
     limit: int = Query(10, ge=1, le=50, description="Max items to return"),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_admin_user),
     db: AsyncSession = Depends(get_db)
 ) -> dict[str, Any]:
     """
@@ -265,7 +265,7 @@ async def get_agent_stats(
 async def get_leaderboard(
     time_range: Literal["7d", "30d", "90d", "all_time"] = Query("30d", description="Time range filter"),
     limit: int = Query(50, ge=1, le=100, description="Max users to return"),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_admin_user),
     db: AsyncSession = Depends(get_db)
 ) -> dict[str, Any]:
     """
@@ -306,7 +306,7 @@ async def get_operating_pack(
     scenario_type: Literal["presentation", "sales"] | None = Query(None, description="Filter by scenario type"),
     limit: int = Query(10, ge=1, le=50, description="Max users per operating list"),
     inactive_days: int = Query(7, ge=1, le=90, description="Minimum inactivity days for risk list"),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_admin_user),
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     """
@@ -349,7 +349,7 @@ async def get_operating_pack(
 @router.get("/runtime-metrics", response_model=dict)
 async def get_runtime_metrics(
     time_range: Literal["1h", "24h", "7d", "30d", "90d"] = Query("30d", description="Time range filter"),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_admin_user),
     db: AsyncSession = Depends(get_db)
 ) -> dict[str, Any]:
     """
@@ -390,7 +390,7 @@ async def get_runtime_metrics(
 async def get_policy_effectiveness(
     time_range: Literal["7d", "30d", "90d", "all_time"] = Query("30d", description="Time range filter"),
     limit: int = Query(10, ge=1, le=50, description="Max items to return"),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_admin_user),
     db: AsyncSession = Depends(get_db)
 ) -> dict[str, Any]:
     """
@@ -430,7 +430,7 @@ async def get_policy_effectiveness(
 @router.get("/voice-mode-comparison", response_model=dict)
 async def get_voice_mode_comparison(
     time_range: Literal["7d", "30d", "90d", "all_time"] = Query("30d", description="Time range filter"),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_admin_user),
     db: AsyncSession = Depends(get_db)
 ) -> dict[str, Any]:
     """
@@ -468,7 +468,7 @@ async def get_voice_mode_comparison(
 @router.get("/fallback-metrics", response_model=dict)
 async def get_fallback_metrics(
     time_range: Literal["7d", "30d", "90d", "all_time"] = Query("30d", description="Time range filter"),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_admin_user),
     db: AsyncSession = Depends(get_db)
 ) -> dict[str, Any]:
     """
@@ -505,7 +505,7 @@ async def get_fallback_metrics(
 async def export_analytics(
     time_range: Literal["7d", "30d", "90d", "all_time"] = Query("30d", description="Time range filter"),
     format: Literal["csv"] = Query("csv", description="Export format"),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_admin_user),
     db: AsyncSession = Depends(get_db)
 ) -> StreamingResponse:
     """

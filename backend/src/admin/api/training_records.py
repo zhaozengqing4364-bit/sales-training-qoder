@@ -18,7 +18,7 @@ from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from common.auth.service import get_current_user
+from common.auth.service import get_current_admin_user
 from common.db.models import PracticeSession, Scenario, User
 from common.db.session import get_db
 from common.monitoring.logger import get_logger, get_trace_id
@@ -145,7 +145,7 @@ async def list_training_records(
     search: str | None = Query(None, description="Search by user name or scenario"),
     status: str | None = Query(None, description="Filter by status"),
     scenario_type: str | None = Query(None, description="Filter by scenario type"),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_admin_user),
     db: AsyncSession = Depends(get_db)
 ) -> dict[str, Any]:
     """
@@ -231,7 +231,7 @@ async def list_training_records(
 @router.get("/{record_id}", response_model=dict)
 async def get_training_record(
     record_id: str,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_admin_user),
     db: AsyncSession = Depends(get_db)
 ) -> dict[str, Any]:
     """Get training record details by ID"""
@@ -255,7 +255,7 @@ async def get_training_record(
 @router.delete("/{record_id}", response_model=dict)
 async def delete_training_record(
     record_id: str,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_admin_user),
     db: AsyncSession = Depends(get_db)
 ) -> dict[str, Any]:
     """
