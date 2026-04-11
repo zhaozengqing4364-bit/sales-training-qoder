@@ -1,3 +1,26 @@
+- time: 2026-04-12T03:30:08+08:00
+  mode: grow
+  item id: M016-S02-T01
+  files changed:
+    - backend/src/prompt_templates/api/routes.py
+    - backend/src/presentation_coach/api/presentations.py
+    - backend/src/common/auth/service.py
+    - web/src/lib/api/client.ts
+    - .gsd/DECISIONS.md
+    - .gsd/KNOWLEDGE.md
+    - .codex/loop/state.json
+    - .codex/loop/log.md
+  summary: Codified the high-noise API error-contract drift map directly beside the live prompt-template, presentation, auth, and frontend client seams so downstream work can collapse the contract without re-inventorying the same surfaces.
+  verification commands:
+    - rg -n "HTTPException|except Exception" backend/src/prompt_templates backend/src/presentation_coach backend/src/common/auth
+    - lsp diagnostics backend/src/prompt_templates/api/routes.py
+    - lsp diagnostics backend/src/presentation_coach/api/presentations.py
+    - lsp diagnostics backend/src/common/auth/service.py
+    - lsp diagnostics web/src/lib/api/client.ts
+  verification results: passed; the planned rg inventory still shows the intended drift surface, and fresh LSP diagnostics were clean on the four touched authority files after the seam writeback.
+  success signal status: future M016/S02 work now has one explicit collapse map — prompt templates are the closest reusable backend seam, while presentations plain-string 403/404 branches, auth dependency HTTPExceptions, and the segment-audio client parser are the only hotspots that still leak error-shape drift.
+  rollback note: if T02 chooses a different shared envelope, update the code-adjacent inventory notes, D191, and the knowledge entry together so the documented drift map still matches the real collapse target.
+
 - time: 2026-04-12T03:19:18+08:00
   mode: grow
   item id: M016-S01-T03

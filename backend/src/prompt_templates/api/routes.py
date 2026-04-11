@@ -74,6 +74,12 @@ logger = get_logger(__name__)
 HTTP_500_INTERNAL_SERVER_ERROR = status.HTTP_500_INTERNAL_SERVER_ERROR
 HTTP_503_SERVICE_UNAVAILABLE = status.HTTP_503_SERVICE_UNAVAILABLE
 
+# M016/S02/T01 error-contract inventory:
+# - 4xx branches in this route family already converge on FastAPI detail={error,message}.
+# - 5xx / infra failures go through build_server_error(...) and therefore return the shared
+#   Result-style envelope {success:false,error,message,trace_id} at the top level.
+# - This makes prompt templates the smallest backend seam to reuse in T02, while also showing
+#   the remaining envelope drift between detail-wrapped 4xx responses and top-level 5xx failures.
 
 def get_prompt_service(
     db: AsyncSession = Depends(get_db),

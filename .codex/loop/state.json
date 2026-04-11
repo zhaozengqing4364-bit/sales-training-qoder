@@ -1,6 +1,6 @@
 {
   "mode": "grow",
-  "current_issue_id": "M016-S01-T03",
+  "current_issue_id": "M016-S02-T01",
   "current_issue_type": "task",
   "current_issue_status": "done",
   "pending_issue_ids": [],
@@ -160,25 +160,30 @@
     "M015-S03",
     "M016-S01-T01",
     "M016-S01-T02",
-    "M016-S01-T03"
+    "M016-S01-T03",
+    "M016-S02-T01"
   ],
   "blocked_issue_ids": [],
   "deferred_issue_ids": [],
   "last_modified_files": [
-    "backend/tests/integration/test_auth_login_api.py",
-    "backend/tests/integration/test_password_reset_api.py",
+    "backend/src/prompt_templates/api/routes.py",
+    "backend/src/presentation_coach/api/presentations.py",
+    "backend/src/common/auth/service.py",
+    "web/src/lib/api/client.ts",
+    ".gsd/DECISIONS.md",
     ".gsd/KNOWLEDGE.md",
     ".codex/loop/state.json",
     ".codex/loop/log.md"
   ],
   "last_verification_commands": [
-    "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/integration/test_auth_login_api.py -x -q",
-    "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/integration/test_password_reset_api.py -x -q",
-    "lsp diagnostics backend/tests/integration/test_auth_login_api.py",
-    "lsp diagnostics backend/tests/integration/test_password_reset_api.py"
+    "rg -n \"HTTPException|except Exception\" backend/src/prompt_templates backend/src/presentation_coach backend/src/common/auth",
+    "lsp diagnostics backend/src/prompt_templates/api/routes.py",
+    "lsp diagnostics backend/src/presentation_coach/api/presentations.py",
+    "lsp diagnostics backend/src/common/auth/service.py",
+    "lsp diagnostics web/src/lib/api/client.ts"
   ],
-  "last_verification_result": "passed; the repo-root auth gate now covers reset success, expiry, reuse, same-IP rate limiting, and request-path DDL absence, the dedicated password-reset suite still covers the lifecycle edge cases including superseded-token rejection, and fresh diagnostics were clean on both focused proof files.",
-  "last_success_signal": "M016/S01/T03 now leaves one stable focused proof bundle: future agents can rerun the repo-root auth gate plus the dedicated reset suite to detect auth recovery regressions without manual forgot/reset smoke testing.",
+  "last_verification_result": "passed; the planned rg inventory still shows the intended drift surface, and fresh LSP diagnostics were clean on backend/src/prompt_templates/api/routes.py, backend/src/presentation_coach/api/presentations.py, backend/src/common/auth/service.py, and web/src/lib/api/client.ts after the seam writeback.",
+  "last_success_signal": "M016/S02/T01 now leaves one durable drift map in code + knowledge: prompt templates define the closest reusable backend error seam, while presentations string-detail branches, auth dependency HTTPExceptions, and the segment-audio client parser are the exact hotspots for T02 contract collapse.",
   "last_growth_scan": null,
-  "next_action": "All M016/S01 tasks are complete; the next auto-mode unit can close the slice using the focused auth proof bundle."
+  "next_action": "Continue M016/S02 with T02 by collapsing the documented drift hotspots onto the shared backend/frontend error-contract seam."
 }

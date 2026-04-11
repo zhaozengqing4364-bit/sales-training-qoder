@@ -43,6 +43,12 @@ router = APIRouter()
 
 _NON_TERMINAL_PRESENTATION_STATUSES = ("preparing", "in_progress", "paused", "scoring")
 
+# M016/S02/T01 error-contract inventory for this high-noise route family:
+# - upload/replace 5xx failures already use build_server_error(...) -> {success:false,error,message,trace_id}.
+# - the replace blocker 409 returns JSONResponse(error_response(...)) plus a nested details payload.
+# - most not-found / permission branches still raise plain-string FastAPI detail payloads.
+# This file therefore exposes three outward error shapes today and is a primary S02 collapse target.
+
 
 def _presentation_storage_root() -> Path:
     return Path(os.getenv("PPT_STORAGE_PATH", "./data/ppts"))

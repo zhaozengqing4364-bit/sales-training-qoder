@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "taskId": "T03",
+  "unitId": "M016/S01/T03",
+  "timestamp": 1775935562678,
+  "passed": true,
+  "discoverySource": "task-plan",
+  "checks": [
+    {
+      "command": "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/integration/test_auth_login_api.py -x -q",
+      "exitCode": 0,
+      "durationMs": 4037,
+      "verdict": "pass"
+    }
+  ]
+}

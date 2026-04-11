@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "exported_at": "2026-04-11T19:25:56.042Z",
+  "exported_at": "2026-04-11T19:36:26.748Z",
   "milestones": [
     {
       "id": "M001",
@@ -2364,14 +2364,14 @@
       "milestone_id": "M016",
       "id": "S01",
       "title": "S01",
-      "status": "pending",
+      "status": "complete",
       "risk": "high",
       "depends": [],
       "demo": "forgot/reset 走正式 token 持久化与 lifecycle contract，现有登录兼容路径保持可证明。",
       "created_at": "2026-04-08T08:53:52.133Z",
-      "completed_at": null,
-      "full_summary_md": "",
-      "full_uat_md": "",
+      "completed_at": "2026-04-11T19:30:02.251Z",
+      "full_summary_md": "---\nid: S01\nparent: M016\nmilestone: M016\nprovides:\n  - A stable forgot/reset backend contract for S02 error-shape unification.\n  - An auditable password-reset lifecycle surface for S03 admin security and log-redaction review.\n  - A proven hashed_password-first compatibility path that later auth work can extend without guessing fallback behavior.\nrequires:\n  []\naffects:\n  - S02\n  - S03\nkey_files:\n  - backend/src/common/services/password_reset.py\n  - backend/src/common/db/models.py\n  - backend/alembic/versions/20260411_2235_027_password_reset_lifecycle_delivery.py\n  - backend/alembic/versions/20260412_0315_028_password_reset_single_active_token.py\n  - backend/src/common/auth/api.py\n  - backend/tests/integration/test_auth_login_api.py\n  - backend/tests/integration/test_password_reset_api.py\n  - .gsd/PROJECT.md\nkey_decisions:\n  - D188 — Treat PasswordResetService + PasswordResetToken + Alembic 026/027 as the auth-recovery authority seam while preserving hashed_password-first login compatibility.\n  - D189 — Enforce the single-active password-reset token invariant at the DB layer and keep password-reset Alembic revision IDs within the version-table length limit.\n  - D190 — Keep proof split between the repo-root auth gate and the dedicated reset lifecycle suite instead of creating a new umbrella auth suite.\npatterns_established:\n  - Auth recovery changes must land on the service/model/migration seam, not on request handlers or global bootstrap code.\n  - Use DB-layer partial unique indexes for security lifecycle invariants that must always hold.\n  - Preserve backward-compatible login fallbacks explicitly while making `User.hashed_password` the durable authority once present.\n  - Keep auth proof narrow by separating compatibility-gate tests from lifecycle-detail tests.\nobservability_surfaces:\n  - Structured auth logs for password reset token issued/delivered/consumed/rejected events.\n  - Password reset lifecycle table fields: `delivery_status`, `delivery_attempted_at`, `delivery_error`, `used_at`, `invalidated_at`, `invalidation_reason`.\n  - Focused acceptance gates: `backend/tests/integration/test_auth_login_api.py` and `backend/tests/integration/test_password_reset_api.py`.\ndrill_down_paths:\n  - .gsd/milestones/M016/slices/S01/tasks/T01-SUMMARY.md\n  - .gsd/milestones/M016/slices/S01/tasks/T02-SUMMARY.md\n  - .gsd/milestones/M016/slices/S01/tasks/T03-SUMMARY.md\nduration: \"\"\nverification_result: passed\ncompleted_at: 2026-04-11T19:30:02.253Z\nblocker_discovered: false\n---\n\n# S01: Password reset / auth backend 正式化\n\n**Formalized the forgot/reset backend contract so password-reset tokens are durable, single-active, auditable, and still preserve hashed_password-first login compatibility.**\n\n## What Happened\n\n## What this slice actually delivered\n\nS01 closed the gap between an already-working forgot/reset flow and a formal auth-recovery contract that later slices can safely build on. The backend authority seam is now explicit: `common.services.password_reset.PasswordResetService` owns issuance/consume/delivery/rate limiting, `common.db.models.PasswordResetToken` owns the durable lifecycle row, and Alembic revisions `026_password_reset_tokens`, `027_reset_lifecycle_delivery`, and `028_reset_single_active_token` own schema history. This slice did **not** widen into JWT/session helper refactors or new frontend auth flows; it kept the change narrow and strengthened the existing seam.\n\n## Delivered behavior and contracts\n\n- Added/confirmed durable password-reset lifecycle fields for `used_at`, `invalidated_at`, `invalidation_reason`, `delivery_status`, `delivery_attempted_at`, and `delivery_error`, so token state is auditable instead of implicit.\n- Enforced the **single-active-token** invariant at the DB layer with a partial unique index on `password_reset_tokens.user_id` where `used_at IS NULL AND invalidated_at IS NULL`, so supersession is a schema contract, not only a service convention.\n- Preserved the existing login compatibility rule: once `User.hashed_password` exists it becomes the login authority, while `AUTH_USER_PASSWORDS_JSON` / `AUTH_SHARED_PASSWORD` remain fallback only for users who have not yet moved onto managed hashes.\n- Kept the default email seam intentionally lightweight: password-reset delivery still goes through `EmailService`, with `ConsoleEmailService` remaining the default dev transport rather than forcing a provider integration into this hardening slice.\n- Expanded focused proof on the existing auth seams instead of adding a new umbrella suite: `test_auth_login_api.py` now proves success, expiry/reuse rejection, same-IP rate limiting, hashed-password-first login, and request-path DDL absence; `test_password_reset_api.py` proves lifecycle details like superseded-token rejection and DB invariant enforcement.\n\n## Patterns established for downstream slices\n\n1. **Auth recovery changes must land on the service/model/migration seam, not request handlers.** Future slices should treat `PasswordResetService + PasswordResetToken + Alembic` as the only valid authority path.\n2. **Schema invariants matter for security seams.** If a lifecycle rule must always hold, prefer a DB constraint/index plus tests rather than a soft service-only convention.\n3. **Compatibility fallbacks stay explicit and bounded.** `hashed_password` is now the durable credential path; env-backed passwords are a temporary compatibility edge, not a co-equal authority.\n4. **Focused proof should stay split by responsibility.** The repo-root auth gate proves compatibility behavior; the dedicated reset suite proves row-level lifecycle behavior.\n\n## What downstream slices should know\n\n- S02 can now standardize auth/API error shapes on top of a stable forgot/reset seam instead of guessing whether reset failures are transport issues, invalid token issues, or legacy DDL artifacts.\n- S03 can rely on an auditable password-reset table surface (`delivery_status`, invalidation metadata, consumption timestamps) when reviewing admin/security posture and log-redaction boundaries.\n- The remaining `Base.metadata.create_all()` usage is still global startup/test bootstrap, **not** request-path auth DDL. Do not reopen S01 by conflating those bootstrap compatibility calls with forgot/reset runtime behavior.\n\n## Operational Readiness (Q8)\n\n- **Health signal:** focused auth gates stay green (`test_auth_login_api.py`, `test_password_reset_api.py`), forgot/reset issues `PasswordResetToken` rows with observable `delivery_status`, and structured logs emit token issued/delivered/consumed/rejected events.\n- **Failure signal:** 429 `[RATE_LIMIT_EXCEEDED]`, 400 `[INVALID_RESET_TOKEN]`, failed delivery rows with `delivery_status=\"failed\"` plus `delivery_error`, and token rows marked `invalidated_at`/`invalidation_reason` when superseded or expired.\n- **Recovery procedure:** inspect the latest `password_reset_tokens` row for the user, verify whether the active token was superseded/expired/used, re-request forgot-password from a new window once the per-IP limiter clears, and keep provider rollouts behind the existing `EmailService` seam instead of bypassing the lifecycle table.\n- **Monitoring gaps:** delivery remains console-backed by default, so there is still no production mail-provider success/failure telemetry beyond the persisted lifecycle fields; the repository’s historical Alembic-from-zero chain still has an older unrelated `001_agent_platform_tables` issue outside this slice.\n\n\n## Verification\n\nFresh close-out verification reran the slice gate `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/integration/test_auth_login_api.py -x -q` and it passed 17/17 in 2.98s, proving reset success, expiry/reuse rejection, same-IP rate limiting, hashed-password-first login compatibility, and request-path DDL absence. Fresh lifecycle verification reran `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/integration/test_password_reset_api.py -x -q` and it passed 8/8 in 2.52s, proving forgot/reset success, single-active-token enforcement, superseded-token rejection, and lifecycle-row observability. Fresh LSP diagnostics for `backend/tests/integration/test_auth_login_api.py` and `backend/tests/integration/test_password_reset_api.py` were both clean. Focused pytest-cov warnings (`Module src was never imported` / `No data was collected`) remain non-blocking noise for these narrow commands; both suites exited 0.\n\n## Requirements Advanced\n\n- R029 — hardened the already-validated self-service password reset capability into a durable, auditable backend contract with DB-enforced token lifecycle invariants and fresh focused auth proof.\n\n## Requirements Validated\n\nNone.\n\n## New Requirements Surfaced\n\nNone.\n\n## Requirements Invalidated or Re-scoped\n\nNone.\n\n## Deviations\n\nNone beyond the task-level path correction already captured in task summaries: the real auth-recovery authority seam lives in `common.services.password_reset`, `PasswordResetToken`, and Alembic 026/027/028 rather than in request handlers themselves.\n\n## Known Limitations\n\nDefault password-reset delivery is still `ConsoleEmailService`, so production-grade provider telemetry is not part of this slice. A fresh Alembic upgrade from the very start of repository history still hits an older unrelated `001_agent_platform_tables` issue outside the password-reset chain. Focused pytest runs still emit pytest-cov no-data warnings that are noisy but non-blocking.\n\n## Follow-ups\n\nS02 should align auth/reset failures with the upcoming unified API error contract so frontend consumers no longer infer token/delivery/compatibility failures page-locally. S03 should review whether password-reset delivery/error fields and auth logs need additional redaction or RBAC-protected admin visibility.\n\n## Files Created/Modified\n\n- `backend/src/common/services/password_reset.py` — Continues to own issuance, supersession, delivery metadata persistence, token consumption, and rate-limited forgot/reset runtime behavior.\n- `backend/src/common/db/models.py` — Defines the durable `PasswordResetToken` lifecycle contract and the partial unique index that enforces one active token per user.\n- `backend/alembic/versions/20260411_2235_027_password_reset_lifecycle_delivery.py` — Carries lifecycle delivery fields such as invalidation and delivery metadata into formal schema history.\n- `backend/alembic/versions/20260412_0315_028_password_reset_single_active_token.py` — Adds the DB-level single-active-token invariant to the migration chain.\n- `backend/src/common/auth/api.py` — Preserves hashed_password-first login compatibility and points forgot/reset behavior at the formalized auth seam.\n- `backend/tests/integration/test_auth_login_api.py` — Acts as the repo-root auth gate proving reset compatibility behavior, rate limiting, DDL absence, and managed-password login promotion.\n- `backend/tests/integration/test_password_reset_api.py` — Acts as the dedicated lifecycle suite proving supersession, expiry, reuse rejection, and single-active-token enforcement.\n",
+      "full_uat_md": "# S01: Password reset / auth backend 正式化 — UAT\n\n**Milestone:** M016\n**Written:** 2026-04-11T19:30:02.253Z\n\n# UAT — M016/S01 Password reset / auth backend 正式化\n\n## Preconditions\n- Backend test environment is available from repo root.\n- Test database can be recreated or isolated for auth integration tests.\n- Default password-reset email transport remains console-based unless an alternate `EmailService` transport is explicitly configured.\n- A test user exists (or is created inside the test flow) with an email address and no previously managed `hashed_password`.\n\n## Test Case 1 — Forgot-password issues one active token and returns a non-enumerating response\n1. Create or select an active user account with email `reset-create@example.com`.\n   - Expected: user exists and is active.\n2. POST `/api/v1/auth/forgot-password` with that email and header `X-Forwarded-For: 203.0.113.10`.\n   - Expected: HTTP 200 with generic success message `如果该邮箱已注册，重置链接将发送到您的邮箱`.\n3. Inspect `password_reset_tokens` for that user.\n   - Expected: exactly one row exists; `token_hash` is populated; `used_at` is null; `invalidated_at` is null; `expires_at` is roughly 30 minutes ahead.\n4. Inspect the delivery outcome.\n   - Expected: console/mock transport emits a `/reset-password?token=...` link; persisted row has delivery metadata populated through the lifecycle seam.\n\n## Test Case 2 — Unknown email does not enumerate account state\n1. POST `/api/v1/auth/forgot-password` with `missing-reset@example.com`.\n   - Expected: HTTP 200 with the same generic success message as a known account.\n2. Inspect `password_reset_tokens`.\n   - Expected: no new row is created for the unknown email path.\n\n## Test Case 3 — Same-IP forgot-password requests are rate limited\n1. For an active test user, POST `/api/v1/auth/forgot-password` twice in quick succession with the same `X-Forwarded-For` header.\n   - Expected: first request returns HTTP 200 generic success.\n   - Expected: second request returns HTTP 429 with `[RATE_LIMIT_EXCEEDED]`.\n2. Wait for the limiter window to clear or switch to a new IP before retrying.\n   - Expected: a subsequent request from a different IP or after the limiter window can issue a new token normally.\n\n## Test Case 4 — Issuing a second token supersedes the first token\n1. Request forgot-password once for a user, capture token A.\n   - Expected: token A is active in the lifecycle table.\n2. Request forgot-password again for the same user from a different IP, capture token B.\n   - Expected: second request returns HTTP 200.\n3. Inspect `password_reset_tokens` for that user.\n   - Expected: two rows exist; token A now has `invalidated_at` populated and `invalidation_reason = \"superseded\"`; token B is the only active row.\n4. Try to reset with token A.\n   - Expected: HTTP 400 `[INVALID_RESET_TOKEN]`.\n5. Reset with token B.\n   - Expected: HTTP 200 success.\n\n## Test Case 5 — Successful reset promotes the account onto managed password login\n1. Start with a user who can still log in through the env-backed compatibility password.\n   - Expected: login with the original env-configured password succeeds before reset.\n2. Complete `/api/v1/auth/reset-password` with a valid token and new password `NewPass123!`.\n   - Expected: HTTP 200 success.\n3. Attempt login with the old compatibility password.\n   - Expected: HTTP 401 invalid credentials.\n4. Attempt login with the new password.\n   - Expected: HTTP 200 success and JWT/session issuance.\n5. Inspect the lifecycle row.\n   - Expected: `used_at` is populated for the consumed token.\n\n## Test Case 6 — Reuse and expiry are rejected truthfully\n1. Re-submit `/api/v1/auth/reset-password` with an already consumed token.\n   - Expected: HTTP 400 `[INVALID_RESET_TOKEN]`.\n2. Create a token and advance time past the 30-minute expiry window (or use the focused test harness to simulate expiry).\n   - Expected: reset attempt fails with HTTP 400 `[INVALID_RESET_TOKEN]`.\n3. Inspect the expired token row.\n   - Expected: `invalidated_at` is populated and `invalidation_reason = \"expired\"`.\n\n## Test Case 7 — Request-path auth recovery no longer owns runtime DDL\n1. Run the focused auth proof: `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/integration/test_auth_login_api.py -x -q`.\n   - Expected: suite passes, including the source-level constraint that forgot/reset handlers do not contain request-path DDL markers.\n2. Optionally grep auth handlers for runtime DDL markers.\n   - Expected: request handlers do not contain `CREATE TABLE IF NOT EXISTS` or equivalent auth-local table creation logic.\n\n## Acceptance Result\n- Slice is acceptable only if all seven cases pass: generic forgot response stays non-enumerating, the DB enforces one active token, superseded/expired/reused tokens are rejected, successful reset moves login onto `hashed_password`, same-IP rate limiting is enforced, and request-path auth recovery stays free of runtime DDL.\n",
       "goal": "把当前 password reset 和 auth 实现从“演示可用”升级为“正式 contract 可维护”。",
       "success_criteria": "- password reset token 有正式持久化模型、migration、一次性消费和过期处理。\n- request-path DDL 或其他过渡 auth recovery 实现被移除。\n- focused auth proof 能覆盖 forgot/reset 正向、过期、重复使用和兼容登录路径。",
       "proof_level": "integration",
@@ -2383,12 +2383,10 @@
     {
       "milestone_id": "M016",
       "id": "S02",
-      "title": "API 错误契约与异常分类收口",
+      "title": "S02",
       "status": "pending",
       "risk": "high",
-      "depends": [
-        "S01"
-      ],
+      "depends": [],
       "demo": "audit 命中的高频 API surface 返回统一错误 shape，frontend client 不再 page-local 猜测。",
       "created_at": "2026-04-08T08:53:52.133Z",
       "completed_at": null,
@@ -10194,19 +10192,30 @@
       "milestone_id": "M016",
       "slice_id": "S02",
       "id": "T01",
-      "title": "定位高频 API surface 的错误 shape 漂移点",
-      "status": "pending",
-      "one_liner": "",
-      "narrative": "",
-      "verification_result": "",
+      "title": "Codified the high-noise API error-contract drift map beside the live prompt, presentation, auth, and frontend client seams.",
+      "status": "complete",
+      "one_liner": "Codified the high-noise API error-contract drift map beside the live prompt, presentation, auth, and frontend client seams.",
+      "narrative": "I audited the four task-authority files against the shared backend/frontend helpers and wrote the findings back next to the live seams instead of changing runtime behavior early. In `backend/src/prompt_templates/api/routes.py` I documented that this route family is already the closest reusable backend model: 4xx branches converge on `{error,message}` inside FastAPI detail payloads, while 5xx/infra failures already go through `build_server_error(...)` and expose the shared Result-style envelope with trace ids. In `backend/src/presentation_coach/api/presentations.py` I recorded the current three-way drift: plain-string 403/404 branches, blocker 409 via `error_response(...)` plus `details`, and Result-style 5xx upload/replace failures. In `backend/src/common/auth/service.py` I marked the dependency-level auth leak where `get_current_user` / `get_current_admin_user` / `require_role` still raise string-detail auth failures even though `common.auth.api` already returns structured `error_response(...)` envelopes. In `web/src/lib/api/client.ts` I documented that `apiFetch`/`apiUpload` already form the frontend normalization seam through `normalizeApiErrorPayload` + `ApiRequestError`, and that `getSegmentAudioBlobUrl()` is the remaining client-local parser that still reads raw payload fields directly. I then persisted the seam choice as decision D191, added the non-obvious drift map to `.gsd/KNOWLEDGE.md`, and updated `.codex/loop/state.json` plus `.codex/loop/log.md` so T02 can continue from this exact collapse target without re-inventorying the same surfaces.",
+      "verification_result": "Ran the planned inventory command `rg -n \"HTTPException|except Exception\" backend/src/prompt_templates backend/src/presentation_coach backend/src/common/auth` after tightening the code-adjacent notes so the proof signal stayed focused on real drift sites. The command exited 0 and still showed the intended hotspots across prompt templates, presentations, and auth. Then ran fresh LSP diagnostics on `backend/src/prompt_templates/api/routes.py`, `backend/src/presentation_coach/api/presentations.py`, `backend/src/common/auth/service.py`, and `web/src/lib/api/client.ts`; all four returned `No diagnostics`, confirming the inventory writeback stayed syntax/type-clean.",
       "duration": "",
-      "completed_at": null,
+      "completed_at": "2026-04-11T19:36:26.706Z",
       "blocker_discovered": false,
-      "deviations": "",
-      "known_issues": "",
-      "key_files": [],
-      "key_decisions": [],
-      "full_summary_md": "",
+      "deviations": "None.",
+      "known_issues": "The outward runtime contract is still intentionally mixed until T02: `backend/src/presentation_coach/api/presentations.py` still exposes plain-string 403/404 branches alongside blocker 409 and Result-style 5xx responses, `backend/src/common/auth/service.py` still leaks string auth `detail` payloads through dependency failures, and `web/src/lib/api/client.ts::getSegmentAudioBlobUrl()` still performs manual raw-payload parsing instead of reusing `ApiRequestError`.",
+      "key_files": [
+        "backend/src/prompt_templates/api/routes.py",
+        "backend/src/presentation_coach/api/presentations.py",
+        "backend/src/common/auth/service.py",
+        "web/src/lib/api/client.ts",
+        ".gsd/DECISIONS.md",
+        ".gsd/KNOWLEDGE.md",
+        ".codex/loop/state.json",
+        ".codex/loop/log.md"
+      ],
+      "key_decisions": [
+        "D191 — reuse the prompt-template error seam (`error_response`/`build_server_error` on the backend plus `normalizeApiErrorPayload`/`ApiRequestError` on the frontend) instead of attempting a broad FastAPI-wide exception rewrite."
+      ],
+      "full_summary_md": "---\nid: T01\nparent: S02\nmilestone: M016\nkey_files:\n  - backend/src/prompt_templates/api/routes.py\n  - backend/src/presentation_coach/api/presentations.py\n  - backend/src/common/auth/service.py\n  - web/src/lib/api/client.ts\n  - .gsd/DECISIONS.md\n  - .gsd/KNOWLEDGE.md\n  - .codex/loop/state.json\n  - .codex/loop/log.md\nkey_decisions:\n  - D191 — reuse the prompt-template error seam (`error_response`/`build_server_error` on the backend plus `normalizeApiErrorPayload`/`ApiRequestError` on the frontend) instead of attempting a broad FastAPI-wide exception rewrite.\nduration: \nverification_result: passed\ncompleted_at: 2026-04-11T19:36:26.704Z\nblocker_discovered: false\n---\n\n# T01: Codified the high-noise API error-contract drift map beside the live prompt, presentation, auth, and frontend client seams.\n\n**Codified the high-noise API error-contract drift map beside the live prompt, presentation, auth, and frontend client seams.**\n\n## What Happened\n\nI audited the four task-authority files against the shared backend/frontend helpers and wrote the findings back next to the live seams instead of changing runtime behavior early. In `backend/src/prompt_templates/api/routes.py` I documented that this route family is already the closest reusable backend model: 4xx branches converge on `{error,message}` inside FastAPI detail payloads, while 5xx/infra failures already go through `build_server_error(...)` and expose the shared Result-style envelope with trace ids. In `backend/src/presentation_coach/api/presentations.py` I recorded the current three-way drift: plain-string 403/404 branches, blocker 409 via `error_response(...)` plus `details`, and Result-style 5xx upload/replace failures. In `backend/src/common/auth/service.py` I marked the dependency-level auth leak where `get_current_user` / `get_current_admin_user` / `require_role` still raise string-detail auth failures even though `common.auth.api` already returns structured `error_response(...)` envelopes. In `web/src/lib/api/client.ts` I documented that `apiFetch`/`apiUpload` already form the frontend normalization seam through `normalizeApiErrorPayload` + `ApiRequestError`, and that `getSegmentAudioBlobUrl()` is the remaining client-local parser that still reads raw payload fields directly. I then persisted the seam choice as decision D191, added the non-obvious drift map to `.gsd/KNOWLEDGE.md`, and updated `.codex/loop/state.json` plus `.codex/loop/log.md` so T02 can continue from this exact collapse target without re-inventorying the same surfaces.\n\n## Verification\n\nRan the planned inventory command `rg -n \"HTTPException|except Exception\" backend/src/prompt_templates backend/src/presentation_coach backend/src/common/auth` after tightening the code-adjacent notes so the proof signal stayed focused on real drift sites. The command exited 0 and still showed the intended hotspots across prompt templates, presentations, and auth. Then ran fresh LSP diagnostics on `backend/src/prompt_templates/api/routes.py`, `backend/src/presentation_coach/api/presentations.py`, `backend/src/common/auth/service.py`, and `web/src/lib/api/client.ts`; all four returned `No diagnostics`, confirming the inventory writeback stayed syntax/type-clean.\n\n## Verification Evidence\n\n| # | Command | Exit Code | Verdict | Duration |\n|---|---------|-----------|---------|----------|\n| 1 | `rg -n \"HTTPException|except Exception\" backend/src/prompt_templates backend/src/presentation_coach backend/src/common/auth` | 0 | ✅ pass | 17ms |\n| 2 | `lsp diagnostics backend/src/prompt_templates/api/routes.py` | 0 | ✅ pass | 1ms |\n| 3 | `lsp diagnostics backend/src/presentation_coach/api/presentations.py` | 0 | ✅ pass | 1ms |\n| 4 | `lsp diagnostics backend/src/common/auth/service.py` | 0 | ✅ pass | 1ms |\n| 5 | `lsp diagnostics web/src/lib/api/client.ts` | 0 | ✅ pass | 1ms |\n\n## Deviations\n\nNone.\n\n## Known Issues\n\nThe outward runtime contract is still intentionally mixed until T02: `backend/src/presentation_coach/api/presentations.py` still exposes plain-string 403/404 branches alongside blocker 409 and Result-style 5xx responses, `backend/src/common/auth/service.py` still leaks string auth `detail` payloads through dependency failures, and `web/src/lib/api/client.ts::getSegmentAudioBlobUrl()` still performs manual raw-payload parsing instead of reusing `ApiRequestError`.\n\n## Files Created/Modified\n\n- `backend/src/prompt_templates/api/routes.py`\n- `backend/src/presentation_coach/api/presentations.py`\n- `backend/src/common/auth/service.py`\n- `web/src/lib/api/client.ts`\n- `.gsd/DECISIONS.md`\n- `.gsd/KNOWLEDGE.md`\n- `.codex/loop/state.json`\n- `.codex/loop/log.md`\n",
       "description": "Why: 只有先找到哪些 route family 正在 outward 暴露漂移的错误 shape，后续收口才不会扩成全 backend 扫荡。\n\nDo:\n1. 盘点 prompt templates、presentations、auth 等高噪声 route family 的错误返回形状。\n2. 标出裸 `HTTPException`、通用 `except Exception` 和 frontend page-local 解析分叉。\n3. 找出最小的一组 shared contract seam。\n\nDone when: 已有一份高频 API surface 错误 shape 漂移清单，足够指导后续统一收口。",
       "estimate": "35m",
       "files": [
@@ -13362,6 +13371,30 @@
       "decision": "How password-reset lifecycle invariants and Alembic revision ids are formalized for M016/S01",
       "choice": "Enforce the single-active-password-reset-token invariant with a partial unique index on password_reset_tokens.user_id, and keep password-reset Alembic revision IDs at 32 characters or fewer.",
       "rationale": "The runtime service already supersedes prior tokens, but without a DB constraint the lifecycle contract remains soft and duplicate active rows can still be inserted. Alembic in this project also uses the default alembic_version.version_num width, so overlong revision IDs fail fresh migration state updates before the auth schema reaches head. Hardening both at the schema layer makes token lifecycle health and migration state mechanically checkable.",
+      "revisable": "Yes",
+      "made_by": "agent",
+      "superseded_by": null
+    },
+    {
+      "seq": 1560,
+      "id": "D190",
+      "when_context": "M016/S01/T03",
+      "scope": "auth-proof",
+      "decision": "How M016/S01 should prove password-reset lifecycle behavior without creating a new umbrella auth suite",
+      "choice": "Keep the existing repo-root auth gate (`backend/tests/integration/test_auth_login_api.py`) as the compatibility proof surface and pair it with the dedicated reset lifecycle suite (`backend/tests/integration/test_password_reset_api.py`) for detailed token-state assertions.",
+      "rationale": "The auth login suite is already the repo-root compatibility gate for hashed-password-first login behavior and request-path contract checks, while the dedicated password-reset suite already owns row-level lifecycle assertions like supersession, expiry, and single-active-token enforcement. Extending those two focused seams keeps proof narrow, mechanically re-runnable, and avoids introducing a third broader entry point that would duplicate coverage and make future auth hardening harder to localize.",
+      "revisable": "Yes",
+      "made_by": "agent",
+      "superseded_by": null
+    },
+    {
+      "seq": 1561,
+      "id": "D191",
+      "when_context": "M016/S02/T01",
+      "scope": "api-contract",
+      "decision": "M016/S02 backend/frontend shared error-contract seam",
+      "choice": "Use `common.api.response.error_response` + `common.api.server_error.build_server_error` as the backend outward error seam, and `web/src/lib/api/client.ts` `normalizeApiErrorPayload`/`ApiRequestError` as the frontend normalization seam; treat prompt templates as the closest existing model, while presentations string-detail branches, auth dependency `HTTPException` strings, and `getSegmentAudioBlobUrl()` manual parsing are the drift points to collapse in T02.",
+      "rationale": "The prompt-template routes already prove the narrowest reusable pattern: domain/not-found 4xx carry `{error,message}` and infra 5xx go through the shared Result-style envelope with trace ids. Locking that seam avoids a broad FastAPI-wide exception rewrite and tells downstream work exactly where the remaining outward drift still leaks through.",
       "revisable": "Yes",
       "made_by": "agent",
       "superseded_by": null
@@ -17052,6 +17085,61 @@
       "verdict": "✅ pass",
       "duration_ms": 0,
       "created_at": "2026-04-11T19:25:55.989Z"
+    },
+    {
+      "id": 341,
+      "task_id": "T01",
+      "slice_id": "S02",
+      "milestone_id": "M016",
+      "command": "rg -n \"HTTPException|except Exception\" backend/src/prompt_templates backend/src/presentation_coach backend/src/common/auth",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 17,
+      "created_at": "2026-04-11T19:36:26.706Z"
+    },
+    {
+      "id": 342,
+      "task_id": "T01",
+      "slice_id": "S02",
+      "milestone_id": "M016",
+      "command": "lsp diagnostics backend/src/prompt_templates/api/routes.py",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 1,
+      "created_at": "2026-04-11T19:36:26.706Z"
+    },
+    {
+      "id": 343,
+      "task_id": "T01",
+      "slice_id": "S02",
+      "milestone_id": "M016",
+      "command": "lsp diagnostics backend/src/presentation_coach/api/presentations.py",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 1,
+      "created_at": "2026-04-11T19:36:26.706Z"
+    },
+    {
+      "id": 344,
+      "task_id": "T01",
+      "slice_id": "S02",
+      "milestone_id": "M016",
+      "command": "lsp diagnostics backend/src/common/auth/service.py",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 1,
+      "created_at": "2026-04-11T19:36:26.706Z"
+    },
+    {
+      "id": 345,
+      "task_id": "T01",
+      "slice_id": "S02",
+      "milestone_id": "M016",
+      "command": "lsp diagnostics web/src/lib/api/client.ts",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 1,
+      "created_at": "2026-04-11T19:36:26.706Z"
     }
   ]
 }

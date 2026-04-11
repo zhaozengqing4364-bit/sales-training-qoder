@@ -223,6 +223,15 @@ type NormalizedApiErrorPayload = {
     traceId?: string;
 };
 
+/**
+ * M016/S02/T01 error-contract inventory:
+ * - apiFetch/apiUpload normalize both top-level Result-style errors
+ *   ({ success:false, error, message, trace_id }) and HTTPException-style
+ *   payloads ({ detail: { error, message } }).
+ * - Most pages already consume this seam only through ApiRequestError + getApiErrorMessage.
+ * - The remaining client-local parsing fork lives in getSegmentAudioBlobUrl(), which still reads
+ *   raw payload fields and throws bare Error(errorCode) instead of reusing ApiRequestError.
+ */
 function normalizeApiErrorPayload(status: number, payload: unknown): NormalizedApiErrorPayload {
     const raw = (payload && typeof payload === "object")
         ? payload as Record<string, unknown>
@@ -1773,6 +1782,9 @@ export const api = {
         },
 
         getSegmentAudioBlobUrl: async (sessionId: string, segmentSequence: number) => {
+            // M016/S02/T01 drift note: this endpoint still bypasses ApiRequestError and manually
+            // inspects detail.error/error_code from the raw payload. T02 should collapse it onto
+            // normalizeApiErrorPayload(...) so audio fetch failures stop carrying a custom parser.
             const response = await fetch(
                 `${resolveApiBaseUrl()}/sessions/${sessionId}/audio-segments/${segmentSequence}`,
                 { credentials: "include" },
