@@ -24,6 +24,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from common.api.response import error_response
 from common.api.server_error import build_server_error
 from common.auth.service import get_current_user
 from common.db.models import User
@@ -104,19 +105,18 @@ def _raise_prompt_http_error(
             source="prompt_templates_api",
         )
 
+    log_method = logger.warning if status_code >= 400 else logger.info
     if exc is not None:
-        logger.error(
+        log_method(
             "Prompt API request failed",
             error_code=error_code,
             status_code=status_code,
             error=str(exc),
         )
-    raise HTTPException(
+
+    return JSONResponse(
         status_code=status_code,
-        detail={
-            "error": error_code,
-            "message": message,
-        },
+        content=error_response(error_code, message=message),
     )
 
 
@@ -253,9 +253,10 @@ async def get_prompt_template(
     try:
         template = await service.get_template(template_uuid)
         if not template:
-            raise HTTPException(
+            return _raise_prompt_http_error(
                 status_code=404,
-                detail={"error": "[PROMPT_TEMPLATE_NOT_FOUND]", "message": "模板不存在"},
+                error_code="[PROMPT_TEMPLATE_NOT_FOUND]",
+                message="模板不存在",
             )
         return template
     except SQLAlchemyError as exc:
@@ -285,9 +286,10 @@ async def update_prompt_template(
     try:
         template = await service.update_template(template_uuid, data)
         if not template:
-            raise HTTPException(
+            return _raise_prompt_http_error(
                 status_code=404,
-                detail={"error": "[PROMPT_TEMPLATE_NOT_FOUND]", "message": "模板不存在"},
+                error_code="[PROMPT_TEMPLATE_NOT_FOUND]",
+                message="模板不存在",
             )
         return template
     except SQLAlchemyError as exc:
@@ -316,9 +318,10 @@ async def delete_prompt_template(
     try:
         success = await service.delete_template(template_uuid)
         if not success:
-            raise HTTPException(
+            return _raise_prompt_http_error(
                 status_code=404,
-                detail={"error": "[PROMPT_TEMPLATE_NOT_FOUND]", "message": "模板不存在"},
+                error_code="[PROMPT_TEMPLATE_NOT_FOUND]",
+                message="模板不存在",
             )
     except SQLAlchemyError as exc:
         return _raise_prompt_http_error(
@@ -339,12 +342,10 @@ async def render_prompt_template(
     template_uuid = _parse_template_id_or_400(template_id)
     # Ensure template_id in path matches request
     if request.template_id != template_uuid:
-        raise HTTPException(
+        return _raise_prompt_http_error(
             status_code=400,
-            detail={
-                "error": "[PROMPT_TEMPLATE_ID_MISMATCH]",
-                "message": "路径中的模板ID与请求体不一致",
-            },
+            error_code="[PROMPT_TEMPLATE_ID_MISMATCH]",
+            message="路径中的模板ID与请求体不一致",
         )
     try:
         return await service.render_prompt(request)
@@ -375,16 +376,18 @@ async def set_default_template(
     try:
         success = await service.set_default_template(template_uuid, prompt_type)
         if not success:
-            raise HTTPException(
+            return _raise_prompt_http_error(
                 status_code=404,
-                detail={"error": "[PROMPT_TEMPLATE_NOT_FOUND]", "message": "模板不存在"},
+                error_code="[PROMPT_TEMPLATE_NOT_FOUND]",
+                message="模板不存在",
             )
 
         template = await service.get_template(template_uuid)
         if not template:
-            raise HTTPException(
+            return _raise_prompt_http_error(
                 status_code=404,
-                detail={"error": "[PROMPT_TEMPLATE_NOT_FOUND]", "message": "模板不存在"},
+                error_code="[PROMPT_TEMPLATE_NOT_FOUND]",
+                message="模板不存在",
             )
         return template
     except SQLAlchemyError as exc:
@@ -469,9 +472,10 @@ async def get_scenario_prompt(
     try:
         assignment = await service.get_scenario_prompt(assignment_id)
         if not assignment:
-            raise HTTPException(
+            return _raise_prompt_http_error(
                 status_code=404,
-                detail={"error": "[SCENARIO_PROMPT_NOT_FOUND]", "message": "场景提示词绑定不存在"},
+                error_code="[SCENARIO_PROMPT_NOT_FOUND]",
+                message="场景提示词绑定不存在",
             )
         return assignment
     except SQLAlchemyError as exc:
@@ -498,9 +502,10 @@ async def update_scenario_prompt(
             template_id=template_id,
         )
         if not assignment:
-            raise HTTPException(
+            return _raise_prompt_http_error(
                 status_code=404,
-                detail={"error": "[SCENARIO_PROMPT_NOT_FOUND]", "message": "场景提示词绑定不存在"},
+                error_code="[SCENARIO_PROMPT_NOT_FOUND]",
+                message="场景提示词绑定不存在",
             )
         return assignment
     except SQLAlchemyError as exc:
@@ -530,9 +535,10 @@ async def delete_scenario_prompt(
     try:
         success = await service.delete_scenario_prompt(assignment_id)
         if not success:
-            raise HTTPException(
+            return _raise_prompt_http_error(
                 status_code=404,
-                detail={"error": "[SCENARIO_PROMPT_NOT_FOUND]", "message": "场景提示词绑定不存在"},
+                error_code="[SCENARIO_PROMPT_NOT_FOUND]",
+                message="场景提示词绑定不存在",
             )
     except SQLAlchemyError as exc:
         return _raise_prompt_http_error(

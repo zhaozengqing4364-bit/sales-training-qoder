@@ -1,3 +1,37 @@
+- time: 2026-04-12T03:49:54+0800
+  mode: grow
+  item id: M016-S02-T02
+  files changed:
+    - backend/src/prompt_templates/api/routes.py
+    - backend/src/presentation_coach/api/presentations.py
+    - backend/src/common/auth/service.py
+    - web/src/lib/api/client.ts
+    - backend/tests/integration/test_prompt_templates_api_rbac.py
+    - backend/tests/contract/test_presentations.py
+    - backend/tests/integration/test_presentation_delete_permissions.py
+    - web/src/lib/api/client.auth.test.ts
+    - backend/tests/conftest.py
+    - backend/src/common/api/practice.py
+    - .gsd/DECISIONS.md
+    - .gsd/KNOWLEDGE.md
+    - .codex/loop/state.json
+    - .codex/loop/log.md
+  summary: Collapsed the audited backend/frontend error seam onto one stable contract by returning top-level error envelopes from prompt-template and presentation 4xx routes, structuring auth dependency failures, and teaching apiFetch plus segment-audio fetches to normalize route/detail/validation payloads into ApiRequestError.
+  verification commands:
+    - backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/integration/test_prompt_templates_api_rbac.py -q
+    - backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/contract/test_presentations.py backend/tests/integration/test_presentation_delete_permissions.py -q
+    - npm --prefix web test -- --run src/lib/api/client.auth.test.ts
+    - backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/contract/test_practice_evidence_contract.py -k "kb_lock_chain_failures" -q
+    - backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/contract/test_presentations.py backend/tests/contract/test_practice_evidence_contract.py backend/tests/integration/test_presentation_flow.py -x -q
+    - lsp diagnostics backend/src/prompt_templates/api/routes.py
+    - lsp diagnostics backend/src/presentation_coach/api/presentations.py
+    - lsp diagnostics backend/src/common/auth/service.py
+    - lsp diagnostics web/src/lib/api/client.ts
+    - lsp diagnostics backend/src/common/api/practice.py
+  verification results: passed; focused prompt-template/presentation/frontend client proof went green, the pre-existing knowledge-check NameError blocker in common/api/practice.py was fixed and re-proved, the slice verification command finished 31/31 green, and diagnostics stayed clean on the touched authority files.
+  success signal status: frontend callers now get one stable ApiRequestError seam across top-level Result envelopes, auth dependency detail payloads, and FastAPI validation arrays, while audited prompt-template/presentation routes expose stable top-level error codes plus trace ids for support triage.
+  rollback note: if later work changes the shared error helper or global HTTPException policy, keep route-local 4xx response envelopes, auth dependency structured detail, frontend normalization, and the focused contract tests aligned together; otherwise clients will fall back to stringified-dict guessing again.
+
 - time: 2026-04-12T03:30:08+08:00
   mode: grow
   item id: M016-S02-T01

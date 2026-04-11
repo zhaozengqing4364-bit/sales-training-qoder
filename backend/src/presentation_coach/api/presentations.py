@@ -50,6 +50,30 @@ _NON_TERMINAL_PRESENTATION_STATUSES = ("preparing", "in_progress", "paused", "sc
 # This file therefore exposes three outward error shapes today and is a primary S02 collapse target.
 
 
+def _presentation_error_response(
+    *,
+    status_code: int,
+    error_code: str,
+    message: str,
+    details: dict[str, Any] | None = None,
+    exc: Exception | None = None,
+) -> JSONResponse:
+    if status_code >= 500:
+        return build_server_error(
+            error_code,
+            status_code=status_code,
+            message=message,
+            exc=exc,
+            source="presentations_api",
+        )
+
+    payload = error_response(error_code, message=message)
+    if details:
+        payload["details"] = details
+
+    return JSONResponse(status_code=status_code, content=payload)
+
+
 def _presentation_storage_root() -> Path:
     return Path(os.getenv("PPT_STORAGE_PATH", "./data/ppts"))
 
@@ -496,7 +520,11 @@ async def replace_presentation(
     try:
         presentation = await _load_presentation_for_replace(db, presentation_id)
         if not presentation:
-            raise HTTPException(status_code=404, detail="Presentation not found")
+            return _presentation_error_response(
+                status_code=404,
+                error_code="[PRESENTATION_NOT_FOUND]",
+                message="演示文稿不存在。",
+            )
 
         active_sessions = await _non_terminal_sessions_for_presentation(db, presentation_id)
         if active_sessions:
@@ -567,11 +595,19 @@ async def replace_presentation(
             )
             if failed_presentation is not None:
                 return failed_presentation
-            raise HTTPException(status_code=404, detail="Presentation not found")
+            return _presentation_error_response(
+                status_code=404,
+                error_code="[PRESENTATION_NOT_FOUND]",
+                message="演示文稿不存在。",
+            )
 
         refreshed = await _load_presentation_for_replace(db, presentation_id)
         if refreshed is None:
-            raise HTTPException(status_code=404, detail="Presentation not found")
+            return _presentation_error_response(
+                status_code=404,
+                error_code="[PRESENTATION_NOT_FOUND]",
+                message="演示文稿不存在。",
+            )
 
         await _replace_pages_and_metadata(
             db,
@@ -589,7 +625,11 @@ async def replace_presentation(
         )
         detail = await _load_presentation_detail(db, presentation_id)
         if detail is None:
-            raise HTTPException(status_code=404, detail="Presentation not found")
+            return _presentation_error_response(
+                status_code=404,
+                error_code="[PRESENTATION_NOT_FOUND]",
+                message="演示文稿不存在。",
+            )
         return detail
 
     except HTTPException:
@@ -633,7 +673,11 @@ async def get_presentation(
     presentation = await _load_presentation_detail(db, presentation_id)
 
     if not presentation:
-        raise HTTPException(status_code=404, detail="Presentation not found")
+        return _presentation_error_response(
+            status_code=404,
+            error_code="[PRESENTATION_NOT_FOUND]",
+            message="演示文稿不存在。",
+        )
 
     return presentation
 
@@ -650,14 +694,23 @@ async def delete_presentation(
     )
     presentation = result.scalar_one_or_none()
     if not presentation:
-        raise HTTPException(status_code=404, detail="Presentation not found")
+        return _presentation_error_response(
+            status_code=404,
+            error_code="[PRESENTATION_NOT_FOUND]",
+            message="演示文稿不存在。",
+        )
 
     is_uploader = presentation.uploaded_by_admin_id == current_user.user_id
     is_admin = getattr(current_user, "role", "") == "admin"
     if not is_uploader and not is_admin:
-        raise HTTPException(
+        return _presentation_error_response(
             status_code=403,
-            detail="No permission to delete this presentation",
+            error_code="[PRESENTATION_DELETE_FORBIDDEN]",
+            message="你没有权限删除该演示文稿。",
+            details={
+                "presentation_id": presentation_id,
+                "current_user_id": str(current_user.user_id),
+            },
         )
 
     await db.delete(presentation)
@@ -704,11 +757,19 @@ async def get_presentation_page_thumbnail(
     )
     page = page_result.scalar_one_or_none()
     if not page:
-        raise HTTPException(status_code=404, detail="Page not found")
+        return _presentation_error_response(
+            status_code=404,
+            error_code="[PRESENTATION_PAGE_NOT_FOUND]",
+            message="演示页不存在。",
+        )
 
     thumbnail_path = _thumbnail_file_path(presentation_id, page_number)
     if not thumbnail_path.exists():
-        raise HTTPException(status_code=404, detail="Thumbnail not found")
+        return _presentation_error_response(
+            status_code=404,
+            error_code="[PRESENTATION_THUMBNAIL_NOT_FOUND]",
+            message="演示页缩略图不存在。",
+        )
 
     existing_url = cast(str | None, getattr(page, "image_url", None))
     if not existing_url:
@@ -735,7 +796,11 @@ async def get_talking_points(
     page = page_result.scalar_one_or_none()
 
     if not page:
-        raise HTTPException(status_code=404, detail="Page not found")
+        return _presentation_error_response(
+            status_code=404,
+            error_code="[PRESENTATION_PAGE_NOT_FOUND]",
+            message="演示页不存在。",
+        )
 
     points_result = await db.execute(
         select(RequiredTalkingPoint).where(
@@ -766,7 +831,11 @@ async def add_talking_point(
     page = page_result.scalar_one_or_none()
 
     if not page:
-        raise HTTPException(status_code=404, detail="Page not found")
+        return _presentation_error_response(
+            status_code=404,
+            error_code="[PRESENTATION_PAGE_NOT_FOUND]",
+            message="演示页不存在。",
+        )
 
     talking_point = RequiredTalkingPoint(
         page_id=page.page_id,

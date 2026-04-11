@@ -35,7 +35,7 @@ Done when: 已有一份高频 API surface 错误 shape 漂移清单，足够指�
   - Files: `backend/src/prompt_templates/api/routes.py`, `backend/src/presentation_coach/api/presentations.py`, `backend/src/common/auth/service.py`, `web/src/lib/api/client.ts`
   - Verify: rg -n "HTTPException|except Exception" backend/src/prompt_templates backend/src/presentation_coach backend/src/common/auth
 
-- [ ] **T02: 收口 backend error contract 并对齐 frontend client** `est:1h`
+- [x] **T02: 收口 backend error contract 并对齐 frontend client** `est:1h`
   Why: 统一 outward 错误 shape 是 frontend client 和 admin/learner 页面停止 page-local 猜测的前提。
 
 Do:

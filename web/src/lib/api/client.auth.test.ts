@@ -169,7 +169,7 @@ describe("API client 401 handling", () => {
         expect(secondUrl).not.toBe(firstUrl);
     });
 
-    it("preserves structured segment playback error codes from JSON error responses", async () => {
+    it("normalizes structured segment playback errors into ApiRequestError", async () => {
         vi.stubGlobal(
             "fetch",
             vi.fn().mockResolvedValue(
@@ -177,6 +177,7 @@ describe("API client 401 handling", () => {
                     JSON.stringify({
                         error_code: "SEGMENT_NOT_UPLOADED",
                         message: "segment is not uploaded yet",
+                        trace_id: "trace-segment-1",
                     }),
                     {
                         status: 409,
@@ -189,7 +190,32 @@ describe("API client 401 handling", () => {
         await expect(
             api.sessions.getSegmentAudioBlobUrl("session-1", 3),
         ).rejects.toMatchObject({
-            message: "SEGMENT_NOT_UPLOADED",
+            name: "ApiRequestError",
+            status: 409,
+            errorCode: "SEGMENT_NOT_UPLOADED",
+            rawMessage: "segment is not uploaded yet",
+            traceId: "trace-segment-1",
+        });
+    });
+
+    it("normalizes validation-array payloads into a stable ApiRequestError", async () => {
+        mockFetchResponse(422, {
+            detail: [
+                {
+                    type: "missing",
+                    loc: ["body", "email"],
+                    msg: "Field required",
+                },
+            ],
+        });
+
+        await expect(
+            api.auth.login({ email: "", password: "password" }),
+        ).rejects.toMatchObject({
+            name: "ApiRequestError",
+            status: 422,
+            errorCode: "[REQUEST_VALIDATION_ERROR]",
+            rawMessage: "Field required",
         });
     });
 });

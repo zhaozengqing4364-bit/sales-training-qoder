@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "exported_at": "2026-04-11T19:36:26.748Z",
+  "exported_at": "2026-04-11T19:51:58.382Z",
   "milestones": [
     {
       "id": "M001",
@@ -10245,19 +10245,36 @@
       "milestone_id": "M016",
       "slice_id": "S02",
       "id": "T02",
-      "title": "收口 backend error contract 并对齐 frontend client",
-      "status": "pending",
-      "one_liner": "",
-      "narrative": "",
-      "verification_result": "",
+      "title": "Unified prompt-template, presentation, auth, and frontend client error handling onto one stable error-contract seam.",
+      "status": "complete",
+      "one_liner": "Unified prompt-template, presentation, auth, and frontend client error handling onto one stable error-contract seam.",
+      "narrative": "I collapsed the audited error drift hotspots onto the shared backend/frontend seam instead of attempting a global FastAPI rewrite. In `backend/src/prompt_templates/api/routes.py`, I converted the audited route-local 4xx branches that previously fell through FastAPI’s stringifying HTTPException handler into direct `JSONResponse(error_response(...))` envelopes, so missing prompt/scenario prompt resources and template-id mismatches now surface stable top-level `error/message/trace_id` fields. In `backend/src/presentation_coach/api/presentations.py`, I introduced the same focused 4xx response helper and applied it to missing-presentation, delete-forbidden, missing-page, and missing-thumbnail paths while preserving the existing blocker 409 and 5xx server-error seams. In `backend/src/common/auth/service.py`, I kept dependency-based auth on `HTTPException` but changed `get_current_user` to raise structured `detail={error,message}` payloads for unauthenticated, invalid-token, missing-user, and disabled-user failures so protected routes stop leaking bare strings. In `web/src/lib/api/client.ts`, I upgraded `normalizeApiErrorPayload` to read top-level envelopes, structured `detail`, and FastAPI validation arrays consistently, preserve `trace_id`, and route segment-audio failures through `ApiRequestError` instead of a custom parser. I added focused backend/frontend tests to lock the new envelopes and, during slice verification, fixed an unrelated pre-existing blocker in `backend/src/common/api/practice.py` where `live_knowledge_answer_diagnostics` was referenced before assignment; I also restored the shared test fixture import in `backend/tests/conftest.py` so selective pytest runs can create `voice_runtime_profiles` before hitting the contract tests.",
+      "verification_result": "Verified the focused contract seam first with `backend/tests/integration/test_prompt_templates_api_rbac.py`, `backend/tests/contract/test_presentations.py`, `backend/tests/integration/test_presentation_delete_permissions.py`, and `web/src/lib/api/client.auth.test.ts`; all passed after the red→green cycle. Then fixed the pre-existing `knowledge-check` NameError exposed by the slice gate and re-ran the targeted `backend/tests/contract/test_practice_evidence_contract.py -k \"kb_lock_chain_failures\"` check, which passed. Finally ran the task-plan verification command `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/contract/test_presentations.py backend/tests/contract/test_practice_evidence_contract.py backend/tests/integration/test_presentation_flow.py -x -q`; it finished 31/31 green. Fresh LSP diagnostics also reported no issues on the touched backend/frontend authority files.",
       "duration": "",
-      "completed_at": null,
+      "completed_at": "2026-04-11T19:51:58.339Z",
       "blocker_discovered": false,
-      "deviations": "",
-      "known_issues": "",
-      "key_files": [],
-      "key_decisions": [],
-      "full_summary_md": "",
+      "deviations": "During final verification I found a pre-existing blocker outside the original four task-authority files: `backend/src/common/api/practice.py` referenced `live_knowledge_answer_diagnostics` before assignment, and `backend/tests/conftest.py` no longer imported `agent.models`, which broke selective `Base.metadata.create_all()` runs after the `voice_runtime_profiles` foreign key landed. I fixed both so the planned verification command could run truthfully.",
+      "known_issues": "None.",
+      "key_files": [
+        "backend/src/prompt_templates/api/routes.py",
+        "backend/src/presentation_coach/api/presentations.py",
+        "backend/src/common/auth/service.py",
+        "web/src/lib/api/client.ts",
+        "backend/tests/integration/test_prompt_templates_api_rbac.py",
+        "backend/tests/contract/test_presentations.py",
+        "backend/tests/integration/test_presentation_delete_permissions.py",
+        "web/src/lib/api/client.auth.test.ts",
+        "backend/tests/conftest.py",
+        "backend/src/common/api/practice.py",
+        ".gsd/DECISIONS.md",
+        ".gsd/KNOWLEDGE.md",
+        ".codex/loop/state.json",
+        ".codex/loop/log.md"
+      ],
+      "key_decisions": [
+        "D192 — normalize focused backend 4xx route families with route-local `JSONResponse(error_response(...))`, while keeping auth dependency failures on structured `HTTPException.detail={error,message}` so clients still see one stable error-contract seam without a global exception rewrite."
+      ],
+      "full_summary_md": "---\nid: T02\nparent: S02\nmilestone: M016\nkey_files:\n  - backend/src/prompt_templates/api/routes.py\n  - backend/src/presentation_coach/api/presentations.py\n  - backend/src/common/auth/service.py\n  - web/src/lib/api/client.ts\n  - backend/tests/integration/test_prompt_templates_api_rbac.py\n  - backend/tests/contract/test_presentations.py\n  - backend/tests/integration/test_presentation_delete_permissions.py\n  - web/src/lib/api/client.auth.test.ts\n  - backend/tests/conftest.py\n  - backend/src/common/api/practice.py\n  - .gsd/DECISIONS.md\n  - .gsd/KNOWLEDGE.md\n  - .codex/loop/state.json\n  - .codex/loop/log.md\nkey_decisions:\n  - D192 — normalize focused backend 4xx route families with route-local `JSONResponse(error_response(...))`, while keeping auth dependency failures on structured `HTTPException.detail={error,message}` so clients still see one stable error-contract seam without a global exception rewrite.\nduration: \nverification_result: passed\ncompleted_at: 2026-04-11T19:51:58.337Z\nblocker_discovered: false\n---\n\n# T02: Unified prompt-template, presentation, auth, and frontend client error handling onto one stable error-contract seam.\n\n**Unified prompt-template, presentation, auth, and frontend client error handling onto one stable error-contract seam.**\n\n## What Happened\n\nI collapsed the audited error drift hotspots onto the shared backend/frontend seam instead of attempting a global FastAPI rewrite. In `backend/src/prompt_templates/api/routes.py`, I converted the audited route-local 4xx branches that previously fell through FastAPI’s stringifying HTTPException handler into direct `JSONResponse(error_response(...))` envelopes, so missing prompt/scenario prompt resources and template-id mismatches now surface stable top-level `error/message/trace_id` fields. In `backend/src/presentation_coach/api/presentations.py`, I introduced the same focused 4xx response helper and applied it to missing-presentation, delete-forbidden, missing-page, and missing-thumbnail paths while preserving the existing blocker 409 and 5xx server-error seams. In `backend/src/common/auth/service.py`, I kept dependency-based auth on `HTTPException` but changed `get_current_user` to raise structured `detail={error,message}` payloads for unauthenticated, invalid-token, missing-user, and disabled-user failures so protected routes stop leaking bare strings. In `web/src/lib/api/client.ts`, I upgraded `normalizeApiErrorPayload` to read top-level envelopes, structured `detail`, and FastAPI validation arrays consistently, preserve `trace_id`, and route segment-audio failures through `ApiRequestError` instead of a custom parser. I added focused backend/frontend tests to lock the new envelopes and, during slice verification, fixed an unrelated pre-existing blocker in `backend/src/common/api/practice.py` where `live_knowledge_answer_diagnostics` was referenced before assignment; I also restored the shared test fixture import in `backend/tests/conftest.py` so selective pytest runs can create `voice_runtime_profiles` before hitting the contract tests.\n\n## Verification\n\nVerified the focused contract seam first with `backend/tests/integration/test_prompt_templates_api_rbac.py`, `backend/tests/contract/test_presentations.py`, `backend/tests/integration/test_presentation_delete_permissions.py`, and `web/src/lib/api/client.auth.test.ts`; all passed after the red→green cycle. Then fixed the pre-existing `knowledge-check` NameError exposed by the slice gate and re-ran the targeted `backend/tests/contract/test_practice_evidence_contract.py -k \"kb_lock_chain_failures\"` check, which passed. Finally ran the task-plan verification command `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/contract/test_presentations.py backend/tests/contract/test_practice_evidence_contract.py backend/tests/integration/test_presentation_flow.py -x -q`; it finished 31/31 green. Fresh LSP diagnostics also reported no issues on the touched backend/frontend authority files.\n\n## Verification Evidence\n\n| # | Command | Exit Code | Verdict | Duration |\n|---|---------|-----------|---------|----------|\n| 1 | `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/integration/test_prompt_templates_api_rbac.py -q` | 0 | ✅ pass | 2770ms |\n| 2 | `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/contract/test_presentations.py backend/tests/integration/test_presentation_delete_permissions.py -q` | 0 | ✅ pass | 1910ms |\n| 3 | `npm --prefix web test -- --run src/lib/api/client.auth.test.ts` | 0 | ✅ pass | 565ms |\n| 4 | `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/contract/test_practice_evidence_contract.py -k \"kb_lock_chain_failures\" -q` | 0 | ✅ pass | 1850ms |\n| 5 | `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/contract/test_presentations.py backend/tests/contract/test_practice_evidence_contract.py backend/tests/integration/test_presentation_flow.py -x -q` | 0 | ✅ pass | 4300ms |\n\n## Deviations\n\nDuring final verification I found a pre-existing blocker outside the original four task-authority files: `backend/src/common/api/practice.py` referenced `live_knowledge_answer_diagnostics` before assignment, and `backend/tests/conftest.py` no longer imported `agent.models`, which broke selective `Base.metadata.create_all()` runs after the `voice_runtime_profiles` foreign key landed. I fixed both so the planned verification command could run truthfully.\n\n## Known Issues\n\nNone.\n\n## Files Created/Modified\n\n- `backend/src/prompt_templates/api/routes.py`\n- `backend/src/presentation_coach/api/presentations.py`\n- `backend/src/common/auth/service.py`\n- `web/src/lib/api/client.ts`\n- `backend/tests/integration/test_prompt_templates_api_rbac.py`\n- `backend/tests/contract/test_presentations.py`\n- `backend/tests/integration/test_presentation_delete_permissions.py`\n- `web/src/lib/api/client.auth.test.ts`\n- `backend/tests/conftest.py`\n- `backend/src/common/api/practice.py`\n- `.gsd/DECISIONS.md`\n- `.gsd/KNOWLEDGE.md`\n- `.codex/loop/state.json`\n- `.codex/loop/log.md`\n",
       "description": "Why: 统一 outward 错误 shape 是 frontend client 和 admin/learner 页面停止 page-local 猜测的前提。\n\nDo:\n1. 为 domain、permission、not-found、validation error 收口统一 outward contract。\n2. 在高噪声 route family 上落这套 contract，而不是一次性扫完整个 backend。\n3. 对齐 frontend `apiFetch`，确保稳定解析这套 shape。\n4. 不重写 FastAPI 全局异常体系，只修当前 audit 命中的核心 surface。\n\nDone when: focused contract/integration proof 通过，frontend client 不再依赖页面本地错误猜测。",
       "estimate": "1h",
       "files": [
@@ -13395,6 +13412,18 @@
       "decision": "M016/S02 backend/frontend shared error-contract seam",
       "choice": "Use `common.api.response.error_response` + `common.api.server_error.build_server_error` as the backend outward error seam, and `web/src/lib/api/client.ts` `normalizeApiErrorPayload`/`ApiRequestError` as the frontend normalization seam; treat prompt templates as the closest existing model, while presentations string-detail branches, auth dependency `HTTPException` strings, and `getSegmentAudioBlobUrl()` manual parsing are the drift points to collapse in T02.",
       "rationale": "The prompt-template routes already prove the narrowest reusable pattern: domain/not-found 4xx carry `{error,message}` and infra 5xx go through the shared Result-style envelope with trace ids. Locking that seam avoids a broad FastAPI-wide exception rewrite and tells downstream work exactly where the remaining outward drift still leaks through.",
+      "revisable": "Yes",
+      "made_by": "agent",
+      "superseded_by": null
+    },
+    {
+      "seq": 1562,
+      "id": "D192",
+      "when_context": "M016/S02/T02",
+      "scope": "api-contract",
+      "decision": "How to normalize focused backend 4xx error envelopes in M016/S02",
+      "choice": "Use route-local `JSONResponse(error_response(...))` for the audited prompt-template and presentation 4xx surfaces, while keeping auth dependency failures on structured `HTTPException.detail={error,message}` because dependencies cannot safely short-circuit with response returns.",
+      "rationale": "FastAPI's shared HTTPException handler currently stringifies dict detail into the top-level `error/message` fields, so relying on bare route-level HTTPException keeps stable codes hidden under `detail` and forces clients to guess. Returning `JSONResponse(error_response(...))` from the focused route families yields the same top-level envelope as existing 5xx helpers without attempting a risky global exception rewrite. Auth dependencies still need to raise, so the smallest safe contract is to make their detail payload structured and let the frontend normalizer read it.",
       "revisable": "Yes",
       "made_by": "agent",
       "superseded_by": null
@@ -17140,6 +17169,61 @@
       "verdict": "✅ pass",
       "duration_ms": 1,
       "created_at": "2026-04-11T19:36:26.706Z"
+    },
+    {
+      "id": 346,
+      "task_id": "T02",
+      "slice_id": "S02",
+      "milestone_id": "M016",
+      "command": "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/integration/test_prompt_templates_api_rbac.py -q",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 2770,
+      "created_at": "2026-04-11T19:51:58.339Z"
+    },
+    {
+      "id": 347,
+      "task_id": "T02",
+      "slice_id": "S02",
+      "milestone_id": "M016",
+      "command": "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/contract/test_presentations.py backend/tests/integration/test_presentation_delete_permissions.py -q",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 1910,
+      "created_at": "2026-04-11T19:51:58.339Z"
+    },
+    {
+      "id": 348,
+      "task_id": "T02",
+      "slice_id": "S02",
+      "milestone_id": "M016",
+      "command": "npm --prefix web test -- --run src/lib/api/client.auth.test.ts",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 565,
+      "created_at": "2026-04-11T19:51:58.339Z"
+    },
+    {
+      "id": 349,
+      "task_id": "T02",
+      "slice_id": "S02",
+      "milestone_id": "M016",
+      "command": "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/contract/test_practice_evidence_contract.py -k \"kb_lock_chain_failures\" -q",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 1850,
+      "created_at": "2026-04-11T19:51:58.339Z"
+    },
+    {
+      "id": 350,
+      "task_id": "T02",
+      "slice_id": "S02",
+      "milestone_id": "M016",
+      "command": "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/contract/test_presentations.py backend/tests/contract/test_practice_evidence_contract.py backend/tests/integration/test_presentation_flow.py -x -q",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 4300,
+      "created_at": "2026-04-11T19:51:58.339Z"
     }
   ]
 }

@@ -313,3 +313,9 @@
 {"id":"d77cb0aa-d6b7-43a3-aed9-e9d15485ebee","ts":"2026-04-11T19:26:02.677Z","severity":"warning","message":"[safety] file-change: backend/tests/integration/test_password_reset_api.py — Modified but not in task plan's expected output","source":"workflow-logger","read":false}
 {"id":"bc69e09e-a6e8-4a78-91d3-2041320096e1","ts":"2026-04-11T19:26:02.677Z","severity":"warning","message":"Safety: 3 unexpected file change(s) outside task plan","source":"notify","read":false}
 {"id":"c8121601-ba54-4128-84e2-f1c47fb30695","ts":"2026-04-11T19:26:06.722Z","severity":"info","message":"Verification gate: 1/1 checks passed","source":"notify","read":false}
+{"id":"eeaf195a-9eae-4418-9f1f-fe093aef54c1","ts":"2026-04-11T19:36:33.956Z","severity":"info","message":"Committed: feat: Codified the high-noise API error-contract drift map beside the l…","source":"notify","read":false}
+{"id":"b16b8c6f-9bb3-4308-8e9c-bae521f436d8","ts":"2026-04-11T19:36:34.007Z","severity":"warning","message":"[safety] file-change: .codex/loop/log.md — Modified but not in task plan's expected output","source":"workflow-logger","read":false}
+{"id":"56c917ef-77e6-4088-9a50-b209eb513a29","ts":"2026-04-11T19:36:34.007Z","severity":"warning","message":"[safety] file-change: .codex/loop/state.json — Modified but not in task plan's expected output","source":"workflow-logger","read":false}
+{"id":"611b19e8-cfb4-4c79-96ef-a1a6c482ec91","ts":"2026-04-11T19:36:34.007Z","severity":"warning","message":"Safety: 2 unexpected file change(s) outside task plan","source":"notify","read":false}
+{"id":"dcaaef06-25d1-44ec-8b14-1aa82abc26bc","ts":"2026-04-11T19:36:42.848Z","severity":"info","message":"Verification gate: FAILED — npm run test","source":"notify","read":false}
+{"id":"c544ae41-dabc-461d-8234-d59a7e93d77a","ts":"2026-04-11T19:36:42.849Z","severity":"warning","message":"Verification failed in auto-discovered package.json checks — treating as advisory.","source":"notify","read":false}

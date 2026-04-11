@@ -48,6 +48,16 @@ security = HTTPBearer(auto_error=False)
 pwd_context = CryptContext(schemes=["pbkdf2_sha256", "bcrypt"], deprecated="auto")
 
 
+def _raise_auth_http_error(*, status_code: int, error_code: str, message: str) -> None:
+    raise HTTPException(
+        status_code=status_code,
+        detail={
+            "error": error_code,
+            "message": message,
+        },
+    )
+
+
 def _current_environment() -> str:
     return os.getenv("ENVIRONMENT", "development").strip().lower() or "development"
 
@@ -165,25 +175,45 @@ async def get_current_user(
         cookie_token=cookie_token,
     )
     if token is None:
-        raise HTTPException(status_code=401, detail="Not authenticated")
+        _raise_auth_http_error(
+            status_code=401,
+            error_code="[AUTHENTICATION_REQUIRED]",
+            message="当前请求需要登录后才能继续。",
+        )
 
     try:
         payload = verify_token(token)
         user_id: str = payload.get("sub")
         if user_id is None:
-            raise HTTPException(status_code=401, detail="Invalid token")
+            _raise_auth_http_error(
+                status_code=401,
+                error_code="[INVALID_TOKEN]",
+                message="登录态已失效，请重新登录。",
+            )
     except JWTError:
-        raise HTTPException(status_code=401, detail="Invalid token")
+        _raise_auth_http_error(
+            status_code=401,
+            error_code="[INVALID_TOKEN]",
+            message="登录态已失效，请重新登录。",
+        )
 
     # Cast UUID column to VARCHAR for string comparison
     result = await db.execute(select(User).where(cast(User.user_id, SQLAlchemyString) == user_id))
     user = result.scalar_one_or_none()
 
     if user is None:
-        raise HTTPException(status_code=401, detail="User not found")
+        _raise_auth_http_error(
+            status_code=401,
+            error_code="[AUTH_USER_NOT_FOUND]",
+            message="登录用户不存在或已被删除。",
+        )
 
     if not user.is_active:
-        raise HTTPException(status_code=403, detail="User account is disabled")
+        _raise_auth_http_error(
+            status_code=403,
+            error_code="[AUTH_USER_DISABLED]",
+            message="当前账号已被停用。",
+        )
 
     return user
 

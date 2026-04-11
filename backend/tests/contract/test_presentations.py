@@ -222,3 +222,20 @@ class TestPresentationsContract:
         ).scalar_one()
         assert persisted.version_number == 1
         assert persisted.status == "ready"
+
+    async def test_get_missing_presentation_returns_structured_not_found_envelope(
+        self,
+        async_client: AsyncClient,
+        contract_auth_headers: dict[str, str],
+    ):
+        response = await async_client.get(
+            "/api/v1/presentations/123e4567-e89b-12d3-a456-426614174000",
+            headers=contract_auth_headers,
+        )
+
+        assert response.status_code == 404
+        body = response.json()
+        assert body["success"] is False
+        assert body["error"] == "[PRESENTATION_NOT_FOUND]"
+        assert body["message"] == "演示文稿不存在。"
+        assert body.get("trace_id")

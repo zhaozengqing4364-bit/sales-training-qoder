@@ -69,6 +69,11 @@ async def test_delete_presentation_enforces_owner_or_admin(
         headers=_auth_headers(other_user),
     )
     assert forbidden_response.status_code == 403
+    forbidden_body = forbidden_response.json()
+    assert forbidden_body["success"] is False
+    assert forbidden_body["error"] == "[PRESENTATION_DELETE_FORBIDDEN]"
+    assert forbidden_body["message"] == "你没有权限删除该演示文稿。"
+    assert forbidden_body.get("trace_id")
 
     still_exists = (
         await test_db.execute(

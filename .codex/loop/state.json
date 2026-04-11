@@ -1,6 +1,6 @@
 {
   "mode": "grow",
-  "current_issue_id": "M016-S02-T01",
+  "current_issue_id": "M016-S02-T02",
   "current_issue_type": "task",
   "current_issue_status": "done",
   "pending_issue_ids": [],
@@ -161,7 +161,8 @@
     "M016-S01-T01",
     "M016-S01-T02",
     "M016-S01-T03",
-    "M016-S02-T01"
+    "M016-S02-T01",
+    "M016-S02-T02"
   ],
   "blocked_issue_ids": [],
   "deferred_issue_ids": [],
@@ -170,20 +171,31 @@
     "backend/src/presentation_coach/api/presentations.py",
     "backend/src/common/auth/service.py",
     "web/src/lib/api/client.ts",
+    "backend/tests/integration/test_prompt_templates_api_rbac.py",
+    "backend/tests/contract/test_presentations.py",
+    "backend/tests/integration/test_presentation_delete_permissions.py",
+    "web/src/lib/api/client.auth.test.ts",
+    "backend/tests/conftest.py",
+    "backend/src/common/api/practice.py",
     ".gsd/DECISIONS.md",
     ".gsd/KNOWLEDGE.md",
     ".codex/loop/state.json",
     ".codex/loop/log.md"
   ],
   "last_verification_commands": [
-    "rg -n \"HTTPException|except Exception\" backend/src/prompt_templates backend/src/presentation_coach backend/src/common/auth",
+    "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/integration/test_prompt_templates_api_rbac.py -q",
+    "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/contract/test_presentations.py backend/tests/integration/test_presentation_delete_permissions.py -q",
+    "npm --prefix web test -- --run src/lib/api/client.auth.test.ts",
+    "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/contract/test_practice_evidence_contract.py -k \"kb_lock_chain_failures\" -q",
+    "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/contract/test_presentations.py backend/tests/contract/test_practice_evidence_contract.py backend/tests/integration/test_presentation_flow.py -x -q",
     "lsp diagnostics backend/src/prompt_templates/api/routes.py",
     "lsp diagnostics backend/src/presentation_coach/api/presentations.py",
     "lsp diagnostics backend/src/common/auth/service.py",
-    "lsp diagnostics web/src/lib/api/client.ts"
+    "lsp diagnostics web/src/lib/api/client.ts",
+    "lsp diagnostics backend/src/common/api/practice.py"
   ],
-  "last_verification_result": "passed; the planned rg inventory still shows the intended drift surface, and fresh LSP diagnostics were clean on backend/src/prompt_templates/api/routes.py, backend/src/presentation_coach/api/presentations.py, backend/src/common/auth/service.py, and web/src/lib/api/client.ts after the seam writeback.",
-  "last_success_signal": "M016/S02/T01 now leaves one durable drift map in code + knowledge: prompt templates define the closest reusable backend error seam, while presentations string-detail branches, auth dependency HTTPExceptions, and the segment-audio client parser are the exact hotspots for T02 contract collapse.",
+  "last_verification_result": "passed; prompt-template RBAC/not-found integration, presentation contract + delete-permission integration, focused frontend API-client auth tests, the targeted practice-evidence knowledge-check regression, and the slice verification command all finished green, while fresh LSP diagnostics stayed clean on the touched backend/frontend authority files.",
+  "last_success_signal": "M016/S02/T02 now leaves the audited prompt-template and presentation 4xx surfaces on the shared top-level error envelope, auth dependencies emit structured {error,message} detail for protected-route failures, and the frontend API client normalizes route-local, dependency, and validation-array failures into one ApiRequestError seam.",
   "last_growth_scan": null,
-  "next_action": "Continue M016/S02 with T02 by collapsing the documented drift hotspots onto the shared backend/frontend error-contract seam."
+  "next_action": "Continue M016/S02 with slice completion or downstream adoption work that consumes the now-stable backend/frontend error-contract seam."
 }

@@ -1660,6 +1660,7 @@ async def get_session_knowledge_check(
     live_claim_truth = None
     live_coach_health = None
     live_session_summary = None
+    live_knowledge_answer_diagnostics = None
     session_info = get_session_manager().sessions.get(session_id)
     live_handler = session_info.handler if session_info is not None else None
     live_runtime_active = live_handler is not None
@@ -1673,6 +1674,9 @@ async def get_session_knowledge_check(
                 )
                 live_claim_truth = deepcopy(runtime_diagnostics.get("claim_truth"))
                 live_coach_health = deepcopy(runtime_diagnostics.get("coach_health"))
+                live_knowledge_answer_diagnostics = deepcopy(
+                    runtime_diagnostics.get("knowledge_answer_diagnostics")
+                )
         if live_session_summary is None:
             live_session_summary = deepcopy(
                 getattr(live_handler, "_latest_live_session_summary", None)
@@ -1681,6 +1685,10 @@ async def get_session_knowledge_check(
             live_claim_truth = deepcopy(live_session_summary.get("claim_truth"))
         if live_claim_truth is None:
             live_claim_truth = deepcopy(getattr(live_handler, "_latest_claim_truth", None))
+        if live_knowledge_answer_diagnostics is None:
+            live_knowledge_answer_diagnostics = deepcopy(
+                getattr(live_handler, "_latest_knowledge_answer_diagnostics", None)
+            )
         if live_coach_health is None:
             live_coach_health = {
                 "status": str(getattr(live_handler, "_coach_health", "healthy") or "healthy"),

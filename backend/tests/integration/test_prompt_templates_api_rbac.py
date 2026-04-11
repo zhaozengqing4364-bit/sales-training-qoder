@@ -194,3 +194,16 @@ class TestPromptTemplateRBAC:
         assert response.status_code == 400
         detail = response.json().get("detail", {})
         assert detail.get("error") == "[PROMPT_TEMPLATE_ID_INVALID]"
+
+    async def test_admin_get_missing_template_returns_structured_not_found_envelope(self, async_client, auth_headers):
+        response = await async_client.get(
+            "/api/v1/prompt-templates/123e4567-e89b-12d3-a456-426614174000",
+            headers=auth_headers["admin"],
+        )
+
+        assert response.status_code == 404
+        body = response.json()
+        assert body["success"] is False
+        assert body["error"] == "[PROMPT_TEMPLATE_NOT_FOUND]"
+        assert body["message"] == "模板不存在"
+        assert body.get("trace_id")

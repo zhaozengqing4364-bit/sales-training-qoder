@@ -198,7 +198,12 @@ function triggerSessionExpiredOnce(): void {
 
 const API_ERROR_MESSAGE_MAP: Record<string, string> = {
     "[NETWORK_ERROR]": "网络连接失败，请检查后端服务或网络设置后重试。",
+    "[REQUEST_VALIDATION_ERROR]": "请求参数缺失或格式不正确，请检查后重试。",
     "[INVALID_CLIENT_PAYLOAD]": "请求参数无效，请刷新页面后重试。",
+    "[AUTHENTICATION_REQUIRED]": "当前请求需要登录后才能继续。",
+    "[INVALID_TOKEN]": "登录态已失效，请重新登录。",
+    "[AUTH_USER_NOT_FOUND]": "登录用户不存在或已被删除。",
+    "[AUTH_USER_DISABLED]": "当前账号已被停用。",
     "[AGENT_PERSONA_PAIR_REQUIRED]": "请选择智能体与角色后再开始训练。",
     "[AGENT_ARCHIVED]": "该智能体已归档，暂时无法创建训练会话。",
     "[AGENT_NOT_PUBLISHED]": "该智能体尚未发布，请选择可用智能体。",
@@ -212,7 +217,13 @@ const API_ERROR_MESSAGE_MAP: Record<string, string> = {
     "[SESSION_NOT_COMPLETED]": "当前会话还在评分中，回放会在持久化完成后解锁。",
     "[ACCESS_DENIED]": "你没有权限访问该会话。",
     "[PROMPT_TEMPLATE_EDIT_ADMIN_ONLY]": "仅管理员可访问提示词治理接口。",
+    "[PROMPT_TEMPLATE_NOT_FOUND]": "模板不存在。",
+    "[SCENARIO_PROMPT_NOT_FOUND]": "场景提示词绑定不存在。",
     "[ROLE_REQUIRED]": "当前账号权限不足，无法执行该操作。",
+    "[PRESENTATION_NOT_FOUND]": "演示文稿不存在。",
+    "[PRESENTATION_DELETE_FORBIDDEN]": "你没有权限删除该演示文稿。",
+    "[PRESENTATION_PAGE_NOT_FOUND]": "演示页不存在。",
+    "[PRESENTATION_THUMBNAIL_NOT_FOUND]": "演示页缩略图不存在。",
     "[PRESENTATION_REPLACE_BLOCKED_ACTIVE_SESSION]": "当前有进行中的演练正在使用该标准PPT，请结束后再替换。",
 };
 
@@ -236,21 +247,39 @@ function normalizeApiErrorPayload(status: number, payload: unknown): NormalizedA
     const raw = (payload && typeof payload === "object")
         ? payload as Record<string, unknown>
         : {};
-    const detail = (raw.detail && typeof raw.detail === "object")
+    const detail = (raw.detail && typeof raw.detail === "object" && !Array.isArray(raw.detail))
         ? raw.detail as Record<string, unknown>
-        : raw;
+        : null;
+    const validationItems = Array.isArray(raw.detail) ? raw.detail : null;
 
-    const rawCode = detail.error ?? detail.error_code;
+    const rawCode = detail?.error
+        ?? detail?.error_code
+        ?? raw.error
+        ?? raw.error_code;
     const errorCode = typeof rawCode === "string" && rawCode.trim()
-        ? rawCode
-        : `[HTTP_${status}]`;
-    const rawMessage = detail.message;
+        ? rawCode.trim()
+        : validationItems
+            ? "[REQUEST_VALIDATION_ERROR]"
+            : `[HTTP_${status}]`;
+
+    const validationMessage = validationItems
+        ?.map((item) => {
+            if (!item || typeof item !== "object") {
+                return "";
+            }
+            const msg = (item as { msg?: unknown }).msg;
+            return typeof msg === "string" ? msg.trim() : "";
+        })
+        .find(Boolean);
+
+    const rawMessage = detail?.message ?? raw.message;
     const message = typeof rawMessage === "string" && rawMessage.trim()
-        ? rawMessage
-        : errorCode;
-    const rawTraceId = detail.trace_id;
+        ? rawMessage.trim()
+        : validationMessage || errorCode;
+
+    const rawTraceId = raw.trace_id ?? detail?.trace_id;
     const traceId = typeof rawTraceId === "string" && rawTraceId.trim()
-        ? rawTraceId
+        ? rawTraceId.trim()
         : undefined;
 
     return { status, errorCode, message, traceId };
@@ -1782,40 +1811,43 @@ export const api = {
         },
 
         getSegmentAudioBlobUrl: async (sessionId: string, segmentSequence: number) => {
-            // M016/S02/T01 drift note: this endpoint still bypasses ApiRequestError and manually
-            // inspects detail.error/error_code from the raw payload. T02 should collapse it onto
-            // normalizeApiErrorPayload(...) so audio fetch failures stop carrying a custom parser.
-            const response = await fetch(
-                `${resolveApiBaseUrl()}/sessions/${sessionId}/audio-segments/${segmentSequence}`,
-                { credentials: "include" },
-            );
+            try {
+                const response = await fetchWithLoopbackRetry(
+                    `${resolveApiBaseUrl()}/sessions/${sessionId}/audio-segments/${segmentSequence}`,
+                    {
+                        credentials: "include",
+                        headers: createHeaders(undefined, false),
+                    },
+                );
 
-            if (!response.ok) {
-                try {
-                    const payload = await response.json();
-                    const detail = payload && typeof payload === "object"
-                        ? (payload.detail && typeof payload.detail === "object" ? payload.detail : payload)
-                        : {};
-                    const errorCode = typeof detail.error === "string" && detail.error.trim()
-                        ? detail.error.trim()
-                        : typeof detail.error_code === "string" && detail.error_code.trim()
-                            ? detail.error_code.trim()
-                            : null;
-
-                    if (errorCode) {
-                        throw new Error(errorCode);
-                    }
-                } catch (parseError) {
-                    if (parseError instanceof Error && parseError.message) {
-                        throw parseError;
-                    }
+                if (!response.ok) {
+                    const payload = await response.json().catch(() => ({}));
+                    throw new ApiRequestError(
+                        normalizeApiErrorPayload(response.status, payload),
+                    );
                 }
 
-                throw new Error(`HTTP ${response.status}`);
-            }
+                const blob = await response.blob();
+                return URL.createObjectURL(blob);
+            } catch (error) {
+                if (error instanceof ApiRequestError) {
+                    throw error;
+                }
 
-            const blob = await response.blob();
-            return URL.createObjectURL(blob);
+                if (error instanceof Error && error.name === "AbortError") {
+                    throw error;
+                }
+
+                const message = error instanceof Error && error.message.trim()
+                    ? error.message
+                    : "请求失败，请稍后重试。";
+
+                throw new ApiRequestError({
+                    status: 0,
+                    errorCode: "[NETWORK_ERROR]",
+                    message,
+                });
+            }
         },
     },
 
