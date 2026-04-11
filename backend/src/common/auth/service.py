@@ -225,10 +225,11 @@ async def get_current_admin_user(
     Get current user and verify they have admin role.
     Use this dependency for admin-only endpoints.
     """
-    if not hasattr(current_user, 'role') or current_user.role != "admin":
-        raise HTTPException(
+    if not hasattr(current_user, "role") or current_user.role != "admin":
+        _raise_auth_http_error(
             status_code=403,
-            detail="[ADMIN_REQUIRED] This action requires administrator privileges"
+            error_code="[ROLE_REQUIRED]",
+            message="当前账号权限不足，无法执行该操作。",
         )
     return current_user
 
@@ -243,11 +244,12 @@ def require_role(allowed_roles: list[str]):
             ...
     """
     async def role_checker(current_user: User = Depends(get_current_user)) -> User:
-        user_role = getattr(current_user, 'role', 'user')
+        user_role = getattr(current_user, "role", "user")
         if user_role not in allowed_roles:
-            raise HTTPException(
+            _raise_auth_http_error(
                 status_code=403,
-                detail=f"[ROLE_REQUIRED] Required roles: {', '.join(allowed_roles)}"
+                error_code="[ROLE_REQUIRED]",
+                message="当前账号权限不足，无法执行该操作。",
             )
         return current_user
     return role_checker

@@ -48,7 +48,7 @@ Done when: focused contract/integration proof 通过，frontend client 不再依
   - Files: `backend/src/prompt_templates/api/routes.py`, `backend/src/presentation_coach/api/presentations.py`, `backend/src/common/auth/service.py`, `web/src/lib/api/client.ts`
   - Verify: backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/contract/test_presentations.py backend/tests/contract/test_practice_evidence_contract.py backend/tests/integration/test_presentation_flow.py -x -q
 
-- [ ] **T03: 为统一错误 shape 补跨端 proof** `est:40m`
+- [x] **T03: 为统一错误 shape 补跨端 proof** `est:40m`
   Why: 如果没有 focused proof，错误 shape 很容易在某个 route family 的局部修补中再次漂移。
 
 Do:

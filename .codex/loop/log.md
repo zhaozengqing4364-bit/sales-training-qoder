@@ -1,3 +1,25 @@
+- time: 2026-04-12T03:58:20+08:00
+  mode: grow
+  item id: M016-S02-T03
+  files changed:
+    - backend/src/common/auth/service.py
+    - backend/tests/contract/test_presentations.py
+    - web/src/lib/api/client.auth.test.ts
+    - .gsd/KNOWLEDGE.md
+    - .codex/loop/state.json
+    - .codex/loop/log.md
+  summary: Added cross-end proof for the unified API error seam by locking presentation/admin role-guard responses to structured auth detail payloads and proving the frontend API client still normalizes those dependency failures through ApiRequestError without page-local parsing.
+  verification commands:
+    - backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/contract/test_presentations.py -k "structured_detail_payload" -q
+    - npm --prefix web test -- --run src/lib/api/client.auth.test.ts
+    - backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/contract/test_presentations.py backend/tests/contract/test_practice_evidence_contract.py backend/tests/integration/test_presentation_flow.py -x -q
+    - lsp diagnostics backend/src/common/auth/service.py
+    - lsp diagnostics backend/tests/contract/test_presentations.py
+    - lsp diagnostics web/src/lib/api/client.auth.test.ts
+  verification results: passed; the new role-guard backend proof finished green, the focused frontend API-client auth suite finished 9/9 green including dependency-detail normalization, the slice verification command finished 33/33 green, and diagnostics stayed clean on the touched auth/test files.
+  success signal status: backend dependency guards no longer leak raw-string 403 detail on presentation/admin routes, and frontend callers keep one stable ApiRequestError seam across dependency detail, route-local envelopes, and validation arrays.
+  rollback note: if later auth or middleware work changes dependency-failure behavior, keep `get_current_user`/`get_current_admin_user`/`require_role(...)`, `backend/tests/contract/test_presentations.py`, and `web/src/lib/api/client.auth.test.ts` aligned together; otherwise admin/protected-route failures will silently fall back to generic HTTP_403 guessing.
+
 - time: 2026-04-12T03:49:54+0800
   mode: grow
   item id: M016-S02-T02

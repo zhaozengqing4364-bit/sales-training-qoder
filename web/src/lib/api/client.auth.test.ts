@@ -218,4 +218,20 @@ describe("API client 401 handling", () => {
             rawMessage: "Field required",
         });
     });
+
+    it("normalizes dependency detail payloads for admin-only endpoints", async () => {
+        mockFetchResponse(403, {
+            detail: {
+                error: "[ROLE_REQUIRED]",
+                message: "当前账号权限不足，无法执行该操作。",
+            },
+        });
+
+        await expect(api.admin.getKnowledgeBases()).rejects.toMatchObject({
+            name: "ApiRequestError",
+            status: 403,
+            errorCode: "[ROLE_REQUIRED]",
+            rawMessage: "当前账号权限不足，无法执行该操作。",
+        });
+    });
 });

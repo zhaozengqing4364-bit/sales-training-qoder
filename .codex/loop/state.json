@@ -1,6 +1,6 @@
 {
   "mode": "grow",
-  "current_issue_id": "M016-S02-T02",
+  "current_issue_id": "M016-S02-T03",
   "current_issue_type": "task",
   "current_issue_status": "done",
   "pending_issue_ids": [],
@@ -162,40 +162,29 @@
     "M016-S01-T02",
     "M016-S01-T03",
     "M016-S02-T01",
-    "M016-S02-T02"
+    "M016-S02-T02",
+    "M016-S02-T03"
   ],
   "blocked_issue_ids": [],
   "deferred_issue_ids": [],
   "last_modified_files": [
-    "backend/src/prompt_templates/api/routes.py",
-    "backend/src/presentation_coach/api/presentations.py",
     "backend/src/common/auth/service.py",
-    "web/src/lib/api/client.ts",
-    "backend/tests/integration/test_prompt_templates_api_rbac.py",
     "backend/tests/contract/test_presentations.py",
-    "backend/tests/integration/test_presentation_delete_permissions.py",
     "web/src/lib/api/client.auth.test.ts",
-    "backend/tests/conftest.py",
-    "backend/src/common/api/practice.py",
-    ".gsd/DECISIONS.md",
     ".gsd/KNOWLEDGE.md",
     ".codex/loop/state.json",
     ".codex/loop/log.md"
   ],
   "last_verification_commands": [
-    "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/integration/test_prompt_templates_api_rbac.py -q",
-    "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/contract/test_presentations.py backend/tests/integration/test_presentation_delete_permissions.py -q",
+    "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/contract/test_presentations.py -k \"structured_detail_payload\" -q",
     "npm --prefix web test -- --run src/lib/api/client.auth.test.ts",
-    "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/contract/test_practice_evidence_contract.py -k \"kb_lock_chain_failures\" -q",
     "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/contract/test_presentations.py backend/tests/contract/test_practice_evidence_contract.py backend/tests/integration/test_presentation_flow.py -x -q",
-    "lsp diagnostics backend/src/prompt_templates/api/routes.py",
-    "lsp diagnostics backend/src/presentation_coach/api/presentations.py",
     "lsp diagnostics backend/src/common/auth/service.py",
-    "lsp diagnostics web/src/lib/api/client.ts",
-    "lsp diagnostics backend/src/common/api/practice.py"
+    "lsp diagnostics backend/tests/contract/test_presentations.py",
+    "lsp diagnostics web/src/lib/api/client.auth.test.ts"
   ],
-  "last_verification_result": "passed; prompt-template RBAC/not-found integration, presentation contract + delete-permission integration, focused frontend API-client auth tests, the targeted practice-evidence knowledge-check regression, and the slice verification command all finished green, while fresh LSP diagnostics stayed clean on the touched backend/frontend authority files.",
-  "last_success_signal": "M016/S02/T02 now leaves the audited prompt-template and presentation 4xx surfaces on the shared top-level error envelope, auth dependencies emit structured {error,message} detail for protected-route failures, and the frontend API client normalizes route-local, dependency, and validation-array failures into one ApiRequestError seam.",
+  "last_verification_result": "passed; the new role-guard contract proof finished green on both user and admin presentation surfaces, the focused frontend API-client auth suite finished 9/9 green including dependency-detail normalization, the slice verification command finished 33/33 green, and fresh LSP diagnostics stayed clean on the touched auth/test files.",
+  "last_success_signal": "M016/S02/T03 now proves the shared error seam end to end: backend role/admin dependency guards emit structured {error,message} detail payloads, presentation contract tests catch regressions on those guards, and the frontend API client continues normalizing dependency, route-local, and validation failures through one ApiRequestError path without page-local guessing.",
   "last_growth_scan": null,
-  "next_action": "Continue M016/S02 with slice completion or downstream adoption work that consumes the now-stable backend/frontend error-contract seam."
+  "next_action": "Complete slice S02 or continue downstream work that consumes the now-proved backend/frontend error-contract seam."
 }

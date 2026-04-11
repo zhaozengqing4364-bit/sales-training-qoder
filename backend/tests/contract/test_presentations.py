@@ -239,3 +239,49 @@ class TestPresentationsContract:
         assert body["error"] == "[PRESENTATION_NOT_FOUND]"
         assert body["message"] == "演示文稿不存在。"
         assert body.get("trace_id")
+
+    async def test_presentations_role_guard_returns_structured_detail_payload(
+        self,
+        async_client: AsyncClient,
+        contract_auth_headers: dict[str, str],
+        test_db: AsyncSession,
+        test_user: User,
+    ):
+        test_user.role = "support"
+        await test_db.commit()
+
+        response = await async_client.get(
+            "/api/v1/presentations",
+            headers=contract_auth_headers,
+        )
+
+        assert response.status_code == 403
+        body = response.json()
+        assert body.get("trace_id")
+        assert body["detail"] == {
+            "error": "[ROLE_REQUIRED]",
+            "message": "当前账号权限不足，无法执行该操作。",
+        }
+
+    async def test_admin_role_guard_returns_structured_detail_payload(
+        self,
+        async_client: AsyncClient,
+        contract_auth_headers: dict[str, str],
+        test_db: AsyncSession,
+        test_user: User,
+    ):
+        test_user.role = "user"
+        await test_db.commit()
+
+        response = await async_client.get(
+            "/api/v1/admin/presentations",
+            headers=contract_auth_headers,
+        )
+
+        assert response.status_code == 403
+        body = response.json()
+        assert body.get("trace_id")
+        assert body["detail"] == {
+            "error": "[ROLE_REQUIRED]",
+            "message": "当前账号权限不足，无法执行该操作。",
+        }
