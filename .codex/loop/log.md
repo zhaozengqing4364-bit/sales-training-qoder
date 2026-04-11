@@ -1,3 +1,65 @@
+- time: 2026-04-12T02:32:30+08:00
+  mode: grow
+  item id: M015-S03-T01
+  files changed:
+    - web/src/app/(dashboard)/history/loading.tsx
+    - web/src/app/(user)/practice/[sessionId]/report/loading.tsx
+    - web/src/app/(user)/practice/[sessionId]/replay/loading.tsx
+    - web/src/app/(auth)/login/page.tsx
+    - web/src/app/(auth)/forgot-password/page.tsx
+    - web/src/app/(auth)/reset-password/page.tsx
+    - web/src/app/(auth)/login/page.test.tsx
+    - .gsd/KNOWLEDGE.md
+    - .codex/loop/state.json
+    - .codex/loop/log.md
+  summary: Established the learner fallback/baseline matrix for M015/S03, recorded the real learner-core gap list in T01-RESEARCH, and shipped the low-risk a11y subset now: existing loading shells announce status and auth forms/errors expose explicit labels/alerts.
+  verification commands:
+    - find web/src/app -type f \( -name 'error.tsx' -o -name 'loading.tsx' \) | sort
+    - npm --prefix web test -- --run "src/app/(auth)/login/page.test.tsx" "src/app/(auth)/forgot-password/login-recovery.test.tsx" "src/app/(auth)/reset-password/login-reset.test.tsx"
+    - lsp diagnostics web/src/app/(auth)/login/page.tsx
+    - lsp diagnostics web/src/app/(auth)/forgot-password/page.tsx
+    - lsp diagnostics web/src/app/(auth)/reset-password/page.tsx
+    - lsp diagnostics web/src/app/(dashboard)/history/loading.tsx
+    - lsp diagnostics web/src/app/(auth)/login/page.test.tsx
+  verification results: passed; the route-file scan confirmed the current fallback inventory used in the matrix, the focused auth suite finished 9/9 green after the label/alert updates, and diagnostics were clean on the touched auth/history files.
+  success signal status: downstream S03 work now has one durable learner-core route matrix, one documented deferred responsive/timezone boundary, and one small shipped a11y baseline so T02 can focus on real fallback gaps instead of re-triaging scope.
+  rollback note: if later S03 tasks add or remove learner-core routes, update the T01 research matrix and the learner-core scope rule in .gsd/KNOWLEDGE.md together; do not let `/support/runtime` or other role-gated dashboard pages drift into learner fallback closure by accident.
+
+- time: 2026-04-12T02:17:45+08:00
+  mode: grow
+  item id: M015-S02
+  files changed:
+    - web/src/lib/auth-handler.ts
+    - web/src/components/providers/app-providers.tsx
+    - web/src/components/layout/dashboard-shell.tsx
+    - web/src/components/layout/admin-shell.tsx
+    - web/src/app/admin/records/page.tsx
+    - web/src/app/admin/rag-profiles/page.tsx
+    - web/src/app/admin/personas/[id]/page.tsx
+    - web/src/lib/auth-handler.test.ts
+    - web/src/app/admin/records/page.test.tsx
+    - web/src/app/admin/rag-profiles/page.test.tsx
+    - web/src/app/admin/personas/[id]/page.test.tsx
+    - .gsd/PROJECT.md
+    - .codex/loop/state.json
+    - .codex/loop/log.md
+  summary: Closed M015/S02 after fresh slice-level verification confirmed native dialog and hard browser navigation are removed from the planned admin/learner business flows, with auth redirects, destructive confirms, and validation/save feedback all routed through shared authHandler/router/dialog/toast seams.
+  verification commands:
+    - rg -n "\b(alert|confirm)\s*\(|window\.location(\.assign|\.href)" web/src
+    - node allowlist interruptive-ui grep check across web/src
+    - npm --prefix web test -- --run "src/app/admin/personas/[id]/page.test.tsx" "src/app/(auth)/login/page.test.tsx"
+    - npm --prefix web test -- --run src/app/admin/records/page.test.tsx src/lib/auth-handler.test.ts src/components/layout/dashboard-shell.test.tsx src/components/layout/admin-shell.test.tsx src/app/admin/rag-profiles/page.test.tsx
+    - lsp diagnostics web/src/lib/auth-handler.ts
+    - lsp diagnostics web/src/components/providers/app-providers.tsx
+    - lsp diagnostics web/src/components/layout/dashboard-shell.tsx
+    - lsp diagnostics web/src/components/layout/admin-shell.tsx
+    - lsp diagnostics web/src/app/admin/records/page.tsx
+    - lsp diagnostics web/src/app/admin/rag-profiles/page.tsx
+    - lsp diagnostics web/src/app/admin/personas/*/page.tsx
+  verification results: passed; the raw grep now reports only documented exceptions in ErrorBoundary/performance/admin-error, the stricter allowlist check confirmed no undisclosed native-dialog or hard-navigation hits remain, the focused persona/login suite finished 7/7 green, the expanded seam suite finished 14/14 green, and diagnostics were clean on the touched auth/router/admin authority files.
+  success signal status: downstream learner-shell work now inherits one router-aware auth redirect seam, one reusable ConfirmDialog+toast destructive-action pattern, and one strict grep/test boundary for preventing regressions in native dialogs or hard redirects.
+  rollback note: if a later slice changes the remaining exception set or adds new auth/destructive flows, update interruptiveUiInventory, its focused tests, and the grep allowlist together instead of letting page-local alert/confirm/location usage drift back into business code.
+
 - time: 2026-04-12T01:36:20+08:00
   mode: grow
   item id: M015-S01

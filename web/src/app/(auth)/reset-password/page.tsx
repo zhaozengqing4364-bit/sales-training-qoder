@@ -14,7 +14,8 @@ export default function ResetPasswordPage() {
     return (
         <Suspense
             fallback={
-                <div className="min-h-screen flex items-center justify-center">
+                <div className="min-h-screen flex items-center justify-center" role="status" aria-live="polite" aria-busy="true">
+                    <span className="sr-only">正在加载重置密码页面</span>
                     <p className="text-slate-500">加载中...</p>
                 </div>
             }
@@ -113,7 +114,7 @@ function ResetPasswordContent() {
 
                 <form onSubmit={handleSubmit} className="space-y-4">
                     {error && (
-                        <div className="p-3 rounded-lg bg-red-50 border border-red-100 text-red-600 text-sm flex items-center">
+                        <div role="alert" className="p-3 rounded-lg bg-red-50 border border-red-100 text-red-600 text-sm flex items-center">
                             <AlertCircle className="w-4 h-4 mr-2 shrink-0" />
                             {error}
                         </div>

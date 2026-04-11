@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "taskId": "T03",
+  "unitId": "M015/S02/T03",
+  "timestamp": 1775931302332,
+  "passed": true,
+  "discoverySource": "task-plan",
+  "checks": [
+    {
+      "command": "npm --prefix web test -- --run \"src/app/admin/personas/[id]/page.test.tsx\" \"src/app/(auth)/login/page.test.tsx\"",
+      "exitCode": 0,
+      "durationMs": 1322,
+      "verdict": "pass"
+    }
+  ]
+}

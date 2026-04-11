@@ -44,10 +44,17 @@ describe("LoginPage", () => {
         expect(screen.getByText("企业微信登录即将支持，敬请期待")).toBeTruthy();
     });
 
+    it("provides explicit accessible labels for the login fields", () => {
+        render(<LoginPage />);
+
+        expect(screen.getByLabelText("邮箱地址")).toBeTruthy();
+        expect(screen.getByLabelText("密码")).toBeTruthy();
+    });
+
     it("preserves a typed email when handing off to forgot-password", () => {
         render(<LoginPage />);
 
-        fireEvent.change(screen.getByPlaceholderText("name@company.com"), {
+        fireEvent.change(screen.getByLabelText("邮箱地址"), {
             target: { value: "  admin@test.com  " },
         });
 
@@ -69,10 +76,10 @@ describe("LoginPage", () => {
 
         render(<LoginPage />);
 
-        fireEvent.change(screen.getByPlaceholderText("name@company.com"), {
+        fireEvent.change(screen.getByLabelText("邮箱地址"), {
             target: { value: "admin@test.com" },
         });
-        fireEvent.change(screen.getByPlaceholderText("••••••••"), {
+        fireEvent.change(screen.getByLabelText("密码"), {
             target: { value: "password" },
         });
         fireEvent.click(screen.getByRole("button", { name: /^登录/ }));

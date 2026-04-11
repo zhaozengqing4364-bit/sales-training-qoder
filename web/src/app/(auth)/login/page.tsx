@@ -75,13 +75,15 @@ export default function LoginPage() {
 
                     <form onSubmit={handleLogin} className="space-y-4">
                         {error && (
-                            <div className="p-3 rounded-lg bg-red-50 border border-red-100 text-red-600 text-sm flex items-center">
+                            <div role="alert" className="p-3 rounded-lg bg-red-50 border border-red-100 text-red-600 text-sm flex items-center">
                                 <AlertCircle className="w-4 h-4 mr-2" />
                                 {error}
                             </div>
                         )}
                         <div className="space-y-2">
+                            <label className="sr-only" htmlFor="login-email">邮箱地址</label>
                             <Input 
+                                id="login-email"
                                 type="email"
                                 name="email"
                                 autoComplete="username"
@@ -101,7 +103,9 @@ export default function LoginPage() {
                                     忘记密码？
                                 </Link>
                             </div>
+                            <label className="sr-only" htmlFor="login-password">密码</label>
                             <Input
+                                id="login-password"
                                 type="password"
                                 name="password"
                                 autoComplete="current-password"

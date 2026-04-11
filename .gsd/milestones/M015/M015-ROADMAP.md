@@ -7,5 +7,5 @@
 | ID | Slice | Risk | Depends | Done | After this |
 |----|-------|------|---------|------|------------|
 | S01 | S01 | medium | — | ✅ | 前端业务页面中的 console 输出被统一收口到共享 debug/observability seam。 |
-| S02 | S02 | medium | — | ⬜ | 业务页面中的原生弹窗和直接浏览器跳转被替换为 toast/dialog/router/auth-handler seam。 |
-| S03 | Learner error/loading 覆盖与 responsive/a11y/timezone baseline | medium | S02 | ⬜ | learner 核心路由都有 error/loading fallback，且 baseline responsive/a11y/timezone 风险有记录和低风险修复。 |
+| S02 | S02 | medium | — | ✅ | 业务页面中的原生弹窗和直接浏览器跳转被替换为 toast/dialog/router/auth-handler seam。 |
+| S03 | S03 | medium | — | ⬜ | learner 核心路由都有 error/loading fallback，且 baseline responsive/a11y/timezone 风险有记录和低风险修复。 |
