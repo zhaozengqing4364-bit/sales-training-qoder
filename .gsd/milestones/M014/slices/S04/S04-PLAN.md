@@ -48,7 +48,7 @@ Done when: practice 主页面在开练前和中断失败时都能给出可理解
   - Files: `web/src/app/(user)/practice/[sessionId]/page.tsx`, `web/src/app/(user)/practice/test-mic/*`
   - Verify: npm --prefix web test -- --run "src/app/(user)/practice/[sessionId]/page.test.tsx" "src/app/(user)/practice/[sessionId]/use-practice-session-lifecycle.test.ts"
 
-- [ ] **T03: 为 practice preflight/interruption UX 补 proof** `est:35m`
+- [x] **T03: 为 practice preflight/interruption UX 补 proof** `est:35m`
   Why: preflight 信息和 interruption 提示都是容易在后续 practice 改动中消失的 UI contract，需要 focused proof 锁住。
 
 Do:

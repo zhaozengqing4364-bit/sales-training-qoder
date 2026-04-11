@@ -183,6 +183,32 @@ describe("usePracticeSessionLifecycle", () => {
         });
     });
 
+    it("stays on the practice page and preserves actionable backend detail when ending fails", async () => {
+        endSession.mockRejectedValueOnce(new Error("报告生成超时，请稍后再试。"));
+
+        const { result } = renderHook(() =>
+            usePracticeSessionLifecycle({
+                sessionId: "session-4",
+                connectionState: "connected",
+                sessionStatus: "in_progress",
+                isRecordingRef: { current: false },
+                stopRecording: vi.fn(),
+            }),
+        );
+
+        await act(async () => {
+            await result.current.handleEndSession();
+        });
+
+        expect(routerPush).not.toHaveBeenCalled();
+        expect(result.current.isEndingSession).toBe(false);
+        expect(result.current.lifecycleError).toEqual({
+            action: "end",
+            message: "结束失败，请再试一次。报告生成超时，请稍后再试。",
+            guidance: "请先确认连接正常，再点击“结束练习”；如果仍失败，可先重新连接后重试结束。",
+        });
+    });
+
     it("stays on the practice page and exposes the end error when ending fails", async () => {
         endSession.mockRejectedValueOnce(new Error("结束失败，请重试"));
 

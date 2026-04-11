@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "exported_at": "2026-04-11T16:35:04.056Z",
+  "exported_at": "2026-04-11T16:39:25.301Z",
   "milestones": [
     {
       "id": "M001",
@@ -9552,19 +9552,24 @@
       "milestone_id": "M014",
       "slice_id": "S04",
       "id": "T03",
-      "title": "为 practice preflight/interruption UX 补 proof",
-      "status": "pending",
-      "one_liner": "",
-      "narrative": "",
-      "verification_result": "",
+      "title": "Locked practice preflight, interruption recovery, and test-mic boundary contracts with focused learner-facing tests.",
+      "status": "complete",
+      "one_liner": "Locked practice preflight, interruption recovery, and test-mic boundary contracts with focused learner-facing tests.",
+      "narrative": "I extended the existing focused practice suites instead of adding a new umbrella test. In `web/src/app/(user)/practice/[sessionId]/page.test.tsx`, I added learner-visible proof that the preflight card only appears before a conversation starts, that end-failure interruption copy exposes the retry/end + reconnect recovery actions, and that the learner practice shell stays free of the developer-only `test-mic` wording. In `web/src/app/(user)/practice/[sessionId]/use-practice-session-lifecycle.test.ts`, I added proof that end-session failures preserve actionable backend detail inside the learner-facing error message. No production code changes were required because the shipped page and lifecycle hook already satisfied these contracts; this task’s deliverable was the regression proof.",
+      "verification_result": "Ran the slice’s focused verification gate: `npm --prefix web test -- --run \"src/app/(user)/practice/[sessionId]/page.test.tsx\" \"src/app/(user)/practice/[sessionId]/use-practice-session-lifecycle.test.ts\"`. The run finished with 2 test files passing and 17/17 tests green, confirming the preflight card visibility boundary, interruption recovery messaging/actions, and the non-main-path `test-mic` exposure rule remain covered by focused tests.",
       "duration": "",
-      "completed_at": null,
+      "completed_at": "2026-04-11T16:39:25.253Z",
       "blocker_discovered": false,
-      "deviations": "",
-      "known_issues": "",
-      "key_files": [],
-      "key_decisions": [],
-      "full_summary_md": "",
+      "deviations": "None.",
+      "known_issues": "None.",
+      "key_files": [
+        "web/src/app/(user)/practice/[sessionId]/page.test.tsx",
+        "web/src/app/(user)/practice/[sessionId]/use-practice-session-lifecycle.test.ts"
+      ],
+      "key_decisions": [
+        "Keep the proof in the existing focused page/lifecycle suites and assert learner-visible behavior rather than implementation details or a new umbrella integration test."
+      ],
+      "full_summary_md": "---\nid: T03\nparent: S04\nmilestone: M014\nkey_files:\n  - web/src/app/(user)/practice/[sessionId]/page.test.tsx\n  - web/src/app/(user)/practice/[sessionId]/use-practice-session-lifecycle.test.ts\nkey_decisions:\n  - Keep the proof in the existing focused page/lifecycle suites and assert learner-visible behavior rather than implementation details or a new umbrella integration test.\nduration: \nverification_result: passed\ncompleted_at: 2026-04-11T16:39:25.251Z\nblocker_discovered: false\n---\n\n# T03: Locked practice preflight, interruption recovery, and test-mic boundary contracts with focused learner-facing tests.\n\n**Locked practice preflight, interruption recovery, and test-mic boundary contracts with focused learner-facing tests.**\n\n## What Happened\n\nI extended the existing focused practice suites instead of adding a new umbrella test. In `web/src/app/(user)/practice/[sessionId]/page.test.tsx`, I added learner-visible proof that the preflight card only appears before a conversation starts, that end-failure interruption copy exposes the retry/end + reconnect recovery actions, and that the learner practice shell stays free of the developer-only `test-mic` wording. In `web/src/app/(user)/practice/[sessionId]/use-practice-session-lifecycle.test.ts`, I added proof that end-session failures preserve actionable backend detail inside the learner-facing error message. No production code changes were required because the shipped page and lifecycle hook already satisfied these contracts; this task’s deliverable was the regression proof.\n\n## Verification\n\nRan the slice’s focused verification gate: `npm --prefix web test -- --run \"src/app/(user)/practice/[sessionId]/page.test.tsx\" \"src/app/(user)/practice/[sessionId]/use-practice-session-lifecycle.test.ts\"`. The run finished with 2 test files passing and 17/17 tests green, confirming the preflight card visibility boundary, interruption recovery messaging/actions, and the non-main-path `test-mic` exposure rule remain covered by focused tests.\n\n## Verification Evidence\n\n| # | Command | Exit Code | Verdict | Duration |\n|---|---------|-----------|---------|----------|\n| 1 | `npm --prefix web test -- --run \"src/app/(user)/practice/[sessionId]/page.test.tsx\" \"src/app/(user)/practice/[sessionId]/use-practice-session-lifecycle.test.ts\"` | 0 | ✅ pass | 847ms |\n\n## Deviations\n\nNone.\n\n## Known Issues\n\nNone.\n\n## Files Created/Modified\n\n- `web/src/app/(user)/practice/[sessionId]/page.test.tsx`\n- `web/src/app/(user)/practice/[sessionId]/use-practice-session-lifecycle.test.ts`\n",
       "description": "Why: preflight 信息和 interruption 提示都是容易在后续 practice 改动中消失的 UI contract，需要 focused proof 锁住。\n\nDo:\n1. 补 focused tests，覆盖训练前预告、中断错误提示与 `test-mic` 非主路径暴露规则。\n2. 让断言针对 learner 可见行为，不绑死实现细节。\n3. 保持与现有 practice/lifecycle focused suite 同步，不新增臃肿 umbrella test。\n\nDone when: focused proof 能稳定证明开练前说明、中断提示和 test-mic 暴露边界仍然成立。",
       "estimate": "35m",
       "files": [
@@ -16409,6 +16414,17 @@
       "verdict": "❌ blocked (local Next dev hung on instrumentation compile)",
       "duration_ms": 30000,
       "created_at": "2026-04-11T16:35:04.005Z"
+    },
+    {
+      "id": 307,
+      "task_id": "T03",
+      "slice_id": "S04",
+      "milestone_id": "M014",
+      "command": "npm --prefix web test -- --run \"src/app/(user)/practice/[sessionId]/page.test.tsx\" \"src/app/(user)/practice/[sessionId]/use-practice-session-lifecycle.test.ts\"",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 847,
+      "created_at": "2026-04-11T16:39:25.254Z"
     }
   ]
 }

@@ -238,6 +238,63 @@ describe("PracticeSessionPage carry-forward retry focus", () => {
         expect(screen.getByText("谨慎型采购经理：会反复确认投入产出、落地周期和风险控制。", { exact: true })).toBeTruthy();
     });
 
+    it("hides the preflight brief after the learner already has conversation history", async () => {
+        usePracticeRuntimeLockMock.mockReturnValue({
+            lockedScenarioType: "sales",
+            lockedVoiceMode: "legacy",
+            lockedAgentId: "agent-1",
+            lockedPersonaId: "persona-1",
+            lockedPresentationId: undefined,
+            focusIntent: null,
+            sessionMetaError: null,
+        });
+        usePracticeWebSocketMock.mockReturnValue({
+            connectionState: "connected",
+            isConnected: true,
+            sessionStatus: "in_progress",
+            aiState: "idle",
+            messages: [
+                {
+                    id: "msg-1",
+                    sender: "ai",
+                    message: "欢迎回来，我们继续上次的销售对练。",
+                    timestamp: new Date().toISOString(),
+                },
+            ],
+            fuzzyDetections: [],
+            salesStage: null,
+            scores: null,
+            liveSessionSummary: null,
+            actionCard: null,
+            coachHealth: null,
+            error: null,
+            isPlayingAudio: false,
+            interimTranscript: "",
+            audioUnlocked: true,
+            isNetworkSlow: false,
+            currentSlide: null,
+            points: [],
+            forbiddenWords: [],
+            sendAudio: vi.fn(),
+            sendAudioBinary: vi.fn(),
+            sendAudioEnd: vi.fn(),
+            startSpeaking: vi.fn(),
+            sendInterrupt: vi.fn(),
+            unlockAudio: vi.fn(),
+            sendMessage: vi.fn(),
+            connect: vi.fn(),
+        });
+
+        render(<PracticeSessionPage />);
+        await flushPreflightEffects();
+
+        expect(screen.getByText("欢迎回来，我们继续上次的销售对练。")).toBeTruthy();
+        expect(screen.queryByText("开始前先看本次练习重点")).toBeNull();
+        expect(screen.queryByText("训练目标")).toBeNull();
+        expect(screen.queryByText("评价标准")).toBeNull();
+        expect(screen.queryByText("角色简介")).toBeNull();
+    });
+
     it("surfaces learner-facing retry guidance when pausing fails", async () => {
         usePracticeRuntimeLockMock.mockReturnValue({
             lockedScenarioType: "sales",
@@ -269,6 +326,72 @@ describe("PracticeSessionPage carry-forward retry focus", () => {
         expect(screen.getByText("暂停失败，请再试一次。", { exact: true })).toBeTruthy();
         expect(screen.getByText("下一步：你可以先继续当前对话，稍后再暂停；如果按钮持续无响应，再结束本次练习后重新进入。", { exact: true })).toBeTruthy();
         expect(screen.getByRole("button", { name: "重试暂停" })).toBeTruthy();
+    });
+
+    it("shows end-failure guidance with retry and reconnect actions when the interruption needs recovery", async () => {
+        const handleEndSession = vi.fn();
+        const reconnect = vi.fn();
+
+        usePracticeRuntimeLockMock.mockReturnValue({
+            lockedScenarioType: "sales",
+            lockedVoiceMode: "legacy",
+            lockedAgentId: "agent-1",
+            lockedPersonaId: "persona-1",
+            lockedPresentationId: undefined,
+            focusIntent: null,
+            sessionMetaError: null,
+        });
+        usePracticeWebSocketMock.mockReturnValue({
+            connectionState: "failed",
+            isConnected: false,
+            sessionStatus: "in_progress",
+            aiState: "idle",
+            messages: [],
+            fuzzyDetections: [],
+            salesStage: null,
+            scores: null,
+            liveSessionSummary: null,
+            actionCard: null,
+            coachHealth: null,
+            error: "连接失败",
+            isPlayingAudio: false,
+            interimTranscript: "",
+            audioUnlocked: true,
+            isNetworkSlow: false,
+            currentSlide: null,
+            points: [],
+            forbiddenWords: [],
+            sendAudio: vi.fn(),
+            sendAudioBinary: vi.fn(),
+            sendAudioEnd: vi.fn(),
+            startSpeaking: vi.fn(),
+            sendInterrupt: vi.fn(),
+            unlockAudio: vi.fn(),
+            sendMessage: vi.fn(),
+            connect: reconnect,
+        });
+        usePracticeSessionLifecycleMock.mockReturnValue({
+            canToggleLifecycle: false,
+            handleEndSession,
+            handleTogglePauseResume: vi.fn(),
+            isEndingSession: false,
+            isSessionPaused: false,
+            isSessionTerminal: false,
+            lifecycleError: {
+                action: "end",
+                message: "结束失败，请再试一次。报告生成超时，请稍后再试。",
+                guidance: "请先确认连接正常，再点击“结束练习”；如果仍失败，可先重新连接后重试结束。",
+            },
+            pendingLifecycleAction: null,
+        });
+
+        render(<PracticeSessionPage />);
+        await flushPreflightEffects();
+
+        expect(screen.getByText("结束失败，请再试一次。报告生成超时，请稍后再试。", { exact: true })).toBeTruthy();
+        expect(screen.getByText("下一步：请先确认连接正常，再点击“结束练习”；如果仍失败，可先重新连接后重试结束。", { exact: true })).toBeTruthy();
+        expect(screen.getByRole("button", { name: "重试结束" })).toBeTruthy();
+        expect(screen.getByRole("button", { name: "重新连接" })).toBeTruthy();
     });
 
     it("omits the callout for ordinary practice sessions without retry focus", async () => {
@@ -483,5 +606,24 @@ describe("PracticeSessionPage carry-forward retry focus", () => {
 
         expect(screen.queryByText("辅导状态提醒")).toBeNull();
         expect(screen.queryByText("实时辅导正常。", { exact: true })).toBeNull();
+    });
+
+    it("does not expose developer-only test-mic copy inside the learner practice shell", async () => {
+        usePracticeRuntimeLockMock.mockReturnValue({
+            lockedScenarioType: "sales",
+            lockedVoiceMode: "legacy",
+            lockedAgentId: "agent-1",
+            lockedPersonaId: "persona-1",
+            lockedPresentationId: undefined,
+            focusIntent: null,
+            sessionMetaError: null,
+        });
+
+        render(<PracticeSessionPage />);
+        await flushPreflightEffects();
+
+        expect(screen.queryByText("开发工具 · 不属于学员训练主流程", { exact: true })).toBeNull();
+        expect(screen.queryByText("麦克风调试工具", { exact: true })).toBeNull();
+        expect(screen.queryByText("正常学员练习请从 practice 主页面进入。", { exact: true })).toBeNull();
     });
 });
