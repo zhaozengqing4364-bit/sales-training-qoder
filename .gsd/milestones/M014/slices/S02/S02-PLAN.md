@@ -23,7 +23,7 @@ S02 把 auth/profile 的体验闭环与 backend auth seam 接到一起，为 M01
 
 ## Tasks
 
-- [ ] **T01: 盘点现有 forgot/reset、profile 修改密码与语速偏好现状** `est:30m`
+- [x] **T01: 盘点现有 forgot/reset、profile 修改密码与语速偏好现状** `est:30m`
   Why: 先把 forgot/reset、profile 修改密码入口与语速偏好的当前真实表面盘清，避免把已存在能力和过渡实现混为一谈。
 
 Do:

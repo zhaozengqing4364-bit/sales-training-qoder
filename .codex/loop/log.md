@@ -211,3 +211,17 @@
   verification results: passed; fresh repo-root focused integration pytest finished 5/5 green for list/detail/steps/RBAC/not-found coverage, py_compile passed on the new router and focused test module, and fresh LSP diagnostics reported no issues on backend/src/common/api/knowledge_debug.py or backend/src/main.py.
   success signal status: admin/support can now inspect recent persisted knowledge-answer runs and their ordered step traces from one stable /api/v1/knowledge-debug surface without reconstructing runtime-local traces.
   rollback note: if T03 or later slices extend report/debug inspection, keep this surface read-only and backed by the persisted audit rows plus compat payload fields rather than teaching runtime handlers to rebuild traces for API consumers.
+
+- time: 2026-04-11T22:18:19+08:00
+  mode: grow
+  item id: M014-S02-T01
+  files changed:
+    - .gsd/KNOWLEDGE.md
+    - .codex/loop/state.json
+  summary: Inventoried the live auth/profile seams and recorded that backend forgot/reset is already persisted and tested, while profile password change remains a truthful forgot-password handoff and voice-speed preference still lives only in localStorage.
+  verification commands:
+    - rg -n "forgot|reset|password|speech|rate|window.location" web/src/app/\(auth\) web/src/app/\(dashboard\)/profile backend/src/common/auth
+    - rg -n "forgot|reset|PasswordReset|AUTH_SHARED_PASSWORD|AUTH_USER_PASSWORDS|hashed_password" backend/tests -g "!**/__pycache__/**"
+  verification results: passed; repo-root rg verification found the live auth/profile entrypoints and silent-fallback surfaces, and the focused backend test scan confirmed dedicated forgot/reset integration coverage already exists in backend/tests/integration/test_password_reset_api.py rather than only in test_auth_login_api.py.
+  success signal status: downstream M014/S02 tasks can now build from the real seams instead of re-researching—PasswordResetService + PasswordResetToken are already the backend authority, the profile password CTA is intentionally a `/forgot-password` link, and voice speed is still frontend-local persistence.
+  rollback note: if later slices change these seams, keep one authoritative reset-token lifecycle and one authoritative voice-speed persistence seam instead of reintroducing fake profile password APIs or split storage paths.

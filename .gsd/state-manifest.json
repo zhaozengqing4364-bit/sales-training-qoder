@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "exported_at": "2026-04-11T07:54:10.741Z",
+  "exported_at": "2026-04-11T14:19:44.801Z",
   "milestones": [
     {
       "id": "M001",
@@ -2223,15 +2223,15 @@
     {
       "milestone_id": "M014",
       "id": "S01",
-      "title": "首页硬编码与空壳动作收口",
-      "status": "pending",
+      "title": "S01",
+      "status": "complete",
       "risk": "medium",
       "depends": [],
       "demo": "首页不再有“点了没反应”的主按钮/CTA，首屏有最小 onboarding 指引",
       "created_at": "2026-04-08T08:40:41.990Z",
-      "completed_at": null,
-      "full_summary_md": "",
-      "full_uat_md": "",
+      "completed_at": "2026-04-11T14:13:26.767Z",
+      "full_summary_md": "---\nid: S01\nparent: M014\nmilestone: M014\nprovides:\n  - A truthful learner-home authority seam for primary CTA routing: recommendation → training, history deep link for review/filtering, recent-report shortcut only when genuinely available.\n  - A minimal onboarding story future slices can build on without introducing a second onboarding subsystem.\n  - Focused dashboard proof that will fail if export/share/goal affordances or fake report/filter buttons drift back into the homepage.\nrequires:\n  []\naffects:\n  - S02\n  - S03\n  - S04\nkey_files:\n  - web/src/app/(dashboard)/page.tsx\n  - web/src/app/(dashboard)/page.test.tsx\n  - web/src/app/(dashboard)/history/page.test.tsx\n  - .gsd/plans/GSD_PLAN_system-audit-repair.md\nkey_decisions:\n  - D175 — Dashboard home must stay a thin learner-loop surface: recommendation-driven training CTA, history deep links for filtering/review, direct report links only for completed supported sessions, and otherwise honest disabled/absent affordances.\npatterns_established:\n  - Keep dashboard home as a thin learner-loop surface; route complex review/filtering back to `/history` instead of recreating those workflows on the homepage.\n  - Resolve recent-session CTA through one helper (`getDashboardHistoryActions(...)`) so report deep links appear only for completed, supported sessions with a real session id; otherwise show explicit disabled learner copy.\n  - Lock homepage closure with explicit focused dashboard tests (`page.test.tsx` + `history/page.test.tsx`) rather than relying on a shell glob that may not expand in auto-mode.\nobservability_surfaces:\n  - none\ndrill_down_paths:\n  - .gsd/milestones/M014/slices/S01/tasks/T01-SUMMARY.md\n  - .gsd/milestones/M014/slices/S01/tasks/T02-SUMMARY.md\n  - .gsd/milestones/M014/slices/S01/tasks/T03-SUMMARY.md\nduration: \"\"\nverification_result: passed\ncompleted_at: 2026-04-11T14:13:26.771Z\nblocker_discovered: false\n---\n\n# S01: 首页硬编码与空壳动作收口\n\n**Learner homepage no longer behaves like a demo: it now offers a truthful three-step onboarding path and only exposes real training/history/report actions, with focused proof preventing fake CTA affordances from drifting back.**\n\n## What Happened\n\nS01 closed the learner homepage back onto the real training loop instead of leaving it as a demo surface. The shipped dashboard home now derives its visible actions from live recommendation and history data: the first screen shows a minimal three-step onboarding path (start training → go to history → open the latest unified report), the primary recommendation CTA deep-links to the real training target, and recent-session cards only expose two truthful actions — `/history` and `/practice/{sessionId}/report` when the record is a completed sales/presentation session with a usable session id. Records that cannot yet support a report no longer pretend to be actionable; they fall back to explicit disabled copy explaining why the learner must go through history or wait for completion. The home surface also stops pretending to own advanced filtering: the only remaining filter affordance is an explicit deep link back to `/history`.\n\nThis slice also retired the remaining fake or misleading homepage affordances. `导出报告` / `设定目标` / `分享分析` stay absent, rather than being reintroduced as decorative buttons. The version badge dialog now acts as a live entry summary instead of frozen release-note theater, and its footer actions both dismiss correctly while offering a real path into the current training recommendation. Focused proof was added on the existing dashboard test seam so future visual/copy changes cannot silently regress the homepage into empty CTA territory again.\n\nFor downstream slices, the important established pattern is that learner-home actions must be derived from existing authority surfaces instead of inventing a second workflow center. Recommendation owns the primary train-now CTA, `getDashboardHistoryActions(...)` owns whether a recent record can deep-link to report versus only history, and complex review/filter behavior stays centralized on `/history`. This gives M014/S02-S04 a stable entrypoint: auth/profile work can hand users back to a homepage that already routes truthfully, learner help/feedback can attach to a shell that no longer carries dead CTA clutter, and practice preflight work can start from a homepage whose promised next step is always real.\n\n## Verification\n\nFresh slice-close verification reran the homepage-focused dashboard gates and the affordance grep on the shipped authority surface.\n\n- `npm --prefix web test -- --run \"src/app/(dashboard)/history/page.test.tsx\"` ✅ pass (5/5)\n- `npm --prefix web test -- --run \"src/app/(dashboard)/page.test.tsx\" \"src/app/(dashboard)/history/page.test.tsx\"` ✅ pass (14/14)\n- `rg -n '导出报告|设定目标|分享分析|筛选' 'web/src/app/(dashboard)/page.tsx'` ✅ pass — only the intentional history-filter guidance / strategy comments remain, with no restored dead CTA copy\n\n## Requirements Advanced\n\nNone.\n\n## Requirements Validated\n\nNone.\n\n## New Requirements Surfaced\n\nNone.\n\n## Requirements Invalidated or Re-scoped\n\nNone.\n\n## Deviations\n\nProduct scope stayed aligned with the slice plan. The only close-out deviation was artifact recovery: T02/T03 product code and tests were already present, but auto-mode had left placeholder task summaries and unchecked task boxes. Close-out regenerated truthful task summaries and synchronized the plan markdown so downstream slices inherit accurate context.\n\n## Known Limitations\n\nAdvanced filtering still intentionally lives on `/history`, and report export / goal-setting / share-analysis remain intentionally absent until those workflows have real product and backend support. This slice does not add learner help shell, auth/profile completion, or practice preflight UX; those remain in S02-S04.\n\n## Follow-ups\n\nS02 can now build auth/profile completion work on top of a truthful homepage entrypoint. S03 can assume learner help/feedback will plug into a homepage that already routes users to real next steps. S04 can design practice preflight/interruption UX without having to first unwind fake homepage CTA or filter affordances again.\n\n## Files Created/Modified\n\n- `web/src/app/(dashboard)/page.tsx` — Learner homepage authority surface: dynamic onboarding, truthful CTA routing, honest disabled report states, history-filter deep link, and version-dialog action cleanup.\n- `web/src/app/(dashboard)/page.test.tsx` — Focused regression suite locking homepage onboarding, live CTA deep links, absent dead affordances, and learner-safe degraded states.\n- `web/src/app/(dashboard)/history/page.test.tsx` — Existing dashboard history authority proof kept as the downstream regression partner for homepage handoff.\n- `.gsd/plans/GSD_PLAN_system-audit-repair.md` — Normalized audit-repair plan now records the homepage CTA closure strategy and disposition table for fake affordances.\n",
+      "full_uat_md": "# S01: 首页硬编码与空壳动作收口 — UAT\n\n**Milestone:** M014\n**Written:** 2026-04-11T14:13:26.771Z\n\n# S01 UAT — 首页硬编码与空壳动作收口\n\n## Preconditions\n- Use a learner account that can open the dashboard homepage.\n- Prepare three dashboard states (real data or mocked API fixtures are both acceptable):\n  1. **First-time learner**: recommendation exists, history list empty.\n  2. **Returning learner**: recommendation exists, history contains at least one completed sales/presentation session with a valid `session_id`.\n  3. **Degraded history records**: history contains one record missing `session_id` and one record with `status != completed`.\n- Confirm the app is running on the current branch with the shipped dashboard homepage.\n\n## Test Case 1 — First-time learner sees a real onboarding path instead of demo CTA\n1. Sign in as a learner whose dashboard history is empty and open `/`.\n   - Expected: the homepage renders a real greeting for the current user and shows the onboarding title `第一次来，先这样开始`.\n2. Inspect the onboarding area.\n   - Expected: there are three learner-facing steps that explain the loop `先训练 → 去历史页 → 看统一报告`.\n3. Click the primary training CTA from the onboarding card or recommendation card.\n   - Expected: the CTA navigates to the recommendation's real training target (for example `/training` or `/training/sales`), not to `#`, a modal stub, or no-op behavior.\n4. Return to the homepage and click `去历史页`.\n   - Expected: navigation goes to `/history`.\n5. Inspect the report step for this no-history user.\n   - Expected: the report entry still routes to `/history` and explains that the learner should finish training first before reviewing the unified report.\n\n## Test Case 2 — Returning learner gets the latest real report shortcut\n1. Open the homepage for a learner with at least two completed history records that have valid session ids.\n   - Expected: the onboarding title switches to `继续按这 3 步推进训练`.\n2. Inspect the third onboarding step.\n   - Expected: it references the latest available report (the newest completed supported session), not an older record and not a placeholder label.\n3. Click the onboarding `报告入口` link.\n   - Expected: navigation goes directly to `/practice/{latestSessionId}/report`.\n4. Inspect each recent-record card.\n   - Expected: each card offers `历史页` and, when eligible, `查看报告`; there is no `查看详情` fake action.\n\n## Test Case 3 — Homepage stays honest for incomplete or malformed records\n1. Open the homepage with one recent record missing `session_id`.\n   - Expected: the record does **not** expose a clickable report link; instead it shows disabled copy explaining that the session id is missing and the learner should verify via history.\n2. Open the homepage with one in-progress recent record.\n   - Expected: the record shows a disabled `报告生成中` state with copy explaining that the learner must wait until completion/evidence generation finishes.\n3. Attempt to activate the disabled report buttons.\n   - Expected: they are not clickable links and do not navigate anywhere.\n\n## Test Case 4 — Fake homepage affordances remain removed\n1. Inspect the homepage header, recommendation area, onboarding cards, and recent-record section.\n   - Expected: there is no learner-visible `导出报告`, `设定目标`, or `分享分析` button/link anywhere on the homepage.\n2. Inspect the filter affordance near recent records.\n   - Expected: the only filter-related action is explicit guidance plus `去历史页筛选`, which navigates to `/history`.\n3. Confirm there is no fake filter modal, no `应用筛选` button, and no decorative chips that do nothing.\n   - Expected: filtering is clearly delegated to the history page.\n\n## Test Case 5 — Version badge dialog truthfully summarizes live entrypoints\n1. Click the homepage version badge.\n   - Expected: a dialog opens describing the **current usable entrypoints** rather than static release-note marketing copy.\n2. Verify the dialog body.\n   - Expected: it summarizes the current recommendation, history/report availability, and the fact that the homepage only keeps real loop actions.\n3. Click `稍后再看`.\n   - Expected: the dialog dismisses cleanly.\n4. Reopen the version dialog and click the primary CTA.\n   - Expected: the dialog dismisses and routes to the current recommendation target path.\n\n## Edge Cases\n- If history API loading fails entirely, the homepage should degrade to the empty-state learner loop: no report shortcut is shown, `开始训练` remains available, and the history-filter deep link still points to `/history`.\n- If the latest recent record is a supported completed session but an older record is newer-looking only because of malformed timestamps, the homepage must still choose the newest valid report shortcut according to the persisted `start_time` ordering used in the shipped logic.\n- If a recent record belongs to an unsupported scenario type, the homepage must not guess a report route; it should keep the learner on `/history` with disabled explanatory copy.\n\n",
       "goal": "清理 dashboard 首页静态更新内容、无动作按钮、假筛选与缺少 onboarding 的问题。",
       "success_criteria": "- 首页不再存在“点了没反应”的主按钮或主 CTA。\n- 首屏有最小 onboarding 指引，至少告诉 learner 如何开始第一轮训练。\n- focused proof 能锁定首页至少一条 CTA 通向真实训练入口，且 report export/share/goal 等已知缺失 affordance 不会被误加回。",
       "proof_level": "integration",
@@ -2243,12 +2243,10 @@
     {
       "milestone_id": "M014",
       "id": "S02",
-      "title": "认证与个人中心体验补齐",
+      "title": "S02",
       "status": "pending",
       "risk": "high",
-      "depends": [
-        "S01"
-      ],
+      "depends": [],
       "demo": "用户可从 profile 走到正式修改密码路径，语速偏好刷新后保留，forgot/reset 体验完整",
       "created_at": "2026-04-08T08:40:41.990Z",
       "completed_at": null,
@@ -9115,12 +9113,12 @@
       "slice_id": "S01",
       "id": "T02",
       "title": "实现首页 CTA 收口与 onboarding 最小指引",
-      "status": "pending",
+      "status": "complete",
       "one_liner": "",
       "narrative": "",
       "verification_result": "",
       "duration": "",
-      "completed_at": null,
+      "completed_at": "2026-04-11T13:31:25.222Z",
       "blocker_discovered": false,
       "deviations": "",
       "known_issues": "",
@@ -9151,12 +9149,12 @@
       "slice_id": "S01",
       "id": "T03",
       "title": "为首页闭环补 focused proof",
-      "status": "pending",
+      "status": "complete",
       "one_liner": "",
       "narrative": "",
       "verification_result": "",
       "duration": "",
-      "completed_at": null,
+      "completed_at": "2026-04-11T14:01:28.880Z",
       "blocker_discovered": false,
       "deviations": "",
       "known_issues": "",
@@ -9183,19 +9181,25 @@
       "milestone_id": "M014",
       "slice_id": "S02",
       "id": "T01",
-      "title": "盘点现有 forgot/reset、profile 修改密码与语速偏好现状",
-      "status": "pending",
-      "one_liner": "",
-      "narrative": "",
-      "verification_result": "",
+      "title": "盘清了 auth/profile 真实现状，并把 forgot/reset 已正式化与 profile/语速偏好剩余缺口固化进知识库",
+      "status": "complete",
+      "one_liner": "盘清了 auth/profile 真实现状，并把 forgot/reset 已正式化与 profile/语速偏好剩余缺口固化进知识库",
+      "narrative": "我按任务计划逐一核对了 `web/src/app/(auth)/*`、`web/src/app/(dashboard)/profile/page.tsx`、`backend/src/common/auth/api.py`、`backend/src/common/auth/service.py`，并补读了支撑 seam：`web/src/hooks/use-voice-speed-preference.ts`、`web/src/lib/api/client.ts`、`backend/src/common/services/password_reset.py`、`backend/src/common/db/models.py` 以及现有 focused tests。结论是：1）learner 侧 forgot/reset 前端页面已经存在且直接调用正式 `/auth/forgot-password` 与 `/auth/reset-password` API，reset 页面同时支持 query token 与手工粘贴 token；2）backend forgot/reset 不是过渡 stub，而是已经围绕 `PasswordResetService` + `PasswordResetToken` 落了真实持久化：token 以 SHA-256 hash 入库、30 分钟过期、申请新 token 时会失效旧未消费 token、消费后写入 `user.hashed_password` 并标记 `used_at`，登录也会优先校验这个重置后的哈希密码；3）真正仍属过渡/开发态的部分是邮件投递，默认 `ConsoleEmailService` 只把 `/reset-password?token=...` 打到控制台，本地恢复路径仍依赖这个 mock delivery seam；4）profile 页的“修改密码”并不是已登录 change-password flow，而是一个诚实的 `/forgot-password` Link handoff；5）语速偏好完全走 `useVoiceSpeedPreference()` 的 `localStorage` seam，profile 改 select 只会写 `voice_speed_preference` 本地键，不会 `PATCH /users/me`，刷新恢复也只靠这个 frontend-local storage；6）在本任务关注范围内没有继续使用 `window.location` 的 auth/profile 路径，但我记录了仍存在的静默容错点：profile `handleCancelEdit()` refetch 失败会静默保留草稿、`handleLogout()` 会忽略 logout API 失败后直接做前端退出、`useVoiceSpeedPreference()` 的 storage 读写失败会静默回退默认/内存值、forgot-password API 在 `SQLAlchemyError` 时仍返回通用成功文案以保持防枚举语义。为避免后续任务重复摸底，我把这些真实边界追加进了 `.gsd/KNOWLEDGE.md`，并同步更新了 `.codex/loop/state.json` 与 `.codex/loop/log.md`。",
+      "verification_result": "我先运行任务计划中的 repo-root 检索命令，确认 auth 路由、profile 密码入口、语速偏好和 backend auth/reset 入口都能被直接定位；随后又对 `backend/tests` 做 focused 检索并补读 `backend/tests/integration/test_password_reset_api.py`，确认 forgot/reset 已经有独立的 integration proof，不只是 login suite。结合源码通读，已明确区分出正式能力（PasswordResetService/PasswordResetToken/token lifecycle）与仍是开发态/前端本地态的边界（ConsoleEmailService、profile Link handoff、localStorage-only voice speed）。",
       "duration": "",
-      "completed_at": null,
+      "completed_at": "2026-04-11T14:19:44.738Z",
       "blocker_discovered": false,
-      "deviations": "",
-      "known_issues": "",
-      "key_files": [],
-      "key_decisions": [],
-      "full_summary_md": "",
+      "deviations": "发现一个局部事实偏差：后续 T02 计划里更容易被拿来当 auth proof 的是 `backend/tests/integration/test_auth_login_api.py`，但本地真实 forgot/reset focused proof 已存在于 `backend/tests/integration/test_password_reset_api.py`。我没有改计划结构，只把这条差异写入 `.gsd/KNOWLEDGE.md` 和 loop 状态，供后续执行直接采用。",
+      "known_issues": "未修复的真实缺口包括：1）password reset 邮件投递默认仍是 `ConsoleEmailService` 控制台打印，本地/开发态可恢复但不是真实邮件平台；2）profile “修改密码” 仍不是 authenticated in-profile change-password flow，而是诚实地跳去 forgot-password 流程；3）语速偏好仍只在前端 `localStorage` 持久化，没有用户级后端存储；4）若 forgot/reset 底层数据库异常，forgot-password API 仍会按防枚举设计返回通用成功文案，这对用户表面是正确的，但会让运维排查更依赖日志。",
+      "key_files": [
+        ".gsd/KNOWLEDGE.md",
+        ".codex/loop/state.json",
+        ".codex/loop/log.md"
+      ],
+      "key_decisions": [
+        "将 M014/S02 后续工作基线固定为“保留现有 PasswordResetService + PasswordResetToken 后端 authority seam，不重做 reset 核心持久化；把改动聚焦到邮件投递 seam、profile 密码体验闭环和语速偏好真实持久化边界”。"
+      ],
+      "full_summary_md": "---\nid: T01\nparent: S02\nmilestone: M014\nkey_files:\n  - .gsd/KNOWLEDGE.md\n  - .codex/loop/state.json\n  - .codex/loop/log.md\nkey_decisions:\n  - 将 M014/S02 后续工作基线固定为“保留现有 PasswordResetService + PasswordResetToken 后端 authority seam，不重做 reset 核心持久化；把改动聚焦到邮件投递 seam、profile 密码体验闭环和语速偏好真实持久化边界”。\nduration: \nverification_result: passed\ncompleted_at: 2026-04-11T14:19:44.735Z\nblocker_discovered: false\n---\n\n# T01: 盘清了 auth/profile 真实现状，并把 forgot/reset 已正式化与 profile/语速偏好剩余缺口固化进知识库\n\n**盘清了 auth/profile 真实现状，并把 forgot/reset 已正式化与 profile/语速偏好剩余缺口固化进知识库**\n\n## What Happened\n\n我按任务计划逐一核对了 `web/src/app/(auth)/*`、`web/src/app/(dashboard)/profile/page.tsx`、`backend/src/common/auth/api.py`、`backend/src/common/auth/service.py`，并补读了支撑 seam：`web/src/hooks/use-voice-speed-preference.ts`、`web/src/lib/api/client.ts`、`backend/src/common/services/password_reset.py`、`backend/src/common/db/models.py` 以及现有 focused tests。结论是：1）learner 侧 forgot/reset 前端页面已经存在且直接调用正式 `/auth/forgot-password` 与 `/auth/reset-password` API，reset 页面同时支持 query token 与手工粘贴 token；2）backend forgot/reset 不是过渡 stub，而是已经围绕 `PasswordResetService` + `PasswordResetToken` 落了真实持久化：token 以 SHA-256 hash 入库、30 分钟过期、申请新 token 时会失效旧未消费 token、消费后写入 `user.hashed_password` 并标记 `used_at`，登录也会优先校验这个重置后的哈希密码；3）真正仍属过渡/开发态的部分是邮件投递，默认 `ConsoleEmailService` 只把 `/reset-password?token=...` 打到控制台，本地恢复路径仍依赖这个 mock delivery seam；4）profile 页的“修改密码”并不是已登录 change-password flow，而是一个诚实的 `/forgot-password` Link handoff；5）语速偏好完全走 `useVoiceSpeedPreference()` 的 `localStorage` seam，profile 改 select 只会写 `voice_speed_preference` 本地键，不会 `PATCH /users/me`，刷新恢复也只靠这个 frontend-local storage；6）在本任务关注范围内没有继续使用 `window.location` 的 auth/profile 路径，但我记录了仍存在的静默容错点：profile `handleCancelEdit()` refetch 失败会静默保留草稿、`handleLogout()` 会忽略 logout API 失败后直接做前端退出、`useVoiceSpeedPreference()` 的 storage 读写失败会静默回退默认/内存值、forgot-password API 在 `SQLAlchemyError` 时仍返回通用成功文案以保持防枚举语义。为避免后续任务重复摸底，我把这些真实边界追加进了 `.gsd/KNOWLEDGE.md`，并同步更新了 `.codex/loop/state.json` 与 `.codex/loop/log.md`。\n\n## Verification\n\n我先运行任务计划中的 repo-root 检索命令，确认 auth 路由、profile 密码入口、语速偏好和 backend auth/reset 入口都能被直接定位；随后又对 `backend/tests` 做 focused 检索并补读 `backend/tests/integration/test_password_reset_api.py`，确认 forgot/reset 已经有独立的 integration proof，不只是 login suite。结合源码通读，已明确区分出正式能力（PasswordResetService/PasswordResetToken/token lifecycle）与仍是开发态/前端本地态的边界（ConsoleEmailService、profile Link handoff、localStorage-only voice speed）。\n\n## Verification Evidence\n\n| # | Command | Exit Code | Verdict | Duration |\n|---|---------|-----------|---------|----------|\n| 1 | `rg -n \"forgot|reset|password|speech|rate|window.location\" web/src/app/\\(auth\\) web/src/app/\\(dashboard\\)/profile backend/src/common/auth` | 0 | ✅ pass | 23ms |\n| 2 | `rg -n \"forgot|reset|PasswordReset|AUTH_SHARED_PASSWORD|AUTH_USER_PASSWORDS|hashed_password\" backend/tests -g \"!**/__pycache__/**\"` | 0 | ✅ pass | 12ms |\n\n## Deviations\n\n发现一个局部事实偏差：后续 T02 计划里更容易被拿来当 auth proof 的是 `backend/tests/integration/test_auth_login_api.py`，但本地真实 forgot/reset focused proof 已存在于 `backend/tests/integration/test_password_reset_api.py`。我没有改计划结构，只把这条差异写入 `.gsd/KNOWLEDGE.md` 和 loop 状态，供后续执行直接采用。\n\n## Known Issues\n\n未修复的真实缺口包括：1）password reset 邮件投递默认仍是 `ConsoleEmailService` 控制台打印，本地/开发态可恢复但不是真实邮件平台；2）profile “修改密码” 仍不是 authenticated in-profile change-password flow，而是诚实地跳去 forgot-password 流程；3）语速偏好仍只在前端 `localStorage` 持久化，没有用户级后端存储；4）若 forgot/reset 底层数据库异常，forgot-password API 仍会按防枚举设计返回通用成功文案，这对用户表面是正确的，但会让运维排查更依赖日志。\n\n## Files Created/Modified\n\n- `.gsd/KNOWLEDGE.md`\n- `.codex/loop/state.json`\n- `.codex/loop/log.md`\n",
       "description": "Why: 先把 forgot/reset、profile 修改密码入口与语速偏好的当前真实表面盘清，避免把已存在能力和过渡实现混为一谈。\n\nDo:\n1. 梳理前端 auth 路由、profile 页面和 backend auth API/service 的现状。\n2. 标出 forgot/reset 哪些已是正式能力、哪些仍是过渡实现。\n3. 定位 profile 中修改密码入口和语速偏好的真实存储/恢复路径。\n4. 记录仍在用 `window.location` 或静默容错的点。\n\nDone when: 后续两项任务可以直接按现状差距动手，不需要再次做 auth/profile 范围摸底。",
       "estimate": "30m",
       "files": [
@@ -12987,6 +12991,18 @@
       "revisable": "Yes",
       "made_by": "collaborative",
       "superseded_by": null
+    },
+    {
+      "seq": 1545,
+      "id": "D175",
+      "when_context": "M014/S01 close-out",
+      "scope": "learner-home",
+      "decision": "How the dashboard homepage should close learner-facing CTA and onboarding affordances",
+      "choice": "Keep dashboard home limited to the real learner loop: training CTA from recommendation, history deep links for review/filtering, direct report links only for completed sales/presentation sessions with a valid session id, and otherwise honest disabled/absent affordances rather than fake buttons.",
+      "rationale": "This slice exists to stop the homepage from behaving like a demo surface. Routing advanced filtering back to /history, keeping export/share/goal affordances absent, and using explicit disabled copy for unavailable reports preserves a truthful first-screen loop without inventing a second onboarding or report surface.",
+      "revisable": "Yes",
+      "made_by": "agent",
+      "superseded_by": null
     }
   ],
   "verification_evidence": [
@@ -16124,6 +16140,28 @@
       "verdict": "✅ pass",
       "duration_ms": 50,
       "created_at": "2026-04-10T01:07:15.639Z"
+    },
+    {
+      "id": 291,
+      "task_id": "T01",
+      "slice_id": "S02",
+      "milestone_id": "M014",
+      "command": "rg -n \"forgot|reset|password|speech|rate|window.location\" web/src/app/\\(auth\\) web/src/app/\\(dashboard\\)/profile backend/src/common/auth",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 23,
+      "created_at": "2026-04-11T14:19:44.738Z"
+    },
+    {
+      "id": 292,
+      "task_id": "T01",
+      "slice_id": "S02",
+      "milestone_id": "M014",
+      "command": "rg -n \"forgot|reset|PasswordReset|AUTH_SHARED_PASSWORD|AUTH_USER_PASSWORDS|hashed_password\" backend/tests -g \"!**/__pycache__/**\"",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 12,
+      "created_at": "2026-04-11T14:19:44.740Z"
     }
   ]
 }
