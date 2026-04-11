@@ -13,7 +13,6 @@ from fastapi import APIRouter, Depends, FastAPI, HTTPException, Query, WebSocket
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.routing import APIRoute
-from jose import JWTError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -47,6 +46,7 @@ from common.auth.api import get_auth_config_diagnostics
 
 # Development mode auth (for testing without WeChat SSO)
 from common.auth.service import (
+    JWTError,
     resolve_websocket_token,
     set_auth_session_cookie,
     create_access_token,

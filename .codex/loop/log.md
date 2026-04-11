@@ -1,3 +1,20 @@
+- time: 2026-04-12T07:57:15+08:00
+  mode: grow
+  item id: M018-S03-T01
+  files changed:
+    - docs/setup/backup-recovery-current-state.md
+    - scripts/README.md
+    - .gsd/KNOWLEDGE.md
+    - .codex/loop/state.json
+    - .codex/loop/log.md
+  summary: Wrote the first backup/recovery current-state baseline so the next slice task can build a truthful runbook from real repository evidence: local startup is script-driven, runtime data spans PostgreSQL/Redis/local document+Chroma paths plus OSS audio, alembic/legacy-schema/admin-bootstrap commands are the only real recovery-side entrypoints, and repo-native backup automation is still absent.
+  verification commands:
+    - find docs scripts -maxdepth 2 -type f | sort | head -n 20
+    - rg -n "DATABASE_URL|alembic upgrade head|repair_legacy_schema|bootstrap_auth_admin|pg_dump|OSS" docs/setup/backup-recovery-current-state.md scripts/README.md
+  verification results: passed; the exact task-plan inventory command stayed green, and the focused grep proof confirmed the new baseline captures the real recovery commands, path drift, storage surfaces, and explicit backup gaps.
+  success signal status: future agents no longer need to reverse-engineer backup/recovery assumptions from startup scripts, env defaults, and scattered backend modules before writing the runbook.
+  rollback note: if later tasks add real backup or restore automation, update docs/setup/backup-recovery-current-state.md and the linked scripts/README baseline together so the inventory keeps distinguishing shipped capabilities from still-missing ops work.
+
 - time: 2026-04-12T06:24:20+08:00
   mode: grow
   item id: M018-S01-T01
@@ -550,23 +567,38 @@
   success signal status: future agents can now verify learner help discoverability from the three main dashboard entry pages and separately prove the shared learner shell seam still exists.
   rollback note: if future support UX changes the copy, update the shared learner-help guidance expectations together across the dashboard page suites and the DashboardShell seam proof instead of reintroducing page-local support buttons.
 
-- time: 2026-04-11T23:40:45+08:00
+- time: 2026-04-12T07:25:00+08:00
   mode: grow
-  item id: M014-S03-T02
+  item id: M018-S02
   files changed:
-    - web/src/components/dashboard/learner-help-card.tsx
-    - web/src/app/(dashboard)/page.tsx
-    - web/src/app/(dashboard)/profile/page.tsx
-    - web/src/app/(dashboard)/history/page.tsx
-    - web/src/app/(dashboard)/history/page.test.tsx
+    - backend/requirements.txt
+    - backend/src/common/auth/service.py
+    - backend/src/common/websocket/base_handler.py
+    - backend/src/sales_bot/websocket/router.py
+    - backend/src/sales_bot/websocket/stepfun_realtime_handler.py
+    - backend/src/presentation_coach/websocket/presentation_handler.py
+    - backend/src/main.py
+    - backend/tests/unit/test_main_presentation_ws_runtime.py
+    - web/package.json
+    - web/package-lock.json
+    - docs/setup/dependency-governance-baseline.md
+    - .gsd/DECISIONS.md
+    - .gsd/KNOWLEDGE.md
+    - .gsd/PROJECT.md
     - .codex/loop/state.json
-  summary: Added one shared learner help card across dashboard home, profile, and history so learners get the same truthful help/feedback guidance everywhere, with explicit copy that the real entry lives in the sidebar help seam and that admin/runtime links are role-gated.
+    - .codex/loop/log.md
+  summary: Closed M018/S02 by turning dependency governance into a fully green executable baseline: web audit stayed 0-vuln, backend exact pip_audit now also returns clean after requirements sync + venv rebuild, piplicenses now emits a real inventory, and auth/runtime JWT handling was migrated from python-jose to PyJWT to remove the audited ecdsa risk chain without changing the HS256 contract.
   verification commands:
-    - npm --prefix web test -- --run "src/app/(dashboard)/history/page.test.tsx"
-    - npm --prefix web test -- --run "src/app/(dashboard)/page.test.tsx" "src/app/(dashboard)/profile/page.test.tsx"
-  verification results: passed; the focused history Vitest suite finished 6/6 green including the new help-card regression, and the impacted dashboard home/profile suites finished 14/14 green after reusing the same shared learner guidance card.
-  success signal status: learner-facing dashboard entry pages now consistently point back to the single sidebar/mobile-drawer help seam instead of inventing separate support buttons, while explaining why management/runtime routes may be absent on learner accounts.
-  rollback note: if future work enriches support UX, extend the shared learner-help card and LearnerHelpEntry seam together instead of adding page-local help endpoints or promising an unimplemented ticketing flow.
+    - test -f web/package.json && test -f backend/requirements.txt
+    - npm audit --prefix web
+    - backend/venv/bin/python -m pip_audit
+    - backend/venv/bin/python -m piplicenses --from=mixed --format=json
+    - backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/integration/test_auth_login_api.py -x -q
+    - backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/test_main_presentation_ws_runtime.py backend/tests/unit/test_websocket_handler.py -x -q
+    - bash scripts/dependency-governance.sh status
+  verification results: passed; all planned slice gates are now green, license inventory is runnable, and focused backend auth/websocket suites stayed green after the dependency/JWT seam hardening.
+  success signal status: future agents no longer need to treat backend dependency governance as a blocked-or-open-risk-only baseline — the repo now exposes one runnable, green dependency-governance path from doc/script entrypoint through exact audit commands.
+  rollback note: if later dependency updates or JWT changes reopen audit failures, keep backend/requirements.txt, docs/setup/dependency-governance-baseline.md, the shared auth JWTError seam, and the focused auth/websocket proofs aligned together; otherwise exact pip_audit can regress while the docs still claim green.
 
 - time: 2026-04-11T23:32:52+0800
   mode: grow

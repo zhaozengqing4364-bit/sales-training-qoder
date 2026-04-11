@@ -9,10 +9,9 @@ import uuid
 from typing import Optional
 
 from fastapi import APIRouter, Query, WebSocket
-from jose import JWTError
 from sqlalchemy import select
 
-from common.auth.service import resolve_websocket_token
+from common.auth.service import JWTError, resolve_websocket_token
 from common.db.models import PracticeSession, Scenario, User
 from common.db.session import AsyncSessionLocal
 from common.knowledge.kb_lock_guard import is_kb_lock_unbound_snapshot

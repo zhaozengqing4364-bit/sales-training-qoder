@@ -47,6 +47,14 @@ bash scripts/dependency-governance.sh status
 - `backend-audit`：在 `pip_audit` 已安装时对 `backend/requirements.txt` 执行扫描
 - `license-plan`：输出当前批准使用的 license scan 命令与缺失前置条件
 
+## 备份 / 恢复现状基线
+
+当前仓库内可直接引用的 backup / recovery 现状清单见：
+
+- `docs/setup/backup-recovery-current-state.md`
+
+这份文档只记录当前真实可执行的入口、路径和缺口，用作后续 runbook 编写基线。
+
 ## 常用环境变量
 
 - `BACKEND_PORT` / `FRONTEND_PORT`

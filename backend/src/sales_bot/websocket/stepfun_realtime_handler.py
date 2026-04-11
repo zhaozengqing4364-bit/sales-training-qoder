@@ -24,7 +24,6 @@ from urllib.parse import urlencode
 
 import websockets
 from fastapi import WebSocket, WebSocketDisconnect
-from jose import JWTError
 from sqlalchemy import select
 from websockets.exceptions import ConnectionClosed
 
@@ -34,7 +33,7 @@ from agent.capabilities.sales_stage import SalesStageCapability
 from agent.context import AgentContext
 from agent.models import Agent, Persona
 from common.ai.embedding_service import get_embedding_service
-from common.auth.service import resolve_websocket_token, verify_token
+from common.auth.service import JWTError, resolve_websocket_token, verify_token
 from common.conversation.storage import normalize_objection_ledger
 from common.db.models import PracticeSession
 from common.effectiveness import (

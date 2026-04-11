@@ -8,10 +8,9 @@ from datetime import datetime, timezone
 from typing import Optional
 
 from fastapi import WebSocket, WebSocketDisconnect
-from jose import JWTError
 from starlette.websockets import WebSocketState
 
-from common.auth.service import resolve_websocket_token
+from common.auth.service import JWTError, resolve_websocket_token
 from common.monitoring.logger import get_logger, set_trace_id, get_trace_id
 from common.monitoring.trace_context import normalize_trace_id
 from common.websocket.session_state_service import (

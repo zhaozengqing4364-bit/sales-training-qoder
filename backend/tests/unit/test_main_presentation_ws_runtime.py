@@ -6,7 +6,8 @@ import uuid
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from jose import JWTError
+
+from common.auth.service import JWTError
 
 import main
 

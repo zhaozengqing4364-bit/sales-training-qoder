@@ -7,5 +7,5 @@
 | ID | Slice | Risk | Depends | Done | After this |
 |----|-------|------|---------|------|------------|
 | S01 | S01 | medium | — | ✅ | 有一份 query/index baseline，后续优化 backlog 基于真实证据而不是 audit 猜测。 |
-| S02 | S02 | low | — | ⬜ | 仓库里有可执行的依赖扫描与升级策略文档/流程。 |
-| S03 | 备份 / 故障恢复 / 容灾 runbook 基线 | medium | S01 | ⬜ | 有一份按当前部署现状可执行的 backup/recovery runbook。 |
+| S02 | S02 | low | — | ✅ | 仓库里有可执行的依赖扫描与升级策略文档/流程。 |
+| S03 | S03 | medium | — | ⬜ | 有一份按当前部署现状可执行的 backup/recovery runbook。 |

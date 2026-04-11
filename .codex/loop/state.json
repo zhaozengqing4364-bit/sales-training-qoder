@@ -1,6 +1,6 @@
 {
   "mode": "grow",
-  "current_issue_id": "M018-S02-T03",
+  "current_issue_id": "M018-S03-T01",
   "current_issue_type": "task",
   "current_issue_status": "done",
   "pending_issue_ids": [],
@@ -178,27 +178,26 @@
     "M018-S01-T02",
     "M018-S01-T03",
     "M018-S01",
-    "M018-S02-T02"
+    "M018-S02-T02",
+    "M018-S02-T03",
+    "M018-S02",
+    "M018-S03-T01"
   ],
   "blocked_issue_ids": [],
   "deferred_issue_ids": [],
   "last_modified_files": [
-    "web/package.json",
-    "web/package-lock.json",
-    "docs/setup/dependency-governance-baseline.md",
-    ".gsd/DECISIONS.md",
+    "docs/setup/backup-recovery-current-state.md",
+    "scripts/README.md",
     ".gsd/KNOWLEDGE.md",
     ".codex/loop/state.json",
     ".codex/loop/log.md"
   ],
   "last_verification_commands": [
-    "npm audit --prefix web",
-    "npm --prefix web test -- --run src/lib/api/client.auth.test.ts",
-    "PIP_AUDIT_VULNERABILITY_SERVICE=osv backend/venv/bin/python -m pip_audit -r backend/requirements.txt",
-    "backend/venv/bin/python -m piplicenses --from=mixed --format=json"
+    "find docs scripts -maxdepth 2 -type f | sort | head -n 20",
+    "rg -n \"DATABASE_URL|alembic upgrade head|repair_legacy_schema|bootstrap_auth_admin|pg_dump|OSS\" docs/setup/backup-recovery-current-state.md scripts/README.md"
   ],
-  "last_verification_result": "passed for the web governance gate after upgrading next/eslint-config-next and refreshing the lockfile with npm update; npm audit now exits 0 and the focused frontend client-auth suite stays green. Backend proof is now explicitly classified: requirements-scoped pip_audit against OSV executes and surfaces one open ecdsa CVE with no newer fix version, while pip-licenses still crashes on missing package Name metadata instead of being silently marked green.",
-  "last_success_signal": "M018/S02/T03 now leaves one truthful dependency-governance baseline: frontend audit proof is freshly green in-repo, backend/security proof distinguishes tool-install, service-timeout, requirements-scoped open risk, and license-scanner runtime blockers, and future agents can see all of that from the baseline doc plus the recorded commands.",
+  "last_verification_result": "passed; the task-plan file inventory command still runs from repo root, and a focused grep proof shows the new backup/recovery baseline now records the real DATABASE_URL drift, alembic/legacy-schema/admin-bootstrap recovery entrypoints, OSS/local persistence surfaces, and the explicit absence of repo-native backup automation.",
+  "last_success_signal": "M018/S03/T01 now leaves one durable current-state baseline in docs/setup/backup-recovery-current-state.md, linked from scripts/README.md, so future agents can start the runbook from real commands, paths, and missing-capability facts instead of rediscovering deployment/storage assumptions from code.",
   "last_growth_scan": null,
-  "next_action": "Wait for the next planned item; dependency-governance proof and prerequisite status are now explicitly recorded for M018/S02/T03."
+  "next_action": "Proceed to M018/S03/T02 and turn the current-state baseline into the minimal executable backup/recovery runbook."
 }

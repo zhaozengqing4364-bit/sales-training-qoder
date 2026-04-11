@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "exported_at": "2026-04-11T23:27:02.815Z",
+  "exported_at": "2026-04-11T23:57:55.663Z",
   "milestones": [
     {
       "id": "M001",
@@ -2504,14 +2504,14 @@
       "milestone_id": "M018",
       "id": "S02",
       "title": "S02",
-      "status": "pending",
+      "status": "complete",
       "risk": "low",
       "depends": [],
       "demo": "仓库里有可执行的依赖扫描与升级策略文档/流程。",
       "created_at": "2026-04-08T08:55:14.383Z",
-      "completed_at": null,
-      "full_summary_md": "",
-      "full_uat_md": "",
+      "completed_at": "2026-04-11T23:52:09.096Z",
+      "full_summary_md": "---\nid: S02\nparent: M018\nmilestone: M018\nprovides:\n  - A repository-local dependency-governance baseline that future agents can rerun directly from doc/script entrypoints.\n  - A green exact backend vulnerability gate (`backend/venv/bin/python -m pip_audit`) and a working backend license inventory command.\n  - A hardened shared backend JWT seam using PyJWT instead of python-jose.\nrequires:\n  []\naffects:\n  - M018/S03\nkey_files:\n  - backend/requirements.txt\n  - backend/src/common/auth/service.py\n  - backend/src/common/websocket/base_handler.py\n  - backend/src/sales_bot/websocket/router.py\n  - backend/src/sales_bot/websocket/stepfun_realtime_handler.py\n  - backend/src/presentation_coach/websocket/presentation_handler.py\n  - backend/src/main.py\n  - docs/setup/dependency-governance-baseline.md\n  - web/package.json\n  - web/package-lock.json\n  - .gsd/DECISIONS.md\n  - .gsd/KNOWLEDGE.md\n  - .gsd/PROJECT.md\nkey_decisions:\n  - D205 — dependency-governance truth still anchors on web/package-lock.json + backend/requirements.txt, not backend pyproject extras or CI install drift.\n  - D206 — repository-local doc + wrapper script are the canonical dependency-governance entrypoint.\n  - D207 — requirements-scoped OSV-backed pip_audit remains the truthful repo-level backend proof seam even though the exact gate is now also green.\n  - D208 — backend JWT handling now uses PyJWT[crypto] with shared JWTError exported from common.auth.service instead of python-jose.\npatterns_established:\n  - Keep dependency governance anchored to repo truth files (`web/package-lock.json`, `backend/requirements.txt`) and make every claimed proof rerunnable from the repository itself.\n  - When exact environment-wide audit gates fail, fix the dependency seam or rebuild the environment; do not relabel the failure as 'non-authoritative' and move on.\n  - Expose shared auth/runtime token errors from one backend seam (`common.auth.service`) so library swaps do not force page- or runtime-local exception handling.\nobservability_surfaces:\n  - bash scripts/dependency-governance.sh status\n  - npm audit --prefix web\n  - backend/venv/bin/python -m pip_audit\n  - backend/venv/bin/python -m piplicenses --from=mixed --format=json\n  - focused backend auth/websocket proof on the shared JWT seam\ndrill_down_paths:\n  - .gsd/milestones/M018/slices/S02/tasks/T01-SUMMARY.md\n  - .gsd/milestones/M018/slices/S02/tasks/T02-SUMMARY.md\n  - .gsd/milestones/M018/slices/S02/tasks/T03-SUMMARY.md\nduration: \"\"\nverification_result: passed\ncompleted_at: 2026-04-11T23:52:09.098Z\nblocker_discovered: false\n---\n\n# S02: 依赖安全、许可证与更新策略基线\n\n**Closed the dependency-governance baseline by making the repo’s web/backend audit commands and backend license inventory actually runnable and green, then hardening the backend JWT dependency seam to remove the audited python-jose/ecdsa risk path.**\n\n## What Happened\n\nS02 started as a documentation-only dependency-governance baseline, but the slice closeout gate exposed that the exact backend proof command `backend/venv/bin/python -m pip_audit` still failed and therefore the baseline was not yet trustworthy. I followed that failure back to its root causes instead of reclassifying it away: the backend authority file still lacked explicit security floors for several audited packages, the auth/runtime stack still depended on `python-jose` and its transitive `ecdsa` chain, and the local backend virtualenv had become polluted enough to leave duplicated opentelemetry metadata and broken license-scanner behavior. The slice was therefore closed by making the repository state match the governance promise. Backend dependency governance now stays anchored to `backend/requirements.txt`; that file was updated with the exact security floors required to satisfy the current backend audit baseline, plus `greenlet` so the repo’s async SQLAlchemy pytest harness keeps working after a clean rebuild. The JWT seam was hardened by replacing `python-jose[cryptography]` with `PyJWT[crypto]` while keeping the existing HS256 create/verify contract and re-exporting `JWTError` from `common.auth.service`, then updating websocket/runtime callers to consume that shared seam. Finally, the slice’s repository-local baseline artifacts were refreshed: `docs/setup/dependency-governance-baseline.md` now records the real green proof line, `scripts/dependency-governance.sh status` truthfully reports ready audit/license prerequisites, `.gsd/DECISIONS.md` records the JWT-library choice, `.gsd/KNOWLEDGE.md` records the clean-venv recovery gotcha, and `.gsd/PROJECT.md` now reflects that M018/S02 is complete. The net result is that this slice no longer leaves dependency governance as a half-runnable promise; the repository itself now demonstrates web audit green, exact backend audit green, backend license inventory runnable, and one explicit set of rules for how future dependency changes must be synchronized and verified.\n\n## Verification\n\nFresh slice-close verification passed the full planned gate and the dependency-seam regression proof: `test -f web/package.json && test -f backend/requirements.txt` passed; `npm audit --prefix web` returned `found 0 vulnerabilities`; exact `backend/venv/bin/python -m pip_audit` returned `No known vulnerabilities found`; `backend/venv/bin/python -m piplicenses --from=mixed --format=json` generated a valid JSON inventory (227 packages); `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/integration/test_auth_login_api.py -x -q` passed 17/17; `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/test_main_presentation_ws_runtime.py backend/tests/unit/test_websocket_handler.py -x -q` passed 26/26; and `bash scripts/dependency-governance.sh status` reported the intended authority files plus ready audit/license prerequisites without hiding the remaining backend pyproject extras drift.\n\n## Requirements Advanced\n\n- No requirement status transitions; S02 establishes operational baseline/governance proof rather than changing a requirement lifecycle state. — \n\n## Requirements Validated\n\nNone.\n\n## New Requirements Surfaced\n\nNone.\n\n## Requirements Invalidated or Re-scoped\n\nNone.\n\n## Deviations\n\nNone.\n\n## Known Limitations\n\nThe rebuilt local backend virtualenv now uses the host Python 3.14 interpreter because auto-mode had to recreate backend/venv cleanly to remove duplicated dist-info corruption; focused backend tests pass, but some third-party packages still emit non-blocking Python 3.14 warnings (for example chromadb telemetry and langchain-core pydantic-v1 warnings). CI/package metadata drift also remains: backend/pyproject.toml still does not define reusable extras, so pip install -e .[test] remains non-authoritative.\n\n## Follow-ups\n\nNone.\n\n## Files Created/Modified\n\n- `backend/requirements.txt` — Raised backend security floors, added greenlet for async SQLAlchemy test harness, swapped python-jose to PyJWT, and recorded exact dependency governance truth in the backend authority file.\n- `backend/src/common/auth/service.py` — Replaced jose imports with PyJWT-backed create/verify helpers and shared JWTError export for auth/runtime callers.\n- `backend/src/common/websocket/base_handler.py` — Updated websocket/runtime import seams to consume JWTError from common.auth.service instead of python-jose directly.\n- `backend/src/sales_bot/websocket/router.py` — Updated sales websocket/router and StepFun runtime to use the shared auth JWT seam after the PyJWT migration.\n- `backend/src/sales_bot/websocket/stepfun_realtime_handler.py` — Updated sales websocket/router and StepFun runtime to use the shared auth JWT seam after the PyJWT migration.\n- `backend/src/presentation_coach/websocket/presentation_handler.py` — Updated presentation runtime JWT imports to stay aligned with the shared auth seam after removing python-jose.\n- `backend/src/main.py` — Updated main.py and focused runtime unit test imports to consume the shared JWTError seam.\n- `docs/setup/dependency-governance-baseline.md` — Updated the repository-local dependency-governance baseline to reflect green exact backend/web audit proof and working backend license inventory.\n- `web/package-lock.json` — Refreshed the frontend dependency lockfile to keep npm audit green.\n- `web/package.json` — Refreshed frontend package pins used for the green audit baseline.\n- `.gsd/DECISIONS.md` — Recorded the new JWT-library decision for future dependency governance work.\n- `.gsd/KNOWLEDGE.md` — Added a recovery note about clean backend venv rebuilds and the greenlet requirement after dependency surgery.\n- `.gsd/PROJECT.md` — Refreshed current project state to reflect M018/S02 completion.\n",
+      "full_uat_md": "# S02: 依赖安全、许可证与更新策略基线 — UAT\n\n**Milestone:** M018\n**Written:** 2026-04-11T23:52:09.098Z\n\n# UAT — M018/S02 依赖安全、许可证与更新策略基线\n\n## Preconditions\n- Repository root is `/Users/zhaozengqing/github/销售训练qoder`.\n- `web/package-lock.json`, `backend/requirements.txt`, `docs/setup/dependency-governance-baseline.md`, and `scripts/dependency-governance.sh` are present.\n- `backend/venv` exists after the clean rebuild performed in this slice.\n\n## Test Case 1 — Governance entrypoint exposes the real authority files and ready prerequisites\n1. Run `bash scripts/dependency-governance.sh status`.\n2. Confirm the output names `web/package.json + web/package-lock.json` as frontend authority and `backend/requirements.txt` as backend authority.\n3. Confirm the output marks `pip_audit: ready` and `pip-licenses: ready`.\n4. Confirm the output still calls out `backend pyproject extras: drift detected` so CI drift is not being hidden.\n\n**Expected outcome:** The command succeeds and truthfully reports one runnable dependency-governance surface plus the still-non-authoritative `pip install -e .[test]` drift note.\n\n## Test Case 2 — Frontend vulnerability baseline is green\n1. Run `npm audit --prefix web`.\n2. Optionally rerun `npm --prefix web test -- --run src/lib/api/client.auth.test.ts`.\n\n**Expected outcome:** `npm audit` exits 0 with `found 0 vulnerabilities`; the focused frontend smoke suite still passes after the lockfile refresh.\n\n## Test Case 3 — Exact backend vulnerability gate is green\n1. Run `backend/venv/bin/python -m pip_audit`.\n2. Run `PIP_AUDIT_VULNERABILITY_SERVICE=osv backend/venv/bin/python -m pip_audit -r backend/requirements.txt`.\n\n**Expected outcome:** Both commands exit 0 with `No known vulnerabilities found`, proving that the repo-level proof and the stricter exact gate are both green.\n\n## Test Case 4 — Backend license inventory is executable, not placeholder-only\n1. Run `backend/venv/bin/python -m piplicenses --from=mixed --format=json > /tmp/m018_s02_piplicenses.json`.\n2. Open or parse the file and verify it is valid JSON with one or more package entries.\n\n**Expected outcome:** The command succeeds and produces a non-empty JSON inventory instead of crashing on package metadata.\n\n## Test Case 5 — Shared JWT seam still works after the python-jose → PyJWT migration\n1. Run `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/integration/test_auth_login_api.py -x -q`.\n2. Run `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/test_main_presentation_ws_runtime.py backend/tests/unit/test_websocket_handler.py -x -q`.\n\n**Expected outcome:** The auth suite passes, and the websocket/runtime unit suites pass, proving token create/verify behavior and shared JWTError handling still work after the library swap.\n\n## Edge Case Checks\n- If `pip_audit` starts reporting unrelated environment breakage after dependency surgery, rebuild with `python3 -m venv --clear backend/venv` and reinstall `-r backend/requirements.txt` plus `pip-audit` / `pip-licenses` before classifying the result as a product regression.\n- If async backend tests fail before route logic with `the greenlet library is required`, treat that as a baseline regression in `backend/requirements.txt` rather than an auth/JWT failure.\n- If `piplicenses` regresses to package-metadata crashes, classify it as an environment/runtime blocker and inspect the rebuilt venv before changing the governance contract.\n\n",
       "goal": "把依赖安全、许可证、更新策略从口头建议变成明确维护流程。",
       "success_criteria": "- web/backend 的依赖扫描入口和升级门禁被写成可执行 baseline。\n- `npm audit`、`pip_audit` 和 license scan 的前置条件/执行方式清楚记录。\n- backend `requirements.txt` 与依赖治理规则的同步要求被明确写进基线。",
       "proof_level": "operational",
@@ -2523,12 +2523,10 @@
     {
       "milestone_id": "M018",
       "id": "S03",
-      "title": "备份 / 故障恢复 / 容灾 runbook 基线",
+      "title": "S03",
       "status": "pending",
       "risk": "medium",
-      "depends": [
-        "S01"
-      ],
+      "depends": [],
       "demo": "有一份按当前部署现状可执行的 backup/recovery runbook。",
       "created_at": "2026-04-08T08:55:14.383Z",
       "completed_at": null,
@@ -11157,19 +11155,25 @@
       "milestone_id": "M018",
       "slice_id": "S03",
       "id": "T01",
-      "title": "盘点当前 backup/recovery 现状",
-      "status": "pending",
-      "one_liner": "",
-      "narrative": "",
-      "verification_result": "",
+      "title": "Added a code-adjacent backup/recovery current-state baseline that maps the repo’s real startup, schema, storage, and missing-backup facts for the upcoming runbook.",
+      "status": "complete",
+      "one_liner": "Added a code-adjacent backup/recovery current-state baseline that maps the repo’s real startup, schema, storage, and missing-backup facts for the upcoming runbook.",
+      "narrative": "I audited the repository’s real operational entrypoints and wrote `docs/setup/backup-recovery-current-state.md` as the authoritative current-state inventory for this slice. The new baseline records the actual local startup path (`scripts/dev-up.sh` / `scripts/dev-stop.sh`), the runtime database/session entrypoints (`backend/src/main.py`, `backend/src/common/db/session.py`), the Alembic migration surface, the one-time legacy schema repair script, the destructive reset script, the local admin bootstrap command, and the currently visible persistence surfaces across PostgreSQL, Redis session-state snapshots, local knowledge documents, local Chroma data, legacy PPT upload paths, and OSS-backed audio objects. I also linked that baseline from `scripts/README.md` so future agents can find it from the existing script index. During execution I documented one non-obvious but operationally important gotcha in `.gsd/KNOWLEDGE.md`: runtime config, shared config, and dev-up do not agree on a single implicit `DATABASE_URL` default, so any future restore/runbook work must record the actual environment value explicitly instead of assuming one universal default. I did not invent any backup automation; the document explicitly records the missing `pg_dump`/restore/Redis/archive/OSS backup gaps as current-state facts for T02.",
+      "verification_result": "Fresh verification was run after writing the baseline. `find docs scripts -maxdepth 2 -type f | sort | head -n 20` succeeded from repo root, confirming the repository-level docs/scripts inventory command in the task plan still runs cleanly. A focused grep proof, `rg -n \"DATABASE_URL|alembic upgrade head|repair_legacy_schema|bootstrap_auth_admin|pg_dump|OSS\" docs/setup/backup-recovery-current-state.md scripts/README.md`, also succeeded and showed the new baseline contains the real recovery-side commands, the DATABASE_URL drift warning, the storage/OSS facts, and the explicit absence of repo-native backup automation.",
       "duration": "",
-      "completed_at": null,
+      "completed_at": "2026-04-11T23:57:55.617Z",
       "blocker_discovered": false,
-      "deviations": "",
-      "known_issues": "",
-      "key_files": [],
-      "key_decisions": [],
-      "full_summary_md": "",
+      "deviations": "None.",
+      "known_issues": "The repository still has no repo-native backup or restore automation for PostgreSQL, Redis, local document/Chroma directories, legacy upload paths, or OSS audio objects; T01 only inventories these gaps and their real evidence paths.",
+      "key_files": [
+        "docs/setup/backup-recovery-current-state.md",
+        "scripts/README.md",
+        ".gsd/KNOWLEDGE.md"
+      ],
+      "key_decisions": [
+        "Recorded the current backup/recovery baseline as a factual inventory document linked from the existing scripts index, instead of inventing unshipped backup automation or idealized ops flows."
+      ],
+      "full_summary_md": "---\nid: T01\nparent: S03\nmilestone: M018\nkey_files:\n  - docs/setup/backup-recovery-current-state.md\n  - scripts/README.md\n  - .gsd/KNOWLEDGE.md\nkey_decisions:\n  - Recorded the current backup/recovery baseline as a factual inventory document linked from the existing scripts index, instead of inventing unshipped backup automation or idealized ops flows.\nduration: \nverification_result: passed\ncompleted_at: 2026-04-11T23:57:55.615Z\nblocker_discovered: false\n---\n\n# T01: Added a code-adjacent backup/recovery current-state baseline that maps the repo’s real startup, schema, storage, and missing-backup facts for the upcoming runbook.\n\n**Added a code-adjacent backup/recovery current-state baseline that maps the repo’s real startup, schema, storage, and missing-backup facts for the upcoming runbook.**\n\n## What Happened\n\nI audited the repository’s real operational entrypoints and wrote `docs/setup/backup-recovery-current-state.md` as the authoritative current-state inventory for this slice. The new baseline records the actual local startup path (`scripts/dev-up.sh` / `scripts/dev-stop.sh`), the runtime database/session entrypoints (`backend/src/main.py`, `backend/src/common/db/session.py`), the Alembic migration surface, the one-time legacy schema repair script, the destructive reset script, the local admin bootstrap command, and the currently visible persistence surfaces across PostgreSQL, Redis session-state snapshots, local knowledge documents, local Chroma data, legacy PPT upload paths, and OSS-backed audio objects. I also linked that baseline from `scripts/README.md` so future agents can find it from the existing script index. During execution I documented one non-obvious but operationally important gotcha in `.gsd/KNOWLEDGE.md`: runtime config, shared config, and dev-up do not agree on a single implicit `DATABASE_URL` default, so any future restore/runbook work must record the actual environment value explicitly instead of assuming one universal default. I did not invent any backup automation; the document explicitly records the missing `pg_dump`/restore/Redis/archive/OSS backup gaps as current-state facts for T02.\n\n## Verification\n\nFresh verification was run after writing the baseline. `find docs scripts -maxdepth 2 -type f | sort | head -n 20` succeeded from repo root, confirming the repository-level docs/scripts inventory command in the task plan still runs cleanly. A focused grep proof, `rg -n \"DATABASE_URL|alembic upgrade head|repair_legacy_schema|bootstrap_auth_admin|pg_dump|OSS\" docs/setup/backup-recovery-current-state.md scripts/README.md`, also succeeded and showed the new baseline contains the real recovery-side commands, the DATABASE_URL drift warning, the storage/OSS facts, and the explicit absence of repo-native backup automation.\n\n## Verification Evidence\n\n| # | Command | Exit Code | Verdict | Duration |\n|---|---------|-----------|---------|----------|\n| 1 | `find docs scripts -maxdepth 2 -type f | sort | head -n 20` | 0 | ✅ pass | 6ms |\n| 2 | `rg -n \"DATABASE_URL|alembic upgrade head|repair_legacy_schema|bootstrap_auth_admin|pg_dump|OSS\" docs/setup/backup-recovery-current-state.md scripts/README.md` | 0 | ✅ pass | 17ms |\n\n## Deviations\n\nNone.\n\n## Known Issues\n\nThe repository still has no repo-native backup or restore automation for PostgreSQL, Redis, local document/Chroma directories, legacy upload paths, or OSS audio objects; T01 only inventories these gaps and their real evidence paths.\n\n## Files Created/Modified\n\n- `docs/setup/backup-recovery-current-state.md`\n- `scripts/README.md`\n- `.gsd/KNOWLEDGE.md`\n",
       "description": "Why: 先盘清当前已有文档、脚本和数据库连接方式，runbook 才不会写成脱离仓库现实的空文档。\n\nDo:\n1. 梳理当前部署方式、脚本、数据库连接方式与已知备份事实。\n2. 找出 runbook 可以引用的真实命令、路径和证据位置。\n3. 记录缺失项，但不在本任务里臆造自动化能力。\n\nDone when: 已有一份 backup/recovery 现状清单，可直接支撑 runbook 编写。",
       "estimate": "30m",
       "files": [
@@ -13743,6 +13747,18 @@
       "decision": "Which backend vulnerability proof counts as the truthful repo-level dependency audit baseline",
       "choice": "Use requirements-scoped OSV-backed pip_audit on backend/requirements.txt, and record no-fix findings as open risk; do not treat bare `backend/venv/bin/python -m pip_audit` as the authoritative repo audit.",
       "rationale": "During M018/S02/T03 the bare command first failed because pip_audit was missing, then hit PyPI timeouts, and when run against the whole local environment it surfaced toolchain package vulnerabilities unrelated to the repository truth line. Auditing `backend/requirements.txt` with the OSV service isolated the repo-declared dependency surface and exposed the actionable/open item explicitly instead of mixing it with venv noise.",
+      "revisable": "Yes",
+      "made_by": "agent",
+      "superseded_by": null
+    },
+    {
+      "seq": 1578,
+      "id": "D208",
+      "when_context": "M018/S02 slice closeout hardening",
+      "scope": "library",
+      "decision": "Backend JWT library for auth/runtime token handling",
+      "choice": "Use PyJWT[crypto] instead of python-jose, and import JWTError via common.auth.service as the shared auth-token error seam.",
+      "rationale": "The enforced backend pip_audit gate surfaced python-jose's transitive ecdsa exposure with no acceptable green closeout path under the exact verification command. Migrating to PyJWT keeps the existing HS256 token contract and verify/create helpers stable while removing the vulnerable dependency path and giving websocket/runtime callers one shared JWTError authority.",
       "revisable": "Yes",
       "made_by": "agent",
       "superseded_by": null
@@ -18181,6 +18197,28 @@
       "verdict": "✅ pass (scanner blocker exposed)",
       "duration_ms": 303,
       "created_at": "2026-04-11T23:27:02.759Z"
+    },
+    {
+      "id": 409,
+      "task_id": "T01",
+      "slice_id": "S03",
+      "milestone_id": "M018",
+      "command": "find docs scripts -maxdepth 2 -type f | sort | head -n 20",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 6,
+      "created_at": "2026-04-11T23:57:55.617Z"
+    },
+    {
+      "id": 410,
+      "task_id": "T01",
+      "slice_id": "S03",
+      "milestone_id": "M018",
+      "command": "rg -n \"DATABASE_URL|alembic upgrade head|repair_legacy_schema|bootstrap_auth_admin|pg_dump|OSS\" docs/setup/backup-recovery-current-state.md scripts/README.md",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 17,
+      "created_at": "2026-04-11T23:57:55.617Z"
     }
   ]
 }

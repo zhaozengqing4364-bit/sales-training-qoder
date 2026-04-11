@@ -13,14 +13,13 @@ import uuid
 from typing import Any, cast
 
 from fastapi import WebSocket, WebSocketDisconnect
-from jose import JWTError
 from sqlalchemy import select
 
 from agent.models import Agent, Persona
 from agent.services.persona_policy import normalize_persona_policy
 from common.audio.asr_service import get_asr_service
 from common.audio.tts_service import get_tts_service
-from common.auth.service import verify_token
+from common.auth.service import JWTError, verify_token
 from common.conversation.storage import MessageStorageService
 from common.db.models import PracticeSession
 from common.db.schemas import InterruptionType
