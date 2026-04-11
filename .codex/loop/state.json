@@ -1,6 +1,6 @@
 {
   "mode": "grow",
-  "current_issue_id": "M018-S01-T01",
+  "current_issue_id": "M018-S01-T03",
   "current_issue_type": "task",
   "current_issue_status": "done",
   "pending_issue_ids": [],
@@ -174,29 +174,26 @@
     "M017-S03-T02",
     "M017-S03-T03",
     "M017-S03",
-    "M018-S01-T01"
+    "M018-S01-T01",
+    "M018-S01-T02",
+    "M018-S01-T03"
   ],
   "blocked_issue_ids": [],
   "deferred_issue_ids": [],
   "last_modified_files": [
-    "backend/src/common/analytics/admin_analytics_service.py",
-    "backend/src/common/analytics/history_service.py",
-    "backend/src/common/conversation/session_evidence.py",
-    "backend/src/admin/api/training_records.py",
-    ".gsd/DECISIONS.md",
-    ".gsd/KNOWLEDGE.md",
+    "backend/tests/contract/test_analytics.py",
     ".codex/loop/state.json",
     ".codex/loop/log.md"
   ],
   "last_verification_commands": [
-    "rg -n \"select|join|order_by|group_by|SessionEvidence|leaderboard|analytics\" backend/src/common/analytics backend/src/common/conversation backend/src/admin/api",
-    "lsp diagnostics backend/src/common/analytics/admin_analytics_service.py",
-    "lsp diagnostics backend/src/common/analytics/history_service.py",
-    "lsp diagnostics backend/src/common/conversation/session_evidence.py",
-    "lsp diagnostics backend/src/admin/api/training_records.py"
+    "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/contract/test_analytics.py -k \"db_performance_baseline or query_index_discovery_conclusions\" -q",
+    "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/contract/test_analytics.py backend/tests/unit/common/test_admin_analytics_service.py backend/tests/unit/common/test_leaderboard_service.py -x -q",
+    "lsp diagnostics backend/tests/contract/test_analytics.py",
+    "lsp diagnostics backend/tests/unit/common/test_admin_analytics_service.py",
+    "lsp diagnostics backend/tests/unit/common/test_leaderboard_service.py"
   ],
-  "last_verification_result": "passed; the exact task-plan rg gate now surfaces the code-adjacent analytics/history/projection/admin inventory facts, and fresh diagnostics stayed clean on the touched authority files.",
-  "last_success_signal": "M018/S01/T01 now gives downstream DB work one durable baseline: admin analytics is a repeated bulk-projection fanout hotspot, history/progress avoids classical DB N+1 but reloads large session/message windows, session-evidence is a per-session message fan-in seam, and admin training records still has a confirmed row-level agent/persona N+1.",
+  "last_verification_result": "passed; the new query/index discovery contract stayed green after a red-green cycle, the full task-plan pytest gate finished 23/23 green, and diagnostics stayed clean on the touched/focused proof files.",
+  "last_success_signal": "M018/S01/T03 now gives downstream work one reusable discovery backlog in backend/tests/contract/test_analytics.py that separates focused-proof-confirmed gaps, code-path-confirmed gaps, and index/search ideas that still need real Postgres/runtime evidence.",
   "last_growth_scan": null,
-  "next_action": "Proceed to M018/S01/T02 using the new code-adjacent DB discovery inventories as the baseline for evidence-backed proof and backlog ranking."
+  "next_action": "Use the layered query/index discovery backlog to decide whether M018 should open a follow-on implementation slice, then close S01 with slice-level verification."
 }

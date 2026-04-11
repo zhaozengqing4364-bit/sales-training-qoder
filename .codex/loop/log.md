@@ -916,3 +916,21 @@
   verification results: passed; the focused presentation contract/integration suite finished 9/9 green, the exact task-plan rg inventory now surfaces the code-adjacent discovery seam plus the new delete guard-gap proof, and diagnostics stayed clean on the touched backend authority/test files.
   success signal status: future agents can now tell which presentation race surfaces are already covered, which one is already proved as a guard gap, and which one still needs concurrent reproduction before any locking work is justified.
   rollback note: if later S03 work changes presentation mutation rules, keep the runtime inventory in backend/src/presentation_coach/api/presentations.py and the focused proofs in backend/tests/contract/test_presentations.py + backend/tests/integration/test_presentation_flow.py aligned together; otherwise discovery conclusions will drift back into audit guesses.
+
+- time: 2026-04-12T06:45:20+08:00
+  mode: grow
+  item id: M018-S01-T03
+  files changed:
+    - backend/tests/contract/test_analytics.py
+    - .codex/loop/state.json
+    - .codex/loop/log.md
+  summary: Added a layered query/index discovery backlog to the analytics contract so future agents can start from explicit confirmed gaps versus Postgres-only hypotheses instead of rebuilding M018 DB findings from scattered inventories.
+  verification commands:
+    - backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/contract/test_analytics.py -k "db_performance_baseline or query_index_discovery_conclusions" -q
+    - backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/contract/test_analytics.py backend/tests/unit/common/test_admin_analytics_service.py backend/tests/unit/common/test_leaderboard_service.py -x -q
+    - lsp diagnostics backend/tests/contract/test_analytics.py
+    - lsp diagnostics backend/tests/unit/common/test_admin_analytics_service.py
+    - lsp diagnostics backend/tests/unit/common/test_leaderboard_service.py
+  verification results: passed; the red-green contract proof finished green, the full task-plan pytest gate finished 23/23 green, and diagnostics stayed clean on the touched/focused proof files.
+  success signal status: downstream M018 work no longer needs to infer priority from baseline inventory strings alone — the contract now names which query-shape gaps are already confirmed and which index/search ideas still require real Postgres/runtime evidence before implementation.
+  rollback note: if a future slice proves or retires any query/index candidate, update backend/tests/contract/test_analytics.py together with the code-adjacent inventory constant that supplied the evidence so the backlog does not drift from the live baseline.

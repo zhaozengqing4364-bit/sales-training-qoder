@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "exported_at": "2026-04-11T22:39:32.985Z",
+  "exported_at": "2026-04-11T22:46:22.152Z",
   "milestones": [
     {
       "id": "M001",
@@ -10987,19 +10987,25 @@
       "milestone_id": "M018",
       "slice_id": "S01",
       "id": "T03",
-      "title": "输出 query/index discovery 结论",
-      "status": "pending",
-      "one_liner": "",
-      "narrative": "",
-      "verification_result": "",
+      "title": "Added a layered analytics contract backlog that separates confirmed query/index gaps from Postgres-only hypotheses.",
+      "status": "complete",
+      "one_liner": "Added a layered analytics contract backlog that separates confirmed query/index gaps from Postgres-only hypotheses.",
+      "narrative": "I extended `backend/tests/contract/test_analytics.py` from a baseline-presence check into the canonical M018/S01 discovery conclusion artifact. The contract now pulls in the admin training-records DB baseline alongside the existing admin analytics, history, and session-evidence inventories so the reusable backlog covers the confirmed admin list N+1 seam as well as the projection-window paths already proved in T02. I then added `QUERY_INDEX_DISCOVERY_CONCLUSIONS`, which is explicitly layered into `confirmed_gaps.focused_proof`, `confirmed_gaps.code_path_confirmed`, and `needs_real_postgres_evidence`. The focused-proof bucket names the two gaps already backed by executable proof: overview growth replays the projection window for current-vs-previous comparison, and admin leaderboard still requires a full projection-window load before top-N ranking. The code-path-confirmed bucket preserves the actionable but not yet focused-tested gaps: export fanout rebuilding the same projection window, the admin training-records row-level agent/persona N+1, and the manager-intervention overlay’s duplicate completed-history reload. The Postgres-only bucket keeps the speculative items honest by requiring a measurement plan instead of pretending they are already ready for implementation: practice-session composite window indexes, admin analytics scenario-filter planning, conversation-message timestamp index extension, and admin training-record search text indexes. I drove the change red→green by first making the contract fail on the missing layered backlog, then filling in the discovery artifact with concrete proof/follow-up language so downstream agents can decide whether to open a real optimization slice without re-reading scattered inventory comments.",
+      "verification_result": "Ran a focused red-green contract gate with `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/contract/test_analytics.py -k \"db_performance_baseline or query_index_discovery_conclusions\" -q`; it finished 2 selected tests green after the layered backlog was added. Then ran the full task-plan verification command `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/contract/test_analytics.py backend/tests/unit/common/test_admin_analytics_service.py backend/tests/unit/common/test_leaderboard_service.py -x -q`; it finished 23/23 green. Also re-checked LSP diagnostics on `backend/tests/contract/test_analytics.py`, `backend/tests/unit/common/test_admin_analytics_service.py`, and `backend/tests/unit/common/test_leaderboard_service.py`; all returned clean.",
       "duration": "",
-      "completed_at": null,
+      "completed_at": "2026-04-11T22:46:22.108Z",
       "blocker_discovered": false,
-      "deviations": "",
-      "known_issues": "",
-      "key_files": [],
-      "key_decisions": [],
-      "full_summary_md": "",
+      "deviations": "None.",
+      "known_issues": "Repo-root backend pytest still emits the pre-existing pytest-cov warning pattern (`Module src was never imported` / `No data was collected`) for these focused commands, but both verification commands exited 0 and the task gate passed.",
+      "key_files": [
+        "backend/tests/contract/test_analytics.py",
+        ".codex/loop/state.json",
+        ".codex/loop/log.md"
+      ],
+      "key_decisions": [
+        "Kept the reusable M018 query/index discovery backlog in `backend/tests/contract/test_analytics.py` itself, layered by focused proof, code-path-confirmed gaps, and Postgres-only hypotheses so future work can start from one executable artifact instead of scattered inventory comments."
+      ],
+      "full_summary_md": "---\nid: T03\nparent: S01\nmilestone: M018\nkey_files:\n  - backend/tests/contract/test_analytics.py\n  - .codex/loop/state.json\n  - .codex/loop/log.md\nkey_decisions:\n  - Kept the reusable M018 query/index discovery backlog in `backend/tests/contract/test_analytics.py` itself, layered by focused proof, code-path-confirmed gaps, and Postgres-only hypotheses so future work can start from one executable artifact instead of scattered inventory comments.\nduration: \nverification_result: passed\ncompleted_at: 2026-04-11T22:46:22.107Z\nblocker_discovered: false\n---\n\n# T03: Added a layered analytics contract backlog that separates confirmed query/index gaps from Postgres-only hypotheses.\n\n**Added a layered analytics contract backlog that separates confirmed query/index gaps from Postgres-only hypotheses.**\n\n## What Happened\n\nI extended `backend/tests/contract/test_analytics.py` from a baseline-presence check into the canonical M018/S01 discovery conclusion artifact. The contract now pulls in the admin training-records DB baseline alongside the existing admin analytics, history, and session-evidence inventories so the reusable backlog covers the confirmed admin list N+1 seam as well as the projection-window paths already proved in T02. I then added `QUERY_INDEX_DISCOVERY_CONCLUSIONS`, which is explicitly layered into `confirmed_gaps.focused_proof`, `confirmed_gaps.code_path_confirmed`, and `needs_real_postgres_evidence`. The focused-proof bucket names the two gaps already backed by executable proof: overview growth replays the projection window for current-vs-previous comparison, and admin leaderboard still requires a full projection-window load before top-N ranking. The code-path-confirmed bucket preserves the actionable but not yet focused-tested gaps: export fanout rebuilding the same projection window, the admin training-records row-level agent/persona N+1, and the manager-intervention overlay’s duplicate completed-history reload. The Postgres-only bucket keeps the speculative items honest by requiring a measurement plan instead of pretending they are already ready for implementation: practice-session composite window indexes, admin analytics scenario-filter planning, conversation-message timestamp index extension, and admin training-record search text indexes. I drove the change red→green by first making the contract fail on the missing layered backlog, then filling in the discovery artifact with concrete proof/follow-up language so downstream agents can decide whether to open a real optimization slice without re-reading scattered inventory comments.\n\n## Verification\n\nRan a focused red-green contract gate with `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/contract/test_analytics.py -k \"db_performance_baseline or query_index_discovery_conclusions\" -q`; it finished 2 selected tests green after the layered backlog was added. Then ran the full task-plan verification command `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/contract/test_analytics.py backend/tests/unit/common/test_admin_analytics_service.py backend/tests/unit/common/test_leaderboard_service.py -x -q`; it finished 23/23 green. Also re-checked LSP diagnostics on `backend/tests/contract/test_analytics.py`, `backend/tests/unit/common/test_admin_analytics_service.py`, and `backend/tests/unit/common/test_leaderboard_service.py`; all returned clean.\n\n## Verification Evidence\n\n| # | Command | Exit Code | Verdict | Duration |\n|---|---------|-----------|---------|----------|\n| 1 | `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/contract/test_analytics.py -k \"db_performance_baseline or query_index_discovery_conclusions\" -q` | 0 | ✅ pass | 2201ms |\n| 2 | `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/contract/test_analytics.py backend/tests/unit/common/test_admin_analytics_service.py backend/tests/unit/common/test_leaderboard_service.py -x -q` | 0 | ✅ pass | 4257ms |\n\n## Deviations\n\nNone.\n\n## Known Issues\n\nRepo-root backend pytest still emits the pre-existing pytest-cov warning pattern (`Module src was never imported` / `No data was collected`) for these focused commands, but both verification commands exited 0 and the task gate passed.\n\n## Files Created/Modified\n\n- `backend/tests/contract/test_analytics.py`\n- `.codex/loop/state.json`\n- `.codex/loop/log.md`\n",
       "description": "Why: 如果不把结论输出成可消费 backlog，后续 agent 仍会重新从零评估 query/index 风险。\n\nDo:\n1. 沉淀后续优化列表。\n2. 显式区分“已证实的性能缺口”和“仍需真实 Postgres 证据的猜测项”。\n3. 保持结论与 focused proof 对齐，不写空泛优化建议。\n\nDone when: 后续是否起性能实现 slice 有一份明确、分层的 discovery 结论可复用。",
       "estimate": "20m",
       "files": [
@@ -17909,6 +17915,28 @@
       "verdict": "✅ pass",
       "duration_ms": 5130,
       "created_at": "2026-04-11T22:39:32.948Z"
+    },
+    {
+      "id": 391,
+      "task_id": "T03",
+      "slice_id": "S01",
+      "milestone_id": "M018",
+      "command": "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/contract/test_analytics.py -k \"db_performance_baseline or query_index_discovery_conclusions\" -q",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 2201,
+      "created_at": "2026-04-11T22:46:22.109Z"
+    },
+    {
+      "id": 392,
+      "task_id": "T03",
+      "slice_id": "S01",
+      "milestone_id": "M018",
+      "command": "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/contract/test_analytics.py backend/tests/unit/common/test_admin_analytics_service.py backend/tests/unit/common/test_leaderboard_service.py -x -q",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 4257,
+      "created_at": "2026-04-11T22:46:22.109Z"
     }
   ]
 }

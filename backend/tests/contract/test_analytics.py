@@ -5,9 +5,142 @@ Tests API contracts for practice history and leaderboard
 import pytest
 from httpx import AsyncClient
 
+from admin.api.training_records import TRAINING_RECORDS_DB_PERFORMANCE_BASELINE
 from common.analytics.admin_analytics_service import ADMIN_ANALYTICS_DB_PERFORMANCE_BASELINE
 from common.analytics.history_service import HISTORY_QUERY_DB_PERFORMANCE_BASELINE
 from common.conversation.session_evidence import SESSION_EVIDENCE_DB_PERFORMANCE_BASELINE
+
+QUERY_INDEX_DISCOVERY_CONCLUSIONS = {
+    "confirmed_gaps": {
+        "focused_proof": (
+            {
+                "slug": "admin_overview_growth_replays_projection_window",
+                "baseline_paths": ("projection_window_load",),
+                "proof": (
+                    "test_get_overview_stats_replays_projection_window_for_growth_comparison proves overview growth "
+                    "replays the projection window twice for current-vs-previous comparison, including two "
+                    "practice_sessions window reads, two batched conversation_messages reads, and two user-count queries."
+                ),
+                "follow_up": (
+                    "If this becomes hot under real admin traffic, test shared current/previous window reuse or "
+                    "aggregate pushdown before proposing index-only work."
+                ),
+            },
+            {
+                "slug": "admin_leaderboard_requires_full_window_projection_before_top_n",
+                "baseline_paths": ("projection_window_load", "leaderboard_python_reduce"),
+                "proof": (
+                    "test_get_leaderboard_batches_projection_window_and_messages_once shows admin leaderboard still "
+                    "loads the whole projection window before ranking, while "
+                    "test_calculate_leaderboard_pushes_ranking_aggregation_into_sql proves the classic leaderboard "
+                    "service already keeps aggregate math in SQL."
+                ),
+                "follow_up": (
+                    "Treat this as a query-shape or top-N reuse candidate first; only escalate to index work if real "
+                    "admin timings show SQL scan time dominates the projection/Python reduce cost."
+                ),
+            },
+        ),
+        "code_path_confirmed": (
+            {
+                "slug": "admin_export_rebuilds_same_projection_window_for_each_csv_section",
+                "baseline_paths": ("projection_window_load",),
+                "proof": (
+                    "ADMIN_ANALYTICS_DB_PERFORMANCE_BASELINE records export_analytics fanout into overview, trends, "
+                    "and leaderboard, each rebuilding the same time-window projection."
+                ),
+                "follow_up": (
+                    "A future optimization slice should first test shared projection reuse across CSV sections instead "
+                    "of jumping straight to index creation."
+                ),
+            },
+            {
+                "slug": "training_records_list_has_row_level_agent_persona_n_plus_one",
+                "baseline_paths": ("list_training_records",),
+                "proof": (
+                    "TRAINING_RECORDS_DB_PERFORMANCE_BASELINE records up to two extra Agent/Persona SELECTs per row "
+                    "inside session_to_response after the paged PracticeSession query completes."
+                ),
+                "follow_up": (
+                    "Fix the row-level metadata lookup pattern before spending effort on admin training-record search "
+                    "indexes."
+                ),
+            },
+            {
+                "slug": "manager_intervention_overlay_reloads_completed_history_after_page_load",
+                "baseline_paths": (
+                    "manager_intervention_overlay",
+                    "history_session_window_and_message_batch",
+                ),
+                "proof": (
+                    "HISTORY_QUERY_DB_PERFORMANCE_BASELINE records a second completed-session/message replay after "
+                    "manager_interventions load, so admin user-session drill-ins can pay for duplicate history work."
+                ),
+                "follow_up": (
+                    "Only promote this into implementation if real admin usage shows it hot; the likely fix is "
+                    "deduplicated projection reuse rather than new indexes."
+                ),
+            },
+        ),
+    },
+    "needs_real_postgres_evidence": (
+        {
+            "slug": "practice_sessions_composite_window_indexes",
+            "baseline_paths": (
+                "projection_window_load",
+                "history_session_window_and_message_batch",
+            ),
+            "why_not_confirmed": (
+                "Current proof shows repeated practice_sessions filters and ordering, but not whether Postgres "
+                "scan/sort cost is the dominant latency versus Python-side projection rebuild work."
+            ),
+            "measurement_plan": (
+                "Capture EXPLAIN ANALYZE or pg_stat_statements for admin analytics/history windows and compare the "
+                "existing single-column indexes against composite window candidates before adding anything."
+            ),
+        },
+        {
+            "slug": "admin_analytics_scenario_filter_plan",
+            "baseline_paths": ("projection_window_load",),
+            "why_not_confirmed": (
+                "The code-path inventory only shows scenario.has(scenario_type=...) relationship filtering; it does "
+                "not prove whether the measurable bottleneck is planner shape, scenario lookup, or the projection "
+                "load after filtering."
+            ),
+            "measurement_plan": (
+                "Inspect real Postgres plans for scenario-filtered admin analytics queries and choose between a "
+                "query-shape rewrite and supporting indexes only if the filter itself shows up as a material cost."
+            ),
+        },
+        {
+            "slug": "conversation_messages_order_by_timestamp_extension",
+            "baseline_paths": (
+                "history_session_window_and_message_batch",
+                "single_session_projection_load",
+            ),
+            "why_not_confirmed": (
+                "Both history and per-session projection paths already batch by session_id/turn_number; without a real "
+                "plan we do not know whether adding timestamp to the composite index removes material sort work."
+            ),
+            "measurement_plan": (
+                "Run EXPLAIN on hot conversation_messages reads for long sessions and only consider extending the "
+                "existing (session_id, turn_number) index with timestamp if residual ORDER BY work is visible."
+            ),
+        },
+        {
+            "slug": "training_records_search_text_indexes",
+            "baseline_paths": ("list_training_records",),
+            "why_not_confirmed": (
+                "The current evidence only proves ILIKE search surfaces exist on user/scenario names; it does not yet "
+                "show that search latency is worse than the confirmed agent/persona row-level N+1."
+            ),
+            "measurement_plan": (
+                "Fix the row-level lookup pattern first, then use real Postgres timing to decide whether trigram or "
+                "text-search support is needed for admin training-record search."
+            ),
+        },
+    ),
+}
 
 
 @pytest.mark.contract
@@ -20,6 +153,7 @@ class TestAnalyticsContract:
             list(ADMIN_ANALYTICS_DB_PERFORMANCE_BASELINE)
             + list(HISTORY_QUERY_DB_PERFORMANCE_BASELINE)
             + list(SESSION_EVIDENCE_DB_PERFORMANCE_BASELINE)
+            + list(TRAINING_RECORDS_DB_PERFORMANCE_BASELINE)
         )
 
         expected_paths = {
@@ -28,24 +162,60 @@ class TestAnalyticsContract:
             "history_session_window_and_message_batch",
             "manager_intervention_overlay",
             "single_session_projection_load",
+            "list_training_records",
+            "get_training_record",
         }
 
         assert {entry["path"] for entry in baseline_entries} == expected_paths
         for entry in baseline_entries:
             assert entry["risk"]
             assert entry["query_shape"]
-            assert entry["index_candidates"]
             assert entry["evidence_level"].startswith("code_path_confirmed")
-            assert any(
-                token in entry["evidence_level"]
-                for token in (
-                    "needs_runtime",
-                    "needs_real_runtime_measurement",
-                    "needs_postgres_measurement",
-                    "requires_real_query_plan_evidence",
-                    "depends_on_real_admin_usage",
+            if entry["path"] != "get_training_record":
+                assert entry["index_candidates"]
+                assert any(
+                    token in entry["evidence_level"]
+                    for token in (
+                        "needs_runtime",
+                        "needs_real_runtime_measurement",
+                        "needs_postgres_measurement",
+                        "requires_real_query_plan_evidence",
+                        "depends_on_real_admin_usage",
+                    )
                 )
-            )
+
+    def test_query_index_discovery_conclusions_stay_layered_and_actionable(self):
+        """Keep the reusable query/index backlog explicit about proof tier and next proof step."""
+        confirmed_gaps = QUERY_INDEX_DISCOVERY_CONCLUSIONS["confirmed_gaps"]
+        focused_proof = confirmed_gaps["focused_proof"]
+        code_path_confirmed = confirmed_gaps["code_path_confirmed"]
+        runtime_hypotheses = QUERY_INDEX_DISCOVERY_CONCLUSIONS["needs_real_postgres_evidence"]
+
+        assert {item["slug"] for item in focused_proof} == {
+            "admin_overview_growth_replays_projection_window",
+            "admin_leaderboard_requires_full_window_projection_before_top_n",
+        }
+        assert {item["slug"] for item in code_path_confirmed} == {
+            "admin_export_rebuilds_same_projection_window_for_each_csv_section",
+            "training_records_list_has_row_level_agent_persona_n_plus_one",
+            "manager_intervention_overlay_reloads_completed_history_after_page_load",
+        }
+        assert {item["slug"] for item in runtime_hypotheses} == {
+            "practice_sessions_composite_window_indexes",
+            "admin_analytics_scenario_filter_plan",
+            "conversation_messages_order_by_timestamp_extension",
+            "training_records_search_text_indexes",
+        }
+
+        for item in focused_proof + code_path_confirmed:
+            assert item["baseline_paths"]
+            assert item["proof"]
+            assert item["follow_up"]
+
+        for item in runtime_hypotheses:
+            assert item["baseline_paths"]
+            assert item["why_not_confirmed"]
+            assert item["measurement_plan"]
 
     async def test_get_practice_history(
         self,

@@ -47,7 +47,7 @@ Done when: focused analytics proof 通过，且 baseline 已能支撑后续优�
   - Files: `backend/tests/contract/test_analytics.py`, `backend/tests/unit/common/test_admin_analytics_service.py`, `backend/tests/unit/common/test_leaderboard_service.py`
   - Verify: backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/contract/test_analytics.py backend/tests/unit/common/test_admin_analytics_service.py backend/tests/unit/common/test_leaderboard_service.py -x -q
 
-- [ ] **T03: 输出 query/index discovery 结论** `est:20m`
+- [x] **T03: 输出 query/index discovery 结论** `est:20m`
   Why: 如果不把结论输出成可消费 backlog，后续 agent 仍会重新从零评估 query/index 风险。
 
 Do:
