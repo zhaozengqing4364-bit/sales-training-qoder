@@ -1,6 +1,6 @@
 {
   "mode": "grow",
-  "current_issue_id": "M014-S02-T01",
+  "current_issue_id": "M014-S03-T01",
   "current_issue_type": "task",
   "current_issue_status": "done",
   "pending_issue_ids": [],
@@ -137,21 +137,26 @@
     "M011-S03",
     "M011-S04-T01",
     "M011-S04-T02",
-    "M014-S02-T01"
+    "M014-S02-T01",
+    "M014-S02-T02",
+    "M014-S02-T03",
+    "M014-S02",
+    "M014-S03-T01"
   ],
   "blocked_issue_ids": [],
   "deferred_issue_ids": [],
   "last_modified_files": [
+    ".gsd/DECISIONS.md",
     ".gsd/KNOWLEDGE.md",
     ".codex/loop/state.json",
     ".codex/loop/log.md"
   ],
   "last_verification_commands": [
-    "rg -n \"forgot|reset|password|speech|rate|window.location\" web/src/app/\\(auth\\) web/src/app/\\(dashboard\\)/profile backend/src/common/auth",
-    "rg -n \"forgot|reset|PasswordReset|AUTH_SHARED_PASSWORD|AUTH_USER_PASSWORDS|hashed_password\" backend/tests -g \"!**/__pycache__/**\""
+    "rg -n \"反馈|帮助|管理员|support|history\" web/src/components/layout web/src/app/\\(dashboard\\)",
+    "npm --prefix web test -- --run \"src/components/layout/sidebar.test.tsx\" \"src/components/layout/dashboard-shell.test.tsx\""
   ],
-  "last_verification_result": "Repo-root auth/profile inventory verification passed: the planned rg scan located the live auth routes, profile password CTA, voice-speed seam, and backend auth/reset entrypoints, and a focused backend test scan confirmed forgot/reset proof already lives in backend/tests/integration/test_password_reset_api.py.",
-  "last_success_signal": "Downstream M014/S02 work can now treat backend password-reset persistence as already real, keep profile password change on the truthful forgot-password handoff, and target the actual remaining gaps: mock email delivery plus localStorage-only voice-speed persistence.",
+  "last_verification_result": "Learner help inventory verification passed: the repo-root rg scan located one shared help seam in layout code rather than page-local dashboard/profile/history buttons, and the focused sidebar/dashboard-shell Vitest command finished 6/6 green on the existing desktop/mobile mount points.",
+  "last_success_signal": "Downstream M014/S03 work now has one stable learner help authority seam—DashboardShell plus LearnerHelpEntry—and knows the remaining gap is discoverability/proof on home/profile/history, not missing runtime wiring.",
   "last_growth_scan": null,
-  "next_action": "Proceed to M014/S02/T02: preserve the existing PasswordResetService/PasswordResetToken seam, formalize any remaining delivery/lifecycle truth, and keep backend auth proof aligned with the dedicated password-reset integration suite."
+  "next_action": "Proceed to M014/S03/T02: make the existing learner help seam more explicit across dashboard/profile/history copy and coverage without adding page-local buttons."
 }

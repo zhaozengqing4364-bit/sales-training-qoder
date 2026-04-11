@@ -1,8 +1,43 @@
-# BLOCKER — auto-mode recovery failed
+---
+id: T03
+parent: S02
+milestone: M014
+key_files:
+  - (none)
+key_decisions:
+  - (none)
+duration: 
+verification_result: untested
+completed_at: 2026-04-11T15:04:12.798Z
+blocker_discovered: false
+---
 
-Unit `execute-task` for `M014/S02/T03` failed to produce this artifact after idle recovery exhausted all retries.
+# T03: 闭合 profile 修改密码与语速偏好体验
 
-**Reason**: hard recovery exhausted 1 attempts. Status: summary missing (.gsd/milestones/M014/slices/S02/tasks/T03-SUMMARY.md); task checkbox unchecked in .gsd/milestones/M014/slices/S02/S02-PLAN.md; state next action still points at the timed-out task
+****
 
-This placeholder was written by auto-mode so the pipeline can advance.
-Review and replace this file before relying on downstream artifacts.
+## What Happened
+
+No summary recorded.
+
+## Verification
+
+No verification recorded.
+
+## Verification Evidence
+
+| # | Command | Exit Code | Verdict | Duration |
+|---|---------|-----------|---------|----------|
+| — | No verification commands discovered | — | — | — |
+
+## Deviations
+
+None.
+
+## Known Issues
+
+None.
+
+## Files Created/Modified
+
+None.

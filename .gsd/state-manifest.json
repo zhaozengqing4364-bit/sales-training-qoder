@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "exported_at": "2026-04-11T14:34:02.662Z",
+  "exported_at": "2026-04-11T15:33:35.048Z",
   "milestones": [
     {
       "id": "M001",
@@ -2244,14 +2244,14 @@
       "milestone_id": "M014",
       "id": "S02",
       "title": "S02",
-      "status": "pending",
+      "status": "complete",
       "risk": "high",
       "depends": [],
       "demo": "用户可从 profile 走到正式修改密码路径，语速偏好刷新后保留，forgot/reset 体验完整",
       "created_at": "2026-04-08T08:40:41.990Z",
-      "completed_at": null,
-      "full_summary_md": "",
-      "full_uat_md": "",
+      "completed_at": "2026-04-11T15:20:37.567Z",
+      "full_summary_md": "---\nid: S02\nparent: M014\nmilestone: M014\nprovides:\n  - A formal backend password-reset lifecycle/delivery seam that downstream auth and practice work can rely on without re-investigating token invalidation semantics.\n  - A truthful learner profile entrypoint into forgot/reset recovery, including current-email handoff and manual-token fallback for local/dev console delivery.\n  - Focused regression proof that spans backend auth lifecycle plus learner login/forgot/reset/profile/voice-speed surfaces, making future drift detectable.\nrequires:\n  []\naffects:\n  - S03\n  - S04\nkey_files:\n  - backend/src/common/services/password_reset.py\n  - backend/src/common/rate_limit/api_limiter.py\n  - backend/alembic/versions/20260411_2235_027_password_reset_lifecycle_delivery.py\n  - backend/tests/integration/test_auth_login_api.py\n  - backend/tests/integration/test_password_reset_api.py\n  - web/src/app/(dashboard)/profile/page.tsx\n  - web/src/app/(dashboard)/profile/page.test.tsx\n  - web/src/app/(auth)/forgot-password/page.tsx\n  - web/src/app/(auth)/reset-password/page.tsx\n  - web/src/hooks/use-voice-speed-preference.ts\n  - web/src/hooks/use-voice-speed-preference.test.ts\nkey_decisions:\n  - D176 — password reset tokens now distinguish consumed vs invalidated states and persist delivery outcome metadata while keeping console email as the default transport seam.\n  - Reuse the existing truthful `/forgot-password` handoff from learner profile instead of inventing an authenticated change-password API before product and backend support exist.\n  - Keep voice-speed persistence on the shared `useVoiceSpeedPreference()` browser-local seam and explicitly avoid fake `PATCH /users/me` storage until a real backend preference contract exists.\npatterns_established:\n  - Treat password-reset authority as one lifecycle seam: issued token rows persist delivery outcome, invalidation reason, and eventual consumption instead of hiding those states in API behavior alone.\n  - Keep learner profile password changes on a truthful forgot/reset handoff until a real authenticated change-password contract exists; do not resurrect `window.location` jumps or fake in-profile password APIs.\n  - Keep voice-speed preference on one shared frontend seam (`useVoiceSpeedPreference()`) and make the browser-local scope explicit instead of pretending it is stored on the user profile.\nobservability_surfaces:\n  - `PasswordResetToken` lifecycle columns: `invalidated_at`, `invalidation_reason`, `delivery_status`, `delivery_attempted_at`, `delivery_error`.\n  - Forgot-password HTTP diagnostics now include `X-RateLimit-Limit`, `X-RateLimit-Remaining`, and `X-RateLimit-Reset` headers on success responses as well as rate-limit errors.\n  - Learner voice-speed state is visibly scoped to the browser via the shared `useVoiceSpeedPreference()` seam and can be inspected through the `voice_speed_preference` localStorage key.\ndrill_down_paths:\n  - .gsd/milestones/M014/slices/S02/tasks/T01-SUMMARY.md\n  - .gsd/milestones/M014/slices/S02/tasks/T02-SUMMARY.md\n  - .gsd/milestones/M014/slices/S02/tasks/T03-SUMMARY.md\nduration: \"\"\nverification_result: passed\ncompleted_at: 2026-04-11T15:20:37.569Z\nblocker_discovered: false\n---\n\n# S02: 认证与个人中心体验补齐\n\n**Formalized the forgot/reset backend lifecycle and closed the learner profile/account-maintenance loop, so password changes route through the real recovery path and voice-speed preference survives refresh truthfully.**\n\n## What Happened\n\nS02 closed the learner account-maintenance loop without inventing fake settings surfaces. On the backend, the existing password-reset authority seam was formalized instead of rebuilt: `PasswordResetToken` now records explicit invalidation state (`invalidated_at`, `invalidation_reason`) alongside delivery lifecycle fields (`delivery_status`, `delivery_attempted_at`, `delivery_error`), superseded requests retire prior unused tokens instead of masquerading as consumed ones, expired tokens persist their invalidation reason before rejection, and forgot-password keeps its anti-enumeration success surface even when the delivery transport fails. The rate-limit decorator was also fixed so `JSONResponse` paths like forgot-password now expose the same `X-RateLimit-*` headers that enforcement already honored, making focused auth proof and live diagnostics line up.\n\nOn the learner-facing side, profile/password behavior stayed honest. The profile page keeps the “修改密码” action as a real Next `Link` to `/forgot-password`, pre-filling the current email when available and explaining that password updates happen through the email-reset flow. The forgot-password page hydrates that handoff email and trims it before submission, while the reset-password page supports both emailed query tokens and manually pasted tokens so the local console-delivery path remains usable. In parallel, voice-speed preference remains on one shared frontend authority seam: `useVoiceSpeedPreference()` normalizes supported values, persists them to `localStorage`, rehydrates them after refresh, and the profile page makes that browser-local scope explicit instead of pretending the choice is stored via `PATCH /users/me`.\n\nThe slice therefore delivers the intended user outcome from the roadmap: a learner can move from profile to the formal password-reset path, recover the account through forgot/reset with a stable backend lifecycle contract, and keep the voice-speed preference after refresh without fake persistence claims. Just as importantly for downstream slices, S02 establishes the pattern that learner account surfaces must either connect to a real seam or stay visibly local/truthful — no imperative `window.location` jumps, no dead password buttons, and no silent backend-preference theater.\n\n## Operational Readiness\n\n- **Health signal:** new `password_reset_tokens` rows move through explicit lifecycle states (`pending` → `sent`/`failed`, or `invalidated`/`used_at`), forgot-password responses expose `X-RateLimit-*` headers, and the profile voice-speed selector rehydrates the last supported value from `localStorage` after refresh.\n- **Failure signal:** password-reset delivery issues now show up as `delivery_status='failed'` plus `delivery_error`/`delivery_attempted_at`, invalid or superseded tokens return the existing `[INVALID_RESET_TOKEN]` user-facing error, and malformed browser storage snaps the voice-speed selector back to `1.0` instead of silently drifting.\n- **Recovery procedure:** if delivery fails, inspect the latest `PasswordResetToken` row/logs, fix or temporarily fall back to the console transport, then ask the learner to request a fresh reset email so any previous token is superseded. If voice-speed looks wrong locally, clear the malformed `voice_speed_preference` key or re-select a supported option and refresh.\n- **Monitoring gaps:** there is still no external email-provider integration or alerting pipeline for repeated `delivery_status='failed'` events, and voice-speed preference has no server-side telemetry or cross-device visibility because the shipped seam is intentionally browser-local.\n\n## Verification\n\nFresh slice-close verification reran both slice-plan gates and the focused auth/profile proofs that actually demonstrate the shipped learner account-maintenance loop.\n\n- `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/integration/test_auth_login_api.py -x -q` ✅ pass (14/14)\n- `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/integration/test_password_reset_api.py -x -q` ✅ pass (6/6)\n- `npm --prefix web test -- --run \"src/app/(auth)/login/page.test.tsx\"` ✅ pass (3/3)\n- `npm --prefix web test -- --run \"src/app/(auth)/forgot-password/login-recovery.test.tsx\" \"src/app/(auth)/reset-password/login-reset.test.tsx\" \"src/app/(dashboard)/profile/page.test.tsx\" \"src/hooks/use-voice-speed-preference.test.ts\"` ✅ pass (14/14)\n- LSP diagnostics on `web/src/app/(dashboard)/profile/page.tsx` and `backend/src/common/services/password_reset.py` ✅ clean\n\nThat gives this slice one trustworthy proof bundle: backend reset lifecycle + delivery resilience, login → forgot handoff, forgot/reset page closure, truthful profile password routing, and refresh-safe voice-speed persistence.\n\n## Requirements Advanced\n\nNone.\n\n## Requirements Validated\n\nNone.\n\n## New Requirements Surfaced\n\nNone.\n\n## Requirements Invalidated or Re-scoped\n\nNone.\n\n## Deviations\n\nThe slice plan named `backend/tests/integration/test_auth_login_api.py` and `src/app/(auth)/login/page.test.tsx` as the minimum proof gates, but the real authority surfaces for the shipped work also include the dedicated password-reset backend suite plus the forgot-password/reset-password/profile/voice-speed web suites. Slice close-out kept the planned commands, added those focused proofs, and replaced the auto-mode placeholder `T03-SUMMARY.md` with a truthful task summary so downstream agents inherit the actual learner-facing closure instead of a blocker stub.\n\n## Known Limitations\n\nPassword reset delivery still defaults to the console transport until a real provider is configured, so local/dev recovery continues to rely on log or console access. The profile password action is intentionally a forgot-password handoff rather than an authenticated in-profile change-password form. Voice-speed preference is intentionally browser-local only; there is still no backend user-preference field or cross-device sync for it.\n\n## Follow-ups\n\nS03 can attach learner help/feedback to a profile/auth shell that no longer contains fake account-maintenance affordances. S04 can assume forgot/reset recovery and browser-local voice-speed persistence are stable while it designs practice preflight and interruption recovery. If product later needs cross-device preference sync or a true authenticated change-password flow, that should be a new slice with an explicit backend user-settings contract rather than retroactively pretending this slice already shipped it.\n\n## Files Created/Modified\n\n- `web/src/app/(dashboard)/profile/page.tsx` — Profile page now keeps password changes on a truthful `/forgot-password` handoff, carries current-email query params, and surfaces the browser-local voice-speed preference seam with honest copy.\n- `web/src/app/(dashboard)/profile/page.test.tsx` — Focused profile regressions lock the password CTA handoff, browser-local voice-speed persistence, malformed localStorage normalization, and no-fake-PATCH boundary.\n- `web/src/app/(auth)/forgot-password/page.tsx` — Forgot-password page hydrates email handoff, trims values before submission, and preserves a truthful success surface for console or real email delivery.\n- `web/src/app/(auth)/reset-password/page.tsx` — Reset-password page supports query-token and manual-token paths so both emailed links and local console-delivery recovery stay usable.\n- `web/src/hooks/use-voice-speed-preference.ts` — Shared voice-speed hook remains the single frontend authority seam for normalization plus localStorage persistence across refreshes.\n- `backend/src/common/services/password_reset.py` — Password reset backend now records explicit invalidation and delivery lifecycle state on `PasswordResetToken`, keeping forgot-password resilient when transport delivery fails.\n- `backend/src/common/rate_limit/api_limiter.py` — Rate-limit decorator now attaches `X-RateLimit-*` headers to response objects like `JSONResponse`, making forgot-password diagnostics match enforcement.\n- `backend/alembic/versions/20260411_2235_027_password_reset_lifecycle_delivery.py` — Alembic revision formalizes password-reset invalidation/delivery columns, constraints, and indexes for the backend authority seam.\n- `.gsd/milestones/M014/slices/S02/tasks/T03-SUMMARY.md` — Recovered the missing T03 task artifact with a truthful summary of the shipped profile/auth closure and focused verification evidence.\n",
+      "full_uat_md": "# S02: 认证与个人中心体验补齐 — UAT\n\n**Milestone:** M014\n**Written:** 2026-04-11T15:20:37.570Z\n\n# S02: 认证与个人中心体验补齐 — UAT\n\n**Milestone:** M014\n**Written:** 2026-04-11T23:11:00+08:00\n\n# S02 UAT — 认证与个人中心体验补齐\n\n## Preconditions\n- Start the current branch with the backend migrated to Alembic head, including `027_password_reset_lifecycle_delivery`.\n- Use a learner account that already exists (for example `learner@example.com`) and can sign in to the dashboard/profile surface.\n- In local/dev, have access to backend console output or logs so you can copy the reset link/token emitted by the console email transport. If a real email provider is configured, use the delivered email instead.\n- Clear or inspect the browser `localStorage` key `voice_speed_preference` before the voice-speed tests.\n\n## Test Case 1 — Login page hands the learner into forgot-password with the typed email intact\n1. Open `/login` and type a learner email with leading/trailing spaces, for example `  learner@example.com  `.\n   - Expected: the email field accepts the value and the rest of the login page remains usable.\n2. Click `忘记密码？`.\n   - Expected: navigation goes to `/forgot-password?email=learner%40example.com` rather than a blank route, `#`, or no-op button.\n3. Inspect the forgot-password email field.\n   - Expected: it is prefilled with `learner@example.com` (trimmed) and the page shows copy explaining the email was carried over from login/profile.\n\n## Test Case 2 — Forgot-password request stays truthful and leads to a usable reset token\n1. From `/forgot-password`, submit the prefilled learner email.\n   - Expected: the page transitions to the generic success state `邮件已发送` without revealing whether the account exists beyond the standard anti-enumeration copy.\n2. Retrieve the reset token from the real email or from the local console/log output.\n   - Expected: the emitted link targets `/reset-password?token=...` and contains a fresh token value.\n3. Immediately submit a second forgot-password request for the same account.\n   - Expected: the user-facing surface remains the same generic success flow; the newest token is now the only valid one, and the older token should no longer work.\n\n## Test Case 3 — Reset-password works via both deep-linked token and manual token entry\n1. Open the reset link from email/console directly.\n   - Expected: `/reset-password` loads with the token already filled from the query string and tells the learner it was auto-filled from the link.\n2. Enter a new password of at least 8 characters twice and submit.\n   - Expected: the page shows `密码已重置` and offers `去登录`.\n3. Return to `/login` and sign in with the new password.\n   - Expected: login succeeds with the new password.\n4. Trigger another forgot-password email, copy the new token, open `/reset-password` without query params, paste the token manually, and reset again.\n   - Expected: the manual-token path succeeds too, proving the local/dev console-delivery fallback remains usable.\n\n## Test Case 4 — Superseded or reused tokens are rejected instead of silently working\n1. Request token A for the learner account.\n2. Before using token A, request token B for the same account.\n   - Expected: token B becomes the active token.\n3. Attempt to reset the password with token A.\n   - Expected: the page/API rejects it with the existing invalid-or-expired-token error; token A must not still work after being superseded.\n4. Use token B successfully once, then try to reuse token B.\n   - Expected: the second attempt is rejected as invalid/expired/used, proving one-time consumption still holds.\n\n## Test Case 5 — Profile page keeps password changes truthful and voice speed refresh-safe\n1. Sign in as the learner and open `/profile`.\n   - Expected: the settings card shows `语音播放速度` with copy explicitly saying the setting is only stored in the current browser, and `修改密码` is presented as `通过邮箱重置密码`.\n2. Inspect the password button target.\n   - Expected: it links to `/forgot-password?email=<current user email>` when the profile has an email, or `/forgot-password` when profile loading degraded.\n3. Change the voice-speed selector from the default to `1.5x`.\n   - Expected: the selector updates immediately and the browser `localStorage` key `voice_speed_preference` becomes `1.5`.\n4. Refresh `/profile`.\n   - Expected: the selector still shows `1.5x`, proving refresh persistence works.\n5. (Optional devtools check) Watch the network panel while changing only the voice-speed selector.\n   - Expected: no fake `PATCH /users/me` request is sent just to persist voice speed.\n\n## Edge Cases\n- If `voice_speed_preference` is manually corrupted in `localStorage` (for example set to `fast`), reloading `/profile` should normalize the selector back to `1.0x` instead of leaving a broken or blank state.\n- If profile bootstrap fails and the page shows the existing inline error, the password CTA should still degrade truthfully to `/forgot-password` instead of disappearing or becoming dead.\n- In local/dev console-email mode, the slice is still acceptable as long as the reset token can be copied from console output and the manual-token reset flow works end to end.\n",
       "goal": "把 learner 侧“能登录”提升到“能维护账号”：forgot/reset 正式化、profile 修改密码体验闭合、语速偏好持久化补齐。",
       "success_criteria": "- 用户可从 profile 走到正式修改密码路径，不再依赖生硬跳转或假入口。\n- forgot/reset 的前后端行为、token 生命周期与兼容登录路径都有 focused proof。\n- 语速偏好刷新后保持稳定，若某项设置无法真实落地，则被诚实隐藏或移除。",
       "proof_level": "integration",
@@ -2263,12 +2263,10 @@
     {
       "milestone_id": "M014",
       "id": "S03",
-      "title": "Learner 导航、反馈入口与系统壳层补齐",
+      "title": "S03",
       "status": "pending",
       "risk": "medium",
-      "depends": [
-        "S01"
-      ],
+      "depends": [],
       "demo": "从首页/profile/history 任一页都能找到帮助/反馈入口",
       "created_at": "2026-04-08T08:40:41.990Z",
       "completed_at": null,
@@ -9286,12 +9284,12 @@
       "slice_id": "S02",
       "id": "T03",
       "title": "闭合 profile 修改密码与语速偏好体验",
-      "status": "pending",
+      "status": "complete",
       "one_liner": "",
       "narrative": "",
       "verification_result": "",
       "duration": "",
-      "completed_at": null,
+      "completed_at": "2026-04-11T15:04:12.798Z",
       "blocker_discovered": false,
       "deviations": "",
       "known_issues": "",
@@ -9324,19 +9322,26 @@
       "milestone_id": "M014",
       "slice_id": "S03",
       "id": "T01",
-      "title": "定位 learner shell 帮助与导航缺口",
-      "status": "pending",
-      "one_liner": "",
-      "narrative": "",
-      "verification_result": "",
+      "title": "Confirmed that learner help already hangs off the shared DashboardShell/LearnerHelpEntry seam, recorded that authority line for M014/S03, and marked the remaining gap as page-level discoverability/proof on home/profile/history.",
+      "status": "complete",
+      "one_liner": "Confirmed that learner help already hangs off the shared DashboardShell/LearnerHelpEntry seam, recorded that authority line for M014/S03, and marked the remaining gap as page-level discoverability/proof on home/profile/history.",
+      "narrative": "I inventoried `web/src/components/layout/sidebar.tsx` plus the dashboard home/profile/history surfaces and found that the learner help entry was not actually missing from the runtime shell. `LearnerHelpEntry` is already mounted from `web/src/components/layout/dashboard-shell.tsx` into the desktop sidebar footer slot and the shared mobile drawer, and the same component is reused by `web/src/app/(user)/practice/layout.tsx`. What is still missing is focused learner-facing discoverability/proof around that shared seam on dashboard home, profile, and history: those page files and tests emphasize history/report/profile flows, while help assertions currently live only at the shell/layout layer. I recorded D177 so T02/T03 stay on the existing shell seam instead of adding per-page help buttons, added the finding to `.gsd/KNOWLEDGE.md`, and updated the loop state/log so the next task can continue from the real gap.",
+      "verification_result": "Ran the task-plan inventory command `rg -n \"反馈|帮助|管理员|support|history\" web/src/components/layout web/src/app/\\(dashboard\\)` to locate the current learner shell/help/history surfaces, which showed help copy only on the shared layout seam rather than page-local dashboard/profile/history buttons. Then ran `npm --prefix web test -- --run \"src/components/layout/sidebar.test.tsx\" \"src/components/layout/dashboard-shell.test.tsx\"`, which passed 6/6 and confirmed the existing learner help entry stays mounted on the shared desktop sidebar and mobile drawer seams.",
       "duration": "",
-      "completed_at": null,
+      "completed_at": "2026-04-11T15:33:35.000Z",
       "blocker_discovered": false,
-      "deviations": "",
-      "known_issues": "",
-      "key_files": [],
-      "key_decisions": [],
-      "full_summary_md": "",
+      "deviations": "The written task expected source-file touch under `web/src/components/layout` / `web/src/app/(dashboard)`, but local inspection showed the shared learner help seam already existed. I therefore documented the authoritative seam and gap in project knowledge/decisions instead of changing runtime files in this task.",
+      "known_issues": "Home/profile/history page tests still do not directly assert learner help visibility; only `src/components/layout/sidebar.test.tsx` and `src/components/layout/dashboard-shell.test.tsx` currently lock the shared seam.",
+      "key_files": [
+        ".gsd/DECISIONS.md",
+        ".gsd/KNOWLEDGE.md",
+        ".codex/loop/state.json",
+        ".codex/loop/log.md"
+      ],
+      "key_decisions": [
+        "D177 — keep learner help on DashboardShell + LearnerHelpEntry instead of scattering page-local help buttons."
+      ],
+      "full_summary_md": "---\nid: T01\nparent: S03\nmilestone: M014\nkey_files:\n  - .gsd/DECISIONS.md\n  - .gsd/KNOWLEDGE.md\n  - .codex/loop/state.json\n  - .codex/loop/log.md\nkey_decisions:\n  - D177 — keep learner help on DashboardShell + LearnerHelpEntry instead of scattering page-local help buttons.\nduration: \nverification_result: passed\ncompleted_at: 2026-04-11T15:33:34.998Z\nblocker_discovered: false\n---\n\n# T01: Confirmed that learner help already hangs off the shared DashboardShell/LearnerHelpEntry seam, recorded that authority line for M014/S03, and marked the remaining gap as page-level discoverability/proof on home/profile/history.\n\n**Confirmed that learner help already hangs off the shared DashboardShell/LearnerHelpEntry seam, recorded that authority line for M014/S03, and marked the remaining gap as page-level discoverability/proof on home/profile/history.**\n\n## What Happened\n\nI inventoried `web/src/components/layout/sidebar.tsx` plus the dashboard home/profile/history surfaces and found that the learner help entry was not actually missing from the runtime shell. `LearnerHelpEntry` is already mounted from `web/src/components/layout/dashboard-shell.tsx` into the desktop sidebar footer slot and the shared mobile drawer, and the same component is reused by `web/src/app/(user)/practice/layout.tsx`. What is still missing is focused learner-facing discoverability/proof around that shared seam on dashboard home, profile, and history: those page files and tests emphasize history/report/profile flows, while help assertions currently live only at the shell/layout layer. I recorded D177 so T02/T03 stay on the existing shell seam instead of adding per-page help buttons, added the finding to `.gsd/KNOWLEDGE.md`, and updated the loop state/log so the next task can continue from the real gap.\n\n## Verification\n\nRan the task-plan inventory command `rg -n \"反馈|帮助|管理员|support|history\" web/src/components/layout web/src/app/\\(dashboard\\)` to locate the current learner shell/help/history surfaces, which showed help copy only on the shared layout seam rather than page-local dashboard/profile/history buttons. Then ran `npm --prefix web test -- --run \"src/components/layout/sidebar.test.tsx\" \"src/components/layout/dashboard-shell.test.tsx\"`, which passed 6/6 and confirmed the existing learner help entry stays mounted on the shared desktop sidebar and mobile drawer seams.\n\n## Verification Evidence\n\n| # | Command | Exit Code | Verdict | Duration |\n|---|---------|-----------|---------|----------|\n| 1 | `rg -n \"反馈|帮助|管理员|support|history\" web/src/components/layout web/src/app/\\(dashboard\\)` | 0 | ✅ pass | 20ms |\n| 2 | `npm --prefix web test -- --run \"src/components/layout/sidebar.test.tsx\" \"src/components/layout/dashboard-shell.test.tsx\"` | 0 | ✅ pass | 1149ms |\n\n## Deviations\n\nThe written task expected source-file touch under `web/src/components/layout` / `web/src/app/(dashboard)`, but local inspection showed the shared learner help seam already existed. I therefore documented the authoritative seam and gap in project knowledge/decisions instead of changing runtime files in this task.\n\n## Known Issues\n\nHome/profile/history page tests still do not directly assert learner help visibility; only `src/components/layout/sidebar.test.tsx` and `src/components/layout/dashboard-shell.test.tsx` currently lock the shared seam.\n\n## Files Created/Modified\n\n- `.gsd/DECISIONS.md`\n- `.gsd/KNOWLEDGE.md`\n- `.codex/loop/state.json`\n- `.codex/loop/log.md`\n",
       "description": "Why: 先找到 learner shell 里真正缺的是 shared seam 还是散页按钮，避免后续把帮助入口补成到处乱放的临时卡片。\n\nDo:\n1. 盘点 sidebar、dashboard 首页、profile、history 当前可见的导航与帮助入口。\n2. 确认支持/反馈信息是否已经存在但不可发现，还是根本缺失。\n3. 标出最适合承载统一入口的 shared shell seam。\n\nDone when: 后续实现能围绕一个稳定入口收口，而不是在多个页面临时塞按钮。",
       "estimate": "20m",
       "files": [
@@ -13027,6 +13032,18 @@
       "revisable": "Yes",
       "made_by": "agent",
       "superseded_by": null
+    },
+    {
+      "seq": 1547,
+      "id": "D177",
+      "when_context": "M014/S03/T01",
+      "scope": "frontend-shell",
+      "decision": "Learner help/feedback entry seam for M014/S03",
+      "choice": "Treat `DashboardShell` + `LearnerHelpEntry` as the single learner help/feedback seam for dashboard home, profile, and history, and close the slice by improving discoverability/proof there instead of adding page-local buttons.",
+      "rationale": "Code inventory showed the learner help entry already mounts through `DashboardShell` via the sidebar footer slot on desktop and the shared mobile drawer, while the same component is also reused by the practice layout. The real gap is not a missing runtime seam but incomplete learner-facing proof/discoverability on home/profile/history. Reusing the existing shell seam prevents scattered temporary buttons and keeps learner support entrypoints on one authority line.",
+      "revisable": "Yes",
+      "made_by": "agent",
+      "superseded_by": null
     }
   ],
   "verification_evidence": [
@@ -16219,6 +16236,28 @@
       "verdict": "✅ pass",
       "duration_ms": 74,
       "created_at": "2026-04-11T14:34:02.599Z"
+    },
+    {
+      "id": 296,
+      "task_id": "T01",
+      "slice_id": "S03",
+      "milestone_id": "M014",
+      "command": "rg -n \"反馈|帮助|管理员|support|history\" web/src/components/layout web/src/app/\\(dashboard\\)",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 20,
+      "created_at": "2026-04-11T15:33:35.001Z"
+    },
+    {
+      "id": 297,
+      "task_id": "T01",
+      "slice_id": "S03",
+      "milestone_id": "M014",
+      "command": "npm --prefix web test -- --run \"src/components/layout/sidebar.test.tsx\" \"src/components/layout/dashboard-shell.test.tsx\"",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 1149,
+      "created_at": "2026-04-11T15:33:35.001Z"
     }
   ]
 }

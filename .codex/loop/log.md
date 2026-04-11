@@ -1,3 +1,38 @@
+- time: 2026-04-11T23:32:52+0800
+  mode: grow
+  item id: M014-S03-T01
+  files changed:
+    - .gsd/DECISIONS.md
+    - .gsd/KNOWLEDGE.md
+    - .codex/loop/state.json
+    - .codex/loop/log.md
+  summary: Inventoried learner shell help/navigation entrypoints and confirmed the real authority seam is DashboardShell + LearnerHelpEntry, so downstream work should close discoverability/proof gaps on that shared shell instead of adding page-local help buttons.
+  verification commands:
+    - rg -n "反馈|帮助|管理员|support|history" web/src/components/layout web/src/app/\(dashboard\)
+    - npm --prefix web test -- --run "src/components/layout/sidebar.test.tsx" "src/components/layout/dashboard-shell.test.tsx"
+  verification results: passed; the rg scan showed help copy only on the shared layout seam while home/profile/history tests still focus on other learner flows, and the focused sidebar/dashboard-shell Vitest suite finished 6/6 green for desktop/mobile help mounts.
+  success signal status: M014/S03 can now build on the existing shared learner help seam instead of re-researching or scattering temporary buttons across dashboard pages.
+  rollback note: if later slices need richer support UX, extend DashboardShell/LearnerHelpEntry and its focused shell tests rather than reintroducing page-local help affordances on home/profile/history.
+
+- time: 2026-04-11T23:12:00+08:00
+  mode: grow
+  item id: M014-S02
+  files changed:
+    - .gsd/milestones/M014/slices/S02/tasks/T03-SUMMARY.md
+    - .gsd/milestones/M014/slices/S02/S02-SUMMARY.md
+    - .gsd/milestones/M014/slices/S02/S02-UAT.md
+    - .gsd/PROJECT.md
+    - .codex/loop/state.json
+  summary: Closed M014/S02 by formalizing password-reset lifecycle and delivery observability, preserving the truthful profile → forgot-password handoff, proving forgot/reset page closure, and locking voice-speed refresh persistence to the shared browser-local seam.
+  verification commands:
+    - backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/integration/test_auth_login_api.py -x -q
+    - backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/integration/test_password_reset_api.py -x -q
+    - npm --prefix web test -- --run "src/app/(auth)/login/page.test.tsx"
+    - npm --prefix web test -- --run "src/app/(auth)/forgot-password/login-recovery.test.tsx" "src/app/(auth)/reset-password/login-reset.test.tsx" "src/app/(dashboard)/profile/page.test.tsx" "src/hooks/use-voice-speed-preference.test.ts"
+  verification results: passed; backend auth/password-reset gates finished 20/20 green, focused web auth/profile/voice-speed gates finished 17/17 green, and diagnostics stayed clean on the profile/password-reset authority files.
+  success signal status: learner profile now hands off to the real forgot/reset path, reset tokens keep explicit invalidation + delivery state for recovery/debugging, and voice-speed preference survives refresh truthfully through the shared localStorage seam.
+  rollback note: if future account-settings work adds a true authenticated change-password or backend preference contract, extend the existing auth/profile authority seams instead of reintroducing fake profile PATCH persistence, window.location redirects, or split reset-token lifecycle semantics.
+
 - time: 2026-03-31T11:06:08+08:00
   mode: grow
   item id: M011-S02-T03
