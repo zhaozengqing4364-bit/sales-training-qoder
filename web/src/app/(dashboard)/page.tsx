@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { GlassCard } from "@/components/ui/glass-card";
 import { Button } from "@/components/ui/button";
 import { DashboardSkeleton } from "@/components/dashboard-skeleton";
+import { LearnerHelpCard } from "@/components/dashboard/learner-help-card";
 import { SwipeableItem } from "@/components/ui/swipeable-item";
 import { EmptyState } from "@/components/ui/empty-state";
 import { cn } from "@/lib/utils";
@@ -445,6 +446,8 @@ export default function HomePage() {
                     })}
                 </div>
             </section>
+
+            <LearnerHelpCard />
 
             {stats.effectiveness && (
                 <section className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">

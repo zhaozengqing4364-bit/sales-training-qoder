@@ -16,6 +16,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { GlassCard } from "@/components/ui/glass-card";
+import { LearnerHelpCard } from "@/components/dashboard/learner-help-card";
 import { api, getApiErrorMessage } from "@/lib/api/client";
 import {
     HistorySessionSummary,
@@ -224,6 +225,8 @@ export default function HistoryPage() {
                     <p className="text-sm text-slate-700">{analyticsHint}</p>
                 </GlassCard>
             )}
+
+            <LearnerHelpCard />
 
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                 <GlassCard className="p-4">

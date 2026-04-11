@@ -1,3 +1,21 @@
+- time: 2026-04-11T23:40:45+08:00
+  mode: grow
+  item id: M014-S03-T02
+  files changed:
+    - web/src/components/dashboard/learner-help-card.tsx
+    - web/src/app/(dashboard)/page.tsx
+    - web/src/app/(dashboard)/profile/page.tsx
+    - web/src/app/(dashboard)/history/page.tsx
+    - web/src/app/(dashboard)/history/page.test.tsx
+    - .codex/loop/state.json
+  summary: Added one shared learner help card across dashboard home, profile, and history so learners get the same truthful help/feedback guidance everywhere, with explicit copy that the real entry lives in the sidebar help seam and that admin/runtime links are role-gated.
+  verification commands:
+    - npm --prefix web test -- --run "src/app/(dashboard)/history/page.test.tsx"
+    - npm --prefix web test -- --run "src/app/(dashboard)/page.test.tsx" "src/app/(dashboard)/profile/page.test.tsx"
+  verification results: passed; the focused history Vitest suite finished 6/6 green including the new help-card regression, and the impacted dashboard home/profile suites finished 14/14 green after reusing the same shared learner guidance card.
+  success signal status: learner-facing dashboard entry pages now consistently point back to the single sidebar/mobile-drawer help seam instead of inventing separate support buttons, while explaining why management/runtime routes may be absent on learner accounts.
+  rollback note: if future work enriches support UX, extend the shared learner-help card and LearnerHelpEntry seam together instead of adding page-local help endpoints or promising an unimplemented ticketing flow.
+
 - time: 2026-04-11T23:32:52+0800
   mode: grow
   item id: M014-S03-T01

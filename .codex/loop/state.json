@@ -1,6 +1,6 @@
 {
   "mode": "grow",
-  "current_issue_id": "M014-S03-T01",
+  "current_issue_id": "M014-S03-T02",
   "current_issue_type": "task",
   "current_issue_status": "done",
   "pending_issue_ids": [],
@@ -141,22 +141,24 @@
     "M014-S02-T02",
     "M014-S02-T03",
     "M014-S02",
-    "M014-S03-T01"
+    "M014-S03-T01",
+    "M014-S03-T02"
   ],
   "blocked_issue_ids": [],
   "deferred_issue_ids": [],
   "last_modified_files": [
-    ".gsd/DECISIONS.md",
-    ".gsd/KNOWLEDGE.md",
-    ".codex/loop/state.json",
-    ".codex/loop/log.md"
+    "web/src/components/dashboard/learner-help-card.tsx",
+    "web/src/app/(dashboard)/page.tsx",
+    "web/src/app/(dashboard)/profile/page.tsx",
+    "web/src/app/(dashboard)/history/page.tsx",
+    "web/src/app/(dashboard)/history/page.test.tsx"
   ],
   "last_verification_commands": [
-    "rg -n \"反馈|帮助|管理员|support|history\" web/src/components/layout web/src/app/\\(dashboard\\)",
-    "npm --prefix web test -- --run \"src/components/layout/sidebar.test.tsx\" \"src/components/layout/dashboard-shell.test.tsx\""
+    "npm --prefix web test -- --run \"src/app/(dashboard)/history/page.test.tsx\"",
+    "npm --prefix web test -- --run \"src/app/(dashboard)/page.test.tsx\" \"src/app/(dashboard)/profile/page.test.tsx\""
   ],
-  "last_verification_result": "Learner help inventory verification passed: the repo-root rg scan located one shared help seam in layout code rather than page-local dashboard/profile/history buttons, and the focused sidebar/dashboard-shell Vitest command finished 6/6 green on the existing desktop/mobile mount points.",
-  "last_success_signal": "Downstream M014/S03 work now has one stable learner help authority seam—DashboardShell plus LearnerHelpEntry—and knows the remaining gap is discoverability/proof on home/profile/history, not missing runtime wiring.",
+  "last_verification_result": "Fresh learner-dashboard verification passed: the focused history Vitest suite finished 6/6 green with the new shared help card proof, and the impacted home/profile suites finished 14/14 green after wiring the same truthful help/role guidance into all three learner entry pages.",
+  "last_success_signal": "Learners now see one consistent help/feedback guidance card on home, profile, and history that points back to the shared sidebar LearnerHelpEntry seam and explains why admin/runtime links may be absent for learner accounts.",
   "last_growth_scan": null,
-  "next_action": "Proceed to M014/S03/T02: make the existing learner help seam more explicit across dashboard/profile/history copy and coverage without adding page-local buttons."
+  "next_action": "Proceed to M014/S03/T03: add focused proof that the shared learner help seam remains visible and understandable across the dashboard entry pages without regressing into page-local support buttons."
 }

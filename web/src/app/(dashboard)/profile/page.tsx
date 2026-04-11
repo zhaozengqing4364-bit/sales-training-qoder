@@ -6,6 +6,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { GlassCard } from "@/components/ui/glass-card";
 import { Input } from "@/components/ui/input";
+import { LearnerHelpCard } from "@/components/dashboard/learner-help-card";
 import {
     VOICE_SPEED_PREFERENCE_OPTIONS,
     serializeVoiceSpeedPreference,
@@ -354,6 +355,8 @@ export default function ProfilePage() {
                     </div>
                 </div>
             </GlassCard>
+
+            <LearnerHelpCard />
 
             <Button variant="destructive" className="w-full md:w-auto" size="lg" onClick={handleLogout}>
                 <LogOut className="w-4 h-4 mr-2" />

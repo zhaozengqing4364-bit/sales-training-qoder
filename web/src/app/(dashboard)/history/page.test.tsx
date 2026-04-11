@@ -337,4 +337,53 @@ describe("HistoryPage", () => {
         expect(reportButton.disabled).toBe(true);
         expect(screen.getByText("进行中")).toBeTruthy();
     });
+
+    it("shows the shared learner help card with truthful role guidance", async () => {
+        getMyHistoryMock.mockResolvedValue({
+            sessions: [
+                {
+                    session_id: "history-help-session",
+                    scenario_name: "销售演练",
+                    scenario_type: "sales",
+                    persona_name: "采购经理",
+                    agent_name: "销售教练",
+                    start_time: "2026-03-23T00:00:00Z",
+                    duration_seconds: 180,
+                    overall_score: 84,
+                    report_status: "pending",
+                    report_generated_at: null,
+                    status: "completed",
+                    evaluable: true,
+                    not_evaluable_reason: null,
+                    evidence_completeness: { complete: true },
+                    effectiveness_snapshot: null,
+                    feedback_summary: null,
+                    stage_summary: [],
+                    main_issue: null,
+                    next_goal: null,
+                },
+            ],
+            total: 1,
+            page: 1,
+            page_size: 50,
+            total_pages: 1,
+        });
+        getHistoryStatisticsMock.mockResolvedValue({
+            total_sessions: 1,
+            evaluable_sessions: 1,
+            not_evaluable_sessions: 0,
+            average_score: 84,
+            best_score: 84,
+            total_practice_time_seconds: 180,
+            total_practice_time_minutes: 3,
+        });
+        getHistoryTrendsMock.mockResolvedValue([]);
+
+        render(<HistoryPage />);
+
+        expect(await screen.findByText("需要帮助或反馈？")).toBeTruthy();
+        expect(screen.getByText(/统一入口在侧边栏底部的“帮助与反馈”里；手机端先打开左上角菜单。/)).toBeTruthy();
+        expect(screen.getByText(/当前 learner 默认只看到训练、历史、个人中心；运行状态和管理后台只对管理员或支持角色开放。/)).toBeTruthy();
+        expect(screen.queryByText(/7 x 24/)).toBeNull();
+    });
 });

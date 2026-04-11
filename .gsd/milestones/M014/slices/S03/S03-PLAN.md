@@ -35,7 +35,7 @@ Done when: 后续实现能围绕一个稳定入口收口，而不是在多个页
   - Files: `web/src/components/layout/sidebar.tsx`, `web/src/app/(dashboard)/*`
   - Verify: rg -n "反馈|帮助|管理员|support|history" web/src/components/layout web/src/app/\(dashboard\)
 
-- [ ] **T02: 补齐 learner 统一帮助/反馈入口** `est:35m`
+- [x] **T02: 补齐 learner 统一帮助/反馈入口** `est:35m`
   Why: 帮助/反馈入口必须优先收口到 shared learner shell 或共享卡片模式，才能避免之后再次分散。
 
 Do:

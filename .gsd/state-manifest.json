@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "exported_at": "2026-04-11T15:33:35.048Z",
+  "exported_at": "2026-04-11T15:43:47.257Z",
   "milestones": [
     {
       "id": "M001",
@@ -9365,19 +9365,29 @@
       "milestone_id": "M014",
       "slice_id": "S03",
       "id": "T02",
-      "title": "补齐 learner 统一帮助/反馈入口",
-      "status": "pending",
-      "one_liner": "",
-      "narrative": "",
-      "verification_result": "",
+      "title": "Added a shared learner help guidance card to dashboard home, profile, and history so learners can find the existing sidebar help seam and understand role-gated links.",
+      "status": "complete",
+      "one_liner": "Added a shared learner help guidance card to dashboard home, profile, and history so learners can find the existing sidebar help seam and understand role-gated links.",
+      "narrative": "I followed the existing T01 authority line instead of inventing a new support path: the learner help runtime seam remains `DashboardShell` + `LearnerHelpEntry`, and this task closes the discoverability gap around it. I started with a new history-page regression that expected truthful learner help guidance, ran it red, and confirmed the failure was real because the page had no such guidance yet. Then I added `web/src/components/dashboard/learner-help-card.tsx`, a shared dashboard card that tells learners the real help/feedback entry lives in the sidebar/mobile drawer, that page/session context should be reported there, and that runtime/admin links are intentionally role-gated. I reused that same card on dashboard home, profile, and history so the learner-facing guidance stays consistent across the three main entry pages without adding page-local help buttons, a fake help center, or any unimplemented ticketing promise. I also updated `.codex/loop/state.json` and `.codex/loop/log.md` so the repository continuity layer reflects that T02 is done and T03 should focus on broader proof rather than more runtime wiring.",
+      "verification_result": "Verified the change with a test-first cycle and fresh post-change runs. First, `npm --prefix web test -- --run \"src/app/(dashboard)/history/page.test.tsx\"` failed on the new help-card expectation because history had no discoverable learner help guidance. After implementing the shared learner help card and wiring it into home/profile/history, I reran that exact task-plan verification command and it passed 6/6. I then ran `npm --prefix web test -- --run \"src/app/(dashboard)/page.test.tsx\" \"src/app/(dashboard)/profile/page.test.tsx\"`, which passed 14/14 and confirmed the reused help card did not regress the other learner entry pages. Earlier in the task I also checked LSP diagnostics on the touched runtime files, and all reported clean.",
       "duration": "",
-      "completed_at": null,
+      "completed_at": "2026-04-11T15:43:47.208Z",
       "blocker_discovered": false,
-      "deviations": "",
-      "known_issues": "",
-      "key_files": [],
-      "key_decisions": [],
-      "full_summary_md": "",
+      "deviations": "The written plan allowed adding the unified entry in the learner shell or on page surfaces. Local reality from T01 showed the shared shell entry already existed, so instead of adding another help button I implemented shared page-level discoverability guidance that points back to the existing `DashboardShell`/`LearnerHelpEntry` seam.",
+      "known_issues": "T03 still needs broader focused proof that the shared learner help seam remains visible and understandable across the dashboard entry pages; this task added the runtime guidance and one focused history regression, but not the full multi-page seam-proof layer yet.",
+      "key_files": [
+        "web/src/components/dashboard/learner-help-card.tsx",
+        "web/src/app/(dashboard)/page.tsx",
+        "web/src/app/(dashboard)/profile/page.tsx",
+        "web/src/app/(dashboard)/history/page.tsx",
+        "web/src/app/(dashboard)/history/page.test.tsx",
+        ".codex/loop/state.json",
+        ".codex/loop/log.md"
+      ],
+      "key_decisions": [
+        "Kept learner help on the existing shared `DashboardShell` + `LearnerHelpEntry` seam and used a shared dashboard guidance card for discoverability instead of adding page-local help buttons or a fake help center."
+      ],
+      "full_summary_md": "---\nid: T02\nparent: S03\nmilestone: M014\nkey_files:\n  - web/src/components/dashboard/learner-help-card.tsx\n  - web/src/app/(dashboard)/page.tsx\n  - web/src/app/(dashboard)/profile/page.tsx\n  - web/src/app/(dashboard)/history/page.tsx\n  - web/src/app/(dashboard)/history/page.test.tsx\n  - .codex/loop/state.json\n  - .codex/loop/log.md\nkey_decisions:\n  - Kept learner help on the existing shared `DashboardShell` + `LearnerHelpEntry` seam and used a shared dashboard guidance card for discoverability instead of adding page-local help buttons or a fake help center.\nduration: \nverification_result: passed\ncompleted_at: 2026-04-11T15:43:47.205Z\nblocker_discovered: false\n---\n\n# T02: Added a shared learner help guidance card to dashboard home, profile, and history so learners can find the existing sidebar help seam and understand role-gated links.\n\n**Added a shared learner help guidance card to dashboard home, profile, and history so learners can find the existing sidebar help seam and understand role-gated links.**\n\n## What Happened\n\nI followed the existing T01 authority line instead of inventing a new support path: the learner help runtime seam remains `DashboardShell` + `LearnerHelpEntry`, and this task closes the discoverability gap around it. I started with a new history-page regression that expected truthful learner help guidance, ran it red, and confirmed the failure was real because the page had no such guidance yet. Then I added `web/src/components/dashboard/learner-help-card.tsx`, a shared dashboard card that tells learners the real help/feedback entry lives in the sidebar/mobile drawer, that page/session context should be reported there, and that runtime/admin links are intentionally role-gated. I reused that same card on dashboard home, profile, and history so the learner-facing guidance stays consistent across the three main entry pages without adding page-local help buttons, a fake help center, or any unimplemented ticketing promise. I also updated `.codex/loop/state.json` and `.codex/loop/log.md` so the repository continuity layer reflects that T02 is done and T03 should focus on broader proof rather than more runtime wiring.\n\n## Verification\n\nVerified the change with a test-first cycle and fresh post-change runs. First, `npm --prefix web test -- --run \"src/app/(dashboard)/history/page.test.tsx\"` failed on the new help-card expectation because history had no discoverable learner help guidance. After implementing the shared learner help card and wiring it into home/profile/history, I reran that exact task-plan verification command and it passed 6/6. I then ran `npm --prefix web test -- --run \"src/app/(dashboard)/page.test.tsx\" \"src/app/(dashboard)/profile/page.test.tsx\"`, which passed 14/14 and confirmed the reused help card did not regress the other learner entry pages. Earlier in the task I also checked LSP diagnostics on the touched runtime files, and all reported clean.\n\n## Verification Evidence\n\n| # | Command | Exit Code | Verdict | Duration |\n|---|---------|-----------|---------|----------|\n| 1 | `npm --prefix web test -- --run \"src/app/(dashboard)/history/page.test.tsx\"` | 0 | ✅ pass | 1231ms |\n| 2 | `npm --prefix web test -- --run \"src/app/(dashboard)/page.test.tsx\" \"src/app/(dashboard)/profile/page.test.tsx\"` | 0 | ✅ pass | 1419ms |\n\n## Deviations\n\nThe written plan allowed adding the unified entry in the learner shell or on page surfaces. Local reality from T01 showed the shared shell entry already existed, so instead of adding another help button I implemented shared page-level discoverability guidance that points back to the existing `DashboardShell`/`LearnerHelpEntry` seam.\n\n## Known Issues\n\nT03 still needs broader focused proof that the shared learner help seam remains visible and understandable across the dashboard entry pages; this task added the runtime guidance and one focused history regression, but not the full multi-page seam-proof layer yet.\n\n## Files Created/Modified\n\n- `web/src/components/dashboard/learner-help-card.tsx`\n- `web/src/app/(dashboard)/page.tsx`\n- `web/src/app/(dashboard)/profile/page.tsx`\n- `web/src/app/(dashboard)/history/page.tsx`\n- `web/src/app/(dashboard)/history/page.test.tsx`\n- `.codex/loop/state.json`\n- `.codex/loop/log.md`\n",
       "description": "Why: 帮助/反馈入口必须优先收口到 shared learner shell 或共享卡片模式，才能避免之后再次分散。\n\nDo:\n1. 在 learner shell 或首页/profile 的合适位置增加统一帮助/反馈入口。\n2. 补最小角色/权限说明，让 learner 知道遇到问题时去哪里、为什么有些入口看不到。\n3. 优先复用 sidebar/home 卡片模式，不新增完整帮助中心。\n4. 保持文案诚实，不承诺未实现的支持系统。\n\nDone when: learner 从主要入口页都能通过同一套模式找到帮助/反馈入口。",
       "estimate": "35m",
       "files": [
@@ -16258,6 +16268,28 @@
       "verdict": "✅ pass",
       "duration_ms": 1149,
       "created_at": "2026-04-11T15:33:35.001Z"
+    },
+    {
+      "id": 298,
+      "task_id": "T02",
+      "slice_id": "S03",
+      "milestone_id": "M014",
+      "command": "npm --prefix web test -- --run \"src/app/(dashboard)/history/page.test.tsx\"",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 1231,
+      "created_at": "2026-04-11T15:43:47.208Z"
+    },
+    {
+      "id": 299,
+      "task_id": "T02",
+      "slice_id": "S03",
+      "milestone_id": "M014",
+      "command": "npm --prefix web test -- --run \"src/app/(dashboard)/page.test.tsx\" \"src/app/(dashboard)/profile/page.test.tsx\"",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 1419,
+      "created_at": "2026-04-11T15:43:47.209Z"
     }
   ]
 }
