@@ -171,7 +171,116 @@ backend/venv/bin/python -m piplicenses --from=mixed --format=json
 截至这次基线落地时：
 
 - `npm audit --prefix web` 是可直接执行的；
-- web 端目前并不是“无漏洞”状态，因此审计结果需要被持续记录与解释；
-- backend 的 `pip_audit` 仍取决于本地/CI 环境是否已经安装该工具；
+- backend 的 `pip_audit` / `pip-licenses` 仍然需要本地或 CI 先把对应工具装进 `backend/venv`；
 - license scan 仍依赖额外 CLI 前置条件，目前先以“可执行命令 + blocker 说明”作为 baseline；
 - future agents 应优先看这份文档和 `scripts/dependency-governance.sh status`，不要从零猜测哪份文件才是当前依赖治理权威。
+
+## 8. 本次已执行 proof（2026-04-12）
+
+### Frontend vulnerability proof
+
+已实际执行：
+
+```bash
+npm audit --prefix web
+```
+
+结果：**通过（0 vulnerabilities）**。
+
+本次修复路径不是只跑 `npm audit fix` 就结束，而是：
+
+```bash
+npm install --prefix web next@16.2.3 eslint-config-next@16.2.3
+npm update --prefix web
+npm audit --prefix web
+```
+
+原因：单独执行 `npm audit fix` 在本仓库里没有把部分已可修复的传递依赖（如 `vite` / `rollup` / `minimatch` / `flatted`）真正抬到安全版本；只有在锁文件允许的前提下再执行一次 `npm update --prefix web`，audit 才会回到绿色。
+
+因此，后续如果 web audit 仍报告“fix available”但 `npm audit fix` 没有实际改动，不要立刻把它记成“仍有未解漏洞”，先补跑一次：
+
+```bash
+npm update --prefix web
+```
+
+### Frontend smoke proof
+
+依赖刷新后还执行了一个最小 smoke test：
+
+```bash
+npm --prefix web test -- --run src/lib/api/client.auth.test.ts
+```
+
+结果：**通过（9/9）**。
+
+## 9. Backend proof 与执行前置说明
+
+### 9.1 工具前置条件
+
+若本地 `backend/venv` 里缺工具，先安装：
+
+```bash
+backend/venv/bin/pip install pip-audit pip-licenses
+```
+
+这一步只是让 proof 可运行，不代表 proof 自动通过。
+
+### 9.2 为什么不要把裸 `backend/venv/bin/python -m pip_audit` 当成唯一 repo proof
+
+本次实际执行中，裸命令出现了两个问题：
+
+1. 在未安装 `pip_audit` 时，它直接失败，说明工具前置条件必须先记录；
+2. 安装后，默认 PyPI 后端会因网络/代理超时而失败；即使改用可用服务，它默认审计的是**整个 venv**，会把 `pip-audit`、`pip-licenses` 等治理工具本身也算进结果里，不能准确代表仓库声明的 `backend/requirements.txt` 风险面。
+
+因此，repo-level backend proof 应优先使用**requirements-scoped**命令：
+
+```bash
+PIP_AUDIT_VULNERABILITY_SERVICE=osv backend/venv/bin/python -m pip_audit -r backend/requirements.txt
+```
+
+### 9.3 本次 backend vulnerability proof 结果
+
+已实际执行：
+
+```bash
+PIP_AUDIT_VULNERABILITY_SERVICE=osv backend/venv/bin/python -m pip_audit -r backend/requirements.txt
+```
+
+结果：当前命中了一个仍需人工跟踪的已知问题：
+
+- `ecdsa 0.19.2` — `CVE-2024-23342`
+
+补充核查：
+
+```bash
+backend/venv/bin/pip index versions ecdsa
+```
+
+执行时显示 `0.19.2` 已是最新可用版本，没有更高的已知修复版本可直接升级。因此，这一项目前应被记录为：
+
+- **proof 已执行**；
+- **存在 open risk**；
+- **不是“没跑 proof”**；
+- **也不是“可以直接升一个版本就绿”**。
+
+### 9.4 本次 backend license proof 结果
+
+已尝试执行：
+
+```bash
+backend/venv/bin/python -m piplicenses --from=mixed --format=json
+```
+
+结果：**未通过，不是因为命令不存在，而是因为当前环境里有部分已安装分发包缺少 `Name` 元数据，`pip-licenses` 会以 `TypeError: expected string or bytes-like object, got 'NoneType'` 直接崩溃。**
+
+因此，当前 backend license 结论应写成：
+
+- 工具前置条件：已满足；
+- 扫描命令：已尝试执行；
+- 当前 blocker：扫描器被环境内异常元数据包打断；
+- 状态：**blocked by scanner/runtime issue**，不是 green。
+
+后续如果要把 backend license proof 变成稳定绿色，需要二选一：
+
+1. 清理/隔离这些缺失 `Name` 元数据的安装包后继续使用 `pip-licenses`；
+2. 为仓库 pin 一个更稳定的 backend license scanner，并同步更新本文档与 `scripts/dependency-governance.sh`。

@@ -47,7 +47,7 @@ Done when: 仓库里存在一份可执行的依赖扫描与升级策略 baseline
   - Files: `docs/*`, `scripts/*`
   - Verify: npm audit --prefix web
 
-- [ ] **T03: 补依赖治理 proof 与执行前置说明** `est:20m`
+- [x] **T03: 补依赖治理 proof 与执行前置说明** `est:20m`
   Why: 依赖治理 proof 必须诚实区分“已经执行过”和“需要前置条件”，否则文档会制造虚假的已验证感。
 
 Do:

@@ -1,6 +1,6 @@
 {
   "mode": "grow",
-  "current_issue_id": "M018-S02-T02",
+  "current_issue_id": "M018-S02-T03",
   "current_issue_type": "task",
   "current_issue_status": "done",
   "pending_issue_ids": [],
@@ -183,23 +183,22 @@
   "blocked_issue_ids": [],
   "deferred_issue_ids": [],
   "last_modified_files": [
+    "web/package.json",
+    "web/package-lock.json",
     "docs/setup/dependency-governance-baseline.md",
-    "scripts/dependency-governance.sh",
-    "scripts/README.md",
     ".gsd/DECISIONS.md",
     ".gsd/KNOWLEDGE.md",
     ".codex/loop/state.json",
     ".codex/loop/log.md"
   ],
   "last_verification_commands": [
-    "bash -n scripts/dependency-governance.sh",
-    "bash scripts/dependency-governance.sh status",
-    "bash scripts/dependency-governance.sh license-plan",
-    "bash scripts/dependency-governance.sh backend-audit",
-    "npm audit --prefix web"
+    "npm audit --prefix web",
+    "npm --prefix web test -- --run src/lib/api/client.auth.test.ts",
+    "PIP_AUDIT_VULNERABILITY_SERVICE=osv backend/venv/bin/python -m pip_audit -r backend/requirements.txt",
+    "backend/venv/bin/python -m piplicenses --from=mixed --format=json"
   ],
-  "last_verification_result": "passed with honest blockers; the new governance wrapper stayed shell-valid, status/ license-plan exposed the real authority files plus missing backend/license prerequisites, backend-audit exited 2 with the expected pip_audit guidance, and npm audit still reports the inherited 8 web vulnerabilities (2 moderate, 6 high) without the baseline pretending they are green.",
-  "last_success_signal": "M018/S02/T02 now gives future agents one repo-local dependency-governance baseline: a discoverable doc plus a runnable script that separates executable proofs from blocked prerequisites and pins backend dependency sync to requirements.txt instead of drifted CI metadata.",
+  "last_verification_result": "passed for the web governance gate after upgrading next/eslint-config-next and refreshing the lockfile with npm update; npm audit now exits 0 and the focused frontend client-auth suite stays green. Backend proof is now explicitly classified: requirements-scoped pip_audit against OSV executes and surfaces one open ecdsa CVE with no newer fix version, while pip-licenses still crashes on missing package Name metadata instead of being silently marked green.",
+  "last_success_signal": "M018/S02/T03 now leaves one truthful dependency-governance baseline: frontend audit proof is freshly green in-repo, backend/security proof distinguishes tool-install, service-timeout, requirements-scoped open risk, and license-scanner runtime blockers, and future agents can see all of that from the baseline doc plus the recorded commands.",
   "last_growth_scan": null,
-  "next_action": "Proceed to M018/S02/T03 to either run pip_audit/license proofs when prerequisites exist or record the blockers explicitly in the final proof write-up."
+  "next_action": "Wait for the next planned item; dependency-governance proof and prerequisite status are now explicitly recorded for M018/S02/T03."
 }

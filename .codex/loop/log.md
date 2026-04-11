@@ -978,3 +978,24 @@
   verification results: passed with honest blockers; the wrapper stayed shell-valid, status/license-plan surfaced the real authority files plus missing backend/license prerequisites, backend-audit failed in the expected blocked-prerequisite mode (exit 2 with install guidance), and the required npm audit gate still reports the inherited 8 web vulnerabilities instead of being papered over.
   success signal status: future agents can now determine the current dependency-governance state from one repo-local doc/script pair, know that backend dependency sync is anchored to requirements.txt, and see exactly which proofs are runnable versus blocked by missing tools.
   rollback note: if a later slice pins different license tooling or repairs backend pyproject extras, update docs/setup/dependency-governance-baseline.md, scripts/dependency-governance.sh, scripts/README.md, and the matching decision/knowledge entries together so the governance baseline does not drift from the actual runnable commands.
+
+- time: 2026-04-12T07:18:54+0800
+  mode: grow
+  item id: M018-S02-T03
+  files changed:
+    - web/package.json
+    - web/package-lock.json
+    - docs/setup/dependency-governance-baseline.md
+    - .gsd/DECISIONS.md
+    - .gsd/KNOWLEDGE.md
+    - .codex/loop/state.json
+    - .codex/loop/log.md
+  summary: Closed M018/S02/T03 by turning dependency-governance proof into a truthful executed-vs-blocked record: the web lockfile was refreshed until npm audit returned green, the baseline doc now records the exact proof commands and prerequisites, and backend security/license proof now explicitly distinguishes requirements-scoped open risk from scanner/runtime blockers instead of treating them as the same kind of failure.
+  verification commands:
+    - npm audit --prefix web
+    - npm --prefix web test -- --run src/lib/api/client.auth.test.ts
+    - PIP_AUDIT_VULNERABILITY_SERVICE=osv backend/venv/bin/python -m pip_audit -r backend/requirements.txt
+    - backend/venv/bin/python -m piplicenses --from=mixed --format=json
+  verification results: web governance is now green end-to-end (`npm audit` exits 0 and the focused client-auth suite stayed 9/9 green). Backend requirements-scoped pip_audit now executes and truthfully reports one open ecdsa CVE with no newer pip release available, while pip-licenses still crashes on missing package Name metadata and therefore remains an explicit blocked scanner/runtime issue rather than a silent pass.
+  success signal status: future agents can now open the baseline doc and immediately tell which proofs were executed, which one is a real open dependency risk, and which one is still blocked by tooling/runtime rather than product code drift.
+  rollback note: if later dependency work changes the backend scanner or resolves the ecdsa/open-license blockers, update web/package-lock.json, docs/setup/dependency-governance-baseline.md, D207, and the matching knowledge entry together so the repo keeps one truthful proof ledger instead of drifting back to command-name-only guidance.
