@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "exported_at": "2026-04-11T18:33:49.295Z",
+  "exported_at": "2026-04-11T18:41:41.898Z",
   "milestones": [
     {
       "id": "M001",
@@ -9953,19 +9953,34 @@
       "milestone_id": "M015",
       "slice_id": "S03",
       "id": "T02",
-      "title": "补齐 learner route fallbacks 并修低风险 UX 问题",
-      "status": "pending",
-      "one_liner": "",
-      "narrative": "",
-      "verification_result": "",
+      "title": "Added shared learner loading/error shells for dashboard, auth, and live practice routes, plus a narrower-screen-safe dashboard fallback layout.",
+      "status": "complete",
+      "one_liner": "Added shared learner loading/error shells for dashboard, auth, and live practice routes, plus a narrower-screen-safe dashboard fallback layout.",
+      "narrative": "I started from the T01 fallback matrix and kept the task narrowly scoped to the real learner-core gaps instead of adding page-local shells everywhere. To stay inside TDD, I first added focused tests for a new learner loading-state seam and auth route shells, ran them, and confirmed they failed because the new shared component and route files did not exist yet.\n\nFrom that red state, I introduced `web/src/components/learner/learner-route-loading-state.tsx` as the shared accessible loading wrapper, then used it to add route-level loaders at `web/src/app/(dashboard)/loading.tsx`, `web/src/app/(auth)/loading.tsx`, and `web/src/app/(user)/practice/[sessionId]/loading.tsx`. I also added `web/src/app/(auth)/error.tsx` on the existing `LearnerRouteErrorState` durable-error seam so auth routes now fail through an explicit recoverable shell instead of bubbling to a blank or generic crash surface.\n\nFor the low-risk UX follow-through, I updated `web/src/components/dashboard-skeleton.tsx` so the shared dashboard fallback stacks cleanly on narrow screens instead of keeping the old edge-aligned header layout. I then aligned the existing live-practice error test with the already-shipped `debug.durableError(...)` observability seam so the learner error boundary proof matches the current tagged route-error behavior instead of the older console-only expectation.\n\nI also recorded the new route-shell reuse pattern as D185 and appended a knowledge entry clarifying that `(dashboard)/loading`, `(auth)/loading`, and `practice/[sessionId]/loading` are now the default learner loading baseline for T03 and later audits.",
+      "verification_result": "Verified the new learner route-shell baseline in four layers: (1) route inventory now shows new `(dashboard)/loading`, `(auth)/error`/`loading`, and `practice/[sessionId]/loading` files; (2) focused auth/loading seam tests passed after the red-to-green cycle for the new shared loading wrapper and auth shells; (3) the task-plan regression gate for history/report/replay finished green at 41/41, proving the new route-level shells did not regress core learner report/replay/history behavior; and (4) route-error observability proof finished green at 5/5, confirming learner route errors still report through the durableError seam with the expected tagged fallback behavior. Fresh LSP diagnostics were clean on the new auth/dashboard/loading/shared-shell files that the server could resolve directly.",
       "duration": "",
-      "completed_at": null,
+      "completed_at": "2026-04-11T18:41:41.855Z",
       "blocker_discovered": false,
-      "deviations": "",
-      "known_issues": "",
-      "key_files": [],
-      "key_decisions": [],
-      "full_summary_md": "",
+      "deviations": "Minor local adaptation only: instead of creating page-local `loading.tsx` files for every individual learner dashboard page, I closed the shared learner loading gap at the route-group boundary with `(dashboard)/loading.tsx` and `(auth)/loading.tsx`, then kept a dedicated page-family loader only for `/practice/[sessionId]`. This matched the real code shape and kept the change low-blast-radius while still closing the user-visible fallback hole.",
+      "known_issues": "Timezone semantics on history/report/replay remain intentionally deferred from T01: those screens still rely on browser-local time formatting, and no timestamp contract change was made here because that would be a product-semantic decision, not a safe route-shell tweak. Also, dashboard child routes now share the new group-level loader by default; if a later slice needs a richer route-specific loading skeleton, it should add that page-local loader deliberately instead of treating the shared group shell as missing coverage.",
+      "key_files": [
+        "web/src/components/learner/learner-route-loading-state.tsx",
+        "web/src/components/learner/learner-route-loading-state.test.tsx",
+        "web/src/app/(dashboard)/loading.tsx",
+        "web/src/app/(auth)/loading.tsx",
+        "web/src/app/(auth)/error.tsx",
+        "web/src/app/(auth)/route-shells.test.tsx",
+        "web/src/app/(user)/practice/[sessionId]/loading.tsx",
+        "web/src/components/dashboard-skeleton.tsx",
+        "web/src/app/(user)/practice/[sessionId]/error.test.tsx",
+        ".gsd/DECISIONS.md",
+        ".gsd/KNOWLEDGE.md"
+      ],
+      "key_decisions": [
+        "D185 — close most learner loading gaps via one shared LearnerRouteLoadingState plus group-level loaders at `(dashboard)` and `(auth)`, with a dedicated live-practice loader only for `/practice/[sessionId]`.",
+        "Keep auth and live-practice route failures on the existing LearnerRouteErrorState + debug.durableError seam instead of creating a second auth-specific observability path."
+      ],
+      "full_summary_md": "---\nid: T02\nparent: S03\nmilestone: M015\nkey_files:\n  - web/src/components/learner/learner-route-loading-state.tsx\n  - web/src/components/learner/learner-route-loading-state.test.tsx\n  - web/src/app/(dashboard)/loading.tsx\n  - web/src/app/(auth)/loading.tsx\n  - web/src/app/(auth)/error.tsx\n  - web/src/app/(auth)/route-shells.test.tsx\n  - web/src/app/(user)/practice/[sessionId]/loading.tsx\n  - web/src/components/dashboard-skeleton.tsx\n  - web/src/app/(user)/practice/[sessionId]/error.test.tsx\n  - .gsd/DECISIONS.md\n  - .gsd/KNOWLEDGE.md\nkey_decisions:\n  - D185 — close most learner loading gaps via one shared LearnerRouteLoadingState plus group-level loaders at `(dashboard)` and `(auth)`, with a dedicated live-practice loader only for `/practice/[sessionId]`.\n  - Keep auth and live-practice route failures on the existing LearnerRouteErrorState + debug.durableError seam instead of creating a second auth-specific observability path.\nduration: \nverification_result: passed\ncompleted_at: 2026-04-11T18:41:41.854Z\nblocker_discovered: false\n---\n\n# T02: Added shared learner loading/error shells for dashboard, auth, and live practice routes, plus a narrower-screen-safe dashboard fallback layout.\n\n**Added shared learner loading/error shells for dashboard, auth, and live practice routes, plus a narrower-screen-safe dashboard fallback layout.**\n\n## What Happened\n\nI started from the T01 fallback matrix and kept the task narrowly scoped to the real learner-core gaps instead of adding page-local shells everywhere. To stay inside TDD, I first added focused tests for a new learner loading-state seam and auth route shells, ran them, and confirmed they failed because the new shared component and route files did not exist yet.\n\nFrom that red state, I introduced `web/src/components/learner/learner-route-loading-state.tsx` as the shared accessible loading wrapper, then used it to add route-level loaders at `web/src/app/(dashboard)/loading.tsx`, `web/src/app/(auth)/loading.tsx`, and `web/src/app/(user)/practice/[sessionId]/loading.tsx`. I also added `web/src/app/(auth)/error.tsx` on the existing `LearnerRouteErrorState` durable-error seam so auth routes now fail through an explicit recoverable shell instead of bubbling to a blank or generic crash surface.\n\nFor the low-risk UX follow-through, I updated `web/src/components/dashboard-skeleton.tsx` so the shared dashboard fallback stacks cleanly on narrow screens instead of keeping the old edge-aligned header layout. I then aligned the existing live-practice error test with the already-shipped `debug.durableError(...)` observability seam so the learner error boundary proof matches the current tagged route-error behavior instead of the older console-only expectation.\n\nI also recorded the new route-shell reuse pattern as D185 and appended a knowledge entry clarifying that `(dashboard)/loading`, `(auth)/loading`, and `practice/[sessionId]/loading` are now the default learner loading baseline for T03 and later audits.\n\n## Verification\n\nVerified the new learner route-shell baseline in four layers: (1) route inventory now shows new `(dashboard)/loading`, `(auth)/error`/`loading`, and `practice/[sessionId]/loading` files; (2) focused auth/loading seam tests passed after the red-to-green cycle for the new shared loading wrapper and auth shells; (3) the task-plan regression gate for history/report/replay finished green at 41/41, proving the new route-level shells did not regress core learner report/replay/history behavior; and (4) route-error observability proof finished green at 5/5, confirming learner route errors still report through the durableError seam with the expected tagged fallback behavior. Fresh LSP diagnostics were clean on the new auth/dashboard/loading/shared-shell files that the server could resolve directly.\n\n## Verification Evidence\n\n| # | Command | Exit Code | Verdict | Duration |\n|---|---------|-----------|---------|----------|\n| 1 | `find web/src/app -type f \\( -name 'error.tsx' -o -name 'loading.tsx' \\) | sort` | 0 | ✅ pass | 15ms |\n| 2 | `npm --prefix web test -- --run \"src/app/(auth)/route-shells.test.tsx\" \"src/components/learner/learner-route-loading-state.test.tsx\"` | 0 | ✅ pass | 1816ms |\n| 3 | `npm --prefix web test -- --run \"src/app/(dashboard)/history/page.test.tsx\" \"src/app/(user)/practice/[sessionId]/report/page.test.tsx\" \"src/app/(user)/practice/[sessionId]/replay/page.test.tsx\"` | 0 | ✅ pass | 2367ms |\n| 4 | `npm --prefix web test -- --run \"src/components/error-reporting.test.tsx\" \"src/app/(user)/practice/[sessionId]/error.test.tsx\"` | 0 | ✅ pass | 1797ms |\n\n## Deviations\n\nMinor local adaptation only: instead of creating page-local `loading.tsx` files for every individual learner dashboard page, I closed the shared learner loading gap at the route-group boundary with `(dashboard)/loading.tsx` and `(auth)/loading.tsx`, then kept a dedicated page-family loader only for `/practice/[sessionId]`. This matched the real code shape and kept the change low-blast-radius while still closing the user-visible fallback hole.\n\n## Known Issues\n\nTimezone semantics on history/report/replay remain intentionally deferred from T01: those screens still rely on browser-local time formatting, and no timestamp contract change was made here because that would be a product-semantic decision, not a safe route-shell tweak. Also, dashboard child routes now share the new group-level loader by default; if a later slice needs a richer route-specific loading skeleton, it should add that page-local loader deliberately instead of treating the shared group shell as missing coverage.\n\n## Files Created/Modified\n\n- `web/src/components/learner/learner-route-loading-state.tsx`\n- `web/src/components/learner/learner-route-loading-state.test.tsx`\n- `web/src/app/(dashboard)/loading.tsx`\n- `web/src/app/(auth)/loading.tsx`\n- `web/src/app/(auth)/error.tsx`\n- `web/src/app/(auth)/route-shells.test.tsx`\n- `web/src/app/(user)/practice/[sessionId]/loading.tsx`\n- `web/src/components/dashboard-skeleton.tsx`\n- `web/src/app/(user)/practice/[sessionId]/error.test.tsx`\n- `.gsd/DECISIONS.md`\n- `.gsd/KNOWLEDGE.md`\n",
       "description": "Why: learner 壳层必须先覆盖核心 route，再顺手修掉低风险 UX 问题，避免白屏或明显不可用状态继续残留。\n\nDo:\n1. 为核心 learner routes 补 route-level error/loading fallback，优先复用 shared components。\n2. 修复明确的低风险 responsive/a11y/timezone 问题。\n3. 不扩成全站 mobile/WCAG 重构；只解决当前 learner 主链路风险。\n\nDone when: learner 核心 routes 有稳定 fallback，focused learner tests 通过。",
       "estimate": "1h",
       "files": [
@@ -13253,6 +13268,18 @@
       "decision": "auth redirect and interruptive action handling seam",
       "choice": "Register Next router navigation in AppProviders through authHandler.setNavigator, let auth expiry flow through authHandler/sessionExpired, keep non-auth role fallback on local router.replace, and route destructive admin actions through ConfirmDialog plus toast feedback.",
       "rationale": "This removes hard browser jumps and native alert/confirm usage from the high-risk admin/learner pages in M015/S02 while preserving one centralized auth toast/redirect policy and one reusable destructive-action interaction pattern for downstream slices.",
+      "revisable": "Yes",
+      "made_by": "agent",
+      "superseded_by": null
+    },
+    {
+      "seq": 1555,
+      "id": "D185",
+      "when_context": "M015/S03/T02",
+      "scope": "pattern",
+      "decision": "Learner route-level loading shell reuse for S03 fallback closure",
+      "choice": "Use one shared LearnerRouteLoadingState plus group-level loading files at `(dashboard)` and `(auth)`, with a dedicated practice session loading shell only for `/practice/[sessionId]`; keep route-specific loading files only where a page needs a more specific shell.",
+      "rationale": "This closes most learner-core loading gaps with the smallest safe change, gives dashboard/auth/practice routes consistent accessible status semantics, and avoids a broad page-by-page loading-shell rewrite while preserving more specific report/replay/history loaders.",
       "revisable": "Yes",
       "made_by": "agent",
       "superseded_by": null
@@ -16745,6 +16772,50 @@
       "verdict": "✅ pass",
       "duration_ms": 1212,
       "created_at": "2026-04-11T18:33:49.248Z"
+    },
+    {
+      "id": 323,
+      "task_id": "T02",
+      "slice_id": "S03",
+      "milestone_id": "M015",
+      "command": "find web/src/app -type f \\( -name 'error.tsx' -o -name 'loading.tsx' \\) | sort",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 15,
+      "created_at": "2026-04-11T18:41:41.856Z"
+    },
+    {
+      "id": 324,
+      "task_id": "T02",
+      "slice_id": "S03",
+      "milestone_id": "M015",
+      "command": "npm --prefix web test -- --run \"src/app/(auth)/route-shells.test.tsx\" \"src/components/learner/learner-route-loading-state.test.tsx\"",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 1816,
+      "created_at": "2026-04-11T18:41:41.856Z"
+    },
+    {
+      "id": 325,
+      "task_id": "T02",
+      "slice_id": "S03",
+      "milestone_id": "M015",
+      "command": "npm --prefix web test -- --run \"src/app/(dashboard)/history/page.test.tsx\" \"src/app/(user)/practice/[sessionId]/report/page.test.tsx\" \"src/app/(user)/practice/[sessionId]/replay/page.test.tsx\"",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 2367,
+      "created_at": "2026-04-11T18:41:41.856Z"
+    },
+    {
+      "id": 326,
+      "task_id": "T02",
+      "slice_id": "S03",
+      "milestone_id": "M015",
+      "command": "npm --prefix web test -- --run \"src/components/error-reporting.test.tsx\" \"src/app/(user)/practice/[sessionId]/error.test.tsx\"",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 1797,
+      "created_at": "2026-04-11T18:41:41.856Z"
     }
   ]
 }

@@ -50,7 +50,14 @@ describe("Practice route error boundary", () => {
 
         fireEvent.click(screen.getByRole("button", { name: "重试" }));
         expect(resetMock).toHaveBeenCalledTimes(1);
-        expect(consoleErrorMock).toHaveBeenCalledWith("[LearnerRouteErrorState:practice-live]", expect.any(Error));
+        expect(consoleErrorMock).toHaveBeenCalledWith(
+            "[route-error.learner]",
+            expect.any(Error),
+            expect.objectContaining({
+                errorTag: "practice-live",
+                backHref: "/training",
+            }),
+        );
     });
 
     it("hides raw diagnostics in production while keeping recovery actions", async () => {
@@ -71,8 +78,13 @@ describe("Practice route error boundary", () => {
         expect(screen.getByRole("button", { name: "重试" })).toBeTruthy();
         expect(screen.getByRole("link", { name: "返回训练大厅" }).getAttribute("href")).toBe("/training");
         expect(consoleErrorMock).toHaveBeenCalledWith(
-            "[LearnerRouteErrorState:practice-live]",
+            "[route-error.learner]",
             { digest: "digest-only" },
+            expect.objectContaining({
+                digest: "digest-only",
+                errorTag: "practice-live",
+                backHref: "/training",
+            }),
         );
     });
 });

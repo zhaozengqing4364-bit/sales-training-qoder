@@ -1,6 +1,6 @@
 {
   "mode": "grow",
-  "current_issue_id": "M015-S03-T01",
+  "current_issue_id": "M015-S03-T02",
   "current_issue_type": "task",
   "current_issue_status": "done",
   "pending_issue_ids": [],
@@ -154,33 +154,34 @@
     "M015-S02-T02",
     "M015-S02-T03",
     "M015-S02",
-    "M015-S03-T01"
+    "M015-S03-T01",
+    "M015-S03-T02"
   ],
   "blocked_issue_ids": [],
   "deferred_issue_ids": [],
   "last_modified_files": [
-    "web/src/app/(dashboard)/history/loading.tsx",
-    "web/src/app/(user)/practice/[sessionId]/report/loading.tsx",
-    "web/src/app/(user)/practice/[sessionId]/replay/loading.tsx",
-    "web/src/app/(auth)/login/page.tsx",
-    "web/src/app/(auth)/forgot-password/page.tsx",
-    "web/src/app/(auth)/reset-password/page.tsx",
-    "web/src/app/(auth)/login/page.test.tsx",
+    "web/src/components/learner/learner-route-loading-state.tsx",
+    "web/src/components/learner/learner-route-loading-state.test.tsx",
+    "web/src/app/(auth)/loading.tsx",
+    "web/src/app/(auth)/error.tsx",
+    "web/src/app/(auth)/route-shells.test.tsx",
+    "web/src/app/(dashboard)/loading.tsx",
+    "web/src/app/(user)/practice/[sessionId]/loading.tsx",
+    "web/src/components/dashboard-skeleton.tsx",
+    "web/src/app/(user)/practice/[sessionId]/error.test.tsx",
+    ".gsd/DECISIONS.md",
     ".gsd/KNOWLEDGE.md",
     ".codex/loop/state.json",
     ".codex/loop/log.md"
   ],
   "last_verification_commands": [
     "find web/src/app -type f \\( -name 'error.tsx' -o -name 'loading.tsx' \\) | sort",
-    "npm --prefix web test -- --run \"src/app/(auth)/login/page.test.tsx\" \"src/app/(auth)/forgot-password/login-recovery.test.tsx\" \"src/app/(auth)/reset-password/login-reset.test.tsx\"",
-    "lsp diagnostics web/src/app/(auth)/login/page.tsx",
-    "lsp diagnostics web/src/app/(auth)/forgot-password/page.tsx",
-    "lsp diagnostics web/src/app/(auth)/reset-password/page.tsx",
-    "lsp diagnostics web/src/app/(dashboard)/history/loading.tsx",
-    "lsp diagnostics web/src/app/(auth)/login/page.test.tsx"
+    "npm --prefix web test -- --run \"src/app/(auth)/route-shells.test.tsx\" \"src/components/learner/learner-route-loading-state.test.tsx\"",
+    "npm --prefix web test -- --run \"src/app/(dashboard)/history/page.test.tsx\" \"src/app/(user)/practice/[sessionId]/report/page.test.tsx\" \"src/app/(user)/practice/[sessionId]/replay/page.test.tsx\"",
+    "npm --prefix web test -- --run \"src/components/error-reporting.test.tsx\" \"src/app/(user)/practice/[sessionId]/error.test.tsx\""
   ],
-  "last_verification_result": "T01 verification passed for the inventory gate, focused auth regression, and touched auth/history diagnostics: the route-file scan still shows learner dashboard/auth gaps exactly where the baseline matrix recorded them, the focused auth suite finished 9/9 green after adding explicit labels/alerts, and LSP diagnostics were clean on the changed auth/loading surfaces.",
-  "last_success_signal": "M015/S03/T01 now leaves one durable learner fallback/baseline matrix plus shipped low-risk a11y fixes on existing loading shells and auth forms, so T02 can add missing route-level fallbacks without re-triaging responsive/timezone scope.",
+  "last_verification_result": "T02 verification passed: the route-file inventory now includes `(dashboard)/loading`, `(auth)/error`/`loading`, and `practice/[sessionId]/loading`; the new auth/loading shell tests finished 3/3 green; the slice learner regression command finished 41/41 green; and the route-error observability proof finished 5/5 green on the durableError seam.",
+  "last_success_signal": "M015/S03/T02 now gives learner dashboard/auth/live-practice routes stable route-level fallback surfaces with accessible loading/error semantics, while the shared dashboard skeleton also stacks safely on narrower screens.",
   "last_growth_scan": null,
-  "next_action": "Continue M015-S03 with T02: add missing learner-core route error/loading fallbacks called out in T01-RESEARCH, while keeping responsive/timezone work limited to low-risk follow-through."
+  "next_action": "Continue M015-S03 with T03: lock learner shell baseline proof and record the remaining deferred responsive/timezone risks against the new shared route-shell baseline."
 }

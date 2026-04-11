@@ -1,3 +1,31 @@
+
+- time: 2026-04-12T02:40:55+08:00
+  mode: grow
+  item id: M015-S03-T02
+  files changed:
+    - web/src/components/learner/learner-route-loading-state.tsx
+    - web/src/components/learner/learner-route-loading-state.test.tsx
+    - web/src/app/(auth)/loading.tsx
+    - web/src/app/(auth)/error.tsx
+    - web/src/app/(auth)/route-shells.test.tsx
+    - web/src/app/(dashboard)/loading.tsx
+    - web/src/app/(user)/practice/[sessionId]/loading.tsx
+    - web/src/components/dashboard-skeleton.tsx
+    - web/src/app/(user)/practice/[sessionId]/error.test.tsx
+    - .gsd/DECISIONS.md
+    - .gsd/KNOWLEDGE.md
+    - .codex/loop/state.json
+    - .codex/loop/log.md
+  summary: Added shared learner route-level loading/error shells across dashboard, auth, and live practice, plus a narrow-screen-safe dashboard skeleton baseline, so learner-core routes now fail or wait on explicit fallback surfaces instead of blanking.
+  verification commands:
+    - find web/src/app -type f \( -name 'error.tsx' -o -name 'loading.tsx' \) | sort
+    - npm --prefix web test -- --run "src/app/(auth)/route-shells.test.tsx" "src/components/learner/learner-route-loading-state.test.tsx"
+    - npm --prefix web test -- --run "src/app/(dashboard)/history/page.test.tsx" "src/app/(user)/practice/[sessionId]/report/page.test.tsx" "src/app/(user)/practice/[sessionId]/replay/page.test.tsx"
+    - npm --prefix web test -- --run "src/components/error-reporting.test.tsx" "src/app/(user)/practice/[sessionId]/error.test.tsx"
+  verification results: passed; the fallback inventory now shows the new dashboard/auth/practice route shells, the focused auth/loading seam tests finished 3/3 green, the task-plan learner regression command finished 41/41 green, and the route-error observability proof finished 5/5 green.
+  success signal status: learner dashboard/auth/live-practice entry routes now have durable route-level fallback surfaces with accessible status semantics, and shared dashboard skeletons no longer force the previous edge-aligned header layout on narrow screens.
+  rollback note: if later S03 work adds more learner page-local loaders, keep the default baseline on `(dashboard)/loading`, `(auth)/loading`, and `practice/[sessionId]/loading`; only introduce page-specific loaders when the route needs richer shape than the shared learner loading state.
+
 - time: 2026-04-12T02:32:30+08:00
   mode: grow
   item id: M015-S03-T01
