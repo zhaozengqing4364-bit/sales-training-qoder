@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { Menu, Shield } from "lucide-react";
 
 import { AdminSidebar, AdminSidebarContent } from "@/components/layout/admin-sidebar";
@@ -9,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { useSidebarStore } from "@/hooks/use-sidebar";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { isAuthenticationError } from "@/lib/api/client";
+import { authHandler } from "@/lib/auth-handler";
 import { cn } from "@/lib/utils";
 import type { CurrentUser } from "@/lib/auth/current-user";
 
@@ -19,6 +21,7 @@ export function AdminShell({
     children: React.ReactNode;
     currentUser: CurrentUser;
 }) {
+    const router = useRouter();
     const { data: sessionUser, error } = useCurrentUser(currentUser);
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
     const { isCollapsed } = useSidebarStore();
@@ -26,19 +29,15 @@ export function AdminShell({
     const authError = isAuthenticationError(error);
 
     useEffect(() => {
-        if (typeof window === "undefined") {
-            return;
-        }
-
         if (authError) {
-            window.location.assign("/login");
+            authHandler.sessionExpired();
             return;
         }
 
         if (effectiveUser.role !== "admin") {
-            window.location.assign("/");
+            router.replace("/");
         }
-    }, [authError, effectiveUser.role]);
+    }, [authError, effectiveUser.role, router]);
 
     useEffect(() => {
         let startX = 0;

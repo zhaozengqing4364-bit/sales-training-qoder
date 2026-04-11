@@ -7,19 +7,37 @@ describe("authHandler", () => {
         vi.restoreAllMocks();
     });
 
-    it("notifies listeners and schedules redirect when session expires", () => {
+    it("notifies listeners and schedules a router-aware redirect when session expires", () => {
+        vi.useFakeTimers();
         const listener = vi.fn();
+        const navigateMock = vi.fn();
         const unsubscribe = authHandler.subscribe(listener);
+        const unregisterNavigator = authHandler.setNavigator(navigateMock);
         const removeItemSpy = vi.spyOn(Storage.prototype, "removeItem");
-        vi.spyOn(window, "setTimeout");
 
         authHandler.sessionExpired();
 
         expect(removeItemSpy).not.toHaveBeenCalled();
         expect(listener).toHaveBeenCalledWith("登录已过期，请重新登录");
-        expect(setTimeout).toHaveBeenCalledWith(expect.any(Function), 1500);
+        expect(navigateMock).not.toHaveBeenCalled();
 
+        vi.advanceTimersByTime(1500);
+
+        expect(navigateMock).toHaveBeenCalledWith("/login", { mode: "replace" });
+
+        unregisterNavigator();
         unsubscribe();
+        vi.useRealTimers();
+    });
+
+    it("queues logout redirects onto the registered navigator instead of hard browser jumps", () => {
+        const navigateMock = vi.fn();
+        const unregisterNavigator = authHandler.setNavigator(navigateMock);
+
+        authHandler.logout("已退出登录", { redirectTo: "/login", notify: false, navigationMode: "push" });
+
+        expect(navigateMock).toHaveBeenCalledWith("/login", { mode: "push" });
+        unregisterNavigator();
     });
 
     it("deduplicates repeated auth notifications within cooldown window", () => {
@@ -46,9 +64,9 @@ describe("authHandler", () => {
         unsubscribe();
     });
 
-    it("tracks interruptive UI cleanup inventory for slice s02", () => {
+    it("tracks cleaned-up interruptive UI seams and the remaining allowed exceptions for slice s02", () => {
         expect(
-            interruptiveUiInventory.filter((item) => item.status === "needs-cleanup").map((item) => item.id),
+            interruptiveUiInventory.filter((item) => item.status === "cleaned-up").map((item) => item.id),
         ).toEqual(expect.arrayContaining([
             "auth-handler-logout-redirect",
             "dashboard-shell-auth-error",

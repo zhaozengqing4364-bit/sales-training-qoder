@@ -5,13 +5,13 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { DashboardShell } from "./dashboard-shell";
 
 const {
-    assignMock,
+    sessionExpiredMock,
     useCurrentUserMock,
     usePathnameMock,
     useParamsMock,
     useSidebarStoreMock,
 } = vi.hoisted(() => ({
-    assignMock: vi.fn(),
+    sessionExpiredMock: vi.fn(),
     useCurrentUserMock: vi.fn(),
     usePathnameMock: vi.fn(),
     useParamsMock: vi.fn(),
@@ -74,6 +74,12 @@ vi.mock("@/lib/api/client", async () => {
     };
 });
 
+vi.mock("@/lib/auth-handler", () => ({
+    authHandler: {
+        sessionExpired: sessionExpiredMock,
+    },
+}));
+
 const currentUser = {
     id: "user-1",
     user_id: "user-1",
@@ -95,12 +101,6 @@ describe("DashboardShell learner help entry", () => {
             isCollapsed: false,
             toggleSidebar: vi.fn(),
             setSidebarState: vi.fn(),
-        });
-        Object.defineProperty(window, "location", {
-            configurable: true,
-            value: {
-                assign: assignMock,
-            },
         });
     });
 
@@ -129,6 +129,6 @@ describe("DashboardShell learner help entry", () => {
         );
 
         expect(screen.getByRole("button", { name: "帮助与反馈" })).toBeTruthy();
-        expect(assignMock).toHaveBeenCalledWith("/login");
+        expect(sessionExpiredMock).toHaveBeenCalledTimes(1);
     });
 });

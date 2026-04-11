@@ -7,10 +7,13 @@ import { debug } from "./debug";
  */
 
 type AuthListener = (message: string) => void;
+type AuthNavigationMode = "push" | "replace";
+type AuthNavigator = (to: string, options?: { mode?: AuthNavigationMode }) => void;
 
 interface LogoutOptions {
     redirectTo?: string | null;
     notify?: boolean;
+    navigationMode?: AuthNavigationMode;
 }
 
 type InterruptiveUiCategory =
@@ -36,7 +39,7 @@ type InterruptiveUiTargetSeam =
     | "auth-handler"
     | "allowed-exception";
 
-type InterruptiveUiStatus = "needs-cleanup" | "allowed-exception";
+type InterruptiveUiStatus = "needs-cleanup" | "cleaned-up" | "allowed-exception";
 
 interface InterruptiveUiInventoryItem {
     id: string;
@@ -64,8 +67,8 @@ export const interruptiveUiInventory: readonly InterruptiveUiInventoryItem[] = [
         category: "auth-redirect",
         currentSurface: "logout redirectTo branch",
         targetSeam: "auth-handler",
-        status: "needs-cleanup",
-        notes: "Keep auth toast publication here, but let router-aware callers own the actual navigation instead of forcing a hard reload.",
+        status: "cleaned-up",
+        notes: "T02 moved logout redirects onto the authHandler navigator seam so auth toasts still publish centrally without forcing a hard reload.",
     },
     {
         id: "auth-handler-session-expired-timeout",
@@ -74,8 +77,8 @@ export const interruptiveUiInventory: readonly InterruptiveUiInventoryItem[] = [
         category: "auth-redirect",
         currentSurface: "sessionExpired delayed login handoff",
         targetSeam: "auth-handler",
-        status: "needs-cleanup",
-        notes: "Session-expired redirects should stay on the centralized auth seam, but the final route transition should stop depending on a bare browser-location jump.",
+        status: "cleaned-up",
+        notes: "T02 keeps the delayed login handoff centralized here, but the final route transition now runs through the registered router navigator seam.",
     },
     {
         id: "dashboard-shell-auth-error",
@@ -84,8 +87,8 @@ export const interruptiveUiInventory: readonly InterruptiveUiInventoryItem[] = [
         category: "auth-redirect",
         currentSurface: "learner shell auth error effect",
         targetSeam: "auth-handler",
-        status: "needs-cleanup",
-        notes: "The learner shell should delegate expired-session handling to authHandler so toast timing and redirect policy stay centralized.",
+        status: "cleaned-up",
+        notes: "The learner shell now delegates expired-session handling to authHandler so toast timing and redirect policy stay centralized.",
     },
     {
         id: "admin-shell-auth-error",
@@ -94,8 +97,8 @@ export const interruptiveUiInventory: readonly InterruptiveUiInventoryItem[] = [
         category: "auth-redirect",
         currentSurface: "admin shell auth error effect",
         targetSeam: "auth-handler",
-        status: "needs-cleanup",
-        notes: "Admin shell auth expiry is the same seam as learner expiry; it should not bypass authHandler with a direct browser jump.",
+        status: "cleaned-up",
+        notes: "Admin shell auth expiry now uses the same authHandler seam as learner expiry instead of bypassing it with a direct browser jump.",
     },
     {
         id: "admin-shell-role-guard-home",
@@ -104,8 +107,8 @@ export const interruptiveUiInventory: readonly InterruptiveUiInventoryItem[] = [
         category: "business-navigation",
         currentSurface: "non-admin role guard fallback",
         targetSeam: "router",
-        status: "needs-cleanup",
-        notes: "Role mismatch is a normal navigation decision, not an auth event, so it should land on router replace/push rather than authHandler.",
+        status: "cleaned-up",
+        notes: "Role mismatch remains a normal navigation decision and now lands on router replace instead of a hard reload.",
     },
     {
         id: "records-delete-confirm",
@@ -114,8 +117,8 @@ export const interruptiveUiInventory: readonly InterruptiveUiInventoryItem[] = [
         category: "delete-confirmation",
         currentSurface: "delete training record",
         targetSeam: "dialog",
-        status: "needs-cleanup",
-        notes: "Use the shared confirm dialog so delete stays non-blocking and visually consistent with the admin shell.",
+        status: "cleaned-up",
+        notes: "Delete now uses the shared confirm dialog so the action stays non-blocking and visually consistent with the admin shell.",
     },
     {
         id: "records-delete-failure-alert",
@@ -124,8 +127,8 @@ export const interruptiveUiInventory: readonly InterruptiveUiInventoryItem[] = [
         category: "mutation-feedback",
         currentSurface: "delete training record failure",
         targetSeam: "toast",
-        status: "needs-cleanup",
-        notes: "Deletion failure is feedback, not a blocking browser modal; it should become toast/error copy.",
+        status: "cleaned-up",
+        notes: "Deletion failure now stays on-page and uses toast feedback instead of a blocking browser modal.",
     },
     {
         id: "rag-profile-delete-confirm",
@@ -134,8 +137,8 @@ export const interruptiveUiInventory: readonly InterruptiveUiInventoryItem[] = [
         category: "delete-confirmation",
         currentSurface: "delete rag profile",
         targetSeam: "dialog",
-        status: "needs-cleanup",
-        notes: "The page already has toast wiring, so the missing seam is only the shared confirm dialog for destructive actions.",
+        status: "cleaned-up",
+        notes: "The page now pairs its existing toast wiring with the shared confirm dialog for destructive actions.",
     },
     {
         id: "persona-name-validation-alert",
@@ -144,8 +147,8 @@ export const interruptiveUiInventory: readonly InterruptiveUiInventoryItem[] = [
         category: "validation-feedback",
         currentSurface: "save validation for empty persona name",
         targetSeam: "toast",
-        status: "needs-cleanup",
-        notes: "Missing required fields should surface as inline/non-blocking feedback rather than freezing the edit flow with a blocking browser modal.",
+        status: "cleaned-up",
+        notes: "Missing required fields now surface through toast feedback instead of freezing the edit flow with a blocking browser modal.",
     },
     {
         id: "persona-system-prompt-validation-alert",
@@ -154,8 +157,8 @@ export const interruptiveUiInventory: readonly InterruptiveUiInventoryItem[] = [
         category: "validation-feedback",
         currentSurface: "save validation for empty system prompt",
         targetSeam: "toast",
-        status: "needs-cleanup",
-        notes: "This is the same validation seam as missing name and should share the same toast/error affordance.",
+        status: "cleaned-up",
+        notes: "This validation now shares the same non-blocking toast seam as the missing-name case.",
     },
     {
         id: "persona-save-failure-alert",
@@ -164,8 +167,8 @@ export const interruptiveUiInventory: readonly InterruptiveUiInventoryItem[] = [
         category: "mutation-feedback",
         currentSurface: "save persona request failure",
         targetSeam: "toast",
-        status: "needs-cleanup",
-        notes: "Save failure should remain on the page and use toast messaging; the success path already routes through router.push.",
+        status: "cleaned-up",
+        notes: "Save failure now remains on the page and uses toast messaging while the success path still routes through router.push.",
     },
     {
         id: "persona-tts-preview-playback-alert",
@@ -174,8 +177,8 @@ export const interruptiveUiInventory: readonly InterruptiveUiInventoryItem[] = [
         category: "media-preview-feedback",
         currentSurface: "audio preview playback error",
         targetSeam: "toast",
-        status: "needs-cleanup",
-        notes: "Preview playback failure is operational feedback and should not block the entire form with a blocking browser modal.",
+        status: "cleaned-up",
+        notes: "Preview playback failure now uses the same toast seam as other operational feedback instead of blocking the whole form.",
     },
     {
         id: "persona-tts-preview-request-alert",
@@ -184,8 +187,8 @@ export const interruptiveUiInventory: readonly InterruptiveUiInventoryItem[] = [
         category: "media-preview-feedback",
         currentSurface: "audio preview request error",
         targetSeam: "toast",
-        status: "needs-cleanup",
-        notes: "Request failures share the same non-blocking media-preview feedback seam as playback errors.",
+        status: "cleaned-up",
+        notes: "Preview request failures now share the same non-blocking media-preview feedback seam as playback errors.",
     },
     {
         id: "admin-error-home-fallback",
@@ -231,6 +234,9 @@ export const interruptiveUiInventory: readonly InterruptiveUiInventoryItem[] = [
 
 class AuthHandler {
     private listeners: Set<AuthListener> = new Set();
+    private navigator: AuthNavigator | null = null;
+    private pendingNavigation: { to: string; mode: AuthNavigationMode } | null = null;
+    private sessionExpiredTimer: ReturnType<typeof setTimeout> | null = null;
     private lastNotifyMessage: string | null = null;
     private lastNotifyTime = 0;
     private readonly notifyCooldownMs = 1200;
@@ -243,6 +249,20 @@ class AuthHandler {
         this.listeners.add(listener);
         return () => {
             this.listeners.delete(listener);
+        };
+    }
+
+    /**
+     * Register a router-aware navigation seam for auth redirects.
+     */
+    setNavigator(navigate: AuthNavigator | null): () => void {
+        this.navigator = navigate;
+        this.flushPendingNavigation();
+
+        return () => {
+            if (this.navigator === navigate) {
+                this.navigator = null;
+            }
         };
     }
 
@@ -269,20 +289,41 @@ class AuthHandler {
         });
     }
 
+    private navigate(to: string, mode: AuthNavigationMode = "replace"): void {
+        if (!to) {
+            return;
+        }
+
+        if (this.navigator) {
+            this.navigator(to, { mode });
+            return;
+        }
+
+        this.pendingNavigation = { to, mode };
+    }
+
+    private flushPendingNavigation(): void {
+        if (!this.navigator || !this.pendingNavigation) {
+            return;
+        }
+
+        const pending = this.pendingNavigation;
+        this.pendingNavigation = null;
+        this.navigator(pending.to, { mode: pending.mode });
+    }
+
     /**
      * Handle logout side effects and redirect.
      */
     logout(message: string = "已退出登录", options: LogoutOptions = {}): void {
-        const { redirectTo = null, notify = true } = options;
+        const { redirectTo = null, notify = true, navigationMode = "replace" } = options;
 
-        if (typeof window !== "undefined") {
-            if (notify) {
-                this.notify(message);
-            }
+        if (notify) {
+            this.notify(message);
+        }
 
-            if (redirectTo) {
-                window.location.assign(redirectTo);
-            }
+        if (redirectTo) {
+            this.navigate(redirectTo, navigationMode);
         }
     }
 
@@ -292,11 +333,21 @@ class AuthHandler {
     sessionExpired(): void {
         this.logout("登录已过期，请重新登录", { redirectTo: null });
 
-        if (typeof window !== "undefined") {
-            setTimeout(() => {
-                window.location.assign("/login");
-            }, 1500);
+        if (this.sessionExpiredTimer !== null) {
+            return;
         }
+
+        const performRedirect = () => {
+            this.sessionExpiredTimer = null;
+            this.navigate("/login", "replace");
+        };
+
+        if (typeof window !== "undefined") {
+            this.sessionExpiredTimer = window.setTimeout(performRedirect, 1500);
+            return;
+        }
+
+        performRedirect();
     }
 
     /**

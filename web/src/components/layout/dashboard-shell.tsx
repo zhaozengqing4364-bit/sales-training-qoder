@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { useSidebarStore } from "@/hooks/use-sidebar";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import { isAuthenticationError } from "@/lib/api/client";
+import { authHandler } from "@/lib/auth-handler";
 import { cn } from "@/lib/utils";
 import type { CurrentUser } from "@/lib/auth/current-user";
 
@@ -26,10 +27,10 @@ export function DashboardShell({
     const authError = isAuthenticationError(error);
 
     useEffect(() => {
-        if (!authError || typeof window === "undefined") {
+        if (!authError) {
             return;
         }
-        window.location.assign("/login");
+        authHandler.sessionExpired();
     }, [authError]);
 
     useEffect(() => {

@@ -35,7 +35,7 @@ Done when: 所有待清理使用点都能映射到一个明确的 shared seam。
   - Files: `web/src/lib/auth-handler.ts`, `web/src/app/admin/records/page.tsx`, `web/src/app/admin/rag-profiles/page.tsx`, `web/src/app/admin/personas/[id]/page.tsx`
   - Verify: rg -n "\b(alert|confirm)\s*\(|window\.location(\.assign|\.href)" web/src
 
-- [ ] **T02: 收口 confirm/dialog/router/auth-handler 交互模式** `est:1h`
+- [x] **T02: 收口 confirm/dialog/router/auth-handler 交互模式** `est:1h`
   Why: 真正的收口点在于把删除确认、auth redirect 和业务导航都接到统一模式，而不是只删掉 API 调用字面量。
 
 Do:

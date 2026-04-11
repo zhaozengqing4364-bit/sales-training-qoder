@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import {
     AlertTriangle,
     Database,
@@ -18,6 +19,7 @@ import {
 import { GlassCard } from "@/components/ui/glass-card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/components/ui/toast";
 import { api } from "@/lib/api/client";
@@ -64,10 +66,13 @@ const DEFAULT_CROSS_ENCODER = {
 // ── Component ──
 
 export default function RagProfilesPage() {
+    const router = useRouter();
     const toast = useToast();
     const [profiles, setProfiles] = useState<RagProfile[]>([]);
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
+    const [deleteTarget, setDeleteTarget] = useState<RagProfile | null>(null);
+    const [isDeleting, setIsDeleting] = useState(false);
 
     // Edit state
     const [editingId, setEditingId] = useState<string | null>(null);
@@ -180,19 +185,22 @@ export default function RagProfilesPage() {
         }
     }, [editingId, formName, formDescription, formChunking, formSemanticCache, formCrossEncoder, loadProfiles, resetForm, toast]);
 
-    const handleDelete = useCallback(async (id: string) => {
-        // M015/S02/T01 inventory: destructive confirmation is the only missing seam
-        // here; success/failure messaging already lives on toast.
-        if (!confirm("确认删除该配置？")) return;
+    const handleDelete = useCallback(async () => {
+        if (!deleteTarget) return;
+
+        setIsDeleting(true);
         try {
-            await api.admin.deleteRagProfile(id);
+            await api.admin.deleteRagProfile(deleteTarget.id);
             toast.success("删除成功");
+            setDeleteTarget(null);
             await loadProfiles();
         } catch (e: unknown) {
             const msg = e instanceof Error ? e.message : "删除失败";
             toast.error(`删除失败: ${msg}`);
+        } finally {
+            setIsDeleting(false);
         }
-    }, [loadProfiles, toast]);
+    }, [deleteTarget, loadProfiles, toast]);
 
     const handleSetDefault = useCallback(async (id: string) => {
         try {
@@ -210,6 +218,21 @@ export default function RagProfilesPage() {
 
     return (
         <div className="p-6 max-w-5xl mx-auto space-y-6">
+            <ConfirmDialog
+                open={!!deleteTarget}
+                onOpenChange={(open) => {
+                    if (!open) {
+                        setDeleteTarget(null);
+                    }
+                }}
+                title="删除 RAG 配置"
+                description={deleteTarget ? `确认删除「${deleteTarget.name}」吗？` : "确认删除该配置？"}
+                confirmText="删除"
+                variant="danger"
+                onConfirm={handleDelete}
+                isLoading={isDeleting}
+            />
+
             {/* Deprecation Banner */}
             <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 flex items-start gap-3">
                 <AlertTriangle className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
@@ -220,13 +243,14 @@ export default function RagProfilesPage() {
                     <p className="text-xs text-amber-700 mt-1">
                         RAG 配置管理已升级为「检索策略」，建议使用新版页面进行配置。此页面将在下个版本移除。
                     </p>
-                    <a
-                        href="/admin/retrieval-strategies"
+                    <button
+                        type="button"
                         className="inline-flex items-center gap-1 mt-2 text-xs font-medium text-amber-800 underline hover:text-amber-900"
+                        onClick={() => router.push("/admin/retrieval-strategies")}
                     >
                         <ExternalLink className="h-3 w-3" />
                         前往检索策略页面
-                    </a>
+                    </button>
                 </div>
             </div>
 
@@ -346,9 +370,10 @@ export default function RagProfilesPage() {
                                         <Button
                                             variant="ghost"
                                             size="sm"
+                                            aria-label={`删除配置 ${p.name}`}
                                             onClick={(e) => {
                                                 e.stopPropagation();
-                                                handleDelete(p.id);
+                                                setDeleteTarget(p);
                                             }}
                                         >
                                             <Trash2 className="w-4 h-4 text-red-500" />

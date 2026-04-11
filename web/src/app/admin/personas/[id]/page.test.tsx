@@ -6,12 +6,14 @@ import EditPersonaPage from "./page";
 const {
     backMock,
     pushMock,
+    errorToastMock,
     getPersonaMock,
     getKnowledgeBasesMock,
     updatePersonaMock,
 } = vi.hoisted(() => ({
     backMock: vi.fn(),
     pushMock: vi.fn(),
+    errorToastMock: vi.fn(),
     getPersonaMock: vi.fn(),
     getKnowledgeBasesMock: vi.fn(),
     updatePersonaMock: vi.fn(),
@@ -24,6 +26,14 @@ vi.mock("next/navigation", () => ({
     }),
     useParams: () => ({
         id: "persona-1",
+    }),
+}));
+
+vi.mock("@/components/ui/toast", () => ({
+    useToast: () => ({
+        error: errorToastMock,
+        success: vi.fn(),
+        showToast: vi.fn(),
     }),
 }));
 
@@ -94,11 +104,10 @@ describe("EditPersonaPage", () => {
     beforeEach(() => {
         backMock.mockReset();
         pushMock.mockReset();
+        errorToastMock.mockReset();
         getPersonaMock.mockReset();
         getKnowledgeBasesMock.mockReset();
         updatePersonaMock.mockReset();
-
-        vi.stubGlobal("alert", vi.fn());
 
         getPersonaMock.mockResolvedValue(basePersona);
         getKnowledgeBasesMock.mockResolvedValue({
@@ -128,6 +137,20 @@ describe("EditPersonaPage", () => {
             ],
         });
         updatePersonaMock.mockResolvedValue(basePersona);
+    });
+
+    it("uses toast validation feedback instead of blocking alert dialogs when required fields are missing", async () => {
+        render(<EditPersonaPage />);
+
+        await screen.findByText("当前 Persona 压力模型");
+
+        fireEvent.change(screen.getByPlaceholderText("例如：急躁的CEO"), {
+            target: { value: "   " },
+        });
+        fireEvent.click(screen.getByRole("button", { name: "保存" }));
+
+        expect(updatePersonaMock).not.toHaveBeenCalled();
+        expect(errorToastMock).toHaveBeenCalledWith("请输入角色名称");
     });
 
     it("renders the current pressure model for inspection", async () => {
@@ -204,5 +227,21 @@ describe("EditPersonaPage", () => {
             }),
         );
         expect(pushMock).toHaveBeenCalledWith("/admin/personas");
+    });
+
+    it("routes save failures through toast feedback while keeping the editor on the page", async () => {
+        updatePersonaMock.mockRejectedValueOnce(new Error("后端异常"));
+
+        render(<EditPersonaPage />);
+
+        await screen.findByText("当前 Persona 压力模型");
+        fireEvent.click(screen.getByRole("button", { name: "保存" }));
+
+        await waitFor(() => {
+            expect(updatePersonaMock).toHaveBeenCalledTimes(1);
+        });
+
+        expect(errorToastMock).toHaveBeenCalledWith("保存失败: 后端异常");
+        expect(pushMock).not.toHaveBeenCalled();
     });
 });

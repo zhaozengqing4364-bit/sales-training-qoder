@@ -2,6 +2,7 @@
 
 import { QueryClientProvider, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 
 import { authHandler } from "@/lib/auth-handler";
 import { currentUserQueryKey } from "@/lib/query/auth";
@@ -19,12 +20,28 @@ function AuthQueryBridge() {
     return null;
 }
 
+function AuthNavigationBridge() {
+    const router = useRouter();
+
+    useEffect(() => authHandler.setNavigator((to, options) => {
+        if (options?.mode === "push") {
+            router.push(to);
+            return;
+        }
+
+        router.replace(to);
+    }), [router]);
+
+    return null;
+}
+
 export function AppProviders({ children }: { children: React.ReactNode }) {
     const [queryClient] = useState(() => createAppQueryClient());
 
     return (
         <QueryClientProvider client={queryClient}>
             <AuthQueryBridge />
+            <AuthNavigationBridge />
             {children}
         </QueryClientProvider>
     );

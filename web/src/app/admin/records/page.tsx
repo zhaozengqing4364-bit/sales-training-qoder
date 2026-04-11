@@ -8,6 +8,8 @@ import { GlassCard } from "@/components/ui/glass-card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Search, Filter, Download, FileText, Eye, Activity, Calendar, Trash2 } from "lucide-react";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { useToast } from "@/components/ui/toast";
 import {
     Dialog,
     DialogContent,
@@ -39,8 +41,11 @@ const formatTime = (isoString: string) => {
 };
 
 export default function RecordsPage() {
+    const toast = useToast();
     const [records, setRecords] = useState<SessionItem[]>([]);
     const [isLoading, setIsLoading] = useState(true);
+    const [deleteTarget, setDeleteTarget] = useState<SessionItem | null>(null);
+    const [isDeleting, setIsDeleting] = useState(false);
 
     // Filter & Search States
     const [searchQuery, setSearchQuery] = useState("");
@@ -65,18 +70,20 @@ export default function RecordsPage() {
         }
     }, [categoryFilter, page, searchQuery]);
 
-    const handleDelete = async (id: string) => {
-        // M015/S02/T01 inventory: this delete flow still mixes a native browser
-        // confirmation step and blocking failure feedback; T02 should move both
-        // onto shared dialog + toast seams.
-        if (!confirm("确定要删除这条训练记录吗？")) return;
-        
+    const handleDelete = async () => {
+        if (!deleteTarget) return;
+
+        setIsDeleting(true);
         try {
-            await api.admin.deleteTrainingRecord(id);
-            setRecords(prev => prev.filter(r => r.id !== id));
+            await api.admin.deleteTrainingRecord(deleteTarget.id);
+            setRecords(prev => prev.filter((record) => record.id !== deleteTarget.id));
+            toast.success("删除成功");
+            setDeleteTarget(null);
         } catch (err) {
             debug.error("Failed to delete record:", err);
-            alert("删除失败");
+            toast.error("删除失败");
+        } finally {
+            setIsDeleting(false);
         }
     };
 
@@ -95,6 +102,21 @@ export default function RecordsPage() {
 
     return (
         <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
+            <ConfirmDialog
+                open={!!deleteTarget}
+                onOpenChange={(open) => {
+                    if (!open) {
+                        setDeleteTarget(null);
+                    }
+                }}
+                title="删除训练记录"
+                description={deleteTarget ? `确定要删除「${deleteTarget.title}」吗？` : "确定要删除这条训练记录吗？"}
+                confirmText="删除"
+                variant="danger"
+                onConfirm={handleDelete}
+                isLoading={isDeleting}
+            />
+
             {/* Header */}
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div>
@@ -233,7 +255,13 @@ export default function RecordsPage() {
                             ]}
                             actions={
                                 <div className="absolute top-4 right-4">
-                                    <Button onClick={() => handleDelete(record.id)} variant="ghost" size="icon" className="text-slate-400 hover:text-red-600 rounded-full">
+                                    <Button
+                                        onClick={() => setDeleteTarget(record)}
+                                        aria-label={`删除记录 ${record.title}`}
+                                        variant="ghost"
+                                        size="icon"
+                                        className="text-slate-400 hover:text-red-600 rounded-full"
+                                    >
                                         <Trash2 className="w-4 h-4" />
                                     </Button>
                                 </div>
@@ -352,7 +380,13 @@ export default function RecordsPage() {
                                                     </DialogContent>
                                                 </Dialog>
                                             </TooltipProvider>
-                                            <Button onClick={() => handleDelete(record.id)} variant="ghost" size="icon" className="h-8 w-8 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-full">
+                                            <Button
+                                                onClick={() => setDeleteTarget(record)}
+                                                aria-label={`删除记录 ${record.title}`}
+                                                variant="ghost"
+                                                size="icon"
+                                                className="h-8 w-8 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-full"
+                                            >
                                                 <Trash2 className="w-4 h-4" />
                                             </Button>
                                         </div>

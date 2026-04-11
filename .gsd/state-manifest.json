@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "exported_at": "2026-04-11T17:53:06.098Z",
+  "exported_at": "2026-04-11T18:09:33.371Z",
   "milestones": [
     {
       "id": "M001",
@@ -9800,19 +9800,35 @@
       "milestone_id": "M015",
       "slice_id": "S02",
       "id": "T02",
-      "title": "收口 confirm/dialog/router/auth-handler 交互模式",
-      "status": "pending",
-      "one_liner": "",
-      "narrative": "",
-      "verification_result": "",
+      "title": "Unified confirm/auth/navigation flows onto authHandler, router, dialog, and toast seams across the planned admin and learner touchpoints.",
+      "status": "complete",
+      "one_liner": "Unified confirm/auth/navigation flows onto authHandler, router, dialog, and toast seams across the planned admin and learner touchpoints.",
+      "narrative": "I verified the remaining T02 touchpoints from the slice inventory, then replaced the last high-risk hard redirects and native blocking interactions with shared seams. In `web/src/lib/auth-handler.ts` I removed direct `window.location.assign` usage, added a router-aware navigator registration API, and kept auth expiry timing centralized by queueing navigation through the shared auth seam. In `web/src/components/providers/app-providers.tsx` I registered that navigator with Next router so auth-triggered redirects now resolve through one client seam. In `web/src/components/layout/dashboard-shell.tsx` and `web/src/components/layout/admin-shell.tsx`, auth errors now delegate to `authHandler.sessionExpired()` instead of forcing browser jumps, while the admin role mismatch fallback now uses `router.replace(\"/\")` as ordinary business navigation.\n\nOn the interruptive UI side, `web/src/app/admin/records/page.tsx` now uses `ConfirmDialog` plus toast feedback for record deletion, `web/src/app/admin/rag-profiles/page.tsx` now uses `ConfirmDialog` for destructive deletion and routes its migration CTA through `router.push(...)` instead of a plain hard-navigation anchor, and `web/src/app/admin/personas/[id]/page.tsx` now replaces validation/save/TTS preview alerts with toast feedback while keeping the success path on router navigation. I also updated the shared `interruptiveUiInventory` statuses from remaining cleanup items to `cleaned-up` for the surfaces closed in T02, and added focused regression tests covering the auth-handler router seam, admin/dashboard shell handoff, records deletion dialog, rag-profile deletion/router handoff, and persona toast-based validation/failure feedback.",
+      "verification_result": "Ran the exact task-plan verification command `npm --prefix web test -- --run \"src/app/admin/personas/[id]/page.test.tsx\" \"src/app/(auth)/login/page.test.tsx\"`, which passed 7/7 tests and proved the persona edit page now uses toast-based validation/failure handling while the login handoff proof still passes. Then ran an expanded seam regression suite `npm --prefix web test -- --run src/lib/auth-handler.test.ts src/components/layout/dashboard-shell.test.tsx src/components/layout/admin-shell.test.tsx src/app/admin/records/page.test.tsx src/app/admin/rag-profiles/page.test.tsx`, which passed 12/12 tests and locked the centralized auth redirect seam plus the records/rag destructive dialog behavior. Fresh LSP diagnostics reported no issues on `web/src/lib/auth-handler.ts`, `web/src/components/providers/app-providers.tsx`, `web/src/components/layout/dashboard-shell.tsx`, `web/src/components/layout/admin-shell.tsx`, `web/src/app/admin/records/page.tsx`, `web/src/app/admin/rag-profiles/page.tsx`, and the persona page glob `web/src/app/admin/personas/*/page.tsx`. The persona failure-path test intentionally emits one `debug.error` line while asserting toast fallback behavior; the suite still passes and no production diagnostics were introduced.",
       "duration": "",
-      "completed_at": null,
+      "completed_at": "2026-04-11T18:09:33.324Z",
       "blocker_discovered": false,
-      "deviations": "",
-      "known_issues": "",
-      "key_files": [],
-      "key_decisions": [],
-      "full_summary_md": "",
+      "deviations": "Added focused seam regression tests for auth-handler, shell routing, records, and rag-profiles beyond the exact plan command so the newly centralized dialog/router/auth-handler behavior is explicitly locked. I also converted the rag-profile migration CTA from a plain anchor to `router.push(...)` because it was a remaining hard-navigation case on a planned touchpoint.",
+      "known_issues": "None.",
+      "key_files": [
+        "web/src/lib/auth-handler.ts",
+        "web/src/components/providers/app-providers.tsx",
+        "web/src/components/layout/dashboard-shell.tsx",
+        "web/src/components/layout/admin-shell.tsx",
+        "web/src/app/admin/records/page.tsx",
+        "web/src/app/admin/rag-profiles/page.tsx",
+        "web/src/app/admin/personas/[id]/page.tsx",
+        "web/src/lib/auth-handler.test.ts",
+        "web/src/components/layout/dashboard-shell.test.tsx",
+        "web/src/components/layout/admin-shell.test.tsx",
+        "web/src/app/admin/records/page.test.tsx",
+        "web/src/app/admin/rag-profiles/page.test.tsx",
+        "web/src/app/admin/personas/[id]/page.test.tsx"
+      ],
+      "key_decisions": [
+        "D184 — register Next router navigation in AppProviders through authHandler.setNavigator, route auth expiry through authHandler/sessionExpired, keep non-auth role fallback on local router.replace, and standardize destructive admin actions on ConfirmDialog plus toast."
+      ],
+      "full_summary_md": "---\nid: T02\nparent: S02\nmilestone: M015\nkey_files:\n  - web/src/lib/auth-handler.ts\n  - web/src/components/providers/app-providers.tsx\n  - web/src/components/layout/dashboard-shell.tsx\n  - web/src/components/layout/admin-shell.tsx\n  - web/src/app/admin/records/page.tsx\n  - web/src/app/admin/rag-profiles/page.tsx\n  - web/src/app/admin/personas/[id]/page.tsx\n  - web/src/lib/auth-handler.test.ts\n  - web/src/components/layout/dashboard-shell.test.tsx\n  - web/src/components/layout/admin-shell.test.tsx\n  - web/src/app/admin/records/page.test.tsx\n  - web/src/app/admin/rag-profiles/page.test.tsx\n  - web/src/app/admin/personas/[id]/page.test.tsx\nkey_decisions:\n  - D184 — register Next router navigation in AppProviders through authHandler.setNavigator, route auth expiry through authHandler/sessionExpired, keep non-auth role fallback on local router.replace, and standardize destructive admin actions on ConfirmDialog plus toast.\nduration: \nverification_result: passed\ncompleted_at: 2026-04-11T18:09:33.322Z\nblocker_discovered: false\n---\n\n# T02: Unified confirm/auth/navigation flows onto authHandler, router, dialog, and toast seams across the planned admin and learner touchpoints.\n\n**Unified confirm/auth/navigation flows onto authHandler, router, dialog, and toast seams across the planned admin and learner touchpoints.**\n\n## What Happened\n\nI verified the remaining T02 touchpoints from the slice inventory, then replaced the last high-risk hard redirects and native blocking interactions with shared seams. In `web/src/lib/auth-handler.ts` I removed direct `window.location.assign` usage, added a router-aware navigator registration API, and kept auth expiry timing centralized by queueing navigation through the shared auth seam. In `web/src/components/providers/app-providers.tsx` I registered that navigator with Next router so auth-triggered redirects now resolve through one client seam. In `web/src/components/layout/dashboard-shell.tsx` and `web/src/components/layout/admin-shell.tsx`, auth errors now delegate to `authHandler.sessionExpired()` instead of forcing browser jumps, while the admin role mismatch fallback now uses `router.replace(\"/\")` as ordinary business navigation.\n\nOn the interruptive UI side, `web/src/app/admin/records/page.tsx` now uses `ConfirmDialog` plus toast feedback for record deletion, `web/src/app/admin/rag-profiles/page.tsx` now uses `ConfirmDialog` for destructive deletion and routes its migration CTA through `router.push(...)` instead of a plain hard-navigation anchor, and `web/src/app/admin/personas/[id]/page.tsx` now replaces validation/save/TTS preview alerts with toast feedback while keeping the success path on router navigation. I also updated the shared `interruptiveUiInventory` statuses from remaining cleanup items to `cleaned-up` for the surfaces closed in T02, and added focused regression tests covering the auth-handler router seam, admin/dashboard shell handoff, records deletion dialog, rag-profile deletion/router handoff, and persona toast-based validation/failure feedback.\n\n## Verification\n\nRan the exact task-plan verification command `npm --prefix web test -- --run \"src/app/admin/personas/[id]/page.test.tsx\" \"src/app/(auth)/login/page.test.tsx\"`, which passed 7/7 tests and proved the persona edit page now uses toast-based validation/failure handling while the login handoff proof still passes. Then ran an expanded seam regression suite `npm --prefix web test -- --run src/lib/auth-handler.test.ts src/components/layout/dashboard-shell.test.tsx src/components/layout/admin-shell.test.tsx src/app/admin/records/page.test.tsx src/app/admin/rag-profiles/page.test.tsx`, which passed 12/12 tests and locked the centralized auth redirect seam plus the records/rag destructive dialog behavior. Fresh LSP diagnostics reported no issues on `web/src/lib/auth-handler.ts`, `web/src/components/providers/app-providers.tsx`, `web/src/components/layout/dashboard-shell.tsx`, `web/src/components/layout/admin-shell.tsx`, `web/src/app/admin/records/page.tsx`, `web/src/app/admin/rag-profiles/page.tsx`, and the persona page glob `web/src/app/admin/personas/*/page.tsx`. The persona failure-path test intentionally emits one `debug.error` line while asserting toast fallback behavior; the suite still passes and no production diagnostics were introduced.\n\n## Verification Evidence\n\n| # | Command | Exit Code | Verdict | Duration |\n|---|---------|-----------|---------|----------|\n| 1 | `npm --prefix web test -- --run \"src/app/admin/personas/[id]/page.test.tsx\" \"src/app/(auth)/login/page.test.tsx\"` | 0 | ✅ pass | 1698ms |\n| 2 | `npm --prefix web test -- --run src/lib/auth-handler.test.ts src/components/layout/dashboard-shell.test.tsx src/components/layout/admin-shell.test.tsx src/app/admin/records/page.test.tsx src/app/admin/rag-profiles/page.test.tsx` | 0 | ✅ pass | 1567ms |\n\n## Deviations\n\nAdded focused seam regression tests for auth-handler, shell routing, records, and rag-profiles beyond the exact plan command so the newly centralized dialog/router/auth-handler behavior is explicitly locked. I also converted the rag-profile migration CTA from a plain anchor to `router.push(...)` because it was a remaining hard-navigation case on a planned touchpoint.\n\n## Known Issues\n\nNone.\n\n## Files Created/Modified\n\n- `web/src/lib/auth-handler.ts`\n- `web/src/components/providers/app-providers.tsx`\n- `web/src/components/layout/dashboard-shell.tsx`\n- `web/src/components/layout/admin-shell.tsx`\n- `web/src/app/admin/records/page.tsx`\n- `web/src/app/admin/rag-profiles/page.tsx`\n- `web/src/app/admin/personas/[id]/page.tsx`\n- `web/src/lib/auth-handler.test.ts`\n- `web/src/components/layout/dashboard-shell.test.tsx`\n- `web/src/components/layout/admin-shell.test.tsx`\n- `web/src/app/admin/records/page.test.tsx`\n- `web/src/app/admin/rag-profiles/page.test.tsx`\n- `web/src/app/admin/personas/[id]/page.test.tsx`\n",
       "description": "Why: 真正的收口点在于把删除确认、auth redirect 和业务导航都接到统一模式，而不是只删掉 API 调用字面量。\n\nDo:\n1. 删除操作统一走 modal/dialog confirm。\n2. auth redirect 统一走 authHandler/router。\n3. 普通业务导航改成 router push/replace。\n4. 保留 ErrorBoundary reload 等明确允许的例外，不做过度清理。\n\nDone when: 高风险业务页面不再依赖原生弹窗或硬跳转，focused UI proof 通过。",
       "estimate": "1h",
       "files": [
@@ -13208,6 +13224,18 @@
       "decision": "M015/S02 原生弹窗与硬跳转 inventory 的权威存放位置与编码方式",
       "choice": "将 inventory 统一放在 web/src/lib/auth-handler.ts 的 interruptiveUiInventory 中，并用 token 化 primitive（如 native-alert、location-assign）+ allowed-exception 状态来描述剩余使用点和 grep 例外。",
       "rationale": "后续 T02/T03 需要一份 scanner-backed 的权威清单，既能把删除确认、auth redirect、普通导航映射到 dialog/toast/router/auth-handler seam，也能解释 ErrorBoundary/performance/admin error 这类剩余 grep 命中；如果在注释或 inventory 中重复写入 alert(/window.location.assign 等字面量，会反过来污染 grep gate。",
+      "revisable": "Yes",
+      "made_by": "agent",
+      "superseded_by": null
+    },
+    {
+      "seq": 1554,
+      "id": "D184",
+      "when_context": "M015/S02/T02",
+      "scope": "frontend-pattern",
+      "decision": "auth redirect and interruptive action handling seam",
+      "choice": "Register Next router navigation in AppProviders through authHandler.setNavigator, let auth expiry flow through authHandler/sessionExpired, keep non-auth role fallback on local router.replace, and route destructive admin actions through ConfirmDialog plus toast feedback.",
+      "rationale": "This removes hard browser jumps and native alert/confirm usage from the high-risk admin/learner pages in M015/S02 while preserving one centralized auth toast/redirect policy and one reusable destructive-action interaction pattern for downstream slices.",
       "revisable": "Yes",
       "made_by": "agent",
       "superseded_by": null
@@ -16623,6 +16651,28 @@
       "verdict": "✅ pass",
       "duration_ms": 20,
       "created_at": "2026-04-11T17:53:06.053Z"
+    },
+    {
+      "id": 316,
+      "task_id": "T02",
+      "slice_id": "S02",
+      "milestone_id": "M015",
+      "command": "npm --prefix web test -- --run \"src/app/admin/personas/[id]/page.test.tsx\" \"src/app/(auth)/login/page.test.tsx\"",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 1698,
+      "created_at": "2026-04-11T18:09:33.324Z"
+    },
+    {
+      "id": 317,
+      "task_id": "T02",
+      "slice_id": "S02",
+      "milestone_id": "M015",
+      "command": "npm --prefix web test -- --run src/lib/auth-handler.test.ts src/components/layout/dashboard-shell.test.tsx src/components/layout/admin-shell.test.tsx src/app/admin/records/page.test.tsx src/app/admin/rag-profiles/page.test.tsx",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 1567,
+      "created_at": "2026-04-11T18:09:33.324Z"
     }
   ]
 }

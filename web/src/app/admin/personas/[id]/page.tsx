@@ -14,6 +14,7 @@ import { GlassCard } from "@/components/ui/glass-card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { useToast } from "@/components/ui/toast";
 import { ArrowLeft, Save, AlertCircle, Loader2, Database, Plus, X, Volume2, Square } from "lucide-react";
 import {
     Dialog,
@@ -284,6 +285,7 @@ const VOICE_OPTIONS = [
 ];
 
 export default function EditPersonaPage() {
+    const toast = useToast();
     const params = useParams();
     const router = useRouter();
     const personaId = params.id as string;
@@ -436,15 +438,12 @@ export default function EditPersonaPage() {
     };
 
     const handleSave = async () => {
-        // M015/S02/T01 inventory: this editor still uses native alerts for
-        // validation + mutation/media-preview failures, while success already
-        // follows the router seam via router.push("/admin/personas").
         if (!formData.name.trim()) {
-            alert("请输入角色名称");
+            toast.error("请输入角色名称");
             return;
         }
         if (!formData.system_prompt.trim()) {
-            alert("请输入系统提示词");
+            toast.error("请输入系统提示词");
             return;
         }
 
@@ -478,7 +477,7 @@ export default function EditPersonaPage() {
             router.push("/admin/personas");
         } catch (err) {
             debug.error("Failed to save persona:", err);
-            alert("保存失败: " + (err instanceof Error ? err.message : "未知错误"));
+            toast.error(`保存失败: ${err instanceof Error ? err.message : "未知错误"}`);
         } finally {
             setIsSaving(false);
         }
@@ -1135,13 +1134,14 @@ export default function EditPersonaPage() {
                                         // should migrate together onto the toast seam.
                                         audio.onerror = () => {
                                             setIsPreviewingTTS(false);
-                                            alert("音频播放失败");
+                                            URL.revokeObjectURL(audioUrl);
+                                            toast.error("音频播放失败");
                                         };
                                         
                                         await audio.play();
                                     } catch (err) {
                                         debug.error("TTS preview failed:", err);
-                                        alert("试听失败");
+                                        toast.error("试听失败");
                                         setIsPreviewingTTS(false);
                                     }
                                 }}
