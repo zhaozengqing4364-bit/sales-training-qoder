@@ -1,3 +1,20 @@
+- time: 2026-04-11T23:47:30+08:00
+  mode: grow
+  item id: M014-S03-T03
+  files changed:
+    - web/src/app/(dashboard)/page.test.tsx
+    - web/src/app/(dashboard)/profile/page.test.tsx
+    - .gsd/KNOWLEDGE.md
+    - .codex/loop/state.json
+  summary: Added focused learner-help proof on dashboard home and profile so the shared sidebar/mobile-drawer help guidance is now regression-locked across home, profile, and history instead of only on one page.
+  verification commands:
+    - npm --prefix web test -- --run "src/app/(dashboard)/history/page.test.tsx" "src/app/(dashboard)/**/*.test.tsx"
+    - npm --prefix web test -- --run "src/app/(dashboard)/page.test.tsx" "src/app/(dashboard)/profile/page.test.tsx" "src/app/(dashboard)/history/page.test.tsx"
+    - npm --prefix web test -- --run "src/components/layout/dashboard-shell.test.tsx"
+  verification results: passed; the plan command stayed green but only exercised history under local Vitest glob semantics, so an explicit dashboard page suite was run and finished 22/22 green across home/profile/history, and the focused DashboardShell seam suite finished 2/2 green for the shared desktop/mobile help entry.
+  success signal status: future agents can now verify learner help discoverability from the three main dashboard entry pages and separately prove the shared learner shell seam still exists.
+  rollback note: if future support UX changes the copy, update the shared learner-help guidance expectations together across the dashboard page suites and the DashboardShell seam proof instead of reintroducing page-local support buttons.
+
 - time: 2026-04-11T23:40:45+08:00
   mode: grow
   item id: M014-S03-T02

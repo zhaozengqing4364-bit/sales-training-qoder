@@ -1,6 +1,6 @@
 {
   "mode": "grow",
-  "current_issue_id": "M014-S03-T02",
+  "current_issue_id": "M014-S03-T03",
   "current_issue_type": "task",
   "current_issue_status": "done",
   "pending_issue_ids": [],
@@ -142,23 +142,25 @@
     "M014-S02-T03",
     "M014-S02",
     "M014-S03-T01",
-    "M014-S03-T02"
+    "M014-S03-T02",
+    "M014-S03-T03"
   ],
   "blocked_issue_ids": [],
   "deferred_issue_ids": [],
   "last_modified_files": [
-    "web/src/components/dashboard/learner-help-card.tsx",
-    "web/src/app/(dashboard)/page.tsx",
-    "web/src/app/(dashboard)/profile/page.tsx",
-    "web/src/app/(dashboard)/history/page.tsx",
-    "web/src/app/(dashboard)/history/page.test.tsx"
+    "web/src/app/(dashboard)/page.test.tsx",
+    "web/src/app/(dashboard)/profile/page.test.tsx",
+    ".gsd/KNOWLEDGE.md",
+    ".codex/loop/state.json",
+    ".codex/loop/log.md"
   ],
   "last_verification_commands": [
-    "npm --prefix web test -- --run \"src/app/(dashboard)/history/page.test.tsx\"",
-    "npm --prefix web test -- --run \"src/app/(dashboard)/page.test.tsx\" \"src/app/(dashboard)/profile/page.test.tsx\""
+    "npm --prefix web test -- --run \"src/app/(dashboard)/history/page.test.tsx\" \"src/app/(dashboard)/**/*.test.tsx\"",
+    "npm --prefix web test -- --run \"src/app/(dashboard)/page.test.tsx\" \"src/app/(dashboard)/profile/page.test.tsx\" \"src/app/(dashboard)/history/page.test.tsx\"",
+    "npm --prefix web test -- --run \"src/components/layout/dashboard-shell.test.tsx\""
   ],
-  "last_verification_result": "Fresh learner-dashboard verification passed: the focused history Vitest suite finished 6/6 green with the new shared help card proof, and the impacted home/profile suites finished 14/14 green after wiring the same truthful help/role guidance into all three learner entry pages.",
-  "last_success_signal": "Learners now see one consistent help/feedback guidance card on home, profile, and history that points back to the shared sidebar LearnerHelpEntry seam and explains why admin/runtime links may be absent for learner accounts.",
+  "last_verification_result": "Fresh learner-help proof verification passed: the plan command stayed green but, under local Vitest semantics, only exercised history; the adapted explicit dashboard page suite then finished 22/22 green across home/profile/history, and the focused DashboardShell seam suite finished 2/2 green for the shared desktop/mobile help entry.",
+  "last_success_signal": "Future agents can now prove learner help discoverability from dashboard home, profile, and history while separately confirming the shared DashboardShell learner-help seam still mounts on desktop and mobile.",
   "last_growth_scan": null,
-  "next_action": "Proceed to M014/S03/T03: add focused proof that the shared learner help seam remains visible and understandable across the dashboard entry pages without regressing into page-local support buttons."
+  "next_action": "M014/S03 is ready for slice closure: learner help discoverability is now locked by focused dashboard page tests plus the shared DashboardShell seam proof."
 }

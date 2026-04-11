@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "exported_at": "2026-04-11T15:43:47.257Z",
+  "exported_at": "2026-04-11T15:50:07.412Z",
   "milestones": [
     {
       "id": "M001",
@@ -9414,19 +9414,28 @@
       "milestone_id": "M014",
       "slice_id": "S03",
       "id": "T03",
-      "title": "为 learner shell 帮助入口补 proof",
-      "status": "pending",
-      "one_liner": "",
-      "narrative": "",
-      "verification_result": "",
+      "title": "Added focused dashboard tests that lock learner help discoverability on home/profile/history while preserving the shared DashboardShell help seam as the authority proof.",
+      "status": "complete",
+      "one_liner": "Added focused dashboard tests that lock learner help discoverability on home/profile/history while preserving the shared DashboardShell help seam as the authority proof.",
+      "narrative": "I completed the missing proof layer for the learner help/feedback work without changing the runtime seam. History already had a focused learner-help regression from T02, so this task closed the remaining gap by adding matching assertions to `web/src/app/(dashboard)/page.test.tsx` and `web/src/app/(dashboard)/profile/page.test.tsx`. Those tests now lock the same truthful learner-help guidance that points learners back to the shared sidebar/mobile-drawer `DashboardShell` + `LearnerHelpEntry` seam, including the role-gated copy and the absence of fake support promises. I deliberately kept the proof anchored on the shared shell contract instead of inventing page-local help buttons or page-specific expectations. During verification I also confirmed a local Vitest gotcha: the literal quoted dashboard glob from the plan stays green but can execute only the explicitly named history file in this repo, so I documented that behavior in `.gsd/KNOWLEDGE.md` and updated the safe-grow continuity files to preserve the explicit multi-page verification path for future agents.",
+      "verification_result": "I first checked LSP diagnostics on the changed test files, and both `web/src/app/(dashboard)/page.test.tsx` and `web/src/app/(dashboard)/profile/page.test.tsx` were clean. Then I ran the task-plan verification command exactly as written: `npm --prefix web test -- --run \"src/app/(dashboard)/history/page.test.tsx\" \"src/app/(dashboard)/**/*.test.tsx\"`; it passed, but local Vitest semantics only exercised the explicitly named history suite. To prove the intended task scope, I ran `npm --prefix web test -- --run \"src/app/(dashboard)/page.test.tsx\" \"src/app/(dashboard)/profile/page.test.tsx\" \"src/app/(dashboard)/history/page.test.tsx\"`, which passed 22/22 tests across home/profile/history, and `npm --prefix web test -- --run \"src/components/layout/dashboard-shell.test.tsx\"`, which passed 2/2 tests for the shared desktop/mobile learner-help seam. Together these checks prove learners can find the help guidance from the key dashboard entry pages and that the shared shell seam still mounts the help entry.",
       "duration": "",
-      "completed_at": null,
+      "completed_at": "2026-04-11T15:50:07.367Z",
       "blocker_discovered": false,
-      "deviations": "",
-      "known_issues": "",
-      "key_files": [],
-      "key_decisions": [],
-      "full_summary_md": "",
+      "deviations": "The written verification command used a quoted dashboard glob that did not broaden coverage under local Vitest behavior here. I kept the literal plan command in the evidence table, then added explicit page-suite and shell-seam commands so the proof actually covered home, profile, history, and the shared `DashboardShell` seam the slice contract depends on.",
+      "known_issues": "None.",
+      "key_files": [
+        "web/src/app/(dashboard)/page.test.tsx",
+        "web/src/app/(dashboard)/profile/page.test.tsx",
+        ".gsd/KNOWLEDGE.md",
+        ".codex/loop/state.json",
+        ".codex/loop/log.md"
+      ],
+      "key_decisions": [
+        "Kept learner-help proof split between dashboard page discoverability tests and the existing `DashboardShell` seam proof instead of asserting page-local help buttons.",
+        "Recorded the local Vitest quoted-glob gotcha in `.gsd/KNOWLEDGE.md` so future multi-page dashboard verification uses explicit file lists when the contract spans more than one page."
+      ],
+      "full_summary_md": "---\nid: T03\nparent: S03\nmilestone: M014\nkey_files:\n  - web/src/app/(dashboard)/page.test.tsx\n  - web/src/app/(dashboard)/profile/page.test.tsx\n  - .gsd/KNOWLEDGE.md\n  - .codex/loop/state.json\n  - .codex/loop/log.md\nkey_decisions:\n  - Kept learner-help proof split between dashboard page discoverability tests and the existing `DashboardShell` seam proof instead of asserting page-local help buttons.\n  - Recorded the local Vitest quoted-glob gotcha in `.gsd/KNOWLEDGE.md` so future multi-page dashboard verification uses explicit file lists when the contract spans more than one page.\nduration: \nverification_result: passed\ncompleted_at: 2026-04-11T15:50:07.366Z\nblocker_discovered: false\n---\n\n# T03: Added focused dashboard tests that lock learner help discoverability on home/profile/history while preserving the shared DashboardShell help seam as the authority proof.\n\n**Added focused dashboard tests that lock learner help discoverability on home/profile/history while preserving the shared DashboardShell help seam as the authority proof.**\n\n## What Happened\n\nI completed the missing proof layer for the learner help/feedback work without changing the runtime seam. History already had a focused learner-help regression from T02, so this task closed the remaining gap by adding matching assertions to `web/src/app/(dashboard)/page.test.tsx` and `web/src/app/(dashboard)/profile/page.test.tsx`. Those tests now lock the same truthful learner-help guidance that points learners back to the shared sidebar/mobile-drawer `DashboardShell` + `LearnerHelpEntry` seam, including the role-gated copy and the absence of fake support promises. I deliberately kept the proof anchored on the shared shell contract instead of inventing page-local help buttons or page-specific expectations. During verification I also confirmed a local Vitest gotcha: the literal quoted dashboard glob from the plan stays green but can execute only the explicitly named history file in this repo, so I documented that behavior in `.gsd/KNOWLEDGE.md` and updated the safe-grow continuity files to preserve the explicit multi-page verification path for future agents.\n\n## Verification\n\nI first checked LSP diagnostics on the changed test files, and both `web/src/app/(dashboard)/page.test.tsx` and `web/src/app/(dashboard)/profile/page.test.tsx` were clean. Then I ran the task-plan verification command exactly as written: `npm --prefix web test -- --run \"src/app/(dashboard)/history/page.test.tsx\" \"src/app/(dashboard)/**/*.test.tsx\"`; it passed, but local Vitest semantics only exercised the explicitly named history suite. To prove the intended task scope, I ran `npm --prefix web test -- --run \"src/app/(dashboard)/page.test.tsx\" \"src/app/(dashboard)/profile/page.test.tsx\" \"src/app/(dashboard)/history/page.test.tsx\"`, which passed 22/22 tests across home/profile/history, and `npm --prefix web test -- --run \"src/components/layout/dashboard-shell.test.tsx\"`, which passed 2/2 tests for the shared desktop/mobile learner-help seam. Together these checks prove learners can find the help guidance from the key dashboard entry pages and that the shared shell seam still mounts the help entry.\n\n## Verification Evidence\n\n| # | Command | Exit Code | Verdict | Duration |\n|---|---------|-----------|---------|----------|\n| 1 | `npm --prefix web test -- --run \"src/app/(dashboard)/history/page.test.tsx\" \"src/app/(dashboard)/**/*.test.tsx\"` | 0 | ✅ pass | 1107ms |\n| 2 | `npm --prefix web test -- --run \"src/app/(dashboard)/page.test.tsx\" \"src/app/(dashboard)/profile/page.test.tsx\" \"src/app/(dashboard)/history/page.test.tsx\"` | 0 | ✅ pass | 1405ms |\n| 3 | `npm --prefix web test -- --run \"src/components/layout/dashboard-shell.test.tsx\"` | 0 | ✅ pass | 845ms |\n\n## Deviations\n\nThe written verification command used a quoted dashboard glob that did not broaden coverage under local Vitest behavior here. I kept the literal plan command in the evidence table, then added explicit page-suite and shell-seam commands so the proof actually covered home, profile, history, and the shared `DashboardShell` seam the slice contract depends on.\n\n## Known Issues\n\nNone.\n\n## Files Created/Modified\n\n- `web/src/app/(dashboard)/page.test.tsx`\n- `web/src/app/(dashboard)/profile/page.test.tsx`\n- `.gsd/KNOWLEDGE.md`\n- `.codex/loop/state.json`\n- `.codex/loop/log.md`\n",
       "description": "Why: 如果没有 focused proof，帮助入口很容易在后续壳层改动里再次消失。\n\nDo:\n1. 补或更新 focused UI proof，覆盖首页、profile、history 等关键 learner 入口。\n2. 锁定帮助入口的可见性与基础文案，不要求复杂交互系统。\n3. 保持测试针对 shared shell seam，而不是只断言单页面临时实现。\n\nDone when: focused tests 能稳定证明 learner 在多个入口页都能找到帮助/反馈入口。",
       "estimate": "20m",
       "files": [
@@ -16290,6 +16299,39 @@
       "verdict": "✅ pass",
       "duration_ms": 1419,
       "created_at": "2026-04-11T15:43:47.209Z"
+    },
+    {
+      "id": 300,
+      "task_id": "T03",
+      "slice_id": "S03",
+      "milestone_id": "M014",
+      "command": "npm --prefix web test -- --run \"src/app/(dashboard)/history/page.test.tsx\" \"src/app/(dashboard)/**/*.test.tsx\"",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 1107,
+      "created_at": "2026-04-11T15:50:07.368Z"
+    },
+    {
+      "id": 301,
+      "task_id": "T03",
+      "slice_id": "S03",
+      "milestone_id": "M014",
+      "command": "npm --prefix web test -- --run \"src/app/(dashboard)/page.test.tsx\" \"src/app/(dashboard)/profile/page.test.tsx\" \"src/app/(dashboard)/history/page.test.tsx\"",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 1405,
+      "created_at": "2026-04-11T15:50:07.368Z"
+    },
+    {
+      "id": 302,
+      "task_id": "T03",
+      "slice_id": "S03",
+      "milestone_id": "M014",
+      "command": "npm --prefix web test -- --run \"src/components/layout/dashboard-shell.test.tsx\"",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 845,
+      "created_at": "2026-04-11T15:50:07.368Z"
     }
   ]
 }

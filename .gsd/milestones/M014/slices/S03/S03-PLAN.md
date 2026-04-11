@@ -48,7 +48,7 @@ Done when: learner 从主要入口页都能通过同一套模式找到帮助/反
   - Files: `web/src/components/layout/sidebar.tsx`, `web/src/app/(dashboard)/*`, `web/src/components/dashboard/*`
   - Verify: npm --prefix web test -- --run "src/app/(dashboard)/history/page.test.tsx"
 
-- [ ] **T03: 为 learner shell 帮助入口补 proof** `est:20m`
+- [x] **T03: 为 learner shell 帮助入口补 proof** `est:20m`
   Why: 如果没有 focused proof，帮助入口很容易在后续壳层改动里再次消失。
 
 Do:

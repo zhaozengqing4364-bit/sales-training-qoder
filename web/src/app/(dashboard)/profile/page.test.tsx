@@ -183,4 +183,18 @@ describe("ProfilePage password route handoff", () => {
         const resetLink = screen.getByRole("link", { name: "通过邮箱重置密码" }) as HTMLAnchorElement;
         expect(resetLink.getAttribute("href")).toBe("/forgot-password");
     });
+
+    it("keeps the shared learner help guidance visible on profile", async () => {
+        renderProfilePage();
+
+        await waitFor(() => {
+            expect(getMeMock).toHaveBeenCalled();
+        });
+
+        expect(screen.getByText("需要帮助或反馈？")).toBeTruthy();
+        expect(screen.getByText(/统一入口在侧边栏底部的“帮助与反馈”里；手机端先打开左上角菜单。/)).toBeTruthy();
+        expect(screen.getByText(/页面异常、入口缺失或结果不对时，请通过这个统一入口反馈当前页面路径或会话编号。/)).toBeTruthy();
+        expect(screen.getByText(/当前 learner 默认只看到训练、历史、个人中心；运行状态和管理后台只对管理员或支持角色开放。/)).toBeTruthy();
+        expect(screen.queryByText(/7 x 24/)).toBeNull();
+    });
 });
