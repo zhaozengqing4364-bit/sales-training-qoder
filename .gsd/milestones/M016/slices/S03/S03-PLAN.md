@@ -23,7 +23,7 @@ S03 把 M016 前两块 auth/error contract 工作推进到 admin 高风险 route
 
 ## Tasks
 
-- [ ] **T01: 建立 admin 权限矩阵与敏感日志出口清单** `est:40m`
+- [x] **T01: 建立 admin 权限矩阵与敏感日志出口清单** `est:40m`
   Why: 先建立权限矩阵和敏感日志出口清单，才能避免 S03 变成盲扫 backend 的长期审计工程。
 
 Do:

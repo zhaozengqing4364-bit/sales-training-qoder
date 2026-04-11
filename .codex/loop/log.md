@@ -1,3 +1,58 @@
+- time: 2026-04-12T04:14:30+08:00
+  mode: grow
+  item id: M016-S03-T01
+  files changed:
+    - backend/src/admin/api/security_inventory.py
+    - backend/src/common/monitoring/log_safety_inventory.py
+    - backend/src/common/auth/service.py
+    - .gsd/DECISIONS.md
+    - .gsd/KNOWLEDGE.md
+    - .codex/loop/state.json
+    - .codex/loop/log.md
+  summary: Codified the M016/S03 security baseline into code-owned inventories so downstream work can stop re-scanning the backend: one admin permission matrix now names the five legacy /admin route families still gated only by generic authentication, one sensitive-log inventory names the shared logger/auth sinks most likely to leak token/password/cookie/email fields, and the auth service now points future agents at those baselines instead of the stale string-detail drift note.
+  verification commands:
+    - rg -n "token|password|cookie|email" backend/src/admin backend/src/common/monitoring backend/src/common/auth
+    - python3 -m py_compile backend/src/admin/api/security_inventory.py backend/src/common/monitoring/log_safety_inventory.py backend/src/common/auth/service.py
+    - backend/venv/bin/python -c 'import sys; sys.path.insert(0, "backend/src"); from admin.api.security_inventory import FIX_FIRST_ADMIN_ROUTE_FAMILIES; from common.monitoring.log_safety_inventory import FIX_FIRST_SENSITIVE_LOG_SURFACES; print(len(FIX_FIRST_ADMIN_ROUTE_FAMILIES), len(FIX_FIRST_SENSITIVE_LOG_SURFACES))'
+    - lsp diagnostics backend/src/admin/api/security_inventory.py
+    - lsp diagnostics backend/src/common/monitoring/log_safety_inventory.py
+    - lsp diagnostics backend/src/common/auth/service.py
+  verification results: passed; the task-plan grep gate finished cleanly with the new code-owned inventory surfaces present, py_compile succeeded on the new inventory/auth files, the backend venv imported the fix-first route/log lists successfully (5 route families, 4 log surfaces), and fresh diagnostics stayed clean on the touched Python files.
+  success signal status: future S03 work now has one durable target list instead of a broad backend audit — fix-first RBAC work is narrowed to the five legacy get_current_user admin route families, and fix-first redaction work is narrowed to the shared logger/latency sinks plus auth logout/failure logging.
+  rollback note: if later S03 tasks change which route families or sinks are first priority, update backend/src/admin/api/security_inventory.py, backend/src/common/monitoring/log_safety_inventory.py, the auth-service baseline note, and D194 together so the code-owned inventory does not drift from the actual repair plan.
+
+- time: 2026-04-12T04:03:30+08:00
+  mode: grow
+  item id: M016-S02
+  files changed:
+    - backend/src/prompt_templates/api/routes.py
+    - backend/src/presentation_coach/api/presentations.py
+    - backend/src/common/auth/service.py
+    - backend/src/common/api/practice.py
+    - backend/tests/conftest.py
+    - backend/tests/contract/test_presentations.py
+    - web/src/lib/api/client.ts
+    - web/src/lib/api/client.auth.test.ts
+    - .gsd/DECISIONS.md
+    - .gsd/PROJECT.md
+    - .codex/loop/state.json
+    - .codex/loop/log.md
+  summary: Closed M016/S02 after fresh slice-level verification confirmed the audited prompt-template, presentation, and auth dependency surfaces now share one stable error-contract seam, and the frontend API client keeps all of those failures on one ApiRequestError normalization path without page-local guessing.
+  verification commands:
+    - backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/contract/test_presentations.py backend/tests/contract/test_practice_evidence_contract.py backend/tests/integration/test_presentation_flow.py -x -q
+    - npm --prefix web test -- --run src/lib/api/client.auth.test.ts
+    - lsp diagnostics backend/src/prompt_templates/api/routes.py
+    - lsp diagnostics backend/src/presentation_coach/api/presentations.py
+    - lsp diagnostics backend/src/common/auth/service.py
+    - lsp diagnostics backend/src/common/api/practice.py
+    - lsp diagnostics backend/tests/conftest.py
+    - lsp diagnostics backend/tests/contract/test_presentations.py
+    - lsp diagnostics web/src/lib/api/client.ts
+    - lsp diagnostics web/src/lib/api/client.auth.test.ts
+  verification results: passed; the exact slice-plan backend gate finished 33/33 green, the focused frontend API-client auth suite finished 9/9 green, and diagnostics stayed clean on the touched backend/frontend authority files.
+  success signal status: M016/S02 now gives downstream work one durable security/error-contract baseline — route-local audited 4xx failures expose top-level structured envelopes, dependency role/admin guards expose structured detail payloads, and frontend callers normalize both shapes through ApiRequestError.
+  rollback note: if later admin-security work changes exception handling, keep `error_response(...)`/`build_server_error(...)`, `_raise_auth_http_error(...)`, `backend/tests/contract/test_presentations.py`, and `web/src/lib/api/client.auth.test.ts` aligned together; otherwise protected-route and not-found failures will drift back into mixed string-vs-envelope parsing.
+
 - time: 2026-04-12T03:58:20+08:00
   mode: grow
   item id: M016-S02-T03

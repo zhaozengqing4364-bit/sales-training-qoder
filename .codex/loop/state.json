@@ -1,6 +1,6 @@
 {
   "mode": "grow",
-  "current_issue_id": "M016-S02-T03",
+  "current_issue_id": "M016-S03-T01",
   "current_issue_type": "task",
   "current_issue_status": "done",
   "pending_issue_ids": [],
@@ -163,28 +163,31 @@
     "M016-S01-T03",
     "M016-S02-T01",
     "M016-S02-T02",
-    "M016-S02-T03"
+    "M016-S02-T03",
+    "M016-S02",
+    "M016-S03-T01"
   ],
   "blocked_issue_ids": [],
   "deferred_issue_ids": [],
   "last_modified_files": [
+    "backend/src/admin/api/security_inventory.py",
+    "backend/src/common/monitoring/log_safety_inventory.py",
     "backend/src/common/auth/service.py",
-    "backend/tests/contract/test_presentations.py",
-    "web/src/lib/api/client.auth.test.ts",
+    ".gsd/DECISIONS.md",
     ".gsd/KNOWLEDGE.md",
     ".codex/loop/state.json",
     ".codex/loop/log.md"
   ],
   "last_verification_commands": [
-    "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/contract/test_presentations.py -k \"structured_detail_payload\" -q",
-    "npm --prefix web test -- --run src/lib/api/client.auth.test.ts",
-    "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/contract/test_presentations.py backend/tests/contract/test_practice_evidence_contract.py backend/tests/integration/test_presentation_flow.py -x -q",
-    "lsp diagnostics backend/src/common/auth/service.py",
-    "lsp diagnostics backend/tests/contract/test_presentations.py",
-    "lsp diagnostics web/src/lib/api/client.auth.test.ts"
+    "rg -n \"token|password|cookie|email\" backend/src/admin backend/src/common/monitoring backend/src/common/auth",
+    "python3 -m py_compile backend/src/admin/api/security_inventory.py backend/src/common/monitoring/log_safety_inventory.py backend/src/common/auth/service.py",
+    "backend/venv/bin/python -c 'import sys; sys.path.insert(0, \"backend/src\"); from admin.api.security_inventory import FIX_FIRST_ADMIN_ROUTE_FAMILIES; from common.monitoring.log_safety_inventory import FIX_FIRST_SENSITIVE_LOG_SURFACES; print(len(FIX_FIRST_ADMIN_ROUTE_FAMILIES), len(FIX_FIRST_SENSITIVE_LOG_SURFACES))'",
+    "lsp diagnostics backend/src/admin/api/security_inventory.py",
+    "lsp diagnostics backend/src/common/monitoring/log_safety_inventory.py",
+    "lsp diagnostics backend/src/common/auth/service.py"
   ],
-  "last_verification_result": "passed; the new role-guard contract proof finished green on both user and admin presentation surfaces, the focused frontend API-client auth suite finished 9/9 green including dependency-detail normalization, the slice verification command finished 33/33 green, and fresh LSP diagnostics stayed clean on the touched auth/test files.",
-  "last_success_signal": "M016/S02/T03 now proves the shared error seam end to end: backend role/admin dependency guards emit structured {error,message} detail payloads, presentation contract tests catch regressions on those guards, and the frontend API client continues normalizing dependency, route-local, and validation failures through one ApiRequestError path without page-local guessing.",
+  "last_verification_result": "passed; the task-plan grep gate finished cleanly with the new code-owned inventory surfaces present, py_compile succeeded on the new inventory/auth files, the backend venv imported the fix-first route/log lists successfully (5 route families, 4 log surfaces), and fresh LSP diagnostics stayed clean on the touched Python files.",
+  "last_success_signal": "M016/S03/T01 now gives downstream work one durable admin security map: backend/src/admin/api/security_inventory.py names the admin route families that already prove admin-only access versus the five legacy get_current_user gaps, backend/src/common/monitoring/log_safety_inventory.py identifies the shared log sinks and auth call sites most likely to leak token/password/cookie/email fields, and common/auth/service.py points future agents at those inventories instead of stale string-detail assumptions.",
   "last_growth_scan": null,
-  "next_action": "Complete slice S02 or continue downstream work that consumes the now-proved backend/frontend error-contract seam."
+  "next_action": "Execute M016/S03/T02 to move the fix-first route families onto an admin-only guard and land redaction on the shared logging/auth sinks named by the new inventories."
 }

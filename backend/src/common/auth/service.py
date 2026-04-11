@@ -41,10 +41,11 @@ security = HTTPBearer(auto_error=False)
 #   AUTH_USER_PASSWORDS_JSON / AUTH_SHARED_PASSWORD until the reset contract replaces that fallback.
 # - request-path auth recovery work should not expand init_db/runtime DDL behavior here; schema authority lives
 #   in Alembic revisions plus common.db.models.PasswordResetToken, including the single-active-token invariant.
-# M016/S02/T01 auth dependency drift inventory:
-# - get_current_user / get_current_admin_user / require_role still raise FastAPI auth failures with string detail payloads.
-# - common.auth.api login / forgot / reset endpoints already return JSONResponse(error_response(...)).
-# - any route that depends directly on these helpers therefore bypasses the shared error envelope and leaks raw strings.
+# M016/S03/T01 auth/RBAC baseline:
+# - get_current_user / get_current_admin_user / require_role now raise structured detail payloads via _raise_auth_http_error(...).
+# - the remaining admin-risk seam is not helper shape, but legacy /admin route families that still wire get_current_user instead of get_current_admin_user.
+# - backend/src/admin/api/security_inventory.py tracks the full permission matrix and the fix-first route families for this slice.
+# - backend/src/common/monitoring/log_safety_inventory.py tracks the auth-adjacent log sinks that still need token/password/cookie/email redaction.
 pwd_context = CryptContext(schemes=["pbkdf2_sha256", "bcrypt"], deprecated="auto")
 
 
