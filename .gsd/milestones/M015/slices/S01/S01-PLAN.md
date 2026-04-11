@@ -49,7 +49,7 @@ Done when: 共享 debug seam 成为业务页面与 route error surface 的默认
   - Files: `web/src/lib/debug.ts`, `web/src/components/ErrorBoundary.tsx`, `web/src/app/**/error.tsx`
   - Verify: npm --prefix web test -- --run "src/app/(user)/practice/[sessionId]/page.test.tsx" "src/hooks/use-practice-websocket.test.ts"
 
-- [ ] **T03: 清理业务页面与 hooks 中的散落 console** `est:45m`
+- [x] **T03: 清理业务页面与 hooks 中的散落 console** `est:45m`
   Why: 只有把高噪声业务页面和 hooks 的散落 console 清掉，S01 才算真正收口，而不是只增加了一个 helper。
 
 Do:

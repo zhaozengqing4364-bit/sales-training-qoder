@@ -1,4 +1,5 @@
 "use client";
+import { debug } from "@/lib/debug";
 
 import { useState, useEffect, useRef } from "react";
 import {
@@ -83,7 +84,7 @@ export function HighlightCard({
     audioRef.current = audio;
 
     audio.play().catch((err) => {
-      console.error("[HighlightCard] Audio playback failed:", err);
+      debug.error("[HighlightCard] Audio playback failed:", err);
       setIsPlaying(false);
     });
 
@@ -98,7 +99,7 @@ export function HighlightCard({
     };
 
     audio.onerror = () => {
-      console.error("[HighlightCard] Audio error");
+      debug.error("[HighlightCard] Audio error");
       setIsPlaying(false);
       if (audioRef.current === audio) {
         audioRef.current = null;

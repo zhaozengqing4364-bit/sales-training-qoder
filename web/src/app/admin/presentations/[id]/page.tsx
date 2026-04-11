@@ -1,4 +1,5 @@
 "use client";
+import { debug } from "@/lib/debug";
 
 import Image from "next/image";
 import { useEffect, useState } from "react";
@@ -159,7 +160,7 @@ export default function PresentationDetailPage() {
             setPresentation(data as PresentationDetail);
             setReplaceError(null);
         } catch (err) {
-            console.error("Failed to load presentation:", err);
+            debug.error("Failed to load presentation:", err);
             toast.error("加载PPT详情失败");
         } finally {
             setIsLoading(false);
@@ -171,7 +172,7 @@ export default function PresentationDetailPage() {
             const data = await api.presentations.getTalkingPoints(presentationId, selectedPage);
             setTalkingPoints(data || []);
         } catch (err) {
-            console.error("Failed to load talking points:", err);
+            debug.error("Failed to load talking points:", err);
         }
     };
 
@@ -180,7 +181,7 @@ export default function PresentationDetailPage() {
             const data = await api.presentations.getForbiddenWords(presentationId);
             setForbiddenWords(data || []);
         } catch (err) {
-            console.error("Failed to load forbidden words:", err);
+            debug.error("Failed to load forbidden words:", err);
         }
     };
 
@@ -218,7 +219,7 @@ export default function PresentationDetailPage() {
             setReplaceFile(null);
             toast.success("标准PPT已提交替换，版本信息已刷新");
         } catch (err) {
-            console.error("Failed to replace presentation:", err);
+            debug.error("Failed to replace presentation:", err);
             const message = getApiErrorMessage(err);
             setReplaceError(message);
             toast.error(message);
@@ -242,7 +243,7 @@ export default function PresentationDetailPage() {
             toast.success("要点添加成功");
             await loadTalkingPoints();
         } catch (err) {
-            console.error("Failed to add talking point:", err);
+            debug.error("Failed to add talking point:", err);
             toast.error("添加要点失败");
         } finally {
             setIsAddingPoint(false);
@@ -255,7 +256,7 @@ export default function PresentationDetailPage() {
             toast.success("要点已删除");
             await loadTalkingPoints();
         } catch (err) {
-            console.error("Failed to delete talking point:", err);
+            debug.error("Failed to delete talking point:", err);
             toast.error("删除要点失败");
         }
     };
@@ -277,7 +278,7 @@ export default function PresentationDetailPage() {
             toast.success("禁忌词添加成功");
             await loadForbiddenWords();
         } catch (err) {
-            console.error("Failed to add forbidden word:", err);
+            debug.error("Failed to add forbidden word:", err);
             toast.error("添加禁忌词失败");
         } finally {
             setIsAddingWord(false);
@@ -290,7 +291,7 @@ export default function PresentationDetailPage() {
             toast.success("禁忌词已删除");
             await loadForbiddenWords();
         } catch (err) {
-            console.error("Failed to delete forbidden word:", err);
+            debug.error("Failed to delete forbidden word:", err);
             toast.error("删除禁忌词失败");
         }
     };

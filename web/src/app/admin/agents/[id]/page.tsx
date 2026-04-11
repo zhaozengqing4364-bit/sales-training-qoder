@@ -1,4 +1,5 @@
 "use client";
+import { debug } from "@/lib/debug";
 
 import { useEffect, useState, use } from "react";
 import { useRouter } from "next/navigation";
@@ -161,7 +162,7 @@ export default function AgentEditPage({ params }: { params: Promise<{ id: string
                     : modelConfigs.llm;
                 setLlmConfigs(llmModelList.filter((item) => item.is_active));
             } catch (err) {
-                console.error("Failed to load agent:", err);
+                debug.error("Failed to load agent:", err);
                 toast.error("加载失败");
             } finally {
                 setIsLoading(false);
@@ -184,7 +185,7 @@ export default function AgentEditPage({ params }: { params: Promise<{ id: string
             });
             toast.success("保存成功");
         } catch (err) {
-            console.error("Failed to update agent:", err);
+            debug.error("Failed to update agent:", err);
             toast.error("保存失败");
         } finally {
             setIsSaving(false);
@@ -201,7 +202,7 @@ export default function AgentEditPage({ params }: { params: Promise<{ id: string
             });
             toast.success("语音策略已保存");
         } catch (err) {
-            console.error("Failed to update voice policy:", err);
+            debug.error("Failed to update voice policy:", err);
             toast.error("语音策略保存失败");
         } finally {
             setIsSavingVoicePolicy(false);
@@ -229,7 +230,7 @@ export default function AgentEditPage({ params }: { params: Promise<{ id: string
             setSelectedPersonaId("");
             toast.success("角色关联成功");
         } catch (err) {
-            console.error("Failed to add persona:", err);
+            debug.error("Failed to add persona:", err);
             toast.error("关联失败");
         } finally {
             setIsAddingPersona(false);
@@ -246,7 +247,7 @@ export default function AgentEditPage({ params }: { params: Promise<{ id: string
             setRemoveTarget(null);
             toast.success("已移除角色");
         } catch (err) {
-            console.error("Failed to remove persona:", err);
+            debug.error("Failed to remove persona:", err);
             toast.error("移除失败");
         } finally {
             setIsRemoving(false);
@@ -266,7 +267,7 @@ export default function AgentEditPage({ params }: { params: Promise<{ id: string
             })));
             toast.success("已设为默认角色");
         } catch (err) {
-            console.error("Failed to set default:", err);
+            debug.error("Failed to set default:", err);
             toast.error("设置失败");
         }
     };

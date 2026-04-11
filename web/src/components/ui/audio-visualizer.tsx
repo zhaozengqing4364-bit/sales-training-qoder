@@ -1,4 +1,5 @@
 "use client";
+import { debug } from "@/lib/debug";
 
 import * as React from "react";
 import { cn } from "@/lib/utils";
@@ -101,7 +102,7 @@ export function AudioVisualizer({
                 
                 draw();
             } catch (err) {
-                console.error("Failed to setup audio visualizer:", err);
+                debug.error("Failed to setup audio visualizer:", err);
             }
         };
 

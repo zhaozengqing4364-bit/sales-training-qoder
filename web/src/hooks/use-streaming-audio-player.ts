@@ -292,7 +292,7 @@ export function useStreamingAudioPlayer(
             try {
                 sourceBuffer.appendBuffer(chunk);
             } catch (err) {
-                console.error('[StreamingAudioPlayer] Failed to append buffer:', err);
+                debug.error('[StreamingAudioPlayer] Failed to append buffer:', err);
                 isAppendingRef.current = false;
                 onErrorRef.current?.('Failed to append audio buffer');
             }
@@ -393,7 +393,7 @@ export function useStreamingAudioPlayer(
 
             audio.onerror = () => {
                 const errorMessage = audio.error?.message || 'Audio playback error';
-                console.error('[StreamingAudioPlayer] Audio error:', errorMessage);
+                debug.error('[StreamingAudioPlayer] Audio error:', errorMessage);
                 onErrorRef.current?.(errorMessage);
             };
 
@@ -408,7 +408,7 @@ export function useStreamingAudioPlayer(
                     sourceBuffer.onupdateend = handleUpdateEnd;
 
                     sourceBuffer.onerror = () => {
-                        console.error('[StreamingAudioPlayer] SourceBuffer error');
+                        debug.error('[StreamingAudioPlayer] SourceBuffer error');
                         onErrorRef.current?.('SourceBuffer error');
                     };
 
@@ -430,7 +430,7 @@ export function useStreamingAudioPlayer(
 
                     debug.log('[StreamingAudioPlayer] MediaSource initialized, queued chunks:', chunkQueueRef.current.length);
                 } catch (err) {
-                    console.error('[StreamingAudioPlayer] Failed to create SourceBuffer:', err);
+                    debug.error('[StreamingAudioPlayer] Failed to create SourceBuffer:', err);
                     onErrorRef.current?.('Failed to initialize audio streaming');
                     isFallbackModeRef.current = true;
                 }
@@ -445,7 +445,7 @@ export function useStreamingAudioPlayer(
             };
 
         } catch (err) {
-            console.error('[StreamingAudioPlayer] Failed to initialize MediaSource:', err);
+            debug.error('[StreamingAudioPlayer] Failed to initialize MediaSource:', err);
             onErrorRef.current?.('Failed to initialize audio streaming');
             isFallbackModeRef.current = true;
         }
@@ -545,7 +545,7 @@ export function useStreamingAudioPlayer(
             try {
                 pcmBuffer = base64ToArrayBuffer(audio);
             } catch (err) {
-                console.error('[StreamingAudioPlayer] Failed to decode PCM chunk:', err);
+                debug.error('[StreamingAudioPlayer] Failed to decode PCM chunk:', err);
                 onErrorRef.current?.('Failed to decode PCM data');
                 return;
             }
@@ -610,7 +610,7 @@ export function useStreamingAudioPlayer(
         try {
             audioBuffer = base64ToArrayBuffer(audio);
         } catch (err) {
-            console.error('[StreamingAudioPlayer] Failed to decode audio chunk:', err);
+            debug.error('[StreamingAudioPlayer] Failed to decode audio chunk:', err);
             onErrorRef.current?.('Failed to decode audio data');
             return;
         }
@@ -698,7 +698,7 @@ export function useStreamingAudioPlayer(
 
             debug.log('[StreamingAudioPlayer] Playing in fallback mode');
         } catch (err) {
-            console.error('[StreamingAudioPlayer] Fallback playback failed:', err);
+            debug.error('[StreamingAudioPlayer] Fallback playback failed:', err);
             onErrorRef.current?.('Failed to play audio');
         }
     }, [mimeType]);

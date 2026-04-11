@@ -1,4 +1,5 @@
 "use client";
+import { debug } from "@/lib/debug";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
@@ -167,7 +168,7 @@ export default function KnowledgeDetailPage() {
             setKb(kbData);
             setDocs(docsData);
         } catch (err) {
-            console.error("Failed to load knowledge base:", err);
+            debug.error("Failed to load knowledge base:", err);
             setError(getApiErrorMessage(err));
         } finally {
             setIsLoading(false);
@@ -283,7 +284,7 @@ export default function KnowledgeDetailPage() {
             toast.success("文档上传成功，系统已开始重新解析与建索引。");
             await loadData();
         } catch (err) {
-            console.error("Upload failed:", err);
+            debug.error("Upload failed:", err);
             toast.error(`上传失败：${getApiErrorMessage(err)}`);
         } finally {
             if (progressInterval) {
@@ -308,7 +309,7 @@ export default function KnowledgeDetailPage() {
             const data = await api.admin.getDocumentPreview(kbId, doc.id);
             setPreviewChunks(normalizePreviewChunks(data.chunks));
         } catch (err) {
-            console.error("Failed to load preview:", err);
+            debug.error("Failed to load preview:", err);
             toast.error(`加载预览失败：${getApiErrorMessage(err)}`);
             setPreviewDoc(null);
         } finally {
@@ -330,7 +331,7 @@ export default function KnowledgeDetailPage() {
             toast.success("文档已重新提交处理。");
             await loadData();
         } catch (err) {
-            console.error("Reprocess failed:", err);
+            debug.error("Reprocess failed:", err);
             toast.error(`重试失败：${getApiErrorMessage(err)}`);
         } finally {
             setReprocessingDocId(null);
@@ -346,7 +347,7 @@ export default function KnowledgeDetailPage() {
             toast.success("文档删除成功。");
             setDeleteTarget(null);
         } catch (err) {
-            console.error("Delete failed:", err);
+            debug.error("Delete failed:", err);
             toast.error(`删除失败：${getApiErrorMessage(err)}`);
         } finally {
             setIsDeleting(false);
@@ -382,7 +383,7 @@ export default function KnowledgeDetailPage() {
                 setSearchMessage("未命中结果。请尝试更具体的问题，或先确认最新文档已处理完成。");
             }
         } catch (err) {
-            console.error("Search failed:", err);
+            debug.error("Search failed:", err);
             setSearchResults([]);
             setSearchMessage(null);
             setSearchError(getApiErrorMessage(err));

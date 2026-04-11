@@ -1,4 +1,5 @@
 "use client";
+import { debug } from "@/lib/debug";
 
 import { useState, useCallback, useEffect } from "react";
 import { Trash2 } from "lucide-react";
@@ -52,7 +53,7 @@ export function IntentRulesTab({ versionId }: IntentRulesTabProps) {
             const data = await api.admin.getKnowledgeQueryProfiles(versionId);
             setQueryProfiles(data);
         } catch (err) {
-            console.error("Failed to load query profiles:", err);
+            debug.error("Failed to load query profiles:", err);
         }
     }, [versionId]);
 

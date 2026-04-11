@@ -1,3 +1,44 @@
+- time: 2026-04-12T01:30:30+08:00
+  mode: grow
+  item id: M015-S01-T03
+  files changed:
+    - web/src/lib/console-boundary.test.ts
+    - web/src/app/(dashboard)/agents/[agentId]/page.tsx
+    - web/src/app/(dashboard)/training/presentation/page.tsx
+    - web/src/app/(dashboard)/training/sales/page.tsx
+    - web/src/app/(user)/practice/[sessionId]/page.tsx
+    - web/src/app/admin/**/*.tsx
+    - web/src/app/test-mic/page.tsx
+    - web/src/components/admin/knowledge-answer/tabs/intent-rules-tab.tsx
+    - web/src/components/highlights/HighlightCard.tsx
+    - web/src/components/highlights/HighlightDetailModal.tsx
+    - web/src/components/training/ScenarioList.tsx
+    - web/src/components/ui/audio-visualizer.tsx
+    - web/src/hooks/use-audio-recorder.ts
+    - web/src/hooks/use-debounce-request.ts
+    - web/src/hooks/use-practice-websocket.ts
+    - web/src/hooks/use-streaming-audio-player.ts
+    - web/src/hooks/websocket/message-handlers.ts
+    - web/src/hooks/websocket/use-audio-playback.ts
+    - web/src/lib/auth-handler.ts
+    - web/src/lib/performance.ts
+    - .gsd/DECISIONS.md
+    - .gsd/KNOWLEDGE.md
+    - .codex/loop/state.json
+  summary: Migrated the remaining business-page, hook, and developer/support raw-console callers onto the shared debug seam and added a filesystem-backed console-boundary test that fails whenever raw console leaks outside instrumentation/bootstrap and web/src/lib/debug.ts.
+  verification commands:
+    - npm --prefix web test -- --run src/lib/console-boundary.test.ts src/lib/debug.test.ts src/components/error-reporting.test.tsx "src/app/(user)/practice/[sessionId]/page.test.tsx" "src/hooks/use-practice-websocket.test.ts"
+    - rg -n "console\.(log|error|warn|info)" web/src
+    - ./web/node_modules/.bin/tsc --noEmit -p web/tsconfig.json
+    - lsp diagnostics web/src/app/(dashboard)/**/*.tsx
+    - lsp diagnostics web/src/app/admin/**/*.tsx
+    - lsp diagnostics web/src/components/**/*.tsx
+    - lsp diagnostics web/src/hooks/**/*.ts
+    - lsp diagnostics web/src/lib/*.ts
+  verification results: passed for the focused Vitest seam gate (27/27 green), repo-root raw-console grep (only instrumentation/debug seam remain), and sampled LSP diagnostics across the touched frontend surface. The direct tsconfig typecheck still reports unrelated pre-existing errors in dashboard page, replay/error-reporting tests, chat-bubble tests, and admin linked-assets tests; no new errors were reported on the migrated console-cleanup files.
+  success signal status: future agents can now prove the frontend console boundary with one grep plus one focused test, and page/hook logging policy no longer depends on scattered raw console calls.
+  rollback note: if later slices intentionally add or remove raw-console exceptions, update web/src/lib/debug.ts inventory, web/src/lib/console-boundary.test.ts, and the corresponding decision/knowledge entries together rather than letting page-local callers redefine the boundary by drift.
+
 
 - time: 2026-04-12T00:32:00+08:00
   mode: grow

@@ -119,7 +119,7 @@ export function usePracticeWebSocket(options: UsePracticeWebSocketOptions) {
             setState(prev => ({ ...prev, isPlayingAudio: false, aiState: "listening", isStreamingTTS: false }));
         },
         onError: (error) => {
-            console.error("[StreamingTTS] Error:", error);
+            debug.error("[StreamingTTS] Error:", error);
             setState(prev => ({ ...prev, isPlayingAudio: false, aiState: "listening", isStreamingTTS: false }));
         },
     });

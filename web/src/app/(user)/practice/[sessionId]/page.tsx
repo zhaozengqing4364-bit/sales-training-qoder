@@ -1,4 +1,5 @@
 "use client";
+import { debug } from "@/lib/debug";
 
 import * as React from "react";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
@@ -367,7 +368,7 @@ export default function PracticeSessionPage() {
 
     // 统一的录音切换函数 - 点击一次开始，再点击一次结束
     const toggleRecording = React.useCallback(() => {
-        console.log('[Recording] toggleRecording called, isRecording:', isRecordingRef.current, 'aiIsBusy:', aiIsBusyRef.current, 'isConnected:', isConnected, 'hasPermission:', hasPermission);
+        debug.log('[Recording] toggleRecording called, isRecording:', isRecordingRef.current, 'aiIsBusy:', aiIsBusyRef.current, 'isConnected:', isConnected, 'hasPermission:', hasPermission);
         
         if (connectionState !== "connected") return;
         if (sessionStatus !== "in_progress") return;
@@ -386,7 +387,7 @@ export default function PracticeSessionPage() {
         
         // 防止快速双击
         if (isStartingRef.current) {
-            console.log('[Recording] Blocked: already starting');
+            debug.log('[Recording] Blocked: already starting');
             return;
         }
         

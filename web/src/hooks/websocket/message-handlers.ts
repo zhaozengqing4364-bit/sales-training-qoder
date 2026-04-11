@@ -1027,6 +1027,6 @@ export function handleWebSocketMessage(
                 debug.log("Unknown message type:", message.type);
         }
     } catch (e) {
-        console.error("Failed to parse WebSocket message:", e);
+        debug.error("Failed to parse WebSocket message:", e);
     }
 }

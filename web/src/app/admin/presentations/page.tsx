@@ -1,4 +1,5 @@
 "use client";
+import { debug } from "@/lib/debug";
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
@@ -79,7 +80,7 @@ export default function PresentationsPage() {
             });
             setPresentations((data || []) as PresentationItem[]);
         } catch (err) {
-            console.error("Failed to load presentations:", err);
+            debug.error("Failed to load presentations:", err);
             setPresentations([]);
         } finally {
             setIsLoading(false);
@@ -110,7 +111,7 @@ export default function PresentationsPage() {
             toast.success("PPT上传成功");
             await loadData();
         } catch (err) {
-            console.error("Failed to upload presentation:", err);
+            debug.error("Failed to upload presentation:", err);
             toast.error(`上传失败: ${err instanceof Error ? err.message : "未知错误"}`);
         } finally {
             setIsCreating(false);
@@ -127,7 +128,7 @@ export default function PresentationsPage() {
             toast.success("删除成功");
             setDeleteTarget(null);
         } catch (err) {
-            console.error("Failed to delete presentation:", err);
+            debug.error("Failed to delete presentation:", err);
             toast.error(`删除失败: ${err instanceof Error ? err.message : "未知错误"}`);
         } finally {
             setIsDeleting(false);

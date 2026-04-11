@@ -1,4 +1,5 @@
 "use client";
+import { debug } from "@/lib/debug";
 
 import { useEffect, useMemo, useState } from "react";
 import { Loader2, Plus, Save, Trash2, RefreshCw, Sparkles } from "lucide-react";
@@ -191,7 +192,7 @@ export default function VoiceRuntimePage() {
                 setLexiconDraft(formatLexiconForEditor(DEFAULT_RUNTIME_TOOL_POLICY.transcript_normalization_lexicon));
             }
         } catch (error) {
-            console.error("Failed to load runtime profiles", error);
+            debug.error("Failed to load runtime profiles", error);
             toast.error("加载语音策略失败");
         } finally {
             setIsLoading(false);
@@ -249,7 +250,7 @@ export default function VoiceRuntimePage() {
             }
             await loadProfiles();
         } catch (error) {
-            console.error("Failed to save runtime profile", error);
+            debug.error("Failed to save runtime profile", error);
             toast.error(error instanceof Error ? error.message : "保存失败");
         } finally {
             setIsSaving(false);
@@ -264,7 +265,7 @@ export default function VoiceRuntimePage() {
             toast.success("配置已删除");
             await loadProfiles();
         } catch (error) {
-            console.error("Failed to delete runtime profile", error);
+            debug.error("Failed to delete runtime profile", error);
             toast.error("删除失败");
         } finally {
             setIsSaving(false);

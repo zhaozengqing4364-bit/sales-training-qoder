@@ -1,4 +1,5 @@
 "use client";
+import { debug } from "@/lib/debug";
 
 import { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -66,7 +67,7 @@ export default function SalesTrainingPage() {
                 setLoadError(`部分数据加载失败（${failedSections.join("、")}），请重试。`);
             }
         } catch (error) {
-            console.error("Failed to load sales training data:", error);
+            debug.error("Failed to load sales training data:", error);
             setLoadError("训练入口加载失败，请稍后重试。");
         } finally {
             setIsLoading(false);

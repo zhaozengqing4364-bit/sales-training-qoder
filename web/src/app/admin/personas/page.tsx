@@ -1,4 +1,5 @@
 "use client";
+import { debug } from "@/lib/debug";
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
@@ -128,12 +129,12 @@ export default function PersonasPage() {
             if (policyHealthResult.status === "fulfilled") {
                 setPolicyHealth(policyHealthResult.value);
             } else {
-                console.error("Failed to load persona policy health:", policyHealthResult.reason);
+                debug.error("Failed to load persona policy health:", policyHealthResult.reason);
                 setPolicyHealth(null);
                 setPolicyHealthError("策略审计暂不可用，列表仍可继续编辑。");
             }
         } catch (err) {
-            console.error("Failed to load personas:", err);
+            debug.error("Failed to load personas:", err);
             setError(err instanceof Error ? err.message : "加载失败");
             setPersonas([]);
             setPolicyHealth(null);
@@ -180,7 +181,7 @@ export default function PersonasPage() {
             toast.success("角色创建成功");
             loadData();
         } catch (err) {
-            console.error("Failed to create persona:", err);
+            debug.error("Failed to create persona:", err);
             toast.error(`创建失败: ${err instanceof Error ? err.message : "未知错误"}`);
         } finally {
             setIsCreating(false);
@@ -197,7 +198,7 @@ export default function PersonasPage() {
             toast.success("删除成功");
             setDeleteTarget(null);
         } catch (err) {
-            console.error("Failed to delete persona:", err);
+            debug.error("Failed to delete persona:", err);
             toast.error(`删除失败: ${err instanceof Error ? err.message : "未知错误"}`);
         } finally {
             setIsDeleting(false);
@@ -222,7 +223,7 @@ export default function PersonasPage() {
             );
             toast.success(effectiveStatus === "active" ? "角色已启用" : "角色已停用");
         } catch (err) {
-            console.error("Failed to toggle persona status:", err);
+            debug.error("Failed to toggle persona status:", err);
             toast.error(`状态更新失败: ${err instanceof Error ? err.message : "未知错误"}`);
         } finally {
             setStatusUpdatingId(null);

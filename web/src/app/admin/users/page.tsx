@@ -1,4 +1,5 @@
 "use client";
+import { debug } from "@/lib/debug";
 
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
@@ -120,7 +121,7 @@ export default function UsersPage() {
             });
             setUsers(data.items || []);
         } catch (err) {
-            console.error("Failed to load users:", err);
+            debug.error("Failed to load users:", err);
         } finally {
             setIsLoading(false);
         }
@@ -136,7 +137,7 @@ export default function UsersPage() {
             });
             setWeeklyManagerLists(buildOperatingPackReadModel(operatingPack).managerLite);
         } catch (err) {
-            console.error("Failed to load weekly operating buckets:", err);
+            debug.error("Failed to load weekly operating buckets:", err);
             setWeeklyManagerLists(EMPTY_ADMIN_MANAGER_LITE_LISTS);
             setWeeklyBucketsError("本周经营名单暂时不可用，请稍后重试。");
         }
@@ -174,7 +175,7 @@ export default function UsersPage() {
             setCreateForm(initialCreateForm);
             loadData();
         } catch (err) {
-            console.error("Failed to create user:", err);
+            debug.error("Failed to create user:", err);
             setCreateError(err instanceof Error ? err.message : "创建失败");
         } finally {
             setIsCreating(false);
@@ -197,7 +198,7 @@ export default function UsersPage() {
             toast.success("用户信息已更新");
             loadData();
         } catch (err) {
-            console.error("Failed to update user:", err);
+            debug.error("Failed to update user:", err);
             toast.error("更新失败");
         } finally {
             setIsEditing(false);
@@ -215,7 +216,7 @@ export default function UsersPage() {
             ));
             toast.success("账户已停用");
         } catch (err) {
-            console.error("Failed to suspend user:", err);
+            debug.error("Failed to suspend user:", err);
             toast.error("停用失败");
         } finally {
             setActionLoading(null);
@@ -243,7 +244,7 @@ export default function UsersPage() {
             ));
             toast.success("账户已激活");
         } catch (err) {
-            console.error("Failed to activate user:", err);
+            debug.error("Failed to activate user:", err);
             toast.error("激活失败");
         } finally {
             setActionLoading(null);
@@ -259,7 +260,7 @@ export default function UsersPage() {
             setUsers(prev => prev.filter(u => u.id !== id));
             toast.success("用户已删除");
         } catch (err) {
-            console.error("Failed to delete user:", err);
+            debug.error("Failed to delete user:", err);
             toast.error("删除失败");
         } finally {
             setActionLoading(null);
@@ -288,7 +289,7 @@ export default function UsersPage() {
             setIsExportOpen(false);
             toast.success("导出成功");
         } catch (err) {
-            console.error("Failed to export users:", err);
+            debug.error("Failed to export users:", err);
             toast.error("导出失败");
         } finally {
             setIsExporting(false);

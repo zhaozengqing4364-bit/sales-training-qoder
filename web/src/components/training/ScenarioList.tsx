@@ -1,4 +1,5 @@
 "use client";
+import { debug } from "@/lib/debug";
 
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -35,7 +36,7 @@ export function ScenarioList({
         const data = await api.agents.getList(category);
         setAgents(data);
       } catch (err) {
-        console.error(`Failed to load ${category} agents:`, err);
+        debug.error(`Failed to load ${category} agents:`, err);
         setError(`暂无${title}场景`);
       } finally {
         setIsLoading(false);

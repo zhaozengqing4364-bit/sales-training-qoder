@@ -1,3 +1,4 @@
+import { debug } from "@/lib/debug";
 /**
  * Request deduplication and debouncing hooks
  *
@@ -68,7 +69,7 @@ export function useDebounceRequest<TArgs extends unknown[], TResult>(
     const execute = useCallback(async (...args: TArgs): Promise<TResult | undefined> => {
         // Prevent duplicate requests
         if (preventDuplicate && isExecutingRef.current) {
-            console.warn('[useDebounceRequest] Request already in progress, skipping duplicate');
+            debug.warn('[useDebounceRequest] Request already in progress, skipping duplicate');
             return undefined;
         }
         

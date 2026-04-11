@@ -1,4 +1,5 @@
 "use client";
+import { debug } from "@/lib/debug";
 
 import * as React from "react";
 import { Mic, Square } from "lucide-react";
@@ -15,7 +16,7 @@ export default function TestMicPage() {
     const addLog = React.useCallback((msg: string) => {
         const timestamp = new Date().toLocaleTimeString();
         setLogs(prev => [...prev.slice(-50), `[${timestamp}] ${msg}`]);
-        console.log(msg);
+        debug.log(msg);
     }, []);
 
     const runBackendDiagnostics = React.useCallback(async () => {

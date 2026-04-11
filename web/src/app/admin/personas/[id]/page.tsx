@@ -1,4 +1,5 @@
 "use client";
+import { debug } from "@/lib/debug";
 
 import { useEffect, useState, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
@@ -412,7 +413,7 @@ export default function EditPersonaPage() {
                 })));
             }
         } catch (err) {
-            console.error("Failed to load persona:", err);
+            debug.error("Failed to load persona:", err);
             setError(err instanceof Error ? err.message : "加载失败");
         } finally {
             setIsLoading(false);
@@ -473,7 +474,7 @@ export default function EditPersonaPage() {
             });
             router.push("/admin/personas");
         } catch (err) {
-            console.error("Failed to save persona:", err);
+            debug.error("Failed to save persona:", err);
             alert("保存失败: " + (err instanceof Error ? err.message : "未知错误"));
         } finally {
             setIsSaving(false);
@@ -1134,7 +1135,7 @@ export default function EditPersonaPage() {
                                         
                                         await audio.play();
                                     } catch (err) {
-                                        console.error("TTS preview failed:", err);
+                                        debug.error("TTS preview failed:", err);
                                         alert("试听失败");
                                         setIsPreviewingTTS(false);
                                     }

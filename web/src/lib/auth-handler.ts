@@ -1,3 +1,4 @@
+import { debug } from "./debug";
 /**
  * Auth Handler - Centralized authentication event management
  * 
@@ -47,7 +48,7 @@ class AuthHandler {
             try {
                 listener(message);
             } catch (error) {
-                console.error("Auth listener error:", error);
+                debug.error("Auth listener error:", error);
             }
         });
     }

@@ -112,7 +112,7 @@ export function useAudioPlayback({ onTTSAudio, setState }: UseAudioPlaybackOptio
 
             await audio.play();
         } catch (e) {
-            console.error("Failed to play TTS audio:", e);
+            debug.error("Failed to play TTS audio:", e);
             setState(prev => ({ ...prev, isPlayingAudio: false, aiState: "listening" }));
             isPlayingRef.current = false;
             // 回退到浏览器 TTS
@@ -173,7 +173,7 @@ export function useAudioPlayback({ onTTSAudio, setState }: UseAudioPlaybackOptio
             
             debug.log("Audio unlocked successfully");
         } catch (e) {
-            console.error("Failed to unlock audio:", e);
+            debug.error("Failed to unlock audio:", e);
             // 即使失败也标记为已解锁，让后续尝试播放
             audioUnlockedRef.current = true;
             setState(prev => ({ ...prev, audioUnlocked: true }));

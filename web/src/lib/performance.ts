@@ -1,3 +1,4 @@
+import { debug } from "./debug";
 /**
  * Performance Monitor - Track Web Vitals and custom metrics
  * 
@@ -200,7 +201,7 @@ function sendToAnalytics(metric: Metric) {
 
     // Also log to console in development
     if (process.env.NODE_ENV === 'development') {
-        console.log(`[Performance] ${metric.name}: ${metric.value.toFixed(2)} (${metric.rating})`);
+        debug.log(`[Performance] ${metric.name}: ${metric.value.toFixed(2)} (${metric.rating})`);
     }
 }
 

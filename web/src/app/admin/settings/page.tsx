@@ -1,4 +1,5 @@
 "use client";
+import { debug } from "@/lib/debug";
 
 import { useEffect, useState, useRef } from "react";
 import { GlassCard } from "@/components/ui/glass-card";
@@ -255,7 +256,7 @@ export default function SettingsPage() {
             
             await audio.play();
         } catch (err) {
-            console.error("TTS preview failed:", err);
+            debug.error("TTS preview failed:", err);
             toast.error("试听失败");
             setIsPreviewingTTS(false);
         }
@@ -302,7 +303,7 @@ export default function SettingsPage() {
                 setConfigs(data as ModelConfigListResponse);
             }
         } catch (err) {
-            console.error("Failed to load model configs:", err);
+            debug.error("Failed to load model configs:", err);
             toast.error("加载配置失败");
         } finally {
             setIsLoadingModels(false);
@@ -345,7 +346,7 @@ export default function SettingsPage() {
             resetForm();
             loadConfigs();
         } catch (err) {
-            console.error("Failed to create config:", err);
+            debug.error("Failed to create config:", err);
             toast.error(`创建失败: ${err instanceof Error ? err.message : "未知错误"}`);
         } finally {
             setIsSubmitting(false);
@@ -368,7 +369,7 @@ export default function SettingsPage() {
             });
             setIsEditOpen(true);
         } catch (err) {
-            console.error("Failed to load config detail:", err);
+            debug.error("Failed to load config detail:", err);
             toast.error("加载配置详情失败");
         }
     };
@@ -412,7 +413,7 @@ export default function SettingsPage() {
             resetForm();
             loadConfigs();
         } catch (err) {
-            console.error("Failed to update config:", err);
+            debug.error("Failed to update config:", err);
             toast.error(`更新失败: ${err instanceof Error ? err.message : "未知错误"}`);
         } finally {
             setIsSubmitting(false);
@@ -428,7 +429,7 @@ export default function SettingsPage() {
             setDeleteTarget(null);
             loadConfigs();
         } catch (err) {
-            console.error("Failed to delete config:", err);
+            debug.error("Failed to delete config:", err);
             toast.error(`删除失败: ${err instanceof Error ? err.message : "未知错误"}`);
         } finally {
             setIsDeleting(false);
@@ -460,7 +461,7 @@ export default function SettingsPage() {
                 toast.error(`测试失败: ${result.message}`);
             }
         } catch (err) {
-            console.error("Test failed:", err);
+            debug.error("Test failed:", err);
             const message = err instanceof Error ? err.message : "测试失败";
             setTestResult({ success: false, message });
             toast.error(message);
@@ -476,7 +477,7 @@ export default function SettingsPage() {
             toast.success(`已将「${config.name}」设为默认`);
             loadConfigs();
         } catch (err) {
-            console.error("Failed to set default:", err);
+            debug.error("Failed to set default:", err);
             toast.error("设置默认失败");
         }
     };

@@ -1,4 +1,5 @@
 "use client";
+import { debug } from "@/lib/debug";
 
 import { useEffect, useMemo, useState } from "react";
 import { GlassCard } from "@/components/ui/glass-card";
@@ -90,7 +91,7 @@ export default function PresentationAIPolicyPage() {
       });
       setTemplates(data);
     } catch (error) {
-      console.error("Failed to load interruption templates", error);
+      debug.error("Failed to load interruption templates", error);
       setTemplates([]);
       toast.error("中断模板加载失败");
     } finally {
@@ -114,7 +115,7 @@ export default function PresentationAIPolicyPage() {
       setExists(Boolean(response.exists));
       setPolicyMeta(response.meta || {});
     } catch (error) {
-      console.error("Failed to load presentation AI policy", error);
+      debug.error("Failed to load presentation AI policy", error);
       toast.error("加载策略失败");
     } finally {
       setIsLoading(false);
@@ -147,7 +148,7 @@ export default function PresentationAIPolicyPage() {
       setPolicyMeta(response.meta || {});
       toast.success("策略保存成功");
     } catch (error) {
-      console.error("Failed to save presentation AI policy", error);
+      debug.error("Failed to save presentation AI policy", error);
       toast.error("保存失败");
     } finally {
       setIsSaving(false);
@@ -177,7 +178,7 @@ export default function PresentationAIPolicyPage() {
       setPreviewResult(response);
       toast.success("预览完成");
     } catch (error) {
-      console.error("Failed to preview presentation AI policy", error);
+      debug.error("Failed to preview presentation AI policy", error);
       toast.error("预览失败");
     } finally {
       setIsPreviewing(false);
@@ -198,7 +199,7 @@ export default function PresentationAIPolicyPage() {
       setEffectivePolicy(response);
       toast.success("已加载生效策略");
     } catch (error) {
-      console.error("Failed to load effective presentation AI policy", error);
+      debug.error("Failed to load effective presentation AI policy", error);
       toast.error("加载生效策略失败");
     } finally {
       setIsLoadingEffective(false);

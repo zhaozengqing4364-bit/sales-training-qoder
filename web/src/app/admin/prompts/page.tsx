@@ -1,4 +1,5 @@
 "use client";
+import { debug } from "@/lib/debug";
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -103,7 +104,7 @@ export default function AdminPromptsPage() {
         setUserRole("user");
       }
     } catch (error) {
-      console.error("Failed to load prompt admin data", error);
+      debug.error("Failed to load prompt admin data", error);
       toast.error("提示词数据加载失败");
     } finally {
       setLoading(false);

@@ -1,4 +1,5 @@
 "use client";
+import { debug } from "@/lib/debug";
 
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
@@ -93,7 +94,7 @@ export default function AgentPersonaSelectPage() {
                     setSelectedPersona(defaultPersona.id);
                 }
             } catch (error) {
-                console.error("Failed to load agent:", error);
+                debug.error("Failed to load agent:", error);
             } finally {
                 setIsLoading(false);
             }
@@ -217,7 +218,7 @@ export default function AgentPersonaSelectPage() {
                 `/practice/${session.session_id}?agent_id=${agentId}&persona_id=${selectedPersona}&scenario_type=${scenarioType}&voice_mode=${voiceMode}${presentationParam}`,
             );
         } catch (error) {
-            console.error("Failed to create session:", error);
+            debug.error("Failed to create session:", error);
             setStartError(getApiErrorMessage(error));
         } finally {
             setIsStarting(false);

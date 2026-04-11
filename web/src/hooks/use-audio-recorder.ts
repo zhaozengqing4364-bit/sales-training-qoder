@@ -193,7 +193,7 @@ export function useAudioRecorder(options: UseAudioRecorderOptions = {}) {
             setError(null);
             return true;
         } catch (err) {
-            console.error("Failed to get microphone permission:", err);
+            debug.error("Failed to get microphone permission:", err);
             setHasPermission(false);
             setError(mapMicrophoneAccessError(err));
             return false;
@@ -335,7 +335,7 @@ export function useAudioRecorder(options: UseAudioRecorderOptions = {}) {
                 debug.log(`[AudioRecorder] Chunk #${chunkCount}: max=${maxAmp.toFixed(4)}`);
             }
         } catch (err) {
-            console.error("[AudioRecorder] Failed to process audio data:", err);
+            debug.error("[AudioRecorder] Failed to process audio data:", err);
         }
     }, [enableHQResample, targetSampleRate, resampleHQ, resampleLinear, floatTo16BitPCM, int16ArrayToBase64]);
 
@@ -528,7 +528,7 @@ export function useAudioRecorder(options: UseAudioRecorderOptions = {}) {
             debug.log(`[AudioRecorder] Recording started (using ${workletSetupSuccess ? 'AudioWorklet' : 'ScriptProcessorNode'})`);
 
         } catch (err) {
-            console.error("[AudioRecorder] Failed to start:", err);
+            debug.error("[AudioRecorder] Failed to start:", err);
             setHasPermission(false);
             setError(mapMicrophoneAccessError(err));
             onSpeakingChangeRef.current?.(false);

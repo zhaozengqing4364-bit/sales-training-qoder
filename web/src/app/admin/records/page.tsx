@@ -1,4 +1,5 @@
 "use client";
+import { debug } from "@/lib/debug";
 
 import { useCallback, useEffect, useState } from "react";
 import { api } from "@/lib/api/client";
@@ -58,7 +59,7 @@ export default function RecordsPage() {
             });
             setRecords(data);
         } catch (err) {
-            console.error("Failed to load records:", err);
+            debug.error("Failed to load records:", err);
         } finally {
             setIsLoading(false);
         }
@@ -71,7 +72,7 @@ export default function RecordsPage() {
             await api.admin.deleteTrainingRecord(id);
             setRecords(prev => prev.filter(r => r.id !== id));
         } catch (err) {
-            console.error("Failed to delete record:", err);
+            debug.error("Failed to delete record:", err);
             alert("删除失败");
         }
     };

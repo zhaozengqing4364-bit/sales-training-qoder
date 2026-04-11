@@ -1,4 +1,5 @@
 "use client";
+import { debug } from "@/lib/debug";
 
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api/client";
@@ -80,7 +81,7 @@ export default function AgentsPage() {
             });
             setAgents(data.items || []);
         } catch (err) {
-            console.error("Failed to load agents:", err);
+            debug.error("Failed to load agents:", err);
             setAgents([]);
         }
     };
@@ -112,7 +113,7 @@ export default function AgentsPage() {
             toast.success("智能体创建成功");
             loadData();
         } catch (err) {
-            console.error("Failed to create agent:", err);
+            debug.error("Failed to create agent:", err);
             toast.error(`创建失败: ${err instanceof Error ? err.message : "未知错误"}`);
         } finally {
             setIsCreating(false);
@@ -129,7 +130,7 @@ export default function AgentsPage() {
             toast.success("删除成功");
             setDeleteTarget(null);
         } catch (err) {
-            console.error("Failed to delete agent:", err);
+            debug.error("Failed to delete agent:", err);
             toast.error(`删除失败: ${err instanceof Error ? err.message : "未知错误"}`);
         } finally {
             setIsDeleting(false);
@@ -156,7 +157,7 @@ export default function AgentsPage() {
             setStatusDropdownId(null);
             loadData();
         } catch (err) {
-            console.error("Failed to change status:", err);
+            debug.error("Failed to change status:", err);
             toast.error(`状态更新失败: ${err instanceof Error ? err.message : "未知错误"}`);
         }
     };

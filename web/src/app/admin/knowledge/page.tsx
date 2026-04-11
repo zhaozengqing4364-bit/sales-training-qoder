@@ -1,4 +1,5 @@
 "use client";
+import { debug } from "@/lib/debug";
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
@@ -58,7 +59,7 @@ export default function KnowledgePage() {
             const data = await api.admin.getKnowledgeBases();
             setKbs((data.items || []) as KnowledgeBaseWithGovernance[]);
         } catch (err) {
-            console.error("Failed to load knowledge bases:", err);
+            debug.error("Failed to load knowledge bases:", err);
             setError(err instanceof Error ? err.message : "加载失败");
             setKbs([]);
         } finally {
@@ -88,7 +89,7 @@ export default function KnowledgePage() {
             toast.success("知识库创建成功");
             await loadData();
         } catch (err) {
-            console.error("Failed to create knowledge base:", err);
+            debug.error("Failed to create knowledge base:", err);
             toast.error(`创建失败: ${err instanceof Error ? err.message : "未知错误"}`);
         } finally {
             setIsCreating(false);
@@ -105,7 +106,7 @@ export default function KnowledgePage() {
             toast.success("删除成功");
             setDeleteTarget(null);
         } catch (err) {
-            console.error("Failed to delete knowledge base:", err);
+            debug.error("Failed to delete knowledge base:", err);
             toast.error(`删除失败: ${err instanceof Error ? err.message : "未知错误"}`);
         } finally {
             setIsDeleting(false);

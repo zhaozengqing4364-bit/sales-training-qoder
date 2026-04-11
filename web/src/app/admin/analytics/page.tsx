@@ -1,4 +1,5 @@
 "use client";
+import { debug } from "@/lib/debug";
 
 import Link from "next/link";
 import { useEffect, useState, useCallback, useMemo } from "react";
@@ -110,49 +111,49 @@ export default function AnalyticsPage() {
         if (overviewResult.status === "fulfilled") {
             setOverview(overviewResult.value);
         } else {
-            console.error("Failed to load analytics overview:", overviewResult.reason);
+            debug.error("Failed to load analytics overview:", overviewResult.reason);
             setOverview(null);
         }
 
         if (trendsResult.status === "fulfilled") {
             setTrends(trendsResult.value);
         } else {
-            console.error("Failed to load analytics trends:", trendsResult.reason);
+            debug.error("Failed to load analytics trends:", trendsResult.reason);
             setTrends(null);
         }
 
         if (agentsResult.status === "fulfilled") {
             setAgents(agentsResult.value);
         } else {
-            console.error("Failed to load analytics agents:", agentsResult.reason);
+            debug.error("Failed to load analytics agents:", agentsResult.reason);
             setAgents(null);
         }
 
         if (leaderboardResult.status === "fulfilled") {
             setLeaderboard(leaderboardResult.value);
         } else {
-            console.error("Failed to load analytics leaderboard:", leaderboardResult.reason);
+            debug.error("Failed to load analytics leaderboard:", leaderboardResult.reason);
             setLeaderboard(null);
         }
 
         if (operatingPackResult.status === "fulfilled") {
             setOperatingPack(operatingPackResult.value);
         } else {
-            console.error("Failed to load analytics operating pack:", operatingPackResult.reason);
+            debug.error("Failed to load analytics operating pack:", operatingPackResult.reason);
             setOperatingPack(EMPTY_ADMIN_OPERATING_PACK);
         }
 
         if (effectivenessResult.status === "fulfilled") {
             setEffectiveness(effectivenessResult.value.effectiveness || DEFAULT_EFFECTIVENESS);
         } else {
-            console.error("Failed to load effectiveness metrics:", effectivenessResult.reason);
+            debug.error("Failed to load effectiveness metrics:", effectivenessResult.reason);
             setEffectiveness(DEFAULT_EFFECTIVENESS);
         }
 
         if (runtimeFaultsResult.status === "fulfilled") {
             setRuntimeFaults(runtimeFaultsResult.value.items || []);
         } else {
-            console.error("Failed to load support runtime faults:", runtimeFaultsResult.reason);
+            debug.error("Failed to load support runtime faults:", runtimeFaultsResult.reason);
             setRuntimeFaults([]);
         }
 
@@ -168,7 +169,7 @@ export default function AnalyticsPage() {
         try {
             await api.analytics.exportReport({ time_range: timeRange, format: "csv" });
         } catch (err) {
-            console.error("Export failed:", err);
+            debug.error("Export failed:", err);
         } finally {
             setIsExporting(false);
         }
@@ -182,7 +183,7 @@ export default function AnalyticsPage() {
             });
             await loadData();
         } catch (err) {
-            console.error("Manager remind failed:", err);
+            debug.error("Manager remind failed:", err);
         }
     };
 

@@ -1,4 +1,5 @@
 "use client";
+import { debug } from "@/lib/debug";
 
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -53,7 +54,7 @@ export default function PresentationTrainingPage() {
                     setLoadError(null);
                 }
             } catch (err) {
-                console.error("Failed to load presentation agents:", err);
+                debug.error("Failed to load presentation agents:", err);
                 if (!cancelled) {
                     setLoadError("演讲训练场景加载失败，请稍后重试");
                     setAgents([]);

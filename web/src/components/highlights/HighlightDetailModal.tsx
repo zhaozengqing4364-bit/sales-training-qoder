@@ -1,4 +1,5 @@
 "use client";
+import { debug } from "@/lib/debug";
 
 import { useState, useEffect, useRef } from "react";
 import {
@@ -137,7 +138,7 @@ export function HighlightDetailModal({
     audioRef.current = audio;
 
     audio.play().catch((err) => {
-      console.error("[HighlightDetailModal] Audio playback failed:", err);
+      debug.error("[HighlightDetailModal] Audio playback failed:", err);
       setIsPlaying(false);
       if (audioRef.current === audio) {
         audioRef.current = null;
@@ -159,7 +160,7 @@ export function HighlightDetailModal({
     };
 
     audio.onerror = () => {
-      console.error("[HighlightDetailModal] Audio error");
+      debug.error("[HighlightDetailModal] Audio error");
       setIsPlaying(false);
       if (audioRef.current === audio) {
         audioRef.current = null;
