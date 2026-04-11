@@ -267,6 +267,13 @@ export function usePracticeWebSocket(options: UsePracticeWebSocketOptions) {
         [],
     );
 
+    const clearPendingMessages = useCallback(() => {
+        if (pendingMessagesRef.current.length === 0) {
+            return;
+        }
+        pendingMessagesRef.current = [];
+    }, []);
+
     const resetRealtimeRuntimeState = useCallback(() => {
         currentStreamIdRef.current = null;
         currentRequestIdRef.current = 0;
@@ -276,6 +283,7 @@ export function usePracticeWebSocket(options: UsePracticeWebSocketOptions) {
         flushSessionRef.current = 0;
         audioQueueRef.current = [];
         isPlayingRef.current = false;
+        clearPendingMessages();
         clearInterimTranscriptThrottle();
         interruptStreamingPlayback();
 
@@ -305,7 +313,13 @@ export function usePracticeWebSocket(options: UsePracticeWebSocketOptions) {
                 fuzzyDetections: [],
             };
         });
-    }, [audioQueueRef, clearInterimTranscriptThrottle, interruptStreamingPlayback, isPlayingRef]);
+    }, [
+        audioQueueRef,
+        clearInterimTranscriptThrottle,
+        clearPendingMessages,
+        interruptStreamingPlayback,
+        isPlayingRef,
+    ]);
 
     // ── Send helpers ──
     const flushPendingMessages = useCallback(() => {
@@ -340,9 +354,19 @@ export function usePracticeWebSocket(options: UsePracticeWebSocketOptions) {
             return;
         }
 
-        // Avoid building an ever-growing queue for high-frequency audio frames.
-        const shouldQueue = type !== "audio_chunk" && type !== "audio_end";
+        // Pending outbound replay is only valid during the initial handshake. Once the
+        // hook has moved into reconnect/failed, the next socket is a fresh transport epoch.
+        const canQueueDuringHandshake = connectionStateRef.current === "connecting";
+        const shouldQueue = canQueueDuringHandshake && type !== "audio_chunk" && type !== "audio_end";
         if (!shouldQueue) {
+            return;
+        }
+
+        if (options?.priority === "high") {
+            pendingMessagesRef.current.unshift(message);
+            if (pendingMessagesRef.current.length > MAX_PENDING_OUTGOING_MESSAGES) {
+                pendingMessagesRef.current.pop();
+            }
             return;
         }
 
@@ -785,9 +809,11 @@ export function usePracticeWebSocket(options: UsePracticeWebSocketOptions) {
         // Abort any in-flight flush before clearing buffers.
         flushSessionRef.current += 1;
         isFlushingRef.current = false;
+        isBackpressureActiveRef.current = false;
 
         const bufferedAudioChunks = localAudioBufferRef.current.length;
         localAudioBufferRef.current = [];
+        clearPendingMessages();
 
         const { wasPlaying, clearedChunks } = interruptStreamingPlayback();
 
@@ -799,7 +825,14 @@ export function usePracticeWebSocket(options: UsePracticeWebSocketOptions) {
             window.speechSynthesis.cancel();
         }
 
-        setState(prev => ({ ...prev, isPlayingAudio: false, aiState: "listening", isStreamingTTS: false }));
+        setState(prev => ({
+            ...prev,
+            isPlayingAudio: false,
+            aiState: "listening",
+            isStreamingTTS: false,
+            isBackpressureActive: false,
+            isNetworkSlow: false,
+        }));
 
         const interruptData: InterruptMessageData = { reason, timestamp: Date.now() };
         sendMessage("interrupt", interruptData, { priority: "high" });
@@ -807,7 +840,7 @@ export function usePracticeWebSocket(options: UsePracticeWebSocketOptions) {
         const totalCleared = clearedChunks + nonStreamingQueueLength + bufferedAudioChunks;
         debug.log(`[Interrupt] Sent interrupt signal (reason: ${reason}, wasPlaying: ${wasPlaying}, clearedChunks: ${totalCleared})`);
         return { wasPlaying, clearedChunks: totalCleared };
-    }, [interruptStreamingPlayback, sendMessage, audioQueueRef, isPlayingRef]);
+    }, [clearPendingMessages, interruptStreamingPlayback, sendMessage, audioQueueRef, isPlayingRef]);
 
     // ── Auto-connect effect ──
     // Reconnect automatically if session runtime lock (scenario/voice mode) changes.

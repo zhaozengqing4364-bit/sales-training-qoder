@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "exported_at": "2026-04-11T21:26:50.687Z",
+  "exported_at": "2026-04-11T21:34:36.672Z",
   "milestones": [
     {
       "id": "M001",
@@ -10672,19 +10672,28 @@
       "milestone_id": "M017",
       "slice_id": "S02",
       "id": "T02",
-      "title": "实现 websocket reconnect/backpressure/interrupt 收口",
-      "status": "pending",
-      "one_liner": "",
-      "narrative": "",
-      "verification_result": "",
+      "title": "Tightened practice websocket reconnect cleanup so stale queued interrupts do not replay after reconnect and interrupt clears local backpressure state.",
+      "status": "complete",
+      "one_liner": "Tightened practice websocket reconnect cleanup so stale queued interrupts do not replay after reconnect and interrupt clears local backpressure state.",
+      "narrative": "I kept the work on the seam identified in T01 instead of doing another size-driven split. In `web/src/hooks/use-practice-websocket.ts`, I tightened outbound orchestration around two stale-state hazards the focused tests exposed: queued outbound messages are now only replayed during the initial `connecting` handshake, and reconnect/failed phases are treated as a fresh transport epoch so stale control/interrupt intent does not leak onto the next socket. I also made `sendInterrupt(...)` own the full local backlog cleanup path by clearing queued outbound work plus local backpressure/slow-state flags when it discards buffered audio. On the proof side, I added two focused regression tests in `web/src/hooks/use-practice-websocket.test.ts`: one locks that interrupt clears the learner-visible local backpressure state after dropping buffered audio, and the other locks that an interrupt fired against a dead socket is not replayed when reconnect opens a fresh connection. I then recorded the seam-level rule in `.gsd/DECISIONS.md` (D200), added the non-obvious reconnect-epoch gotcha to `.gsd/KNOWLEDGE.md`, and updated the safe-grow continuity files so T03 can start from the tightened contract instead of the old T01 checkpoint.",
+      "verification_result": "I followed a red-green cycle on the websocket hook before widening verification. First I ran `npm --prefix web test -- --run src/hooks/use-practice-websocket.test.ts` after adding the new contract tests; it failed exactly where expected, showing that interrupt left `isBackpressureActive`/`isNetworkSlow` true after dropping buffered audio and that an interrupt triggered during reconnect was replayed on the next socket. After tightening the hook, I reran the focused hook suite and it passed 17/17. Then I ran the exact task-plan verification command `npm --prefix web test -- --run \"src/hooks/use-practice-websocket.test.ts\" \"src/hooks/use-practice-websocket.presentation-flow.test.ts\" \"src/app/(user)/practice/[sessionId]/page.test.tsx\"`; all three suites passed (30/30), confirming the reconnect/backpressure/interrupt change preserved the presentation-flow and learner-page contracts. Fresh LSP diagnostics were clean on `web/src/hooks/use-practice-websocket.ts`, `web/src/hooks/use-practice-websocket.test.ts`, and `web/src/hooks/use-practice-websocket.presentation-flow.test.ts`.",
       "duration": "",
-      "completed_at": null,
+      "completed_at": "2026-04-11T21:34:36.620Z",
       "blocker_discovered": false,
-      "deviations": "",
-      "known_issues": "",
-      "key_files": [],
-      "key_decisions": [],
-      "full_summary_md": "",
+      "deviations": "None.",
+      "known_issues": "None.",
+      "key_files": [
+        "web/src/hooks/use-practice-websocket.ts",
+        "web/src/hooks/use-practice-websocket.test.ts",
+        ".gsd/DECISIONS.md",
+        ".gsd/KNOWLEDGE.md",
+        ".codex/loop/state.json",
+        ".codex/loop/log.md"
+      ],
+      "key_decisions": [
+        "D200 — treat reconnect as a fresh transport epoch: only the initial connecting handshake may replay queued outbound messages, and interrupt owns queued-outbound/local-backpressure cleanup."
+      ],
+      "full_summary_md": "---\nid: T02\nparent: S02\nmilestone: M017\nkey_files:\n  - web/src/hooks/use-practice-websocket.ts\n  - web/src/hooks/use-practice-websocket.test.ts\n  - .gsd/DECISIONS.md\n  - .gsd/KNOWLEDGE.md\n  - .codex/loop/state.json\n  - .codex/loop/log.md\nkey_decisions:\n  - D200 — treat reconnect as a fresh transport epoch: only the initial connecting handshake may replay queued outbound messages, and interrupt owns queued-outbound/local-backpressure cleanup.\nduration: \nverification_result: passed\ncompleted_at: 2026-04-11T21:34:36.618Z\nblocker_discovered: false\n---\n\n# T02: Tightened practice websocket reconnect cleanup so stale queued interrupts do not replay after reconnect and interrupt clears local backpressure state.\n\n**Tightened practice websocket reconnect cleanup so stale queued interrupts do not replay after reconnect and interrupt clears local backpressure state.**\n\n## What Happened\n\nI kept the work on the seam identified in T01 instead of doing another size-driven split. In `web/src/hooks/use-practice-websocket.ts`, I tightened outbound orchestration around two stale-state hazards the focused tests exposed: queued outbound messages are now only replayed during the initial `connecting` handshake, and reconnect/failed phases are treated as a fresh transport epoch so stale control/interrupt intent does not leak onto the next socket. I also made `sendInterrupt(...)` own the full local backlog cleanup path by clearing queued outbound work plus local backpressure/slow-state flags when it discards buffered audio. On the proof side, I added two focused regression tests in `web/src/hooks/use-practice-websocket.test.ts`: one locks that interrupt clears the learner-visible local backpressure state after dropping buffered audio, and the other locks that an interrupt fired against a dead socket is not replayed when reconnect opens a fresh connection. I then recorded the seam-level rule in `.gsd/DECISIONS.md` (D200), added the non-obvious reconnect-epoch gotcha to `.gsd/KNOWLEDGE.md`, and updated the safe-grow continuity files so T03 can start from the tightened contract instead of the old T01 checkpoint.\n\n## Verification\n\nI followed a red-green cycle on the websocket hook before widening verification. First I ran `npm --prefix web test -- --run src/hooks/use-practice-websocket.test.ts` after adding the new contract tests; it failed exactly where expected, showing that interrupt left `isBackpressureActive`/`isNetworkSlow` true after dropping buffered audio and that an interrupt triggered during reconnect was replayed on the next socket. After tightening the hook, I reran the focused hook suite and it passed 17/17. Then I ran the exact task-plan verification command `npm --prefix web test -- --run \"src/hooks/use-practice-websocket.test.ts\" \"src/hooks/use-practice-websocket.presentation-flow.test.ts\" \"src/app/(user)/practice/[sessionId]/page.test.tsx\"`; all three suites passed (30/30), confirming the reconnect/backpressure/interrupt change preserved the presentation-flow and learner-page contracts. Fresh LSP diagnostics were clean on `web/src/hooks/use-practice-websocket.ts`, `web/src/hooks/use-practice-websocket.test.ts`, and `web/src/hooks/use-practice-websocket.presentation-flow.test.ts`.\n\n## Verification Evidence\n\n| # | Command | Exit Code | Verdict | Duration |\n|---|---------|-----------|---------|----------|\n| 1 | `npm --prefix web test -- --run src/hooks/use-practice-websocket.test.ts` | 0 | ✅ pass | 699ms |\n| 2 | `npm --prefix web test -- --run \"src/hooks/use-practice-websocket.test.ts\" \"src/hooks/use-practice-websocket.presentation-flow.test.ts\" \"src/app/(user)/practice/[sessionId]/page.test.tsx\"` | 0 | ✅ pass | 1000ms |\n\n## Deviations\n\nNone.\n\n## Known Issues\n\nNone.\n\n## Files Created/Modified\n\n- `web/src/hooks/use-practice-websocket.ts`\n- `web/src/hooks/use-practice-websocket.test.ts`\n- `.gsd/DECISIONS.md`\n- `.gsd/KNOWLEDGE.md`\n- `.codex/loop/state.json`\n- `.codex/loop/log.md`\n",
       "description": "Why: reconnect/backpressure/interrupt 是 practice 主链路里最容易靠经验式 patch 堆积复杂度的地方，必须统一收口。\n\nDo:\n1. 按真实 seam 调整 reconnect 策略、队列清理和 interrupt 处理。\n2. 必要时拆分 hook 内部职责，但不引入重量级状态机框架。\n3. 保持 practice 页面现有主链路和 focused tests 仍然可证明通过。\n\nDone when: focused websocket + practice tests 通过，reconnect/backpressure/interrupt contract 更清晰。",
       "estimate": "1.5h",
       "files": [
@@ -13573,6 +13582,18 @@
       "decision": "How to treat the remaining complexity inside use-practice-websocket during M017/S02",
       "choice": "Keep use-practice-websocket as the transport/outbound orchestrator and target future refactors at the reconnect/backpressure/interrupt seam instead of splitting again by file size; keep inbound protocol projection in websocket/message-handlers.",
       "rationale": "Reading the live hook and focused tests showed the real coordination burden is shared local runtime cleanup and outbound pacing across websocket state, audio queues, reconnect retry budget, binary negotiation, and interrupt pre-cleanup. Inbound status/reconnected/interrupted/backpressure application is already isolated in message-handlers, so another size-driven split would move code without reducing the true seam.",
+      "revisable": "Yes",
+      "made_by": "agent",
+      "superseded_by": null
+    },
+    {
+      "seq": 1570,
+      "id": "D200",
+      "when_context": "M017/S02/T02",
+      "scope": "websocket-orchestration",
+      "decision": "How pending outbound messages behave across practice websocket reconnects and interrupt cleanup",
+      "choice": "Treat reconnect as a fresh transport epoch: only initial connect may replay queued outbound messages, while reconnect/failed phases drop queued messages and interrupt clears both queued outbound messages and local backpressure/slow-state flags.",
+      "rationale": "The focused websocket proofs showed two stale-state hazards in the live hook: an interrupt fired against a dead socket was replayed on the next connection, and interrupting a buffered/backpressured turn left learner-visible slow-state flags behind even though the local backlog had been discarded. Narrowing pending replay to the initial handshake and making interrupt own local queue/backpressure cleanup keeps reconnect, backpressure, and interrupt semantics on one truthful orchestrator seam without adding a second state machine.",
       "revisable": "Yes",
       "made_by": "agent",
       "superseded_by": null
@@ -17637,6 +17658,28 @@
       "verdict": "✅ pass",
       "duration_ms": 980,
       "created_at": "2026-04-11T21:26:50.634Z"
+    },
+    {
+      "id": 375,
+      "task_id": "T02",
+      "slice_id": "S02",
+      "milestone_id": "M017",
+      "command": "npm --prefix web test -- --run src/hooks/use-practice-websocket.test.ts",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 699,
+      "created_at": "2026-04-11T21:34:36.620Z"
+    },
+    {
+      "id": 376,
+      "task_id": "T02",
+      "slice_id": "S02",
+      "milestone_id": "M017",
+      "command": "npm --prefix web test -- --run \"src/hooks/use-practice-websocket.test.ts\" \"src/hooks/use-practice-websocket.presentation-flow.test.ts\" \"src/app/(user)/practice/[sessionId]/page.test.tsx\"",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 1000,
+      "created_at": "2026-04-11T21:34:36.621Z"
     }
   ]
 }

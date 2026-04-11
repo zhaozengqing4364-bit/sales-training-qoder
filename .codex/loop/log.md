@@ -1,3 +1,24 @@
+- time: 2026-04-12T05:34:02+08:00
+  mode: grow
+  item id: M017-S02-T02
+  files changed:
+    - web/src/hooks/use-practice-websocket.ts
+    - web/src/hooks/use-practice-websocket.test.ts
+    - .gsd/DECISIONS.md
+    - .gsd/KNOWLEDGE.md
+    - .codex/loop/state.json
+    - .codex/loop/log.md
+  summary: Tightened the practice websocket outbound orchestration seam so reconnect now starts a fresh transport epoch, queued outbound messages no longer leak across reconnect, and interrupt clears both queued outbound work and local backpressure/slow-state flags.
+  verification commands:
+    - npm --prefix web test -- --run src/hooks/use-practice-websocket.test.ts
+    - npm --prefix web test -- --run "src/hooks/use-practice-websocket.test.ts" "src/hooks/use-practice-websocket.presentation-flow.test.ts" "src/app/(user)/practice/[sessionId]/page.test.tsx"
+    - lsp diagnostics web/src/hooks/use-practice-websocket.ts
+    - lsp diagnostics web/src/hooks/use-practice-websocket.test.ts
+    - lsp diagnostics web/src/hooks/use-practice-websocket.presentation-flow.test.ts
+  verification results: passed; the new red-first websocket proofs finished green (17/17 on the focused hook suite), the exact task-plan web verification gate finished 30/30 green across hook/presentation/page surfaces, and diagnostics stayed clean on the touched hook/test files.
+  success signal status: future agents can now tell reconnect/backpressure/interrupt regressions apart from downstream runtime problems because stale outbound intent no longer replays after reconnect and interrupt immediately resets the discarded local backlog state.
+  rollback note: if later S02/T03 work extracts helpers, preserve the fresh-transport-epoch rule and keep interrupt responsible for clearing queued outbound work plus local backpressure flags; otherwise reconnect can silently replay stale intent against a restored session.
+
 - time: 2026-04-12T05:25:37+08:00
   mode: grow
   item id: M017-S02-T01

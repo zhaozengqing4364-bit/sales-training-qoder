@@ -375,6 +375,63 @@ describe("usePracticeWebSocket reconnect lifecycle", () => {
         });
     });
 
+    it("drops local backpressure pressure flags when interrupt clears the buffered audio backlog", async () => {
+        const actualHandlers = await vi.importActual<typeof import("./websocket/message-handlers")>(
+            "./websocket/message-handlers",
+        );
+        vi.mocked(handleWebSocketMessage).mockImplementation((event, deps) =>
+            actualHandlers.handleWebSocketMessage(event, deps),
+        );
+
+        const { result } = renderHook(() =>
+            usePracticeWebSocket({
+                sessionId: "session-interrupt-clears-backpressure",
+                scenarioType: "sales",
+            }),
+        );
+
+        const ws = MockWebSocket.instances.at(-1);
+        expect(ws).toBeDefined();
+
+        act(() => {
+            if (!ws) return;
+            ws.readyState = MockWebSocket.OPEN;
+            ws.onopen?.(new Event("open"));
+            emitJsonMessage(ws, {
+                type: "status",
+                data: {
+                    session_status: "in_progress",
+                    ai_state: "listening",
+                    connection_state: "connected",
+                },
+            });
+            emitJsonMessage(ws, {
+                type: "backpressure",
+                timestamp: new Date().toISOString(),
+                data: {
+                    action: "slow_down",
+                    queue_size: 24,
+                },
+            });
+        });
+
+        act(() => {
+            Array.from({ length: 205 }).forEach((_, index) => {
+                result.current.sendAudio(`buffered-audio-${index}`);
+            });
+        });
+
+        expect(result.current.isBackpressureActive).toBe(true);
+        expect(result.current.isNetworkSlow).toBe(true);
+
+        act(() => {
+            result.current.sendInterrupt("user_speaking");
+        });
+
+        expect(result.current.isBackpressureActive).toBe(false);
+        expect(result.current.isNetworkSlow).toBe(false);
+    });
+
     it("keeps interrupt pre-cleanup in the hook before backend interrupt confirmation arrives", () => {
         const { result } = renderHook(() =>
             usePracticeWebSocket({
@@ -630,6 +687,68 @@ describe("usePracticeWebSocket reconnect lifecycle", () => {
         expect(result.current.actionCard).toBeNull();
         expect(result.current.fuzzyDetections).toEqual([]);
         expect(result.current.scores?.suggestions).toEqual(["给出 6 个月回本测算"]);
+    });
+
+    it("does not replay a queued interrupt after reconnect establishes a fresh transport epoch", () => {
+        const { result } = renderHook(() =>
+            usePracticeWebSocket({
+                sessionId: "session-reconnect-drops-interrupt",
+                scenarioType: "sales",
+            }),
+        );
+
+        const ws = MockWebSocket.instances.at(-1);
+        expect(ws).toBeDefined();
+
+        act(() => {
+            if (!ws) return;
+            ws.readyState = MockWebSocket.OPEN;
+            ws.onopen?.(new Event("open"));
+            emitJsonMessage(ws, {
+                type: "status",
+                data: {
+                    session_status: "in_progress",
+                    ai_state: "listening",
+                    connection_state: "connected",
+                },
+            });
+            ws.emitClose(1006, "network-drop");
+        });
+
+        expect(result.current.connectionState).toBe("reconnecting");
+
+        act(() => {
+            result.current.sendInterrupt("user_speaking");
+        });
+
+        act(() => {
+            vi.advanceTimersByTime(1000);
+        });
+
+        const retryWs = MockWebSocket.instances.at(-1);
+        expect(retryWs).toBeDefined();
+        expect(retryWs).not.toBe(ws);
+
+        act(() => {
+            if (!retryWs) return;
+            retryWs.readyState = MockWebSocket.OPEN;
+            retryWs.onopen?.(new Event("open"));
+        });
+
+        const sentPayloads = retryWs?.send.mock.calls
+            .map(call => call[0])
+            .filter((payload): payload is string => typeof payload === "string")
+            .map(payload => JSON.parse(payload) as { type: string; data?: { reason?: string }; priority?: string });
+
+        expect(sentPayloads).not.toContainEqual(expect.objectContaining({
+            type: "interrupt",
+            data: expect.objectContaining({ reason: "user_speaking" }),
+        }));
+        expect(sentPayloads).toContainEqual(expect.objectContaining({
+            type: "negotiate",
+            data: { prefer_binary: true },
+            priority: "normal",
+        }));
     });
 
     it("does not reconnect when streaming player reference changes", () => {

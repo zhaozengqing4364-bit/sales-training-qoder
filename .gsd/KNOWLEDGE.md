@@ -1,5 +1,6 @@
 # Knowledge
 
+- `web/src/hooks/use-practice-websocket.ts` intentionally scopes `pendingMessagesRef` to the initial `connecting` handshake only. Once the hook has moved into `reconnecting` or `failed`, the next socket is treated as a fresh transport epoch, so stale outbound control/interrupt/user-speaking messages must be dropped instead of replayed on reconnect. If a future focused test sees an interrupt emitted only after the retry socket opens, that is a queue-cleanup regression, not an expected retry behavior.
 - `web/src/hooks/use-practice-websocket.ts` intentionally treats `sendControl("start"|"pause"|"resume"|"end")` as an outbound command only; the authoritative runtime transition back to `sessionStatus` / `aiState` still comes from inbound `status` or `reconnected` messages. If a focused practice/presentation test expects local `start` to flip straight to `in_progress`, that is a test bug, not a product regression.
 
 - `web/src/components/layout/sidebar.tsx` intentionally exposes learner nav anchors as `role="menuitem"` inside a `menubar`, not plain `link`; when locking shared-nav regressions (for example `历史记录`), query them as `menuitem` in focused tests or you will chase a false negative.

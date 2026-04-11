@@ -1,6 +1,6 @@
 {
   "mode": "grow",
-  "current_issue_id": "M017-S02-T01",
+  "current_issue_id": "M017-S02-T02",
   "current_issue_type": "task",
   "current_issue_status": "done",
   "pending_issue_ids": [],
@@ -168,28 +168,28 @@
     "M016-S03-T01",
     "M016-S03-T02",
     "M016-S03-T03",
-    "M017-S02-T01"
+    "M017-S02-T01",
+    "M017-S02-T02"
   ],
   "blocked_issue_ids": [],
   "deferred_issue_ids": [],
   "last_modified_files": [
     "web/src/hooks/use-practice-websocket.ts",
     "web/src/hooks/use-practice-websocket.test.ts",
-    "web/src/hooks/use-practice-websocket.presentation-flow.test.ts",
     ".gsd/DECISIONS.md",
     ".gsd/KNOWLEDGE.md",
     ".codex/loop/state.json",
     ".codex/loop/log.md"
   ],
   "last_verification_commands": [
-    "rg -n \"reconnect|backpressure|interrupt|binary\" web/src/hooks/use-practice-websocket.ts web/src/hooks/use-practice-websocket*.test.ts",
-    "npm --prefix web test -- --run \"src/hooks/use-practice-websocket.test.ts\" \"src/hooks/use-practice-websocket.presentation-flow.test.ts\"",
+    "npm --prefix web test -- --run src/hooks/use-practice-websocket.test.ts",
+    "npm --prefix web test -- --run \"src/hooks/use-practice-websocket.test.ts\" \"src/hooks/use-practice-websocket.presentation-flow.test.ts\" \"src/app/(user)/practice/[sessionId]/page.test.tsx\"",
     "lsp diagnostics web/src/hooks/use-practice-websocket.ts",
     "lsp diagnostics web/src/hooks/use-practice-websocket.test.ts",
     "lsp diagnostics web/src/hooks/use-practice-websocket.presentation-flow.test.ts"
   ],
-  "last_verification_result": "passed; the exact task-plan rg inventory now surfaces the explicit boundary map plus focused reconnect/backpressure/interrupt/binary proofs, the impacted websocket hook suites finished 18/18 green, and fresh LSP diagnostics were clean on the touched hook/test files.",
-  "last_success_signal": "M017/S02/T01 now encodes the real websocket seam instead of a fake file-size refactor: use-practice-websocket stays the transport/outbound orchestrator for reconnect/binary negotiation/backpressure/interrupt cleanup, while inbound runtime truth remains on status/reconnected/interrupted/backpressure messages handled by websocket/message-handlers.",
+  "last_verification_result": "passed; the new red-first websocket proofs now hold: the focused hook suite finished 17/17 green, the exact task-plan web verification command finished 30/30 green across hook/presentation/page surfaces, and fresh LSP diagnostics were clean on the touched hook/test files.",
+  "last_success_signal": "M017/S02/T02 now treats reconnect as a fresh transport epoch instead of replaying stale outbound intent: queued messages only survive the initial connecting handshake, interrupt clears queued outbound work plus local backpressure/slow-state flags, and the learner-facing practice/page proofs stayed green.",
   "last_growth_scan": null,
-  "next_action": "Continue M017/S02 with T02, using the now-explicit outbound-orchestration seam instead of splitting the hook by size."
+  "next_action": "Continue M017/S02 with T03, using the now-tightened reconnect/backpressure/interrupt contract as the focused proof target."
 }

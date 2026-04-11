@@ -35,7 +35,7 @@ Done when: 已明确 hook 的真实职责边界，后续实现不会为了拆分
   - Files: `web/src/hooks/use-practice-websocket.ts`, `web/src/hooks/use-practice-websocket.test.ts`, `web/src/hooks/use-practice-websocket.presentation-flow.test.ts`
   - Verify: rg -n "reconnect|backpressure|interrupt|binary" web/src/hooks/use-practice-websocket.ts web/src/hooks/use-practice-websocket*.test.ts
 
-- [ ] **T02: 实现 websocket reconnect/backpressure/interrupt 收口** `est:1.5h`
+- [x] **T02: 实现 websocket reconnect/backpressure/interrupt 收口** `est:1.5h`
   Why: reconnect/backpressure/interrupt 是 practice 主链路里最容易靠经验式 patch 堆积复杂度的地方，必须统一收口。
 
 Do:
