@@ -8,4 +8,4 @@
 |----|-------|------|---------|------|------------|
 | S01 | S01 | high | — | ✅ | forgot/reset 走正式 token 持久化与 lifecycle contract，现有登录兼容路径保持可证明。 |
 | S02 | S02 | high | — | ✅ | audit 命中的高频 API surface 返回统一错误 shape，frontend client 不再 page-local 猜测。 |
-| S03 | S03 | high | — | ⬜ | admin 高风险接口有权限证明，日志敏感字段脱敏规则落到高风险出口。 |
+| S03 | S03 | high | — | ✅ | admin 高风险接口有权限证明，日志敏感字段脱敏规则落到高风险出口。 |
