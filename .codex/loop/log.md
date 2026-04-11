@@ -1,3 +1,28 @@
+- time: 2026-04-12T06:09:00+08:00
+  mode: grow
+  item id: M017-S03
+  files changed:
+    - backend/src/presentation_coach/api/presentations.py
+    - backend/tests/contract/test_presentations.py
+    - backend/tests/integration/test_presentation_flow.py
+    - backend/tests/integration/test_presentation_delete_permissions.py
+    - .gsd/DECISIONS.md
+    - .gsd/KNOWLEDGE.md
+    - .gsd/PROJECT.md
+    - .codex/loop/state.json
+    - .codex/loop/log.md
+  summary: Closed M017/S03 by converting presentation upload/replace/delete concurrency suspicion into a code-adjacent discovery baseline: replace is now a proved concurrent-writer race, delete is a proved live-session route-guard gap, and upload-new remains inventory-only until new evidence appears.
+  verification commands:
+    - rg -n "replace|upload|delete|active-session|lock" backend/src/presentation_coach/api/presentations.py backend/tests/contract/test_presentations.py backend/tests/integration/test_presentation_flow.py
+    - backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/contract/test_presentations.py backend/tests/integration/test_presentation_flow.py backend/tests/integration/test_presentation_delete_permissions.py -x -q
+    - lsp diagnostics backend/src/presentation_coach/api/presentations.py
+    - lsp diagnostics backend/tests/contract/test_presentations.py
+    - lsp diagnostics backend/tests/integration/test_presentation_flow.py
+    - lsp diagnostics backend/tests/integration/test_presentation_delete_permissions.py
+  verification results: passed; the exact slice-plan rg inventory exposed the discovery constants plus focused replace/delete proof lines, the full S03 backend gate finished 11/11 green, and diagnostics stayed clean on the touched backend authority/test files.
+  success signal status: future agents no longer need to re-audit presentation mutation risk from scratch — they can start from one canonical discovery artifact and one focused proof bundle that already distinguishes real replace/delete problems from unproved upload suspicion.
+  rollback note: if later work implements replace serialization or delete-policy changes, update the code-adjacent discovery artifact, the focused contract assertion, and the replace/delete integration proofs together so the discovery baseline stays aligned with the live route behavior.
+
 - time: 2026-04-12T05:34:02+08:00
   mode: grow
   item id: M017-S02-T02
