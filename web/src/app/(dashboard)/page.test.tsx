@@ -192,6 +192,49 @@ describe("HomePage dashboard header", () => {
         expect(screen.getByRole("link", { name: "报告入口" }).getAttribute("href")).toBe("/history");
     });
 
+    it("prefers the latest report shortcut in onboarding so returning learners stay on the real train-history-report loop", async () => {
+        getRecommendationMock.mockResolvedValue({
+            title: "继续产品介绍训练",
+            reason: "先完成今天的重点训练，再复盘最近一次报告。",
+            action_label: "继续训练",
+            target_path: "/training/sales",
+        });
+        getHistoryMock.mockResolvedValue([
+            {
+                id: "older-session",
+                session_id: "older-session",
+                title: "较早的销售复盘",
+                scenario_type: "sales",
+                overall_score: 80,
+                duration_seconds: 180,
+                start_time: "2026-04-08T00:00:00Z",
+                status: "completed",
+                feedback_summary: "先补客户案例。",
+            },
+            {
+                id: "latest-session",
+                session_id: "latest-session",
+                title: "最新销售复盘",
+                scenario_type: "sales",
+                overall_score: 91,
+                duration_seconds: 240,
+                start_time: "2026-04-09T00:00:00Z",
+                status: "completed",
+                feedback_summary: "继续保持节奏。",
+            },
+        ]);
+
+        render(<HomePage />);
+        await flushDashboardData();
+
+        expect(screen.getByText("继续按这 3 步推进训练")).toBeTruthy();
+        const trainingLinks = screen.getAllByRole("link", { name: "继续训练" });
+        expect(trainingLinks.some((link) => link.getAttribute("href") === "/training/sales")).toBe(true);
+        expect(screen.getByRole("link", { name: "去历史页" }).getAttribute("href")).toBe("/history");
+        expect(screen.getByRole("link", { name: "报告入口" }).getAttribute("href")).toBe("/practice/latest-session/report");
+        expect(screen.getByText("最近一次可用报告：最新销售复盘")).toBeTruthy();
+    });
+
     it("truthifies the version dialog into a live entry summary instead of static release-note claims", async () => {
         getRecommendationMock.mockResolvedValue({
             title: "继续产品介绍训练",

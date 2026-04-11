@@ -186,7 +186,24 @@ export default function HomePage() {
         item,
         historyActions: getDashboardHistoryActions(item),
     }));
-    const reportShortcut = resolvedHistoryItems.find(({ historyActions }) => historyActions.reportHref);
+    const reportShortcut = [...resolvedHistoryItems]
+        .filter(({ historyActions }) => historyActions.reportHref)
+        .sort((left, right) => {
+            const leftTime = Date.parse(left.item.start_time);
+            const rightTime = Date.parse(right.item.start_time);
+
+            if (Number.isNaN(leftTime) && Number.isNaN(rightTime)) {
+                return 0;
+            }
+            if (Number.isNaN(leftTime)) {
+                return 1;
+            }
+            if (Number.isNaN(rightTime)) {
+                return -1;
+            }
+
+            return rightTime - leftTime;
+        })[0];
     const hasHistory = historyItems.length > 0;
     const onboardingSteps = [
         {
