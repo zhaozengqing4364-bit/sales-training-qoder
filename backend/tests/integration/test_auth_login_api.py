@@ -7,12 +7,14 @@ from __future__ import annotations
 import json
 import uuid
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 
 import agent.models  # noqa: F401  # ensure Agent/Persona tables are registered on Base metadata for sqlite tests
 import pytest
 from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from common.auth.api import AUTH_FORMALIZATION_SURFACE
 from common.auth.service import AUTH_SESSION_COOKIE_NAME, verify_token
 from common.db.models import User
 
@@ -427,6 +429,38 @@ async def test_forgot_password_success_includes_rate_limit_headers(
 
 
 @pytest.mark.asyncio
+async def test_forgot_password_rate_limit_rejects_second_request_for_same_ip(
+    async_client,
+    test_db: AsyncSession,
+) -> None:
+    user = await _create_user(
+        test_db,
+        email="auth-reset-rate-limit@example.com",
+        role="user",
+        is_active=True,
+    )
+    headers = {"X-Forwarded-For": "203.0.113.320"}
+
+    first_response = await async_client.post(
+        "/api/v1/auth/forgot-password",
+        json={"email": user.email},
+        headers=headers,
+    )
+    second_response = await async_client.post(
+        "/api/v1/auth/forgot-password",
+        json={"email": user.email},
+        headers=headers,
+    )
+
+    assert first_response.status_code == 200
+    assert second_response.status_code == 429
+    payload = second_response.json()
+    assert payload["detail"]["error"] == "[RATE_LIMIT_EXCEEDED]"
+    assert payload["detail"]["message"]
+    assert second_response.headers.get("x-trace-id")
+
+
+@pytest.mark.asyncio
 async def test_forgot_password_delivery_failure_still_returns_generic_success(
     async_client,
     test_db: AsyncSession,
@@ -521,3 +555,74 @@ async def test_reset_password_rejects_expired_token_and_preserves_new_login_boun
         json={"email": user.email, "password": "OriginalPass123!"},
     )
     assert old_login.status_code == 200
+
+
+@pytest.mark.asyncio
+async def test_reset_password_success_sets_managed_password_and_rejects_reuse(
+    async_client,
+    test_db: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("AUTH_USER_PASSWORDS_JSON", raising=False)
+    monkeypatch.setenv("AUTH_SHARED_PASSWORD", "OriginalPass123!")
+    monkeypatch.setattr("secrets.token_urlsafe", lambda _: "managed-reset-token")
+    user = await _create_user(
+        test_db,
+        email="auth-reset-managed@example.com",
+        role="user",
+        is_active=True,
+    )
+    user_email = user.email
+
+    forgot_response = await async_client.post(
+        "/api/v1/auth/forgot-password",
+        json={"email": user_email},
+        headers={"X-Forwarded-For": "203.0.113.35"},
+    )
+    assert forgot_response.status_code == 200
+
+    reset_response = await async_client.post(
+        "/api/v1/auth/reset-password",
+        json={"token": "managed-reset-token", "new_password": "NewPass123!"},
+    )
+    assert reset_response.status_code == 200
+    assert reset_response.json()["success"] is True
+
+    reused_response = await async_client.post(
+        "/api/v1/auth/reset-password",
+        json={"token": "managed-reset-token", "new_password": "AnotherPass123!"},
+    )
+    assert reused_response.status_code == 400
+    assert reused_response.json()["error"] == "[INVALID_RESET_TOKEN]"
+
+    old_login = await async_client.post(
+        "/api/v1/auth/login",
+        json={"email": user_email, "password": "OriginalPass123!"},
+    )
+    assert old_login.status_code == 401
+
+    new_login = await async_client.post(
+        "/api/v1/auth/login",
+        json={"email": user_email, "password": "NewPass123!"},
+    )
+    assert new_login.status_code == 200
+
+    rows = await _fetch_reset_rows(test_db)
+    assert len(rows) == 1
+    assert rows[0]["used_at"] is not None
+    assert rows[0]["invalidated_at"] is None
+    assert rows[0]["delivery_status"] == "sent"
+
+
+def test_auth_recovery_request_path_keeps_runtime_ddl_out_of_handlers() -> None:
+    repo_root = Path(__file__).resolve().parents[2]
+    auth_api_source = (repo_root / "src/common/auth/api.py").read_text(encoding="utf-8")
+    password_reset_source = (repo_root / "src/common/services/password_reset.py").read_text(
+        encoding="utf-8"
+    )
+
+    assert AUTH_FORMALIZATION_SURFACE["runtime_ddl_owner"] == "common.db.session.init_db"
+    assert "PasswordResetService" in auth_api_source
+    for forbidden_snippet in ("create_all(", "CREATE TABLE", "create table"):
+        assert forbidden_snippet not in auth_api_source
+        assert forbidden_snippet not in password_reset_source

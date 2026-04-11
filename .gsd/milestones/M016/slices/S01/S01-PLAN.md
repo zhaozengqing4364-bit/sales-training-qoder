@@ -48,7 +48,7 @@ Done when: forgot/reset 有正式持久化和 lifecycle contract，focused backe
   - Files: `backend/src/common/auth/api.py`, `backend/src/common/auth/service.py`, `backend/src/common/db/models.py`, `backend/alembic/versions/*`
   - Verify: backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/integration/test_auth_login_api.py -x -q
 
-- [ ] **T03: 为 auth recovery contract 补 focused proof** `est:45m`
+- [x] **T03: 为 auth recovery contract 补 focused proof** `est:45m`
   Why: S01 只有在 focused proof 能锁定 forgot/reset 全链路行为时才算真正闭合。
 
 Do:

@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "exported_at": "2026-04-11T19:18:54.981Z",
+  "exported_at": "2026-04-11T19:25:56.042Z",
   "milestones": [
     {
       "id": "M001",
@@ -10152,19 +10152,25 @@
       "milestone_id": "M016",
       "slice_id": "S01",
       "id": "T03",
-      "title": "为 auth recovery contract 补 focused proof",
-      "status": "pending",
-      "one_liner": "",
-      "narrative": "",
-      "verification_result": "",
+      "title": "Expanded the focused auth recovery proof so the repo-root auth gate now covers reset success, expiry, reuse, same-IP rate limiting, and request-path DDL absence.",
+      "status": "complete",
+      "one_liner": "Expanded the focused auth recovery proof so the repo-root auth gate now covers reset success, expiry, reuse, same-IP rate limiting, and request-path DDL absence.",
+      "narrative": "I kept the change narrow and test-first on the existing auth recovery proof surface instead of creating a new broad suite. In `backend/tests/integration/test_auth_login_api.py` I added focused regressions that prove the repo-root auth gate now covers same-IP forgot-password rate limiting, successful reset promotion from env-password fallback into managed `hashed_password` login, post-consumption token reuse rejection, and a source-level constraint that request-path auth recovery handlers do not contain runtime DDL markers while still pointing at the formalized seam. In `backend/tests/integration/test_password_reset_api.py` I extended the lifecycle assertions to include API-level rejection of a superseded token while the latest token still succeeds, and widened the row inspection helper so the invalidation state remains observable. During verification I hit two test-only false assumptions and corrected them without widening runtime code: the 429 limiter response does not currently emit the success-path `X-RateLimit-*` headers, and async ORM instances can expire after API calls that commit, so scalar fields like `user.email` need to be cached before later assertions. I recorded the latter in `.gsd/KNOWLEDGE.md` so future agents do not misread `MissingGreenlet` as an auth regression.",
+      "verification_result": "Ran the task-plan gate `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/integration/test_auth_login_api.py -x -q`, which finished 17/17 green and now proves reset success, expiry, reuse, same-IP rate limiting, and request-path DDL absence from the repo-root auth file alone. Then ran `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/integration/test_password_reset_api.py -x -q`, which finished 8/8 green and keeps the dedicated lifecycle suite proving forgot/reset success, short-password rejection, single-active-token schema enforcement, and superseded-token rejection. Fresh LSP diagnostics on both focused proof files were clean after the edits.",
       "duration": "",
-      "completed_at": null,
+      "completed_at": "2026-04-11T19:25:55.988Z",
       "blocker_discovered": false,
-      "deviations": "",
-      "known_issues": "",
-      "key_files": [],
-      "key_decisions": [],
-      "full_summary_md": "",
+      "deviations": "The plan named repo-root focused proof plus `**/*reset*.py`; the live gap was that `test_auth_login_api.py` still delegated part of the recovery contract to the dedicated reset suite. I closed that by expanding the existing auth gate rather than introducing a new test entry point, while also strengthening `test_password_reset_api.py` with the superseded-token API proof because that file already owns the detailed lifecycle seam.",
+      "known_issues": "Repo-root focused backend pytest still emits the existing pytest-cov `Module src was never imported` / `No data was collected` warnings for these narrow commands, but both suites exit 0 and the focused auth assertions passed. No product/runtime auth regression remains open from this task.",
+      "key_files": [
+        "backend/tests/integration/test_auth_login_api.py",
+        "backend/tests/integration/test_password_reset_api.py",
+        ".gsd/KNOWLEDGE.md"
+      ],
+      "key_decisions": [
+        "Kept auth recovery proof on the existing repo-root auth gate plus the dedicated reset lifecycle suite instead of creating a new umbrella test entry point."
+      ],
+      "full_summary_md": "---\nid: T03\nparent: S01\nmilestone: M016\nkey_files:\n  - backend/tests/integration/test_auth_login_api.py\n  - backend/tests/integration/test_password_reset_api.py\n  - .gsd/KNOWLEDGE.md\nkey_decisions:\n  - Kept auth recovery proof on the existing repo-root auth gate plus the dedicated reset lifecycle suite instead of creating a new umbrella test entry point.\nduration: \nverification_result: passed\ncompleted_at: 2026-04-11T19:25:55.985Z\nblocker_discovered: false\n---\n\n# T03: Expanded the focused auth recovery proof so the repo-root auth gate now covers reset success, expiry, reuse, same-IP rate limiting, and request-path DDL absence.\n\n**Expanded the focused auth recovery proof so the repo-root auth gate now covers reset success, expiry, reuse, same-IP rate limiting, and request-path DDL absence.**\n\n## What Happened\n\nI kept the change narrow and test-first on the existing auth recovery proof surface instead of creating a new broad suite. In `backend/tests/integration/test_auth_login_api.py` I added focused regressions that prove the repo-root auth gate now covers same-IP forgot-password rate limiting, successful reset promotion from env-password fallback into managed `hashed_password` login, post-consumption token reuse rejection, and a source-level constraint that request-path auth recovery handlers do not contain runtime DDL markers while still pointing at the formalized seam. In `backend/tests/integration/test_password_reset_api.py` I extended the lifecycle assertions to include API-level rejection of a superseded token while the latest token still succeeds, and widened the row inspection helper so the invalidation state remains observable. During verification I hit two test-only false assumptions and corrected them without widening runtime code: the 429 limiter response does not currently emit the success-path `X-RateLimit-*` headers, and async ORM instances can expire after API calls that commit, so scalar fields like `user.email` need to be cached before later assertions. I recorded the latter in `.gsd/KNOWLEDGE.md` so future agents do not misread `MissingGreenlet` as an auth regression.\n\n## Verification\n\nRan the task-plan gate `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/integration/test_auth_login_api.py -x -q`, which finished 17/17 green and now proves reset success, expiry, reuse, same-IP rate limiting, and request-path DDL absence from the repo-root auth file alone. Then ran `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/integration/test_password_reset_api.py -x -q`, which finished 8/8 green and keeps the dedicated lifecycle suite proving forgot/reset success, short-password rejection, single-active-token schema enforcement, and superseded-token rejection. Fresh LSP diagnostics on both focused proof files were clean after the edits.\n\n## Verification Evidence\n\n| # | Command | Exit Code | Verdict | Duration |\n|---|---------|-----------|---------|----------|\n| 1 | `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/integration/test_auth_login_api.py -x -q` | 0 | ✅ pass | 3240ms |\n| 2 | `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/integration/test_password_reset_api.py -x -q` | 0 | ✅ pass | 2720ms |\n| 3 | `lsp diagnostics backend/tests/integration/test_auth_login_api.py` | 0 | ✅ pass | 0ms |\n| 4 | `lsp diagnostics backend/tests/integration/test_password_reset_api.py` | 0 | ✅ pass | 0ms |\n\n## Deviations\n\nThe plan named repo-root focused proof plus `**/*reset*.py`; the live gap was that `test_auth_login_api.py` still delegated part of the recovery contract to the dedicated reset suite. I closed that by expanding the existing auth gate rather than introducing a new test entry point, while also strengthening `test_password_reset_api.py` with the superseded-token API proof because that file already owns the detailed lifecycle seam.\n\n## Known Issues\n\nRepo-root focused backend pytest still emits the existing pytest-cov `Module src was never imported` / `No data was collected` warnings for these narrow commands, but both suites exit 0 and the focused auth assertions passed. No product/runtime auth regression remains open from this task.\n\n## Files Created/Modified\n\n- `backend/tests/integration/test_auth_login_api.py`\n- `backend/tests/integration/test_password_reset_api.py`\n- `.gsd/KNOWLEDGE.md`\n",
       "description": "Why: S01 只有在 focused proof 能锁定 forgot/reset 全链路行为时才算真正闭合。\n\nDo:\n1. 补 focused tests，覆盖 forgot/reset 成功、过期、重复使用、rate limit 等路径。\n2. 增加对 request-path DDL 已移除的约束性 proof。\n3. 保持 auth proof 仍围绕 repo-root focused gate，不引入新的大而全测试入口。\n\nDone when: auth recovery contract 的关键正负路径都有 focused proof，且回归命令稳定通过。",
       "estimate": "45m",
       "files": [
@@ -17002,6 +17008,50 @@
       "verdict": "✅ pass",
       "duration_ms": 74,
       "created_at": "2026-04-11T19:18:54.933Z"
+    },
+    {
+      "id": 337,
+      "task_id": "T03",
+      "slice_id": "S01",
+      "milestone_id": "M016",
+      "command": "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/integration/test_auth_login_api.py -x -q",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 3240,
+      "created_at": "2026-04-11T19:25:55.989Z"
+    },
+    {
+      "id": 338,
+      "task_id": "T03",
+      "slice_id": "S01",
+      "milestone_id": "M016",
+      "command": "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/integration/test_password_reset_api.py -x -q",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 2720,
+      "created_at": "2026-04-11T19:25:55.989Z"
+    },
+    {
+      "id": 339,
+      "task_id": "T03",
+      "slice_id": "S01",
+      "milestone_id": "M016",
+      "command": "lsp diagnostics backend/tests/integration/test_auth_login_api.py",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 0,
+      "created_at": "2026-04-11T19:25:55.989Z"
+    },
+    {
+      "id": 340,
+      "task_id": "T03",
+      "slice_id": "S01",
+      "milestone_id": "M016",
+      "command": "lsp diagnostics backend/tests/integration/test_password_reset_api.py",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 0,
+      "created_at": "2026-04-11T19:25:55.989Z"
     }
   ]
 }

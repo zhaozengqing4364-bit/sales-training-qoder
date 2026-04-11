@@ -39,7 +39,7 @@ async def _fetch_reset_rows(db: AsyncSession):
     result = await db.execute(
         text(
             """
-            SELECT user_id, token_hash, expires_at, used_at
+            SELECT user_id, token_hash, expires_at, used_at, invalidated_at, invalidation_reason
             FROM password_reset_tokens
             ORDER BY created_at ASC
             """
@@ -198,6 +198,68 @@ async def test_reset_password_consumes_token_and_updates_login_password(
     rows = await _fetch_reset_rows(test_db)
     assert len(rows) == 1
     assert rows[0]["used_at"] is not None
+
+
+@pytest.mark.asyncio
+async def test_reset_password_rejects_superseded_token_and_accepts_latest_token(
+    async_client,
+    test_db: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("AUTH_USER_PASSWORDS_JSON", raising=False)
+    monkeypatch.setenv("AUTH_SHARED_PASSWORD", "OriginalPass123!")
+    issued_tokens = iter(["superseded-reset-token", "latest-reset-token"])
+    monkeypatch.setattr("secrets.token_urlsafe", lambda _: next(issued_tokens))
+
+    user = await _create_user(test_db, email="reset-superseded@example.com")
+
+    first_forgot = await async_client.post(
+        "/api/v1/auth/forgot-password",
+        json={"email": user.email},
+        headers={"X-Forwarded-For": "203.0.113.130"},
+    )
+    second_forgot = await async_client.post(
+        "/api/v1/auth/forgot-password",
+        json={"email": user.email},
+        headers={"X-Forwarded-For": "203.0.113.131"},
+    )
+
+    assert first_forgot.status_code == 200
+    assert second_forgot.status_code == 200
+
+    superseded_response = await async_client.post(
+        "/api/v1/auth/reset-password",
+        json={"token": "superseded-reset-token", "new_password": "IgnoredPass123!"},
+    )
+    assert superseded_response.status_code == 400
+    assert superseded_response.json()["error"] == "[INVALID_RESET_TOKEN]"
+
+    latest_response = await async_client.post(
+        "/api/v1/auth/reset-password",
+        json={"token": "latest-reset-token", "new_password": "LatestPass123!"},
+    )
+    assert latest_response.status_code == 200
+    assert latest_response.json()["success"] is True
+
+    old_login = await async_client.post(
+        "/api/v1/auth/login",
+        json={"email": user.email, "password": "OriginalPass123!"},
+    )
+    assert old_login.status_code == 401
+
+    new_login = await async_client.post(
+        "/api/v1/auth/login",
+        json={"email": user.email, "password": "LatestPass123!"},
+    )
+    assert new_login.status_code == 200
+
+    rows = await _fetch_reset_rows(test_db)
+    assert len(rows) == 2
+    assert rows[0]["used_at"] is None
+    assert rows[0]["invalidated_at"] is not None
+    assert rows[0]["invalidation_reason"] == "superseded"
+    assert rows[1]["used_at"] is not None
+    assert rows[1]["invalidated_at"] is None
 
 
 @pytest.mark.asyncio

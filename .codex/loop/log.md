@@ -1,3 +1,22 @@
+- time: 2026-04-12T03:19:18+08:00
+  mode: grow
+  item id: M016-S01-T03
+  files changed:
+    - backend/tests/integration/test_auth_login_api.py
+    - backend/tests/integration/test_password_reset_api.py
+    - .gsd/KNOWLEDGE.md
+    - .codex/loop/state.json
+    - .codex/loop/log.md
+  summary: Expanded the focused auth recovery proof so the repo-root auth gate now covers reset success, expiry, reuse, same-IP rate limiting, and request-path DDL absence, while the dedicated reset suite also proves superseded-token rejection against the live lifecycle contract.
+  verification commands:
+    - backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/integration/test_auth_login_api.py -x -q
+    - backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/integration/test_password_reset_api.py -x -q
+    - lsp diagnostics backend/tests/integration/test_auth_login_api.py
+    - lsp diagnostics backend/tests/integration/test_password_reset_api.py
+  verification results: passed; the repo-root auth gate finished 17/17 green, the dedicated password-reset suite finished 8/8 green, and diagnostics were clean on both focused proof files.
+  success signal status: future agents can now prove forgot/reset health from focused backend tests alone — including successful reset handoff into managed credentials, expired/reused/superseded token rejection, rate limiting, and the absence of request-path auth DDL.
+  rollback note: if later auth-recovery work changes handler ownership or token lifecycle semantics, update both focused proof files together so the repo-root auth gate and the dedicated reset lifecycle suite keep describing the same contract.
+
 - time: 2026-04-12T03:08:13+08:00
   mode: grow
   item id: M016-S01-T01
