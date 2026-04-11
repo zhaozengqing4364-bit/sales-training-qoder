@@ -151,7 +151,13 @@ export default function TestMicPage() {
     return (
         <div className="min-h-screen bg-slate-50 p-8">
             <div className="max-w-2xl mx-auto">
-                <h1 className="text-2xl font-bold text-slate-900 mb-6">麦克风测试页面</h1>
+                <div className="mb-4 inline-flex items-center rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-700">
+                    开发工具 · 不属于学员训练主流程
+                </div>
+                <h1 className="text-2xl font-bold text-slate-900 mb-2">麦克风调试工具</h1>
+                <p className="text-sm text-slate-500 mb-6">
+                    仅供开发/支持排查设备与后端连通性时使用；正常学员练习请从 practice 主页面进入。
+                </p>
 
                 <div className="mb-6 rounded-2xl border border-slate-200 bg-white p-4 flex items-center justify-between flex-wrap gap-3">
                     <div>

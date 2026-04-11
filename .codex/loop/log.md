@@ -1,3 +1,23 @@
+
+- time: 2026-04-12T00:32:00+08:00
+  mode: grow
+  item id: M014-S04-T02
+  files changed:
+    - web/src/app/(user)/practice/[sessionId]/page.tsx
+    - web/src/app/(user)/practice/[sessionId]/use-practice-session-lifecycle.ts
+    - web/src/app/(user)/practice/[sessionId]/page.test.tsx
+    - web/src/app/(user)/practice/[sessionId]/use-practice-session-lifecycle.test.ts
+    - web/src/app/test-mic/page.tsx
+    - .gsd/KNOWLEDGE.md
+    - .codex/loop/state.json
+  summary: Added a truthful preflight brief to the practice page for ordinary learners, upgraded pause/resume/end failures into learner-facing retry guidance with explicit next steps, and relabeled /app/test-mic as a developer-only debug tool without reintroducing it into the learner route map.
+  verification commands:
+    - npm --prefix web test -- --run "src/app/(user)/practice/[sessionId]/page.test.tsx" "src/app/(user)/practice/[sessionId]/use-practice-session-lifecycle.test.ts"
+    - browser smoke attempt: npm --prefix web run dev -> http://localhost:3445/practice/session-current?scenario_type=sales&voice_mode=legacy
+  verification results: passed for the focused Vitest gate (13/13 green, clean output). Browser smoke was environment-blocked because local Next dev never served the page and stayed stuck on `Compiling instrumentation Node.js ...`; the managed bg_shell process was killed to keep auto-mode health clean.
+  success signal status: learners now see what they are about to practice, how it will be judged, and what to do when pause/resume/end actions fail, while the standalone mic page now clearly reads as a debug-only utility.
+  rollback note: if later slices enrich preflight data further, keep learner-readable names/titles hydrated from the existing agent/presentation detail APIs and keep lifecycle failures on the same page-level banner/retry seam instead of moving them back into console-only logs or a separate route.
+
 - time: 2026-04-12T00:04:00+08:00
   mode: grow
   item id: M014-S04-T01

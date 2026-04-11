@@ -96,6 +96,58 @@ describe("usePracticeSessionLifecycle", () => {
         expect(controlLifecycle).toHaveBeenNthCalledWith(2, "session-2", "resume");
     });
 
+    it("surfaces learner-facing guidance when pausing fails", async () => {
+        controlLifecycle.mockRejectedValueOnce(new Error("后端暂时不可用"));
+        const stopRecording = vi.fn();
+
+        const { result } = renderHook(() =>
+            usePracticeSessionLifecycle({
+                sessionId: "session-2b",
+                connectionState: "connected",
+                sessionStatus: "in_progress",
+                isRecordingRef: { current: true },
+                stopRecording,
+            }),
+        );
+
+        await act(async () => {
+            await result.current.handleTogglePauseResume();
+        });
+
+        expect(stopRecording).toHaveBeenCalledTimes(1);
+        expect(result.current.pendingLifecycleAction).toBeNull();
+        expect(result.current.lifecycleError).toEqual({
+            action: "pause",
+            message: "暂停失败，请再试一次。",
+            guidance: "你可以先继续当前对话，稍后再暂停；如果按钮持续无响应，再结束本次练习后重新进入。",
+        });
+    });
+
+    it("surfaces learner-facing guidance when resuming fails", async () => {
+        controlLifecycle.mockRejectedValueOnce(new Error("网络连接失败"));
+
+        const { result } = renderHook(() =>
+            usePracticeSessionLifecycle({
+                sessionId: "session-2c",
+                connectionState: "connected",
+                sessionStatus: "paused",
+                isRecordingRef: { current: false },
+                stopRecording: vi.fn(),
+            }),
+        );
+
+        await act(async () => {
+            await result.current.handleTogglePauseResume();
+        });
+
+        expect(result.current.pendingLifecycleAction).toBeNull();
+        expect(result.current.lifecycleError).toEqual({
+            action: "resume",
+            message: "继续失败，请确认连接后再试一次。",
+            guidance: "如果仍无法恢复，请先重新连接或刷新页面，再回到当前会话继续练习。",
+        });
+    });
+
     it("waits for server terminal status before navigating to the report page", async () => {
         const stopRecording = vi.fn();
         const { result, rerender } = renderHook(
@@ -150,6 +202,10 @@ describe("usePracticeSessionLifecycle", () => {
 
         expect(routerPush).not.toHaveBeenCalled();
         expect(result.current.isEndingSession).toBe(false);
-        expect(result.current.lifecycleError).toBe("结束失败，请重试");
+        expect(result.current.lifecycleError).toEqual({
+            action: "end",
+            message: "结束失败，请再试一次。",
+            guidance: "请先确认连接正常，再点击“结束练习”；如果仍失败，可先重新连接后重试结束。",
+        });
     });
 });

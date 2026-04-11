@@ -148,3 +148,9 @@
 {"id":"0bfffe1c-09e4-49f3-9849-e31799ef1a9b","ts":"2026-04-11T15:50:16.883Z","severity":"warning","message":"[safety] file-change: web/src/app/(dashboard)/profile/page.test.tsx — Modified but not in task plan's expected output","source":"workflow-logger","read":false}
 {"id":"aeef8332-355c-4141-b732-f934ea07c15f","ts":"2026-04-11T15:50:16.883Z","severity":"warning","message":"Safety: 4 unexpected file change(s) outside task plan","source":"notify","read":false}
 {"id":"b675cfe5-3ea8-4c7f-b3a1-d76ddf28e8cb","ts":"2026-04-11T15:50:17.969Z","severity":"info","message":"Verification gate: 1/1 checks passed","source":"notify","read":false}
+{"id":"67a0f0f4-8953-4f3b-9c7f-d97c9a87287c","ts":"2026-04-11T16:07:48.269Z","severity":"info","message":"Committed: test: Documented the real practice preflight and interruption seams, in…","source":"notify","read":false}
+{"id":"59bbb025-25c4-4103-a678-1a26d059446c","ts":"2026-04-11T16:07:48.274Z","severity":"warning","message":"[safety] file-change: .codex/loop/log.md — Modified but not in task plan's expected output","source":"workflow-logger","read":false}
+{"id":"103266ae-b577-4922-830b-f85cd6eaa588","ts":"2026-04-11T16:07:48.274Z","severity":"warning","message":"[safety] file-change: .codex/loop/state.json — Modified but not in task plan's expected output","source":"workflow-logger","read":false}
+{"id":"0fad81fb-1f19-468a-af9b-ac67d72d93b2","ts":"2026-04-11T16:07:48.274Z","severity":"warning","message":"Safety: 2 unexpected file change(s) outside task plan","source":"notify","read":false}
+{"id":"3661df6c-70fa-4dbb-8c8b-47ba47959c51","ts":"2026-04-11T16:07:56.789Z","severity":"info","message":"Verification gate: FAILED — npm run test","source":"notify","read":false}
+{"id":"41c8c949-eacb-4f0e-96b9-1e26be0b582f","ts":"2026-04-11T16:07:56.789Z","severity":"warning","message":"Verification failed in auto-discovered package.json checks — treating as advisory.","source":"notify","read":false}

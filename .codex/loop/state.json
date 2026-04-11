@@ -1,6 +1,6 @@
 {
   "mode": "grow",
-  "current_issue_id": "M014-S04-T01",
+  "current_issue_id": "M014-S04-T02",
   "current_issue_type": "task",
   "current_issue_status": "done",
   "pending_issue_ids": [],
@@ -144,22 +144,27 @@
     "M014-S03-T01",
     "M014-S03-T02",
     "M014-S03-T03",
-    "M014-S04-T01"
+    "M014-S04-T01",
+    "M014-S04-T02"
   ],
   "blocked_issue_ids": [],
   "deferred_issue_ids": [],
   "last_modified_files": [
+    "web/src/app/(user)/practice/[sessionId]/page.tsx",
+    "web/src/app/(user)/practice/[sessionId]/use-practice-session-lifecycle.ts",
+    "web/src/app/(user)/practice/[sessionId]/page.test.tsx",
+    "web/src/app/(user)/practice/[sessionId]/use-practice-session-lifecycle.test.ts",
+    "web/src/app/test-mic/page.tsx",
     ".gsd/KNOWLEDGE.md",
-    ".gsd/DECISIONS.md",
     ".codex/loop/state.json",
     ".codex/loop/log.md"
   ],
   "last_verification_commands": [
-    "rg -n \"pause|resume|end|test-mic|persona|scenario|goal\" 'web/src/app/(user)/practice/[sessionId]/page.tsx' 'web/src/hooks/use-practice-websocket.ts'",
-    "npm --prefix web test -- --run 'src/app/(user)/practice/[sessionId]/page.test.tsx' 'src/app/(user)/practice/[sessionId]/use-practice-session-lifecycle.test.ts' 'src/app/(user)/practice/layout.test.tsx'"
+    "npm --prefix web test -- --run \"src/app/(user)/practice/[sessionId]/page.test.tsx\" \"src/app/(user)/practice/[sessionId]/use-practice-session-lifecycle.test.ts\"",
+    "browser smoke attempt: npm --prefix web run dev -> http://localhost:3445/practice/session-current?scenario_type=sales&voice_mode=legacy"
   ],
-  "last_verification_result": "Practice surface inventory verification passed: the planned rg scan confirmed the existing scenario/persona/focus/interruption seams in the practice page and websocket hook, and the focused practice page/lifecycle/layout Vitest suite finished 11/11 green after the knowledge-only writeback.",
-  "last_success_signal": "Future agents can now build S04 from the real practice seams: normal sessions still lack a dedicated preflight card, retry focus and right-panel live summary already exist, pause/resume failures remain silent, end failures already surface retry/reconnect affordances, and the dev mic tool is off the learner path at /app/test-mic.",
+  "last_verification_result": "Focused practice page + lifecycle Vitest finished 13/13 green with clean output after adding the preflight card, retry copy, and dev-tool labeling. A follow-up browser smoke attempt was blocked by the local Next dev server hanging on “Compiling instrumentation Node.js ...”; the managed bg_shell process was killed instead of leaving a stale verifier behind.",
+  "last_success_signal": "Ordinary practice sessions now show a learner-facing preflight brief before first speech, pause/resume/end failures surface explicit next-step guidance with retry CTAs, and /app/test-mic is labeled as a developer-only debug tool instead of reading like a learner route.",
   "last_growth_scan": null,
-  "next_action": "M014/S04 T02 should add learner-facing preflight and interruption copy on the existing practice page/right-panel/help seams, without reviving a learner-visible test-mic entry."
+  "next_action": "M014/S04 T03 should lock the new preflight/interruption learner surfaces with focused proof, including the non-learner positioning of /app/test-mic."
 }

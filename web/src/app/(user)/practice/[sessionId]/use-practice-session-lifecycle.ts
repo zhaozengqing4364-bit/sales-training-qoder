@@ -16,6 +16,40 @@ interface UsePracticeSessionLifecycleParams {
     stopRecording: () => void;
 }
 
+export interface PracticeLifecycleError {
+    action: "pause" | "resume" | "end";
+    message: string;
+    guidance: string;
+}
+
+function buildLifecycleError(action: "pause" | "resume" | "end", error: unknown): PracticeLifecycleError {
+    const backendMessage = getApiErrorMessage(error).trim();
+
+    if (action === "pause") {
+        return {
+            action,
+            message: "暂停失败，请再试一次。",
+            guidance: "你可以先继续当前对话，稍后再暂停；如果按钮持续无响应，再结束本次练习后重新进入。",
+        };
+    }
+
+    if (action === "resume") {
+        return {
+            action,
+            message: "继续失败，请确认连接后再试一次。",
+            guidance: "如果仍无法恢复，请先重新连接或刷新页面，再回到当前会话继续练习。",
+        };
+    }
+
+    return {
+        action,
+        message: backendMessage && backendMessage !== "结束失败，请重试" && backendMessage !== "会话结束失败"
+            ? `结束失败，请再试一次。${backendMessage}`
+            : "结束失败，请再试一次。",
+        guidance: "请先确认连接正常，再点击“结束练习”；如果仍失败，可先重新连接后重试结束。",
+    };
+}
+
 export function usePracticeSessionLifecycle({
     sessionId,
     connectionState,
@@ -26,7 +60,7 @@ export function usePracticeSessionLifecycle({
     const router = useRouter();
     const [isEndingSession, setIsEndingSession] = React.useState(false);
     const [pendingLifecycleAction, setPendingLifecycleAction] = React.useState<"pause" | "resume" | null>(null);
-    const [lifecycleError, setLifecycleError] = React.useState<string | null>(null);
+    const [lifecycleError, setLifecycleError] = React.useState<PracticeLifecycleError | null>(null);
     const hasStartedSessionRef = React.useRef(false);
     const hasNavigatedToReportRef = React.useRef(false);
 
@@ -87,6 +121,7 @@ export function usePracticeSessionLifecycle({
         }
 
         const action = sessionStatus === "paused" ? "resume" : "pause";
+        setLifecycleError(null);
         setPendingLifecycleAction(action);
 
         try {
@@ -100,6 +135,7 @@ export function usePracticeSessionLifecycle({
                 sessionId,
                 error,
             });
+            setLifecycleError(buildLifecycleError(action, error));
         } finally {
             setPendingLifecycleAction(null);
         }
@@ -126,7 +162,7 @@ export function usePracticeSessionLifecycle({
                 error,
                 message,
             });
-            setLifecycleError(message);
+            setLifecycleError(buildLifecycleError("end", error));
             setIsEndingSession(false);
         }
     }, [isEndingSession, isRecordingRef, isSessionTerminal, sessionId, stopRecording]);

@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
 import type { ButtonHTMLAttributes, ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -7,6 +7,8 @@ import PracticeSessionPage from "./page";
 const {
     pushMock,
     replaceMock,
+    getAgentWithPersonasMock,
+    getPresentationMock,
     usePracticeWebSocketMock,
     useAudioRecorderMock,
     usePracticeRuntimeLockMock,
@@ -14,6 +16,8 @@ const {
 } = vi.hoisted(() => ({
     pushMock: vi.fn(),
     replaceMock: vi.fn(),
+    getAgentWithPersonasMock: vi.fn(),
+    getPresentationMock: vi.fn(),
     usePracticeWebSocketMock: vi.fn(),
     useAudioRecorderMock: vi.fn(),
     usePracticeRuntimeLockMock: vi.fn(),
@@ -78,6 +82,17 @@ vi.mock("./runtime-lock", () => ({
     usePracticeRuntimeLock: (...args: unknown[]) => usePracticeRuntimeLockMock(...args),
 }));
 
+vi.mock("@/lib/api/client", () => ({
+    api: {
+        agents: {
+            getAgentWithPersonas: (...args: unknown[]) => getAgentWithPersonasMock(...args),
+        },
+        presentations: {
+            get: (...args: unknown[]) => getPresentationMock(...args),
+        },
+    },
+}));
+
 vi.mock("./use-practice-recording-hotkeys", () => ({
     usePracticeRecordingHotkeys: vi.fn(),
 }));
@@ -85,6 +100,12 @@ vi.mock("./use-practice-recording-hotkeys", () => ({
 vi.mock("./use-practice-session-lifecycle", () => ({
     usePracticeSessionLifecycle: (...args: unknown[]) => usePracticeSessionLifecycleMock(...args),
 }));
+
+async function flushPreflightEffects() {
+    await act(async () => {
+        await Promise.resolve();
+    });
+}
 
 describe("PracticeSessionPage carry-forward retry focus", () => {
     beforeEach(() => {
@@ -140,9 +161,29 @@ describe("PracticeSessionPage carry-forward retry focus", () => {
             lifecycleError: null,
             pendingLifecycleAction: null,
         });
+
+        getAgentWithPersonasMock.mockResolvedValue({
+            id: "agent-1",
+            name: "企业版销售教练",
+            description: "重点训练价值翻译和 ROI 证据表达。",
+            personas: [
+                {
+                    id: "persona-1",
+                    name: "谨慎型采购经理",
+                    description: "会反复确认投入产出、落地周期和风险控制。",
+                },
+            ],
+        });
+        getPresentationMock.mockResolvedValue({
+            presentation_id: "presentation-1",
+            title: "企业协同平台方案",
+            page_count: 12,
+            total_pages: 12,
+            pages: [],
+        });
     });
 
-    it("renders the targeted retry callout when runtime lock exposes focus intent", () => {
+    it("renders the targeted retry callout when runtime lock exposes focus intent", async () => {
         usePracticeRuntimeLockMock.mockReturnValue({
             lockedScenarioType: "sales",
             lockedVoiceMode: "legacy",
@@ -167,6 +208,7 @@ describe("PracticeSessionPage carry-forward retry focus", () => {
         });
 
         render(<PracticeSessionPage />);
+        await flushPreflightEffects();
 
         expect(screen.getByText("本次练习聚焦上次复盘问题")).toBeTruthy();
         expect(screen.getByText("这次不是普通新建会话，系统已带入上一轮的主问题和下一轮目标，方便你直接针对性再练。")).toBeTruthy();
@@ -176,7 +218,7 @@ describe("PracticeSessionPage carry-forward retry focus", () => {
         expect(screen.getByText("判定条件：客户能复述价值和 ROI 逻辑。")).toBeTruthy();
     });
 
-    it("omits the callout for ordinary practice sessions without retry focus", () => {
+    it("renders a minimal sales preflight brief before the learner starts speaking", async () => {
         usePracticeRuntimeLockMock.mockReturnValue({
             lockedScenarioType: "sales",
             lockedVoiceMode: "legacy",
@@ -188,11 +230,65 @@ describe("PracticeSessionPage carry-forward retry focus", () => {
         });
 
         render(<PracticeSessionPage />);
+        await flushPreflightEffects();
+
+        expect(await screen.findByText("开始前先看本次练习重点")).toBeTruthy();
+        expect(screen.getByText("围绕「企业版销售教练」进行销售对练，开口前先想好价值主张和下一步推进。", { exact: true })).toBeTruthy();
+        expect(screen.getByText("系统会重点看价值翻译、证据支撑和异议推进的完成度。", { exact: true })).toBeTruthy();
+        expect(screen.getByText("谨慎型采购经理：会反复确认投入产出、落地周期和风险控制。", { exact: true })).toBeTruthy();
+    });
+
+    it("surfaces learner-facing retry guidance when pausing fails", async () => {
+        usePracticeRuntimeLockMock.mockReturnValue({
+            lockedScenarioType: "sales",
+            lockedVoiceMode: "legacy",
+            lockedAgentId: "agent-1",
+            lockedPersonaId: "persona-1",
+            lockedPresentationId: undefined,
+            focusIntent: null,
+            sessionMetaError: null,
+        });
+        usePracticeSessionLifecycleMock.mockReturnValue({
+            canToggleLifecycle: true,
+            handleEndSession: vi.fn(),
+            handleTogglePauseResume: vi.fn(),
+            isEndingSession: false,
+            isSessionPaused: false,
+            isSessionTerminal: false,
+            lifecycleError: {
+                action: "pause",
+                message: "暂停失败，请再试一次。",
+                guidance: "你可以先继续当前对话，稍后再暂停；如果按钮持续无响应，再结束本次练习后重新进入。",
+            },
+            pendingLifecycleAction: null,
+        });
+
+        render(<PracticeSessionPage />);
+        await flushPreflightEffects();
+
+        expect(screen.getByText("暂停失败，请再试一次。", { exact: true })).toBeTruthy();
+        expect(screen.getByText("下一步：你可以先继续当前对话，稍后再暂停；如果按钮持续无响应，再结束本次练习后重新进入。", { exact: true })).toBeTruthy();
+        expect(screen.getByRole("button", { name: "重试暂停" })).toBeTruthy();
+    });
+
+    it("omits the callout for ordinary practice sessions without retry focus", async () => {
+        usePracticeRuntimeLockMock.mockReturnValue({
+            lockedScenarioType: "sales",
+            lockedVoiceMode: "legacy",
+            lockedAgentId: "agent-1",
+            lockedPersonaId: "persona-1",
+            lockedPresentationId: undefined,
+            focusIntent: null,
+            sessionMetaError: null,
+        });
+
+        render(<PracticeSessionPage />);
+        await flushPreflightEffects();
 
         expect(screen.queryByText("本次练习聚焦上次复盘问题")).toBeNull();
     });
 
-    it("shows degraded coach health in the learner page shell even when the right panel is mocked", () => {
+    it("shows degraded coach health in the learner page shell even when the right panel is mocked", async () => {
         usePracticeRuntimeLockMock.mockReturnValue({
             lockedScenarioType: "sales",
             lockedVoiceMode: "legacy",
@@ -251,13 +347,14 @@ describe("PracticeSessionPage carry-forward retry focus", () => {
         });
 
         render(<PracticeSessionPage />);
+        await flushPreflightEffects();
 
         expect(screen.getByText("辅导状态提醒")).toBeTruthy();
         expect(screen.getByText("实时辅导暂不可用，训练仍可继续。", { exact: true })).toBeTruthy();
         expect(screen.getAllByTestId("right-panel-content")).toHaveLength(2);
     });
 
-    it("passes live same-session summary through to the learner panel", () => {
+    it("passes live same-session summary through to the learner panel", async () => {
         usePracticeRuntimeLockMock.mockReturnValue({
             lockedScenarioType: "sales",
             lockedVoiceMode: "legacy",
@@ -332,12 +429,13 @@ describe("PracticeSessionPage carry-forward retry focus", () => {
         });
 
         render(<PracticeSessionPage />);
+        await flushPreflightEffects();
 
         expect(screen.getAllByText("live-focus:evidence_gap")).toHaveLength(2);
         expect(screen.getAllByText("价值主张缺少案例、数据或ROI支撑，客户很难相信收益承诺。")).toHaveLength(2);
     });
 
-    it("keeps the learner page shell quiet when coach health is healthy or missing a message", () => {
+    it("keeps the learner page shell quiet when coach health is healthy or missing a message", async () => {
         usePracticeRuntimeLockMock.mockReturnValue({
             lockedScenarioType: "sales",
             lockedVoiceMode: "legacy",
@@ -381,6 +479,7 @@ describe("PracticeSessionPage carry-forward retry focus", () => {
         });
 
         render(<PracticeSessionPage />);
+        await flushPreflightEffects();
 
         expect(screen.queryByText("辅导状态提醒")).toBeNull();
         expect(screen.queryByText("实时辅导正常。", { exact: true })).toBeNull();
