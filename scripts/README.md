@@ -34,6 +34,19 @@ bash scripts/setup-git-hooks.sh
 - 把 `.gsd/completed-units.json` 规范化成低冲突的多行 JSON
 - 阻止在默认分支（例如 `001-ai-practice-system` / `main`）直接提交 `.gsd/milestones/*/slices/Sxx/**` slice 文件
 
+## 依赖治理 baseline
+
+```bash
+bash scripts/dependency-governance.sh status
+```
+
+配套文档见 `docs/setup/dependency-governance-baseline.md`。
+当前脚本提供：
+- `status`：输出当前依赖治理权威文件与前置条件阻塞项
+- `web-audit`：执行 `npm audit --prefix web`
+- `backend-audit`：在 `pip_audit` 已安装时对 `backend/requirements.txt` 执行扫描
+- `license-plan`：输出当前批准使用的 license scan 命令与缺失前置条件
+
 ## 常用环境变量
 
 - `BACKEND_PORT` / `FRONTEND_PORT`

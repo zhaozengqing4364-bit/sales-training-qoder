@@ -956,3 +956,25 @@
   verification results: passed; the slice-close rg inventory stayed present, the full analytics/leaderboard/query-index gate finished 23/23 green, and diagnostics stayed clean on the proof files.
   success signal status: downstream M018 work can now start from one durable discovery artifact that distinguishes focused-proof-confirmed projection costs, code-path-confirmed gaps, and index ideas that still need real Postgres evidence.
   rollback note: if later performance slices implement or disprove any listed gap, update the code-adjacent baseline inventories, QUERY_INDEX_DISCOVERY_CONCLUSIONS, and focused analytics proof together so the discovery backlog does not drift from runtime facts.
+
+- time: 2026-04-12T07:03:27+0800
+  mode: grow
+  item id: M018-S02-T02
+  files changed:
+    - docs/setup/dependency-governance-baseline.md
+    - scripts/dependency-governance.sh
+    - scripts/README.md
+    - .gsd/DECISIONS.md
+    - .gsd/KNOWLEDGE.md
+    - .codex/loop/state.json
+    - .codex/loop/log.md
+  summary: Landed the first repo-local dependency-governance baseline by writing one authority doc plus one wrapper script that exposes the real dependency truth lines, scan cadence, upgrade gates, backend requirements.txt sync rule, approved license-scan commands, and the current missing pip_audit/pip-licenses prerequisites without pretending CI already proves them.
+  verification commands:
+    - bash -n scripts/dependency-governance.sh
+    - bash scripts/dependency-governance.sh status
+    - bash scripts/dependency-governance.sh license-plan
+    - bash scripts/dependency-governance.sh backend-audit
+    - npm audit --prefix web
+  verification results: passed with honest blockers; the wrapper stayed shell-valid, status/license-plan surfaced the real authority files plus missing backend/license prerequisites, backend-audit failed in the expected blocked-prerequisite mode (exit 2 with install guidance), and the required npm audit gate still reports the inherited 8 web vulnerabilities instead of being papered over.
+  success signal status: future agents can now determine the current dependency-governance state from one repo-local doc/script pair, know that backend dependency sync is anchored to requirements.txt, and see exactly which proofs are runnable versus blocked by missing tools.
+  rollback note: if a later slice pins different license tooling or repairs backend pyproject extras, update docs/setup/dependency-governance-baseline.md, scripts/dependency-governance.sh, scripts/README.md, and the matching decision/knowledge entries together so the governance baseline does not drift from the actual runnable commands.

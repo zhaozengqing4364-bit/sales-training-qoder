@@ -1,7 +1,7 @@
 {
   "mode": "grow",
-  "current_issue_id": "M018-S01",
-  "current_issue_type": "slice",
+  "current_issue_id": "M018-S02-T02",
+  "current_issue_type": "task",
   "current_issue_status": "done",
   "pending_issue_ids": [],
   "completed_issue_ids": [
@@ -177,28 +177,29 @@
     "M018-S01-T01",
     "M018-S01-T02",
     "M018-S01-T03",
-    "M018-S01"
+    "M018-S01",
+    "M018-S02-T02"
   ],
   "blocked_issue_ids": [],
   "deferred_issue_ids": [],
   "last_modified_files": [
+    "docs/setup/dependency-governance-baseline.md",
+    "scripts/dependency-governance.sh",
+    "scripts/README.md",
     ".gsd/DECISIONS.md",
     ".gsd/KNOWLEDGE.md",
-    ".gsd/PROJECT.md",
-    ".gsd/milestones/M018/slices/S01/S01-SUMMARY.md",
-    ".gsd/milestones/M018/slices/S01/S01-UAT.md",
     ".codex/loop/state.json",
     ".codex/loop/log.md"
   ],
   "last_verification_commands": [
-    "rg -n \"select|join|order_by|group_by|SessionEvidence|leaderboard|analytics\" backend/src/common/analytics backend/src/common/conversation backend/src/admin/api",
-    "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/contract/test_analytics.py backend/tests/unit/common/test_admin_analytics_service.py backend/tests/unit/common/test_leaderboard_service.py -x -q",
-    "lsp diagnostics backend/tests/contract/test_analytics.py",
-    "lsp diagnostics backend/tests/unit/common/test_admin_analytics_service.py",
-    "lsp diagnostics backend/tests/unit/common/test_leaderboard_service.py"
+    "bash -n scripts/dependency-governance.sh",
+    "bash scripts/dependency-governance.sh status",
+    "bash scripts/dependency-governance.sh license-plan",
+    "bash scripts/dependency-governance.sh backend-audit",
+    "npm audit --prefix web"
   ],
-  "last_verification_result": "passed; the slice-close rg inventory stayed present, the full analytics/leaderboard/query-index gate finished 23/23 green, and focused diagnostics stayed clean on the proof files.",
-  "last_success_signal": "M018/S01 is now closed with one reusable query/index discovery baseline: code-adjacent inventories plus QUERY_INDEX_DISCOVERY_CONCLUSIONS cleanly separate proved projection-cost gaps from Postgres-only index hypotheses.",
+  "last_verification_result": "passed with honest blockers; the new governance wrapper stayed shell-valid, status/ license-plan exposed the real authority files plus missing backend/license prerequisites, backend-audit exited 2 with the expected pip_audit guidance, and npm audit still reports the inherited 8 web vulnerabilities (2 moderate, 6 high) without the baseline pretending they are green.",
+  "last_success_signal": "M018/S02/T02 now gives future agents one repo-local dependency-governance baseline: a discoverable doc plus a runnable script that separates executable proofs from blocked prerequisites and pins backend dependency sync to requirements.txt instead of drifted CI metadata.",
   "last_growth_scan": null,
-  "next_action": "Proceed to M018/S02 to baseline dependency security, licenses, and upgrade strategy on the same evidence-first footing."
+  "next_action": "Proceed to M018/S02/T03 to either run pip_audit/license proofs when prerequisites exist or record the blockers explicitly in the final proof write-up."
 }
