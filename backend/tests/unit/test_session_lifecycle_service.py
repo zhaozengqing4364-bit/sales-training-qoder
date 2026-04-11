@@ -13,6 +13,7 @@ import pytest
 
 from common.db.session_lifecycle import (
     InvalidSessionTransitionError,
+    SESSION_LIFECYCLE_RACE_SCENARIOS,
     SessionLifecycleService,
 )
 
@@ -42,6 +43,20 @@ def mock_db():
 @pytest.fixture
 def service(mock_db):
     return SessionLifecycleService(mock_db)
+
+
+def test_race_catalog_prioritizes_terminal_regressions() -> None:
+    assert [scenario.slug for scenario in SESSION_LIFECYCLE_RACE_SCENARIOS] == [
+        "sales_end_beats_stale_resume",
+        "presentation_end_beats_stale_pause",
+    ]
+    assert [scenario.expected_status for scenario in SESSION_LIFECYCLE_RACE_SCENARIOS] == [
+        "scoring",
+        "completed",
+    ]
+    assert all(scenario.priority == "critical" for scenario in SESSION_LIFECYCLE_RACE_SCENARIOS)
+    assert all(scenario.winner_action == "end" for scenario in SESSION_LIFECYCLE_RACE_SCENARIOS)
+    assert {scenario.stale_action for scenario in SESSION_LIFECYCLE_RACE_SCENARIOS} == {"resume", "pause"}
 
 
 @pytest.mark.asyncio

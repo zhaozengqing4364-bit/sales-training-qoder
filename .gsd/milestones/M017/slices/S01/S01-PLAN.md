@@ -23,7 +23,7 @@ S01 先证明 lifecycle 竞态与状态收敛边界，供 S02 websocket interrup
 
 ## Tasks
 
-- [ ] **T01: 设计 lifecycle race 场景与失败证明** `est:35m`
+- [x] **T01: 设计 lifecycle race 场景与失败证明** `est:35m`
   Why: 先设计真实 race 场景，才能避免只在代码里凭感觉加锁或加 guard。
 
 Do:

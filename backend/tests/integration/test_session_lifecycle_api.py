@@ -19,6 +19,10 @@ import evaluation.services.report_generation_trigger as trigger_module
 from common.auth.service import create_access_token
 from common.conversation.models import ConversationMessage
 from common.db.models import PracticeSession, Scenario, User
+from common.db.session_lifecycle import (
+    SESSION_LIFECYCLE_RACE_SCENARIOS,
+    SessionLifecycleService,
+)
 from common.error_handling.result import Result
 from common.websocket.session_manager import get_session_manager
 from evaluation.services.report_generation_trigger import trigger_report_generation
@@ -55,6 +59,14 @@ async def _create_session(
     return session
 
 
+def _session_factory(bind) -> async_sessionmaker[AsyncSession]:
+    return async_sessionmaker(
+        bind,
+        class_=AsyncSession,
+        expire_on_commit=False,
+    )
+
+
 def _stub_sales_end_dependencies(monkeypatch: pytest.MonkeyPatch):
     summary_mock = AsyncMock(
         return_value=Result.ok(
@@ -71,6 +83,81 @@ def _stub_sales_end_dependencies(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr(practice_api.summary_service, "generate_summary", summary_mock)
     monkeypatch.setattr(practice_api.sales_bot_service, "end_session", cleanup_mock)
     return summary_mock, cleanup_mock
+
+
+def test_race_catalog_focuses_on_terminal_regressions() -> None:
+    assert [scenario.slug for scenario in SESSION_LIFECYCLE_RACE_SCENARIOS] == [
+        "sales_end_beats_stale_resume",
+        "presentation_end_beats_stale_pause",
+    ]
+    assert all(scenario.winner_action == "end" for scenario in SESSION_LIFECYCLE_RACE_SCENARIOS)
+    assert [scenario.expected_status for scenario in SESSION_LIFECYCLE_RACE_SCENARIOS] == [
+        "scoring",
+        "completed",
+    ]
+
+
+@pytest.mark.asyncio
+@pytest.mark.xfail(
+    strict=True,
+    reason="T01 proof: stale lifecycle writers can still overwrite an already terminal session.",
+)
+@pytest.mark.parametrize(
+    "race_scenario",
+    SESSION_LIFECYCLE_RACE_SCENARIOS,
+    ids=lambda scenario: scenario.slug,
+)
+async def test_lifecycle_race_proof_preserves_terminal_status_against_stale_writer(
+    test_db: AsyncSession,
+    test_user: User,
+    race_scenario,
+):
+    seeded_session = await _create_session(
+        test_db,
+        user_id=str(test_user.user_id),
+        scenario_type=race_scenario.scenario_type,
+        status=race_scenario.initial_status,
+    )
+    session_id = str(seeded_session.session_id)
+    factory = _session_factory(test_db.bind)
+
+    async with factory() as winner_db, factory() as stale_db:
+        winner_service = SessionLifecycleService(winner_db)
+        stale_service = SessionLifecycleService(stale_db)
+
+        winner_session, winner_scenario_type = await winner_service.get_session_with_scenario(session_id)
+        stale_session, stale_scenario_type = await stale_service.get_session_with_scenario(session_id)
+
+        assert winner_session is not None
+        assert stale_session is not None
+        assert winner_scenario_type == race_scenario.scenario_type
+        assert stale_scenario_type == race_scenario.scenario_type
+
+        winner_transition = await winner_service.transition(
+            session=winner_session,
+            scenario_type=winner_scenario_type,
+            action=race_scenario.winner_action,
+            now=datetime(2026, 2, 11, 12, 0, tzinfo=UTC),
+        )
+        await winner_db.commit()
+        assert winner_transition.to_status == race_scenario.expected_status
+
+        await stale_service.transition(
+            session=stale_session,
+            scenario_type=stale_scenario_type,
+            action=race_scenario.stale_action,
+            now=datetime(2026, 2, 11, 12, 1, tzinfo=UTC),
+        )
+        await stale_db.commit()
+
+    async with factory() as verify_db:
+        persisted_session = (
+            await verify_db.execute(
+                select(PracticeSession).where(PracticeSession.session_id == session_id)
+            )
+        ).scalar_one()
+
+    assert persisted_session.status == race_scenario.expected_status
 
 
 @pytest.mark.asyncio

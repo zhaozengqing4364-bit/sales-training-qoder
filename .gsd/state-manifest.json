@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "exported_at": "2026-04-11T20:48:30.499Z",
+  "exported_at": "2026-04-11T20:57:17.680Z",
   "milestones": [
     {
       "id": "M001",
@@ -2423,7 +2423,7 @@
     {
       "milestone_id": "M017",
       "id": "S01",
-      "title": "Session lifecycle 并发安全 proof",
+      "title": "S01",
       "status": "pending",
       "risk": "high",
       "depends": [],
@@ -10490,19 +10490,27 @@
       "milestone_id": "M017",
       "slice_id": "S01",
       "id": "T01",
-      "title": "设计 lifecycle race 场景与失败证明",
-      "status": "pending",
-      "one_liner": "",
-      "narrative": "",
-      "verification_result": "",
+      "title": "Added lifecycle race catalog and strict xfail proofs for stale pause/resume reopening terminal sessions",
+      "status": "complete",
+      "one_liner": "Added lifecycle race catalog and strict xfail proofs for stale pause/resume reopening terminal sessions",
+      "narrative": "I read `SessionLifecycleService` plus the existing unit/integration lifecycle tests, then narrowed the concurrency focus to the two highest-risk regressions: (1) a stale `resume` reopening a sales session after `end` already converged it to `scoring`, and (2) a stale `pause` reopening a presentation session after `end` already converged it to `completed`. To make that target explicit for downstream work, I added `SESSION_LIFECYCLE_RACE_SCENARIOS` to `backend/src/common/db/session_lifecycle.py` as the shared proof catalog. I added a unit-level catalog assertion in `backend/tests/unit/test_session_lifecycle_service.py` so future agents can see which transitions are intentionally prioritized. I then added a parameterized strict-`xfail` integration proof in `backend/tests/integration/test_session_lifecycle_api.py` that binds two independent `AsyncSession` instances to the same engine, loads the same `PracticeSession` row twice, commits `end` in one session, and then commits `pause`/`resume` from the stale session. Running that proof with `--runxfail` showed the current regressions exactly as expected: `scoring -> in_progress` for sales and `completed -> paused` for presentation. After preserving the proof as strict `xfail`, the focused lifecycle suite stays green while still carrying the concrete red evidence T02 needs to turn passing. I also appended the stale-writer reproduction pattern to `.gsd/KNOWLEDGE.md` so the next task can reuse the same harness directly.",
+      "verification_result": "Verified the new proof in two modes. First, I ran the stale-writer proof with `--runxfail` to force the xfail test to fail normally and confirm the real race: the sales scenario reopened `scoring` back to `in_progress`, and the presentation scenario reopened `completed` back to `paused`. Second, I ran the focused lifecycle backend suite normally and confirmed it remains stable at `18 passed, 2 xfailed`, which preserves the failing proof without breaking the slice baseline. I also ran the task-plan `rg` verification and confirmed the new pause/resume/end/scoring/completed race catalog and proof references are present in the intended service and test files. LSP diagnostics for the touched Python files returned no issues.",
       "duration": "",
-      "completed_at": null,
+      "completed_at": "2026-04-11T20:57:17.643Z",
       "blocker_discovered": false,
-      "deviations": "",
-      "known_issues": "",
-      "key_files": [],
-      "key_decisions": [],
-      "full_summary_md": "",
+      "deviations": "Instead of leaving the repository in a permanently red state after proving the race, I converted the verified red proofs into `strict=True` xfail tests. This keeps T01 executable and preserves the evidence for T02 without blocking focused lifecycle verification.",
+      "known_issues": "The focused pytest commands still emit existing repo-level warnings unrelated to this task: pytest-cov reports `Module src was never imported` / `No data was collected` on these focused runs, and the pre-existing `test_lifecycle_api_refreshes_live_session_activity_after_rest_transition` path emits a `RuntimeWarning: coroutine 'Connection._cancel' was never awaited` while the suite still exits 0. No new product blocker was introduced.",
+      "key_files": [
+        "backend/src/common/db/session_lifecycle.py",
+        "backend/tests/unit/test_session_lifecycle_service.py",
+        "backend/tests/integration/test_session_lifecycle_api.py",
+        ".gsd/KNOWLEDGE.md"
+      ],
+      "key_decisions": [
+        "T01 only catalogs and proves terminal-regression races (`end` losing to stale `pause`/`resume`), leaving the actual convergence strategy choice to T02.",
+        "The race proof is kept as strict xfail after a verified red run so the suite stays usable while still carrying executable failing evidence."
+      ],
+      "full_summary_md": "---\nid: T01\nparent: S01\nmilestone: M017\nkey_files:\n  - backend/src/common/db/session_lifecycle.py\n  - backend/tests/unit/test_session_lifecycle_service.py\n  - backend/tests/integration/test_session_lifecycle_api.py\n  - .gsd/KNOWLEDGE.md\nkey_decisions:\n  - T01 only catalogs and proves terminal-regression races (`end` losing to stale `pause`/`resume`), leaving the actual convergence strategy choice to T02.\n  - The race proof is kept as strict xfail after a verified red run so the suite stays usable while still carrying executable failing evidence.\nduration: \nverification_result: passed\ncompleted_at: 2026-04-11T20:57:17.642Z\nblocker_discovered: false\n---\n\n# T01: Added lifecycle race catalog and strict xfail proofs for stale pause/resume reopening terminal sessions\n\n**Added lifecycle race catalog and strict xfail proofs for stale pause/resume reopening terminal sessions**\n\n## What Happened\n\nI read `SessionLifecycleService` plus the existing unit/integration lifecycle tests, then narrowed the concurrency focus to the two highest-risk regressions: (1) a stale `resume` reopening a sales session after `end` already converged it to `scoring`, and (2) a stale `pause` reopening a presentation session after `end` already converged it to `completed`. To make that target explicit for downstream work, I added `SESSION_LIFECYCLE_RACE_SCENARIOS` to `backend/src/common/db/session_lifecycle.py` as the shared proof catalog. I added a unit-level catalog assertion in `backend/tests/unit/test_session_lifecycle_service.py` so future agents can see which transitions are intentionally prioritized. I then added a parameterized strict-`xfail` integration proof in `backend/tests/integration/test_session_lifecycle_api.py` that binds two independent `AsyncSession` instances to the same engine, loads the same `PracticeSession` row twice, commits `end` in one session, and then commits `pause`/`resume` from the stale session. Running that proof with `--runxfail` showed the current regressions exactly as expected: `scoring -> in_progress` for sales and `completed -> paused` for presentation. After preserving the proof as strict `xfail`, the focused lifecycle suite stays green while still carrying the concrete red evidence T02 needs to turn passing. I also appended the stale-writer reproduction pattern to `.gsd/KNOWLEDGE.md` so the next task can reuse the same harness directly.\n\n## Verification\n\nVerified the new proof in two modes. First, I ran the stale-writer proof with `--runxfail` to force the xfail test to fail normally and confirm the real race: the sales scenario reopened `scoring` back to `in_progress`, and the presentation scenario reopened `completed` back to `paused`. Second, I ran the focused lifecycle backend suite normally and confirmed it remains stable at `18 passed, 2 xfailed`, which preserves the failing proof without breaking the slice baseline. I also ran the task-plan `rg` verification and confirmed the new pause/resume/end/scoring/completed race catalog and proof references are present in the intended service and test files. LSP diagnostics for the touched Python files returned no issues.\n\n## Verification Evidence\n\n| # | Command | Exit Code | Verdict | Duration |\n|---|---------|-----------|---------|----------|\n| 1 | `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/integration/test_session_lifecycle_api.py -k 'lifecycle_race_proof_preserves_terminal_status_against_stale_writer' --runxfail -q` | 1 | ✅ pass (expected red proof exposed stale-writer regressions) | 2900ms |\n| 2 | `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/test_session_lifecycle_service.py backend/tests/integration/test_session_lifecycle_api.py -q` | 0 | ✅ pass | 4130ms |\n| 3 | `rg -n \"pause|resume|end|scoring|completed\" backend/src/common/db/session_lifecycle.py backend/tests/unit/test_session_lifecycle_service.py backend/tests/integration/test_session_lifecycle_api.py` | 0 | ✅ pass | 18ms |\n\n## Deviations\n\nInstead of leaving the repository in a permanently red state after proving the race, I converted the verified red proofs into `strict=True` xfail tests. This keeps T01 executable and preserves the evidence for T02 without blocking focused lifecycle verification.\n\n## Known Issues\n\nThe focused pytest commands still emit existing repo-level warnings unrelated to this task: pytest-cov reports `Module src was never imported` / `No data was collected` on these focused runs, and the pre-existing `test_lifecycle_api_refreshes_live_session_activity_after_rest_transition` path emits a `RuntimeWarning: coroutine 'Connection._cancel' was never awaited` while the suite still exits 0. No new product blocker was introduced.\n\n## Files Created/Modified\n\n- `backend/src/common/db/session_lifecycle.py`\n- `backend/tests/unit/test_session_lifecycle_service.py`\n- `backend/tests/integration/test_session_lifecycle_api.py`\n- `.gsd/KNOWLEDGE.md`\n",
       "description": "Why: 先设计真实 race 场景，才能避免只在代码里凭感觉加锁或加 guard。\n\nDo:\n1. 阅读 SessionLifecycleService 与现有 unit/integration tests。\n2. 设计 pause/resume/end 的 race 场景和最可能的非法状态迁移。\n3. 明确哪些转移最值得先证明。\n\nDone when: 已形成一组可执行 race 场景，后续实现可直接从 failing proof 出发。",
       "estimate": "35m",
       "files": [
@@ -17451,6 +17459,39 @@
       "verdict": "✅ pass",
       "duration_ms": 4555,
       "created_at": "2026-04-11T20:36:04.179Z"
+    },
+    {
+      "id": 364,
+      "task_id": "T01",
+      "slice_id": "S01",
+      "milestone_id": "M017",
+      "command": "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/integration/test_session_lifecycle_api.py -k 'lifecycle_race_proof_preserves_terminal_status_against_stale_writer' --runxfail -q",
+      "exit_code": 1,
+      "verdict": "✅ pass (expected red proof exposed stale-writer regressions)",
+      "duration_ms": 2900,
+      "created_at": "2026-04-11T20:57:17.643Z"
+    },
+    {
+      "id": 365,
+      "task_id": "T01",
+      "slice_id": "S01",
+      "milestone_id": "M017",
+      "command": "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/test_session_lifecycle_service.py backend/tests/integration/test_session_lifecycle_api.py -q",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 4130,
+      "created_at": "2026-04-11T20:57:17.644Z"
+    },
+    {
+      "id": 366,
+      "task_id": "T01",
+      "slice_id": "S01",
+      "milestone_id": "M017",
+      "command": "rg -n \"pause|resume|end|scoring|completed\" backend/src/common/db/session_lifecycle.py backend/tests/unit/test_session_lifecycle_service.py backend/tests/integration/test_session_lifecycle_api.py",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 18,
+      "created_at": "2026-04-11T20:57:17.644Z"
     }
   ]
 }

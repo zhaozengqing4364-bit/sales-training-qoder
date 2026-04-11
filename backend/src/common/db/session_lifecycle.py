@@ -21,6 +21,7 @@ from common.monitoring.logger import get_logger
 logger = get_logger(__name__)
 
 SessionLifecycleAction = Literal["start", "pause", "resume", "end"]
+SessionLifecycleRacePriority = Literal["critical"]
 
 _TERMINAL_STATUSES = {"scoring", "completed"}
 
@@ -69,6 +70,45 @@ class SessionLifecycleTransition:
     @property
     def session_ended(self) -> bool:
         return self.to_status in _TERMINAL_STATUSES
+
+
+@dataclass(frozen=True, slots=True)
+class SessionLifecycleRaceScenario:
+    slug: str
+    scenario_type: str
+    initial_status: str
+    winner_action: SessionLifecycleAction
+    stale_action: SessionLifecycleAction
+    expected_status: str
+    priority: SessionLifecycleRacePriority
+    risk: str
+    proof_goal: str
+
+
+SESSION_LIFECYCLE_RACE_SCENARIOS: tuple[SessionLifecycleRaceScenario, ...] = (
+    SessionLifecycleRaceScenario(
+        slug="sales_end_beats_stale_resume",
+        scenario_type="sales",
+        initial_status="paused",
+        winner_action="end",
+        stale_action="resume",
+        expected_status="scoring",
+        priority="critical",
+        risk="A stale resume must not reopen a sales session that already converged to scoring.",
+        proof_goal="Protect the scoring/report handoff from paused->in_progress regressions.",
+    ),
+    SessionLifecycleRaceScenario(
+        slug="presentation_end_beats_stale_pause",
+        scenario_type="presentation",
+        initial_status="in_progress",
+        winner_action="end",
+        stale_action="pause",
+        expected_status="completed",
+        priority="critical",
+        risk="A stale pause must not reopen a presentation session that already converged to completed.",
+        proof_goal="Keep presentation terminal semantics stable while concurrency control is added later.",
+    ),
+)
 
 
 class SessionLifecycleService:

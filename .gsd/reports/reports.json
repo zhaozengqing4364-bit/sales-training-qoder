@@ -147,6 +147,22 @@
       "doneMilestones": 15,
       "totalMilestones": 18,
       "phase": "evaluating-gates"
+    },
+    {
+      "filename": "M016-2026-04-11T20-49-37.html",
+      "generatedAt": "2026-04-11T20:49:37.486Z",
+      "milestoneId": "M016",
+      "milestoneTitle": "Auth / API / admin security contract hardening",
+      "label": "M016: Auth / API / admin security contract hardening",
+      "kind": "milestone",
+      "totalCost": 68.2259445,
+      "totalTokens": 1885249927,
+      "totalDuration": 352620844,
+      "doneSlices": 65,
+      "totalSlices": 73,
+      "doneMilestones": 16,
+      "totalMilestones": 18,
+      "phase": "evaluating-gates"
     }
   ]
 }
