@@ -436,6 +436,9 @@ export default function EditPersonaPage() {
     };
 
     const handleSave = async () => {
+        // M015/S02/T01 inventory: this editor still uses native alerts for
+        // validation + mutation/media-preview failures, while success already
+        // follows the router seam via router.push("/admin/personas").
         if (!formData.name.trim()) {
             alert("请输入角色名称");
             return;
@@ -1128,6 +1131,8 @@ export default function EditPersonaPage() {
                                             setIsPreviewingTTS(false);
                                             URL.revokeObjectURL(audioUrl);
                                         };
+                                        // M015/S02/T01 inventory: preview playback/request failures
+                                        // should migrate together onto the toast seam.
                                         audio.onerror = () => {
                                             setIsPreviewingTTS(false);
                                             alert("音频播放失败");

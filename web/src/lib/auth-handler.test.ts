@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-import { authHandler } from "./auth-handler";
+import { authHandler, interruptiveUiInventory } from "./auth-handler";
 
 describe("authHandler", () => {
     beforeEach(() => {
@@ -44,5 +44,27 @@ describe("authHandler", () => {
         expect(listener).not.toHaveBeenCalled();
 
         unsubscribe();
+    });
+
+    it("tracks interruptive UI cleanup inventory for slice s02", () => {
+        expect(
+            interruptiveUiInventory.filter((item) => item.status === "needs-cleanup").map((item) => item.id),
+        ).toEqual(expect.arrayContaining([
+            "auth-handler-logout-redirect",
+            "dashboard-shell-auth-error",
+            "records-delete-confirm",
+            "records-delete-failure-alert",
+            "rag-profile-delete-confirm",
+            "persona-save-failure-alert",
+        ]));
+
+        expect(
+            interruptiveUiInventory.filter((item) => item.status === "allowed-exception").map((item) => item.id),
+        ).toEqual(expect.arrayContaining([
+            "admin-error-home-fallback",
+            "error-boundary-url-capture",
+            "performance-url-capture-navigation-start",
+            "performance-url-capture-navigation-complete",
+        ]));
     });
 });

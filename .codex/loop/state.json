@@ -1,6 +1,6 @@
 {
   "mode": "grow",
-  "current_issue_id": "M015-S01-T03",
+  "current_issue_id": "M015-S02-T01",
   "current_issue_type": "task",
   "current_issue_status": "done",
   "pending_issue_ids": [],
@@ -147,34 +147,35 @@
     "M014-S04-T01",
     "M014-S04-T02",
     "M015-S01-T01",
-    "M015-S01-T03"
+    "M015-S01-T02",
+    "M015-S01-T03",
+    "M015-S01",
+    "M015-S02-T01"
   ],
   "blocked_issue_ids": [],
   "deferred_issue_ids": [],
   "last_modified_files": [
-    "web/src/lib/console-boundary.test.ts",
-    "web/src/app/admin/analytics/page.tsx",
-    "web/src/app/(user)/practice/[sessionId]/page.tsx",
-    "web/src/hooks/use-audio-recorder.ts",
-    "web/src/hooks/use-streaming-audio-player.ts",
-    "web/src/lib/performance.ts",
-    ".gsd/DECISIONS.md",
+    "web/src/lib/auth-handler.ts",
+    "web/src/lib/auth-handler.test.ts",
+    "web/src/app/admin/records/page.tsx",
+    "web/src/app/admin/rag-profiles/page.tsx",
+    "web/src/app/admin/personas/[id]/page.tsx",
     ".gsd/KNOWLEDGE.md",
+    ".gsd/DECISIONS.md",
     ".codex/loop/state.json",
     ".codex/loop/log.md"
   ],
   "last_verification_commands": [
-    "npm --prefix web test -- --run src/lib/console-boundary.test.ts src/lib/debug.test.ts src/components/error-reporting.test.tsx \"src/app/(user)/practice/[sessionId]/page.test.tsx\" \"src/hooks/use-practice-websocket.test.ts\"",
-    "rg -n \"console\\.(log|error|warn|info)\" web/src",
-    "./web/node_modules/.bin/tsc --noEmit -p web/tsconfig.json",
-    "lsp diagnostics web/src/app/(dashboard)/**/*.tsx",
-    "lsp diagnostics web/src/app/admin/**/*.tsx",
-    "lsp diagnostics web/src/components/**/*.tsx",
-    "lsp diagnostics web/src/hooks/**/*.ts",
-    "lsp diagnostics web/src/lib/*.ts"
+    "npm --prefix web test -- --run src/lib/auth-handler.test.ts",
+    "rg -n \"\\b(alert|confirm)\\s*\\(|window\\.location(\\.assign|\\.href)\" web/src",
+    "lsp diagnostics web/src/lib/auth-handler.ts",
+    "lsp diagnostics web/src/app/admin/records/page.tsx",
+    "lsp diagnostics web/src/app/admin/rag-profiles/page.tsx",
+    "lsp diagnostics web/src/app/admin/personas/*/page.tsx",
+    "lsp diagnostics web/src/lib/auth-handler.test.ts"
   ],
-  "last_verification_result": "The focused Vitest seam gate passed 27/27 tests after the new filesystem-backed console-boundary proof went green, and the repo-root raw-console grep now reports only the intended exceptions in instrumentation/bootstrap and web/src/lib/debug.ts. A direct tsconfig typecheck still surfaces unrelated pre-existing errors in dashboard page, replay/error-reporting tests, chat-bubble tests, and admin linked-assets tests; sampled LSP diagnostics across the touched app/admin/components/hooks/lib files reported no new issues on the migrated console-cleanup surface.",
-  "last_success_signal": "Frontend business pages, hooks, and dev/support utilities now report through the shared debug seam instead of raw console, so future agents can use one grep/test boundary to distinguish real instrumentation exceptions from ordinary product/runtime logging.",
+  "last_verification_result": "Passed the focused auth-handler inventory unit proof (4/4 green), the slice grep gate, and fresh diagnostics on auth-handler, the admin record/rag-profile touchpoints, the persona route glob, and the focused test file. The grep output is intentionally non-empty at T01 stage because it now cleanly isolates real remaining cleanup points plus explained exceptions.",
+  "last_success_signal": "M015/S02 now has one shared interruptiveUiInventory authority seam that classifies every current alert/confirm/location hit into dialog, toast, router, auth-handler, or allowed-exception, so T02/T03 can migrate and verify without re-inventorying the repo.",
   "last_growth_scan": null,
-  "next_action": "M015/S01 can now run slice-close verification and complete the slice if the remaining task summaries and slice-level proof are ready."
+  "next_action": "M015-S02-T01 is complete. Wait for auto-mode to dispatch M015-S02-T02."
 }

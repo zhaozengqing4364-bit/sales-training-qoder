@@ -1,3 +1,30 @@
+- time: 2026-04-12T01:36:20+08:00
+  mode: grow
+  item id: M015-S01
+  files changed:
+    - web/src/lib/debug.ts
+    - web/src/lib/console-boundary.test.ts
+    - web/src/components/ErrorBoundary.tsx
+    - web/src/components/learner/learner-route-error-state.tsx
+    - web/src/app/(dashboard)/error.tsx
+    - web/src/app/admin/error.tsx
+    - .gsd/PROJECT.md
+    - .codex/loop/state.json
+    - .codex/loop/log.md
+  summary: Closed M015/S01 after fresh slice-level verification confirmed the shared frontend debug seam, durable route-error reporting, and raw-console exception boundary are all in place for downstream dialog/router and learner-shell cleanup work.
+  verification commands:
+    - npm --prefix web test -- --run src/lib/console-boundary.test.ts src/lib/debug.test.ts src/components/error-reporting.test.tsx "src/app/(user)/practice/[sessionId]/page.test.tsx" "src/hooks/use-practice-websocket.test.ts"
+    - rg -n "console\.(log|error|warn|info)" web/src
+    - lsp diagnostics web/src/lib/debug.ts
+    - lsp diagnostics web/src/components/ErrorBoundary.tsx
+    - lsp diagnostics web/src/components/learner/learner-route-error-state.tsx
+    - lsp diagnostics web/src/app/(dashboard)/error.tsx
+    - lsp diagnostics web/src/app/admin/error.tsx
+    - lsp diagnostics web/src/lib/console-boundary.test.ts
+  verification results: passed; the focused frontend seam gate finished 27/27 green, the repo-root raw-console grep returned only web/src/lib/debug.ts plus web/src/instrumentation*.ts, and fresh diagnostics were clean on the shared seam, route-error surfaces, and boundary proof file.
+  success signal status: frontend business pages, hooks, and route-error surfaces now share one explicit debug/observability seam, so later M015 slices can distinguish intentional instrumentation exceptions from product/runtime logging with one test and one grep.
+  rollback note: if a later slice needs to change the raw-console exception set, update the inventory in web/src/lib/debug.ts, the allowlist in web/src/lib/console-boundary.test.ts, and the matching decision/knowledge entries together rather than letting page-local console usage redefine policy by drift.
+
 - time: 2026-04-12T01:30:30+08:00
   mode: grow
   item id: M015-S01-T03
@@ -389,3 +416,29 @@
   verification results: passed; the repo-root rg gate produced the expected raw-console inventory for classification, and fresh LSP diagnostics reported no issues after adding the inventory map to web/src/lib/debug.ts and tagging ErrorBoundary as a durable route-error surface.
   success signal status: future M015/S01 tasks now have an explicit migration contract—only instrumentation bootstrap and the shared debug seam itself are allowed raw-console exceptions, while route errors, business faults, and dev/support debug output have named categories and seam destinations.
   rollback note: if later slices narrow or expand the exception set, update the shared inventory in web/src/lib/debug.ts and the corresponding knowledge/decision entries together instead of letting page-local console calls define policy by drift.
+
+- time: 2026-04-12T01:52:30+08:00
+  mode: grow
+  item id: M015-S02-T01
+  files changed:
+    - web/src/lib/auth-handler.ts
+    - web/src/lib/auth-handler.test.ts
+    - web/src/app/admin/records/page.tsx
+    - web/src/app/admin/rag-profiles/page.tsx
+    - web/src/app/admin/personas/[id]/page.tsx
+    - .gsd/KNOWLEDGE.md
+    - .gsd/DECISIONS.md
+    - .codex/loop/state.json
+    - .codex/loop/log.md
+  summary: Centralized the remaining native-dialog and hard-navigation inventory into web/src/lib/auth-handler.ts, annotated the hottest admin touchpoints with their target seams, and locked the inventory with a focused auth-handler unit test so later cleanup work can distinguish true cleanup points from explained grep exceptions.
+  verification commands:
+    - npm --prefix web test -- --run src/lib/auth-handler.test.ts
+    - rg -n "\b(alert|confirm)\s*\(|window\.location(\.assign|\.href)" web/src
+    - lsp diagnostics web/src/lib/auth-handler.ts
+    - lsp diagnostics web/src/app/admin/records/page.tsx
+    - lsp diagnostics web/src/app/admin/rag-profiles/page.tsx
+    - lsp diagnostics web/src/app/admin/personas/*/page.tsx
+    - lsp diagnostics web/src/lib/auth-handler.test.ts
+  verification results: passed; the focused auth-handler test finished 4/4 green, the slice grep gate now reports only the real remaining cleanup points plus the documented ErrorBoundary/performance/admin-error exceptions, and the touched authority files were diagnostics-clean.
+  success signal status: downstream S02 tasks can now migrate dialog/toast/router/auth-handler seams from one shared inventory instead of re-scanning admin/learner pages or accidentally treating grep exceptions as product regressions.
+  rollback note: if T02/T03 changes the remaining exception set, update interruptiveUiInventory, its focused unit test, and the matching knowledge/decision entries together; do not add literal grep-target strings into the inventory/comments or the grep gate will start matching the documentation itself.

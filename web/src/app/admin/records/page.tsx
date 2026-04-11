@@ -66,6 +66,9 @@ export default function RecordsPage() {
     }, [categoryFilter, page, searchQuery]);
 
     const handleDelete = async (id: string) => {
+        // M015/S02/T01 inventory: this delete flow still mixes a native browser
+        // confirmation step and blocking failure feedback; T02 should move both
+        // onto shared dialog + toast seams.
         if (!confirm("确定要删除这条训练记录吗？")) return;
         
         try {

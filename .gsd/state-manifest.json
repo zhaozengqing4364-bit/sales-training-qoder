@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "exported_at": "2026-04-11T17:30:47.933Z",
+  "exported_at": "2026-04-11T17:53:06.098Z",
   "milestones": [
     {
       "id": "M001",
@@ -2304,14 +2304,14 @@
       "milestone_id": "M015",
       "id": "S01",
       "title": "S01",
-      "status": "pending",
+      "status": "complete",
       "risk": "medium",
       "depends": [],
       "demo": "前端业务页面中的 console 输出被统一收口到共享 debug/observability seam。",
       "created_at": "2026-04-08T08:53:16.023Z",
-      "completed_at": null,
-      "full_summary_md": "",
-      "full_uat_md": "",
+      "completed_at": "2026-04-11T17:39:38.911Z",
+      "full_summary_md": "---\nid: S01\nparent: M015\nmilestone: M015\nprovides:\n  - A single frontend debug/observability seam that downstream slices can reuse instead of adding page-local console exits.\n  - A regression-proof raw-console boundary that distinguishes allowed instrumentation/bootstrap exceptions from product/runtime logging.\n  - Durable route-error reporting already wired into learner/admin/dashboard error surfaces for reuse by learner-shell follow-up work.\nrequires:\n  []\naffects:\n  - S02\n  - S03\nkey_files:\n  - web/src/lib/debug.ts\n  - web/src/lib/console-boundary.test.ts\n  - web/src/components/ErrorBoundary.tsx\n  - web/src/components/learner/learner-route-error-state.tsx\n  - web/src/app/(dashboard)/error.tsx\n  - web/src/app/admin/error.tsx\nkey_decisions:\n  - D180 — raw console is allowed only in instrumentation bootstrap and the shared debug seam itself.\n  - D181 — route error surfaces and React boundaries use `debug.durableError(scope, error, context)` as the durable frontend failure seam.\n  - D182 — business pages, hooks, and developer/support utilities use `debug.log/debug.warn/debug.error`; raw console does not return outside the shared seam/bootstrap exceptions.\npatterns_established:\n  - Use `debug.durableError(...)` for user-visible route/error-boundary failures and `debug.log/warn/error(...)` for ordinary dev/support diagnostics.\n  - Treat `web/src/lib/console-boundary.test.ts` plus the repo-root raw-console grep as the canonical proof boundary for frontend console hygiene.\n  - Update the inventory, decision record, knowledge note, and boundary allowlist together if the raw-console exception set ever changes.\nobservability_surfaces:\n  - `web/src/lib/debug.ts` shared frontend debug/observability seam\n  - `web/src/lib/console-boundary.test.ts` raw-console boundary gate\n  - Repo-root `rg -n \"console\\.(log|error|warn|info)\" web/src` inventory scan\n  - Route/error-boundary `debug.durableError(...)` reporting path\ndrill_down_paths:\n  - .gsd/milestones/M015/slices/S01/tasks/T01-SUMMARY.md\n  - .gsd/milestones/M015/slices/S01/tasks/T02-SUMMARY.md\n  - .gsd/milestones/M015/slices/S01/tasks/T03-SUMMARY.md\nduration: \"\"\nverification_result: passed\ncompleted_at: 2026-04-11T17:39:38.914Z\nblocker_discovered: false\n---\n\n# S01: 前端日志出口统一化\n\n**Frontend business pages, hooks, and route-error surfaces now report through one shared debug/observability seam, with raw console limited to the intentional debug/instrumentation exception boundary.**\n\n## What Happened\n\n## What this slice actually delivered\n\nS01 turned frontend logging from a page-local habit into one explicit seam. `web/src/lib/debug.ts` now carries the canonical frontend console inventory plus the durable/frontend debug helpers that downstream work should reuse instead of opening new `console.*` escape hatches. The slice narrowed raw-console exceptions to exactly three places: `web/src/lib/debug.ts` itself and the bootstrap instrumentation entrypoints `web/src/instrumentation.ts` / `web/src/instrumentation-client.ts`.\n\nOn top of that boundary, route-level failure surfaces were migrated onto `debug.durableError(scope, error, context)`: `web/src/components/ErrorBoundary.tsx`, `web/src/components/learner/learner-route-error-state.tsx`, `web/src/app/(dashboard)/error.tsx`, and `web/src/app/admin/error.tsx` now keep their fallback UI/analytics behavior while reporting durable failures through one helper instead of ad hoc `console.error(...)` calls.\n\nThe remaining noisy business callers were then migrated onto `debug.log(...)`, `debug.warn(...)`, or `debug.error(...)` across learner/admin pages, hooks, highlight/media helpers, auth/performance utilities, and the developer test-mic path. To keep that cleanup from drifting back, `web/src/lib/console-boundary.test.ts` now scans the frontend source tree and fails whenever a raw `console.*` slips outside the explicit allowlist.\n\n## Patterns established for downstream slices\n\n- **One explicit frontend observability seam:** use `debug.durableError(...)` for user-visible route/error-boundary failures and `debug.log/warn/error(...)` for dev/support diagnostics; do not reintroduce page-local raw console usage.\n- **Inventory-backed exception policy:** the allowlist lives in code and proof, not tribal knowledge. If a future slice truly needs a new raw-console exception, it must update the inventory/decision/knowledge entries together with the boundary proof.\n- **Proof by boundary, not by hope:** downstream agents can prove console hygiene with one focused Vitest suite plus one repo-root `rg` scan instead of rereading dozens of files.\n\n## Operational Readiness\n\n- **Health signal:** `npm --prefix web test -- --run src/lib/console-boundary.test.ts src/lib/debug.test.ts src/components/error-reporting.test.tsx \"src/app/(user)/practice/[sessionId]/page.test.tsx\" \"src/hooks/use-practice-websocket.test.ts\"` stays green, and `rg -n \"console\\.(log|error|warn|info)\" web/src` only returns `web/src/lib/debug.ts` plus `web/src/instrumentation*.ts`.\n- **Failure signal:** a new raw `console.*` appears in a business page/hook/route surface, `console-boundary.test.ts` fails, or a route error surface stops calling `debug.durableError(...)` and starts owning its own logging again.\n- **Recovery procedure:** classify the offending caller with the `frontendConsoleInventory`, migrate it onto `debug.durableError(...)` or `debug.log/warn/error(...)` as appropriate, keep raw console limited to the shared seam/bootstrap exceptions, then rerun the Vitest seam gate and repo-root `rg` gate.\n- **Monitoring gaps:** the slice intentionally standardized the frontend logging exit but did not add a remote durable reporter beyond existing side effects; future work may still choose to connect `debug.durableError(...)` to stronger observability sinks.\n\n## What the next slices should know\n\nS02 should treat this slice as the authority for frontend logging policy: replacing native dialogs or `window.location` must not come with new page-local console escape hatches. S03 should reuse the already-migrated learner route/error boundary seam when adding loading/error coverage, rather than inventing a second reporting path for learner shell failures.\n\n## Verification\n\nFresh slice-close verification reran the focused seam gate `npm --prefix web test -- --run src/lib/console-boundary.test.ts src/lib/debug.test.ts src/components/error-reporting.test.tsx \"src/app/(user)/practice/[sessionId]/page.test.tsx\" \"src/hooks/use-practice-websocket.test.ts\"` and it passed 5 files / 27 tests green. Fresh repo-root inventory verification reran `rg -n \"console\\.(log|error|warn|info)\" web/src` and it reported raw console only in `web/src/instrumentation.ts`, `web/src/instrumentation-client.ts`, and `web/src/lib/debug.ts`, matching the intended exception boundary. Fresh LSP diagnostics on `web/src/lib/debug.ts`, `web/src/components/ErrorBoundary.tsx`, `web/src/components/learner/learner-route-error-state.tsx`, `web/src/app/(dashboard)/error.tsx`, `web/src/app/admin/error.tsx`, and `web/src/lib/console-boundary.test.ts` reported no diagnostics.\n\n## Requirements Advanced\n\nNone.\n\n## Requirements Validated\n\nNone.\n\n## New Requirements Surfaced\n\nNone.\n\n## Requirements Invalidated or Re-scoped\n\nNone.\n\n## Deviations\n\nNone.\n\n## Known Limitations\n\nS01 standardizes the frontend logging exit but does not yet add a stronger remote/browser-side durable reporting sink beyond the existing shared helper and existing side effects.\n\n## Follow-ups\n\nS02 should reuse the shared debug seam while replacing native dialogs and `window.location`; S03 should reuse the learner route/error durable seam while filling loading/error fallback coverage.\n\n## Files Created/Modified\n\n- `web/src/lib/debug.ts` — Added the canonical frontend console inventory plus shared debug and durable-error helpers.\n- `web/src/lib/console-boundary.test.ts` — Added the filesystem-backed regression gate that fails when raw console escapes the approved boundary.\n- `web/src/components/ErrorBoundary.tsx` — Migrated React error boundaries onto the shared durable frontend error seam.\n- `web/src/components/learner/learner-route-error-state.tsx` — Moved learner route-level fallback reporting onto `debug.durableError(...)`.\n- `web/src/app/(dashboard)/error.tsx` — Migrated dashboard route-error reporting onto the shared durable seam.\n- `web/src/app/admin/error.tsx` — Migrated admin route-error reporting onto the shared durable seam.\n",
+      "full_uat_md": "# S01: 前端日志出口统一化 — UAT\n\n**Milestone:** M015\n**Written:** 2026-04-11T17:39:38.914Z\n\n# UAT — M015/S01 前端日志出口统一化\n\n## Preconditions\n\n- Repository root is `/Users/zhaozengqing/github/销售训练qoder`.\n- Frontend dependencies are installed (`web/node_modules` present).\n- Worktree contains the S01 changes.\n\n## Test Case 1 — Raw console boundary inventory stays narrow\n\n1. Run `rg -n \"console\\.(log|error|warn|info)\" web/src` from the repo root.\n2. Review the returned paths.\n\n**Expected outcome**\n- Matches appear only in `web/src/lib/debug.ts`, `web/src/instrumentation.ts`, and `web/src/instrumentation-client.ts`.\n- No learner page, admin page, hook, highlight component, auth helper, or performance utility appears in the result.\n\n## Test Case 2 — Shared seam regression pack stays green\n\n1. Run `npm --prefix web test -- --run src/lib/console-boundary.test.ts src/lib/debug.test.ts src/components/error-reporting.test.tsx \"src/app/(user)/practice/[sessionId]/page.test.tsx\" \"src/hooks/use-practice-websocket.test.ts\"`.\n2. Observe the Vitest summary.\n\n**Expected outcome**\n- All 5 test files pass.\n- Total result is 27/27 tests green.\n- The suite proves all of the following together: console-boundary enforcement, shared debug helper behavior, durable route-error reporting, practice-page behavior, and practice websocket behavior.\n\n## Test Case 3 — Durable route-error surfaces use the shared helper\n\n1. Run `rg -n \"debug\\.durableError\" web/src/components/ErrorBoundary.tsx web/src/components/learner/learner-route-error-state.tsx web/src/app/'(dashboard)'/error.tsx web/src/app/admin/error.tsx`.\n2. Inspect the matching lines.\n\n**Expected outcome**\n- Each listed route/error-boundary surface contains a `debug.durableError(...)` call.\n- There is no need for those files to own raw `console.error(...)` calls.\n\n## Edge Case A — Developer/support diagnostics still have an approved path\n\n1. Review `web/src/lib/debug.ts` and confirm `debug.log(...)`, `debug.warn(...)`, `debug.error(...)`, and `debug.durableError(...)` are present.\n2. Confirm the repo-root console inventory from Test Case 1 still includes the shared seam file itself.\n\n**Expected outcome**\n- The slice did not remove debugging capability; it centralized it.\n- Developer/support diagnostics still have a supported API without expanding the raw-console boundary.\n\n## Edge Case B — Future regression detection is explicit\n\n1. Review `web/src/lib/console-boundary.test.ts`.\n2. Confirm the allowlist names only the intentional exception boundary (`web/src/lib/debug.ts` and `web/src/instrumentation*.ts`).\n\n**Expected outcome**\n- Boundary enforcement is code-backed and future regressions fail fast.\n- Later slices can extend the seam safely without re-running a repo-wide investigation to rediscover policy.\n\n",
       "goal": "把前端大量 console.* 调用收口到明确的 debug/observability seam，并区分 dev-only 与 durable error reporting。",
       "success_criteria": "- 业务页面与 hooks 中的散落 console 输出被归类，并迁到共享 debug/observability seam。\n- route error surface、业务页面和 hooks 对“允许保留的 instrumentation/dev-only console”有统一边界，不再各自为政。\n- focused proof 能同时证明业务页面不再直出高噪声 console，以及共享 debug seam 仍保留必要诊断信号。",
       "proof_level": "integration",
@@ -2323,12 +2323,10 @@
     {
       "milestone_id": "M015",
       "id": "S02",
-      "title": "原生弹窗与 window.location 跳转清理",
+      "title": "S02",
       "status": "pending",
       "risk": "medium",
-      "depends": [
-        "S01"
-      ],
+      "depends": [],
       "demo": "业务页面中的原生弹窗和直接浏览器跳转被替换为 toast/dialog/router/auth-handler seam。",
       "created_at": "2026-04-08T08:53:16.023Z",
       "completed_at": null,
@@ -9748,19 +9746,31 @@
       "milestone_id": "M015",
       "slice_id": "S02",
       "id": "T01",
-      "title": "盘点原生弹窗与直接跳转使用点",
-      "status": "pending",
-      "one_liner": "",
-      "narrative": "",
-      "verification_result": "",
+      "title": "Centralized the remaining native-dialog and hard-navigation inventory into a shared auth-handler seam map with focused proof.",
+      "status": "complete",
+      "one_liner": "Centralized the remaining native-dialog and hard-navigation inventory into a shared auth-handler seam map with focused proof.",
+      "narrative": "I started from the slice grep gate and the planned authority files, then verified the real remaining usage points before touching code. The scan showed three cleanup families that matter for S02: delete confirmations in `web/src/app/admin/records/page.tsx` and `web/src/app/admin/rag-profiles/page.tsx`, auth redirects in `web/src/lib/auth-handler.ts` plus the admin/learner shell guards, and blocking feedback modals in `web/src/app/admin/personas/[id]/page.tsx`. I also confirmed the grep command still catches some non-navigation `window.location.href` reads in `ErrorBoundary` and `performance.ts`, plus the explicit admin error fallback, so T01 needed to distinguish true cleanup work from explained exceptions instead of just listing raw matches.\n\nTo make that durable, I added `interruptiveUiInventory` to `web/src/lib/auth-handler.ts` as the shared authority seam for this slice. Each entry records the file, primitive kind, category, target seam (`dialog`, `toast`, `router`, `auth-handler`, or `allowed-exception`), cleanup status, and a short rationale. I kept the primitive labels tokenized (`native-alert`, `location-assign`, etc.) so the inventory itself does not pollute the slice grep gate. I then added local inline inventory notes to the hottest admin touchpoints (`records`, `rag-profiles`, `personas/[id]`) so the eventual T02 cleanup can land on the correct seam without re-researching the page. Finally, I added a focused unit assertion in `web/src/lib/auth-handler.test.ts` to lock the presence of both the real cleanup items and the documented grep exceptions, recorded the pattern in `.gsd/KNOWLEDGE.md`, and saved decision D183 for the centralized inventory approach.",
+      "verification_result": "Ran `npm --prefix web test -- --run src/lib/auth-handler.test.ts`, which passed 4/4 and proved the shared inventory exposes both the remaining cleanup set and the allowed-exception set. Re-ran the slice grep gate with `rg -n \"\\\\b(alert|confirm)\\\\s*\\\\(|window\\\\.location(\\\\.assign|\\\\.href)\" web/src`; it stayed intentionally non-empty at T01 stage, but now isolates only the real remaining cleanup points (`auth-handler`, `admin-shell`, `dashboard-shell`, `records`, `rag-profiles`, `personas/[id]`) plus the documented exceptions (`ErrorBoundary`, `performance.ts`, `app/admin/error.tsx`). Fresh LSP diagnostics were clean on `web/src/lib/auth-handler.ts`, `web/src/app/admin/records/page.tsx`, `web/src/app/admin/rag-profiles/page.tsx`, `web/src/app/admin/personas/*/page.tsx`, and `web/src/lib/auth-handler.test.ts`.",
       "duration": "",
-      "completed_at": null,
+      "completed_at": "2026-04-11T17:53:06.053Z",
       "blocker_discovered": false,
-      "deviations": "",
-      "known_issues": "",
-      "key_files": [],
-      "key_decisions": [],
-      "full_summary_md": "",
+      "deviations": "Added a focused auth-handler inventory unit test and centralized the classification table in code instead of leaving the inventory only in prose, so downstream tasks can import and update one authority seam. This stayed within the task goal of producing a durable classification map for every remaining usage point.",
+      "known_issues": "The actual cleanup has not happened yet by design: `web/src/lib/auth-handler.ts`, `web/src/components/layout/admin-shell.tsx`, and `web/src/components/layout/dashboard-shell.tsx` still use hard browser redirects, while `web/src/app/admin/records/page.tsx`, `web/src/app/admin/rag-profiles/page.tsx`, and `web/src/app/admin/personas/[id]/page.tsx` still contain native confirm/alert calls. Those live hits are now explicitly tracked by `interruptiveUiInventory` for T02/T03 rather than being treated as unexplained regressions.",
+      "key_files": [
+        "web/src/lib/auth-handler.ts",
+        "web/src/lib/auth-handler.test.ts",
+        "web/src/app/admin/records/page.tsx",
+        "web/src/app/admin/rag-profiles/page.tsx",
+        "web/src/app/admin/personas/[id]/page.tsx",
+        ".gsd/KNOWLEDGE.md",
+        ".gsd/DECISIONS.md",
+        ".codex/loop/state.json",
+        ".codex/loop/log.md"
+      ],
+      "key_decisions": [
+        "D183 — keep the native-dialog/hard-navigation inventory in `web/src/lib/auth-handler.ts` as `interruptiveUiInventory`, using tokenized primitive labels and explicit allowed-exception entries so the grep gate stays trustworthy."
+      ],
+      "full_summary_md": "---\nid: T01\nparent: S02\nmilestone: M015\nkey_files:\n  - web/src/lib/auth-handler.ts\n  - web/src/lib/auth-handler.test.ts\n  - web/src/app/admin/records/page.tsx\n  - web/src/app/admin/rag-profiles/page.tsx\n  - web/src/app/admin/personas/[id]/page.tsx\n  - .gsd/KNOWLEDGE.md\n  - .gsd/DECISIONS.md\n  - .codex/loop/state.json\n  - .codex/loop/log.md\nkey_decisions:\n  - D183 — keep the native-dialog/hard-navigation inventory in `web/src/lib/auth-handler.ts` as `interruptiveUiInventory`, using tokenized primitive labels and explicit allowed-exception entries so the grep gate stays trustworthy.\nduration: \nverification_result: passed\ncompleted_at: 2026-04-11T17:53:06.052Z\nblocker_discovered: false\n---\n\n# T01: Centralized the remaining native-dialog and hard-navigation inventory into a shared auth-handler seam map with focused proof.\n\n**Centralized the remaining native-dialog and hard-navigation inventory into a shared auth-handler seam map with focused proof.**\n\n## What Happened\n\nI started from the slice grep gate and the planned authority files, then verified the real remaining usage points before touching code. The scan showed three cleanup families that matter for S02: delete confirmations in `web/src/app/admin/records/page.tsx` and `web/src/app/admin/rag-profiles/page.tsx`, auth redirects in `web/src/lib/auth-handler.ts` plus the admin/learner shell guards, and blocking feedback modals in `web/src/app/admin/personas/[id]/page.tsx`. I also confirmed the grep command still catches some non-navigation `window.location.href` reads in `ErrorBoundary` and `performance.ts`, plus the explicit admin error fallback, so T01 needed to distinguish true cleanup work from explained exceptions instead of just listing raw matches.\n\nTo make that durable, I added `interruptiveUiInventory` to `web/src/lib/auth-handler.ts` as the shared authority seam for this slice. Each entry records the file, primitive kind, category, target seam (`dialog`, `toast`, `router`, `auth-handler`, or `allowed-exception`), cleanup status, and a short rationale. I kept the primitive labels tokenized (`native-alert`, `location-assign`, etc.) so the inventory itself does not pollute the slice grep gate. I then added local inline inventory notes to the hottest admin touchpoints (`records`, `rag-profiles`, `personas/[id]`) so the eventual T02 cleanup can land on the correct seam without re-researching the page. Finally, I added a focused unit assertion in `web/src/lib/auth-handler.test.ts` to lock the presence of both the real cleanup items and the documented grep exceptions, recorded the pattern in `.gsd/KNOWLEDGE.md`, and saved decision D183 for the centralized inventory approach.\n\n## Verification\n\nRan `npm --prefix web test -- --run src/lib/auth-handler.test.ts`, which passed 4/4 and proved the shared inventory exposes both the remaining cleanup set and the allowed-exception set. Re-ran the slice grep gate with `rg -n \"\\\\b(alert|confirm)\\\\s*\\\\(|window\\\\.location(\\\\.assign|\\\\.href)\" web/src`; it stayed intentionally non-empty at T01 stage, but now isolates only the real remaining cleanup points (`auth-handler`, `admin-shell`, `dashboard-shell`, `records`, `rag-profiles`, `personas/[id]`) plus the documented exceptions (`ErrorBoundary`, `performance.ts`, `app/admin/error.tsx`). Fresh LSP diagnostics were clean on `web/src/lib/auth-handler.ts`, `web/src/app/admin/records/page.tsx`, `web/src/app/admin/rag-profiles/page.tsx`, `web/src/app/admin/personas/*/page.tsx`, and `web/src/lib/auth-handler.test.ts`.\n\n## Verification Evidence\n\n| # | Command | Exit Code | Verdict | Duration |\n|---|---------|-----------|---------|----------|\n| 1 | `npm --prefix web test -- --run src/lib/auth-handler.test.ts` | 0 | ✅ pass | 820ms |\n| 2 | `rg -n \"\\\\b(alert|confirm)\\\\s*\\\\(|window\\\\.location(\\\\.assign|\\\\.href)\" web/src` | 0 | ✅ pass | 20ms |\n\n## Deviations\n\nAdded a focused auth-handler inventory unit test and centralized the classification table in code instead of leaving the inventory only in prose, so downstream tasks can import and update one authority seam. This stayed within the task goal of producing a durable classification map for every remaining usage point.\n\n## Known Issues\n\nThe actual cleanup has not happened yet by design: `web/src/lib/auth-handler.ts`, `web/src/components/layout/admin-shell.tsx`, and `web/src/components/layout/dashboard-shell.tsx` still use hard browser redirects, while `web/src/app/admin/records/page.tsx`, `web/src/app/admin/rag-profiles/page.tsx`, and `web/src/app/admin/personas/[id]/page.tsx` still contain native confirm/alert calls. Those live hits are now explicitly tracked by `interruptiveUiInventory` for T02/T03 rather than being treated as unexplained regressions.\n\n## Files Created/Modified\n\n- `web/src/lib/auth-handler.ts`\n- `web/src/lib/auth-handler.test.ts`\n- `web/src/app/admin/records/page.tsx`\n- `web/src/app/admin/rag-profiles/page.tsx`\n- `web/src/app/admin/personas/[id]/page.tsx`\n- `.gsd/KNOWLEDGE.md`\n- `.gsd/DECISIONS.md`\n- `.codex/loop/state.json`\n- `.codex/loop/log.md`\n",
       "description": "Why: 先把原生弹窗和直接跳转按场景分类，后续才能统一到正确的 shared seam，而不是机械替换。\n\nDo:\n1. 扫描 admin/learner 页面中的 `alert/confirm/window.location` 使用点。\n2. 区分删除确认、auth redirect、普通导航三类场景。\n3. 确认每类场景应该落到 dialog、toast、router 还是 auth-handler。\n\nDone when: 所有待清理使用点都能映射到一个明确的 shared seam。",
       "estimate": "25m",
       "files": [
@@ -13189,6 +13199,18 @@
       "revisable": "Yes",
       "made_by": "agent",
       "superseded_by": null
+    },
+    {
+      "seq": 1553,
+      "id": "D183",
+      "when_context": "M015-S02-T01",
+      "scope": "observability",
+      "decision": "M015/S02 原生弹窗与硬跳转 inventory 的权威存放位置与编码方式",
+      "choice": "将 inventory 统一放在 web/src/lib/auth-handler.ts 的 interruptiveUiInventory 中，并用 token 化 primitive（如 native-alert、location-assign）+ allowed-exception 状态来描述剩余使用点和 grep 例外。",
+      "rationale": "后续 T02/T03 需要一份 scanner-backed 的权威清单，既能把删除确认、auth redirect、普通导航映射到 dialog/toast/router/auth-handler seam，也能解释 ErrorBoundary/performance/admin error 这类剩余 grep 命中；如果在注释或 inventory 中重复写入 alert(/window.location.assign 等字面量，会反过来污染 grep gate。",
+      "revisable": "Yes",
+      "made_by": "agent",
+      "superseded_by": null
     }
   ],
   "verification_evidence": [
@@ -16579,6 +16601,28 @@
       "verdict": "❌ fail",
       "duration_ms": 1061,
       "created_at": "2026-04-11T17:30:47.885Z"
+    },
+    {
+      "id": 314,
+      "task_id": "T01",
+      "slice_id": "S02",
+      "milestone_id": "M015",
+      "command": "npm --prefix web test -- --run src/lib/auth-handler.test.ts",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 820,
+      "created_at": "2026-04-11T17:53:06.053Z"
+    },
+    {
+      "id": 315,
+      "task_id": "T01",
+      "slice_id": "S02",
+      "milestone_id": "M015",
+      "command": "rg -n \"\\\\b(alert|confirm)\\\\s*\\\\(|window\\\\.location(\\\\.assign|\\\\.href)\" web/src",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 20,
+      "created_at": "2026-04-11T17:53:06.053Z"
     }
   ]
 }

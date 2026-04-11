@@ -181,6 +181,8 @@ export default function RagProfilesPage() {
     }, [editingId, formName, formDescription, formChunking, formSemanticCache, formCrossEncoder, loadProfiles, resetForm, toast]);
 
     const handleDelete = useCallback(async (id: string) => {
+        // M015/S02/T01 inventory: destructive confirmation is the only missing seam
+        // here; success/failure messaging already lives on toast.
         if (!confirm("确认删除该配置？")) return;
         try {
             await api.admin.deleteRagProfile(id);
