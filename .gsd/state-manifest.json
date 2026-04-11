@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "exported_at": "2026-04-11T20:29:11.299Z",
+  "exported_at": "2026-04-11T20:36:04.222Z",
   "milestones": [
     {
       "id": "M001",
@@ -10448,19 +10448,25 @@
       "milestone_id": "M016",
       "slice_id": "S03",
       "id": "T03",
-      "title": "为 admin security baseline 补 focused proof",
-      "status": "pending",
-      "one_liner": "",
-      "narrative": "",
-      "verification_result": "",
+      "title": "Added focused admin-security baseline proof for isolated-router RBAC, sink-level log redaction, and inventory scope.",
+      "status": "complete",
+      "one_liner": "Added focused admin-security baseline proof for isolated-router RBAC, sink-level log redaction, and inventory scope.",
+      "narrative": "I deepened the existing S03 proof instead of widening the repair surface. In `backend/tests/integration/test_admin_users_api.py`, I tied the isolated-router deny checks to a named `ADMIN_SECURITY_BASELINE_WATCH_ROUTE_PROOFS` subset and added an inventory-scope assertion that locks the current admin baseline shape: the fix-first route-family list is now empty, the five repaired legacy router families stay on the explicit isolated proof path, `admin.api.users` remains the baseline positive control, and the remaining already-correct admin families are tracked separately through `ADMIN_PERMISSION_POSITIVE_CONTROL` instead of being conflated with the repaired router subset. In `backend/tests/unit/admin/test_admin_users_api_models.py`, I added sink-boundary proof for `StructuredLogger.info(...)` so the task no longer relies only on helper-level sanitizer tests; the new assertion proves trace_id preservation plus masking/redaction of email/token/cookie fields before the shared logger emits anything. I also added a sensitive-log inventory-scope assertion so the current covered-vs-watch list is encoded in tests and future edits have to update the inventory deliberately. Finally, I wrote one knowledge entry documenting the non-obvious inventory split: `priority=\"watch\"` mixes the isolated-router proof subset with already-correct positive controls, so future agents should separate those two cases instead of assuming the whole bucket maps to one runtime test.",
+      "verification_result": "I ran the new focused admin-RBAC/inventory subset with `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/integration/test_admin_users_api.py -k \"admin_security_baseline_inventory_is_closed_and_scoped or admin_router_modules_require_admin_even_without_main_router_guard\" -q`; it finished 6 selected tests green and proved the repaired router subset still rejects non-admin callers even when mounted without `main.py` wrapper guards while the inventory shape stays explicit. I ran the new sink-redaction/inventory subset with `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/admin/test_admin_users_api_models.py -k \"structured_logger_masks_sensitive_fields_before_sink_emission or sensitive_log_security_baseline_inventory_is_closed_and_scoped\" -q`; it finished 2 selected tests green and proved the shared logger masks/redacts sensitive fields at the actual sink boundary while the current log-surface baseline remains closed. I then ran the exact task-plan gate `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/integration/test_admin_users_api.py backend/tests/unit/admin/test_admin_users_api_models.py -x -q`; it finished 36/36 green. Fresh LSP diagnostics for `backend/tests/integration/test_admin_users_api.py` and `backend/tests/unit/admin/test_admin_users_api_models.py` reported no diagnostics. The repo-root pytest-cov `No data to report` warning still appears on these commands, but the gate remains trustworthy because exit codes were 0 and all targeted assertions passed.",
       "duration": "",
-      "completed_at": null,
+      "completed_at": "2026-04-11T20:36:04.178Z",
       "blocker_discovered": false,
-      "deviations": "",
-      "known_issues": "",
-      "key_files": [],
-      "key_decisions": [],
-      "full_summary_md": "",
+      "deviations": "I adapted the planned baseline-scope proof to local reality after the first failing assertion showed that `security_inventory.py` intentionally uses `priority=\"watch\"` for two different groups: the five repaired legacy router families covered by the isolated-router regression tests, and several already-correct admin positive controls that are only being tracked for later follow-up. I preserved the task scope by splitting those groups in the proof instead of trying to widen runtime coverage or rewrite the inventory model.",
+      "known_issues": "The repo-root pytest commands in this harness still emit the pre-existing pytest-cov warning `Failed to generate report: No data to report.` even when the focused subsets and exact task gate pass. Also, this task intentionally keeps the runtime-focused router proof scoped to the repaired five-family subset plus the `admin.api.users` positive control; other already-correct admin families remain inventory-tracked follow-up surfaces rather than new runtime coverage in this task.",
+      "key_files": [
+        "backend/tests/integration/test_admin_users_api.py",
+        "backend/tests/unit/admin/test_admin_users_api_models.py",
+        ".gsd/KNOWLEDGE.md"
+      ],
+      "key_decisions": [
+        "Keep the admin baseline proof split between the explicit isolated-router subset and `ADMIN_PERMISSION_POSITIVE_CONTROL` instead of assuming every inventory `watch` entry should map to the same runtime test."
+      ],
+      "full_summary_md": "---\nid: T03\nparent: S03\nmilestone: M016\nkey_files:\n  - backend/tests/integration/test_admin_users_api.py\n  - backend/tests/unit/admin/test_admin_users_api_models.py\n  - .gsd/KNOWLEDGE.md\nkey_decisions:\n  - Keep the admin baseline proof split between the explicit isolated-router subset and `ADMIN_PERMISSION_POSITIVE_CONTROL` instead of assuming every inventory `watch` entry should map to the same runtime test.\nduration: \nverification_result: passed\ncompleted_at: 2026-04-11T20:36:04.177Z\nblocker_discovered: false\n---\n\n# T03: Added focused admin-security baseline proof for isolated-router RBAC, sink-level log redaction, and inventory scope.\n\n**Added focused admin-security baseline proof for isolated-router RBAC, sink-level log redaction, and inventory scope.**\n\n## What Happened\n\nI deepened the existing S03 proof instead of widening the repair surface. In `backend/tests/integration/test_admin_users_api.py`, I tied the isolated-router deny checks to a named `ADMIN_SECURITY_BASELINE_WATCH_ROUTE_PROOFS` subset and added an inventory-scope assertion that locks the current admin baseline shape: the fix-first route-family list is now empty, the five repaired legacy router families stay on the explicit isolated proof path, `admin.api.users` remains the baseline positive control, and the remaining already-correct admin families are tracked separately through `ADMIN_PERMISSION_POSITIVE_CONTROL` instead of being conflated with the repaired router subset. In `backend/tests/unit/admin/test_admin_users_api_models.py`, I added sink-boundary proof for `StructuredLogger.info(...)` so the task no longer relies only on helper-level sanitizer tests; the new assertion proves trace_id preservation plus masking/redaction of email/token/cookie fields before the shared logger emits anything. I also added a sensitive-log inventory-scope assertion so the current covered-vs-watch list is encoded in tests and future edits have to update the inventory deliberately. Finally, I wrote one knowledge entry documenting the non-obvious inventory split: `priority=\"watch\"` mixes the isolated-router proof subset with already-correct positive controls, so future agents should separate those two cases instead of assuming the whole bucket maps to one runtime test.\n\n## Verification\n\nI ran the new focused admin-RBAC/inventory subset with `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/integration/test_admin_users_api.py -k \"admin_security_baseline_inventory_is_closed_and_scoped or admin_router_modules_require_admin_even_without_main_router_guard\" -q`; it finished 6 selected tests green and proved the repaired router subset still rejects non-admin callers even when mounted without `main.py` wrapper guards while the inventory shape stays explicit. I ran the new sink-redaction/inventory subset with `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/admin/test_admin_users_api_models.py -k \"structured_logger_masks_sensitive_fields_before_sink_emission or sensitive_log_security_baseline_inventory_is_closed_and_scoped\" -q`; it finished 2 selected tests green and proved the shared logger masks/redacts sensitive fields at the actual sink boundary while the current log-surface baseline remains closed. I then ran the exact task-plan gate `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/integration/test_admin_users_api.py backend/tests/unit/admin/test_admin_users_api_models.py -x -q`; it finished 36/36 green. Fresh LSP diagnostics for `backend/tests/integration/test_admin_users_api.py` and `backend/tests/unit/admin/test_admin_users_api_models.py` reported no diagnostics. The repo-root pytest-cov `No data to report` warning still appears on these commands, but the gate remains trustworthy because exit codes were 0 and all targeted assertions passed.\n\n## Verification Evidence\n\n| # | Command | Exit Code | Verdict | Duration |\n|---|---------|-----------|---------|----------|\n| 1 | `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/integration/test_admin_users_api.py -k \"admin_security_baseline_inventory_is_closed_and_scoped or admin_router_modules_require_admin_even_without_main_router_guard\" -q` | 0 | ✅ pass | 3375ms |\n| 2 | `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/admin/test_admin_users_api_models.py -k \"structured_logger_masks_sensitive_fields_before_sink_emission or sensitive_log_security_baseline_inventory_is_closed_and_scoped\" -q` | 0 | ✅ pass | 2133ms |\n| 3 | `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/integration/test_admin_users_api.py backend/tests/unit/admin/test_admin_users_api_models.py -x -q` | 0 | ✅ pass | 4555ms |\n\n## Deviations\n\nI adapted the planned baseline-scope proof to local reality after the first failing assertion showed that `security_inventory.py` intentionally uses `priority=\"watch\"` for two different groups: the five repaired legacy router families covered by the isolated-router regression tests, and several already-correct admin positive controls that are only being tracked for later follow-up. I preserved the task scope by splitting those groups in the proof instead of trying to widen runtime coverage or rewrite the inventory model.\n\n## Known Issues\n\nThe repo-root pytest commands in this harness still emit the pre-existing pytest-cov warning `Failed to generate report: No data to report.` even when the focused subsets and exact task gate pass. Also, this task intentionally keeps the runtime-focused router proof scoped to the repaired five-family subset plus the `admin.api.users` positive control; other already-correct admin families remain inventory-tracked follow-up surfaces rather than new runtime coverage in this task.\n\n## Files Created/Modified\n\n- `backend/tests/integration/test_admin_users_api.py`\n- `backend/tests/unit/admin/test_admin_users_api_models.py`\n- `.gsd/KNOWLEDGE.md`\n",
       "description": "Why: 权限矩阵和脱敏规则如果没有 focused proof，会在后续路由调整中很快漂移。\n\nDo:\n1. 补 focused tests/断言，锁定 admin 高风险接口的权限拒绝路径。\n2. 为首批日志出口补脱敏行为 proof。\n3. 形成最小 security baseline 说明，明确哪些已覆盖、哪些留待后续治理。\n\nDone when: admin security baseline 既有 focused backend proof，也有清晰范围边界。",
       "estimate": "40m",
       "files": [
@@ -17400,6 +17406,39 @@
       "verdict": "✅ pass",
       "duration_ms": 959,
       "created_at": "2026-04-11T20:29:11.245Z"
+    },
+    {
+      "id": 361,
+      "task_id": "T03",
+      "slice_id": "S03",
+      "milestone_id": "M016",
+      "command": "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/integration/test_admin_users_api.py -k \"admin_security_baseline_inventory_is_closed_and_scoped or admin_router_modules_require_admin_even_without_main_router_guard\" -q",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 3375,
+      "created_at": "2026-04-11T20:36:04.178Z"
+    },
+    {
+      "id": 362,
+      "task_id": "T03",
+      "slice_id": "S03",
+      "milestone_id": "M016",
+      "command": "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/admin/test_admin_users_api_models.py -k \"structured_logger_masks_sensitive_fields_before_sink_emission or sensitive_log_security_baseline_inventory_is_closed_and_scoped\" -q",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 2133,
+      "created_at": "2026-04-11T20:36:04.179Z"
+    },
+    {
+      "id": 363,
+      "task_id": "T03",
+      "slice_id": "S03",
+      "milestone_id": "M016",
+      "command": "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/integration/test_admin_users_api.py backend/tests/unit/admin/test_admin_users_api_models.py -x -q",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 4555,
+      "created_at": "2026-04-11T20:36:04.179Z"
     }
   ]
 }

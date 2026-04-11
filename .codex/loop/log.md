@@ -783,3 +783,23 @@
   verification results: passed; the focused auth-handler test finished 4/4 green, the slice grep gate now reports only the real remaining cleanup points plus the documented ErrorBoundary/performance/admin-error exceptions, and the touched authority files were diagnostics-clean.
   success signal status: downstream S02 tasks can now migrate dialog/toast/router/auth-handler seams from one shared inventory instead of re-scanning admin/learner pages or accidentally treating grep exceptions as product regressions.
   rollback note: if T02/T03 changes the remaining exception set, update interruptiveUiInventory, its focused unit test, and the matching knowledge/decision entries together; do not add literal grep-target strings into the inventory/comments or the grep gate will start matching the documentation itself.
+
+- time: 2026-04-12T04:35:21+08:00
+  mode: grow
+  item id: M016-S03-T03
+  files changed:
+    - backend/tests/integration/test_admin_users_api.py
+    - backend/tests/unit/admin/test_admin_users_api_models.py
+    - .gsd/KNOWLEDGE.md
+    - .codex/loop/state.json
+    - .codex/loop/log.md
+  summary: Added focused admin-security baseline proof that locks the repaired router RBAC seam, proves sink-level log redaction, and encodes the current covered-vs-follow-up inventory scope directly in tests.
+  verification commands:
+    - backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/integration/test_admin_users_api.py -k "admin_security_baseline_inventory_is_closed_and_scoped or admin_router_modules_require_admin_even_without_main_router_guard" -q
+    - backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/admin/test_admin_users_api_models.py -k "structured_logger_masks_sensitive_fields_before_sink_emission or sensitive_log_security_baseline_inventory_is_closed_and_scoped" -q
+    - backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/integration/test_admin_users_api.py backend/tests/unit/admin/test_admin_users_api_models.py -x -q
+    - lsp diagnostics backend/tests/integration/test_admin_users_api.py
+    - lsp diagnostics backend/tests/unit/admin/test_admin_users_api_models.py
+  verification results: passed; the focused admin baseline subset finished 6/6 green, the focused logger/inventory subset finished 2/2 green, the exact task-plan pytest gate finished 36/36 green, and diagnostics were clean on the two touched proof files.
+  success signal status: future agents can now rerun one focused backend bundle to tell whether a regression is in module-level admin RBAC, sink-level redaction, or inventory drift about what this baseline currently covers.
+  rollback note: if later admin route families or sensitive-log surfaces are added, update the code-owned inventories and these focused proof subsets together so the watch/baseline split does not drift from runtime reality.

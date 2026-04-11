@@ -22,6 +22,11 @@ from sqlalchemy.orm import sessionmaker
 from admin.api.admin import router as admin_presentations_router
 from admin.api.analytics import router as admin_analytics_router
 from admin.api.release_verification import router as release_verification_router
+from admin.api.security_inventory import (
+    ADMIN_PERMISSION_POSITIVE_CONTROL,
+    ADMIN_ROUTE_PERMISSION_MATRIX,
+    FIX_FIRST_ADMIN_ROUTE_FAMILIES,
+)
 from admin.api.system_logs import router as admin_system_logs_router
 from admin.api.training_records import router as admin_training_records_router
 # Import Agent models so Base.metadata has all FK targets used by common models.
@@ -43,6 +48,17 @@ ROLE_REQUIRED_DETAIL = {
     "error": "[ROLE_REQUIRED]",
     "message": "当前账号权限不足，无法执行该操作。",
 }
+ADMIN_SECURITY_BASELINE_WATCH_ROUTE_PROOFS = (
+    ("admin.api.admin", admin_presentations_router, "/api/v1/admin/presentations"),
+    ("admin.api.analytics", admin_analytics_router, "/api/v1/admin/analytics/overview"),
+    ("admin.api.system_logs", admin_system_logs_router, "/api/v1/admin/system-logs"),
+    ("admin.api.training_records", admin_training_records_router, "/api/v1/admin/training-records"),
+    (
+        "admin.api.release_verification",
+        release_verification_router,
+        "/api/v1/admin/release-verification/candidates",
+    ),
+)
 
 
 async def _create_isolated_router_client(
@@ -280,27 +296,59 @@ async def test_non_admin_cannot_access_admin_users_api(
     assert response.json()["detail"] == ROLE_REQUIRED_DETAIL
 
 
+def test_admin_security_baseline_inventory_is_closed_and_scoped() -> None:
+    """Security baseline inventory should make the covered-vs-watch scope explicit."""
+    watch_route_families = {
+        entry.route_family
+        for entry in ADMIN_ROUTE_PERMISSION_MATRIX
+        if entry.priority == "watch"
+    }
+    baseline_route_families = {
+        entry.route_family
+        for entry in ADMIN_ROUTE_PERMISSION_MATRIX
+        if entry.priority == "baseline"
+    }
+    explicit_router_proof_families = {
+        route_family
+        for route_family, _, _ in ADMIN_SECURITY_BASELINE_WATCH_ROUTE_PROOFS
+    }
+
+    assert FIX_FIRST_ADMIN_ROUTE_FAMILIES == ()
+    assert explicit_router_proof_families <= watch_route_families
+    assert baseline_route_families == {"admin.api.users"}
+    assert set(ADMIN_PERMISSION_POSITIVE_CONTROL) == (
+        baseline_route_families | (watch_route_families - explicit_router_proof_families)
+    )
+    assert watch_route_families.isdisjoint(baseline_route_families)
+    assert all(entry.allowed_roles == ("admin",) for entry in ADMIN_ROUTE_PERMISSION_MATRIX)
+    assert all(
+        "[ROLE_REQUIRED]" in entry.non_admin_deny_path
+        for entry in ADMIN_ROUTE_PERMISSION_MATRIX
+    )
+    assert {entry.route_family for entry in ADMIN_ROUTE_PERMISSION_MATRIX} == (
+        watch_route_families | baseline_route_families
+    )
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    ("router", "path"),
-    [
-        (admin_presentations_router, "/api/v1/admin/presentations"),
-        (admin_analytics_router, "/api/v1/admin/analytics/overview"),
-        (admin_system_logs_router, "/api/v1/admin/system-logs"),
-        (admin_training_records_router, "/api/v1/admin/training-records"),
-        (release_verification_router, "/api/v1/admin/release-verification/candidates"),
-    ],
+    ("route_family", "router", "path"),
+    ADMIN_SECURITY_BASELINE_WATCH_ROUTE_PROOFS,
 )
 async def test_admin_router_modules_require_admin_even_without_main_router_guard(
     db_session: AsyncSession,
     user_headers: dict[str, str],
+    route_family: str,
     router,
     path: str,
 ) -> None:
-    """Each fix-first admin router should carry its own admin dependency."""
+    """Each watch-list admin router should carry its own admin dependency."""
     async with await _create_isolated_router_client(router=router, db_session=db_session) as client:
         response = await client.get(path, headers=user_headers)
 
+    assert route_family in {
+        entry.route_family for entry in ADMIN_ROUTE_PERMISSION_MATRIX if entry.priority == "watch"
+    }
     assert response.status_code == 403
     assert response.json()["detail"] == ROLE_REQUIRED_DETAIL
 
