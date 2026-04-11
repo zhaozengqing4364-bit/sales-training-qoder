@@ -10,10 +10,11 @@ from __future__ import annotations
 import asyncio
 from dataclasses import dataclass
 from datetime import UTC, datetime
-from typing import Literal
+from typing import Any, Literal
 
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, update
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+from sqlalchemy.orm.attributes import set_committed_value
 
 from common.db.models import PracticeSession, Scenario
 from common.monitoring.logger import get_logger
@@ -85,6 +86,15 @@ class SessionLifecycleRaceScenario:
     proof_goal: str
 
 
+@dataclass(frozen=True, slots=True)
+class SessionLifecyclePersistedState:
+    status: str
+    start_time: datetime | None
+    end_time: datetime | None
+    total_duration_seconds: int | None
+    scenario_type: str | None
+
+
 SESSION_LIFECYCLE_RACE_SCENARIOS: tuple[SessionLifecycleRaceScenario, ...] = (
     SessionLifecycleRaceScenario(
         slug="sales_end_beats_stale_resume",
@@ -146,6 +156,153 @@ class SessionLifecycleService:
             return value.replace(tzinfo=UTC)
         return value.astimezone(UTC)
 
+    @staticmethod
+    def _is_sqlalchemy_instance(session: Any) -> bool:
+        return hasattr(session, "_sa_instance_state")
+
+    def _apply_session_values(
+        self,
+        session: PracticeSession,
+        values: dict[str, Any],
+        *,
+        mark_committed: bool,
+    ) -> None:
+        for field, value in values.items():
+            if mark_committed and self._is_sqlalchemy_instance(session):
+                set_committed_value(session, field, value)
+            else:
+                setattr(session, field, value)
+
+    async def _load_persisted_state(
+        self,
+        session_id: str,
+    ) -> SessionLifecyclePersistedState | None:
+        stmt = (
+            select(
+                PracticeSession.status,
+                PracticeSession.start_time,
+                PracticeSession.end_time,
+                PracticeSession.total_duration_seconds,
+                Scenario.scenario_type,
+            )
+            .join(Scenario, Scenario.scenario_id == PracticeSession.scenario_id, isouter=True)
+            .where(PracticeSession.session_id == session_id)
+        )
+
+        if isinstance(self.db, AsyncSession) and self.db.bind is not None:
+            factory = async_sessionmaker(
+                self.db.bind,
+                class_=AsyncSession,
+                expire_on_commit=False,
+            )
+            async with factory() as read_db:
+                row = (await read_db.execute(stmt)).first()
+        else:
+            row = (await self.db.execute(stmt)).first()
+
+        if row is None:
+            return None
+
+        status, start_time, end_time, total_duration_seconds, persisted_scenario_type = row
+        return SessionLifecyclePersistedState(
+            status=str(status or "preparing"),
+            start_time=start_time,
+            end_time=end_time,
+            total_duration_seconds=total_duration_seconds,
+            scenario_type=str(persisted_scenario_type) if persisted_scenario_type else None,
+        )
+
+    def _sync_session_to_persisted_state(
+        self,
+        session: PracticeSession,
+        persisted_state: SessionLifecyclePersistedState,
+    ) -> None:
+        self._apply_session_values(
+            session,
+            {
+                "status": persisted_state.status,
+                "start_time": persisted_state.start_time,
+                "end_time": persisted_state.end_time,
+                "total_duration_seconds": persisted_state.total_duration_seconds,
+            },
+            mark_committed=True,
+        )
+
+    async def _persist_transition_with_optimistic_status_guard(
+        self,
+        *,
+        session: PracticeSession,
+        scenario_type: str,
+        action: SessionLifecycleAction,
+        from_status: str,
+        update_values: dict[str, Any],
+        timestamp: datetime,
+        retry_on_conflict: bool,
+    ) -> SessionLifecycleTransition | None:
+        session_id = getattr(session, "session_id", None)
+        if not session_id:
+            self._apply_session_values(session, update_values, mark_committed=False)
+            await self.db.flush()
+            return None
+
+        result = await self.db.execute(
+            update(PracticeSession)
+            .where(PracticeSession.session_id == session_id)
+            .where(PracticeSession.status == from_status)
+            .values(**update_values)
+        )
+        rowcount = getattr(result, "rowcount", None)
+        if rowcount and rowcount > 0:
+            self._apply_session_values(session, update_values, mark_committed=True)
+            return None
+
+        persisted_state = await self._load_persisted_state(str(session_id))
+        if persisted_state is None:
+            self._apply_session_values(session, update_values, mark_committed=False)
+            await self.db.flush()
+            return None
+
+        self._sync_session_to_persisted_state(session, persisted_state)
+        resolved_scenario_type = (persisted_state.scenario_type or scenario_type or "sales").lower()
+        converged_to_terminal = persisted_state.status in _TERMINAL_STATUSES and action != "end"
+        logger.warning(
+            "practice_session_lifecycle_concurrency_conflict",
+            session_id=str(session_id),
+            action=action,
+            stale_status=from_status,
+            persisted_status=persisted_state.status,
+            scenario_type=resolved_scenario_type,
+            converged_to_terminal=converged_to_terminal,
+        )
+
+        if converged_to_terminal:
+            return SessionLifecycleTransition(
+                session=session,
+                scenario_type=resolved_scenario_type,
+                action=action,
+                from_status=persisted_state.status,
+                to_status=persisted_state.status,
+                changed=False,
+            )
+
+        if not retry_on_conflict:
+            return SessionLifecycleTransition(
+                session=session,
+                scenario_type=resolved_scenario_type,
+                action=action,
+                from_status=persisted_state.status,
+                to_status=persisted_state.status,
+                changed=False,
+            )
+
+        return await self.transition(
+            session=session,
+            scenario_type=resolved_scenario_type,
+            action=action,
+            now=timestamp,
+            _retry_on_conflict=False,
+        )
+
     async def transition(
         self,
         *,
@@ -153,6 +310,7 @@ class SessionLifecycleService:
         scenario_type: str | None,
         action: SessionLifecycleAction,
         now: datetime | None = None,
+        _retry_on_conflict: bool = True,
     ) -> SessionLifecycleTransition:
         resolved_scenario_type = (scenario_type or "sales").lower()
         timestamp = now or datetime.now(UTC)
@@ -160,6 +318,7 @@ class SessionLifecycleService:
         from_status = str(session.status or "preparing")
         to_status = from_status
         changed = False
+        update_values: dict[str, Any] = {}
 
         if action == "start":
             if from_status == "in_progress":
@@ -179,10 +338,12 @@ class SessionLifecycleService:
                     scenario_type=resolved_scenario_type,
                 )
 
-            session.status = "in_progress"
-            session.start_time = timestamp
             to_status = "in_progress"
             changed = True
+            update_values = {
+                "status": to_status,
+                "start_time": timestamp,
+            }
 
         elif action == "pause":
             if from_status == "paused":
@@ -202,9 +363,9 @@ class SessionLifecycleService:
                     scenario_type=resolved_scenario_type,
                 )
 
-            session.status = "paused"
             to_status = "paused"
             changed = True
+            update_values = {"status": to_status}
 
         elif action == "resume":
             if from_status == "in_progress":
@@ -224,9 +385,9 @@ class SessionLifecycleService:
                     scenario_type=resolved_scenario_type,
                 )
 
-            session.status = "in_progress"
             to_status = "in_progress"
             changed = True
+            update_values = {"status": to_status}
 
         elif action == "end":
             target_status = self.terminal_status_for_scenario(resolved_scenario_type)
@@ -247,26 +408,41 @@ class SessionLifecycleService:
                     scenario_type=resolved_scenario_type,
                 )
 
-            session.status = target_status
-            if session.end_time is None:
-                session.end_time = timestamp
-            if session.start_time is None:
-                session.start_time = timestamp
-            if session.end_time and session.start_time:
-                end_time_utc = self._coerce_utc_timestamp(session.end_time)
-                start_time_utc = self._coerce_utc_timestamp(session.start_time)
-                session.total_duration_seconds = max(
+            end_time = session.end_time or timestamp
+            start_time = session.start_time or timestamp
+            total_duration_seconds = session.total_duration_seconds
+            if end_time and start_time:
+                end_time_utc = self._coerce_utc_timestamp(end_time)
+                start_time_utc = self._coerce_utc_timestamp(start_time)
+                total_duration_seconds = max(
                     0,
                     int((end_time_utc - start_time_utc).total_seconds()),
                 )
+
             to_status = target_status
             changed = True
+            update_values = {
+                "status": target_status,
+                "end_time": end_time,
+                "start_time": start_time,
+                "total_duration_seconds": total_duration_seconds,
+            }
 
         else:
             raise ValueError(f"Unsupported lifecycle action: {action}")
 
         if changed:
-            await self.db.flush()
+            conflict_transition = await self._persist_transition_with_optimistic_status_guard(
+                session=session,
+                scenario_type=resolved_scenario_type,
+                action=action,
+                from_status=from_status,
+                update_values=update_values,
+                timestamp=timestamp,
+                retry_on_conflict=_retry_on_conflict,
+            )
+            if conflict_transition is not None:
+                return conflict_transition
 
         return SessionLifecycleTransition(
             session=session,

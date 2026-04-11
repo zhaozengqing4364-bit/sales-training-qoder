@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "exported_at": "2026-04-11T20:57:17.680Z",
+  "exported_at": "2026-04-11T21:08:06.206Z",
   "milestones": [
     {
       "id": "M001",
@@ -10537,19 +10537,28 @@
       "milestone_id": "M017",
       "slice_id": "S01",
       "id": "T02",
-      "title": "实现 lifecycle 并发收敛策略",
-      "status": "pending",
-      "one_liner": "",
-      "narrative": "",
-      "verification_result": "",
+      "title": "Added optimistic lifecycle convergence so stale pause/resume writes no longer reopen terminal sessions",
+      "status": "complete",
+      "one_liner": "Added optimistic lifecycle convergence so stale pause/resume writes no longer reopen terminal sessions",
+      "narrative": "I promoted the T01 stale-writer proof from strict xfail into an enforced passing contract, then implemented the convergence logic inside `backend/src/common/db/session_lifecycle.py` instead of scattering guards across REST/WebSocket callers. The service now persists lifecycle mutations with an optimistic compare-and-swap on `PracticeSession.status` (`UPDATE ... WHERE session_id=:id AND status=:observed_status`). When that write loses a race, the service loads the latest persisted lifecycle row through an independent async session, logs `practice_session_lifecycle_concurrency_conflict`, syncs the in-memory session back to the durable state, and converges stale non-terminal writers that hit an already-terminal session (`scoring` / `completed`) into `changed=False` no-ops instead of reopening the session. For non-terminal conflicts, the service retries once from the persisted state so normal same-action/idempotent convergence still works. This keeps the existing terminal split intact (`sales -> scoring`, `presentation -> completed`) and leaves report/replay unlock semantics unchanged because only the stale overwrite window changed, not the terminal targets or downstream end-of-session behavior. I updated the unit tests to separate pure state-machine assertions from explicit conflict-path assertions, and I upgraded the integration race proof so it now requires the stale writer itself to observe terminal state and return a no-op before commit. I also recorded the strategy choice in decision D197 and appended the SQLite stale-snapshot gotcha to `.gsd/KNOWLEDGE.md` for downstream slices.",
+      "verification_result": "I first ran the promoted race proof before the fix and confirmed the expected red state: stale `resume` / `pause` transitions still returned `changed=True` and reopened terminal rows. After implementing the optimistic status-guarded write path, I reran the targeted unit conflict tests, the promoted integration race proof, and finally the full task-plan lifecycle suite. All three passed. I also ran LSP diagnostics on `backend/src/common/db/session_lifecycle.py`, `backend/tests/unit/test_session_lifecycle_service.py`, and `backend/tests/integration/test_session_lifecycle_api.py`; all returned `No diagnostics`. The focused pytest commands still emit existing repo-level warnings from pytest-cov (`Module src was never imported` / `No data was collected`), the existing `passlib` crypt deprecation warning, and the pre-existing `RuntimeWarning: coroutine 'Connection._cancel' was never awaited` in `test_lifecycle_api_end_is_idempotent_and_logs_unified_terminal_context`, but none were introduced by this task and the suite exits 0.",
       "duration": "",
-      "completed_at": null,
+      "completed_at": "2026-04-11T21:08:06.167Z",
       "blocker_discovered": false,
-      "deviations": "",
-      "known_issues": "",
-      "key_files": [],
-      "key_decisions": [],
-      "full_summary_md": "",
+      "deviations": "None.",
+      "known_issues": "Existing focused pytest warnings remain: pytest-cov reports `Module src was never imported` / `No data was collected` on these narrow commands, `passlib` emits a `crypt` deprecation warning, and `test_lifecycle_api_end_is_idempotent_and_logs_unified_terminal_context` still produces the pre-existing `RuntimeWarning: coroutine 'Connection._cancel' was never awaited` while the suite passes. No new blocker was discovered.",
+      "key_files": [
+        "backend/src/common/db/session_lifecycle.py",
+        "backend/tests/unit/test_session_lifecycle_service.py",
+        "backend/tests/integration/test_session_lifecycle_api.py",
+        ".gsd/KNOWLEDGE.md",
+        ".gsd/DECISIONS.md"
+      ],
+      "key_decisions": [
+        "D197: choose optimistic compare-and-swap on `PracticeSession.status` instead of row locks so the lifecycle race is provable in the focused SQLite-backed suite.",
+        "Only stale writers that lose to an already-persisted terminal state converge to a no-op; fresh pause/resume requests against terminal sessions remain invalid transitions."
+      ],
+      "full_summary_md": "---\nid: T02\nparent: S01\nmilestone: M017\nkey_files:\n  - backend/src/common/db/session_lifecycle.py\n  - backend/tests/unit/test_session_lifecycle_service.py\n  - backend/tests/integration/test_session_lifecycle_api.py\n  - .gsd/KNOWLEDGE.md\n  - .gsd/DECISIONS.md\nkey_decisions:\n  - D197: choose optimistic compare-and-swap on `PracticeSession.status` instead of row locks so the lifecycle race is provable in the focused SQLite-backed suite.\n  - Only stale writers that lose to an already-persisted terminal state converge to a no-op; fresh pause/resume requests against terminal sessions remain invalid transitions.\nduration: \nverification_result: passed\ncompleted_at: 2026-04-11T21:08:06.166Z\nblocker_discovered: false\n---\n\n# T02: Added optimistic lifecycle convergence so stale pause/resume writes no longer reopen terminal sessions\n\n**Added optimistic lifecycle convergence so stale pause/resume writes no longer reopen terminal sessions**\n\n## What Happened\n\nI promoted the T01 stale-writer proof from strict xfail into an enforced passing contract, then implemented the convergence logic inside `backend/src/common/db/session_lifecycle.py` instead of scattering guards across REST/WebSocket callers. The service now persists lifecycle mutations with an optimistic compare-and-swap on `PracticeSession.status` (`UPDATE ... WHERE session_id=:id AND status=:observed_status`). When that write loses a race, the service loads the latest persisted lifecycle row through an independent async session, logs `practice_session_lifecycle_concurrency_conflict`, syncs the in-memory session back to the durable state, and converges stale non-terminal writers that hit an already-terminal session (`scoring` / `completed`) into `changed=False` no-ops instead of reopening the session. For non-terminal conflicts, the service retries once from the persisted state so normal same-action/idempotent convergence still works. This keeps the existing terminal split intact (`sales -> scoring`, `presentation -> completed`) and leaves report/replay unlock semantics unchanged because only the stale overwrite window changed, not the terminal targets or downstream end-of-session behavior. I updated the unit tests to separate pure state-machine assertions from explicit conflict-path assertions, and I upgraded the integration race proof so it now requires the stale writer itself to observe terminal state and return a no-op before commit. I also recorded the strategy choice in decision D197 and appended the SQLite stale-snapshot gotcha to `.gsd/KNOWLEDGE.md` for downstream slices.\n\n## Verification\n\nI first ran the promoted race proof before the fix and confirmed the expected red state: stale `resume` / `pause` transitions still returned `changed=True` and reopened terminal rows. After implementing the optimistic status-guarded write path, I reran the targeted unit conflict tests, the promoted integration race proof, and finally the full task-plan lifecycle suite. All three passed. I also ran LSP diagnostics on `backend/src/common/db/session_lifecycle.py`, `backend/tests/unit/test_session_lifecycle_service.py`, and `backend/tests/integration/test_session_lifecycle_api.py`; all returned `No diagnostics`. The focused pytest commands still emit existing repo-level warnings from pytest-cov (`Module src was never imported` / `No data was collected`), the existing `passlib` crypt deprecation warning, and the pre-existing `RuntimeWarning: coroutine 'Connection._cancel' was never awaited` in `test_lifecycle_api_end_is_idempotent_and_logs_unified_terminal_context`, but none were introduced by this task and the suite exits 0.\n\n## Verification Evidence\n\n| # | Command | Exit Code | Verdict | Duration |\n|---|---------|-----------|---------|----------|\n| 1 | `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/test_session_lifecycle_service.py -k 'stale_terminal_writer_converges_to_persisted_terminal_noop or fresh_terminal_resume_still_raises_invalid_transition' -q` | 0 | ✅ pass | 501ms |\n| 2 | `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/integration/test_session_lifecycle_api.py -k 'lifecycle_race_proof_preserves_terminal_status_against_stale_writer' -q` | 0 | ✅ pass | 2565ms |\n| 3 | `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/test_session_lifecycle_service.py backend/tests/integration/test_session_lifecycle_api.py -x -q` | 0 | ✅ pass | 3576ms |\n\n## Deviations\n\nNone.\n\n## Known Issues\n\nExisting focused pytest warnings remain: pytest-cov reports `Module src was never imported` / `No data was collected` on these narrow commands, `passlib` emits a `crypt` deprecation warning, and `test_lifecycle_api_end_is_idempotent_and_logs_unified_terminal_context` still produces the pre-existing `RuntimeWarning: coroutine 'Connection._cancel' was never awaited` while the suite passes. No new blocker was discovered.\n\n## Files Created/Modified\n\n- `backend/src/common/db/session_lifecycle.py`\n- `backend/tests/unit/test_session_lifecycle_service.py`\n- `backend/tests/integration/test_session_lifecycle_api.py`\n- `.gsd/KNOWLEDGE.md`\n- `.gsd/DECISIONS.md`\n",
       "description": "Why: 只有从 failing-to-passing 的并发 proof 出发，锁策略才会是事实驱动，而不是经验性补丁。\n\nDo:\n1. 先写 race-oriented failing proof。\n2. 选择行锁或乐观并发策略实现收敛。\n3. 保持 sales/presentation 现有终态差异与 report/replay 解锁语义。\n4. 不把简单防抖误包装成并发安全修复。\n\nDone when: focused lifecycle backend proof 通过，且状态收敛策略有明确理由。",
       "estimate": "1.5h",
       "files": [
@@ -13516,6 +13525,18 @@
       "decision": "How M016/S03 admin security baseline proof maps inventory watch entries to runtime tests",
       "choice": "Keep the repaired five isolated-router families on explicit `ADMIN_SECURITY_BASELINE_WATCH_ROUTE_PROOFS` coverage and track already-correct admin families separately through `ADMIN_PERMISSION_POSITIVE_CONTROL` instead of forcing every inventory `priority=\"watch\"` entry into the same runtime deny test.",
       "rationale": "The S03 inventory uses `priority=\"watch\"` for two different reasons: some route families were repaired and need isolated-router RBAC proof, while other admin families are already correctly guarded and only need ongoing positive-control tracking. Splitting those cases keeps the baseline honest, prevents over-broad runtime assertions, and makes future admin-security audits update the inventory deliberately rather than widening proof scope accidentally.",
+      "revisable": "Yes",
+      "made_by": "agent",
+      "superseded_by": null
+    },
+    {
+      "seq": 1567,
+      "id": "D197",
+      "when_context": "M017/S01/T02",
+      "scope": "architecture",
+      "decision": "Session lifecycle stale-writer convergence strategy",
+      "choice": "Use optimistic compare-and-swap on PracticeSession.status and converge stale non-terminal writers to the already-persisted terminal state instead of introducing row locks.",
+      "rationale": "The focused lifecycle proof runs on SQLite-backed tests where row-lock behavior is not a reliable or easily provable contract. A status-guarded UPDATE makes the race observable at write time, preserves existing sales/presentation terminal differences plus report/replay semantics, and lets stale pause/resume attempts become explicit no-op convergence when end already won.",
       "revisable": "Yes",
       "made_by": "agent",
       "superseded_by": null
@@ -17492,6 +17513,39 @@
       "verdict": "✅ pass",
       "duration_ms": 18,
       "created_at": "2026-04-11T20:57:17.644Z"
+    },
+    {
+      "id": 367,
+      "task_id": "T02",
+      "slice_id": "S01",
+      "milestone_id": "M017",
+      "command": "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/test_session_lifecycle_service.py -k 'stale_terminal_writer_converges_to_persisted_terminal_noop or fresh_terminal_resume_still_raises_invalid_transition' -q",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 501,
+      "created_at": "2026-04-11T21:08:06.168Z"
+    },
+    {
+      "id": 368,
+      "task_id": "T02",
+      "slice_id": "S01",
+      "milestone_id": "M017",
+      "command": "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/integration/test_session_lifecycle_api.py -k 'lifecycle_race_proof_preserves_terminal_status_against_stale_writer' -q",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 2565,
+      "created_at": "2026-04-11T21:08:06.168Z"
+    },
+    {
+      "id": 369,
+      "task_id": "T02",
+      "slice_id": "S01",
+      "milestone_id": "M017",
+      "command": "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/test_session_lifecycle_service.py backend/tests/integration/test_session_lifecycle_api.py -x -q",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 3576,
+      "created_at": "2026-04-11T21:08:06.168Z"
     }
   ]
 }

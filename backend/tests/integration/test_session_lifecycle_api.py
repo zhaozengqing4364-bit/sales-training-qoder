@@ -98,10 +98,6 @@ def test_race_catalog_focuses_on_terminal_regressions() -> None:
 
 
 @pytest.mark.asyncio
-@pytest.mark.xfail(
-    strict=True,
-    reason="T01 proof: stale lifecycle writers can still overwrite an already terminal session.",
-)
 @pytest.mark.parametrize(
     "race_scenario",
     SESSION_LIFECYCLE_RACE_SCENARIOS,
@@ -142,12 +138,15 @@ async def test_lifecycle_race_proof_preserves_terminal_status_against_stale_writ
         await winner_db.commit()
         assert winner_transition.to_status == race_scenario.expected_status
 
-        await stale_service.transition(
+        stale_transition = await stale_service.transition(
             session=stale_session,
             scenario_type=stale_scenario_type,
             action=race_scenario.stale_action,
             now=datetime(2026, 2, 11, 12, 1, tzinfo=UTC),
         )
+        assert stale_transition.changed is False
+        assert stale_transition.from_status == race_scenario.expected_status
+        assert stale_transition.to_status == race_scenario.expected_status
         await stale_db.commit()
 
     async with factory() as verify_db:

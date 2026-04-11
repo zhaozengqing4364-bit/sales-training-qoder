@@ -35,7 +35,7 @@ Done when: 已形成一组可执行 race 场景，后续实现可直接从 faili
   - Files: `backend/src/common/db/session_lifecycle.py`, `backend/tests/unit/test_session_lifecycle_service.py`, `backend/tests/integration/test_session_lifecycle_api.py`
   - Verify: rg -n "pause|resume|end|scoring|completed" backend/src/common/db/session_lifecycle.py backend/tests/unit/test_session_lifecycle_service.py backend/tests/integration/test_session_lifecycle_api.py
 
-- [ ] **T02: 实现 lifecycle 并发收敛策略** `est:1.5h`
+- [x] **T02: 实现 lifecycle 并发收敛策略** `est:1.5h`
   Why: 只有从 failing-to-passing 的并发 proof 出发，锁策略才会是事实驱动，而不是经验性补丁。
 
 Do:

@@ -6,11 +6,12 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 from uuid import uuid4
 
 import pytest
 
+import common.db.session_lifecycle as session_lifecycle_module
 from common.db.session_lifecycle import (
     InvalidSessionTransitionError,
     SESSION_LIFECYCLE_RACE_SCENARIOS,
@@ -20,12 +21,13 @@ from common.db.session_lifecycle import (
 
 def _make_session(
     *,
+    session_id: str | None = None,
     status: str = "preparing",
     start_time: datetime | None = None,
     end_time: datetime | None = None,
 ):
     return SimpleNamespace(
-        session_id=str(uuid4()),
+        session_id=session_id,
         status=status,
         start_time=start_time,
         end_time=end_time,
@@ -57,6 +59,81 @@ def test_race_catalog_prioritizes_terminal_regressions() -> None:
     assert all(scenario.priority == "critical" for scenario in SESSION_LIFECYCLE_RACE_SCENARIOS)
     assert all(scenario.winner_action == "end" for scenario in SESSION_LIFECYCLE_RACE_SCENARIOS)
     assert {scenario.stale_action for scenario in SESSION_LIFECYCLE_RACE_SCENARIOS} == {"resume", "pause"}
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "race_scenario",
+    SESSION_LIFECYCLE_RACE_SCENARIOS,
+    ids=lambda scenario: scenario.slug,
+)
+async def test_stale_terminal_writer_converges_to_persisted_terminal_noop(
+    service,
+    mock_db,
+    monkeypatch,
+    race_scenario,
+):
+    session = _make_session(
+        session_id=str(uuid4()),
+        status=race_scenario.initial_status,
+    )
+    update_result = MagicMock()
+    update_result.rowcount = 0
+    read_result = MagicMock()
+    read_result.first.return_value = (
+        race_scenario.expected_status,
+        session.start_time,
+        datetime(2026, 2, 11, 12, 0, tzinfo=UTC),
+        300,
+        race_scenario.scenario_type,
+    )
+    mock_db.execute.side_effect = [update_result, read_result]
+    warning_spy = MagicMock()
+    monkeypatch.setattr(session_lifecycle_module.logger, "warning", warning_spy)
+
+    transition = await service.transition(
+        session=session,
+        scenario_type=race_scenario.scenario_type,
+        action=race_scenario.stale_action,
+        now=datetime(2026, 2, 11, 12, 1, tzinfo=UTC),
+    )
+
+    assert transition.changed is False
+    assert transition.from_status == race_scenario.expected_status
+    assert transition.to_status == race_scenario.expected_status
+    assert session.status == race_scenario.expected_status
+    mock_db.flush.assert_not_awaited()
+    warning_spy.assert_called_once()
+    assert warning_spy.call_args.args[0] == "practice_session_lifecycle_concurrency_conflict"
+    assert warning_spy.call_args.kwargs == {
+        "session_id": session.session_id,
+        "action": race_scenario.stale_action,
+        "stale_status": race_scenario.initial_status,
+        "persisted_status": race_scenario.expected_status,
+        "scenario_type": race_scenario.scenario_type,
+        "converged_to_terminal": True,
+    }
+
+
+@pytest.mark.asyncio
+async def test_fresh_terminal_resume_still_raises_invalid_transition(service, mock_db):
+    session = _make_session(status="scoring")
+    result = MagicMock()
+    result.first.return_value = ("scoring", session.start_time, None, None, "sales")
+    result.scalar_one_or_none.return_value = "scoring"
+    mock_db.execute.return_value = result
+
+    with pytest.raises(InvalidSessionTransitionError) as exc_info:
+        await service.transition(
+            session=session,
+            scenario_type="sales",
+            action="resume",
+        )
+
+    assert exc_info.value.action == "resume"
+    assert exc_info.value.from_status == "scoring"
+    assert exc_info.value.expected == "paused|in_progress"
+    mock_db.flush.assert_not_awaited()
 
 
 @pytest.mark.asyncio
