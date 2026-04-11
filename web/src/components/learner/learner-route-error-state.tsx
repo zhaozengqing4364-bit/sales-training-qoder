@@ -5,6 +5,7 @@ import Link from "next/link";
 import { AlertTriangle, ArrowLeft, RefreshCw } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { debug } from "@/lib/debug";
 
 type LearnerRouteErrorStateProps = {
     error: unknown;
@@ -39,6 +40,19 @@ function getDiagnosticMessage(error: unknown): string | null {
     return null;
 }
 
+function getErrorDigest(error: unknown): string | undefined {
+    if (
+        typeof error === "object" &&
+        error !== null &&
+        "digest" in error &&
+        typeof error.digest === "string"
+    ) {
+        return error.digest;
+    }
+
+    return undefined;
+}
+
 export function LearnerRouteErrorState({
     error,
     reset,
@@ -52,8 +66,12 @@ export function LearnerRouteErrorState({
     const showDiagnosticMessage = process.env.NODE_ENV === "development" && Boolean(diagnosticMessage);
 
     useEffect(() => {
-        console.error(`[LearnerRouteErrorState:${errorTag}]`, error);
-    }, [error, errorTag]);
+        debug.durableError("route-error.learner", error, {
+            digest: getErrorDigest(error),
+            errorTag,
+            backHref,
+        });
+    }, [backHref, error, errorTag]);
 
     return (
         <div className="flex min-h-[60vh] items-center justify-center p-8">

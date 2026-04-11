@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "exported_at": "2026-04-11T17:12:25.065Z",
+  "exported_at": "2026-04-11T17:22:01.571Z",
   "milestones": [
     {
       "id": "M001",
@@ -9642,19 +9642,31 @@
       "milestone_id": "M015",
       "slice_id": "S01",
       "id": "T02",
-      "title": "实现 shared debug seam 收口",
-      "status": "pending",
-      "one_liner": "",
-      "narrative": "",
-      "verification_result": "",
+      "title": "Added `debug.durableError(...)` and migrated route error surfaces and React boundaries onto the shared frontend observability seam.",
+      "status": "complete",
+      "one_liner": "Added `debug.durableError(...)` and migrated route error surfaces and React boundaries onto the shared frontend observability seam.",
+      "narrative": "I extended `web/src/lib/debug.ts` with an explicit `debug.durableError(scope, error, context)` helper so durable frontend failures have a single always-on observability seam that is distinct from the existing dev-gated `debug.log` / `debug.warn` paths. I then migrated the durable route-failure surfaces named in the inventory—`web/src/components/ErrorBoundary.tsx`, `web/src/components/learner/learner-route-error-state.tsx`, `web/src/app/(dashboard)/error.tsx`, and `web/src/app/admin/error.tsx`—to call that helper with stable scope tags and contextual metadata instead of owning their own `console.error(...)` calls. The existing fallback UI, Sentry capture, and analytics POST behavior in `ErrorBoundary` stayed intact; only the reporting seam changed. To keep the seam regression-proof, I added a direct helper test in `web/src/lib/debug.test.ts` and a route-surface test in `web/src/components/error-reporting.test.tsx` that proves app error surfaces and both React boundaries call the shared durable seam.",
+      "verification_result": "Reran a combined Vitest gate covering the new seam tests plus the task’s focused verification suites: `src/lib/debug.test.ts`, `src/components/error-reporting.test.tsx`, `src/app/(user)/practice/[sessionId]/page.test.tsx`, and `src/hooks/use-practice-websocket.test.ts`. The run passed with 4 test files / 26 tests green. I also ran a focused `rg` check on the migrated files to confirm route surfaces now call `debug.durableError(...)` and that remaining raw `console.error(...)` ownership is constrained to `web/src/lib/debug.ts`, which is the intentional seam boundary. Separate LSP diagnostics on the edited production files reported no issues.",
       "duration": "",
-      "completed_at": null,
+      "completed_at": "2026-04-11T17:22:01.521Z",
       "blocker_discovered": false,
-      "deviations": "",
-      "known_issues": "",
-      "key_files": [],
-      "key_decisions": [],
-      "full_summary_md": "",
+      "deviations": "Added two focused regression test files (`web/src/lib/debug.test.ts` and `web/src/components/error-reporting.test.tsx`) so the new seam and its migrated callers are locked directly; this tightened verification without changing the task scope.",
+      "known_issues": "None.",
+      "key_files": [
+        "web/src/lib/debug.ts",
+        "web/src/components/ErrorBoundary.tsx",
+        "web/src/components/learner/learner-route-error-state.tsx",
+        "web/src/app/(dashboard)/error.tsx",
+        "web/src/app/admin/error.tsx",
+        "web/src/lib/debug.test.ts",
+        "web/src/components/error-reporting.test.tsx",
+        ".gsd/DECISIONS.md",
+        ".gsd/KNOWLEDGE.md"
+      ],
+      "key_decisions": [
+        "D181: route error surfaces and React error boundaries now report through `debug.durableError(scope, error, context)` instead of ad hoc raw console calls."
+      ],
+      "full_summary_md": "---\nid: T02\nparent: S01\nmilestone: M015\nkey_files:\n  - web/src/lib/debug.ts\n  - web/src/components/ErrorBoundary.tsx\n  - web/src/components/learner/learner-route-error-state.tsx\n  - web/src/app/(dashboard)/error.tsx\n  - web/src/app/admin/error.tsx\n  - web/src/lib/debug.test.ts\n  - web/src/components/error-reporting.test.tsx\n  - .gsd/DECISIONS.md\n  - .gsd/KNOWLEDGE.md\nkey_decisions:\n  - D181: route error surfaces and React error boundaries now report through `debug.durableError(scope, error, context)` instead of ad hoc raw console calls.\nduration: \nverification_result: passed\ncompleted_at: 2026-04-11T17:22:01.519Z\nblocker_discovered: false\n---\n\n# T02: Added `debug.durableError(...)` and migrated route error surfaces and React boundaries onto the shared frontend observability seam.\n\n**Added `debug.durableError(...)` and migrated route error surfaces and React boundaries onto the shared frontend observability seam.**\n\n## What Happened\n\nI extended `web/src/lib/debug.ts` with an explicit `debug.durableError(scope, error, context)` helper so durable frontend failures have a single always-on observability seam that is distinct from the existing dev-gated `debug.log` / `debug.warn` paths. I then migrated the durable route-failure surfaces named in the inventory—`web/src/components/ErrorBoundary.tsx`, `web/src/components/learner/learner-route-error-state.tsx`, `web/src/app/(dashboard)/error.tsx`, and `web/src/app/admin/error.tsx`—to call that helper with stable scope tags and contextual metadata instead of owning their own `console.error(...)` calls. The existing fallback UI, Sentry capture, and analytics POST behavior in `ErrorBoundary` stayed intact; only the reporting seam changed. To keep the seam regression-proof, I added a direct helper test in `web/src/lib/debug.test.ts` and a route-surface test in `web/src/components/error-reporting.test.tsx` that proves app error surfaces and both React boundaries call the shared durable seam.\n\n## Verification\n\nReran a combined Vitest gate covering the new seam tests plus the task’s focused verification suites: `src/lib/debug.test.ts`, `src/components/error-reporting.test.tsx`, `src/app/(user)/practice/[sessionId]/page.test.tsx`, and `src/hooks/use-practice-websocket.test.ts`. The run passed with 4 test files / 26 tests green. I also ran a focused `rg` check on the migrated files to confirm route surfaces now call `debug.durableError(...)` and that remaining raw `console.error(...)` ownership is constrained to `web/src/lib/debug.ts`, which is the intentional seam boundary. Separate LSP diagnostics on the edited production files reported no issues.\n\n## Verification Evidence\n\n| # | Command | Exit Code | Verdict | Duration |\n|---|---------|-----------|---------|----------|\n| 1 | `npm --prefix web test -- --run src/lib/debug.test.ts src/components/error-reporting.test.tsx \"src/app/(user)/practice/[sessionId]/page.test.tsx\" \"src/hooks/use-practice-websocket.test.ts\"` | 0 | ✅ pass | 1248ms |\n| 2 | `rg -n \"durableError|console\\\\.error\" web/src/lib/debug.ts web/src/components/ErrorBoundary.tsx web/src/components/learner/learner-route-error-state.tsx web/src/app/'(dashboard)'/error.tsx web/src/app/admin/error.tsx` | 0 | ✅ pass | 31ms |\n\n## Deviations\n\nAdded two focused regression test files (`web/src/lib/debug.test.ts` and `web/src/components/error-reporting.test.tsx`) so the new seam and its migrated callers are locked directly; this tightened verification without changing the task scope.\n\n## Known Issues\n\nNone.\n\n## Files Created/Modified\n\n- `web/src/lib/debug.ts`\n- `web/src/components/ErrorBoundary.tsx`\n- `web/src/components/learner/learner-route-error-state.tsx`\n- `web/src/app/(dashboard)/error.tsx`\n- `web/src/app/admin/error.tsx`\n- `web/src/lib/debug.test.ts`\n- `web/src/components/error-reporting.test.tsx`\n- `.gsd/DECISIONS.md`\n- `.gsd/KNOWLEDGE.md`\n",
       "description": "Why: 把业务页面与 route error surface 的日志出口统一到一条 shared seam，避免后续继续在页面本地直出 console。\n\nDo:\n1. 扩展或收口 `web/src/lib/debug.ts`，让业务日志与 durable error 通过统一 helper 输出。\n2. 把高噪声业务页面与 route `error.tsx`/ErrorBoundary 的日志迁到这条 seam。\n3. 保留必要 instrumentation 例外，并让例外边界在代码里可见。\n4. 不重写观测体系；只收口当前 audit 命中的高噪声 surface。\n\nDone when: 共享 debug seam 成为业务页面与 route error surface 的默认日志出口，focused 页面测试保持通过。",
       "estimate": "45m",
       "files": [
@@ -13134,6 +13146,18 @@
       "revisable": "Yes",
       "made_by": "agent",
       "superseded_by": null
+    },
+    {
+      "seq": 1551,
+      "id": "D181",
+      "when_context": "M015/S01/T02",
+      "scope": "observability",
+      "decision": "How route error surfaces should report durable frontend failures in M015/S01",
+      "choice": "Use `debug.durableError(scope, error, context)` as the default durable reporting seam for route `error.tsx`, learner route error state, and React error boundaries, while leaving raw console reserved for `web/src/lib/debug.ts` itself and bootstrap instrumentation entrypoints.",
+      "rationale": "This keeps durable product errors on one inspectable helper without changing existing fallback UI or downstream analytics side effects, and it makes the allowed raw-console exception boundary visible in code for later cleanup tasks.",
+      "revisable": "Yes",
+      "made_by": "agent",
+      "superseded_by": null
     }
   ],
   "verification_evidence": [
@@ -16469,6 +16493,28 @@
       "verdict": "✅ pass",
       "duration_ms": 26,
       "created_at": "2026-04-11T17:12:25.022Z"
+    },
+    {
+      "id": 309,
+      "task_id": "T02",
+      "slice_id": "S01",
+      "milestone_id": "M015",
+      "command": "npm --prefix web test -- --run src/lib/debug.test.ts src/components/error-reporting.test.tsx \"src/app/(user)/practice/[sessionId]/page.test.tsx\" \"src/hooks/use-practice-websocket.test.ts\"",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 1248,
+      "created_at": "2026-04-11T17:22:01.521Z"
+    },
+    {
+      "id": 310,
+      "task_id": "T02",
+      "slice_id": "S01",
+      "milestone_id": "M015",
+      "command": "rg -n \"durableError|console\\\\.error\" web/src/lib/debug.ts web/src/components/ErrorBoundary.tsx web/src/components/learner/learner-route-error-state.tsx web/src/app/'(dashboard)'/error.tsx web/src/app/admin/error.tsx",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 31,
+      "created_at": "2026-04-11T17:22:01.521Z"
     }
   ]
 }

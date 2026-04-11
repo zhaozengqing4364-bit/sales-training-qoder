@@ -12,6 +12,10 @@ export interface FrontendConsoleInventoryEntry {
     notes: string;
 }
 
+export interface DebugContext {
+    [key: string]: unknown;
+}
+
 /**
  * Canonical inventory for M015/S01.
  *
@@ -120,6 +124,13 @@ function isDebugEnabled(): boolean {
     return BUILD_DEBUG_ENABLED || runtimeDebugEnabled();
 }
 
+function emitDurableError(scope: string, error: unknown, context: DebugContext = {}) {
+    console.error(`[${scope}]`, error, {
+        reporting: "durable-error",
+        ...context,
+    });
+}
+
 export const debug = {
     log: (...args: unknown[]) => {
         if (isDebugEnabled()) {
@@ -133,6 +144,9 @@ export const debug = {
     },
     error: (...args: unknown[]) => {
         console.error(...args);
+    },
+    durableError: (scope: string, error: unknown, context?: DebugContext) => {
+        emitDurableError(scope, error, context);
     },
     enabled: () => isDebugEnabled(),
 };

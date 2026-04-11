@@ -36,7 +36,7 @@ Done when: 已形成一份可执行的分类结论，后续任务可以按这份
   - Files: `web/src/lib/debug.ts`, `web/src/components/ErrorBoundary.tsx`, `web/src/instrumentation.ts`, `web/src/instrumentation-client.ts`
   - Verify: rg -n "console\.(log|error|warn|info)" web/src
 
-- [ ] **T02: 实现 shared debug seam 收口** `est:45m`
+- [x] **T02: 实现 shared debug seam 收口** `est:45m`
   Why: 把业务页面与 route error surface 的日志出口统一到一条 shared seam，避免后续继续在页面本地直出 console。
 
 Do:

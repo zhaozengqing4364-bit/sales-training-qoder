@@ -3,6 +3,7 @@
 
 import { GlassCard } from "@/components/ui/glass-card";
 import { Button } from "@/components/ui/button";
+import { debug } from "@/lib/debug";
 import { AlertCircle, RefreshCcw } from "lucide-react";
 import { useEffect } from "react";
 
@@ -14,8 +15,10 @@ export default function Error({
     reset: () => void;
 }) {
     useEffect(() => {
-        // Log the error to an error reporting service
-        console.error(error);
+        debug.durableError("route-error.admin", error, {
+            digest: error.digest,
+            route: "/admin",
+        });
     }, [error]);
 
     return (

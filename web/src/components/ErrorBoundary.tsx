@@ -10,6 +10,8 @@
 
 import React, { Component, ErrorInfo, ReactNode } from 'react';
 
+import { debug } from '@/lib/debug';
+
 interface Props {
     children: ReactNode;
     fallback?: ReactNode;
@@ -57,9 +59,12 @@ export class ErrorBoundary extends Component<Props, State> {
 
     componentDidCatch(error: Error, errorInfo: ErrorInfo) {
         // M015/S01 inventory note: ErrorBoundary is a durable route error surface.
-        // Keep the fallback UI + reporting side effects here, but migrate the raw console
-        // call to the shared debug/observability seam in T02 instead of leaving it bespoke.
-        console.error('Error caught by boundary:', error, errorInfo);
+        // Keep the fallback UI + reporting side effects here, but route the durable
+        // report through the shared seam instead of leaving a bespoke raw console call.
+        debug.durableError('react.error-boundary', error, {
+            componentStack: errorInfo.componentStack,
+            boundary: 'ErrorBoundary',
+        });
 
         // Send to monitoring service if available
         if (typeof window !== 'undefined') {
@@ -205,8 +210,11 @@ export class AsyncErrorBoundary extends Component<Props, State> {
 
     componentDidCatch(error: Error, errorInfo: ErrorInfo) {
         // M015/S01 inventory note: Async boundary failures are also durable route-level
-        // errors, so they belong on the shared debug seam once T02 does the migration.
-        console.error('Async error caught:', error, errorInfo);
+        // errors, so they belong on the shared debug seam instead of bespoke console use.
+        debug.durableError('react.async-error-boundary', error, {
+            componentStack: errorInfo.componentStack,
+            boundary: 'AsyncErrorBoundary',
+        });
     }
 
     render() {
