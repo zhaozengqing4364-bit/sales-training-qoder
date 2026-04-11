@@ -1,4 +1,23 @@
 
+- time: 2026-04-12T02:52:25+08:00
+  mode: grow
+  item id: M015-S03
+  files changed:
+    - .gsd/DECISIONS.md
+    - .gsd/milestones/M015/slices/S03/S03-SUMMARY.md
+    - .gsd/milestones/M015/slices/S03/S03-UAT.md
+    - .gsd/PROJECT.md
+    - .codex/loop/state.json
+    - .codex/loop/log.md
+  summary: Closed M015/S03 after fresh slice-level verification confirmed learner dashboard/auth/practice routes now share explicit route-level fallback shells, the durable learner route-error seam still reports correctly, and remaining responsive/timezone work is preserved as a focused deferred baseline instead of reopening shell scope.
+  verification commands:
+    - find web/src/app -type f \( -name 'error.tsx' -o -name 'loading.tsx' \) | sort && npm --prefix web test -- --run "src/app/(dashboard)/history/page.test.tsx" "src/app/(user)/practice/[sessionId]/report/page.test.tsx" "src/app/(user)/practice/[sessionId]/replay/page.test.tsx"
+    - npm --prefix web test -- --run "src/app/learner-shell-baseline.test.ts" "src/components/error-reporting.test.tsx" "src/app/(user)/practice/[sessionId]/error.test.tsx"
+    - lsp diagnostics web/src/app/learner-shell-baseline.test.ts
+  verification results: passed; the route-file inventory plus learner history/report/replay gate finished 41/41 green, the learner-shell baseline + route-error observability gate finished 8/8 green, and diagnostics were clean on the focused learner proof file.
+  success signal status: M015/S03 is now closed on one durable learner-shell contract — group-level dashboard/auth loaders, live-practice fallback coverage, shared durable route-error reporting, and one proof file that future agents can rerun directly.
+  rollback note: if later work changes learner route families or resolves the deferred responsive/timezone baseline, update web/src/app/learner-shell-baseline.test.ts, the matching knowledge entries, and this slice summary together so shell scope and proof do not drift.
+
 - time: 2026-04-12T02:47:30+08:00
   mode: grow
   item id: M015-S03-T03

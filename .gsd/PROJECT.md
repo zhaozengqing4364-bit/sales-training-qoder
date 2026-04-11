@@ -32,25 +32,23 @@
 - **M011**：KnowledgeAnswerEngine、control plane、audit、debug API、compat rollout 已接入现有 runtime。
 - **M012**：首登与 learner 基础体验已补齐（forgot-password、可信 dashboard/profile、shared help、practice route fallback 等）。
 - **M013**：system audit findings 已归一化成可信 repair backlog 与 focused verification baseline。
-- **M014**：learner 首页 CTA、profile→forgot/reset、shared help、practice preflight/interruption guidance 已完成收口。
+- **M014**：learner 入口与体验闭环补齐（dashboard CTA、profile→forgot/reset、shared help、practice preflight/interruption guidance）。
+- **M015**：frontend hygiene 与 learner shell 保护收口已完成并封板——raw console 已统一到 shared debug seam，原生 dialog/hard navigation 已收口到 auth-handler/router/dialog/toast seam，learner dashboard/auth/practice 入口已具备明确的 route-level loading/error fallback，并把剩余 responsive/timezone 风险锁成 focused baseline proof。
 
-### Current active milestone: M015 — Frontend hygiene 与 learner shell 保护收口
-- **S01 已完成**：frontend raw console 已统一收口到 shared debug / observability seam。
-- **S02 已完成**：高风险 admin/learner 中断式交互与 auth/business 跳转已统一到 `ConfirmDialog`、toast、router、`authHandler` seam；业务页面不再依赖原生 `alert()` / `confirm()` 或 `window.location.assign`。repo 内剩余 `window.location.href` 命中只保留在 `ErrorBoundary`、`performance.ts` 与 `app/admin/error.tsx` 这三类已文档化例外。
-- **S03 待执行**：继续完成 learner shell 的 error/loading fallback、responsive/a11y/timezone baseline 收口。
-
-## Current Working Truths
+## Current Product Truths
 
 - 当前权威 learner surfaces 仍是现有 `/practice/{sessionId}`、`/practice/{sessionId}/report`、`/practice/{sessionId}/replay`、`/history`，不是新造第二套路由。
 - 当前权威 admin surfaces 仍是现有 `/admin/*` 页面族，不应平行再造管理工作台。
 - 训练事实权威线已经建立：会话生命周期、retrieval truth、audio audit、conclusion evidence、degradation taxonomy 都应复用现有 shared seam，而不是页面本地再推导。
-- 前端表层 hygiene 现在已有两条明确边界：
-  - raw console 只允许出现在 shared debug seam / instrumentation 例外。
+- 前端 hygiene 边界现在已有三条明确约束：
+  - raw `console.*` 只允许出现在 shared debug seam / instrumentation 例外。
   - native dialog / hard navigation 只允许出现在已文档化例外，其余业务流程必须走 shared dialog / toast / router / auth-handler seam。
+  - learner shell fallback 只按 learner-core route families 闭合：sidebar learner routes + auth/practice flows；`/support/runtime` 和 admin route shells 不算 learner-shell 缺口。
+- learner shell baseline 现在已有一个可直接复跑的 focused proof：`web/src/app/learner-shell-baseline.test.ts`。它同时锁定 route-shell inventory、shared a11y/error seam，以及尚未解决但已知的 responsive/timezone baseline 事实。
 
 ## Current Focus
 
-优先继续 M015/S03，把 learner shell 的 error/loading 覆盖、responsive/a11y/timezone baseline 做成低风险、可验证的收口，而不是扩写新页面或引入新的产品面。
+M015 已完成收口。当前项目应从已更新的 roadmap / backlog 中选择下一个真实用户价值或核心能力增强里程碑，而不是继续在已封板的 frontend hygiene / learner shell 范围内做无边界追加。
 
 ## Capability Contract
 
@@ -72,4 +70,4 @@
 - [x] M012 — 首登可用性与体验修复
 - [x] M013 — system audit 归一化与修复基线
 - [x] M014 — learner 入口与体验闭环补齐
-- [ ] M015 — Frontend hygiene 与 learner shell 保护收口（S01/S02 complete，S03 pending）
+- [x] M015 — Frontend hygiene 与 learner shell 保护收口
