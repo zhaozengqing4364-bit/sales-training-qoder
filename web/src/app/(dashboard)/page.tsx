@@ -22,6 +22,7 @@ import { DashboardStats, Recommendation, SessionItem } from "@/lib/api/types";
 import { useCurrentUser } from "@/hooks/use-current-user";
 import {
     Dialog,
+    DialogClose,
     DialogContent,
     DialogDescription,
     DialogFooter,
@@ -104,6 +105,7 @@ function getDashboardHistoryActions(item: SessionItem): {
     reportLabel: string;
     disabledReason: string | null;
 } {
+    // Dashboard 首页只保留“查看报告”深链，不重新引入导出报告 affordance。
     const sessionId = resolveDashboardSessionId(item);
     const supportsSharedReportRoute = item.scenario_type === "sales" || item.scenario_type === "presentation";
 
@@ -142,6 +144,10 @@ function getDashboardHistoryActions(item: SessionItem): {
     };
 }
 
+function getOnboardingTitle(hasHistory: boolean): string {
+    return hasHistory ? "继续按这 3 步推进训练" : "第一次来，先这样开始";
+}
+
 export default function HomePage() {
     const router = useRouter();
     const { data: currentUser } = useCurrentUser();
@@ -176,6 +182,74 @@ export default function HomePage() {
         void loadDashboardData();
     }, []);
 
+    const resolvedHistoryItems = historyItems.map((item) => ({
+        item,
+        historyActions: getDashboardHistoryActions(item),
+    }));
+    const reportShortcut = resolvedHistoryItems.find(({ historyActions }) => historyActions.reportHref);
+    const hasHistory = historyItems.length > 0;
+    const onboardingSteps = [
+        {
+            key: "train",
+            badge: "第 1 步",
+            title: recommendation.title,
+            description: recommendation.reason,
+            href: recommendation.target_path,
+            actionLabel: recommendation.action_label,
+            icon: Zap,
+            accentClassName: "bg-blue-50 text-blue-700 border-blue-100",
+            buttonClassName: "rounded-full bg-slate-900 text-white hover:bg-slate-800",
+        },
+        {
+            key: "history",
+            badge: "第 2 步",
+            title: "去历史页复盘",
+            description: "完整记录、筛选与复练线索统一收口在历史页。",
+            href: "/history",
+            actionLabel: "去历史页",
+            icon: Presentation,
+            accentClassName: "bg-violet-50 text-violet-700 border-violet-100",
+            buttonClassName: "rounded-full",
+        },
+        {
+            key: "report",
+            badge: "第 3 步",
+            title: reportShortcut ? "打开最近一次可用报告" : "完成训练后看统一报告",
+            description: reportShortcut
+                ? `最近一次可用报告：${reportShortcut.item.title}`
+                : "报告生成后，可从最近记录或历史页进入统一报告。",
+            href: reportShortcut?.historyActions.reportHref ?? "/history",
+            actionLabel: "报告入口",
+            icon: CheckCircle2,
+            accentClassName: "bg-emerald-50 text-emerald-700 border-emerald-100",
+            buttonClassName: "rounded-full",
+        },
+    ];
+    const versionDialogHighlights = [
+        {
+            title: recommendation.title,
+            description: recommendation.reason,
+            icon: Zap,
+            iconClassName: "bg-blue-100 text-blue-600",
+        },
+        {
+            title: hasHistory ? "最近记录入口已就绪" : "先完成第一次训练",
+            description: hasHistory
+                ? `首页当前已加载 ${historyItems.length} 条最近记录，可直接去历史页或统一报告继续复盘。`
+                : "完成第一次训练后，首页会出现历史页和统一报告的快捷入口。",
+            icon: Presentation,
+            iconClassName: "bg-violet-100 text-violet-600",
+        },
+        {
+            title: "首页只保留真实闭环入口",
+            description: reportShortcut
+                ? "这个版本支持继续训练、查看历史，以及直接打开最近一次可用报告。"
+                : "这个版本支持先训练、再去历史页/统一报告复盘，不再放装饰性空壳按钮。",
+            icon: CheckCircle2,
+            iconClassName: "bg-emerald-100 text-emerald-600",
+        },
+    ];
+
     if (isLoading) {
         return <DashboardSkeleton />;
     }
@@ -193,35 +267,32 @@ export default function HomePage() {
                             </DialogTrigger>
                             <DialogContent>
                                 <DialogHeader>
-                                    <DialogTitle>版本更新日志</DialogTitle>
-                                    <DialogDescription>感谢使用 AI 销售教练平台</DialogDescription>
+                                    <DialogTitle>当前版本可用入口</DialogTitle>
+                                    <DialogDescription>{versionBadge} 当前只展示真实可用的训练、历史与报告入口。</DialogDescription>
                                 </DialogHeader>
                                 <div className="space-y-4 py-4">
-                                    <div className="flex gap-3">
-                                        <div className="mt-1 bg-violet-100 p-1 rounded-full h-fit"><Presentation className="w-3 h-3 text-violet-600" /></div>
-                                        <div>
-                                            <div className="text-sm font-bold text-slate-900">PPT 长时演讲稳定性优化</div>
-                                            <p className="text-xs text-slate-500">长时间实时演练支持更稳定，减少中断与角色偏航。</p>
-                                        </div>
-                                    </div>
-                                    <div className="flex gap-3">
-                                        <div className="mt-1 bg-blue-100 p-1 rounded-full h-fit"><Zap className="w-3 h-3 text-blue-600" /></div>
-                                        <div>
-                                            <div className="text-sm font-bold text-slate-900">演讲策略配置简化</div>
-                                            <p className="text-xs text-slate-500">策略管理改为最简模式，关键参数更清晰。</p>
-                                        </div>
-                                    </div>
-                                    <div className="flex gap-3">
-                                        <div className="mt-1 bg-emerald-100 p-1 rounded-full h-fit"><CheckCircle2 className="w-3 h-3 text-emerald-600" /></div>
-                                        <div>
-                                            <div className="text-sm font-bold text-slate-900">性能优化</div>
-                                            <p className="text-xs text-slate-500">语音合成响应速度大幅提升。</p>
-                                        </div>
-                                    </div>
+                                    {versionDialogHighlights.map((highlight) => {
+                                        const Icon = highlight.icon;
+                                        return (
+                                            <div key={highlight.title} className="flex gap-3">
+                                                <div className={cn("mt-1 p-1 rounded-full h-fit", highlight.iconClassName)}>
+                                                    <Icon className="w-3 h-3" />
+                                                </div>
+                                                <div>
+                                                    <div className="text-sm font-bold text-slate-900">{highlight.title}</div>
+                                                    <p className="text-xs text-slate-500">{highlight.description}</p>
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
                                 </div>
                                 <DialogFooter>
-                                    <Button variant="ghost" onClick={() => setIsWeeklyStatsOpen(false)} className="rounded-full">稍后再说</Button>
-                                    <Button onClick={() => router.push("/training/presentation")} className="rounded-full bg-slate-900 text-white px-6">立即体验</Button>
+                                    <DialogClose asChild>
+                                        <Button variant="ghost" className="rounded-full">稍后再看</Button>
+                                    </DialogClose>
+                                    <DialogClose asChild>
+                                        <Button onClick={() => router.push(recommendation.target_path)} className="rounded-full bg-slate-900 text-white px-6">{recommendation.action_label}</Button>
+                                    </DialogClose>
                                 </DialogFooter>
                             </DialogContent>
                         </Dialog>
@@ -311,6 +382,53 @@ export default function HomePage() {
                 </div>
             </header>
 
+            <section className="grid grid-cols-1 xl:grid-cols-[0.9fr_2.1fr] gap-4">
+                <GlassCard className="p-6 bg-white/80 border-none shadow-sm ring-1 ring-slate-100">
+                    <div className="flex items-center gap-3 mb-3">
+                        <div className="w-10 h-10 rounded-2xl bg-blue-50 flex items-center justify-center text-blue-600">
+                            <Zap className="w-5 h-5" />
+                        </div>
+                        <div>
+                            <p className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">最小上手指引</p>
+                            <h2 className="text-xl font-bold text-slate-900 mt-1">{getOnboardingTitle(hasHistory)}</h2>
+                        </div>
+                    </div>
+                    <p className="text-sm leading-6 text-slate-600">
+                        {recommendation.reason}
+                    </p>
+                    <div className="mt-4 rounded-2xl border border-dashed border-slate-200 bg-slate-50/80 px-4 py-3 text-xs leading-6 text-slate-500">
+                        先训练，再去历史页和统一报告复盘；首页不再放看起来能点、实际没有闭环的装饰性按钮。
+                    </div>
+                </GlassCard>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    {onboardingSteps.map((step) => {
+                        const Icon = step.icon;
+                        return (
+                            <GlassCard key={step.key} className="p-5 bg-white/80 border-none shadow-sm ring-1 ring-slate-100 flex flex-col gap-4">
+                                <div className="flex items-start justify-between gap-3">
+                                    <div>
+                                        <span className={cn("inline-flex rounded-full border px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide", step.accentClassName)}>
+                                            {step.badge}
+                                        </span>
+                                        <h3 className="text-base font-bold text-slate-900 mt-3">{step.title}</h3>
+                                    </div>
+                                    <div className={cn("w-10 h-10 rounded-2xl flex items-center justify-center", step.accentClassName)}>
+                                        <Icon className="w-5 h-5" />
+                                    </div>
+                                </div>
+                                <p className="text-sm leading-6 text-slate-600 min-h-[72px]">{step.description}</p>
+                                <Link href={step.href}>
+                                    <Button variant={step.key === "train" ? "default" : "outline"} className={step.buttonClassName}>
+                                        {step.actionLabel} <ArrowRight className="ml-2 w-4 h-4" />
+                                    </Button>
+                                </Link>
+                            </GlassCard>
+                        );
+                    })}
+                </div>
+            </section>
+
             {stats.effectiveness && (
                 <section className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
                     <GlassCard className="p-5">
@@ -379,6 +497,7 @@ export default function HomePage() {
                         最近记录
                     </h2>
                     <div className="flex flex-col items-end gap-1 sm:flex-row sm:items-center">
+                        {/* 首页不承载假筛选弹窗，复杂筛选统一深链到历史页。 */}
                         <span className="text-xs text-slate-400">高级筛选请在历史页进行</span>
                         <Link href="/history">
                             <Button variant="ghost" size="sm" className="text-slate-500 hover:text-slate-900 hover:bg-white/50">
@@ -399,9 +518,7 @@ export default function HomePage() {
                             />
                         </div>
                     ) : (
-                        historyItems.map((item) => {
-                            const historyActions = getDashboardHistoryActions(item);
-
+                        resolvedHistoryItems.map(({ item, historyActions }) => {
                             return (
                                 <SwipeableItem key={item.id} onDelete={() => handleDeleteHistory(item.id)}>
                                     <GlassCard className="p-0 flex flex-col hover:shadow-lg transition-all bg-white border-none shadow-sm ring-1 ring-slate-100">

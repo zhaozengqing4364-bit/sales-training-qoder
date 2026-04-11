@@ -1,12 +1,20 @@
 ---
-estimated_steps: 1
+estimated_steps: 7
 estimated_files: 6
 skills_used: []
 ---
 
 # T02: 收口 confirm/dialog/router/auth-handler 交互模式
 
-替换删除确认与业务跳转：删除操作统一走 modal confirm，auth redirect 统一走 authHandler/router，业务导航改成 router push/replace。保留 ErrorBoundary reload 例外。
+Why: 真正的收口点在于把删除确认、auth redirect 和业务导航都接到统一模式，而不是只删掉 API 调用字面量。
+
+Do:
+1. 删除操作统一走 modal/dialog confirm。
+2. auth redirect 统一走 authHandler/router。
+3. 普通业务导航改成 router push/replace。
+4. 保留 ErrorBoundary reload 等明确允许的例外，不做过度清理。
+
+Done when: 高风险业务页面不再依赖原生弹窗或硬跳转，focused UI proof 通过。
 
 ## Inputs
 
@@ -32,4 +40,4 @@ npm --prefix web test -- --run "src/app/admin/personas/[id]/page.test.tsx" "src/
 
 ## Observability Impact
 
-交互确认与 auth redirect 行为统一
+删除确认与 auth redirect 经统一 seam 执行，页面状态更可追踪。

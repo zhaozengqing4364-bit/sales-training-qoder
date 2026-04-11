@@ -99,6 +99,22 @@
       "doneMilestones": 12,
       "totalMilestones": 18,
       "phase": "evaluating-gates"
+    },
+    {
+      "filename": "M013-2026-04-09T17-48-31.html",
+      "generatedAt": "2026-04-09T17:48:31.394Z",
+      "milestoneId": "M013",
+      "milestoneTitle": "M013: SYSTEM_AUDIT_REPORT 归一化与修复基线",
+      "label": "M013: M013: SYSTEM_AUDIT_REPORT 归一化与修复基线",
+      "kind": "milestone",
+      "totalCost": 0,
+      "totalTokens": 1730383040,
+      "totalDuration": 296759506,
+      "doneSlices": 52,
+      "totalSlices": 68,
+      "doneMilestones": 13,
+      "totalMilestones": 18,
+      "phase": "evaluating-gates"
     }
   ]
 }

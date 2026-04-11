@@ -1355,6 +1355,20 @@
 - Expected Output: 首页 CTA 收口方案 + focused 测试补丁。
 - Recommended Executor: Strong model
 
+#### M014-S01 / T01 当前实况动作收口表（2026-04-09）
+
+| Surface | Current state in code | T01 disposition | T02 follow-through |
+|---|---|---|---|
+| 版本 badge / 更新弹窗 | `page.tsx` 保留版本 badge；弹窗正文仍是静态更新文案；footer 里 `立即体验` 已深链 `/training/presentation`，`稍后再说` 原先误绑 `isWeeklyStatsOpen`，本次已改为真实 `DialogClose` | `实现 + truthify` | 不再把它当“伪 release center”；若无法接真实更新源，则收敛成版本入口 + 真实训练深链 + 简洁说明 |
+| 系统推荐 CTA | `recommendation.target_path` + `recommendation.action_label` 已是真实推荐入口 | `保持实现` | 继续复用实时 recommendation 数据，不新增平行按钮 |
+| 本周训练卡 / 周报弹窗 | 卡片已打开真实周报弹窗；footer 仅深链 `/history` | `保持实现` | 保持 history deep-link，不在首页复制历史页能力 |
+| 最近记录筛选 | 首页仅显示“高级筛选请在历史页进行” + `去历史页筛选`，`history/page.tsx` 才有真实 `scenarioFilter` 下拉 | `改为深链`（已落地） | 不在首页重新引入 fake modal / fake filter chips |
+| 历史项“查看历史”/“历史页” | 均真实深链 `/history` | `保持实现` | 保持为完整记录入口 |
+| 历史项“查看报告” | 仅对 `sales/presentation + completed + 有 session_id` 暴露 `/practice/{sessionId}/report`；否则显示 disabled 文案 | `条件实现 + disabled 文案` | 保持统一报告深链逻辑，不扩展成导出按钮 |
+| 报告导出 affordance | 首页当前不存在 `导出报告` | `删除/保持缺失` | 继续保持缺失；若后续产品方向变化，需单独立项，不在本 slice 偷渡 |
+| “设定目标” / “分享分析” CTA | 首页当前不存在这两类按钮或链接 | `删除/保持缺失` | 在没有真实目标模型 / 分享链路前，不新增装饰性 CTA |
+| 新手 onboarding | 首页首屏仍缺最小 onboarding 指引 | `待实现` | T02 增加最小 onboarding 卡片，至少指向真实训练入口，并解释“先训练、再看历史/报告”的路径 |
+
 ### Task Card 3
 - Task ID: `M016-S01-T01`
 - Title: 把 forgot/reset 从过渡实现升级为正式 auth seam

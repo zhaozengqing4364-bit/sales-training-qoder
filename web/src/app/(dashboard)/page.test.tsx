@@ -62,6 +62,7 @@ vi.mock("@/components/ui/empty-state", () => ({
 vi.mock("@/components/ui/glass-modal", () => ({
     Dialog: ({ children }: { children: ReactNode }) => <div>{children}</div>,
     DialogTrigger: ({ children }: { children: ReactNode }) => <div>{children}</div>,
+    DialogClose: ({ children }: { children: ReactNode }) => <div>{children}</div>,
     DialogContent: ({ children }: { children: ReactNode }) => <div>{children}</div>,
     DialogDescription: ({ children }: { children: ReactNode }) => <div>{children}</div>,
     DialogFooter: ({ children }: { children: ReactNode }) => <div>{children}</div>,
@@ -170,6 +171,69 @@ describe("HomePage dashboard header", () => {
 
         expect(getRecommendationMock).toHaveBeenCalled();
         expect(screen.getByRole("heading", { name: /晚安, fallback.user/i })).toBeTruthy();
+    });
+
+    it("shows a first-screen onboarding card that links learners into the real training and history flow", async () => {
+        getRecommendationMock.mockResolvedValue({
+            title: "从异议处理开始",
+            reason: "先完成一轮真实训练，再去历史页和统一报告复盘。",
+            action_label: "开始异议处理训练",
+            target_path: "/training/sales",
+        });
+
+        render(<HomePage />);
+        await flushDashboardData();
+
+        expect(screen.getByText("第一次来，先这样开始")).toBeTruthy();
+        expect(screen.getAllByText("先完成一轮真实训练，再去历史页和统一报告复盘。").length).toBeGreaterThan(0);
+        const trainingLinks = screen.getAllByRole("link", { name: "开始异议处理训练" });
+        expect(trainingLinks.some((link) => link.getAttribute("href") === "/training/sales")).toBe(true);
+        expect(screen.getByRole("link", { name: "去历史页" }).getAttribute("href")).toBe("/history");
+        expect(screen.getByRole("link", { name: "报告入口" }).getAttribute("href")).toBe("/history");
+    });
+
+    it("truthifies the version dialog into a live entry summary instead of static release-note claims", async () => {
+        getRecommendationMock.mockResolvedValue({
+            title: "继续产品介绍训练",
+            reason: "今天优先补齐开场后的客户价值表达。",
+            action_label: "继续训练",
+            target_path: "/training",
+        });
+        getHistoryMock.mockResolvedValue([
+            {
+                id: "sales-session-1",
+                session_id: "sales-session-1",
+                title: "销售复盘",
+                scenario_type: "sales",
+                overall_score: 88,
+                duration_seconds: 180,
+                start_time: "2026-04-09T00:00:00Z",
+                status: "completed",
+                feedback_summary: "继续补强成交证据。",
+            },
+        ]);
+
+        render(<HomePage />);
+        await flushDashboardData();
+
+        expect(screen.getByText("当前版本可用入口")).toBeTruthy();
+        expect(screen.getAllByText("继续产品介绍训练").length).toBeGreaterThan(0);
+        expect(screen.getByText("首页当前已加载 1 条最近记录，可直接去历史页或统一报告继续复盘。")).toBeTruthy();
+        expect(screen.queryByText("PPT 长时演讲稳定性优化")).toBeNull();
+        expect(screen.queryByText("演讲策略配置简化")).toBeNull();
+        expect(screen.queryByText("性能优化")).toBeNull();
+    });
+
+    it("keeps report export, goal setting, and share-analysis affordances absent from dashboard home", async () => {
+        render(<HomePage />);
+        await flushDashboardData();
+
+        expect(screen.queryByRole("button", { name: "导出报告" })).toBeNull();
+        expect(screen.queryByRole("link", { name: "导出报告" })).toBeNull();
+        expect(screen.queryByRole("button", { name: "设定目标" })).toBeNull();
+        expect(screen.queryByRole("link", { name: "设定目标" })).toBeNull();
+        expect(screen.queryByRole("button", { name: "分享分析" })).toBeNull();
+        expect(screen.queryByRole("link", { name: "分享分析" })).toBeNull();
     });
 
     it("replaces fake filter and detail affordances with real history/report links", async () => {
