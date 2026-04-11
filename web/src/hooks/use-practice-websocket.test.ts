@@ -751,6 +751,70 @@ describe("usePracticeWebSocket reconnect lifecycle", () => {
         }));
     });
 
+    it("exits the reconnect path and clears slow-network state when close code ends the transport epoch", async () => {
+        const actualHandlers = await vi.importActual<typeof import("./websocket/message-handlers")>(
+            "./websocket/message-handlers",
+        );
+        vi.mocked(handleWebSocketMessage).mockImplementation((event, deps) =>
+            actualHandlers.handleWebSocketMessage(event, deps),
+        );
+
+        const { result } = renderHook(() =>
+            usePracticeWebSocket({
+                sessionId: "session-normal-close-clears-backpressure",
+                scenarioType: "sales",
+            }),
+        );
+
+        const ws = MockWebSocket.instances.at(-1);
+        expect(ws).toBeDefined();
+
+        act(() => {
+            if (!ws) return;
+            ws.readyState = MockWebSocket.OPEN;
+            ws.onopen?.(new Event("open"));
+            emitJsonMessage(ws, {
+                type: "status",
+                data: {
+                    session_status: "in_progress",
+                    ai_state: "listening",
+                    connection_state: "connected",
+                },
+            });
+            emitJsonMessage(ws, {
+                type: "backpressure",
+                timestamp: new Date().toISOString(),
+                data: {
+                    action: "slow_down",
+                    queue_size: 32,
+                },
+            });
+        });
+
+        act(() => {
+            Array.from({ length: 205 }).forEach((_, index) => {
+                result.current.sendAudio(`buffered-audio-${index}`);
+            });
+        });
+
+        expect(result.current.isBackpressureActive).toBe(true);
+        expect(result.current.isNetworkSlow).toBe(true);
+
+        act(() => {
+            ws?.emitClose(1001, "page-hidden");
+        });
+
+        expect(result.current.connectionState).toBe("failed");
+        expect(result.current.isBackpressureActive).toBe(false);
+        expect(result.current.isNetworkSlow).toBe(false);
+
+        act(() => {
+            vi.advanceTimersByTime(30000);
+        });
+
+        expect(MockWebSocket.instances).toHaveLength(1);
+    });
+
     it("does not reconnect when streaming player reference changes", () => {
         unstableStreamingPlayerMode = true;
 

@@ -47,7 +47,7 @@ Done when: focused websocket + practice tests 通过，reconnect/backpressure/in
   - Files: `web/src/hooks/use-practice-websocket.ts`, `web/src/hooks/**/*`, `web/src/app/(user)/practice/[sessionId]/page.tsx`
   - Verify: npm --prefix web test -- --run "src/hooks/use-practice-websocket.test.ts" "src/hooks/use-practice-websocket.presentation-flow.test.ts" "src/app/(user)/practice/[sessionId]/page.test.tsx"
 
-- [ ] **T03: 为 websocket orchestration contract 补 proof** `est:40m`
+- [x] **T03: 为 websocket orchestration contract 补 proof** `est:40m`
   Why: websocket orchestration contract 如果没有 focused proof，很容易在下一次 runtime 调整时再次膨胀或回归。
 
 Do:

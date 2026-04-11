@@ -237,4 +237,85 @@ describe("usePracticeWebSocket presentation flow boundary", () => {
         expect(result.current.sessionStatus).toBe("in_progress");
         expect(result.current.aiState).toBe("thinking");
     });
+
+    it("ignores stale interrupt confirmations after reconnect resets the presentation stream epoch", () => {
+        vi.useFakeTimers();
+
+        try {
+            const { result } = renderHook(() =>
+                usePracticeWebSocket({
+                    sessionId: "ppt-session-4",
+                    scenarioType: "presentation",
+                }),
+            );
+
+            const ws = MockWebSocket.instances.at(-1);
+            expect(ws).toBeDefined();
+
+            act(() => {
+                if (!ws) return;
+                ws.readyState = MockWebSocket.OPEN;
+                ws.onopen?.(new Event("open"));
+                ws.emitMessage({
+                    type: "status",
+                    timestamp: new Date().toISOString(),
+                    data: {
+                        session_status: "in_progress",
+                        ai_state: "listening",
+                        connection_state: "connected",
+                    },
+                });
+                ws.emitMessage({
+                    type: "tts_chunk",
+                    stream_id: "stream-live",
+                    request_id: 1,
+                    timestamp: new Date().toISOString(),
+                    data: {
+                        chunk_index: 0,
+                        audio: "ZmFrZS1hdWRpbw==",
+                        is_final: false,
+                        audio_format: "mp3",
+                    },
+                });
+            });
+
+            expect(result.current.aiState).toBe("speaking");
+            expect(result.current.isStreamingTTS).toBe(true);
+
+            act(() => {
+                ws?.close(1006, "network-drop");
+            });
+
+            expect(result.current.connectionState).toBe("reconnecting");
+            expect(result.current.aiState).toBe("listening");
+            expect(result.current.isStreamingTTS).toBe(false);
+            expect(mockStreamingPlayer.interrupt).toHaveBeenCalledTimes(1);
+
+            act(() => {
+                vi.advanceTimersByTime(1000);
+            });
+
+            const retryWs = MockWebSocket.instances.at(-1);
+            expect(retryWs).toBeDefined();
+            expect(retryWs).not.toBe(ws);
+
+            act(() => {
+                if (!retryWs) return;
+                retryWs.readyState = MockWebSocket.OPEN;
+                retryWs.onopen?.(new Event("open"));
+                retryWs.emitMessage({
+                    type: "interrupted",
+                    stream_id: "stream-live",
+                    timestamp: new Date().toISOString(),
+                    data: { reason: "user_speaking" },
+                });
+            });
+
+            expect(mockStreamingPlayer.interrupt).toHaveBeenCalledTimes(1);
+            expect(result.current.aiState).toBe("listening");
+            expect(result.current.isStreamingTTS).toBe(false);
+        } finally {
+            vi.useRealTimers();
+        }
+    });
 });

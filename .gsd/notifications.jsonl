@@ -391,3 +391,9 @@
 {"id":"920bfdb6-02ec-44e3-b6a4-89175364aafd","ts":"2026-04-11T21:26:56.642Z","severity":"warning","message":"Safety: 2 unexpected file change(s) outside task plan","source":"notify","read":false}
 {"id":"64e74953-f5f4-41da-b8fa-929a5848e019","ts":"2026-04-11T21:27:05.115Z","severity":"info","message":"Verification gate: FAILED — npm run test","source":"notify","read":false}
 {"id":"4b469828-9ba7-4404-a9ea-41dd19f792d6","ts":"2026-04-11T21:27:05.116Z","severity":"warning","message":"Verification failed in auto-discovered package.json checks — treating as advisory.","source":"notify","read":false}
+{"id":"f4d18665-7600-4c84-b61b-cf0f284ead0a","ts":"2026-04-11T21:34:43.609Z","severity":"info","message":"Committed: chore: Tightened practice websocket reconnect cleanup so stale queued i…","source":"notify","read":false}
+{"id":"506ce34f-f73c-4a67-a093-92608794e5c4","ts":"2026-04-11T21:34:43.615Z","severity":"warning","message":"[safety] file-change: .codex/loop/log.md — Modified but not in task plan's expected output","source":"workflow-logger","read":false}
+{"id":"c3f5fcb7-a300-4d2d-a803-f8e0f7c9c502","ts":"2026-04-11T21:34:43.615Z","severity":"warning","message":"[safety] file-change: .codex/loop/state.json — Modified but not in task plan's expected output","source":"workflow-logger","read":false}
+{"id":"eb751e97-70ef-42ea-a0d0-01aa281228ed","ts":"2026-04-11T21:34:43.615Z","severity":"warning","message":"[safety] file-change: web/src/hooks/use-practice-websocket.test.ts — Modified but not in task plan's expected output","source":"workflow-logger","read":false}
+{"id":"2db0a7c1-6fd1-4a73-bcee-b7b85bd83c08","ts":"2026-04-11T21:34:43.615Z","severity":"warning","message":"Safety: 3 unexpected file change(s) outside task plan","source":"notify","read":false}
+{"id":"1e12eac0-863d-4c29-85ba-c53fb872ce48","ts":"2026-04-11T21:34:44.969Z","severity":"info","message":"Verification gate: 1/1 checks passed","source":"notify","read":false}

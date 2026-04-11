@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "exported_at": "2026-04-11T21:34:36.672Z",
+  "exported_at": "2026-04-11T21:40:59.642Z",
   "milestones": [
     {
       "id": "M001",
@@ -10720,19 +10720,23 @@
       "milestone_id": "M017",
       "slice_id": "S02",
       "id": "T03",
-      "title": "为 websocket orchestration contract 补 proof",
-      "status": "pending",
-      "one_liner": "",
-      "narrative": "",
-      "verification_result": "",
+      "title": "Added focused websocket contract proofs for reconnect exit, stale interrupt reset, and learner reconnect guidance.",
+      "status": "complete",
+      "one_liner": "Added focused websocket contract proofs for reconnect exit, stale interrupt reset, and learner reconnect guidance.",
+      "narrative": "I kept this task at the proof layer instead of reopening the websocket implementation seam from T01/T02. In `web/src/hooks/use-practice-websocket.test.ts`, I added a focused transport-epoch regression that proves a close code which exits the retry path clears learner-visible slow-network/backpressure state and does not schedule another socket. In `web/src/hooks/use-practice-websocket.presentation-flow.test.ts`, I added a presentation-specific proof that reconnect resets stream ownership, so a stale `interrupted` message from the pre-reconnect stream no longer mutates the new epoch. In `web/src/app/(user)/practice/[sessionId]/page.test.tsx`, I added a learner-shell proof that the page shows automatic reconnect guidance while recovery is still in progress and withholds the manual reconnect CTA until the transport has actually failed. The runtime code already satisfied these boundaries, so the shipped change is a tighter proof surface that future agents can use to localize regressions quickly.",
+      "verification_result": "Ran the slice-plan verification command after adding the new proofs: `npm --prefix web test -- --run \"src/hooks/use-practice-websocket.test.ts\" \"src/hooks/use-practice-websocket.presentation-flow.test.ts\" \"src/app/(user)/practice/[sessionId]/page.test.tsx\"`; all three focused suites passed (33/33). Re-ran semantic checks with LSP diagnostics on the two hook test files plus the app page test glob covering `web/src/app/(user)/practice/[sessionId]/page.test.tsx`; no diagnostics were reported.",
       "duration": "",
-      "completed_at": null,
+      "completed_at": "2026-04-11T21:40:59.589Z",
       "blocker_discovered": false,
-      "deviations": "",
-      "known_issues": "",
-      "key_files": [],
+      "deviations": "None.",
+      "known_issues": "None.",
+      "key_files": [
+        "web/src/hooks/use-practice-websocket.test.ts",
+        "web/src/hooks/use-practice-websocket.presentation-flow.test.ts",
+        "web/src/app/(user)/practice/[sessionId]/page.test.tsx"
+      ],
       "key_decisions": [],
-      "full_summary_md": "",
+      "full_summary_md": "---\nid: T03\nparent: S02\nmilestone: M017\nkey_files:\n  - web/src/hooks/use-practice-websocket.test.ts\n  - web/src/hooks/use-practice-websocket.presentation-flow.test.ts\n  - web/src/app/(user)/practice/[sessionId]/page.test.tsx\nkey_decisions:\n  - (none)\nduration: \nverification_result: passed\ncompleted_at: 2026-04-11T21:40:59.586Z\nblocker_discovered: false\n---\n\n# T03: Added focused websocket contract proofs for reconnect exit, stale interrupt reset, and learner reconnect guidance.\n\n**Added focused websocket contract proofs for reconnect exit, stale interrupt reset, and learner reconnect guidance.**\n\n## What Happened\n\nI kept this task at the proof layer instead of reopening the websocket implementation seam from T01/T02. In `web/src/hooks/use-practice-websocket.test.ts`, I added a focused transport-epoch regression that proves a close code which exits the retry path clears learner-visible slow-network/backpressure state and does not schedule another socket. In `web/src/hooks/use-practice-websocket.presentation-flow.test.ts`, I added a presentation-specific proof that reconnect resets stream ownership, so a stale `interrupted` message from the pre-reconnect stream no longer mutates the new epoch. In `web/src/app/(user)/practice/[sessionId]/page.test.tsx`, I added a learner-shell proof that the page shows automatic reconnect guidance while recovery is still in progress and withholds the manual reconnect CTA until the transport has actually failed. The runtime code already satisfied these boundaries, so the shipped change is a tighter proof surface that future agents can use to localize regressions quickly.\n\n## Verification\n\nRan the slice-plan verification command after adding the new proofs: `npm --prefix web test -- --run \"src/hooks/use-practice-websocket.test.ts\" \"src/hooks/use-practice-websocket.presentation-flow.test.ts\" \"src/app/(user)/practice/[sessionId]/page.test.tsx\"`; all three focused suites passed (33/33). Re-ran semantic checks with LSP diagnostics on the two hook test files plus the app page test glob covering `web/src/app/(user)/practice/[sessionId]/page.test.tsx`; no diagnostics were reported.\n\n## Verification Evidence\n\n| # | Command | Exit Code | Verdict | Duration |\n|---|---------|-----------|---------|----------|\n| 1 | `npm --prefix web test -- --run src/hooks/use-practice-websocket.test.ts src/hooks/use-practice-websocket.presentation-flow.test.ts src/app/(user)/practice/[sessionId]/page.test.tsx` | 0 | ✅ pass | 1371ms |\n| 2 | `rg -n \"transport epoch|presentation stream epoch|automatic reconnect guidance\" web/src/hooks/use-practice-websocket.test.ts web/src/hooks/use-practice-websocket.presentation-flow.test.ts web/src/app/(user)/practice/[sessionId]/page.test.tsx` | 0 | ✅ pass | 15ms |\n\n## Deviations\n\nNone.\n\n## Known Issues\n\nNone.\n\n## Files Created/Modified\n\n- `web/src/hooks/use-practice-websocket.test.ts`\n- `web/src/hooks/use-practice-websocket.presentation-flow.test.ts`\n- `web/src/app/(user)/practice/[sessionId]/page.test.tsx`\n",
       "description": "Why: websocket orchestration contract 如果没有 focused proof，很容易在下一次 runtime 调整时再次膨胀或回归。\n\nDo:\n1. 补 focused tests，锁定 reconnect 退出条件、backpressure 清理和 interrupt contract。\n2. 保持断言关注 learner 可见行为和 hook outward contract，不写死内部实现。\n3. 让 future agents 能通过一组 focused tests 重建当前 websocket 设计边界。\n\nDone when: websocket orchestration contract 有稳定 focused proof，可防止复杂度回流。",
       "estimate": "40m",
       "files": [
@@ -17680,6 +17684,28 @@
       "verdict": "✅ pass",
       "duration_ms": 1000,
       "created_at": "2026-04-11T21:34:36.621Z"
+    },
+    {
+      "id": 377,
+      "task_id": "T03",
+      "slice_id": "S02",
+      "milestone_id": "M017",
+      "command": "npm --prefix web test -- --run src/hooks/use-practice-websocket.test.ts src/hooks/use-practice-websocket.presentation-flow.test.ts src/app/(user)/practice/[sessionId]/page.test.tsx",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 1371,
+      "created_at": "2026-04-11T21:40:59.589Z"
+    },
+    {
+      "id": 378,
+      "task_id": "T03",
+      "slice_id": "S02",
+      "milestone_id": "M017",
+      "command": "rg -n \"transport epoch|presentation stream epoch|automatic reconnect guidance\" web/src/hooks/use-practice-websocket.test.ts web/src/hooks/use-practice-websocket.presentation-flow.test.ts web/src/app/(user)/practice/[sessionId]/page.test.tsx",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 15,
+      "created_at": "2026-04-11T21:40:59.589Z"
     }
   ]
 }

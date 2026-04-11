@@ -394,6 +394,54 @@ describe("PracticeSessionPage carry-forward retry focus", () => {
         expect(screen.getByRole("button", { name: "重新连接" })).toBeTruthy();
     });
 
+    it("shows automatic reconnect guidance while transport recovery is still in progress", async () => {
+        usePracticeRuntimeLockMock.mockReturnValue({
+            lockedScenarioType: "sales",
+            lockedVoiceMode: "legacy",
+            lockedAgentId: "agent-1",
+            lockedPersonaId: "persona-1",
+            lockedPresentationId: undefined,
+            focusIntent: null,
+            sessionMetaError: null,
+        });
+        usePracticeWebSocketMock.mockReturnValue({
+            connectionState: "reconnecting",
+            isConnected: false,
+            sessionStatus: "in_progress",
+            aiState: "idle",
+            messages: [],
+            fuzzyDetections: [],
+            salesStage: null,
+            scores: null,
+            liveSessionSummary: null,
+            actionCard: null,
+            coachHealth: null,
+            error: "连接中断，正在重连...",
+            isPlayingAudio: false,
+            interimTranscript: "",
+            audioUnlocked: true,
+            isNetworkSlow: false,
+            currentSlide: null,
+            points: [],
+            forbiddenWords: [],
+            sendAudio: vi.fn(),
+            sendAudioBinary: vi.fn(),
+            sendAudioEnd: vi.fn(),
+            startSpeaking: vi.fn(),
+            sendInterrupt: vi.fn(),
+            unlockAudio: vi.fn(),
+            sendMessage: vi.fn(),
+            connect: vi.fn(),
+        });
+
+        render(<PracticeSessionPage />);
+        await flushPreflightEffects();
+
+        expect(screen.getByText("连接中断，正在重连...", { exact: true })).toBeTruthy();
+        expect(screen.getByText("网络波动，正在自动重连...", { exact: true })).toBeTruthy();
+        expect(screen.queryByRole("button", { name: "重新连接" })).toBeNull();
+    });
+
     it("omits the callout for ordinary practice sessions without retry focus", async () => {
         usePracticeRuntimeLockMock.mockReturnValue({
             lockedScenarioType: "sales",
