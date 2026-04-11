@@ -288,6 +288,7 @@ class TestPresentationsContract:
 
     async def test_resource_race_inventory_marks_replace_as_first_confirmed_proof_target(self):
         from presentation_coach.api.presentations import (
+            PRESENTATION_RESOURCE_RACE_DISCOVERY_CONCLUSIONS,
             PRESENTATION_RESOURCE_RACE_FOCUS,
             PRESENTATION_RESOURCE_RACE_INVENTORY,
         )
@@ -338,3 +339,47 @@ class TestPresentationsContract:
             PRESENTATION_RESOURCE_RACE_FOCUS["recommended_next_step"]
             == "add compare-and-swap or lock around in-place replace before multi-writer rollout"
         )
+
+        conclusions = PRESENTATION_RESOURCE_RACE_DISCOVERY_CONCLUSIONS
+        assert conclusions["artifact_purpose"].startswith("canonical, code-adjacent")
+        assert conclusions["proof_boundary"].startswith("ground conclusions only in focused proofs")
+
+        confirmed = {
+            entry["surface"]: entry for entry in conclusions["confirmed_findings"]
+        }
+        assert set(confirmed) == {
+            "replace_presentation_in_place",
+            "delete_presentation",
+        }
+        assert confirmed["replace_presentation_in_place"]["finding"] == (
+            "confirmed_concurrent_writer_race"
+        )
+        assert "presentation row version_number/file_url" in confirmed[
+            "replace_presentation_in_place"
+        ]["shared_conflict_surfaces"]
+        assert "distributed lock only if multiple app instances" in confirmed[
+            "replace_presentation_in_place"
+        ]["multi_instance_lock_candidate"]
+        assert confirmed["delete_presentation"]["finding"] == (
+            "confirmed_route_guard_gap_not_lock_gap"
+        )
+        assert "delete currently returns 204" in confirmed["delete_presentation"][
+            "proof_summary"
+        ]
+
+        inventory_only = {
+            entry["surface"]: entry for entry in conclusions["inventory_only_surfaces"]
+        }
+        assert inventory_only["upload_new_presentation"][
+            "why_not_prioritized"
+        ] == "no focused proof shows harmful cross-request contention on the current new-upload path"
+
+        not_recommended = {
+            entry["candidate"]: entry for entry in conclusions["not_recommended_now"]
+        }
+        assert "coordination cost" in not_recommended[
+            "system-wide distributed lock for every presentation mutation"
+        ]["reason"]
+        assert "blind retries hide the conflict" in not_recommended[
+            "retry-only mitigation for replace losers"
+        ]["reason"]

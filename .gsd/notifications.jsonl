@@ -405,3 +405,7 @@
 {"id":"a2bac9fc-b7ce-4832-9a4d-26bdabdfc4ea","ts":"2026-04-11T21:54:15.054Z","severity":"warning","message":"Safety: 2 unexpected file change(s) outside task plan","source":"notify","read":false}
 {"id":"af7c1012-c750-44fa-a979-1797c5b98f24","ts":"2026-04-11T21:54:23.957Z","severity":"info","message":"Verification gate: FAILED — npm run test","source":"notify","read":false}
 {"id":"ce5e9339-ca63-4b35-a336-36c54f568dca","ts":"2026-04-11T21:54:23.958Z","severity":"warning","message":"Verification failed in auto-discovered package.json checks — treating as advisory.","source":"notify","read":false}
+{"id":"e7c99800-4a60-4136-897e-38407abb2e2d","ts":"2026-04-11T22:04:52.358Z","severity":"info","message":"Committed: feat: Added a focused concurrent-replace proof that confirms in-place p…","source":"notify","read":false}
+{"id":"2ffc9da3-b9c6-4c25-9050-079f9aed2ffd","ts":"2026-04-11T22:04:52.363Z","severity":"warning","message":"[safety] file-change: backend/src/presentation_coach/api/presentations.py — Modified but not in task plan's expected output","source":"workflow-logger","read":false}
+{"id":"bdafb6e5-3bc7-4481-bf11-6c556e3c4aa0","ts":"2026-04-11T22:04:52.363Z","severity":"warning","message":"Safety: 1 unexpected file change(s) outside task plan","source":"notify","read":false}
+{"id":"db830a71-c789-43e7-a40c-87ed44109331","ts":"2026-04-11T22:04:56.472Z","severity":"info","message":"Verification gate: 1/1 checks passed","source":"notify","read":false}

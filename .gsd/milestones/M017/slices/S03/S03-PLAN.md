@@ -47,7 +47,7 @@ Done when: focused presentation proof 通过，且已有一份区分真实问题
   - Files: `backend/tests/contract/test_presentations.py`, `backend/tests/integration/test_presentation_flow.py`, `backend/tests/integration/test_presentation_delete_permissions.py`
   - Verify: backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/contract/test_presentations.py backend/tests/integration/test_presentation_flow.py backend/tests/integration/test_presentation_delete_permissions.py -x -q
 
-- [ ] **T03: 输出 upload/resource race discovery 结论** `est:25m`
+- [x] **T03: 输出 upload/resource race discovery 结论** `est:25m`
   Why: 没有沉淀出的 discovery artifact，后续 agent 还会重新从 audit 文本猜 upload/resource 风险。
 
 Do:

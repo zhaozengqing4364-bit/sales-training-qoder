@@ -127,6 +127,57 @@ PRESENTATION_RESOURCE_RACE_FOCUS: dict[str, str] = {
     "not_recommended_yet": "do not broaden the fix into upload_new_presentation or system-wide distributed locks until in-place replace is serialized first",
 }
 
+PRESENTATION_RESOURCE_RACE_DISCOVERY_CONCLUSIONS: dict[str, Any] = {
+    "artifact_purpose": "canonical, code-adjacent discovery conclusion for presentation upload/resource race follow-up",
+    "proof_boundary": "ground conclusions only in focused proofs for upload/replace/delete on the live presentations API",
+    "confirmed_findings": (
+        {
+            "surface": "replace_presentation_in_place",
+            "finding": "confirmed_concurrent_writer_race",
+            "proof_summary": "two replace writers can both clear the active-session preflight, target version 2, and the stale writer can fail during page rebuild with a generic 500 fallback",
+            "shared_conflict_surfaces": (
+                "presentation row version_number/file_url",
+                "versioned replace file path derived from next_version",
+                "page delete-and-rebuild sequence",
+                "thumbnail directory for the stable presentation_id",
+            ),
+            "multi_instance_lock_candidate": "serialize replace per presentation_id with compare-and-swap locally, then promote to a distributed lock only if multiple app instances must run the same mutation concurrently",
+        },
+        {
+            "surface": "delete_presentation",
+            "finding": "confirmed_route_guard_gap_not_lock_gap",
+            "proof_summary": "delete currently returns 204 even when a live session still references the presentation and the session can lose its presentation_id link",
+            "shared_conflict_surfaces": (
+                "presentation row lifecycle",
+                "practice_session presentation references",
+                "stored ppt and thumbnail cleanup ownership",
+            ),
+            "multi_instance_lock_candidate": "defer lock design until product policy decides whether delete should block, retire sessions first, or become explicitly idempotent",
+        },
+    ),
+    "inventory_only_surfaces": (
+        {
+            "surface": "upload_new_presentation",
+            "current_assessment": "not a proved race today because each upload gets a fresh presentation_id/storage key and atomic file replace already prevents partial writes",
+            "why_not_prioritized": "no focused proof shows harmful cross-request contention on the current new-upload path",
+        },
+    ),
+    "not_recommended_now": (
+        {
+            "candidate": "system-wide distributed lock for every presentation mutation",
+            "reason": "focused proof only confirms in-place replace; broad lock rollout would add coordination cost before the real mutation policy boundary is settled",
+        },
+        {
+            "candidate": "retry-only mitigation for replace losers",
+            "reason": "the stale replace writer is still mutating shared page/thumbnail state when it fails, so blind retries hide the conflict instead of making it explicit",
+        },
+        {
+            "candidate": "idempotency-key work for upload_new_presentation",
+            "reason": "current discovery does not show duplicate-create contention; fresh presentation ids already isolate upload writes better than the in-place replace path",
+        },
+    ),
+}
+
 
 def _presentation_error_response(
     *,
