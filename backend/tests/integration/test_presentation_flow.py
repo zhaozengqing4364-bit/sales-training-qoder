@@ -7,7 +7,13 @@ from httpx import AsyncClient
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from common.db.models import ForbiddenWord, Page, Presentation, RequiredTalkingPoint
+from common.db.models import (
+    ForbiddenWord,
+    Page,
+    PracticeSession,
+    Presentation,
+    RequiredTalkingPoint,
+)
 from common.error_handling.result import Result
 from presentation_coach.services.coach_service import PresentationCoachService
 
@@ -279,3 +285,68 @@ class TestPresentationFlow:
         assert detail["version_number"] == 1
         assert detail["status"] == "ready"
         assert detail["pages"][0]["ocr_extracted_text"] == "稳定内容"
+
+    async def test_delete_presentation_has_no_route_level_active_session_blocker(
+        self,
+        async_client: AsyncClient,
+        auth_headers: dict[str, str],
+        test_db: AsyncSession,
+        monkeypatch: pytest.MonkeyPatch,
+        tmp_path: Path,
+    ):
+        """Deleting a presentation with a live session currently succeeds without any route-level blocker, and the session loses its presentation link in the focused test harness."""
+        monkeypatch.setenv("PPT_STORAGE_PATH", str(tmp_path / "ppts"))
+
+        from presentation_coach.api import presentations as presentations_api
+
+        fake_parser = _FakePPTParser(
+            tmp_path,
+            payloads={
+                "delete-v1.pptx": {
+                    "total_pages": 1,
+                    "pages": [{"page_number": 1, "extracted_text": "待删除内容"}],
+                },
+            },
+        )
+        monkeypatch.setattr(presentations_api, "get_ppt_parser", lambda: fake_parser)
+
+        original = await _upload_presentation(
+            async_client,
+            auth_headers,
+            title="待删除模板",
+            filename="delete-v1.pptx",
+        )
+        presentation_id = str(original["presentation_id"])
+
+        create_session_response = await async_client.post(
+            "/api/v1/practice/sessions",
+            headers=auth_headers,
+            json={
+                "scenario_type": "presentation",
+                "presentation_id": presentation_id,
+            },
+        )
+        assert create_session_response.status_code == 201, create_session_response.text
+        session_id = create_session_response.json()["data"]["session_id"]
+
+        delete_response = await async_client.delete(
+            f"/api/v1/presentations/{presentation_id}",
+            headers=auth_headers,
+        )
+        assert delete_response.status_code == 204, delete_response.text
+
+        deleted_presentation = (
+            await test_db.execute(
+                select(Presentation).where(
+                    Presentation.presentation_id == presentation_id
+                )
+            )
+        ).scalar_one_or_none()
+        assert deleted_presentation is None
+
+        persisted_session = (
+            await test_db.execute(
+                select(PracticeSession).where(PracticeSession.session_id == session_id)
+            )
+        ).scalar_one()
+        assert persisted_session.presentation_id is None

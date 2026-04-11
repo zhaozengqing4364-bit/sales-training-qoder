@@ -36,6 +36,7 @@
 - **M015**：frontend hygiene 与 learner shell 保护收口已完成并封板——raw console 已统一到 shared debug seam，原生 dialog/hard navigation 已收口到 auth-handler/router/dialog/toast seam，learner dashboard/auth/practice 入口已具备明确的 route-level loading/error fallback，并把剩余 responsive/timezone 风险锁成 focused baseline proof。
 - **M016**：auth / API / admin security contract hardening 已完成——password reset 现在沿 `PasswordResetService` + `PasswordResetToken` + Alembic 026/027/028 的 durable seam 演进并由 DB enforce 单 active token；audited prompt-template / presentation / auth dependency surface 已统一到稳定错误契约并由 `ApiRequestError` 单 seam 消费；第一批高风险 admin router family 已在 module 级显式 `get_current_admin_user`，`StructuredLogger` 成为 token/password/cookie/email 的共享脱敏边界，security inventory / log-safety inventory 已把 fix-first 列表收敛到 0。
 - **M017/S01**：session lifecycle 并发 proof 已收口——`pause`/`resume` 对抗 `end` 的 stale-writer race 现在通过 `PracticeSession.status` 的 optimistic compare-and-swap 收敛为 terminal no-op，不再把 sales `scoring` 或 presentation `completed` 重新打开；并发 contract 与 terminal split 已固定在 focused lifecycle tests 与 `practice_session_lifecycle_concurrency_conflict` 日志 seam 上。
+- **M017/S02**：practice websocket reconnect/backpressure/interrupt contract 已收口——`use-practice-websocket` 明确保持 transport/outbound orchestrator 角色，`websocket/message-handlers` 保持 inbound authority seam；reconnect 现在被视为 fresh transport epoch，只允许初次 `connecting` 握手 replay queued outbound，interrupt 会清空 pending outbound + local backpressure/slow state，presentation stale interrupt 与 learner reconnect guidance 也都被 focused proof 锁定。
 
 ## Current Product Truths
 
@@ -59,18 +60,23 @@
   - stale `pause` / `resume` writers 只能在写入时通过 status compare-and-swap 收敛，不能靠同一 `AsyncSession` 的“再读一次”假装并发安全；
   - sales 终态语义仍是 `end -> scoring`（后续 background finalization 才可能到 `completed`），presentation 终态语义仍是 `end -> completed`；
   - focused lifecycle proof 的长期入口仍是 `backend/tests/unit/test_session_lifecycle_service.py` + `backend/tests/integration/test_session_lifecycle_api.py`，不是额外的新并发 harness。
+- websocket realtime 权威线现在也已明确：
+  - `use-practice-websocket` 继续拥有 transport lifecycle、initial pending flush、binary negotiation、local backpressure buffering 与 interrupt pre-cleanup；
+  - `web/src/hooks/websocket/message-handlers.ts` 继续拥有 `status` / `reconnected` / `interrupted` / `backpressure` 的 inbound state projection；
+  - reconnect 是 fresh transport epoch，不应 replay stale dead-socket interrupt/control intent；
+  - learner reconnect UX 需按 `connectionState` truth 区分 `reconnecting`（自动恢复中）与 `failed`（允许手动 `重新连接`）。
 
 ## Current Focus
 
-M017 已进入并发与 realtime contract 收口阶段，当前状态如下：
+M017 仍处于并发与 realtime contract 收口阶段，当前状态如下：
 - **S01 已完成**：SessionLifecycleService 的 stale-writer race 已被证明并收敛，pause/resume/end 的 terminal 语义边界已固定。
-- **接下来优先 S02**：围绕 practice websocket 的 reconnect / interrupt / backpressure 复用 S01 锁定的 lifecycle terminal 语义，避免 websocket 层再偷偷重开已终止会话。
-- **随后 S03**：围绕 presentation upload / replace 等资源竞争点做 discovery，但必须沿 S01 的“先做可证伪 proof，再决定是否加锁/重试/幂等”路径推进。
+- **S02 已完成**：practice websocket 的 reconnect / backpressure / interrupt seam 已收口，transport epoch contract 与 learner reconnect guidance 已通过 focused proof 固定。
+- **接下来优先 S03**：围绕 presentation upload / replace 等资源竞争点做 discovery，但必须沿 M017 已锁定的“先做可证伪 proof，再决定是否加锁/重试/幂等”路径推进。
 
 当前不应做的事：
 - 不要把 lifecycle 并发问题重新包装成前端防抖或 route guard 修补。
 - 不要引入新的 report/replay 终态分支去绕过 backend lifecycle contract。
-- 不要在 upload / websocket slice 里重复发明第二套 terminal-state 语义。
+- 不要在 upload / websocket slice 里重复发明第二套 terminal-state 或 transport-epoch 语义。
 
 ## Capability Contract
 
@@ -94,4 +100,4 @@ M017 已进入并发与 realtime contract 收口阶段，当前状态如下：
 - [x] M014 — learner 入口与体验闭环补齐
 - [x] M015 — Frontend hygiene 与 learner shell 保护收口
 - [x] M016 — Auth / API / admin security contract hardening
-- [ ] M017 — Realtime contract 与 concurrency proof 收口（S01 complete; S02-S03 pending）
+- [ ] M017 — Realtime contract 与 concurrency proof 收口（S01-S02 complete; S03 pending）

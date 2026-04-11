@@ -23,7 +23,7 @@ S03 在现有 presentation upload/replace/delete 链路上沉淀资源竞争 dis
 
 ## Tasks
 
-- [ ] **T01: 定位 upload / resource race 风险点** `est:35m`
+- [x] **T01: 定位 upload / resource race 风险点** `est:35m`
   Why: 先沿真实 upload/replace/delete 链路识别共享资源访问点，才能把 active-session blocker 已覆盖的和未覆盖的竞争面分开。
 
 Do:

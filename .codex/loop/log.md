@@ -846,3 +846,25 @@
   verification results: passed; the focused admin baseline subset finished 6/6 green, the focused logger/inventory subset finished 2/2 green, the exact task-plan pytest gate finished 36/36 green, and diagnostics were clean on the two touched proof files.
   success signal status: future agents can now rerun one focused backend bundle to tell whether a regression is in module-level admin RBAC, sink-level redaction, or inventory drift about what this baseline currently covers.
   rollback note: if later admin route families or sensitive-log surfaces are added, update the code-owned inventories and these focused proof subsets together so the watch/baseline split does not drift from runtime reality.
+
+- time: 2026-04-12T05:53:19+08:00
+  mode: grow
+  item id: M017-S03-T01
+  files changed:
+    - backend/src/presentation_coach/api/presentations.py
+    - backend/tests/contract/test_presentations.py
+    - backend/tests/integration/test_presentation_flow.py
+    - .gsd/DECISIONS.md
+    - .gsd/KNOWLEDGE.md
+    - .codex/loop/state.json
+    - .codex/loop/log.md
+  summary: Added a code-adjacent presentation upload/resource race inventory, locked replace as the first concurrent-writer proof target, and proved in the focused integration harness that delete currently succeeds without a route-level live-session blocker and detaches the session from its presentation.
+  verification commands:
+    - backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/contract/test_presentations.py backend/tests/integration/test_presentation_flow.py -q
+    - rg -n "replace|upload|delete|active-session|lock" backend/src/presentation_coach/api/presentations.py backend/tests/contract/test_presentations.py backend/tests/integration/test_presentation_flow.py
+    - lsp diagnostics backend/src/presentation_coach/api/presentations.py
+    - lsp diagnostics backend/tests/contract/test_presentations.py
+    - lsp diagnostics backend/tests/integration/test_presentation_flow.py
+  verification results: passed; the focused presentation contract/integration suite finished 9/9 green, the exact task-plan rg inventory now surfaces the code-adjacent discovery seam plus the new delete guard-gap proof, and diagnostics stayed clean on the touched backend authority/test files.
+  success signal status: future agents can now tell which presentation race surfaces are already covered, which one is already proved as a guard gap, and which one still needs concurrent reproduction before any locking work is justified.
+  rollback note: if later S03 work changes presentation mutation rules, keep the runtime inventory in backend/src/presentation_coach/api/presentations.py and the focused proofs in backend/tests/contract/test_presentations.py + backend/tests/integration/test_presentation_flow.py aligned together; otherwise discovery conclusions will drift back into audit guesses.

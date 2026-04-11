@@ -1,6 +1,6 @@
 {
   "mode": "grow",
-  "current_issue_id": "M017-S02-T02",
+  "current_issue_id": "M017-S03-T01",
   "current_issue_type": "task",
   "current_issue_status": "done",
   "pending_issue_ids": [],
@@ -169,27 +169,29 @@
     "M016-S03-T02",
     "M016-S03-T03",
     "M017-S02-T01",
-    "M017-S02-T02"
+    "M017-S02-T02",
+    "M017-S03-T01"
   ],
   "blocked_issue_ids": [],
   "deferred_issue_ids": [],
   "last_modified_files": [
-    "web/src/hooks/use-practice-websocket.ts",
-    "web/src/hooks/use-practice-websocket.test.ts",
+    "backend/src/presentation_coach/api/presentations.py",
+    "backend/tests/contract/test_presentations.py",
+    "backend/tests/integration/test_presentation_flow.py",
     ".gsd/DECISIONS.md",
     ".gsd/KNOWLEDGE.md",
     ".codex/loop/state.json",
     ".codex/loop/log.md"
   ],
   "last_verification_commands": [
-    "npm --prefix web test -- --run src/hooks/use-practice-websocket.test.ts",
-    "npm --prefix web test -- --run \"src/hooks/use-practice-websocket.test.ts\" \"src/hooks/use-practice-websocket.presentation-flow.test.ts\" \"src/app/(user)/practice/[sessionId]/page.test.tsx\"",
-    "lsp diagnostics web/src/hooks/use-practice-websocket.ts",
-    "lsp diagnostics web/src/hooks/use-practice-websocket.test.ts",
-    "lsp diagnostics web/src/hooks/use-practice-websocket.presentation-flow.test.ts"
+    "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/contract/test_presentations.py backend/tests/integration/test_presentation_flow.py -q",
+    "rg -n \"replace|upload|delete|active-session|lock\" backend/src/presentation_coach/api/presentations.py backend/tests/contract/test_presentations.py backend/tests/integration/test_presentation_flow.py",
+    "lsp diagnostics backend/src/presentation_coach/api/presentations.py",
+    "lsp diagnostics backend/tests/contract/test_presentations.py",
+    "lsp diagnostics backend/tests/integration/test_presentation_flow.py"
   ],
-  "last_verification_result": "passed; the new red-first websocket proofs now hold: the focused hook suite finished 17/17 green, the exact task-plan web verification command finished 30/30 green across hook/presentation/page surfaces, and fresh LSP diagnostics were clean on the touched hook/test files.",
-  "last_success_signal": "M017/S02/T02 now treats reconnect as a fresh transport epoch instead of replaying stale outbound intent: queued messages only survive the initial connecting handshake, interrupt clears queued outbound work plus local backpressure/slow-state flags, and the learner-facing practice/page proofs stayed green.",
+  "last_verification_result": "passed; the focused presentation contract/integration suite finished 9/9 green, the exact task-plan rg inventory now shows the code-adjacent race discovery seam plus the new delete guard-gap proof, and diagnostics stayed clean on the touched backend authority/test files.",
+  "last_success_signal": "M017/S03/T01 now gives future agents one explicit presentation race inventory: upload is mostly isolated by fresh storage keys, replace is the first concurrent-writer proof target because the active-session blocker only covers live-session mutation, and delete is already proved to succeed without a route-level live-session blocker in the focused test harness.",
   "last_growth_scan": null,
-  "next_action": "Continue M017/S02 with T03, using the now-tightened reconnect/backpressure/interrupt contract as the focused proof target."
+  "next_action": "Continue M017/S03 with T02, using concurrent_replace_without_active_sessions as the first focused proof target and treating delete as an already-confirmed guard gap rather than an audit-only suspicion."
 }

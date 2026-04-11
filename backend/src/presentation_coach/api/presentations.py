@@ -48,6 +48,82 @@ _NON_TERMINAL_PRESENTATION_STATUSES = ("preparing", "in_progress", "paused", "sc
 # - the replace blocker 409 returns JSONResponse(error_response(...)) plus a nested details payload.
 # - most not-found / permission branches still raise plain-string FastAPI detail payloads.
 # This file therefore exposes three outward error shapes today and is a primary S02 collapse target.
+#
+# M017/S03/T01 upload/resource-race discovery inventory:
+# - keep the race inventory next to the live upload/replace/delete authority instead of a separate audit doc.
+# - distinguish what the active-session blocker already covers from surfaces that still only have suspicion or
+#   database-dependent behavior.
+PRESENTATION_RESOURCE_RACE_INVENTORY: tuple[dict[str, Any], ...] = (
+    {
+        "surface": "upload_new_presentation",
+        "shared_resources": (
+            "storage_file_path",
+            "presentation_row",
+            "page_rows",
+            "thumbnail_directory",
+        ),
+        "active_session_blocker_coverage": "not_applicable",
+        "current_guardrails": (
+            "fresh storage key per upload",
+            "atomic file replace prevents partial writes",
+        ),
+        "current_assessment": "new uploads mostly isolate themselves because each request gets a fresh presentation_id/storage key",
+        "proof_state": "inventory_only",
+        "next_proof": "defer until in-place mutation surfaces are retired",
+    },
+    {
+        "surface": "replace_presentation_in_place",
+        "shared_resources": (
+            "stable presentation row",
+            "version_number and file_url",
+            "page_rows and page-scoped metadata",
+            "thumbnail_directory",
+            "practice_session references",
+        ),
+        "active_session_blocker_coverage": "covered_for_live_session_mutation_only",
+        "current_guardrails": (
+            "non-terminal active-session blocker",
+            "atomic file replace per derived versioned path",
+        ),
+        "uncovered_race_windows": (
+            "two replace requests can both pass the active-session preflight before either writer commits",
+            "both writers can derive the same next_version and target the same versioned file path",
+            "page delete-and-rebuild work has no compare-and-swap or lock once replace starts",
+        ),
+        "current_assessment": "highest-priority race surface: shared stable identity is mutated in place after a read-then-write preflight",
+        "proof_state": "needs_focused_proof",
+        "next_proof": "concurrent_replace_without_active_sessions",
+    },
+    {
+        "surface": "delete_presentation",
+        "shared_resources": (
+            "presentation row",
+            "page and forbidden-word rows",
+            "practice_session references",
+            "stored ppt artifact",
+            "thumbnail_directory",
+        ),
+        "active_session_blocker_coverage": "not_covered",
+        "current_guardrails": (
+            "owner_or_admin_permission_check_only",
+        ),
+        "uncovered_race_windows": (
+            "route has no practice-session preflight before deleting the presentation row",
+            "stored ppt and thumbnail artifacts are not removed by the delete handler",
+            "live sessions can lose their presentation link during delete because the route never retires or rehomes referencing sessions first",
+        ),
+        "current_assessment": "confirmed route-guard gap: delete succeeds without a live-session blocker and can detach session state from the presentation authority",
+        "proof_state": "confirmed_route_guard_gap",
+        "next_proof": "delete_while_session_references_presentation",
+    },
+)
+
+PRESENTATION_RESOURCE_RACE_FOCUS: dict[str, str] = {
+    "highest_priority_surface": "replace_presentation_in_place",
+    "why": "it mutates the stable presentation_id authority in place, and the current blocker only protects against live-session reads, not concurrent writers",
+    "recommended_next_proof": "concurrent_replace_without_active_sessions",
+    "not_recommended_yet": "do not add distributed locks to every upload path before the in-place replace race is reproduced",
+}
 
 
 def _presentation_error_response(

@@ -7,5 +7,5 @@
 | ID | Slice | Risk | Depends | Done | After this |
 |----|-------|------|---------|------|------------|
 | S01 | S01 | high | — | ✅ | pause/resume/end 并发行为有可重复证明，状态收敛策略清晰。 |
-| S02 | S02 | high | — | ⬜ | practice websocket 的 reconnect/backpressure/interrupt contract 更清晰，测试保持通过。 |
-| S03 | 文件上传 / 资源竞争 / 分布式锁风险 discovery | medium | S01 | ⬜ | presentation upload / replace 等并发风险点被列成可证据化清单，并给出下一步建议。 |
+| S02 | S02 | high | — | ✅ | practice websocket 的 reconnect/backpressure/interrupt contract 更清晰，测试保持通过。 |
+| S03 | S03 | medium | — | ⬜ | presentation upload / replace 等并发风险点被列成可证据化清单，并给出下一步建议。 |

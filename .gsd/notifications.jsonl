@@ -397,3 +397,5 @@
 {"id":"eb751e97-70ef-42ea-a0d0-01aa281228ed","ts":"2026-04-11T21:34:43.615Z","severity":"warning","message":"[safety] file-change: web/src/hooks/use-practice-websocket.test.ts — Modified but not in task plan's expected output","source":"workflow-logger","read":false}
 {"id":"2db0a7c1-6fd1-4a73-bcee-b7b85bd83c08","ts":"2026-04-11T21:34:43.615Z","severity":"warning","message":"Safety: 3 unexpected file change(s) outside task plan","source":"notify","read":false}
 {"id":"1e12eac0-863d-4c29-85ba-c53fb872ce48","ts":"2026-04-11T21:34:44.969Z","severity":"info","message":"Verification gate: 1/1 checks passed","source":"notify","read":false}
+{"id":"bd5b635d-4917-4f22-a9f9-cb80bcb03ac8","ts":"2026-04-11T21:41:05.882Z","severity":"info","message":"Committed: feat: Added focused websocket contract proofs for reconnect exit, stale…","source":"notify","read":false}
+{"id":"912d3aef-0678-4267-b6a9-efb0ac45ddf3","ts":"2026-04-11T21:41:07.254Z","severity":"info","message":"Verification gate: 1/1 checks passed","source":"notify","read":false}

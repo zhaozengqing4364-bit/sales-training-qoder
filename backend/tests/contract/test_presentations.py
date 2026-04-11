@@ -285,3 +285,47 @@ class TestPresentationsContract:
             "error": "[ROLE_REQUIRED]",
             "message": "当前账号权限不足，无法执行该操作。",
         }
+
+    async def test_resource_race_inventory_marks_replace_as_first_proof_target(self):
+        from presentation_coach.api.presentations import (
+            PRESENTATION_RESOURCE_RACE_FOCUS,
+            PRESENTATION_RESOURCE_RACE_INVENTORY,
+        )
+
+        surfaces = {
+            entry["surface"]: entry for entry in PRESENTATION_RESOURCE_RACE_INVENTORY
+        }
+
+        assert set(surfaces) == {
+            "upload_new_presentation",
+            "replace_presentation_in_place",
+            "delete_presentation",
+        }
+        assert (
+            surfaces["upload_new_presentation"]["active_session_blocker_coverage"]
+            == "not_applicable"
+        )
+        assert (
+            surfaces["replace_presentation_in_place"][
+                "active_session_blocker_coverage"
+            ]
+            == "covered_for_live_session_mutation_only"
+        )
+        assert surfaces["replace_presentation_in_place"]["proof_state"] == (
+            "needs_focused_proof"
+        )
+        assert (
+            surfaces["delete_presentation"]["active_session_blocker_coverage"]
+            == "not_covered"
+        )
+        assert surfaces["delete_presentation"]["proof_state"] == (
+            "confirmed_route_guard_gap"
+        )
+        assert (
+            PRESENTATION_RESOURCE_RACE_FOCUS["highest_priority_surface"]
+            == "replace_presentation_in_place"
+        )
+        assert (
+            PRESENTATION_RESOURCE_RACE_FOCUS["recommended_next_proof"]
+            == "concurrent_replace_without_active_sessions"
+        )
