@@ -1,4 +1,21 @@
 
+- time: 2026-04-12T02:47:30+08:00
+  mode: grow
+  item id: M015-S03-T03
+  files changed:
+    - web/src/app/learner-shell-baseline.test.ts
+    - .gsd/KNOWLEDGE.md
+    - .codex/loop/state.json
+    - .codex/loop/log.md
+  summary: Added one focused learner-shell baseline proof that scopes route-shell closure to learner-core routes, locks the shared a11y seam, and records the remaining responsive/timezone work as explicit deferred source facts instead of reopening shell scope.
+  verification commands:
+    - npm --prefix web test -- --run "src/app/learner-shell-baseline.test.ts"
+    - find web/src/app -type f \( -name 'error.tsx' -o -name 'loading.tsx' \) | sort && npm --prefix web test -- --run "src/app/learner-shell-baseline.test.ts" "src/app/(dashboard)/history/page.test.tsx" "src/app/(user)/practice/[sessionId]/report/page.test.tsx" "src/app/(user)/practice/[sessionId]/replay/page.test.tsx"
+    - lsp diagnostics web/src/app/learner-shell-baseline.test.ts
+  verification results: passed; the new focused baseline proof finished 3/3 green, the slice inventory + learner regression gate finished 44/44 green, and diagnostics were clean on the new proof file.
+  success signal status: learner fallback closure, route-shell a11y baseline, and deferred responsive/timezone facts are now all encoded in one focused learner test that future agents can rerun directly.
+  rollback note: if later learner-shell work adds/removes route fallbacks or resolves the deferred responsive/timezone baseline, update web/src/app/learner-shell-baseline.test.ts and the matching knowledge entry together so the proof keeps matching the real scope.
+
 - time: 2026-04-12T02:40:55+08:00
   mode: grow
   item id: M015-S03-T02

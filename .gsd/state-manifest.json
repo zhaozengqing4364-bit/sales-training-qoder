@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "exported_at": "2026-04-11T18:41:41.898Z",
+  "exported_at": "2026-04-11T18:49:14.675Z",
   "milestones": [
     {
       "id": "M001",
@@ -10010,19 +10010,27 @@
       "milestone_id": "M015",
       "slice_id": "S03",
       "id": "T03",
-      "title": "锁定 learner shell baseline proof 与剩余风险",
-      "status": "pending",
-      "one_liner": "",
-      "narrative": "",
-      "verification_result": "",
+      "title": "Added a focused learner-shell baseline test that locks learner fallback coverage and the remaining deferred responsive/timezone facts.",
+      "status": "complete",
+      "one_liner": "Added a focused learner-shell baseline test that locks learner fallback coverage and the remaining deferred responsive/timezone facts.",
+      "narrative": "I kept T03 scoped to proof closure instead of reopening learner-shell implementation work. Following the T01/T02 baseline, I first added a naive learner-shell inventory test and ran it red; it failed for the right reason because the raw `web/src/app/**/(error|loading).tsx` scan also includes `admin/error.tsx` and `admin/loading.tsx`, which are real route shells but out of learner scope. I then refined that proof into `web/src/app/learner-shell-baseline.test.ts`, which now does three things in one focused place: (1) scopes route-shell closure to the learner-core route families recorded in S03, while explicitly proving admin shells stay outside that assertion boundary; (2) locks the learner route a11y baseline by checking the shared loading/error seams and the explicit status semantics on history/report/replay loading shells; and (3) records the remaining responsive/timezone work as deferred source-backed facts by proving the shared dashboard skeleton is narrow-screen safe while dashboard page density and browser-local `toLocaleString(\"zh-CN\")` formatting still remain intentionally unresolved product-baseline items. I also appended the non-obvious learner-scope inventory rule to `.gsd/KNOWLEDGE.md` and updated `.codex/loop/state.json` plus `.codex/loop/log.md` so future auto runs can resume from the new proof instead of stale T02 state.",
+      "verification_result": "Ran the new focused proof with `npm --prefix web test -- --run \"src/app/learner-shell-baseline.test.ts\"`, which finished 3/3 green after the red-to-green scope correction. Then ran the slice verification gate `find web/src/app -type f \\( -name 'error.tsx' -o -name 'loading.tsx' \\) | sort && npm --prefix web test -- --run \"src/app/learner-shell-baseline.test.ts\" \"src/app/(dashboard)/history/page.test.tsx\" \"src/app/(user)/practice/[sessionId]/report/page.test.tsx\" \"src/app/(user)/practice/[sessionId]/replay/page.test.tsx\"`, which showed the expected route-shell inventory and finished 44/44 green across the baseline proof plus learner history/report/replay regressions. Fresh LSP diagnostics on `web/src/app/learner-shell-baseline.test.ts` were clean.",
       "duration": "",
-      "completed_at": null,
+      "completed_at": "2026-04-11T18:49:14.614Z",
       "blocker_discovered": false,
-      "deviations": "",
-      "known_issues": "",
-      "key_files": [],
-      "key_decisions": [],
-      "full_summary_md": "",
+      "deviations": "Minor local adaptation only: instead of spreading the remaining-risk proof across multiple existing page suites, I landed one new filesystem-backed app-level test (`web/src/app/learner-shell-baseline.test.ts`) plus a matching knowledge entry. This kept the proof readable and let the learner-scope rule live next to the route-shell inventory it constrains.",
+      "known_issues": "The remaining baseline risks stay intentionally deferred and are now encoded in the new proof: dashboard home/profile still carry denser multi-column responsive layouts outside route-shell scope, and history/report/replay still format timestamps with browser-local `toLocaleString(\"zh-CN\")` without an explicit product timezone contract. No new runtime regression was introduced.",
+      "key_files": [
+        "web/src/app/learner-shell-baseline.test.ts",
+        ".gsd/KNOWLEDGE.md",
+        ".codex/loop/state.json",
+        ".codex/loop/log.md"
+      ],
+      "key_decisions": [
+        "Scope learner-shell closure proof to learner-core route families only; admin route shells in the same app tree are explicit out-of-scope noise for this baseline.",
+        "Record remaining responsive/timezone work as source-backed deferred facts in one focused learner test instead of reopening shell implementation scope."
+      ],
+      "full_summary_md": "---\nid: T03\nparent: S03\nmilestone: M015\nkey_files:\n  - web/src/app/learner-shell-baseline.test.ts\n  - .gsd/KNOWLEDGE.md\n  - .codex/loop/state.json\n  - .codex/loop/log.md\nkey_decisions:\n  - Scope learner-shell closure proof to learner-core route families only; admin route shells in the same app tree are explicit out-of-scope noise for this baseline.\n  - Record remaining responsive/timezone work as source-backed deferred facts in one focused learner test instead of reopening shell implementation scope.\nduration: \nverification_result: passed\ncompleted_at: 2026-04-11T18:49:14.611Z\nblocker_discovered: false\n---\n\n# T03: Added a focused learner-shell baseline test that locks learner fallback coverage and the remaining deferred responsive/timezone facts.\n\n**Added a focused learner-shell baseline test that locks learner fallback coverage and the remaining deferred responsive/timezone facts.**\n\n## What Happened\n\nI kept T03 scoped to proof closure instead of reopening learner-shell implementation work. Following the T01/T02 baseline, I first added a naive learner-shell inventory test and ran it red; it failed for the right reason because the raw `web/src/app/**/(error|loading).tsx` scan also includes `admin/error.tsx` and `admin/loading.tsx`, which are real route shells but out of learner scope. I then refined that proof into `web/src/app/learner-shell-baseline.test.ts`, which now does three things in one focused place: (1) scopes route-shell closure to the learner-core route families recorded in S03, while explicitly proving admin shells stay outside that assertion boundary; (2) locks the learner route a11y baseline by checking the shared loading/error seams and the explicit status semantics on history/report/replay loading shells; and (3) records the remaining responsive/timezone work as deferred source-backed facts by proving the shared dashboard skeleton is narrow-screen safe while dashboard page density and browser-local `toLocaleString(\"zh-CN\")` formatting still remain intentionally unresolved product-baseline items. I also appended the non-obvious learner-scope inventory rule to `.gsd/KNOWLEDGE.md` and updated `.codex/loop/state.json` plus `.codex/loop/log.md` so future auto runs can resume from the new proof instead of stale T02 state.\n\n## Verification\n\nRan the new focused proof with `npm --prefix web test -- --run \"src/app/learner-shell-baseline.test.ts\"`, which finished 3/3 green after the red-to-green scope correction. Then ran the slice verification gate `find web/src/app -type f \\( -name 'error.tsx' -o -name 'loading.tsx' \\) | sort && npm --prefix web test -- --run \"src/app/learner-shell-baseline.test.ts\" \"src/app/(dashboard)/history/page.test.tsx\" \"src/app/(user)/practice/[sessionId]/report/page.test.tsx\" \"src/app/(user)/practice/[sessionId]/replay/page.test.tsx\"`, which showed the expected route-shell inventory and finished 44/44 green across the baseline proof plus learner history/report/replay regressions. Fresh LSP diagnostics on `web/src/app/learner-shell-baseline.test.ts` were clean.\n\n## Verification Evidence\n\n| # | Command | Exit Code | Verdict | Duration |\n|---|---------|-----------|---------|----------|\n| 1 | `npm --prefix web test -- --run \"src/app/learner-shell-baseline.test.ts\"` | 0 | ✅ pass | 438ms |\n| 2 | `find web/src/app -type f \\( -name 'error.tsx' -o -name 'loading.tsx' \\) | sort && npm --prefix web test -- --run \"src/app/learner-shell-baseline.test.ts\" \"src/app/(dashboard)/history/page.test.tsx\" \"src/app/(user)/practice/[sessionId]/report/page.test.tsx\" \"src/app/(user)/practice/[sessionId]/replay/page.test.tsx\"` | 0 | ✅ pass | 1340ms |\n| 3 | `lsp diagnostics web/src/app/learner-shell-baseline.test.ts` | 0 | ✅ pass | 0ms |\n\n## Deviations\n\nMinor local adaptation only: instead of spreading the remaining-risk proof across multiple existing page suites, I landed one new filesystem-backed app-level test (`web/src/app/learner-shell-baseline.test.ts`) plus a matching knowledge entry. This kept the proof readable and let the learner-scope rule live next to the route-shell inventory it constrains.\n\n## Known Issues\n\nThe remaining baseline risks stay intentionally deferred and are now encoded in the new proof: dashboard home/profile still carry denser multi-column responsive layouts outside route-shell scope, and history/report/replay still format timestamps with browser-local `toLocaleString(\"zh-CN\")` without an explicit product timezone contract. No new runtime regression was introduced.\n\n## Files Created/Modified\n\n- `web/src/app/learner-shell-baseline.test.ts`\n- `.gsd/KNOWLEDGE.md`\n- `.codex/loop/state.json`\n- `.codex/loop/log.md`\n",
       "description": "Why: baseline 风险和剩余 deferred 项如果不记录清楚，后续很容易把 M015 做成新的 audit triage 回合。\n\nDo:\n1. 记录 remaining responsive/a11y/timezone 风险的 disposition。\n2. 补 focused proof，锁定 learner fallback 仍然覆盖关键 route。\n3. 确保 baseline 闭合，但不扩大 scope 到全站治理。\n\nDone when: learner shell baseline 既有测试 proof，也有剩余风险记录，后续 agent 可直接消费。",
       "estimate": "25m",
       "files": [
@@ -16816,6 +16824,39 @@
       "verdict": "✅ pass",
       "duration_ms": 1797,
       "created_at": "2026-04-11T18:41:41.856Z"
+    },
+    {
+      "id": 327,
+      "task_id": "T03",
+      "slice_id": "S03",
+      "milestone_id": "M015",
+      "command": "npm --prefix web test -- --run \"src/app/learner-shell-baseline.test.ts\"",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 438,
+      "created_at": "2026-04-11T18:49:14.615Z"
+    },
+    {
+      "id": 328,
+      "task_id": "T03",
+      "slice_id": "S03",
+      "milestone_id": "M015",
+      "command": "find web/src/app -type f \\( -name 'error.tsx' -o -name 'loading.tsx' \\) | sort && npm --prefix web test -- --run \"src/app/learner-shell-baseline.test.ts\" \"src/app/(dashboard)/history/page.test.tsx\" \"src/app/(user)/practice/[sessionId]/report/page.test.tsx\" \"src/app/(user)/practice/[sessionId]/replay/page.test.tsx\"",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 1340,
+      "created_at": "2026-04-11T18:49:14.615Z"
+    },
+    {
+      "id": 329,
+      "task_id": "T03",
+      "slice_id": "S03",
+      "milestone_id": "M015",
+      "command": "lsp diagnostics web/src/app/learner-shell-baseline.test.ts",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 0,
+      "created_at": "2026-04-11T18:49:14.615Z"
     }
   ]
 }
