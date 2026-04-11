@@ -42,6 +42,36 @@ _OBJECTION_LEDGER_REPORT_FOCUS = {
     "implementation_risk": "objection_handling_gap",
 }
 
+# M018/S01/T01 DB performance discovery inventory:
+# - keep the projection baseline beside the single-session projection authority.
+# - record what is already true about the query path versus what still needs Postgres/runtime proof.
+SESSION_EVIDENCE_DB_PERFORMANCE_BASELINE: tuple[dict[str, Any], ...] = (
+    {
+        "path": "single_session_projection_load",
+        "callers": (
+            "get_projection",
+            "common.conversation.replay",
+            "common.analytics.history_service.build_history_entries",
+            "admin.api.users.get_user_sessions",
+        ),
+        "query_shape": (
+            "one PracticeSession lookup by session_id when the session is not already supplied",
+            "one ConversationMessage batch WHERE session_id = ? ORDER BY turn_number, timestamp",
+            "pure Python projection build over the full normalized message list",
+        ),
+        "risk": "per_session_hot_path",
+        "n_plus_one_risk": "none for a single session; the cost comes from loading every message for the session and rebuilding the projection each time an upstream caller asks for it",
+        "slow_query_candidates": (
+            "long sessions with many messages amplify projection CPU and message sort cost on every rebuild",
+            "upstream callers that request many projections in one response turn this single-session path into a repeated fanout hotspot",
+        ),
+        "index_candidates": (
+            "conversation_messages already has (session_id, turn_number); only consider extending that to cover timestamp if real Postgres plans show residual sort work on ORDER BY turn_number, timestamp",
+        ),
+        "evidence_level": "code_path_confirmed_for_batch_message_read__index_priority_requires_real_query_plan_evidence",
+    },
+)
+
 
 @dataclass(slots=True)
 class SessionEvidenceProjection:

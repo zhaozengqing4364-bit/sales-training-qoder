@@ -1,3 +1,26 @@
+- time: 2026-04-12T06:24:20+08:00
+  mode: grow
+  item id: M018-S01-T01
+  files changed:
+    - backend/src/common/analytics/admin_analytics_service.py
+    - backend/src/common/analytics/history_service.py
+    - backend/src/common/conversation/session_evidence.py
+    - backend/src/admin/api/training_records.py
+    - .gsd/DECISIONS.md
+    - .gsd/KNOWLEDGE.md
+    - .codex/loop/state.json
+    - .codex/loop/log.md
+  summary: Wrote the first code-adjacent DB performance discovery baseline so future agents can start from one durable inventory instead of re-auditing query hotspots: admin analytics repeats full projection-window loads, history/progress replays large session/message windows without classical DB N+1, session-evidence is the per-session message fan-in seam, and admin training records still has a confirmed row-level agent/persona N+1.
+  verification commands:
+    - rg -n "select|join|order_by|group_by|SessionEvidence|leaderboard|analytics" backend/src/common/analytics backend/src/common/conversation backend/src/admin/api
+    - lsp diagnostics backend/src/common/analytics/admin_analytics_service.py
+    - lsp diagnostics backend/src/common/analytics/history_service.py
+    - lsp diagnostics backend/src/common/conversation/session_evidence.py
+    - lsp diagnostics backend/src/admin/api/training_records.py
+  verification results: passed; the exact task-plan rg gate now surfaces the code-adjacent analytics/history/projection/admin inventory facts, and diagnostics stayed clean on the touched authority files.
+  success signal status: downstream M018/S01 work no longer needs to reconstruct the first performance baseline from grep output alone — the live authority files now distinguish confirmed query-shape/N+1 facts from index ideas that still need real Postgres/runtime evidence.
+  rollback note: if later slices prove or retire any of these candidates, update the code-adjacent inventory constants, the matching decision/knowledge entries, and the focused analytics proof together so the baseline does not drift from live runtime facts.
+
 - time: 2026-04-12T06:09:00+08:00
   mode: grow
   item id: M017-S03

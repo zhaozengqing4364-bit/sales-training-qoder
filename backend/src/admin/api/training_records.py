@@ -27,6 +27,46 @@ logger = get_logger(__name__)
 
 router = APIRouter(prefix="/admin/training-records", tags=["admin-training-records"])
 
+# M018/S01/T01 DB performance discovery inventory:
+# - keep the admin list baseline next to the route family that still performs row-level metadata lookups.
+# - distinguish confirmed N+1 behavior from search/index ideas that still need real Postgres evidence.
+TRAINING_RECORDS_DB_PERFORMANCE_BASELINE: tuple[dict[str, Any], ...] = (
+    {
+        "path": "list_training_records",
+        "callers": (
+            "list_training_records",
+        ),
+        "query_shape": (
+            "one paginated PracticeSession/Scenario/User join for the page",
+            "one count query for the same filters",
+            "session_to_response then issues up to two extra SELECTs per row to resolve agent and persona names",
+        ),
+        "risk": "confirmed_row_level_n_plus_one",
+        "n_plus_one_risk": "confirmed: page size N can trigger up to 2N extra queries for Agent/Persona lookup even though the page rows are already known",
+        "slow_query_candidates": (
+            "admin search uses User.name ILIKE / Scenario.name ILIKE and can become expensive on larger tables",
+        ),
+        "index_candidates": (
+            "fix the confirmed row-level N+1 before adding new indexes here",
+            "if admin search becomes slow under real Postgres load, validate text-search/trigram support for user/scenario names instead of adding blind btree indexes",
+        ),
+        "evidence_level": "code_path_confirmed_for_n_plus_one__search_index_priority_still_needs_runtime_postgres_proof",
+    },
+    {
+        "path": "get_training_record",
+        "callers": (
+            "get_training_record",
+        ),
+        "query_shape": (
+            "one PracticeSession/Scenario/User join for the record",
+            "then the same per-record agent/persona metadata selects through session_to_response",
+        ),
+        "risk": "small_volume_same_pattern",
+        "n_plus_one_risk": "same lookup pattern as list_training_records, but bounded to a single record",
+        "evidence_level": "code_path_confirmed_but_lower_priority_than_list_endpoint",
+    },
+)
+
 
 # Response schemas
 class TrainingRecordResponse(BaseModel):

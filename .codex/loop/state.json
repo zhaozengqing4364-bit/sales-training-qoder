@@ -1,7 +1,7 @@
 {
   "mode": "grow",
-  "current_issue_id": "M017-S03",
-  "current_issue_type": "slice",
+  "current_issue_id": "M018-S01-T01",
+  "current_issue_type": "task",
   "current_issue_status": "done",
   "pending_issue_ids": [],
   "completed_issue_ids": [
@@ -173,31 +173,30 @@
     "M017-S03-T01",
     "M017-S03-T02",
     "M017-S03-T03",
-    "M017-S03"
+    "M017-S03",
+    "M018-S01-T01"
   ],
   "blocked_issue_ids": [],
   "deferred_issue_ids": [],
   "last_modified_files": [
-    "backend/src/presentation_coach/api/presentations.py",
-    "backend/tests/contract/test_presentations.py",
-    "backend/tests/integration/test_presentation_flow.py",
-    "backend/tests/integration/test_presentation_delete_permissions.py",
+    "backend/src/common/analytics/admin_analytics_service.py",
+    "backend/src/common/analytics/history_service.py",
+    "backend/src/common/conversation/session_evidence.py",
+    "backend/src/admin/api/training_records.py",
     ".gsd/DECISIONS.md",
     ".gsd/KNOWLEDGE.md",
-    ".gsd/PROJECT.md",
     ".codex/loop/state.json",
     ".codex/loop/log.md"
   ],
   "last_verification_commands": [
-    "rg -n \"replace|upload|delete|active-session|lock\" backend/src/presentation_coach/api/presentations.py backend/tests/contract/test_presentations.py backend/tests/integration/test_presentation_flow.py",
-    "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/contract/test_presentations.py backend/tests/integration/test_presentation_flow.py backend/tests/integration/test_presentation_delete_permissions.py -x -q",
-    "lsp diagnostics backend/src/presentation_coach/api/presentations.py",
-    "lsp diagnostics backend/tests/contract/test_presentations.py",
-    "lsp diagnostics backend/tests/integration/test_presentation_flow.py",
-    "lsp diagnostics backend/tests/integration/test_presentation_delete_permissions.py"
+    "rg -n \"select|join|order_by|group_by|SessionEvidence|leaderboard|analytics\" backend/src/common/analytics backend/src/common/conversation backend/src/admin/api",
+    "lsp diagnostics backend/src/common/analytics/admin_analytics_service.py",
+    "lsp diagnostics backend/src/common/analytics/history_service.py",
+    "lsp diagnostics backend/src/common/conversation/session_evidence.py",
+    "lsp diagnostics backend/src/admin/api/training_records.py"
   ],
-  "last_verification_result": "passed; the exact slice-plan rg inventory surfaced the code-adjacent discovery artifact plus focused replace/delete proof lines, the full S03 backend gate finished 11/11 green, and fresh diagnostics stayed clean on the touched backend authority/test files.",
-  "last_success_signal": "M017/S03 is now closed on one explicit presentation mutation discovery baseline: in-place replace is a proved concurrent-writer race that needs serialization, delete is a proved live-session route-guard gap, and upload-new remains inventory-only until new evidence says otherwise.",
+  "last_verification_result": "passed; the exact task-plan rg gate now surfaces the code-adjacent analytics/history/projection/admin inventory facts, and fresh diagnostics stayed clean on the touched authority files.",
+  "last_success_signal": "M018/S01/T01 now gives downstream DB work one durable baseline: admin analytics is a repeated bulk-projection fanout hotspot, history/progress avoids classical DB N+1 but reloads large session/message windows, session-evidence is a per-session message fan-in seam, and admin training records still has a confirmed row-level agent/persona N+1.",
   "last_growth_scan": null,
-  "next_action": "M017 slice execution is complete; proceed to milestone validation/close-out using the S03 discovery summary as the presentation mutation dependency baseline."
+  "next_action": "Proceed to M018/S01/T02 using the new code-adjacent DB discovery inventories as the baseline for evidence-backed proof and backlog ranking."
 }

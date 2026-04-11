@@ -163,6 +163,22 @@
       "doneMilestones": 16,
       "totalMilestones": 18,
       "phase": "evaluating-gates"
+    },
+    {
+      "filename": "M017-2026-04-11T22-24-20.html",
+      "generatedAt": "2026-04-11T22:24:20.549Z",
+      "milestoneId": "M017",
+      "milestoneTitle": "Realtime contract 与 concurrency proof 收口",
+      "label": "M017: Realtime contract 与 concurrency proof 收口",
+      "kind": "milestone",
+      "totalCost": 84.3212025,
+      "totalTokens": 1920391799,
+      "totalDuration": 358249744,
+      "doneSlices": 68,
+      "totalSlices": 73,
+      "doneMilestones": 17,
+      "totalMilestones": 18,
+      "phase": "evaluating-gates"
     }
   ]
 }

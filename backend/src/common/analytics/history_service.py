@@ -32,6 +32,62 @@ logger = get_logger(__name__)
 
 PROJECTION_SCORE_BASIS = "session_evidence_projection_evaluable_only"
 
+# M018/S01/T01 DB performance discovery inventory:
+# - keep the history/progress/query baseline next to the shared user-history authority.
+# - this inventory records confirmed query shapes first, then index candidates that still need
+#   real Postgres plans before they should become implementation work.
+HISTORY_QUERY_DB_PERFORMANCE_BASELINE: tuple[dict[str, Any], ...] = (
+    {
+        "path": "history_session_window_and_message_batch",
+        "callers": (
+            "get_user_history",
+            "get_score_trends",
+            "get_statistics",
+            "get_projection_score_summary",
+            "get_supervisor_progress_snapshot",
+            "get_manager_intervention_results",
+            "get_user_history_with_report_summary",
+            "common.analytics.admin_analytics_service._load_projection_records",
+        ),
+        "query_shape": (
+            "practice_sessions filtered by user_id with optional status/cutoff and start_time ordering",
+            "optional count subquery built from the same filtered session query",
+            "one batched conversation_messages fetch WHERE session_id IN (...) ORDER BY session_id, turn_number, timestamp for completed sessions",
+        ),
+        "risk": "near_runtime_hot_path",
+        "n_plus_one_risk": "avoided at the database layer here: session relationships use selectinload and messages are fetched in one IN query instead of per-session selects",
+        "slow_query_candidates": (
+            "large user histories rebuild SessionEvidence projections from raw messages on every stats/progress/history request",
+            "admin analytics piggybacks on the same helper, so one expensive user/session window can affect both learner and supervisor surfaces",
+        ),
+        "index_candidates": (
+            "practice_sessions currently has single-column indexes on user_id/status/start_time, but these paths repeatedly combine user_id + optional status/cutoff + start_time ordering, so a composite index is a strong candidate once real Postgres evidence exists",
+            "conversation_messages already has (session_id, turn_number); only add timestamp to that composite if EXPLAIN shows a residual sort on ORDER BY turn_number, timestamp within hot sessions",
+        ),
+        "evidence_level": "code_path_confirmed_for_multi_query_history_shape__composite_index_priority_still_needs_postgres_measurement",
+    },
+    {
+        "path": "manager_intervention_overlay",
+        "callers": (
+            "get_manager_intervention_results",
+            "admin.api.users.get_user_sessions",
+        ),
+        "query_shape": (
+            "load manager_interventions by user_id ordered by created_at desc",
+            "then reload the user's completed sessions and batched messages to compute intervention outcomes",
+        ),
+        "risk": "duplicate_history_reload",
+        "n_plus_one_risk": "not row-by-row; the risk is re-running the same history/message load on endpoints that already fetched a user session page",
+        "slow_query_candidates": (
+            "admin user session pages pay for both the paged history load and a second full completed-history replay when manager intervention results are requested",
+        ),
+        "index_candidates": (
+            "manager_interventions already has (user_id, created_at); treat this as a query-shape dedup candidate before proposing new indexes",
+        ),
+        "evidence_level": "code_path_confirmed_for_duplicate_window_reload__fix_priority_depends_on_real_admin_usage",
+    },
+)
+
 
 @dataclass(slots=True)
 class HistorySessionSummary:

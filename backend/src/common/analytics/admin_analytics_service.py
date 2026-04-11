@@ -29,6 +29,62 @@ from common.error_handling.result import Result
 
 logger = logging.getLogger(__name__)
 
+# M018/S01/T01 DB performance discovery inventory:
+# - keep the first-round baseline next to the projection-backed admin analytics authority.
+# - distinguish confirmed multi-query/query-fanout shapes from index ideas that still need
+#   EXPLAIN/pg_stat_statements before implementation priority is set.
+ADMIN_ANALYTICS_DB_PERFORMANCE_BASELINE: tuple[dict[str, Any], ...] = (
+    {
+        "path": "projection_window_load",
+        "callers": (
+            "get_overview_stats",
+            "get_trends_data",
+            "get_operating_pack",
+            "get_agent_stats",
+            "get_leaderboard",
+            "admin.api.analytics.export_analytics",
+        ),
+        "query_shape": (
+            "one practice_sessions window query with selectinload bursts for user/scenario/agent/persona/presentation",
+            "one batched conversation_messages fetch for every completed session in the window via history_service.build_projection_summaries_for_sessions",
+            "projection aggregation then runs in Python over all loaded rows",
+        ),
+        "risk": "near_runtime_hot_path",
+        "n_plus_one_risk": "not a row-by-row ORM N+1 inside this service; the main risk is repeating the same bulk projection load for each endpoint/export slice of the same time window",
+        "slow_query_candidates": (
+            "large time windows force full message fanout into SessionEvidence projection even when the caller only needs cohort aggregates",
+            "time_range != all_time doubles the projection load because overview growth compares current and previous windows separately",
+            "export_analytics currently fans out into overview + trends + leaderboard, each of which rebuilds the same projection window independently",
+        ),
+        "index_candidates": (
+            "practice_sessions composite access paths around (start_time, user_id) or (status, start_time) may outperform the current single-column indexes for cohort windows, but this still needs real Postgres evidence",
+            "scenario.has(scenario_type=...) keeps the scenario filter on a relationship predicate; if that shows up in plans, validate whether the better fix is query-shape change or a supporting scenario/practice-session index before adding anything",
+        ),
+        "evidence_level": "code_path_confirmed_for_bulk_projection_fanout__index_priority_still_needs_runtime_postgres_proof",
+    },
+    {
+        "path": "leaderboard_python_reduce",
+        "callers": (
+            "get_leaderboard",
+            "admin.api.analytics.export_analytics",
+        ),
+        "query_shape": (
+            "reuses the full projection window load",
+            "groups every loaded record by user_id in Python",
+            "sorts/ranks leaderboard entries after the full in-memory reduce",
+        ),
+        "risk": "runtime_hot_if_window_or_user_count_grows",
+        "n_plus_one_risk": "none after the loader; the cost is full-window fan-in plus Python grouping/sorting",
+        "slow_query_candidates": (
+            "leaderboard has to read all sessions in the window before it can rank even when only top-N rows are returned",
+        ),
+        "index_candidates": (
+            "do not add leaderboard-specific indexes before measuring whether the real bottleneck is SQL scan time or Python-side projection/ranking cost",
+        ),
+        "evidence_level": "code_path_confirmed_for_full_window_reduce__topn_pushdown_strategy_still_needs_real_runtime_measurement",
+    },
+)
+
 
 @dataclass(slots=True)
 class OverviewStats:

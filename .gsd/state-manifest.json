@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "exported_at": "2026-04-11T22:22:44.612Z",
+  "exported_at": "2026-04-11T22:32:02.722Z",
   "milestones": [
     {
       "id": "M001",
@@ -2483,7 +2483,7 @@
     {
       "milestone_id": "M018",
       "id": "S01",
-      "title": "数据库性能基线 discovery",
+      "title": "S01",
       "status": "pending",
       "risk": "medium",
       "depends": [],
@@ -10892,19 +10892,30 @@
       "milestone_id": "M018",
       "slice_id": "S01",
       "id": "T01",
-      "title": "定位热点查询与索引候选路径",
-      "status": "pending",
-      "one_liner": "",
-      "narrative": "",
-      "verification_result": "",
+      "title": "Added code-adjacent DB hotspot inventories for admin analytics, history/projection, and admin training records.",
+      "status": "complete",
+      "one_liner": "Added code-adjacent DB hotspot inventories for admin analytics, history/projection, and admin training records.",
+      "narrative": "I mapped the live analytics/history/admin/projection read paths from the planner’s target files, then encoded the first-round DB performance baseline directly beside the authority seams instead of leaving it as an ad-hoc grep result. In `backend/src/common/analytics/admin_analytics_service.py` I recorded that the admin analytics endpoints share one repeated bulk projection-window loader and that `/admin/analytics/export` fans out into multiple independent full-window rebuilds; this is a confirmed query-fanout hotspot, while any index work still needs real Postgres evidence. In `backend/src/common/analytics/history_service.py` I captured the user-history/progress pattern as a batched session window plus one grouped message fetch — not a classical DB N+1, but still a large repeated session/message replay seam, especially when manager intervention overlays trigger a second full reload. In `backend/src/common/conversation/session_evidence.py` I documented the per-session projection path as a single-session message fan-in seam whose main cost is rebuilding the projection over full message lists, with the timestamp-extension index remaining only a hypothesis until EXPLAIN proves it. In `backend/src/admin/api/training_records.py` I locked the one confirmed row-level N+1 in this task: `session_to_response()` can issue up to two extra SELECTs per row for agent/persona metadata after the page query already completed. I also saved D203 to record that M018’s DB baseline should stay in code-adjacent inventories and explicitly grade confirmed query-shape facts separately from unproved index ideas, then appended the matching handoff note to `.gsd/KNOWLEDGE.md` and updated the safe-grow continuity files for the next task.",
+      "verification_result": "Ran the exact task-plan verification command `rg -n \"select|join|order_by|group_by|SessionEvidence|leaderboard|analytics\" backend/src/common/analytics backend/src/common/conversation backend/src/admin/api`, which now surfaces the new code-adjacent inventory constants alongside the underlying query shapes they describe. Ran fresh LSP diagnostics on `backend/src/common/analytics/admin_analytics_service.py`, `backend/src/common/analytics/history_service.py`, `backend/src/common/conversation/session_evidence.py`, and `backend/src/admin/api/training_records.py`; all returned clean. Also sanity-checked `.codex/loop/state.json` with `python3` JSON parsing after updating continuity metadata. Slice-level note: this intermediate task completed the discovery inventory baseline only; the focused analytics pytest proof and evidence-backed ranking work remain for T02/T03.",
       "duration": "",
-      "completed_at": null,
+      "completed_at": "2026-04-11T22:32:02.673Z",
       "blocker_discovered": false,
-      "deviations": "",
-      "known_issues": "",
-      "key_files": [],
-      "key_decisions": [],
-      "full_summary_md": "",
+      "deviations": "Used four authority files instead of only the planner’s minimal three-file estimate so the baseline could capture one confirmed admin N+1 seam (`training_records.py`) in addition to the shared analytics/history/projection loaders. This stayed within the slice contract and did not change task scope.",
+      "known_issues": "Index priority is still intentionally unproved at this stage. The inventories mark composite-index and search-index ideas as candidates only; T02 still needs real Postgres/runtime evidence before any of them should become implementation work.",
+      "key_files": [
+        "backend/src/common/analytics/admin_analytics_service.py",
+        "backend/src/common/analytics/history_service.py",
+        "backend/src/common/conversation/session_evidence.py",
+        "backend/src/admin/api/training_records.py",
+        ".gsd/DECISIONS.md",
+        ".gsd/KNOWLEDGE.md",
+        ".codex/loop/state.json",
+        ".codex/loop/log.md"
+      ],
+      "key_decisions": [
+        "D203 — keep the M018 DB performance baseline in code-adjacent inventories and grade confirmed query-shape facts separately from unproved index ideas."
+      ],
+      "full_summary_md": "---\nid: T01\nparent: S01\nmilestone: M018\nkey_files:\n  - backend/src/common/analytics/admin_analytics_service.py\n  - backend/src/common/analytics/history_service.py\n  - backend/src/common/conversation/session_evidence.py\n  - backend/src/admin/api/training_records.py\n  - .gsd/DECISIONS.md\n  - .gsd/KNOWLEDGE.md\n  - .codex/loop/state.json\n  - .codex/loop/log.md\nkey_decisions:\n  - D203 — keep the M018 DB performance baseline in code-adjacent inventories and grade confirmed query-shape facts separately from unproved index ideas.\nduration: \nverification_result: passed\ncompleted_at: 2026-04-11T22:32:02.671Z\nblocker_discovered: false\n---\n\n# T01: Added code-adjacent DB hotspot inventories for admin analytics, history/projection, and admin training records.\n\n**Added code-adjacent DB hotspot inventories for admin analytics, history/projection, and admin training records.**\n\n## What Happened\n\nI mapped the live analytics/history/admin/projection read paths from the planner’s target files, then encoded the first-round DB performance baseline directly beside the authority seams instead of leaving it as an ad-hoc grep result. In `backend/src/common/analytics/admin_analytics_service.py` I recorded that the admin analytics endpoints share one repeated bulk projection-window loader and that `/admin/analytics/export` fans out into multiple independent full-window rebuilds; this is a confirmed query-fanout hotspot, while any index work still needs real Postgres evidence. In `backend/src/common/analytics/history_service.py` I captured the user-history/progress pattern as a batched session window plus one grouped message fetch — not a classical DB N+1, but still a large repeated session/message replay seam, especially when manager intervention overlays trigger a second full reload. In `backend/src/common/conversation/session_evidence.py` I documented the per-session projection path as a single-session message fan-in seam whose main cost is rebuilding the projection over full message lists, with the timestamp-extension index remaining only a hypothesis until EXPLAIN proves it. In `backend/src/admin/api/training_records.py` I locked the one confirmed row-level N+1 in this task: `session_to_response()` can issue up to two extra SELECTs per row for agent/persona metadata after the page query already completed. I also saved D203 to record that M018’s DB baseline should stay in code-adjacent inventories and explicitly grade confirmed query-shape facts separately from unproved index ideas, then appended the matching handoff note to `.gsd/KNOWLEDGE.md` and updated the safe-grow continuity files for the next task.\n\n## Verification\n\nRan the exact task-plan verification command `rg -n \"select|join|order_by|group_by|SessionEvidence|leaderboard|analytics\" backend/src/common/analytics backend/src/common/conversation backend/src/admin/api`, which now surfaces the new code-adjacent inventory constants alongside the underlying query shapes they describe. Ran fresh LSP diagnostics on `backend/src/common/analytics/admin_analytics_service.py`, `backend/src/common/analytics/history_service.py`, `backend/src/common/conversation/session_evidence.py`, and `backend/src/admin/api/training_records.py`; all returned clean. Also sanity-checked `.codex/loop/state.json` with `python3` JSON parsing after updating continuity metadata. Slice-level note: this intermediate task completed the discovery inventory baseline only; the focused analytics pytest proof and evidence-backed ranking work remain for T02/T03.\n\n## Verification Evidence\n\n| # | Command | Exit Code | Verdict | Duration |\n|---|---------|-----------|---------|----------|\n| 1 | `rg -n \"select|join|order_by|group_by|SessionEvidence|leaderboard|analytics\" backend/src/common/analytics backend/src/common/conversation backend/src/admin/api` | 0 | ✅ pass | 140ms |\n| 2 | `lsp diagnostics backend/src/common/analytics/admin_analytics_service.py` | 0 | ✅ pass | 60ms |\n| 3 | `lsp diagnostics backend/src/common/analytics/history_service.py` | 0 | ✅ pass | 58ms |\n| 4 | `lsp diagnostics backend/src/common/conversation/session_evidence.py` | 0 | ✅ pass | 55ms |\n| 5 | `lsp diagnostics backend/src/admin/api/training_records.py` | 0 | ✅ pass | 52ms |\n| 6 | `python3 - <<'PY'\nimport json\nfrom pathlib import Path\njson.loads(Path('.codex/loop/state.json').read_text())\nprint('state.json OK')\nPY` | 0 | ✅ pass | 47ms |\n\n## Deviations\n\nUsed four authority files instead of only the planner’s minimal three-file estimate so the baseline could capture one confirmed admin N+1 seam (`training_records.py`) in addition to the shared analytics/history/projection loaders. This stayed within the slice contract and did not change task scope.\n\n## Known Issues\n\nIndex priority is still intentionally unproved at this stage. The inventories mark composite-index and search-index ideas as candidates only; T02 still needs real Postgres/runtime evidence before any of them should become implementation work.\n\n## Files Created/Modified\n\n- `backend/src/common/analytics/admin_analytics_service.py`\n- `backend/src/common/analytics/history_service.py`\n- `backend/src/common/conversation/session_evidence.py`\n- `backend/src/admin/api/training_records.py`\n- `.gsd/DECISIONS.md`\n- `.gsd/KNOWLEDGE.md`\n- `.codex/loop/state.json`\n- `.codex/loop/log.md`\n",
       "description": "Why: 先定位最可能的热点查询和索引候选路径，后续基线才能围绕真实风险而不是全文猜测。\n\nDo:\n1. 梳理 analytics/history/admin/leaderboard/projection 的热点读路径。\n2. 标出最可能的 N+1、索引缺口和 slow query 候选。\n3. 记录哪些只是 ORM 结构猜测，哪些已经接近真实热点。\n\nDone when: 已形成热点查询与索引候选清单，可直接指导后续 evidence gathering。",
       "estimate": "40m",
       "files": [
@@ -13640,6 +13651,18 @@
       "decision": "What harness should future agents use to reproduce presentation replace races truthfully",
       "choice": "Use a per-request `get_db` override backed by a shared file-backed SQLite engine for concurrent presentation replace proofs; do not use the shared `backend/tests/conftest.py::async_client` session for race reproduction.",
       "rationale": "The focused proof showed the shared async_client fixture reuses one AsyncSession across requests and can fail for shared-session reasons before it says anything truthful about route-level concurrency. Fresh-session requests on one shared database reproduce the real replace race and keep future concurrency work grounded in the live authority seam.",
+      "revisable": "Yes",
+      "made_by": "agent",
+      "superseded_by": null
+    },
+    {
+      "seq": 1573,
+      "id": "D203",
+      "when_context": "M018/S01/T01",
+      "scope": "performance-discovery",
+      "decision": "Where the first-round M018/S01 DB performance baseline should live and how it should grade evidence",
+      "choice": "Keep the baseline in code-adjacent inventory constants at the live analytics/history/projection/admin authority seams, and explicitly separate confirmed query-shape or N+1 facts from index ideas that still require real Postgres/runtime evidence.",
+      "rationale": "This repo already uses code-owned discovery inventories to prevent later agents from re-auditing the same surfaces from scratch. For database performance work, query fanout and row-level lookup patterns are provable from code today, but index priority is not trustworthy without EXPLAIN/pg_stat_statements or real runtime observations. Encoding both levels together beside the live authority files gives future slices one durable entrypoint without turning structural guesses into premature implementation mandates.",
       "revisable": "Yes",
       "made_by": "agent",
       "superseded_by": null
@@ -17792,6 +17815,72 @@
       "verdict": "✅ pass",
       "duration_ms": 4220,
       "created_at": "2026-04-11T22:08:52.025Z"
+    },
+    {
+      "id": 383,
+      "task_id": "T01",
+      "slice_id": "S01",
+      "milestone_id": "M018",
+      "command": "rg -n \"select|join|order_by|group_by|SessionEvidence|leaderboard|analytics\" backend/src/common/analytics backend/src/common/conversation backend/src/admin/api",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 140,
+      "created_at": "2026-04-11T22:32:02.673Z"
+    },
+    {
+      "id": 384,
+      "task_id": "T01",
+      "slice_id": "S01",
+      "milestone_id": "M018",
+      "command": "lsp diagnostics backend/src/common/analytics/admin_analytics_service.py",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 60,
+      "created_at": "2026-04-11T22:32:02.673Z"
+    },
+    {
+      "id": 385,
+      "task_id": "T01",
+      "slice_id": "S01",
+      "milestone_id": "M018",
+      "command": "lsp diagnostics backend/src/common/analytics/history_service.py",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 58,
+      "created_at": "2026-04-11T22:32:02.673Z"
+    },
+    {
+      "id": 386,
+      "task_id": "T01",
+      "slice_id": "S01",
+      "milestone_id": "M018",
+      "command": "lsp diagnostics backend/src/common/conversation/session_evidence.py",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 55,
+      "created_at": "2026-04-11T22:32:02.673Z"
+    },
+    {
+      "id": 387,
+      "task_id": "T01",
+      "slice_id": "S01",
+      "milestone_id": "M018",
+      "command": "lsp diagnostics backend/src/admin/api/training_records.py",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 52,
+      "created_at": "2026-04-11T22:32:02.673Z"
+    },
+    {
+      "id": 388,
+      "task_id": "T01",
+      "slice_id": "S01",
+      "milestone_id": "M018",
+      "command": "python3 - <<'PY'\nimport json\nfrom pathlib import Path\njson.loads(Path('.codex/loop/state.json').read_text())\nprint('state.json OK')\nPY",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 47,
+      "created_at": "2026-04-11T22:32:02.673Z"
     }
   ]
 }
