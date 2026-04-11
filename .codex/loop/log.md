@@ -1,3 +1,24 @@
+- time: 2026-04-12T03:08:13+08:00
+  mode: grow
+  item id: M016-S01-T01
+  files changed:
+    - backend/src/common/auth/api.py
+    - backend/src/common/auth/service.py
+    - backend/src/common/db/models.py
+    - .gsd/KNOWLEDGE.md
+    - .gsd/DECISIONS.md
+    - .codex/loop/state.json
+    - .codex/loop/log.md
+  summary: Documented the narrow password-reset formalization boundary directly in the auth/model files and knowledge log so downstream work can target PasswordResetService + PasswordResetToken + Alembic 026/027 while keeping the current hashed_password-first login fallback stable.
+  verification commands:
+    - rg -n "CREATE TABLE IF NOT EXISTS|reset|forgot|token|email" backend/src/common/auth backend/src/common/db/models.py
+    - lsp diagnostics backend/src/common/auth/api.py
+    - lsp diagnostics backend/src/common/auth/service.py
+    - lsp diagnostics backend/src/common/db/models.py
+  verification results: passed; the planned rg inventory confirmed forgot/reset still lands on the existing auth/model seam without any auth-local CREATE TABLE path, and fresh LSP diagnostics were clean on backend/src/common/auth/api.py, backend/src/common/auth/service.py, and backend/src/common/db/models.py after the seam writeback.
+  success signal status: M016/S01/T01 now has one explicit formalization boundary: future work can land on PasswordResetService + PasswordResetToken + Alembic 026/027 while preserving the hashed_password-first login compatibility rule instead of reopening JWT/session helpers or mistaking global startup create_all bootstrap for request-path auth DDL.
+  rollback note: If later M016 work changes the auth recovery boundary, update the code-level seam notes in auth/api.py, auth/service.py, db/models.py, and the matching knowledge/decision entries together so migration authority and login fallback rules do not drift apart.
+
 
 - time: 2026-04-12T02:52:25+08:00
   mode: grow

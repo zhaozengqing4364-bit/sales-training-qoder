@@ -45,6 +45,20 @@ router = APIRouter()
 
 AUTH_SHARED_PASSWORD_ENV = "AUTH_SHARED_PASSWORD"
 AUTH_USER_PASSWORDS_ENV = "AUTH_USER_PASSWORDS_JSON"
+AUTH_FORMALIZATION_SURFACE = {
+    "password_reset_service": "common.services.password_reset.PasswordResetService",
+    "password_reset_model": "common.db.models.PasswordResetToken",
+    "password_reset_migrations": (
+        "026_password_reset_tokens",
+        "027_password_reset_lifecycle_delivery",
+    ),
+    "runtime_ddl_owner": "common.db.session.init_db",
+    "login_compatibility_boundary": (
+        "User.hashed_password is authoritative once present; "
+        "AUTH_USER_PASSWORDS_JSON/AUTH_SHARED_PASSWORD stay as the fallback login path "
+        "for users that have not been reset into managed credentials yet."
+    ),
+}
 
 
 # ========== Schemas ==========

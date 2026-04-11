@@ -102,6 +102,15 @@ class User(Base):
 
 
 class PasswordResetToken(Base):
+    """Durable password-reset lifecycle row.
+
+    Formal auth-recovery work should extend this model + its Alembic history
+    (`026_password_reset_tokens` and `027_password_reset_lifecycle_delivery`)
+    instead of reintroducing request-path DDL or page-local token state.
+    `used_at` is reserved for successful consumption, while `invalidated_at`
+    records superseded/expired tokens that must still remain auditable.
+    """
+
     __tablename__ = "password_reset_tokens"
 
     id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))

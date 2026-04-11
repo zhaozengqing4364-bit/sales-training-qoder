@@ -1,7 +1,7 @@
 {
   "mode": "grow",
-  "current_issue_id": "M015-S03",
-  "current_issue_type": "slice",
+  "current_issue_id": "M016-S01-T01",
+  "current_issue_type": "task",
   "current_issue_status": "done",
   "pending_issue_ids": [],
   "completed_issue_ids": [
@@ -157,25 +157,28 @@
     "M015-S03-T01",
     "M015-S03-T02",
     "M015-S03-T03",
-    "M015-S03"
+    "M015-S03",
+    "M016-S01-T01"
   ],
   "blocked_issue_ids": [],
   "deferred_issue_ids": [],
   "last_modified_files": [
+    "backend/src/common/auth/api.py",
+    "backend/src/common/auth/service.py",
+    "backend/src/common/db/models.py",
+    ".gsd/KNOWLEDGE.md",
     ".gsd/DECISIONS.md",
-    ".gsd/milestones/M015/slices/S03/S03-SUMMARY.md",
-    ".gsd/milestones/M015/slices/S03/S03-UAT.md",
-    ".gsd/PROJECT.md",
     ".codex/loop/state.json",
     ".codex/loop/log.md"
   ],
   "last_verification_commands": [
-    "find web/src/app -type f \\( -name 'error.tsx' -o -name 'loading.tsx' \\) | sort && npm --prefix web test -- --run \"src/app/(dashboard)/history/page.test.tsx\" \"src/app/(user)/practice/[sessionId]/report/page.test.tsx\" \"src/app/(user)/practice/[sessionId]/replay/page.test.tsx\"",
-    "npm --prefix web test -- --run \"src/app/learner-shell-baseline.test.ts\" \"src/components/error-reporting.test.tsx\" \"src/app/(user)/practice/[sessionId]/error.test.tsx\"",
-    "lsp diagnostics web/src/app/learner-shell-baseline.test.ts"
+    "rg -n \"CREATE TABLE IF NOT EXISTS|reset|forgot|token|email\" backend/src/common/auth backend/src/common/db/models.py",
+    "lsp diagnostics backend/src/common/auth/api.py",
+    "lsp diagnostics backend/src/common/auth/service.py",
+    "lsp diagnostics backend/src/common/db/models.py"
   ],
-  "last_verification_result": "M015/S03 slice close-out verification passed: the route-file inventory plus learner history/report/replay gate finished 41/41 green, the learner-shell baseline + route-error observability gate finished 8/8 green, and fresh LSP diagnostics were clean on web/src/app/learner-shell-baseline.test.ts.",
-  "last_success_signal": "M015/S03 is now complete: learner dashboard/auth/practice routes share explicit fallback shells, the durable route-error seam still reports correctly, and remaining responsive/timezone work is locked as an explicit deferred baseline instead of drifting back into shell scope.",
+  "last_verification_result": "passed; the planned rg inventory confirmed forgot/reset still lands on the existing auth/model seam without any auth-local CREATE TABLE path, and fresh LSP diagnostics were clean on backend/src/common/auth/api.py, backend/src/common/auth/service.py, and backend/src/common/db/models.py after the seam writeback.",
+  "last_success_signal": "M016/S01/T01 now has one explicit formalization boundary: future work can land on PasswordResetService + PasswordResetToken + Alembic 026/027 while preserving the hashed_password-first login compatibility rule instead of reopening JWT/session helpers or mistaking global startup create_all bootstrap for request-path auth DDL.",
   "last_growth_scan": null,
-  "next_action": "M015 now has all slices complete and is ready for milestone validation / close-out."
+  "next_action": "Continue M016/S01 with T02, implementing the formal PasswordResetToken migration-backed contract on the documented seam."
 }

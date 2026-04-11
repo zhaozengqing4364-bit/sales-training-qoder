@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "exported_at": "2026-04-11T19:02:51.199Z",
+  "exported_at": "2026-04-11T19:09:16.463Z",
   "milestones": [
     {
       "id": "M001",
@@ -2363,7 +2363,7 @@
     {
       "milestone_id": "M016",
       "id": "S01",
-      "title": "Password reset / auth backend 正式化",
+      "title": "S01",
       "status": "pending",
       "risk": "high",
       "depends": [],
@@ -10051,19 +10051,29 @@
       "milestone_id": "M016",
       "slice_id": "S01",
       "id": "T01",
-      "title": "定位 password reset 正式化的最窄接入点",
-      "status": "pending",
-      "one_liner": "",
-      "narrative": "",
-      "verification_result": "",
+      "title": "Documented the password-reset authority seam and the hashed_password-first login compatibility boundary so downstream formalization can land on one explicit auth contract.",
+      "status": "complete",
+      "one_liner": "Documented the password-reset authority seam and the hashed_password-first login compatibility boundary so downstream formalization can land on one explicit auth contract.",
+      "narrative": "I traced the live forgot/reset path through the real runtime seam and found the planner snapshot was slightly narrow: the actual password-reset behavior is already centralized in `common.services.password_reset.PasswordResetService`, while the durable lifecycle row lives in `common.db.models.PasswordResetToken` and the formal schema history is already carried by Alembic revisions `026_password_reset_tokens` and `027_password_reset_lifecycle_delivery`. The auth API handlers themselves only delegate into that service; they do not own request-path DDL. The remaining `Base.metadata.create_all()` usage sits in global startup/test bootstrap (`common.db.session.init_db` and fixtures), so I wrote the narrow landing-point back into the planned authority files instead of widening the change. Specifically, `backend/src/common/auth/api.py` now exposes the formalization surface and preserves the rule that `User.hashed_password` is authoritative once present, `backend/src/common/auth/service.py` now documents that password-reset work must not expand JWT/session helper scope or re-treat startup bootstrap as auth-local DDL, and `backend/src/common/db/models.py` now marks `PasswordResetToken` as the durable lifecycle contract where `used_at` means consumption and `invalidated_at` means superseded/expired-but-auditable. I also recorded the rule in `.gsd/KNOWLEDGE.md` and saved decision D188 so T02/T03 can land on one seam without re-researching auth boundaries.",
+      "verification_result": "Ran the task-plan inventory command `rg -n \"CREATE TABLE IF NOT EXISTS|reset|forgot|token|email\" backend/src/common/auth backend/src/common/db/models.py` and confirmed forgot/reset still resolves to the existing auth/model seam without any auth-local `CREATE TABLE` path. Then ran fresh LSP diagnostics on `backend/src/common/auth/api.py`, `backend/src/common/auth/service.py`, and `backend/src/common/db/models.py`; all three returned clean after the seam writeback. I also manually inspected `backend/alembic/versions/20260408_1718_026_password_reset_tokens.py` and `backend/alembic/versions/20260411_2235_027_password_reset_lifecycle_delivery.py` during execution to confirm migration authority already exists where T02 should land.",
       "duration": "",
-      "completed_at": null,
+      "completed_at": "2026-04-11T19:09:16.417Z",
       "blocker_discovered": false,
-      "deviations": "",
-      "known_issues": "",
-      "key_files": [],
-      "key_decisions": [],
-      "full_summary_md": "",
+      "deviations": "The planner inputs named only `backend/src/common/auth/api.py`, `backend/src/common/auth/service.py`, and `backend/src/common/db/models.py`, but the real runtime reset behavior lives in `backend/src/common/services/password_reset.py` and the live schema authority lives in Alembic revisions 026/027. I treated that as a local path correction, inspected those files, and wrote the seam back into the planned authority files instead of broadening the task into an implementation refactor.",
+      "known_issues": "Password-reset delivery still defaults to `ConsoleEmailService`, so recovery delivery remains a development transport seam rather than a production provider integration. Login compatibility still depends on `AUTH_USER_PASSWORDS_JSON` / `AUTH_SHARED_PASSWORD` for users without `User.hashed_password`. Global startup/test bootstrap still uses `Base.metadata.create_all()` outside the request path, so T02 should continue collapsing auth recovery onto migrations/service boundaries without conflating that broader compatibility bootstrap with forgot/reset runtime DDL.",
+      "key_files": [
+        "backend/src/common/auth/api.py",
+        "backend/src/common/auth/service.py",
+        "backend/src/common/db/models.py",
+        ".gsd/KNOWLEDGE.md",
+        ".gsd/DECISIONS.md",
+        ".codex/loop/state.json",
+        ".codex/loop/log.md"
+      ],
+      "key_decisions": [
+        "D188 — land M016 password-reset formalization on PasswordResetService + PasswordResetToken + Alembic 026/027, while preserving the hashed_password-first login compatibility fallback."
+      ],
+      "full_summary_md": "---\nid: T01\nparent: S01\nmilestone: M016\nkey_files:\n  - backend/src/common/auth/api.py\n  - backend/src/common/auth/service.py\n  - backend/src/common/db/models.py\n  - .gsd/KNOWLEDGE.md\n  - .gsd/DECISIONS.md\n  - .codex/loop/state.json\n  - .codex/loop/log.md\nkey_decisions:\n  - D188 — land M016 password-reset formalization on PasswordResetService + PasswordResetToken + Alembic 026/027, while preserving the hashed_password-first login compatibility fallback.\nduration: \nverification_result: mixed\ncompleted_at: 2026-04-11T19:09:16.415Z\nblocker_discovered: false\n---\n\n# T01: Documented the password-reset authority seam and the hashed_password-first login compatibility boundary so downstream formalization can land on one explicit auth contract.\n\n**Documented the password-reset authority seam and the hashed_password-first login compatibility boundary so downstream formalization can land on one explicit auth contract.**\n\n## What Happened\n\nI traced the live forgot/reset path through the real runtime seam and found the planner snapshot was slightly narrow: the actual password-reset behavior is already centralized in `common.services.password_reset.PasswordResetService`, while the durable lifecycle row lives in `common.db.models.PasswordResetToken` and the formal schema history is already carried by Alembic revisions `026_password_reset_tokens` and `027_password_reset_lifecycle_delivery`. The auth API handlers themselves only delegate into that service; they do not own request-path DDL. The remaining `Base.metadata.create_all()` usage sits in global startup/test bootstrap (`common.db.session.init_db` and fixtures), so I wrote the narrow landing-point back into the planned authority files instead of widening the change. Specifically, `backend/src/common/auth/api.py` now exposes the formalization surface and preserves the rule that `User.hashed_password` is authoritative once present, `backend/src/common/auth/service.py` now documents that password-reset work must not expand JWT/session helper scope or re-treat startup bootstrap as auth-local DDL, and `backend/src/common/db/models.py` now marks `PasswordResetToken` as the durable lifecycle contract where `used_at` means consumption and `invalidated_at` means superseded/expired-but-auditable. I also recorded the rule in `.gsd/KNOWLEDGE.md` and saved decision D188 so T02/T03 can land on one seam without re-researching auth boundaries.\n\n## Verification\n\nRan the task-plan inventory command `rg -n \"CREATE TABLE IF NOT EXISTS|reset|forgot|token|email\" backend/src/common/auth backend/src/common/db/models.py` and confirmed forgot/reset still resolves to the existing auth/model seam without any auth-local `CREATE TABLE` path. Then ran fresh LSP diagnostics on `backend/src/common/auth/api.py`, `backend/src/common/auth/service.py`, and `backend/src/common/db/models.py`; all three returned clean after the seam writeback. I also manually inspected `backend/alembic/versions/20260408_1718_026_password_reset_tokens.py` and `backend/alembic/versions/20260411_2235_027_password_reset_lifecycle_delivery.py` during execution to confirm migration authority already exists where T02 should land.\n\n## Verification Evidence\n\n| # | Command | Exit Code | Verdict | Duration |\n|---|---------|-----------|---------|----------|\n| 1 | `rg -n \"CREATE TABLE IF NOT EXISTS|reset|forgot|token|email\" backend/src/common/auth backend/src/common/db/models.py` | 0 | ✅ pass | 17ms |\n| 2 | `lsp diagnostics backend/src/common/auth/api.py — ✅ pass (no diagnostics)` | -1 | unknown (coerced from string) | 0ms |\n| 3 | `lsp diagnostics backend/src/common/auth/service.py — ✅ pass (no diagnostics)` | -1 | unknown (coerced from string) | 0ms |\n| 4 | `lsp diagnostics backend/src/common/db/models.py — ✅ pass (no diagnostics)` | -1 | unknown (coerced from string) | 0ms |\n\n## Deviations\n\nThe planner inputs named only `backend/src/common/auth/api.py`, `backend/src/common/auth/service.py`, and `backend/src/common/db/models.py`, but the real runtime reset behavior lives in `backend/src/common/services/password_reset.py` and the live schema authority lives in Alembic revisions 026/027. I treated that as a local path correction, inspected those files, and wrote the seam back into the planned authority files instead of broadening the task into an implementation refactor.\n\n## Known Issues\n\nPassword-reset delivery still defaults to `ConsoleEmailService`, so recovery delivery remains a development transport seam rather than a production provider integration. Login compatibility still depends on `AUTH_USER_PASSWORDS_JSON` / `AUTH_SHARED_PASSWORD` for users without `User.hashed_password`. Global startup/test bootstrap still uses `Base.metadata.create_all()` outside the request path, so T02 should continue collapsing auth recovery onto migrations/service boundaries without conflating that broader compatibility bootstrap with forgot/reset runtime DDL.\n\n## Files Created/Modified\n\n- `backend/src/common/auth/api.py`\n- `backend/src/common/auth/service.py`\n- `backend/src/common/db/models.py`\n- `.gsd/KNOWLEDGE.md`\n- `.gsd/DECISIONS.md`\n- `.codex/loop/state.json`\n- `.codex/loop/log.md`\n",
       "description": "Why: 先定位当前 forgot/reset 正式化的最窄接入点，避免在 auth seam 上做不必要的扩散式重构。\n\nDo:\n1. 盘点 forgot/reset 路径中的 runtime DDL、token 生命周期、email 发送与 rate limit 现状。\n2. 找出正式模型、migration 和 email seam 的最小落点。\n3. 明确现有登录兼容路径必须保持不变的部分。\n\nDone when: 后续正式化改动有明确接入点，不需要边做边重新判断 auth seam。",
       "estimate": "30m",
       "files": [
@@ -13312,6 +13322,18 @@
       "decision": "How M015/S03 handles remaining responsive and timezone risks",
       "choice": "Keep dashboard page-density and browser-local timezone semantics as explicit deferred baseline facts locked by focused learner-shell proof, rather than expanding S03 into responsive/time-contract rewrites.",
       "rationale": "The slice goal is route-shell protection and low-risk UX baseline. Recording the remaining responsive/timezone risk in one focused proof preserves visibility for future work without destabilizing current learner routes or making premature product-semantic decisions.",
+      "revisable": "Yes",
+      "made_by": "agent",
+      "superseded_by": null
+    },
+    {
+      "seq": 1558,
+      "id": "D188",
+      "when_context": "M016/S01/T01",
+      "scope": "auth-lifecycle",
+      "decision": "Where should M016 password-reset formalization land without widening auth scope?",
+      "choice": "Treat PasswordResetService + PasswordResetToken + Alembic revisions 026/027 as the only password-reset authority seam, and preserve the existing login compatibility rule where User.hashed_password overrides env credentials while AUTH_USER_PASSWORDS_JSON/AUTH_SHARED_PASSWORD remain fallback for users without managed hashes.",
+      "rationale": "The runtime/password-reset behavior is already centralized there: forgot/reset handlers only delegate to PasswordResetService, the durable lifecycle fields live on PasswordResetToken, and migration history already formalizes the schema. Keeping later work on that service/model/migration seam avoids scattering auth changes into JWT/session helpers or reinterpreting global startup Base.metadata.create_all compatibility bootstrap as request-path auth DDL.",
       "revisable": "Yes",
       "made_by": "agent",
       "superseded_by": null
@@ -16881,6 +16903,50 @@
       "verdict": "✅ pass",
       "duration_ms": 0,
       "created_at": "2026-04-11T18:49:14.615Z"
+    },
+    {
+      "id": 330,
+      "task_id": "T01",
+      "slice_id": "S01",
+      "milestone_id": "M016",
+      "command": "rg -n \"CREATE TABLE IF NOT EXISTS|reset|forgot|token|email\" backend/src/common/auth backend/src/common/db/models.py",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 17,
+      "created_at": "2026-04-11T19:09:16.418Z"
+    },
+    {
+      "id": 331,
+      "task_id": "T01",
+      "slice_id": "S01",
+      "milestone_id": "M016",
+      "command": "lsp diagnostics backend/src/common/auth/api.py — ✅ pass (no diagnostics)",
+      "exit_code": -1,
+      "verdict": "unknown (coerced from string)",
+      "duration_ms": 0,
+      "created_at": "2026-04-11T19:09:16.418Z"
+    },
+    {
+      "id": 332,
+      "task_id": "T01",
+      "slice_id": "S01",
+      "milestone_id": "M016",
+      "command": "lsp diagnostics backend/src/common/auth/service.py — ✅ pass (no diagnostics)",
+      "exit_code": -1,
+      "verdict": "unknown (coerced from string)",
+      "duration_ms": 0,
+      "created_at": "2026-04-11T19:09:16.418Z"
+    },
+    {
+      "id": 333,
+      "task_id": "T01",
+      "slice_id": "S01",
+      "milestone_id": "M016",
+      "command": "lsp diagnostics backend/src/common/db/models.py — ✅ pass (no diagnostics)",
+      "exit_code": -1,
+      "verdict": "unknown (coerced from string)",
+      "duration_ms": 0,
+      "created_at": "2026-04-11T19:09:16.419Z"
     }
   ]
 }

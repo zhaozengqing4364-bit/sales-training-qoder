@@ -131,6 +131,22 @@
       "doneMilestones": 14,
       "totalMilestones": 18,
       "phase": "evaluating-gates"
+    },
+    {
+      "filename": "M015-2026-04-11T19-04-15.html",
+      "generatedAt": "2026-04-11T19:04:15.065Z",
+      "milestoneId": "M015",
+      "milestoneTitle": "Frontend hygiene 与 learner shell 保护收口",
+      "label": "M015: Frontend hygiene 与 learner shell 保护收口",
+      "kind": "milestone",
+      "totalCost": 45.652532,
+      "totalTokens": 1833193024,
+      "totalDuration": 346362815,
+      "doneSlices": 62,
+      "totalSlices": 73,
+      "doneMilestones": 15,
+      "totalMilestones": 18,
+      "phase": "evaluating-gates"
     }
   ]
 }

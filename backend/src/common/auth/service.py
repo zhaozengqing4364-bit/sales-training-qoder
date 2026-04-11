@@ -35,6 +35,12 @@ AUTH_SESSION_COOKIE_SECURE = (
 AUTH_SESSION_COOKIE_SAMESITE = os.getenv("AUTH_SESSION_COOKIE_SAMESITE", "lax").strip().lower() or "lax"
 
 security = HTTPBearer(auto_error=False)
+# Login compatibility seam:
+# - password reset writes User.hashed_password and should become the durable credential path.
+# - users without hashed_password must keep authenticating through
+#   AUTH_USER_PASSWORDS_JSON / AUTH_SHARED_PASSWORD until the reset contract replaces that fallback.
+# - request-path auth recovery work should not expand init_db/runtime DDL behavior here; schema authority lives
+#   in Alembic revisions plus common.db.models.PasswordResetToken.
 pwd_context = CryptContext(schemes=["pbkdf2_sha256", "bcrypt"], deprecated="auto")
 
 
