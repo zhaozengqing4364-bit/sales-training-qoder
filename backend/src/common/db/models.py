@@ -114,6 +114,11 @@ class PasswordResetToken(Base):
     token_hash = Column(String(64), nullable=False, unique=True)
     expires_at = Column(DateTime(timezone=True), nullable=False, index=True)
     used_at = Column(DateTime(timezone=True), nullable=True)
+    invalidated_at = Column(DateTime(timezone=True), nullable=True, index=True)
+    invalidation_reason = Column(String(32), nullable=True)
+    delivery_status = Column(String(20), nullable=False, default="pending", index=True)
+    delivery_attempted_at = Column(DateTime(timezone=True), nullable=True)
+    delivery_error = Column(Text, nullable=True)
     created_at = Column(
         DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),
@@ -121,6 +126,14 @@ class PasswordResetToken(Base):
     )
 
     __table_args__ = (
+        CheckConstraint(
+            "delivery_status IN ('pending', 'sent', 'failed')",
+            name="ck_password_reset_tokens_delivery_status",
+        ),
+        CheckConstraint(
+            "invalidation_reason IS NULL OR invalidation_reason IN ('superseded', 'expired')",
+            name="ck_password_reset_tokens_invalidation_reason",
+        ),
         Index("idx_password_reset_tokens_user_created", "user_id", "created_at"),
     )
 

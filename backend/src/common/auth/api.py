@@ -34,7 +34,8 @@ from common.monitoring.logger import get_logger, get_trace_id
 from common.rate_limit.api_limiter import rate_limit
 from common.services.password_reset import (
     InvalidResetPasswordTokenError,
-    PASSWORD_RESET_MIN_LENGTH,
+    PASSWORD_RESET_RATE_LIMIT_CALLS,
+    PASSWORD_RESET_RATE_LIMIT_PERIOD_SECONDS,
     PasswordResetService,
 )
 
@@ -321,7 +322,11 @@ async def logout(
 
 
 @router.post("/auth/forgot-password")
-@rate_limit(calls=1, period=60, scope="ip")
+@rate_limit(
+    calls=PASSWORD_RESET_RATE_LIMIT_CALLS,
+    period=PASSWORD_RESET_RATE_LIMIT_PERIOD_SECONDS,
+    scope="ip",
+)
 async def forgot_password(
     request: Request,
     body: ForgotPasswordRequest,

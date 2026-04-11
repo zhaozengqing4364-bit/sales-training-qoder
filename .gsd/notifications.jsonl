@@ -102,3 +102,9 @@
 {"id":"67c153af-09ca-4e66-a31a-159439ef8047","ts":"2026-04-11T14:01:29.452Z","severity":"warning","message":"[safety] file-change: web/src/app/(dashboard)/page.tsx — Modified but not in task plan's expected output","source":"workflow-logger","read":false}
 {"id":"7a929984-a9ac-45a2-81bb-3dfa2779e8ce","ts":"2026-04-11T14:01:29.452Z","severity":"warning","message":"Safety: 2 unexpected file change(s) outside task plan","source":"notify","read":false}
 {"id":"c996e6bb-f975-4842-ac00-9b668861b6a5","ts":"2026-04-11T14:01:30.688Z","severity":"info","message":"Verification gate: 1/1 checks passed","source":"notify","read":false}
+{"id":"20b75bfc-6f07-411c-8b09-5f7a1b62ad6a","ts":"2026-04-11T14:19:57.146Z","severity":"info","message":"Committed: feat: 盘清了 auth/profile 真实现状，并把 forgot/reset 已正式化与 profile/语速偏好剩余缺口固化进知识库","source":"notify","read":false}
+{"id":"b0daeedf-c38a-4ae3-85e7-775403aa6cbd","ts":"2026-04-11T14:19:57.154Z","severity":"warning","message":"[safety] file-change: .codex/loop/log.md — Modified but not in task plan's expected output","source":"workflow-logger","read":false}
+{"id":"e8b51128-edc1-4025-873c-7e587fa36767","ts":"2026-04-11T14:19:57.154Z","severity":"warning","message":"[safety] file-change: .codex/loop/state.json — Modified but not in task plan's expected output","source":"workflow-logger","read":false}
+{"id":"0be9ddd1-2dc4-4fe5-a97f-22047aca135b","ts":"2026-04-11T14:19:57.154Z","severity":"warning","message":"Safety: 2 unexpected file change(s) outside task plan","source":"notify","read":false}
+{"id":"92a09343-80e5-4182-b3e7-208281ef0179","ts":"2026-04-11T14:20:06.354Z","severity":"info","message":"Verification gate: FAILED — npm run test","source":"notify","read":false}
+{"id":"da75bdfa-b1f0-48d9-ac82-320affb61f2a","ts":"2026-04-11T14:20:06.355Z","severity":"warning","message":"Verification failed in auto-discovered package.json checks — treating as advisory.","source":"notify","read":false}

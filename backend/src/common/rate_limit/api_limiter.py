@@ -204,11 +204,12 @@ class APIRateLimiter:
                 if isinstance(response, dict):
                     from fastapi.responses import JSONResponse
 
-                    resp = JSONResponse(content=response)
-                    resp.headers["X-RateLimit-Limit"] = str(info["limit"])
-                    resp.headers["X-RateLimit-Remaining"] = str(info["remaining"])
-                    resp.headers["X-RateLimit-Reset"] = str(info["reset"])
-                    return resp
+                    response = JSONResponse(content=response)
+
+                if hasattr(response, "headers"):
+                    response.headers["X-RateLimit-Limit"] = str(info["limit"])
+                    response.headers["X-RateLimit-Remaining"] = str(info["remaining"])
+                    response.headers["X-RateLimit-Reset"] = str(info["reset"])
 
                 return response
 

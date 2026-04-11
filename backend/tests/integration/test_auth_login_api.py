@@ -6,9 +6,11 @@ from __future__ import annotations
 
 import json
 import uuid
+from datetime import UTC, datetime, timedelta
 
+import agent.models  # noqa: F401  # ensure Agent/Persona tables are registered on Base metadata for sqlite tests
 import pytest
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.auth.service import AUTH_SESSION_COOKIE_NAME, verify_token
@@ -35,6 +37,28 @@ async def _create_user(
     await db.commit()
     await db.refresh(user)
     return user
+
+
+async def _fetch_reset_rows(db: AsyncSession):
+    result = await db.execute(
+        text(
+            """
+            SELECT
+                user_id,
+                token_hash,
+                expires_at,
+                used_at,
+                invalidated_at,
+                invalidation_reason,
+                delivery_status,
+                delivery_attempted_at,
+                delivery_error
+            FROM password_reset_tokens
+            ORDER BY created_at ASC
+            """
+        )
+    )
+    return result.mappings().all()
 
 
 @pytest.mark.asyncio
@@ -335,3 +359,165 @@ async def test_dev_login_sets_http_only_cookie_and_allows_cookie_auth(
     me_body = me_response.json()
     assert me_body["success"] is True
     assert me_body["data"]["email"] == "dev@example.com"
+
+
+@pytest.mark.asyncio
+async def test_forgot_password_reissues_token_without_marking_previous_one_as_consumed(
+    async_client,
+    test_db: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    issued_tokens = iter(["first-reset-token", "second-reset-token"])
+    monkeypatch.setattr("secrets.token_urlsafe", lambda _: next(issued_tokens))
+    user = await _create_user(
+        test_db,
+        email="auth-reset-reissue@example.com",
+        role="user",
+        is_active=True,
+    )
+
+    first_response = await async_client.post(
+        "/api/v1/auth/forgot-password",
+        json={"email": user.email},
+        headers={"X-Forwarded-For": "203.0.113.30"},
+    )
+    second_response = await async_client.post(
+        "/api/v1/auth/forgot-password",
+        json={"email": user.email},
+        headers={"X-Forwarded-For": "203.0.113.31"},
+    )
+
+    assert first_response.status_code == 200
+    assert second_response.status_code == 200
+
+    rows = await _fetch_reset_rows(test_db)
+    assert len(rows) == 2
+    assert rows[0]["user_id"] == str(user.user_id)
+    assert rows[0]["used_at"] is None
+    assert rows[0]["invalidated_at"] is not None
+    assert rows[0]["invalidation_reason"] == "superseded"
+    assert rows[0]["delivery_status"] == "sent"
+    assert rows[1]["used_at"] is None
+    assert rows[1]["invalidated_at"] is None
+    assert rows[1]["delivery_status"] == "sent"
+
+
+@pytest.mark.asyncio
+async def test_forgot_password_success_includes_rate_limit_headers(
+    async_client,
+    test_db: AsyncSession,
+) -> None:
+    user = await _create_user(
+        test_db,
+        email="auth-reset-headers@example.com",
+        role="user",
+        is_active=True,
+    )
+
+    response = await async_client.post(
+        "/api/v1/auth/forgot-password",
+        json={"email": user.email},
+        headers={"X-Forwarded-For": "203.0.113.32"},
+    )
+
+    assert response.status_code == 200
+    assert response.headers["X-RateLimit-Limit"] == "1"
+    assert response.headers["X-RateLimit-Remaining"] == "0"
+    assert int(response.headers["X-RateLimit-Reset"]) >= int(datetime.now(UTC).timestamp())
+
+
+@pytest.mark.asyncio
+async def test_forgot_password_delivery_failure_still_returns_generic_success(
+    async_client,
+    test_db: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    user = await _create_user(
+        test_db,
+        email="auth-reset-delivery-failure@example.com",
+        role="user",
+        is_active=True,
+    )
+
+    async def _boom(self, *, recipient: str, reset_url: str) -> None:
+        raise RuntimeError(f"delivery offline for {recipient} -> {reset_url}")
+
+    monkeypatch.setattr(
+        "common.services.password_reset.ConsoleEmailService.send_password_reset_email",
+        _boom,
+    )
+
+    response = await async_client.post(
+        "/api/v1/auth/forgot-password",
+        json={"email": user.email},
+        headers={"X-Forwarded-For": "203.0.113.33"},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["success"] is True
+    assert payload["data"]["message"] == "如果该邮箱已注册，重置链接将发送到您的邮箱"
+
+    rows = await _fetch_reset_rows(test_db)
+    assert len(rows) == 1
+    assert rows[0]["user_id"] == str(user.user_id)
+    assert rows[0]["delivery_status"] == "failed"
+    assert rows[0]["delivery_attempted_at"] is not None
+    assert "RuntimeError: delivery offline" in str(rows[0]["delivery_error"])
+
+
+@pytest.mark.asyncio
+async def test_reset_password_rejects_expired_token_and_preserves_new_login_boundary(
+    async_client,
+    test_db: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("AUTH_USER_PASSWORDS_JSON", raising=False)
+    monkeypatch.setenv("AUTH_SHARED_PASSWORD", "OriginalPass123!")
+    monkeypatch.setattr("secrets.token_urlsafe", lambda _: "expired-reset-token")
+    user = await _create_user(
+        test_db,
+        email="auth-reset-expired@example.com",
+        role="user",
+        is_active=True,
+    )
+
+    forgot_response = await async_client.post(
+        "/api/v1/auth/forgot-password",
+        json={"email": user.email},
+        headers={"X-Forwarded-For": "203.0.113.34"},
+    )
+    assert forgot_response.status_code == 200
+
+    await test_db.execute(
+        text(
+            "UPDATE password_reset_tokens SET expires_at = :expired_at WHERE user_id = :user_id"
+        ),
+        {
+            "expired_at": (datetime.now(UTC) - timedelta(minutes=1)).isoformat(),
+            "user_id": str(user.user_id),
+        },
+    )
+    await test_db.commit()
+
+    reset_response = await async_client.post(
+        "/api/v1/auth/reset-password",
+        json={"token": "expired-reset-token", "new_password": "NewPass123!"},
+    )
+
+    assert reset_response.status_code == 400
+    payload = reset_response.json()
+    assert payload["success"] is False
+    assert payload["error"] == "[INVALID_RESET_TOKEN]"
+
+    rows = await _fetch_reset_rows(test_db)
+    assert len(rows) == 1
+    assert rows[0]["used_at"] is None
+    assert rows[0]["invalidation_reason"] == "expired"
+    assert rows[0]["invalidated_at"] is not None
+
+    old_login = await async_client.post(
+        "/api/v1/auth/login",
+        json={"email": user.email, "password": "OriginalPass123!"},
+    )
+    assert old_login.status_code == 200

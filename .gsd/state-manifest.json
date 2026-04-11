@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "exported_at": "2026-04-11T14:19:44.801Z",
+  "exported_at": "2026-04-11T14:34:02.662Z",
   "milestones": [
     {
       "id": "M001",
@@ -9229,19 +9229,31 @@
       "milestone_id": "M014",
       "slice_id": "S02",
       "id": "T02",
-      "title": "把 forgot/reset 升级为正式 auth seam",
-      "status": "pending",
-      "one_liner": "",
-      "narrative": "",
-      "verification_result": "",
+      "title": "Formalized password-reset lifecycle and delivery seams with explicit invalidation state, resilient delivery fallback, and auth-focused proof.",
+      "status": "complete",
+      "one_liner": "Formalized password-reset lifecycle and delivery seams with explicit invalidation state, resilient delivery fallback, and auth-focused proof.",
+      "narrative": "我先把计划要求翻译成红测，直接在 `backend/tests/integration/test_auth_login_api.py` 增补了三类 auth-focused 证明：1）重复申请 reset 时旧 token 不能再被伪装成已消费；2）forgot-password 成功响应必须带 `X-RateLimit-*` 头；3）邮件投递失败时 forgot-password 仍要保持防枚举成功表面。红测先后暴露出两个事实：一是这组集成测试需要像现有 reset suite 一样预注册 `agent.models` 才能让 sqlite metadata 建表成功；二是现状确实存在正式 seam 缺口——旧 token 被写进 `used_at`、`JSONResponse` 丢失限流头、控制台邮件一旦抛错就把 forgot-password 打成 500。随后我在 `backend/src/common/services/password_reset.py` 正式化了 reset lifecycle 和 delivery seam：增加 `PASSWORD_RESET_RATE_LIMIT_*` 常量与 `build_password_reset_email_service()`；发起重置时把旧未消费 token 标记为 `invalidated_at + invalidation_reason='superseded'`，而不是继续复用 `used_at`；新增投递后续处理，在 email transport 成功时写入 `delivery_status='sent'`，失败时写入 `delivery_status='failed'`、`delivery_attempted_at`、`delivery_error` 并记录结构化日志，但 API 仍返回通用成功文案；reset 时若 token 已过期，会把该行持久化标记为 `invalidation_reason='expired'` 后再拒绝，保留可回查的生命周期痕迹。为让这些状态成为正式 schema contract，我在 `backend/src/common/db/models.py` 扩展了 `PasswordResetToken` 模型，并新增 Alembic migration `backend/alembic/versions/20260411_2235_027_password_reset_lifecycle_delivery.py`。同时我在 `backend/src/common/rate_limit/api_limiter.py` 修复了装饰器只给 dict 响应附加限流头的问题，让返回 `JSONResponse` 的 forgot-password 也能暴露 `X-RateLimit-*`。最后，我把新的 seam 证明补进 `backend/tests/integration/test_auth_login_api.py`，覆盖 supersede、投递失败降级、过期 token 拒绝与限流头表面，并把这个 gotcha 回写到 `.gsd/KNOWLEDGE.md`，另用 GSD 决策记录了 password-reset lifecycle/delivery 的正式表示方式（D176）。",
+      "verification_result": "我先运行新增的 focused auth 红测子集，确认当前实现会因为三类 seam 缺口而失败：旧 token 被标记成 `used_at`、forgot-password 成功响应没有 `X-RateLimit-*` 头、控制台邮件 transport 抛错时 forgot-password 会直接变成 500。实现完成后，任务合同中的 backend auth focused 验证命令 `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/integration/test_auth_login_api.py -x -q` 全量通过，新增 proof 确认了 superseded/expired token 生命周期、delivery failure 持久化和 rate-limit 头表面；我又补跑了现有 `backend/tests/integration/test_password_reset_api.py -x -q`，确认原 forgot/reset suite 没有因 lifecycle 正式化而回归。最后用 `py_compile` 校验了改动过的 auth/service/model/rate-limit/migration/test 文件，确认未留下未执行路径上的语法问题。按照 slice 级验证要求，backend auth focused proof 已满足，profile 页面行为与语速偏好持久化的 slice 级证明留待 T03 完成。",
       "duration": "",
-      "completed_at": null,
+      "completed_at": "2026-04-11T14:34:02.597Z",
       "blocker_discovered": false,
-      "deviations": "",
-      "known_issues": "",
-      "key_files": [],
-      "key_decisions": [],
-      "full_summary_md": "",
+      "deviations": "本地真实基线与计划快照有一处小偏差：`026_password_reset_tokens` migration 与独立的 `backend/tests/integration/test_password_reset_api.py` 已经存在，所以我没有重做 reset 核心持久化，而是在此基础上新增 `027_password_reset_lifecycle_delivery`，把 lifecycle/delivery 语义正式化，并把 auth-focused proof 补进了计划指定的 `test_auth_login_api.py`。",
+      "known_issues": "默认邮件投递仍然是 `ConsoleEmailService`，只把 reset link 打到控制台；这次任务把它正式化成可替换且有持久化状态的 seam，但没有接入真实外部邮件平台。Slice 级的 profile 修改密码入口闭环与语速偏好持久化仍待 T03 完成。",
+      "key_files": [
+        "backend/src/common/services/password_reset.py",
+        "backend/src/common/db/models.py",
+        "backend/src/common/auth/api.py",
+        "backend/src/common/rate_limit/api_limiter.py",
+        "backend/alembic/versions/20260411_2235_027_password_reset_lifecycle_delivery.py",
+        "backend/tests/integration/test_auth_login_api.py",
+        ".gsd/KNOWLEDGE.md"
+      ],
+      "key_decisions": [
+        "将 password reset lifecycle 明确拆分为 consumed（`used_at`）与 invalidated（`invalidated_at` + `invalidation_reason`），避免旧 token supersede 时继续伪装成“已消费”。",
+        "保持 `ConsoleEmailService` 作为默认 delivery seam，但把发送结果持久化为 `delivery_status` / `delivery_attempted_at` / `delivery_error`，让 forgot-password 在投递失败时仍返回防枚举成功响应，同时保留可观测证据。",
+        "把限流策略常量提升到 password reset seam，并修复全局 `rate_limit` 装饰器对 `JSONResponse` 不回填 `X-RateLimit-*` 头的问题，确保 focused auth tests 和运行时诊断看到一致表面。"
+      ],
+      "full_summary_md": "---\nid: T02\nparent: S02\nmilestone: M014\nkey_files:\n  - backend/src/common/services/password_reset.py\n  - backend/src/common/db/models.py\n  - backend/src/common/auth/api.py\n  - backend/src/common/rate_limit/api_limiter.py\n  - backend/alembic/versions/20260411_2235_027_password_reset_lifecycle_delivery.py\n  - backend/tests/integration/test_auth_login_api.py\n  - .gsd/KNOWLEDGE.md\nkey_decisions:\n  - 将 password reset lifecycle 明确拆分为 consumed（`used_at`）与 invalidated（`invalidated_at` + `invalidation_reason`），避免旧 token supersede 时继续伪装成“已消费”。\n  - 保持 `ConsoleEmailService` 作为默认 delivery seam，但把发送结果持久化为 `delivery_status` / `delivery_attempted_at` / `delivery_error`，让 forgot-password 在投递失败时仍返回防枚举成功响应，同时保留可观测证据。\n  - 把限流策略常量提升到 password reset seam，并修复全局 `rate_limit` 装饰器对 `JSONResponse` 不回填 `X-RateLimit-*` 头的问题，确保 focused auth tests 和运行时诊断看到一致表面。\nduration: \nverification_result: passed\ncompleted_at: 2026-04-11T14:34:02.596Z\nblocker_discovered: false\n---\n\n# T02: Formalized password-reset lifecycle and delivery seams with explicit invalidation state, resilient delivery fallback, and auth-focused proof.\n\n**Formalized password-reset lifecycle and delivery seams with explicit invalidation state, resilient delivery fallback, and auth-focused proof.**\n\n## What Happened\n\n我先把计划要求翻译成红测，直接在 `backend/tests/integration/test_auth_login_api.py` 增补了三类 auth-focused 证明：1）重复申请 reset 时旧 token 不能再被伪装成已消费；2）forgot-password 成功响应必须带 `X-RateLimit-*` 头；3）邮件投递失败时 forgot-password 仍要保持防枚举成功表面。红测先后暴露出两个事实：一是这组集成测试需要像现有 reset suite 一样预注册 `agent.models` 才能让 sqlite metadata 建表成功；二是现状确实存在正式 seam 缺口——旧 token 被写进 `used_at`、`JSONResponse` 丢失限流头、控制台邮件一旦抛错就把 forgot-password 打成 500。随后我在 `backend/src/common/services/password_reset.py` 正式化了 reset lifecycle 和 delivery seam：增加 `PASSWORD_RESET_RATE_LIMIT_*` 常量与 `build_password_reset_email_service()`；发起重置时把旧未消费 token 标记为 `invalidated_at + invalidation_reason='superseded'`，而不是继续复用 `used_at`；新增投递后续处理，在 email transport 成功时写入 `delivery_status='sent'`，失败时写入 `delivery_status='failed'`、`delivery_attempted_at`、`delivery_error` 并记录结构化日志，但 API 仍返回通用成功文案；reset 时若 token 已过期，会把该行持久化标记为 `invalidation_reason='expired'` 后再拒绝，保留可回查的生命周期痕迹。为让这些状态成为正式 schema contract，我在 `backend/src/common/db/models.py` 扩展了 `PasswordResetToken` 模型，并新增 Alembic migration `backend/alembic/versions/20260411_2235_027_password_reset_lifecycle_delivery.py`。同时我在 `backend/src/common/rate_limit/api_limiter.py` 修复了装饰器只给 dict 响应附加限流头的问题，让返回 `JSONResponse` 的 forgot-password 也能暴露 `X-RateLimit-*`。最后，我把新的 seam 证明补进 `backend/tests/integration/test_auth_login_api.py`，覆盖 supersede、投递失败降级、过期 token 拒绝与限流头表面，并把这个 gotcha 回写到 `.gsd/KNOWLEDGE.md`，另用 GSD 决策记录了 password-reset lifecycle/delivery 的正式表示方式（D176）。\n\n## Verification\n\n我先运行新增的 focused auth 红测子集，确认当前实现会因为三类 seam 缺口而失败：旧 token 被标记成 `used_at`、forgot-password 成功响应没有 `X-RateLimit-*` 头、控制台邮件 transport 抛错时 forgot-password 会直接变成 500。实现完成后，任务合同中的 backend auth focused 验证命令 `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/integration/test_auth_login_api.py -x -q` 全量通过，新增 proof 确认了 superseded/expired token 生命周期、delivery failure 持久化和 rate-limit 头表面；我又补跑了现有 `backend/tests/integration/test_password_reset_api.py -x -q`，确认原 forgot/reset suite 没有因 lifecycle 正式化而回归。最后用 `py_compile` 校验了改动过的 auth/service/model/rate-limit/migration/test 文件，确认未留下未执行路径上的语法问题。按照 slice 级验证要求，backend auth focused proof 已满足，profile 页面行为与语速偏好持久化的 slice 级证明留待 T03 完成。\n\n## Verification Evidence\n\n| # | Command | Exit Code | Verdict | Duration |\n|---|---------|-----------|---------|----------|\n| 1 | `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/integration/test_auth_login_api.py -x -q` | 0 | ✅ pass | 4588ms |\n| 2 | `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/integration/test_password_reset_api.py -x -q` | 0 | ✅ pass | 4049ms |\n| 3 | `backend/venv/bin/python -m py_compile backend/src/common/services/password_reset.py backend/src/common/db/models.py backend/src/common/auth/api.py backend/src/common/rate_limit/api_limiter.py backend/tests/integration/test_auth_login_api.py backend/alembic/versions/20260411_2235_027_password_reset_lifecycle_delivery.py` | 0 | ✅ pass | 74ms |\n\n## Deviations\n\n本地真实基线与计划快照有一处小偏差：`026_password_reset_tokens` migration 与独立的 `backend/tests/integration/test_password_reset_api.py` 已经存在，所以我没有重做 reset 核心持久化，而是在此基础上新增 `027_password_reset_lifecycle_delivery`，把 lifecycle/delivery 语义正式化，并把 auth-focused proof 补进了计划指定的 `test_auth_login_api.py`。\n\n## Known Issues\n\n默认邮件投递仍然是 `ConsoleEmailService`，只把 reset link 打到控制台；这次任务把它正式化成可替换且有持久化状态的 seam，但没有接入真实外部邮件平台。Slice 级的 profile 修改密码入口闭环与语速偏好持久化仍待 T03 完成。\n\n## Files Created/Modified\n\n- `backend/src/common/services/password_reset.py`\n- `backend/src/common/db/models.py`\n- `backend/src/common/auth/api.py`\n- `backend/src/common/rate_limit/api_limiter.py`\n- `backend/alembic/versions/20260411_2235_027_password_reset_lifecycle_delivery.py`\n- `backend/tests/integration/test_auth_login_api.py`\n- `.gsd/KNOWLEDGE.md`\n",
       "description": "Why: backend auth seam 必须先正式化，前端 profile/forgot/reset 才有稳定依赖面。\n\nDo:\n1. 正式化 password reset token 存储、过期处理和一次性消费逻辑。\n2. 抽出 email delivery seam 和 rate limit 策略，但不强接外部邮件平台。\n3. 加 migration，移除 request-path DDL 或其他过渡实现。\n4. 保持现有登录兼容路径和 focused auth tests 可继续证明。\n\nDone when: forgot/reset 有正式持久化与 lifecycle contract，且 focused backend auth proof 通过。",
       "estimate": "1.5h",
       "files": [
@@ -13003,6 +13015,18 @@
       "revisable": "Yes",
       "made_by": "agent",
       "superseded_by": null
+    },
+    {
+      "seq": 1546,
+      "id": "D176",
+      "when_context": "M014/S02/T02",
+      "scope": "auth-lifecycle",
+      "decision": "How should password reset token lifecycle and delivery be represented for downstream auth/profile work?",
+      "choice": "Keep one PasswordResetToken row per issuance, mark superseded/expired tokens with explicit invalidation fields instead of overloading used_at, and persist delivery status/error metadata while keeping console email as the default transport seam.",
+      "rationale": "T02 needed forgot/reset to be a formal backend seam rather than a mostly-working flow. Separating invalidation from consumption makes token lifecycle auditable, persisting delivery outcome keeps forgot-password resilient to transport outages, and retaining a configurable console transport avoids coupling this slice to an external email provider before profile work depends on the seam.",
+      "revisable": "Yes",
+      "made_by": "agent",
+      "superseded_by": null
     }
   ],
   "verification_evidence": [
@@ -16162,6 +16186,39 @@
       "verdict": "✅ pass",
       "duration_ms": 12,
       "created_at": "2026-04-11T14:19:44.740Z"
+    },
+    {
+      "id": 293,
+      "task_id": "T02",
+      "slice_id": "S02",
+      "milestone_id": "M014",
+      "command": "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/integration/test_auth_login_api.py -x -q",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 4588,
+      "created_at": "2026-04-11T14:34:02.599Z"
+    },
+    {
+      "id": 294,
+      "task_id": "T02",
+      "slice_id": "S02",
+      "milestone_id": "M014",
+      "command": "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/integration/test_password_reset_api.py -x -q",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 4049,
+      "created_at": "2026-04-11T14:34:02.599Z"
+    },
+    {
+      "id": 295,
+      "task_id": "T02",
+      "slice_id": "S02",
+      "milestone_id": "M014",
+      "command": "backend/venv/bin/python -m py_compile backend/src/common/services/password_reset.py backend/src/common/db/models.py backend/src/common/auth/api.py backend/src/common/rate_limit/api_limiter.py backend/tests/integration/test_auth_login_api.py backend/alembic/versions/20260411_2235_027_password_reset_lifecycle_delivery.py",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 74,
+      "created_at": "2026-04-11T14:34:02.599Z"
     }
   ]
 }

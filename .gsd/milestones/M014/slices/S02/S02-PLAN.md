@@ -36,7 +36,7 @@ Done when: 后续两项任务可以直接按现状差距动手，不需要再次
   - Files: `web/src/app/(auth)/*`, `web/src/app/(dashboard)/profile/page.tsx`, `backend/src/common/auth/api.py`, `backend/src/common/auth/service.py`
   - Verify: rg -n "forgot|reset|password|speech|rate|window.location" web/src/app/\(auth\) web/src/app/\(dashboard\)/profile backend/src/common/auth
 
-- [ ] **T02: 把 forgot/reset 升级为正式 auth seam** `est:1.5h`
+- [x] **T02: 把 forgot/reset 升级为正式 auth seam** `est:1.5h`
   Why: backend auth seam 必须先正式化，前端 profile/forgot/reset 才有稳定依赖面。
 
 Do:
