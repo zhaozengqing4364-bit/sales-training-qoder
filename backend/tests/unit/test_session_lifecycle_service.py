@@ -19,6 +19,32 @@ from common.db.session_lifecycle import (
 )
 
 
+LIFECYCLE_CONCURRENCY_CONTRACT = {
+    "locking_strategy": (
+        "Use optimistic compare-and-swap on PracticeSession.status instead of row locks so the "
+        "focused SQLite-backed lifecycle proof can reproduce stale AsyncSession snapshots across two "
+        "writers and still verify deterministic convergence."
+    ),
+    "converged_races": {
+        "sales_end_beats_stale_resume": "A stale resume must converge to persisted scoring as a no-op.",
+        "presentation_end_beats_stale_pause": "A stale pause must converge to persisted completed as a no-op.",
+    },
+    "intentional_terminal_statuses": {
+        "sales": "scoring",
+        "presentation": "completed",
+    },
+    "intentional_differences": {
+        "sales": "Fresh sales end keeps the scoring handoff explicit; later background work may finalize to completed.",
+        "presentation": "Presentation end lands directly on completed without introducing a scoring handoff.",
+    },
+    "regression_entrypoint": (
+        "backend/venv/bin/python -m pytest -c backend/pyproject.toml "
+        "backend/tests/unit/test_session_lifecycle_service.py "
+        "backend/tests/integration/test_session_lifecycle_api.py -x -q"
+    ),
+}
+
+
 def _make_session(
     *,
     session_id: str | None = None,
@@ -45,6 +71,38 @@ def mock_db():
 @pytest.fixture
 def service(mock_db):
     return SessionLifecycleService(mock_db)
+
+
+def test_lifecycle_concurrency_contract_documents_strategy_and_regression_entrypoint() -> None:
+    assert "optimistic compare-and-swap" in LIFECYCLE_CONCURRENCY_CONTRACT["locking_strategy"]
+    assert "SQLite" in LIFECYCLE_CONCURRENCY_CONTRACT["locking_strategy"]
+    assert "row locks" in LIFECYCLE_CONCURRENCY_CONTRACT["locking_strategy"]
+    assert set(LIFECYCLE_CONCURRENCY_CONTRACT["converged_races"]) == {
+        scenario.slug for scenario in SESSION_LIFECYCLE_RACE_SCENARIOS
+    }
+    assert LIFECYCLE_CONCURRENCY_CONTRACT["regression_entrypoint"] == (
+        "backend/venv/bin/python -m pytest -c backend/pyproject.toml "
+        "backend/tests/unit/test_session_lifecycle_service.py "
+        "backend/tests/integration/test_session_lifecycle_api.py -x -q"
+    )
+
+
+def test_lifecycle_concurrency_contract_keeps_terminal_split_explicit(service) -> None:
+    assert LIFECYCLE_CONCURRENCY_CONTRACT["intentional_terminal_statuses"] == {
+        "sales": "scoring",
+        "presentation": "completed",
+    }
+    assert service.terminal_status_for_scenario("sales") == "scoring"
+    assert service.terminal_status_for_scenario("presentation") == "completed"
+    assert "background work may finalize to completed" in LIFECYCLE_CONCURRENCY_CONTRACT[
+        "intentional_differences"
+    ]["sales"]
+    assert "directly on completed" not in LIFECYCLE_CONCURRENCY_CONTRACT[
+        "intentional_differences"
+    ]["sales"]
+    assert "directly on completed" in LIFECYCLE_CONCURRENCY_CONTRACT[
+        "intentional_differences"
+    ]["presentation"]
 
 
 def test_race_catalog_prioritizes_terminal_regressions() -> None:

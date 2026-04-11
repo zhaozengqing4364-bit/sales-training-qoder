@@ -28,6 +28,23 @@ from common.websocket.session_manager import get_session_manager
 from evaluation.services.report_generation_trigger import trigger_report_generation
 
 
+LIFECYCLE_API_CONCURRENCY_CONTRACT = {
+    "intentional_terminal_statuses": {
+        "sales": "scoring",
+        "presentation": "completed",
+    },
+    "intentional_differences": {
+        "sales": "REST end returns scoring first so background report finalization can complete the session later.",
+        "presentation": "REST end settles directly on end as completed because presentation sessions do not insert a scoring handoff.",
+    },
+    "regression_entrypoint": (
+        "backend/venv/bin/python -m pytest -c backend/pyproject.toml "
+        "backend/tests/unit/test_session_lifecycle_service.py "
+        "backend/tests/integration/test_session_lifecycle_api.py -x -q"
+    ),
+}
+
+
 def _headers_for_user(user_id: str) -> dict[str, str]:
     token = create_access_token(data={"sub": str(user_id)})
     return {"Authorization": f"Bearer {token}"}
@@ -95,6 +112,24 @@ def test_race_catalog_focuses_on_terminal_regressions() -> None:
         "scoring",
         "completed",
     ]
+
+
+def test_lifecycle_api_concurrency_contract_documents_terminal_split() -> None:
+    assert LIFECYCLE_API_CONCURRENCY_CONTRACT["intentional_terminal_statuses"] == {
+        "sales": "scoring",
+        "presentation": "completed",
+    }
+    assert LIFECYCLE_API_CONCURRENCY_CONTRACT["regression_entrypoint"] == (
+        "backend/venv/bin/python -m pytest -c backend/pyproject.toml "
+        "backend/tests/unit/test_session_lifecycle_service.py "
+        "backend/tests/integration/test_session_lifecycle_api.py -x -q"
+    )
+    assert "background report finalization" in LIFECYCLE_API_CONCURRENCY_CONTRACT[
+        "intentional_differences"
+    ]["sales"]
+    assert "directly on end as completed" in LIFECYCLE_API_CONCURRENCY_CONTRACT[
+        "intentional_differences"
+    ]["presentation"]
 
 
 @pytest.mark.asyncio
@@ -381,6 +416,80 @@ async def test_sales_end_response_stays_scoring_but_background_finalization_can_
     assert persisted_session.report_status == "failed"
     assert persisted_session.status == "completed"
     assert persisted_session.report_error == "[ENHANCED_REPORT_FAILED]"
+
+
+@pytest.mark.asyncio
+async def test_lifecycle_api_end_presentation_completes_without_scoring_handoff(
+    async_client: AsyncClient,
+    test_db: AsyncSession,
+    test_user: User,
+    monkeypatch: pytest.MonkeyPatch,
+):
+    report_trigger_mock = AsyncMock()
+    monkeypatch.setattr(
+        practice_api.SessionLifecycleService,
+        "trigger_report_generation_if_needed",
+        report_trigger_mock,
+    )
+
+    async def _stub_presentation_end(self, session_id: str, *, commit: bool = True):
+        session = (
+            await self.db.execute(
+                select(PracticeSession).where(PracticeSession.session_id == session_id)
+            )
+        ).scalar_one()
+        session.status = "completed"
+        session.end_time = datetime(2026, 2, 11, 13, 5, tzinfo=UTC)
+        session.total_duration_seconds = 300
+        if commit:
+            await self.db.commit()
+        else:
+            await self.db.flush()
+        return Result.ok(session)
+
+    monkeypatch.setattr(
+        practice_api.PresentationCoachService,
+        "end_session",
+        _stub_presentation_end,
+    )
+
+    session = await _create_session(
+        test_db,
+        user_id=str(test_user.user_id),
+        scenario_type="presentation",
+        status="in_progress",
+    )
+    session.start_time = datetime(2026, 2, 11, 13, 0, tzinfo=UTC)
+    await test_db.commit()
+    await test_db.refresh(session)
+    session_id = str(session.session_id)
+
+    response = await async_client.post(
+        f"/api/v1/practice/sessions/{session_id}/lifecycle",
+        headers=_headers_for_user(str(test_user.user_id)),
+        json={"action": "end"},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["data"]["previous_status"] == "in_progress"
+    assert body["data"]["status"] == "completed"
+    assert body["data"]["ai_state"] == "idle"
+    assert body["data"]["changed"] is True
+
+    persisted_session = (
+        await test_db.execute(
+            select(PracticeSession).where(PracticeSession.session_id == session_id)
+        )
+    ).scalar_one()
+    assert persisted_session.status == "completed"
+    assert persisted_session.end_time is not None
+    assert persisted_session.total_duration_seconds == 300
+    report_trigger_mock.assert_awaited_once()
+    transition = report_trigger_mock.await_args.args[0]
+    assert transition.action == "end"
+    assert transition.to_status == "completed"
+    assert transition.changed is True
 
 
 @pytest.mark.asyncio

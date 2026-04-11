@@ -48,7 +48,7 @@ Done when: focused lifecycle backend proof 通过，且状态收敛策略有明�
   - Files: `backend/src/common/db/session_lifecycle.py`, `backend/tests/unit/test_session_lifecycle_service.py`, `backend/tests/integration/test_session_lifecycle_api.py`
   - Verify: backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/test_session_lifecycle_service.py backend/tests/integration/test_session_lifecycle_api.py -x -q
 
-- [ ] **T03: 沉淀 lifecycle concurrency contract 证据** `est:25m`
+- [x] **T03: 沉淀 lifecycle concurrency contract 证据** `est:25m`
   Why: lifecycle 并发证明要沉淀成可复用 contract，否则后续 websocket/terminal-state 调整还会重复争论。
 
 Do:
