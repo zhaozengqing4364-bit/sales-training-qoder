@@ -35,7 +35,7 @@ Done when: 已形成热点查询与索引候选清单，可直接指导后续 ev
   - Files: `backend/src/common/analytics/*`, `backend/src/common/conversation/session_evidence.py`, `backend/src/admin/api/*`
   - Verify: rg -n "select|join|order_by|group_by|SessionEvidence|leaderboard|analytics" backend/src/common/analytics backend/src/common/conversation backend/src/admin/api
 
-- [ ] **T02: 形成 evidence-backed DB performance baseline** `est:1h`
+- [x] **T02: 形成 evidence-backed DB performance baseline** `est:1h`
   Why: baseline 的关键是把“已证实”和“猜测”分开，而不是直接把所有性能建议都推成待实现项。
 
 Do:

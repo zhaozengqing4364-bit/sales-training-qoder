@@ -2,12 +2,15 @@
 Unit tests for leaderboard service filters and rank calculation.
 """
 
+from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 import uuid
+from typing import Iterator
 
 import pytest
 import pytest_asyncio
-from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
+from sqlalchemy import event
+from sqlalchemy.ext.asyncio import AsyncSession, AsyncEngine, create_async_engine
 from sqlalchemy.orm import sessionmaker
 
 from common.analytics.leaderboard_service import LeaderboardService
@@ -15,6 +18,30 @@ from common.db.models import Base, PracticeSession, Scenario, User
 
 
 TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
+
+
+@contextmanager
+def _capture_sql_statements(engine: AsyncEngine) -> Iterator[list[str]]:
+    statements: list[str] = []
+
+    def _before_cursor_execute(
+        conn,
+        cursor,
+        statement,
+        parameters,
+        context,
+        executemany,
+    ) -> None:
+        normalized = " ".join(str(statement).split())
+        if normalized.startswith(("PRAGMA ", "SAVEPOINT ", "RELEASE SAVEPOINT ")):
+            return
+        statements.append(normalized)
+
+    event.listen(engine.sync_engine, "before_cursor_execute", _before_cursor_execute)
+    try:
+        yield statements
+    finally:
+        event.remove(engine.sync_engine, "before_cursor_execute", _before_cursor_execute)
 
 
 @pytest_asyncio.fixture()
@@ -167,3 +194,40 @@ async def test_calculate_leaderboard_accepts_alias_filters(
     assert presentation_weekly.is_success
     assert len(presentation_weekly.value.entries) == 1
     assert presentation_weekly.value.entries[0].username == "Bob"
+
+
+@pytest.mark.asyncio
+async def test_calculate_leaderboard_pushes_ranking_aggregation_into_sql(
+    leaderboard_db: AsyncSession,
+    seeded_leaderboard_data: dict[str, str],
+):
+    service = LeaderboardService()
+
+    with _capture_sql_statements(leaderboard_db.bind) as statements:
+        sales_monthly = await service.calculate_leaderboard(
+            db=leaderboard_db,
+            scenario_type="sales_bot",
+            time_period="month",
+            limit=10,
+        )
+
+    assert sales_monthly.is_success
+    assert len(sales_monthly.value.entries) == 1
+
+    aggregate_queries = [
+        statement
+        for statement in statements
+        if "avg(practice_sessions.logic_score" in statement.lower()
+    ]
+    count_queries = [
+        statement
+        for statement in statements
+        if "count(distinct(users.user_id))" in statement.lower()
+    ]
+
+    assert len(statements) == 2
+    assert len(aggregate_queries) == 1
+    assert len(count_queries) == 1
+    assert "GROUP BY users.user_id, users.name" in aggregate_queries[0]
+    assert "ORDER BY average_score DESC" in aggregate_queries[0]
+    assert "JOIN scenarios" in aggregate_queries[0]

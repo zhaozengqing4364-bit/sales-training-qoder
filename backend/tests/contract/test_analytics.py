@@ -5,10 +5,47 @@ Tests API contracts for practice history and leaderboard
 import pytest
 from httpx import AsyncClient
 
+from common.analytics.admin_analytics_service import ADMIN_ANALYTICS_DB_PERFORMANCE_BASELINE
+from common.analytics.history_service import HISTORY_QUERY_DB_PERFORMANCE_BASELINE
+from common.conversation.session_evidence import SESSION_EVIDENCE_DB_PERFORMANCE_BASELINE
+
 
 @pytest.mark.contract
 class TestAnalyticsContract:
     """Contract tests for analytics API"""
+
+    def test_db_performance_baseline_keeps_confirmed_shapes_separate_from_runtime_hypotheses(self):
+        """Keep the first-round DB baseline evidence-backed instead of speculative."""
+        baseline_entries = (
+            list(ADMIN_ANALYTICS_DB_PERFORMANCE_BASELINE)
+            + list(HISTORY_QUERY_DB_PERFORMANCE_BASELINE)
+            + list(SESSION_EVIDENCE_DB_PERFORMANCE_BASELINE)
+        )
+
+        expected_paths = {
+            "projection_window_load",
+            "leaderboard_python_reduce",
+            "history_session_window_and_message_batch",
+            "manager_intervention_overlay",
+            "single_session_projection_load",
+        }
+
+        assert {entry["path"] for entry in baseline_entries} == expected_paths
+        for entry in baseline_entries:
+            assert entry["risk"]
+            assert entry["query_shape"]
+            assert entry["index_candidates"]
+            assert entry["evidence_level"].startswith("code_path_confirmed")
+            assert any(
+                token in entry["evidence_level"]
+                for token in (
+                    "needs_runtime",
+                    "needs_real_runtime_measurement",
+                    "needs_postgres_measurement",
+                    "requires_real_query_plan_evidence",
+                    "depends_on_real_admin_usage",
+                )
+            )
 
     async def test_get_practice_history(
         self,

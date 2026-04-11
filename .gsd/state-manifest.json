@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "exported_at": "2026-04-11T22:32:02.722Z",
+  "exported_at": "2026-04-11T22:39:32.985Z",
   "milestones": [
     {
       "id": "M001",
@@ -10942,19 +10942,25 @@
       "milestone_id": "M018",
       "slice_id": "S01",
       "id": "T02",
-      "title": "形成 evidence-backed DB performance baseline",
-      "status": "pending",
-      "one_liner": "",
-      "narrative": "",
-      "verification_result": "",
+      "title": "Added evidence-backed DB baseline tests for analytics projection and leaderboard query shapes",
+      "status": "complete",
+      "one_liner": "Added evidence-backed DB baseline tests for analytics projection and leaderboard query shapes",
+      "narrative": "I turned the first-round DB baseline from code-adjacent inventory into executable proof without changing the runtime queries themselves. In `backend/tests/unit/common/test_admin_analytics_service.py` I added SQL-capture helpers plus focused tests that prove two confirmed admin analytics behaviors: `get_leaderboard()` loads one projection window and one batched `conversation_messages ... IN (...)` query for multiple sessions instead of per-session message reads, and `get_overview_stats(time_range=\"30d\")` replays the projection window twice for current-vs-previous growth comparison, including a second batched message fetch. In `backend/tests/unit/common/test_leaderboard_service.py` I added a focused SQL-shape proof showing `LeaderboardService.calculate_leaderboard()` keeps ranking aggregation in SQL via one grouped AVG/MAX query plus one `count(distinct users.user_id)` query, rather than issuing per-user follow-ups. In `backend/tests/contract/test_analytics.py` I added a contract guard that keeps the M018 baseline inventories aligned to the expected hotspot paths and explicitly requires each entry to carry both a confirmed query-shape fact and an evidence-level marker that still points to runtime/Postgres proof for index prioritization. Together these tests give downstream work a concrete baseline for what is already proven versus what remains hypothesis-level.",
+      "verification_result": "Ran a focused pytest proof for the new evidence-backed baseline tests only, covering the contract baseline partition plus the new admin-analytics and leaderboard SQL-shape assertions; all 4 targeted tests passed. Then ran the full task verification command from the plan — `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/contract/test_analytics.py backend/tests/unit/common/test_admin_analytics_service.py backend/tests/unit/common/test_leaderboard_service.py -x -q` — and all 22 tests passed. Also checked LSP diagnostics on `backend/tests/contract/test_analytics.py`, `backend/tests/unit/common/test_admin_analytics_service.py`, and `backend/tests/unit/common/test_leaderboard_service.py`; all returned clean.",
       "duration": "",
-      "completed_at": null,
+      "completed_at": "2026-04-11T22:39:32.948Z",
       "blocker_discovered": false,
-      "deviations": "",
-      "known_issues": "",
-      "key_files": [],
-      "key_decisions": [],
-      "full_summary_md": "",
+      "deviations": "None.",
+      "known_issues": "Focused repo-root pytest runs still emit the existing pytest-cov \"Module src was never imported / No data was collected\" warning pattern for these backend test files, but the verification commands exit 0 and the task gate passed.",
+      "key_files": [
+        "backend/tests/contract/test_analytics.py",
+        "backend/tests/unit/common/test_admin_analytics_service.py",
+        "backend/tests/unit/common/test_leaderboard_service.py"
+      ],
+      "key_decisions": [
+        "Kept T02 strictly evidence-building: add executable baseline proof in tests/contracts without preemptively changing query shapes or adding indexes."
+      ],
+      "full_summary_md": "---\nid: T02\nparent: S01\nmilestone: M018\nkey_files:\n  - backend/tests/contract/test_analytics.py\n  - backend/tests/unit/common/test_admin_analytics_service.py\n  - backend/tests/unit/common/test_leaderboard_service.py\nkey_decisions:\n  - Kept T02 strictly evidence-building: add executable baseline proof in tests/contracts without preemptively changing query shapes or adding indexes.\nduration: \nverification_result: passed\ncompleted_at: 2026-04-11T22:39:32.946Z\nblocker_discovered: false\n---\n\n# T02: Added evidence-backed DB baseline tests for analytics projection and leaderboard query shapes\n\n**Added evidence-backed DB baseline tests for analytics projection and leaderboard query shapes**\n\n## What Happened\n\nI turned the first-round DB baseline from code-adjacent inventory into executable proof without changing the runtime queries themselves. In `backend/tests/unit/common/test_admin_analytics_service.py` I added SQL-capture helpers plus focused tests that prove two confirmed admin analytics behaviors: `get_leaderboard()` loads one projection window and one batched `conversation_messages ... IN (...)` query for multiple sessions instead of per-session message reads, and `get_overview_stats(time_range=\"30d\")` replays the projection window twice for current-vs-previous growth comparison, including a second batched message fetch. In `backend/tests/unit/common/test_leaderboard_service.py` I added a focused SQL-shape proof showing `LeaderboardService.calculate_leaderboard()` keeps ranking aggregation in SQL via one grouped AVG/MAX query plus one `count(distinct users.user_id)` query, rather than issuing per-user follow-ups. In `backend/tests/contract/test_analytics.py` I added a contract guard that keeps the M018 baseline inventories aligned to the expected hotspot paths and explicitly requires each entry to carry both a confirmed query-shape fact and an evidence-level marker that still points to runtime/Postgres proof for index prioritization. Together these tests give downstream work a concrete baseline for what is already proven versus what remains hypothesis-level.\n\n## Verification\n\nRan a focused pytest proof for the new evidence-backed baseline tests only, covering the contract baseline partition plus the new admin-analytics and leaderboard SQL-shape assertions; all 4 targeted tests passed. Then ran the full task verification command from the plan — `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/contract/test_analytics.py backend/tests/unit/common/test_admin_analytics_service.py backend/tests/unit/common/test_leaderboard_service.py -x -q` — and all 22 tests passed. Also checked LSP diagnostics on `backend/tests/contract/test_analytics.py`, `backend/tests/unit/common/test_admin_analytics_service.py`, and `backend/tests/unit/common/test_leaderboard_service.py`; all returned clean.\n\n## Verification Evidence\n\n| # | Command | Exit Code | Verdict | Duration |\n|---|---------|-----------|---------|----------|\n| 1 | `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/contract/test_analytics.py::TestAnalyticsContract::test_db_performance_baseline_keeps_confirmed_shapes_separate_from_runtime_hypotheses backend/tests/unit/common/test_admin_analytics_service.py::test_get_leaderboard_batches_projection_window_and_messages_once backend/tests/unit/common/test_admin_analytics_service.py::test_get_overview_stats_replays_projection_window_for_growth_comparison backend/tests/unit/common/test_leaderboard_service.py::test_calculate_leaderboard_pushes_ranking_aggregation_into_sql -q` | 0 | ✅ pass | 2947ms |\n| 2 | `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/contract/test_analytics.py backend/tests/unit/common/test_admin_analytics_service.py backend/tests/unit/common/test_leaderboard_service.py -x -q` | 0 | ✅ pass | 5130ms |\n\n## Deviations\n\nNone.\n\n## Known Issues\n\nFocused repo-root pytest runs still emit the existing pytest-cov \"Module src was never imported / No data was collected\" warning pattern for these backend test files, but the verification commands exit 0 and the task gate passed.\n\n## Files Created/Modified\n\n- `backend/tests/contract/test_analytics.py`\n- `backend/tests/unit/common/test_admin_analytics_service.py`\n- `backend/tests/unit/common/test_leaderboard_service.py`\n",
       "description": "Why: baseline 的关键是把“已证实”和“猜测”分开，而不是直接把所有性能建议都推成待实现项。\n\nDo:\n1. 结合 focused tests、explain 或代码级查询审视形成第一轮 baseline。\n2. 标明哪些问题已有足够证据，哪些仍需要真实 Postgres/runtime 证据。\n3. 不抢跑加索引或改查询，只产出 evidence-backed 基线。\n\nDone when: focused analytics proof 通过，且 baseline 已能支撑后续优化优先级。",
       "estimate": "1h",
       "files": [
@@ -17881,6 +17887,28 @@
       "verdict": "✅ pass",
       "duration_ms": 47,
       "created_at": "2026-04-11T22:32:02.673Z"
+    },
+    {
+      "id": 389,
+      "task_id": "T02",
+      "slice_id": "S01",
+      "milestone_id": "M018",
+      "command": "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/contract/test_analytics.py::TestAnalyticsContract::test_db_performance_baseline_keeps_confirmed_shapes_separate_from_runtime_hypotheses backend/tests/unit/common/test_admin_analytics_service.py::test_get_leaderboard_batches_projection_window_and_messages_once backend/tests/unit/common/test_admin_analytics_service.py::test_get_overview_stats_replays_projection_window_for_growth_comparison backend/tests/unit/common/test_leaderboard_service.py::test_calculate_leaderboard_pushes_ranking_aggregation_into_sql -q",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 2947,
+      "created_at": "2026-04-11T22:39:32.948Z"
+    },
+    {
+      "id": 390,
+      "task_id": "T02",
+      "slice_id": "S01",
+      "milestone_id": "M018",
+      "command": "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/contract/test_analytics.py backend/tests/unit/common/test_admin_analytics_service.py backend/tests/unit/common/test_leaderboard_service.py -x -q",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 5130,
+      "created_at": "2026-04-11T22:39:32.948Z"
     }
   ]
 }
