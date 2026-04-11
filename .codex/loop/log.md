@@ -934,3 +934,25 @@
   verification results: passed; the red-green contract proof finished green, the full task-plan pytest gate finished 23/23 green, and diagnostics stayed clean on the touched/focused proof files.
   success signal status: downstream M018 work no longer needs to infer priority from baseline inventory strings alone — the contract now names which query-shape gaps are already confirmed and which index/search ideas still require real Postgres/runtime evidence before implementation.
   rollback note: if a future slice proves or retires any query/index candidate, update backend/tests/contract/test_analytics.py together with the code-adjacent inventory constant that supplied the evidence so the backlog does not drift from the live baseline.
+
+- time: 2026-04-12T06:53:04+08:00
+  mode: grow
+  item id: M018-S01
+  files changed:
+    - .gsd/DECISIONS.md
+    - .gsd/KNOWLEDGE.md
+    - .gsd/PROJECT.md
+    - .gsd/milestones/M018/slices/S01/S01-SUMMARY.md
+    - .gsd/milestones/M018/slices/S01/S01-UAT.md
+    - .codex/loop/state.json
+    - .codex/loop/log.md
+  summary: Closed M018/S01 after fresh slice-level verification confirmed the query/index discovery baseline is now code-adjacent, executable, and layered by proof strength, with one reusable backlog for future performance work instead of audit-era guesswork.
+  verification commands:
+    - rg -n "select|join|order_by|group_by|SessionEvidence|leaderboard|analytics" backend/src/common/analytics backend/src/common/conversation backend/src/admin/api
+    - backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/contract/test_analytics.py backend/tests/unit/common/test_admin_analytics_service.py backend/tests/unit/common/test_leaderboard_service.py -x -q
+    - lsp diagnostics backend/tests/contract/test_analytics.py
+    - lsp diagnostics backend/tests/unit/common/test_admin_analytics_service.py
+    - lsp diagnostics backend/tests/unit/common/test_leaderboard_service.py
+  verification results: passed; the slice-close rg inventory stayed present, the full analytics/leaderboard/query-index gate finished 23/23 green, and diagnostics stayed clean on the proof files.
+  success signal status: downstream M018 work can now start from one durable discovery artifact that distinguishes focused-proof-confirmed projection costs, code-path-confirmed gaps, and index ideas that still need real Postgres evidence.
+  rollback note: if later performance slices implement or disprove any listed gap, update the code-adjacent baseline inventories, QUERY_INDEX_DISCOVERY_CONCLUSIONS, and focused analytics proof together so the discovery backlog does not drift from runtime facts.

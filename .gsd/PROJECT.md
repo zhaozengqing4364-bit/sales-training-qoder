@@ -37,6 +37,13 @@
 - **M016**：auth / API / admin security contract hardening 已完成——password reset 现在沿 `PasswordResetService` + `PasswordResetToken` + Alembic 026/027/028 的 durable seam 演进并由 DB enforce 单 active token；audited prompt-template / presentation / auth dependency surface 已统一到稳定错误契约并由 `ApiRequestError` 单 seam 消费；第一批高风险 admin router family 已在 module 级显式 `get_current_admin_user`，`StructuredLogger` 成为 token/password/cookie/email 的共享脱敏边界，security inventory / log-safety inventory 已把 fix-first 列表收敛到 0。
 - **M017**：realtime contract 与 concurrency proof 收口已完成——session lifecycle stale-writer race 通过 `PracticeSession.status` optimistic compare-and-swap 固定，practice websocket reconnect/backpressure/interrupt contract 通过 fresh transport epoch + focused web proof 固定，presentation upload/replace/delete 风险通过 code-adjacent discovery artifact 收敛成清晰下一步边界（先处理 replace，再决定 delete policy，不抢跑 upload-wide lock）。
 
+### Active baseline work
+- **M018/S01 已完成**：数据库性能 discovery 现在有一条可复用事实线：
+  - 代码权威处的 baseline inventories：`admin_analytics_service.py`、`history_service.py`、`session_evidence.py`、`training_records.py`。
+  - focused executable proof：`backend/tests/contract/test_analytics.py`、`backend/tests/unit/common/test_admin_analytics_service.py`、`backend/tests/unit/common/test_leaderboard_service.py`。
+  - 一份分层的 follow-up backlog：`QUERY_INDEX_DISCOVERY_CONCLUSIONS`，明确区分已被 focused proof 证实的 query cost、代码路径已确认但仍待更强 proof 的 gap，以及必须依赖真实 Postgres/runtime 证据的索引假设。
+- **M018/S02-S03 待执行**：依赖安全/许可证/升级策略基线，以及 backup/recovery/runbook 基线仍待完成。
+
 ## Current Product Truths
 
 - 当前权威 learner surfaces 仍是现有 `/practice/{sessionId}`、`/practice/{sessionId}/report`、`/practice/{sessionId}/replay`、`/history`，不是新造第二套路由。
@@ -69,19 +76,24 @@
   - in-place replace 是当前唯一已证实的 concurrent-writer race，应先做 per-`presentation_id` serialization/CAS，再决定是否需要 distributed lock；
   - delete 当前首先是 live-session policy/guard gap，而不是已经证明需要锁的路径；
   - upload-new 目前仍无 focused proof 证明存在有害并发冲突，不应抢跑到 idempotency-key 或 system-wide lock 方案。
+- M018/S01 database performance discovery 权威线现在也已明确：
+  - 代码级 baseline 以 `ADMIN_ANALYTICS_DB_PERFORMANCE_BASELINE`、`HISTORY_QUERY_DB_PERFORMANCE_BASELINE`、`SESSION_EVIDENCE_DB_PERFORMANCE_BASELINE`、`TRAINING_RECORDS_DB_PERFORMANCE_BASELINE` 为准；
+  - 可执行 follow-up backlog 以 `backend/tests/contract/test_analytics.py::QUERY_INDEX_DISCOVERY_CONCLUSIONS` 为准；
+  - `focused_proof`、`code_path_confirmed`、`needs_real_postgres_evidence` 三层必须一起维护，不能把代码结构猜测直接当成索引 implementation mandate；
+  - 没有真实 Postgres `EXPLAIN` / `pg_stat_statements` / runtime timing 前，不要把 scenario filter、message timestamp 扩展、search text index 这类候选直接当成已证实优化项。
 
 ## Current Focus
 
-M017 已完成，当前项目进入 **post-M017 follow-up selection** 阶段：
-- 已固定 lifecycle stale-writer contract。
-- 已固定 websocket reconnect/backpressure/interrupt contract。
-- 已把 presentation mutation 风险缩成明确的实现边界：先 serialize/guard replace，再决定 delete active-session policy。
+当前项目进入 **M018 baselines** 阶段：
+- S01 已把 query/index baseline 从 audit 猜测变成代码邻近、可验证、可复用的 discovery artifact。
+- 下一步应继续完成：
+  1. **S02** 依赖安全、许可证与升级策略基线；
+  2. **S03** 备份 / 故障恢复 / 容灾 runbook 基线。
 
 当前不应做的事：
-- 不要把 lifecycle 并发问题重新包装成前端防抖或 route guard 修补。
-- 不要引入新的 report/replay 终态分支去绕过 backend lifecycle contract。
-- 不要在 presentation mutation follow-up 里直接扩展成 upload-wide idempotency 或 broad distributed-lock rollout；先处理已证明的 replace/delete 问题。
-- 不要把 code-adjacent discovery artifact 退回成独立 audit 文档，造成 route facts 与结论漂移。
+- 不要在 M018/S01 还没有真实 Postgres/runtime 证据的前提下，直接抢跑到索引 implementation 或查询重写。
+- 不要把 query/index discovery 退回成 markdown-only backlog；后续更新必须同步修改 code-adjacent inventories、`QUERY_INDEX_DISCOVERY_CONCLUSIONS`、以及 focused proof。
+- 不要把 M018 扩展成 broad performance refactor；当前目标是建立可信基线，不是一次性“优化一切”。
 
 ## Capability Contract
 
@@ -106,3 +118,4 @@ M017 已完成，当前项目进入 **post-M017 follow-up selection** 阶段：
 - [x] M015 — Frontend hygiene 与 learner shell 保护收口
 - [x] M016 — Auth / API / admin security contract hardening
 - [x] M017 — Realtime contract 与 concurrency proof 收口
+- [ ] M018 — Performance / dependency / recovery baselines（S01 complete; S02-S03 pending）

@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "exported_at": "2026-04-11T22:46:22.152Z",
+  "exported_at": "2026-04-11T22:57:34.359Z",
   "milestones": [
     {
       "id": "M001",
@@ -2484,14 +2484,14 @@
       "milestone_id": "M018",
       "id": "S01",
       "title": "S01",
-      "status": "pending",
+      "status": "complete",
       "risk": "medium",
       "depends": [],
       "demo": "有一份 query/index baseline，后续优化 backlog 基于真实证据而不是 audit 猜测。",
       "created_at": "2026-04-08T08:55:14.383Z",
-      "completed_at": null,
-      "full_summary_md": "",
-      "full_uat_md": "",
+      "completed_at": "2026-04-11T22:52:37.222Z",
+      "full_summary_md": "---\nid: S01\nparent: M018\nmilestone: M018\nprovides:\n  - A reusable query/index discovery baseline for analytics/history/projection/admin read paths.\n  - A focused proof bundle that distinguishes already-proved query costs from unproved index ideas.\n  - One canonical follow-up backlog (`QUERY_INDEX_DISCOVERY_CONCLUSIONS`) future performance slices can start from.\nrequires:\n  []\naffects:\n  - future performance implementation slices on analytics/history/projection/admin read paths\n  - M018/S02 and M018/S03 downstream baseline consumers\nkey_files:\n  - backend/src/common/analytics/admin_analytics_service.py\n  - backend/src/common/analytics/history_service.py\n  - backend/src/common/conversation/session_evidence.py\n  - backend/src/admin/api/training_records.py\n  - backend/tests/contract/test_analytics.py\n  - backend/tests/unit/common/test_admin_analytics_service.py\n  - backend/tests/unit/common/test_leaderboard_service.py\n  - .gsd/DECISIONS.md\n  - .gsd/KNOWLEDGE.md\nkey_decisions:\n  - D203 — keep the first-round M018 DB performance baseline in code-adjacent inventories and grade confirmed query-shape facts separately from unproved index ideas.\n  - D204 — keep `QUERY_INDEX_DISCOVERY_CONCLUSIONS` in `backend/tests/contract/test_analytics.py` as the canonical layered follow-up backlog.\npatterns_established:\n  - Keep performance discovery artifacts in live authority files plus focused contract/unit tests, not in markdown-only audits.\n  - Partition discovery into focused-proof-confirmed gaps, code-path-confirmed gaps, and real-Postgres/runtime hypotheses.\n  - Require real Postgres evidence before turning index ideas into implementation scope.\nobservability_surfaces:\n  - Code-adjacent inventories: `ADMIN_ANALYTICS_DB_PERFORMANCE_BASELINE`, `HISTORY_QUERY_DB_PERFORMANCE_BASELINE`, `SESSION_EVIDENCE_DB_PERFORMANCE_BASELINE`, `TRAINING_RECORDS_DB_PERFORMANCE_BASELINE`.\n  - Contract backlog seam: `backend/tests/contract/test_analytics.py::QUERY_INDEX_DISCOVERY_CONCLUSIONS`.\n  - Focused proof seams: `test_get_leaderboard_batches_projection_window_and_messages_once`, `test_get_overview_stats_replays_projection_window_for_growth_comparison`, and `test_calculate_leaderboard_pushes_ranking_aggregation_into_sql`.\n  - Fresh slice gate: `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/contract/test_analytics.py backend/tests/unit/common/test_admin_analytics_service.py backend/tests/unit/common/test_leaderboard_service.py -x -q`.\ndrill_down_paths:\n  - .gsd/milestones/M018/slices/S01/tasks/T01-SUMMARY.md\n  - .gsd/milestones/M018/slices/S01/tasks/T02-SUMMARY.md\n  - .gsd/milestones/M018/slices/S01/tasks/T03-SUMMARY.md\nduration: \"\"\nverification_result: passed\ncompleted_at: 2026-04-11T22:52:37.227Z\nblocker_discovered: false\n---\n\n# S01: 数据库性能基线 discovery\n\n**Established an evidence-backed query/index discovery baseline for analytics, history/projection, leaderboard, and admin training records, separating proved query-cost gaps from hypotheses that still need real Postgres evidence.**\n\n## What Happened\n\n# S01: 数据库性能基线 discovery\n\n**Turned audit-era performance suspicion into one reusable discovery baseline:** the live analytics/history/projection/admin seams now carry code-adjacent DB hotspot inventories, focused backend tests prove which query shapes are already confirmed, and one layered contract backlog tells future slices exactly which items are ready for implementation discussion versus which still require real Postgres/runtime evidence.\n\n## Delivered\n- Added code-adjacent DB baseline inventories at the live authority seams:\n  - `backend/src/common/analytics/admin_analytics_service.py`\n  - `backend/src/common/analytics/history_service.py`\n  - `backend/src/common/conversation/session_evidence.py`\n  - `backend/src/admin/api/training_records.py`\n- Added executable proof in:\n  - `backend/tests/unit/common/test_admin_analytics_service.py`\n  - `backend/tests/unit/common/test_leaderboard_service.py`\n  - `backend/tests/contract/test_analytics.py`\n- Recorded the reusable discovery conclusion in `QUERY_INDEX_DISCOVERY_CONCLUSIONS`, split into:\n  - `confirmed_gaps.focused_proof`\n  - `confirmed_gaps.code_path_confirmed`\n  - `needs_real_postgres_evidence`\n- Saved the slice-level decision/knowledge handoff so later agents know where the canonical performance-discovery seam lives.\n\n## What This Slice Actually Established\n1. **The main proved admin analytics cost today is repeated projection-window work, not hidden leaderboard SQL N+1.**\n   - `get_overview_stats(time_range=\"30d\")` replays the projection window for current-vs-previous comparison.\n   - admin leaderboard still loads a full projection window before top-N ranking.\n2. **History/progress is heavy, but not a classical DB N+1 path.**\n   - The current history/progress path batches sessions and messages instead of issuing per-session DB reads.\n   - Its cost comes from rebuilding session projections over large windows, especially when manager-intervention overlays trigger an extra reload.\n3. **There is one confirmed row-level admin N+1 seam worth future implementation attention.**\n   - `backend/src/admin/api/training_records.py::session_to_response()` can still issue per-record agent/persona lookups after the page query completes.\n4. **Index work remains hypothesis-level unless real Postgres evidence says otherwise.**\n   - Practice-session composite window indexes, analytics scenario-filter planning, message timestamp index extension, and training-record search indexes are now explicitly classified as “needs real Postgres evidence”, not pre-approved fixes.\n5. **The discovery artifact is now executable and code-adjacent.**\n   - Future slices do not need to reconstruct this baseline from grep output or audit prose; they can start from the inventories + focused tests + layered backlog contract.\n\n## Patterns Established For Future Work\n- Keep performance discovery conclusions beside the live backend authority seams and pin them with focused contract/unit tests.\n- Separate **focused-proof-confirmed gaps**, **code-path-confirmed gaps**, and **runtime/Postgres-only hypotheses** before opening an implementation slice.\n- Do not convert index guesses into implementation work until EXPLAIN / pg_stat_statements / real runtime timing proves the bottleneck.\n- When the discovery backlog changes, update the code-adjacent inventories, `QUERY_INDEX_DISCOVERY_CONCLUSIONS`, and the focused analytics tests together.\n\n## Downstream Notes\n- The strongest implementation candidates after this slice are the repeated admin analytics projection rebuilds and the training-records agent/persona row-level N+1 seam.\n- Index candidates remain intentionally deferred pending real database evidence; this slice proves where to measure next, not which indexes to add immediately.\n- M018/S02 and M018/S03 can now treat the data-plane baseline as known context instead of reverse-engineering query hotspots from scratch.\n\n## Requirements Advanced\nNone.\n\n## Requirements Validated\nNone.\n\n## New Requirements Surfaced\nNone.\n\n## Requirements Invalidated or Re-scoped\nNone.\n\n## Known Limitations\n- This slice does **not** include live Postgres `EXPLAIN`, `pg_stat_statements`, or production/runtime timing evidence; index candidates remain hypotheses by design.\n- The focused pytest gate still emits the existing pytest-cov `Module src was never imported / No data was collected` warnings on repo-root backend runs, but the suite exits 0 and the slice proof remains green.\n- No production observability surface yet exposes these query costs directly; today the trustworthy baseline is the code-adjacent inventory plus focused test bundle.\n\n## Follow-ups\n1. Open a narrow implementation slice for the proved projection-window replay hotspots (`overview`, `leaderboard`, `export`) if product priority warrants it.\n2. Open a narrow implementation slice for the admin training-records row-level agent/persona N+1 seam.\n3. Gather real Postgres/runtime evidence before promoting any index candidate out of `needs_real_postgres_evidence`.\n\n\n## Verification\n\nFresh slice-close verification passed from the repository root. `rg -n \"select|join|order_by|group_by|SessionEvidence|leaderboard|analytics\" backend/src/common/analytics backend/src/common/conversation backend/src/admin/api` exited 0 and surfaced the intended analytics/history/projection/admin query inventory seams. `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/contract/test_analytics.py backend/tests/unit/common/test_admin_analytics_service.py backend/tests/unit/common/test_leaderboard_service.py -x -q` exited 0 with 23/23 tests passing. Fresh LSP diagnostics on `backend/tests/contract/test_analytics.py`, `backend/tests/unit/common/test_admin_analytics_service.py`, and `backend/tests/unit/common/test_leaderboard_service.py` returned no diagnostics. The pytest run still reported the pre-existing pytest-cov no-data warning pattern, but it was non-blocking and did not invalidate the green test result.\n\n## Requirements Advanced\n\nNone.\n\n## Requirements Validated\n\nNone.\n\n## New Requirements Surfaced\n\nNone.\n\n## Requirements Invalidated or Re-scoped\n\nNone.\n\n## Deviations\n\nNone.\n\n## Known Limitations\n\n- No live Postgres EXPLAIN / pg_stat_statements / runtime timing evidence yet; index candidates remain intentionally hypothesis-level.\n- Repo-root backend pytest still emits the pre-existing pytest-cov no-data warning pattern on this focused slice bundle.\n\n## Follow-ups\n\nNone.\n\n## Files Created/Modified\n\n- `backend/src/common/analytics/admin_analytics_service.py` — Added code-adjacent admin analytics DB hotspot inventory and evidence-level notes.\n- `backend/src/common/analytics/history_service.py` — Added history/progress projection-window baseline inventory and N+1/non-N+1 classification.\n- `backend/src/common/conversation/session_evidence.py` — Added session-evidence projection cost baseline for per-session message fan-in.\n- `backend/src/admin/api/training_records.py` — Added admin training-records DB baseline noting the row-level agent/persona N+1 seam.\n- `backend/tests/contract/test_analytics.py` — Added the layered `QUERY_INDEX_DISCOVERY_CONCLUSIONS` contract and baseline-presence guards.\n- `backend/tests/unit/common/test_admin_analytics_service.py` — Added focused SQL-shape proof for overview and leaderboard projection behavior.\n- `backend/tests/unit/common/test_leaderboard_service.py` — Added focused SQL-shape proof that ranking aggregation stays in SQL.\n- `.gsd/DECISIONS.md` — Recorded the canonical location of the reusable query/index discovery backlog (D204).\n- `.gsd/KNOWLEDGE.md` — Captured the follow-on rule to keep inventories, discovery backlog, and focused proof aligned.\n",
+      "full_uat_md": "# S01: 数据库性能基线 discovery — UAT\n\n**Milestone:** M018\n**Written:** 2026-04-11T22:52:37.229Z\n\n# S01: 数据库性能基线 discovery — UAT\n\n**Milestone:** M018\n\n# S01 UAT — query/index baseline discovery\n\n## Preconditions\n- Repository dependencies are installed and the backend virtualenv exists at `backend/venv`.\n- Execute commands from the repository root: `/Users/zhaozengqing/github/销售训练qoder`.\n- No browser or live database is required for acceptance of this slice; the slice closes on focused backend proof plus code-adjacent discovery artifacts.\n\n## Test Case 1 — Code-adjacent baseline inventories exist on the live authority seams\n1. Run:\n   `rg -n \"DB_PERFORMANCE_BASELINE|leaderboard_python_reduce|projection_window|training_records\" backend/src/common/analytics backend/src/common/conversation/session_evidence.py backend/src/admin/api/training_records.py`\n2. Confirm the output includes the four discovery seams:\n   - `ADMIN_ANALYTICS_DB_PERFORMANCE_BASELINE`\n   - `HISTORY_QUERY_DB_PERFORMANCE_BASELINE`\n   - `SESSION_EVIDENCE_DB_PERFORMANCE_BASELINE`\n   - `TRAINING_RECORDS_DB_PERFORMANCE_BASELINE`\n3. Confirm the baseline text distinguishes confirmed query-shape facts from index candidates that still require runtime/Postgres proof.\n\n**Expected outcome**\n- Command exits 0.\n- The current data-plane baseline is stored beside the live backend authority files, not only in external notes.\n\n## Test Case 2 — Focused analytics proof locks the already-confirmed query costs\n1. Run:\n   `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/common/test_admin_analytics_service.py::test_get_leaderboard_batches_projection_window_and_messages_once backend/tests/unit/common/test_admin_analytics_service.py::test_get_overview_stats_replays_projection_window_for_growth_comparison backend/tests/unit/common/test_leaderboard_service.py::test_calculate_leaderboard_pushes_ranking_aggregation_into_sql -q`\n2. Verify the proof behavior:\n   - leaderboard batches the projection window and messages instead of per-session message reads;\n   - overview stats replays the projection window for current-vs-previous growth comparison;\n   - leaderboard ranking aggregation stays in SQL instead of per-user follow-up queries.\n\n**Expected outcome**\n- Command exits 0.\n- The slice has executable proof for the already-confirmed analytics/leaderboard query-shape costs.\n\n## Test Case 3 — The canonical discovery backlog separates proved gaps from hypotheses\n1. Run:\n   `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/contract/test_analytics.py -k \"db_performance_baseline or query_index_discovery_conclusions\" -q`\n2. Confirm the contract keeps `QUERY_INDEX_DISCOVERY_CONCLUSIONS` partitioned into:\n   - `confirmed_gaps.focused_proof`\n   - `confirmed_gaps.code_path_confirmed`\n   - `needs_real_postgres_evidence`\n3. Confirm the backlog names both the proved analytics hotspots and the still-hypothesis index candidates.\n\n**Expected outcome**\n- Command exits 0.\n- Future agents have one executable backlog artifact instead of reconstructing scope from audit prose or grep output.\n\n## Test Case 4 — Full slice gate stays green\n1. Run the exact slice verification command:\n   `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/contract/test_analytics.py backend/tests/unit/common/test_admin_analytics_service.py backend/tests/unit/common/test_leaderboard_service.py -x -q`\n2. Confirm all focused analytics/leaderboard/discovery tests pass.\n\n**Expected outcome**\n- Exit 0.\n- 23/23 tests pass.\n\n## Edge Cases To Re-check If This Slice Regresses\n1. **Index guess promoted too early:** if a follow-on change moves an item out of `needs_real_postgres_evidence`, verify that real Postgres/runtime evidence was added rather than only code-structure reasoning.\n2. **Backlog drift:** if baseline inventories and `QUERY_INDEX_DISCOVERY_CONCLUSIONS` start disagreeing, update the inventories, contract backlog, and focused proof together.\n3. **False N+1 assumptions:** if a future agent claims history/progress or leaderboard is classical DB N+1, re-run the focused tests first; current proof shows the main cost is projection-window replay / Python reduction, not per-session DB fanout.\n4. **Training-record optimization work:** if `session_to_response()` is changed, re-check that the row-level agent/persona metadata path is truly collapsed rather than merely hidden by fixture shape or caching.\n\n",
       "goal": "对 N+1、索引、slow query 做第一轮基线审计，产出真实优化 backlog。",
       "success_criteria": "- analytics/history/admin/leaderboard/projection 的热点查询路径被盘清。\n- N+1、索引缺口、slow query 风险按证据级别分层记录。\n- focused analytics proof 通过，且 discovery 结论明确哪些值得后续起 implementation slice。",
       "proof_level": "contract",
@@ -2503,12 +2503,10 @@
     {
       "milestone_id": "M018",
       "id": "S02",
-      "title": "依赖安全、许可证与更新策略基线",
+      "title": "S02",
       "status": "pending",
       "risk": "low",
-      "depends": [
-        "S01"
-      ],
+      "depends": [],
       "demo": "仓库里有可执行的依赖扫描与升级策略文档/流程。",
       "created_at": "2026-04-08T08:55:14.383Z",
       "completed_at": null,
@@ -11026,19 +11024,24 @@
       "milestone_id": "M018",
       "slice_id": "S02",
       "id": "T01",
-      "title": "盘点现有依赖治理入口",
-      "status": "pending",
-      "one_liner": "",
-      "narrative": "",
-      "verification_result": "",
+      "title": "Inventoried the repo’s real dependency audit entrypoints and recorded the missing pip_audit/license prerequisites for the S02 baseline.",
+      "status": "complete",
+      "one_liner": "Inventoried the repo’s real dependency audit entrypoints and recorded the missing pip_audit/license prerequisites for the S02 baseline.",
+      "narrative": "I reviewed `web/package.json`, `backend/requirements.txt`, `backend/pyproject.toml`, and `.github/workflows/nfr-performance-check.yml` to map the repository’s current dependency-governance entrypoints instead of assuming the planned paths were already wired. The frontend already has a lockfile-backed audit surface (`web/package-lock.json`) but no dedicated audit/license scripts in `web/package.json`. The backend still uses `backend/requirements.txt` as the practical dependency inventory even though `backend/pyproject.toml` exists, and the current workflow install pattern still points at `pip install -e .[test]` despite the package metadata not defining a `test` extra. I persisted the non-obvious discovery to `.gsd/KNOWLEDGE.md` and recorded decision D205 so T02/T03 can build the baseline from the repository’s real truth lines instead of from incomplete packaging metadata or implied CI capability.",
+      "verification_result": "I re-ran the task’s required file-existence check and confirmed the planned inventory inputs are present. I then ran `npm audit --prefix web --audit-level=high --package-lock-only` to prove the frontend audit command is directly runnable today; it exits non-zero because the current lockfile reports 8 vulnerabilities (2 moderate, 6 high), which is exactly the sort of proof the later baseline must surface honestly. I ran `backend/venv/bin/python -m pip_audit --version` and confirmed `pip_audit` is not installed in the local backend venv, so backend vulnerability scanning currently has an unmet prerequisite. I also ran `backend/venv/bin/pip install --dry-run -e './backend[test]'` to verify the workflow’s install path and confirmed pip warns that `ai-practice-backend` does not provide the `test` extra, which means the CI install command is not a clean dependency-governance authority. Finally, I ran a focused repository search for common license-scan tools and found no repo-native license scanning entry wired yet.",
       "duration": "",
-      "completed_at": null,
+      "completed_at": "2026-04-11T22:57:34.314Z",
       "blocker_discovered": false,
-      "deviations": "",
-      "known_issues": "",
-      "key_files": [],
-      "key_decisions": [],
-      "full_summary_md": "",
+      "deviations": "I inspected `backend/pyproject.toml` in addition to the three planned input files so I could verify whether the workflow’s `pip install -e .[test]` path was a real reusable governance entry. I also persisted the resulting truth-line rule to `.gsd/KNOWLEDGE.md` and `.gsd/DECISIONS.md` so downstream tasks can reference it directly.",
+      "known_issues": "`npm audit --prefix web --audit-level=high --package-lock-only` currently reports 8 vulnerabilities in the web lockfile, including high-severity findings on `next`, `vite`, `rollup`, `picomatch`, `minimatch`, and `flatted`. `backend/venv/bin/python -m pip_audit` currently fails because `pip_audit` is not installed. No repo-native license scanning tool configuration was found under `web`, `backend`, or `.github`. `.github/workflows/nfr-performance-check.yml` still relies on `pip install -e .[test]`, but the backend package metadata does not define a `test` extra.",
+      "key_files": [
+        ".gsd/KNOWLEDGE.md",
+        ".gsd/DECISIONS.md"
+      ],
+      "key_decisions": [
+        "D205 — dependency-governance baseline should treat `web/package-lock.json` and `backend/requirements.txt` as the current truth line, not `backend/pyproject.toml` extras or CI alone."
+      ],
+      "full_summary_md": "---\nid: T01\nparent: S02\nmilestone: M018\nkey_files:\n  - .gsd/KNOWLEDGE.md\n  - .gsd/DECISIONS.md\nkey_decisions:\n  - D205 — dependency-governance baseline should treat `web/package-lock.json` and `backend/requirements.txt` as the current truth line, not `backend/pyproject.toml` extras or CI alone.\nduration: \nverification_result: passed\ncompleted_at: 2026-04-11T22:57:34.312Z\nblocker_discovered: false\n---\n\n# T01: Inventoried the repo’s real dependency audit entrypoints and recorded the missing pip_audit/license prerequisites for the S02 baseline.\n\n**Inventoried the repo’s real dependency audit entrypoints and recorded the missing pip_audit/license prerequisites for the S02 baseline.**\n\n## What Happened\n\nI reviewed `web/package.json`, `backend/requirements.txt`, `backend/pyproject.toml`, and `.github/workflows/nfr-performance-check.yml` to map the repository’s current dependency-governance entrypoints instead of assuming the planned paths were already wired. The frontend already has a lockfile-backed audit surface (`web/package-lock.json`) but no dedicated audit/license scripts in `web/package.json`. The backend still uses `backend/requirements.txt` as the practical dependency inventory even though `backend/pyproject.toml` exists, and the current workflow install pattern still points at `pip install -e .[test]` despite the package metadata not defining a `test` extra. I persisted the non-obvious discovery to `.gsd/KNOWLEDGE.md` and recorded decision D205 so T02/T03 can build the baseline from the repository’s real truth lines instead of from incomplete packaging metadata or implied CI capability.\n\n## Verification\n\nI re-ran the task’s required file-existence check and confirmed the planned inventory inputs are present. I then ran `npm audit --prefix web --audit-level=high --package-lock-only` to prove the frontend audit command is directly runnable today; it exits non-zero because the current lockfile reports 8 vulnerabilities (2 moderate, 6 high), which is exactly the sort of proof the later baseline must surface honestly. I ran `backend/venv/bin/python -m pip_audit --version` and confirmed `pip_audit` is not installed in the local backend venv, so backend vulnerability scanning currently has an unmet prerequisite. I also ran `backend/venv/bin/pip install --dry-run -e './backend[test]'` to verify the workflow’s install path and confirmed pip warns that `ai-practice-backend` does not provide the `test` extra, which means the CI install command is not a clean dependency-governance authority. Finally, I ran a focused repository search for common license-scan tools and found no repo-native license scanning entry wired yet.\n\n## Verification Evidence\n\n| # | Command | Exit Code | Verdict | Duration |\n|---|---------|-----------|---------|----------|\n| 1 | `test -f web/package.json && test -f backend/requirements.txt` | 0 | ✅ pass | 4ms |\n| 2 | `npm audit --prefix web --audit-level=high --package-lock-only` | 1 | ✅ pass | 1704ms |\n| 3 | `backend/venv/bin/python -m pip_audit --version` | 1 | ✅ pass | 59ms |\n| 4 | `backend/venv/bin/pip install --dry-run -e './backend[test]'` | 0 | ✅ pass | 4177ms |\n| 5 | `rg -n 'license-checker|pip-licenses|license_finder|cyclonedx|syft' web backend .github --glob '!**/node_modules/**' --glob '!**/venv/**' --glob '!backend/htmlcov/**' --glob '!web/coverage/**'` | 1 | ✅ pass | 49ms |\n\n## Deviations\n\nI inspected `backend/pyproject.toml` in addition to the three planned input files so I could verify whether the workflow’s `pip install -e .[test]` path was a real reusable governance entry. I also persisted the resulting truth-line rule to `.gsd/KNOWLEDGE.md` and `.gsd/DECISIONS.md` so downstream tasks can reference it directly.\n\n## Known Issues\n\n`npm audit --prefix web --audit-level=high --package-lock-only` currently reports 8 vulnerabilities in the web lockfile, including high-severity findings on `next`, `vite`, `rollup`, `picomatch`, `minimatch`, and `flatted`. `backend/venv/bin/python -m pip_audit` currently fails because `pip_audit` is not installed. No repo-native license scanning tool configuration was found under `web`, `backend`, or `.github`. `.github/workflows/nfr-performance-check.yml` still relies on `pip install -e .[test]`, but the backend package metadata does not define a `test` extra.\n\n## Files Created/Modified\n\n- `.gsd/KNOWLEDGE.md`\n- `.gsd/DECISIONS.md`\n",
       "description": "Why: 先盘清仓库里已经有什么依赖治理入口，才能避免再造一套与现状脱节的流程文档。\n\nDo:\n1. 梳理 `web/package.json`、`backend/requirements.txt` 与现有 workflow 中可复用的依赖检查入口。\n2. 明确 `npm audit`、`pip_audit`、license scan 的最小执行路径。\n3. 标记哪些命令依赖额外前置条件。\n\nDone when: 后续 baseline 文档可以直接引用真实入口和前置条件，而不是泛化建议。",
       "estimate": "25m",
       "files": [
@@ -13675,6 +13678,30 @@
       "decision": "Where the first-round M018/S01 DB performance baseline should live and how it should grade evidence",
       "choice": "Keep the baseline in code-adjacent inventory constants at the live analytics/history/projection/admin authority seams, and explicitly separate confirmed query-shape or N+1 facts from index ideas that still require real Postgres/runtime evidence.",
       "rationale": "This repo already uses code-owned discovery inventories to prevent later agents from re-auditing the same surfaces from scratch. For database performance work, query fanout and row-level lookup patterns are provable from code today, but index priority is not trustworthy without EXPLAIN/pg_stat_statements or real runtime observations. Encoding both levels together beside the live authority files gives future slices one durable entrypoint without turning structural guesses into premature implementation mandates.",
+      "revisable": "Yes",
+      "made_by": "agent",
+      "superseded_by": null
+    },
+    {
+      "seq": 1574,
+      "id": "D204",
+      "when_context": "M018/S01/T03",
+      "scope": "performance-discovery",
+      "decision": "Where the reusable M018 query/index discovery backlog should live for follow-on performance work",
+      "choice": "Keep `QUERY_INDEX_DISCOVERY_CONCLUSIONS` in `backend/tests/contract/test_analytics.py`, layered by focused-proof-confirmed gaps, code-path-confirmed gaps, and Postgres/runtime-only hypotheses, and keep it aligned with the code-adjacent baseline inventories plus focused SQL-shape tests.",
+      "rationale": "Downstream work needs one executable artifact that separates already-proven query costs from hypotheses that still require real Postgres evidence. Housing the backlog in the contract test keeps the discovery conclusion tied to live authority files and forces future updates to stay verified instead of drifting into markdown-only audits.",
+      "revisable": "Yes",
+      "made_by": "agent",
+      "superseded_by": null
+    },
+    {
+      "seq": 1575,
+      "id": "D205",
+      "when_context": "M018/S02/T01",
+      "scope": "dependency-governance",
+      "decision": "S02 baseline 的依赖事实源应以哪些仓库入口为准",
+      "choice": "以前端 `web/package-lock.json` 与后端 `backend/requirements.txt` 作为当前依赖安装/审计 truth line；`backend/pyproject.toml` extras 与现有 workflow 只作为补充上下文，直到它们被补齐并可验证",
+      "rationale": "本地验证表明 `npm audit --prefix web --package-lock-only` 可直接基于 lockfile 运行；`backend/venv/bin/python -m pip_audit` 当前因未安装模块而失败；`.github/workflows/nfr-performance-check.yml` 仍使用 `pip install -e .[test]`，但 `backend/pyproject.toml` 未定义 `test` extra。若把 extras 或 CI 命令当成已接通事实源，会让依赖治理 baseline 误报现状。",
       "revisable": "Yes",
       "made_by": "agent",
       "superseded_by": null
@@ -17937,6 +17964,61 @@
       "verdict": "✅ pass",
       "duration_ms": 4257,
       "created_at": "2026-04-11T22:46:22.109Z"
+    },
+    {
+      "id": 393,
+      "task_id": "T01",
+      "slice_id": "S02",
+      "milestone_id": "M018",
+      "command": "test -f web/package.json && test -f backend/requirements.txt",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 4,
+      "created_at": "2026-04-11T22:57:34.314Z"
+    },
+    {
+      "id": 394,
+      "task_id": "T01",
+      "slice_id": "S02",
+      "milestone_id": "M018",
+      "command": "npm audit --prefix web --audit-level=high --package-lock-only",
+      "exit_code": 1,
+      "verdict": "✅ pass",
+      "duration_ms": 1704,
+      "created_at": "2026-04-11T22:57:34.314Z"
+    },
+    {
+      "id": 395,
+      "task_id": "T01",
+      "slice_id": "S02",
+      "milestone_id": "M018",
+      "command": "backend/venv/bin/python -m pip_audit --version",
+      "exit_code": 1,
+      "verdict": "✅ pass",
+      "duration_ms": 59,
+      "created_at": "2026-04-11T22:57:34.314Z"
+    },
+    {
+      "id": 396,
+      "task_id": "T01",
+      "slice_id": "S02",
+      "milestone_id": "M018",
+      "command": "backend/venv/bin/pip install --dry-run -e './backend[test]'",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 4177,
+      "created_at": "2026-04-11T22:57:34.314Z"
+    },
+    {
+      "id": 397,
+      "task_id": "T01",
+      "slice_id": "S02",
+      "milestone_id": "M018",
+      "command": "rg -n 'license-checker|pip-licenses|license_finder|cyclonedx|syft' web backend .github --glob '!**/node_modules/**' --glob '!**/venv/**' --glob '!backend/htmlcov/**' --glob '!web/coverage/**'",
+      "exit_code": 1,
+      "verdict": "✅ pass",
+      "duration_ms": 49,
+      "created_at": "2026-04-11T22:57:34.314Z"
     }
   ]
 }

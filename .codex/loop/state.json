@@ -1,7 +1,7 @@
 {
   "mode": "grow",
-  "current_issue_id": "M018-S01-T03",
-  "current_issue_type": "task",
+  "current_issue_id": "M018-S01",
+  "current_issue_type": "slice",
   "current_issue_status": "done",
   "pending_issue_ids": [],
   "completed_issue_ids": [
@@ -176,24 +176,29 @@
     "M017-S03",
     "M018-S01-T01",
     "M018-S01-T02",
-    "M018-S01-T03"
+    "M018-S01-T03",
+    "M018-S01"
   ],
   "blocked_issue_ids": [],
   "deferred_issue_ids": [],
   "last_modified_files": [
-    "backend/tests/contract/test_analytics.py",
+    ".gsd/DECISIONS.md",
+    ".gsd/KNOWLEDGE.md",
+    ".gsd/PROJECT.md",
+    ".gsd/milestones/M018/slices/S01/S01-SUMMARY.md",
+    ".gsd/milestones/M018/slices/S01/S01-UAT.md",
     ".codex/loop/state.json",
     ".codex/loop/log.md"
   ],
   "last_verification_commands": [
-    "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/contract/test_analytics.py -k \"db_performance_baseline or query_index_discovery_conclusions\" -q",
+    "rg -n \"select|join|order_by|group_by|SessionEvidence|leaderboard|analytics\" backend/src/common/analytics backend/src/common/conversation backend/src/admin/api",
     "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/contract/test_analytics.py backend/tests/unit/common/test_admin_analytics_service.py backend/tests/unit/common/test_leaderboard_service.py -x -q",
     "lsp diagnostics backend/tests/contract/test_analytics.py",
     "lsp diagnostics backend/tests/unit/common/test_admin_analytics_service.py",
     "lsp diagnostics backend/tests/unit/common/test_leaderboard_service.py"
   ],
-  "last_verification_result": "passed; the new query/index discovery contract stayed green after a red-green cycle, the full task-plan pytest gate finished 23/23 green, and diagnostics stayed clean on the touched/focused proof files.",
-  "last_success_signal": "M018/S01/T03 now gives downstream work one reusable discovery backlog in backend/tests/contract/test_analytics.py that separates focused-proof-confirmed gaps, code-path-confirmed gaps, and index/search ideas that still need real Postgres/runtime evidence.",
+  "last_verification_result": "passed; the slice-close rg inventory stayed present, the full analytics/leaderboard/query-index gate finished 23/23 green, and focused diagnostics stayed clean on the proof files.",
+  "last_success_signal": "M018/S01 is now closed with one reusable query/index discovery baseline: code-adjacent inventories plus QUERY_INDEX_DISCOVERY_CONCLUSIONS cleanly separate proved projection-cost gaps from Postgres-only index hypotheses.",
   "last_growth_scan": null,
-  "next_action": "Use the layered query/index discovery backlog to decide whether M018 should open a follow-on implementation slice, then close S01 with slice-level verification."
+  "next_action": "Proceed to M018/S02 to baseline dependency security, licenses, and upgrade strategy on the same evidence-first footing."
 }
