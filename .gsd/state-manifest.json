@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "exported_at": "2026-04-11T19:09:16.463Z",
+  "exported_at": "2026-04-11T19:18:54.981Z",
   "milestones": [
     {
       "id": "M001",
@@ -10100,19 +10100,29 @@
       "milestone_id": "M016",
       "slice_id": "S01",
       "id": "T02",
-      "title": "实现正式 PasswordResetToken contract 与 migration",
-      "status": "pending",
-      "one_liner": "",
-      "narrative": "",
-      "verification_result": "",
+      "title": "Hardened password-reset persistence with a single-active-token schema contract and Alembic-safe revision ids.",
+      "status": "complete",
+      "one_liner": "Hardened password-reset persistence with a single-active-token schema contract and Alembic-safe revision ids.",
+      "narrative": "I translated the missing formal contract into a failing focused test first by proving the database still allowed two active `password_reset_tokens` rows for the same user. To close that gap, I hardened `backend/src/common/db/models.py` with a partial unique index on `password_reset_tokens.user_id` for rows where `used_at` and `invalidated_at` are both null, then added Alembic revision `backend/alembic/versions/20260412_0315_028_password_reset_single_active_token.py` so the lifecycle invariant is part of schema history instead of only service behavior. While verifying migrations, I also found that the descriptive password-reset revision ids were longer than Alembic’s default `alembic_version.version_num` width, so I shortened the 027/028 revision identifiers to `027_reset_lifecycle_delivery` and `028_reset_single_active_token` and updated the formalization references in `backend/src/common/auth/api.py` and `backend/src/common/db/models.py`. The existing `EmailService` seam and hashed-password-first login compatibility boundary already matched the task contract, so I preserved them and only documented the new invariant instead of widening auth behavior. I also wrote the non-obvious Alembic-length/metadata-registration rule into `.gsd/KNOWLEDGE.md` and recorded decision D189 so future auth work knows the lifecycle invariant is a DB contract, not just a service convention.",
+      "verification_result": "Ran the task-plan gate `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/integration/test_auth_login_api.py -x -q` and confirmed the focused auth/login compatibility suite stayed green after the schema hardening. Then ran `backend/tests/integration/test_password_reset_api.py -x -q`, which includes the new single-active-token regression and confirmed forgot/reset success, expiry, reuse rejection, and the new schema invariant all pass together. Finally, ran a repo-root Python contract check that verifies the password-reset Alembic revision ids are now all <=32 characters and that SQLite metadata creation emits the partial unique index SQL `WHERE used_at IS NULL AND invalidated_at IS NULL`, proving the lifecycle invariant is inspectable at the DB layer. I also attempted a fresh SQLite Alembic-from-zero upgrade; that exposed a pre-existing historical migration problem in `001_agent_platform_tables` (`practice_sessions` missing) outside this task’s scope, so I did not widen T02 into full legacy-chain repair.",
       "duration": "",
-      "completed_at": null,
+      "completed_at": "2026-04-11T19:18:54.933Z",
       "blocker_discovered": false,
-      "deviations": "",
-      "known_issues": "",
-      "key_files": [],
-      "key_decisions": [],
-      "full_summary_md": "",
+      "deviations": "The real reset authority seam lives in `common.services.password_reset` and the dedicated `backend/tests/integration/test_password_reset_api.py` suite, so I treated those as local path corrections alongside the planned auth/api/model/alembic files. I also had to shorten the 027/028 revision ids to stay within Alembic’s version-table width; the task plan did not call out migration-id hygiene explicitly, but the migration chain could not stay healthy without it.",
+      "known_issues": "A fresh SQLite Alembic upgrade from the very start of the repository history still fails earlier in `001_agent_platform_tables` because that legacy chain assumes pre-existing `practice_sessions` tables. This task fixed the password-reset revision-id problem and formalized the reset schema invariant, but it did not widen into unrelated historical migration repair. Password-reset delivery still defaults to the existing console transport seam until a real email provider is configured.",
+      "key_files": [
+        "backend/src/common/db/models.py",
+        "backend/alembic/versions/20260411_2235_027_password_reset_lifecycle_delivery.py",
+        "backend/alembic/versions/20260412_0315_028_password_reset_single_active_token.py",
+        "backend/src/common/auth/api.py",
+        "backend/tests/integration/test_password_reset_api.py",
+        ".gsd/KNOWLEDGE.md",
+        ".gsd/DECISIONS.md"
+      ],
+      "key_decisions": [
+        "D189 — enforce the password-reset single-active-token invariant at the DB layer and keep password-reset Alembic revision ids within the version-table length limit."
+      ],
+      "full_summary_md": "---\nid: T02\nparent: S01\nmilestone: M016\nkey_files:\n  - backend/src/common/db/models.py\n  - backend/alembic/versions/20260411_2235_027_password_reset_lifecycle_delivery.py\n  - backend/alembic/versions/20260412_0315_028_password_reset_single_active_token.py\n  - backend/src/common/auth/api.py\n  - backend/tests/integration/test_password_reset_api.py\n  - .gsd/KNOWLEDGE.md\n  - .gsd/DECISIONS.md\nkey_decisions:\n  - D189 — enforce the password-reset single-active-token invariant at the DB layer and keep password-reset Alembic revision ids within the version-table length limit.\nduration: \nverification_result: passed\ncompleted_at: 2026-04-11T19:18:54.931Z\nblocker_discovered: false\n---\n\n# T02: Hardened password-reset persistence with a single-active-token schema contract and Alembic-safe revision ids.\n\n**Hardened password-reset persistence with a single-active-token schema contract and Alembic-safe revision ids.**\n\n## What Happened\n\nI translated the missing formal contract into a failing focused test first by proving the database still allowed two active `password_reset_tokens` rows for the same user. To close that gap, I hardened `backend/src/common/db/models.py` with a partial unique index on `password_reset_tokens.user_id` for rows where `used_at` and `invalidated_at` are both null, then added Alembic revision `backend/alembic/versions/20260412_0315_028_password_reset_single_active_token.py` so the lifecycle invariant is part of schema history instead of only service behavior. While verifying migrations, I also found that the descriptive password-reset revision ids were longer than Alembic’s default `alembic_version.version_num` width, so I shortened the 027/028 revision identifiers to `027_reset_lifecycle_delivery` and `028_reset_single_active_token` and updated the formalization references in `backend/src/common/auth/api.py` and `backend/src/common/db/models.py`. The existing `EmailService` seam and hashed-password-first login compatibility boundary already matched the task contract, so I preserved them and only documented the new invariant instead of widening auth behavior. I also wrote the non-obvious Alembic-length/metadata-registration rule into `.gsd/KNOWLEDGE.md` and recorded decision D189 so future auth work knows the lifecycle invariant is a DB contract, not just a service convention.\n\n## Verification\n\nRan the task-plan gate `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/integration/test_auth_login_api.py -x -q` and confirmed the focused auth/login compatibility suite stayed green after the schema hardening. Then ran `backend/tests/integration/test_password_reset_api.py -x -q`, which includes the new single-active-token regression and confirmed forgot/reset success, expiry, reuse rejection, and the new schema invariant all pass together. Finally, ran a repo-root Python contract check that verifies the password-reset Alembic revision ids are now all <=32 characters and that SQLite metadata creation emits the partial unique index SQL `WHERE used_at IS NULL AND invalidated_at IS NULL`, proving the lifecycle invariant is inspectable at the DB layer. I also attempted a fresh SQLite Alembic-from-zero upgrade; that exposed a pre-existing historical migration problem in `001_agent_platform_tables` (`practice_sessions` missing) outside this task’s scope, so I did not widen T02 into full legacy-chain repair.\n\n## Verification Evidence\n\n| # | Command | Exit Code | Verdict | Duration |\n|---|---------|-----------|---------|----------|\n| 1 | `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/integration/test_auth_login_api.py -x -q` | 0 | ✅ pass | 3830ms |\n| 2 | `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/integration/test_password_reset_api.py -x -q` | 0 | ✅ pass | 3686ms |\n| 3 | `backend/venv/bin/python - <<'PY' ... verify password-reset revision lengths <=32 and sqlite metadata emits uq_password_reset_tokens_single_active_user ... PY` | 0 | ✅ pass | 74ms |\n\n## Deviations\n\nThe real reset authority seam lives in `common.services.password_reset` and the dedicated `backend/tests/integration/test_password_reset_api.py` suite, so I treated those as local path corrections alongside the planned auth/api/model/alembic files. I also had to shorten the 027/028 revision ids to stay within Alembic’s version-table width; the task plan did not call out migration-id hygiene explicitly, but the migration chain could not stay healthy without it.\n\n## Known Issues\n\nA fresh SQLite Alembic upgrade from the very start of the repository history still fails earlier in `001_agent_platform_tables` because that legacy chain assumes pre-existing `practice_sessions` tables. This task fixed the password-reset revision-id problem and formalized the reset schema invariant, but it did not widen into unrelated historical migration repair. Password-reset delivery still defaults to the existing console transport seam until a real email provider is configured.\n\n## Files Created/Modified\n\n- `backend/src/common/db/models.py`\n- `backend/alembic/versions/20260411_2235_027_password_reset_lifecycle_delivery.py`\n- `backend/alembic/versions/20260412_0315_028_password_reset_single_active_token.py`\n- `backend/src/common/auth/api.py`\n- `backend/tests/integration/test_password_reset_api.py`\n- `.gsd/KNOWLEDGE.md`\n- `.gsd/DECISIONS.md`\n",
       "description": "Why: token 持久化、一次性消费、过期处理和 rate limit 是 auth recovery seam 的核心 contract，必须先变成正式实现。\n\nDo:\n1. 新增或完善 PasswordResetToken 正式模型与 migration。\n2. 实现一次性消费、过期校验与 rate limit 策略。\n3. 抽出 EmailService seam，但不强行引入外部邮件供应商依赖。\n4. 保持现有登录兼容路径可证明通过。\n\nDone when: forgot/reset 有正式持久化和 lifecycle contract，focused backend auth tests 通过。",
       "estimate": "1.5h",
       "files": [
@@ -13334,6 +13344,18 @@
       "decision": "Where should M016 password-reset formalization land without widening auth scope?",
       "choice": "Treat PasswordResetService + PasswordResetToken + Alembic revisions 026/027 as the only password-reset authority seam, and preserve the existing login compatibility rule where User.hashed_password overrides env credentials while AUTH_USER_PASSWORDS_JSON/AUTH_SHARED_PASSWORD remain fallback for users without managed hashes.",
       "rationale": "The runtime/password-reset behavior is already centralized there: forgot/reset handlers only delegate to PasswordResetService, the durable lifecycle fields live on PasswordResetToken, and migration history already formalizes the schema. Keeping later work on that service/model/migration seam avoids scattering auth changes into JWT/session helpers or reinterpreting global startup Base.metadata.create_all compatibility bootstrap as request-path auth DDL.",
+      "revisable": "Yes",
+      "made_by": "agent",
+      "superseded_by": null
+    },
+    {
+      "seq": 1559,
+      "id": "D189",
+      "when_context": "M016/S01/T02",
+      "scope": "auth-schema",
+      "decision": "How password-reset lifecycle invariants and Alembic revision ids are formalized for M016/S01",
+      "choice": "Enforce the single-active-password-reset-token invariant with a partial unique index on password_reset_tokens.user_id, and keep password-reset Alembic revision IDs at 32 characters or fewer.",
+      "rationale": "The runtime service already supersedes prior tokens, but without a DB constraint the lifecycle contract remains soft and duplicate active rows can still be inserted. Alembic in this project also uses the default alembic_version.version_num width, so overlong revision IDs fail fresh migration state updates before the auth schema reaches head. Hardening both at the schema layer makes token lifecycle health and migration state mechanically checkable.",
       "revisable": "Yes",
       "made_by": "agent",
       "superseded_by": null
@@ -16947,6 +16969,39 @@
       "verdict": "unknown (coerced from string)",
       "duration_ms": 0,
       "created_at": "2026-04-11T19:09:16.419Z"
+    },
+    {
+      "id": 334,
+      "task_id": "T02",
+      "slice_id": "S01",
+      "milestone_id": "M016",
+      "command": "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/integration/test_auth_login_api.py -x -q",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 3830,
+      "created_at": "2026-04-11T19:18:54.933Z"
+    },
+    {
+      "id": 335,
+      "task_id": "T02",
+      "slice_id": "S01",
+      "milestone_id": "M016",
+      "command": "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/integration/test_password_reset_api.py -x -q",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 3686,
+      "created_at": "2026-04-11T19:18:54.933Z"
+    },
+    {
+      "id": 336,
+      "task_id": "T02",
+      "slice_id": "S01",
+      "milestone_id": "M016",
+      "command": "backend/venv/bin/python - <<'PY' ... verify password-reset revision lengths <=32 and sqlite metadata emits uq_password_reset_tokens_single_active_user ... PY",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 74,
+      "created_at": "2026-04-11T19:18:54.933Z"
     }
   ]
 }

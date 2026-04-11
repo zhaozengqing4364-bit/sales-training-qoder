@@ -50,7 +50,8 @@ AUTH_FORMALIZATION_SURFACE = {
     "password_reset_model": "common.db.models.PasswordResetToken",
     "password_reset_migrations": (
         "026_password_reset_tokens",
-        "027_password_reset_lifecycle_delivery",
+        "027_reset_lifecycle_delivery",
+        "028_reset_single_active_token",
     ),
     "runtime_ddl_owner": "common.db.session.init_db",
     "login_compatibility_boundary": (

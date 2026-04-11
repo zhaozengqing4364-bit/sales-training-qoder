@@ -8,6 +8,7 @@ from datetime import UTC, datetime, timedelta
 import agent.models  # noqa: F401  # ensure Agent/Persona tables are registered on Base metadata for sqlite tests
 import pytest
 from sqlalchemy import text
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.db.models import User
@@ -197,6 +198,56 @@ async def test_reset_password_consumes_token_and_updates_login_password(
     rows = await _fetch_reset_rows(test_db)
     assert len(rows) == 1
     assert rows[0]["used_at"] is not None
+
+
+@pytest.mark.asyncio
+async def test_password_reset_token_schema_enforces_single_active_token_per_user(
+    test_db: AsyncSession,
+) -> None:
+    user = await _create_user(test_db, email="reset-schema-active@example.com")
+
+    await test_db.execute(
+        text(
+            """
+            INSERT INTO password_reset_tokens (
+                id, user_id, token_hash, expires_at, delivery_status, created_at
+            ) VALUES (
+                :id, :user_id, :token_hash, :expires_at, 'pending', :created_at
+            )
+            """
+        ),
+        {
+            "id": str(uuid.uuid4()),
+            "user_id": str(user.user_id),
+            "token_hash": "schema-active-first",
+            "expires_at": (datetime.now(UTC) + timedelta(minutes=30)).isoformat(),
+            "created_at": datetime.now(UTC).isoformat(),
+        },
+    )
+    await test_db.commit()
+
+    with pytest.raises(IntegrityError):
+        await test_db.execute(
+            text(
+                """
+                INSERT INTO password_reset_tokens (
+                    id, user_id, token_hash, expires_at, delivery_status, created_at
+                ) VALUES (
+                    :id, :user_id, :token_hash, :expires_at, 'pending', :created_at
+                )
+                """
+            ),
+            {
+                "id": str(uuid.uuid4()),
+                "user_id": str(user.user_id),
+                "token_hash": "schema-active-second",
+                "expires_at": (datetime.now(UTC) + timedelta(minutes=30)).isoformat(),
+                "created_at": datetime.now(UTC).isoformat(),
+            },
+        )
+        await test_db.commit()
+
+    await test_db.rollback()
 
 
 @pytest.mark.asyncio

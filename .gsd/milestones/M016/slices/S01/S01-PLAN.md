@@ -35,7 +35,7 @@ Done when: 后续正式化改动有明确接入点，不需要边做边重新判
   - Files: `backend/src/common/auth/api.py`, `backend/src/common/auth/service.py`, `backend/src/common/db/models.py`
   - Verify: rg -n "CREATE TABLE IF NOT EXISTS|reset|forgot|token|email" backend/src/common/auth backend/src/common/db/models.py
 
-- [ ] **T02: 实现正式 PasswordResetToken contract 与 migration** `est:1.5h`
+- [x] **T02: 实现正式 PasswordResetToken contract 与 migration** `est:1.5h`
   Why: token 持久化、一次性消费、过期处理和 rate limit 是 auth recovery seam 的核心 contract，必须先变成正式实现。
 
 Do:

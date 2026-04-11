@@ -23,6 +23,7 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    text,
 )
 from sqlalchemy.orm import declarative_base, relationship
 
@@ -105,8 +106,8 @@ class PasswordResetToken(Base):
     """Durable password-reset lifecycle row.
 
     Formal auth-recovery work should extend this model + its Alembic history
-    (`026_password_reset_tokens` and `027_password_reset_lifecycle_delivery`)
-    instead of reintroducing request-path DDL or page-local token state.
+    (`026_password_reset_tokens`, `027_reset_lifecycle_delivery`, and
+    `028_reset_single_active_token`) instead of reintroducing
     `used_at` is reserved for successful consumption, while `invalidated_at`
     records superseded/expired tokens that must still remain auditable.
     """
@@ -144,6 +145,13 @@ class PasswordResetToken(Base):
             name="ck_password_reset_tokens_invalidation_reason",
         ),
         Index("idx_password_reset_tokens_user_created", "user_id", "created_at"),
+        Index(
+            "uq_password_reset_tokens_single_active_user",
+            "user_id",
+            unique=True,
+            sqlite_where=text("used_at IS NULL AND invalidated_at IS NULL"),
+            postgresql_where=text("used_at IS NULL AND invalidated_at IS NULL"),
+        ),
     )
 
     user = relationship("User", back_populates="password_reset_tokens")

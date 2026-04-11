@@ -40,7 +40,7 @@ security = HTTPBearer(auto_error=False)
 # - users without hashed_password must keep authenticating through
 #   AUTH_USER_PASSWORDS_JSON / AUTH_SHARED_PASSWORD until the reset contract replaces that fallback.
 # - request-path auth recovery work should not expand init_db/runtime DDL behavior here; schema authority lives
-#   in Alembic revisions plus common.db.models.PasswordResetToken.
+#   in Alembic revisions plus common.db.models.PasswordResetToken, including the single-active-token invariant.
 pwd_context = CryptContext(schemes=["pbkdf2_sha256", "bcrypt"], deprecated="auto")
 
 

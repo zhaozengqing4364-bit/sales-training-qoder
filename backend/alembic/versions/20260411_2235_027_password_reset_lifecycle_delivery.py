@@ -1,6 +1,6 @@
 """formalize password reset lifecycle and delivery observability
 
-Revision ID: 027_password_reset_lifecycle_delivery
+Revision ID: 027_reset_lifecycle_delivery
 Revises: 026_password_reset_tokens
 Create Date: 2026-04-11 22:35:00.000000
 
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision: str = "027_password_reset_lifecycle_delivery"
+revision: str = "027_reset_lifecycle_delivery"
 down_revision: Union[str, None] = "026_password_reset_tokens"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
