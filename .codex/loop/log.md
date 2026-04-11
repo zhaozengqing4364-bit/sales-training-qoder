@@ -330,3 +330,21 @@
   verification results: passed; repo-root rg verification found the live auth/profile entrypoints and silent-fallback surfaces, and the focused backend test scan confirmed dedicated forgot/reset integration coverage already exists in backend/tests/integration/test_password_reset_api.py rather than only in test_auth_login_api.py.
   success signal status: downstream M014/S02 tasks can now build from the real seams instead of re-researching—PasswordResetService + PasswordResetToken are already the backend authority, the profile password CTA is intentionally a `/forgot-password` link, and voice speed is still frontend-local persistence.
   rollback note: if later slices change these seams, keep one authoritative reset-token lifecycle and one authoritative voice-speed persistence seam instead of reintroducing fake profile password APIs or split storage paths.
+
+- time: 2026-04-12T01:04:39+08:00
+  mode: grow
+  item id: M015-S01-T01
+  files changed:
+    - web/src/lib/debug.ts
+    - web/src/components/ErrorBoundary.tsx
+    - .gsd/DECISIONS.md
+    - .gsd/KNOWLEDGE.md
+    - .codex/loop/state.json
+  summary: Inventoried the live frontend console surfaces and encoded one canonical boundary in web/src/lib/debug.ts so downstream migration work can distinguish instrumentation exceptions from durable business errors and debug-only noise without rerunning a repo-wide search.
+  verification commands:
+    - rg -n "console\.(log|error|warn|info)" web/src
+    - lsp diagnostics web/src/lib/debug.ts
+    - lsp diagnostics web/src/components/ErrorBoundary.tsx
+  verification results: passed; the repo-root rg gate produced the expected raw-console inventory for classification, and fresh LSP diagnostics reported no issues after adding the inventory map to web/src/lib/debug.ts and tagging ErrorBoundary as a durable route-error surface.
+  success signal status: future M015/S01 tasks now have an explicit migration contract—only instrumentation bootstrap and the shared debug seam itself are allowed raw-console exceptions, while route errors, business faults, and dev/support debug output have named categories and seam destinations.
+  rollback note: if later slices narrow or expand the exception set, update the shared inventory in web/src/lib/debug.ts and the corresponding knowledge/decision entries together instead of letting page-local console calls define policy by drift.

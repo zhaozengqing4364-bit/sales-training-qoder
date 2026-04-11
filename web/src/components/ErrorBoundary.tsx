@@ -56,7 +56,9 @@ export class ErrorBoundary extends Component<Props, State> {
     }
 
     componentDidCatch(error: Error, errorInfo: ErrorInfo) {
-        // Log to console
+        // M015/S01 inventory note: ErrorBoundary is a durable route error surface.
+        // Keep the fallback UI + reporting side effects here, but migrate the raw console
+        // call to the shared debug/observability seam in T02 instead of leaving it bespoke.
         console.error('Error caught by boundary:', error, errorInfo);
 
         // Send to monitoring service if available
@@ -202,6 +204,8 @@ export class AsyncErrorBoundary extends Component<Props, State> {
     }
 
     componentDidCatch(error: Error, errorInfo: ErrorInfo) {
+        // M015/S01 inventory note: Async boundary failures are also durable route-level
+        // errors, so they belong on the shared debug seam once T02 does the migration.
         console.error('Async error caught:', error, errorInfo);
     }
 

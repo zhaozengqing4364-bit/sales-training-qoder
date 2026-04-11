@@ -2,7 +2,7 @@
   "version": 1,
   "projectName": "销售训练qoder",
   "projectPath": "/Users/zhaozengqing/github/销售训练qoder",
-  "gsdVersion": "2.58.0",
+  "gsdVersion": "2.70.1",
   "entries": [
     {
       "filename": "M001-2026-03-24T10-38-09.html",
@@ -113,6 +113,22 @@
       "doneSlices": 52,
       "totalSlices": 68,
       "doneMilestones": 13,
+      "totalMilestones": 18,
+      "phase": "evaluating-gates"
+    },
+    {
+      "filename": "M014-2026-04-11T17-04-39.html",
+      "generatedAt": "2026-04-11T17:04:39.136Z",
+      "milestoneId": "M014",
+      "milestoneTitle": "Learner 入口与体验闭环补齐",
+      "label": "M014: Learner 入口与体验闭环补齐",
+      "kind": "milestone",
+      "totalCost": 24.8291115,
+      "totalTokens": 1783763992,
+      "totalDuration": 339237605,
+      "doneSlices": 59,
+      "totalSlices": 73,
+      "doneMilestones": 14,
       "totalMilestones": 18,
       "phase": "evaluating-gates"
     }

@@ -1,6 +1,6 @@
 {
   "mode": "grow",
-  "current_issue_id": "M014-S04-T02",
+  "current_issue_id": "M015-S01-T01",
   "current_issue_type": "task",
   "current_issue_status": "done",
   "pending_issue_ids": [],
@@ -145,26 +145,26 @@
     "M014-S03-T02",
     "M014-S03-T03",
     "M014-S04-T01",
-    "M014-S04-T02"
+    "M014-S04-T02",
+    "M015-S01-T01"
   ],
   "blocked_issue_ids": [],
   "deferred_issue_ids": [],
   "last_modified_files": [
-    "web/src/app/(user)/practice/[sessionId]/page.tsx",
-    "web/src/app/(user)/practice/[sessionId]/use-practice-session-lifecycle.ts",
-    "web/src/app/(user)/practice/[sessionId]/page.test.tsx",
-    "web/src/app/(user)/practice/[sessionId]/use-practice-session-lifecycle.test.ts",
-    "web/src/app/test-mic/page.tsx",
+    "web/src/lib/debug.ts",
+    "web/src/components/ErrorBoundary.tsx",
+    ".gsd/DECISIONS.md",
     ".gsd/KNOWLEDGE.md",
     ".codex/loop/state.json",
     ".codex/loop/log.md"
   ],
   "last_verification_commands": [
-    "npm --prefix web test -- --run \"src/app/(user)/practice/[sessionId]/page.test.tsx\" \"src/app/(user)/practice/[sessionId]/use-practice-session-lifecycle.test.ts\"",
-    "browser smoke attempt: npm --prefix web run dev -> http://localhost:3445/practice/session-current?scenario_type=sales&voice_mode=legacy"
+    "rg -n \"console\\.(log|error|warn|info)\" web/src",
+    "lsp diagnostics web/src/lib/debug.ts",
+    "lsp diagnostics web/src/components/ErrorBoundary.tsx"
   ],
-  "last_verification_result": "Focused practice page + lifecycle Vitest finished 13/13 green with clean output after adding the preflight card, retry copy, and dev-tool labeling. A follow-up browser smoke attempt was blocked by the local Next dev server hanging on “Compiling instrumentation Node.js ...”; the managed bg_shell process was killed instead of leaving a stale verifier behind.",
-  "last_success_signal": "Ordinary practice sessions now show a learner-facing preflight brief before first speech, pause/resume/end failures surface explicit next-step guidance with retry CTAs, and /app/test-mic is labeled as a developer-only debug tool instead of reading like a learner route.",
+  "last_verification_result": "The repo-root console inventory gate still reports the expected raw-console callers, and the new canonical map in web/src/lib/debug.ts cleanly separates migrate-to-debug-seam targets from allowed raw-console exceptions. Fresh LSP diagnostics reported no issues on web/src/lib/debug.ts or web/src/components/ErrorBoundary.tsx after encoding the boundary and tagging ErrorBoundary as a durable route-error surface.",
+  "last_success_signal": "Future M015/S01 tasks can now migrate console usage against one explicit rule: only instrumentation bootstrap and the shared debug seam itself remain raw-console exceptions, while route error surfaces, business errors, and dev/support debug output all have a named category and expected seam destination.",
   "last_growth_scan": null,
-  "next_action": "M014/S04 T03 should lock the new preflight/interruption learner surfaces with focused proof, including the non-learner positioning of /app/test-mic."
+  "next_action": "M015/S01 T02 should start moving route error surfaces and the highest-noise business console callers onto web/src/lib/debug.ts using the new inventory boundary instead of reclassifying each site."
 }

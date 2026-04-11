@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "exported_at": "2026-04-11T16:58:16.685Z",
+  "exported_at": "2026-04-11T17:12:25.065Z",
   "milestones": [
     {
       "id": "M001",
@@ -2303,7 +2303,7 @@
     {
       "milestone_id": "M015",
       "id": "S01",
-      "title": "前端日志出口统一化",
+      "title": "S01",
       "status": "pending",
       "risk": "medium",
       "depends": [],
@@ -9593,19 +9593,28 @@
       "milestone_id": "M015",
       "slice_id": "S01",
       "id": "T01",
-      "title": "盘点并分类前端 console 使用点",
-      "status": "pending",
-      "one_liner": "",
-      "narrative": "",
-      "verification_result": "",
+      "title": "Cataloged frontend console usage into one shared migration map and locked the allowed raw-console exception boundary for M015/S01.",
+      "status": "complete",
+      "one_liner": "Cataloged frontend console usage into one shared migration map and locked the allowed raw-console exception boundary for M015/S01.",
+      "narrative": "I scanned the live `web/src` console inventory, verified the existing seams in `web/src/lib/debug.ts`, `web/src/components/ErrorBoundary.tsx`, and the instrumentation entrypoints, and then encoded the classification result directly in `web/src/lib/debug.ts` as a canonical `frontendConsoleInventory` plus `frontendConsoleRouteErrorPolicy`. That inventory narrows allowed raw-console exceptions to the shared debug seam itself and the bootstrap instrumentation entrypoints, marks route error surfaces as durable reporters that should migrate without losing fallback UI, and separates business/runtime faults from debug-only utility noise so later tasks can migrate against one fixed map instead of repeating ad hoc repo-wide searches. I also annotated `ErrorBoundary` and `AsyncErrorBoundary` to make their durable route-error role explicit for T02/T03, recorded the observability boundary as decision D180, saved the non-obvious rule to `.gsd/KNOWLEDGE.md`, and updated the repo loop state/log for continuity.",
+      "verification_result": "Ran the task’s required repo-root inventory gate `rg -n \"console\\.(log|error|warn|info)\" web/src` to confirm the live console callers after encoding the classification map; the command passed and now provides the expected post-inventory baseline for T02/T03 migration work. Also re-checked `web/src/lib/debug.ts` and `web/src/components/ErrorBoundary.tsx` with fresh LSP diagnostics, and both files reported no issues after the inventory/policy writeback.",
       "duration": "",
-      "completed_at": null,
+      "completed_at": "2026-04-11T17:12:25.021Z",
       "blocker_discovered": false,
-      "deviations": "",
-      "known_issues": "",
-      "key_files": [],
-      "key_decisions": [],
-      "full_summary_md": "",
+      "deviations": "None.",
+      "known_issues": "None.",
+      "key_files": [
+        "web/src/lib/debug.ts",
+        "web/src/components/ErrorBoundary.tsx",
+        ".gsd/DECISIONS.md",
+        ".gsd/KNOWLEDGE.md",
+        ".codex/loop/state.json",
+        ".codex/loop/log.md"
+      ],
+      "key_decisions": [
+        "D180: keep raw console only for instrumentation bootstrap and the shared debug seam itself; treat route error surfaces, business/runtime faults, and debug-only utilities as migrate-to-seam callers."
+      ],
+      "full_summary_md": "---\nid: T01\nparent: S01\nmilestone: M015\nkey_files:\n  - web/src/lib/debug.ts\n  - web/src/components/ErrorBoundary.tsx\n  - .gsd/DECISIONS.md\n  - .gsd/KNOWLEDGE.md\n  - .codex/loop/state.json\n  - .codex/loop/log.md\nkey_decisions:\n  - D180: keep raw console only for instrumentation bootstrap and the shared debug seam itself; treat route error surfaces, business/runtime faults, and debug-only utilities as migrate-to-seam callers.\nduration: \nverification_result: passed\ncompleted_at: 2026-04-11T17:12:25.019Z\nblocker_discovered: false\n---\n\n# T01: Cataloged frontend console usage into one shared migration map and locked the allowed raw-console exception boundary for M015/S01.\n\n**Cataloged frontend console usage into one shared migration map and locked the allowed raw-console exception boundary for M015/S01.**\n\n## What Happened\n\nI scanned the live `web/src` console inventory, verified the existing seams in `web/src/lib/debug.ts`, `web/src/components/ErrorBoundary.tsx`, and the instrumentation entrypoints, and then encoded the classification result directly in `web/src/lib/debug.ts` as a canonical `frontendConsoleInventory` plus `frontendConsoleRouteErrorPolicy`. That inventory narrows allowed raw-console exceptions to the shared debug seam itself and the bootstrap instrumentation entrypoints, marks route error surfaces as durable reporters that should migrate without losing fallback UI, and separates business/runtime faults from debug-only utility noise so later tasks can migrate against one fixed map instead of repeating ad hoc repo-wide searches. I also annotated `ErrorBoundary` and `AsyncErrorBoundary` to make their durable route-error role explicit for T02/T03, recorded the observability boundary as decision D180, saved the non-obvious rule to `.gsd/KNOWLEDGE.md`, and updated the repo loop state/log for continuity.\n\n## Verification\n\nRan the task’s required repo-root inventory gate `rg -n \"console\\.(log|error|warn|info)\" web/src` to confirm the live console callers after encoding the classification map; the command passed and now provides the expected post-inventory baseline for T02/T03 migration work. Also re-checked `web/src/lib/debug.ts` and `web/src/components/ErrorBoundary.tsx` with fresh LSP diagnostics, and both files reported no issues after the inventory/policy writeback.\n\n## Verification Evidence\n\n| # | Command | Exit Code | Verdict | Duration |\n|---|---------|-----------|---------|----------|\n| 1 | `rg -n \"console\\.(log|error|warn|info)\" web/src` | 0 | ✅ pass | 26ms |\n\n## Deviations\n\nNone.\n\n## Known Issues\n\nNone.\n\n## Files Created/Modified\n\n- `web/src/lib/debug.ts`\n- `web/src/components/ErrorBoundary.tsx`\n- `.gsd/DECISIONS.md`\n- `.gsd/KNOWLEDGE.md`\n- `.codex/loop/state.json`\n- `.codex/loop/log.md`\n",
       "description": "Why: 先拿到真实 console inventory，避免把 instrumentation/dev-only 输出和业务页面噪声混在一起。\n\nDo:\n1. 扫描 `web/src` 下所有 `console.log/error/warn/info` 使用点。\n2. 按 `debug-only`、`durable error`、`instrumentation`、`tests` 四类归档。\n3. 记录哪些调用应迁到 `web/src/lib/debug.ts`，哪些是允许保留的例外。\n4. 明确 route error surface 与业务页面当前的日志分歧。\n\nDone when: 已形成一份可执行的分类结论，后续任务可以按这份分类迁移，而不是再次全仓搜索后现场判断。",
       "estimate": "30m",
       "files": [
@@ -13113,6 +13122,18 @@
       "revisable": "Yes",
       "made_by": "agent",
       "superseded_by": null
+    },
+    {
+      "seq": 1550,
+      "id": "D180",
+      "when_context": "M015/S01/T01",
+      "scope": "observability",
+      "decision": "前端 raw console 的允许例外边界",
+      "choice": "仅保留 instrumentation bootstrap（web/src/instrumentation*.ts）与 shared debug seam 自身（web/src/lib/debug.ts）作为 raw console 例外；route error surfaces、业务页面/ hooks 的 durable error 以及 test-mic/performance/debounce 这类 debug-only 输出统一视为应迁到 shared debug seam。",
+      "rationale": "T01 inventory 证明当前大多数 console 命中并非真正的 instrumentation，而是路由边界、业务 fetch/audio/websocket 故障或 dev/support 调试输出。先把允许保留的例外收窄，后续 T02/T03 才能按同一迁移规则收口，而不是继续逐页判断。",
+      "revisable": "Yes",
+      "made_by": "agent",
+      "superseded_by": null
     }
   ],
   "verification_evidence": [
@@ -16437,6 +16458,17 @@
       "verdict": "✅ pass",
       "duration_ms": 847,
       "created_at": "2026-04-11T16:39:25.254Z"
+    },
+    {
+      "id": 308,
+      "task_id": "T01",
+      "slice_id": "S01",
+      "milestone_id": "M015",
+      "command": "rg -n \"console\\.(log|error|warn|info)\" web/src",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 26,
+      "created_at": "2026-04-11T17:12:25.022Z"
     }
   ]
 }

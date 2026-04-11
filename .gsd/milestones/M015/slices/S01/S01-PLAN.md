@@ -23,7 +23,7 @@ S01 建立共享 debug seam 和例外规则，供 M015/S02 的 dialog/router 清
 
 ## Tasks
 
-- [ ] **T01: 盘点并分类前端 console 使用点** `est:30m`
+- [x] **T01: 盘点并分类前端 console 使用点** `est:30m`
   Why: 先拿到真实 console inventory，避免把 instrumentation/dev-only 输出和业务页面噪声混在一起。
 
 Do:
