@@ -399,3 +399,9 @@
 {"id":"1e12eac0-863d-4c29-85ba-c53fb872ce48","ts":"2026-04-11T21:34:44.969Z","severity":"info","message":"Verification gate: 1/1 checks passed","source":"notify","read":false}
 {"id":"bd5b635d-4917-4f22-a9f9-cb80bcb03ac8","ts":"2026-04-11T21:41:05.882Z","severity":"info","message":"Committed: feat: Added focused websocket contract proofs for reconnect exit, stale…","source":"notify","read":false}
 {"id":"912d3aef-0678-4267-b6a9-efb0ac45ddf3","ts":"2026-04-11T21:41:07.254Z","severity":"info","message":"Verification gate: 1/1 checks passed","source":"notify","read":false}
+{"id":"c15e0e7b-6b25-426f-a720-be6d390e3fac","ts":"2026-04-11T21:54:15.047Z","severity":"info","message":"Committed: chore: Added a code-adjacent presentation race inventory and focused pr…","source":"notify","read":false}
+{"id":"b5167a81-627a-4080-9d41-2813f3c2f419","ts":"2026-04-11T21:54:15.053Z","severity":"warning","message":"[safety] file-change: .codex/loop/log.md — Modified but not in task plan's expected output","source":"workflow-logger","read":false}
+{"id":"1e6730eb-7be5-405e-95fe-8eb445611c01","ts":"2026-04-11T21:54:15.054Z","severity":"warning","message":"[safety] file-change: .codex/loop/state.json — Modified but not in task plan's expected output","source":"workflow-logger","read":false}
+{"id":"a2bac9fc-b7ce-4832-9a4d-26bdabdfc4ea","ts":"2026-04-11T21:54:15.054Z","severity":"warning","message":"Safety: 2 unexpected file change(s) outside task plan","source":"notify","read":false}
+{"id":"af7c1012-c750-44fa-a979-1797c5b98f24","ts":"2026-04-11T21:54:23.957Z","severity":"info","message":"Verification gate: FAILED — npm run test","source":"notify","read":false}
+{"id":"ce5e9339-ca63-4b35-a336-36c54f568dca","ts":"2026-04-11T21:54:23.958Z","severity":"warning","message":"Verification failed in auto-discovered package.json checks — treating as advisory.","source":"notify","read":false}

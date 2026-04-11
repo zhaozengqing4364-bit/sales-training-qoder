@@ -90,9 +90,10 @@ PRESENTATION_RESOURCE_RACE_INVENTORY: tuple[dict[str, Any], ...] = (
             "both writers can derive the same next_version and target the same versioned file path",
             "page delete-and-rebuild work has no compare-and-swap or lock once replace starts",
         ),
-        "current_assessment": "highest-priority race surface: shared stable identity is mutated in place after a read-then-write preflight",
-        "proof_state": "needs_focused_proof",
+        "current_assessment": "focused proof confirmed a concurrent writer race: one replace can commit version 2 while a second concurrent writer falls into a page uniqueness failure during metadata rebuild",
+        "proof_state": "confirmed_concurrent_writer_race",
         "next_proof": "concurrent_replace_without_active_sessions",
+        "recommended_next_step": "serialize_in_place_replace_with_local_or_distributed_lock_before_multi-writer rollout",
     },
     {
         "surface": "delete_presentation",
@@ -120,9 +121,10 @@ PRESENTATION_RESOURCE_RACE_INVENTORY: tuple[dict[str, Any], ...] = (
 
 PRESENTATION_RESOURCE_RACE_FOCUS: dict[str, str] = {
     "highest_priority_surface": "replace_presentation_in_place",
-    "why": "it mutates the stable presentation_id authority in place, and the current blocker only protects against live-session reads, not concurrent writers",
+    "why": "focused proof now shows concurrent writers can both enter the version-2 replace path and the loser can explode during page rebuild, so in-place mutation must be serialized before broader rollout",
     "recommended_next_proof": "concurrent_replace_without_active_sessions",
-    "not_recommended_yet": "do not add distributed locks to every upload path before the in-place replace race is reproduced",
+    "recommended_next_step": "add compare-and-swap or lock around in-place replace before multi-writer rollout",
+    "not_recommended_yet": "do not broaden the fix into upload_new_presentation or system-wide distributed locks until in-place replace is serialized first",
 }
 
 

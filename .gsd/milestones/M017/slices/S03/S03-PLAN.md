@@ -35,7 +35,7 @@ Done when: 已形成 upload/resource race 风险点列表，后续 focused proof
   - Files: `backend/src/presentation_coach/api/presentations.py`, `backend/tests/contract/test_presentations.py`, `backend/tests/integration/test_presentation_flow.py`
   - Verify: rg -n "replace|upload|delete|active-session|lock" backend/src/presentation_coach/api/presentations.py backend/tests/contract/test_presentations.py backend/tests/integration/test_presentation_flow.py
 
-- [ ] **T02: 用 focused proof 区分真实并发问题与想象风险** `est:1h`
+- [x] **T02: 用 focused proof 区分真实并发问题与想象风险** `est:1h`
   Why: discovery 的价值在于把“真实问题”与“audit 猜测”分开，而不是先上锁再找理由。
 
 Do:

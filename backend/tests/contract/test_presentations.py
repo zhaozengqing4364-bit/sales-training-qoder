@@ -286,7 +286,7 @@ class TestPresentationsContract:
             "message": "当前账号权限不足，无法执行该操作。",
         }
 
-    async def test_resource_race_inventory_marks_replace_as_first_proof_target(self):
+    async def test_resource_race_inventory_marks_replace_as_first_confirmed_proof_target(self):
         from presentation_coach.api.presentations import (
             PRESENTATION_RESOURCE_RACE_FOCUS,
             PRESENTATION_RESOURCE_RACE_INVENTORY,
@@ -305,6 +305,7 @@ class TestPresentationsContract:
             surfaces["upload_new_presentation"]["active_session_blocker_coverage"]
             == "not_applicable"
         )
+        assert surfaces["upload_new_presentation"]["proof_state"] == "inventory_only"
         assert (
             surfaces["replace_presentation_in_place"][
                 "active_session_blocker_coverage"
@@ -312,7 +313,11 @@ class TestPresentationsContract:
             == "covered_for_live_session_mutation_only"
         )
         assert surfaces["replace_presentation_in_place"]["proof_state"] == (
-            "needs_focused_proof"
+            "confirmed_concurrent_writer_race"
+        )
+        assert (
+            surfaces["replace_presentation_in_place"]["recommended_next_step"]
+            == "serialize_in_place_replace_with_local_or_distributed_lock_before_multi-writer rollout"
         )
         assert (
             surfaces["delete_presentation"]["active_session_blocker_coverage"]
@@ -328,4 +333,8 @@ class TestPresentationsContract:
         assert (
             PRESENTATION_RESOURCE_RACE_FOCUS["recommended_next_proof"]
             == "concurrent_replace_without_active_sessions"
+        )
+        assert (
+            PRESENTATION_RESOURCE_RACE_FOCUS["recommended_next_step"]
+            == "add compare-and-swap or lock around in-place replace before multi-writer rollout"
         )
