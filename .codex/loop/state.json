@@ -1,6 +1,6 @@
 {
   "mode": "grow",
-  "current_issue_id": "M014-S03-T03",
+  "current_issue_id": "M014-S04-T01",
   "current_issue_type": "task",
   "current_issue_status": "done",
   "pending_issue_ids": [],
@@ -143,24 +143,23 @@
     "M014-S02",
     "M014-S03-T01",
     "M014-S03-T02",
-    "M014-S03-T03"
+    "M014-S03-T03",
+    "M014-S04-T01"
   ],
   "blocked_issue_ids": [],
   "deferred_issue_ids": [],
   "last_modified_files": [
-    "web/src/app/(dashboard)/page.test.tsx",
-    "web/src/app/(dashboard)/profile/page.test.tsx",
     ".gsd/KNOWLEDGE.md",
+    ".gsd/DECISIONS.md",
     ".codex/loop/state.json",
     ".codex/loop/log.md"
   ],
   "last_verification_commands": [
-    "npm --prefix web test -- --run \"src/app/(dashboard)/history/page.test.tsx\" \"src/app/(dashboard)/**/*.test.tsx\"",
-    "npm --prefix web test -- --run \"src/app/(dashboard)/page.test.tsx\" \"src/app/(dashboard)/profile/page.test.tsx\" \"src/app/(dashboard)/history/page.test.tsx\"",
-    "npm --prefix web test -- --run \"src/components/layout/dashboard-shell.test.tsx\""
+    "rg -n \"pause|resume|end|test-mic|persona|scenario|goal\" 'web/src/app/(user)/practice/[sessionId]/page.tsx' 'web/src/hooks/use-practice-websocket.ts'",
+    "npm --prefix web test -- --run 'src/app/(user)/practice/[sessionId]/page.test.tsx' 'src/app/(user)/practice/[sessionId]/use-practice-session-lifecycle.test.ts' 'src/app/(user)/practice/layout.test.tsx'"
   ],
-  "last_verification_result": "Fresh learner-help proof verification passed: the plan command stayed green but, under local Vitest semantics, only exercised history; the adapted explicit dashboard page suite then finished 22/22 green across home/profile/history, and the focused DashboardShell seam suite finished 2/2 green for the shared desktop/mobile help entry.",
-  "last_success_signal": "Future agents can now prove learner help discoverability from dashboard home, profile, and history while separately confirming the shared DashboardShell learner-help seam still mounts on desktop and mobile.",
+  "last_verification_result": "Practice surface inventory verification passed: the planned rg scan confirmed the existing scenario/persona/focus/interruption seams in the practice page and websocket hook, and the focused practice page/lifecycle/layout Vitest suite finished 11/11 green after the knowledge-only writeback.",
+  "last_success_signal": "Future agents can now build S04 from the real practice seams: normal sessions still lack a dedicated preflight card, retry focus and right-panel live summary already exist, pause/resume failures remain silent, end failures already surface retry/reconnect affordances, and the dev mic tool is off the learner path at /app/test-mic.",
   "last_growth_scan": null,
-  "next_action": "M014/S03 is ready for slice closure: learner help discoverability is now locked by focused dashboard page tests plus the shared DashboardShell seam proof."
+  "next_action": "M014/S04 T02 should add learner-facing preflight and interruption copy on the existing practice page/right-panel/help seams, without reviving a learner-visible test-mic entry."
 }

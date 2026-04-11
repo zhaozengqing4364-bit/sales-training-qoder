@@ -23,7 +23,7 @@ S04 把 M014 前三块 learner 入口、auth/profile 与 shell 信息收口到 p
 
 ## Tasks
 
-- [ ] **T01: 梳理 practice preflight 与 interruption 当前表面** `est:30m`
+- [x] **T01: 梳理 practice preflight 与 interruption 当前表面** `est:30m`
   Why: 先把 practice 页面已有的 persona/scenario 信息与 interruption 表面盘清，避免重复实现已经存在的上下文卡片或错误提示。
 
 Do:

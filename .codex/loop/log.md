@@ -1,3 +1,18 @@
+- time: 2026-04-12T00:04:00+08:00
+  mode: grow
+  item id: M014-S04-T01
+  files changed:
+    - .gsd/KNOWLEDGE.md
+    - .gsd/DECISIONS.md
+    - .codex/loop/state.json
+  summary: Inventoried the live practice preflight and interruption surfaces so downstream work can reuse the real seams: ordinary sessions only show thin shell state, retry focus and right-panel live summary already carry goal/evidence context, pause/resume failures are still silent, end failures already expose retry/reconnect affordances, the mic test tool lives off the learner path at /app/test-mic, and the seam choice was recorded as D178.
+  verification commands:
+    - rg -n "pause|resume|end|test-mic|persona|scenario|goal" 'web/src/app/(user)/practice/[sessionId]/page.tsx' 'web/src/hooks/use-practice-websocket.ts'
+    - npm --prefix web test -- --run 'src/app/(user)/practice/[sessionId]/page.test.tsx' 'src/app/(user)/practice/[sessionId]/use-practice-session-lifecycle.test.ts' 'src/app/(user)/practice/layout.test.tsx'
+  verification results: passed; the planned rg scan confirmed the existing scenario/persona/focus/interruption seams, and the focused practice page/lifecycle/layout Vitest suite finished 11/11 green after the knowledge-only writeback.
+  success signal status: future agents can now add S04 UX copy on the existing practice page/right-panel/help seams without reintroducing a learner-facing test-mic path or duplicating retry/live-summary data.
+  rollback note: if later practice UX work changes the entrypoints, keep preflight/interruption guidance on the real practice shell and right-panel seams, and keep the standalone /app/test-mic tool off the learner route map unless a deliberate product decision restores it.
+
 - time: 2026-04-11T23:47:30+08:00
   mode: grow
   item id: M014-S03-T03
