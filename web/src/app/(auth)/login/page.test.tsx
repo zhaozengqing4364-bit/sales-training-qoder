@@ -44,10 +44,14 @@ describe("LoginPage", () => {
         expect(screen.getByText("企业微信登录即将支持，敬请期待")).toBeTruthy();
     });
 
-    it("renders a forgot-password link below the password field", () => {
+    it("preserves a typed email when handing off to forgot-password", () => {
         render(<LoginPage />);
 
-        expect(screen.getByRole("link", { name: "忘记密码？" }).getAttribute("href")).toBe("/forgot-password");
+        fireEvent.change(screen.getByPlaceholderText("name@company.com"), {
+            target: { value: "  admin@test.com  " },
+        });
+
+        expect(screen.getByRole("link", { name: "忘记密码？" }).getAttribute("href")).toBe("/forgot-password?email=admin%40test.com");
     });
 
     it("redirects after a successful cookie-session login without storing auth in localStorage", async () => {

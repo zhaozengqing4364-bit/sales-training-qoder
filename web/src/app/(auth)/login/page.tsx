@@ -15,6 +15,10 @@ export default function LoginPage() {
     const [password, setPassword] = useState("");
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState("");
+    const normalizedEmail = email.trim();
+    const forgotPasswordHref = normalizedEmail
+        ? `/forgot-password?email=${encodeURIComponent(normalizedEmail)}`
+        : "/forgot-password";
 
     const handleLogin = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -91,7 +95,7 @@ export default function LoginPage() {
                         <div className="space-y-2">
                             <div className="flex justify-end">
                                 <Link
-                                    href="/forgot-password"
+                                    href={forgotPasswordHref}
                                     className="text-xs text-slate-500 hover:text-slate-900 transition-colors"
                                 >
                                     忘记密码？

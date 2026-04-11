@@ -121,17 +121,18 @@ describe("ProfilePage password route handoff", () => {
         logoutMock.mockResolvedValue(undefined);
     });
 
-    it("renders the password CTA as a controlled forgot-password link with truthful copy", async () => {
+    it("renders the password CTA as a controlled forgot-password handoff with truthful copy", async () => {
         renderProfilePage();
 
         await waitFor(() => {
             expect(getMeMock).toHaveBeenCalled();
         });
 
-        expect(screen.getByText("通过邮箱重置密码，沿用现有邮箱找回流程")).toBeTruthy();
+        expect(screen.getByText("通过邮箱重置密码，会带入当前账号邮箱。", { exact: false })).toBeTruthy();
+        expect(screen.getByText("仅保存在当前浏览器，刷新后会保留。", { exact: false })).toBeTruthy();
         expect(screen.queryByText(/通知/)).toBeNull();
         const resetLink = screen.getByRole("link", { name: "通过邮箱重置密码" }) as HTMLAnchorElement;
-        expect(resetLink.getAttribute("href")).toBe("/forgot-password");
+        expect(resetLink.getAttribute("href")).toBe("/forgot-password?email=learner%40example.com");
     });
 
     it("hydrates the voice speed select from the shared preference seam and never PATCHes fake persistence", async () => {

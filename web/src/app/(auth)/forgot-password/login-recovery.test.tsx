@@ -3,14 +3,18 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import ForgotPasswordPage from "./page";
 
-const { pushMock, forgotPasswordMock } = vi.hoisted(() => ({
+const { pushMock, forgotPasswordMock, searchParamsState } = vi.hoisted(() => ({
     pushMock: vi.fn(),
     forgotPasswordMock: vi.fn(),
+    searchParamsState: { email: "" },
 }));
 
 vi.mock("next/navigation", () => ({
     useRouter: () => ({
         push: pushMock,
+    }),
+    useSearchParams: () => ({
+        get: (key: string) => (key === "email" ? searchParamsState.email : null),
     }),
 }));
 
@@ -32,6 +36,23 @@ describe("ForgotPasswordPage login recovery", () => {
     beforeEach(() => {
         pushMock.mockReset();
         forgotPasswordMock.mockReset();
+        searchParamsState.email = "";
+    });
+
+    it("hydrates the email field from the route handoff before requesting a reset link", async () => {
+        searchParamsState.email = "  learner@example.com  ";
+        forgotPasswordMock.mockResolvedValue({ message: "ok" });
+
+        render(<ForgotPasswordPage />);
+
+        expect((screen.getByLabelText("邮箱地址") as HTMLInputElement).value).toBe("learner@example.com");
+        expect(screen.getByText("已从登录或个人中心带入邮箱，可直接发送重置邮件。")).toBeTruthy();
+
+        fireEvent.click(screen.getByRole("button", { name: "发送重置链接" }));
+
+        await waitFor(() => {
+            expect(forgotPasswordMock).toHaveBeenCalledWith("learner@example.com");
+        });
     });
 
     it("trims the email before requesting a reset link and lets the user return to login", async () => {

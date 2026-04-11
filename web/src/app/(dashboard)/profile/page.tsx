@@ -125,6 +125,13 @@ export default function ProfilePage() {
         () => Number((stats.total_practice_time_minutes / 60).toFixed(1)),
         [stats.total_practice_time_minutes],
     );
+    const normalizedProfileEmail = profile.email.trim();
+    const forgotPasswordHref = normalizedProfileEmail
+        ? `/forgot-password?email=${encodeURIComponent(normalizedProfileEmail)}`
+        : "/forgot-password";
+    const passwordResetDescription = normalizedProfileEmail
+        ? "通过邮箱重置密码，会带入当前账号邮箱。"
+        : "通过邮箱重置密码，进入邮箱找回流程。";
 
     const onFieldChange = (field: keyof ProfileForm, value: string) => {
         setProfile((prev) => ({ ...prev, [field]: value }));
@@ -312,7 +319,7 @@ export default function ProfilePage() {
                             </div>
                             <div>
                                 <div className="text-slate-700 font-medium">语音播放速度</div>
-                                <div className="text-xs text-slate-400">调节 AI 回复的语速</div>
+                                <div className="text-xs text-slate-400">仅保存在当前浏览器，刷新后会保留。</div>
                             </div>
                         </div>
                         <select
@@ -338,11 +345,11 @@ export default function ProfilePage() {
                             </div>
                             <div>
                                 <div className="text-slate-700 font-medium">修改密码</div>
-                                <div className="text-xs text-slate-400">通过邮箱重置密码，沿用现有邮箱找回流程</div>
+                                <div className="text-xs text-slate-400">{passwordResetDescription}</div>
                             </div>
                         </div>
                         <Button variant="outline" size="sm" className="rounded-full text-sm" asChild>
-                            <Link href="/forgot-password">通过邮箱重置密码</Link>
+                            <Link href={forgotPasswordHref}>通过邮箱重置密码</Link>
                         </Button>
                     </div>
                 </div>

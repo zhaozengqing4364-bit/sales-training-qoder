@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { GlassCard } from "@/components/ui/glass-card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,7 +11,9 @@ import Link from "next/link";
 
 export default function ForgotPasswordPage() {
     const router = useRouter();
-    const [email, setEmail] = useState("");
+    const searchParams = useSearchParams();
+    const handoffEmail = searchParams.get("email")?.trim() || "";
+    const [email, setEmail] = useState(handoffEmail);
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState("");
     const [isSuccess, setIsSuccess] = useState(false);
@@ -104,6 +106,9 @@ export default function ForgotPasswordPage() {
                             onChange={(e) => setEmail(e.target.value)}
                             required
                         />
+                        {handoffEmail ? (
+                            <p className="text-xs text-slate-400">已从登录或个人中心带入邮箱，可直接发送重置邮件。</p>
+                        ) : null}
                     </div>
 
                     <Button

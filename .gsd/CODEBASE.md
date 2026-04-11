@@ -1,7 +1,7 @@
 # Codebase Map
 
-Generated: 2026-04-11T14:20:06Z | Files: 500 | Described: 0/500
-<!-- gsd:codebase-meta {"generatedAt":"2026-04-11T14:20:06Z","fingerprint":"087c85275218888904c9d4029816139c8ed66b53","fileCount":500,"truncated":true} -->
+Generated: 2026-04-11T14:34:11Z | Files: 500 | Described: 0/500
+<!-- gsd:codebase-meta {"generatedAt":"2026-04-11T14:34:11Z","fingerprint":"c5217d60dc4e35d754d4b3d83354b1ad6b2b6190","fileCount":500,"truncated":true} -->
 Note: Truncated to first 500 files. Run with higher --max-files to include all.
 
 ### (root)/
@@ -225,7 +225,7 @@ Note: Truncated to first 500 files. Run with higher --max-files to include all.
 - `backend/alembic/script.py.mako`
 
 ### backend/alembic/versions/
-- *(27 files: 27 .py)*
+- *(28 files: 28 .py)*
 
 ### backend/backend/
 - `backend/backend/README.md`
@@ -626,4 +626,4 @@ Note: Truncated to first 500 files. Run with higher --max-files to include all.
 - `backend/tests/unit/admin/test_admin_users_api_models.py`
 
 ### backend/tests/unit/common/
-- *(23 files: 23 .py)*
+- *(22 files: 22 .py)*
