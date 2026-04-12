@@ -1,3 +1,19 @@
+- time: 2026-04-12T08:05:35+08:00
+  mode: grow
+  item id: M018-S03-T03
+  files changed:
+    - docs/backup-recovery-runbook.md
+    - .gsd/analysis/BACKUP_RECOVERY_BASELINE.md
+    - .codex/loop/state.json
+    - .codex/loop/log.md
+  summary: Tightened the backup/recovery runbook against live repository paths so every cited repo-local seam now points at a real file, `/health` verification is anchored to the shipped backend route, and all drill/improvement guidance is clearly isolated as non-baseline follow-up instead of blending into the executable recovery steps.
+  verification commands:
+    - python3 repo-local reference existence check for the runbook/baseline path set
+    - grep -n "备份\|恢复\|演练" docs/backup-recovery-runbook.md .gsd/analysis/BACKUP_RECOVERY_BASELINE.md
+  verification results: passed; all revalidated repo-local references exist in the current repository, and the exact task-plan grep gate stays green while the follow-up split remains visible in the final documents.
+  success signal status: future agents can now open the runbook or baseline pointer and immediately distinguish executable backup/recovery reality from not-yet-shipped drill/improvement work without re-auditing the repository.
+  rollback note: if later slices add real backup automation, Redis restore flow, or OSS export tooling, update the repo-local reference list and the Follow-up split first, then promote only the actually shipped steps into the executable baseline.
+
 - time: 2026-04-12T08:04:34+08:00
   mode: grow
   item id: M018-S03-T02

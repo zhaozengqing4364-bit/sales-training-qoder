@@ -6,7 +6,9 @@
 
 > 当前基线只描述**今天仓库里真实能执行的路径**：本地脚本、PostgreSQL/Redis 标准工具、文件归档、Alembic、老库修复脚本、管理员账号重建。
 >
-> 当前仓库**没有** repo-native 的一键备份平台、OSS 批量导出脚本、统一灾备编排或明确值班名单；这些缺口会在文末单列，不混入当前基线步骤。
+> 本次文档已按当前仓库实物复核以下 repo-local 引用：`scripts/dev-up.sh`、`scripts/dev-stop.sh`、`backend/src/main.py`、`backend/scripts/repair_legacy_schema.py`、`backend/scripts/bootstrap_auth_admin.py`、`backend/src/common/db/session.py`、`backend/src/common/config.py`、`backend/src/common/storage/document.py`、`backend/src/common/knowledge/vector_store.py`、`backend/src/admin/api/admin.py`、`docs/setup/auth-local.md`。
+>
+> 当前仓库**没有** repo-native 的一键备份平台、OSS 批量导出脚本、统一灾备编排或明确值班名单；这些缺口会在文末的 **Follow-up（非当前基线）** 单列，不混入当前基线步骤。
 
 ## 1. 当前责任边界与证据位置
 
@@ -226,6 +228,8 @@ bash scripts/dev-up.sh
 
 ### 6.1 后端健康检查
 
+当前仓库以 `backend/src/main.py` 暴露的 `/health` 为准：
+
 ```bash
 curl -fsS http://127.0.0.1:3444/health
 ```
@@ -233,7 +237,7 @@ curl -fsS http://127.0.0.1:3444/health
 预期包含：
 - `"status": "healthy"`
 - 当前时间戳
-- 版本号
+- 版本号字段
 
 ### 6.2 Schema 已对齐到当前代码
 
@@ -279,7 +283,9 @@ done
 4. 仓库内没有统一的 RTO / RPO 文档；
 5. 仓库内没有明确值班人名册。
 
-## 8. 季度演练建议（建议项，不代表已落地）
+## 8. Follow-up（非当前可执行基线）
+
+### 8.1 灾难恢复演练建议（建议项，不代表已落地）
 
 当前仓库没有灾难恢复演练记录。最小建议是**每季度至少做一次 60 分钟手工演练**，演练范围按下面顺序执行：
 
@@ -294,7 +300,7 @@ done
 9. 执行 `/health` 检查并记录成功/失败；
 10. 把本次耗时、缺失工具、路径漂移、人工判断点补回本 runbook。
 
-## 9. 未来改进（与当前可执行内容分开）
+### 8.2 后续改进（与当前可执行内容分开）
 
 以下是后续改进项，不是当前仓库已落地能力：
 

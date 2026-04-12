@@ -7,6 +7,20 @@
 - 可执行 runbook：`docs/backup-recovery-runbook.md`
 - 事实盘点：`docs/setup/backup-recovery-current-state.md`
 
+## 本次已复核的 repo-local 引用
+
+- `scripts/dev-up.sh`
+- `scripts/dev-stop.sh`
+- `backend/src/main.py`
+- `backend/scripts/repair_legacy_schema.py`
+- `backend/scripts/bootstrap_auth_admin.py`
+- `backend/src/common/db/session.py`
+- `backend/src/common/config.py`
+- `backend/src/common/storage/document.py`
+- `backend/src/common/knowledge/vector_store.py`
+- `backend/src/admin/api/admin.py`
+- `docs/setup/auth-local.md`
+
 ## 当前基线结论
 
 1. 当前仓库已经具备最小手工恢复链路：
@@ -28,6 +42,11 @@
    - OSS 音频对象批量导出
    - 统一 RTO/RPO 与明确值班人
    - 固定季度演练记录机制
+
+## Follow-up（不属于当前可执行基线）
+
+- 灾难恢复演练建议已单列在 `docs/backup-recovery-runbook.md` 的 `8.1 灾难恢复演练建议（建议项，不代表已落地）`；执行时不要把该建议误写成“当前已实施流程”。
+- 后续改进项已单列在 `docs/backup-recovery-runbook.md` 的 `8.2 后续改进（与当前可执行内容分开）`；未来如果真的落地脚本或流程，应先更新这些 follow-up，再把对应条目提升进当前基线。
 
 ## 后续阅读顺序
 

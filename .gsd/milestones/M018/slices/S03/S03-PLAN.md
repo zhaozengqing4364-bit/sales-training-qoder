@@ -47,7 +47,7 @@ Done when: 仓库中出现一份可直接被人类执行的 backup/recovery base
   - Files: `docs/backup-recovery-runbook.md`, `.gsd/analysis/BACKUP_RECOVERY_BASELINE.md`
   - Verify: test -f docs/backup-recovery-runbook.md || test -f .gsd/analysis/BACKUP_RECOVERY_BASELINE.md
 
-- [ ] **T03: 校正 runbook 为真实可执行现状** `est:20m`
+- [x] **T03: 校正 runbook 为真实可执行现状** `est:20m`
   Why: runbook 如果不和真实命令、真实路径对齐，很快就会变成误导性文档。
 
 Do:

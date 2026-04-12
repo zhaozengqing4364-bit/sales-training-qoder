@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "exported_at": "2026-04-12T00:05:19.159Z",
+  "exported_at": "2026-04-12T00:10:18.826Z",
   "milestones": [
     {
       "id": "M001",
@@ -11240,19 +11240,27 @@
       "milestone_id": "M018",
       "slice_id": "S03",
       "id": "T03",
-      "title": "校正 runbook 为真实可执行现状",
-      "status": "pending",
-      "one_liner": "",
-      "narrative": "",
-      "verification_result": "",
+      "title": "Revalidated the backup/recovery runbook against live repo paths and moved drill/improvement guidance into explicit non-baseline follow-up sections.",
+      "status": "complete",
+      "one_liner": "Revalidated the backup/recovery runbook against live repo paths and moved drill/improvement guidance into explicit non-baseline follow-up sections.",
+      "narrative": "I manually rechecked the runbook’s cited repo-local seams against the live repository and tightened both `docs/backup-recovery-runbook.md` and `.gsd/analysis/BACKUP_RECOVERY_BASELINE.md` so they now point only at files and commands that are actually present today. The runbook introduction now names the specific repo-local references that were revalidated (`scripts/dev-up.sh`, `scripts/dev-stop.sh`, `backend/src/main.py`, `backend/scripts/repair_legacy_schema.py`, `backend/scripts/bootstrap_auth_admin.py`, the database/config/storage/vector-store seams, the legacy admin upload seam, and `docs/setup/auth-local.md`), and the `/health` verification step now explicitly anchors to the shipped backend route in `backend/src/main.py` instead of generic wording. I also restructured the tail of the runbook so quarterly disaster-recovery drill advice and future improvement items are grouped under a single `Follow-up（非当前可执行基线）` section, which keeps executable backup/recovery reality separate from unshipped recommendations. The baseline analysis file now mirrors that split and records the revalidated repo-local reference set so future agents can start from one factual pointer instead of re-auditing command/path drift from scattered code.",
+      "verification_result": "Fresh verification was run after the final edits. A repo-local reference existence check confirmed every runbook-anchored file path used in this task is present in the current repository. A JSON parse check confirmed `.codex/loop/state.json` remained valid after the continuity update. The task-plan verification command `grep -n \"备份\\|恢复\\|演练\" docs/backup-recovery-runbook.md .gsd/analysis/BACKUP_RECOVERY_BASELINE.md` passed and showed the final runbook/baseline still expose the backup, recovery, and drill/follow-up surfaces future agents are expected to grep directly.",
       "duration": "",
-      "completed_at": null,
+      "completed_at": "2026-04-12T00:10:18.785Z",
       "blocker_discovered": false,
-      "deviations": "",
-      "known_issues": "",
-      "key_files": [],
-      "key_decisions": [],
-      "full_summary_md": "",
+      "deviations": "None.",
+      "known_issues": "The repository still does not ship automated PostgreSQL backup scheduling, Redis restore automation, OSS bulk-export tooling, a single authoritative Chroma persistence path, or named RTO/RPO/on-call ownership; this task kept those items explicitly outside the executable baseline and inside Follow-up guidance rather than inventing capabilities.",
+      "key_files": [
+        "docs/backup-recovery-runbook.md",
+        ".gsd/analysis/BACKUP_RECOVERY_BASELINE.md",
+        ".codex/loop/state.json",
+        ".codex/loop/log.md"
+      ],
+      "key_decisions": [
+        "Made the runbook’s repo-local authority seams explicit by listing the revalidated files instead of relying on implied code references.",
+        "Kept disaster-recovery drill advice and future improvements in a dedicated non-baseline Follow-up section so the runbook does not mix shipped recovery steps with recommendations."
+      ],
+      "full_summary_md": "---\nid: T03\nparent: S03\nmilestone: M018\nkey_files:\n  - docs/backup-recovery-runbook.md\n  - .gsd/analysis/BACKUP_RECOVERY_BASELINE.md\n  - .codex/loop/state.json\n  - .codex/loop/log.md\nkey_decisions:\n  - Made the runbook’s repo-local authority seams explicit by listing the revalidated files instead of relying on implied code references.\n  - Kept disaster-recovery drill advice and future improvements in a dedicated non-baseline Follow-up section so the runbook does not mix shipped recovery steps with recommendations.\nduration: \nverification_result: passed\ncompleted_at: 2026-04-12T00:10:18.784Z\nblocker_discovered: false\n---\n\n# T03: Revalidated the backup/recovery runbook against live repo paths and moved drill/improvement guidance into explicit non-baseline follow-up sections.\n\n**Revalidated the backup/recovery runbook against live repo paths and moved drill/improvement guidance into explicit non-baseline follow-up sections.**\n\n## What Happened\n\nI manually rechecked the runbook’s cited repo-local seams against the live repository and tightened both `docs/backup-recovery-runbook.md` and `.gsd/analysis/BACKUP_RECOVERY_BASELINE.md` so they now point only at files and commands that are actually present today. The runbook introduction now names the specific repo-local references that were revalidated (`scripts/dev-up.sh`, `scripts/dev-stop.sh`, `backend/src/main.py`, `backend/scripts/repair_legacy_schema.py`, `backend/scripts/bootstrap_auth_admin.py`, the database/config/storage/vector-store seams, the legacy admin upload seam, and `docs/setup/auth-local.md`), and the `/health` verification step now explicitly anchors to the shipped backend route in `backend/src/main.py` instead of generic wording. I also restructured the tail of the runbook so quarterly disaster-recovery drill advice and future improvement items are grouped under a single `Follow-up（非当前可执行基线）` section, which keeps executable backup/recovery reality separate from unshipped recommendations. The baseline analysis file now mirrors that split and records the revalidated repo-local reference set so future agents can start from one factual pointer instead of re-auditing command/path drift from scattered code.\n\n## Verification\n\nFresh verification was run after the final edits. A repo-local reference existence check confirmed every runbook-anchored file path used in this task is present in the current repository. A JSON parse check confirmed `.codex/loop/state.json` remained valid after the continuity update. The task-plan verification command `grep -n \"备份\\|恢复\\|演练\" docs/backup-recovery-runbook.md .gsd/analysis/BACKUP_RECOVERY_BASELINE.md` passed and showed the final runbook/baseline still expose the backup, recovery, and drill/follow-up surfaces future agents are expected to grep directly.\n\n## Verification Evidence\n\n| # | Command | Exit Code | Verdict | Duration |\n|---|---------|-----------|---------|----------|\n| 1 | `python3 - <<'INNER' ... Path(...).exists() ... INNER` | 0 | ✅ pass | 24ms |\n| 2 | `python3 - <<'INNER' import json, pathlib; json.loads(pathlib.Path('.codex/loop/state.json').read_text()); print('state.json ok') INNER` | 0 | ✅ pass | 21ms |\n| 3 | `grep -n \"备份\\|恢复\\|演练\" docs/backup-recovery-runbook.md .gsd/analysis/BACKUP_RECOVERY_BASELINE.md` | 0 | ✅ pass | 3ms |\n\n## Deviations\n\nNone.\n\n## Known Issues\n\nThe repository still does not ship automated PostgreSQL backup scheduling, Redis restore automation, OSS bulk-export tooling, a single authoritative Chroma persistence path, or named RTO/RPO/on-call ownership; this task kept those items explicitly outside the executable baseline and inside Follow-up guidance rather than inventing capabilities.\n\n## Files Created/Modified\n\n- `docs/backup-recovery-runbook.md`\n- `.gsd/analysis/BACKUP_RECOVERY_BASELINE.md`\n- `.codex/loop/state.json`\n- `.codex/loop/log.md`\n",
       "description": "Why: runbook 如果不和真实命令、真实路径对齐，很快就会变成误导性文档。\n\nDo:\n1. 人工走查 runbook 引用的命令与路径。\n2. 去掉空泛理想架构描述，只保留当前可执行现状。\n3. 把未来演练建议单列为 follow-up，而不混进当前基线。\n\nDone when: runbook 里的路径/命令都能在当前仓库语境下成立，grep proof 通过。",
       "estimate": "20m",
       "files": [
@@ -18259,6 +18267,39 @@
       "verdict": "✅ pass",
       "duration_ms": 8,
       "created_at": "2026-04-12T00:05:19.118Z"
+    },
+    {
+      "id": 414,
+      "task_id": "T03",
+      "slice_id": "S03",
+      "milestone_id": "M018",
+      "command": "python3 - <<'INNER' ... Path(...).exists() ... INNER",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 24,
+      "created_at": "2026-04-12T00:10:18.785Z"
+    },
+    {
+      "id": 415,
+      "task_id": "T03",
+      "slice_id": "S03",
+      "milestone_id": "M018",
+      "command": "python3 - <<'INNER' import json, pathlib; json.loads(pathlib.Path('.codex/loop/state.json').read_text()); print('state.json ok') INNER",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 21,
+      "created_at": "2026-04-12T00:10:18.785Z"
+    },
+    {
+      "id": 416,
+      "task_id": "T03",
+      "slice_id": "S03",
+      "milestone_id": "M018",
+      "command": "grep -n \"备份\\|恢复\\|演练\" docs/backup-recovery-runbook.md .gsd/analysis/BACKUP_RECOVERY_BASELINE.md",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 3,
+      "created_at": "2026-04-12T00:10:18.785Z"
     }
   ]
 }

@@ -1,6 +1,6 @@
 {
   "mode": "grow",
-  "current_issue_id": "M018-S03-T02",
+  "current_issue_id": "M018-S03-T03",
   "current_issue_type": "task",
   "current_issue_status": "done",
   "pending_issue_ids": [],
@@ -182,24 +182,24 @@
     "M018-S02-T03",
     "M018-S02",
     "M018-S03-T01",
-    "M018-S03-T02"
+    "M018-S03-T02",
+    "M018-S03-T03"
   ],
   "blocked_issue_ids": [],
   "deferred_issue_ids": [],
   "last_modified_files": [
     "docs/backup-recovery-runbook.md",
     ".gsd/analysis/BACKUP_RECOVERY_BASELINE.md",
-    ".gsd/KNOWLEDGE.md",
     ".codex/loop/state.json",
     ".codex/loop/log.md"
   ],
   "last_verification_commands": [
-    "test -f docs/backup-recovery-runbook.md || test -f .gsd/analysis/BACKUP_RECOVERY_BASELINE.md",
-    "rg -n '当前最小备份频率|pg_dump|pg_restore|redis-cli|alembic upgrade head|bootstrap_auth_admin|/health|季度演练建议|未来改进' docs/backup-recovery-runbook.md .gsd/analysis/BACKUP_RECOVERY_BASELINE.md",
-    "rg -n 'postgresql\\+asyncpg|CHROMADB_PERSIST_DIR|CHROMA_PERSIST_DIRECTORY' docs/backup-recovery-runbook.md .gsd/KNOWLEDGE.md"
+    "python3 - <<'INNER' ... Path(...).exists() ... INNER",
+    "python3 - <<'INNER' import json, pathlib; json.loads(pathlib.Path('.codex/loop/state.json').read_text()); print('state.json ok') INNER",
+    "grep -n '备份\\|恢复\\|演练' docs/backup-recovery-runbook.md .gsd/analysis/BACKUP_RECOVERY_BASELINE.md"
   ],
-  "last_verification_result": "passed; the exact task-plan file-existence gate is green, focused grep proof shows the runbook now captures backup frequency, restore order, verification steps, quarterly drill guidance, and the real manual command seams, and KNOWLEDGE now records the asyncpg/libpq plus Chroma-path drift gotchas that affect recovery work.",
-  "last_success_signal": "M018/S03/T02 now leaves one truthful backup/recovery runbook plus one analysis pointer, so future agents can start from an executable manual baseline instead of rediscovering backup cadence, restore order, evidence paths, and unimplemented gaps from scattered scripts and backend modules.",
+  "last_verification_result": "passed; all revalidated repo-local runbook references exist in the current repository, .codex/loop/state.json parses cleanly after the continuity update, and the task-plan grep gate is green while future drill/improvement guidance stays isolated under a non-baseline Follow-up section.",
+  "last_success_signal": "M018/S03/T03 leaves one truthful backup/recovery runbook plus one baseline pointer that future agents can grep directly to see what is executable today, which repo-local paths were rechecked, and which drill/improvement items are still only follow-up work.",
   "last_growth_scan": null,
-  "next_action": "Proceed to M018/S03/T03 and tighten the runbook/path wording with focused grep proof against the shipped baseline artifacts."
+  "next_action": "Proceed to M018/S03 slice close-out; the backup/recovery runbook and baseline now reflect only revalidated shipped reality, with drill/improvement items explicitly isolated as follow-up."
 }
