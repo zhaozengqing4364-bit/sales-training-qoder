@@ -1,3 +1,24 @@
+- time: 2026-04-12T08:10:30+08:00
+  mode: grow
+  item id: M018-S03
+  files changed:
+    - docs/setup/backup-recovery-current-state.md
+    - docs/backup-recovery-runbook.md
+    - .gsd/analysis/BACKUP_RECOVERY_BASELINE.md
+    - .gsd/DECISIONS.md
+    - .gsd/KNOWLEDGE.md
+    - .gsd/PROJECT.md
+    - .codex/loop/state.json
+    - .codex/loop/log.md
+  summary: Closed M018/S03 by turning the repository’s backup/recovery ambiguity into one truthful operational baseline: a current-state inventory, a manual runbook, and an analysis pointer that only cite revalidated repo-local commands and paths while isolating drill/improvement work under explicit non-baseline follow-up.
+  verification commands:
+    - find docs scripts -maxdepth 2 -type f | sort | head -n 20
+    - test -f docs/backup-recovery-runbook.md || test -f .gsd/analysis/BACKUP_RECOVERY_BASELINE.md
+    - grep -n "备份\|恢复\|演练" docs/backup-recovery-runbook.md .gsd/analysis/BACKUP_RECOVERY_BASELINE.md
+  verification results: passed; all three slice-plan gates were rerun fresh from repo root, the runbook and baseline artifacts remain present, and the final docs are grep-discoverable for backup/recovery/drill surfaces without claiming unshipped automation.
+  success signal status: future agents can now start from one durable, repository-grounded recovery baseline instead of re-auditing startup scripts, config drift, and repair commands before every ops-related slice.
+  rollback note: if later work ships real backup automation, OSS export tooling, or named operational ownership, update the current-state inventory, runbook baseline, analysis pointer, and follow-up split together before promoting any new step into the executable baseline.
+
 - time: 2026-04-12T08:05:35+08:00
   mode: grow
   item id: M018-S03-T03

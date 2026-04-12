@@ -36,8 +36,7 @@
 - **M015**：frontend hygiene 与 learner shell 保护收口已完成并封板——raw console 已统一到 shared debug seam，原生 dialog/hard navigation 已收口到 auth-handler/router/dialog/toast seam，learner dashboard/auth/practice 入口已具备明确的 route-level loading/error fallback，并把剩余 responsive/timezone 风险锁成 focused baseline proof。
 - **M016**：auth / API / admin security contract hardening 已完成——password reset 现在沿 `PasswordResetService` + `PasswordResetToken` + Alembic 026/027/028 的 durable seam 演进并由 DB enforce 单 active token；audited prompt-template / presentation / auth dependency surface 已统一到稳定错误契约并由 `ApiRequestError` 单 seam 消费；第一批高风险 admin router family 已在 module 级显式 `get_current_admin_user`，`StructuredLogger` 成为 token/password/cookie/email 的共享脱敏边界，security inventory / log-safety inventory 已把 fix-first 列表收敛到 0。
 - **M017**：realtime contract 与 concurrency proof 收口已完成——session lifecycle stale-writer race 通过 `PracticeSession.status` optimistic compare-and-swap 固定，practice websocket reconnect/backpressure/interrupt contract 通过 fresh transport epoch + focused web proof 固定，presentation upload/replace/delete 风险通过 code-adjacent discovery artifact 收敛成清晰下一步边界（先处理 replace，再决定 delete policy，不抢跑 upload-wide lock）。
-- **M018/S01**：数据库性能 discovery 已落成代码邻近、可验证、可复用的 baseline。
-- **M018/S02**：依赖安全、许可证与升级策略基线已落地——仓库现在有可执行的 `docs/setup/dependency-governance-baseline.md` + `scripts/dependency-governance.sh` 入口，`npm audit --prefix web` 与 exact gate `backend/venv/bin/python -m pip_audit` 都已回绿，`piplicenses` 也已能实际产出 license 清单；backend JWT 依赖已从 `python-jose` 收口到 `PyJWT[crypto]` 以移除被 exact audit gate 命中的 ecdsa 风险链。
+- **M018**：performance / dependency / recovery baselines 已完成——数据库性能疑点被收口为代码邻近、可执行的 discovery backlog；依赖安全/许可证/升级策略现在有 repo-local 可复跑的文档与脚本入口，并通过 web/backend audit + license inventory + shared `PyJWT` seam 回绿；备份 / 故障恢复 / 容灾现状被整理成 current-state inventory → manual runbook → analysis pointer 三层事实链，明确当前可执行恢复路径与仍未落地的运维缺口。
 
 ## Current Product Truths
 
@@ -71,30 +70,40 @@
   - in-place replace 是当前唯一已证实的 concurrent-writer race，应先做 per-`presentation_id` serialization/CAS，再决定是否需要 distributed lock；
   - delete 当前首先是 live-session policy/guard gap，而不是已经证明需要锁的路径；
   - upload-new 目前仍无 focused proof 证明存在有害并发冲突，不应抢跑到 idempotency-key 或 system-wide lock 方案。
-- M018/S01 database performance discovery 权威线现在也已明确：
+- M018 database performance baseline 权威线现在也已明确：
   - 代码级 baseline 以 `ADMIN_ANALYTICS_DB_PERFORMANCE_BASELINE`、`HISTORY_QUERY_DB_PERFORMANCE_BASELINE`、`SESSION_EVIDENCE_DB_PERFORMANCE_BASELINE`、`TRAINING_RECORDS_DB_PERFORMANCE_BASELINE` 为准；
   - 可执行 follow-up backlog 以 `backend/tests/contract/test_analytics.py::QUERY_INDEX_DISCOVERY_CONCLUSIONS` 为准；
   - `focused_proof`、`code_path_confirmed`、`needs_real_postgres_evidence` 三层必须一起维护，不能把代码结构猜测直接当成索引 implementation mandate；
   - 没有真实 Postgres `EXPLAIN` / `pg_stat_statements` / runtime timing 前，不要把 scenario filter、message timestamp 扩展、search text index 这类候选直接当成已证实优化项。
-- M018/S02 dependency-governance 权威线现在也已明确：
+- M018 dependency-governance 权威线现在也已明确：
   - 依赖治理事实源仍是 `web/package-lock.json` + `backend/requirements.txt`；
   - `scripts/dependency-governance.sh status` 是查看当前 prerequisites / authority files / CI drift 的首要入口；
-  - repo-level backend proof 建议保留 requirements-scoped `pip_audit -r backend/requirements.txt`，但 exact closeout gate `backend/venv/bin/python -m pip_audit` 也必须保持绿色；
+  - repo-level backend proof 建议保留 requirements-scoped `pip_audit -r backend/requirements.txt`，但 exact gate `backend/venv/bin/python -m pip_audit` 也必须保持绿色；
   - 当本地 venv 出现重复 dist-info / metadata 污染时，truthful fix 不是“改文档解释过去”，而是 clean rebuild `backend/venv`；
   - backend JWT token handling 现在统一通过 `common.auth.service` 暴露 `JWTError` / `create_access_token` / `verify_token`，底层库改为 `PyJWT[crypto]`。
+- M018 backup/recovery 权威线现在也已明确：
+  - 运维事实链采用三层：`docs/setup/backup-recovery-current-state.md`（详细现状盘点）→ `docs/backup-recovery-runbook.md`（人类可执行 runbook）→ `.gsd/analysis/BACKUP_RECOVERY_BASELINE.md`（面向后续 agent 的短指针）；
+  - runbook 只应引用已复核的 repo-local 路径与当前确实存在的标准工具/脚本，不应把理想化运维平台、值班人名册或自动化能力写成现实；
+  - 恢复前必须先记录 live `DATABASE_URL` / Redis / 文件目录 / OSS 环境值，因为 `session.py`、`config.py`、`scripts/dev-up.sh`、Chroma 配置之间存在默认值漂移；
+  - `pg_dump` / `pg_restore` 必须把应用的 `postgresql+asyncpg://...` URL 转成 libpq `postgresql://...` 才能直接使用；
+  - `/health`、`alembic upgrade head`、`repair_legacy_schema.py` 与 `bootstrap_auth_admin.py` 是当前恢复后验证/补齐的真实 seam；
+  - 灾备演练建议、owner gap、RTO/RPO、OSS bulk export 等未来工作必须留在 `Follow-up（非当前可执行基线）`，只有真正落地后才能提升进可执行基线。
 
 ## Current Focus
 
-当前项目处于 **M018 baselines** 阶段：
-- **S01 已完成**：query/index baseline 已从 audit 猜测变成代码邻近、可验证、可复用的 discovery artifact。
-- **S02 已完成**：仓库级依赖治理入口、升级门禁、backend `requirements.txt` 同步规则、frontend/backend vulnerability proof、以及 license scan 执行方式都已落成并验证。
-- **下一步待执行**：
-  1. **S03** 备份 / 故障恢复 / 容灾 runbook 基线。
+当前项目处于 **M018 已完成、等待下一轮 focused delivery 选择** 的状态：
+- M018 已把性能 / 依赖 / 恢复三类“像问题但未证实”的审计项，分别收口成可复跑、可引用、可继续演进的 baseline。
+- 后续任何 performance/dependency/recovery 工作，都应直接从这些 baseline authority seam 起步，而不是重新做一轮 markdown-only audit。
+- 当前更重要的是维护这些 baseline 的真实性：
+  1. 性能项先拿真实 Postgres/runtime 证据，再决定是否进入实现；
+  2. 依赖项继续保持 `npm audit` / `pip_audit` / license inventory / shared JWT seam 绿色；
+  3. 恢复项只有在仓库真正补齐脚本、自动化、owner、演练记录后，才能把 Follow-up 内容提升进 executable baseline。
 
 当前不应做的事：
-- 不要在 M018/S01 还没有真实 Postgres/runtime 证据的前提下，直接抢跑到索引 implementation 或查询重写。
-- 不要把 query/index discovery 退回成 markdown-only backlog；后续更新必须同步修改 code-adjacent inventories、`QUERY_INDEX_DISCOVERY_CONCLUSIONS`、以及 focused proof。
-- 不要把 M018/S02 再退回成“文档里承认 blocker 就算完成”；当前 slice 已经证明 exact audit gate、requirements-scoped proof、license scan、和 repo-local baseline 可以同时成立，后续应维护绿色基线而不是重新放宽标准。
+- 不要在没有真实 Postgres/runtime 证据前，把 M018 的索引候选伪装成已确认优化。
+- 不要把依赖治理退回成“文档承认 blocker 就算完成”；repo-local 命令现在已经可执行，后续要维护绿灯。
+- 不要把 backup/recovery runbook 里的演练建议、RTO/RPO、owner gap 写成“当前已具备能力”；那仍然只是明确记录的后续工作。
+- 不要绕开 code-adjacent / repo-local authority seam 另造并行 audit 文档；后续更新必须直接改动现有 baseline 文件与 proof。
 
 ## Capability Contract
 
@@ -119,4 +128,4 @@
 - [x] M015 — Frontend hygiene 与 learner shell 保护收口
 - [x] M016 — Auth / API / admin security contract hardening
 - [x] M017 — Realtime contract 与 concurrency proof 收口
-- [ ] M018 — Performance / dependency / recovery baselines（S01-S02 complete; S03 pending）
+- [x] M018 — Performance / dependency / recovery baselines
