@@ -1,0 +1,305 @@
+# Backup / Recovery Baseline Runbook
+
+最后更新：2026-04-12  
+适用范围：当前仓库可见的本地开发 / 轻量手工运维场景  
+配套现状清单：`docs/setup/backup-recovery-current-state.md`
+
+> 当前基线只描述**今天仓库里真实能执行的路径**：本地脚本、PostgreSQL/Redis 标准工具、文件归档、Alembic、老库修复脚本、管理员账号重建。
+>
+> 当前仓库**没有** repo-native 的一键备份平台、OSS 批量导出脚本、统一灾备编排或明确值班名单；这些缺口会在文末单列，不混入当前基线步骤。
+
+## 1. 当前责任边界与证据位置
+
+| 项目 | 当前真实口径 | 执行时必须留证的位置 |
+|---|---|---|
+| 执行人 | 当前实际维护该环境的人；仓库内未记录具体姓名/值班表 | 工单 / 变更单 / 值班记录 |
+| 审批人 | 当前环境负责人；仓库内未记录具体人名 | 工单审批记录 |
+| 仓库内事实依据 | 本 runbook + `docs/setup/backup-recovery-current-state.md` | 仓库文档本身 |
+| 备份产物目录（建议） | 当前仓库无固定目录；最小基线建议放到本机或挂载盘的 `./.dev/backup-evidence/<YYYYMMDD-HHMM>/`，不要提交到 Git | 备份目录、截图、命令回显 |
+| 恢复验证证据 | `/health` 回包、`alembic upgrade head` 输出、必要时管理员重建回显 | 同一工单 / 恢复演练记录 |
+
+## 2. 执行前先确认的环境事实
+
+### 2.1 必须先记录真实环境变量
+
+先在要执行的 shell 中确认真实值；不要直接相信仓库默认值，因为当前仓库有多处默认值漂移。
+
+```bash
+printf 'DATABASE_URL=%s\n' "${DATABASE_URL:-<unset>}"
+printf 'REDIS_URL=%s\n' "${REDIS_URL:-<unset>}"
+printf 'SESSION_STATE_REDIS_URL=%s\n' "${SESSION_STATE_REDIS_URL:-<unset>}"
+printf 'DOCUMENT_STORAGE_PATH=%s\n' "${DOCUMENT_STORAGE_PATH:-<unset>}"
+printf 'CHROMADB_PERSIST_DIR=%s\n' "${CHROMADB_PERSIST_DIR:-<unset>}"
+printf 'CHROMA_PERSIST_DIRECTORY=%s\n' "${CHROMA_PERSIST_DIRECTORY:-<unset>}"
+printf 'UPLOAD_DIR=%s\n' "${UPLOAD_DIR:-<unset>}"
+printf 'ALI_OSS_BUCKET=%s\n' "${ALI_OSS_BUCKET:-<unset>}"
+printf 'ALI_OSS_ENDPOINT=%s\n' "${ALI_OSS_ENDPOINT:-<unset>}"
+```
+
+### 2.2 当前必须记住的路径差异
+
+- `scripts/dev-up.sh` 的本地开发默认库：`sales_training`
+- `backend/src/common/db/session.py` 的运行时默认库：`ai_practice`
+- `backend/src/common/config.py` 的 `DATABASE_URL` 默认值：SQLite `./ai_practice.db`
+- `backend/src/common/storage/document.py` 默认文档目录：`./data/documents`
+- `backend/src/common/knowledge/vector_store.py` 默认向量目录：`./data/chromadb`
+- `backend/src/common/config.py` 的 `CHROMA_PERSIST_DIRECTORY` 默认值：`./data/chroma`
+- `backend/src/common/config.py` 的通用上传目录：`./uploads`
+- `backend/src/admin/api/admin.py` 旧 PPT 上传硬编码目录：`/data/uploads`
+
+恢复或备份时，**以当前环境实际值为准**，不要假设仓库只有一个统一默认目录。
+
+## 3. 当前最小备份频率（手工执行，不代表已自动化）
+
+| 数据面 | 当前最小频率 | 当前可执行方式 | 当前风险说明 |
+|---|---|---|---|
+| PostgreSQL 主库 | 每周至少一次；每次执行 `alembic upgrade head`、`repair_legacy_schema.py`、`reset_db.py`、大版本发布前必须额外执行一次 | 手工 `pg_dump` | 仓库内没有自动调度或保留策略 |
+| Redis 会话恢复状态 | 需要保留活跃会话可恢复能力时，在重启/迁移前执行一次；否则可接受丢失最近 30 分钟 reconnect 状态 | 手工 `redis-cli --rdb` | Redis 只承载短 TTL 会话快照，不是长期业务主数据 |
+| 本地文档 / 向量库 / 上传目录 | 每周至少一次；知识库大批量导入或 PPT 上传后额外执行一次 | 手工 `tar` 归档 | 当前目录分散，且存在相对路径/绝对路径并存 |
+| OSS 音频对象 | 当前仓库内**无**批量备份入口；至少每季度确认 bucket 配置与代表性对象可读 | 仓库内仅能验证 `object_key`/签名能力，不能批量导出 | 当前是已知缺口 |
+
+## 4. 备份步骤（当前可执行基线）
+
+以下步骤假设你已经在正确环境里导出了真实环境变量，并且 `pg_dump` / `pg_restore` / `redis-cli` / `tar` 已安装。
+
+### 4.1 建立证据目录
+
+```bash
+export BACKUP_TS="$(date +%Y%m%d-%H%M%S)"
+export BACKUP_DIR="./.dev/backup-evidence/${BACKUP_TS}"
+mkdir -p "${BACKUP_DIR}"/{db,redis,files,notes}
+```
+
+### 4.2 PostgreSQL 逻辑备份
+
+> 注意：应用运行时常用 `postgresql+asyncpg://...`；`pg_dump` / `pg_restore` 需要 libpq 风格 URL。
+
+```bash
+export PG_BACKUP_URL="${DATABASE_URL/postgresql+asyncpg:/postgresql:}"
+pg_dump --format=custom --file "${BACKUP_DIR}/db/postgres.dump" "${PG_BACKUP_URL}"
+pg_restore --list "${BACKUP_DIR}/db/postgres.dump" | head -n 20
+```
+
+如果上面的 `PG_BACKUP_URL` 为空或不正确，不要继续；先回到第 2 节确认真实 `DATABASE_URL`。
+
+### 4.3 Redis 会话恢复状态备份（可选但建议在重启/迁移前执行）
+
+```bash
+export SESSION_STATE_REDIS_EFFECTIVE="${SESSION_STATE_REDIS_URL:-${REDIS_URL}}"
+redis-cli -u "${SESSION_STATE_REDIS_EFFECTIVE}" --rdb "${BACKUP_DIR}/redis/session-state.rdb"
+test -f "${BACKUP_DIR}/redis/session-state.rdb"
+```
+
+说明：
+- 当前 Redis 主要保存 `ws:session_state:` 前缀、TTL 1800 秒的 reconnect 状态；
+- 如果这部分丢失，活跃会话会失去恢复上下文，但数据库主数据不因此回退；
+- 如果环境不要求保留活跃会话恢复，可以在记录风险后跳过此项。
+
+### 4.4 本地目录归档
+
+#### 4.4.1 仓库相对路径目录
+
+```bash
+for path in ./data/documents ./data/chromadb ./data/chroma ./uploads; do
+  if [ -e "$path" ]; then
+    safe_name="$(printf '%s' "$path" | tr '/' '_')"
+    tar -czf "${BACKUP_DIR}/files/${safe_name}.tgz" "$path"
+    tar -tzf "${BACKUP_DIR}/files/${safe_name}.tgz" | head -n 5
+  fi
+done
+```
+
+#### 4.4.2 旧绝对路径 `/data/uploads`（如果环境里真实存在）
+
+```bash
+if [ -e /data/uploads ]; then
+  tar -P -czf "${BACKUP_DIR}/files/_data_uploads.tgz" /data/uploads
+  tar -P -tzf "${BACKUP_DIR}/files/_data_uploads.tgz" | head -n 5
+fi
+```
+
+### 4.5 OSS 音频对象当前基线
+
+当前仓库只有以下事实：
+- 数据库里保存 `object_key`
+- 后端可基于 `ALI_OSS_*` 生成签名 PUT/GET URL
+- 仓库内**没有**批量导出 OSS bucket 的脚本
+
+因此当前备份基线只能做到：
+1. 记录当前 bucket / endpoint 配置；
+2. 确认关键环境中 OSS 凭证已配置；
+3. 在工单里标注“OSS 批量备份不由仓库内脚本覆盖”。
+
+## 5. 恢复步骤（当前真实顺序）
+
+### 5.1 先停服务，避免边恢复边写入
+
+```bash
+bash scripts/dev-stop.sh
+```
+
+如果本次恢复也要停本机 PostgreSQL / Redis，可在确认影响后执行：
+
+```bash
+STOP_INFRA=1 bash scripts/dev-stop.sh
+```
+
+### 5.2 恢复 PostgreSQL 主库
+
+以下命令适用于已经拿到 `postgres.dump` 的场景：
+
+```bash
+export PG_RESTORE_URL="${DATABASE_URL/postgresql+asyncpg:/postgresql:}"
+pg_restore --clean --if-exists --no-owner --dbname "${PG_RESTORE_URL}" "${BACKUP_DIR}/db/postgres.dump"
+```
+
+如果目标环境要求先人工 drop/create 数据库，请先由环境负责人执行，再运行上面的 `pg_restore`。
+
+### 5.3 对齐 schema 到当前代码版本
+
+```bash
+cd backend
+alembic upgrade head
+```
+
+如果是老环境、升级后仍存在知识库 schema 漂移，再执行：
+
+```bash
+python scripts/repair_legacy_schema.py --database-url "${DATABASE_URL}"
+```
+
+只有在你已经确认目标 revision 的前提下，才使用 `--stamp-revision <revision>`。
+
+### 5.4 恢复本地目录
+
+### 仓库相对路径目录
+
+在仓库根目录执行：
+
+```bash
+for archive in "${BACKUP_DIR}"/files/*.tgz; do
+  [ -e "$archive" ] || continue
+  case "$archive" in
+    *"_data_uploads.tgz") ;; # 绝对路径单独处理
+    *) tar -xzf "$archive" ;;
+  esac
+done
+```
+
+### `/data/uploads` 绝对路径（如果有单独归档）
+
+```bash
+if [ -f "${BACKUP_DIR}/files/_data_uploads.tgz" ]; then
+  tar -P -xzf "${BACKUP_DIR}/files/_data_uploads.tgz"
+fi
+```
+
+### 5.5 Redis 会话状态恢复（可选）
+
+当前仓库**没有**把 `session-state.rdb` 自动装回 Redis 的 repo-native 脚本。
+
+因此当前真实口径是：
+- 如果环境负责人有现成 Redis 服务级恢复流程，就按服务级流程恢复；
+- 如果没有，就接受活跃会话 reconnect 状态丢失，并在恢复记录里注明“仅恢复数据库与文件面”。
+
+### 5.6 必要时重建管理员 / 支持账号
+
+```bash
+cd backend
+python scripts/bootstrap_auth_admin.py --email admin@qoder.ai --name 管理员 --role admin
+python scripts/bootstrap_auth_admin.py --email support@qoder.ai --name 支持工程师 --role support
+```
+
+配套登录密码配置见：`docs/setup/auth-local.md`
+
+### 5.7 启动服务
+
+回到仓库根目录：
+
+```bash
+bash scripts/dev-up.sh
+```
+
+## 6. 恢复后验证步骤
+
+至少执行下面这些检查并把输出附到同一条恢复记录。
+
+### 6.1 后端健康检查
+
+```bash
+curl -fsS http://127.0.0.1:3444/health
+```
+
+预期包含：
+- `"status": "healthy"`
+- 当前时间戳
+- 版本号
+
+### 6.2 Schema 已对齐到当前代码
+
+```bash
+cd backend
+alembic upgrade head
+```
+
+预期：无报错；如果已经是最新 revision，应表现为 no-op / 最新版本。
+
+### 6.3 管理员入口可重新建立
+
+如果恢复后管理员账号缺失，重新执行：
+
+```bash
+cd backend
+python scripts/bootstrap_auth_admin.py --email admin@qoder.ai --name 管理员 --role admin
+```
+
+预期：输出 `[created]` 或 `[updated]`。
+
+### 6.4 文件面抽查
+
+```bash
+for path in ./data/documents ./data/chromadb ./data/chroma ./uploads /data/uploads; do
+  [ -e "$path" ] && printf '[present] %s\n' "$path"
+done
+```
+
+### 6.5 Redis 风险确认
+
+如果本次没有恢复 Redis，会话恢复状态将从零开始。请在恢复记录里明确写明：
+- 是否恢复 Redis；
+- 如果未恢复，是否接受活跃会话 reconnect 状态丢失。
+
+## 7. 当前已知不能假装存在的能力
+
+以下能力当前**不应**写成“已具备”：
+
+1. 仓库内没有自动调度的 PostgreSQL 备份任务；
+2. 仓库内没有 Redis 恢复脚本；
+3. 仓库内没有 OSS bucket 批量导出脚本；
+4. 仓库内没有统一的 RTO / RPO 文档；
+5. 仓库内没有明确值班人名册。
+
+## 8. 季度演练建议（建议项，不代表已落地）
+
+当前仓库没有灾难恢复演练记录。最小建议是**每季度至少做一次 60 分钟手工演练**，演练范围按下面顺序执行：
+
+1. 选一个非生产环境，记录真实环境变量；
+2. 手工做一次 PostgreSQL dump、Redis RDB（可选）、本地目录归档；
+3. 停服务；
+4. 从 dump 恢复数据库；
+5. 执行 `alembic upgrade head`；
+6. 恢复目录归档；
+7. 必要时重建管理员账号；
+8. `bash scripts/dev-up.sh`；
+9. 执行 `/health` 检查并记录成功/失败；
+10. 把本次耗时、缺失工具、路径漂移、人工判断点补回本 runbook。
+
+## 9. 未来改进（与当前可执行内容分开）
+
+以下是后续改进项，不是当前仓库已落地能力：
+
+- 提供 repo-native 的 `pg_dump` / `pg_restore` 包装脚本；
+- 明确 Redis 服务级恢复流程；
+- 明确 `./data/chromadb` 与 `./data/chroma` 的单一权威目录；
+- 为 OSS 音频对象补齐批量导出或 bucket 级备份策略说明；
+- 建立固定值班人、审批人、RTO / RPO、演练记录模板。

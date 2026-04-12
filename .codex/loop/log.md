@@ -1,3 +1,21 @@
+- time: 2026-04-12T08:04:34+08:00
+  mode: grow
+  item id: M018-S03-T02
+  files changed:
+    - docs/backup-recovery-runbook.md
+    - .gsd/analysis/BACKUP_RECOVERY_BASELINE.md
+    - .gsd/KNOWLEDGE.md
+    - .codex/loop/state.json
+    - .codex/loop/log.md
+  summary: Turned the backup/recovery current-state audit into a truthful manual runbook with explicit backup cadence, restore order, verification steps, evidence locations, quarterly drill guidance, and clearly separated uncovered gaps.
+  verification commands:
+    - test -f docs/backup-recovery-runbook.md || test -f .gsd/analysis/BACKUP_RECOVERY_BASELINE.md
+    - rg -n "当前最小备份频率|pg_dump|pg_restore|redis-cli|alembic upgrade head|bootstrap_auth_admin|/health|季度演练建议|未来改进" docs/backup-recovery-runbook.md .gsd/analysis/BACKUP_RECOVERY_BASELINE.md
+    - rg -n "postgresql\+asyncpg|CHROMADB_PERSIST_DIR|CHROMA_PERSIST_DIRECTORY" docs/backup-recovery-runbook.md .gsd/KNOWLEDGE.md
+  verification results: passed; the task-plan file-existence gate is green, grep proof shows the shipped runbook contains backup cadence, restore commands, verification, and drill/follow-up sections, and the knowledge log now records the asyncpg/libpq plus Chroma-path drift that could otherwise derail future restore work.
+  success signal status: future agents can now open one runbook and one analysis pointer to understand the current manual backup/recovery baseline, including what is executable today and what is still an explicit gap.
+  rollback note: if later slices add real backup automation or unify storage paths, update docs/backup-recovery-runbook.md, .gsd/analysis/BACKUP_RECOVERY_BASELINE.md, and the related knowledge entry together so the manual baseline does not drift from the shipped recovery surface.
+
 - time: 2026-04-12T07:57:15+08:00
   mode: grow
   item id: M018-S03-T01

@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "exported_at": "2026-04-11T23:57:55.663Z",
+  "exported_at": "2026-04-12T00:05:19.159Z",
   "milestones": [
     {
       "id": "M001",
@@ -11197,19 +11197,26 @@
       "milestone_id": "M018",
       "slice_id": "S03",
       "id": "T02",
-      "title": "输出 backup/recovery baseline runbook",
-      "status": "pending",
-      "one_liner": "",
-      "narrative": "",
-      "verification_result": "",
+      "title": "Added a truthful manual backup/recovery runbook and analysis baseline that capture today’s backup cadence, restore order, verification steps, and explicit gaps.",
+      "status": "complete",
+      "one_liner": "Added a truthful manual backup/recovery runbook and analysis baseline that capture today’s backup cadence, restore order, verification steps, and explicit gaps.",
+      "narrative": "I turned the current-state backup/recovery audit into two durable artifacts: `docs/backup-recovery-runbook.md` as the human-executable baseline runbook, and `.gsd/analysis/BACKUP_RECOVERY_BASELINE.md` as the short analysis pointer that tells future agents where to start. The runbook stays strictly on today’s shipped surface: it uses the real repo entrypoints (`scripts/dev-up.sh`, `scripts/dev-stop.sh`, Alembic, `repair_legacy_schema.py`, `bootstrap_auth_admin.py`), records manual backup cadence for PostgreSQL / Redis / local directories, preserves the current OSS bulk-backup gap as an explicit uncovered risk, and separates quarterly drill guidance plus future improvements from the executable baseline so the document does not pretend unshipped automation exists. Because the repo still has no named on-call roster, I documented owner/evidence handling with truthful role placeholders rather than inventing people or SRE processes. I also appended two non-obvious recovery gotchas to `.gsd/KNOWLEDGE.md`: `pg_dump` / `pg_restore` must convert the app’s `postgresql+asyncpg://...` URL into `postgresql://...`, and Chroma persistence currently drifts between `CHROMA_PERSIST_DIRECTORY=./data/chroma` and `CHROMADB_PERSIST_DIR=./data/chromadb`, so future recovery work must verify the live path instead of trusting one default.",
+      "verification_result": "Fresh verification was run on the final written version of the artifacts. `test -f docs/backup-recovery-runbook.md || test -f .gsd/analysis/BACKUP_RECOVERY_BASELINE.md` passed, proving the planned output files exist. A focused grep proof, `rg -n '当前最小备份频率|pg_dump|pg_restore|redis-cli|alembic upgrade head|bootstrap_auth_admin|/health|季度演练建议|未来改进' docs/backup-recovery-runbook.md .gsd/analysis/BACKUP_RECOVERY_BASELINE.md`, passed and showed the runbook now contains the backup cadence, restore order, verification path, quarterly drill guidance, and explicit future-gap split. A second grep proof, `rg -n 'postgresql\\+asyncpg|CHROMADB_PERSIST_DIR|CHROMA_PERSIST_DIRECTORY' docs/backup-recovery-runbook.md .gsd/KNOWLEDGE.md`, passed and confirmed the final artifact set records the asyncpg/libpq and Chroma-path drift gotchas that can derail later restore work.",
       "duration": "",
-      "completed_at": null,
+      "completed_at": "2026-04-12T00:05:19.118Z",
       "blocker_discovered": false,
-      "deviations": "",
-      "known_issues": "",
-      "key_files": [],
-      "key_decisions": [],
-      "full_summary_md": "",
+      "deviations": "None.",
+      "known_issues": "The repository still does not ship repo-native PostgreSQL scheduling, Redis restore automation, OSS bulk-export tooling, a single authoritative Chroma persistence path, or named RTO/RPO/on-call ownership; the new runbook records these as explicit gaps instead of pretending they are implemented.",
+      "key_files": [
+        "docs/backup-recovery-runbook.md",
+        ".gsd/analysis/BACKUP_RECOVERY_BASELINE.md",
+        ".gsd/KNOWLEDGE.md"
+      ],
+      "key_decisions": [
+        "Separated the executable manual backup/recovery baseline from future drill/improvement guidance so the runbook only describes capabilities that are actually present in the repository today.",
+        "Documented owners as role-based placeholders and evidence paths rather than inventing named operators, because the repository still lacks an explicit on-call/owner roster."
+      ],
+      "full_summary_md": "---\nid: T02\nparent: S03\nmilestone: M018\nkey_files:\n  - docs/backup-recovery-runbook.md\n  - .gsd/analysis/BACKUP_RECOVERY_BASELINE.md\n  - .gsd/KNOWLEDGE.md\nkey_decisions:\n  - Separated the executable manual backup/recovery baseline from future drill/improvement guidance so the runbook only describes capabilities that are actually present in the repository today.\n  - Documented owners as role-based placeholders and evidence paths rather than inventing named operators, because the repository still lacks an explicit on-call/owner roster.\nduration: \nverification_result: passed\ncompleted_at: 2026-04-12T00:05:19.116Z\nblocker_discovered: false\n---\n\n# T02: Added a truthful manual backup/recovery runbook and analysis baseline that capture today’s backup cadence, restore order, verification steps, and explicit gaps.\n\n**Added a truthful manual backup/recovery runbook and analysis baseline that capture today’s backup cadence, restore order, verification steps, and explicit gaps.**\n\n## What Happened\n\nI turned the current-state backup/recovery audit into two durable artifacts: `docs/backup-recovery-runbook.md` as the human-executable baseline runbook, and `.gsd/analysis/BACKUP_RECOVERY_BASELINE.md` as the short analysis pointer that tells future agents where to start. The runbook stays strictly on today’s shipped surface: it uses the real repo entrypoints (`scripts/dev-up.sh`, `scripts/dev-stop.sh`, Alembic, `repair_legacy_schema.py`, `bootstrap_auth_admin.py`), records manual backup cadence for PostgreSQL / Redis / local directories, preserves the current OSS bulk-backup gap as an explicit uncovered risk, and separates quarterly drill guidance plus future improvements from the executable baseline so the document does not pretend unshipped automation exists. Because the repo still has no named on-call roster, I documented owner/evidence handling with truthful role placeholders rather than inventing people or SRE processes. I also appended two non-obvious recovery gotchas to `.gsd/KNOWLEDGE.md`: `pg_dump` / `pg_restore` must convert the app’s `postgresql+asyncpg://...` URL into `postgresql://...`, and Chroma persistence currently drifts between `CHROMA_PERSIST_DIRECTORY=./data/chroma` and `CHROMADB_PERSIST_DIR=./data/chromadb`, so future recovery work must verify the live path instead of trusting one default.\n\n## Verification\n\nFresh verification was run on the final written version of the artifacts. `test -f docs/backup-recovery-runbook.md || test -f .gsd/analysis/BACKUP_RECOVERY_BASELINE.md` passed, proving the planned output files exist. A focused grep proof, `rg -n '当前最小备份频率|pg_dump|pg_restore|redis-cli|alembic upgrade head|bootstrap_auth_admin|/health|季度演练建议|未来改进' docs/backup-recovery-runbook.md .gsd/analysis/BACKUP_RECOVERY_BASELINE.md`, passed and showed the runbook now contains the backup cadence, restore order, verification path, quarterly drill guidance, and explicit future-gap split. A second grep proof, `rg -n 'postgresql\\+asyncpg|CHROMADB_PERSIST_DIR|CHROMA_PERSIST_DIRECTORY' docs/backup-recovery-runbook.md .gsd/KNOWLEDGE.md`, passed and confirmed the final artifact set records the asyncpg/libpq and Chroma-path drift gotchas that can derail later restore work.\n\n## Verification Evidence\n\n| # | Command | Exit Code | Verdict | Duration |\n|---|---------|-----------|---------|----------|\n| 1 | `test -f docs/backup-recovery-runbook.md || test -f .gsd/analysis/BACKUP_RECOVERY_BASELINE.md` | 0 | ✅ pass | 5ms |\n| 2 | `rg -n '当前最小备份频率|pg_dump|pg_restore|redis-cli|alembic upgrade head|bootstrap_auth_admin|/health|季度演练建议|未来改进' docs/backup-recovery-runbook.md .gsd/analysis/BACKUP_RECOVERY_BASELINE.md` | 0 | ✅ pass | 17ms |\n| 3 | `rg -n 'postgresql\\+asyncpg|CHROMADB_PERSIST_DIR|CHROMA_PERSIST_DIRECTORY' docs/backup-recovery-runbook.md .gsd/KNOWLEDGE.md` | 0 | ✅ pass | 8ms |\n\n## Deviations\n\nNone.\n\n## Known Issues\n\nThe repository still does not ship repo-native PostgreSQL scheduling, Redis restore automation, OSS bulk-export tooling, a single authoritative Chroma persistence path, or named RTO/RPO/on-call ownership; the new runbook records these as explicit gaps instead of pretending they are implemented.\n\n## Files Created/Modified\n\n- `docs/backup-recovery-runbook.md`\n- `.gsd/analysis/BACKUP_RECOVERY_BASELINE.md`\n- `.gsd/KNOWLEDGE.md`\n",
       "description": "Why: S03 的核心交付是把“缺失”变成一份最小可执行 runbook，而不是继续停留在 audit 描述。\n\nDo:\n1. 编写最小 runbook：备份频率、恢复步骤、验证步骤、负责人/证据位置、季度演练建议。\n2. 只写当前真实现状，不写未落地的理想化运维平台。\n3. 保留未来改进建议，但与当前可执行内容分开。\n\nDone when: 仓库中出现一份可直接被人类执行的 backup/recovery baseline runbook。",
       "estimate": "40m",
       "files": [
@@ -18219,6 +18226,39 @@
       "verdict": "✅ pass",
       "duration_ms": 17,
       "created_at": "2026-04-11T23:57:55.617Z"
+    },
+    {
+      "id": 411,
+      "task_id": "T02",
+      "slice_id": "S03",
+      "milestone_id": "M018",
+      "command": "test -f docs/backup-recovery-runbook.md || test -f .gsd/analysis/BACKUP_RECOVERY_BASELINE.md",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 5,
+      "created_at": "2026-04-12T00:05:19.118Z"
+    },
+    {
+      "id": 412,
+      "task_id": "T02",
+      "slice_id": "S03",
+      "milestone_id": "M018",
+      "command": "rg -n '当前最小备份频率|pg_dump|pg_restore|redis-cli|alembic upgrade head|bootstrap_auth_admin|/health|季度演练建议|未来改进' docs/backup-recovery-runbook.md .gsd/analysis/BACKUP_RECOVERY_BASELINE.md",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 17,
+      "created_at": "2026-04-12T00:05:19.118Z"
+    },
+    {
+      "id": 413,
+      "task_id": "T02",
+      "slice_id": "S03",
+      "milestone_id": "M018",
+      "command": "rg -n 'postgresql\\+asyncpg|CHROMADB_PERSIST_DIR|CHROMA_PERSIST_DIRECTORY' docs/backup-recovery-runbook.md .gsd/KNOWLEDGE.md",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 8,
+      "created_at": "2026-04-12T00:05:19.118Z"
     }
   ]
 }

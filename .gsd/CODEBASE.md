@@ -1,12 +1,14 @@
 # Codebase Map
 
-Generated: 2026-04-11T23:52:27Z | Files: 500 | Described: 0/500
-<!-- gsd:codebase-meta {"generatedAt":"2026-04-11T23:52:27Z","fingerprint":"0db4109962a7b8517be2d68f04885e8c8e15323b","fileCount":500,"truncated":true} -->
+Generated: 2026-04-11T23:58:10Z | Files: 500 | Described: 0/500
+<!-- gsd:codebase-meta {"generatedAt":"2026-04-11T23:58:10Z","fingerprint":"2bbf320ccc52c037949fceb28657a91b2d98fdc1","fileCount":500,"truncated":true} -->
 Note: Truncated to first 500 files. Run with higher --max-files to include all.
 
 ### (root)/
 - `.env.example`
 - `.gitignore`
+- `=2.6.3`
+- `=3.2.4`
 - `AGENTS.md`
 - `alembic.ini`
 - `api-spec.md`
@@ -645,5 +647,3 @@ Note: Truncated to first 500 files. Run with higher --max-files to include all.
 - `backend/tests/unit/common/test_knowledge_answer_control_plane_models.py`
 - `backend/tests/unit/common/test_knowledge_answer_engine.py`
 - `backend/tests/unit/common/test_knowledge_answer_feature_flag.py`
-- `backend/tests/unit/common/test_knowledge_answerability.py`
-- `backend/tests/unit/common/test_knowledge_entity_resolver.py`
