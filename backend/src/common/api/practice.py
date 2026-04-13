@@ -37,7 +37,6 @@ from common.conversation.runtime_diagnostics import (
     build_session_runtime_diagnostics,
     extract_voice_policy_snapshot,
 )
-from common.conversation.session_evidence import SessionEvidenceService
 from common.db.models import PracticeSession, Scenario, SessionAudioSegment, SessionStatus, User
 from common.db.schemas import (
     SessionCreate,
@@ -62,21 +61,27 @@ from common.effectiveness import (
     evaluate_effectiveness_snapshot,
 )
 from common.monitoring.logger import get_logger, get_trace_id
-from common.oss.signing import OssConfigError, get_oss_signing_service
+from common.oss.signing import OssConfigError
+from common.services.practice_service import (
+    PracticeRuntimeDescriptorService,
+    build_practice_route_services,
+)
 from common.websocket.base_handler import get_connection_manager
 from common.websocket.session_manager import get_session_manager
 from presentation_coach.services.coach_service import PresentationCoachService
 from sales_bot.services.bot_service import sales_bot_service
 from sales_bot.services.summary_service import summary_service
-from sales_bot.services.voice_runtime_policy import VoiceRuntimePolicyService
 from sales_bot.websocket.components.stepfun_message_helpers import (
     normalize_score_snapshot,
 )
-from training_runtime.service import build_training_runtime_descriptor
 
 logger = get_logger(__name__)
 
 router = APIRouter()
+
+
+def _practice_services(db: AsyncSession):
+    return build_practice_route_services(db)
 
 
 def _is_true_env(name: str, default: str = "false") -> bool:
@@ -237,141 +242,20 @@ async def build_session_audio_audit(
     session_id: str,
     session: PracticeSession,
 ) -> "AudioAuditPayloadSchema | None":
-    """Build a shared audio-audit read model for report and replay payloads.
-
-    Queries SessionAudioSegment rows ordered by segment_sequence, reads the
-    bounded summary from voice_policy_snapshot.runtime_metrics.audio_audit, and
-    computes a derived learner_status.
-
-    Returns None (not an empty payload) when the session has no audio segments
-    at all — this distinguishes "audio not applicable" from "audio applicable
-    but nothing uploaded yet".
-    """
-    from common.db.schemas import (
-        AudioAuditPayloadSchema,
-        AudioAuditSegmentSchema,
-        AudioAuditSummarySchema,
+    return await _practice_services(db).audio_audit.build_session_audio_audit(
+        session_id=session_id,
+        session=session,
     )
-
-    # Query all segments ordered by sequence
-    seg_result = await db.execute(
-        select(SessionAudioSegment)
-        .where(SessionAudioSegment.session_id == session_id)
-        .order_by(SessionAudioSegment.segment_sequence)
-    )
-    segments = list(seg_result.scalars().all())
-
-    # If the session has never created any audio segments, return None.
-    if not segments:
-        return None
-
-    # Read bounded summary from voice_policy_snapshot.runtime_metrics.audio_audit
-    voice_policy = session.voice_policy_snapshot or {}
-    runtime_metrics = voice_policy.get("runtime_metrics") if isinstance(voice_policy, dict) else None
-    audio_audit_raw = {}
-    if isinstance(runtime_metrics, dict):
-        raw = runtime_metrics.get("audio_audit")
-        if isinstance(raw, dict):
-            audio_audit_raw = raw
-
-    # Compute aggregates from actual segment rows
-    uploaded_count = 0
-    failed_count = 0
-    pending_count = 0
-    total_bytes = 0
-    latest_sequence: int | None = None
-    last_uploaded_at: str | None = None
-
-    segment_schemas: list[AudioAuditSegmentSchema] = []
-    for seg in segments:
-        if seg.upload_status == "uploaded":
-            uploaded_count += 1
-            total_bytes += seg.size_bytes or 0
-            if latest_sequence is None or seg.segment_sequence > latest_sequence:
-                latest_sequence = seg.segment_sequence
-            if seg.created_at is not None:
-                last_uploaded_at = seg.created_at.isoformat()
-        elif seg.upload_status == "failed":
-            failed_count += 1
-        elif seg.upload_status == "pending":
-            pending_count += 1
-
-        playback_path = None
-        if seg.upload_status == "uploaded":
-            playback_path = f"/api/v1/sessions/{session_id}/audio-segments/{seg.segment_sequence}"
-
-        segment_schemas.append(
-            AudioAuditSegmentSchema(
-                segment_sequence=seg.segment_sequence,
-                created_at=seg.created_at.isoformat() if seg.created_at else None,
-                duration_ms=seg.duration_ms,
-                size_bytes=seg.size_bytes,
-                upload_status=seg.upload_status,
-                playback_path=playback_path,
-                error_message=seg.error_message,
-            )
-        )
-
-    total_segments = len(segments)
-
-    # Derive learner_status
-    if uploaded_count > 0 and uploaded_count == total_segments:
-        learner_status = "available"
-    elif uploaded_count > 0:
-        learner_status = "partial"
-    else:
-        learner_status = "missing"
-
-    # Derive degraded_reasons
-    degraded_reasons: list[str] = []
-    if failed_count > 0:
-        degraded_reasons.append("upload_failed")
-    if pending_count > 0:
-        degraded_reasons.append("segments_pending")
-
-    summary = AudioAuditSummarySchema(
-        recording_status=audio_audit_raw.get("recording_status", "active"),
-        total_segments=total_segments,
-        uploaded_segments=uploaded_count,
-        failed_segments=failed_count,
-        total_bytes=total_bytes,
-        latest_segment_sequence=latest_sequence,
-        storage_prefix=audio_audit_raw.get("storage_prefix", f"audio/{session_id}/"),
-        last_uploaded_at=last_uploaded_at,
-        learner_status=learner_status,
-        degraded_reasons=degraded_reasons,
-    )
-
-    return AudioAuditPayloadSchema(summary=summary, segments=segment_schemas)
 
 
 def _build_session_response(
     session: PracticeSession,
     scenario_type: str | None = None,
 ) -> SessionResponse:
-    payload = SessionResponse.model_validate(session)
-    resolved_scenario_type = scenario_type
-    if not resolved_scenario_type and getattr(session, "scenario", None) is not None:
-        resolved_scenario_type = getattr(session.scenario, "scenario_type", None)
-
-    try:
-        payload.scenario_type = ScenarioType(resolved_scenario_type or "sales")
-    except ValueError:
-        payload.scenario_type = ScenarioType.SALES
-    runtime_descriptor = build_training_runtime_descriptor(
+    return PracticeRuntimeDescriptorService.build_session_response(
         session,
-        scenario_type=payload.scenario_type.value,
+        scenario_type=scenario_type,
     )
-    payload.runtime_subject = runtime_descriptor.subject
-    payload.runtime_descriptor = runtime_descriptor
-    runtime_profile_id = getattr(session, "voice_runtime_profile_id", None)
-    payload.runtime_profile_id = (
-        uuid.UUID(str(runtime_profile_id)) if runtime_profile_id else None
-    )
-    payload.voice_policy_snapshot_ref = build_voice_policy_snapshot_ref(
-        payload.voice_policy_snapshot
-    )
-    return payload
 
 
 def _build_lifecycle_response_payload(transition) -> SessionLifecycleResponse:
@@ -682,7 +566,7 @@ async def _run_lifecycle_action(
     action: str,
     db: AsyncSession,
 ) -> _LifecycleActionResult:
-    lifecycle_service = SessionLifecycleService(db)
+    lifecycle_service = _practice_services(db).lifecycle
 
     if action == "end":
         if not scenario_type:
@@ -1002,7 +886,7 @@ async def start_session(
                 return error_response("[PERSONA_NOT_LINKED_TO_AGENT]", status_code=400)
             association_override_config = link.override_config or None
 
-        runtime_policy_service = VoiceRuntimePolicyService(db)
+        runtime_policy_service = _practice_services(db).runtime_policy
         effective_voice_policy = await runtime_policy_service.resolve_effective_policy(
             agent_id=agent_id_str,
             persona_id=persona_id_str,
@@ -1214,7 +1098,7 @@ async def control_session_lifecycle(
     db: AsyncSession = Depends(get_db),
 ):
     """Control session lifecycle using explicit start/pause/resume/end actions."""
-    lifecycle_service = SessionLifecycleService(db)
+    lifecycle_service = _practice_services(db).lifecycle
     session, scenario_type = await lifecycle_service.get_session_with_scenario(
         session_id
     )
@@ -1275,7 +1159,7 @@ async def update_session(
     if not _can_read_session(session, current_user):
         return error_response("[ACCESS_DENIED]", status_code=403)
 
-    lifecycle_service = SessionLifecycleService(db)
+    lifecycle_service = _practice_services(db).lifecycle
 
     transition = None
 
@@ -1342,7 +1226,7 @@ async def end_session(
 
     Supports both presentation and sales_bot sessions
     """
-    lifecycle_service = SessionLifecycleService(db)
+    lifecycle_service = _practice_services(db).lifecycle
     session, scenario_type = await lifecycle_service.get_session_with_scenario(
         session_id
     )
@@ -1522,7 +1406,7 @@ async def get_session_report(
         str(scenario_type_value) if scenario_type_value else "sales"
     )
 
-    projection_result = await SessionEvidenceService(db).get_projection(
+    projection_result = await _practice_services(db).evidence.get_projection(
         session_id=session_id,
         session=session,
         scenario_type=normalized_scenario_type,
@@ -1652,7 +1536,7 @@ async def get_session_knowledge_check(
         return error_response("[ACCESS_DENIED]", status_code=403)
 
     snapshot = extract_voice_policy_snapshot(session)
-    preview_tools = VoiceRuntimePolicyService(db).build_stepfun_tools(snapshot)
+    preview_tools = _practice_services(db).runtime_policy.build_stepfun_tools(snapshot)
     effective_tool_types = [
         str(tool.get("type") or "") for tool in preview_tools if isinstance(tool, dict)
     ]
@@ -1699,9 +1583,10 @@ async def get_session_knowledge_check(
     projection_effectiveness_snapshot = None
     projection_conclusion_evidence = None
     projection_evidence_degradation = None
-    resolved_scenario_type = SessionEvidenceService.resolve_scenario_type(session)
+    evidence_service = _practice_services(db).evidence
+    resolved_scenario_type = evidence_service.resolve_scenario_type(session)
     if resolved_scenario_type == "sales" and session.status == SessionStatus.COMPLETED.value:
-        projection_result = await SessionEvidenceService(db).get_projection(
+        projection_result = await evidence_service.get_projection(
             session_id=session_id,
             session=session,
             scenario_type=resolved_scenario_type,
@@ -2320,7 +2205,7 @@ async def generate_audio_upload_url(
 
     # --- generate signed URL ---
     try:
-        svc = get_oss_signing_service()
+        svc = _practice_services(db).get_oss_signing_service()
     except OssConfigError as exc:
         return error_response(
             "[OSS_NOT_CONFIGURED]",

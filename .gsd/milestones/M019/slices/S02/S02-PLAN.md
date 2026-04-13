@@ -23,7 +23,7 @@ S02 结束后，practice backend 的创建/生命周期/报告/音频/runtime de
 
 ## Tasks
 
-- [ ] **T01: 划分 practice backend 的应用层责任面** `est:50m`
+- [x] **T01: 划分 practice backend 的应用层责任面** `est:50m`
   - 沿 `backend/src/common/api/practice.py` 盘点当前真实 responsibility clusters：session create+policy freeze、lifecycle、report/read model、audio audit/signing、runtime descriptor。
 - 在 `backend/src/common` 下设计最小 application/service module 边界，避免新造第二套 route family。
 - 先补一组 focused tests 或 inventory assertions，锁住现有 outward contract。

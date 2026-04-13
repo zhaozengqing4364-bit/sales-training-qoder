@@ -37,6 +37,7 @@
 - **M016**：auth / API / admin security contract hardening 已完成——password reset 现在沿 `PasswordResetService` + `PasswordResetToken` + Alembic 026/027/028 的 durable seam 演进并由 DB enforce 单 active token；audited prompt-template / presentation / auth dependency surface 已统一到稳定错误契约并由 `ApiRequestError` 单 seam 消费；第一批高风险 admin router family 已在 module 级显式 `get_current_admin_user`，`StructuredLogger` 成为 token/password/cookie/email 的共享脱敏边界，security inventory / log-safety inventory 已把 fix-first 列表收敛到 0。
 - **M017**：realtime contract 与 concurrency proof 收口已完成——session lifecycle stale-writer race 通过 `PracticeSession.status` optimistic compare-and-swap 固定，practice websocket reconnect/backpressure/interrupt contract 通过 fresh transport epoch + focused web proof 固定，presentation upload/replace/delete 风险通过 code-adjacent discovery artifact 收敛成清晰下一步边界（先处理 replace，再决定 delete policy，不抢跑 upload-wide lock）。
 - **M018**：performance / dependency / recovery baselines 已完成——数据库性能疑点被收口为代码邻近、可执行的 discovery backlog；依赖安全/许可证/升级策略现在有 repo-local 可复跑的文档与脚本入口，并通过 web/backend audit + license inventory + shared `PyJWT` seam 回绿；备份 / 故障恢复 / 容灾现状被整理成 current-state inventory → manual runbook → analysis pointer 三层事实链，明确当前可执行恢复路径与仍未落地的运维缺口。
+- **M019 / S01**：数据库 startup / migration / legacy repair / auth bootstrap 的 authority line 已从隐式 startup 修补收口到可验证入口：Alembic 是 forward migration authority，legacy schema drift 由显式 repair seam 与 Alembic revision `20260413_1040_029` 承担，非开发环境 startup 对 legacy personas/knowledge drift 改为 fail-fast，runbook / architecture scan / CI migration wording 已对齐这一事实线。
 
 ## Current Product Truths
 
@@ -88,22 +89,31 @@
   - `pg_dump` / `pg_restore` 必须把应用的 `postgresql+asyncpg://...` URL 转成 libpq `postgresql://...` 才能直接使用；
   - `/health`、`alembic upgrade head`、`repair_legacy_schema.py` 与 `bootstrap_auth_admin.py` 是当前恢复后验证/补齐的真实 seam；
   - 灾备演练建议、owner gap、RTO/RPO、OSS bulk export 等未来工作必须留在 `Follow-up（非当前可执行基线）`，只有真正落地后才能提升进可执行基线。
+- M019/S01 database authority 权威线现在也已明确：
+  - `backend/src/common/db/session.py::STARTUP_DB_AUTHORITY` 是 startup / migration / legacy repair / auth bootstrap 的代码级 authority map；
+  - `init_db()` 仍是 startup bootstrap seam，但开发/测试外不再承担 schema repair 责任；发现 `personas.persona_policy` 或 `knowledge_documents` drift 时必须显式走 Alembic 或 `python scripts/repair_legacy_schema.py`；
+  - `backend/src/common/db/legacy_schema_repair.py` 是 startup compat guard、repair script、Alembic revision `20260413_1040_029_explicit_legacy_startup_repairs.py` 共享的 repair seam；
+  - `scripts/dev-up.sh` 依旧不会先跑 `alembic upgrade head`，因此本地“能启动”不能再被误读为 schema 已完成迁移；
+  - `docs/backup-recovery-runbook.md`、`docs/setup/backup-recovery-current-state.md`、`.gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md`、`.github/workflows/nfr-performance-check.yml` 已对齐为同一 authority line。
 
 ## Current Focus
 
-当前项目处于 **M018 已完成、等待下一轮 focused delivery 选择** 的状态：
-- M018 已把性能 / 依赖 / 恢复三类“像问题但未证实”的审计项，分别收口成可复跑、可引用、可继续演进的 baseline。
-- 后续任何 performance/dependency/recovery 工作，都应直接从这些 baseline authority seam 起步，而不是重新做一轮 markdown-only audit。
-- 当前更重要的是维护这些 baseline 的真实性：
-  1. 性能项先拿真实 Postgres/runtime 证据，再决定是否进入实现；
-  2. 依赖项继续保持 `npm audit` / `pip_audit` / license inventory / shared JWT seam 绿色；
-  3. 恢复项只有在仓库真正补齐脚本、自动化、owner、演练记录后，才能把 Follow-up 内容提升进 executable baseline。
+当前项目处于 **M019 已启动，S01 已完成，后续进入 S02-S04 authority seam / release gate 收口** 的状态：
+- S01 已把数据库 startup / migration / bootstrap authority 从“startup 隐式补洞”收口到显式、可验证的 entrypoint 和 fail-fast 信号。
+- 接下来的重点是继续沿已明确的 authority seam 拆出：
+  1. **S02**：practice backend application seam，把 `practice.py` 中会话创建 / 生命周期 / 报告 / 音频审计 / runtime descriptor 编排拆到可验证应用层；
+  2. **S03**：frontend domain client 与 transport seam，把 `client.ts` 与 `use-practice-websocket.ts` 的职责边界继续收口；
+  3. **S04**：release gate / metrics / doc-contract truth line，把 GitHub Actions、metrics、错误上报与 docs/spec 合到至少一条真实 release truth line。
+- 当前更重要的是维持 S01 刚建立的 authority truth：
+  1. 不要重新把 non-development startup 当成 schema repair 常态入口；
+  2. 后续 slice 的 runbook / CI / docs / tests 必须继续引用同一 Alembic / repair / bootstrap authority line；
+  3. 任何新的 schema drift 修补都应优先落到显式 migration 或脚本，而不是 request/startup path。
 
 当前不应做的事：
-- 不要在没有真实 Postgres/runtime 证据前，把 M018 的索引候选伪装成已确认优化。
-- 不要把依赖治理退回成“文档承认 blocker 就算完成”；repo-local 命令现在已经可执行，后续要维护绿灯。
-- 不要把 backup/recovery runbook 里的演练建议、RTO/RPO、owner gap 写成“当前已具备能力”；那仍然只是明确记录的后续工作。
-- 不要绕开 code-adjacent / repo-local authority seam 另造并行 audit 文档；后续更新必须直接改动现有 baseline 文件与 proof。
+- 不要把 `init_db()` 的 `create_all()` / compat guard 继续外推成生产迁移 authority。
+- 不要因为 `scripts/dev-up.sh` 能启动，就跳过 `alembic upgrade head` 或显式 repair。
+- 不要在 S02-S04 又各自发明一套启动/迁移/恢复说明；必须复用 S01 已写回的 authority map。
+- 不要绕开现有 code-adjacent seam 再写并行 markdown-only inventory；后续更新应直接修改现有 authority-bearing files/tests/docs。
 
 ## Capability Contract
 
@@ -129,3 +139,4 @@
 - [x] M016 — Auth / API / admin security contract hardening
 - [x] M017 — Realtime contract 与 concurrency proof 收口
 - [x] M018 — Performance / dependency / recovery baselines
+- [ ] M019 — Authority seams 与 release gate 收口（S01 complete, S02-S04 pending）

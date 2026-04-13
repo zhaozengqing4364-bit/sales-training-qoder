@@ -24,6 +24,46 @@ from main import app
 TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
 
 
+def test_practice_application_service_inventory_exposes_named_route_clusters() -> None:
+    from common.services.practice_service import (
+        PRACTICE_APPLICATION_SEAMS,
+        PracticeAudioAuditService,
+        PracticeRouteServices,
+        PracticeRuntimeDescriptorService,
+    )
+
+    assert PRACTICE_APPLICATION_SEAMS == (
+        "session_create_policy",
+        "session_lifecycle",
+        "session_report_read_model",
+        "audio_audit_and_signing",
+        "runtime_descriptor",
+    )
+    assert PracticeRouteServices.__dataclass_fields__["seam_names"].default == PRACTICE_APPLICATION_SEAMS
+    assert PracticeAudioAuditService.__name__ == "PracticeAudioAuditService"
+    assert PracticeRuntimeDescriptorService.__name__ == "PracticeRuntimeDescriptorService"
+
+
+@pytest.mark.asyncio
+async def test_practice_application_service_bundle_wires_existing_dependencies(
+    db_session: AsyncSession,
+) -> None:
+    from common.conversation.session_evidence import SessionEvidenceService
+    from common.db.session_lifecycle import SessionLifecycleService
+    from common.services.practice_service import build_practice_route_services
+    from sales_bot.services.voice_runtime_policy import VoiceRuntimePolicyService
+
+    services = build_practice_route_services(db_session)
+
+    assert services.seam_names[0] == "session_create_policy"
+    assert isinstance(services.runtime_policy, VoiceRuntimePolicyService)
+    assert isinstance(services.lifecycle, SessionLifecycleService)
+    assert isinstance(services.evidence, SessionEvidenceService)
+    assert services.audio_audit.__class__.__name__ == "PracticeAudioAuditService"
+    assert services.runtime_descriptor.__class__.__name__ == "PracticeRuntimeDescriptorService"
+    assert callable(services.get_oss_signing_service)
+
+
 def _make_effectiveness_snapshot(*, evaluable: bool, reason: str | None) -> dict[str, object]:
     return {
         "pass_flags": {
