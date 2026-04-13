@@ -25,8 +25,8 @@ def test_startup_db_authority_map_points_to_runtime_migration_and_bootstrap_entr
         "--email <email> --role <role>"
     )
     assert STARTUP_DB_AUTHORITY["startup_compatibility_guards"] == (
-        "personas.persona_policy compatibility guard",
-        "knowledge_documents schema compatibility guard",
+        "development/test-only personas.persona_policy compatibility guard",
+        "development/test-only knowledge_documents schema compatibility guard",
     )
 
 

@@ -30,7 +30,7 @@ S01 结束后，数据库演进、bootstrap、兼容补齐会有明确 authority
   - Files: `.gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md`, `backend/src/common/db/session.py`, `backend/src/main.py`, `backend/alembic/versions`, `scripts`
   - Verify: rg -n "create_all|alembic|bootstrap|repair_legacy_schema|init_db" backend/src/common/db/session.py backend/src/main.py backend/alembic/versions scripts
 
-- [ ] **T02: 把隐式 schema 修补迁到迁移或显式脚本** `est:1.5h`
+- [x] **T02: 把隐式 schema 修补迁到迁移或显式脚本** `est:1.5h`
   - 把真正仍需要的兼容性 DDL/数据补齐从运行时隐式路径移到 Alembic revision 或显式 bootstrap 脚本。
 - 保留开发/测试兼容性所需的最小路径，但让 prod startup 不再承担 schema 修复责任。
 - 补 focused proof，证明缺迁移/缺配置时失败信号是显式的。

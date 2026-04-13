@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "exported_at": "2026-04-13T02:40:32.894Z",
+  "exported_at": "2026-04-13T02:57:30.348Z",
   "milestones": [
     {
       "id": "M001",
@@ -11941,19 +11941,29 @@
       "milestone_id": "M019",
       "slice_id": "S01",
       "id": "T02",
-      "title": "把隐式 schema 修补迁到迁移或显式脚本",
-      "status": "pending",
-      "one_liner": "",
-      "narrative": "",
-      "verification_result": "",
+      "title": "Restricted startup schema repair to development/test and moved legacy persona/knowledge fixes behind explicit repair-script and Alembic authority.",
+      "status": "complete",
+      "one_liner": "Restricted startup schema repair to development/test and moved legacy persona/knowledge fixes behind explicit repair-script and Alembic authority.",
+      "narrative": "I moved the remaining startup-era schema repair responsibility off the production-like startup path and into explicit authority entrypoints. The core change was introducing `backend/src/common/db/legacy_schema_repair.py` as one shared sync repair seam for the two legacy compatibility surfaces that T01 identified: `personas.persona_policy` and `knowledge_documents` schema drift. `backend/src/common/db/session.py` now treats those repairs as development/test-only bootstrap compatibility; in non-development environments, startup inspects the live schema and raises an explicit `RuntimeError` that points operators at `alembic upgrade head` or `python scripts/repair_legacy_schema.py` instead of silently mutating schema during normal service startup. I then wired the same helper into `backend/scripts/repair_legacy_schema.py`, which now explicitly repairs both legacy surfaces rather than only the knowledge-documents path, and added idempotent Alembic revision `20260413_1040_029_explicit_legacy_startup_repairs.py` so the forward migration entrypoint also carries this repair authority. Finally, I added a focused integration proof in `backend/tests/integration/test_startup_or_bootstrap_authority.py` that locks the two key behaviors: production-like startup fails loudly on a legacy personas table, and the explicit repair script seam upgrades that same legacy schema successfully. I updated the existing unit authority-map proof and wrote back D211 plus a knowledge entry about `common.db.session` binding `DATABASE_URL`/engine at import time, which matters for future startup-authority tests.",
+      "verification_result": "I reran the new focused proof plus the existing unit authority proof with `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/integration/test_startup_or_bootstrap_authority.py backend/tests/unit/common/test_db_session_compatibility.py -q`, and it finished 4/4 green. That proof confirms production-like startup now rejects a legacy `personas` table with an actionable migration/repair error and that the explicit repair-script seam upgrades the same legacy schema. I also reran the exact slice verification command `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/integration -k \"startup or bootstrap or migration\" -x -q`, which passed with the new integration authority test selected by the gate. Fresh LSP diagnostics reported no issues on `backend/src/common/db/session.py`, `backend/src/common/db/legacy_schema_repair.py`, `backend/scripts/repair_legacy_schema.py`, `backend/alembic/versions/20260413_1040_029_explicit_legacy_startup_repairs.py`, `backend/tests/integration/test_startup_or_bootstrap_authority.py`, and `backend/tests/unit/common/test_db_session_compatibility.py`.",
       "duration": "",
-      "completed_at": null,
+      "completed_at": "2026-04-13T02:57:30.273Z",
       "blocker_discovered": false,
-      "deviations": "",
-      "known_issues": "",
-      "key_files": [],
-      "key_decisions": [],
-      "full_summary_md": "",
+      "deviations": "Beyond the plan’s minimum expected output, I introduced `backend/src/common/db/legacy_schema_repair.py` as a shared sync repair seam and added idempotent Alembic revision `20260413_1040_029` so startup, the explicit repair script, and `alembic upgrade head` all point at one executable authority instead of three drifting implementations.",
+      "known_issues": "Focused pytest still emits pre-existing pytest-cov 'module src was never imported / no data was collected' warnings, and the focused SQLite proof still surfaces a teardown `ResourceWarning` for an unclosed sqlite connection. This task did not change that harness noise.",
+      "key_files": [
+        "backend/src/common/db/session.py",
+        "backend/src/common/db/legacy_schema_repair.py",
+        "backend/scripts/repair_legacy_schema.py",
+        "backend/alembic/versions/20260413_1040_029_explicit_legacy_startup_repairs.py",
+        "backend/tests/integration/test_startup_or_bootstrap_authority.py",
+        "backend/tests/unit/common/test_db_session_compatibility.py",
+        ".gsd/KNOWLEDGE.md"
+      ],
+      "key_decisions": [
+        "D211 — Restrict startup compatibility repairs to development/test bootstrap, and route production-like legacy persona/knowledge schema drift through explicit Alembic revision 20260413_1040_029 or scripts/repair_legacy_schema.py."
+      ],
+      "full_summary_md": "---\nid: T02\nparent: S01\nmilestone: M019\nkey_files:\n  - backend/src/common/db/session.py\n  - backend/src/common/db/legacy_schema_repair.py\n  - backend/scripts/repair_legacy_schema.py\n  - backend/alembic/versions/20260413_1040_029_explicit_legacy_startup_repairs.py\n  - backend/tests/integration/test_startup_or_bootstrap_authority.py\n  - backend/tests/unit/common/test_db_session_compatibility.py\n  - .gsd/KNOWLEDGE.md\nkey_decisions:\n  - D211 — Restrict startup compatibility repairs to development/test bootstrap, and route production-like legacy persona/knowledge schema drift through explicit Alembic revision 20260413_1040_029 or scripts/repair_legacy_schema.py.\nduration: \nverification_result: passed\ncompleted_at: 2026-04-13T02:57:30.271Z\nblocker_discovered: false\n---\n\n# T02: Restricted startup schema repair to development/test and moved legacy persona/knowledge fixes behind explicit repair-script and Alembic authority.\n\n**Restricted startup schema repair to development/test and moved legacy persona/knowledge fixes behind explicit repair-script and Alembic authority.**\n\n## What Happened\n\nI moved the remaining startup-era schema repair responsibility off the production-like startup path and into explicit authority entrypoints. The core change was introducing `backend/src/common/db/legacy_schema_repair.py` as one shared sync repair seam for the two legacy compatibility surfaces that T01 identified: `personas.persona_policy` and `knowledge_documents` schema drift. `backend/src/common/db/session.py` now treats those repairs as development/test-only bootstrap compatibility; in non-development environments, startup inspects the live schema and raises an explicit `RuntimeError` that points operators at `alembic upgrade head` or `python scripts/repair_legacy_schema.py` instead of silently mutating schema during normal service startup. I then wired the same helper into `backend/scripts/repair_legacy_schema.py`, which now explicitly repairs both legacy surfaces rather than only the knowledge-documents path, and added idempotent Alembic revision `20260413_1040_029_explicit_legacy_startup_repairs.py` so the forward migration entrypoint also carries this repair authority. Finally, I added a focused integration proof in `backend/tests/integration/test_startup_or_bootstrap_authority.py` that locks the two key behaviors: production-like startup fails loudly on a legacy personas table, and the explicit repair script seam upgrades that same legacy schema successfully. I updated the existing unit authority-map proof and wrote back D211 plus a knowledge entry about `common.db.session` binding `DATABASE_URL`/engine at import time, which matters for future startup-authority tests.\n\n## Verification\n\nI reran the new focused proof plus the existing unit authority proof with `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/integration/test_startup_or_bootstrap_authority.py backend/tests/unit/common/test_db_session_compatibility.py -q`, and it finished 4/4 green. That proof confirms production-like startup now rejects a legacy `personas` table with an actionable migration/repair error and that the explicit repair-script seam upgrades the same legacy schema. I also reran the exact slice verification command `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/integration -k \"startup or bootstrap or migration\" -x -q`, which passed with the new integration authority test selected by the gate. Fresh LSP diagnostics reported no issues on `backend/src/common/db/session.py`, `backend/src/common/db/legacy_schema_repair.py`, `backend/scripts/repair_legacy_schema.py`, `backend/alembic/versions/20260413_1040_029_explicit_legacy_startup_repairs.py`, `backend/tests/integration/test_startup_or_bootstrap_authority.py`, and `backend/tests/unit/common/test_db_session_compatibility.py`.\n\n## Verification Evidence\n\n| # | Command | Exit Code | Verdict | Duration |\n|---|---------|-----------|---------|----------|\n| 1 | `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/integration/test_startup_or_bootstrap_authority.py backend/tests/unit/common/test_db_session_compatibility.py -q` | 0 | ✅ pass | 1803ms |\n| 2 | `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/integration -k \"startup or bootstrap or migration\" -x -q` | 0 | ✅ pass | 5513ms |\n\n## Deviations\n\nBeyond the plan’s minimum expected output, I introduced `backend/src/common/db/legacy_schema_repair.py` as a shared sync repair seam and added idempotent Alembic revision `20260413_1040_029` so startup, the explicit repair script, and `alembic upgrade head` all point at one executable authority instead of three drifting implementations.\n\n## Known Issues\n\nFocused pytest still emits pre-existing pytest-cov 'module src was never imported / no data was collected' warnings, and the focused SQLite proof still surfaces a teardown `ResourceWarning` for an unclosed sqlite connection. This task did not change that harness noise.\n\n## Files Created/Modified\n\n- `backend/src/common/db/session.py`\n- `backend/src/common/db/legacy_schema_repair.py`\n- `backend/scripts/repair_legacy_schema.py`\n- `backend/alembic/versions/20260413_1040_029_explicit_legacy_startup_repairs.py`\n- `backend/tests/integration/test_startup_or_bootstrap_authority.py`\n- `backend/tests/unit/common/test_db_session_compatibility.py`\n- `.gsd/KNOWLEDGE.md`\n",
       "description": "- 把真正仍需要的兼容性 DDL/数据补齐从运行时隐式路径移到 Alembic revision 或显式 bootstrap 脚本。\n- 保留开发/测试兼容性所需的最小路径，但让 prod startup 不再承担 schema 修复责任。\n- 补 focused proof，证明缺迁移/缺配置时失败信号是显式的。",
       "estimate": "1.5h",
       "files": [
@@ -16303,6 +16313,18 @@
       "decision": "Database startup, migration, repair, and bootstrap authority split",
       "choice": "Keep Alembic (`backend/alembic/env.py` + revisions via `alembic upgrade head`) as the schema evolution authority; keep `common.db.session.init_db()` explicitly limited to startup bootstrap plus the currently-shipped compatibility guards; keep `backend/scripts/repair_legacy_schema.py` as one-off legacy repair/alembic_version stamping and `backend/scripts/bootstrap_auth_admin.py` as one-off auth bootstrap.",
       "rationale": "The live startup path still runs `Base.metadata.create_all()` and two compatibility guards, while `scripts/dev-up.sh` does not run Alembic first and the legacy repair script only covers the knowledge-documents patch plus optional stamping. Writing the split down in code/logs/analysis prevents future work from treating startup repair as the authoritative migration path and gives later M019 tasks a concrete seam to tighten.",
+      "revisable": "Yes",
+      "made_by": "agent",
+      "superseded_by": null
+    },
+    {
+      "seq": 1581,
+      "id": "D211",
+      "when_context": "M019/S01/T02",
+      "scope": "architecture",
+      "decision": "startup schema compatibility authority for legacy drift",
+      "choice": "Restrict startup compatibility repairs to development/test bootstrap, and route production-like legacy persona/knowledge schema drift through explicit Alembic revision 20260413_1040_029 or scripts/repair_legacy_schema.py.",
+      "rationale": "This removes silent schema repair responsibility from service startup in non-development environments while preserving low-friction local bootstrap for SQLite fixtures; failures now point operators to explicit migration/repair entrypoints instead of mutating schema during normal startup.",
       "revisable": "Yes",
       "made_by": "agent",
       "superseded_by": null
@@ -20862,6 +20884,28 @@
       "verdict": "✅ pass",
       "duration_ms": 1699,
       "created_at": "2026-04-13T02:40:32.827Z"
+    },
+    {
+      "id": 420,
+      "task_id": "T02",
+      "slice_id": "S01",
+      "milestone_id": "M019",
+      "command": "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/integration/test_startup_or_bootstrap_authority.py backend/tests/unit/common/test_db_session_compatibility.py -q",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 1803,
+      "created_at": "2026-04-13T02:57:30.273Z"
+    },
+    {
+      "id": 421,
+      "task_id": "T02",
+      "slice_id": "S01",
+      "milestone_id": "M019",
+      "command": "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/integration -k \"startup or bootstrap or migration\" -x -q",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 5513,
+      "created_at": "2026-04-13T02:57:30.273Z"
     }
   ]
 }

@@ -23,7 +23,10 @@ from sqlalchemy.pool import NullPool
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
-from common.db.session import _ensure_knowledge_document_schema_compatibility
+from common.db.legacy_schema_repair import (
+    repair_knowledge_document_legacy_schema,
+    repair_persona_policy_legacy_schema,
+)
 from common.monitoring.logger import configure_logging, get_logger
 
 load_dotenv()
@@ -81,7 +84,7 @@ def _bootstrap_alembic_version(sync_conn, revision: str) -> None:
             text("INSERT INTO alembic_version (version_num) VALUES (:revision)"),
             {"revision": revision},
         )
-        logger.info("Inserted alembic revision", revision=revision)
+        logger.info("Inserted Alembic revision", revision=revision)
         return
 
     current_revision = str(existing_rows[0]).strip()
@@ -97,6 +100,17 @@ def _bootstrap_alembic_version(sync_conn, revision: str) -> None:
         "Updated alembic_version revision",
         from_revision=current_revision,
         to_revision=revision,
+    )
+
+
+def _repair_startup_schema_compatibility(sync_conn) -> None:
+    repair_persona_policy_legacy_schema(
+        sync_conn,
+        repair_surface="explicit legacy repair script",
+    )
+    repair_knowledge_document_legacy_schema(
+        sync_conn,
+        repair_surface="explicit legacy repair script",
     )
 
 
@@ -128,7 +142,7 @@ def main() -> int:
     engine = create_engine(sync_database_url, poolclass=NullPool)
     try:
         with engine.begin() as sync_conn:
-            _ensure_knowledge_document_schema_compatibility(sync_conn)
+            _repair_startup_schema_compatibility(sync_conn)
             if args.stamp_revision:
                 _bootstrap_alembic_version(sync_conn, args.stamp_revision.strip())
     finally:

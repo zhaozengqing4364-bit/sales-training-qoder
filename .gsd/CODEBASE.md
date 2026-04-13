@@ -1,7 +1,7 @@
 # Codebase Map
 
-Generated: 2026-04-13T01:59:53Z | Files: 500 | Described: 0/500
-<!-- gsd:codebase-meta {"generatedAt":"2026-04-13T01:59:53Z","fingerprint":"2bbf320ccc52c037949fceb28657a91b2d98fdc1","fileCount":500,"truncated":true} -->
+Generated: 2026-04-13T02:41:04Z | Files: 500 | Described: 0/500
+<!-- gsd:codebase-meta {"generatedAt":"2026-04-13T02:41:04Z","fingerprint":"00f8a19adf55b7b83773a953fc95ffd6a55bddbf","fileCount":500,"truncated":true} -->
 Note: Truncated to first 500 files. Run with higher --max-files to include all.
 
 ### (root)/
@@ -587,6 +587,11 @@ Note: Truncated to first 500 files. Run with higher --max-files to include all.
 - `backend/src/training_runtime/models.py`
 - `backend/src/training_runtime/service.py`
 
+### backend/test-results/
+- `backend/test-results/nfr-report.html`
+- `backend/test-results/nfr-report.json`
+- `backend/test-results/nfr-report.md`
+
 ### backend/tests/
 - `backend/tests/conftest.py`
 
@@ -644,6 +649,3 @@ Note: Truncated to first 500 files. Run with higher --max-files to include all.
 - `backend/tests/unit/common/test_knowledge_answer_assembler.py`
 - `backend/tests/unit/common/test_knowledge_answer_audit_repo.py`
 - `backend/tests/unit/common/test_knowledge_answer_config_repo.py`
-- `backend/tests/unit/common/test_knowledge_answer_control_plane_models.py`
-- `backend/tests/unit/common/test_knowledge_answer_engine.py`
-- `backend/tests/unit/common/test_knowledge_answer_feature_flag.py`

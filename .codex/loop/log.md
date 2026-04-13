@@ -1110,3 +1110,31 @@
   verification results: web governance is now green end-to-end (`npm audit` exits 0 and the focused client-auth suite stayed 9/9 green). Backend requirements-scoped pip_audit now executes and truthfully reports one open ecdsa CVE with no newer pip release available, while pip-licenses still crashes on missing package Name metadata and therefore remains an explicit blocked scanner/runtime issue rather than a silent pass.
   success signal status: future agents can now open the baseline doc and immediately tell which proofs were executed, which one is a real open dependency risk, and which one is still blocked by tooling/runtime rather than product code drift.
   rollback note: if later dependency work changes the backend scanner or resolves the ecdsa/open-license blockers, update web/package-lock.json, docs/setup/dependency-governance-baseline.md, D207, and the matching knowledge entry together so the repo keeps one truthful proof ledger instead of drifting back to command-name-only guidance.
+
+- time: 2026-04-13T10:56:08+08:00
+  mode: grow
+  item id: M019-S01-T02
+  files changed:
+    - backend/src/common/db/session.py
+    - backend/src/common/db/legacy_schema_repair.py
+    - backend/scripts/repair_legacy_schema.py
+    - backend/alembic/versions/20260413_1040_029_explicit_legacy_startup_repairs.py
+    - backend/tests/integration/test_startup_or_bootstrap_authority.py
+    - backend/tests/unit/common/test_db_session_compatibility.py
+    - .gsd/DECISIONS.md
+    - .gsd/KNOWLEDGE.md
+    - .codex/loop/state.json
+    - .codex/loop/log.md
+  summary: Moved the remaining startup schema repair out of production-like service startup by restricting compatibility guards to development/test bootstrap, routing the same persona/knowledge legacy repair through an explicit shared helper used by the repair script and a new Alembic revision, and proving prod-like startup now fails loudly on missing migration drift.
+  verification commands:
+    - backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/integration/test_startup_or_bootstrap_authority.py backend/tests/unit/common/test_db_session_compatibility.py -q
+    - lsp diagnostics backend/src/common/db/session.py
+    - lsp diagnostics backend/src/common/db/legacy_schema_repair.py
+    - lsp diagnostics backend/scripts/repair_legacy_schema.py
+    - lsp diagnostics backend/alembic/versions/20260413_1040_029_explicit_legacy_startup_repairs.py
+    - lsp diagnostics backend/tests/integration/test_startup_or_bootstrap_authority.py
+    - lsp diagnostics backend/tests/unit/common/test_db_session_compatibility.py
+    - backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/integration -k "startup or bootstrap or migration" -x -q
+  verification results: passed; focused proof is green for explicit production-like startup failure and explicit repair-script handoff, the touched Python/revision/test files are diagnostics-clean, and the exact slice gate passes without relying on implicit startup schema patching outside development/test.
+  success signal status: production-like startup no longer silently repairs legacy persona/knowledge schema drift, while operators still have two explicit recovery paths — `alembic upgrade head` (now including revision 20260413_1040_029) and `python scripts/repair_legacy_schema.py`.
+  rollback note: if later tasks remove `Base.metadata.create_all()` or further narrow local bootstrap, keep `backend/src/common/db/session.py`, `backend/src/common/db/legacy_schema_repair.py`, `backend/scripts/repair_legacy_schema.py`, the explicit Alembic repair revision, and the focused startup authority tests aligned together so startup/bootstrap authority does not drift again.

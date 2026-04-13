@@ -1,6 +1,6 @@
 {
   "mode": "grow",
-  "current_issue_id": "M019-S01-T01",
+  "current_issue_id": "M019-S01-T02",
   "current_issue_type": "task",
   "current_issue_status": "done",
   "pending_issue_ids": [],
@@ -185,30 +185,35 @@
     "M018-S03-T02",
     "M018-S03-T03",
     "M018-S03",
-    "M019-S01-T01"
+    "M019-S01-T01",
+    "M019-S01-T02"
   ],
   "blocked_issue_ids": [],
   "deferred_issue_ids": [],
   "last_modified_files": [
     "backend/src/common/db/session.py",
-    "backend/src/main.py",
+    "backend/src/common/db/legacy_schema_repair.py",
+    "backend/scripts/repair_legacy_schema.py",
+    "backend/alembic/versions/20260413_1040_029_explicit_legacy_startup_repairs.py",
+    "backend/tests/integration/test_startup_or_bootstrap_authority.py",
     "backend/tests/unit/common/test_db_session_compatibility.py",
-    ".gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md",
-    ".gsd/KNOWLEDGE.md",
     ".gsd/DECISIONS.md",
+    ".gsd/KNOWLEDGE.md",
     ".codex/loop/state.json",
     ".codex/loop/log.md"
   ],
   "last_verification_commands": [
-    "rg -n \"create_all|alembic|bootstrap|repair_legacy_schema|init_db\" backend/src/common/db/session.py backend/src/main.py backend/alembic/versions scripts",
-    "rg -n \"M019/S01 数据库演进 / bootstrap authority inventory|scripts/dev-up.sh 当前只是拉起 infra|M019/S01/T01 database authority inventory exposed\" .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md .gsd/KNOWLEDGE.md",
-    "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/common/test_db_session_compatibility.py -q",
+    "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/integration/test_startup_or_bootstrap_authority.py backend/tests/unit/common/test_db_session_compatibility.py -q",
     "lsp diagnostics backend/src/common/db/session.py",
-    "lsp diagnostics backend/src/main.py",
-    "lsp diagnostics backend/tests/unit/common/test_db_session_compatibility.py"
+    "lsp diagnostics backend/src/common/db/legacy_schema_repair.py",
+    "lsp diagnostics backend/scripts/repair_legacy_schema.py",
+    "lsp diagnostics backend/alembic/versions/20260413_1040_029_explicit_legacy_startup_repairs.py",
+    "lsp diagnostics backend/tests/integration/test_startup_or_bootstrap_authority.py",
+    "lsp diagnostics backend/tests/unit/common/test_db_session_compatibility.py",
+    "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/integration -k \"startup or bootstrap or migration\" -x -q"
   ],
-  "last_verification_result": "passed; the slice-plan rg gate now shows the explicit startup/migration/bootstrap authority surface in session.py/main.py, the new analysis and knowledge entries are grep-discoverable, the focused db-session unit suite finished 2/2 green, and LSP diagnostics stayed clean on the touched Python authority files.",
-  "last_success_signal": "M019/S01/T01 now gives downstream work one executable authority inventory instead of scattered assumptions: startup bootstrap is explicit in code/logs, Alembic stays the forward migration owner, the one-off repair/bootstrap scripts are named, and the remaining startup-path schema repair is called out truthfully in analysis.",
+  "last_verification_result": "passed; the new focused startup/repair proofs are green, diagnostics stayed clean on the shared repair/session/script/revision/test files, and the exact slice integration gate now passes with startup authority failing explicitly in production-like legacy scenarios instead of silently patching schema.",
+  "last_success_signal": "M019/S01/T02 now routes legacy persona/knowledge schema repair through explicit Alembic/script authority while keeping only development/test startup bootstrap compatibility; production-like startup surfaces missing migration drift as an actionable failure.",
   "last_growth_scan": null,
-  "next_action": "Proceed to the next M019/S01 task using the new authority map to shrink or relocate the remaining startup-path schema repair surface."
+  "next_action": "Proceed to M019/S01/T03 to write the narrowed startup/migration/bootstrap authority back into long-lived docs and verification entrypoints."
 }
