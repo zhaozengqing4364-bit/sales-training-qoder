@@ -64,6 +64,7 @@ from common.monitoring.logger import get_logger, get_trace_id
 from common.oss.signing import OssConfigError
 from common.services.practice_service import (
     PracticeRuntimeDescriptorService,
+    PracticeServiceError,
     build_practice_route_services,
 )
 from common.websocket.base_handler import get_connection_manager
@@ -81,7 +82,10 @@ router = APIRouter()
 
 
 def _practice_services(db: AsyncSession):
-    return build_practice_route_services(db)
+    services = build_practice_route_services(db)
+    services.session_create.logger = logger
+    services.session_lifecycle.logger = logger
+    return services
 
 
 def _is_true_env(name: str, default: str = "false") -> bool:
@@ -781,282 +785,38 @@ async def start_session(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """
-    Start a new practice session
-
-    Supports:
-    - presentation: PPT coaching session
-    - sales: Sales practice session (agent_id + persona_id required)
-
-    Enhanced (R12):
-    - agent_id + persona_id: Enhanced session with Agent Platform
-    - Validates Persona is linked to Agent
-    """
+    """Start a new practice session."""
     try:
-        # Get scenario_type value for comparison
-        scenario_type_value = (
-            session_data.scenario_type.value
-            if hasattr(session_data.scenario_type, "value")
-            else session_data.scenario_type
+        services = _practice_services(db)
+        result = await services.session_create.create_session(
+            session_data,
+            current_user=current_user,
         )
-        voice_mode_override = session_data.voice_mode
-        runtime_profile_override = (
-            str(session_data.runtime_profile_id)
-            if session_data.runtime_profile_id
-            else None
+    except PracticeServiceError as exc:
+        if exc.status_code >= 500:
+            return build_server_error(
+                exc.error_code,
+                status_code=exc.status_code,
+                message=exc.message,
+            )
+        return error_response(
+            exc.error_code,
+            status_code=exc.status_code,
+            message=exc.message,
+            details=exc.details,
         )
-        raw_session_payload = session_data.model_dump(exclude_unset=True)
-        if raw_session_payload.get("sales_persona"):
-            return error_response(
-                "[FIELD_DEPRECATED_PERSONA_CENTERED]",
-                status_code=400,
-                message="sales_persona 已废弃，请改用 agent_id + persona_id（并在角色中心配置策略）",
-            )
-        association_override_config = None
-        requested_scenario: Scenario | None = None
-
-        if session_data.scenario_id:
-            requested_scenario_result = await db.execute(
-                select(Scenario).where(
-                    Scenario.scenario_id == str(session_data.scenario_id)
-                )
-            )
-            requested_scenario = requested_scenario_result.scalar_one_or_none()
-            if not requested_scenario:
-                return error_response("[SCENARIO_NOT_FOUND]", status_code=404)
-            if requested_scenario.scenario_type != scenario_type_value:
-                return error_response("[SCENARIO_TYPE_MISMATCH]", status_code=400)
-            if not requested_scenario.is_active:
-                return error_response("[SCENARIO_INACTIVE]", status_code=400)
-
-        # Validate Agent-Persona association if both provided (R12.2)
-        agent_id_str = str(session_data.agent_id) if session_data.agent_id else None
-        persona_id_str = (
-            str(session_data.persona_id) if session_data.persona_id else None
-        )
-
-        # Require enhanced mode identifiers to be provided as a pair.
-        # Prevents silently falling back to legacy flow when only one is passed.
-        if bool(agent_id_str) != bool(persona_id_str):
-            return error_response("[AGENT_PERSONA_PAIR_REQUIRED]", status_code=400)
-        if (
-            scenario_type_value == "presentation"
-            and _is_true_env("PRESENTATION_REQUIRE_AGENT_PERSONA", "true")
-            and not (agent_id_str and persona_id_str)
-        ):
-            return error_response("[AGENT_PERSONA_PAIR_REQUIRED]", status_code=400)
-        if scenario_type_value == "sales" and not (agent_id_str and persona_id_str):
-            return error_response("[AGENT_PERSONA_PAIR_REQUIRED]", status_code=400)
-
-        if agent_id_str and persona_id_str:
-            from agent.models import Agent, AgentPersona
-            from agent.models import Persona as AgentPersonaModel
-
-            # Check Agent exists and is published
-            agent_result = await db.execute(
-                select(Agent).where(Agent.id == agent_id_str)
-            )
-            agent = agent_result.scalar_one_or_none()
-            if not agent:
-                return error_response("[AGENT_NOT_FOUND]", status_code=404)
-            if agent.status == "archived":
-                return error_response("[AGENT_ARCHIVED]", status_code=400)
-            if agent.status != "published":
-                return error_response("[AGENT_NOT_PUBLISHED]", status_code=400)
-
-            # Check Persona exists
-            persona_result = await db.execute(
-                select(AgentPersonaModel).where(AgentPersonaModel.id == persona_id_str)
-            )
-            persona_obj = persona_result.scalar_one_or_none()
-            if not persona_obj:
-                return error_response("[PERSONA_NOT_FOUND]", status_code=404)
-            if persona_obj.status != "active":
-                return error_response("[PERSONA_INACTIVE]", status_code=400)
-
-            # Check Persona is linked to Agent (R12.2)
-            link_result = await db.execute(
-                select(AgentPersona).where(
-                    AgentPersona.agent_id == agent_id_str,
-                    AgentPersona.persona_id == persona_id_str,
-                )
-            )
-            link = link_result.scalar_one_or_none()
-            if not link:
-                return error_response("[PERSONA_NOT_LINKED_TO_AGENT]", status_code=400)
-            association_override_config = link.override_config or None
-
-        runtime_policy_service = _practice_services(db).runtime_policy
-        effective_voice_policy = await runtime_policy_service.resolve_effective_policy(
-            agent_id=agent_id_str,
-            persona_id=persona_id_str,
-            voice_mode_override=voice_mode_override,
-            runtime_profile_override=runtime_profile_override,
-        )
-        if association_override_config:
-            effective_voice_policy = {
-                **effective_voice_policy,
-                "agent_persona_override_config": association_override_config,
-            }
-        session_policy_snapshot = deepcopy(effective_voice_policy)
-        effective_voice_mode = effective_voice_policy.get("voice_mode", "legacy")
-        effective_runtime_profile_id = effective_voice_policy.get("runtime_profile_id")
-        resolved_kb_ids = effective_voice_policy.get("knowledge_base_ids")
-        if not isinstance(resolved_kb_ids, list):
-            resolved_kb_ids = []
-        customer_pressure = effective_voice_policy.get("customer_pressure")
-        if not isinstance(customer_pressure, dict):
-            customer_pressure = {}
-        pressure_direction = customer_pressure.get("pressure_direction")
-        if not isinstance(pressure_direction, dict):
-            pressure_direction = {}
-        follow_up_behavior = customer_pressure.get("follow_up_behavior")
-        if not isinstance(follow_up_behavior, dict):
-            follow_up_behavior = {}
-        focus_intent = _sanitize_retry_focus_intent(session_data.focus_intent)
-        if (
-            scenario_type_value == "sales"
-            and session_data.focus_intent is not None
-            and focus_intent is None
-        ):
-            return error_response(
-                "[INVALID_RETRY_FOCUS_INTENT]",
-                status_code=400,
-                message="retry focus intent 必须包含可读的 main_issue 或 next_goal 结构。",
-            )
-        if scenario_type_value == "sales" and focus_intent is not None:
-            session_policy_snapshot["focus_intent"] = deepcopy(focus_intent)
-        logger.info(
-            "practice_session_voice_policy_resolved",
-            user_id=str(current_user.user_id),
-            scenario_type=scenario_type_value,
-            agent_id=agent_id_str,
-            persona_id=persona_id_str,
-            voice_mode=effective_voice_mode,
-            runtime_profile_id=effective_runtime_profile_id,
-            knowledge_base_count=len(resolved_kb_ids),
-            customer_pressure_source=str(customer_pressure.get("source") or "none"),
-            customer_pressure_focus=str(pressure_direction.get("sales_focus") or ""),
-            question_strategy=str(follow_up_behavior.get("question_strategy") or ""),
-            revisit_on_evasion=bool(
-                follow_up_behavior.get("revisit_on_evasion", False)
-            ),
-            require_evidence=bool(follow_up_behavior.get("require_evidence", False)),
-            instruction_contract_hash=str(
-                effective_voice_policy.get("instruction_contract_hash") or ""
-            ),
-            retry_focus_issue_type=(
-                focus_intent.get("main_issue", {}).get("issue_type")
-                if isinstance(focus_intent, dict)
-                else None
-            ),
-            retry_focus_goal_type=(
-                focus_intent.get("next_goal", {}).get("goal_type")
-                if isinstance(focus_intent, dict)
-                else None
-            ),
-            retry_focus_source_session_id=(
-                focus_intent.get("source_session_id")
-                if isinstance(focus_intent, dict)
-                else None
-            ),
-        )
-
-        if scenario_type_value == "presentation":
-            if not session_data.presentation_id:
-                return error_response("[PRESENTATION_ID_REQUIRED]", status_code=400)
-
-            coach_service = PresentationCoachService(db)
-
-            result = await coach_service.create_session(
-                user_id=str(current_user.user_id),
-                presentation_id=str(session_data.presentation_id),
-            )
-
-            if not result.is_success:
-                fallback = str(result.fallback or "").strip()
-                fallback_lower = fallback.lower()
-                if "presentation not found or not ready" in fallback_lower:
-                    return error_response(
-                        "[PRESENTATION_NOT_READY]",
-                        status_code=400,
-                        message="演练PPT不存在或尚未就绪",
-                    )
-                return build_server_error(
-                    "[SESSION_CREATE_FAILED]",
-                    message=fallback or "会话创建失败",
-                    session_id=str(getattr(session_data, "session_id", "") or "") or None,
-                )
-
-            session = result.value
-
-            # Update with agent/persona if provided
-            if agent_id_str:
-                session.agent_id = agent_id_str
-            if persona_id_str:
-                session.persona_id = persona_id_str
-            session.voice_mode = effective_voice_mode
-            session.voice_runtime_profile_id = effective_runtime_profile_id
-            session.voice_policy_snapshot = deepcopy(session_policy_snapshot)
-            if requested_scenario:
-                session.scenario_id = requested_scenario.scenario_id
-            await db.commit()
-            await db.refresh(session)
-
-        elif scenario_type_value == "sales":
-            scenario = requested_scenario
-            if not scenario:
-                # Keep compatibility with clients that do not pass scenario_id yet.
-                scenario_result = await db.execute(
-                    select(Scenario).where(
-                        Scenario.scenario_type == "sales",
-                        Scenario.name == f"agent_{agent_id_str}",
-                    )
-                )
-                scenario = scenario_result.scalar_one_or_none()
-
-                if not scenario:
-                    scenario = Scenario(
-                        scenario_id=str(uuid.uuid4()),
-                        scenario_type="sales",
-                        name=f"agent_{agent_id_str}",
-                        description="Sales practice with Agent Platform",
-                        is_active=True,
-                    )
-                    db.add(scenario)
-                    await db.flush()
-
-            # Create practice session with agent/persona
-            session = PracticeSession(
-                session_id=str(uuid.uuid4()),
-                user_id=str(current_user.user_id),
-                scenario_id=scenario.scenario_id,
-                agent_id=agent_id_str,
-                persona_id=persona_id_str,
-                voice_mode=effective_voice_mode,
-                voice_runtime_profile_id=effective_runtime_profile_id,
-                voice_policy_snapshot=deepcopy(session_policy_snapshot),
-                status="preparing",
-            )
-            db.add(session)
-            await db.commit()
-            await db.refresh(session)
-
-        else:
-            return error_response("[INVALID_SCENARIO_TYPE]", status_code=400)
-
-        response_payload = success_response(
-            _build_session_response(session, scenario_type=scenario_type_value)
-        )
-        response_payload["session_id"] = str(session.session_id)
-        return response_payload
-
-    except (SQLAlchemyError, ValueError) as e:
+    except (SQLAlchemyError, ValueError) as exc:
         return build_server_error(
             "[SESSION_CREATE_FAILED]",
             message="会话创建失败",
-            exc=e,
+            exc=exc,
         )
+
+    response_payload = success_response(
+        _build_session_response(result.session, scenario_type=result.scenario_type)
+    )
+    response_payload["session_id"] = str(result.session.session_id)
+    return response_payload
 
 
 @router.get("/practice/sessions/{session_id}")
@@ -1098,8 +858,8 @@ async def control_session_lifecycle(
     db: AsyncSession = Depends(get_db),
 ):
     """Control session lifecycle using explicit start/pause/resume/end actions."""
-    lifecycle_service = _practice_services(db).lifecycle
-    session, scenario_type = await lifecycle_service.get_session_with_scenario(
+    services = _practice_services(db)
+    session, scenario_type = await services.session_lifecycle.get_session_with_scenario(
         session_id
     )
 
@@ -1110,16 +870,26 @@ async def control_session_lifecycle(
         return error_response("[ACCESS_DENIED]", status_code=403)
 
     try:
-        result = await _run_lifecycle_action(
+        result = await services.session_lifecycle.run_action(
             session_id=session_id,
             session=session,
             scenario_type=scenario_type,
             action=payload.action.value,
-            db=db,
         )
-    except _LifecycleActionAbort as exc:
+    except PracticeServiceError as exc:
         await db.rollback()
-        return exc.response
+        if exc.status_code >= 500:
+            return build_server_error(
+                exc.error_code,
+                status_code=exc.status_code,
+                message=exc.message,
+            )
+        return error_response(
+            exc.error_code,
+            status_code=exc.status_code,
+            message=exc.message,
+            details=exc.details,
+        )
     except InvalidSessionTransitionError as exc:
         await db.rollback()
         return _invalid_transition_response(
@@ -1129,14 +899,18 @@ async def control_session_lifecycle(
     except (RuntimeError, ValueError, OSError) as exc:
         await db.rollback()
         return build_server_error(
-            "[SESSION_END_FAILED]" if payload.action.value == "end" else "[SESSION_LIFECYCLE_FAILED]",
+            "[SESSION_END_FAILED]"
+            if payload.action.value == "end"
+            else "[SESSION_LIFECYCLE_FAILED]",
             message="会话结束失败" if payload.action.value == "end" else "会话生命周期控制失败",
             exc=exc,
             session_id=session_id,
             action=payload.action.value,
         )
 
-    return success_response(_build_lifecycle_response_payload(result.transition))
+    return success_response(
+        services.session_lifecycle.build_response_payload(result.transition)
+    )
 
 
 @router.patch("/practice/sessions/{session_id}")
@@ -1146,7 +920,7 @@ async def update_session(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """Update session status"""
+    """Update session status."""
     result = await db.execute(
         select(PracticeSession).where(PracticeSession.session_id == session_id)
     )
@@ -1155,62 +929,27 @@ async def update_session(
     if not session:
         return error_response("[SESSION_NOT_FOUND]", status_code=404)
 
-    # Verify ownership
     if not _can_read_session(session, current_user):
         return error_response("[ACCESS_DENIED]", status_code=403)
 
-    lifecycle_service = _practice_services(db).lifecycle
+    services = _practice_services(db)
 
-    transition = None
-
-    # Update fields
-    if update_data.status:
-        scenario_result = await db.execute(
-            select(Scenario.scenario_type).where(
-                Scenario.scenario_id == session.scenario_id
-            )
+    try:
+        update_result = await services.session_lifecycle.update_session(
+            session=session,
+            update_data=update_data,
         )
-        scenario_type = scenario_result.scalar_one_or_none()
-        try:
-            transition = await lifecycle_service.transition_by_target_status(
-                session=session,
-                scenario_type=str(scenario_type) if scenario_type else None,
-                target_status=update_data.status.value,
-            )
-        except InvalidSessionTransitionError as exc:
-            await db.rollback()
-            return _invalid_transition_response(
-                exc=exc,
-                current_status=exc.from_status,
-            )
-
-    if update_data.current_page is not None:
-        session.current_page = update_data.current_page
-
-    await db.commit()
-    await db.refresh(session)
-    if transition:
-        transition.session = session
-        await lifecycle_service.trigger_report_generation_if_needed(transition)
-        await _sync_live_handler_after_lifecycle_transition(transition)
-        await _broadcast_lifecycle_events(transition)
-        await _close_live_handler_if_terminal(transition)
-
-    scenario_type_value = None
-    if transition and getattr(transition, "scenario_type", None):
-        scenario_type_value = str(transition.scenario_type)
-    else:
-        scenario_type_result = await db.execute(
-            select(Scenario.scenario_type).where(
-                Scenario.scenario_id == session.scenario_id
-            )
+    except InvalidSessionTransitionError as exc:
+        await db.rollback()
+        return _invalid_transition_response(
+            exc=exc,
+            current_status=exc.from_status,
         )
-        scenario_type_value = scenario_type_result.scalar_one_or_none()
 
     return success_response(
         _build_session_response(
-            session,
-            scenario_type=str(scenario_type_value) if scenario_type_value else None,
+            update_result.session,
+            scenario_type=update_result.scenario_type,
         )
     )
 
@@ -1221,20 +960,15 @@ async def end_session(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """
-    End session and generate report
-
-    Supports both presentation and sales_bot sessions
-    """
-    lifecycle_service = _practice_services(db).lifecycle
-    session, scenario_type = await lifecycle_service.get_session_with_scenario(
+    """End session and generate report."""
+    services = _practice_services(db)
+    session, scenario_type = await services.session_lifecycle.get_session_with_scenario(
         session_id
     )
 
     if not session:
         return error_response("[SESSION_NOT_FOUND]", status_code=404)
 
-    # Verify ownership or admin access
     if not _can_read_session(session, current_user):
         return error_response("[ACCESS_DENIED]", status_code=403)
 
@@ -1242,16 +976,33 @@ async def end_session(
         return error_response("[SCENARIO_NOT_FOUND]", status_code=404)
 
     try:
-        result = await _run_lifecycle_action(
+        lifecycle_result = await services.session_lifecycle.run_action(
             session_id=session_id,
             session=session,
             scenario_type=scenario_type,
             action="end",
-            db=db,
         )
-    except _LifecycleActionAbort as exc:
+        report = await services.session_report.build_terminal_report(
+            session_id=session_id,
+            session=lifecycle_result.transition.session,
+            scenario_type=scenario_type,
+            summary=lifecycle_result.summary,
+            snapshot=lifecycle_result.snapshot,
+        )
+    except PracticeServiceError as exc:
         await db.rollback()
-        return exc.response
+        if exc.status_code >= 500:
+            return build_server_error(
+                exc.error_code,
+                status_code=exc.status_code,
+                message=exc.message,
+            )
+        return error_response(
+            exc.error_code,
+            status_code=exc.status_code,
+            message=exc.message,
+            details=exc.details,
+        )
     except InvalidSessionTransitionError as exc:
         await db.rollback()
         return _invalid_transition_response(
@@ -1267,115 +1018,6 @@ async def end_session(
             session_id=session_id,
         )
 
-    session = result.transition.session
-    summary = result.summary
-    snapshot = result.snapshot or _ensure_effectiveness_snapshot(session)
-
-    if scenario_type == "presentation":
-        report = SessionReport(
-            session_id=session.session_id,
-            logic_score=session.logic_score or 0,
-            accuracy_score=session.accuracy_score or 0,
-            completeness_score=session.completeness_score or 0,
-            overall_score=(
-                (session.logic_score or 0)
-                + (session.accuracy_score or 0)
-                + (session.completeness_score or 0)
-            )
-            / 3,
-            suggestions=["Great practice! Keep working on your presentation skills."],
-            audio_url=session.audio_url,
-            transcript_url=session.transcript_url,
-            voice_policy_snapshot_ref=build_voice_policy_snapshot_ref(
-                session.voice_policy_snapshot
-            ),
-            effectiveness_snapshot=snapshot,
-            pass_flags=snapshot.get("pass_flags"),
-            main_capability_passed=snapshot.get("main_capability_passed"),
-            overall_result=snapshot.get("overall_result"),
-            main_issue=snapshot.get("main_issue"),
-            next_goal=snapshot.get("next_goal"),
-            retry_entry={
-                "scenario_type": "presentation",
-                "agent_id": str(session.agent_id) if session.agent_id else None,
-                "persona_id": str(session.persona_id) if session.persona_id else None,
-                "presentation_id": str(session.presentation_id)
-                if session.presentation_id
-                else None,
-            },
-            audio_audit=await build_session_audio_audit(db, session_id, session),
-        )
-    else:
-        # Generate comprehensive report using AI evaluation
-        try:
-            from common.ai.llm_service import LLMService
-            from evaluation.services.comprehensive_report import (
-                ComprehensiveReportService,
-            )
-            from evaluation.services.staged_evaluation import StagedEvaluationService
-            from prompt_templates.service import PromptTemplateService
-
-            llm_service = LLMService()
-            prompt_service = PromptTemplateService(db)
-            staged_eval_service = StagedEvaluationService(
-                db_session=db, prompt_service=prompt_service, llm_service=llm_service
-            )
-            report_service = ComprehensiveReportService(
-                db_session=db,
-                staged_eval_service=staged_eval_service,
-                prompt_service=prompt_service,
-                llm_service=llm_service,
-            )
-            comprehensive_result = await report_service.generate_report(
-                session_id, scenario_type="sales"
-            )
-            if comprehensive_result.is_success:
-                logger.info(f"Comprehensive report generated for session {session_id}")
-            else:
-                logger.warning(
-                    f"Comprehensive report generation failed: {comprehensive_result.fallback}"
-                )
-        except (RuntimeError, ValueError, OSError, ImportError) as e:
-            logger.warning(f"Comprehensive report generation skipped: {str(e)}")
-
-        suggestions = ["会话已结束，可查看历史反馈并继续练习。"]
-        if summary is not None:
-            suggestions = [
-                *summary.strengths,
-                f"Improvement: {summary.actionable_feedback}",
-            ]
-
-        report = SessionReport(
-            session_id=session_id,
-            logic_score=session.logic_score or 0,
-            accuracy_score=session.accuracy_score or 0,
-            completeness_score=session.completeness_score or 0,
-            overall_score=(
-                (session.logic_score or 0)
-                + (session.accuracy_score or 0)
-                + (session.completeness_score or 0)
-            )
-            / 3,
-            suggestions=suggestions,
-            audio_url=None,
-            transcript_url=None,
-            voice_policy_snapshot_ref=build_voice_policy_snapshot_ref(
-                session.voice_policy_snapshot
-            ),
-            effectiveness_snapshot=snapshot,
-            pass_flags=snapshot.get("pass_flags"),
-            main_capability_passed=snapshot.get("main_capability_passed"),
-            overall_result=snapshot.get("overall_result"),
-            main_issue=snapshot.get("main_issue"),
-            next_goal=snapshot.get("next_goal"),
-            retry_entry={
-                "scenario_type": "sales",
-                "agent_id": str(session.agent_id) if session.agent_id else None,
-                "persona_id": str(session.persona_id) if session.persona_id else None,
-            },
-            audio_audit=await build_session_audio_audit(db, session_id, session),
-        )
-
     return success_response(report)
 
 
@@ -1385,7 +1027,7 @@ async def get_session_report(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """Get session report with scores"""
+    """Get session report with scores."""
     result = await db.execute(
         select(PracticeSession).where(PracticeSession.session_id == session_id)
     )
@@ -1394,7 +1036,6 @@ async def get_session_report(
     if not session:
         return error_response("[SESSION_NOT_FOUND]", status_code=404)
 
-    # Verify ownership or admin access
     if not _can_read_session(session, current_user):
         return error_response("[ACCESS_DENIED]", status_code=403)
 
@@ -1406,108 +1047,25 @@ async def get_session_report(
         str(scenario_type_value) if scenario_type_value else "sales"
     )
 
-    projection_result = await _practice_services(db).evidence.get_projection(
-        session_id=session_id,
-        session=session,
-        scenario_type=normalized_scenario_type,
-    )
-    if not projection_result.is_success:
-        return error_response("[SESSION_EVIDENCE_FAILED]", status_code=500)
-
-    projection = projection_result.value
-    scenario_type_enum = (
-        ScenarioType.PRESENTATION
-        if normalized_scenario_type == "presentation"
-        else ScenarioType.SALES
-    )
-    presentation_review = (
-        projection.presentation_review if scenario_type_enum == ScenarioType.PRESENTATION else None
-    )
-    suggestions = ["Review your performance and practice again!"]
-    if scenario_type_enum == ScenarioType.PRESENTATION and isinstance(
-        presentation_review,
-        dict,
-    ):
-        review_recommendations = presentation_review.get("recommendations")
-        if isinstance(review_recommendations, list) and review_recommendations:
-            suggestions = [str(item) for item in review_recommendations]
-        else:
-            suggestions = ["按页回看关键内容，并针对缺失覆盖点再练一轮。"]
-
-    report = SessionReport(
-        session_id=session.session_id,
-        scenario_type=scenario_type_enum,
-        logic_score=projection.logic_score,
-        accuracy_score=projection.accuracy_score,
-        completeness_score=projection.completeness_score,
-        overall_score=projection.overall_score,
-        suggestions=suggestions,
-        audio_url=session.audio_url,
-        transcript_url=session.transcript_url,
-        voice_policy_snapshot_ref=build_voice_policy_snapshot_ref(
-            session.voice_policy_snapshot
-        ),
-        effectiveness_snapshot=(
-            None if scenario_type_enum == ScenarioType.PRESENTATION else projection.effectiveness_snapshot
-        ),
-        pass_flags=(
-            None if scenario_type_enum == ScenarioType.PRESENTATION else projection.pass_flags
-        ),
-        main_capability_passed=(
-            None
-            if scenario_type_enum == ScenarioType.PRESENTATION
-            else projection.main_capability_passed
-        ),
-        overall_result=(
-            None if scenario_type_enum == ScenarioType.PRESENTATION else projection.overall_result
-        ),
-        main_issue=(
-            None if scenario_type_enum == ScenarioType.PRESENTATION else projection.main_issue
-        ),
-        next_goal=(
-            None if scenario_type_enum == ScenarioType.PRESENTATION else projection.next_goal
-        ),
-        stage_summary=(
-            [] if scenario_type_enum == ScenarioType.PRESENTATION else projection.stage_summary
-        ),
-        evaluable=(
-            None if scenario_type_enum == ScenarioType.PRESENTATION else projection.evaluable
-        ),
-        not_evaluable_reason=(
-            None
-            if scenario_type_enum == ScenarioType.PRESENTATION
-            else projection.not_evaluable_reason
-        ),
-        evidence_completeness=projection.evidence_completeness,
-        presentation_review=presentation_review,
-        retry_entry=_build_retry_entry(
+    try:
+        report = await _practice_services(db).session_report.build_session_report(
+            session_id=session_id,
             session=session,
             scenario_type=normalized_scenario_type,
-            main_issue=projection.main_issue,
-            next_goal=projection.next_goal,
-        ),
-        audio_audit=await build_session_audio_audit(db, session_id, session),
-        conclusion_evidence=(
-            None if scenario_type_enum == ScenarioType.PRESENTATION else projection.conclusion_evidence
-        ),
-        evidence_degradation=(
-            None if scenario_type_enum == ScenarioType.PRESENTATION else projection.evidence_degradation
-        ),
-    )
-
-    logger.info(
-        "practice_session_report_built",
-        session_id=session_id,
-        scenario_type=scenario_type_enum.value,
-        report_overall_score=report.overall_score,
-        evidence_complete=projection.evidence_completeness.get("complete"),
-        presentation_page_metadata_complete=projection.evidence_completeness.get(
-            "page_metadata_complete"
-        ),
-        presentation_degraded_reasons=projection.evidence_completeness.get(
-            "degraded_reasons"
-        ),
-    )
+        )
+    except PracticeServiceError as exc:
+        if exc.status_code >= 500:
+            return build_server_error(
+                exc.error_code,
+                status_code=exc.status_code,
+                message=exc.message,
+            )
+        return error_response(
+            exc.error_code,
+            status_code=exc.status_code,
+            message=exc.message,
+            details=exc.details,
+        )
 
     return success_response(report)
 
@@ -2167,16 +1725,7 @@ async def generate_audio_upload_url(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """Generate a presigned PUT URL for browser-direct audio segment upload.
-
-    Request body:
-        segment_sequence (int): Zero-based segment index within the session.
-        content_type (str): MIME type, default "audio/webm".
-
-    Returns:
-        {url, object_key, expires_at} — the browser PUTs raw audio bytes to *url*.
-    """
-    # --- input validation ---
+    """Generate a presigned PUT URL for browser-direct audio segment upload."""
     segment_sequence = body.get("segment_sequence")
     if segment_sequence is None or not isinstance(segment_sequence, int) or segment_sequence < 0:
         return error_response(
@@ -2193,7 +1742,6 @@ async def generate_audio_upload_url(
             message="content_type must be a non-empty string",
         )
 
-    # --- session ownership check ---
     result = await db.execute(
         select(PracticeSession).where(PracticeSession.session_id == session_id)
     )
@@ -2203,26 +1751,27 @@ async def generate_audio_upload_url(
     if not _can_read_session(session, current_user):
         return error_response("[ACCESS_DENIED]", status_code=403)
 
-    # --- generate signed URL ---
     try:
-        svc = _practice_services(db).get_oss_signing_service()
-    except OssConfigError as exc:
+        payload = _practice_services(db).audio_segments.generate_upload_url(
+            session_id=session_id,
+            segment_sequence=segment_sequence,
+            content_type=content_type,
+        )
+    except PracticeServiceError as exc:
+        if exc.status_code >= 500:
+            return build_server_error(
+                exc.error_code,
+                status_code=exc.status_code,
+                message=exc.message,
+            )
         return error_response(
-            "[OSS_NOT_CONFIGURED]",
-            status_code=503,
-            message=str(exc),
+            exc.error_code,
+            status_code=exc.status_code,
+            message=exc.message,
+            details=exc.details,
         )
 
-    object_key = svc.build_object_key(session_id, segment_sequence)
-    presigned = svc.generate_put_url(object_key, content_type=content_type)
-
-    return success_response(
-        {
-            "url": presigned.url,
-            "object_key": presigned.object_key,
-            "expires_at": presigned.expires_at,
-        }
-    )
+    return success_response(payload)
 
 
 @router.post("/practice/sessions/{session_id}/audio-segments")
@@ -2232,16 +1781,7 @@ async def register_audio_segment(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """Register a successfully uploaded audio segment.
-
-    Request body:
-        segment_sequence (int): Segment index.
-        object_key (str): OSS object key that was uploaded.
-        size_bytes (int | null): Upload size in bytes.
-        duration_ms (int | null): Segment duration in milliseconds.
-
-    Creates/updates a SessionAudioSegment row with upload_status="uploaded".
-    """
+    """Register a successfully uploaded audio segment."""
     segment_sequence = body.get("segment_sequence")
     if segment_sequence is None or not isinstance(segment_sequence, int) or segment_sequence < 0:
         return error_response(
@@ -2261,7 +1801,6 @@ async def register_audio_segment(
     size_bytes = body.get("size_bytes")
     duration_ms = body.get("duration_ms")
 
-    # --- session ownership check ---
     result = await db.execute(
         select(PracticeSession).where(PracticeSession.session_id == session_id)
     )
@@ -2271,118 +1810,15 @@ async def register_audio_segment(
     if not _can_read_session(session, current_user):
         return error_response("[ACCESS_DENIED]", status_code=403)
 
-    # --- upsert segment row ---
-    existing = await db.execute(
-        select(SessionAudioSegment).where(
-            SessionAudioSegment.session_id == session_id,
-            SessionAudioSegment.segment_sequence == segment_sequence,
-        )
-    )
-    segment = existing.scalar_one_or_none()
-
-    if segment:
-        segment.object_key = object_key
-        segment.upload_status = "uploaded"
-        segment.error_message = None
-        if size_bytes is not None:
-            segment.size_bytes = size_bytes
-        if duration_ms is not None:
-            segment.duration_ms = duration_ms
-    else:
-        segment = SessionAudioSegment(
-            session_id=session_id,
-            segment_sequence=segment_sequence,
-            object_key=object_key,
-            content_type="audio/webm",
-            size_bytes=size_bytes,
-            duration_ms=duration_ms,
-            upload_status="uploaded",
-        )
-        db.add(segment)
-
-    # Update PracticeSession.audio_url to point to the first segment's directory
-    if session.audio_url is None:
-        session.audio_url = f"audio/{session_id}/"
-
-    await db.flush()
-
-    # Persist audio-audit runtime metrics without clobbering existing voice policy data.
-    audio_audit_result = await db.execute(
-        select(
-            func.count(SessionAudioSegment.id),
-            func.coalesce(func.sum(SessionAudioSegment.size_bytes), 0),
-        ).where(
-            SessionAudioSegment.session_id == session_id,
-            SessionAudioSegment.upload_status == "uploaded",
-        )
-    )
-    uploaded_segment_count, total_uploaded_bytes = audio_audit_result.one()
-
-    # Query failed segment count for bounded failure summary.
-    failed_count_result = await db.execute(
-        select(func.count(SessionAudioSegment.id)).where(
-            SessionAudioSegment.session_id == session_id,
-            SessionAudioSegment.upload_status == "failed",
-        )
-    )
-    failed_segment_count_in_register = failed_count_result.scalar() or 0
-
-    base_snapshot = (
-        deepcopy(session.voice_policy_snapshot)
-        if isinstance(session.voice_policy_snapshot, dict)
-        else {}
-    )
-    runtime_metrics = base_snapshot.get("runtime_metrics")
-    if not isinstance(runtime_metrics, dict):
-        runtime_metrics = {}
-    else:
-        runtime_metrics = deepcopy(runtime_metrics)
-
-    audio_audit = runtime_metrics.get("audio_audit")
-    if not isinstance(audio_audit, dict):
-        audio_audit = {}
-    else:
-        audio_audit = deepcopy(audio_audit)
-
-    audio_audit.update(
-        {
-            "segment_count": int(uploaded_segment_count or 0),
-            "uploaded_segment_count": int(uploaded_segment_count or 0),
-            "total_uploaded_bytes": int(total_uploaded_bytes or 0),
-            "last_segment_sequence": segment_sequence,
-            "last_object_key": object_key,
-            "last_uploaded_at": datetime.now(UTC).isoformat(),
-            "storage_prefix": f"audio/{session_id}/",
-            "failed_segment_count": int(failed_segment_count_in_register),
-        }
-    )
-    runtime_metrics["audio_audit"] = audio_audit
-    base_snapshot["runtime_metrics"] = runtime_metrics
-    session.voice_policy_snapshot = base_snapshot
-
-    await db.commit()
-    await db.refresh(segment)
-
-    logger.info(
-        "audio_segment_registered",
+    payload = await _practice_services(db).audio_segments.register_audio_segment(
         session_id=session_id,
+        session=session,
         segment_sequence=segment_sequence,
         object_key=object_key,
-        upload_status="uploaded",
+        size_bytes=size_bytes,
+        duration_ms=duration_ms,
     )
-
-    return success_response(
-        {
-            "id": segment.id,
-            "session_id": session_id,
-            "segment_sequence": segment.segment_sequence,
-            "object_key": segment.object_key,
-            "upload_status": segment.upload_status,
-            "size_bytes": segment.size_bytes,
-            "duration_ms": segment.duration_ms,
-            "created_at": segment.created_at.isoformat() if segment.created_at else None,
-        }
-    )
+    return success_response(payload)
 
 
 @router.get("/practice/sessions/{session_id}/audio-segments")
@@ -2391,11 +1827,7 @@ async def list_audio_segments(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """List all audio segments registered for a session.
-
-    Returns an array of segment metadata including upload status.
-    """
-    # --- session ownership check ---
+    """List all audio segments registered for a session."""
     result = await db.execute(
         select(PracticeSession).where(PracticeSession.session_id == session_id)
     )
@@ -2405,28 +1837,10 @@ async def list_audio_segments(
     if not _can_read_session(session, current_user):
         return error_response("[ACCESS_DENIED]", status_code=403)
 
-    seg_result = await db.execute(
-        select(SessionAudioSegment)
-        .where(SessionAudioSegment.session_id == session_id)
-        .order_by(SessionAudioSegment.segment_sequence)
-    )
-    segments = seg_result.scalars().all()
-
     return success_response(
-        [
-            {
-                "id": s.id,
-                "segment_sequence": s.segment_sequence,
-                "object_key": s.object_key,
-                "content_type": s.content_type,
-                "size_bytes": s.size_bytes,
-                "duration_ms": s.duration_ms,
-                "upload_status": s.upload_status,
-                "error_message": s.error_message,
-                "created_at": s.created_at.isoformat() if s.created_at else None,
-            }
-            for s in segments
-        ]
+        await _practice_services(db).audio_segments.list_audio_segments(
+            session_id=session_id,
+        )
     )
 
 
@@ -2447,19 +1861,7 @@ async def register_audio_segment_failure(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """Register a failed audio segment upload attempt.
-
-    Request body:
-        segment_sequence (int): Segment index that failed.
-        error_token (str): One of signing_failed, oss_put_failed,
-                           register_failed, network_error, unknown.
-
-    Creates/upserts a SessionAudioSegment row with upload_status="failed"
-    and stores the compact error token in error_message. Also updates
-    voice_policy_snapshot.runtime_metrics.audio_audit with a bounded
-    failure summary (failed_segment_count, last_failure_reason).
-    """
-    # --- input validation ---
+    """Register a failed audio segment upload attempt."""
     segment_sequence = body.get("segment_sequence")
     if segment_sequence is None or not isinstance(segment_sequence, int) or segment_sequence < 0:
         return error_response(
@@ -2475,14 +1877,7 @@ async def register_audio_segment_failure(
             status_code=422,
             message="error_token must be a non-empty string",
         )
-    if error_token not in _AUDIO_FAILURE_TOKENS:
-        return error_response(
-            "[INVALID_ERROR_TOKEN]",
-            status_code=422,
-            message=f"error_token must be one of: {', '.join(sorted(_AUDIO_FAILURE_TOKENS))}",
-        )
 
-    # --- session ownership check ---
     result = await db.execute(
         select(PracticeSession).where(PracticeSession.session_id == session_id)
     )
@@ -2492,61 +1887,28 @@ async def register_audio_segment_failure(
     if not _can_read_session(session, current_user):
         return error_response("[ACCESS_DENIED]", status_code=403)
 
-    # --- upsert segment row as failed ---
-    existing = await db.execute(
-        select(SessionAudioSegment).where(
-            SessionAudioSegment.session_id == session_id,
-            SessionAudioSegment.segment_sequence == segment_sequence,
-        )
-    )
-    segment = existing.scalar_one_or_none()
-
-    if segment:
-        # Only overwrite if not already successfully uploaded
-        if segment.upload_status != "uploaded":
-            segment.upload_status = "failed"
-            segment.error_message = error_token
-    else:
-        segment = SessionAudioSegment(
+    try:
+        payload = await _practice_services(db).audio_segments.register_audio_segment_failure(
             session_id=session_id,
+            session=session,
             segment_sequence=segment_sequence,
-            object_key=f"audio/{session_id}/seg_{segment_sequence:04d}.webm",
-            content_type="audio/webm",
-            upload_status="failed",
-            error_message=error_token,
+            error_token=error_token,
         )
-        db.add(segment)
+    except PracticeServiceError as exc:
+        if exc.status_code >= 500:
+            return build_server_error(
+                exc.error_code,
+                status_code=exc.status_code,
+                message=exc.message,
+            )
+        return error_response(
+            exc.error_code,
+            status_code=exc.status_code,
+            message=exc.message,
+            details=exc.details,
+        )
 
-    # Ensure PracticeSession.audio_url is set
-    if session.audio_url is None:
-        session.audio_url = f"audio/{session_id}/"
-
-    await db.flush()
-
-    # --- update voice_policy_snapshot.runtime_metrics.audio_audit ---
-    await _update_audio_audit_failure_metrics(db, session, session_id, error_token)
-
-    await db.commit()
-    await db.refresh(segment)
-
-    logger.info(
-        "audio_segment_failure_registered",
-        session_id=session_id,
-        segment_sequence=segment_sequence,
-        error_token=error_token,
-        upload_status="failed",
-    )
-
-    return success_response(
-        {
-            "id": segment.id,
-            "session_id": session_id,
-            "segment_sequence": segment.segment_sequence,
-            "upload_status": segment.upload_status,
-            "error_message": segment.error_message,
-            "created_at": segment.created_at.isoformat() if segment.created_at else None,
-        }
-    )
+    return success_response(payload)
 
 
 async def _update_audio_audit_failure_metrics(

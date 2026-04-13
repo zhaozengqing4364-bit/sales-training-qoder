@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "exported_at": "2026-04-13T03:26:25.725Z",
+  "exported_at": "2026-04-13T03:51:15.850Z",
   "milestones": [
     {
       "id": "M001",
@@ -12079,19 +12079,29 @@
       "milestone_id": "M019",
       "slice_id": "S02",
       "id": "T02",
-      "title": "抽出 session create/lifecycle/report 应用服务",
-      "status": "pending",
-      "one_liner": "",
-      "narrative": "",
-      "verification_result": "",
+      "title": "Extracted practice session/report application services and rewired practice routes to delegate create, lifecycle, report, and audio-segment orchestration without changing the existing API contracts.",
+      "status": "complete",
+      "one_liner": "Extracted practice session/report application services and rewired practice routes to delegate create, lifecycle, report, and audio-segment orchestration without changing the existing API contracts.",
+      "narrative": "I started red-first by adding a focused contract that required the practice route bundle to expose extracted `practice_session_service` and `practice_report_service` seams; the proof failed with `ModuleNotFoundError`, confirming the route-facing seam did not exist yet. I then added `backend/src/common/services/practice_session_service.py` to own session creation, retry-focus shaping, runtime descriptor assembly, lifecycle orchestration, and lifecycle response shaping, plus `backend/src/common/services/practice_report_service.py` to own report assembly, audio-audit projection, OSS signing/audio-segment persistence, and retry-entry reuse. `backend/src/common/services/practice_service.py` was reduced to a compatibility bundle that composes the new services, and `backend/src/common/services/__init__.py` now re-exports the expanded seam surface. After that, I rewired `backend/src/common/api/practice.py` so the route handlers delegate session creation, lifecycle transitions, terminal report building, projection-backed report reads, and audio upload/register/failure flows through the extracted services while keeping auth checks, request parsing, response envelopes, and HTTP codes in the route layer. The first full gate exposed one real regression: lifecycle logs moved onto a module-local logger, so the existing route-level observability proof stopped seeing `practice_session_lifecycle_transition_applied` and `practice_session_terminal_connection_close`. I fixed that by injecting the route logger into the extracted session services from `_practice_services(db)` instead of changing the outward logging contract, then reran the failing lifecycle proof and the full gate to green.",
+      "verification_result": "Red-first contract proof failed exactly because the new extracted modules did not exist yet, then passed once the services and bundle fields were added. LSP diagnostics stayed clean on the new session/report service modules, the compatibility bundle, and the rewired route file. A targeted lifecycle proof then confirmed the logger-injection fix preserved the existing route-level lifecycle observability contract, and the task’s required verification command finished 47/47 green across the practice evidence contract suite, evidence-flow integration suite, and session lifecycle API suite.",
       "duration": "",
-      "completed_at": null,
+      "completed_at": "2026-04-13T03:51:15.781Z",
       "blocker_discovered": false,
-      "deviations": "",
-      "known_issues": "",
-      "key_files": [],
-      "key_decisions": [],
-      "full_summary_md": "",
+      "deviations": "Kept `common.services.practice_service` as the route-facing compatibility bundle instead of making routes import the new session/report modules directly. This preserves the T01 seam and lets downstream work adopt the extracted modules incrementally behind one stable import surface.",
+      "known_issues": "The final backend gate still emits the pre-existing pytest-cov `Module src was never imported` / `No data was collected` warnings plus the Python 3.14 `_pytest/unraisableexception.py` runtime warning about `Connection._cancel` never awaited during async teardown. These warnings were already present in this area and did not block the green verification result.",
+      "key_files": [
+        "backend/src/common/services/practice_session_service.py",
+        "backend/src/common/services/practice_report_service.py",
+        "backend/src/common/services/practice_service.py",
+        "backend/src/common/services/__init__.py",
+        "backend/src/common/api/practice.py",
+        "backend/tests/contract/test_practice_evidence_contract.py",
+        ".gsd/KNOWLEDGE.md"
+      ],
+      "key_decisions": [
+        "D213 — keep `common.services.practice_service` as a compatibility bundle that composes the new `practice_session_service` and `practice_report_service` modules while routes delegate through those focused services."
+      ],
+      "full_summary_md": "---\nid: T02\nparent: S02\nmilestone: M019\nkey_files:\n  - backend/src/common/services/practice_session_service.py\n  - backend/src/common/services/practice_report_service.py\n  - backend/src/common/services/practice_service.py\n  - backend/src/common/services/__init__.py\n  - backend/src/common/api/practice.py\n  - backend/tests/contract/test_practice_evidence_contract.py\n  - .gsd/KNOWLEDGE.md\nkey_decisions:\n  - D213 — keep `common.services.practice_service` as a compatibility bundle that composes the new `practice_session_service` and `practice_report_service` modules while routes delegate through those focused services.\nduration: \nverification_result: mixed\ncompleted_at: 2026-04-13T03:51:15.780Z\nblocker_discovered: false\n---\n\n# T02: Extracted practice session/report application services and rewired practice routes to delegate create, lifecycle, report, and audio-segment orchestration without changing the existing API contracts.\n\n**Extracted practice session/report application services and rewired practice routes to delegate create, lifecycle, report, and audio-segment orchestration without changing the existing API contracts.**\n\n## What Happened\n\nI started red-first by adding a focused contract that required the practice route bundle to expose extracted `practice_session_service` and `practice_report_service` seams; the proof failed with `ModuleNotFoundError`, confirming the route-facing seam did not exist yet. I then added `backend/src/common/services/practice_session_service.py` to own session creation, retry-focus shaping, runtime descriptor assembly, lifecycle orchestration, and lifecycle response shaping, plus `backend/src/common/services/practice_report_service.py` to own report assembly, audio-audit projection, OSS signing/audio-segment persistence, and retry-entry reuse. `backend/src/common/services/practice_service.py` was reduced to a compatibility bundle that composes the new services, and `backend/src/common/services/__init__.py` now re-exports the expanded seam surface. After that, I rewired `backend/src/common/api/practice.py` so the route handlers delegate session creation, lifecycle transitions, terminal report building, projection-backed report reads, and audio upload/register/failure flows through the extracted services while keeping auth checks, request parsing, response envelopes, and HTTP codes in the route layer. The first full gate exposed one real regression: lifecycle logs moved onto a module-local logger, so the existing route-level observability proof stopped seeing `practice_session_lifecycle_transition_applied` and `practice_session_terminal_connection_close`. I fixed that by injecting the route logger into the extracted session services from `_practice_services(db)` instead of changing the outward logging contract, then reran the failing lifecycle proof and the full gate to green.\n\n## Verification\n\nRed-first contract proof failed exactly because the new extracted modules did not exist yet, then passed once the services and bundle fields were added. LSP diagnostics stayed clean on the new session/report service modules, the compatibility bundle, and the rewired route file. A targeted lifecycle proof then confirmed the logger-injection fix preserved the existing route-level lifecycle observability contract, and the task’s required verification command finished 47/47 green across the practice evidence contract suite, evidence-flow integration suite, and session lifecycle API suite.\n\n## Verification Evidence\n\n| # | Command | Exit Code | Verdict | Duration |\n|---|---------|-----------|---------|----------|\n| 1 | `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/contract/test_practice_evidence_contract.py -k \"exposes_extracted_session_and_report_services\" -x -q` | 1 | ❌ fail | 5560ms |\n| 2 | `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/contract/test_practice_evidence_contract.py -k \"exposes_extracted_session_and_report_services\" -x -q` | 0 | ✅ pass | 3500ms |\n| 3 | `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/integration/test_session_lifecycle_api.py -k \"idempotent_and_logs_unified_terminal_context\" -x -q` | 0 | ✅ pass | 3840ms |\n| 4 | `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/contract/test_practice_evidence_contract.py backend/tests/integration/test_practice_evidence_flow.py backend/tests/integration/test_session_lifecycle_api.py -x -q` | 0 | ✅ pass | 14120ms |\n\n## Deviations\n\nKept `common.services.practice_service` as the route-facing compatibility bundle instead of making routes import the new session/report modules directly. This preserves the T01 seam and lets downstream work adopt the extracted modules incrementally behind one stable import surface.\n\n## Known Issues\n\nThe final backend gate still emits the pre-existing pytest-cov `Module src was never imported` / `No data was collected` warnings plus the Python 3.14 `_pytest/unraisableexception.py` runtime warning about `Connection._cancel` never awaited during async teardown. These warnings were already present in this area and did not block the green verification result.\n\n## Files Created/Modified\n\n- `backend/src/common/services/practice_session_service.py`\n- `backend/src/common/services/practice_report_service.py`\n- `backend/src/common/services/practice_service.py`\n- `backend/src/common/services/__init__.py`\n- `backend/src/common/api/practice.py`\n- `backend/tests/contract/test_practice_evidence_contract.py`\n- `.gsd/KNOWLEDGE.md`\n",
       "description": "- 先抽 `create session + voice_policy_snapshot/runtime descriptor` 与 `lifecycle/report/read model` 两组 service，保持现有 response schema 和权限边界不变。\n- 对 `audio_audit` / OSS signing / retry focus 等高耦合 helper 采用窄 service/assembler seam，而不是继续堆回 route。\n- 保证 route 层只负责 auth、request parsing、response shape、HTTP code。",
       "estimate": "2h",
       "files": [
@@ -16347,6 +16357,18 @@
       "decision": "How to introduce the first application seam for common.api.practice during M019/S02",
       "choice": "Add common.services.practice_service as a minimal route-facing seam bundle that names session_create_policy, session_lifecycle, session_report_read_model, audio_audit_and_signing, and runtime_descriptor responsibilities; delegate audio audit and runtime descriptor helpers through it first while keeping route contracts unchanged.",
       "rationale": "T01 needed a concrete extraction boundary without prematurely splitting the route family or changing API behavior. A small service bundle gives later tasks stable seam names, centralizes existing dependency wiring, and lets low-risk helpers move out of practice.py immediately while create/lifecycle/report extractions can follow incrementally.",
+      "revisable": "Yes",
+      "made_by": "agent",
+      "superseded_by": null
+    },
+    {
+      "seq": 1583,
+      "id": "D213",
+      "when_context": "M019/S02/T02",
+      "scope": "architecture",
+      "decision": "How practice route-facing imports should evolve during the backend seam extraction",
+      "choice": "Keep `common.services.practice_service` as a compatibility bundle that composes the new `practice_session_service` and `practice_report_service` modules, while route handlers delegate create/lifecycle/report/audio orchestration through those focused services.",
+      "rationale": "This preserves the stable route-facing seam introduced in T01 and lets downstream slices import one existing bundle while the actual application logic moves out of `common/api/practice.py` into testable modules. It also keeps low-risk helper seams like audio audit, OSS signing, runtime descriptors, and retry-entry shaping centralized instead of redistributing them back into routes.",
       "revisable": "Yes",
       "made_by": "agent",
       "superseded_by": null
@@ -20972,6 +20994,50 @@
       "verdict": "✅ pass",
       "duration_ms": 13697,
       "created_at": "2026-04-13T03:26:25.631Z"
+    },
+    {
+      "id": 426,
+      "task_id": "T02",
+      "slice_id": "S02",
+      "milestone_id": "M019",
+      "command": "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/contract/test_practice_evidence_contract.py -k \"exposes_extracted_session_and_report_services\" -x -q",
+      "exit_code": 1,
+      "verdict": "❌ fail",
+      "duration_ms": 5560,
+      "created_at": "2026-04-13T03:51:15.781Z"
+    },
+    {
+      "id": 427,
+      "task_id": "T02",
+      "slice_id": "S02",
+      "milestone_id": "M019",
+      "command": "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/contract/test_practice_evidence_contract.py -k \"exposes_extracted_session_and_report_services\" -x -q",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 3500,
+      "created_at": "2026-04-13T03:51:15.781Z"
+    },
+    {
+      "id": 428,
+      "task_id": "T02",
+      "slice_id": "S02",
+      "milestone_id": "M019",
+      "command": "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/integration/test_session_lifecycle_api.py -k \"idempotent_and_logs_unified_terminal_context\" -x -q",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 3840,
+      "created_at": "2026-04-13T03:51:15.782Z"
+    },
+    {
+      "id": 429,
+      "task_id": "T02",
+      "slice_id": "S02",
+      "milestone_id": "M019",
+      "command": "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/contract/test_practice_evidence_contract.py backend/tests/integration/test_practice_evidence_flow.py backend/tests/integration/test_session_lifecycle_api.py -x -q",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 14120,
+      "created_at": "2026-04-13T03:51:15.782Z"
     }
   ]
 }

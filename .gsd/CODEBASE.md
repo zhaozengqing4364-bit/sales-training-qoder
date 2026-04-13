@@ -1,7 +1,7 @@
 # Codebase Map
 
-Generated: 2026-04-13T03:15:51Z | Files: 500 | Described: 0/500
-<!-- gsd:codebase-meta {"generatedAt":"2026-04-13T03:15:51Z","fingerprint":"10fbf2e2ee7adc81dcba6644dbc59dd73198de2c","fileCount":500,"truncated":true} -->
+Generated: 2026-04-13T03:26:52Z | Files: 500 | Described: 0/500
+<!-- gsd:codebase-meta {"generatedAt":"2026-04-13T03:26:52Z","fingerprint":"b81402061f917d614d9c7db920ce35636d46827e","fileCount":500,"truncated":true} -->
 Note: Truncated to first 500 files. Run with higher --max-files to include all.
 
 ### (root)/
@@ -451,6 +451,7 @@ Note: Truncated to first 500 files. Run with higher --max-files to include all.
 ### backend/src/common/services/
 - `backend/src/common/services/__init__.py`
 - `backend/src/common/services/password_reset.py`
+- `backend/src/common/services/practice_service.py`
 
 ### backend/src/common/storage/
 - `backend/src/common/storage/__init__.py`
@@ -646,4 +647,3 @@ Note: Truncated to first 500 files. Run with higher --max-files to include all.
 - `backend/tests/unit/common/test_document_storage_artifacts.py`
 - `backend/tests/unit/common/test_embedding_service_resilience.py`
 - `backend/tests/unit/common/test_haystack_adapter.py`
-- `backend/tests/unit/common/test_kb_lock_guard.py`

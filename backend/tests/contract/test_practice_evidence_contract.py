@@ -64,6 +64,24 @@ async def test_practice_application_service_bundle_wires_existing_dependencies(
     assert callable(services.get_oss_signing_service)
 
 
+@pytest.mark.asyncio
+async def test_practice_application_service_bundle_exposes_extracted_session_and_report_services(
+    db_session: AsyncSession,
+) -> None:
+    from common.services.practice_report_service import PracticeReportService
+    from common.services.practice_service import build_practice_route_services
+    from common.services.practice_session_service import (
+        PracticeSessionCreateService,
+        PracticeSessionLifecycleApplicationService,
+    )
+
+    services = build_practice_route_services(db_session)
+
+    assert isinstance(services.session_create, PracticeSessionCreateService)
+    assert isinstance(services.session_lifecycle, PracticeSessionLifecycleApplicationService)
+    assert isinstance(services.session_report, PracticeReportService)
+
+
 def _make_effectiveness_snapshot(*, evaluable: bool, reason: str | None) -> dict[str, object]:
     return {
         "pass_flags": {
