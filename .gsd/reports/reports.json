@@ -179,6 +179,22 @@
       "doneMilestones": 17,
       "totalMilestones": 18,
       "phase": "evaluating-gates"
+    },
+    {
+      "filename": "M019-2026-04-13T09-51-05.html",
+      "generatedAt": "2026-04-13T09:51:05.063Z",
+      "milestoneId": "M019",
+      "milestoneTitle": "Authority seams 与 release gate 收口",
+      "label": "M019: Authority seams 与 release gate 收口",
+      "kind": "milestone",
+      "totalCost": 135.66095199999995,
+      "totalTokens": 2036724585,
+      "totalDuration": 380953145,
+      "doneSlices": 75,
+      "totalSlices": 89,
+      "doneMilestones": 19,
+      "totalMilestones": 22,
+      "phase": "evaluating-gates"
     }
   ]
 }

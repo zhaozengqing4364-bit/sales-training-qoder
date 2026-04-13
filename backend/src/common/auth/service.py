@@ -49,6 +49,28 @@ security = HTTPBearer(auto_error=False)
 # - backend/src/common/monitoring/log_safety_inventory.py tracks the auth-adjacent log sinks that still need token/password/cookie/email redaction.
 pwd_context = CryptContext(schemes=["pbkdf2_sha256", "bcrypt"], deprecated="auto")
 
+# M020/S01/T01 auth transport matrix — current shipped behavior, not target-state hardening.
+# T02/T03 may tighten the policy, but downstream work should start from this explicit matrix instead
+# of inferring security posture from scattered helpers/routes/hooks.
+AUTH_TRANSPORT_MATRIX: dict[str, dict[str, list[str] | str]] = {
+    "http_request": {
+        "formal": ["authorization_bearer", "session_cookie"],
+        "compatibility": [],
+        "resolver": "resolve_bearer_or_cookie_token",
+    },
+    "websocket": {
+        "formal": ["authorization_bearer", "session_cookie"],
+        "compatibility": ["query_token"],
+        "resolver": "resolve_websocket_token",
+        "current_resolution_order": "authorization_header -> query_token -> cookie_header",
+    },
+    "login_credentials": {
+        "formal": ["user_hashed_password"],
+        "compatibility": ["auth_user_passwords_json", "auth_shared_password"],
+        "resolver": "common.auth.api.login",
+    },
+}
+
 
 def _raise_auth_http_error(*, status_code: int, error_code: str, message: str) -> None:
     raise HTTPException(
@@ -124,6 +146,13 @@ def resolve_websocket_token(
     authorization_header: str | None = None,
     cookie_header: str | None = None,
 ) -> str:
+    """
+    Resolve websocket auth from the currently shipped compatibility order.
+
+    Current runtime order is Authorization header -> query token -> session cookie.
+    Query token remains a compatibility transport for existing websocket callers and
+    should not be treated as the preferred long-term posture.
+    """
     if authorization_header and authorization_header.lower().startswith("bearer "):
         return authorization_header[7:].strip()
 

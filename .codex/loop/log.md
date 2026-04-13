@@ -1,3 +1,29 @@
+- time: 2026-04-13T18:04:04.426244+08:00
+  mode: grow
+  item id: M020-S01-T01
+  files changed:
+    - .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md
+    - .gsd/DECISIONS.md
+    - .gsd/KNOWLEDGE.md
+    - backend/src/common/auth/service.py
+    - backend/src/sales_bot/websocket/router.py
+    - backend/tests/unit/common/test_auth_transport_matrix.py
+    - backend/tests/unit/test_sales_websocket_router.py
+    - .codex/loop/state.json
+    - .codex/loop/log.md
+  summary: Codified the real auth transport matrix for M020/S01 so downstream hardening stops guessing: common.auth now exposes one shipped HTTP/websocket/login-credential matrix, sales websocket exposes its compat policy explicitly, the architecture scan now distinguishes formal versus compatibility transports, and the focused proof bundle locks learner/admin cookie auth plus websocket query-token compatibility in place before T02 tightens anything.
+  verification commands:
+    - rg -n "AUTH_SHARED_PASSWORD|AUTH_USER_PASSWORDS_JSON|session cookie|resolve_websocket_token|token: str = Query|Authorization" backend/src/common/auth backend/src/sales_bot/websocket backend/src/presentation_coach/websocket web/src/lib/auth-handler.ts web/src/hooks/use-auth-protection.ts
+    - backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/common/test_auth_transport_matrix.py backend/tests/unit/test_sales_websocket_router.py backend/tests/unit/test_main_presentation_ws_runtime.py backend/tests/integration/test_auth_login_api.py -q
+    - npm --prefix web test -- --run "src/hooks/use-practice-websocket.test.ts" "src/hooks/websocket/transport.test.ts" "src/lib/auth-handler.test.ts" "src/app/(auth)/login/page.test.tsx"
+    - lsp diagnostics backend/src/common/auth/service.py
+    - lsp diagnostics backend/src/sales_bot/websocket/router.py
+    - lsp diagnostics backend/tests/unit/common/test_auth_transport_matrix.py
+    - lsp diagnostics backend/tests/unit/test_sales_websocket_router.py
+  verification results: passed; the grep gate exposes the intended auth surfaces, backend auth/websocket proofs finished 30/30 green, the focused frontend auth/websocket bundle finished 32/32 green, and diagnostics stayed clean on the touched backend files.
+  success signal status: future M020 auth hardening work no longer has to rediscover whether bearer, cookie, query token, hashed_password, AUTH_USER_PASSWORDS_JSON, and AUTH_SHARED_PASSWORD are authoritative or compatibility-only — that matrix is now explicit in code, tests, and the architecture scan.
+  rollback note: if T02 changes websocket resolution order, removes query-token compatibility, or retires shared-password fallbacks, update AUTH_TRANSPORT_MATRIX, SALES_WS_AUTH_POLICY, the architecture scan auth matrix section, and the focused backend/frontend proof bundle together so the documented authority line does not drift from runtime behavior.
+
 - time: 2026-04-13T17:00:44.074256+08:00
   mode: grow
   item id: M019-S04-T03

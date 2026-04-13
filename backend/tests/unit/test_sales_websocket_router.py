@@ -11,6 +11,20 @@ import pytest
 from sales_bot.websocket import router as sales_router
 
 
+def test_sales_websocket_auth_policy_marks_query_token_as_compatibility_only() -> None:
+    assert sales_router.SALES_WS_AUTH_POLICY["formal"] == [
+        "authorization_bearer",
+        "session_cookie",
+    ]
+    assert sales_router.SALES_WS_AUTH_POLICY["compatibility"] == ["query_token"]
+    assert sales_router.SALES_WS_AUTH_POLICY["reject_close_codes"] == {
+        "unauthorized": 4001,
+        "owner_mismatch": 4003,
+        "kb_lock_unbound": 4410,
+        "agent_persona_required": 4411,
+    }
+
+
 @pytest.mark.asyncio
 async def test_enhanced_connection_init_failure_does_not_fallback_to_simple(monkeypatch):
     websocket = MagicMock()

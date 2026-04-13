@@ -23,7 +23,7 @@ S01 结束后，所有后续安全/运行时切片都以这一条 auth boundary 
 
 ## Tasks
 
-- [ ] **T01: 盘点 auth transport matrix 与兼容路径** `est:45m`
+- [x] **T01: 盘点 auth transport matrix 与兼容路径** `est:45m`
   - 盘点 `common.auth`、frontend auth hooks、sales/presentation websocket routers 当前支持的认证 transport：cookie、Authorization header、query token、shared password、per-user password。
 - 写出当前真实 auth matrix，明确哪些是正式路径、哪些只是兼容路径。
 - 锁定一组 focused auth/websocket tests，避免后续 hardening 改坏 learner/admin 主链。

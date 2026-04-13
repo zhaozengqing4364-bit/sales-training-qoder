@@ -27,6 +27,20 @@ logger = get_logger(__name__)
 
 router = APIRouter()
 
+# M020/S01/T01 current sales websocket auth posture.
+# This is an explicit inventory of the shipped behavior before T02 tightens the authority line.
+SALES_WS_AUTH_POLICY: dict[str, list[str] | dict[str, int] | str] = {
+    "formal": ["authorization_bearer", "session_cookie"],
+    "compatibility": ["query_token"],
+    "current_resolution_order": "authorization_header -> query_token -> cookie_header",
+    "reject_close_codes": {
+        "unauthorized": 4001,
+        "owner_mismatch": 4003,
+        "kb_lock_unbound": 4410,
+        "agent_persona_required": 4411,
+    },
+}
+
 
 @router.websocket("/ws/sales")
 async def sales_websocket(
@@ -247,7 +261,7 @@ async def _handle_sales_websocket(
 
 
 def _resolve_ws_token(websocket: WebSocket, query_token: str) -> str:
-    """Resolve auth token from header, query or cookie."""
+    """Resolve sales websocket auth using the shipped compatibility order."""
     return resolve_websocket_token(
         query_token=query_token,
         authorization_header=websocket.headers.get("authorization", ""),

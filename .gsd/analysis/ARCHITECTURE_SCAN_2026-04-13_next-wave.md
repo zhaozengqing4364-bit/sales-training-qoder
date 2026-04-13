@@ -266,6 +266,14 @@ S04/T02 之后，当前仓库已经有一条**可复用的 assembled release gat
 - SessionManager 多实例/重启语义不清
 - recovery 仍偏 runbook 阶段
 
+#### 7.2.1 M020/S01 当前 auth transport matrix（真实现状，不是目标态）
+- **HTTP API 正式路径**：`common.auth.service.resolve_bearer_or_cookie_token(...)` 允许 `Authorization: Bearer <jwt>` 与 `HttpOnly session cookie` 两条正式 transport；`web/src/lib/api/client.ts` 默认 `credentials: "include"`，所以 learner/admin 主链已经以 cookie-session 为默认浏览器 transport，而不是 localStorage token。
+- **登录凭证正式/兼容路径**：`User.hashed_password` 是正式密码 authority；尚未进入 managed password 的账号仍通过 `AUTH_USER_PASSWORDS_JSON`（per-user override）与 `AUTH_SHARED_PASSWORD`（shared password）兼容登录。这个兼容层目前仍在 `common.auth.api.login` 里真实生效，不能被误读成“文档遗留”。
+- **WebSocket 正式/兼容路径**：sales router（`backend/src/sales_bot/websocket/router.py`）与 presentation router（`backend/src/main.py::_handle_presentation_websocket`）都复用 `resolve_websocket_token(...)`，当前 shipped 顺序是 `Authorization header -> query token -> session cookie`。也就是说：`Authorization`/cookie 是想保留的正式 transport，但 `query token` 仍是**正在运行的兼容路径**，而且现在优先级还高于 cookie，这正是 T02 要收口的 authority gap。
+- **前端当前 posture**：`web/src/hooks/use-practice-websocket.ts` + `web/src/hooks/websocket/transport.ts` 已经不再往 websocket URL 追加 `token=`，对应 proof 在 `web/src/hooks/use-practice-websocket.test.ts` 与 `web/src/hooks/websocket/transport.test.ts`。因此 query-token 兼容已主要停留在 backend websocket entrypoints，不再是 frontend 主链的默认行为。
+- **401 / session expired 统一处理**：`web/src/lib/auth-handler.ts` 与 `web/src/hooks/use-auth-protection.ts` 仍是前端统一登录态退出 seam；API 401 继续通过 `authHandler.sessionExpired()` 触发统一提示与 `/login` 跳转，而不是页面各自发明 unauthorized 逻辑。
+- **Focused proof（T01 锁定）**：`backend/tests/unit/common/test_auth_transport_matrix.py` 现在显式锁住 HTTP/WS/login credential matrix；`backend/tests/unit/test_sales_websocket_router.py` 锁住 sales websocket compat policy；既有 `backend/tests/unit/test_main_presentation_ws_runtime.py`、`backend/tests/integration/test_auth_login_api.py`、`web/src/hooks/use-practice-websocket.test.ts`、`web/src/lib/auth-handler.test.ts` 继续覆盖 presentation ws runtime、cookie-session login、frontend session-expired seam。
+
 落点：**M020**
 
 ### 7.3 Theme C — AI control plane / evaluation kernel
