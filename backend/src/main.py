@@ -58,7 +58,12 @@ from common.auth.service import (
 # Conversation Replay API
 from common.conversation.api import router as replay_router
 from common.db.models import PracticeSession, Scenario
-from common.db.session import AsyncSessionLocal, get_db, init_db
+from common.db.session import (
+    AsyncSessionLocal,
+    STARTUP_DB_AUTHORITY,
+    get_db,
+    init_db,
+)
 from common.error_handling.middleware import (
     ErrorHandlerMiddleware,
     global_exception_handler,
@@ -164,6 +169,22 @@ async def lifespan(app: FastAPI):
             "JWT_SECRET must be set in production via environment variable"
         )
 
+    logger.info(
+        "Database authority map resolved for startup",
+        startup_initializer=STARTUP_DB_AUTHORITY["startup_initializer"],
+        schema_migration_entrypoint=STARTUP_DB_AUTHORITY[
+            "schema_migration_entrypoint"
+        ],
+        legacy_schema_repair_entrypoint=STARTUP_DB_AUTHORITY[
+            "legacy_schema_repair_entrypoint"
+        ],
+        auth_bootstrap_entrypoint=STARTUP_DB_AUTHORITY[
+            "auth_bootstrap_entrypoint"
+        ],
+        startup_compatibility_guards=STARTUP_DB_AUTHORITY[
+            "startup_compatibility_guards"
+        ],
+    )
     await init_db()
 
     auth_config = get_auth_config_diagnostics()

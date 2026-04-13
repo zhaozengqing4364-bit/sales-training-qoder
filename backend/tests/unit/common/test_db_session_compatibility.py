@@ -2,7 +2,32 @@ from __future__ import annotations
 
 from sqlalchemy import create_engine, inspect, text
 
-from common.db.session import _ensure_knowledge_document_schema_compatibility
+from common.db.session import (
+    STARTUP_DB_AUTHORITY,
+    _ensure_knowledge_document_schema_compatibility,
+)
+
+
+def test_startup_db_authority_map_points_to_runtime_migration_and_bootstrap_entrypoints():
+    assert STARTUP_DB_AUTHORITY["startup_initializer"] == "common.db.session.init_db"
+    assert STARTUP_DB_AUTHORITY["startup_table_bootstrap"] == "Base.metadata.create_all"
+    assert (
+        STARTUP_DB_AUTHORITY["schema_migration_entrypoint"]
+        == "cd backend && alembic upgrade head"
+    )
+    assert (
+        STARTUP_DB_AUTHORITY["legacy_schema_repair_entrypoint"]
+        == "cd backend && python scripts/repair_legacy_schema.py"
+    )
+    assert (
+        STARTUP_DB_AUTHORITY["auth_bootstrap_entrypoint"]
+        == "cd backend && python scripts/bootstrap_auth_admin.py "
+        "--email <email> --role <role>"
+    )
+    assert STARTUP_DB_AUTHORITY["startup_compatibility_guards"] == (
+        "personas.persona_policy compatibility guard",
+        "knowledge_documents schema compatibility guard",
+    )
 
 
 def test_sqlite_legacy_knowledge_documents_schema_is_upgraded_for_spreadsheets(

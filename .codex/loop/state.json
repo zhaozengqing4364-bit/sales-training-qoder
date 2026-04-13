@@ -1,7 +1,7 @@
 {
   "mode": "grow",
-  "current_issue_id": "M018-S03",
-  "current_issue_type": "slice",
+  "current_issue_id": "M019-S01-T01",
+  "current_issue_type": "task",
   "current_issue_status": "done",
   "pending_issue_ids": [],
   "completed_issue_ids": [
@@ -184,27 +184,31 @@
     "M018-S03-T01",
     "M018-S03-T02",
     "M018-S03-T03",
-    "M018-S03"
+    "M018-S03",
+    "M019-S01-T01"
   ],
   "blocked_issue_ids": [],
   "deferred_issue_ids": [],
   "last_modified_files": [
-    "docs/setup/backup-recovery-current-state.md",
-    "docs/backup-recovery-runbook.md",
-    ".gsd/analysis/BACKUP_RECOVERY_BASELINE.md",
-    ".gsd/DECISIONS.md",
+    "backend/src/common/db/session.py",
+    "backend/src/main.py",
+    "backend/tests/unit/common/test_db_session_compatibility.py",
+    ".gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md",
     ".gsd/KNOWLEDGE.md",
-    ".gsd/PROJECT.md",
+    ".gsd/DECISIONS.md",
     ".codex/loop/state.json",
     ".codex/loop/log.md"
   ],
   "last_verification_commands": [
-    "find docs scripts -maxdepth 2 -type f | sort | head -n 20",
-    "test -f docs/backup-recovery-runbook.md || test -f .gsd/analysis/BACKUP_RECOVERY_BASELINE.md",
-    "grep -n \"备份\\|恢复\\|演练\" docs/backup-recovery-runbook.md .gsd/analysis/BACKUP_RECOVERY_BASELINE.md"
+    "rg -n \"create_all|alembic|bootstrap|repair_legacy_schema|init_db\" backend/src/common/db/session.py backend/src/main.py backend/alembic/versions scripts",
+    "rg -n \"M019/S01 数据库演进 / bootstrap authority inventory|scripts/dev-up.sh 当前只是拉起 infra|M019/S01/T01 database authority inventory exposed\" .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md .gsd/KNOWLEDGE.md",
+    "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/common/test_db_session_compatibility.py -q",
+    "lsp diagnostics backend/src/common/db/session.py",
+    "lsp diagnostics backend/src/main.py",
+    "lsp diagnostics backend/tests/unit/common/test_db_session_compatibility.py"
   ],
-  "last_verification_result": "passed; all three slice-plan verification gates were rerun from repo root, the backup/recovery runbook and analysis baseline remain present and grep-discoverable, and the assembled slice now records one truthful executable recovery baseline plus explicit non-baseline follow-up work.",
-  "last_success_signal": "M018/S03 now gives future agents a repository-grounded backup/recovery baseline: one current-state inventory, one executable manual runbook, one short analysis pointer, and explicit separation between shipped recovery steps and still-missing automation/ownership work.",
+  "last_verification_result": "passed; the slice-plan rg gate now shows the explicit startup/migration/bootstrap authority surface in session.py/main.py, the new analysis and knowledge entries are grep-discoverable, the focused db-session unit suite finished 2/2 green, and LSP diagnostics stayed clean on the touched Python authority files.",
+  "last_success_signal": "M019/S01/T01 now gives downstream work one executable authority inventory instead of scattered assumptions: startup bootstrap is explicit in code/logs, Alembic stays the forward migration owner, the one-off repair/bootstrap scripts are named, and the remaining startup-path schema repair is called out truthfully in analysis.",
   "last_growth_scan": null,
-  "next_action": "Proceed to M018 milestone validation/close-out; all three slices are complete and the remaining work is milestone-level synthesis, validation, and follow-up prioritization."
+  "next_action": "Proceed to the next M019/S01 task using the new authority map to shrink or relocate the remaining startup-path schema repair surface."
 }

@@ -1,3 +1,27 @@
+- time: 2026-04-13T10:38:53+0800
+  mode: grow
+  item id: M019-S01-T01
+  files changed:
+    - backend/src/common/db/session.py
+    - backend/src/main.py
+    - backend/tests/unit/common/test_db_session_compatibility.py
+    - .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md
+    - .gsd/KNOWLEDGE.md
+    - .gsd/DECISIONS.md
+    - .codex/loop/state.json
+    - .codex/loop/log.md
+  summary: Wrote the first M019 startup-schema authority inventory by making the startup bootstrap seam explicit in code/logs, documenting the real migration/repair/bootstrap entrypoints in the architecture scan, and adding a focused unit proof for the new authority map.
+  verification commands:
+    - rg -n "create_all|alembic|bootstrap|repair_legacy_schema|init_db" backend/src/common/db/session.py backend/src/main.py backend/alembic/versions scripts
+    - rg -n "M019/S01 数据库演进 / bootstrap authority inventory|scripts/dev-up.sh 当前只是拉起 infra|M019/S01/T01 database authority inventory exposed" .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md .gsd/KNOWLEDGE.md
+    - backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/common/test_db_session_compatibility.py -q
+    - lsp diagnostics backend/src/common/db/session.py
+    - lsp diagnostics backend/src/main.py
+    - lsp diagnostics backend/tests/unit/common/test_db_session_compatibility.py
+  verification results: passed; the planned rg gate now exposes the explicit startup/migration/bootstrap mapping, the new analysis and knowledge inventory entries are grep-discoverable, the focused db-session suite finished 2/2 green, and diagnostics stayed clean on the touched Python authority files.
+  success signal status: downstream M019 work can now start from one truthful authority split — Alembic owns forward schema evolution, init_db owns startup bootstrap plus the currently-shipped compatibility guards, repair_legacy_schema is a one-off legacy repair/stamping entrypoint, and bootstrap_auth_admin is a one-off auth bootstrap script.
+  rollback note: if later M019 tasks remove or relocate startup compatibility repair, update the session/main authority constants/logs, the architecture scan inventory, the knowledge note, and the focused authority test together so the documented split keeps matching the live startup surface.
+
 - time: 2026-04-12T08:10:30+08:00
   mode: grow
   item id: M018-S03

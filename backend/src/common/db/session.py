@@ -1,5 +1,9 @@
 """
-Database session management with async support
+Database session management with async support.
+
+`init_db()` is the startup-time database bootstrap surface. It is intentionally
+not the long-term schema evolution authority: Alembic revisions own forward
+schema changes, while one-off recovery/bootstrap lives in dedicated scripts.
 """
 import json
 import os
@@ -7,16 +11,41 @@ from collections.abc import AsyncGenerator
 from typing import Any
 
 from dotenv import load_dotenv
+from sqlalchemy import inspect, text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
-from sqlalchemy import inspect, text
 
 from common.monitoring.logger import get_logger
 
 load_dotenv()
 logger = get_logger(__name__)
 
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql+asyncpg://postgres:password@localhost:5432/ai_practice")
+STARTUP_DB_AUTHORITY = {
+    "startup_initializer": "common.db.session.init_db",
+    "startup_table_bootstrap": "Base.metadata.create_all",
+    "startup_compatibility_guards": (
+        "personas.persona_policy compatibility guard",
+        "knowledge_documents schema compatibility guard",
+    ),
+    "schema_migration_entrypoint": "cd backend && alembic upgrade head",
+    "schema_migration_owner": "backend/alembic/env.py + backend/alembic/versions/*",
+    "legacy_schema_repair_entrypoint": (
+        "cd backend && python scripts/repair_legacy_schema.py"
+    ),
+    "auth_bootstrap_entrypoint": (
+        "cd backend && python scripts/bootstrap_auth_admin.py "
+        "--email <email> --role <role>"
+    ),
+    "note": (
+        "Startup compatibility guards are not a substitute for Alembic migrations; "
+        "non-development schema drift should be repaired explicitly."
+    ),
+}
+
+DATABASE_URL = os.getenv(
+    "DATABASE_URL",
+    "postgresql+asyncpg://postgres:password@localhost:5432/ai_practice",
+)
 
 # Determine if using SQLite (for development/testing)
 is_sqlite = DATABASE_URL.startswith("sqlite")
@@ -47,7 +76,7 @@ AsyncSessionLocal = async_sessionmaker(
 
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
     """Dependency for FastAPI to get database session.
-    
+
     P1-9: Removed implicit auto-commit. Business logic must explicitly
     call session.commit() to control transaction boundaries.
     This prevents accidental commits of incomplete data.
@@ -63,12 +92,37 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
 
 
 async def init_db():
-    """Initialize database and apply critical compatibility guards."""
+    """Initialize mapped tables and run startup-time compatibility guards.
+
+    This function is the startup bootstrap surface only. Alembic remains the
+    schema evolution authority, while legacy repair/bootstrap stay in explicit
+    scripts so failures can be localized to the right entrypoint.
+    """
     from common.db.models import Base
+
+    logger.info(
+        "Running startup database bootstrap",
+        startup_initializer=STARTUP_DB_AUTHORITY["startup_initializer"],
+        startup_table_bootstrap=STARTUP_DB_AUTHORITY["startup_table_bootstrap"],
+        startup_compatibility_guards=STARTUP_DB_AUTHORITY[
+            "startup_compatibility_guards"
+        ],
+        schema_migration_entrypoint=STARTUP_DB_AUTHORITY[
+            "schema_migration_entrypoint"
+        ],
+        legacy_schema_repair_entrypoint=STARTUP_DB_AUTHORITY[
+            "legacy_schema_repair_entrypoint"
+        ],
+        auth_bootstrap_entrypoint=STARTUP_DB_AUTHORITY[
+            "auth_bootstrap_entrypoint"
+        ],
+    )
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
         await conn.run_sync(_ensure_persona_policy_column_compatibility)
         await conn.run_sync(_ensure_knowledge_document_schema_compatibility)
+
+    logger.info("Startup database bootstrap finished")
 
 
 def _parse_json_list(raw: Any) -> list[str]:

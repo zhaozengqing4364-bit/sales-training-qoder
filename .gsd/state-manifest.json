@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "exported_at": "2026-04-12T04:55:10.233Z",
+  "exported_at": "2026-04-13T02:40:32.894Z",
   "milestones": [
     {
       "id": "M001",
@@ -968,6 +968,258 @@
       ],
       "requirement_coverage": "承接 M013 归一化矩阵中的 7.1、7.2、9.1、11.1、11.2、11.3、14.1、14.2、14.3、17.1、17.2、17.3；把性能/依赖/容灾风险从 audit 表述转成 evidence-backed baseline。",
       "boundary_map_markdown": "### S01 → S02\n\nProduces:\n- query/index/slow-path baseline\n- 后续优化 backlog 的证据分层\n\nConsumes:\n- nothing (first slice)\n\n### S01 → S03\n\nProduces:\n- 数据与运行时现状基线\n- 哪些问题只是 audit 猜测、哪些有真实证据\n\nConsumes:\n- nothing (first slice)\n"
+    },
+    {
+      "id": "M019",
+      "title": "Authority seams 与 release gate 收口",
+      "status": "active",
+      "depends_on": [],
+      "created_at": "2026-04-13T02:03:04.413Z",
+      "completed_at": null,
+      "vision": "把当前“单体部署下的模块化单体”从超大编排文件和隐式运行时修补，收口成可验证的 authority seams：数据库只通过迁移演进，practice backend 与 frontend orchestration 有明确应用层边界，release gate 覆盖真实 web/backend/doc-contract 路径，后续 runtime/AI/product 化工作不再继续堆进 mega files。",
+      "success_criteria": [
+        "非开发环境启动不再依赖隐式 schema 修补，数据库演进与兼容补齐路径能从迁移/显式脚本重建。",
+        "`backend/src/common/api/practice.py` 与 `web/src/lib/api/client.ts` / `web/src/hooks/use-practice-websocket.ts` 的主职责被拆成可定位的应用层/域层 seam，而不是继续在单文件累积。",
+        "GitHub Actions 覆盖当前真实的 web/backend focused gate 与依赖安装 authority，不再使用与仓库真相漂移的安装/验证路径。",
+        "观测与契约出口可核验：前端错误上报与 `/metrics`/契约校验有明确 live surface 或显式失败信号，后续 agent 不再靠猜测判断 release health。"
+      ],
+      "key_risks": [
+        {
+          "risk": "启动期 schema 兼容补丁和 Alembic/脚本的 authority 混杂，强行改动容易把现有 SQLite/Postgres 兼容链打断。",
+          "whyItMatters": "这是 auth、practice、report、replay 等所有运行面的共同底座，误收口会直接伤及全仓。"
+        },
+        {
+          "risk": "`practice.py`、`client.ts`、`use-practice-websocket.ts` 都是高扇出文件，若不先画 seam 就做大重构，容易把既有 contract 与 focused tests 一起打碎。",
+          "whyItMatters": "这三个文件已经承载真实业务入口，边界抽错会把 roadmap 变成回归制造器。"
+        },
+        {
+          "risk": "CI/metrics/error-reporting 的现状存在‘看起来有基础设施，实际未接通’的假象。",
+          "whyItMatters": "如果先加更多功能而不把 release truth line 收口，后续每个 milestone 都会继续在假绿灯上推进。"
+        }
+      ],
+      "proof_strategy": [
+        {
+          "riskOrUnknown": "启动期 schema authority 混杂",
+          "retireIn": "S01",
+          "whatWillBeProven": "prod/dev 启动、迁移、bootstrap 路径各自职责明确，兼容补齐不再藏在运行时隐式修补里"
+        },
+        {
+          "riskOrUnknown": "practice/backend/frontend mega-file seam 不清",
+          "retireIn": "S02",
+          "whatWillBeProven": "practice backend 的创建/生命周期/报告/音频链先从 API 路由中抽成可单测的应用层"
+        },
+        {
+          "riskOrUnknown": "frontend API/ws orchestration 继续膨胀",
+          "retireIn": "S03",
+          "whatWillBeProven": "API client 与 practice websocket outward contract 通过域模块/transport seam 保持稳定且 focused tests 继续覆盖"
+        },
+        {
+          "riskOrUnknown": "release gate 与观测出口假接通",
+          "retireIn": "S04",
+          "whatWillBeProven": "GitHub Actions、错误上报、metrics/doc-contract check 对真实仓库 authority 生效"
+        }
+      ],
+      "verification_contract": "以 focused web/backend gates、路由/文档 contract proof、GitHub workflow dry-run 级校验和 repo-root 命令为主，不承诺本 milestone 完成后立即进入多实例或多租户。",
+      "verification_integration": "至少要覆盖 backend startup/auth/practice focused suites、web dashboard/practice/auth focused suites，以及 CI workflow 对这些命令的真实复用。",
+      "verification_operational": "验证迁移/启动/bootstrap 路径与 workflow 安装路径一致；`/metrics` 或替代观测 seam 能在本地或测试中被明确检查。",
+      "verification_uat": "人工核查 release truth line：新 agent 仅凭 roadmap/plan 与 workflow 就能定位启动、契约、错误上报、metrics 的 authority。",
+      "definition_of_done": [
+        "所有切片都落在现有真实入口文件与其直接上下游模块，不引入第二套 parallel runtime。",
+        "web/backend/doc-contract/release gate 的 focused proof 可以从 repo root 直接执行。",
+        "roadmap 中承诺的 authority seams 都有明确 produces/consumes 描述和对应 plan 任务。",
+        "本 milestone 的计划文件足够细，后续执行模型无需重做架构调查即可开工。"
+      ],
+      "requirement_coverage": "这是 post-M018 的 architecture/operability milestone，主要覆盖用户刚给出的系统审查结论：mega-file orchestration、隐式 schema 修补、CI 漂移、metrics/error-reporting 未接通、文档契约漂移。它不直接新增用户功能，但为后续 M020-M022 提供可执行边界。",
+      "boundary_map_markdown": "### S01 → S02\n\nProduces:\n- migration-only / bootstrap-only authority map for `backend/src/common/db/session.py`, `backend/src/main.py`, auth bootstrap scripts, and related Alembic revisions\n- startup / bootstrap / compatibility inventory with focused verification entrypoints\n\nConsumes:\n- current FastAPI startup path and existing Alembic baseline\n\n### S02 → S03\n\nProduces:\n- backend practice application services for session create/lifecycle/report/audio/runtime-descriptor composition\n- route-level contract tests pinned to the extracted seams instead of `practice.py` internals\n\nConsumes:\n- S01 authority map so extraction does not reintroduce runtime DDL drift\n\n### S03 → S04\n\nProduces:\n- frontend domain client seam and practice websocket transport boundary with stable outward contract\n- focused web tests that prove split modules still satisfy current routes\n\nConsumes:\n- S02 backend application seam and existing API/websocket contracts\n\n### S04 → downstream milestones\n\nProduces:\n- release-gate workflows, metrics/error-reporting/doc-contract truth surfaces, and repo-root verification commands\n- a truthful release baseline that M020 security/runtime, M021 AI control-plane, and M022 productization work can reuse\n\nConsumes:\n- S01-S03 extracted seams and existing `.github/workflows` / docs/api-contract / specs contracts"
+    },
+    {
+      "id": "M020",
+      "title": "Security / multi-instance runtime / recovery hardening",
+      "status": "active",
+      "depends_on": [],
+      "created_at": "2026-04-13T02:05:39.571Z",
+      "completed_at": null,
+      "vision": "把现有‘单机可跑、兼容路径较多’的 auth/runtime/ops 基座收口成更可信的生产底座：cookie 与 websocket auth 边界清楚，日志/系统日志对敏感信息有统一暴露策略，SessionManager/SessionStateService 在多实例与重启语义上不再依赖隐性假设，M018 的恢复基线升级为可执行 drill。",
+      "success_criteria": [
+        "cookie/session/websocket/admin-log 的安全边界被写成真实 code+test+runbook authority，而不是散落在默认值和局部约定里。",
+        "support/admin 可见的 observability surface 既能定位问题，又不会把 token/password/cookie/email 等敏感信息原样暴露。",
+        "SessionManager/SessionStateService 的多实例/重启/reconnect 语义有清晰 authority 与 focused proof，不再只是假设单进程。",
+        "M018 的 backup/recovery baseline 至少提升到一组可执行 drill/script，能验证 hardened runtime 的恢复能力。"
+      ],
+      "key_risks": [
+        {
+          "risk": "现有 auth 同时兼容 shared password、per-user hashed password、cookie session、websocket token，多条路径并存。",
+          "whyItMatters": "贸然收口容易把现有 learner/admin 登录链打断，或者留下新的安全空洞。"
+        },
+        {
+          "risk": "系统日志与 admin 可视化面已经能工作，但字段暴露边界不清。",
+          "whyItMatters": "如果只修 logger 不修 admin UI/route allowlist，敏感信息仍可能从另一层泄露。"
+        },
+        {
+          "risk": "SessionManager/SessionStateService 当前混合进程内与 Redis 语义。",
+          "whyItMatters": "只在单机 happy path 上看起来稳定，扩容/重启/恢复时可能出现隐性一致性问题。"
+        }
+      ],
+      "proof_strategy": [
+        {
+          "riskOrUnknown": "多条 auth transport 路径并存",
+          "retireIn": "S01",
+          "whatWillBeProven": "cookie secure、CSRF posture、websocket token transport、shared password 兼容退出路径有一条明确可验证的 authority"
+        },
+        {
+          "riskOrUnknown": "敏感信息从日志或 admin UI 泄露",
+          "retireIn": "S02",
+          "whatWillBeProven": "logger sink、system log route、admin logs page 形成一致的 redaction policy"
+        },
+        {
+          "riskOrUnknown": "多实例/重启下 session state 不一致",
+          "retireIn": "S03",
+          "whatWillBeProven": "SessionManager/SessionStateService 的 connection visibility、snapshot、reconnect 语义能跨实例/重启被清晰定义和验证"
+        },
+        {
+          "riskOrUnknown": "恢复/runbook 仍停留在人工文档",
+          "retireIn": "S04",
+          "whatWillBeProven": "至少一组 repo-local drill/script 能把 hardened runtime 真正跑通并验证"
+        }
+      ],
+      "verification_contract": "优先使用 repo-root backend pytest、web focused tests、日志/redaction assertions、websocket integration tests 和脚本级 recovery checks；不要求本 milestone 完成后立刻上 Kubernetes。",
+      "verification_integration": "覆盖 auth login/reset、websocket connect/reconnect、admin logs page/system log API、session state snapshot/reconnect、recovery script 执行。",
+      "verification_operational": "至少验证一次 restart/drain/reconnect 或 recovery drill；runbook 与脚本的 authority 要一致。",
+      "verification_uat": "人工确认 support/admin 能在不泄密的前提下读懂失败状态，并能按 drill 指引完成最小恢复。",
+      "definition_of_done": [
+        "cookie/auth/websocket/admin-log/SessionManager/ops hardening tasks都沿现有真实入口和权威 seam 落地。",
+        "release 后的关键 failure modes（auth 失效、ws 重连、admin 日志查看、恢复脚本）都有 focused proof 和可定位的诊断出口。",
+        "多实例/重启/恢复相关 work 以显式 state authority 和 runbook/drill 为准，不再只依赖单进程假设。",
+        "本 milestone 结束后，后续 AI/product milestone 不需要再为 auth transport 或 runtime recovery 先补安全/运维底座。"
+      ],
+      "requirement_coverage": "覆盖用户审查中的安全与运维缺口：cookie secure/CSRF、websocket query token、shared-password 过渡风险、system log/admin redaction、多实例 SessionManager 一致性、手工 runbook 阶段的恢复能力。M018 提供 baseline，本 milestone 把 baseline 升成真实 hardening work。",
+      "boundary_map_markdown": "### S01 → S02\n\nProduces:\n- explicit auth transport policy for cookie security, websocket auth, CSRF posture, and shared-password deprecation path\n- focused auth/websocket proof commands from repo root\n\nConsumes:\n- M019 release truth line and existing auth routes/hooks\n\n### S02 → S03\n\nProduces:\n- sensitive-log redaction allowlist/denylist for backend log sinks and admin log UI\n- stable observability fields safe to expose to support/admin users\n\nConsumes:\n- S01 transport/auth policy and current `StructuredLogger` seam\n\n### S03 → S04\n\nProduces:\n- multi-instance-ready session state / connection visibility / reconnect authority seam\n- runtime restart/drain/reconnect proof surfaces\n\nConsumes:\n- S01 auth/websocket policy and current SessionManager/SessionStateService baseline\n\n### S04 → downstream milestones\n\nProduces:\n- executable recovery/drill scripts and deployment guidance that assume the hardened auth/runtime/observability seams\n- reusable operational proof for later AI/product milestones\n\nConsumes:\n- M018 backup/recovery baseline plus S01-S03 security/runtime changes"
+    },
+    {
+      "id": "M021",
+      "title": "AI control plane / prompt / evaluation kernel 统一",
+      "status": "active",
+      "depends_on": [],
+      "created_at": "2026-04-13T02:07:54.264Z",
+      "completed_at": null,
+      "vision": "把当前分散在 StepFun realtime handler、legacy evaluation/report、PromptTemplateService、persona policy、voice instruction、knowledge-answer 双轨路径上的 AI 控制平面和评估事实线统一起来：先确认 live authority，再让 prompt compilation、评分内核、质量/成本事件和知识问答都读同一套 truth line。",
+      "success_criteria": [
+        "项目里真正在线的 AI 主链、遗留兼容链和退役候选链被明确标记，后续决策不再误把 legacy 当 live。",
+        "PromptTemplateService、voice instruction、persona policy、runtime guardrail 形成真实可审计的 compiled prompt contract。",
+        "realtime、report、history、admin、replay 至少共享一套 canonical evaluation kernel，旧 contract 通过 compatibility readers 过渡。",
+        "AI 失败、降级、成本和 knowledge-answer 运行路径被显式记录并可检查，不再靠默认分数/默认文案掩盖。"
+      ],
+      "key_risks": [
+        {
+          "risk": "仓库当前同时存在 StepFun realtime 主链、legacy evaluation/report 链、PromptTemplateService、多套 prompt 来源和多套分数维度。",
+          "whyItMatters": "如果不先分清 live 与 compat，再做统一会把当前能跑的主链一起打碎。"
+        },
+        {
+          "risk": "Prompt 渲染与模型配置涉及安全与运行时稳定性（missing vars、任意 base_url、fail-open）。",
+          "whyItMatters": "错误的 prompt/control-plane 统一可能带来静默降质或把密钥发往非预期端点。"
+        },
+        {
+          "risk": "评分维度一旦统一，会影响 report/replay/history/admin/leaderboard 等多个 read-side surface。",
+          "whyItMatters": "这是一条高扇出 contract 变更，没有 compatibility readers 就会制造广泛事实漂移。"
+        }
+      ],
+      "proof_strategy": [
+        {
+          "riskOrUnknown": "live AI authority 不清",
+          "retireIn": "S01",
+          "whatWillBeProven": "仓库内每条 AI/prompt/score path 都被标记为 live、compat、shadow 或 retirement candidate"
+        },
+        {
+          "riskOrUnknown": "PromptTemplateService 看起来接入、实际上未驱动 live path",
+          "retireIn": "S02",
+          "whatWillBeProven": "compiled prompt contract 真正进入 live/legacy runtime，missing-variable/base-url policy 有明确诊断"
+        },
+        {
+          "riskOrUnknown": "多套评分维度不可校准",
+          "retireIn": "S03",
+          "whatWillBeProven": "realtime/report/history/admin/replay 共享 canonical evaluation kernel，并保留兼容 readers"
+        },
+        {
+          "riskOrUnknown": "默认分数/默认文案掩盖失败与成本",
+          "retireIn": "S04",
+          "whatWillBeProven": "质量/成本/失败事件能被显式记录、呈现、回放，而不是被 silent fallback 吃掉"
+        }
+      ],
+      "verification_contract": "结合 focused backend contract/integration suites、web report/replay/practice suites、knowledge-answer tests 和配置/文档 inventory checks；先保主链 truth，再做统一。",
+      "verification_integration": "至少覆盖 StepFun realtime path、PromptTemplateService/voice compiler、SessionEvidenceService/read-side consumers、knowledge-answer debug/run APIs。",
+      "verification_operational": "验证 compiled prompt / quality event / knowledge-answer mode 在 runtime diagnostics 或 support/admin surface 上可检查。",
+      "verification_uat": "人工确认报告、回放、实践页的分数/建议/降级说明不再互相打架，并且能解释失败而不是掩盖失败。",
+      "definition_of_done": [
+        "live AI path、prompt path、score path、read-side path 都有明确 authority 和 compatibility status。",
+        "PromptTemplateService 不再只是‘看起来接入’，而是对 live/legacy paths 有真实影响或明确 retirement 计划。",
+        "realtime/report/history/admin/replay 至少共享一套 canonical dimension/evidence kernel，兼容 readers 明确。",
+        "质量/成本/失败事件不会再被默认分数、默认文案或 silent fallback 伪装成成功。"
+      ],
+      "requirement_coverage": "覆盖用户审查中的 AI 主链问题：live path 实际在 StepFun realtime handler、PromptTemplateService 未真正驱动、prompt 来源碎片化、评分维度双轨/三轨漂移、质量与成本事件被掩盖、knowledge-answer 路径需要收敛。",
+      "boundary_map_markdown": "### S01 → S02\n\nProduces:\n- authoritative inventory of live AI/runtime paths vs legacy evaluation/report/prompt paths\n- compatibility labels for what is live, compat-only, shadow, or retirement candidate\n\nConsumes:\n- M019 extracted practice/runtime seams and current AI modules\n\n### S02 → S03\n\nProduces:\n- compiled prompt contract that actually drives live/legacy runtime paths\n- prompt-source taxonomy and missing-variable diagnostics policy\n\nConsumes:\n- S01 live/legacy inventory and existing PromptTemplateService / voice instruction compiler\n\n### S03 → S04\n\nProduces:\n- canonical evaluation kernel dimension schema plus compatibility readers for report/history/admin/replay\n- one scoring fact model shared across realtime and read-side consumers\n\nConsumes:\n- S02 compiled prompt contract and current session evidence projection\n\n### S04 → downstream milestones\n\nProduces:\n- explicit AI quality/cost/failure events and knowledge-answer convergence surfaces\n- a trustworthy runtime/control-plane/evidence base for M022 productization and future org-boundary work\n\nConsumes:\n- S01-S03 unified prompt/evaluation seams and current KnowledgeAnswer / StepFun runtime"
+    },
+    {
+      "id": "M022",
+      "title": "Sales productization / manager truth / organization-ready roadmap",
+      "status": "active",
+      "depends_on": [],
+      "created_at": "2026-04-13T02:10:16.146Z",
+      "completed_at": null,
+      "vision": "把这套系统从‘企业内部 AI 训练平台底座’推进到更像专业销售训练产品的下一阶段：用方法论-aware rubric 提升销售专业度，用 persona/scenario/customer-pressure/industry pack 强化角色真实性与资产运营，用 manager/admin 的真实证据面建立产品信任，同时为 organization/team/tenant 的企业化目标态准备迁移路线。",
+      "success_criteria": [
+        "销售训练至少具备一套方法论 aware 的 rubric contract，并与 canonical evaluation kernel 对齐。",
+        "persona/customer-pressure/scenario/industry pack 的运营方式继续站在现有 admin surfaces 上，不需要重造内容平台。",
+        "manager/admin 产品信任面使用真实 evidence 与真实统计；demo 数字与漂移口径不再留在关键决策入口。",
+        "organization/team/tenant 的目标态模型、authz 影响和迁移路线可直接成为下一轮企业化 roadmap 输入。"
+      ],
+      "key_risks": [
+        {
+          "risk": "如果先做外层产品包装而不先提升销售方法论与评分可信度，会把现有平台能力过度包装成专业销售 SaaS。",
+          "whyItMatters": "这会放大用户预期错配和商业化阻力。"
+        },
+        {
+          "risk": "persona/scenario/知识包 是当前产品运营的关键资产，但过度扩张会把范围拖成内容平台重建。",
+          "whyItMatters": "本 milestone 必须复用现有 admin/agent/persona/knowledge surfaces，而不是另造内容管理系统。"
+        },
+        {
+          "risk": "组织/多租户边界牵涉数据模型、authz、运营和未来集成。",
+          "whyItMatters": "如果没有 target-state migration path，后续每个功能都会继续绑定 user/session，累积迁移债。"
+        }
+      ],
+      "proof_strategy": [
+        {
+          "riskOrUnknown": "销售训练专业度不足",
+          "retireIn": "S01",
+          "whatWillBeProven": "方法论/rubric contract 能接入 canonical evaluation kernel，而不是继续只有关键词阶段机"
+        },
+        {
+          "riskOrUnknown": "资产运营靠手工 prompt 与零散 persona 配置",
+          "retireIn": "S02",
+          "whatWillBeProven": "persona/customer-pressure/scenario/industry pack 有稳定的复用与维护方式"
+        },
+        {
+          "riskOrUnknown": "manager/admin 产品信任不足",
+          "retireIn": "S03",
+          "whatWillBeProven": "manager calibration surfaces 与 admin truth surfaces 建立在真实 evidence/stats 上，demo 数字被移出决策面"
+        },
+        {
+          "riskOrUnknown": "未来组织/多租户方向只有口头结论",
+          "retireIn": "S04",
+          "whatWillBeProven": "organization/team boundary、authz、数据迁移、集成槽位有一份可执行 target-state plan"
+        }
+      ],
+      "verification_contract": "优先使用 canonical evidence/read-side focused suites、admin/persona/history/report web tests、inventory docs 和 plan artifacts。S04 是 target-state plan，不要求本 milestone 内直接上线多租户。",
+      "verification_integration": "覆盖 sales runtime/evaluation surfaces、persona/admin asset surfaces、manager/admin analytics surfaces。",
+      "verification_operational": "验证内容资产、manager summary、admin truth surfaces的配置与消费路径一致；不强行引入外部系统。",
+      "verification_uat": "人工确认产品描述、训练反馈、主管视图与 admin 首页不再给出超出真实能力的承诺。",
+      "definition_of_done": [
+        "销售训练的‘专业度’不再只靠关键词规则和包装文案，而是至少有一套可配置方法论/rubric contract 与 canonical evidence 对齐。",
+        "persona/scenario/customer-pressure/industry pack 的运营方式继续复用现有 admin entrypoints，不另造平行平台。",
+        "manager/admin surfaces 使用真实 canonical evidence 和真实统计，不再靠 demo 数字或漂移口径制造产品信任。",
+        "组织/团队边界与多租户目标态被写成可执行迁移路径，而不是继续停留在口头愿景。"
+      ],
+      "requirement_coverage": "覆盖用户审查中的产品与商业化问题：当前更像企业内部训练平台而不是成熟销售 SaaS、销售方法论/角色深度不足、内容资产与经理校准面偏弱、admin 首页 demo stats 影响可信度、组织/团队/多租户边界尚未成为一等公民。",
+      "boundary_map_markdown": "### S01 → S02\n\nProduces:\n- methodology-aware sales rubric/model contract that plugs into the canonical evaluation kernel\n- clear mapping from stage/objection/evidence events to coaching method concepts\n\nConsumes:\n- M021 canonical evaluation kernel and current sales scenario/persona surfaces\n\n### S02 → S03\n\nProduces:\n- deeper persona/customer-pressure/scenario packaging seam plus industry-pack operating rules\n- stable admin entrypoints for maintaining those assets without inventing a second platform\n\nConsumes:\n- S01 rubric/methodology contract and current persona/agent/knowledge admin surfaces\n\n### S03 → S04\n\nProduces:\n- manager calibration / team-coaching / truthful admin surfaces built on canonical evidence\n- product-facing trust improvements such as removing fake stats from decision surfaces\n\nConsumes:\n- S02 asset packaging seam and current admin analytics/user/session surfaces\n\n### S04 → future roadmap\n\nProduces:\n- organization/team boundary target-state model, authz implications, and migration path that preserves the modular-monolith shape until service split is justified\n- explicit future integration slots for SSO/CRM/org sync without pulling them into the current MVP\n\nConsumes:\n- S01-S03 productized training model and current auth/admin/runtime seams"
     }
   ],
   "slices": [
@@ -2538,6 +2790,360 @@
       "integration_closure": "S03 把当前部署/脚本/负责人/验证路径沉淀成 runbook，为未来运维自动化或恢复演练 slice 提供事实起点。",
       "observability_impact": "future agents 可直接检查 runbook 文件和引用路径，判断当前备份/恢复现状，而不是重新从部署脚本和 workflow 猜。",
       "sequence": 3,
+      "replan_triggered_at": null
+    },
+    {
+      "milestone_id": "M019",
+      "id": "S01",
+      "title": "S01",
+      "status": "pending",
+      "risk": "high",
+      "depends": [],
+      "demo": "After this: 数据库演进、bootstrap、兼容补齐的 authority map 会落到真实迁移/脚本/测试入口，非开发环境不再靠隐式 schema 修补蒙混过关。",
+      "created_at": "2026-04-13T02:03:54.875Z",
+      "completed_at": null,
+      "full_summary_md": "",
+      "full_uat_md": "",
+      "goal": "把 `init_db` / startup compatibility patch / bootstrap 脚本 / Alembic 的职责界线画清并收口到可执行 authority。",
+      "success_criteria": "- `backend/src/common/db/session.py`、`backend/src/main.py`、bootstrap 脚本、Alembic revisions 的职责被文档化并由 focused proof 覆盖。\n- 新实现/计划不再允许 request/startup 路径隐式 `create_all` / patch schema 充当常态迁移机制。\n- dev/prod 两条启动链路的前置条件和失败信号清楚可见。",
+      "proof_level": "integration",
+      "integration_closure": "S01 结束后，数据库演进、bootstrap、兼容补齐会有明确 authority map，S02-S04 可在不再猜 schema/runtime 责任归属的前提下继续抽层与接 release gate。",
+      "observability_impact": "startup / migration / bootstrap failure 能通过 focused proof、日志和脚本入口明确定位，而不是在运行时隐式修补中被吞掉。",
+      "sequence": 1,
+      "replan_triggered_at": null
+    },
+    {
+      "milestone_id": "M019",
+      "id": "S02",
+      "title": "Practice backend application seam 抽离",
+      "status": "pending",
+      "risk": "high",
+      "depends": [
+        "S01"
+      ],
+      "demo": "After this: `practice.py` 不再独自承载会话创建、生命周期、报告、音频审计、runtime descriptor 编排，后续任务可以沿应用层 seam 精准改动。",
+      "created_at": "2026-04-13T02:03:54.875Z",
+      "completed_at": null,
+      "full_summary_md": "",
+      "full_uat_md": "",
+      "goal": "从 `backend/src/common/api/practice.py` 中抽出可单测、可复用的 application services，同时保持当前 route contract 不变。",
+      "success_criteria": "- practice backend 的 create/lifecycle/report/audio/runtime-descriptor 编排从 route 文件中下沉到命名清晰的 service/application seam。\n- focused backend contract/integration tests 仍沿现有 API surface 通过。\n- route 文件保留输入校验和 response composition，而不是继续累积业务逻辑。",
+      "proof_level": "integration",
+      "integration_closure": "S02 结束后，practice backend 的创建/生命周期/报告/音频/runtime descriptor 会有明确应用层 seam；S03 前端域拆分和 M021 evidence kernel 统一可以直接复用这些 seams。",
+      "observability_impact": "practice 失败可以先定位 route、application service、read model、storage/signing 中哪一层出了问题，而不是只剩一个 mega route 文件。",
+      "sequence": 2,
+      "replan_triggered_at": null
+    },
+    {
+      "milestone_id": "M019",
+      "id": "S03",
+      "title": "Frontend domain client 与 transport seam 抽离",
+      "status": "pending",
+      "risk": "high",
+      "depends": [
+        "S02"
+      ],
+      "demo": "After this: `client.ts` 按 domain 拆包、`use-practice-websocket.ts` 保留 transport/orchestration outward contract，前端大文件不再是唯一事实源。",
+      "created_at": "2026-04-13T02:03:54.875Z",
+      "completed_at": null,
+      "full_summary_md": "",
+      "full_uat_md": "",
+      "goal": "把 `web/src/lib/api/client.ts` 与 `web/src/hooks/use-practice-websocket.ts` 收口为清晰的 domain/transport seam，保留现有页面 contract。",
+      "success_criteria": "- API client 被拆成 domain-level modules/types，不再只有单一 mega file。\n- practice websocket hook 的 transport boundary 保持稳定，message handlers / audio / backpressure / reconnect 的职责明确。\n- focused web tests 证明 dashboard/auth/practice/report/replay 仍沿现有 contract 工作。",
+      "proof_level": "integration",
+      "integration_closure": "S03 结束后，前端请求与 practice transport 不再被两个 mega file 独占；M020 auth transport hardening 与 M021 AI runtime surfaces 可以直接落到域模块或 transport seam。",
+      "observability_impact": "前端请求失败或 websocket 异常能先归类到 domain client、auth handler、transport orchestration、message handlers 四个层级之一。",
+      "sequence": 3,
+      "replan_triggered_at": null
+    },
+    {
+      "milestone_id": "M019",
+      "id": "S04",
+      "title": "Release gate / metrics / doc-contract truth line 收口",
+      "status": "pending",
+      "risk": "medium",
+      "depends": [
+        "S01",
+        "S02",
+        "S03"
+      ],
+      "demo": "After this: GitHub Actions、metrics、前端错误上报和 docs/spec contract 至少有一条真实、可检查的 release truth line，而不是只存在零散文件。",
+      "created_at": "2026-04-13T02:03:54.875Z",
+      "completed_at": null,
+      "full_summary_md": "",
+      "full_uat_md": "",
+      "goal": "让 CI、metrics、frontend error reporting、spec/doc contract 与当前仓库 authority 对齐，形成可复用 release gate。",
+      "success_criteria": "- workflow 使用与仓库真实一致的依赖安装与 focused verification 命令。\n- `/metrics` 或明确替代观测 surface 有可执行检查，frontend error reporting 的 backend 对口路由或显式缺失信号被收口。\n- api-spec/openapi/docs-api-contract 与 live route 的漂移有 check 或 inventory，不再全靠人工记忆。",
+      "proof_level": "final-assembly",
+      "integration_closure": "S04 是 M019 的最终 assembled slice；完成后 M020-M022 可以直接复用 release truth line，而不用再先证明 workflow/metrics/error/doc 是否真的接通。",
+      "observability_impact": "release 是否可过线不再只看单个 workflow 绿灯，而是看 web/backend/doc/metrics/error-reporting 的 assembled proof。",
+      "sequence": 4,
+      "replan_triggered_at": null
+    },
+    {
+      "milestone_id": "M020",
+      "id": "S01",
+      "title": "Auth transport hardening",
+      "status": "pending",
+      "risk": "high",
+      "depends": [],
+      "demo": "After this: auth/cookie/websocket 的 transport policy 会落成真实代码与 focused tests，后续不再靠‘兼容默认值’猜测安全边界。",
+      "created_at": "2026-04-13T02:06:22.480Z",
+      "completed_at": null,
+      "full_summary_md": "",
+      "full_uat_md": "",
+      "goal": "收口 cookie security、CSRF posture、websocket auth transport、shared-password 兼容退出路径。",
+      "success_criteria": "- 非开发环境 cookie secure 策略和 CSRF posture 有明确 authority，而不是隐藏默认值。\n- websocket auth 不再依赖 query token 作为常态路径，兼容策略可审计。\n- shared password 只作为显式兼容态存在，退出路径与验证命令清楚。",
+      "proof_level": "integration",
+      "integration_closure": "S01 结束后，所有后续安全/运行时切片都以这一条 auth boundary 为准，不再继续在页面、hook、router 里各自发明登录态规则。",
+      "observability_impact": "auth 失败、session 失效、ws 拒连原因和安全降级状态有明确日志/HTTP/close-code 信号。",
+      "sequence": 1,
+      "replan_triggered_at": null
+    },
+    {
+      "milestone_id": "M020",
+      "id": "S02",
+      "title": "Sensitive log 与 admin observability redaction 收口",
+      "status": "pending",
+      "risk": "medium",
+      "depends": [
+        "S01"
+      ],
+      "demo": "After this: support/admin 能看到对排障有用但不泄密的日志与错误上下文，敏感字段不会在 logger 或 admin logs page 原样外露。",
+      "created_at": "2026-04-13T02:06:22.480Z",
+      "completed_at": null,
+      "full_summary_md": "",
+      "full_uat_md": "",
+      "goal": "把 backend logger、system log route、admin logs page 收口到一致的 redaction/exposure policy。",
+      "success_criteria": "- token/password/cookie/email 等敏感字段在 logger sink、system log route、admin logs page 三层都遵守同一 policy。\n- admin/support 仍能定位 trace_id、错误分类、阶段状态，而不是因为过度脱敏失去排障能力。\n- focused tests 锁定允许暴露与禁止暴露的字段。",
+      "proof_level": "integration",
+      "integration_closure": "S02 结束后，M020/M021 的 observability work 都可建立在安全可见的日志 surface 上，而不是一边加事件一边担心 UI/route 反向泄密。",
+      "observability_impact": "日志可见性与脱敏边界有统一规则，future agents 不再从 UI 或 route 误读敏感详情。",
+      "sequence": 2,
+      "replan_triggered_at": null
+    },
+    {
+      "milestone_id": "M020",
+      "id": "S03",
+      "title": "Multi-instance session state 与 reconnect authority 收口",
+      "status": "pending",
+      "risk": "high",
+      "depends": [
+        "S01",
+        "S02"
+      ],
+      "demo": "After this: runtime connection visibility、session snapshot、reconnect/drain 语义对单实例和多实例都清晰，后续扩容不再完全依赖进程内假设。",
+      "created_at": "2026-04-13T02:06:22.480Z",
+      "completed_at": null,
+      "full_summary_md": "",
+      "full_uat_md": "",
+      "goal": "把 SessionManager/SessionStateService 从‘单进程看起来能用’提升为多实例/重启可解释的 state authority。",
+      "success_criteria": "- 进程内连接态与 Redis/session snapshot 的职责边界明确，重连 epoch 与 active connection visibility 有 authority。\n- runtime restart/drain/reconnect 至少有一组 focused proof 覆盖。\n- 不再默认把单机 systemd happy path 当作扩容语义。",
+      "proof_level": "integration",
+      "integration_closure": "S03 结束后，runtime state、snapshot、connection visibility、reconnect epoch 都有明确 authority；S04 drill 和 M021 realtime quality events 可以直接消费。",
+      "observability_impact": "连接数、session snapshot、reconnect state、last error/epoch 可以从明确 surface 检查，而不是读进程内偶然状态。",
+      "sequence": 3,
+      "replan_triggered_at": null
+    },
+    {
+      "milestone_id": "M020",
+      "id": "S04",
+      "title": "Recovery drill automation 与部署指导收口",
+      "status": "pending",
+      "risk": "medium",
+      "depends": [
+        "S01",
+        "S02",
+        "S03"
+      ],
+      "demo": "After this: M018 的 backup/recovery baseline 会升级成可执行 drill/script，能针对 hardened auth/runtime/observability seams 做真实恢复验证。",
+      "created_at": "2026-04-13T02:06:22.480Z",
+      "completed_at": null,
+      "full_summary_md": "",
+      "full_uat_md": "",
+      "goal": "把手工 runbook 提升为最小可执行 recovery/drill automation，并校准部署指导。",
+      "success_criteria": "- 至少一组 repo-local drill/script 能验证 auth/runtime/db/redis/oss 关键恢复路径。\n- runbook 与脚本对同一 authority file/command 负责，不再分叉。\n- 部署指导对单机与未来多实例边界有明确说明。",
+      "proof_level": "final-assembly",
+      "integration_closure": "S04 是 M020 的 final assembly slice；完成后 M021/M022 的试验与交付可以建立在可恢复 runtime 之上。",
+      "observability_impact": "恢复动作会产出脚本输出、health check、trace/log evidence，而不是只剩 markdown 说明。",
+      "sequence": 4,
+      "replan_triggered_at": null
+    },
+    {
+      "milestone_id": "M021",
+      "id": "S01",
+      "title": "Live AI authority inventory",
+      "status": "pending",
+      "risk": "high",
+      "depends": [],
+      "demo": "After this: 项目中每条 AI/runtime/prompt/score/report 路径都有 live/compat/shadow/retire 标签，后续统一工作不会再基于误判开刀。",
+      "created_at": "2026-04-13T02:08:39.740Z",
+      "completed_at": null,
+      "full_summary_md": "",
+      "full_uat_md": "",
+      "goal": "先把 live AI authority 弄清：哪些链路真实在线，哪些只是遗留兼容或影子路径。",
+      "success_criteria": "- StepFun realtime、legacy evaluation/report、PromptTemplateService、knowledge-answer、voice instruction compiler 的当前职责被标成 live/compat/shadow/retire。\n- architecture scan 与 milestone context 可以直接回答‘现在真正在线的 AI 主链是什么’。\n- downstream slices 不再直接基于过时 assumptions 改代码。",
+      "proof_level": "contract",
+      "integration_closure": "S01 结束后，后续 prompt/evaluation/kernel 工作都有同一张 live/compat/shadow inventory 可依赖，不再误把 legacy 文件名当 runtime authority。",
+      "observability_impact": "排障与规划可直接引用 live/compat 标签；新的 agent 不必重新猜哪个 handler/service 才是真主链。",
+      "sequence": 1,
+      "replan_triggered_at": null
+    },
+    {
+      "milestone_id": "M021",
+      "id": "S02",
+      "title": "Prompt control plane 统一",
+      "status": "pending",
+      "risk": "high",
+      "depends": [
+        "S01"
+      ],
+      "demo": "After this: prompt template、voice instruction、persona policy、runtime guardrail 不再各走各路，至少有一条 compiled prompt contract 真正驱动 live/legacy 路径。",
+      "created_at": "2026-04-13T02:08:39.740Z",
+      "completed_at": null,
+      "full_summary_md": "",
+      "full_uat_md": "",
+      "goal": "统一 prompt control plane，让 PromptTemplateService/voice instruction/persona policy 形成真实编译产物。",
+      "success_criteria": "- PromptTemplateService 真正驱动 live 或 legacy 仍保留的路径，不再只是看起来被调用。\n- prompt 来源碎片化被收敛成清晰 taxonomy：template、persona policy、runtime guardrail、compiled instruction。\n- missing-variable/base-url/fail-open policy 有明确默认值与 failure surface。",
+      "proof_level": "integration",
+      "integration_closure": "S02 结束后，S03 canonical evaluation kernel 与 S04 quality events 都建立在同一 compiled prompt contract 上。",
+      "observability_impact": "missing vars、template drift、provider/base_url policy 会有显式 diagnostics，而不是 silent fail-open。",
+      "sequence": 2,
+      "replan_triggered_at": null
+    },
+    {
+      "milestone_id": "M021",
+      "id": "S03",
+      "title": "Canonical evaluation kernel 收口",
+      "status": "pending",
+      "risk": "high",
+      "depends": [
+        "S01",
+        "S02"
+      ],
+      "demo": "After this: realtime、report、history、admin、replay 至少共享一套 canonical sales/presentation evaluation kernel，旧读者通过 compatibility readers 过渡。",
+      "created_at": "2026-04-13T02:08:39.740Z",
+      "completed_at": null,
+      "full_summary_md": "",
+      "full_uat_md": "",
+      "goal": "统一评分维度、rollup 和 evidence kernel，避免多套分数事实继续漂移。",
+      "success_criteria": "- realtime/report/history/admin/replay 至少共享一套 canonical dimension schema 与 rollup contract。\n- 旧字段/旧维度通过 compatibility readers 暂时保留，而不是继续各算各的。\n- focused backend/web tests 锁定 canonical vs compatibility 行为。",
+      "proof_level": "integration",
+      "integration_closure": "S03 结束后，realtime/report/history/admin/replay 至少共享一套 canonical evaluation kernel；S04 的质量事件可以直接挂在这条事实线。",
+      "observability_impact": "score drift 可以从 canonical kernel 与 compatibility reader 的差异中被明确定位，而不是通过页面互相比对猜。",
+      "sequence": 3,
+      "replan_triggered_at": null
+    },
+    {
+      "milestone_id": "M021",
+      "id": "S04",
+      "title": "AI quality/cost/failure events 与 knowledge path 收口",
+      "status": "pending",
+      "risk": "medium",
+      "depends": [
+        "S02",
+        "S03"
+      ],
+      "demo": "After this: AI 失败、降级、成本、知识问答路径会以显式质量事件落盘/出现在诊断面，默认分数和默认文案不再掩盖问题。",
+      "created_at": "2026-04-13T02:08:39.741Z",
+      "completed_at": null,
+      "full_summary_md": "",
+      "full_uat_md": "",
+      "goal": "把 AI runtime/control-plane 的质量、成本、失败事件显式化，并收敛 knowledge-answer 运行路径。",
+      "success_criteria": "- quality/cost/failure events 有明确 schema 和 inspection surface。\n- knowledge-answer 双轨/影子路径被收敛到一个可解释的 live+compat 模式。\n- 默认分数、默认文案、静默 fallback 会被显式标成 degraded/failure，而不是伪装成功。",
+      "proof_level": "final-assembly",
+      "integration_closure": "S04 是 M021 的 final assembly slice；完成后 M022 可以在真实 quality/cost/evidence 之上做销售产品化，而不是继续包装默认分数和静默 fallback。",
+      "observability_impact": "future agents 可直接检查 cost/quality/failure events、knowledge-answer runs、claim-truth degradation，而不是反推默认分数。",
+      "sequence": 4,
+      "replan_triggered_at": null
+    },
+    {
+      "milestone_id": "M022",
+      "id": "S01",
+      "title": "Methodology-aware sales rubric 收口",
+      "status": "pending",
+      "risk": "high",
+      "depends": [],
+      "demo": "After this: 销售训练会有一套可配置方法论/rubric contract，可以明确映射到 realtime、report、manager coaching，而不是只剩关键词阶段和散分。",
+      "created_at": "2026-04-13T02:11:02.999Z",
+      "completed_at": null,
+      "full_summary_md": "",
+      "full_uat_md": "",
+      "goal": "把销售训练从‘通用训练框架 + 销售规则’推进到方法论 aware 的 rubric contract。",
+      "success_criteria": "- 至少一套销售方法论/rubric contract（例如 discovery/qualification/value/objection/next-step 维度）接入 canonical evaluation kernel。\n- realtime/report/manager coaching 能读同一方法论语义，而不是各自解释。\n- 不要求首轮就覆盖所有方法论，但必须明确配置入口与证据映射。",
+      "proof_level": "integration",
+      "integration_closure": "S01 结束后，S02 persona/industry pack 和 S03 manager calibration 都可以直接复用同一方法论 contract，而不是各自解释什么叫‘好销售对话’。",
+      "observability_impact": "方法论/rubric 命中、缺口、校准结果可以在 canonical evidence 上被定位，而不是只剩一个总分。",
+      "sequence": 1,
+      "replan_triggered_at": null
+    },
+    {
+      "milestone_id": "M022",
+      "id": "S02",
+      "title": "Persona / scenario / industry pack 运营化",
+      "status": "pending",
+      "risk": "medium",
+      "depends": [
+        "S01"
+      ],
+      "demo": "After this: persona/customer-pressure/scenario/industry pack 会通过现有 admin entrypoints 运作，角色扮演与场景深度不再只靠单条 prompt。",
+      "created_at": "2026-04-13T02:11:02.999Z",
+      "completed_at": null,
+      "full_summary_md": "",
+      "full_uat_md": "",
+      "goal": "提升 persona/customer-pressure/scenario 深度，并形成可维护的行业包/场景包运营规则。",
+      "success_criteria": "- persona/customer_pressure/scenario/knowledge 的组合方式有统一 contract，能表达行业差异和压力模型。\n- 继续复用现有 admin agents/personas/knowledge entrypoints，而不是新造平台。\n- focused tests 或 inventory 证明这些资产真正影响 runtime/evidence。",
+      "proof_level": "integration",
+      "integration_closure": "S02 结束后，S03 manager calibration 与 future enterprise rollout 能直接复用现有 admin entrypoints 管理内容资产，而不是再造内容平台。",
+      "observability_impact": "future agents 可以从 admin/persona/knowledge surfaces 检查某个行业包/压力模型实际影响了哪些运行时行为。",
+      "sequence": 2,
+      "replan_triggered_at": null
+    },
+    {
+      "milestone_id": "M022",
+      "id": "S03",
+      "title": "Manager calibration 与 admin truth surfaces 收口",
+      "status": "pending",
+      "risk": "medium",
+      "depends": [
+        "S01",
+        "S02"
+      ],
+      "demo": "After this: manager/admin 的关键决策面会使用真实 canonical evidence 和真实统计，不再混用 demo 数字、漂移口径或不可解释总分。",
+      "created_at": "2026-04-13T02:11:02.999Z",
+      "completed_at": null,
+      "full_summary_md": "",
+      "full_uat_md": "",
+      "goal": "把 manager calibration、team coaching、admin truth surfaces 建立在真实 evidence 和真实统计上。",
+      "success_criteria": "- admin 首页/关键管理面移除或替换 fake stats/dummy cards，不再伪装实时运营数字。\n- manager calibration/team coaching 至少有一组建立在 canonical evidence 上的 focused surfaces。\n- learner/manager/admin 对同一训练事实的口径一致。",
+      "proof_level": "integration",
+      "integration_closure": "S03 结束后，组织侧看到的关键训练面会与 learner report/replay 使用同一事实线；S04 org target-state 不再建立在 demo 面之上。",
+      "observability_impact": "主管看到的 not passed / trend / calibration / team summary 都能回到 canonical evidence，而不是本地凑数。",
+      "sequence": 3,
+      "replan_triggered_at": null
+    },
+    {
+      "milestone_id": "M022",
+      "id": "S04",
+      "title": "Organization / team / tenant target-state plan",
+      "status": "pending",
+      "risk": "high",
+      "depends": [
+        "S01",
+        "S02",
+        "S03"
+      ],
+      "demo": "After this: organization/team/tenant 的目标态、authz 影响、数据迁移、SSO/CRM/org-sync 插槽会有一份可执行路线，而不是继续停留在‘以后再说’。",
+      "created_at": "2026-04-13T02:11:02.999Z",
+      "completed_at": null,
+      "full_summary_md": "",
+      "full_uat_md": "",
+      "goal": "把 organization/team boundary 变成下一阶段可执行的 target-state migration plan。",
+      "success_criteria": "- `organization/team/member/role/access scope` 的目标态模型与当前 `user/session/agent/persona` 模型映射清楚。\n- authz、analytics、asset ownership、future integrations（SSO/CRM/org sync）有明确插槽，但不被提前实现进当前 MVP。\n- modular monolith 下的迁移路径清楚，知道何时仍留在单体边界、何时才值得拆服务。",
+      "proof_level": "contract",
+      "integration_closure": "S04 是 M022 的 final assembly/contract slice；完成后 org-boundary、SSO、CRM、org-sync 等未来工作可以直接转为新 milestone，而不重跑全仓扫描。",
+      "observability_impact": "后续 agent 可以直接引用 org target-state 文档判断某个新需求该挂在哪个 owner/entity/authz seam。",
+      "sequence": 4,
       "replan_triggered_at": null
     }
   ],
@@ -11279,6 +11885,1905 @@
       "observability_impact": "runbook 是否仍反映当前现实，可由文件存在和内容 grep 直接检查。",
       "full_plan_md": "",
       "sequence": 0
+    },
+    {
+      "milestone_id": "M019",
+      "slice_id": "S01",
+      "id": "T01",
+      "title": "Made startup/migration/bootstrap authority explicit across db startup code, analysis, and focused proof.",
+      "status": "complete",
+      "one_liner": "Made startup/migration/bootstrap authority explicit across db startup code, analysis, and focused proof.",
+      "narrative": "I audited the live startup and schema surfaces across `backend/src/common/db/session.py`, `backend/src/main.py`, `backend/alembic/env.py`, the relevant Alembic revisions (`015`, `017`, `018`, `026`, `027`, `028`), `backend/scripts/repair_legacy_schema.py`, `backend/scripts/bootstrap_auth_admin.py`, `scripts/dev-up.sh`, and `docs/backup-recovery-runbook.md`. The key finding was that the real implicit repair surface is concentrated in the startup path, not request handlers: `lifespan -> init_db()` still runs `Base.metadata.create_all()` plus the `persona_policy` and `knowledge_documents` compatibility guards, while `scripts/dev-up.sh` starts `uvicorn src.main:app` directly and does not run `alembic upgrade head` first. I made that split explicit by introducing `STARTUP_DB_AUTHORITY` in `backend/src/common/db/session.py`, logging the authority map during startup in both `session.py` and `main.py`, adding a focused unit test that locks the named migration/repair/bootstrap entrypoints, and extending `.gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md` with a concrete M019/S01 authority inventory table. I also captured the non-obvious `dev-up` / startup-patch drift in `.gsd/KNOWLEDGE.md` and saved decision D210 so downstream M019 work can tighten the remaining startup-path schema repair against one shared baseline instead of rediscovering it.",
+      "verification_result": "I reran the slice-plan grep gate and it now exposes the explicit startup/migration/bootstrap authority surface in `backend/src/common/db/session.py` and `backend/src/main.py`. I also grepped the architecture scan and knowledge log to prove the new inventory persisted to the expected long-lived artifacts. The focused backend proof `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/common/test_db_session_compatibility.py -q` passed 2/2 after adding the authority-map assertion alongside the existing knowledge-documents compatibility test. Finally, fresh LSP diagnostics reported no issues on `backend/src/common/db/session.py`, `backend/src/main.py`, and `backend/tests/unit/common/test_db_session_compatibility.py`.",
+      "duration": "",
+      "completed_at": "2026-04-13T02:40:32.822Z",
+      "blocker_discovered": false,
+      "deviations": "Expanded beyond the minimum expected-output list by adding a focused unit proof, a knowledge-log entry, decision D210, and safe-grow continuity updates so the authority split is executable, discoverable, and resumable rather than markdown-only.",
+      "known_issues": "Focused pytest still emits pre-existing pytest-cov 'module src was never imported / no data was collected' warnings plus a SQLite ResourceWarning on suite teardown; this task did not change that harness noise.",
+      "key_files": [
+        "backend/src/common/db/session.py",
+        "backend/src/main.py",
+        "backend/tests/unit/common/test_db_session_compatibility.py",
+        ".gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md",
+        ".gsd/KNOWLEDGE.md"
+      ],
+      "key_decisions": [
+        "D210 — Keep Alembic as schema evolution authority, keep init_db as startup bootstrap plus explicit compatibility guards, and keep repair/bootstrap as one-off scripts."
+      ],
+      "full_summary_md": "---\nid: T01\nparent: S01\nmilestone: M019\nkey_files:\n  - backend/src/common/db/session.py\n  - backend/src/main.py\n  - backend/tests/unit/common/test_db_session_compatibility.py\n  - .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md\n  - .gsd/KNOWLEDGE.md\nkey_decisions:\n  - D210 — Keep Alembic as schema evolution authority, keep init_db as startup bootstrap plus explicit compatibility guards, and keep repair/bootstrap as one-off scripts.\nduration: \nverification_result: passed\ncompleted_at: 2026-04-13T02:40:32.820Z\nblocker_discovered: false\n---\n\n# T01: Made startup/migration/bootstrap authority explicit across db startup code, analysis, and focused proof.\n\n**Made startup/migration/bootstrap authority explicit across db startup code, analysis, and focused proof.**\n\n## What Happened\n\nI audited the live startup and schema surfaces across `backend/src/common/db/session.py`, `backend/src/main.py`, `backend/alembic/env.py`, the relevant Alembic revisions (`015`, `017`, `018`, `026`, `027`, `028`), `backend/scripts/repair_legacy_schema.py`, `backend/scripts/bootstrap_auth_admin.py`, `scripts/dev-up.sh`, and `docs/backup-recovery-runbook.md`. The key finding was that the real implicit repair surface is concentrated in the startup path, not request handlers: `lifespan -> init_db()` still runs `Base.metadata.create_all()` plus the `persona_policy` and `knowledge_documents` compatibility guards, while `scripts/dev-up.sh` starts `uvicorn src.main:app` directly and does not run `alembic upgrade head` first. I made that split explicit by introducing `STARTUP_DB_AUTHORITY` in `backend/src/common/db/session.py`, logging the authority map during startup in both `session.py` and `main.py`, adding a focused unit test that locks the named migration/repair/bootstrap entrypoints, and extending `.gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md` with a concrete M019/S01 authority inventory table. I also captured the non-obvious `dev-up` / startup-patch drift in `.gsd/KNOWLEDGE.md` and saved decision D210 so downstream M019 work can tighten the remaining startup-path schema repair against one shared baseline instead of rediscovering it.\n\n## Verification\n\nI reran the slice-plan grep gate and it now exposes the explicit startup/migration/bootstrap authority surface in `backend/src/common/db/session.py` and `backend/src/main.py`. I also grepped the architecture scan and knowledge log to prove the new inventory persisted to the expected long-lived artifacts. The focused backend proof `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/common/test_db_session_compatibility.py -q` passed 2/2 after adding the authority-map assertion alongside the existing knowledge-documents compatibility test. Finally, fresh LSP diagnostics reported no issues on `backend/src/common/db/session.py`, `backend/src/main.py`, and `backend/tests/unit/common/test_db_session_compatibility.py`.\n\n## Verification Evidence\n\n| # | Command | Exit Code | Verdict | Duration |\n|---|---------|-----------|---------|----------|\n| 1 | `rg -n \"create_all|alembic|bootstrap|repair_legacy_schema|init_db\" backend/src/common/db/session.py backend/src/main.py backend/alembic/versions scripts` | 0 | ✅ pass | 22ms |\n| 2 | `rg -n \"M019/S01 数据库演进 / bootstrap authority inventory|scripts/dev-up.sh 当前只是拉起 infra|M019/S01/T01 database authority inventory exposed\" .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md .gsd/KNOWLEDGE.md` | 0 | ✅ pass | 22ms |\n| 3 | `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/common/test_db_session_compatibility.py -q` | 0 | ✅ pass | 1699ms |\n\n## Deviations\n\nExpanded beyond the minimum expected-output list by adding a focused unit proof, a knowledge-log entry, decision D210, and safe-grow continuity updates so the authority split is executable, discoverable, and resumable rather than markdown-only.\n\n## Known Issues\n\nFocused pytest still emits pre-existing pytest-cov 'module src was never imported / no data was collected' warnings plus a SQLite ResourceWarning on suite teardown; this task did not change that harness noise.\n\n## Files Created/Modified\n\n- `backend/src/common/db/session.py`\n- `backend/src/main.py`\n- `backend/tests/unit/common/test_db_session_compatibility.py`\n- `.gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md`\n- `.gsd/KNOWLEDGE.md`\n",
+      "description": "- 盘点 `backend/src/common/db/session.py`、`backend/src/main.py`、bootstrap/auth 脚本、现有 Alembic revisions 和任何 compatibility patch 的当前职责。\n- 把“启动初始化 / schema 演进 / 开发兼容 / 一次性 bootstrap”四类责任映射到真实代码入口。\n- 在 `.gsd/analysis` 写一份 authority inventory，显式标出仍在 request/startup path 中执行的 schema 修补。",
+      "estimate": "45m",
+      "files": [
+        ".gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md",
+        "backend/src/common/db/session.py",
+        "backend/src/main.py",
+        "backend/alembic/versions",
+        "scripts"
+      ],
+      "verify": "rg -n \"create_all|alembic|bootstrap|repair_legacy_schema|init_db\" backend/src/common/db/session.py backend/src/main.py backend/alembic/versions scripts",
+      "inputs": [
+        "backend/src/common/db/session.py",
+        "backend/src/main.py",
+        "backend/alembic/versions",
+        "scripts",
+        "docs/backup-recovery-runbook.md"
+      ],
+      "expected_output": [
+        ".gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md",
+        "backend/src/common/db/session.py",
+        "backend/src/main.py"
+      ],
+      "observability_impact": "",
+      "full_plan_md": "",
+      "sequence": 0
+    },
+    {
+      "milestone_id": "M019",
+      "slice_id": "S01",
+      "id": "T02",
+      "title": "把隐式 schema 修补迁到迁移或显式脚本",
+      "status": "pending",
+      "one_liner": "",
+      "narrative": "",
+      "verification_result": "",
+      "duration": "",
+      "completed_at": null,
+      "blocker_discovered": false,
+      "deviations": "",
+      "known_issues": "",
+      "key_files": [],
+      "key_decisions": [],
+      "full_summary_md": "",
+      "description": "- 把真正仍需要的兼容性 DDL/数据补齐从运行时隐式路径移到 Alembic revision 或显式 bootstrap 脚本。\n- 保留开发/测试兼容性所需的最小路径，但让 prod startup 不再承担 schema 修复责任。\n- 补 focused proof，证明缺迁移/缺配置时失败信号是显式的。",
+      "estimate": "1.5h",
+      "files": [
+        "backend/alembic/versions",
+        "backend/src/common/db/session.py",
+        "backend/src/main.py",
+        "backend/tests/integration"
+      ],
+      "verify": "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/integration -k \"startup or bootstrap or migration\" -x -q",
+      "inputs": [
+        "T01 盘点结果",
+        "backend/tests/integration",
+        "backend/tests/unit"
+      ],
+      "expected_output": [
+        "backend/alembic/versions/*",
+        "backend/src/common/db/session.py",
+        "backend/tests/integration/test_startup_or_bootstrap_authority.py"
+      ],
+      "observability_impact": "",
+      "full_plan_md": "",
+      "sequence": 0
+    },
+    {
+      "milestone_id": "M019",
+      "slice_id": "S01",
+      "id": "T03",
+      "title": "把 authority 结果写回文档与验证入口",
+      "status": "pending",
+      "one_liner": "",
+      "narrative": "",
+      "verification_result": "",
+      "duration": "",
+      "completed_at": null,
+      "blocker_discovered": false,
+      "deviations": "",
+      "known_issues": "",
+      "key_files": [],
+      "key_decisions": [],
+      "full_summary_md": "",
+      "description": "- 更新 runbook / setup / architecture scan，让后续执行模型能直接分辨什么时候跑 Alembic、什么时候跑 bootstrap、什么时候不该让 startup 自动补洞。\n- 为 M019 后续 slices 写下可复用的 repo-root 验证命令。\n- 确认 `.github/workflows` 与此 authority line 不冲突。",
+      "estimate": "35m",
+      "files": [
+        "docs/backup-recovery-runbook.md",
+        ".gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md",
+        ".github/workflows"
+      ],
+      "verify": "rg -n \"alembic upgrade head|bootstrap|init_db|migration\" docs/backup-recovery-runbook.md .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md .github/workflows",
+      "inputs": [
+        "T01/T02 结果",
+        ".github/workflows/nfr-performance-check.yml"
+      ],
+      "expected_output": [
+        "docs/backup-recovery-runbook.md",
+        ".gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md",
+        ".github/workflows/*"
+      ],
+      "observability_impact": "",
+      "full_plan_md": "",
+      "sequence": 0
+    },
+    {
+      "milestone_id": "M019",
+      "slice_id": "S02",
+      "id": "T01",
+      "title": "划分 practice backend 的应用层责任面",
+      "status": "pending",
+      "one_liner": "",
+      "narrative": "",
+      "verification_result": "",
+      "duration": "",
+      "completed_at": null,
+      "blocker_discovered": false,
+      "deviations": "",
+      "known_issues": "",
+      "key_files": [],
+      "key_decisions": [],
+      "full_summary_md": "",
+      "description": "- 沿 `backend/src/common/api/practice.py` 盘点当前真实 responsibility clusters：session create+policy freeze、lifecycle、report/read model、audio audit/signing、runtime descriptor。\n- 在 `backend/src/common` 下设计最小 application/service module 边界，避免新造第二套 route family。\n- 先补一组 focused tests 或 inventory assertions，锁住现有 outward contract。",
+      "estimate": "50m",
+      "files": [
+        "backend/src/common/api/practice.py",
+        "backend/src/common",
+        "backend/tests/contract/test_practice_evidence_contract.py",
+        "backend/tests/integration/test_session_lifecycle_api.py"
+      ],
+      "verify": "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/contract/test_practice_evidence_contract.py backend/tests/integration/test_session_lifecycle_api.py -x -q",
+      "inputs": [
+        "backend/src/common/api/practice.py",
+        "backend/src/common/conversation/session_evidence.py",
+        "backend/src/common/db/session_lifecycle.py"
+      ],
+      "expected_output": [
+        "backend/src/common/api/practice.py",
+        "backend/src/common/*service*.py",
+        "backend/tests/contract/test_practice_evidence_contract.py"
+      ],
+      "observability_impact": "",
+      "full_plan_md": "",
+      "sequence": 0
+    },
+    {
+      "milestone_id": "M019",
+      "slice_id": "S02",
+      "id": "T02",
+      "title": "抽出 session create/lifecycle/report 应用服务",
+      "status": "pending",
+      "one_liner": "",
+      "narrative": "",
+      "verification_result": "",
+      "duration": "",
+      "completed_at": null,
+      "blocker_discovered": false,
+      "deviations": "",
+      "known_issues": "",
+      "key_files": [],
+      "key_decisions": [],
+      "full_summary_md": "",
+      "description": "- 先抽 `create session + voice_policy_snapshot/runtime descriptor` 与 `lifecycle/report/read model` 两组 service，保持现有 response schema 和权限边界不变。\n- 对 `audio_audit` / OSS signing / retry focus 等高耦合 helper 采用窄 service/assembler seam，而不是继续堆回 route。\n- 保证 route 层只负责 auth、request parsing、response shape、HTTP code。",
+      "estimate": "2h",
+      "files": [
+        "backend/src/common/api/practice.py",
+        "backend/src/common/services",
+        "backend/src/common/conversation/session_evidence.py",
+        "backend/src/common/oss/signing.py"
+      ],
+      "verify": "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/contract/test_practice_evidence_contract.py backend/tests/integration/test_practice_evidence_flow.py backend/tests/integration/test_session_lifecycle_api.py -x -q",
+      "inputs": [
+        "T01 的 seam 设计",
+        "现有 practice/report/audio routes"
+      ],
+      "expected_output": [
+        "backend/src/common/services/practice_session_service.py",
+        "backend/src/common/services/practice_report_service.py",
+        "backend/src/common/api/practice.py"
+      ],
+      "observability_impact": "",
+      "full_plan_md": "",
+      "sequence": 0
+    },
+    {
+      "milestone_id": "M019",
+      "slice_id": "S02",
+      "id": "T03",
+      "title": "固定 extracted seam 的 proof 与下游消费规则",
+      "status": "pending",
+      "one_liner": "",
+      "narrative": "",
+      "verification_result": "",
+      "duration": "",
+      "completed_at": null,
+      "blocker_discovered": false,
+      "deviations": "",
+      "known_issues": "",
+      "key_files": [],
+      "key_decisions": [],
+      "full_summary_md": "",
+      "description": "- 把 route-level focused tests、architecture scan 和 milestone context 更新到新的 service seams。\n- 确认 admin/history/replay 仍通过 SessionEvidenceService 和现有 route family 消费，而不是被抽层后绕开 canonical read model。\n- 写清 downstream consumption：S03/M021 应该接哪个 service，而不是再回 `practice.py` 拼装。",
+      "estimate": "40m",
+      "files": [
+        ".gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md",
+        "backend/tests/contract/test_practice_evidence_contract.py",
+        "backend/tests/integration/test_practice_evidence_flow.py"
+      ],
+      "verify": "rg -n \"practice_session_service|practice_report_service|SessionEvidenceService\" .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md backend/src/common/api/practice.py backend/tests/contract/test_practice_evidence_contract.py",
+      "inputs": [
+        "T01/T02 结果",
+        "current report/replay/history authority docs"
+      ],
+      "expected_output": [
+        ".gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md",
+        "backend/tests/contract/test_practice_evidence_contract.py",
+        "backend/tests/integration/test_practice_evidence_flow.py"
+      ],
+      "observability_impact": "",
+      "full_plan_md": "",
+      "sequence": 0
+    },
+    {
+      "milestone_id": "M019",
+      "slice_id": "S03",
+      "id": "T01",
+      "title": "识别前端 domain client 与 transport seam",
+      "status": "pending",
+      "one_liner": "",
+      "narrative": "",
+      "verification_result": "",
+      "duration": "",
+      "completed_at": null,
+      "blocker_discovered": false,
+      "deviations": "",
+      "known_issues": "",
+      "key_files": [],
+      "key_decisions": [],
+      "full_summary_md": "",
+      "description": "- 盘点 `client.ts` 中的 domain surfaces（auth/dashboard/practice/admin/knowledge/support 等），标出高扇出消费点。\n- 盘点 `use-practice-websocket.ts` 当前剩余 transport/orchestration 复杂度，并写清哪些职责已在 `message-handlers.ts` / audio hooks 中。\n- 先补一个小型 import/contract inventory，避免拆分后页面改成跨域直连实现。",
+      "estimate": "45m",
+      "files": [
+        "web/src/lib/api/client.ts",
+        "web/src/hooks/use-practice-websocket.ts",
+        "web/src/hooks/websocket",
+        "web/src/lib/api"
+      ],
+      "verify": "rg -n \"export const api|normalizeApiErrorPayload|usePracticeWebSocket|MAX_RECONNECT_ATTEMPTS|message-handlers\" web/src/lib/api web/src/hooks",
+      "inputs": [
+        "web/src/lib/api/client.ts",
+        "web/src/hooks/use-practice-websocket.ts",
+        "web/src/hooks/websocket/message-handlers.ts"
+      ],
+      "expected_output": [
+        "web/src/lib/api/client.ts",
+        "web/src/hooks/use-practice-websocket.ts",
+        ".gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md"
+      ],
+      "observability_impact": "",
+      "full_plan_md": "",
+      "sequence": 0
+    },
+    {
+      "milestone_id": "M019",
+      "slice_id": "S03",
+      "id": "T02",
+      "title": "拆分 API client 与 websocket transport helpers",
+      "status": "pending",
+      "one_liner": "",
+      "narrative": "",
+      "verification_result": "",
+      "duration": "",
+      "completed_at": null,
+      "blocker_discovered": false,
+      "deviations": "",
+      "known_issues": "",
+      "key_files": [],
+      "key_decisions": [],
+      "full_summary_md": "",
+      "description": "- 先按 domain 拆 `client.ts`，保留统一 auth/error/trace seam，再把 outward `api` façade 指回域模块。\n- 对 `use-practice-websocket.ts` 继续下沉可下沉的 URL/auth/reconnect/backpressure helper，但保留它作为 outward transport hook，避免页面本地拼 websocket 行为。\n- 确保 `authHandler`、trace-context、shared types 仍是唯一 cross-cutting seam。",
+      "estimate": "2h",
+      "files": [
+        "web/src/lib/api",
+        "web/src/hooks/use-practice-websocket.ts",
+        "web/src/hooks/websocket",
+        "web/src/lib/auth-handler.ts"
+      ],
+      "verify": "npm --prefix web test -- --run \"src/app/(auth)/login/page.test.tsx\" \"src/app/(user)/practice/[sessionId]/page.test.tsx\" \"src/app/(user)/practice/[sessionId]/report/page.test.tsx\" \"src/app/(user)/practice/[sessionId]/replay/page.test.tsx\"",
+      "inputs": [
+        "T01 inventory",
+        "现有 web tests"
+      ],
+      "expected_output": [
+        "web/src/lib/api/*.ts",
+        "web/src/hooks/websocket/*.ts",
+        "web/src/lib/api/client.ts"
+      ],
+      "observability_impact": "",
+      "full_plan_md": "",
+      "sequence": 0
+    },
+    {
+      "milestone_id": "M019",
+      "slice_id": "S03",
+      "id": "T03",
+      "title": "固定前端拆分后的 contract proof",
+      "status": "pending",
+      "one_liner": "",
+      "narrative": "",
+      "verification_result": "",
+      "duration": "",
+      "completed_at": null,
+      "blocker_discovered": false,
+      "deviations": "",
+      "known_issues": "",
+      "key_files": [],
+      "key_decisions": [],
+      "full_summary_md": "",
+      "description": "- 更新 shared types / imports / architecture scan，让后续 slices 直接知道该改哪个 domain module、哪个 transport helper、哪个 inbound handler。\n- 对 reconnect/backpressure/interrupt 的 focused tests 补齐或重定位，确保拆分没有把 contract 流失到 page-level hacks。\n- 记录仍故意保留在 outward hook 中的职责，避免后续继续无依据地拆。",
+      "estimate": "40m",
+      "files": [
+        "web/src/hooks/use-practice-websocket.test.ts",
+        "web/src/hooks/use-practice-websocket.ts",
+        ".gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md"
+      ],
+      "verify": "npm --prefix web test -- --run \"src/hooks/use-practice-websocket.test.ts\" \"src/app/(user)/practice/[sessionId]/page.test.tsx\"",
+      "inputs": [
+        "T02 结果",
+        "current practice/report/replay pages"
+      ],
+      "expected_output": [
+        "web/src/hooks/use-practice-websocket.test.ts",
+        "web/src/lib/api",
+        ".gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md"
+      ],
+      "observability_impact": "",
+      "full_plan_md": "",
+      "sequence": 0
+    },
+    {
+      "milestone_id": "M019",
+      "slice_id": "S04",
+      "id": "T01",
+      "title": "盘点 release truth line 的真实接通状态",
+      "status": "pending",
+      "one_liner": "",
+      "narrative": "",
+      "verification_result": "",
+      "duration": "",
+      "completed_at": null,
+      "blocker_discovered": false,
+      "deviations": "",
+      "known_issues": "",
+      "key_files": [],
+      "key_decisions": [],
+      "full_summary_md": "",
+      "description": "- 盘点现有 `.github/workflows`、frontend ErrorBoundary 上报路径、backend metrics helpers、api-spec/openapi/docs-api-contract 之间的真实接通情况。\n- 明确哪些是“文件存在但未接通”，哪些已有 live route 或 check。\n- 形成 assembled release truth inventory，作为 workflow 设计输入。",
+      "estimate": "45m",
+      "files": [
+        ".github/workflows",
+        ".gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md",
+        "web/src/components/ErrorBoundary.tsx",
+        "backend/src/common/monitoring/metrics.py",
+        "api-spec.md",
+        "specs/001-ai-practice-system/contracts/openapi.yaml",
+        "docs/api-contract"
+      ],
+      "verify": "rg -n \"analytics/error|metrics|openapi|api-contract|pip install -e|requirements.txt|package-lock\" .github/workflows web/src/components/ErrorBoundary.tsx backend/src/common/monitoring/metrics.py api-spec.md specs/001-ai-practice-system/contracts/openapi.yaml docs/api-contract",
+      "inputs": [
+        "current workflow",
+        "ErrorBoundary",
+        "metrics helpers",
+        "api/spec docs"
+      ],
+      "expected_output": [
+        ".github/workflows/*.yml",
+        "web/src/components/ErrorBoundary.tsx",
+        "backend/src/common/monitoring/metrics.py",
+        ".gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md"
+      ],
+      "observability_impact": "",
+      "full_plan_md": "",
+      "sequence": 0
+    },
+    {
+      "milestone_id": "M019",
+      "slice_id": "S04",
+      "id": "T02",
+      "title": "把 workflow 与观测出口对齐到真实 authority",
+      "status": "pending",
+      "one_liner": "",
+      "narrative": "",
+      "verification_result": "",
+      "duration": "",
+      "completed_at": null,
+      "blocker_discovered": false,
+      "deviations": "",
+      "known_issues": "",
+      "key_files": [],
+      "key_decisions": [],
+      "full_summary_md": "",
+      "description": "- 新增或拆分 GitHub Actions，让 web/backend focused gates、依赖安装 authority、docs/spec drift check 与 release baseline 一致。\n- 为 frontend error reporting 和 metrics surface 做明确收口：要么补对口 route/check，要么让缺失成为显式失败信号而非静默假接通。\n- 保持所有验证命令都能从 repo root 直接运行。",
+      "estimate": "2h",
+      "files": [
+        ".github/workflows",
+        "backend/src/main.py",
+        "backend/src/common/api",
+        "web/src/components/ErrorBoundary.tsx",
+        "scripts"
+      ],
+      "verify": "rg -n \"npm --prefix web|backend/venv/bin/python -m pytest|requirements.txt|package-lock|metrics|analytics/error\" .github/workflows && npm --prefix web test -- --run \"src/app/(auth)/login/page.test.tsx\" && backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/integration/test_auth_login_api.py -x -q",
+      "inputs": [
+        "T01 inventory",
+        "web/package.json",
+        "backend/requirements.txt",
+        "backend/pyproject.toml"
+      ],
+      "expected_output": [
+        ".github/workflows/*.yml",
+        "backend/src/main.py or backend/src/common/api/*.py",
+        "web/src/components/ErrorBoundary.tsx"
+      ],
+      "observability_impact": "",
+      "full_plan_md": "",
+      "sequence": 0
+    },
+    {
+      "milestone_id": "M019",
+      "slice_id": "S04",
+      "id": "T03",
+      "title": "固定 assembled release gate 与 downstream 复用规则",
+      "status": "pending",
+      "one_liner": "",
+      "narrative": "",
+      "verification_result": "",
+      "duration": "",
+      "completed_at": null,
+      "blocker_discovered": false,
+      "deviations": "",
+      "known_issues": "",
+      "key_files": [],
+      "key_decisions": [],
+      "full_summary_md": "",
+      "description": "- 把 assembled release gate 写入 architecture scan / plan，明确 downstream milestones 默认复用哪些 commands 和 live surfaces。\n- 补 doc/spec drift check 或 inventory proof，让后续 agent 能判断 api-spec/openapi/docs-api-contract 是否与 live routes 一致。\n- 如 admin 首页仍有 demo stats/假监控数字，至少把其 truthfulness gap 记录为 M022 输入，不让它继续伪装成 release surface。",
+      "estimate": "40m",
+      "files": [
+        ".gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md",
+        ".gsd/plans/GSD_PLAN_post-M018-next-wave.md",
+        "docs/api-contract",
+        "api-spec.md"
+      ],
+      "verify": "rg -n \"release gate|metrics|error reporting|doc contract|repo-root\" .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md .gsd/plans/GSD_PLAN_post-M018-next-wave.md",
+      "inputs": [
+        "T01/T02 结果",
+        "M022 productization 输入"
+      ],
+      "expected_output": [
+        ".gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md",
+        ".gsd/plans/GSD_PLAN_post-M018-next-wave.md"
+      ],
+      "observability_impact": "",
+      "full_plan_md": "",
+      "sequence": 0
+    },
+    {
+      "milestone_id": "M020",
+      "slice_id": "S01",
+      "id": "T01",
+      "title": "盘点 auth transport matrix 与兼容路径",
+      "status": "pending",
+      "one_liner": "",
+      "narrative": "",
+      "verification_result": "",
+      "duration": "",
+      "completed_at": null,
+      "blocker_discovered": false,
+      "deviations": "",
+      "known_issues": "",
+      "key_files": [],
+      "key_decisions": [],
+      "full_summary_md": "",
+      "description": "- 盘点 `common.auth`、frontend auth hooks、sales/presentation websocket routers 当前支持的认证 transport：cookie、Authorization header、query token、shared password、per-user password。\n- 写出当前真实 auth matrix，明确哪些是正式路径、哪些只是兼容路径。\n- 锁定一组 focused auth/websocket tests，避免后续 hardening 改坏 learner/admin 主链。",
+      "estimate": "45m",
+      "files": [
+        ".gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md",
+        "backend/src/common/auth/service.py",
+        "backend/src/common/auth/api.py",
+        "backend/src/sales_bot/websocket/router.py",
+        "web/src/lib/auth-handler.ts",
+        "web/src/hooks/use-auth-protection.ts"
+      ],
+      "verify": "rg -n \"AUTH_SHARED_PASSWORD|AUTH_USER_PASSWORDS_JSON|session cookie|resolve_websocket_token|token: str = Query|Authorization\" backend/src/common/auth backend/src/sales_bot/websocket backend/src/presentation_coach/websocket web/src/lib/auth-handler.ts web/src/hooks/use-auth-protection.ts",
+      "inputs": [
+        "backend/src/common/auth/service.py",
+        "backend/src/common/auth/api.py",
+        "backend/src/sales_bot/websocket/router.py",
+        "web/src/lib/auth-handler.ts"
+      ],
+      "expected_output": [
+        ".gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md",
+        "backend/src/common/auth/service.py",
+        "backend/src/sales_bot/websocket/router.py"
+      ],
+      "observability_impact": "",
+      "full_plan_md": "",
+      "sequence": 0
+    },
+    {
+      "milestone_id": "M020",
+      "slice_id": "S01",
+      "id": "T02",
+      "title": "收口 cookie、CSRF 与 websocket auth authority",
+      "status": "pending",
+      "one_liner": "",
+      "narrative": "",
+      "verification_result": "",
+      "duration": "",
+      "completed_at": null,
+      "blocker_discovered": false,
+      "deviations": "",
+      "known_issues": "",
+      "key_files": [],
+      "key_decisions": [],
+      "full_summary_md": "",
+      "description": "- 在 backend/frontend 收口非开发环境 cookie secure 和 CSRF posture；若当前采用 same-site/cookie-only 策略，也要把 authority 写清并让失败信号显式化。\n- websocket router 与 client 改为 header/cookie 优先，query token 退为受控兼容路径或移除。\n- 为 shared-password 兼容态加显式诊断/退场策略，避免长期成为默认主路径。",
+      "estimate": "2h",
+      "files": [
+        "backend/src/common/auth/service.py",
+        "backend/src/common/auth/api.py",
+        "backend/src/main.py",
+        "backend/src/sales_bot/websocket/router.py",
+        "backend/src/presentation_coach/websocket",
+        "web/src/hooks/use-practice-websocket.ts",
+        "web/src/lib/api/client.ts"
+      ],
+      "verify": "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/integration/test_auth_login_api.py backend/tests/integration/test_password_reset_api.py backend/tests/integration/test_websocket_status_contract.py -x -q",
+      "inputs": [
+        "T01 matrix",
+        "current auth tests"
+      ],
+      "expected_output": [
+        "backend/src/common/auth/service.py",
+        "backend/src/common/auth/api.py",
+        "backend/src/sales_bot/websocket/router.py",
+        "web/src/hooks/use-practice-websocket.ts"
+      ],
+      "observability_impact": "",
+      "full_plan_md": "",
+      "sequence": 0
+    },
+    {
+      "milestone_id": "M020",
+      "slice_id": "S01",
+      "id": "T03",
+      "title": "把 auth authority 写回 contract 与 runbook",
+      "status": "pending",
+      "one_liner": "",
+      "narrative": "",
+      "verification_result": "",
+      "duration": "",
+      "completed_at": null,
+      "blocker_discovered": false,
+      "deviations": "",
+      "known_issues": "",
+      "key_files": [],
+      "key_decisions": [],
+      "full_summary_md": "",
+      "description": "- 更新 auth-local/setup/runbook/docs-api-contract，明确正式 transport、兼容 transport、关闭条件和 repo-root 验证命令。\n- 确认前端对 session expired / unauthorized 的处理仍走统一 `authHandler`。",
+      "estimate": "35m",
+      "files": [
+        "docs/setup/auth-local.md",
+        "docs/api-contract/websocket.md",
+        ".gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md",
+        "web/src/lib/auth-handler.ts"
+      ],
+      "verify": "rg -n \"Authorization|query token|cookie|CSRF|shared password|session expired\" docs/setup/auth-local.md docs/api-contract/websocket.md .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md web/src/lib/auth-handler.ts",
+      "inputs": [
+        "T02 结果",
+        "web auth handling"
+      ],
+      "expected_output": [
+        "docs/setup/auth-local.md",
+        "docs/api-contract/websocket.md",
+        ".gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md"
+      ],
+      "observability_impact": "",
+      "full_plan_md": "",
+      "sequence": 0
+    },
+    {
+      "milestone_id": "M020",
+      "slice_id": "S02",
+      "id": "T01",
+      "title": "建立日志暴露 allowlist/denylist",
+      "status": "pending",
+      "one_liner": "",
+      "narrative": "",
+      "verification_result": "",
+      "duration": "",
+      "completed_at": null,
+      "blocker_discovered": false,
+      "deviations": "",
+      "known_issues": "",
+      "key_files": [],
+      "key_decisions": [],
+      "full_summary_md": "",
+      "description": "- 盘点 `StructuredLogger`、`system_logs` API、admin logs page 当前暴露字段和脱敏逻辑。\n- 建一份 allowlist/denylist：哪些字段可给 support/admin 看，哪些只能保留在 backend 内部。\n- 把已有 inventory 与当前 UI/API 真正连起来，避免只在 logger 层修一半。",
+      "estimate": "40m",
+      "files": [
+        "backend/src/common/monitoring/logger.py",
+        "backend/src/admin/api/system_logs.py",
+        "web/src/app/admin/logs/page.tsx",
+        "backend/src/admin/api/security_inventory.py",
+        "backend/src/common/monitoring/log_safety_inventory.py"
+      ],
+      "verify": "rg -n \"token|password|cookie|email|user_identifier|ip_address|details\" backend/src/common/monitoring backend/src/admin/api web/src/app/admin/logs/page.tsx",
+      "inputs": [
+        "current logger/system log code",
+        "M016 inventories"
+      ],
+      "expected_output": [
+        "backend/src/common/monitoring/logger.py",
+        "backend/src/admin/api/system_logs.py",
+        "web/src/app/admin/logs/page.tsx"
+      ],
+      "observability_impact": "",
+      "full_plan_md": "",
+      "sequence": 0
+    },
+    {
+      "milestone_id": "M020",
+      "slice_id": "S02",
+      "id": "T02",
+      "title": "在 logger、API、UI 三层统一 redaction policy",
+      "status": "pending",
+      "one_liner": "",
+      "narrative": "",
+      "verification_result": "",
+      "duration": "",
+      "completed_at": null,
+      "blocker_discovered": false,
+      "deviations": "",
+      "known_issues": "",
+      "key_files": [],
+      "key_decisions": [],
+      "full_summary_md": "",
+      "description": "- 在 logger sink、system log serialization、admin logs UI 三层统一应用 redaction policy。\n- 保留 trace_id、severity、error code、phase、session_id 等排障必要字段。\n- 为 admin/support 视角补 focused tests，防止未来新增字段绕过 policy。",
+      "estimate": "1.5h",
+      "files": [
+        "backend/src/common/monitoring/logger.py",
+        "backend/src/admin/api/system_logs.py",
+        "web/src/app/admin/logs/page.tsx",
+        "backend/tests",
+        "web/src/app/admin/logs"
+      ],
+      "verify": "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/integration/test_admin_users_api.py backend/tests/unit/admin/test_admin_users_api_models.py -x -q && npm --prefix web test -- --run \"src/app/admin/logs/page.test.tsx\"",
+      "inputs": [
+        "T01 policy",
+        "current admin log tests"
+      ],
+      "expected_output": [
+        "backend/src/common/monitoring/logger.py",
+        "backend/src/admin/api/system_logs.py",
+        "web/src/app/admin/logs/page.tsx",
+        "backend/tests/*system_log*.py"
+      ],
+      "observability_impact": "",
+      "full_plan_md": "",
+      "sequence": 0
+    },
+    {
+      "milestone_id": "M020",
+      "slice_id": "S02",
+      "id": "T03",
+      "title": "把 redaction boundary 固化到 inventory 与扫描文档",
+      "status": "pending",
+      "one_liner": "",
+      "narrative": "",
+      "verification_result": "",
+      "duration": "",
+      "completed_at": null,
+      "blocker_discovered": false,
+      "deviations": "",
+      "known_issues": "",
+      "key_files": [],
+      "key_decisions": [],
+      "full_summary_md": "",
+      "description": "- 更新 security inventory / architecture scan / support guidance，明确哪类错误详情留在 backend，哪类可安全展示给 admin/support。\n- 把这套 policy 变成后续 M021 质量事件的前置约束。",
+      "estimate": "30m",
+      "files": [
+        "backend/src/admin/api/security_inventory.py",
+        "backend/src/common/monitoring/log_safety_inventory.py",
+        ".gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md"
+      ],
+      "verify": "rg -n \"allowlist|redaction|trace_id|details|support|admin\" backend/src/admin/api/security_inventory.py backend/src/common/monitoring/log_safety_inventory.py .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md",
+      "inputs": [
+        "T02 结果",
+        "M021 planned quality events"
+      ],
+      "expected_output": [
+        "backend/src/admin/api/security_inventory.py",
+        ".gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md"
+      ],
+      "observability_impact": "",
+      "full_plan_md": "",
+      "sequence": 0
+    },
+    {
+      "milestone_id": "M020",
+      "slice_id": "S03",
+      "id": "T01",
+      "title": "建立 runtime state authority table",
+      "status": "pending",
+      "one_liner": "",
+      "narrative": "",
+      "verification_result": "",
+      "duration": "",
+      "completed_at": null,
+      "blocker_discovered": false,
+      "deviations": "",
+      "known_issues": "",
+      "key_files": [],
+      "key_decisions": [],
+      "full_summary_md": "",
+      "description": "- 盘点 `common.websocket.session_manager`、`session_state_service`、sales/presentation handlers 当前各自持有什么 state。\n- 画出单实例、多实例、进程重启三种场景下的 authority table：哪些 state 可以只在进程内，哪些必须进 Redis/persistent snapshot。\n- 先补/锁一组 focused reconnect tests，防止后续 hardening 回归 current epoch semantics。",
+      "estimate": "50m",
+      "files": [
+        ".gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md",
+        "backend/src/common/websocket/session_manager.py",
+        "backend/src/common/websocket/session_state_service.py",
+        "backend/src/sales_bot/websocket/stepfun_realtime_handler.py",
+        "backend/src/presentation_coach/websocket"
+      ],
+      "verify": "rg -n \"SessionManager|SessionStateService|snapshot|reconnect|active_connections|runtime_state\" backend/src/common/websocket backend/src/sales_bot/websocket backend/src/presentation_coach/websocket",
+      "inputs": [
+        "session_manager",
+        "session_state_service",
+        "realtime handlers",
+        "existing reconnect tests"
+      ],
+      "expected_output": [
+        ".gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md",
+        "backend/src/common/websocket/session_manager.py",
+        "backend/src/common/websocket/session_state_service.py"
+      ],
+      "observability_impact": "",
+      "full_plan_md": "",
+      "sequence": 0
+    },
+    {
+      "milestone_id": "M020",
+      "slice_id": "S03",
+      "id": "T02",
+      "title": "按 authority table 重收 runtime snapshot 与 connection visibility",
+      "status": "pending",
+      "one_liner": "",
+      "narrative": "",
+      "verification_result": "",
+      "duration": "",
+      "completed_at": null,
+      "blocker_discovered": false,
+      "deviations": "",
+      "known_issues": "",
+      "key_files": [],
+      "key_decisions": [],
+      "full_summary_md": "",
+      "description": "- 按 T01 table 收口 state：把需要跨实例/重启可见的 state 写入 Redis/snapshot，把纯进程内状态限制在明确边界。\n- 为 drain/restart/reconnect 增加必要的 epoch / status / last-error signals。\n- 避免把所有状态都强塞进 Redis；只提升 authority 真正需要的部分。",
+      "estimate": "2h",
+      "files": [
+        "backend/src/common/websocket/session_manager.py",
+        "backend/src/common/websocket/session_state_service.py",
+        "backend/src/sales_bot/websocket/stepfun_realtime_handler.py",
+        "backend/src/presentation_coach/websocket/presentation_stepfun_realtime_handler.py"
+      ],
+      "verify": "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/integration/test_websocket_status_contract.py backend/tests/integration/test_sales_realtime_reconnect_flow.py -x -q",
+      "inputs": [
+        "T01 table",
+        "current runtime tests"
+      ],
+      "expected_output": [
+        "backend/src/common/websocket/session_manager.py",
+        "backend/src/common/websocket/session_state_service.py",
+        "backend/src/sales_bot/websocket/stepfun_realtime_handler.py"
+      ],
+      "observability_impact": "",
+      "full_plan_md": "",
+      "sequence": 0
+    },
+    {
+      "milestone_id": "M020",
+      "slice_id": "S03",
+      "id": "T03",
+      "title": "把 runtime state authority 写回 support/runbook surfaces",
+      "status": "pending",
+      "one_liner": "",
+      "narrative": "",
+      "verification_result": "",
+      "duration": "",
+      "completed_at": null,
+      "blocker_discovered": false,
+      "deviations": "",
+      "known_issues": "",
+      "key_files": [],
+      "key_decisions": [],
+      "full_summary_md": "",
+      "description": "- 为 support/runtime、architecture scan、runbook 补充新的 state inspection surfaces 和 restart/drain guidance。\n- 把单机/systemd 与未来多实例边界说清，不让 downstream milestones 再假设 ‘只要重启服务就行’。",
+      "estimate": "35m",
+      "files": [
+        "docs/api-contract/support-runtime.md",
+        "docs/backup-recovery-runbook.md",
+        ".gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md"
+      ],
+      "verify": "rg -n \"reconnect|epoch|snapshot|active connection|drain|restart\" docs/api-contract/support-runtime.md docs/backup-recovery-runbook.md .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md",
+      "inputs": [
+        "T02 结果",
+        "support runtime surfaces"
+      ],
+      "expected_output": [
+        "docs/api-contract/support-runtime.md",
+        "docs/backup-recovery-runbook.md",
+        ".gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md"
+      ],
+      "observability_impact": "",
+      "full_plan_md": "",
+      "sequence": 0
+    },
+    {
+      "milestone_id": "M020",
+      "slice_id": "S04",
+      "id": "T01",
+      "title": "把 recovery baseline 提炼成可执行 drills",
+      "status": "pending",
+      "one_liner": "",
+      "narrative": "",
+      "verification_result": "",
+      "duration": "",
+      "completed_at": null,
+      "blocker_discovered": false,
+      "deviations": "",
+      "known_issues": "",
+      "key_files": [],
+      "key_decisions": [],
+      "full_summary_md": "",
+      "description": "- 基于 M018 baseline 与 S01-S03 hardened seams，选定最有价值的 recovery drills：auth/bootstrap、db migration、redis/session state、websocket reconnect、OSS signing/playback。\n- 把手工 runbook 中可自动执行的步骤提炼成 repo-local scripts 或 checked commands。\n- 明确哪些仍必须人工完成。",
+      "estimate": "45m",
+      "files": [
+        "scripts",
+        "docs/backup-recovery-runbook.md",
+        "docs/setup/backup-recovery-current-state.md"
+      ],
+      "verify": "rg -n \"backup|restore|recovery|drill|auth|redis|oss|websocket\" scripts docs/backup-recovery-runbook.md docs/setup/backup-recovery-current-state.md",
+      "inputs": [
+        "M018 baseline",
+        "M020 S01-S03 outputs"
+      ],
+      "expected_output": [
+        "scripts/*recovery* or scripts/*drill*",
+        "docs/backup-recovery-runbook.md"
+      ],
+      "observability_impact": "",
+      "full_plan_md": "",
+      "sequence": 0
+    },
+    {
+      "milestone_id": "M020",
+      "slice_id": "S04",
+      "id": "T02",
+      "title": "落地最小 recovery/drill scripts",
+      "status": "pending",
+      "one_liner": "",
+      "narrative": "",
+      "verification_result": "",
+      "duration": "",
+      "completed_at": null,
+      "blocker_discovered": false,
+      "deviations": "",
+      "known_issues": "",
+      "key_files": [],
+      "key_decisions": [],
+      "full_summary_md": "",
+      "description": "- 实现并验证最小 drill scripts：检查环境、执行必要 migrate/bootstrap、跑 health/runtime/auth checks、记录失败信号。\n- 确保这些脚本复用 runbook 中同一 authority commands，而不是发明另一套运维路径。\n- 对需要 secrets 的步骤继续保持显式前置条件，不在脚本中硬编码。",
+      "estimate": "2h",
+      "files": [
+        "scripts",
+        "docs/backup-recovery-runbook.md",
+        "backend/src/main.py",
+        "scripts/dev-up.sh"
+      ],
+      "verify": "bash scripts/dependency-governance.sh status && rg -n \"health|alembic|bootstrap|redis|oss|recovery\" scripts/recovery-* docs/backup-recovery-runbook.md",
+      "inputs": [
+        "T01 drill selection",
+        "existing health/auth/runtime commands"
+      ],
+      "expected_output": [
+        "scripts/recovery-*.sh or .py",
+        "docs/backup-recovery-runbook.md"
+      ],
+      "observability_impact": "",
+      "full_plan_md": "",
+      "sequence": 0
+    },
+    {
+      "milestone_id": "M020",
+      "slice_id": "S04",
+      "id": "T03",
+      "title": "把 recovery drill 与部署边界写回运维文档",
+      "status": "pending",
+      "one_liner": "",
+      "narrative": "",
+      "verification_result": "",
+      "duration": "",
+      "completed_at": null,
+      "blocker_discovered": false,
+      "deviations": "",
+      "known_issues": "",
+      "key_files": [],
+      "key_decisions": [],
+      "full_summary_md": "",
+      "description": "- 更新部署指导、architecture scan、support guidance，明确单机部署、未来多实例、以及 drill 适用范围。\n- 把 drill outputs 纳入 release/recovery proof 说明，供后续 milestone 复用。",
+      "estimate": "35m",
+      "files": [
+        ".sisyphus/deploy",
+        ".sisyphus/plans",
+        "docs/backup-recovery-runbook.md",
+        ".gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md"
+      ],
+      "verify": "rg -n \"single-node|multi-instance|drill|recovery|health\" .sisyphus/deploy .sisyphus/plans docs/backup-recovery-runbook.md .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md",
+      "inputs": [
+        "T02 script outputs",
+        "current deploy configs"
+      ],
+      "expected_output": [
+        ".sisyphus/deploy/*",
+        "docs/backup-recovery-runbook.md",
+        ".gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md"
+      ],
+      "observability_impact": "",
+      "full_plan_md": "",
+      "sequence": 0
+    },
+    {
+      "milestone_id": "M021",
+      "slice_id": "S01",
+      "id": "T01",
+      "title": "盘点 live/compat/shadow AI 路径",
+      "status": "pending",
+      "one_liner": "",
+      "narrative": "",
+      "verification_result": "",
+      "duration": "",
+      "completed_at": null,
+      "blocker_discovered": false,
+      "deviations": "",
+      "known_issues": "",
+      "key_files": [],
+      "key_decisions": [],
+      "full_summary_md": "",
+      "description": "- 沿 `backend/src/sales_bot/websocket/stepfun_realtime_handler.py`、`evaluation/services/*`、`prompt_templates/*`、`common/ai/*`、knowledge-answer 路径盘点 live/compat/shadow responsibilities。\n- 对每条路径记录：入口、调用者、输出消费者、是否当前真实在线。\n- 把 inventory 写入 architecture scan 和 milestone context。",
+      "estimate": "1h",
+      "files": [
+        ".gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md",
+        "backend/src/sales_bot/websocket/stepfun_realtime_handler.py",
+        "backend/src/evaluation/services",
+        "backend/src/prompt_templates",
+        "backend/src/common/knowledge_engine"
+      ],
+      "verify": "rg -n \"PromptTemplateService|generate_report|evaluate\\(|stepfun|knowledge_answer|voice_instruction|compiled\" backend/src/sales_bot backend/src/evaluation backend/src/prompt_templates backend/src/common backend/src/presentation_coach",
+      "inputs": [
+        "stepfun handler",
+        "evaluation services",
+        "prompt templates",
+        "knowledge-answer paths"
+      ],
+      "expected_output": [
+        ".gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md",
+        ".gsd/milestones/M021/M021-CONTEXT.md"
+      ],
+      "observability_impact": "",
+      "full_plan_md": "",
+      "sequence": 0
+    },
+    {
+      "milestone_id": "M021",
+      "slice_id": "S01",
+      "id": "T02",
+      "title": "把 authority inventory 写进 proof 与文档",
+      "status": "pending",
+      "one_liner": "",
+      "narrative": "",
+      "verification_result": "",
+      "duration": "",
+      "completed_at": null,
+      "blocker_discovered": false,
+      "deviations": "",
+      "known_issues": "",
+      "key_files": [],
+      "key_decisions": [],
+      "full_summary_md": "",
+      "description": "- 为关键 runtime/read-side tests 补 inventory assertions 或注释，明确它们锁的是哪条 authority path。\n- 在 docs/api-contract 或 analysis 中写清 live path 与 compat path 的 consumer list。",
+      "estimate": "40m",
+      "files": [
+        "backend/tests",
+        "docs/api-contract",
+        ".gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md"
+      ],
+      "verify": "rg -n \"live|compat|shadow|retire|authority\" .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md docs/api-contract backend/tests",
+      "inputs": [
+        "T01 inventory",
+        "existing tests/docs"
+      ],
+      "expected_output": [
+        "backend/tests/*",
+        "docs/api-contract/*",
+        ".gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md"
+      ],
+      "observability_impact": "",
+      "full_plan_md": "",
+      "sequence": 0
+    },
+    {
+      "milestone_id": "M021",
+      "slice_id": "S01",
+      "id": "T03",
+      "title": "输出 live/compat/retire 输入矩阵",
+      "status": "pending",
+      "one_liner": "",
+      "narrative": "",
+      "verification_result": "",
+      "duration": "",
+      "completed_at": null,
+      "blocker_discovered": false,
+      "deviations": "",
+      "known_issues": "",
+      "key_files": [],
+      "key_decisions": [],
+      "full_summary_md": "",
+      "description": "- 从 inventory 中筛出必须保留、可兼容、应退役的路径，形成 S02-S04 的输入矩阵。\n- 明确不能在本 milestone 中一次性粗暴删除的 legacy consumers。",
+      "estimate": "30m",
+      "files": [
+        ".gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md",
+        ".gsd/plans/GSD_PLAN_post-M018-next-wave.md"
+      ],
+      "verify": "rg -n \"must keep|compat|retire candidate|consumer\" .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md .gsd/plans/GSD_PLAN_post-M018-next-wave.md",
+      "inputs": [
+        "T01/T02 outputs"
+      ],
+      "expected_output": [
+        ".gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md",
+        ".gsd/plans/GSD_PLAN_post-M018-next-wave.md"
+      ],
+      "observability_impact": "",
+      "full_plan_md": "",
+      "sequence": 0
+    },
+    {
+      "milestone_id": "M021",
+      "slice_id": "S02",
+      "id": "T01",
+      "title": "定义 prompt source taxonomy 与假接入点",
+      "status": "pending",
+      "one_liner": "",
+      "narrative": "",
+      "verification_result": "",
+      "duration": "",
+      "completed_at": null,
+      "blocker_discovered": false,
+      "deviations": "",
+      "known_issues": "",
+      "key_files": [],
+      "key_decisions": [],
+      "full_summary_md": "",
+      "description": "- 沿 S01 inventory 明确 prompt source taxonomy：PromptTemplateService、voice_instruction_compiler、persona_policy、presentation prompt resolver、runtime guardrails、legacy hardcoded prompts。\n- 找出当前‘取了 template 但最终没驱动模型调用’的真实代码点。",
+      "estimate": "50m",
+      "files": [
+        "backend/src/prompt_templates",
+        "backend/src/common/ai/llm_service.py",
+        "backend/src/sales_bot/services/voice_instruction_compiler.py",
+        "backend/src/presentation_coach/services/prompt_role_resolver.py",
+        ".gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md"
+      ],
+      "verify": "rg -n \"PromptTemplateService|render\\(|generate_report|evaluate\\(|instructions|persona_policy|strict=|SilentUndefined|base_url\" backend/src/prompt_templates backend/src/common/ai backend/src/sales_bot/services backend/src/presentation_coach/services backend/src/evaluation/services",
+      "inputs": [
+        "S01 live/compat inventory",
+        "prompt-related modules"
+      ],
+      "expected_output": [
+        "backend/src/prompt_templates/*",
+        "backend/src/common/ai/llm_service.py",
+        ".gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md"
+      ],
+      "observability_impact": "",
+      "full_plan_md": "",
+      "sequence": 0
+    },
+    {
+      "milestone_id": "M021",
+      "slice_id": "S02",
+      "id": "T02",
+      "title": "让 compiled prompt contract 真正驱动 runtime",
+      "status": "pending",
+      "one_liner": "",
+      "narrative": "",
+      "verification_result": "",
+      "duration": "",
+      "completed_at": null,
+      "blocker_discovered": false,
+      "deviations": "",
+      "known_issues": "",
+      "key_files": [],
+      "key_decisions": [],
+      "full_summary_md": "",
+      "description": "- 设计并实现一个 compiled prompt contract：明确输入来源、编译结果、hash/version、runtime consumer。\n- 让 live/legacy 仍保留的路径实际消费这个 compiled contract，而不是分别硬编码。\n- 对 missing vars/fail-open/base_url policy 增加显式 diagnostics 或 guardrails。",
+      "estimate": "2.5h",
+      "files": [
+        "backend/src/prompt_templates",
+        "backend/src/common/ai/config_manager.py",
+        "backend/src/common/ai/llm_service.py",
+        "backend/src/sales_bot/services/voice_instruction_compiler.py",
+        "backend/src/presentation_coach/services/prompt_role_resolver.py",
+        "backend/src/evaluation/services"
+      ],
+      "verify": "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests -k \"prompt or knowledge_answer or report\" -x -q",
+      "inputs": [
+        "T01 taxonomy",
+        "S01 keep/compat matrix"
+      ],
+      "expected_output": [
+        "backend/src/prompt_templates/*",
+        "backend/src/common/ai/config_manager.py",
+        "backend/src/common/ai/llm_service.py",
+        "backend/src/sales_bot/services/voice_instruction_compiler.py"
+      ],
+      "observability_impact": "",
+      "full_plan_md": "",
+      "sequence": 0
+    },
+    {
+      "milestone_id": "M021",
+      "slice_id": "S02",
+      "id": "T03",
+      "title": "把 prompt authority 写回文档与管理面说明",
+      "status": "pending",
+      "one_liner": "",
+      "narrative": "",
+      "verification_result": "",
+      "duration": "",
+      "completed_at": null,
+      "blocker_discovered": false,
+      "deviations": "",
+      "known_issues": "",
+      "key_files": [],
+      "key_decisions": [],
+      "full_summary_md": "",
+      "description": "- 更新 prompt docs、architecture scan 与 admin-facing guidance，说明哪个 surface 改模板会影响哪些 live path。\n- 为后续 S03 canonical evaluation kernel 标明 compiled prompt 的 authority entry。",
+      "estimate": "40m",
+      "files": [
+        "docs/api-contract",
+        ".gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md",
+        "backend/src/prompt_templates"
+      ],
+      "verify": "rg -n \"compiled prompt|template source|guardrail|missing var|base_url\" docs/api-contract .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md backend/src/prompt_templates",
+      "inputs": [
+        "T02 outputs",
+        "prompt admin surfaces"
+      ],
+      "expected_output": [
+        "docs/api-contract/*",
+        ".gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md"
+      ],
+      "observability_impact": "",
+      "full_plan_md": "",
+      "sequence": 0
+    },
+    {
+      "milestone_id": "M021",
+      "slice_id": "S03",
+      "id": "T01",
+      "title": "定义 canonical evaluation schema 与 compatibility reader map",
+      "status": "pending",
+      "one_liner": "",
+      "narrative": "",
+      "verification_result": "",
+      "duration": "",
+      "completed_at": null,
+      "blocker_discovered": false,
+      "deviations": "",
+      "known_issues": "",
+      "key_files": [],
+      "key_decisions": [],
+      "full_summary_md": "",
+      "description": "- 盘点现有 sales/presentation 评分维度、rollup、report 字段、history/admin 聚合字段，写出 canonical schema 候选与 compatibility readers 列表。\n- 明确哪些 surface 先切 canonical，哪些只能暂时镜像。",
+      "estimate": "55m",
+      "files": [
+        ".gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md",
+        "backend/src/common/effectiveness",
+        "backend/src/common/conversation/session_evidence.py",
+        "backend/src/common/analytics",
+        "web/src/lib/api/types.ts"
+      ],
+      "verify": "rg -n \"logic_score|accuracy_score|completeness_score|overall_score|dimension_scores|effectiveness_snapshot|leaderboard|history\" backend/src/common backend/src/agent web/src/lib/api/types.ts",
+      "inputs": [
+        "S01/S02 outputs",
+        "current score/report/history/admin surfaces"
+      ],
+      "expected_output": [
+        ".gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md",
+        "backend/src/common/effectiveness/*",
+        "backend/src/common/conversation/session_evidence.py"
+      ],
+      "observability_impact": "",
+      "full_plan_md": "",
+      "sequence": 0
+    },
+    {
+      "milestone_id": "M021",
+      "slice_id": "S03",
+      "id": "T02",
+      "title": "实现 canonical evaluation kernel 与 compatibility readers",
+      "status": "pending",
+      "one_liner": "",
+      "narrative": "",
+      "verification_result": "",
+      "duration": "",
+      "completed_at": null,
+      "blocker_discovered": false,
+      "deviations": "",
+      "known_issues": "",
+      "key_files": [],
+      "key_decisions": [],
+      "full_summary_md": "",
+      "description": "- 在 backend shared effectiveness/session-evidence/read-side services 中实现 canonical kernel，并让 realtime write path 与 report/history/admin/replay 统一读它。\n- 保留旧字段通过 compatibility readers 输出，避免一次性打断当前前端 surfaces。\n- 对 sales 与 presentation 的差异使用同一 kernel 下的 scenario-aware schema，而不是两套完全不同 contract。",
+      "estimate": "3h",
+      "files": [
+        "backend/src/common/effectiveness",
+        "backend/src/common/conversation/session_evidence.py",
+        "backend/src/common/analytics",
+        "backend/src/agent/capabilities/realtime_scoring.py",
+        "backend/src/presentation_coach/services/presentation_report_service.py"
+      ],
+      "verify": "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/contract/test_conclusion_evidence_parity.py backend/tests/contract/test_practice_evidence_contract.py backend/tests/unit/common/test_admin_analytics_service.py backend/tests/unit/test_history_service_evidence_projection.py -x -q",
+      "inputs": [
+        "T01 schema",
+        "S02 compiled prompt contract"
+      ],
+      "expected_output": [
+        "backend/src/common/effectiveness/*",
+        "backend/src/common/conversation/session_evidence.py",
+        "backend/src/common/analytics/*",
+        "backend/src/agent/capabilities/realtime_scoring.py"
+      ],
+      "observability_impact": "",
+      "full_plan_md": "",
+      "sequence": 0
+    },
+    {
+      "milestone_id": "M021",
+      "slice_id": "S03",
+      "id": "T03",
+      "title": "让前端读侧显式消费 canonical/compat contract",
+      "status": "pending",
+      "one_liner": "",
+      "narrative": "",
+      "verification_result": "",
+      "duration": "",
+      "completed_at": null,
+      "blocker_discovered": false,
+      "deviations": "",
+      "known_issues": "",
+      "key_files": [],
+      "key_decisions": [],
+      "full_summary_md": "",
+      "description": "- 更新 web shared types / report/replay/history/admin focused tests，让页面明确区分 canonical 字段与 compat 字段。\n- 文档化 canonical kernel 与 compat reader 的退役计划。",
+      "estimate": "45m",
+      "files": [
+        "web/src/lib/api/types.ts",
+        "web/src/app/(user)/practice/[sessionId]/report/page.test.tsx",
+        "web/src/app/(user)/practice/[sessionId]/replay/page.test.tsx",
+        "web/src/app/(dashboard)/history/page.tsx",
+        "web/src/app/admin"
+      ],
+      "verify": "npm --prefix web test -- --run \"src/app/(user)/practice/[sessionId]/report/page.test.tsx\" \"src/app/(user)/practice/[sessionId]/replay/page.test.tsx\" \"src/app/(dashboard)/history/page.test.tsx\"",
+      "inputs": [
+        "T02 backend outputs",
+        "current web score consumers"
+      ],
+      "expected_output": [
+        "web/src/lib/api/types.ts",
+        "web/src/app/(user)/practice/[sessionId]/report/page.test.tsx",
+        "web/src/app/(user)/practice/[sessionId]/replay/page.test.tsx"
+      ],
+      "observability_impact": "",
+      "full_plan_md": "",
+      "sequence": 0
+    },
+    {
+      "milestone_id": "M021",
+      "slice_id": "S04",
+      "id": "T01",
+      "title": "识别需要显式化的 quality/cost/failure events",
+      "status": "pending",
+      "one_liner": "",
+      "narrative": "",
+      "verification_result": "",
+      "duration": "",
+      "completed_at": null,
+      "blocker_discovered": false,
+      "deviations": "",
+      "known_issues": "",
+      "key_files": [],
+      "key_decisions": [],
+      "full_summary_md": "",
+      "description": "- 盘点当前默认分数、默认报告文案、fallback 行为和粗粒度 cost tracking 的真实落点。\n- 明确哪些 failure/degradation 需要成为质量事件（例如 kb lock、report generation failed、prompt compile failed、provider rejected、fallback answer）。",
+      "estimate": "45m",
+      "files": [
+        ".gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md",
+        "backend/src/common/ai/llm_service.py",
+        "backend/src/sales_bot/websocket/stepfun_realtime_handler.py",
+        "backend/src/common/knowledge_engine",
+        "backend/src/evaluation/services"
+      ],
+      "verify": "rg -n \"default|fallback|NO_STAGE_RESULTS|cost|report_generation_failed|knowledge_answer|degraded|claim_truth\" backend/src/common backend/src/sales_bot backend/src/evaluation",
+      "inputs": [
+        "S01-S03 outputs",
+        "current fallback behaviors"
+      ],
+      "expected_output": [
+        ".gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md",
+        "backend/src/common/ai/llm_service.py",
+        "backend/src/sales_bot/websocket/stepfun_realtime_handler.py"
+      ],
+      "observability_impact": "",
+      "full_plan_md": "",
+      "sequence": 0
+    },
+    {
+      "milestone_id": "M021",
+      "slice_id": "S04",
+      "id": "T02",
+      "title": "落地 unified quality/cost/failure events 与 knowledge path mode",
+      "status": "pending",
+      "one_liner": "",
+      "narrative": "",
+      "verification_result": "",
+      "duration": "",
+      "completed_at": null,
+      "blocker_discovered": false,
+      "deviations": "",
+      "known_issues": "",
+      "key_files": [],
+      "key_decisions": [],
+      "full_summary_md": "",
+      "description": "- 设计并落地 quality/cost/failure event schema，让 runtime、report/read-side、knowledge-answer runs 共用同一条可检查的事件线。\n- 收敛 knowledge-answer dual-run/shadow 路径到明确的 live+compat mode，并把 event 写入 diagnostics/run history。\n- 保持不泄露 secret/base_url/token 等敏感信息。",
+      "estimate": "2.5h",
+      "files": [
+        "backend/src/common/knowledge_engine",
+        "backend/src/common/ai/llm_service.py",
+        "backend/src/sales_bot/websocket/components",
+        "backend/src/support/api/runtime_status.py",
+        "backend/src/common/conversation/runtime_diagnostics.py"
+      ],
+      "verify": "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/contract/test_conclusion_evidence_parity.py backend/tests/integration/test_knowledge_flow.py backend/tests/integration/test_websocket_status_contract.py -x -q",
+      "inputs": [
+        "T01 event list",
+        "S03 canonical kernel"
+      ],
+      "expected_output": [
+        "backend/src/common/knowledge_engine/*",
+        "backend/src/common/ai/llm_service.py",
+        "backend/src/sales_bot/websocket/components/*",
+        "backend/src/support/api/runtime_status.py"
+      ],
+      "observability_impact": "",
+      "full_plan_md": "",
+      "sequence": 0
+    },
+    {
+      "milestone_id": "M021",
+      "slice_id": "S04",
+      "id": "T03",
+      "title": "把 quality/cost/failure event 读法写回 support 与前端 proof",
+      "status": "pending",
+      "one_liner": "",
+      "narrative": "",
+      "verification_result": "",
+      "duration": "",
+      "completed_at": null,
+      "blocker_discovered": false,
+      "deviations": "",
+      "known_issues": "",
+      "key_files": [],
+      "key_decisions": [],
+      "full_summary_md": "",
+      "description": "- 更新 support/runtime、report/replay docs、architecture scan，明确如何读这些事件以及如何区分 degraded / failure / compat。\n- 前端如已展示对应降级状态，补 focused assertions，确保不是继续把失败翻译成‘低质量成功’。",
+      "estimate": "45m",
+      "files": [
+        "docs/api-contract/support-runtime.md",
+        "web/src/app/(user)/practice/[sessionId]/report/page.test.tsx",
+        "web/src/app/(user)/practice/[sessionId]/replay/page.test.tsx",
+        ".gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md"
+      ],
+      "verify": "npm --prefix web test -- --run \"src/app/(user)/practice/[sessionId]/report/page.test.tsx\" \"src/app/(user)/practice/[sessionId]/replay/page.test.tsx\" && rg -n \"quality|cost|failure|degraded|compat\" docs/api-contract/support-runtime.md .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md",
+      "inputs": [
+        "T02 events",
+        "current degraded UI surfaces"
+      ],
+      "expected_output": [
+        "docs/api-contract/support-runtime.md",
+        "web/src/app/(user)/practice/[sessionId]/report/page.test.tsx",
+        ".gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md"
+      ],
+      "observability_impact": "",
+      "full_plan_md": "",
+      "sequence": 0
+    },
+    {
+      "milestone_id": "M022",
+      "slice_id": "S01",
+      "id": "T01",
+      "title": "定义首轮方法论-aware rubric contract",
+      "status": "pending",
+      "one_liner": "",
+      "narrative": "",
+      "verification_result": "",
+      "duration": "",
+      "completed_at": null,
+      "blocker_discovered": false,
+      "deviations": "",
+      "known_issues": "",
+      "key_files": [],
+      "key_decisions": [],
+      "full_summary_md": "",
+      "description": "- 结合当前 sales_stage/realtime_scoring/effectiveness_snapshot 与 report surfaces，选定首轮方法论维度映射。\n- 写出 rubric contract：方法论概念、可观察证据、评分/建议映射、兼容当前 score schema 的方式。",
+      "estimate": "1h",
+      "files": [
+        ".gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md",
+        "backend/src/common/effectiveness",
+        "backend/src/agent/capabilities/realtime_scoring.py",
+        "backend/src/agent/capabilities/sales_stage.py",
+        "docs/api-contract"
+      ],
+      "verify": "rg -n \"sales_stage|realtime_scoring|effectiveness|main_issue|next_goal|dimension_scores\" backend/src/common backend/src/agent docs/api-contract",
+      "inputs": [
+        "M021 canonical kernel",
+        "current sales scoring/stage surfaces"
+      ],
+      "expected_output": [
+        ".gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md",
+        "backend/src/common/effectiveness/*",
+        "docs/api-contract/*"
+      ],
+      "observability_impact": "",
+      "full_plan_md": "",
+      "sequence": 0
+    },
+    {
+      "milestone_id": "M022",
+      "slice_id": "S01",
+      "id": "T02",
+      "title": "把 rubric contract 接入 realtime 与 read-side",
+      "status": "pending",
+      "one_liner": "",
+      "narrative": "",
+      "verification_result": "",
+      "duration": "",
+      "completed_at": null,
+      "blocker_discovered": false,
+      "deviations": "",
+      "known_issues": "",
+      "key_files": [],
+      "key_decisions": [],
+      "full_summary_md": "",
+      "description": "- 在 shared effectiveness/realtime scoring/report readers 中接入方法论语义。\n- 保持当前外部 contract 尽量稳定，通过 compatibility readers 过渡。\n- focused tests 锁定 report/realtime/manager surfaces 对同一 rubric 的解释一致。",
+      "estimate": "2.5h",
+      "files": [
+        "backend/src/common/effectiveness",
+        "backend/src/agent/capabilities/realtime_scoring.py",
+        "backend/src/common/conversation/session_evidence.py",
+        "backend/tests"
+      ],
+      "verify": "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests -k \"sales and (report or replay or history or analytics)\" -x -q",
+      "inputs": [
+        "T01 rubric contract",
+        "current tests"
+      ],
+      "expected_output": [
+        "backend/src/common/effectiveness/*",
+        "backend/src/agent/capabilities/realtime_scoring.py",
+        "backend/tests/*sales*"
+      ],
+      "observability_impact": "",
+      "full_plan_md": "",
+      "sequence": 0
+    },
+    {
+      "milestone_id": "M022",
+      "slice_id": "S01",
+      "id": "T03",
+      "title": "把 rubric 语义写回用户/管理面说明",
+      "status": "pending",
+      "one_liner": "",
+      "narrative": "",
+      "verification_result": "",
+      "duration": "",
+      "completed_at": null,
+      "blocker_discovered": false,
+      "deviations": "",
+      "known_issues": "",
+      "key_files": [],
+      "key_decisions": [],
+      "full_summary_md": "",
+      "description": "- 更新 learner-facing 和 manager-facing 文档/文案，让方法论语义对用户可解释。\n- 写明首轮不覆盖的方法论边界，防止产品话术超过真实能力。",
+      "estimate": "40m",
+      "files": [
+        "docs/api-contract",
+        ".gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md",
+        "web/src/app/(user)/practice/[sessionId]/report/page.tsx"
+      ],
+      "verify": "rg -n \"qualification|discovery|value|objection|next-step|rubric\" docs/api-contract .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md web/src/app/(user)/practice/[sessionId]/report/page.tsx",
+      "inputs": [
+        "T02 outputs",
+        "current user-facing copy"
+      ],
+      "expected_output": [
+        "docs/api-contract/*",
+        ".gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md"
+      ],
+      "observability_impact": "",
+      "full_plan_md": "",
+      "sequence": 0
+    },
+    {
+      "milestone_id": "M022",
+      "slice_id": "S02",
+      "id": "T01",
+      "title": "定义 industry pack / customer-pressure 资产合同",
+      "status": "pending",
+      "one_liner": "",
+      "narrative": "",
+      "verification_result": "",
+      "duration": "",
+      "completed_at": null,
+      "blocker_discovered": false,
+      "deviations": "",
+      "known_issues": "",
+      "key_files": [],
+      "key_decisions": [],
+      "full_summary_md": "",
+      "description": "- 盘点现有 admin agents/personas/knowledge/scenarios surfaces 与 runtime snapshot 之间的映射。\n- 定义首轮 industry pack contract：哪些字段属于 persona、哪些属于 scenario、哪些属于 knowledge bundle/customer pressure。",
+      "estimate": "50m",
+      "files": [
+        ".gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md",
+        "backend/src/agent/api",
+        "backend/src/agent/models.py",
+        "backend/src/sales_bot/api/scenarios.py",
+        "backend/src/common/knowledge"
+      ],
+      "verify": "rg -n \"persona_policy|customer_pressure|scenario|knowledge_base|agent|industry\" backend/src/agent backend/src/sales_bot backend/src/common/knowledge",
+      "inputs": [
+        "current admin/runtime surfaces",
+        "M022 S01 rubric contract"
+      ],
+      "expected_output": [
+        ".gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md",
+        "backend/src/agent/api/*",
+        "backend/src/sales_bot/api/scenarios.py"
+      ],
+      "observability_impact": "",
+      "full_plan_md": "",
+      "sequence": 0
+    },
+    {
+      "milestone_id": "M022",
+      "slice_id": "S02",
+      "id": "T02",
+      "title": "把 industry pack contract 接入现有 admin 与 runtime surfaces",
+      "status": "pending",
+      "one_liner": "",
+      "narrative": "",
+      "verification_result": "",
+      "duration": "",
+      "completed_at": null,
+      "blocker_discovered": false,
+      "deviations": "",
+      "known_issues": "",
+      "key_files": [],
+      "key_decisions": [],
+      "full_summary_md": "",
+      "description": "- 在现有 admin/persona/scenario/knowledge surfaces 上落地组合 contract，不新增第二套内容平台。\n- 让 runtime snapshot / report evidence 能明确指出本次训练使用了哪种行业包/压力模型。",
+      "estimate": "2h",
+      "files": [
+        "backend/src/agent/api",
+        "backend/src/common/db/schemas.py",
+        "backend/src/sales_bot/services/voice_runtime_policy.py",
+        "web/src/app/admin/personas",
+        "web/src/app/admin/agents",
+        "web/src/app/admin/knowledge"
+      ],
+      "verify": "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests -k \"persona or knowledge or scenario or policy\" -x -q && npm --prefix web test -- --run \"src/app/admin/personas/[id]/page.test.tsx\"",
+      "inputs": [
+        "T01 contract",
+        "current admin pages"
+      ],
+      "expected_output": [
+        "backend/src/agent/api/*",
+        "backend/src/common/db/schemas.py",
+        "web/src/app/admin/personas/*",
+        "web/src/app/admin/agents/*"
+      ],
+      "observability_impact": "",
+      "full_plan_md": "",
+      "sequence": 0
+    },
+    {
+      "milestone_id": "M022",
+      "slice_id": "S02",
+      "id": "T03",
+      "title": "把资产运营规则写回计划与扫描文档",
+      "status": "pending",
+      "one_liner": "",
+      "narrative": "",
+      "verification_result": "",
+      "duration": "",
+      "completed_at": null,
+      "blocker_discovered": false,
+      "deviations": "",
+      "known_issues": "",
+      "key_files": [],
+      "key_decisions": [],
+      "full_summary_md": "",
+      "description": "- 文档化行业包/压力模型如何影响 runtime、report、manager calibration，明确哪些仍是手工内容运营项。\n- 把资产运营规则写入 architecture scan 和 product plan。",
+      "estimate": "35m",
+      "files": [
+        ".gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md",
+        ".gsd/plans/GSD_PLAN_post-M018-next-wave.md"
+      ],
+      "verify": "rg -n \"industry pack|customer pressure|scenario package|knowledge bundle\" .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md .gsd/plans/GSD_PLAN_post-M018-next-wave.md",
+      "inputs": [
+        "T02 outputs"
+      ],
+      "expected_output": [
+        ".gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md",
+        ".gsd/plans/GSD_PLAN_post-M018-next-wave.md"
+      ],
+      "observability_impact": "",
+      "full_plan_md": "",
+      "sequence": 0
+    },
+    {
+      "milestone_id": "M022",
+      "slice_id": "S03",
+      "id": "T01",
+      "title": "识别 manager/admin 的 fake stats 与漂移 summary",
+      "status": "pending",
+      "one_liner": "",
+      "narrative": "",
+      "verification_result": "",
+      "duration": "",
+      "completed_at": null,
+      "blocker_discovered": false,
+      "deviations": "",
+      "known_issues": "",
+      "key_files": [],
+      "key_decisions": [],
+      "full_summary_md": "",
+      "description": "- 盘点 admin 首页、manager-lite、analytics/user detail 当前哪些数字或 summary 是 demo/placeholder/漂移口径。\n- 定义 truth surface 优先级：哪些必须接真实 evidence/stats，哪些应降级为说明文案或移除。",
+      "estimate": "45m",
+      "files": [
+        "web/src/app/admin/page.tsx",
+        "web/src/components/admin",
+        "backend/src/common/analytics",
+        "backend/src/admin/api"
+      ],
+      "verify": "rg -n \"2543|84|placeholder|demo|mock|dummy|manager-lite|analytics\" web/src/app/admin web/src/components/admin backend/src/common/analytics backend/src/admin/api",
+      "inputs": [
+        "current admin home",
+        "manager-lite",
+        "analytics surfaces"
+      ],
+      "expected_output": [
+        "web/src/app/admin/page.tsx",
+        ".gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md"
+      ],
+      "observability_impact": "",
+      "full_plan_md": "",
+      "sequence": 0
+    },
+    {
+      "milestone_id": "M022",
+      "slice_id": "S03",
+      "id": "T02",
+      "title": "让 manager/admin 决策面只显示真实 evidence 与真实 stats",
+      "status": "pending",
+      "one_liner": "",
+      "narrative": "",
+      "verification_result": "",
+      "duration": "",
+      "completed_at": null,
+      "blocker_discovered": false,
+      "deviations": "",
+      "known_issues": "",
+      "key_files": [],
+      "key_decisions": [],
+      "full_summary_md": "",
+      "description": "- 用 canonical evidence/stats 替换关键管理面上的 fake numbers/dummy cards；没有真实数据的项显式降级，不再硬造‘正在运行中’假象。\n- 优先锁主管最常用 surfaces：admin home、user detail、manager-lite、not passed / trend / calibration cards。",
+      "estimate": "2h",
+      "files": [
+        "web/src/app/admin/page.tsx",
+        "web/src/components/admin",
+        "backend/src/common/analytics",
+        "backend/src/admin/api/users.py"
+      ],
+      "verify": "npm --prefix web test -- --run \"src/app/admin/page.test.tsx\" \"src/components/admin/manager-lite-panel.test.tsx\" && backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/common/test_admin_analytics_service.py -x -q",
+      "inputs": [
+        "T01 inventory",
+        "M021 canonical kernel"
+      ],
+      "expected_output": [
+        "web/src/app/admin/page.tsx",
+        "web/src/components/admin/*",
+        "backend/src/common/analytics/*"
+      ],
+      "observability_impact": "",
+      "full_plan_md": "",
+      "sequence": 0
+    },
+    {
+      "milestone_id": "M022",
+      "slice_id": "S03",
+      "id": "T03",
+      "title": "固定 manager/admin truth surface 的产品边界",
+      "status": "pending",
+      "one_liner": "",
+      "narrative": "",
+      "verification_result": "",
+      "duration": "",
+      "completed_at": null,
+      "blocker_discovered": false,
+      "deviations": "",
+      "known_issues": "",
+      "key_files": [],
+      "key_decisions": [],
+      "full_summary_md": "",
+      "description": "- 把 manager calibration/team coaching 入口、truth surface 说明写回 architecture scan 和 product plan。\n- 明确哪些管理能力已可产品化，哪些仍是后续工作，避免商业话术超过真实实现。",
+      "estimate": "35m",
+      "files": [
+        ".gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md",
+        ".gsd/plans/GSD_PLAN_post-M018-next-wave.md"
+      ],
+      "verify": "rg -n \"manager|calibration|truth surface|fake stats|placeholder|canonical evidence\" .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md .gsd/plans/GSD_PLAN_post-M018-next-wave.md",
+      "inputs": [
+        "T02 outputs"
+      ],
+      "expected_output": [
+        ".gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md",
+        ".gsd/plans/GSD_PLAN_post-M018-next-wave.md"
+      ],
+      "observability_impact": "",
+      "full_plan_md": "",
+      "sequence": 0
+    },
+    {
+      "milestone_id": "M022",
+      "slice_id": "S04",
+      "id": "T01",
+      "title": "建立 org/team target-state matrix",
+      "status": "pending",
+      "one_liner": "",
+      "narrative": "",
+      "verification_result": "",
+      "duration": "",
+      "completed_at": null,
+      "blocker_discovered": false,
+      "deviations": "",
+      "known_issues": "",
+      "key_files": [],
+      "key_decisions": [],
+      "full_summary_md": "",
+      "description": "- 盘点当前 user/session/agent/persona/knowledge/report/admin ownership 模型，找出所有隐含的‘单组织/单租户’假设。\n- 建一张 org/team/member/role/access scope target-state matrix，对齐 authz、analytics、asset ownership。",
+      "estimate": "1h",
+      "files": [
+        ".gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md",
+        ".gsd/plans/GSD_PLAN_post-M018-next-wave.md",
+        "backend/src/common/db/models.py",
+        "backend/src/common/auth",
+        "backend/src/admin/api",
+        "web/src/app/admin"
+      ],
+      "verify": "rg -n \"user_id|role|owner|agent_id|persona_id|knowledge_base|organization|tenant|team\" backend/src/common backend/src/admin web/src/app/admin .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md",
+      "inputs": [
+        "current ownership/authz model",
+        "M020 hardened auth boundary",
+        "M022 S03 truth surfaces"
+      ],
+      "expected_output": [
+        ".gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md",
+        ".gsd/plans/GSD_PLAN_post-M018-next-wave.md"
+      ],
+      "observability_impact": "",
+      "full_plan_md": "",
+      "sequence": 0
+    },
+    {
+      "milestone_id": "M022",
+      "slice_id": "S04",
+      "id": "T02",
+      "title": "设计保持单体边界的 org-boundary migration path",
+      "status": "pending",
+      "one_liner": "",
+      "narrative": "",
+      "verification_result": "",
+      "duration": "",
+      "completed_at": null,
+      "blocker_discovered": false,
+      "deviations": "",
+      "known_issues": "",
+      "key_files": [],
+      "key_decisions": [],
+      "full_summary_md": "",
+      "description": "- 设计 modular monolith 下的迁移路径：哪些实体先加 organization/team ownership，哪些 authz/analytics/report surfaces 需要 compatibility readers。\n- 为未来 SSO/CRM/org-sync/enterprise directory 预留 integration slots，但不把它们拉进当前实现范围。",
+      "estimate": "1.5h",
+      "files": [
+        ".gsd/plans/GSD_PLAN_post-M018-next-wave.md",
+        ".gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md",
+        "backend/src/common/db/models.py",
+        "backend/src/common/auth/service.py"
+      ],
+      "verify": "rg -n \"migration path|organization|team|tenant|SSO|CRM|org sync|compatibility reader\" .gsd/plans/GSD_PLAN_post-M018-next-wave.md .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md",
+      "inputs": [
+        "T01 matrix",
+        "future enterprise requirements"
+      ],
+      "expected_output": [
+        ".gsd/plans/GSD_PLAN_post-M018-next-wave.md",
+        ".gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md"
+      ],
+      "observability_impact": "",
+      "full_plan_md": "",
+      "sequence": 0
+    },
+    {
+      "milestone_id": "M022",
+      "slice_id": "S04",
+      "id": "T03",
+      "title": "把 org-boundary plan 写成下一轮企业化 roadmap 输入",
+      "status": "pending",
+      "one_liner": "",
+      "narrative": "",
+      "verification_result": "",
+      "duration": "",
+      "completed_at": null,
+      "blocker_discovered": false,
+      "deviations": "",
+      "known_issues": "",
+      "key_files": [],
+      "key_decisions": [],
+      "full_summary_md": "",
+      "description": "- 把这份 org target-state plan 绑定到下一轮 roadmap 入口，明确什么情况下继续留在 modular monolith，什么情况下才值得拆服务。\n- 记录 out-of-scope：当前不做多租户实现、不接 SSO/CRM、不改外部集成。",
+      "estimate": "35m",
+      "files": [
+        ".gsd/plans/GSD_PLAN_post-M018-next-wave.md",
+        ".codex/roadmap/PROJECT_FUTURE.md"
+      ],
+      "verify": "rg -n \"organization|team|tenant|monolith|service split|out-of-scope|SSO|CRM\" .gsd/plans/GSD_PLAN_post-M018-next-wave.md .codex/roadmap/PROJECT_FUTURE.md",
+      "inputs": [
+        "T01/T02 outputs",
+        "current future roadmap stub"
+      ],
+      "expected_output": [
+        ".gsd/plans/GSD_PLAN_post-M018-next-wave.md",
+        ".codex/roadmap/PROJECT_FUTURE.md"
+      ],
+      "observability_impact": "",
+      "full_plan_md": "",
+      "sequence": 0
     }
   ],
   "decisions": [
@@ -13786,6 +16291,18 @@
       "decision": "How backup/recovery baseline documentation should represent current capability",
       "choice": "Keep the backup/recovery runbook limited to revalidated repo-local commands, paths, and manual recovery order; place disaster-recovery drill guidance, owner gaps, and future improvements in an explicit non-baseline Follow-up section.",
       "rationale": "This slice exists to turn missing operational recovery knowledge into a truthful executable baseline, not to invent automation or named ownership that the repository does not actually ship. Separating executable reality from follow-up recommendations keeps future agents from mistaking advice for deployed capability.",
+      "revisable": "Yes",
+      "made_by": "agent",
+      "superseded_by": null
+    },
+    {
+      "seq": 1580,
+      "id": "D210",
+      "when_context": "M019/S01/T01",
+      "scope": "architecture",
+      "decision": "Database startup, migration, repair, and bootstrap authority split",
+      "choice": "Keep Alembic (`backend/alembic/env.py` + revisions via `alembic upgrade head`) as the schema evolution authority; keep `common.db.session.init_db()` explicitly limited to startup bootstrap plus the currently-shipped compatibility guards; keep `backend/scripts/repair_legacy_schema.py` as one-off legacy repair/alembic_version stamping and `backend/scripts/bootstrap_auth_admin.py` as one-off auth bootstrap.",
+      "rationale": "The live startup path still runs `Base.metadata.create_all()` and two compatibility guards, while `scripts/dev-up.sh` does not run Alembic first and the legacy repair script only covers the knowledge-documents patch plus optional stamping. Writing the split down in code/logs/analysis prevents future work from treating startup repair as the authoritative migration path and gives later M019 tasks a concrete seam to tighten.",
       "revisable": "Yes",
       "made_by": "agent",
       "superseded_by": null
@@ -18312,6 +20829,39 @@
       "verdict": "✅ pass",
       "duration_ms": 3,
       "created_at": "2026-04-12T00:10:18.785Z"
+    },
+    {
+      "id": 417,
+      "task_id": "T01",
+      "slice_id": "S01",
+      "milestone_id": "M019",
+      "command": "rg -n \"create_all|alembic|bootstrap|repair_legacy_schema|init_db\" backend/src/common/db/session.py backend/src/main.py backend/alembic/versions scripts",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 22,
+      "created_at": "2026-04-13T02:40:32.823Z"
+    },
+    {
+      "id": 418,
+      "task_id": "T01",
+      "slice_id": "S01",
+      "milestone_id": "M019",
+      "command": "rg -n \"M019/S01 数据库演进 / bootstrap authority inventory|scripts/dev-up.sh 当前只是拉起 infra|M019/S01/T01 database authority inventory exposed\" .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md .gsd/KNOWLEDGE.md",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 22,
+      "created_at": "2026-04-13T02:40:32.827Z"
+    },
+    {
+      "id": 419,
+      "task_id": "T01",
+      "slice_id": "S01",
+      "milestone_id": "M019",
+      "command": "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/common/test_db_session_compatibility.py -q",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 1699,
+      "created_at": "2026-04-13T02:40:32.827Z"
     }
   ]
 }
