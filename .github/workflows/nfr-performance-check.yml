@@ -43,22 +43,26 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up Python
+      - name: Set up Python from backend/requirements.txt authority
         uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: 'pip'
+          cache-dependency-path: |
+            backend/requirements.txt
+            backend/pyproject.toml
 
       - name: Install system dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y portaudio19-dev python3-pyaudio
 
-      - name: Install backend dependencies
+      - name: Install backend dependencies from requirements authority
         working-directory: ./backend
         run: |
-          pip install --upgrade pip
-          pip install -e .[test]
+          python -m venv venv
+          venv/bin/pip install --upgrade pip
+          venv/bin/pip install -r requirements.txt
 
       - name: Setup test environment
         working-directory: ./backend
@@ -80,12 +84,12 @@ jobs:
         run: |
           # CI validates the explicit migration authority line; startup init_db is
           # bootstrap only and must not be treated as schema-evolution authority.
-          alembic upgrade head
+          venv/bin/alembic upgrade head
 
       - name: Run NFR performance tests
         working-directory: ./backend
         run: |
-          pytest tests/performance/test_nfr_metrics.py \
+          venv/bin/python -m pytest tests/performance/test_nfr_metrics.py \
             -v \
             --tb=short \
             --cov=src \
@@ -98,7 +102,7 @@ jobs:
       - name: Generate NFR performance report
         working-directory: ./backend
         run: |
-          python -c "
+          venv/bin/python -c "
           import json
           from pathlib import Path
 
@@ -183,7 +187,7 @@ jobs:
       - name: Check NFR thresholds
         working-directory: ./backend
         run: |
-          python -c "
+          venv/bin/python -c "
           import sys
           import json
           from pathlib import Path
@@ -216,23 +220,27 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set up Python
+      - name: Set up Python from backend/requirements.txt authority
         uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           cache: 'pip'
+          cache-dependency-path: |
+            backend/requirements.txt
+            backend/pyproject.toml
 
-      - name: Install dependencies
+      - name: Install dependencies from requirements authority
         working-directory: ./backend
         run: |
-          pip install --upgrade pip
-          pip install -e .[test]
-          pip install pytest-asyncio locust
+          python -m venv venv
+          venv/bin/pip install --upgrade pip
+          venv/bin/pip install -r requirements.txt
+          venv/bin/pip install locust
 
       - name: Run load test
         working-directory: ./backend
         run: |
-          pytest tests/performance/ \
+          venv/bin/python -m pytest tests/performance/ \
             -k "concurrent" \
             -v \
             --junitxml=test-results/load-test.xml

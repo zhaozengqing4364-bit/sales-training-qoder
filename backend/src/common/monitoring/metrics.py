@@ -133,6 +133,12 @@ errors_total = Counter(
     ['service', 'error_type']
 )
 
+frontend_analytics_events_total = Counter(
+    'frontend_analytics_events_total',
+    'Total frontend analytics events accepted by backend observability routes',
+    ['event_type', 'status']
+)
+
 # System metrics
 application_info = Info(
     'application',
@@ -258,6 +264,14 @@ def track_error(service: str, error_type: str):
     errors_total.labels(
         service=service,
         error_type=error_type
+    ).inc()
+
+
+def track_frontend_analytics_event(event_type: str, status: str = 'accepted'):
+    """Track frontend analytics beacons that reach the backend truth line."""
+    frontend_analytics_events_total.labels(
+        event_type=event_type,
+        status=status,
     ).inc()
 
 

@@ -2,8 +2,9 @@ import { render, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const { durableErrorMock } = vi.hoisted(() => ({
+const { durableErrorMock, fetchMock } = vi.hoisted(() => ({
     durableErrorMock: vi.fn(),
+    fetchMock: vi.fn(),
 }));
 
 vi.mock("@/lib/debug", async (importOriginal) => {
@@ -61,6 +62,9 @@ function ThrowOnRender() {
 describe("frontend route error reporting seam", () => {
     beforeEach(() => {
         durableErrorMock.mockReset();
+        fetchMock.mockReset();
+        fetchMock.mockResolvedValue({ ok: true, status: 202, json: async () => ({ accepted: true }) });
+        vi.stubGlobal("fetch", fetchMock);
         vi.spyOn(console, "error").mockImplementation(() => {});
     });
 
@@ -118,6 +122,38 @@ describe("frontend route error reporting seam", () => {
                     componentStack: expect.any(String),
                 }),
             );
+        });
+    });
+
+    it("posts ErrorBoundary crashes to the release-truth analytics route with cookie-safe keepalive semantics", async () => {
+        render(
+            <ErrorBoundary>
+                <ThrowOnRender />
+            </ErrorBoundary>,
+        );
+
+        await waitFor(() => {
+            expect(fetchMock).toHaveBeenCalledWith(
+                "/api/v1/analytics/error",
+                expect.objectContaining({
+                    method: "POST",
+                    keepalive: true,
+                    credentials: "include",
+                    headers: expect.objectContaining({
+                        "Content-Type": "application/json",
+                    }),
+                }),
+            );
+        });
+
+        const request = fetchMock.mock.calls[0]?.[1] as RequestInit | undefined;
+        const body = JSON.parse(String(request?.body ?? "{}"));
+
+        expect(body).toMatchObject({
+            error: "boundary exploded",
+            source: "react.error-boundary",
+            boundary: "ErrorBoundary",
+            componentStack: expect.any(String),
         });
     });
 

@@ -6,7 +6,10 @@ Implements Constitution Principles:
 - V. Cost control - Efficient queries
 """
 
+from typing import Any
+
 from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel, Field
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -19,10 +22,89 @@ from common.db.models import User
 from common.db.session import get_db
 from common.jobs.audio_archival import audio_archival_job
 from common.monitoring.logger import get_logger
+from common.monitoring.metrics import track_frontend_analytics_event
 
 logger = get_logger(__name__)
 
 router = APIRouter()
+
+
+class FrontendErrorEvent(BaseModel):
+    error: str
+    stack: str | None = None
+    component_stack: str | None = Field(default=None, alias="componentStack")
+    url: str
+    user_agent: str | None = Field(default=None, alias="userAgent")
+    timestamp: str
+    source: str | None = None
+    boundary: str | None = None
+
+
+class FrontendPerformanceEvent(BaseModel):
+    name: str
+    value: float
+    rating: str | None = None
+    delta: float | None = None
+    id: str | None = None
+    url: str
+    timestamp: str
+
+
+class FrontendCustomEvent(BaseModel):
+    name: str
+    value: float
+    metadata: dict[str, Any] | None = None
+    url: str
+    timestamp: str
+
+
+@router.post("/analytics/error", status_code=202)
+async def ingest_frontend_error(event: FrontendErrorEvent):
+    """Accept frontend route and boundary error beacons on a real backend sink."""
+    track_frontend_analytics_event("error")
+    logger.warning(
+        "Accepted frontend analytics/error beacon",
+        source=event.source or "frontend.unknown",
+        boundary=event.boundary or "",
+        url=event.url,
+        error=event.error,
+        component_stack_present=bool(event.component_stack),
+        user_agent=event.user_agent or "",
+        observed_at=event.timestamp,
+    )
+    return {"accepted": True, "event_type": "error"}
+
+
+@router.post("/analytics/performance", status_code=202)
+async def ingest_frontend_performance_metric(event: FrontendPerformanceEvent):
+    """Accept Web Vitals beacons on a real backend sink."""
+    track_frontend_analytics_event("performance")
+    logger.info(
+        "Accepted frontend analytics/performance beacon",
+        metric_name=event.name,
+        metric_value=event.value,
+        rating=event.rating or "",
+        delta=event.delta,
+        metric_id=event.id or "",
+        url=event.url,
+        observed_at=event.timestamp,
+    )
+    return {"accepted": True, "event_type": "performance"}
+
+
+@router.post("/analytics/custom", status_code=202)
+async def ingest_frontend_custom_metric(event: FrontendCustomEvent):
+    """Accept custom frontend metrics on a real backend sink."""
+    track_frontend_analytics_event("custom")
+    logger.info(
+        "Accepted frontend analytics/custom beacon",
+        metric_name=event.name,
+        metric_value=event.value,
+        metadata=event.metadata or {},
+        url=event.url,
+        observed_at=event.timestamp,
+    )
+    return {"accepted": True, "event_type": "custom"}
 
 
 def _normalize_scenario_type(scenario_type: str | None) -> str | None:

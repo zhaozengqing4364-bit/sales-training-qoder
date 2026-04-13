@@ -10,7 +10,7 @@ from contextlib import asynccontextmanager
 
 from dotenv import load_dotenv
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, Query, WebSocket
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.routing import APIRoute
 from sqlalchemy import select
@@ -75,6 +75,11 @@ from common.knowledge.kb_lock_guard import is_kb_lock_unbound_snapshot
 from common.knowledge.api import admin_router as knowledge_admin_router
 from common.knowledge.api import internal_router as knowledge_internal_router
 from common.monitoring.logger import configure_logging, get_logger
+from common.monitoring.metrics import (
+    MetricsMiddleware,
+    get_metrics,
+    initialize_metrics,
+)
 from common.monitoring.otel import initialize_otel
 from common.monitoring.trace_context import normalize_trace_id
 from presentation_coach.api import presentations
@@ -289,6 +294,10 @@ Real-time voice-based AI training platform with Agent Platform support.
     version="2.0.0",
     lifespan=lifespan,
 )
+initialize_metrics(
+    version=app.version,
+    environment=os.getenv("ENVIRONMENT", "development").strip().lower(),
+)
 
 # Add CORS middleware
 app.add_middleware(
@@ -302,6 +311,7 @@ app.add_middleware(
 
 # Add error handling middleware (Constitution Principle I)
 app.add_middleware(ErrorHandlerMiddleware)
+app.add_middleware(MetricsMiddleware)
 
 # Add global exception handler
 app.exception_handler(HTTPException)(http_exception_handler)
@@ -319,6 +329,15 @@ async def health_check():
         "timestamp": datetime.now(UTC).isoformat(),
         "version": "1.0.0",
     }
+
+
+@app.get("/metrics", include_in_schema=False)
+async def metrics_export():
+    """Prometheus metrics export mounted on the live backend authority line."""
+    return Response(
+        content=get_metrics(),
+        media_type="text/plain; version=0.0.4; charset=utf-8",
+    )
 
 
 # Development login endpoint (for testing without WeChat SSO)

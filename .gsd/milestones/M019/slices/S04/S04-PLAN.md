@@ -30,7 +30,7 @@ S04 是 M019 的最终 assembled slice；完成后 M020-M022 可以直接复用 
   - Files: `.github/workflows`, `.gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md`, `web/src/components/ErrorBoundary.tsx`, `backend/src/common/monitoring/metrics.py`, `api-spec.md`, `specs/001-ai-practice-system/contracts/openapi.yaml`, `docs/api-contract`
   - Verify: rg -n "analytics/error|metrics|openapi|api-contract|pip install -e|requirements.txt|package-lock" .github/workflows web/src/components/ErrorBoundary.tsx backend/src/common/monitoring/metrics.py api-spec.md specs/001-ai-practice-system/contracts/openapi.yaml docs/api-contract
 
-- [ ] **T02: 把 workflow 与观测出口对齐到真实 authority** `est:2h`
+- [x] **T02: 把 workflow 与观测出口对齐到真实 authority** `est:2h`
   - 新增或拆分 GitHub Actions，让 web/backend focused gates、依赖安装 authority、docs/spec drift check 与 release baseline 一致。
 - 为 frontend error reporting 和 metrics surface 做明确收口：要么补对口 route/check，要么让缺失成为显式失败信号而非静默假接通。
 - 保持所有验证命令都能从 repo root 直接运行。
