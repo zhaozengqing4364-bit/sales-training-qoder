@@ -293,6 +293,47 @@ S04/T02 之后，当前仓库已经有一条**可复用的 assembled release gat
   1. `rg -n "allowlist|redaction|trace_id|details|support|admin" backend/src/admin/api/security_inventory.py backend/src/common/monitoring/log_safety_inventory.py .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md`
   2. `backend/venv/bin/python -m py_compile backend/src/admin/api/security_inventory.py backend/src/common/monitoring/log_safety_inventory.py`
 
+#### 7.2.3 M020/S03 runtime state authority table（T01 baseline）
+
+这轮 repo-root 复核后，websocket runtime state 的 authority 需要明确拆成 **process-local connection registry** 与 **cross-instance reconnect snapshot** 两层；当前真实代码入口是：
+- `common.websocket.base_handler.ConnectionManager.active_connections` / `common.websocket.session_manager.SessionManager.sessions`
+- `common.websocket.session_state_service.SessionStateService`
+- `sales_bot.websocket.stepfun_realtime_handler.StepFunRealtimeHandler`
+- `presentation_coach.websocket.presentation_handler.PresentationWebSocketHandler`
+
+**场景 1：单实例运行（当前 happy path）**
+
+| State / Signal | 当前 authority | Storage | 单实例语义 | 说明 |
+|---|---|---|---|---|
+| 当前 websocket 是否在线 / 连接数 | `ConnectionManager.active_connections` + `SessionManager.sessions` | 进程内内存 | 可直接回答 | 这是真实 live connection authority，但只对当前进程成立。 |
+| session timeout / heartbeat 清理 | `SessionManager` | 进程内内存 + live websocket | 可直接执行 | timeout 关闭连接依赖当前进程持有 handler/websocket。 |
+| reconnect 恢复所需 turn/page/status/runtime subset | `SessionStateService` snapshot | Redis TTL snapshot | 可恢复 | 这是断线后“应该恢复什么”的 authority，不是 live connection truth。 |
+| StepFun 当前 request epoch（`current_request_id`） | `StepFunRealtimeHandler._create_state_snapshot()` → `runtime_state.current_request_id` | Redis snapshot | 可跨断线延续 | 当前已是 reconnect-safe；后续要继续围绕它收紧 request/drain 语义。 |
+| StepFun action card UI 残影 | **不应持久化** | N/A | 不应跨断线重放 | 当前代码已故意不把 `latest_action_card` 写入 snapshot，避免 reconnect replay 旧卡片。 |
+| Presentation 当前页 / required points | `PresentationWebSocketHandler` + DB page requirements | Snapshot + DB lookup | 可恢复 | 页码是 snapshot，页面上下文重新从 DB/coach service 补发。 |
+
+**场景 2：多实例并发**
+
+| State / Signal | authority | 结论 |
+|---|---|---|
+| 某个 session 在“整个集群”是否在线 | **当前没有 cluster-wide authority** | 只能回答“本进程看见的连接”；不能把 `active_connections` 当成全局 truth。 |
+| reconnect snapshot / turn/page/status/runtime subset | `SessionStateService` | 只要 Redis 可用，就可以被其他实例读取；这是当前唯一跨实例 authority。 |
+| timeout/drain 对 live websocket 的直接操作 | 持有连接的那个进程 | 其他实例即便读到 snapshot，也不能替代当前 owner 关闭 websocket。 |
+| connection count / visibility 对 support 的解释 | 必须标注为 process-local | 后续 support/runtime surface 需要显式区分 local connections vs persisted reconnect snapshot。 |
+
+**场景 3：进程重启**
+
+| State / Signal | 重启后是否保留 | authority / 说明 |
+|---|---|---|
+| `active_connections` / `SessionManager.sessions` | 否 | 进程内 registry 全丢失；这是预期，不应伪装成 durable state。 |
+| Redis reconnect snapshot | 是（直到 TTL 到期或 terminal delete） | `SessionStateService` 是 restart 后唯一还能解释 session runtime 的 authority。 |
+| handler 内临时对象（pending response、action card、websocket refs） | 否 | 只能重新建立；不能依赖 restart 后还原这些瞬态对象。 |
+
+**T01 baseline 决策**
+- `SessionManager.get_stats()` 现在应该显式暴露它只拥有 **process-local connection registry authority**，而不是暗示 cluster-wide truth。
+- `SessionStateService.get_stats()` 现在应该显式暴露它只拥有 **Redis reconnect snapshot authority**，并附带 save/get/delete/healthcheck metrics 与 `last_error`，方便后续 support/runtime surface 复用。
+- focused reconnect proof 要锁住：`current_request_id` 作为当前 request epoch 可跨 reconnect 延续，而 `latest_action_card` 不能被 snapshot replay。
+
 ### 7.3 Theme C — AI control plane / evaluation kernel
 对应问题：
 - live path 与 legacy path 并存

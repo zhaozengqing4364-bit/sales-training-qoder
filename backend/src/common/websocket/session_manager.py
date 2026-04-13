@@ -288,6 +288,24 @@ class SessionManager:
         for session_id in dead_sessions:
             await self.unregister_session(session_id, reason="heartbeat_failed")
 
+    def describe_authority(self) -> dict[str, dict[str, object]]:
+        """Describe which websocket runtime facts this process truly owns."""
+        return {
+            "connection_registry": {
+                "owner": "session_manager.sessions",
+                "storage": "process_memory",
+                "shared_across_instances": False,
+                "survives_restart": False,
+                "inspection_surface": "SessionManager.get_stats()",
+            },
+            "session_snapshot": {
+                "owner": "session_state_service",
+                "storage": "redis_snapshot",
+                "shared_across_instances": True,
+                "survives_restart": True,
+            },
+        }
+
     def get_stats(self) -> dict:
         """Get session manager statistics"""
         now = time.time()
@@ -301,12 +319,22 @@ class SessionManager:
             1 for s in self.sessions.values() if now - s.last_activity < 3600
         )
 
+        tracked_sessions = [
+            {
+                "session_id": info.session_id,
+                "user_id": info.user_id,
+            }
+            for info in sorted(self.sessions.values(), key=lambda item: item.session_id)
+        ]
+
         return {
             "total_sessions": total,
             "active_last_5min": active_last_5min,
             "active_last_hour": active_last_hour,
             "timeout_seconds": self.timeout_seconds,
             "heartbeat_interval": self.heartbeat_interval,
+            "authority": self.describe_authority(),
+            "tracked_sessions": tracked_sessions,
             "metrics": dict(self.metrics),
         }
 

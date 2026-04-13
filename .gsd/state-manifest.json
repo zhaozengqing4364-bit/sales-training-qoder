@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "exported_at": "2026-04-13T15:15:15.448Z",
+  "exported_at": "2026-04-13T15:55:31.619Z",
   "milestones": [
     {
       "id": "M001",
@@ -2896,14 +2896,14 @@
       "milestone_id": "M020",
       "id": "S02",
       "title": "S02",
-      "status": "pending",
+      "status": "complete",
       "risk": "medium",
       "depends": [],
       "demo": "After this: support/admin 能看到对排障有用但不泄密的日志与错误上下文，敏感字段不会在 logger 或 admin logs page 原样外露。",
       "created_at": "2026-04-13T02:06:22.480Z",
-      "completed_at": null,
-      "full_summary_md": "",
-      "full_uat_md": "",
+      "completed_at": "2026-04-13T15:28:06.549Z",
+      "full_summary_md": "---\nid: S02\nparent: M020\nmilestone: M020\nprovides:\n  - A single backend-owned admin/support log redaction contract shared by the logger, system-log API, and admin logs UI.\n  - Focused backend/frontend proof that safe diagnostics remain visible while raw details and precise identifiers stay out of admin/support surfaces.\n  - Inventory and architecture guidance that future M020/M021 observability work must reuse instead of inventing a second support payload.\nrequires:\n  []\naffects:\n  - S03\n  - S04\nkey_files:\n  - backend/src/common/monitoring/logger.py\n  - backend/src/admin/api/system_logs.py\n  - web/src/app/admin/logs/page.tsx\n  - web/src/lib/api/types.ts\n  - backend/src/admin/api/security_inventory.py\n  - backend/src/common/monitoring/log_safety_inventory.py\n  - backend/tests/unit/admin/test_system_logs_redaction.py\n  - backend/tests/integration/test_admin_users_api.py\n  - web/src/app/admin/logs/page.test.tsx\n  - .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md\nkey_decisions:\n  - D221 — adopt an allowlist-first admin log exposure policy that masks identifiers, strips raw details from API/UI exposure, and keeps only safe diagnostics visible.\n  - D222 — expose ordered backend-owned `diagnostics` plus `policy.diagnostic_fields` from the API, and require the admin logs UI to render that contract directly.\n  - D223 — require future admin/support quality-event surfaces to reuse the same diagnostics contract and keep raw provider/request/config details backend-only.\npatterns_established:\n  - Keep sensitive-log visibility in one backend-owned seam (`backend/src/common/monitoring/logger.py`) and let downstream API/UI layers render, not reinterpret, the policy.\n  - Use allowlist-first admin/support diagnostics: preserve `trace_id`/`error_code`/`phase`/`session_id`/`target_user_id` for triage while treating raw identifiers, payloads, prompts, and secrets as backend-only.\n  - Write the redaction boundary into code-owned inventory artifacts and architecture scan guidance so future observability work inherits the same safe exposure rules.\nobservability_surfaces:\n  - `GET /api/v1/admin/system-logs` policy metadata (`version`, `allowed_detail_keys`, `diagnostic_fields`).\n  - Per-log ordered `diagnostics[]` contract and safe `details` summary in the admin system-log API.\n  - `/admin/logs` masked identity display plus backend-supplied diagnostics rendering.\n  - Code-owned redaction inventories in `backend/src/admin/api/security_inventory.py` and `backend/src/common/monitoring/log_safety_inventory.py`.\ndrill_down_paths:\n  - .gsd/milestones/M020/slices/S02/tasks/T01-SUMMARY.md\n  - .gsd/milestones/M020/slices/S02/tasks/T02-SUMMARY.md\n  - .gsd/milestones/M020/slices/S02/tasks/T03-SUMMARY.md\nduration: \"\"\nverification_result: passed\ncompleted_at: 2026-04-13T15:28:06.552Z\nblocker_discovered: false\n---\n\n# S02: Sensitive log 与 admin observability redaction 收口\n\n**Unified logger, admin system-log API, and admin logs UI behind one allowlist-first redaction policy so support/admin keep traceable diagnostics without exposing raw details, precise identifiers, or secret-adjacent payloads.**\n\n## What Happened\n\n# S02: Sensitive log 与 admin observability redaction 收口\n\n**Unified logger, admin system-log API, and admin logs UI behind one backend-owned allowlist-first redaction policy so support/admin keep usable diagnostics without seeing raw `details`, precise identifiers, or secret-adjacent payloads.**\n\n## What Happened\n\nS02 started by inventorying the real leakage boundary instead of assuming the logger was already sufficient. T01 proved that `StructuredLogger` only masked credential-shaped keys while `backend/src/admin/api/system_logs.py` and `web/src/app/admin/logs/page.tsx` could still expose raw `user_identifier`, `ip_address`, and `details`. The slice then established `admin_support_redaction_v1` in `backend/src/common/monitoring/logger.py` as the shared authority seam: it now owns the allowlist/denylist constants, masking helpers for identifiers and IPs, safe-detail extraction, and the ordered diagnostics contract (`trace_id`, `error_code`, `phase`, `session_id`, `target_user_id`).\n\nT02 carried that same contract through the shipped API/UI surfaces instead of letting each layer reinterpret policy. `backend/src/admin/api/system_logs.py` now serializes log rows into masked top-level fields plus a pre-redacted ordered `diagnostics` list and returns `policy.version`, `policy.allowed_detail_keys`, and `policy.diagnostic_fields` so the backend response itself describes what admin/support may see. `web/src/app/admin/logs/page.tsx` no longer reconstructs visible keys locally; it renders the backend-supplied diagnostics list, the policy banner, masked identities, and the safe details summary string. This means logger → API → UI now share one policy rather than three drifting heuristics.\n\nT03 converted that runtime contract into durable downstream guidance. `backend/src/admin/api/security_inventory.py` and `backend/src/common/monitoring/log_safety_inventory.py` now codify the same allowlist/back-end-only boundary, and `.gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md` records the rule that future admin/support observability work — especially M021 quality/cost/failure events — must reuse the same diagnostics contract rather than inventing a second support payload. D221, D222, and D223 capture the key decisions: allowlist-first masking, backend-owned ordered diagnostics, and a single reusable redaction boundary for future support surfaces.\n\nThis slice establishes three reusable patterns for the rest of M020/M021. First, sensitive observability fields are governed by one backend-owned policy seam, not page-local filtering. Second, admin/support visibility is allowlist-first: safe diagnostics stay visible, but raw provider/request/config/prompt/secret context remains backend-only. Third, inventory and architecture artifacts now explicitly constrain downstream work, so future slices can extend observability without reopening this leakage boundary.\n\n## Operational Readiness\n\n- **Health signal:** `GET /api/v1/admin/system-logs` returns `policy.version=admin_support_redaction_v1`, exposes `policy.diagnostic_fields`, and each row contains masked `user_identifier` / coarse `ip_address` plus ordered safe `diagnostics`; the admin logs page renders those diagnostics and never needs to guess which fields are safe.\n- **Failure signal:** raw `details`, exact identifiers/IPs, or secret-adjacent fields appearing in `/api/v1/admin/system-logs` or `/admin/logs` indicate policy drift; the focused backend serializer/API tests and frontend page test are the first-line regression signal for that class of failure.\n- **Recovery procedure:** revert to the shared logger allowlist/denylist constants in `backend/src/common/monitoring/logger.py`, confirm `system_logs.py` still serializes only backend-owned diagnostics, rerun `backend/tests/unit/admin/test_system_logs_redaction.py`, `backend/tests/integration/test_admin_users_api.py`, `backend/tests/unit/admin/test_admin_users_api_models.py`, and `web/src/app/admin/logs/page.test.tsx`, then inspect backend-controlled logs for any raw-detail need instead of widening the admin/support payload.\n- **Monitoring gaps:** `/api/v1/admin/system-logs` remains admin-only, not a separate support-role surface; search semantics still query raw persisted `SystemLog.user_identifier` while the UI displays masked identifiers; and there is not yet a live production detector beyond focused tests/inventory review if a new admin/support surface bypasses the shared diagnostics contract.\n\n\n## Verification\n\nFresh slice-close verification reran every slice-plan gate and passed. Required task-plan runtime gate: `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/integration/test_admin_users_api.py backend/tests/unit/admin/test_admin_users_api_models.py -x -q && npm --prefix web test -- --run \"src/app/admin/logs/page.test.tsx\"` ✅ pass (37 backend tests + 1 frontend test). Required inventory/documentation gate 1: `rg -n \"token|password|cookie|email|user_identifier|ip_address|details\" backend/src/common/monitoring backend/src/admin/api web/src/app/admin/logs/page.tsx` ✅ pass. Required inventory/documentation gate 2: `rg -n \"allowlist|redaction|trace_id|details|support|admin\" backend/src/admin/api/security_inventory.py backend/src/common/monitoring/log_safety_inventory.py .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md` ✅ pass. Additional focused observability proof: `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/admin/test_system_logs_redaction.py -q` ✅ pass. Fresh LSP diagnostics were clean on `backend/src/common/monitoring/logger.py`, `backend/src/admin/api/system_logs.py`, `backend/src/admin/api/security_inventory.py`, `backend/src/common/monitoring/log_safety_inventory.py`, `web/src/app/admin/logs/page.tsx`, `web/src/lib/api/types.ts`, `backend/tests/unit/admin/test_system_logs_redaction.py`, and `web/src/app/admin/logs/page.test.tsx`. Only pre-existing pytest-cov no-data warnings and upstream Python 3.14 dependency deprecation warnings remained.\n\n## Requirements Advanced\n\nNone.\n\n## Requirements Validated\n\nNone.\n\n## New Requirements Surfaced\n\nNone.\n\n## Requirements Invalidated or Re-scoped\n\nNone.\n\n## Deviations\n\nNone.\n\n## Known Limitations\n\n`/api/v1/admin/system-logs` search still filters by raw persisted `SystemLog.user_identifier` while the API/UI display only masked identifiers. The route is still admin-only rather than a dedicated support-role surface, and runtime drift detection still relies primarily on focused tests plus the codified inventory.\n\n## Follow-ups\n\nM020/S03 should treat this logger/API/UI diagnostics contract as fixed while it hardens reconnect/session-state authority. M020/S04 and later M021 observability work should reuse the same allowlist-first diagnostics seam for recovery/quality/failure events instead of inventing a second support payload.\n\n## Files Created/Modified\n\n- `backend/src/common/monitoring/logger.py` — Added the backend-owned allowlist/denylist policy, masking helpers, and ordered diagnostics extraction for admin/support log views.\n- `backend/src/admin/api/system_logs.py` — Serialized log rows through the shared redaction policy and exposed policy metadata plus ordered `diagnostics` in the API contract.\n- `web/src/app/admin/logs/page.tsx` — Rendered the backend-supplied diagnostics contract directly and showed masked identifiers plus safe detail summaries.\n- `web/src/lib/api/types.ts` — Typed the new admin system-log diagnostics and policy metadata contract.\n- `backend/src/admin/api/security_inventory.py` — Codified the admin/support allowlist vs backend-only detail boundary for future observability work.\n- `backend/src/common/monitoring/log_safety_inventory.py` — Recorded the shared logger/API/UI redaction rule and downstream M021 reuse constraint.\n- `.gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md` — Documented the shipped redaction authority seam and the rule that future quality-event surfaces must reuse it.\n",
+      "full_uat_md": "# S02: Sensitive log 与 admin observability redaction 收口 — UAT\n\n**Milestone:** M020\n**Written:** 2026-04-13T15:28:06.552Z\n\n# S02 UAT — admin/support log redaction boundary\n\n## Preconditions\n- 使用一个 **admin** 账号登录系统，并能访问 `/admin/logs`。\n- 数据库里至少有一条 `SystemLog` 记录，其原始 `details` 含有混合字段：`trace_id`、`error_code`、`phase`、`session_id`、`target_user_id`，以及至少一种不应外露的字段（例如 raw `user_identifier`/`ip_address`、email、token、cookie、provider/request/response payload、prompt 或 secret-adjacent config）。\n- 部署的代码包含 M020/S02 的 logger/API/UI 变更。\n\n## Test Case 1 — Admin logs list shows masked identities plus safe diagnostics only\n1. 以 admin 身份打开 `/admin/logs`。\n   - 预期：页面可正常加载，不出现权限错误。\n2. 在日志列表中找到包含诊断上下文的那条记录。\n   - 预期：页面显示 redaction policy 提示/说明，不是裸数据 dump。\n3. 检查该行的 `user_identifier` 与 `ip_address` 展示。\n   - 预期：`user_identifier` 已脱敏，`ip_address` 只显示 coarse/masked 值；不会看到原始邮箱、本地部分、完整 IP 或其他精确身份信息。\n4. 检查诊断信息区域。\n   - 预期：只看到 allowlist 字段，例如 `trace_id`、`error_code`、`phase`、`session_id`、`target_user_id`；顺序稳定、可读。\n5. 检查详情文本/补充说明区域。\n   - 预期：看到的是安全 summary，而不是原始 JSON `details` dump。\n\n## Test Case 2 — Admin system-logs API returns backend-owned diagnostics contract\n1. 用同一个 admin 会话请求 `GET /api/v1/admin/system-logs`。\n   - 预期：返回 200。\n2. 查看响应中的 `policy` 字段。\n   - 预期：包含 `version`、`diagnostic_fields`，并表明当前 policy 为 `admin_support_redaction_v1`。\n3. 查看某条日志对象。\n   - 预期：对象包含 masked `user_identifier`、masked/coarse `ip_address`、安全 `details` summary，以及一个有序 `diagnostics` 数组。\n4. 对照原始落库内容核验字段泄露边界。\n   - 预期：`diagnostics` 只包含 allowlist 字段；原始 `details`、provider/request body、prompt、token/password/cookie/email、`base_url`、stack trace 等均不会直接出现在 API 响应中。\n\n## Test Case 3 — UI uses server-supplied diagnostics, not client-side field guessing\n1. 在 `/admin/logs` 页面选择一条带 `trace_id`/`error_code`/`phase` 的日志。\n2. 对照该行对应的 `GET /api/v1/admin/system-logs` 响应。\n   - 预期：页面展示的 diagnostics 与 API 返回的 `diagnostics[]` 一致；UI 不会额外拼出未经 allowlist 批准的新字段。\n3. 临时移除/缺少某个 allowlisted diagnostics 字段的日志再次查看。\n   - 预期：页面只显示实际返回的 diagnostics，不会自行补造空字段或回退去渲染 raw `details`。\n\n## Edge Case 1 — Secret-adjacent raw detail remains backend-only\n1. 准备一条原始 `details` 中包含 email/token/cookie/provider payload/prompt 的日志。\n2. 同时查看 `/api/v1/admin/system-logs` 响应与 `/admin/logs` 页面。\n   - 预期：这些字段不会原样出现在 API 或 UI；管理员仍可依靠 `trace_id`/`error_code`/`phase`/`session_id` 等安全 diagnostics 做排障。\n\n## Edge Case 2 — Search/display mismatch stays explicit and non-leaky\n1. 使用当前 system-log 搜索功能查找一条已知日志（其原始 `SystemLog.user_identifier` 可命中搜索条件）。\n2. 打开匹配结果。\n   - 预期：结果仍按当前 SQL 搜索语义返回，但页面展示继续保持 masked `user_identifier` / coarse `ip_address`；不会因为搜索命中而泄露原始 identifier。\n3. 记录该行为给支持团队。\n   - 预期：支持团队清楚“搜索依据可能是落库原值，但展示永远走脱敏 contract”，不会把它误认为 UI 泄露。\n",
       "goal": "把 backend logger、system log route、admin logs page 收口到一致的 redaction/exposure policy。",
       "success_criteria": "- token/password/cookie/email 等敏感字段在 logger sink、system log route、admin logs page 三层都遵守同一 policy。\n- admin/support 仍能定位 trace_id、错误分类、阶段状态，而不是因为过度脱敏失去排障能力。\n- focused tests 锁定允许暴露与禁止暴露的字段。",
       "proof_level": "integration",
@@ -2915,13 +2915,10 @@
     {
       "milestone_id": "M020",
       "id": "S03",
-      "title": "Multi-instance session state 与 reconnect authority 收口",
+      "title": "S03",
       "status": "pending",
       "risk": "high",
-      "depends": [
-        "S01",
-        "S02"
-      ],
+      "depends": [],
       "demo": "After this: runtime connection visibility、session snapshot、reconnect/drain 语义对单实例和多实例都清晰，后续扩容不再完全依赖进程内假设。",
       "created_at": "2026-04-13T02:06:22.480Z",
       "completed_at": null,
@@ -12757,19 +12754,30 @@
       "milestone_id": "M020",
       "slice_id": "S03",
       "id": "T01",
-      "title": "建立 runtime state authority table",
-      "status": "pending",
-      "one_liner": "",
-      "narrative": "",
-      "verification_result": "",
+      "title": "Documented websocket runtime authority boundaries and added reconnect-focused proofs for process-local connections versus Redis snapshots.",
+      "status": "complete",
+      "one_liner": "Documented websocket runtime authority boundaries and added reconnect-focused proofs for process-local connections versus Redis snapshots.",
+      "narrative": "I audited the current websocket runtime ownership split across `SessionManager`, `SessionStateService`, and the sales/presentation reconnect handlers, then wrote the missing authority baseline into both code and architecture docs. `SessionManager.get_stats()` now exposes that live connection visibility is a process-local in-memory registry, while `SessionStateService.get_stats()` now exposes Redis snapshot authority, save/get/delete/healthcheck metrics, and the latest snapshot error surface for downstream support/runtime consumers. I added a focused unit test file to lock those inspection surfaces and updated the sales reconnect integration proof to assert the real reconnect contract: `current_request_id` survives reconnect as the current request epoch, but `latest_action_card` is intentionally not persisted so stale coaching UI is not replayed after reconnect. I also appended the non-obvious reconnect rule to `.gsd/KNOWLEDGE.md` and recorded the authority-boundary decision in `.gsd/DECISIONS.md`.",
+      "verification_result": "Verified the new authority surfaces and reconnect contract with focused pytest coverage and the task-plan grep inventory. The authority tests proved `SessionManager` reports process-local connection ownership and `SessionStateService` reports Redis snapshot ownership plus operation metrics/last-error state. The reconnect integration test proved persisted/restored runtime state keeps `current_request_id` continuity while omitting `latest_action_card`. The task-plan `rg` command also confirmed the relevant authority/snapshot/reconnect symbols are now visible across the intended websocket modules.",
       "duration": "",
-      "completed_at": null,
+      "completed_at": "2026-04-13T15:55:31.550Z",
       "blocker_discovered": false,
-      "deviations": "",
-      "known_issues": "",
-      "key_files": [],
-      "key_decisions": [],
-      "full_summary_md": "",
+      "deviations": "Adjusted the sales reconnect integration proof to stop expecting `latest_action_card` inside persisted `runtime_state`. The existing handler code already intentionally suppressed stale action-card replay; the test contract was older than the shipped reconnect-safe behavior.",
+      "known_issues": "None.",
+      "key_files": [
+        "backend/src/common/websocket/session_manager.py",
+        "backend/src/common/websocket/session_state_service.py",
+        "backend/tests/unit/test_session_runtime_authority.py",
+        "backend/tests/integration/test_sales_realtime_reconnect_flow.py",
+        ".gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md",
+        ".gsd/KNOWLEDGE.md",
+        ".gsd/DECISIONS.md"
+      ],
+      "key_decisions": [
+        "Runtime connection visibility remains process-local authority in `SessionManager`, while reconnect-safe snapshots remain Redis authority in `SessionStateService`.",
+        "Sales reconnect snapshots preserve `current_request_id` continuity but intentionally exclude `latest_action_card` to avoid replaying stale coaching UI after reconnect."
+      ],
+      "full_summary_md": "---\nid: T01\nparent: S03\nmilestone: M020\nkey_files:\n  - backend/src/common/websocket/session_manager.py\n  - backend/src/common/websocket/session_state_service.py\n  - backend/tests/unit/test_session_runtime_authority.py\n  - backend/tests/integration/test_sales_realtime_reconnect_flow.py\n  - .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md\n  - .gsd/KNOWLEDGE.md\n  - .gsd/DECISIONS.md\nkey_decisions:\n  - Runtime connection visibility remains process-local authority in `SessionManager`, while reconnect-safe snapshots remain Redis authority in `SessionStateService`.\n  - Sales reconnect snapshots preserve `current_request_id` continuity but intentionally exclude `latest_action_card` to avoid replaying stale coaching UI after reconnect.\nduration: \nverification_result: passed\ncompleted_at: 2026-04-13T15:55:31.546Z\nblocker_discovered: false\n---\n\n# T01: Documented websocket runtime authority boundaries and added reconnect-focused proofs for process-local connections versus Redis snapshots.\n\n**Documented websocket runtime authority boundaries and added reconnect-focused proofs for process-local connections versus Redis snapshots.**\n\n## What Happened\n\nI audited the current websocket runtime ownership split across `SessionManager`, `SessionStateService`, and the sales/presentation reconnect handlers, then wrote the missing authority baseline into both code and architecture docs. `SessionManager.get_stats()` now exposes that live connection visibility is a process-local in-memory registry, while `SessionStateService.get_stats()` now exposes Redis snapshot authority, save/get/delete/healthcheck metrics, and the latest snapshot error surface for downstream support/runtime consumers. I added a focused unit test file to lock those inspection surfaces and updated the sales reconnect integration proof to assert the real reconnect contract: `current_request_id` survives reconnect as the current request epoch, but `latest_action_card` is intentionally not persisted so stale coaching UI is not replayed after reconnect. I also appended the non-obvious reconnect rule to `.gsd/KNOWLEDGE.md` and recorded the authority-boundary decision in `.gsd/DECISIONS.md`.\n\n## Verification\n\nVerified the new authority surfaces and reconnect contract with focused pytest coverage and the task-plan grep inventory. The authority tests proved `SessionManager` reports process-local connection ownership and `SessionStateService` reports Redis snapshot ownership plus operation metrics/last-error state. The reconnect integration test proved persisted/restored runtime state keeps `current_request_id` continuity while omitting `latest_action_card`. The task-plan `rg` command also confirmed the relevant authority/snapshot/reconnect symbols are now visible across the intended websocket modules.\n\n## Verification Evidence\n\n| # | Command | Exit Code | Verdict | Duration |\n|---|---------|-----------|---------|----------|\n| 1 | `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/test_session_runtime_authority.py backend/tests/integration/test_sales_realtime_reconnect_flow.py -q` | 0 | ✅ pass | 47000ms |\n| 2 | `rg -n \"SessionManager|SessionStateService|snapshot|reconnect|active_connections|runtime_state\" backend/src/common/websocket backend/src/sales_bot/websocket backend/src/presentation_coach/websocket` | 0 | ✅ pass | 54300ms |\n| 3 | `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/test_stepfun_realtime_persistence.py backend/tests/unit/test_presentation_handler_persistence.py backend/tests/unit/test_session_runtime_authority.py backend/tests/integration/test_sales_realtime_reconnect_flow.py -q` | 0 | ✅ pass | 29200ms |\n\n## Deviations\n\nAdjusted the sales reconnect integration proof to stop expecting `latest_action_card` inside persisted `runtime_state`. The existing handler code already intentionally suppressed stale action-card replay; the test contract was older than the shipped reconnect-safe behavior.\n\n## Known Issues\n\nNone.\n\n## Files Created/Modified\n\n- `backend/src/common/websocket/session_manager.py`\n- `backend/src/common/websocket/session_state_service.py`\n- `backend/tests/unit/test_session_runtime_authority.py`\n- `backend/tests/integration/test_sales_realtime_reconnect_flow.py`\n- `.gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md`\n- `.gsd/KNOWLEDGE.md`\n- `.gsd/DECISIONS.md`\n",
       "description": "- 盘点 `common.websocket.session_manager`、`session_state_service`、sales/presentation handlers 当前各自持有什么 state。\n- 画出单实例、多实例、进程重启三种场景下的 authority table：哪些 state 可以只在进程内，哪些必须进 Redis/persistent snapshot。\n- 先补/锁一组 focused reconnect tests，防止后续 hardening 回归 current epoch semantics。",
       "estimate": "50m",
       "files": [
@@ -16595,6 +16603,18 @@
       "decision": "How future admin/support quality-event surfaces should expose diagnostics",
       "choice": "Require M021 quality/cost/failure events and later admin/support observability surfaces to reuse the backend-owned allowlist-first diagnostics contract and keep raw provider/request/config details backend-only.",
       "rationale": "M020/S02 already unified logger, system log API, and admin logs UI around one safe diagnostics seam. Letting later quality-event work invent a second support payload would reopen leakage risk and drift between logger, route, UI, and support guidance.",
+      "revisable": "Yes",
+      "made_by": "agent",
+      "superseded_by": null
+    },
+    {
+      "seq": 1594,
+      "id": "D224",
+      "when_context": "M020 S03 T01",
+      "scope": "architecture",
+      "decision": "Websocket runtime authority boundary for reconnect snapshots",
+      "choice": "Treat SessionManager connection visibility as process-local authority, treat SessionStateService Redis snapshots as cross-instance/restart authority, and exclude StepFun latest_action_card from persisted reconnect snapshots while preserving current_request_id.",
+      "rationale": "The codebase already restores request continuity from SessionStateService but intentionally suppresses stale UI replay after reconnect. Making the authority boundary explicit in stats/docs and aligning the reconnect proof prevents downstream work from treating in-memory active connections as cluster-wide truth or replaying outdated coaching action cards after reconnection.",
       "revisable": "Yes",
       "made_by": "agent",
       "superseded_by": null
@@ -21803,6 +21823,39 @@
       "verdict": "✅ pass",
       "duration_ms": 60,
       "created_at": "2026-04-13T15:15:15.399Z"
+    },
+    {
+      "id": 479,
+      "task_id": "T01",
+      "slice_id": "S03",
+      "milestone_id": "M020",
+      "command": "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/test_session_runtime_authority.py backend/tests/integration/test_sales_realtime_reconnect_flow.py -q",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 47000,
+      "created_at": "2026-04-13T15:55:31.550Z"
+    },
+    {
+      "id": 480,
+      "task_id": "T01",
+      "slice_id": "S03",
+      "milestone_id": "M020",
+      "command": "rg -n \"SessionManager|SessionStateService|snapshot|reconnect|active_connections|runtime_state\" backend/src/common/websocket backend/src/sales_bot/websocket backend/src/presentation_coach/websocket",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 54300,
+      "created_at": "2026-04-13T15:55:31.550Z"
+    },
+    {
+      "id": 481,
+      "task_id": "T01",
+      "slice_id": "S03",
+      "milestone_id": "M020",
+      "command": "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/test_stepfun_realtime_persistence.py backend/tests/unit/test_presentation_handler_persistence.py backend/tests/unit/test_session_runtime_authority.py backend/tests/integration/test_sales_realtime_reconnect_flow.py -q",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 29200,
+      "created_at": "2026-04-13T15:55:31.550Z"
     }
   ]
 }

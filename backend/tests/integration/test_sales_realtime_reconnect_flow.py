@@ -216,8 +216,9 @@ async def test_sales_stepfun_reconnect_restores_turn_continuity_and_cleans_termi
     assert persisted.turn_count == 2
     assert persisted.session_status == "in_progress"
     assert persisted.ai_state == "listening"
+    assert persisted.runtime_state["current_request_id"] == first_handler.current_request_id
     assert persisted.runtime_state["latest_score_snapshot"] == {"overall_score": 84.0}
-    assert persisted.runtime_state["latest_action_card"] == {"title": "继续深挖预算与时机"}
+    assert "latest_action_card" not in persisted.runtime_state
 
     second_ws = _QueueWebSocket()
     second_handler = _prepare_handler(state_service=state_service)
@@ -233,9 +234,11 @@ async def test_sales_stepfun_reconnect_restores_turn_continuity_and_cleans_termi
     assert restored_state["turn_count"] == 2
     assert restored_state["session_status"] == "in_progress"
     assert restored_state["ai_state"] == "listening"
+    assert restored_state["runtime_state"]["current_request_id"] == first_handler.current_request_id
     assert restored_state["runtime_state"]["latest_score_snapshot"] == {
         "overall_score": 84.0
     }
+    assert "latest_action_card" not in restored_state["runtime_state"]
 
     await second_ws.push_json(
         {"type": "text", "data": {"text": "第三轮：如果本月就推进，你最看重什么"}}

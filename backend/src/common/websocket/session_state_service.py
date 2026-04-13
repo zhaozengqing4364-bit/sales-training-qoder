@@ -86,6 +86,20 @@ class SessionStateService:
         self._cleanup_task: Optional[asyncio.Task] = None
         self._running = False
         self._redis: Any | None = None
+        self.metrics = {
+            "save_calls": 0,
+            "get_calls": 0,
+            "get_misses": 0,
+            "delete_calls": 0,
+            "save_failures": 0,
+            "get_failures": 0,
+            "delete_failures": 0,
+            "healthcheck_failures": 0,
+        }
+        self.last_saved_session_id: str | None = None
+        self.last_loaded_session_id: str | None = None
+        self.last_deleted_session_id: str | None = None
+        self.last_error: dict[str, Any] | None = None
 
     def _state_key(self, session_id: str) -> str:
         return f"{self.key_prefix}{session_id}"
@@ -94,6 +108,25 @@ class SessionStateService:
         if self._redis is None:
             raise RuntimeError("Session state Redis client is not initialized")
         return self._redis
+
+    def describe_authority(self) -> dict[str, dict[str, Any]]:
+        """Describe which runtime state belongs in Redis versus process memory."""
+        return {
+            "session_snapshot": {
+                "owner": "session_state_service",
+                "storage": "redis_snapshot",
+                "shared_across_instances": True,
+                "survives_restart": True,
+                "ttl_seconds": self.state_ttl,
+                "inspection_surface": "SessionStateService.get_stats()",
+            },
+            "runtime_connections": {
+                "owner": "session_manager.sessions",
+                "storage": "process_memory",
+                "shared_across_instances": False,
+                "survives_restart": False,
+            },
+        }
 
     async def start(self):
         """Start Redis-backed session state service"""
@@ -169,6 +202,7 @@ class SessionStateService:
         Returns:
             Result[None]: Success or failure
         """
+        self.metrics["save_calls"] += 1
         try:
             state.last_activity = time.time()
             payload = json.dumps(state.to_dict(), ensure_ascii=False)
@@ -178,6 +212,8 @@ class SessionStateService:
                 payload,
                 ex=self.state_ttl,
             )
+            self.last_saved_session_id = state.session_id
+            self.last_error = None
 
             logger.info(
                 f"Saved session state: {state.session_id}",
@@ -192,6 +228,12 @@ class SessionStateService:
             return Result.ok(None)
 
         except Exception as e:
+            self.metrics["save_failures"] += 1
+            self.last_error = {
+                "operation": "save_state",
+                "session_id": state.session_id,
+                "error": str(e),
+            }
             logger.error(f"Failed to save session state: {str(e)}")
             return Result.fail(f"[STATE_SAVE_FAILED] {str(e)}")
 
@@ -205,19 +247,30 @@ class SessionStateService:
         Returns:
             Result[Optional[SessionStateSnapshot]]: State or None if not found
         """
+        self.metrics["get_calls"] += 1
         try:
             redis_client = self._require_redis()
             raw_state = await redis_client.get(self._state_key(session_id))
             if not raw_state:
+                self.metrics["get_misses"] += 1
+                self.last_error = None
                 logger.info(f"Session state not found: {session_id}")
                 return Result.ok(None)
 
             data = json.loads(raw_state)
             state = SessionStateSnapshot.from_dict(data)
+            self.last_loaded_session_id = session_id
+            self.last_error = None
             logger.info(f"Retrieved session state: {session_id}")
             return Result.ok(state)
 
         except Exception as e:
+            self.metrics["get_failures"] += 1
+            self.last_error = {
+                "operation": "get_state",
+                "session_id": session_id,
+                "error": str(e),
+            }
             logger.error(f"Failed to get session state: {str(e)}")
             return Result.fail(f"[STATE_GET_FAILED] {str(e)}")
 
@@ -231,13 +284,22 @@ class SessionStateService:
         Returns:
             Result[None]: Success or failure
         """
+        self.metrics["delete_calls"] += 1
         try:
             redis_client = self._require_redis()
             await redis_client.delete(self._state_key(session_id))
+            self.last_deleted_session_id = session_id
+            self.last_error = None
             logger.info(f"Deleted session state: {session_id}")
             return Result.ok(None)
 
         except Exception as e:
+            self.metrics["delete_failures"] += 1
+            self.last_error = {
+                "operation": "delete_state",
+                "session_id": session_id,
+                "error": str(e),
+            }
             logger.error(f"Failed to delete session state: {str(e)}")
             return Result.fail(f"[STATE_DELETE_FAILED] {str(e)}")
 
@@ -291,6 +353,11 @@ class SessionStateService:
             except asyncio.CancelledError:
                 break
             except Exception as e:
+                self.metrics["healthcheck_failures"] += 1
+                self.last_error = {
+                    "operation": "healthcheck",
+                    "error": str(e),
+                }
                 logger.error(f"Session state Redis health check failed: {e}")
 
     def get_stats(self) -> dict[str, Any]:
@@ -301,6 +368,12 @@ class SessionStateService:
             "redis_connected": self._redis is not None,
             "running": self._running,
             "key_prefix": self.key_prefix,
+            "authority": self.describe_authority(),
+            "metrics": dict(self.metrics),
+            "last_saved_session_id": self.last_saved_session_id,
+            "last_loaded_session_id": self.last_loaded_session_id,
+            "last_deleted_session_id": self.last_deleted_session_id,
+            "last_error": dict(self.last_error) if isinstance(self.last_error, dict) else None,
         }
 
 

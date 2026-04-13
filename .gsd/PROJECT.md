@@ -39,6 +39,7 @@
 - **M018**：performance / dependency / recovery baselines 已完成。
 - **M019**：authority seams 与 release gate 收口已完成。
 - **M020 / S01**：auth transport hardening 第一片已完成：非 development session/CSRF cookie 强制 `Secure`，cookie-backed unsafe request 走双提交 CSRF 校验，websocket auth authority 收口为 `Authorization -> session cookie -> query_token compatibility`，并把 shared-password compatibility 诊断、repo-root proof、runbook/doc contract 一起写回。
+- **M020 / S02**：sensitive log 与 admin observability redaction 已完成：logger、`/api/v1/admin/system-logs`、`/admin/logs` 现在共用一个 backend-owned allowlist-first diagnostics contract，admin/support 保留 `trace_id`/`error_code`/`phase`/`session_id`/`target_user_id` 等排障字段，但 raw `details`、精确 identifier/IP、provider/request/prompt/secret-adjacent payload 保持 backend-only。
 
 ## Current Product Truths
 
@@ -54,27 +55,35 @@
 - M019 database authority 现在已明确：`backend/src/common/db/session.py::STARTUP_DB_AUTHORITY` 是 startup / migration / legacy repair / auth bootstrap 的 code-level authority map；`init_db()` 仍是 startup bootstrap seam，但非 development/test 不再承担 schema repair 责任；显式 drift 需走 Alembic 或 `python scripts/repair_legacy_schema.py`。
 - M019 frontend authority 也已明确：`web/src/lib/api/client.ts` 继续作为唯一 outward `api` façade；`usePracticeWebSocket()` 继续作为 live practice page 的唯一 outward transport/orchestration contract；页面不要绕开这些 seam 自己重建 auth/error/request transport 或 websocket lifecycle。
 - M019 release truth authority 同样已明确：`.github/workflows/release-truth-gate.yml` + `.github/workflows/nfr-performance-check.yml`、live `/metrics` + `/api/v1/analytics/*`、以及 router-backed `docs/api-contract/*` 共同形成当前 assembled release truth line；legacy spec 与 admin home demo stats 仍只是 drift inventory，不得包装成 release authority。
-- **M020/S01 auth transport authority 现在也已明确**：
+- **M020/S01 auth transport authority 已固定**：
   - `backend/src/common/auth/service.py` 是 auth transport/cookie/CSRF 的共享 authority seam；
-  - 非 development 环境下 `app_session` 与 `app_csrf` cookie 会被强制标记为 `Secure`，不会再受 `AUTH_SESSION_COOKIE_SECURE=false` 影响；
+  - 非 development 环境下 `app_session` 与 `app_csrf` cookie 会被强制标记为 `Secure`；
   - cookie-backed unsafe HTTP request 必须通过 `app_csrf` ↔ `X-CSRF-Token` 双提交校验；
-  - websocket auth authority 已收口为 `Authorization -> session cookie -> query_token compatibility`，并通过 `resolve_websocket_auth(...)` / `resolve_websocket_token(...)` 统一；
+  - websocket auth authority 已收口为 `Authorization -> session cookie -> query token compatibility`，并通过 `resolve_websocket_auth(...)` / `resolve_websocket_token(...)` 统一；
   - `common.auth.api.login` 会通过 `X-Auth-Authority` / `X-Auth-Compatibility-Mode` 暴露 managed password / env compatibility authority，shared password 只作为显式 compatibility 模式存在。
+- **M020/S02 admin/support observability authority 也已固定**：
+  - `backend/src/common/monitoring/logger.py` 现在是 admin/support 日志可见性的 backend-owned authority seam；
+  - `/api/v1/admin/system-logs` 通过 `policy.version`、`policy.diagnostic_fields`、masked identifiers、safe `details` summary、ordered `diagnostics[]` 暴露唯一可信的 admin/support diagnostics contract；
+  - `/admin/logs` 只渲染 backend 返回的 diagnostics 列表，不再在前端本地重建 allowlist；
+  - raw `details`、精确 `user_identifier` / `ip_address`、provider/request/response payload、prompt text、token/password/cookie/email、`base_url`、stack trace 与 secrets 保持 backend-only；
+  - 未来 M021 quality/cost/failure events 若进入 admin/support 诊断面，必须复用这套 allowlist-first diagnostics contract，而不是发明第二套 support payload。
 
 ## Current Focus
 
 当前项目处于 **M019 已完成、M020 进行中** 的状态：
 - M019 已完成 milestone close-out：数据库 authority map、practice backend seam、frontend domain/transport seam、以及 assembled release truth line 都已经过 fresh milestone-level verification。
-- M020 已启动，**S01 已完成**：auth transport、cookie/CSRF posture、websocket auth authority、shared-password compatibility diagnosis 已在代码、focused tests、runbook、API contract 与 architecture scan 上收口。
+- M020 已完成前两片：
+  1. **S01** auth transport、cookie/CSRF posture、websocket auth authority、shared-password compatibility diagnosis 已在代码、focused tests、runbook、API contract 与 architecture scan 上收口；
+  2. **S02** sensitive log 与 admin observability redaction 已在 logger、system-log API、admin logs UI、focused tests、inventory 与 architecture scan 上收口。
 - M020 后续切片仍待执行：
-  1. **S02** sensitive log 与 admin observability redaction 收口；
-  2. **S03** multi-instance session state 与 reconnect authority 收口；
-  3. **S04** recovery drill automation 与部署指导收口。
+  1. **S03** multi-instance session state 与 reconnect authority 收口；
+  2. **S04** recovery drill automation 与部署指导收口。
 
 接下来的重点：
 1. 保持 M019 authority truth 稳定，不要重开第二套 startup/migration/practice/frontend/release 入口。
-2. 在 M020/S01 已固定的 auth boundary 上继续推进 S02-S04，而不是再让页面、hook、router 各自发明登录态或 websocket authority 规则。
+2. 把 M020/S01 的 auth boundary 与 M020/S02 的 diagnostics redaction boundary 当成固定前提，再推进 S03-S04；不要让 session-state、reconnect、recovery drill 再次绕开这些 seam 发明隐式规则。
 3. 后续安全/运行时工作优先落在现有 authority-bearing files、focused tests、workflow、runbook 与 contract docs 上，而不是写一套 markdown-only inventory。
+4. M021 及以后的 quality/cost/failure/admin-support observability work 必须复用 S02 的 backend-owned diagnostics contract，而不是让 route/UI 各自决定哪些错误细节可以展示。
 
 当前不应做的事：
 - 不要把 `init_db()` 的 `create_all()` / compat guard 外推成生产迁移 authority。
@@ -83,6 +92,7 @@
 - 不要让页面直接调用内部 domain builders 或本地拼 websocket transport；应继续沿 outward `api` façade 和 `usePracticeWebSocket()` 收口。
 - 不要让后续 milestone 只凭 workflow 绿灯就宣称 release truth 完整；必须继续复用 web/backend/doc/metrics/error-reporting 的 assembled proof。
 - 不要让后续 auth slices 回退到隐含默认值：cookie secure、CSRF、websocket query token、shared password 都已经在 M020/S01 被写成显式 authority / compatibility / off-ramp 规则。
+- 不要让未来 admin/support observability slices 在 route 或 UI 层重新暴露 raw `details`、精确 identity/IP、provider/request payload 或 secret-adjacent config；这些已经在 M020/S02 被明确划回 backend-only。
 
 ## Capability Contract
 
@@ -109,4 +119,4 @@
 - [x] M017 — Realtime contract 与 concurrency proof 收口
 - [x] M018 — Performance / dependency / recovery baselines
 - [x] M019 — Authority seams 与 release gate 收口
-- [ ] M020 — Security / multi-instance runtime / recovery hardening（S01 complete; S02-S04 pending）
+- [ ] M020 — Security / multi-instance runtime / recovery hardening（S01-S02 complete; S03-S04 pending）

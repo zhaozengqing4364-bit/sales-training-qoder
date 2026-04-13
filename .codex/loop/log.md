@@ -1356,3 +1356,30 @@
   verification results: passed; the new backend unit + integration proofs finished green, the exact task-plan backend/web verification command passed end-to-end, and diagnostics stayed clean on the touched runtime/test files.
   success signal status: future M020/M021 observability work no longer has to guess whether trace_id/error_code/phase/session_id/target_user_id are safe to show or rebuild that selection in the UI — one ordered diagnostics contract now flows from backend policy to admin display.
   rollback note: if later work changes which admin/support diagnostics are safe to expose, update logger.py diagnostic-field constants, the system-log API policy payload, the focused backend serializer/API proofs, and the admin logs page test together so backend/API/UI do not drift.
+
+- time: 2026-04-13T23:30:30+08:00
+  mode: grow
+  item id: M020-S02
+  files changed:
+    - .gsd/milestones/M020/slices/S02/S02-SUMMARY.md
+    - .gsd/milestones/M020/slices/S02/S02-UAT.md
+    - .gsd/PROJECT.md
+    - .codex/loop/state.json
+    - .codex/loop/log.md
+  summary: Closed M020/S02 after fresh slice-level verification confirmed that the shared logger, admin system-log API, and admin logs page now expose one backend-owned allowlist-first diagnostics contract; support/admin keep masked identifiers plus safe diagnostics while raw details, precise identity/IP data, and provider/request/prompt/secret-adjacent payloads remain backend-only.
+  verification commands:
+    - backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/integration/test_admin_users_api.py backend/tests/unit/admin/test_admin_users_api_models.py -x -q && npm --prefix web test -- --run "src/app/admin/logs/page.test.tsx"
+    - rg -n "token|password|cookie|email|user_identifier|ip_address|details" backend/src/common/monitoring backend/src/admin/api web/src/app/admin/logs/page.tsx
+    - rg -n "allowlist|redaction|trace_id|details|support|admin" backend/src/admin/api/security_inventory.py backend/src/common/monitoring/log_safety_inventory.py .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md
+    - backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/admin/test_system_logs_redaction.py -q
+    - lsp diagnostics backend/src/common/monitoring/logger.py
+    - lsp diagnostics backend/src/admin/api/system_logs.py
+    - lsp diagnostics backend/src/admin/api/security_inventory.py
+    - lsp diagnostics backend/src/common/monitoring/log_safety_inventory.py
+    - lsp diagnostics web/src/app/admin/logs/page.tsx
+    - lsp diagnostics web/src/lib/api/types.ts
+    - lsp diagnostics backend/tests/unit/admin/test_system_logs_redaction.py
+    - lsp diagnostics web/src/app/admin/logs/page.test.tsx
+  verification results: passed; the slice-plan backend+frontend gate finished 37 backend tests plus 1 web admin-logs test green, both grep gates were rerun fresh, the focused system-log redaction proof passed, and diagnostics stayed clean on the touched authority/test files.
+  success signal status: downstream M020/M021 work no longer has to guess what admin/support may see in failure logs — the logger, route, UI, inventory, and architecture scan all now agree on the same safe diagnostics boundary.
+  rollback note: if later work expands admin/support observability fields, update the shared logger policy constants, system-log API contract, admin logs UI renderer, both inventory modules, and the architecture scan together; otherwise route/UI behavior and support guidance will drift again.

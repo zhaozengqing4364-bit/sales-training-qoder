@@ -1,7 +1,7 @@
 # Codebase Map
 
-Generated: 2026-04-13T12:11:46Z | Files: 500 | Described: 0/500
-<!-- gsd:codebase-meta {"generatedAt":"2026-04-13T12:11:46Z","fingerprint":"7951cff7f31474f5ce9d2c47b0299c83dd7e7f0b","fileCount":500,"truncated":true} -->
+Generated: 2026-04-13T15:33:44Z | Files: 500 | Described: 0/500
+<!-- gsd:codebase-meta {"generatedAt":"2026-04-13T15:33:44Z","fingerprint":"568fe0a50e9f3c34115ff6e696069746bbae7c06","fileCount":500,"truncated":true} -->
 Note: Truncated to first 500 files. Run with higher --max-files to include all.
 
 ### (root)/
@@ -638,6 +638,7 @@ Note: Truncated to first 500 files. Run with higher --max-files to include all.
 
 ### backend/tests/unit/admin/
 - `backend/tests/unit/admin/test_admin_users_api_models.py`
+- `backend/tests/unit/admin/test_system_logs_redaction.py`
 
 ### backend/tests/unit/common/
 - `backend/tests/unit/common/test_admin_analytics_service.py`
@@ -645,4 +646,3 @@ Note: Truncated to first 500 files. Run with higher --max-files to include all.
 - `backend/tests/unit/common/test_api_users.py`
 - `backend/tests/unit/common/test_auth_transport_matrix.py`
 - `backend/tests/unit/common/test_config_manager_embedding_env.py`
-- `backend/tests/unit/common/test_db_session_compatibility.py`

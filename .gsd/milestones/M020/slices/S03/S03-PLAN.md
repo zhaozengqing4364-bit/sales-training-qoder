@@ -23,7 +23,7 @@ S03 结束后，runtime state、snapshot、connection visibility、reconnect epo
 
 ## Tasks
 
-- [ ] **T01: 建立 runtime state authority table** `est:50m`
+- [x] **T01: 建立 runtime state authority table** `est:50m`
   - 盘点 `common.websocket.session_manager`、`session_state_service`、sales/presentation handlers 当前各自持有什么 state。
 - 画出单实例、多实例、进程重启三种场景下的 authority table：哪些 state 可以只在进程内，哪些必须进 Redis/persistent snapshot。
 - 先补/锁一组 focused reconnect tests，防止后续 hardening 回归 current epoch semantics。
