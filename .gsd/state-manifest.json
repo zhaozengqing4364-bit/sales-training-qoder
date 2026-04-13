@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "exported_at": "2026-04-13T23:35:59.716Z",
+  "exported_at": "2026-04-13T23:43:17.430Z",
   "milestones": [
     {
       "id": "M001",
@@ -12855,19 +12855,26 @@
       "milestone_id": "M020",
       "slice_id": "S03",
       "id": "T03",
-      "title": "把 runtime state authority 写回 support/runbook surfaces",
-      "status": "pending",
-      "one_liner": "",
-      "narrative": "",
-      "verification_result": "",
+      "title": "Aligned support/runtime docs with the shipped websocket authority split and added restart/drain guidance for Redis snapshots versus process-local connections.",
+      "status": "complete",
+      "one_liner": "Aligned support/runtime docs with the shipped websocket authority split and added restart/drain guidance for Redis snapshots versus process-local connections.",
+      "narrative": "I treated T03 as a doc-contract and runbook hardening pass, not a code-path redesign. First I reread the live support runtime API implementation plus the websocket authority surfaces added in T01/T02. That exposed a real drift in `docs/api-contract/support-runtime.md`: the file still described the old faults filter and log-style payload shape instead of the shipped `overview` / `faults` contract backed by `RuntimeStatusService`, and it did not explain that `/api/v1/support/runtime` is a release-health summary surface rather than a websocket cluster-state API. I rewrote that contract to match the current `severity` filter, the actual overview/fault payloads, and the two companion runtime inspection surfaces: `SessionManager.get_stats()` for process-local live connection visibility and `SessionStateService.get_stats()` for shared Redis reconnect snapshots, including request/connection epoch and last-error semantics.\n\nI then updated `docs/backup-recovery-runbook.md` to make restart/drain behavior explicit instead of leaving it as an operator assumption. The runbook now says what a single-instance/systemd restart actually preserves, what it always drops, why a zeroed `SessionManager` registry after restart is expected, why Redis snapshots are the only restart-safe runtime authority, and why multi-instance drain still depends on external traffic steering because the repo does not ship a drain endpoint or cluster-wide live connection authority. Finally, I wrote the same rule into section 7.2.3 of `.gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md` so downstream slices inherit one durable explanation instead of rediscovering it from websocket code and prior task summaries.",
+      "verification_result": "Ran the exact task-plan verification command from repo root after the edits. The grep gate passed with exit code 0 and surfaced reconnect, epoch, snapshot, active connection, drain, and restart wording in all three required artifacts: `docs/api-contract/support-runtime.md`, `docs/backup-recovery-runbook.md`, and `.gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md`. I also read back the edited sections to confirm the support-runtime contract now matches the shipped `severity`-based faults API and that the new restart/drain guidance is formatted cleanly.",
       "duration": "",
-      "completed_at": null,
+      "completed_at": "2026-04-13T23:43:17.365Z",
       "blocker_discovered": false,
-      "deviations": "",
-      "known_issues": "",
-      "key_files": [],
-      "key_decisions": [],
-      "full_summary_md": "",
+      "deviations": "The plan only said to add state-inspection and restart/drain guidance, but the live `docs/api-contract/support-runtime.md` was also materially stale relative to the shipped API. I corrected that local mismatch while doing the planned runtime-authority write-back so the durable support surface matches the real backend contract instead of preserving an outdated faults schema.",
+      "known_issues": "The repository still does not ship a repo-native websocket drain endpoint, load-balancer/ingress traffic-drain script, or cluster-wide live connection authority. This task documents that gap clearly but does not implement the missing operational control plane.",
+      "key_files": [
+        "docs/api-contract/support-runtime.md",
+        "docs/backup-recovery-runbook.md",
+        ".gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md"
+      ],
+      "key_decisions": [
+        "Keep `/api/v1/support/runtime` documented as a release-health summary contract and point live websocket state inspection to `SessionManager.get_stats()` plus `SessionStateService.get_stats()` instead of inventing a new cluster-state API surface.",
+        "Document restart/drain semantics around the existing authority split: live connection visibility is instance-local and ephemeral, while Redis reconnect snapshots are the only shared restart-safe runtime authority."
+      ],
+      "full_summary_md": "---\nid: T03\nparent: S03\nmilestone: M020\nkey_files:\n  - docs/api-contract/support-runtime.md\n  - docs/backup-recovery-runbook.md\n  - .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md\nkey_decisions:\n  - Keep `/api/v1/support/runtime` documented as a release-health summary contract and point live websocket state inspection to `SessionManager.get_stats()` plus `SessionStateService.get_stats()` instead of inventing a new cluster-state API surface.\n  - Document restart/drain semantics around the existing authority split: live connection visibility is instance-local and ephemeral, while Redis reconnect snapshots are the only shared restart-safe runtime authority.\nduration: \nverification_result: passed\ncompleted_at: 2026-04-13T23:43:17.362Z\nblocker_discovered: false\n---\n\n# T03: Aligned support/runtime docs with the shipped websocket authority split and added restart/drain guidance for Redis snapshots versus process-local connections.\n\n**Aligned support/runtime docs with the shipped websocket authority split and added restart/drain guidance for Redis snapshots versus process-local connections.**\n\n## What Happened\n\nI treated T03 as a doc-contract and runbook hardening pass, not a code-path redesign. First I reread the live support runtime API implementation plus the websocket authority surfaces added in T01/T02. That exposed a real drift in `docs/api-contract/support-runtime.md`: the file still described the old faults filter and log-style payload shape instead of the shipped `overview` / `faults` contract backed by `RuntimeStatusService`, and it did not explain that `/api/v1/support/runtime` is a release-health summary surface rather than a websocket cluster-state API. I rewrote that contract to match the current `severity` filter, the actual overview/fault payloads, and the two companion runtime inspection surfaces: `SessionManager.get_stats()` for process-local live connection visibility and `SessionStateService.get_stats()` for shared Redis reconnect snapshots, including request/connection epoch and last-error semantics.\n\nI then updated `docs/backup-recovery-runbook.md` to make restart/drain behavior explicit instead of leaving it as an operator assumption. The runbook now says what a single-instance/systemd restart actually preserves, what it always drops, why a zeroed `SessionManager` registry after restart is expected, why Redis snapshots are the only restart-safe runtime authority, and why multi-instance drain still depends on external traffic steering because the repo does not ship a drain endpoint or cluster-wide live connection authority. Finally, I wrote the same rule into section 7.2.3 of `.gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md` so downstream slices inherit one durable explanation instead of rediscovering it from websocket code and prior task summaries.\n\n## Verification\n\nRan the exact task-plan verification command from repo root after the edits. The grep gate passed with exit code 0 and surfaced reconnect, epoch, snapshot, active connection, drain, and restart wording in all three required artifacts: `docs/api-contract/support-runtime.md`, `docs/backup-recovery-runbook.md`, and `.gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md`. I also read back the edited sections to confirm the support-runtime contract now matches the shipped `severity`-based faults API and that the new restart/drain guidance is formatted cleanly.\n\n## Verification Evidence\n\n| # | Command | Exit Code | Verdict | Duration |\n|---|---------|-----------|---------|----------|\n| 1 | `rg -n \"reconnect|epoch|snapshot|active connection|drain|restart\" docs/api-contract/support-runtime.md docs/backup-recovery-runbook.md .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md` | 0 | ✅ pass | 58ms |\n\n## Deviations\n\nThe plan only said to add state-inspection and restart/drain guidance, but the live `docs/api-contract/support-runtime.md` was also materially stale relative to the shipped API. I corrected that local mismatch while doing the planned runtime-authority write-back so the durable support surface matches the real backend contract instead of preserving an outdated faults schema.\n\n## Known Issues\n\nThe repository still does not ship a repo-native websocket drain endpoint, load-balancer/ingress traffic-drain script, or cluster-wide live connection authority. This task documents that gap clearly but does not implement the missing operational control plane.\n\n## Files Created/Modified\n\n- `docs/api-contract/support-runtime.md`\n- `docs/backup-recovery-runbook.md`\n- `.gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md`\n",
       "description": "- 为 support/runtime、architecture scan、runbook 补充新的 state inspection surfaces 和 restart/drain guidance。\n- 把单机/systemd 与未来多实例边界说清，不让 downstream milestones 再假设 ‘只要重启服务就行’。",
       "estimate": "35m",
       "files": [
@@ -21888,6 +21895,17 @@
       "verdict": "✅ pass",
       "duration_ms": 2190,
       "created_at": "2026-04-13T23:35:59.644Z"
+    },
+    {
+      "id": 483,
+      "task_id": "T03",
+      "slice_id": "S03",
+      "milestone_id": "M020",
+      "command": "rg -n \"reconnect|epoch|snapshot|active connection|drain|restart\" docs/api-contract/support-runtime.md docs/backup-recovery-runbook.md .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 58,
+      "created_at": "2026-04-13T23:43:17.365Z"
     }
   ]
 }

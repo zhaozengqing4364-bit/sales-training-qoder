@@ -37,7 +37,7 @@ S03 结束后，runtime state、snapshot、connection visibility、reconnect epo
   - Files: `backend/src/common/websocket/session_manager.py`, `backend/src/common/websocket/session_state_service.py`, `backend/src/sales_bot/websocket/stepfun_realtime_handler.py`, `backend/src/presentation_coach/websocket/presentation_stepfun_realtime_handler.py`
   - Verify: backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/integration/test_websocket_status_contract.py backend/tests/integration/test_sales_realtime_reconnect_flow.py -x -q
 
-- [ ] **T03: 把 runtime state authority 写回 support/runbook surfaces** `est:35m`
+- [x] **T03: 把 runtime state authority 写回 support/runbook surfaces** `est:35m`
   - 为 support/runtime、architecture scan、runbook 补充新的 state inspection surfaces 和 restart/drain guidance。
 - 把单机/systemd 与未来多实例边界说清，不让 downstream milestones 再假设 ‘只要重启服务就行’。
   - Files: `docs/api-contract/support-runtime.md`, `docs/backup-recovery-runbook.md`, `.gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md`

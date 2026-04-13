@@ -334,6 +334,19 @@ S04/T02 之后，当前仓库已经有一条**可复用的 assembled release gat
 - `SessionStateService.get_stats()` 现在应该显式暴露它只拥有 **Redis reconnect snapshot authority**，并附带 save/get/delete/healthcheck metrics 与 `last_error`，方便后续 support/runtime surface 复用。
 - focused reconnect proof 要锁住：`current_request_id` 作为当前 request epoch 可跨 reconnect 延续，而 `latest_action_card` 不能被 snapshot replay。
 
+**T02/T03 write-back surfaces（当前 downstream 必须复用）**
+- `docs/api-contract/support-runtime.md` 现在必须明确写成：`/api/v1/support/runtime/overview|faults` 是 release-health / fault summary contract，**不是** websocket cluster-state API；需要解释 live websocket runtime 时，要回到 `SessionManager.get_stats()`（process-local active connection authority）与 `SessionStateService.get_stats()`（shared Redis snapshot authority）这两条 companion inspection surfaces。
+- `SessionManager.get_stats()` 当前 support-facing 关键字段是：`connection_visibility.scope=process_local`、`tracked_sessions[]`、以及 `tracked_sessions[].runtime_diagnostics.session_status|ai_state|current_request_id|reconnect_state`。这些字段只能回答“当前实例还持有哪些 live sockets / request epoch / disconnect reason”。
+- `SessionStateService.get_stats()` 当前 support/runbook 关键字段是：`snapshot_visibility.scope=redis_snapshot`、`last_saved_snapshot`、`last_loaded_snapshot`、`request_epoch`、`connection_epoch`、`last_disconnect_reason`、`last_error`。这些字段是 restart 后仍可解释 reconnect state 的唯一共享 authority。
+- `docs/backup-recovery-runbook.md` 现在必须明确写成：单机 / systemd restart 会丢失进程内 live registry；多实例 drain 需要仓库外的 LB / ingress 摘流能力；当前仓库**没有** repo-native drain endpoint、cluster-wide live connection authority 或跨实例 close orchestration。后续 runbook 不能再写成“只要重启服务就行”。
+- restart / drain 解释规则：
+  1. restart 前要分别记录目标实例的 `SessionManager.get_stats()` 与共享 Redis 的 `SessionStateService.get_stats()`；
+  2. restart 后 local registry 归零是预期，不代表所有 session 正常结束；
+  3. 只有 Redis snapshot 能解释 reconnect-safe state，pending response / websocket refs / latest action card 等瞬态对象不会跨重启保留；
+  4. 单实例 restart 与未来多实例滚动升级都必须把“active connection”标成 instance-local，而不是 cluster truth。
+- repo-root proof 继续以 docs grep 为准：
+  `rg -n "reconnect|epoch|snapshot|active connection|drain|restart" docs/api-contract/support-runtime.md docs/backup-recovery-runbook.md .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md`
+
 ### 7.3 Theme C — AI control plane / evaluation kernel
 对应问题：
 - live path 与 legacy path 并存

@@ -1,7 +1,7 @@
 {
   "mode": "grow",
-  "current_issue_id": "M020-S02",
-  "current_issue_type": "slice",
+  "current_issue_id": "M020-S03-T03",
+  "current_issue_type": "task",
   "current_issue_status": "done",
   "pending_issue_ids": [],
   "completed_issue_ids": [
@@ -199,33 +199,23 @@
     "M019-S04-T03",
     "M020-S02-T02",
     "M020-S02-T03",
-    "M020-S02"
+    "M020-S02",
+    "M020-S03-T03"
   ],
   "blocked_issue_ids": [],
   "deferred_issue_ids": [],
   "last_modified_files": [
-    ".gsd/milestones/M020/slices/S02/S02-SUMMARY.md",
-    ".gsd/milestones/M020/slices/S02/S02-UAT.md",
-    ".gsd/PROJECT.md",
+    "docs/api-contract/support-runtime.md",
+    "docs/backup-recovery-runbook.md",
+    ".gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md",
     ".codex/loop/state.json",
     ".codex/loop/log.md"
   ],
   "last_verification_commands": [
-    "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/integration/test_admin_users_api.py backend/tests/unit/admin/test_admin_users_api_models.py -x -q && npm --prefix web test -- --run \"src/app/admin/logs/page.test.tsx\"",
-    "rg -n \"token|password|cookie|email|user_identifier|ip_address|details\" backend/src/common/monitoring backend/src/admin/api web/src/app/admin/logs/page.tsx",
-    "rg -n \"allowlist|redaction|trace_id|details|support|admin\" backend/src/admin/api/security_inventory.py backend/src/common/monitoring/log_safety_inventory.py .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md",
-    "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/admin/test_system_logs_redaction.py -q",
-    "lsp diagnostics backend/src/common/monitoring/logger.py",
-    "lsp diagnostics backend/src/admin/api/system_logs.py",
-    "lsp diagnostics backend/src/admin/api/security_inventory.py",
-    "lsp diagnostics backend/src/common/monitoring/log_safety_inventory.py",
-    "lsp diagnostics web/src/app/admin/logs/page.tsx",
-    "lsp diagnostics web/src/lib/api/types.ts",
-    "lsp diagnostics backend/tests/unit/admin/test_system_logs_redaction.py",
-    "lsp diagnostics web/src/app/admin/logs/page.test.tsx"
+    "rg -n \"reconnect|epoch|snapshot|active connection|drain|restart\" docs/api-contract/support-runtime.md docs/backup-recovery-runbook.md .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md"
   ],
-  "last_verification_result": "passed; the exact slice-plan backend+frontend gate finished 37 backend tests plus 1 web admin-logs test green, both grep gates were rerun fresh, the focused system-log redaction unit proof passed, and LSP diagnostics stayed clean on all touched logger/API/UI/inventory/test files.",
-  "last_success_signal": "M020/S02 is now fully closed: logger, /api/v1/admin/system-logs, and /admin/logs share one backend-owned allowlist-first diagnostics contract, admin/support keep traceable safe diagnostics, and raw details/precise identifiers/provider payloads remain backend-only.",
+  "last_verification_result": "passed; the exact task-plan grep gate was rerun fresh and now exposes reconnect/epoch/snapshot/active connection/drain/restart guidance across the support-runtime contract, backup-recovery runbook, and architecture scan.",
+  "last_success_signal": "M020/S03/T03 wrote the runtime authority split into durable support/operator surfaces: /api/v1/support/runtime is now documented as release-health summary only, SessionManager remains the instance-local live connection authority, SessionStateService remains the shared Redis reconnect authority, and the runbook now says restart/drain cannot be treated as a cluster-aware no-op.",
   "last_growth_scan": null,
-  "next_action": "Proceed to M020/S03 now that auth transport and admin/support log redaction boundaries are both fixed for downstream multi-instance session-state and reconnect hardening."
+  "next_action": "Proceed to M020/S03 slice closure now that support/runtime docs, the recovery runbook, and the architecture scan all encode instance-local live connections versus shared Redis snapshots plus restart/drain guidance."
 }

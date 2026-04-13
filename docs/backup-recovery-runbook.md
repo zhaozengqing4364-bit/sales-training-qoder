@@ -299,6 +299,48 @@ backend/venv/bin/python -m pytest -c backend/pyproject.toml \
 
 第一条命令确认文档 / CI 入口仍把 Alembic、repair script、bootstrap、`init_db()` 写在正确 authority 线上；第二条命令确认非开发环境 startup 不再静默修补 legacy drift，同时 development/test bootstrap 兼容 proof 仍然存在。
 
+### 6.7 WebSocket runtime state / restart / drain guidance
+
+这部分不是新的自动化功能，而是把当前仓库已经实现的 runtime authority 写成可执行口径，避免后续把“重启服务”误当成 cluster-aware drain。
+
+#### 6.7.1 当前必须区分的两层 authority
+
+- **进程内 live connection authority**：`SessionManager.get_stats()`
+  - 真实拥有：`total_sessions`、`tracked_sessions[]`、`connection_visibility.scope=process_local`
+  - 只说明“当前进程正在持有哪些 websocket / handler runtime diagnostics”
+  - **不会**跨实例共享，**不会**跨重启保留
+- **Redis reconnect snapshot authority**：`SessionStateService.get_stats()`
+  - 真实拥有：`snapshot_visibility.scope=redis_snapshot`、`last_saved_snapshot`、`last_loaded_snapshot`、`request_epoch`、`connection_epoch`、`last_disconnect_reason`、`last_error`
+  - 这是当前唯一可跨实例读取、并在 backend 重启后继续解释 reconnect 状态的 runtime authority
+
+#### 6.7.2 单机 / systemd restart 的解释规则
+
+如果当前环境是单机、单 backend 进程、或 systemd 直接拉起一个 backend worker：
+
+1. restart 之前，如需留证，先记录：
+   - 当前目标进程的 `SessionManager.get_stats()`（活跃连接数、tracked session、runtime diagnostics）
+   - 当前共享 Redis 的 `SessionStateService.get_stats()`（最近 snapshot、request/connection epoch、last_error）
+2. 执行 restart 后，`SessionManager` registry 归零是**预期行为**；这只说明旧进程已经退出，不等于所有 session 已正常终结。
+3. restart 后仍可能存在可恢复的 session，是因为 Redis snapshot 还在 TTL 内，而不是因为 live socket 被“保留”了。
+4. handler 内瞬态对象（pending response、websocket refs、最新 action card 等）不会跨重启保留；只能依赖 reconnect-safe snapshot 恢复最小 runtime subset。
+
+#### 6.7.3 多实例 / 未来扩容的解释规则
+
+如果未来是多实例或滚动发布：
+
+- 必须把 `SessionManager.get_stats()` 的结论写成 **instance-local**；单个实例的 `total_sessions=0` 不能当成“整个集群已经 drain 完毕”。
+- 必须把 `SessionStateService.get_stats()` 当成唯一 shared reconnect authority；它能说明哪些 session 还有可恢复 snapshot，但不能替代拥有 live websocket 的实例去执行 close / timeout / drain。
+- 当前仓库**没有** repo-native 的 cluster drain endpoint、负载均衡摘流脚本或跨实例 live connection authority；真正的流量摘除 / 滚动升级要依赖仓库外的 ingress / LB / systemd 编排能力。
+
+#### 6.7.4 当前可执行的最小 drain guidance
+
+今天仓库里能诚实写出的最小 guidance 只有：
+
+1. **先停新流量，再等 live connections 自然归零**：如果环境有上游 LB / ingress / 网关摘流能力，先把目标实例从新 websocket 流量里摘掉；仓库内没有替代这个动作的命令。
+2. **观察 process-local active connections**：用 `SessionManager.get_stats()` 看目标实例的 `total_sessions` 是否下降，以及 `tracked_sessions[].runtime_diagnostics.reconnect_state` / `current_request_id` / `session_status` 是否仍在活动中。
+3. **必要时接受强制重启的损失**：如果不能等待自然 drain，必须在工单里记录“live sockets 会被中断；只有 Redis reconnect snapshot 可能保留；pending response / action card / websocket ref 不会保留”。
+4. **重启后验证 shared snapshot 是否仍可解释**：检查 `SessionStateService.get_stats()` 的 `last_saved_snapshot` / `last_loaded_snapshot` / `last_error`，确认 reconnect authority 没有因为 Redis 不可用而消失。
+
 ## 7. 当前已知不能假装存在的能力
 
 以下能力当前**不应**写成“已具备”：
@@ -307,7 +349,8 @@ backend/venv/bin/python -m pytest -c backend/pyproject.toml \
 2. 仓库内没有 Redis 恢复脚本；
 3. 仓库内没有 OSS bucket 批量导出脚本；
 4. 仓库内没有统一的 RTO / RPO 文档；
-5. 仓库内没有明确值班人名册。
+5. 仓库内没有明确值班人名册；
+6. 仓库内没有 repo-native 的 websocket drain endpoint、负载均衡摘流脚本或 cluster-wide live connection authority。
 
 ## 8. Follow-up（非当前可执行基线）
 

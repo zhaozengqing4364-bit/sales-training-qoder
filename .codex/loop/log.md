@@ -1383,3 +1383,19 @@
   verification results: passed; the slice-plan backend+frontend gate finished 37 backend tests plus 1 web admin-logs test green, both grep gates were rerun fresh, the focused system-log redaction proof passed, and diagnostics stayed clean on the touched authority/test files.
   success signal status: downstream M020/M021 work no longer has to guess what admin/support may see in failure logs — the logger, route, UI, inventory, and architecture scan all now agree on the same safe diagnostics boundary.
   rollback note: if later work expands admin/support observability fields, update the shared logger policy constants, system-log API contract, admin logs UI renderer, both inventory modules, and the architecture scan together; otherwise route/UI behavior and support guidance will drift again.
+
+- time: 2026-04-14T07:42:19+08:00
+  mode: grow
+  item id: M020-S03-T03
+  files changed:
+    - docs/api-contract/support-runtime.md
+    - docs/backup-recovery-runbook.md
+    - .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md
+    - .codex/loop/state.json
+    - .codex/loop/log.md
+  summary: Wrote the runtime state authority split back into the durable support/operator surfaces: support-runtime now documents the real overview/fault contract plus the companion SessionManager and SessionStateService inspection surfaces, the backup/recovery runbook now explains what restart and drain really preserve, and the architecture scan turns the same rule into a downstream boundary instead of leaving it implicit in websocket code.
+  verification commands:
+    - rg -n "reconnect|epoch|snapshot|active connection|drain|restart" docs/api-contract/support-runtime.md docs/backup-recovery-runbook.md .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md
+  verification results: passed; the exact task-plan grep gate was rerun fresh and now exposes reconnect, epoch, snapshot, active connection, drain, and restart wording across all three durable surfaces.
+  success signal status: future support/runtime, recovery, and multi-instance hardening work no longer has to guess whether /api/v1/support/runtime is a websocket truth surface or whether restart empties cluster state — the docs now say release-health summary lives in the API, live connections are process-local, Redis snapshots are the restart-safe authority, and drain still depends on external traffic steering.
+  rollback note: if later work adds a real websocket drain endpoint, cluster-wide live-connection authority, or new support/runtime inspection payloads, update docs/api-contract/support-runtime.md, docs/backup-recovery-runbook.md, and section 7.2.3 of the architecture scan together so operator guidance does not drift again.
