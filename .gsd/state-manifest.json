@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "exported_at": "2026-04-13T08:46:55.159Z",
+  "exported_at": "2026-04-13T09:02:14.265Z",
   "milestones": [
     {
       "id": "M001",
@@ -12417,19 +12417,26 @@
       "milestone_id": "M019",
       "slice_id": "S04",
       "id": "T03",
-      "title": "固定 assembled release gate 与 downstream 复用规则",
-      "status": "pending",
-      "one_liner": "",
-      "narrative": "",
-      "verification_result": "",
+      "title": "Locked the assembled release gate into a reusable repo-root bundle with router-backed doc/spec drift proof and an explicit admin-home truthfulness handoff.",
+      "status": "complete",
+      "one_liner": "Locked the assembled release gate into a reusable repo-root bundle with router-backed doc/spec drift proof and an explicit admin-home truthfulness handoff.",
+      "narrative": "I executed T03 as a narrow writeback task on top of the already-live S04 surfaces instead of reopening workflow or runtime implementation. In `.gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md` I tightened the assembled release-gate section so downstream work now has one explicit repo-root reuse bundle: the release-truth workflow, the NFR companion workflow, the focused web/backend checks, a router-backed `docs/api-contract` versus live-route inventory proof, and a negative inventory proof for legacy specs and admin home fake stats. I also corrected the broader planning theme text so future roadmap reading no longer says metrics/error/doc surfaces are simply ‘not connected’; the real risk is mis-promoting legacy specs or weak truth surfaces into authority. In `.gsd/plans/GSD_PLAN_post-M018-next-wave.md` I updated the M019-S04 planning contract so M020-M022 default to reusing that same bundle unless they explicitly promote a new release surface, and I carried the admin home demo-stat gap forward as an M022-S03 input instead of letting it drift back into release-gate language. Finally, I added a knowledge entry documenting a non-obvious gotcha: `backend/src/main.py` still contains stale inline route-summary wording (`/api/v1/sessions`), so route modules plus repo-root drift greps—not top-level comments—are the trustworthy contract authority. I also recorded D218 so the downstream release-authority bundle is preserved as a project decision.",
+      "verification_result": "I reran the exact task-plan grep gate after the edits and confirmed both the architecture scan and the next-wave plan still expose the required `release gate|metrics|error reporting|doc contract|repo-root` proof lines. I then ran a router-backed repo-root inventory proof across `docs/api-contract`, `backend/src/common/api/practice.py`, `backend/src/admin/api/release_verification.py`, and `backend/src/support/api/runtime_status.py`, which passed and showed the current doc-contract authority still matches the live practice, release-verification, and support-runtime route families. Finally, I ran a focused truthfulness/drift grep across the architecture scan, plan, knowledge log, `web/src/app/admin/page.tsx`, and `backend/src/main.py`, which passed and reconfirmed that the admin home still mixes live top-card metrics with hardcoded dashboard numbers and that the `main.py` inline route summary remains legacy-only commentary rather than release authority.",
       "duration": "",
-      "completed_at": null,
+      "completed_at": "2026-04-13T09:02:14.178Z",
       "blocker_discovered": false,
-      "deviations": "",
-      "known_issues": "",
-      "key_files": [],
-      "key_decisions": [],
-      "full_summary_md": "",
+      "deviations": "Minor local adaptation: the architecture scan and next-wave plan already contained most of the assembled release-gate structure before T03 execution, so I focused this task on tightening the downstream reuse rule, adding the router-backed doc/live-route proof, and fixing the remaining stale planning language rather than inventing a second release-gate model.",
+      "known_issues": "`web/src/app/admin/page.tsx` still contains hardcoded operational/demo stats and static log/alert copy outside the top live metrics card; this remains an explicit M022-S03 truth-surface input, not a release-gate blocker for T03. `backend/src/main.py` also still carries stale top-level route summary comments such as `/api/v1/sessions`; the task documents that drift but intentionally does not treat those comments as authority.",
+      "key_files": [
+        ".gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md",
+        ".gsd/plans/GSD_PLAN_post-M018-next-wave.md",
+        ".gsd/KNOWLEDGE.md",
+        ".gsd/DECISIONS.md"
+      ],
+      "key_decisions": [
+        "D218 — M020-M022 should reuse the assembled release-truth workflow bundle plus router-backed doc/spec drift proof until a new authority surface is explicitly promoted."
+      ],
+      "full_summary_md": "---\nid: T03\nparent: S04\nmilestone: M019\nkey_files:\n  - .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md\n  - .gsd/plans/GSD_PLAN_post-M018-next-wave.md\n  - .gsd/KNOWLEDGE.md\n  - .gsd/DECISIONS.md\nkey_decisions:\n  - D218 — M020-M022 should reuse the assembled release-truth workflow bundle plus router-backed doc/spec drift proof until a new authority surface is explicitly promoted.\nduration: \nverification_result: passed\ncompleted_at: 2026-04-13T09:02:14.177Z\nblocker_discovered: false\n---\n\n# T03: Locked the assembled release gate into a reusable repo-root bundle with router-backed doc/spec drift proof and an explicit admin-home truthfulness handoff.\n\n**Locked the assembled release gate into a reusable repo-root bundle with router-backed doc/spec drift proof and an explicit admin-home truthfulness handoff.**\n\n## What Happened\n\nI executed T03 as a narrow writeback task on top of the already-live S04 surfaces instead of reopening workflow or runtime implementation. In `.gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md` I tightened the assembled release-gate section so downstream work now has one explicit repo-root reuse bundle: the release-truth workflow, the NFR companion workflow, the focused web/backend checks, a router-backed `docs/api-contract` versus live-route inventory proof, and a negative inventory proof for legacy specs and admin home fake stats. I also corrected the broader planning theme text so future roadmap reading no longer says metrics/error/doc surfaces are simply ‘not connected’; the real risk is mis-promoting legacy specs or weak truth surfaces into authority. In `.gsd/plans/GSD_PLAN_post-M018-next-wave.md` I updated the M019-S04 planning contract so M020-M022 default to reusing that same bundle unless they explicitly promote a new release surface, and I carried the admin home demo-stat gap forward as an M022-S03 input instead of letting it drift back into release-gate language. Finally, I added a knowledge entry documenting a non-obvious gotcha: `backend/src/main.py` still contains stale inline route-summary wording (`/api/v1/sessions`), so route modules plus repo-root drift greps—not top-level comments—are the trustworthy contract authority. I also recorded D218 so the downstream release-authority bundle is preserved as a project decision.\n\n## Verification\n\nI reran the exact task-plan grep gate after the edits and confirmed both the architecture scan and the next-wave plan still expose the required `release gate|metrics|error reporting|doc contract|repo-root` proof lines. I then ran a router-backed repo-root inventory proof across `docs/api-contract`, `backend/src/common/api/practice.py`, `backend/src/admin/api/release_verification.py`, and `backend/src/support/api/runtime_status.py`, which passed and showed the current doc-contract authority still matches the live practice, release-verification, and support-runtime route families. Finally, I ran a focused truthfulness/drift grep across the architecture scan, plan, knowledge log, `web/src/app/admin/page.tsx`, and `backend/src/main.py`, which passed and reconfirmed that the admin home still mixes live top-card metrics with hardcoded dashboard numbers and that the `main.py` inline route summary remains legacy-only commentary rather than release authority.\n\n## Verification Evidence\n\n| # | Command | Exit Code | Verdict | Duration |\n|---|---------|-----------|---------|----------|\n| 1 | `rg -n \"release gate|metrics|error reporting|doc contract|repo-root\" .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md .gsd/plans/GSD_PLAN_post-M018-next-wave.md` | 0 | ✅ pass | 26ms |\n| 2 | `rg -n \"/practice/sessions|/admin/release-verification|/support/runtime\" docs/api-contract backend/src/common/api/practice.py backend/src/admin/api/release_verification.py backend/src/support/api/runtime_status.py` | 0 | ✅ pass | 15ms |\n| 3 | `rg -n \"api.internal.health|api.analyticsOpen.getDashboard|2,543|84|42%|68%|75%|450 GB|legacy /api/v1/sessions|doc-contract drift gotcha\" .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md .gsd/plans/GSD_PLAN_post-M018-next-wave.md .gsd/KNOWLEDGE.md web/src/app/admin/page.tsx backend/src/main.py` | 0 | ✅ pass | 13ms |\n\n## Deviations\n\nMinor local adaptation: the architecture scan and next-wave plan already contained most of the assembled release-gate structure before T03 execution, so I focused this task on tightening the downstream reuse rule, adding the router-backed doc/live-route proof, and fixing the remaining stale planning language rather than inventing a second release-gate model.\n\n## Known Issues\n\n`web/src/app/admin/page.tsx` still contains hardcoded operational/demo stats and static log/alert copy outside the top live metrics card; this remains an explicit M022-S03 truth-surface input, not a release-gate blocker for T03. `backend/src/main.py` also still carries stale top-level route summary comments such as `/api/v1/sessions`; the task documents that drift but intentionally does not treat those comments as authority.\n\n## Files Created/Modified\n\n- `.gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md`\n- `.gsd/plans/GSD_PLAN_post-M018-next-wave.md`\n- `.gsd/KNOWLEDGE.md`\n- `.gsd/DECISIONS.md`\n",
       "description": "- 把 assembled release gate 写入 architecture scan / plan，明确 downstream milestones 默认复用哪些 commands 和 live surfaces。\n- 补 doc/spec drift check 或 inventory proof，让后续 agent 能判断 api-spec/openapi/docs-api-contract 是否与 live routes 一致。\n- 如 admin 首页仍有 demo stats/假监控数字，至少把其 truthfulness gap 记录为 M022 输入，不让它继续伪装成 release surface。",
       "estimate": "40m",
       "files": [
@@ -16464,6 +16471,18 @@
       "decision": "Backend workflow install authority for release and NFR gates",
       "choice": "Use backend/requirements.txt as the backend dependency install authority in GitHub Actions via per-job virtualenvs instead of editable installs from pyproject extras",
       "rationale": "T01 inventory showed backend/requirements.txt is the repo's live install truth line while the older NFR workflow still used `pip install -e .[test]`, and backend/pyproject.toml does not define a `test` extra. Aligning both release and NFR workflows to requirements-backed installs removes silent drift and keeps CI closer to local/bootstrap reality.",
+      "revisable": "Yes",
+      "made_by": "agent",
+      "superseded_by": null
+    },
+    {
+      "seq": 1588,
+      "id": "D218",
+      "when_context": "M019/S04/T03",
+      "scope": "architecture",
+      "decision": "Default downstream release authority bundle after M019/S04",
+      "choice": "Reuse `.github/workflows/release-truth-gate.yml` plus `.github/workflows/nfr-performance-check.yml`, the router-backed `docs/api-contract` drift proof, and the explicit legacy spec/admin-home negative inventory as the default release gate for M020-M022 until a new surface is explicitly promoted.",
+      "rationale": "T01/T02 established that workflows, observability sinks, docs/api-contract, legacy specs, and admin home metrics do not all have the same truthfulness. Freezing one assembled repo-root bundle prevents future slices from silently treating legacy specs, stale comments, or demo dashboard numbers as release authority.",
       "revisable": "Yes",
       "made_by": "agent",
       "superseded_by": null
@@ -21419,6 +21438,39 @@
       "verdict": "✅ pass",
       "duration_ms": 6500,
       "created_at": "2026-04-13T08:46:55.055Z"
+    },
+    {
+      "id": 456,
+      "task_id": "T03",
+      "slice_id": "S04",
+      "milestone_id": "M019",
+      "command": "rg -n \"release gate|metrics|error reporting|doc contract|repo-root\" .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md .gsd/plans/GSD_PLAN_post-M018-next-wave.md",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 26,
+      "created_at": "2026-04-13T09:02:14.178Z"
+    },
+    {
+      "id": 457,
+      "task_id": "T03",
+      "slice_id": "S04",
+      "milestone_id": "M019",
+      "command": "rg -n \"/practice/sessions|/admin/release-verification|/support/runtime\" docs/api-contract backend/src/common/api/practice.py backend/src/admin/api/release_verification.py backend/src/support/api/runtime_status.py",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 15,
+      "created_at": "2026-04-13T09:02:14.179Z"
+    },
+    {
+      "id": 458,
+      "task_id": "T03",
+      "slice_id": "S04",
+      "milestone_id": "M019",
+      "command": "rg -n \"api.internal.health|api.analyticsOpen.getDashboard|2,543|84|42%|68%|75%|450 GB|legacy /api/v1/sessions|doc-contract drift gotcha\" .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md .gsd/plans/GSD_PLAN_post-M018-next-wave.md .gsd/KNOWLEDGE.md web/src/app/admin/page.tsx backend/src/main.py",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 13,
+      "created_at": "2026-04-13T09:02:14.179Z"
     }
   ]
 }

@@ -1,3 +1,21 @@
+- time: 2026-04-13T17:00:44.074256+08:00
+  mode: grow
+  item id: M019-S04-T03
+  files changed:
+    - .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md
+    - .gsd/plans/GSD_PLAN_post-M018-next-wave.md
+    - .gsd/KNOWLEDGE.md
+    - .codex/loop/state.json
+    - .codex/loop/log.md
+  summary: Fixed the assembled release-gate handoff into durable repo-root rules instead of leaving it as local memory: the architecture scan now names the default downstream reuse bundle plus the router-backed doc-contract/live-route proof, the next-wave plan now tells M020-M022 to reuse that bundle unless they promote a new authority surface, and the admin home fake-stat mix stays explicitly parked as an M022-S03 truth-surface input rather than a release gate.
+  verification commands:
+    - rg -n "release gate|metrics|error reporting|doc contract|repo-root" .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md .gsd/plans/GSD_PLAN_post-M018-next-wave.md
+    - rg -n "/practice/sessions|/admin/release-verification|/support/runtime" docs/api-contract backend/src/common/api/practice.py backend/src/admin/api/release_verification.py backend/src/support/api/runtime_status.py
+    - rg -n "api.internal.health|api.analyticsOpen.getDashboard|2,543|84|42%|68%|75%|450 GB|legacy /api/v1/sessions|doc-contract drift gotcha" .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md .gsd/plans/GSD_PLAN_post-M018-next-wave.md .gsd/KNOWLEDGE.md web/src/app/admin/page.tsx backend/src/main.py
+  verification results: passed; the exact task-plan grep gate stayed green, the new router-backed proof shows docs/api-contract still matches the live practice/release-verification/support-runtime route modules, and the known admin fake stats plus main.py inline route-summary drift are now explicit downstream facts instead of hidden release-surface ambiguity.
+  success signal status: future M020-M022 work can now reuse one truthful release-gate contract without rediscovering it — workflow checks, observability sinks, router-backed doc-contract proof, legacy spec drift, and the admin home truthfulness gap are all written down in one place.
+  rollback note: if later work promotes generated OpenAPI, adds new release authority routes, or truthifies the admin home metrics, update the workflow bundle, the router-backed proof, the architecture scan, the plan handoff, and the M022 carry-forward note together so the assembled release gate does not fork.
+
 - time: 2026-04-13T13:05:41.478296+08:00
   mode: grow
   item id: M019-S04-T01

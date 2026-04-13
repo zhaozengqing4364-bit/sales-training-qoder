@@ -177,24 +177,32 @@
 - 如果改的是 realtime inbound state projection，优先扩展 `websocket/message-handlers.ts`。
 - 如果改的是 websocket URL/auth/reconnect/backpressure/interrupt/outbound pacing，优先扩展 `use-practice-websocket.ts` 或 `websocket/transport.ts`；不要把这些逻辑下沉到 page-level effect。
 
-### 4.6 M019/S04 assembled release truth inventory
+### 4.6 M019/S04 assembled release gate 与 downstream reuse rule
 
-当前仓库里已经存在 workflow、metrics helper、frontend error reporting、doc/spec 文件，但它们还没有全部形成同一条可过线的 release truth line。按 repo-root 盘点，当前真实接通状态如下：
+S04/T02 之后，当前仓库已经有一条**可复用的 assembled release gate**，而不是只剩“文件存在”。按 repo-root 复核，当前真实接通状态如下：
 
 | Surface | 当前 authority / 入口 | 真实接通状态 | 当前缺口 / 结论 |
 |---|---|---|---|
-| GitHub Actions | `.github/workflows/nfr-performance-check.yml` | **部分接通（backend-only）**：这是仓库里唯一 live workflow，真实执行 `pip install -e .[test]`、Postgres service、`alembic upgrade head`、backend NFR/load pytest。 | 还没有 web gate、`package-lock`/npm 安装 authority、docs/api-contract drift check、metrics/export smoke、frontend error-reporting smoke。release 目前仍主要由 backend NFR workflow 代表。 |
-| Frontend durable error surface | `web/src/components/ErrorBoundary.tsx` | **部分接通**：真实 durable signal 是 `debug.durableError(...)`，可选再送 Sentry。 | 自定义 beacon `fetch('/api/v1/analytics/error')` 目前**未接通**：backend `common/api/analytics.py` 没有 `/analytics/error` 路由，`web/next.config.ts` 也没有 rewrite/proxy，`web/src/app` 下没有对应 route handler。该 POST 现在是“文件存在但无对口接收面”。 |
-| Frontend performance/custom beacons | `web/src/lib/performance.ts` | **未接通**：代码会向相对路径 `/api/v1/analytics/performance` 与 `/api/v1/analytics/custom` 发送 beacon。 | 与 error beacon 一样，仓库内没有 backend route、Next rewrite 或 route handler 承接这些 URL，因此当前不是 release 可验证 observability surface。 |
-| Backend Prometheus metrics | `backend/src/common/monitoring/metrics.py` | **helper 存在但未接通**：文件内有 counters/gauges、`MetricsMiddleware`、`get_metrics()`、`initialize_metrics()`。 | `backend/src/main.py` 没有导入/挂载 `MetricsMiddleware`、没有调用 `initialize_metrics()`、也没有暴露 `/metrics`。`common/middleware/auth.py` 虽把 `/metrics` 列为 public path，但该 AuthMiddleware 自身并未在 `main.py` 挂载，所以这不是 live metrics proof。 |
-| `docs/api-contract` 契约族 | `docs/api-contract/*.md` | **文档面较真实，但未纳入 release check**：这些文档明确指向当前 backend 模块，例如 `analytics.md -> backend/src/common/api/analytics.py`、`release-verification.md -> /api/v1/admin/release-verification`、`support-runtime.md -> /api/v1/support/runtime`。`main.py` 也确实 include 了 analytics / release_verification / support_runtime 等 router。 | 目前没有 workflow 或 repo-root 校验命令去验证这些契约文档与 live route 同步，因此它们是“可读 authority”，还不是“release gate authority”。 |
-| Legacy checked-in OpenAPI | `specs/001-ai-practice-system/contracts/openapi.yaml` | **存在但漂移明显**：仍声明 `/auth/wechat`，且不覆盖当前 repo 已实现的 `/api/v1/admin/release-verification`、`/api/v1/support/runtime` 等 surface。 | 该 YAML 目前没有接到 FastAPI `openapi.json`、没有 CI drift check，也不应再被视为单一 release authority。 |
-| Legacy API spec narrative | `api-spec.md` | **部分命中、部分漂移**：仍能对上 `dashboard/stats`、`recommendations/latest`、`training-categories` 等旧 REST surface。 | practice 主链仍写成 `POST /api/v1/sessions`、`GET /api/v1/sessions/{id}`、`POST /api/v1/sessions/{id}/end`，而 live backend authority 已是 `POST /api/v1/practice/sessions`、`/lifecycle`、`/report-status`、audio segment surfaces。它当前更像历史产品稿，不是 release 合同。 |
+| GitHub Actions assembled release gate | `.github/workflows/release-truth-gate.yml` | **已接通**：当前 release truth workflow 同时检查 `web/package-lock.json` + `backend/requirements.txt` install authority、web focused gate、backend auth/metrics/analytics gate、以及 docs/spec drift inventory。 | 这是 downstream milestone 默认复用的 release gate；新增 release truth surface 时，要同步更新 workflow、对应 focused proof 和本节 inventory。 |
+| Backend NFR companion gate | `.github/workflows/nfr-performance-check.yml` | **已接通**：仍承担 backend NFR / load proof，但现在也已对齐 `backend/requirements.txt` authority。 | 这是 release gate 的补充 proof，不再单独代表整体 release truth line。 |
+| Frontend error reporting / custom analytics beacons | `web/src/components/ErrorBoundary.tsx` + `web/src/lib/performance.ts` → `backend/src/common/api/analytics.py` | **已接通**：`/api/v1/analytics/error`、`/api/v1/analytics/performance`、`/api/v1/analytics/custom` 已有 live backend sink，`backend/tests/integration/test_observability_surfaces.py` 会证明 beacon 可被接收。 | 当前 truth line 只证明“被接收并计入 metrics”，还不等于已经有持久化告警、Sentry 聚合或产品级 triage 面。 |
+| Backend Prometheus metrics | `backend/src/common/monitoring/metrics.py` + `backend/src/main.py` | **已接通**：`initialize_metrics(...)`、`MetricsMiddleware` 和 `/metrics` export 已挂到 live backend authority line。 | 现在的 release truth 是 raw Prometheus payload 可检查；更高阶 dashboard / SLO 仍属于后续 observability 工作，不应倒推成已实现。 |
+| `docs/api-contract` doc contract authority | `docs/api-contract/*.md` | **部分纳入 release gate**：`sessions.md`、`release-verification.md`、`support-runtime.md` 这些与 live routes 对齐的 surface，已经通过 repo-root `rg` proof 成为当前 doc contract authority。 | 当前 gate 是 inventory-style drift proof，不是从 FastAPI 自动生成 OpenAPI；若未来升级为 machine-checked contract，必须替换整组 proof，而不是新增第二套 authority。 |
+| Legacy checked-in OpenAPI | `specs/001-ai-practice-system/contracts/openapi.yaml` | **显式保留为 drift inventory**：它仍包含 `/auth/wechat` 等旧 surface，且缺少 `/api/v1/admin/release-verification`、`/api/v1/support/runtime`。 | 只有在它重新由 live router/openapi 生成或受 CI machine-check 约束时，才可重新晋升为 release authority；在此之前，它只是“负向 inventory proof”。 |
+| Legacy API spec narrative | `api-spec.md` | **显式保留为 drift inventory**：仍写 `POST /api/v1/sessions` 等旧 practice flow，而 live authority 已经转到 `POST /api/v1/practice/sessions` family。 | 与 checked-in OpenAPI 一样，它现在是 drift surface，不是 release 合同。 |
+| Admin 首页 truth surface | `web/src/app/admin/page.tsx` | **不得纳入 release gate**：页面顶部“训练效果核心看板（近7天）”会读 `api.internal.health()` 与 `api.analyticsOpen.getDashboard({ days: 7 })`，但同页其余运营卡片仍硬编码 `2,543`、`84`、`42%`、`68%`、`75%`、`450 GB` 以及静态日志/告警文案。 | 这些 demo stats / 假监控数字只能作为 **M022/S03 manager/admin truth surfaces** 的输入，不能被包装成当前 release surface。 |
 
-**当前 assembled truth line 结论**
-- 已经真实接通的 release 线只有：**backend NFR workflow** + **当前 backend router reality** + **`docs/api-contract` 中部分与 live router 一致的模块文档**。
-- 仍属于“文件存在但未接通”的典型假接入面：**frontend `/api/v1/analytics/error|performance|custom` beacons**、**backend `metrics.py` Prometheus export**、**checked-in `openapi.yaml` / `api-spec.md` 作为 release authority**。
-- S04/T02 的正确方向不是再增加更多孤立文件，而是把 workflow、metrics/error-reporting、doc/spec drift proof 收敛到同一条 repo-root release gate 上。
+**当前 assembled release gate 结论**
+- 当前 release 是否可过线，应该看 **`.github/workflows/release-truth-gate.yml` + `.github/workflows/nfr-performance-check.yml` + live backend router/metrics/analytics sinks + `docs/api-contract` inventory proof** 的 assembled evidence，而不是只看单个 workflow 绿灯。
+- 当前 repo-root release gate 默认复用命令为：
+  1. `npm --prefix web test -- --run "src/app/(auth)/login/page.test.tsx" "src/components/error-reporting.test.tsx"`
+  2. `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/integration/test_auth_login_api.py backend/tests/integration/test_observability_surfaces.py -x -q`
+  3. `rg -n "/api/v1/practice/sessions|/api/v1/admin/release-verification|/api/v1/support/runtime" docs/api-contract`
+  4. `rg -n "/auth/wechat|POST /api/v1/sessions" api-spec.md specs/001-ai-practice-system/contracts/openapi.yaml`
+- 当前 repo-root **doc contract / drift inventory 补充 proof** 为：
+  5. `rg -n "/practice/sessions|/admin/release-verification|/support/runtime" docs/api-contract backend/src/common/api/practice.py backend/src/admin/api/release_verification.py backend/src/support/api/runtime_status.py`
+  6. `rg -n "api.internal.health|api.analyticsOpen.getDashboard|2,543|84|42%|68%|75%|450 GB" web/src/app/admin/page.tsx`
+- **Downstream reuse rule（M020-M022 默认沿用）**：除非某个 slice 明确把新 surface 晋升为 authority，否则直接复用上述 repo-root commands、live surfaces、以及 doc-contract/live-route inventory proof；判断 `docs/api-contract` 是否仍是真实合同、判断 legacy spec 是否仍只是 drift surface、以及判断 admin home 是否还混有 demo stats，默认都先跑上面的 repo-root proof 再做结论。如果要晋升 legacy spec、增加新的 metrics/error-reporting sink、或把 admin/manager 面板提升为 release truth，必须同时更新 workflow、focused proof、architecture scan、以及对应计划文档，不能只改单个文件。
 
 ---
 
@@ -246,7 +254,7 @@
 - 隐式 schema 修补
 - mega-file orchestration
 - CI 与依赖 authority 漂移
-- metrics / frontend error reporting / doc-contract 看似存在但未完全接通
+- legacy spec / admin truth surfaces 容易被误判成 release authority，必须固定 repo-root assembled gate 与 drift inventory
 
 落点：**M019**
 

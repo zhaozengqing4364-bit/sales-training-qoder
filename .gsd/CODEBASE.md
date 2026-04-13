@@ -1,7 +1,7 @@
 # Codebase Map
 
-Generated: 2026-04-13T04:57:03Z | Files: 500 | Described: 0/500
-<!-- gsd:codebase-meta {"generatedAt":"2026-04-13T04:57:03Z","fingerprint":"a7962409338b69d6b9beba67aa5d3c4636c5350b","fileCount":500,"truncated":true} -->
+Generated: 2026-04-13T08:47:34Z | Files: 500 | Described: 0/500
+<!-- gsd:codebase-meta {"generatedAt":"2026-04-13T08:47:34Z","fingerprint":"93c7619155f701fd3dcc9bcc74418b83e409c1a2","fileCount":500,"truncated":true} -->
 Note: Truncated to first 500 files. Run with higher --max-files to include all.
 
 ### (root)/
@@ -71,6 +71,7 @@ Note: Truncated to first 500 files. Run with higher --max-files to include all.
 
 ### .github/workflows/
 - `.github/workflows/nfr-performance-check.yml`
+- `.github/workflows/release-truth-gate.yml`
 
 ### .kiro/hooks/
 - `.kiro/hooks/agent-stop-check.kiro.hook`
@@ -624,7 +625,7 @@ Note: Truncated to first 500 files. Run with higher --max-files to include all.
 - `backend/tests/fixtures/knowledge_answer_eval_cases.json`
 
 ### backend/tests/integration/
-- *(38 files: 38 .py)*
+- *(39 files: 39 .py)*
 
 ### backend/tests/performance/
 - `backend/tests/performance/test_e2e_latency.py`
@@ -645,5 +646,3 @@ Note: Truncated to first 500 files. Run with higher --max-files to include all.
 - `backend/tests/unit/common/test_config_manager_embedding_env.py`
 - `backend/tests/unit/common/test_db_session_compatibility.py`
 - `backend/tests/unit/common/test_document_processor_image_ocr.py`
-- `backend/tests/unit/common/test_document_processor_spreadsheet.py`
-- `backend/tests/unit/common/test_document_storage_artifacts.py`

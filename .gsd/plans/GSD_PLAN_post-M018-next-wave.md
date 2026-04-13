@@ -144,10 +144,10 @@
 - Out of Scope：完整平台级观测重建。
 - Inputs / Preconditions：M019 S01-S03 outputs、当前 `.github/workflows`、ErrorBoundary、metrics helpers、api docs。
 - Target Files / Modules：`.github/workflows/*`、`backend/src/main.py`/`common/api/*`、`web/src/components/ErrorBoundary.tsx`、`docs/api-contract/*`。
-- Implementation Notes：所有命令以 repo-root 为准。
-- Done When：release gate 能检查 web/backend/doc/metrics/error-reporting 关键 truth line。
-- Verification：grep workflow + focused web/backend commands。
-- Deliverable：assembled release gate。
+- Implementation Notes：所有命令以 repo-root 为准；默认 authority 以 `.github/workflows/release-truth-gate.yml` 为 assembled release gate，以 `.github/workflows/nfr-performance-check.yml` 为 backend NFR companion gate。M020-M022 默认复用同一组 repo-root verification bundle 与 doc-contract/live-route inventory proof；如果要把新的 route/spec/metrics/admin surface 升级为 authority，必须同步更新 workflow、focused proof、architecture scan 和计划文档。`web/src/app/admin/page.tsx` 的 demo stats 仅作为 M022-S03 输入，不能并入 release gate。
+- Done When：release gate 能检查 web/backend/doc/metrics/error-reporting 关键 truth line，并把 legacy `api-spec.md` / checked-in `openapi.yaml` 明确留在 drift inventory，而不是继续伪装成 release authority；admin home demo stats 继续显式留在 M022-S03 truth-surface 收口输入里。
+- Verification：默认复用以下 repo-root bundle：`npm --prefix web test -- --run "src/app/(auth)/login/page.test.tsx" "src/components/error-reporting.test.tsx"`；`backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/integration/test_auth_login_api.py backend/tests/integration/test_observability_surfaces.py -x -q`；`rg -n "/api/v1/practice/sessions|/api/v1/admin/release-verification|/api/v1/support/runtime" docs/api-contract`；`rg -n "/auth/wechat|POST /api/v1/sessions" api-spec.md specs/001-ai-practice-system/contracts/openapi.yaml`；`rg -n "/practice/sessions|/admin/release-verification|/support/runtime" docs/api-contract backend/src/common/api/practice.py backend/src/admin/api/release_verification.py backend/src/support/api/runtime_status.py`。
+- Deliverable：assembled release gate + downstream reuse rule。
 - Risk Level：Medium
 - Recommended Executor：Strong model
 
@@ -296,9 +296,9 @@
 - Why：fake stats/dummy cards 会直接损害产品可信度。
 - In Scope：fake stats inventory、真实 surface 替换、manager truth 文档化。
 - Out of Scope：完整管理系统重建。
-- Inputs / Preconditions：M022-S01/S02。
+- Inputs / Preconditions：M022-S01/S02；另外直接继承 M019/S04 的已知输入：`web/src/app/admin/page.tsx` 当前只有顶部“训练效果核心看板（近7天）”读取真实 API，其余卡片仍硬编码 `2,543`、`84`、`42%`、`68%`、`75%`、`450 GB` 以及静态日志/告警文案。
 - Target Files / Modules：`web/src/app/admin/page.tsx`、`web/src/components/admin/*`、`backend/src/common/analytics/*`。
-- Implementation Notes：没有真实数据的卡片要降级或移除，不再硬造运行中数字。
+- Implementation Notes：没有真实数据的卡片要降级或移除，不再硬造运行中数字；M019/S04 已明确这些 admin home demo stats 不是 release truth，也不能被营销/运营文案包装成 live monitoring。
 - Done When：关键 admin/manager 决策面只显示真实数字和真实 summary。
 - Verification：admin home / manager-lite web tests + admin analytics backend tests。
 - Deliverable：manager/admin truth surfaces。

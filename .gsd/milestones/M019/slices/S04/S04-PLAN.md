@@ -37,7 +37,7 @@ S04 是 M019 的最终 assembled slice；完成后 M020-M022 可以直接复用 
   - Files: `.github/workflows`, `backend/src/main.py`, `backend/src/common/api`, `web/src/components/ErrorBoundary.tsx`, `scripts`
   - Verify: rg -n "npm --prefix web|backend/venv/bin/python -m pytest|requirements.txt|package-lock|metrics|analytics/error" .github/workflows && npm --prefix web test -- --run "src/app/(auth)/login/page.test.tsx" && backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/integration/test_auth_login_api.py -x -q
 
-- [ ] **T03: 固定 assembled release gate 与 downstream 复用规则** `est:40m`
+- [x] **T03: 固定 assembled release gate 与 downstream 复用规则** `est:40m`
   - 把 assembled release gate 写入 architecture scan / plan，明确 downstream milestones 默认复用哪些 commands 和 live surfaces。
 - 补 doc/spec drift check 或 inventory proof，让后续 agent 能判断 api-spec/openapi/docs-api-contract 是否与 live routes 一致。
 - 如 admin 首页仍有 demo stats/假监控数字，至少把其 truthfulness gap 记录为 M022 输入，不让它继续伪装成 release surface。

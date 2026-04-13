@@ -1,6 +1,6 @@
 {
   "mode": "grow",
-  "current_issue_id": "M019-S04-T01",
+  "current_issue_id": "M019-S04-T03",
   "current_issue_type": "task",
   "current_issue_status": "done",
   "pending_issue_ids": [],
@@ -194,23 +194,26 @@
     "M019-S02",
     "M019-S03-T01",
     "M019-S03-T02",
-    "M019-S04-T01"
+    "M019-S04-T01",
+    "M019-S04-T02",
+    "M019-S04-T03"
   ],
   "blocked_issue_ids": [],
   "deferred_issue_ids": [],
   "last_modified_files": [
     ".gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md",
+    ".gsd/plans/GSD_PLAN_post-M018-next-wave.md",
     ".gsd/KNOWLEDGE.md",
     ".codex/loop/state.json",
     ".codex/loop/log.md"
   ],
   "last_verification_commands": [
-    "rg -n \"analytics/error|metrics|openapi|api-contract|pip install -e|requirements.txt|package-lock\" .github/workflows web/src/components/ErrorBoundary.tsx backend/src/common/monitoring/metrics.py api-spec.md specs/001-ai-practice-system/contracts/openapi.yaml docs/api-contract",
-    "rg -n \"analytics/error|analytics/performance|analytics/custom|MetricsMiddleware|initialize_metrics\\(|get_metrics\\(|/metrics|add_middleware\\(|next.config\" web/src/components/ErrorBoundary.tsx web/src/lib/performance.ts backend/src/common/api/analytics.py backend/src/common/monitoring/metrics.py backend/src/main.py backend/src/common/middleware/auth.py web/next.config.ts",
-    "rg -n \"/auth/wechat|/practice/sessions|/api/v1/admin/release-verification|/api/v1/support/runtime|POST /api/v1/sessions|POST /api/v1/practice/sessions|M019/S04 assembled release truth inventory|M019/S04 release-truth gotcha\" specs/001-ai-practice-system/contracts/openapi.yaml api-spec.md docs/api-contract .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md .gsd/KNOWLEDGE.md"
+    "rg -n \"release gate|metrics|error reporting|doc contract|repo-root\" .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md .gsd/plans/GSD_PLAN_post-M018-next-wave.md",
+    "rg -n \"/practice/sessions|/admin/release-verification|/support/runtime\" docs/api-contract backend/src/common/api/practice.py backend/src/admin/api/release_verification.py backend/src/support/api/runtime_status.py",
+    "rg -n \"api.internal.health|api.analyticsOpen.getDashboard|2,543|84|42%|68%|75%|450 GB|legacy /api/v1/sessions|doc-contract drift gotcha\" .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md .gsd/plans/GSD_PLAN_post-M018-next-wave.md .gsd/KNOWLEDGE.md web/src/app/admin/page.tsx backend/src/main.py"
   ],
-  "last_verification_result": "passed; the exact task-plan grep gate is green, focused repo-root grep proof shows frontend analytics beacons and Prometheus helpers are still disconnected from live server surfaces, and the assembled inventory/knowledge writeback is now grep-discoverable beside the current docs-api-contract truth line.",
-  "last_success_signal": "S04 now has one durable assembled release-truth inventory: backend NFR workflow plus live router-backed docs/api-contract surfaces are the real authority line, while frontend analytics beacons, Prometheus export helpers, and legacy openapi/api-spec artifacts are explicitly marked as disconnected or drifting instead of silently trusted.",
+  "last_verification_result": "passed; the exact task-plan grep gate is green, the new router-backed repo-root proof now ties docs/api-contract to the live practice/release-verification/support-runtime modules, and the admin home fake-stat surface plus main.py inline route-summary drift are explicitly recorded instead of being silently trusted.",
+  "last_success_signal": "S04 now has one durable downstream reuse bundle: release-truth workflow + NFR companion gate + router-backed doc-contract drift proof remain the default release authority line, while admin home demo stats stay an explicit M022 input rather than a disguised release surface.",
   "last_growth_scan": null,
-  "next_action": "Proceed to M019/S04/T02 by aligning workflow authority, metrics/error-reporting closure, and doc/spec drift proof to this assembled inventory without treating disconnected beacons or helper-only metrics as live release surfaces."
+  "next_action": "Proceed to M019/S04 slice closeout using the assembled release gate bundle and router-backed doc/spec drift proof as the default downstream verification contract."
 }
