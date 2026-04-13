@@ -120,23 +120,25 @@
 
 | 责任类型 | 当前真实 authority | 真实入口 | 当前状态 / 风险 |
 |---|---|---|---|
-| 启动初始化 | `backend/src/main.py` 的 lifespan 调用 `common.db.session.init_db()` | `backend/src/main.py` → `await init_db()` | **仍带 schema side effect**：`Base.metadata.create_all()` 会在 startup path 执行；失败会直接阻断服务启动。 |
-| schema 演进 | Alembic revision 链 | `cd backend && alembic upgrade head` → `backend/alembic/env.py` + `backend/alembic/versions/*` | 这是唯一真实的 forward migration authority；`026/027/028` 已承载 password reset，`015/017/018` 已承载 persona / knowledge_documents 演进。 |
-| 开发兼容 / 启动期兼容 patch | `common.db.session.init_db()` 内显式 compatibility guard | `_ensure_persona_policy_column_compatibility()`、`_ensure_knowledge_document_schema_compatibility()` | **仍在 startup path**。其中 persona patch 仅允许 SQLite 自动补齐；非 SQLite 发现缺列会 fail-fast。knowledge_documents patch 则仍会在 startup path 对 SQLite / PostgreSQL 做真实 schema 修补。 |
-| 一次性 legacy repair | `backend/scripts/repair_legacy_schema.py` | `cd backend && python scripts/repair_legacy_schema.py [--stamp-revision ...]` | 不是启动自动流程；当前只复用 `knowledge_documents` compat patch，并可手工补 `alembic_version`，**不处理 persona_policy patch**。 |
+| 启动初始化 | `backend/src/main.py` 的 lifespan 调用 `common.db.session.init_db()` | `backend/src/main.py` → `await init_db()` | 仍带 startup schema side effect：`Base.metadata.create_all()` 会执行；失败会直接阻断服务启动。 |
+| schema 演进 | Alembic revision 链 | `cd backend && alembic upgrade head` → `backend/alembic/env.py` + `backend/alembic/versions/*` | 这是唯一真实的 forward migration authority；`026/027/028` 已承载 password reset，`015/017/018` 已承载 persona / knowledge_documents 演进，`20260413_1040_029` 已把 legacy startup repair authority 收回显式迁移/repair seam。 |
+| 开发 / 测试 bootstrap 兼容 guard | `common.db.session.init_db()` 内显式 compatibility guard | `_ensure_persona_policy_column_compatibility()`、`_ensure_knowledge_document_schema_compatibility()` | 现在只允许 `development` / `test` / `testing` 自动补齐本地 legacy fixture；非开发环境发现 drift 会 fail-fast 并指向 Alembic / `repair_legacy_schema.py`。 |
+| 一次性 legacy repair | `backend/scripts/repair_legacy_schema.py` + `common.db.legacy_schema_repair` | `cd backend && python scripts/repair_legacy_schema.py [--stamp-revision ...]` | 不是启动自动流程；现在显式修补 `personas.persona_policy` 与 `knowledge_documents` drift，并可按需补 `alembic_version`。 |
 | 一次性 auth/bootstrap | `backend/scripts/bootstrap_auth_admin.py` | `cd backend && python scripts/bootstrap_auth_admin.py --email ... --role ...` | 只负责账号重建/补齐，不拥有 schema authority。 |
 
 补充事实：
 - `scripts/dev-up.sh` 当前只是拉起 infra + `uvicorn src.main:app`，**不会先执行 `alembic upgrade head`**。
-- 因此本地/轻运维环境今天仍可能依赖 startup path 的 `create_all` + compatibility guard 才“看起来能跑起来”。
+- 因此本地/轻运维环境今天仍可能依赖 startup bootstrap 才“看起来能跑起来”；但 production-like 环境已经不会再静默修补 legacy personas / knowledge drift。
 - 当前未发现 request handler 内的隐式 schema repair；隐式 schema 修补集中在 **startup path**，不是 request path。
-- `docs/backup-recovery-runbook.md` 已把恢复顺序写成：`pg_restore` → `alembic upgrade head` → 必要时 `repair_legacy_schema.py` → `bootstrap_auth_admin.py`，这和上面的 authority 分工一致。
+- `.github/workflows/nfr-performance-check.yml` 在性能验证前显式执行 `alembic upgrade head`，与这条 authority line 一致，而不是依赖 startup `init_db()`。
+- `docs/backup-recovery-runbook.md` 与 `docs/setup/backup-recovery-current-state.md` 现在都把恢复顺序写成：`pg_restore` → `alembic upgrade head` → 必要时 `repair_legacy_schema.py` → `bootstrap_auth_admin.py`。
+- repo-root focused proof 已固定为 `backend/tests/integration/test_startup_or_bootstrap_authority.py` + `backend/tests/unit/common/test_db_session_compatibility.py`。
 
-这意味着 M019 的正确收口方向不是“再加一个修补入口”，而是：
-1. 让 `init_db()` 的 startup/bootstrap 责任显式可见；
+这意味着 M019 当前的正确收口方向不是“再加一个修补入口”，而是：
+1. 保持 `init_db()` 的 startup/bootstrap 责任显式可见；
 2. 把 schema 演进 authority 固定回 Alembic；
-3. 把 legacy repair 和 auth bootstrap 继续留在脚本入口；
-4. 后续逐步消掉 startup path 中仍在做真实 schema repair 的 compatibility patch。
+3. 把 legacy repair 和 auth bootstrap 继续留在显式脚本入口；
+4. 后续只在真正准备好外部 bootstrap/recovery authority 时，再考虑进一步收窄 startup path 的 `create_all()` / dev-test compat 行为。
 
 ---
 

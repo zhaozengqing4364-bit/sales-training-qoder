@@ -1,3 +1,21 @@
+- time: 2026-04-13T11:09:36+08:00
+  mode: grow
+  item id: M019-S01-T03
+  files changed:
+    - docs/backup-recovery-runbook.md
+    - docs/setup/backup-recovery-current-state.md
+    - .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md
+    - .github/workflows/nfr-performance-check.yml
+    - .codex/loop/state.json
+    - .codex/loop/log.md
+  summary: Wrote the post-T02 startup/migration/bootstrap authority line back into the recovery runbook, setup baseline, architecture scan, and CI migration entrypoint so future work can tell when to run Alembic, when to run the explicit repair/bootstrap scripts, and when startup must not be trusted to patch schema.
+  verification commands:
+    - rg -n "alembic upgrade head|bootstrap|init_db|migration" docs/backup-recovery-runbook.md .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md .github/workflows
+    - backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/integration/test_startup_or_bootstrap_authority.py backend/tests/unit/common/test_db_session_compatibility.py -q
+  verification results: passed; the exact task-plan grep gate is green across the long-lived doc and CI surfaces, and the focused startup/bootstrap authority suite still finishes 4/4 green with only the pre-existing pytest-cov and sqlite teardown warnings.
+  success signal status: future M019 slices can now start from one durable, repo-root-verifiable authority map — Alembic owns forward migration, repair_legacy_schema owns explicit legacy repair, bootstrap_auth_admin owns account bootstrap, and startup init_db is documented as bootstrap-only with non-dev fail-fast semantics.
+  rollback note: if later work changes startup bootstrap scope or adds a new migration/bootstrap entrypoint, update the setup baseline, recovery runbook, architecture scan, CI step wording, and the focused authority proof together so the verification commands in runbook section 6.6 keep matching the shipped behavior.
+
 - time: 2026-04-13T10:38:53+0800
   mode: grow
   item id: M019-S01-T01

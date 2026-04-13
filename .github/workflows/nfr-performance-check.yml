@@ -75,9 +75,11 @@ jobs:
             sleep 2
           done
 
-      - name: Run database migrations
+      - name: Run database migrations (schema authority: Alembic)
         working-directory: ./backend
         run: |
+          # CI validates the explicit migration authority line; startup init_db is
+          # bootstrap only and must not be treated as schema-evolution authority.
           alembic upgrade head
 
       - name: Run NFR performance tests

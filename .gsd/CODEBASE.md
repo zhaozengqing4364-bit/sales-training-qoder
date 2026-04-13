@@ -1,7 +1,7 @@
 # Codebase Map
 
-Generated: 2026-04-13T02:41:04Z | Files: 500 | Described: 0/500
-<!-- gsd:codebase-meta {"generatedAt":"2026-04-13T02:41:04Z","fingerprint":"00f8a19adf55b7b83773a953fc95ffd6a55bddbf","fileCount":500,"truncated":true} -->
+Generated: 2026-04-13T02:57:47Z | Files: 500 | Described: 0/500
+<!-- gsd:codebase-meta {"generatedAt":"2026-04-13T02:57:47Z","fingerprint":"10fbf2e2ee7adc81dcba6644dbc59dd73198de2c","fileCount":500,"truncated":true} -->
 Note: Truncated to first 500 files. Run with higher --max-files to include all.
 
 ### (root)/
@@ -227,7 +227,7 @@ Note: Truncated to first 500 files. Run with higher --max-files to include all.
 - `backend/alembic/script.py.mako`
 
 ### backend/alembic/versions/
-- *(29 files: 29 .py)*
+- *(30 files: 30 .py)*
 
 ### backend/backend/
 - `backend/backend/README.md`
@@ -367,6 +367,7 @@ Note: Truncated to first 500 files. Run with higher --max-files to include all.
 - `backend/src/common/conversation/storage.py`
 
 ### backend/src/common/db/
+- `backend/src/common/db/legacy_schema_repair.py`
 - `backend/src/common/db/models.py`
 - `backend/src/common/db/schemas.py`
 - `backend/src/common/db/session_lifecycle.py`
@@ -620,7 +621,7 @@ Note: Truncated to first 500 files. Run with higher --max-files to include all.
 - `backend/tests/fixtures/knowledge_answer_eval_cases.json`
 
 ### backend/tests/integration/
-- *(37 files: 37 .py)*
+- *(38 files: 38 .py)*
 
 ### backend/tests/performance/
 - `backend/tests/performance/test_e2e_latency.py`
@@ -646,6 +647,3 @@ Note: Truncated to first 500 files. Run with higher --max-files to include all.
 - `backend/tests/unit/common/test_embedding_service_resilience.py`
 - `backend/tests/unit/common/test_haystack_adapter.py`
 - `backend/tests/unit/common/test_kb_lock_guard.py`
-- `backend/tests/unit/common/test_knowledge_answer_assembler.py`
-- `backend/tests/unit/common/test_knowledge_answer_audit_repo.py`
-- `backend/tests/unit/common/test_knowledge_answer_config_repo.py`

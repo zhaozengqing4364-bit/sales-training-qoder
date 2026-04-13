@@ -37,7 +37,7 @@ S01 结束后，数据库演进、bootstrap、兼容补齐会有明确 authority
   - Files: `backend/alembic/versions`, `backend/src/common/db/session.py`, `backend/src/main.py`, `backend/tests/integration`
   - Verify: backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/integration -k "startup or bootstrap or migration" -x -q
 
-- [ ] **T03: 把 authority 结果写回文档与验证入口** `est:35m`
+- [x] **T03: 把 authority 结果写回文档与验证入口** `est:35m`
   - 更新 runbook / setup / architecture scan，让后续执行模型能直接分辨什么时候跑 Alembic、什么时候跑 bootstrap、什么时候不该让 startup 自动补洞。
 - 为 M019 后续 slices 写下可复用的 repo-root 验证命令。
 - 确认 `.github/workflows` 与此 authority line 不冲突。

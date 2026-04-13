@@ -1,6 +1,6 @@
 # Backup / Recovery 当前现状清单
 
-最后更新：2026-04-12  
+最后更新：2026-04-13  
 适用范围：当前仓库可见的本地开发 / 仓库内运维入口  
 用途：给 `docs/backup-recovery-runbook.md` 提供事实基线；这里只记录仓库里已经存在的真实路径、命令和缺口，不补写不存在的自动化。
 
@@ -78,21 +78,21 @@ alembic upgrade head
 
 证据路径：`.github/workflows/nfr-performance-check.yml`
 
-### 3.3 启动时存在 `create_all()` 兼容行为，但这不是备份/恢复替代品
+### 3.3 `init_db()` 仍是 startup/bootstrap 入口，但 authority 已收口
 
-`backend/src/common/db/session.py` 里的 `init_db()` 会执行：
+`backend/src/common/db/session.py` 里的 `init_db()` 现在仍会执行：
 
 - `Base.metadata.create_all`
 - `_ensure_persona_policy_column_compatibility(...)`
 - `_ensure_knowledge_document_schema_compatibility(...)`
 
-这说明：
+但它的职责已经明确收口为 **startup bootstrap**：
 
-- 仓库当前允许在启动时做一部分 **兼容性补丁 / 缺表创建**；
-- 但这只是一种“代码升级后尽量别起不来”的保护；
-- **不能**把它当成可靠的备份恢复方案，也不能替代完整的库级 restore 流程。
+- 在 `development` / `test` / `testing` 环境里，允许对本地 legacy fixture 做兼容补齐；
+- 在非开发环境里，如果发现 `personas.persona_policy` 或 `knowledge_documents` legacy drift，startup 会直接 fail-fast，并明确要求执行 Alembic 或 `python scripts/repair_legacy_schema.py`；
+- 因此 **不能**把“服务能启动”当成 schema 已对齐的证据，尤其不能把 `init_db()` 当成迁移替代品。
 
-### 3.4 已有一次性修老库脚本
+### 3.4 已有一次性修老库脚本，且它是显式 repair authority
 
 仓库内已有真实修复脚本：
 
@@ -104,11 +104,11 @@ python scripts/repair_legacy_schema.py --database-url <DATABASE_URL> --stamp-rev
 
 它当前能做的事：
 
-- 调用 `_ensure_knowledge_document_schema_compatibility(...)` 修老 schema；
+- 显式修补 legacy `personas.persona_policy` 与 `knowledge_documents` schema drift；
 - 在需要时写入 / 更新 `alembic_version`；
-- 目标是“老环境补兼容 + 可选补 Alembic 状态”，不是通用 restore 工具。
+- 作为一次性 repair 入口，与 `alembic upgrade head` 一起承担非 startup 的 schema 修复 authority。
 
-证据路径：`backend/scripts/repair_legacy_schema.py`
+证据路径：`backend/scripts/repair_legacy_schema.py`, `backend/src/common/db/legacy_schema_repair.py`, `backend/alembic/versions/20260413_1040_029_explicit_legacy_startup_repairs.py`
 
 ### 3.5 已有破坏性 reset 脚本
 
@@ -131,21 +131,21 @@ python reset_db.py
 
 ## 4. 当前可直接引用的“恢复后补齐”命令
 
-### 4.1 恢复 schema 到当前代码版本
+### 4.1 恢复 schema 到当前代码版本（唯一 forward migration authority）
 
 ```bash
 cd backend
 alembic upgrade head
 ```
 
-### 4.2 老环境 schema 漂移修补
+### 4.2 老环境 schema 漂移修补（仅在显式 repair 入口执行）
 
 ```bash
 cd backend
 python scripts/repair_legacy_schema.py --database-url <DATABASE_URL>
 ```
 
-### 4.3 本地重建管理员 / 支持账号
+### 4.3 本地重建管理员 / 支持账号（不拥有 schema authority）
 
 ```bash
 cd backend
@@ -230,4 +230,4 @@ python scripts/bootstrap_auth_admin.py --email support@qoder.ai --name 支持工
 - 数据面统一恢复顺序说明；
 - 灾备演练记录。
 
-因此 T02 的目标应是：把这些已存在的真实入口、路径、缺口和验证步骤整理成最小可执行 runbook，而不是假设仓库已经有自动化备份平台。
+因此后续任务的基线应是：把这些已存在的真实入口、路径、缺口和验证步骤整理成最小可执行 runbook，并始终按 **Alembic → legacy repair（必要时）→ auth bootstrap** 的 authority 线执行，而不是假设 startup `init_db()` 或 `scripts/dev-up.sh` 会替你完成迁移。
