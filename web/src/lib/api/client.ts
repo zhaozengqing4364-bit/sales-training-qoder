@@ -1391,7 +1391,28 @@ async function apiUpload<T>(
     }
 }
 
-// API methods organized by domain
+/**
+ * M019/S03/T01 domain client seam inventory
+ *
+ * Cross-cutting seam that must stay centralized even after client.ts is split:
+ * - auth/session expiry handling: authHandler + triggerSessionExpiredOnce
+ * - request transport: apiFetch / apiUpload / fetchWithLoopbackRetry
+ * - trace propagation: createHeaders(buildTraceHeaders(...))
+ * - error normalization: normalizeApiErrorPayload -> ApiRequestError -> getApiErrorMessage
+ *
+ * Domain surfaces currently exposed through the outward `api` façade:
+ * - auth, user, dashboard, analyticsOpen, supportRuntime
+ * - training, practice, sessions, scenarios, agents, analytics
+ * - admin, adminTools, presentations, adminPresentations, internal
+ *
+ * High-fan-out consumers confirmed by repo inventory:
+ * - learner/auth/dashboard/practice/report/replay/profile pages import the façade directly
+ * - admin analytics/users/personas/knowledge/settings/prompts plus debug panels depend on `api.admin*`
+ * - shell/auth guards consume `isAuthenticationError` / `getApiErrorMessage`, not raw payload parsing
+ *
+ * Split rule for follow-up tasks: keep page/component imports pointed at this façade and let
+ * domain modules live behind it, otherwise pages will start bypassing auth/error/trace seams.
+ */
 export const api = {
     // Authentication
     auth: {

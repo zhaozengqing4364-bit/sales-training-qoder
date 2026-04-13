@@ -1,9 +1,3 @@
-{"id":"c37ffa0c-45d6-4e04-bd70-63b7ef5cd372","ts":"2026-04-10T06:38:45.432Z","severity":"info","message":"Resume: applied 3 fix(es) to state.","source":"notify","read":false}
-{"id":"32f4ba76-8d49-4265-a216-ef83437c908e","ts":"2026-04-10T06:38:46.877Z","severity":"warning","message":"Web search: Set BRAVE_API_KEY or use an Anthropic model for built-in search","source":"notify","read":false}
-{"id":"76a5cc25-933b-4778-bddb-f39b02e123bb","ts":"2026-04-10T06:38:49.101Z","severity":"warning","message":"Auto-mode paused due to provider error: Not logged in · Please run /login","source":"notify","read":false}
-{"id":"4d4525b8-673d-450d-80c0-1d3e62a31db1","ts":"2026-04-10T06:38:49.117Z","severity":"info","message":"Auto-mode paused (Escape). Type to interact, or /gsd auto to resume.","source":"notify","read":false}
-{"id":"34b720a3-4f6c-4dd9-acb9-0252af80963d","ts":"2026-04-10T06:39:32.967Z","severity":"warning","message":"Web search: Set BRAVE_API_KEY or use an Anthropic model for built-in search","source":"notify","read":false}
-{"id":"772ed143-6464-474b-a339-92095288add4","ts":"2026-04-10T09:28:25.885Z","severity":"warning","message":"[guided] preferences section parse failed: Source contains multiple documents; please use YAML.parseAllDocuments() at line 8, column 1:\n\n避免一次性大改、多点乱改、顺手修一堆。\n---\n^^^\n","source":"workflow-logger","read":false}
 {"id":"a2ded4d6-3e33-4b81-829a-4aa90645134e","ts":"2026-04-10T09:28:29.905Z","severity":"info","message":"Resuming paused session for M014.","source":"notify","read":false}
 {"id":"f16a0268-f86e-4cbc-b9d3-b8f096da96a7","ts":"2026-04-10T09:28:29.916Z","severity":"info","message":"Auto-mode resumed.","source":"notify","read":false}
 {"id":"4ae162bb-d8e0-44ed-96e8-a45142e087e5","ts":"2026-04-10T09:28:35.755Z","severity":"info","message":"Resume: applied 4 fix(es) to state.","source":"notify","read":false}
@@ -498,3 +492,9 @@
 {"id":"2e4a075f-b5db-433b-8f91-a2ea572c2263","ts":"2026-04-13T03:51:20.662Z","severity":"warning","message":"[safety] file-change: backend/tests/contract/test_practice_evidence_contract.py — Modified but not in task plan's expected output","source":"workflow-logger","read":false}
 {"id":"184ebfce-463a-4d50-88fc-929ab36096e2","ts":"2026-04-13T03:51:20.667Z","severity":"warning","message":"Safety: 3 unexpected file change(s) outside task plan","source":"notify","read":false}
 {"id":"504ec513-953c-479c-a136-22019be08984","ts":"2026-04-13T03:51:39.339Z","severity":"info","message":"Verification gate: 1/1 checks passed","source":"notify","read":false}
+{"id":"0b043990-36f7-42eb-b5ca-69d7d8ab4721","ts":"2026-04-13T04:04:02.247Z","severity":"info","message":"Committed: feat: Locked the extracted practice seam with canonical read-model proo…","source":"notify","read":false}
+{"id":"db861d7c-bcf0-437d-8630-f58cababb933","ts":"2026-04-13T04:04:02.266Z","severity":"warning","message":"[safety] file-change: .codex/loop/log.md — Modified but not in task plan's expected output","source":"workflow-logger","read":false}
+{"id":"d0b84eff-c534-45b8-8edf-4fe64cdbab4d","ts":"2026-04-13T04:04:02.269Z","severity":"warning","message":"[safety] file-change: .codex/loop/state.json — Modified but not in task plan's expected output","source":"workflow-logger","read":false}
+{"id":"829e614d-8e90-4908-95c2-859bc1d61f67","ts":"2026-04-13T04:04:02.271Z","severity":"warning","message":"Safety: 2 unexpected file change(s) outside task plan","source":"notify","read":false}
+{"id":"447555c7-9a42-4e27-82f2-971c4e947f78","ts":"2026-04-13T04:04:22.190Z","severity":"info","message":"Verification gate: FAILED — npm run test","source":"notify","read":false}
+{"id":"dd759c15-e77a-45ca-8f81-27a69ebd96ea","ts":"2026-04-13T04:04:22.196Z","severity":"warning","message":"Verification failed in auto-discovered package.json checks — treating as advisory.","source":"notify","read":false}

@@ -154,6 +154,28 @@
 3. 把 legacy repair 和 auth bootstrap 继续留在显式脚本入口；
 4. 后续只在真正准备好外部 bootstrap/recovery authority 时，再考虑进一步收窄 startup path 的 `create_all()` / dev-test compat 行为。
 
+### 4.5 M019/S03 frontend domain client / transport seam inventory
+`web/src/lib/api/client.ts` 现在仍是前端统一 outward façade，但 repo-root inventory 已经能把它拆成明确 domain 面：
+- cross-cutting seam：`apiFetch` / `apiUpload` / `fetchWithLoopbackRetry` + `createHeaders(buildTraceHeaders(...))` + `normalizeApiErrorPayload` / `ApiRequestError` + `authHandler.sessionExpired()`
+- outward domains：`auth`、`user`、`dashboard`、`analyticsOpen`、`supportRuntime`、`training`、`practice`、`sessions`、`scenarios`、`agents`、`analytics`、`admin`、`adminTools`、`presentations`、`adminPresentations`、`internal`
+- high-fan-out consumers：learner auth/dashboard/profile/training/practice/report/replay 页面直接依赖 façade；admin analytics/users/personas/knowledge/settings/prompts 与 knowledge-answer debug panels 大量依赖 `api.admin*` / `api.adminTools`。
+
+这意味着 S03 后续拆分不能把页面改成跨 domain 直连实现；正确方向是：
+1. 保留 `api` 作为唯一 outward import surface；
+2. 把 domain modules 收到 `web/src/lib/api/*` 内部，由 façade 回指；
+3. 继续把 auth/error/trace 只留在 shared transport seam，而不是让页面或 domain module 自己处理 401、trace header、payload normalization。
+
+`web/src/hooks/use-practice-websocket.ts` 当前也已经有清晰的 inward/outward 边界，而不是“整文件继续硬拆”：
+- outward consumer 现在基本只剩 `web/src/app/(user)/practice/[sessionId]/page.tsx`（以及其测试/mock contract），所以 outward return shape 必须稳定。
+- 已抽出的 inward helpers：`websocket/message-handlers.ts` 负责 inbound protocol -> state projection；`websocket/use-audio-playback.ts` 负责 legacy audio queue/unlock；`use-streaming-audio-player.ts` 负责 chunk playback；`use-voice-speed-preference.ts` 负责本地播放速率偏好。
+- hook 自身仍是 transport orchestration authority：WS URL + trace 拼装、connect/disconnect、reconnect budget、pending outbound queue、binary negotiate、local backpressure buffer/flush abort、interrupt pre-cleanup。
+
+**S03 downstream consumption rule**
+- 如果改的是 auth/error/trace/request transport，优先扩展 API transport seam，而不是在 domain module 或页面里直接 `fetch(...)`。
+- 如果改的是 learner/admin domain request surface，优先落在 `web/src/lib/api/*` 的 domain module，再由 `api` façade 暴露；不要让页面跨 domain 引别的实现细节。
+- 如果改的是 realtime inbound state projection，优先扩展 `websocket/message-handlers.ts`。
+- 如果改的是 websocket URL/auth/reconnect/backpressure/interrupt/outbound pacing，优先扩展 `use-practice-websocket.ts` 或其 transport helper；不要把这些逻辑下沉到 page-level effect。
+
 ---
 
 ## 5. 代码热点与高耦合区

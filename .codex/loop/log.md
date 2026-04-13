@@ -1,3 +1,49 @@
+- time: 2026-04-13T12:17:51.050075+08:00
+  mode: grow
+  item id: M019-S03-T01
+  files changed:
+    - web/src/lib/api/client.ts
+    - web/src/hooks/use-practice-websocket.ts
+    - .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md
+    - .gsd/KNOWLEDGE.md
+    - .codex/loop/state.json
+    - .codex/loop/log.md
+  summary: Codified the frontend seam inventory for M019/S03 so downstream work can split internals without reopening page contracts: client.ts now names its cross-cutting transport/auth/error/trace seam plus domain/high-fan-out surfaces, usePracticeWebSocket now records the retained transport/orchestration boundary, and the architecture/knowledge artifacts point future work at the right layer before editing.
+  verification commands:
+    - rg -n "export const api|normalizeApiErrorPayload|usePracticeWebSocket|MAX_RECONNECT_ATTEMPTS|message-handlers" web/src/lib/api web/src/hooks
+    - lsp diagnostics web/src/lib/api/client.ts
+    - lsp diagnostics web/src/hooks/use-practice-websocket.ts
+    - rg -n "M019/S03|api façade|transport contract inventory|usePracticeWebSocket\(\)|websocket lifecycle|domain client seam inventory" .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md web/src/lib/api/client.ts web/src/hooks/use-practice-websocket.ts .gsd/KNOWLEDGE.md
+  verification results: passed; the task-plan grep gate is green, the new seam inventory is grep-discoverable across code and GSD artifacts, and diagnostics stayed clean on the touched TypeScript authority files.
+  success signal status: future S03 work no longer needs to rediscover whether a change belongs in domain client internals, the shared auth/error/trace seam, transport orchestration, or inbound message handlers before refactoring.
+  rollback note: if later S03 work changes outward imports or page-level websocket wiring, update the client/hook inventory comments, architecture scan section 4.5, and the knowledge entry together so the documented seam still matches the live contract.
+
+- time: 2026-04-13T12:12:08+0800
+  mode: grow
+  item id: M019-S02
+  files changed:
+    - .gsd/KNOWLEDGE.md
+    - .gsd/milestones/M019/slices/S02/S02-SUMMARY.md
+    - .gsd/milestones/M019/slices/S02/S02-UAT.md
+    - .gsd/PROJECT.md
+    - .codex/loop/state.json
+    - .codex/loop/log.md
+  summary: Closed M019/S02 after fresh slice-level verification confirmed the practice backend now has named session/report application seams behind a stable route-facing compatibility bundle, while replay/history/admin still consume SessionEvidenceService as the canonical completed-session read model instead of drifting back into practice.py.
+  verification commands:
+    - backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/contract/test_practice_evidence_contract.py backend/tests/integration/test_session_lifecycle_api.py -x -q
+    - backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/contract/test_practice_evidence_contract.py backend/tests/integration/test_practice_evidence_flow.py backend/tests/integration/test_session_lifecycle_api.py -x -q
+    - rg -n "practice_session_service|practice_report_service|SessionEvidenceService" .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md backend/src/common/api/practice.py backend/tests/contract/test_practice_evidence_contract.py
+    - lsp diagnostics backend/src/common/api/practice.py
+    - lsp diagnostics backend/src/common/services/practice_service.py
+    - lsp diagnostics backend/src/common/services/practice_session_service.py
+    - lsp diagnostics backend/src/common/services/practice_report_service.py
+    - lsp diagnostics backend/tests/contract/test_practice_evidence_contract.py
+    - lsp diagnostics backend/tests/integration/test_practice_evidence_flow.py
+    - lsp diagnostics backend/tests/integration/test_session_lifecycle_api.py
+  verification results: passed; the planned contract/lifecycle gate finished 44/44 green, the broader contract+evidence-flow+lifecycle gate finished 50/50 green, the seam grep proof exposed the new landing zones in the architecture scan and contract file, and LSP diagnostics were clean on all touched Python authority files. Only the pre-existing pytest-cov no-data warning and Python 3.14 async teardown warning remained.
+  success signal status: future backend work no longer has to infer whether to extend practice.py, the route-facing compatibility bundle, or the canonical completed-session read model — S02 now documents and proves that split directly.
+  rollback note: if later work pushes create/lifecycle/report/audio logic back into common/api/practice.py or lets replay/history/admin rebuild completed-session truth outside SessionEvidenceService, update the service split, architecture scan, knowledge note, and focused verification bundle together before claiming the seam still holds.
+
 - time: 2026-04-13T12:02:21.064291+08:00
   mode: grow
   item id: M019-S02-T03

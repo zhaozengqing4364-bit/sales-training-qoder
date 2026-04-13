@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "exported_at": "2026-04-13T04:03:49.642Z",
+  "exported_at": "2026-04-13T04:19:10.097Z",
   "milestones": [
     {
       "id": "M001",
@@ -2816,14 +2816,14 @@
       "milestone_id": "M019",
       "id": "S02",
       "title": "S02",
-      "status": "pending",
+      "status": "complete",
       "risk": "high",
       "depends": [],
       "demo": "After this: `practice.py` 不再独自承载会话创建、生命周期、报告、音频审计、runtime descriptor 编排，后续任务可以沿应用层 seam 精准改动。",
       "created_at": "2026-04-13T02:03:54.875Z",
-      "completed_at": null,
-      "full_summary_md": "",
-      "full_uat_md": "",
+      "completed_at": "2026-04-13T04:09:56.736Z",
+      "full_summary_md": "---\nid: S02\nparent: M019\nmilestone: M019\nprovides:\n  - A named backend application seam for practice session creation, lifecycle, runtime descriptor, report, audio audit, and audio segment flows.\n  - A documented downstream rule for whether future changes belong in `practice_session_service`, `practice_report_service`, or `SessionEvidenceService`.\n  - A stable verification bundle that can catch route-contract drift, lifecycle-observability drift, and completed-session read-model drift separately.\nrequires:\n  []\naffects:\n  - S03\n  - S04\n  - M021\nkey_files:\n  - backend/src/common/api/practice.py\n  - backend/src/common/services/practice_service.py\n  - backend/src/common/services/practice_session_service.py\n  - backend/src/common/services/practice_report_service.py\n  - backend/tests/contract/test_practice_evidence_contract.py\n  - backend/tests/integration/test_practice_evidence_flow.py\n  - backend/tests/integration/test_session_lifecycle_api.py\n  - .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md\n  - .gsd/KNOWLEDGE.md\nkey_decisions:\n  - D212 — introduce `common.services.practice_service` as the first route-facing seam bundle for practice responsibilities.\n  - D213 — keep `common.services.practice_service` as a compatibility bundle that composes the new `practice_session_service` and `practice_report_service` modules.\n  - D214 — preserve `SessionEvidenceService` as the canonical completed-session read model while the practice route family delegates write/report orchestration through the extracted services.\npatterns_established:\n  - Route-facing compatibility bundle first, focused application services second.\n  - Separate practice write/application seams from completed-session read-model seams.\n  - Preserve route-owned structured logger injection when extracting lifecycle orchestration.\nobservability_surfaces:\n  - Focused lifecycle log assertions for `practice_session_lifecycle_transition_applied` and terminal connection-close handling.\n  - `backend/tests/integration/test_practice_evidence_flow.py` parity proof on `SessionEvidenceService` consumption across report/replay/history/admin.\n  - Architecture-scan seam map in `.gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md` for downstream landing-zone verification.\ndrill_down_paths:\n  - .gsd/milestones/M019/slices/S02/tasks/T01-SUMMARY.md\n  - .gsd/milestones/M019/slices/S02/tasks/T02-SUMMARY.md\n  - .gsd/milestones/M019/slices/S02/tasks/T03-SUMMARY.md\nduration: \"\"\nverification_result: passed\ncompleted_at: 2026-04-13T04:09:56.737Z\nblocker_discovered: false\n---\n\n# S02: Practice backend application seam 抽离\n\n**Extracted practice backend session/report application seams out of `common/api/practice.py` while preserving existing route contracts and the canonical `SessionEvidenceService` completed-session truth line.**\n\n## What Happened\n\n## Delivered\n- Introduced a stable route-facing compatibility bundle in `backend/src/common/services/practice_service.py`, then extracted the actual backend application logic into `practice_session_service.py` and `practice_report_service.py`.\n- Moved session creation, retry-focus shaping, runtime descriptor assembly, and lifecycle orchestration behind `PracticeSessionCreateService` and `PracticeSessionLifecycleApplicationService` so the route layer can stay focused on auth, request parsing, response shaping, and HTTP status handling.\n- Moved report assembly, audio-audit projection, OSS signing/audio-segment registration, and retry-entry shaping behind `PracticeReportService`, `PracticeAudioAuditService`, and `PracticeAudioSegmentService`.\n- Kept `common.services.practice_service` as the compatibility seam so downstream work can adopt the new services without importing route-local helpers or re-coupling itself to `backend/src/common/api/practice.py`.\n- Locked the completed-session read-model boundary: report routes can use the extracted practice report service, but replay/history/admin still consume the canonical `SessionEvidenceService` projection instead of rebuilding truth from practice-route helpers.\n\n## What This Slice Actually Changed\n- `backend/src/common/api/practice.py` is still the HTTP entrypoint, but it no longer needs to own all orchestration logic itself.\n- `backend/src/common/services/practice_session_service.py` is now the write-side/application seam for create/lifecycle/runtime-descriptor work.\n- `backend/src/common/services/practice_report_service.py` is now the practice-route report/audio seam.\n- `backend/src/common/services/practice_service.py` is the route-facing composition seam that wires shared dependencies once.\n- `.gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md` now documents the downstream consumption rule so later slices know which seam to extend.\n\n## Patterns Established\n- Use a route-facing compatibility bundle first, then peel business orchestration into narrower application services without forcing every consumer to switch imports in one step.\n- Keep write-side practice orchestration seams separate from the completed-session read-model seam; `practice_*_service` owns route/application behavior, while `SessionEvidenceService` remains the shared completed-session authority for replay/history/admin.\n- When extracting lifecycle logic, inject the route-owned logger into services so focused lifecycle observability proof and existing log-based diagnostics remain stable.\n\n## Downstream Guidance\n- If future work changes session create, retry focus, runtime descriptor, or lifecycle orchestration, extend `practice_session_service` and keep `practice_service` as the route-facing bundle.\n- If future work changes practice report payloads, audio audit, or audio-segment upload/register/failure flows, extend `practice_report_service`.\n- If future work changes replay/history/admin/manager-truth on completed sessions, extend `SessionEvidenceService`, `ReplayService`, or `history_service` instead of rebuilding a projection inside `practice.py`.\n- This gives S03 a clean backend seam to pair against frontend domain-client/transport work, and gives later evidence/kernel work a clear rule for staying on the canonical read model.\n\n## Operational Readiness\n- **Health signal:** the fresh backend verification bundle is green, architecture-scan seam documentation is grep-discoverable, and all touched Python files are LSP-clean.\n- **Failure signal:** regressions will usually show up as one of three failures: route contract tests breaking, lifecycle observability assertions no longer seeing the expected route logger events, or report/replay/history/admin parity drifting away from `SessionEvidenceService`.\n- **Recovery procedure:** extend the correct extracted service instead of patching `practice.py`, preserve route logger injection for lifecycle services, then rerun the three slice gates (`practice evidence + lifecycle`, `practice evidence + evidence flow + lifecycle`, and the seam grep proof).\n- **Monitoring gaps:** there is still no dedicated runtime metric for “which practice seam handled this change”; boundary enforcement currently depends on focused tests, architecture-scan guidance, and log assertions rather than first-class production metrics.\n\n\n## Verification\n\nFresh slice-close verification passed all planned gates from repo root: `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/contract/test_practice_evidence_contract.py backend/tests/integration/test_session_lifecycle_api.py -x -q` (44 passed), `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/contract/test_practice_evidence_contract.py backend/tests/integration/test_practice_evidence_flow.py backend/tests/integration/test_session_lifecycle_api.py -x -q` (50 passed), and `rg -n \"practice_session_service|practice_report_service|SessionEvidenceService\" .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md backend/src/common/api/practice.py backend/tests/contract/test_practice_evidence_contract.py` (matched the documented downstream seam rule). Fresh LSP diagnostics on `backend/src/common/api/practice.py`, `backend/src/common/services/practice_service.py`, `backend/src/common/services/practice_session_service.py`, `backend/src/common/services/practice_report_service.py`, `backend/tests/contract/test_practice_evidence_contract.py`, `backend/tests/integration/test_practice_evidence_flow.py`, and `backend/tests/integration/test_session_lifecycle_api.py` all returned no diagnostics. Test output still showed the pre-existing pytest-cov no-data warning and Python 3.14 async teardown warning, but both gates exited 0 and matched prior known-noise behavior.\n\n## Requirements Advanced\n\nNone.\n\n## Requirements Validated\n\nNone.\n\n## New Requirements Surfaced\n\nNone.\n\n## Requirements Invalidated or Re-scoped\n\nNone.\n\n## Deviations\n\nNone beyond the intentional compatibility-bundle pattern recorded in D213.\n\n## Known Limitations\n\n`backend/src/common/api/practice.py` remains the HTTP entrypoint and still contains legacy helper residue, so the file is smaller in responsibility but not yet small in size. Boundary enforcement is also still test-and-doc driven; there is no production metric that directly proves whether a future change landed on the correct extracted seam.\n\n## Follow-ups\n\nS03 should keep this backend split intact when extracting frontend domain client / transport seams, and S04 should reuse the same focused practice verification bundle as part of the release gate instead of inventing a second backend truth line.\n\n## Files Created/Modified\n\n- `backend/src/common/api/practice.py` — Rewired the route layer to delegate create/lifecycle/report/audio orchestration through extracted practice services while keeping the API surface unchanged.\n- `backend/src/common/services/practice_service.py` — Introduced the route-facing compatibility bundle and shared dependency wiring for the extracted practice seams.\n- `backend/src/common/services/practice_session_service.py` — Holds session creation, retry-focus shaping, runtime descriptor assembly, and lifecycle application behavior.\n- `backend/src/common/services/practice_report_service.py` — Holds report assembly, audio-audit projection, OSS signing/audio-segment flows, and retry-entry composition.\n- `backend/tests/contract/test_practice_evidence_contract.py` — Locks the extracted seam inventory plus the canonical SessionEvidenceService read-model contract.\n- `backend/tests/integration/test_practice_evidence_flow.py` — Proves report/replay/history/admin remain aligned to the canonical completed-session projection after extraction.\n- `backend/tests/integration/test_session_lifecycle_api.py` — Keeps the route-level lifecycle contract and observability proof stable while services are extracted.\n- `.gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md` — Documents the M019/S02 seam split and downstream consumption rule for later slices.\n- `.gsd/KNOWLEDGE.md` — Records the logger-injection gotcha and the post-S02 seam-selection rule for future agents.\n",
+      "full_uat_md": "# S02: Practice backend application seam 抽离 — UAT\n\n**Milestone:** M019\n**Written:** 2026-04-13T04:09:56.737Z\n\n# S02 UAT — Practice backend application seam 抽离\n\n## Preconditions\n1. Repository is at the M019/S02 close-out state.\n2. Run all commands from repo root: `/Users/zhaozengqing/github/销售训练qoder`.\n3. Backend virtualenv dependencies are installed at `backend/venv`.\n4. No local code changes are bypassing the extracted practice services.\n\n## Test Case 1 — Practice route bundle exposes the extracted application seams\n**Goal:** confirm the route-facing seam exists and future work does not need to import route-local helpers.\n\n1. Run:\n   - `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/contract/test_practice_evidence_contract.py -x -q`\n2. Verify the contract suite passes.\n3. Inspect the seam inventory via:\n   - `rg -n \"practice_session_service|practice_report_service|SessionEvidenceService\" .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md backend/tests/contract/test_practice_evidence_contract.py`\n\n**Expected outcomes**\n- The contract suite passes without `ModuleNotFoundError` or missing-seam assertions.\n- The architecture scan and contract proof both mention `practice_session_service`, `practice_report_service`, and `SessionEvidenceService`.\n- The route-facing bundle remains `common.services.practice_service`, not direct imports from `common/api/practice.py`.\n\n## Test Case 2 — Session creation and lifecycle behavior stay on the current API contract\n**Goal:** confirm extracted session services did not change create/lifecycle route behavior.\n\n1. Run:\n   - `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/contract/test_practice_evidence_contract.py backend/tests/integration/test_session_lifecycle_api.py -x -q`\n2. Review lifecycle-related assertions in the output scope.\n\n**Expected outcomes**\n- The combined gate passes.\n- Session create responses still include the same outward contract fields, including runtime descriptor / snapshot metadata expected by current routes.\n- Lifecycle transitions remain valid for the existing API surface.\n- Route-level lifecycle observability still emits the established log events used by focused proof (`practice_session_lifecycle_transition_applied`, terminal close handling).\n\n## Test Case 3 — Report, replay, history, and admin stay aligned to the canonical completed-session read model\n**Goal:** confirm the extraction did not fork completed-session truth into the route layer.\n\n1. Run:\n   - `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/contract/test_practice_evidence_contract.py backend/tests/integration/test_practice_evidence_flow.py backend/tests/integration/test_session_lifecycle_api.py -x -q`\n2. Review the focused evidence-flow assertions.\n\n**Expected outcomes**\n- The full gate passes.\n- Completed-session report payloads continue to assemble through the extracted practice report service.\n- Replay, learner history, and admin completed-session consumers still align with `SessionEvidenceService` rather than rebuilding truth in `practice.py`.\n- The focused proof can still observe `SessionEvidenceService.get_projection/build_projection` as the canonical read-model path.\n\n## Test Case 4 — Downstream seam rules are discoverable for future slices\n**Goal:** ensure future agents can tell where to land new work.\n\n1. Run:\n   - `rg -n \"practice_session_service|practice_report_service|SessionEvidenceService\" .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md backend/src/common/api/practice.py backend/tests/contract/test_practice_evidence_contract.py`\n2. Read the M019/S02 closure section in the architecture scan.\n\n**Expected outcomes**\n- The grep proof succeeds.\n- The architecture scan explicitly states:\n  - create/lifecycle/runtime descriptor/retry-focus changes belong in `practice_session_service`\n  - report/audio flows belong in `practice_report_service`\n  - replay/history/admin completed-session truth belongs in `SessionEvidenceService` / existing read-model consumers\n- No downstream guidance tells agents to extend `common/api/practice.py` as the default business-logic seam.\n\n## Edge Cases\n- If lifecycle tests fail only because expected route log events disappear, treat it as an observability regression caused by logger ownership drifting back to a module-local logger inside the extracted services.\n- If report/replay/history/admin payload parity drifts while route tests still pass, treat it as a read-model boundary regression: the likely fix is in `SessionEvidenceService` consumption or service wiring, not a new route-local projection.\n- If the architecture-scan grep fails but tests pass, do not close the slice: downstream slices will lose the seam map and are likely to regress back into `practice.py`.\n\n",
       "goal": "从 `backend/src/common/api/practice.py` 中抽出可单测、可复用的 application services，同时保持当前 route contract 不变。",
       "success_criteria": "- practice backend 的 create/lifecycle/report/audio/runtime-descriptor 编排从 route 文件中下沉到命名清晰的 service/application seam。\n- focused backend contract/integration tests 仍沿现有 API surface 通过。\n- route 文件保留输入校验和 response composition，而不是继续累积业务逻辑。",
       "proof_level": "integration",
@@ -2835,12 +2835,10 @@
     {
       "milestone_id": "M019",
       "id": "S03",
-      "title": "Frontend domain client 与 transport seam 抽离",
+      "title": "S03",
       "status": "pending",
       "risk": "high",
-      "depends": [
-        "S02"
-      ],
+      "depends": [],
       "demo": "After this: `client.ts` 按 domain 拆包、`use-practice-websocket.ts` 保留 transport/orchestration outward contract，前端大文件不再是唯一事实源。",
       "created_at": "2026-04-13T02:03:54.875Z",
       "completed_at": null,
@@ -12175,19 +12173,29 @@
       "milestone_id": "M019",
       "slice_id": "S03",
       "id": "T01",
-      "title": "识别前端 domain client 与 transport seam",
-      "status": "pending",
-      "one_liner": "",
-      "narrative": "",
-      "verification_result": "",
+      "title": "Codified the frontend domain-client and websocket transport seam inventory so S03 can split internals without changing page contracts.",
+      "status": "complete",
+      "one_liner": "Codified the frontend domain-client and websocket transport seam inventory so S03 can split internals without changing page contracts.",
+      "narrative": "I treated T01 as an authority-mapping task, not a behavior refactor. In `web/src/lib/api/client.ts` I added a durable M019/S03 inventory block above the `api` façade that names the shared auth/error/trace/transport seam, enumerates the current domain surfaces, and records the high-fan-out learner/admin consumers that must keep importing the façade instead of reaching into future domain modules directly. In `web/src/hooks/use-practice-websocket.ts` I extended the top-level contract comment to pin the outward consumer (`app/(user)/practice/[sessionId]/page.tsx`), the responsibilities already delegated to `message-handlers` / audio helpers, and the transport/orchestration responsibilities that intentionally remain in the outward hook. I then wrote the same seam map back into `.gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md` as section 4.5 and added a future-agent knowledge note in `.gsd/KNOWLEDGE.md` so T02/T03 can split internals from a truthful repo-local inventory instead of re-discovering the boundary from grep output.",
+      "verification_result": "Verified the task-plan grep gate from repo root, then ran a focused web proof bundle covering the touched API client and websocket hook surfaces: `npm --prefix web test -- --run src/lib/api/client.auth.test.ts src/hooks/use-practice-websocket.test.ts` finished green (27/27). I also reran repo-root grep proof to confirm the new seam inventory is discoverable in `client.ts`, `use-practice-websocket.ts`, the architecture scan, and the knowledge log. Fresh LSP diagnostics for `web/src/lib/api/client.ts` and `web/src/hooks/use-practice-websocket.ts` reported no issues.",
       "duration": "",
-      "completed_at": null,
+      "completed_at": "2026-04-13T04:19:10.021Z",
       "blocker_discovered": false,
-      "deviations": "",
-      "known_issues": "",
-      "key_files": [],
-      "key_decisions": [],
-      "full_summary_md": "",
+      "deviations": "None.",
+      "known_issues": "None.",
+      "key_files": [
+        "web/src/lib/api/client.ts",
+        "web/src/hooks/use-practice-websocket.ts",
+        ".gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md",
+        ".gsd/KNOWLEDGE.md",
+        ".codex/loop/state.json",
+        ".codex/loop/log.md"
+      ],
+      "key_decisions": [
+        "Keep page/component imports on the outward `api` façade while future domain modules move behind it.",
+        "Keep `usePracticeWebSocket()` as the sole outward transport contract for the live practice page while future transport helpers move underneath it."
+      ],
+      "full_summary_md": "---\nid: T01\nparent: S03\nmilestone: M019\nkey_files:\n  - web/src/lib/api/client.ts\n  - web/src/hooks/use-practice-websocket.ts\n  - .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md\n  - .gsd/KNOWLEDGE.md\n  - .codex/loop/state.json\n  - .codex/loop/log.md\nkey_decisions:\n  - Keep page/component imports on the outward `api` façade while future domain modules move behind it.\n  - Keep `usePracticeWebSocket()` as the sole outward transport contract for the live practice page while future transport helpers move underneath it.\nduration: \nverification_result: passed\ncompleted_at: 2026-04-13T04:19:10.020Z\nblocker_discovered: false\n---\n\n# T01: Codified the frontend domain-client and websocket transport seam inventory so S03 can split internals without changing page contracts.\n\n**Codified the frontend domain-client and websocket transport seam inventory so S03 can split internals without changing page contracts.**\n\n## What Happened\n\nI treated T01 as an authority-mapping task, not a behavior refactor. In `web/src/lib/api/client.ts` I added a durable M019/S03 inventory block above the `api` façade that names the shared auth/error/trace/transport seam, enumerates the current domain surfaces, and records the high-fan-out learner/admin consumers that must keep importing the façade instead of reaching into future domain modules directly. In `web/src/hooks/use-practice-websocket.ts` I extended the top-level contract comment to pin the outward consumer (`app/(user)/practice/[sessionId]/page.tsx`), the responsibilities already delegated to `message-handlers` / audio helpers, and the transport/orchestration responsibilities that intentionally remain in the outward hook. I then wrote the same seam map back into `.gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md` as section 4.5 and added a future-agent knowledge note in `.gsd/KNOWLEDGE.md` so T02/T03 can split internals from a truthful repo-local inventory instead of re-discovering the boundary from grep output.\n\n## Verification\n\nVerified the task-plan grep gate from repo root, then ran a focused web proof bundle covering the touched API client and websocket hook surfaces: `npm --prefix web test -- --run src/lib/api/client.auth.test.ts src/hooks/use-practice-websocket.test.ts` finished green (27/27). I also reran repo-root grep proof to confirm the new seam inventory is discoverable in `client.ts`, `use-practice-websocket.ts`, the architecture scan, and the knowledge log. Fresh LSP diagnostics for `web/src/lib/api/client.ts` and `web/src/hooks/use-practice-websocket.ts` reported no issues.\n\n## Verification Evidence\n\n| # | Command | Exit Code | Verdict | Duration |\n|---|---------|-----------|---------|----------|\n| 1 | `npm --prefix web test -- --run src/lib/api/client.auth.test.ts src/hooks/use-practice-websocket.test.ts` | 0 | ✅ pass | 2741ms |\n| 2 | `rg -n \"export const api|normalizeApiErrorPayload|usePracticeWebSocket|MAX_RECONNECT_ATTEMPTS|message-handlers\" web/src/lib/api web/src/hooks` | 0 | ✅ pass | 42ms |\n| 3 | `rg -n \"M019/S03|api façade|transport contract inventory|usePracticeWebSocket\\(\\)|websocket lifecycle|domain client seam inventory\" .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md web/src/lib/api/client.ts web/src/hooks/use-practice-websocket.ts .gsd/KNOWLEDGE.md` | 0 | ✅ pass | 23ms |\n| 4 | `lsp diagnostics web/src/lib/api/client.ts` | 0 | ✅ pass | 0ms |\n| 5 | `lsp diagnostics web/src/hooks/use-practice-websocket.ts` | 0 | ✅ pass | 0ms |\n\n## Deviations\n\nNone.\n\n## Known Issues\n\nNone.\n\n## Files Created/Modified\n\n- `web/src/lib/api/client.ts`\n- `web/src/hooks/use-practice-websocket.ts`\n- `.gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md`\n- `.gsd/KNOWLEDGE.md`\n- `.codex/loop/state.json`\n- `.codex/loop/log.md`\n",
       "description": "- 盘点 `client.ts` 中的 domain surfaces（auth/dashboard/practice/admin/knowledge/support 等），标出高扇出消费点。\n- 盘点 `use-practice-websocket.ts` 当前剩余 transport/orchestration 复杂度，并写清哪些职责已在 `message-handlers.ts` / audio hooks 中。\n- 先补一个小型 import/contract inventory，避免拆分后页面改成跨域直连实现。",
       "estimate": "45m",
       "files": [
@@ -21081,6 +21089,61 @@
       "verdict": "✅ pass",
       "duration_ms": 27,
       "created_at": "2026-04-13T04:03:49.564Z"
+    },
+    {
+      "id": 432,
+      "task_id": "T01",
+      "slice_id": "S03",
+      "milestone_id": "M019",
+      "command": "npm --prefix web test -- --run src/lib/api/client.auth.test.ts src/hooks/use-practice-websocket.test.ts",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 2741,
+      "created_at": "2026-04-13T04:19:10.021Z"
+    },
+    {
+      "id": 433,
+      "task_id": "T01",
+      "slice_id": "S03",
+      "milestone_id": "M019",
+      "command": "rg -n \"export const api|normalizeApiErrorPayload|usePracticeWebSocket|MAX_RECONNECT_ATTEMPTS|message-handlers\" web/src/lib/api web/src/hooks",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 42,
+      "created_at": "2026-04-13T04:19:10.023Z"
+    },
+    {
+      "id": 434,
+      "task_id": "T01",
+      "slice_id": "S03",
+      "milestone_id": "M019",
+      "command": "rg -n \"M019/S03|api façade|transport contract inventory|usePracticeWebSocket\\(\\)|websocket lifecycle|domain client seam inventory\" .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md web/src/lib/api/client.ts web/src/hooks/use-practice-websocket.ts .gsd/KNOWLEDGE.md",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 23,
+      "created_at": "2026-04-13T04:19:10.023Z"
+    },
+    {
+      "id": 435,
+      "task_id": "T01",
+      "slice_id": "S03",
+      "milestone_id": "M019",
+      "command": "lsp diagnostics web/src/lib/api/client.ts",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 0,
+      "created_at": "2026-04-13T04:19:10.023Z"
+    },
+    {
+      "id": 436,
+      "task_id": "T01",
+      "slice_id": "S03",
+      "milestone_id": "M019",
+      "command": "lsp diagnostics web/src/hooks/use-practice-websocket.ts",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 0,
+      "created_at": "2026-04-13T04:19:10.023Z"
     }
   ]
 }

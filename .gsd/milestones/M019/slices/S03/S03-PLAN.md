@@ -23,7 +23,7 @@ S03 结束后，前端请求与 practice transport 不再被两个 mega file 独
 
 ## Tasks
 
-- [ ] **T01: 识别前端 domain client 与 transport seam** `est:45m`
+- [x] **T01: 识别前端 domain client 与 transport seam** `est:45m`
   - 盘点 `client.ts` 中的 domain surfaces（auth/dashboard/practice/admin/knowledge/support 等），标出高扇出消费点。
 - 盘点 `use-practice-websocket.ts` 当前剩余 transport/orchestration 复杂度，并写清哪些职责已在 `message-handlers.ts` / audio hooks 中。
 - 先补一个小型 import/contract inventory，避免拆分后页面改成跨域直连实现。

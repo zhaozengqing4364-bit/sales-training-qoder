@@ -1,6 +1,6 @@
 {
   "mode": "grow",
-  "current_issue_id": "M019-S02-T03",
+  "current_issue_id": "M019-S03-T01",
   "current_issue_type": "task",
   "current_issue_status": "done",
   "pending_issue_ids": [],
@@ -187,26 +187,31 @@
     "M018-S03",
     "M019-S01-T01",
     "M019-S01-T02",
-    "M019-S01-T03"
+    "M019-S01-T03",
+    "M019-S02-T01",
+    "M019-S02-T02",
+    "M019-S02-T03",
+    "M019-S02",
+    "M019-S03-T01"
   ],
   "blocked_issue_ids": [],
   "deferred_issue_ids": [],
   "last_modified_files": [
+    "web/src/lib/api/client.ts",
+    "web/src/hooks/use-practice-websocket.ts",
     ".gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md",
-    "backend/tests/contract/test_practice_evidence_contract.py",
-    "backend/tests/integration/test_practice_evidence_flow.py",
-    ".gsd/DECISIONS.md",
+    ".gsd/KNOWLEDGE.md",
     ".codex/loop/state.json",
     ".codex/loop/log.md"
   ],
   "last_verification_commands": [
-    "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/contract/test_practice_evidence_contract.py backend/tests/integration/test_practice_evidence_flow.py -x -q",
-    "rg -n \"practice_session_service|practice_report_service|SessionEvidenceService\" .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md backend/src/common/api/practice.py backend/tests/contract/test_practice_evidence_contract.py",
-    "lsp diagnostics backend/tests/contract/test_practice_evidence_contract.py",
-    "lsp diagnostics backend/tests/integration/test_practice_evidence_flow.py"
+    "rg -n \"export const api|normalizeApiErrorPayload|usePracticeWebSocket|MAX_RECONNECT_ATTEMPTS|message-handlers\" web/src/lib/api web/src/hooks",
+    "lsp diagnostics web/src/lib/api/client.ts",
+    "lsp diagnostics web/src/hooks/use-practice-websocket.ts",
+    "rg -n \"M019/S03|api façade|transport contract inventory|usePracticeWebSocket\\(\\)|websocket lifecycle|domain client seam inventory\" .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md web/src/lib/api/client.ts web/src/hooks/use-practice-websocket.ts .gsd/KNOWLEDGE.md"
   ],
-  "last_verification_result": "passed; the architecture scan now names the extracted practice session/report seams plus the S03/M021 downstream consumption rule, the new contract/integration proof locks the shared SessionEvidenceService read-model line across report/history/admin/replay, and the full touched-file backend gate finished 37/37 green with only pre-existing coverage and third-party Python 3.14 warnings.",
-  "last_success_signal": "Future practice backend work can now tell which changes belong in practice_session_service or practice_report_service, while replay/history/admin continue to prove they share one completed-session projection authority instead of reaching back into practice.py.",
+  "last_verification_result": "passed; the task-plan grep gate is green across web/src/lib/api and web/src/hooks, the new frontend seam inventory is grep-discoverable in client.ts/use-practice-websocket.ts/architecture scan/knowledge, and LSP diagnostics stayed clean on the touched TypeScript authority files.",
+  "last_success_signal": "frontend seam work now has one durable inventory: pages still import the api façade, live practice still consumes usePracticeWebSocket(), and future refactors can classify work into domain client, auth/error/trace seam, transport orchestration, or inbound message handlers before touching code.",
   "last_growth_scan": null,
-  "next_action": "Proceed to M019/S02 slice completion or downstream seam adoption work with the practice route-vs-read-model boundary now documented and proved."
+  "next_action": "Proceed to M019/S03/T02 by splitting client.ts into internal domain modules behind the api façade and extracting websocket transport helpers without changing the page-level contracts."
 }

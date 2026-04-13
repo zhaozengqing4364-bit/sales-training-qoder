@@ -18,6 +18,19 @@
  *     backpressure events become state updates once the server tells us what runtime state is true.
  *   - The remaining complexity seam is therefore outbound orchestration around reconnect /
  *     backpressure / interrupt, not a generic “the file is too large so split it again” problem.
+ *
+ * M019/S03/T01 transport contract inventory:
+ *   - outward consumer: `app/(user)/practice/[sessionId]/page.tsx` owns the live practice UI and
+ *     page tests/mock wiring rely on the current `usePracticeWebSocket(...)` return contract.
+ *   - already extracted behind this hook: `websocket/message-handlers.ts` (inbound projection),
+ *     `websocket/use-audio-playback.ts` (legacy audio queue/unlock),
+ *     `use-streaming-audio-player.ts` (chunk playback), and
+ *     `use-voice-speed-preference.ts` (playback-rate preference).
+ *   - intentionally retained here: URL/auth trace assembly, socket connect/disconnect,
+ *     reconnect budget, pending outbound queue, binary negotiation, local backpressure
+ *     buffer/flush abort, and interrupt cleanup across local playback/runtime refs.
+ *   - follow-up split rule: transport helpers may move out, but the page must keep depending on
+ *     this hook instead of rebuilding websocket lifecycle or backpressure logic locally.
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
