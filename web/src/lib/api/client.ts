@@ -109,6 +109,14 @@ import {
 import { authHandler } from "@/lib/auth-handler";
 import { normalizeCurrentUser } from "@/lib/auth/current-user";
 import { buildTraceHeaders } from "@/lib/observability/trace-context";
+import {
+    createAdminReportDomain,
+    createAgentsDomain,
+    createAuthDomain,
+    createPracticeDomain,
+    createPresentationsDomain,
+    createSessionsDomain,
+} from "./client-domains";
 
 const LOOPBACK_HOST_FALLBACK_MAP: Record<string, string> = {
     "localhost": "127.0.0.1",
@@ -1413,47 +1421,45 @@ async function apiUpload<T>(
  * Split rule for follow-up tasks: keep page/component imports pointed at this façade and let
  * domain modules live behind it, otherwise pages will start bypassing auth/error/trace seams.
  */
+const authDomain = createAuthDomain({ request: apiFetch });
+const practiceDomain = createPracticeDomain({ request: apiFetch });
+const sessionsDomain = createSessionsDomain({
+    request: apiFetch,
+    resolveApiBaseUrl,
+    createHeaders,
+    fetchWithLoopbackRetry,
+    createApiError: (status, payload) => new ApiRequestError(normalizeApiErrorPayload(status, payload)),
+    createNetworkError: (error) => {
+        if (error instanceof ApiRequestError) {
+            return error;
+        }
+        return new ApiRequestError({
+            status: 0,
+            errorCode: "[NETWORK_ERROR]",
+            message: error instanceof Error && error.message.trim()
+                ? error.message
+                : "请求失败，请稍后重试。",
+        });
+    },
+});
+const agentsDomain = createAgentsDomain({ request: apiFetch });
+const presentationsDomain = createPresentationsDomain({
+    request: apiFetch,
+    upload: apiUpload,
+    resolveApiBaseUrl,
+    createHeaders,
+    fetchWithLoopbackRetry,
+    normalizePresentationListItem,
+    normalizePresentationDetailItem,
+    normalizePresentationPage,
+    normalizePresentationTalkingPoint,
+    normalizePresentationForbiddenWord,
+});
+const adminReportDomain = createAdminReportDomain({ request: apiFetch });
+
 export const api = {
     // Authentication
-    auth: {
-        login: async (credentials: { email: string; password: string }) => {
-            return apiFetch<{ token?: string; access_token?: string; user: User & { id?: string } }>("/auth/login", {
-                method: "POST",
-                body: JSON.stringify(credentials),
-                skipSessionExpiredHandling: true,
-            });
-        },
-
-        devLogin: async () => {
-            return apiFetch<{ access_token: string; token_type: string; user: User }>("/auth/dev-login", {
-                method: "POST",
-                skipSessionExpiredHandling: true,
-            });
-        },
-
-        logout: async () => {
-            return apiFetch<void>("/auth/logout", {
-                method: "POST",
-                skipSessionExpiredHandling: true,
-            });
-        },
-
-        forgotPassword: async (email: string) => {
-            return apiFetch<{ message: string }>("/auth/forgot-password", {
-                method: "POST",
-                body: JSON.stringify({ email }),
-                skipSessionExpiredHandling: true,
-            });
-        },
-
-        resetPassword: async (token: string, newPassword: string) => {
-            return apiFetch<{ message: string }>("/auth/reset-password", {
-                method: "POST",
-                body: JSON.stringify({ token, new_password: newPassword }),
-                skipSessionExpiredHandling: true,
-            });
-        },
-    },
+    auth: authDomain,
 
     // User
     user: {
@@ -1729,148 +1735,10 @@ export const api = {
     },
 
     // Practice / Sessions
-    practice: {
-        createSession: async (data: {
-            scenario_type: "sales" | "presentation";
-            presentation_id?: string;
-            agent_id?: string;
-            persona_id?: string;
-            scenario_id?: string;
-            voice_mode?: "legacy" | "stepfun_realtime";
-            runtime_profile_id?: string;
-            focus_intent?: RetryFocusIntent;
-        }) => {
-            return apiFetch<{ session_id: string }>("/practice/sessions", {
-                method: "POST",
-                body: JSON.stringify(data),
-            });
-        },
-
-        getSession: async (sessionId: string) => {
-            return apiFetch<PracticeSessionRuntime>(`/practice/sessions/${sessionId}`);
-        },
-
-        controlLifecycle: async (sessionId: string, action: SessionLifecycleAction) => {
-            const payload: SessionLifecycleRequest = { action };
-            return apiFetch<SessionLifecycleResponse>(`/practice/sessions/${sessionId}/lifecycle`, {
-                method: "POST",
-                body: JSON.stringify(payload),
-            });
-        },
-
-        startSession: async (sessionId: string) => {
-            return api.practice.controlLifecycle(sessionId, "start");
-        },
-
-        pauseSession: async (sessionId: string) => {
-            return api.practice.controlLifecycle(sessionId, "pause");
-        },
-
-        resumeSession: async (sessionId: string) => {
-            return api.practice.controlLifecycle(sessionId, "resume");
-        },
-
-        endSession: async (sessionId: string) => {
-            return api.practice.controlLifecycle(sessionId, "end");
-        },
-    },
+    practice: practiceDomain,
 
     // Sessions
-    sessions: {
-        list: async (params?: { limit?: number; page?: number; page_size?: number; sort?: string }) => {
-            const searchParams = new URLSearchParams();
-            if (params?.limit) searchParams.set("limit", String(params.limit));
-            if (params?.page) searchParams.set("page", String(params.page));
-            if (params?.page_size) searchParams.set("page_size", String(params.page_size));
-            if (params?.sort) searchParams.set("sort", params.sort);
-            return apiFetch<{ total: number; items: SessionItem[]; page: number; page_size: number; has_more: boolean }>(`/sessions?${searchParams}`);
-        },
-
-        getStats: async () => {
-            return apiFetch<SessionStats>("/sessions/stats");
-        },
-
-        getReport: async (sessionId: string) => {
-            return apiFetch<PracticeSessionReport>(`/practice/sessions/${sessionId}/report`);
-        },
-
-        getKnowledgeCheck: async (sessionId: string) => {
-            return apiFetch<KnowledgeCheckDiagnostics>(`/practice/sessions/${sessionId}/knowledge-check`);
-        },
-
-        getEnhancedReport: async (sessionId: string) => {
-            return apiFetch<Record<string, unknown>>(`/sessions/${sessionId}/enhanced-report`);
-        },
-
-        getReplay: async (sessionId: string) => {
-            return apiFetch<ReplayData>(`/sessions/${sessionId}/replay`);
-        },
-
-        getMessages: async (sessionId: string, page = 1, pageSize = 50) => {
-            return apiFetch<ReplayMessagesResponse>(`/sessions/${sessionId}/messages?page=${page}&page_size=${pageSize}`);
-        },
-
-        getMessageDetail: async (sessionId: string, messageId: string) => {
-            return apiFetch<Record<string, unknown>>(`/sessions/${sessionId}/messages/${messageId}`);
-        },
-
-        getHighlights: async (sessionId: string) => {
-            return apiFetch<HighlightsResponse>(`/sessions/${sessionId}/highlights`);
-        },
-
-        getAudioBlobUrl: async (sessionId: string, messageId: string) => {
-            const response = await fetch(`${resolveApiBaseUrl()}/sessions/${sessionId}/audio/${messageId}`, {
-                credentials: "include",
-            });
-
-            if (!response.ok) {
-                throw new Error(`HTTP ${response.status}`);
-            }
-
-            const blob = await response.blob();
-            return URL.createObjectURL(blob);
-        },
-
-        getSegmentAudioBlobUrl: async (sessionId: string, segmentSequence: number) => {
-            try {
-                const response = await fetchWithLoopbackRetry(
-                    `${resolveApiBaseUrl()}/sessions/${sessionId}/audio-segments/${segmentSequence}`,
-                    {
-                        credentials: "include",
-                        headers: createHeaders(undefined, false),
-                    },
-                );
-
-                if (!response.ok) {
-                    const payload = await response.json().catch(() => ({}));
-                    throw new ApiRequestError(
-                        normalizeApiErrorPayload(response.status, payload),
-                    );
-                }
-
-                const blob = await response.blob();
-                return URL.createObjectURL(blob);
-            } catch (error) {
-                if (error instanceof ApiRequestError) {
-                    throw error;
-                }
-
-                if (error instanceof Error && error.name === "AbortError") {
-                    throw error;
-                }
-
-                const message = error instanceof Error && error.message.trim()
-                    ? error.message
-                    : "请求失败，请稍后重试。";
-
-                throw new ApiRequestError({
-                    status: 0,
-                    errorCode: "[NETWORK_ERROR]",
-                    message,
-                });
-            }
-        },
-    },
+    sessions: sessionsDomain,
 
     // Scenarios (user-facing)
     scenarios: {
@@ -1892,36 +1760,7 @@ export const api = {
     },
 
     // Agents (user-facing)
-    agents: {
-        list: async (params?: { category?: string; status?: string }) => {
-            const searchParams = new URLSearchParams();
-            if (params?.category) searchParams.set("category", params.category);
-            if (params?.status) searchParams.set("status", params.status);
-
-            const result = await apiFetch<{ agents: Agent[]; total: number }>(`/agents?${searchParams}`);
-            return result.agents || [];
-        },
-
-        getList: async (category: string) => {
-            const result = await apiFetch<{ agents: Agent[]; total: number }>(`/agents?category=${category}&status=published`);
-            return result.agents || [];
-        },
-
-        get: async (id: string) => {
-            return apiFetch<Agent>(`/agents/${id}`);
-        },
-
-        getAgentWithPersonas: async (agentId: string) => {
-            const [agent, personasResult] = await Promise.all([
-                apiFetch<Agent>(`/agents/${agentId}`),
-                apiFetch<{ personas: Persona[] }>(`/agents/${agentId}/personas`),
-            ]);
-            return {
-                ...agent,
-                personas: personasResult.personas || [],
-            };
-        },
-    },
+    agents: agentsDomain,
 
     // Admin - Analytics
     analytics: {
@@ -2020,6 +1859,7 @@ export const api = {
 
     // Admin operations
     admin: {
+        ...adminReportDomain,
         // Training Records
         getTrainingRecords: async (params: {
             search?: string;
@@ -3013,106 +2853,7 @@ export const api = {
     },
 
     // Presentation coach (user)
-    presentations: {
-        list: async (params?: { status?: string; limit?: number }) => {
-            const searchParams = new URLSearchParams();
-            if (params?.status) searchParams.set("status", params.status);
-            if (params?.limit) searchParams.set("limit", params.limit.toString());
-            const query = searchParams.toString();
-            const result = await apiFetch<Array<Record<string, unknown>>>(`/presentations${query ? `?${query}` : ""}`);
-            return result.map(normalizePresentationListItem);
-        },
-
-        upload: async ({ title, file }: { title: string; file: File }) => {
-            const formData = new FormData();
-            formData.append("title", title);
-            formData.append("file", file);
-            const result = await apiUpload<Record<string, unknown>>("/presentations", formData);
-            return normalizePresentationListItem(result);
-        },
-
-        replace: async (presentationId: string, payload: { file: File; title?: string }) => {
-            const formData = new FormData();
-            if (payload.title) {
-                formData.append("title", payload.title);
-            }
-            formData.append("file", payload.file);
-            const result = await apiUpload<Record<string, unknown>>(
-                `/presentations/${presentationId}/replace`,
-                formData,
-            );
-            return normalizePresentationDetailItem(result);
-        },
-
-        get: async (presentationId: string) => {
-            const result = await apiFetch<Record<string, unknown>>(`/presentations/${presentationId}`);
-            return normalizePresentationDetailItem(result);
-        },
-
-        delete: async (presentationId: string) => {
-            return apiFetch<void>(`/presentations/${presentationId}`, {
-                method: "DELETE",
-            });
-        },
-
-        getForbiddenWords: async (presentationId: string) => {
-            const result = await apiFetch<Array<Record<string, unknown>>>(`/presentations/${presentationId}/forbidden-words`);
-            return result.map(normalizePresentationForbiddenWord);
-        },
-
-        addForbiddenWord: async (presentationId: string, payload: { phrase: string; suggested_alternative?: string }) => {
-            const result = await apiFetch<Record<string, unknown>>(`/presentations/${presentationId}/forbidden-words`, {
-                method: "POST",
-                body: JSON.stringify(payload),
-            });
-            return normalizePresentationForbiddenWord(result);
-        },
-
-        deleteForbiddenWord: async (_presentationId: string, wordId: string) => {
-            return apiFetch<void>(`/admin/forbidden-words/${wordId}`, {
-                method: "DELETE",
-            });
-        },
-
-        getPages: async (presentationId: string) => {
-            const result = await apiFetch<Array<Record<string, unknown>>>(`/presentations/${presentationId}/pages`);
-            return result.map(normalizePresentationPage);
-        },
-
-        getThumbnailBlob: async (presentationId: string, pageNumber: number) => {
-            const response = await fetchWithLoopbackRetry(
-                `${resolveApiBaseUrl()}/presentations/${presentationId}/pages/${pageNumber}/thumbnail`,
-                {
-                    method: "GET",
-                    headers: createHeaders(undefined, false),
-                    credentials: "include",
-                },
-            );
-            if (!response.ok) {
-                throw new Error(`HTTP ${response.status}`);
-            }
-            return response.blob();
-        },
-
-        getTalkingPoints: async (presentationId: string, pageNumber: number) => {
-            const result = await apiFetch<Array<Record<string, unknown>>>(`/presentations/${presentationId}/pages/${pageNumber}/talking-points`);
-            return result.map(normalizePresentationTalkingPoint);
-        },
-
-        addTalkingPoint: async (presentationId: string, pageNumber: number, payload: { description: string }) => {
-            const result = await apiFetch<Record<string, unknown>>(`/presentations/${presentationId}/pages/${pageNumber}/talking-points`, {
-                method: "POST",
-                body: JSON.stringify(payload),
-            });
-            return normalizePresentationTalkingPoint(result);
-        },
-
-        deleteTalkingPoint: async (_presentationId: string, pointId: string) => {
-            return apiFetch<void>(`/admin/talking-points/${pointId}`, {
-                method: "DELETE",
-            });
-        },
-    },
+    presentations: presentationsDomain,
 
     // Presentation coach (admin)
     adminPresentations: {

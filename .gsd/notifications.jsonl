@@ -1,9 +1,3 @@
-{"id":"a2ded4d6-3e33-4b81-829a-4aa90645134e","ts":"2026-04-10T09:28:29.905Z","severity":"info","message":"Resuming paused session for M014.","source":"notify","read":false}
-{"id":"f16a0268-f86e-4cbc-b9d3-b8f096da96a7","ts":"2026-04-10T09:28:29.916Z","severity":"info","message":"Auto-mode resumed.","source":"notify","read":false}
-{"id":"4ae162bb-d8e0-44ed-96e8-a45142e087e5","ts":"2026-04-10T09:28:35.755Z","severity":"info","message":"Resume: applied 4 fix(es) to state.","source":"notify","read":false}
-{"id":"bf05fac7-0a0b-46e1-87ac-89d956981745","ts":"2026-04-10T09:28:37.194Z","severity":"warning","message":"Web search: Set BRAVE_API_KEY or use an Anthropic model for built-in search","source":"notify","read":false}
-{"id":"3f7d8972-0d07-4093-8b27-74b3cb6457e1","ts":"2026-04-10T09:28:37.357Z","severity":"warning","message":"Auto-mode paused due to provider error: Claude Code process aborted by user","source":"notify","read":false}
-{"id":"43a0a373-3259-4051-b4aa-96afe7127c6f","ts":"2026-04-10T09:28:37.369Z","severity":"info","message":"Auto-mode paused (Escape). Type to interact, or /gsd auto to resume.","source":"notify","read":false}
 {"id":"4ed54a49-f215-4170-8213-d68dc3dc35c4","ts":"2026-04-10T09:28:44.282Z","severity":"warning","message":"[guided] preferences section parse failed: Source contains multiple documents; please use YAML.parseAllDocuments() at line 8, column 1:\n\n避免一次性大改、多点乱改、顺手修一堆。\n---\n^^^\n","source":"workflow-logger","read":false}
 {"id":"b92b6b40-3e87-4e72-a143-bce28ed8ec0f","ts":"2026-04-10T09:28:50.509Z","severity":"warning","message":"Web search: Set BRAVE_API_KEY or use an Anthropic model for built-in search","source":"notify","read":false}
 {"id":"cef9a71f-cbb0-4105-ac20-18a1c92e0793","ts":"2026-04-10T09:28:54.737Z","severity":"info","message":"Resuming paused session for M014.","source":"notify","read":false}
@@ -498,3 +492,9 @@
 {"id":"829e614d-8e90-4908-95c2-859bc1d61f67","ts":"2026-04-13T04:04:02.271Z","severity":"warning","message":"Safety: 2 unexpected file change(s) outside task plan","source":"notify","read":false}
 {"id":"447555c7-9a42-4e27-82f2-971c4e947f78","ts":"2026-04-13T04:04:22.190Z","severity":"info","message":"Verification gate: FAILED — npm run test","source":"notify","read":false}
 {"id":"dd759c15-e77a-45ca-8f81-27a69ebd96ea","ts":"2026-04-13T04:04:22.196Z","severity":"warning","message":"Verification failed in auto-discovered package.json checks — treating as advisory.","source":"notify","read":false}
+{"id":"d461f4d6-2d9a-4942-a465-99f278fe0748","ts":"2026-04-13T04:19:18.577Z","severity":"info","message":"Committed: feat: Codified the frontend domain-client and websocket transport seam…","source":"notify","read":false}
+{"id":"8c0fb347-4d17-4e85-af8e-f893daaeb0be","ts":"2026-04-13T04:19:18.605Z","severity":"warning","message":"[safety] file-change: .codex/loop/log.md — Modified but not in task plan's expected output","source":"workflow-logger","read":false}
+{"id":"bcec884c-e5b3-45c7-959a-c0dd92192a8e","ts":"2026-04-13T04:19:18.609Z","severity":"warning","message":"[safety] file-change: .codex/loop/state.json — Modified but not in task plan's expected output","source":"workflow-logger","read":false}
+{"id":"1e788df2-c3cb-46bb-b7f7-42508a0be5e2","ts":"2026-04-13T04:19:18.613Z","severity":"warning","message":"Safety: 2 unexpected file change(s) outside task plan","source":"notify","read":false}
+{"id":"1b12a124-36a3-41f1-8c5e-01dec23aa52b","ts":"2026-04-13T04:19:36.671Z","severity":"info","message":"Verification gate: FAILED — npm run test","source":"notify","read":false}
+{"id":"15cbfb94-3af4-41e7-8cc2-92eac73c8685","ts":"2026-04-13T04:19:36.677Z","severity":"warning","message":"Verification failed in auto-discovered package.json checks — treating as advisory.","source":"notify","read":false}

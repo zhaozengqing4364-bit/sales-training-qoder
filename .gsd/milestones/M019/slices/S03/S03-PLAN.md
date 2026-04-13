@@ -30,7 +30,7 @@ S03 结束后，前端请求与 practice transport 不再被两个 mega file 独
   - Files: `web/src/lib/api/client.ts`, `web/src/hooks/use-practice-websocket.ts`, `web/src/hooks/websocket`, `web/src/lib/api`
   - Verify: rg -n "export const api|normalizeApiErrorPayload|usePracticeWebSocket|MAX_RECONNECT_ATTEMPTS|message-handlers" web/src/lib/api web/src/hooks
 
-- [ ] **T02: 拆分 API client 与 websocket transport helpers** `est:2h`
+- [x] **T02: 拆分 API client 与 websocket transport helpers** `est:2h`
   - 先按 domain 拆 `client.ts`，保留统一 auth/error/trace seam，再把 outward `api` façade 指回域模块。
 - 对 `use-practice-websocket.ts` 继续下沉可下沉的 URL/auth/reconnect/backpressure helper，但保留它作为 outward transport hook，避免页面本地拼 websocket 行为。
 - 确保 `authHandler`、trace-context、shared types 仍是唯一 cross-cutting seam。

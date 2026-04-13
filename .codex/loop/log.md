@@ -1,3 +1,27 @@
+- time: 2026-04-13T12:38:12.165299+08:00
+  mode: grow
+  item id: M019-S03-T02
+  files changed:
+    - web/src/lib/api/client.ts
+    - web/src/lib/api/client-domains.ts
+    - web/src/hooks/use-practice-websocket.ts
+    - web/src/hooks/websocket/transport.ts
+    - web/src/lib/api/client-domains.test.ts
+    - web/src/hooks/websocket/transport.test.ts
+    - .codex/loop/state.json
+    - .codex/loop/log.md
+  summary: Split the runtime-facing frontend seams behind dedicated helpers without changing page contracts: client.ts now delegates auth/practice/session/agent/presentation/report domains to client-domains.ts, usePracticeWebSocket now uses websocket/transport.ts for URL/queue/backoff helpers, and the login/practice/report/replay page bundle stayed green on the outward api façade plus usePracticeWebSocket hook.
+  verification commands:
+    - npm --prefix web test -- --run src/lib/api/client-domains.test.ts src/hooks/websocket/transport.test.ts src/hooks/use-practice-websocket.test.ts
+    - npm --prefix web test -- --run "src/app/(auth)/login/page.test.tsx" "src/app/(user)/practice/[sessionId]/page.test.tsx" "src/app/(user)/practice/[sessionId]/report/page.test.tsx" "src/app/(user)/practice/[sessionId]/replay/page.test.tsx"
+    - lsp diagnostics web/src/lib/api/client.ts
+    - lsp diagnostics web/src/lib/api/client-domains.ts
+    - lsp diagnostics web/src/hooks/use-practice-websocket.ts
+    - lsp diagnostics web/src/hooks/websocket/transport.ts
+  verification results: passed; the new internal seam tests finished 23/23 green, the exact slice verification bundle finished 50/50 green across login/practice/report/replay pages, and diagnostics stayed clean on the touched TypeScript files.
+  success signal status: the runtime-facing frontend seam is no longer locked inside two monoliths — pages still import api/usePracticeWebSocket, while the split between shared request/error/trace core, domain builders, and transport helpers is now explicit and re-runnable.
+  rollback note: if later S03 work moves more domains out of client.ts or changes websocket queue/backoff semantics, keep client-domains.ts, websocket/transport.ts, the focused seam tests, and the page-level verification bundle aligned together so the outward contracts remain stable.
+
 - time: 2026-04-13T12:17:51.050075+08:00
   mode: grow
   item id: M019-S03-T01

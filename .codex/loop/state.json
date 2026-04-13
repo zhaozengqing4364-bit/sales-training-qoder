@@ -1,6 +1,6 @@
 {
   "mode": "grow",
-  "current_issue_id": "M019-S03-T01",
+  "current_issue_id": "M019-S03-T02",
   "current_issue_type": "task",
   "current_issue_status": "done",
   "pending_issue_ids": [],
@@ -192,26 +192,31 @@
     "M019-S02-T02",
     "M019-S02-T03",
     "M019-S02",
-    "M019-S03-T01"
+    "M019-S03-T01",
+    "M019-S03-T02"
   ],
   "blocked_issue_ids": [],
   "deferred_issue_ids": [],
   "last_modified_files": [
     "web/src/lib/api/client.ts",
+    "web/src/lib/api/client-domains.ts",
     "web/src/hooks/use-practice-websocket.ts",
-    ".gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md",
-    ".gsd/KNOWLEDGE.md",
+    "web/src/hooks/websocket/transport.ts",
+    "web/src/lib/api/client-domains.test.ts",
+    "web/src/hooks/websocket/transport.test.ts",
     ".codex/loop/state.json",
     ".codex/loop/log.md"
   ],
   "last_verification_commands": [
-    "rg -n \"export const api|normalizeApiErrorPayload|usePracticeWebSocket|MAX_RECONNECT_ATTEMPTS|message-handlers\" web/src/lib/api web/src/hooks",
+    "npm --prefix web test -- --run src/lib/api/client-domains.test.ts src/hooks/websocket/transport.test.ts src/hooks/use-practice-websocket.test.ts",
+    "npm --prefix web test -- --run \"src/app/(auth)/login/page.test.tsx\" \"src/app/(user)/practice/[sessionId]/page.test.tsx\" \"src/app/(user)/practice/[sessionId]/report/page.test.tsx\" \"src/app/(user)/practice/[sessionId]/replay/page.test.tsx\"",
     "lsp diagnostics web/src/lib/api/client.ts",
+    "lsp diagnostics web/src/lib/api/client-domains.ts",
     "lsp diagnostics web/src/hooks/use-practice-websocket.ts",
-    "rg -n \"M019/S03|api façade|transport contract inventory|usePracticeWebSocket\\(\\)|websocket lifecycle|domain client seam inventory\" .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md web/src/lib/api/client.ts web/src/hooks/use-practice-websocket.ts .gsd/KNOWLEDGE.md"
+    "lsp diagnostics web/src/hooks/websocket/transport.ts"
   ],
-  "last_verification_result": "passed; the task-plan grep gate is green across web/src/lib/api and web/src/hooks, the new frontend seam inventory is grep-discoverable in client.ts/use-practice-websocket.ts/architecture scan/knowledge, and LSP diagnostics stayed clean on the touched TypeScript authority files.",
-  "last_success_signal": "frontend seam work now has one durable inventory: pages still import the api façade, live practice still consumes usePracticeWebSocket(), and future refactors can classify work into domain client, auth/error/trace seam, transport orchestration, or inbound message handlers before touching code.",
+  "last_verification_result": "passed; the new client-domain factory seam and websocket transport helper seam are green in focused tests, the exact slice verification bundle finished 50/50 green across login/practice/report/replay pages, and fresh LSP diagnostics stayed clean on all touched TypeScript authority files.",
+  "last_success_signal": "runtime-facing frontend domains now sit behind client-domains.ts while pages still import the api façade, and usePracticeWebSocket() now delegates URL/queue/backoff transport helpers to websocket/transport.ts without changing its outward contract.",
   "last_growth_scan": null,
-  "next_action": "Proceed to M019/S03/T02 by splitting client.ts into internal domain modules behind the api façade and extracting websocket transport helpers without changing the page-level contracts."
+  "next_action": "Proceed to M019/S03/T03 by tightening the remaining client/websocket internal seams or documenting downstream proof, while keeping pages on the api façade and usePracticeWebSocket outward contract."
 }

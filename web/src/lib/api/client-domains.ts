@@ -1,0 +1,392 @@
+import type {
+    Agent,
+    Persona,
+    User,
+    PracticeSessionRuntime,
+    RetryFocusIntent,
+    SessionItem,
+    SessionStats,
+    PracticeSessionReport,
+    KnowledgeCheckDiagnostics,
+    ReplayData,
+    ReplayMessagesResponse,
+    HighlightsResponse,
+    SessionLifecycleAction,
+    SessionLifecycleRequest,
+    SessionLifecycleResponse,
+    ComprehensiveReport,
+    AdminPresentationListItem,
+    AdminPresentationDetailItem,
+    AdminPresentationPage,
+} from "./types";
+
+type ApiRequestOptions = RequestInit & {
+    signal?: AbortSignal;
+    skipSessionExpiredHandling?: boolean;
+};
+
+type ApiRequest = <T>(endpoint: string, options?: ApiRequestOptions) => Promise<T>;
+type ApiUpload = <T>(
+    endpoint: string,
+    formData: FormData,
+    signal?: AbortSignal,
+    options?: { skipSessionExpiredHandling?: boolean },
+) => Promise<T>;
+
+type PresentationListItem = AdminPresentationListItem;
+type PresentationDetailItem = AdminPresentationDetailItem;
+type PresentationPage = AdminPresentationPage;
+type PresentationTalkingPoint = {
+    point_id: string;
+    description: string;
+    is_ai_generated: boolean;
+    confirmed_by_admin: boolean;
+};
+type PresentationForbiddenWord = {
+    word_id: string;
+    phrase: string;
+    suggested_alternative?: string;
+    page_id?: string;
+};
+
+type SessionsDomainDependencies = {
+    request: ApiRequest;
+    resolveApiBaseUrl: () => string;
+    createHeaders: (existingHeaders?: HeadersInit, includeContentType?: boolean) => Headers;
+    fetchWithLoopbackRetry: (url: string, options: RequestInit) => Promise<Response>;
+    createApiError: (status: number, payload: unknown) => Error;
+    createNetworkError: (error: unknown) => Error;
+};
+
+type PresentationsDomainDependencies = {
+    request: ApiRequest;
+    upload: ApiUpload;
+    resolveApiBaseUrl: () => string;
+    createHeaders: (existingHeaders?: HeadersInit, includeContentType?: boolean) => Headers;
+    fetchWithLoopbackRetry: (url: string, options: RequestInit) => Promise<Response>;
+    normalizePresentationListItem: (input: unknown) => PresentationListItem;
+    normalizePresentationDetailItem: (input: unknown) => PresentationDetailItem;
+    normalizePresentationPage: (input: unknown) => PresentationPage;
+    normalizePresentationTalkingPoint: (input: unknown) => PresentationTalkingPoint;
+    normalizePresentationForbiddenWord: (input: unknown) => PresentationForbiddenWord;
+};
+
+type AgentsDomainDependencies = {
+    request: ApiRequest;
+};
+
+type AuthDomainDependencies = {
+    request: ApiRequest;
+};
+
+type PracticeDomainDependencies = {
+    request: ApiRequest;
+};
+
+type AdminReportDomainDependencies = {
+    request: ApiRequest;
+};
+
+export function createAuthDomain({ request }: AuthDomainDependencies) {
+    return {
+        login: async (credentials: { email: string; password: string }) => {
+            return request<{ token?: string; access_token?: string; user: User & { id?: string } }>("/auth/login", {
+                method: "POST",
+                body: JSON.stringify(credentials),
+                skipSessionExpiredHandling: true,
+            });
+        },
+
+        devLogin: async () => {
+            return request<{ access_token: string; token_type: string; user: User }>("/auth/dev-login", {
+                method: "POST",
+                skipSessionExpiredHandling: true,
+            });
+        },
+
+        logout: async () => {
+            return request<void>("/auth/logout", {
+                method: "POST",
+                skipSessionExpiredHandling: true,
+            });
+        },
+
+        forgotPassword: async (email: string) => {
+            return request<{ message: string }>("/auth/forgot-password", {
+                method: "POST",
+                body: JSON.stringify({ email }),
+                skipSessionExpiredHandling: true,
+            });
+        },
+
+        resetPassword: async (token: string, newPassword: string) => {
+            return request<{ message: string }>("/auth/reset-password", {
+                method: "POST",
+                body: JSON.stringify({ token, new_password: newPassword }),
+                skipSessionExpiredHandling: true,
+            });
+        },
+    };
+}
+
+export function createPracticeDomain({ request }: PracticeDomainDependencies) {
+    const controlLifecycle = async (sessionId: string, action: SessionLifecycleAction) => {
+        const payload: SessionLifecycleRequest = { action };
+        return request<SessionLifecycleResponse>(`/practice/sessions/${sessionId}/lifecycle`, {
+            method: "POST",
+            body: JSON.stringify(payload),
+        });
+    };
+
+    return {
+        createSession: async (data: {
+            scenario_type: "sales" | "presentation";
+            presentation_id?: string;
+            agent_id?: string;
+            persona_id?: string;
+            scenario_id?: string;
+            voice_mode?: "legacy" | "stepfun_realtime";
+            runtime_profile_id?: string;
+            focus_intent?: RetryFocusIntent;
+        }) => {
+            return request<{ session_id: string }>("/practice/sessions", {
+                method: "POST",
+                body: JSON.stringify(data),
+            });
+        },
+
+        getSession: async (sessionId: string) => {
+            return request<PracticeSessionRuntime>(`/practice/sessions/${sessionId}`);
+        },
+
+        controlLifecycle,
+        startSession: async (sessionId: string) => controlLifecycle(sessionId, "start"),
+        pauseSession: async (sessionId: string) => controlLifecycle(sessionId, "pause"),
+        resumeSession: async (sessionId: string) => controlLifecycle(sessionId, "resume"),
+        endSession: async (sessionId: string) => controlLifecycle(sessionId, "end"),
+    };
+}
+
+export function createSessionsDomain({
+    request,
+    resolveApiBaseUrl,
+    createHeaders,
+    fetchWithLoopbackRetry,
+    createApiError,
+    createNetworkError,
+}: SessionsDomainDependencies) {
+    return {
+        list: async (params?: { limit?: number; page?: number; page_size?: number; sort?: string }) => {
+            const searchParams = new URLSearchParams();
+            if (params?.limit) searchParams.set("limit", String(params.limit));
+            if (params?.page) searchParams.set("page", String(params.page));
+            if (params?.page_size) searchParams.set("page_size", String(params.page_size));
+            if (params?.sort) searchParams.set("sort", params.sort);
+            return request<{ total: number; items: SessionItem[]; page: number; page_size: number; has_more: boolean }>(`/sessions?${searchParams}`);
+        },
+
+        getStats: async () => request<SessionStats>("/sessions/stats"),
+        getReport: async (sessionId: string) => request<PracticeSessionReport>(`/practice/sessions/${sessionId}/report`),
+        getKnowledgeCheck: async (sessionId: string) => request<KnowledgeCheckDiagnostics>(`/practice/sessions/${sessionId}/knowledge-check`),
+        getEnhancedReport: async (sessionId: string) => request<Record<string, unknown>>(`/sessions/${sessionId}/enhanced-report`),
+        getReplay: async (sessionId: string) => request<ReplayData>(`/sessions/${sessionId}/replay`),
+        getMessages: async (sessionId: string, page = 1, pageSize = 50) => {
+            return request<ReplayMessagesResponse>(`/sessions/${sessionId}/messages?page=${page}&page_size=${pageSize}`);
+        },
+        getMessageDetail: async (sessionId: string, messageId: string) => {
+            return request<Record<string, unknown>>(`/sessions/${sessionId}/messages/${messageId}`);
+        },
+        getHighlights: async (sessionId: string) => request<HighlightsResponse>(`/sessions/${sessionId}/highlights`),
+
+        getAudioBlobUrl: async (sessionId: string, messageId: string) => {
+            const response = await fetch(`${resolveApiBaseUrl()}/sessions/${sessionId}/audio/${messageId}`, {
+                credentials: "include",
+            });
+
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}`);
+            }
+
+            const blob = await response.blob();
+            return URL.createObjectURL(blob);
+        },
+
+        getSegmentAudioBlobUrl: async (sessionId: string, segmentSequence: number) => {
+            try {
+                const response = await fetchWithLoopbackRetry(
+                    `${resolveApiBaseUrl()}/sessions/${sessionId}/audio-segments/${segmentSequence}`,
+                    {
+                        credentials: "include",
+                        headers: createHeaders(undefined, false),
+                    },
+                );
+
+                if (!response.ok) {
+                    const payload = await response.json().catch(() => ({}));
+                    throw createApiError(response.status, payload);
+                }
+
+                const blob = await response.blob();
+                return URL.createObjectURL(blob);
+            } catch (error) {
+                if (error instanceof Error && error.name === "AbortError") {
+                    throw error;
+                }
+                if (error instanceof Error && error.name === "ApiRequestError") {
+                    throw error;
+                }
+                throw createNetworkError(error);
+            }
+        },
+    };
+}
+
+export function createAgentsDomain({ request }: AgentsDomainDependencies) {
+    return {
+        list: async (params?: { category?: string; status?: string }) => {
+            const searchParams = new URLSearchParams();
+            if (params?.category) searchParams.set("category", params.category);
+            if (params?.status) searchParams.set("status", params.status);
+
+            const result = await request<{ agents: Agent[]; total: number }>(`/agents?${searchParams}`);
+            return result.agents || [];
+        },
+
+        getList: async (category: string) => {
+            const result = await request<{ agents: Agent[]; total: number }>(`/agents?category=${category}&status=published`);
+            return result.agents || [];
+        },
+
+        get: async (id: string) => request<Agent>(`/agents/${id}`),
+
+        getAgentWithPersonas: async (agentId: string) => {
+            const [agent, personasResult] = await Promise.all([
+                request<Agent>(`/agents/${agentId}`),
+                request<{ personas: Persona[] }>(`/agents/${agentId}/personas`),
+            ]);
+            return {
+                ...agent,
+                personas: personasResult.personas || [],
+            };
+        },
+    };
+}
+
+export function createPresentationsDomain({
+    request,
+    upload,
+    resolveApiBaseUrl,
+    createHeaders,
+    fetchWithLoopbackRetry,
+    normalizePresentationListItem,
+    normalizePresentationDetailItem,
+    normalizePresentationPage,
+    normalizePresentationTalkingPoint,
+    normalizePresentationForbiddenWord,
+}: PresentationsDomainDependencies) {
+    return {
+        list: async (params?: { status?: string; limit?: number }) => {
+            const searchParams = new URLSearchParams();
+            if (params?.status) searchParams.set("status", params.status);
+            if (params?.limit) searchParams.set("limit", params.limit.toString());
+            const query = searchParams.toString();
+            const result = await request<Array<Record<string, unknown>>>(`/presentations${query ? `?${query}` : ""}`);
+            return result.map(normalizePresentationListItem);
+        },
+
+        upload: async ({ title, file }: { title: string; file: File }) => {
+            const formData = new FormData();
+            formData.append("title", title);
+            formData.append("file", file);
+            const result = await upload<Record<string, unknown>>("/presentations", formData);
+            return normalizePresentationListItem(result);
+        },
+
+        replace: async (presentationId: string, payload: { file: File; title?: string }) => {
+            const formData = new FormData();
+            if (payload.title) {
+                formData.append("title", payload.title);
+            }
+            formData.append("file", payload.file);
+            const result = await upload<Record<string, unknown>>(`/presentations/${presentationId}/replace`, formData);
+            return normalizePresentationDetailItem(result);
+        },
+
+        get: async (presentationId: string) => {
+            const result = await request<Record<string, unknown>>(`/presentations/${presentationId}`);
+            return normalizePresentationDetailItem(result);
+        },
+
+        delete: async (presentationId: string) => {
+            return request<void>(`/presentations/${presentationId}`, { method: "DELETE" });
+        },
+
+        getForbiddenWords: async (presentationId: string) => {
+            const result = await request<Array<Record<string, unknown>>>(`/presentations/${presentationId}/forbidden-words`);
+            return result.map(normalizePresentationForbiddenWord);
+        },
+
+        addForbiddenWord: async (presentationId: string, payload: { phrase: string; suggested_alternative?: string }) => {
+            const result = await request<Record<string, unknown>>(`/presentations/${presentationId}/forbidden-words`, {
+                method: "POST",
+                body: JSON.stringify(payload),
+            });
+            return normalizePresentationForbiddenWord(result);
+        },
+
+        deleteForbiddenWord: async (_presentationId: string, wordId: string) => {
+            return request<void>(`/admin/forbidden-words/${wordId}`, { method: "DELETE" });
+        },
+
+        getPages: async (presentationId: string) => {
+            const result = await request<Array<Record<string, unknown>>>(`/presentations/${presentationId}/pages`);
+            return result.map(normalizePresentationPage);
+        },
+
+        getThumbnailBlob: async (presentationId: string, pageNumber: number) => {
+            const response = await fetchWithLoopbackRetry(
+                `${resolveApiBaseUrl()}/presentations/${presentationId}/pages/${pageNumber}/thumbnail`,
+                {
+                    method: "GET",
+                    headers: createHeaders(undefined, false),
+                    credentials: "include",
+                },
+            );
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}`);
+            }
+            return response.blob();
+        },
+
+        getTalkingPoints: async (presentationId: string, pageNumber: number) => {
+            const result = await request<Array<Record<string, unknown>>>(`/presentations/${presentationId}/pages/${pageNumber}/talking-points`);
+            return result.map(normalizePresentationTalkingPoint);
+        },
+
+        addTalkingPoint: async (presentationId: string, pageNumber: number, payload: { description: string }) => {
+            const result = await request<Record<string, unknown>>(`/presentations/${presentationId}/pages/${pageNumber}/talking-points`, {
+                method: "POST",
+                body: JSON.stringify(payload),
+            });
+            return normalizePresentationTalkingPoint(result);
+        },
+
+        deleteTalkingPoint: async (_presentationId: string, pointId: string) => {
+            return request<void>(`/admin/talking-points/${pointId}`, { method: "DELETE" });
+        },
+    };
+}
+
+export function createAdminReportDomain({ request }: AdminReportDomainDependencies) {
+    return {
+        getComprehensiveReport: async (sessionId: string) => {
+            return request<ComprehensiveReport>(`/evaluation/sessions/${sessionId}/report`);
+        },
+
+        generateComprehensiveReport: async (sessionId: string) => {
+            return request<ComprehensiveReport>(`/evaluation/sessions/${sessionId}/report`, {
+                method: "POST",
+            });
+        },
+    };
+}

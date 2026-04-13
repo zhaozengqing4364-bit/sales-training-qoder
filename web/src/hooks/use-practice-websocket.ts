@@ -59,6 +59,14 @@ import type { InterruptReason } from "./websocket/types";
 import { WS_BASE_URL, INITIAL_PRACTICE_STATE } from "./websocket/types";
 import { useAudioPlayback } from "./websocket/use-audio-playback";
 import { handleWebSocketMessage } from "./websocket/message-handlers";
+import {
+    buildPracticeWebSocketUrl,
+    createPendingMessageQueue,
+    deriveConnectionFlags,
+    maskWsUrlToken,
+    nextReconnectDelay,
+    toCloseReasonMessage,
+} from "./websocket/transport";
 
 // ── Constants ──
 const MAX_RECONNECT_ATTEMPTS = 5;
@@ -71,34 +79,6 @@ const MAX_PENDING_OUTGOING_MESSAGES = 80;
 const BINARY_AUDIO_CHUNK = 0x01;
 const BINARY_AUDIO_INTERRUPT = 0x02;
 type OutgoingMessagePriority = "high" | "normal";
-
-function deriveConnectionFlags(connectionState: ConnectionState): {
-    isConnected: boolean;
-    isConnecting: boolean;
-} {
-    return {
-        isConnected: connectionState === "connected",
-        isConnecting: connectionState === "connecting" || connectionState === "reconnecting",
-    };
-}
-
-function maskWsUrlToken(url: string): string {
-    return url.replace(/([?&]token=)[^&]+/i, "$1***");
-}
-
-function toCloseReasonMessage(reason: string): string | null {
-    const normalized = reason.trim().toLowerCase();
-    if (!normalized) {
-        return null;
-    }
-    if (
-        normalized.includes("too long without operation")
-        || normalized.includes("too long without operatio")
-    ) {
-        return "Realtime 上游连接空闲超时，请继续提问或点击“重新连接”。";
-    }
-    return reason.trim();
-}
 
 /** v1-13: Convert Int16Array PCM to Base64 string (used only during backpressure fallback). */
 function pcmToBase64(pcmData: Int16Array): string {
@@ -121,7 +101,7 @@ export function usePracticeWebSocket(options: UsePracticeWebSocketOptions) {
     const reconnectAttempts = useRef(0);
     const isConnectingRef = useRef(false);
     const manualDisconnectRef = useRef(false);
-    const pendingMessagesRef = useRef<WSMessage[]>([]);
+    const pendingMessagesRef = useRef(createPendingMessageQueue(MAX_PENDING_OUTGOING_MESSAGES));
 
     // ── State ──
     const [state, setState] = useState<PracticeState>(INITIAL_PRACTICE_STATE);
@@ -281,10 +261,10 @@ export function usePracticeWebSocket(options: UsePracticeWebSocketOptions) {
     );
 
     const clearPendingMessages = useCallback(() => {
-        if (pendingMessagesRef.current.length === 0) {
+        if (pendingMessagesRef.current.size() === 0) {
             return;
         }
-        pendingMessagesRef.current = [];
+        pendingMessagesRef.current.clear();
     }, []);
 
     const resetRealtimeRuntimeState = useCallback(() => {
@@ -340,12 +320,7 @@ export function usePracticeWebSocket(options: UsePracticeWebSocketOptions) {
         if (!ws || ws.readyState !== WebSocket.OPEN) {
             return;
         }
-        if (pendingMessagesRef.current.length === 0) {
-            return;
-        }
-
-        const queuedMessages = pendingMessagesRef.current.splice(0);
-        queuedMessages.forEach((message) => {
+        pendingMessagesRef.current.flushTo((message) => {
             ws.send(JSON.stringify(message));
         });
     }, []);
@@ -367,26 +342,9 @@ export function usePracticeWebSocket(options: UsePracticeWebSocketOptions) {
             return;
         }
 
-        // Pending outbound replay is only valid during the initial handshake. Once the
-        // hook has moved into reconnect/failed, the next socket is a fresh transport epoch.
-        const canQueueDuringHandshake = connectionStateRef.current === "connecting";
-        const shouldQueue = canQueueDuringHandshake && type !== "audio_chunk" && type !== "audio_end";
-        if (!shouldQueue) {
-            return;
-        }
-
-        if (options?.priority === "high") {
-            pendingMessagesRef.current.unshift(message);
-            if (pendingMessagesRef.current.length > MAX_PENDING_OUTGOING_MESSAGES) {
-                pendingMessagesRef.current.pop();
-            }
-            return;
-        }
-
-        if (pendingMessagesRef.current.length >= MAX_PENDING_OUTGOING_MESSAGES) {
-            pendingMessagesRef.current.shift();
-        }
-        pendingMessagesRef.current.push(message);
+        pendingMessagesRef.current.enqueue(message, {
+            connectionState: connectionStateRef.current,
+        });
     }, [flushPendingMessages]);
 
     const sendText = useCallback((content: string) => {
@@ -658,12 +616,15 @@ export function usePracticeWebSocket(options: UsePracticeWebSocketOptions) {
 
     // ── Connection management ──
     const buildWsUrl = useCallback(() => {
-        let url = `${WS_BASE_URL}/ws/${scenarioType}?session_id=${sessionId}`;
-        if (agentId) url += `&agent_id=${agentId}`;
-        if (personaId) url += `&persona_id=${personaId}`;
-        if (voiceMode) url += `&voice_mode=${voiceMode}`;
-        url += `&trace_id=${getSharedTraceId()}`;
-        return url;
+        return buildPracticeWebSocketUrl({
+            baseUrl: WS_BASE_URL,
+            scenarioType,
+            sessionId,
+            agentId,
+            personaId,
+            voiceMode,
+            traceId: getSharedTraceId(),
+        });
     }, [sessionId, scenarioType, agentId, personaId, voiceMode]);
 
     const connect = useCallback(() => {
@@ -764,7 +725,7 @@ export function usePracticeWebSocket(options: UsePracticeWebSocketOptions) {
                     "reconnecting",
                     closeReasonText || "连接中断，正在重连...",
                 );
-                const delay = Math.min(1000 * Math.pow(2, reconnectAttempts.current), 30000);
+                const delay = nextReconnectDelay(reconnectAttempts.current);
                 reconnectAttempts.current++;
                 debug.log(`[PracticeWS] Reconnecting in ${delay}ms (attempt ${reconnectAttempts.current})`);
                 setTimeout(() => {
@@ -803,7 +764,7 @@ export function usePracticeWebSocket(options: UsePracticeWebSocketOptions) {
         reconnectAttempts.current = 0;
         clearInterimTranscriptThrottle();
         resetRealtimeRuntimeState();
-        pendingMessagesRef.current = [];
+        pendingMessagesRef.current.clear();
         applyConnectionState("failed", null);
         if (wsRef.current) {
             wsRef.current.close(1000, "User disconnected");
