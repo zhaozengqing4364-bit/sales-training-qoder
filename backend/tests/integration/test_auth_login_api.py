@@ -15,7 +15,12 @@ from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.auth.api import AUTH_FORMALIZATION_SURFACE
-from common.auth.service import AUTH_SESSION_COOKIE_NAME, verify_token
+from common.auth.service import (
+    AUTH_CSRF_COOKIE_NAME,
+    AUTH_CSRF_HEADER_NAME,
+    AUTH_SESSION_COOKIE_NAME,
+    verify_token,
+)
 from common.db.models import User
 
 
@@ -130,7 +135,42 @@ async def test_login_sets_http_only_cookie_and_cookie_auth_works(
 
 
 @pytest.mark.asyncio
-async def test_logout_clears_session_cookie(
+async def test_login_in_non_development_forces_secure_session_and_csrf_cookies(
+    async_client,
+    test_db: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("ENVIRONMENT", "production")
+    monkeypatch.setenv("AUTH_SESSION_COOKIE_SECURE", "false")
+    monkeypatch.delenv("AUTH_USER_PASSWORDS_JSON", raising=False)
+    monkeypatch.setenv("AUTH_SHARED_PASSWORD", "Password123!")
+    user = await _create_user(
+        test_db,
+        email="auth-secure-cookie@example.com",
+        role="user",
+        is_active=True,
+    )
+
+    response = await async_client.post(
+        "/api/v1/auth/login",
+        json={"email": user.email, "password": "Password123!"},
+    )
+
+    assert response.status_code == 200
+    set_cookie_headers = response.headers.get_list("set-cookie")
+    session_cookie_header = next(
+        header for header in set_cookie_headers if header.startswith(f"{AUTH_SESSION_COOKIE_NAME}=")
+    )
+    csrf_cookie_header = next(
+        header for header in set_cookie_headers if header.startswith(f"{AUTH_CSRF_COOKIE_NAME}=")
+    )
+    assert "Secure" in session_cookie_header
+    assert "Secure" in csrf_cookie_header
+    assert "SameSite=lax" in session_cookie_header or "SameSite=Lax" in session_cookie_header
+
+
+@pytest.mark.asyncio
+async def test_logout_requires_matching_csrf_header_for_cookie_session(
     async_client,
     test_db: AsyncSession,
     monkeypatch: pytest.MonkeyPatch,
@@ -149,15 +189,52 @@ async def test_logout_clears_session_cookie(
         json={"email": user.email, "password": "Password123!"},
     )
     assert login_response.status_code == 200
+    csrf_token = async_client.cookies.get(AUTH_CSRF_COOKIE_NAME)
+    assert csrf_token
 
-    logout_response = await async_client.post("/api/v1/auth/logout")
+    rejected_logout = await async_client.post("/api/v1/auth/logout")
+    assert rejected_logout.status_code == 403
+    rejected_payload = rejected_logout.json()
+    assert rejected_payload["detail"]["error"] == "[CSRF_VALIDATION_FAILED]"
+
+    logout_response = await async_client.post(
+        "/api/v1/auth/logout",
+        headers={AUTH_CSRF_HEADER_NAME: csrf_token},
+    )
     assert logout_response.status_code == 200
-    logout_cookie_header = logout_response.headers.get("set-cookie", "")
-    assert f"{AUTH_SESSION_COOKIE_NAME}=" in logout_cookie_header
+    logout_cookie_headers = logout_response.headers.get_list("set-cookie")
+    logout_cookie_header = next(
+        header for header in logout_cookie_headers if header.startswith(f"{AUTH_SESSION_COOKIE_NAME}=")
+    )
     assert "Max-Age=0" in logout_cookie_header or "expires=" in logout_cookie_header.lower()
 
     me_response = await async_client.get("/api/v1/users/me")
     assert me_response.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_login_shared_password_fallback_exposes_compatibility_diagnostic_header(
+    async_client,
+    test_db: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("AUTH_USER_PASSWORDS_JSON", raising=False)
+    monkeypatch.setenv("AUTH_SHARED_PASSWORD", "Password123!")
+    user = await _create_user(
+        test_db,
+        email="auth-shared-password-compat@example.com",
+        role="user",
+        is_active=True,
+    )
+
+    response = await async_client.post(
+        "/api/v1/auth/login",
+        json={"email": user.email, "password": "Password123!"},
+    )
+
+    assert response.status_code == 200
+    assert response.headers.get("X-Auth-Compatibility-Mode") == "shared_password"
+    assert response.headers.get("X-Auth-Authority") == "compatibility_env_password"
 
 
 @pytest.mark.asyncio
@@ -624,5 +701,7 @@ def test_auth_recovery_request_path_keeps_runtime_ddl_out_of_handlers() -> None:
     assert AUTH_FORMALIZATION_SURFACE["runtime_ddl_owner"] == "common.db.session.init_db"
     assert "PasswordResetService" in auth_api_source
     for forbidden_snippet in ("create_all(", "CREATE TABLE", "create table"):
+        assert forbidden_snippet not in auth_api_source
+        assert forbidden_snippet not in password_reset_source
         assert forbidden_snippet not in auth_api_source
         assert forbidden_snippet not in password_reset_source

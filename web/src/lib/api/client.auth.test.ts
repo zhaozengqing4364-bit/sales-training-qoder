@@ -80,6 +80,30 @@ describe("API client 401 handling", () => {
         );
     });
 
+    it("adds csrf header for cookie-backed unsafe requests when the csrf cookie is present", async () => {
+        document.cookie = "app_csrf=csrf-token-123; path=/";
+        const fetchMock = vi.fn().mockResolvedValue(
+            new Response(
+                JSON.stringify({
+                    success: true,
+                    data: { message: "ok" },
+                }),
+                {
+                    status: 200,
+                    headers: { "Content-Type": "application/json" },
+                },
+            ),
+        );
+
+        vi.stubGlobal("fetch", fetchMock);
+
+        await api.auth.logout();
+
+        const requestOptions = fetchMock.mock.calls[0]?.[1] as RequestInit | undefined;
+        const headers = new Headers(requestOptions?.headers);
+        expect(headers.get("X-CSRF-Token")).toBe("csrf-token-123");
+    });
+
     it("attaches W3C trace context headers to API requests", async () => {
         const fetchMock = vi.fn().mockResolvedValue(
             new Response(

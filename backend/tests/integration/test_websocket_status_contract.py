@@ -4,9 +4,35 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from common.auth.service import get_session_cookie_name, resolve_websocket_auth
 from presentation_coach.websocket.presentation_handler import PresentationWebSocketHandler
 from sales_bot.websocket.simple_handler import SimpleSalesHandler
 from sales_bot.websocket.stepfun_realtime_handler import StepFunRealtimeHandler
+
+
+def test_websocket_auth_prefers_session_cookie_before_query_token_compatibility():
+    cookie_name = get_session_cookie_name()
+    resolution = resolve_websocket_auth(
+        query_token="query-token",
+        authorization_header="",
+        cookie_header=f"{cookie_name}=cookie-token",
+    )
+
+    assert resolution["token"] == "cookie-token"
+    assert resolution["transport"] == "session_cookie"
+    assert resolution["compatibility_mode"] is False
+
+
+def test_websocket_query_token_is_marked_as_compatibility_transport():
+    resolution = resolve_websocket_auth(
+        query_token="query-token",
+        authorization_header="",
+        cookie_header="",
+    )
+
+    assert resolution["token"] == "query-token"
+    assert resolution["transport"] == "query_token"
+    assert resolution["compatibility_mode"] is True
 
 
 @pytest.mark.asyncio

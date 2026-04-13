@@ -30,14 +30,14 @@ S01 结束后，所有后续安全/运行时切片都以这一条 auth boundary 
   - Files: `.gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md`, `backend/src/common/auth/service.py`, `backend/src/common/auth/api.py`, `backend/src/sales_bot/websocket/router.py`, `web/src/lib/auth-handler.ts`, `web/src/hooks/use-auth-protection.ts`
   - Verify: rg -n "AUTH_SHARED_PASSWORD|AUTH_USER_PASSWORDS_JSON|session cookie|resolve_websocket_token|token: str = Query|Authorization" backend/src/common/auth backend/src/sales_bot/websocket backend/src/presentation_coach/websocket web/src/lib/auth-handler.ts web/src/hooks/use-auth-protection.ts
 
-- [ ] **T02: 收口 cookie、CSRF 与 websocket auth authority** `est:2h`
+- [x] **T02: 收口 cookie、CSRF 与 websocket auth authority** `est:2h`
   - 在 backend/frontend 收口非开发环境 cookie secure 和 CSRF posture；若当前采用 same-site/cookie-only 策略，也要把 authority 写清并让失败信号显式化。
 - websocket router 与 client 改为 header/cookie 优先，query token 退为受控兼容路径或移除。
 - 为 shared-password 兼容态加显式诊断/退场策略，避免长期成为默认主路径。
   - Files: `backend/src/common/auth/service.py`, `backend/src/common/auth/api.py`, `backend/src/main.py`, `backend/src/sales_bot/websocket/router.py`, `backend/src/presentation_coach/websocket`, `web/src/hooks/use-practice-websocket.ts`, `web/src/lib/api/client.ts`
   - Verify: backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/integration/test_auth_login_api.py backend/tests/integration/test_password_reset_api.py backend/tests/integration/test_websocket_status_contract.py -x -q
 
-- [ ] **T03: 把 auth authority 写回 contract 与 runbook** `est:35m`
+- [x] **T03: 把 auth authority 写回 contract 与 runbook** `est:35m`
   - 更新 auth-local/setup/runbook/docs-api-contract，明确正式 transport、兼容 transport、关闭条件和 repo-root 验证命令。
 - 确认前端对 session expired / unauthorized 的处理仍走统一 `authHandler`。
   - Files: `docs/setup/auth-local.md`, `docs/api-contract/websocket.md`, `.gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md`, `web/src/lib/auth-handler.ts`

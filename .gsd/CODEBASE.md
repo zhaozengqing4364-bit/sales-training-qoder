@@ -1,7 +1,7 @@
 # Codebase Map
 
-Generated: 2026-04-13T09:51:03Z | Files: 500 | Described: 0/500
-<!-- gsd:codebase-meta {"generatedAt":"2026-04-13T09:51:03Z","fingerprint":"93c7619155f701fd3dcc9bcc74418b83e409c1a2","fileCount":500,"truncated":true} -->
+Generated: 2026-04-13T10:06:24Z | Files: 500 | Described: 0/500
+<!-- gsd:codebase-meta {"generatedAt":"2026-04-13T10:06:24Z","fingerprint":"7951cff7f31474f5ce9d2c47b0299c83dd7e7f0b","fileCount":500,"truncated":true} -->
 Note: Truncated to first 500 files. Run with higher --max-files to include all.
 
 ### (root)/
@@ -643,6 +643,6 @@ Note: Truncated to first 500 files. Run with higher --max-files to include all.
 - `backend/tests/unit/common/test_admin_analytics_service.py`
 - `backend/tests/unit/common/test_analytics_api_normalization.py`
 - `backend/tests/unit/common/test_api_users.py`
+- `backend/tests/unit/common/test_auth_transport_matrix.py`
 - `backend/tests/unit/common/test_config_manager_embedding_env.py`
 - `backend/tests/unit/common/test_db_session_compatibility.py`
-- `backend/tests/unit/common/test_document_processor_image_ocr.py`

@@ -4,24 +4,68 @@
 > 
 > 参考: `docs/roadmap/sales-coach-upgrade.md` - 8. WebSocket 消息协议扩展
 
-## 连接建立
+## Auth transport contract（M020/S01 authority）
 
-### PPT 演练（兼容两种 URL 形式）
+### 当前正式 / 兼容 transport
+
+| Surface | 正式 transport | 兼容 transport | 当前 authority |
+|---|---|---|---|
+| 浏览器 websocket | session cookie | `?token=` query token | web 主链不再默认在 URL 上追加 `token=`；浏览器应优先复用登录后的 cookie-session。 |
+| 非浏览器 / script websocket | `Authorization: Bearer <jwt>` | `?token=` query token | 新调用方优先走 Authorization header；不要新增 query-token 依赖。 |
+| backend resolver（sales / presentation 共用） | `Authorization`、cookie | query token | 当前 shipped resolver 仍是 `Authorization -> query token -> session cookie`，因此 query token 仍是活跃兼容路径，但已被标记为 deprecated compatibility。 |
+
+### 连接 URL
+
+#### 正式调用方式（推荐）
+```text
+wss://api.your-domain.com/ws/presentation/{session_id}
+wss://api.your-domain.com/ws/sales/{session_id}
 ```
+
+- 浏览器主链：依赖现有 session cookie；
+- 脚本/非浏览器 caller：通过 `Authorization: Bearer <jwt>` 传递认证；
+- `session_id` 也兼容 query 形式：`/ws/presentation?session_id=...`、`/ws/sales?session_id=...`。
+
+#### 兼容调用方式（仅 legacy caller）
+```text
 wss://api.your-domain.com/ws/presentation/{session_id}?token={jwt_token}
 wss://api.your-domain.com/ws/presentation?session_id={session_id}&token={jwt_token}
-```
-
-### 销售对练（兼容两种 URL 形式）
-```
 wss://api.your-domain.com/ws/sales/{session_id}?token={jwt_token}
 wss://api.your-domain.com/ws/sales?session_id={session_id}&token={jwt_token}
 ```
+
+### 兼容路径关闭条件
+- 前端与脚本调用方全部迁移到 header/cookie；
+- focused proof 不再依赖 `query token`，且 backend websocket contract tests 与前端 websocket tests 同步通过；
+- 本文档、`docs/setup/auth-local.md`、`.gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md` 同步删掉 query-token authority，避免文档与代码各说各话。
+
+### Repo-root 验证命令
+
+```bash
+backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/integration/test_websocket_status_contract.py -x -q
+npm --prefix web test -- --run src/lib/api/client.auth.test.ts src/lib/auth-handler.test.ts
+rg -n "Authorization|query token|cookie|CSRF|shared password|session expired" docs/setup/auth-local.md docs/api-contract/websocket.md .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md web/src/lib/auth-handler.ts
+```
+
+## 连接建立
+
+### `session_id` 校验
 
 ### `session_id` 校验
 - 服务端在握手阶段校验 `session_id` 是否为 UUID。
 - 非法 `session_id` 将直接拒绝连接（`close code = 4400`, `reason = INVALID_SESSION_ID`）。
 - `session_id` 与会话场景不匹配时，拒绝连接（`close code = 4409`, `reason = SESSION_SCENARIO_MISMATCH`）。
+
+### 认证 / runtime 拒连 close code
+
+| 场景 | close code | reason |
+|---|---:|---|
+| token 缺失或无效 | `4001` | `Unauthorized` |
+| session owner 不匹配且当前用户不是 admin | `4003` | `ACCESS_DENIED` |
+| knowledge-base lock 未绑定知识库 | `4410` | `KB_LOCK_UNBOUND` |
+| sales session 缺少 agent/persona runtime lock | `4411` | `AGENT_PERSONA_REQUIRED` |
+
+这些拒连信号是当前 websocket authority 的一部分：调用方必须把 close code / reason 当作稳定诊断面，而不是把所有拒连都视为网络波动。
 
 ### 连接成功响应
 ```json
