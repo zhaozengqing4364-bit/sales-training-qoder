@@ -288,6 +288,17 @@ class SessionManager:
         for session_id in dead_sessions:
             await self.unregister_session(session_id, reason="heartbeat_failed")
 
+    def _runtime_diagnostics_for_handler(self, handler) -> dict | None:
+        getter = getattr(handler, "get_runtime_diagnostics", None)
+        if not callable(getter):
+            return None
+        try:
+            diagnostics = getter()
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(f"Failed to read handler runtime diagnostics: {exc}")
+            return None
+        return diagnostics if isinstance(diagnostics, dict) else None
+
     def describe_authority(self) -> dict[str, dict[str, object]]:
         """Describe which websocket runtime facts this process truly owns."""
         return {
@@ -323,6 +334,16 @@ class SessionManager:
             {
                 "session_id": info.session_id,
                 "user_id": info.user_id,
+                "scenario": getattr(info.handler, "scenario", None),
+                "session_status": getattr(info.handler, "session_status", None),
+                "ai_state": getattr(info.handler, "ai_state", None),
+                "connected_at": info.created_at,
+                "last_activity_at": info.last_activity,
+                "session_age_seconds": round(max(0.0, now - info.created_at), 3),
+                "inactive_seconds": round(max(0.0, now - info.last_activity), 3),
+                "runtime_diagnostics": self._runtime_diagnostics_for_handler(
+                    info.handler
+                ),
             }
             for info in sorted(self.sessions.values(), key=lambda item: item.session_id)
         ]
@@ -334,6 +355,12 @@ class SessionManager:
             "timeout_seconds": self.timeout_seconds,
             "heartbeat_interval": self.heartbeat_interval,
             "authority": self.describe_authority(),
+            "connection_visibility": {
+                "scope": "process_local",
+                "shared_across_instances": False,
+                "survives_restart": False,
+                "running": self._running,
+            },
             "tracked_sessions": tracked_sessions,
             "metrics": dict(self.metrics),
         }

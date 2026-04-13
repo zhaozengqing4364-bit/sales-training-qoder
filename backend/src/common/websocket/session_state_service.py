@@ -99,7 +99,44 @@ class SessionStateService:
         self.last_saved_session_id: str | None = None
         self.last_loaded_session_id: str | None = None
         self.last_deleted_session_id: str | None = None
+        self.last_saved_snapshot: dict[str, Any] | None = None
+        self.last_loaded_snapshot: dict[str, Any] | None = None
         self.last_error: dict[str, Any] | None = None
+
+    @staticmethod
+    def _summarize_snapshot(state: SessionStateSnapshot) -> dict[str, Any]:
+        runtime_state = state.runtime_state if isinstance(state.runtime_state, dict) else {}
+        reconnect_state = runtime_state.get("reconnect_state")
+        normalized_reconnect_state = (
+            dict(reconnect_state) if isinstance(reconnect_state, dict) else None
+        )
+        last_error = None
+        connection_epoch = 0
+        last_disconnect_reason = None
+        if normalized_reconnect_state is not None:
+            connection_epoch = int(normalized_reconnect_state.get("connection_epoch") or 0)
+            last_disconnect_reason = normalized_reconnect_state.get(
+                "last_disconnect_reason"
+            )
+            candidate_last_error = normalized_reconnect_state.get("last_error")
+            if isinstance(candidate_last_error, dict):
+                last_error = dict(candidate_last_error)
+        return {
+            "session_id": state.session_id,
+            "scenario": state.scenario,
+            "turn_count": state.turn_count,
+            "current_page": state.current_page,
+            "session_status": state.session_status,
+            "ai_state": state.ai_state,
+            "user_id": state.user_id,
+            "last_activity": state.last_activity,
+            "runtime_keys": sorted(runtime_state.keys()),
+            "request_epoch": int(runtime_state.get("current_request_id") or 0),
+            "connection_epoch": connection_epoch,
+            "last_disconnect_reason": last_disconnect_reason,
+            "last_error": last_error,
+            "reconnect_state": normalized_reconnect_state,
+        }
 
     def _state_key(self, session_id: str) -> str:
         return f"{self.key_prefix}{session_id}"
@@ -213,6 +250,7 @@ class SessionStateService:
                 ex=self.state_ttl,
             )
             self.last_saved_session_id = state.session_id
+            self.last_saved_snapshot = self._summarize_snapshot(state)
             self.last_error = None
 
             logger.info(
@@ -260,6 +298,7 @@ class SessionStateService:
             data = json.loads(raw_state)
             state = SessionStateSnapshot.from_dict(data)
             self.last_loaded_session_id = session_id
+            self.last_loaded_snapshot = self._summarize_snapshot(state)
             self.last_error = None
             logger.info(f"Retrieved session state: {session_id}")
             return Result.ok(state)
@@ -369,10 +408,23 @@ class SessionStateService:
             "running": self._running,
             "key_prefix": self.key_prefix,
             "authority": self.describe_authority(),
+            "snapshot_visibility": {
+                "scope": "redis_snapshot",
+                "shared_across_instances": True,
+                "survives_restart": True,
+                "redis_connected": self._redis is not None,
+                "running": self._running,
+            },
             "metrics": dict(self.metrics),
             "last_saved_session_id": self.last_saved_session_id,
             "last_loaded_session_id": self.last_loaded_session_id,
             "last_deleted_session_id": self.last_deleted_session_id,
+            "last_saved_snapshot": dict(self.last_saved_snapshot)
+            if isinstance(self.last_saved_snapshot, dict)
+            else None,
+            "last_loaded_snapshot": dict(self.last_loaded_snapshot)
+            if isinstance(self.last_loaded_snapshot, dict)
+            else None,
             "last_error": dict(self.last_error) if isinstance(self.last_error, dict) else None,
         }
 

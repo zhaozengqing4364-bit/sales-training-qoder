@@ -19,6 +19,7 @@ import sales_bot.websocket.stepfun_realtime_handler as stepfun_module
 from common.db.models import PracticeSession, Scenario, User
 from common.error_handling.result import Result
 from common.websocket.session_state_service import SessionStateSnapshot
+from sales_bot.websocket.realtime_feedback_arbiter import RealtimeFeedbackPacingState
 from sales_bot.websocket.stepfun_realtime_handler import StepFunRealtimeHandler
 
 
@@ -206,6 +207,10 @@ async def test_sales_stepfun_reconnect_restores_turn_continuity_and_cleans_termi
     await _wait_for(lambda: first_handler.turn_count == 2 and first_handler._active_response is not None)
     first_handler._latest_score_snapshot = {"overall_score": 84.0}
     first_handler._latest_action_card = {"title": "继续深挖预算与时机"}
+    first_handler._feedback_pacing_state = RealtimeFeedbackPacingState(
+        last_action_signature="sig-turn-2",
+        last_action_turn=2,
+    )
     await _finish_assistant_turn(first_handler, "第二轮回复")
 
     await first_ws.disconnect()
@@ -218,6 +223,16 @@ async def test_sales_stepfun_reconnect_restores_turn_continuity_and_cleans_termi
     assert persisted.ai_state == "listening"
     assert persisted.runtime_state["current_request_id"] == first_handler.current_request_id
     assert persisted.runtime_state["latest_score_snapshot"] == {"overall_score": 84.0}
+    assert persisted.runtime_state["feedback_pacing_state"] == {
+        "last_action_signature": "sig-turn-2",
+        "last_action_turn": 2,
+    }
+    assert persisted.runtime_state["reconnect_state"] == {
+        "connection_epoch": 1,
+        "request_epoch": first_handler.current_request_id,
+        "last_disconnect_reason": "client_disconnect",
+        "last_error": None,
+    }
     assert "latest_action_card" not in persisted.runtime_state
 
     second_ws = _QueueWebSocket()
@@ -237,6 +252,16 @@ async def test_sales_stepfun_reconnect_restores_turn_continuity_and_cleans_termi
     assert restored_state["runtime_state"]["current_request_id"] == first_handler.current_request_id
     assert restored_state["runtime_state"]["latest_score_snapshot"] == {
         "overall_score": 84.0
+    }
+    assert restored_state["runtime_state"]["feedback_pacing_state"] == {
+        "last_action_signature": "sig-turn-2",
+        "last_action_turn": 2,
+    }
+    assert restored_state["runtime_state"]["reconnect_state"] == {
+        "connection_epoch": 2,
+        "request_epoch": first_handler.current_request_id,
+        "last_disconnect_reason": "client_disconnect",
+        "last_error": None,
     }
     assert "latest_action_card" not in restored_state["runtime_state"]
 

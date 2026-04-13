@@ -336,7 +336,51 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
         self._upstream_connected_at: float = 0.0
         self._last_upstream_event_type: str = ""
         self._timeout_disconnect_requested = False
+        self._connection_epoch = 0
+        self._last_disconnect_reason: str | None = None
+        self._last_runtime_error: dict[str, str] | None = None
         self._transcript_normalization_service = TranscriptNormalizationService()
+
+    @staticmethod
+    def _normalize_connection_epoch(value: Any) -> int:
+        try:
+            return max(0, int(value))
+        except (TypeError, ValueError):
+            return 0
+
+    @staticmethod
+    def _copy_runtime_error(value: Any) -> dict[str, str] | None:
+        if not isinstance(value, dict):
+            return None
+        code = str(value.get("code") or "").strip()
+        message = str(value.get("message") or "").strip()
+        if not code and not message:
+            return None
+        return {
+            "code": code,
+            "message": message,
+        }
+
+    def _build_reconnect_state_payload(self) -> dict[str, Any]:
+        return {
+            "connection_epoch": self._normalize_connection_epoch(self._connection_epoch),
+            "request_epoch": int(self.current_request_id or 0),
+            "last_disconnect_reason": self._last_disconnect_reason,
+            "last_error": self._copy_runtime_error(self._last_runtime_error),
+        }
+
+    def _record_disconnect_reason(self, reason: str | None) -> None:
+        normalized = str(reason or "").strip()
+        if normalized:
+            self._last_disconnect_reason = normalized
+
+    def _record_runtime_error(self, code: str, message: str) -> None:
+        self._last_runtime_error = self._copy_runtime_error(
+            {
+                "code": code,
+                "message": message,
+            }
+        )
 
     def _log_grounding_debug(self, event: str, **fields: Any) -> None:
         if not self._grounding_debug_log:
@@ -666,9 +710,12 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
             )
         feedback_pacing_state = self._feedback_pacing_state.to_dict()
         if feedback_pacing_state:
-            runtime_state["feedback_pacing_state"] = feedback_pacing_state
+            runtime_state["feedback_pacing_state"] = copy.deepcopy(
+                feedback_pacing_state
+            )
         if self._coach_health != "healthy" or self._coach_health_reason is not None:
             runtime_state["coach_health"] = self._coach_health_payload()
+        runtime_state["reconnect_state"] = self._build_reconnect_state_payload()
 
         return SessionStateSnapshot(
             session_id=self.session_id or "",
@@ -684,10 +731,21 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
         """Restore the minimal StepFun runtime subset required to continue training."""
         await super()._restore_session_state(state)
 
-        runtime_state = (
-            copy.deepcopy(state.runtime_state)
-            if isinstance(state.runtime_state, dict)
+        runtime_state = state.runtime_state if isinstance(state.runtime_state, dict) else {}
+        reconnect_state = (
+            copy.deepcopy(runtime_state.get("reconnect_state"))
+            if isinstance(runtime_state.get("reconnect_state"), dict)
             else {}
+        )
+        self._connection_epoch = self._normalize_connection_epoch(
+            reconnect_state.get("connection_epoch")
+        )
+        self._connection_epoch = max(1, self._connection_epoch + 1)
+        self._last_disconnect_reason = (
+            str(reconnect_state.get("last_disconnect_reason") or "").strip() or None
+        )
+        self._last_runtime_error = self._copy_runtime_error(
+            reconnect_state.get("last_error")
         )
         await self._cancel_pending_response_after_commit()
         self.session_id = state.session_id or self.session_id
@@ -823,6 +881,7 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
             outbound["data"] = data
             outbound.setdefault("trace_id", get_trace_id())
             self._timeout_disconnect_requested = True
+            self._record_disconnect_reason("session_timeout")
 
         await self.manager.send_json(websocket, outbound)
 
@@ -867,6 +926,7 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
         self.websocket = websocket
         self.session_id = session_id
         self._timeout_disconnect_requested = False
+        self._connection_epoch = max(1, self._normalize_connection_epoch(self._connection_epoch))
 
         await self.manager.connect(websocket, self.scenario, session_id)
 
@@ -908,6 +968,7 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
                 try:
                     raw = await asyncio.wait_for(websocket.receive(), timeout=30.0)
                     if raw.get("type") == "websocket.disconnect":
+                        self._record_disconnect_reason("client_disconnect")
                         break
                     if raw.get("text") is not None:
                         await self._touch_session_activity()
@@ -919,10 +980,12 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
                     await self._send_heartbeat()
 
         except WebSocketDisconnect:
+            self._record_disconnect_reason("client_disconnect")
             logger.info(f"StepFun WS disconnected: session={session_id}")
         except asyncio.CancelledError:
             logger.info(f"StepFun WS cancelled: session={session_id}")
         except (RuntimeError, ValueError, OSError) as e:
+            self._record_disconnect_reason("runtime_error")
             logger.error(f"StepFun WS error: {e}", exc_info=True)
             await self._send_error(
                 "[STEPFUN_CONNECTION_ERROR]", "Realtime 语音连接失败"
@@ -2116,11 +2179,15 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
         if claim_truth is None and isinstance(self._latest_claim_truth, dict):
             claim_truth = copy.deepcopy(self._latest_claim_truth)
         return {
+            "session_status": self.session_status,
+            "ai_state": self.ai_state,
+            "current_request_id": int(self.current_request_id or 0),
             "live_session_summary": copy.deepcopy(live_session_summary)
             if isinstance(live_session_summary, dict)
             else None,
             "claim_truth": claim_truth,
             "coach_health": self._coach_health_payload(),
+            "reconnect_state": self._build_reconnect_state_payload(),
             "knowledge_answer_diagnostics": copy.deepcopy(
                 self._latest_knowledge_answer_diagnostics
             )
@@ -4169,6 +4236,7 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
             )
             metrics["upstream_disconnect_last_ws_lifetime_ms"] = ws_lifetime_ms
             metrics["upstream_disconnect_last_at"] = datetime.now(UTC).isoformat()
+            self._record_disconnect_reason("upstream_disconnect")
 
             await self._persist_runtime_metrics_to_session()
             logger.info(
@@ -4481,6 +4549,7 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
         )
 
     async def _send_error(self, code: str, message: str):
+        self._record_runtime_error(code, message)
         await self.manager.send_json(
             self.websocket,
             build_error_event(
