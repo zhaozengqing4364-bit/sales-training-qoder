@@ -2,6 +2,7 @@
 JWT Authentication and Enterprise WeChat SSO
 Constitution Principle VI: Data Privacy & Compliance
 """
+import hmac
 import os
 import uuid
 from datetime import UTC, datetime, timedelta
@@ -30,9 +31,8 @@ JWT_SECRET = os.getenv("JWT_SECRET", "your-super-secret-key-change-in-production
 JWT_ALGORITHM = os.getenv("JWT_ALGORITHM", "HS256")
 JWT_EXPIRATION_HOURS = int(os.getenv("JWT_EXPIRATION_HOURS", "24"))
 AUTH_SESSION_COOKIE_NAME = os.getenv("AUTH_SESSION_COOKIE_NAME", "app_session")
-AUTH_SESSION_COOKIE_SECURE = (
-    os.getenv("AUTH_SESSION_COOKIE_SECURE", "").strip().lower() in {"1", "true", "yes", "on"}
-)
+AUTH_CSRF_COOKIE_NAME = os.getenv("AUTH_CSRF_COOKIE_NAME", "app_csrf")
+AUTH_CSRF_HEADER_NAME = os.getenv("AUTH_CSRF_HEADER_NAME", "X-CSRF-Token")
 AUTH_SESSION_COOKIE_SAMESITE = os.getenv("AUTH_SESSION_COOKIE_SAMESITE", "lax").strip().lower() or "lax"
 
 security = HTTPBearer(auto_error=False)
@@ -61,8 +61,8 @@ AUTH_TRANSPORT_MATRIX: dict[str, dict[str, list[str] | str]] = {
     "websocket": {
         "formal": ["authorization_bearer", "session_cookie"],
         "compatibility": ["query_token"],
-        "resolver": "resolve_websocket_token",
-        "current_resolution_order": "authorization_header -> query_token -> cookie_header",
+        "resolver": "resolve_websocket_auth",
+        "current_resolution_order": "authorization_header -> session_cookie -> query_token_compatibility",
     },
     "login_credentials": {
         "formal": ["user_hashed_password"],
@@ -86,38 +86,109 @@ def _current_environment() -> str:
     return os.getenv("ENVIRONMENT", "development").strip().lower() or "development"
 
 
+def _env_truthy(value: str | None) -> bool:
+    return (value or "").strip().lower() in {"1", "true", "yes", "on"}
+
+
 def get_session_cookie_name() -> str:
     return AUTH_SESSION_COOKIE_NAME
+
+
+def get_csrf_cookie_name() -> str:
+    return AUTH_CSRF_COOKIE_NAME
+
+
+def get_csrf_header_name() -> str:
+    return AUTH_CSRF_HEADER_NAME
 
 
 def get_session_cookie_max_age_seconds() -> int:
     return max(1, JWT_EXPIRATION_HOURS * 3600)
 
 
+def get_session_cookie_samesite() -> str:
+    return AUTH_SESSION_COOKIE_SAMESITE
+
+
+def get_session_cookie_secure() -> bool:
+    if _current_environment() != "development":
+        return True
+    return _env_truthy(os.getenv("AUTH_SESSION_COOKIE_SECURE", ""))
+
+
 def get_session_cookie_options() -> dict[str, Any]:
     return {
         "key": get_session_cookie_name(),
         "httponly": True,
-        "secure": AUTH_SESSION_COOKIE_SECURE,
-        "samesite": AUTH_SESSION_COOKIE_SAMESITE,
+        "secure": get_session_cookie_secure(),
+        "samesite": get_session_cookie_samesite(),
         "path": "/",
         "max_age": get_session_cookie_max_age_seconds(),
     }
 
 
-def set_auth_session_cookie(response: Response, token: str) -> None:
+def get_csrf_cookie_options() -> dict[str, Any]:
+    return {
+        "key": get_csrf_cookie_name(),
+        "httponly": False,
+        "secure": get_session_cookie_secure(),
+        "samesite": get_session_cookie_samesite(),
+        "path": "/",
+        "max_age": get_session_cookie_max_age_seconds(),
+    }
+
+
+def set_auth_session_cookie(response: Response, token: str, csrf_token: str | None = None) -> str:
+    issued_csrf_token = (csrf_token or uuid.uuid4().hex).strip()
     response.set_cookie(
         value=token,
         **get_session_cookie_options(),
     )
+    response.set_cookie(
+        value=issued_csrf_token,
+        **get_csrf_cookie_options(),
+    )
+    return issued_csrf_token
 
 
 def clear_auth_session_cookie(response: Response) -> None:
     response.delete_cookie(
         key=get_session_cookie_name(),
         path="/",
-        samesite=AUTH_SESSION_COOKIE_SAMESITE,
+        secure=get_session_cookie_secure(),
+        samesite=get_session_cookie_samesite(),
     )
+    response.delete_cookie(
+        key=get_csrf_cookie_name(),
+        path="/",
+        secure=get_session_cookie_secure(),
+        samesite=get_session_cookie_samesite(),
+    )
+
+
+def should_enforce_csrf(request: Request) -> bool:
+    if request.method.upper() in {"GET", "HEAD", "OPTIONS", "TRACE"}:
+        return False
+
+    authorization_header = request.headers.get("authorization", "")
+    if authorization_header.lower().startswith("bearer "):
+        return False
+
+    return bool(request.cookies.get(get_session_cookie_name()))
+
+
+def validate_csrf_request(request: Request) -> None:
+    csrf_cookie = (request.cookies.get(get_csrf_cookie_name()) or "").strip()
+    csrf_header = (request.headers.get(get_csrf_header_name()) or "").strip()
+
+    if not csrf_cookie or not csrf_header or not hmac.compare_digest(csrf_cookie, csrf_header):
+        raise HTTPException(
+            status_code=403,
+            detail={
+                "error": "[CSRF_VALIDATION_FAILED]",
+                "message": "当前请求缺少有效 CSRF 凭证。",
+            },
+        )
 
 
 def resolve_bearer_or_cookie_token(
@@ -140,34 +211,67 @@ def resolve_bearer_or_cookie_token(
     return None
 
 
+def _extract_cookie_token(cookie_header: str | None) -> str:
+    if not cookie_header:
+        return ""
+
+    cookies = SimpleCookie()
+    cookies.load(cookie_header)
+    morsel = cookies.get(get_session_cookie_name())
+    if morsel and morsel.value:
+        return morsel.value.strip()
+    return ""
+
+
+def resolve_websocket_auth(
+    *,
+    query_token: str | None,
+    authorization_header: str | None = None,
+    cookie_header: str | None = None,
+) -> dict[str, str | bool]:
+    if authorization_header and authorization_header.lower().startswith("bearer "):
+        return {
+            "token": authorization_header[7:].strip(),
+            "transport": "authorization_bearer",
+            "compatibility_mode": False,
+        }
+
+    cookie_token = _extract_cookie_token(cookie_header)
+    if cookie_token:
+        return {
+            "token": cookie_token,
+            "transport": "session_cookie",
+            "compatibility_mode": False,
+        }
+
+    normalized_query_token = (query_token or "").strip()
+    if normalized_query_token:
+        return {
+            "token": normalized_query_token,
+            "transport": "query_token",
+            "compatibility_mode": True,
+        }
+
+    return {
+        "token": "",
+        "transport": "",
+        "compatibility_mode": False,
+    }
+
+
 def resolve_websocket_token(
     *,
     query_token: str | None,
     authorization_header: str | None = None,
     cookie_header: str | None = None,
 ) -> str:
-    """
-    Resolve websocket auth from the currently shipped compatibility order.
-
-    Current runtime order is Authorization header -> query token -> session cookie.
-    Query token remains a compatibility transport for existing websocket callers and
-    should not be treated as the preferred long-term posture.
-    """
-    if authorization_header and authorization_header.lower().startswith("bearer "):
-        return authorization_header[7:].strip()
-
-    normalized_query_token = (query_token or "").strip()
-    if normalized_query_token:
-        return normalized_query_token
-
-    if cookie_header:
-        cookies = SimpleCookie()
-        cookies.load(cookie_header)
-        morsel = cookies.get(get_session_cookie_name())
-        if morsel and morsel.value:
-            return morsel.value.strip()
-
-    return ""
+    return str(
+        resolve_websocket_auth(
+            query_token=query_token,
+            authorization_header=authorization_header,
+            cookie_header=cookie_header,
+        )["token"]
+    )
 
 
 def create_access_token(data: dict, expires_delta: timedelta | None = None) -> str:

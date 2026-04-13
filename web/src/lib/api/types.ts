@@ -1002,6 +1002,11 @@ export interface AdminKnowledgeDocumentPreviewResponse {
     total_chunks: number;
 }
 
+export interface AdminSystemLogDiagnosticItem {
+    key: string;
+    value: string;
+}
+
 export interface AdminSystemLog {
     id: string;
     action: string;
@@ -1010,6 +1015,19 @@ export interface AdminSystemLog {
     status: "success" | "failed" | "warning" | string;
     created_at: string;
     details?: string | null;
+    diagnostics?: AdminSystemLogDiagnosticItem[];
+    trace_id?: string | null;
+    error_code?: string | null;
+    phase?: string | null;
+    session_id?: string | null;
+}
+
+export interface AdminSystemLogExposurePolicy {
+    version: string;
+    visible_fields: string[];
+    internal_only_fields: string[];
+    redaction_summary: string;
+    diagnostic_fields: string[];
 }
 
 export interface AdminSystemLogListResponse {
@@ -1018,6 +1036,7 @@ export interface AdminSystemLogListResponse {
     page: number;
     page_size: number;
     has_more: boolean;
+    policy?: AdminSystemLogExposurePolicy;
 }
 
 export interface AdminKnowledgeSearchResult {

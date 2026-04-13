@@ -26,6 +26,8 @@ from common.auth.service import (
     create_access_token,
     get_current_user,
     set_auth_session_cookie,
+    should_enforce_csrf,
+    validate_csrf_request,
     pwd_context,
 )
 from common.db.models import User
@@ -201,6 +203,17 @@ def hash_password(password: str) -> str:
     return pwd_context.hash(password)
 
 
+def _set_login_authority_headers(
+    response: JSONResponse,
+    *,
+    compatibility_mode: str | None,
+    authority: str,
+) -> None:
+    response.headers["X-Auth-Authority"] = authority
+    if compatibility_mode:
+        response.headers["X-Auth-Compatibility-Mode"] = compatibility_mode
+
+
 # ========== Endpoints ==========
 
 @router.post("/auth/login")
@@ -244,6 +257,8 @@ async def login(
             return _invalid_credentials_response()
         user_email = (user.email or "").strip().lower()
         expected_password = None
+        compatibility_mode: str | None = None
+        authority = "user_hashed_password"
 
         # First check user-specific hashed_password (set via password reset)
         user_hashed_pw = getattr(user, "hashed_password", None)
@@ -251,11 +266,16 @@ async def login(
             if not verify_password(credentials.password, user_hashed_pw):
                 return _invalid_credentials_response()
         else:
+            authority = "compatibility_env_password"
             # Fall back to env-configured shared password
             if configured_user_passwords is not None:
                 expected_password = configured_user_passwords.get(user_email)
+                if expected_password is not None:
+                    compatibility_mode = "user_password_override"
             if expected_password is None:
                 expected_password = configured_password
+                if expected_password is not None:
+                    compatibility_mode = "shared_password"
 
             if expected_password is None:
                 return _invalid_credentials_response()
@@ -291,12 +311,19 @@ async def login(
             user_id=str(user.user_id),
             user_email=user.email,
             role=user_role,
+            auth_authority=authority,
+            auth_compatibility_mode=compatibility_mode or "managed_password",
         )
         response = JSONResponse(
             status_code=status.HTTP_200_OK,
             content=success_response(login_response.model_dump()),
         )
         set_auth_session_cookie(response, token)
+        _set_login_authority_headers(
+            response,
+            compatibility_mode=compatibility_mode,
+            authority=authority,
+        )
         return response
 
     except SQLAlchemyError as e:
@@ -310,6 +337,7 @@ async def login(
 
 @router.post("/auth/logout")
 async def logout(
+    request: Request,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db)
 ):
@@ -322,6 +350,9 @@ async def logout(
     Requirements: 1.2
     """
     try:
+        if should_enforce_csrf(request):
+            validate_csrf_request(request)
+
         # In a stateless JWT setup, logout is handled client-side
         # If using token blacklist or refresh tokens, would invalidate here
 

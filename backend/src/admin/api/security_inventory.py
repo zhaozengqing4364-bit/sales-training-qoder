@@ -271,9 +271,62 @@ ADMIN_PERMISSION_POSITIVE_CONTROL: tuple[str, ...] = (
 )
 
 
+ADMIN_SUPPORT_LOG_VISIBLE_FIELDS: tuple[str, ...] = (
+    "action",
+    "status",
+    "created_at",
+    "user_identifier(masked)",
+    "ip_address(masked)",
+    "diagnostics",
+)
+
+ADMIN_SUPPORT_DIAGNOSTIC_ALLOWLIST: tuple[str, ...] = (
+    "trace_id",
+    "error_code",
+    "phase",
+    "session_id",
+    "target_user_id",
+)
+
+ADMIN_SUPPORT_BACKEND_ONLY_FIELDS: tuple[str, ...] = (
+    "user_identifier.raw",
+    "ip_address.raw",
+    "details.raw",
+    "stack_trace",
+    "request_payload.raw",
+    "response_payload.raw",
+    "provider_payload.raw",
+    "prompt.raw",
+    "token",
+    "password",
+    "cookie",
+    "email",
+    "base_url",
+    "secret",
+)
+
+ADMIN_SUPPORT_LOG_REDACTION_GUIDANCE: str = (
+    "Admin/support 只能把 backend 提供的 diagnostics allowlist 当成可见 error-details surface："
+    "trace_id、error_code、phase、session_id、target_user_id 可展示；"
+    "原始 details、精确 user_identifier/ip_address、provider/request payload、prompt、token/password/cookie/email、"
+    "base_url/secret 与 stack trace 只保留在 backend 内部。"
+)
+
+M021_QUALITY_EVENT_ADMIN_SUPPORT_PREREQUISITE: str = (
+    "M021 quality/cost/failure events 若要进入 admin/support 诊断面，必须复用同一 allowlist-first redaction boundary："
+    "仅暴露 trace_id/error_code/phase/session_id/target_user_id 等安全 diagnostics，"
+    "不得把 provider rejected 原文、fallback request/response details、prompt text、base_url、token 或其他 secret 直接外露。"
+)
+
+
 __all__ = [
     "AdminRoutePermissionEntry",
     "ADMIN_ROUTE_PERMISSION_MATRIX",
     "ADMIN_PERMISSION_POSITIVE_CONTROL",
+    "ADMIN_SUPPORT_BACKEND_ONLY_FIELDS",
+    "ADMIN_SUPPORT_DIAGNOSTIC_ALLOWLIST",
+    "ADMIN_SUPPORT_LOG_REDACTION_GUIDANCE",
+    "ADMIN_SUPPORT_LOG_VISIBLE_FIELDS",
     "FIX_FIRST_ADMIN_ROUTE_FAMILIES",
+    "M021_QUALITY_EVENT_ADMIN_SUPPORT_PREREQUISITE",
 ]

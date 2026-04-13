@@ -128,9 +128,56 @@ FIX_FIRST_SENSITIVE_LOG_SURFACES: tuple[str, ...] = tuple(
 SENSITIVE_LOG_POSITIVE_CONTROL: str = "admin.api.users._queue_user_audit_log"
 
 
+ADMIN_SUPPORT_LOG_DIAGNOSTIC_ALLOWLIST: tuple[str, ...] = (
+    "trace_id",
+    "error_code",
+    "phase",
+    "session_id",
+    "target_user_id",
+)
+
+ADMIN_SUPPORT_LOG_BACKEND_ONLY_FIELDS: tuple[str, ...] = (
+    "details.raw",
+    "stack_trace",
+    "provider_payload.raw",
+    "request_payload.raw",
+    "response_payload.raw",
+    "prompt.raw",
+    "user_identifier.raw",
+    "ip_address.raw",
+    "token",
+    "password",
+    "cookie",
+    "email",
+    "base_url",
+    "secret",
+)
+
+ADMIN_SUPPORT_LOG_SURFACES: tuple[str, ...] = (
+    "backend/src/common/monitoring/logger.py::StructuredLogger",
+    "backend/src/admin/api/system_logs.py::list_system_logs/get_system_log",
+    "web/src/app/admin/logs/page.tsx::AdminLogsPage",
+)
+
+ADMIN_SUPPORT_LOG_REDACTION_BOUNDARY: str = (
+    "Shared admin/support observability follows one allowlist-first redaction policy: the logger may persist richer raw details inside backend-controlled sinks, "
+    "but any admin/support route or UI surface may only expose masked identifiers plus diagnostics allowlist fields like trace_id/error_code/phase/session_id/target_user_id."
+)
+
+M021_QUALITY_EVENT_REDACTION_RULE: str = (
+    "Future M021 quality/cost/failure events must inherit the same admin/support redaction boundary instead of inventing a second support payload: "
+    "safe diagnostics may surface, but raw provider details, request bodies, prompt text, tokens, cookies, emails, base_url, and secrets remain backend-only."
+)
+
+
 __all__ = [
     "SensitiveLogSurface",
+    "ADMIN_SUPPORT_LOG_BACKEND_ONLY_FIELDS",
+    "ADMIN_SUPPORT_LOG_DIAGNOSTIC_ALLOWLIST",
+    "ADMIN_SUPPORT_LOG_REDACTION_BOUNDARY",
+    "ADMIN_SUPPORT_LOG_SURFACES",
     "FIX_FIRST_SENSITIVE_LOG_SURFACES",
+    "M021_QUALITY_EVENT_REDACTION_RULE",
     "SENSITIVE_LOG_POSITIVE_CONTROL",
     "SENSITIVE_LOG_SURFACES",
 ]

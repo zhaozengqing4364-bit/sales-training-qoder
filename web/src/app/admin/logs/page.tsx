@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { AlertCircle, RefreshCw, Search } from "lucide-react";
 import { api, getApiErrorMessage } from "@/lib/api/client";
-import { AdminSystemLog } from "@/lib/api/types";
+import { AdminSystemLog, AdminSystemLogDiagnosticItem, AdminSystemLogExposurePolicy } from "@/lib/api/types";
 import { GlassCard } from "@/components/ui/glass-card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -34,6 +34,12 @@ function formatDate(iso: string): string {
     return date.toLocaleString("zh-CN", { hour12: false });
 }
 
+function buildDiagnosticItems(log: AdminSystemLog): AdminSystemLogDiagnosticItem[] {
+    return Array.isArray(log.diagnostics)
+        ? log.diagnostics.filter((item): item is AdminSystemLogDiagnosticItem => Boolean(item?.key && item?.value))
+        : [];
+}
+
 export default function AdminLogsPage() {
     const toast = useToast();
     const [logs, setLogs] = useState<AdminSystemLog[]>([]);
@@ -43,6 +49,7 @@ export default function AdminLogsPage() {
     const [statusFilter, setStatusFilter] = useState<"all" | "success" | "failed" | "warning">("all");
     const [page, setPage] = useState(1);
     const [total, setTotal] = useState(0);
+    const [policy, setPolicy] = useState<AdminSystemLogExposurePolicy | null>(null);
 
     const loadLogs = async (targetPage = page) => {
         setIsLoading(true);
@@ -56,10 +63,12 @@ export default function AdminLogsPage() {
             });
             setLogs(result.items || []);
             setTotal(result.total || 0);
+            setPolicy(result.policy || null);
         } catch (err) {
             const message = getApiErrorMessage(err);
             setError(message);
             setLogs([]);
+            setPolicy(null);
             toast.error(message);
         } finally {
             setIsLoading(false);
@@ -130,6 +139,13 @@ export default function AdminLogsPage() {
                     </Button>
                 </div>
 
+                {policy && (
+                    <div className="rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+                        <div className="font-medium">日志可见性策略：{policy.version}</div>
+                        <div>{policy.redaction_summary}</div>
+                    </div>
+                )}
+
                 {error && (
                     <div className="rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700 flex items-center gap-2">
                         <AlertCircle className="w-4 h-4" />
@@ -150,37 +166,56 @@ export default function AdminLogsPage() {
                                 <tr>
                                     <th className="px-5 py-3 text-left">时间</th>
                                     <th className="px-5 py-3 text-left">操作</th>
-                                    <th className="px-5 py-3 text-left">用户</th>
-                                    <th className="px-5 py-3 text-left">IP</th>
+                                    <th className="px-5 py-3 text-left">用户标识</th>
+                                    <th className="px-5 py-3 text-left">来源 IP</th>
                                     <th className="px-5 py-3 text-left">状态</th>
-                                    <th className="px-5 py-3 text-left">详情</th>
+                                    <th className="px-5 py-3 text-left">诊断上下文</th>
                                 </tr>
                             </thead>
                             <tbody>
-                                {logs.map((log) => (
-                                    <tr key={log.id} className="border-b border-slate-100 last:border-0">
-                                        <td className="px-5 py-4 text-slate-600 whitespace-nowrap">
-                                            {formatDate(log.created_at)}
-                                        </td>
-                                        <td className="px-5 py-4 font-medium text-slate-800 whitespace-nowrap">
-                                            {log.action}
-                                        </td>
-                                        <td className="px-5 py-4 text-slate-600 whitespace-nowrap">
-                                            {log.user_identifier}
-                                        </td>
-                                        <td className="px-5 py-4 text-slate-500 whitespace-nowrap">
-                                            {log.ip_address || "-"}
-                                        </td>
-                                        <td className="px-5 py-4 whitespace-nowrap">
-                                            <Badge variant={getStatusBadgeVariant(log.status)}>
-                                                {getStatusLabel(log.status)}
-                                            </Badge>
-                                        </td>
-                                        <td className="px-5 py-4 text-slate-500 max-w-[360px] truncate">
-                                            {log.details || "-"}
-                                        </td>
-                                    </tr>
-                                ))}
+                                {logs.map((log) => {
+                                    const diagnostics = buildDiagnosticItems(log);
+                                    return (
+                                        <tr key={log.id} className="border-b border-slate-100 last:border-0">
+                                            <td className="px-5 py-4 text-slate-600 whitespace-nowrap">
+                                                {formatDate(log.created_at)}
+                                            </td>
+                                            <td className="px-5 py-4 font-medium text-slate-800 whitespace-nowrap">
+                                                {log.action}
+                                            </td>
+                                            <td className="px-5 py-4 text-slate-600 whitespace-nowrap">
+                                                {log.user_identifier}
+                                            </td>
+                                            <td className="px-5 py-4 text-slate-500 whitespace-nowrap">
+                                                {log.ip_address || "-"}
+                                            </td>
+                                            <td className="px-5 py-4 whitespace-nowrap">
+                                                <Badge variant={getStatusBadgeVariant(log.status)}>
+                                                    {getStatusLabel(log.status)}
+                                                </Badge>
+                                            </td>
+                                            <td className="px-5 py-4 text-slate-500 max-w-[420px]">
+                                                {diagnostics.length > 0 ? (
+                                                    <div className="flex flex-wrap gap-2">
+                                                        {diagnostics.map((item) => (
+                                                            <span
+                                                                key={`${log.id}-${item.key}`}
+                                                                className="rounded-full border border-slate-200 bg-slate-50 px-2 py-1 text-xs text-slate-700"
+                                                            >
+                                                                {item.value}
+                                                            </span>
+                                                        ))}
+                                                    </div>
+                                                ) : (
+                                                    <span className="text-slate-400">-</span>
+                                                )}
+                                                {log.details && (
+                                                    <div className="mt-2 text-xs text-slate-400 break-words">{log.details}</div>
+                                                )}
+                                            </td>
+                                        </tr>
+                                    );
+                                })}
                             </tbody>
                         </table>
                     </div>

@@ -2,6 +2,8 @@
 Structured JSON logging with trace_id
 Constitution Principle VII: Observability
 """
+import ipaddress
+import json
 import logging
 from contextvars import ContextVar
 from pathlib import Path
@@ -16,6 +18,42 @@ trace_id_var: ContextVar[str] = ContextVar("trace_id", default="")
 
 REDACTED_VALUE = "[REDACTED]"
 SENSITIVE_LOG_FIELD_MARKERS = ("token", "password", "cookie", "email")
+SYSTEM_LOG_ADMIN_POLICY_VERSION = "admin_support_redaction_v1"
+ADMIN_LOG_ALLOWLIST_FIELDS = (
+    "id",
+    "action",
+    "status",
+    "created_at",
+    "user_identifier",
+    "ip_address",
+    "details",
+    "diagnostics",
+    "trace_id",
+    "error_code",
+    "phase",
+    "session_id",
+)
+ADMIN_LOG_DENYLIST_FIELDS = (
+    "user_identifier.raw",
+    "ip_address.raw",
+    "details.raw",
+    "token",
+    "password",
+    "cookie",
+    "email",
+)
+ADMIN_LOG_ALLOWED_DETAIL_KEYS = (
+    "error_code",
+    "phase",
+    "session_id",
+    "target_user_id",
+    "trace_id",
+)
+ADMIN_LOG_DIAGNOSTIC_FIELDS = ADMIN_LOG_ALLOWED_DETAIL_KEYS
+ADMIN_LOG_REDACTION_SUMMARY = (
+    "admin/support 仅暴露 trace_id、error_code、phase、session_id 等排障字段；"
+    "原始 user_identifier、ip_address 与 details 仅保留在 backend 内部。"
+)
 
 
 def get_trace_id() -> str:
@@ -62,6 +100,49 @@ def mask_email_for_logs(value: Any) -> str:
     return f"{visible_prefix}***@{domain_part}"
 
 
+def mask_user_identifier_for_admin(value: Any) -> str:
+    """Mask user identifiers before exposing them on admin/support log surfaces."""
+    if not isinstance(value, str):
+        return REDACTED_VALUE
+
+    cleaned = value.strip()
+    if not cleaned:
+        return REDACTED_VALUE
+
+    if cleaned.lower() == "system":
+        return "system"
+
+    if "@" in cleaned:
+        return mask_email_for_logs(cleaned)
+
+    visible_prefix = cleaned[: min(2, len(cleaned))]
+    return f"{visible_prefix}***"
+
+
+def mask_ip_address_for_admin(value: Any) -> str | None:
+    """Return a coarse-grained IP mask for admin/support diagnostics."""
+    if not isinstance(value, str):
+        return None
+
+    cleaned = value.strip()
+    if not cleaned:
+        return None
+
+    try:
+        address = ipaddress.ip_address(cleaned)
+    except ValueError:
+        return REDACTED_VALUE
+
+    if address.version == 4:
+        octets = cleaned.split(".")
+        if len(octets) == 4:
+            return f"{octets[0]}.{octets[1]}.*.*"
+        return REDACTED_VALUE
+
+    hextets = address.exploded.split(":")
+    return f"{hextets[0]}:{hextets[1]}:*:*:*:*:*:*"
+
+
 def sanitize_log_value(value: Any, *, field_name: str | None = None) -> Any:
     """Recursively sanitize one log value based on its field name."""
     normalized_field = _normalize_log_key(field_name) if field_name else ""
@@ -94,6 +175,63 @@ def sanitize_log_kwargs(kwargs: dict[str, Any]) -> dict[str, Any]:
         key: sanitize_log_value(value, field_name=key)
         for key, value in kwargs.items()
     }
+
+
+def _coerce_admin_log_details(raw_details: Any) -> dict[str, Any]:
+    """Best-effort parse of stored audit details for admin/support views."""
+    if raw_details is None:
+        return {}
+
+    if isinstance(raw_details, dict):
+        return raw_details
+
+    if isinstance(raw_details, str):
+        stripped = raw_details.strip()
+        if not stripped:
+            return {}
+        try:
+            parsed = json.loads(stripped)
+        except json.JSONDecodeError:
+            return {}
+        return parsed if isinstance(parsed, dict) else {}
+
+    return {}
+
+
+def extract_admin_log_context(raw_details: Any) -> dict[str, str | None]:
+    """Return the audience-safe diagnostic subset from stored audit details."""
+    details = _coerce_admin_log_details(raw_details)
+    context: dict[str, str | None] = {key: None for key in ADMIN_LOG_DIAGNOSTIC_FIELDS}
+
+    for key in ADMIN_LOG_DIAGNOSTIC_FIELDS:
+        value = details.get(key)
+        if value in (None, ""):
+            continue
+        sanitized = sanitize_log_value(value, field_name=key)
+        context[key] = str(sanitized)
+
+    return context
+
+
+def build_admin_log_diagnostics(raw_details: Any) -> list[dict[str, str]]:
+    """Return ordered safe diagnostic items for admin/support log surfaces."""
+    context = extract_admin_log_context(raw_details)
+    return [
+        {"key": key, "value": value}
+        for key in ADMIN_LOG_DIAGNOSTIC_FIELDS
+        if (value := context.get(key))
+    ]
+
+
+def summarize_admin_log_details(raw_details: Any) -> str | None:
+    """Build the safe diagnostic details string shown to admin/support surfaces."""
+    visible_parts = [
+        f"{item['key']}={item['value']}"
+        for item in build_admin_log_diagnostics(raw_details)
+    ]
+    if not visible_parts:
+        return None
+    return " · ".join(visible_parts)
 
 
 class StructuredLogger:

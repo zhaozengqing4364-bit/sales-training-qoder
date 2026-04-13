@@ -172,6 +172,71 @@ async def user_headers(non_admin_user: User) -> dict[str, str]:
 
 
 @pytest.mark.asyncio
+async def test_system_logs_api_returns_shared_redaction_policy_and_safe_diagnostics(
+    async_client: AsyncClient,
+    admin_headers: dict[str, str],
+    db_session: AsyncSession,
+) -> None:
+    """System logs API should expose the shared allowlist policy and pre-redacted diagnostics."""
+    log_id = str(uuid.uuid4())
+    db_session.add(
+        SystemLog(
+            log_id=log_id,
+            action="admin.user.updated",
+            user_identifier="sensitive.user@example.com",
+            ip_address="203.0.113.42",
+            status="failed",
+            details=json.dumps(
+                {
+                    "trace_id": "trace-123",
+                    "error_code": "USER_UPDATE_FAILED",
+                    "phase": "persist",
+                    "session_id": "session-123",
+                    "target_user_id": "user-456",
+                    "password": "Password123",
+                    "reset_token": "secret-reset-token",
+                    "operator_email": "admin@example.com",
+                }
+            ),
+            created_at=datetime.now(timezone.utc),
+        )
+    )
+    await db_session.commit()
+
+    response = await async_client.get("/api/v1/admin/system-logs", headers=admin_headers)
+
+    assert response.status_code == 200
+    payload = response.json()["data"]
+    item = next(row for row in payload["items"] if row["id"] == log_id)
+
+    assert payload["policy"]["version"] == "admin_support_redaction_v1"
+    assert payload["policy"]["diagnostic_fields"] == [
+        "error_code",
+        "phase",
+        "session_id",
+        "target_user_id",
+        "trace_id",
+    ]
+    assert item["user_identifier"] == "se***@example.com"
+    assert item["ip_address"] == "203.0.*.*"
+    assert item["trace_id"] == "trace-123"
+    assert item["error_code"] == "USER_UPDATE_FAILED"
+    assert item["phase"] == "persist"
+    assert item["session_id"] == "session-123"
+    assert item["diagnostics"] == [
+        {"key": "error_code", "value": "USER_UPDATE_FAILED"},
+        {"key": "phase", "value": "persist"},
+        {"key": "session_id", "value": "session-123"},
+        {"key": "target_user_id", "value": "user-456"},
+        {"key": "trace_id", "value": "trace-123"},
+    ]
+    assert item["details"] == "error_code=USER_UPDATE_FAILED · phase=persist · session_id=session-123 · target_user_id=user-456 · trace_id=trace-123"
+    assert "Password123" not in json.dumps(item, ensure_ascii=False)
+    assert "secret-reset-token" not in json.dumps(item, ensure_ascii=False)
+    assert "admin@example.com" not in json.dumps(item, ensure_ascii=False)
+
+
+@pytest.mark.asyncio
 async def test_admin_user_lifecycle_and_audit_log_fields(
     async_client: AsyncClient,
     admin_headers: dict[str, str],

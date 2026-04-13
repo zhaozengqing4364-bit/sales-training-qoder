@@ -6,9 +6,9 @@
 
 | Surface | 正式 authority | 兼容 authority | 当前说明 |
 |---|---|---|---|
-| HTTP API | `Authorization: Bearer <jwt>`、`HttpOnly session cookie` | 无 | `backend/src/common/auth/service.py::resolve_bearer_or_cookie_token()` 是当前唯一 resolver；`web/src/lib/api/client.ts` 默认 `credentials: "include"`，所以浏览器主链默认走 cookie-session。 |
-| WebSocket | `Authorization` header、session cookie | `?token=` query token | sales / presentation websocket 都复用 `resolve_websocket_token(...)`；当前 shipped 顺序仍是 `Authorization -> query token -> session cookie`，所以 query token 仍是**活跃兼容路径**，但不应再被当作正式调用方式。 |
-| 登录凭证 | `User.hashed_password` | `AUTH_USER_PASSWORDS_JSON`、`AUTH_SHARED_PASSWORD` | password reset 后的 `hashed_password` 是正式 authority；env password 只用于本地/兼容账号恢复，不是长期主路径。 |
+| HTTP API | `Authorization: Bearer <jwt>`、`HttpOnly session cookie` + `X-CSRF-Token`（unsafe cookie-backed requests） | 无 | `backend/src/common/auth/service.py::resolve_bearer_or_cookie_token()` 是当前唯一 HTTP auth resolver；浏览器主链通过 `web/src/lib/api/client.ts` 默认 `credentials: "include"`，并在带 session cookie 的 unsafe 请求上自动附带 `X-CSRF-Token`。非 development 环境会强制把 session / CSRF cookie 标记为 `Secure`。 |
+| WebSocket | `Authorization` header、session cookie | `?token=` query token | sales / presentation websocket 都复用 `resolve_websocket_auth(...)` / `resolve_websocket_token(...)`；当前 shipped 顺序已收口为 `Authorization -> session cookie -> query token compatibility`，query token 仍是**活跃兼容路径**，但已明确降为 compatibility-only。 |
+| 登录凭证 | `User.hashed_password` | `AUTH_USER_PASSWORDS_JSON`、`AUTH_SHARED_PASSWORD` | password reset 后的 `hashed_password` 是正式 authority；env password 只用于本地/兼容账号恢复，不是长期主路径。登录成功时会通过 `X-Auth-Authority` / `X-Auth-Compatibility-Mode` 暴露当前 authority。 |
 
 ## 2) 本地环境变量
 
@@ -29,6 +29,7 @@ AUTH_USER_PASSWORDS_JSON={"admin@qoder.ai":"admin123","support@qoder.ai":"suppor
 
 ### 浏览器 HTTP 主链
 - 浏览器页面默认通过 `web/src/lib/api/client.ts` 发请求，并自动携带 `credentials: "include"`；
+- 对带 session cookie 的 unsafe 请求（如 logout），client 会自动附带 `X-CSRF-Token`，并与 `app_csrf` cookie 做双提交校验；
 - 401 由统一 transport seam 触发 `authHandler.sessionExpired()`，而不是页面各自弹错或各自跳转；
 - login / logout / forgot-password / reset-password 这些 auth 自身接口显式设置 `skipSessionExpiredHandling: true`，避免把“登录失败”误当成“会话过期”。
 

@@ -267,9 +267,9 @@ S04/T02 之后，当前仓库已经有一条**可复用的 assembled release gat
 - recovery 仍偏 runbook 阶段
 
 #### 7.2.1 M020/S01 当前 auth transport authority（真实现状 + runbook closure）
-- **HTTP API 正式路径**：`common.auth.service.resolve_bearer_or_cookie_token(...)` 允许 `Authorization: Bearer <jwt>` 与 `HttpOnly session cookie` 两条正式 transport；`web/src/lib/api/client.ts` 默认 `credentials: "include"`，所以 learner/admin 主链已经以 cookie-session 为默认浏览器 transport，而不是 localStorage token。
-- **登录凭证正式/兼容路径**：`User.hashed_password` 是正式密码 authority；尚未进入 managed password 的账号仍通过 `AUTH_USER_PASSWORDS_JSON`（per-user override）与 `AUTH_SHARED_PASSWORD`（shared password）兼容登录。这个兼容层目前仍在 `common.auth.api.login` 里真实生效，因此 runbook 必须把它写成“兼容入口 + 退出条件”，不能写成正式长期 authority。
-- **WebSocket 正式/兼容路径**：sales router（`backend/src/sales_bot/websocket/router.py`）与 presentation router（`backend/src/main.py::_handle_presentation_websocket`）都复用 `resolve_websocket_token(...)`。当前 shipped 顺序仍是 `Authorization header -> query token -> session cookie`；也就是说，`Authorization`/cookie 是目标正式 transport，但 `query token` 仍是**活跃兼容路径**，并且今天优先级仍高于 cookie。这一事实现在需要同时写进 `docs/api-contract/websocket.md` 与 `docs/setup/auth-local.md`，避免只在代码注释里存在。
+- **HTTP API 正式路径**：`common.auth.service.resolve_bearer_or_cookie_token(...)` 允许 `Authorization: Bearer <jwt>` 与 `HttpOnly session cookie` 两条正式 transport；`web/src/lib/api/client.ts` 默认 `credentials: "include"`，并在带 session cookie 的 unsafe 请求上自动附带 `X-CSRF-Token`，所以 learner/admin 浏览器主链现在是 cookie-session + CSRF 双提交校验，而不是 localStorage token。
+- **登录凭证正式/兼容路径**：`User.hashed_password` 是正式密码 authority；尚未进入 managed password 的账号仍通过 `AUTH_USER_PASSWORDS_JSON`（per-user override）与 `AUTH_SHARED_PASSWORD`（shared password）兼容登录。这个兼容层目前仍在 `common.auth.api.login` 里真实生效，并会通过 `X-Auth-Authority` / `X-Auth-Compatibility-Mode` 诊断头显式暴露当前 authority，因此 runbook 必须把它写成“兼容入口 + 退出条件”，不能写成正式长期 authority。
+- **WebSocket 正式/兼容路径**：sales router（`backend/src/sales_bot/websocket/router.py`）与 presentation router（`backend/src/main.py::_handle_presentation_websocket`）都复用 `resolve_websocket_auth(...)` / `resolve_websocket_token(...)`。当前 shipped 顺序已收口为 `Authorization header -> session cookie -> query token compatibility`；也就是说，`Authorization`/cookie 是正式 transport，而 `query token` 仍是**活跃兼容路径**，但现在已降为 cookie 之后的 compatibility-only fallback。这一事实现在需要同时写进 `docs/api-contract/websocket.md` 与 `docs/setup/auth-local.md`，避免只在代码注释里存在。
 - **前端统一 session-expired seam 仍成立**：`web/src/lib/api/client.ts` 的 `apiFetch` / `apiUpload` 在 401 且未设置 `skipSessionExpiredHandling` 时统一调用 `authHandler.sessionExpired()`；`createAuthDomain(...)` 对 login / logout / forgot-password / reset-password 显式设置 `skipSessionExpiredHandling: true`，避免把 auth 自身失败误报成 session expired；`web/src/hooks/use-auth-protection.ts` 继续负责页面级 login/role guard。
 - **兼容路径关闭条件（必须文档化）**：
   1. 只有当目标账号都已经写入 `User.hashed_password`，且 reset-password focused proof 通过时，才应移除 `AUTH_SHARED_PASSWORD` / `AUTH_USER_PASSWORDS_JSON`；
@@ -282,6 +282,16 @@ S04/T02 之后，当前仓库已经有一条**可复用的 assembled release gat
   4. `rg -n "Authorization|query token|cookie|CSRF|shared password|session expired" docs/setup/auth-local.md docs/api-contract/websocket.md .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md web/src/lib/auth-handler.ts`
 
 落点：**M020**
+
+#### 7.2.2 M020/S02 admin/support 日志 redaction boundary（T03 inventory closure）
+- **已收口的 authority seam**：`backend/src/common/monitoring/logger.py` 现在是 admin/support 日志可见性的 backend-owned authority。`SYSTEM_LOG_ADMIN_POLICY_VERSION=admin_support_redaction_v1`、`ADMIN_LOG_ALLOWED_DETAIL_KEYS`、`ADMIN_LOG_DIAGNOSTIC_FIELDS`、`ADMIN_LOG_REDACTION_SUMMARY` 一起定义了 system log route 与 admin logs page 可见的 diagnostics contract；`backend/src/admin/api/system_logs.py` 只序列化这套 contract，`web/src/app/admin/logs/page.tsx` 只渲染 backend 返回的 diagnostics 列表，不再在前端重建可见字段规则。
+- **可安全展示给 admin/support 的字段（allowlist）**：`action`、`status`、`created_at`、masked `user_identifier`、coarse `ip_address`，以及 `trace_id` / `error_code` / `phase` / `session_id` / `target_user_id` 这组 diagnostics。它们的用途是让 support/admin 可以定位哪条链路失败、落在哪个阶段、关联哪个 session 或 trace，而不是获得原始错误 payload。
+- **必须留在 backend 内部的字段（backend-only details）**：raw `details`、精确 `user_identifier` / `ip_address`、stack trace、request/response/provider payload、prompt text、token/password/cookie/email、`base_url`、secret，以及任何足以重放请求或暴露身份/配置的原文错误上下文。即使 logger sink 可以在 backend 受控环境里保留这些原始 details，admin/support route 和 UI 也不得原样转发。
+- **support guidance / inspection rule**：未来排障时，把 `policy.diagnostic_fields` 与 `diagnostics[]` 当成唯一可信的 admin/support error-details surface；如果某个问题需要 raw details、provider body、prompt、secret-adjacent config 或 stack trace，就应该回到 backend-controlled logs / runtime diagnostics，而不是把 system log route 或 admin page 扩成第二条泄密面。
+- **M021 quality-event 前置约束**：`M021/S04` 计划把 AI `quality/cost/failure events` 暴露到 support/runtime 与前端 proof，但这条事件线不能发明第二套 support payload。任何需要进入 admin/support 诊断面的 quality event 都必须复用同一 allowlist-first redaction boundary：显式标出 degraded / failure / compat 与 `trace_id` / `error_code` / `phase` / `session_id` 等安全 diagnostics，但不得把 provider rejected 原文、fallback request/response details、prompt text、`base_url`、token 或其他 secret 直接外露。这样 M021 强化的是“显式失败”，不是“显式泄密”。
+- **Repo-root focused proof（T03 写回）**：
+  1. `rg -n "allowlist|redaction|trace_id|details|support|admin" backend/src/admin/api/security_inventory.py backend/src/common/monitoring/log_safety_inventory.py .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md`
+  2. `backend/venv/bin/python -m py_compile backend/src/admin/api/security_inventory.py backend/src/common/monitoring/log_safety_inventory.py`
 
 ### 7.3 Theme C — AI control plane / evaluation kernel
 对应问题：

@@ -11,7 +11,7 @@ from typing import Optional
 from fastapi import APIRouter, Query, WebSocket
 from sqlalchemy import select
 
-from common.auth.service import JWTError, resolve_websocket_token
+from common.auth.service import JWTError, resolve_websocket_auth
 from common.db.models import PracticeSession, Scenario, User
 from common.db.session import AsyncSessionLocal
 from common.knowledge.kb_lock_guard import is_kb_lock_unbound_snapshot
@@ -32,7 +32,7 @@ router = APIRouter()
 SALES_WS_AUTH_POLICY: dict[str, list[str] | dict[str, int] | str] = {
     "formal": ["authorization_bearer", "session_cookie"],
     "compatibility": ["query_token"],
-    "current_resolution_order": "authorization_header -> query_token -> cookie_header",
+    "current_resolution_order": "authorization_header -> session_cookie -> query_token_compatibility",
     "reject_close_codes": {
         "unauthorized": 4001,
         "owner_mismatch": 4003,
@@ -261,12 +261,18 @@ async def _handle_sales_websocket(
 
 
 def _resolve_ws_token(websocket: WebSocket, query_token: str) -> str:
-    """Resolve sales websocket auth using the shipped compatibility order."""
-    return resolve_websocket_token(
+    """Resolve sales websocket auth with cookie preference and explicit compatibility logging."""
+    resolution = resolve_websocket_auth(
         query_token=query_token,
         authorization_header=websocket.headers.get("authorization", ""),
         cookie_header=websocket.headers.get("cookie", ""),
     )
+    if resolution["compatibility_mode"]:
+        logger.warning(
+            "Accepted /ws/sales connection via compatibility auth transport",
+            transport=resolution["transport"],
+        )
+    return str(resolution["token"])
 
 
 def _normalize_requested_voice_mode(voice_mode: str | None) -> str | None:

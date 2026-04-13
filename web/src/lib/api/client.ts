@@ -194,6 +194,8 @@ const activeRequests = new Map<string, AbortController>();
 let requestCounter = 0;
 let lastSessionExpiredAt = 0;
 const SESSION_EXPIRED_NOTIFY_COOLDOWN_MS = 1500;
+const CSRF_COOKIE_NAME = "app_csrf";
+const CSRF_HEADER_NAME = "X-CSRF-Token";
 
 function triggerSessionExpiredOnce(): void {
     const now = Date.now();
@@ -1265,6 +1267,58 @@ function createHeaders(
     return headers;
 }
 
+function readBrowserCookie(name: string): string | null {
+    if (typeof document === "undefined") {
+        return null;
+    }
+
+    const encodedName = `${encodeURIComponent(name)}=`;
+    const cookieEntry = document.cookie
+        .split(";")
+        .map((item) => item.trim())
+        .find((item) => item.startsWith(encodedName));
+
+    if (!cookieEntry) {
+        return null;
+    }
+
+    const cookieValue = cookieEntry.slice(encodedName.length);
+    if (!cookieValue) {
+        return null;
+    }
+
+    try {
+        return decodeURIComponent(cookieValue);
+    } catch {
+        return cookieValue;
+    }
+}
+
+function isUnsafeHttpMethod(method: string | undefined): boolean {
+    const normalizedMethod = (method || "GET").trim().toUpperCase();
+    return !["GET", "HEAD", "OPTIONS", "TRACE"].includes(normalizedMethod);
+}
+
+function attachCsrfHeader(
+    headers: Headers,
+    options: {
+        method: string | undefined;
+        credentials: RequestCredentials | undefined;
+    },
+): Headers {
+    const { method, credentials } = options;
+    if (credentials !== "include" || !isUnsafeHttpMethod(method) || headers.has(CSRF_HEADER_NAME)) {
+        return headers;
+    }
+
+    const csrfToken = readBrowserCookie(CSRF_COOKIE_NAME);
+    if (csrfToken) {
+        headers.set(CSRF_HEADER_NAME, csrfToken);
+    }
+
+    return headers;
+}
+
 // Generic fetch wrapper with AbortController support
 async function apiFetch<T>(
     endpoint: string,
@@ -1287,11 +1341,19 @@ async function apiFetch<T>(
     activeRequests.set(requestId, controller);
 
     try {
+        const resolvedCredentials = requestOptions.credentials || "include";
+        const headers = attachCsrfHeader(
+            createHeaders(requestOptions.headers),
+            {
+                method: requestOptions.method,
+                credentials: resolvedCredentials,
+            },
+        );
         const response = await fetchWithLoopbackRetry(url, {
             ...requestOptions,
             signal,
-            credentials: requestOptions.credentials || "include",
-            headers: createHeaders(requestOptions.headers),
+            credentials: resolvedCredentials,
+            headers,
         });
 
         const responseJson = await response.json().catch(() => ({}));
@@ -1354,12 +1416,20 @@ async function apiUpload<T>(
     activeRequests.set(requestId, controller);
 
     try {
+        const resolvedCredentials = "include";
+        const headers = attachCsrfHeader(
+            createHeaders(undefined, false),
+            {
+                method: "POST",
+                credentials: resolvedCredentials,
+            },
+        );
         const response = await fetchWithLoopbackRetry(url, {
             method: "POST",
             body: formData,
             signal: signal || controller.signal,
-            credentials: "include",
-            headers: createHeaders(undefined, false),
+            credentials: resolvedCredentials,
+            headers,
         });
 
         const responseJson = await response.json().catch(() => ({}));

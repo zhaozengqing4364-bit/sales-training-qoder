@@ -1,3 +1,23 @@
+- time: 2026-04-13T23:07:58+0800
+  mode: grow
+  item id: M020-S02-T03
+  files changed:
+    - backend/src/admin/api/security_inventory.py
+    - backend/src/common/monitoring/log_safety_inventory.py
+    - .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md
+    - .gsd/DECISIONS.md
+    - .codex/loop/state.json
+    - .codex/loop/log.md
+  summary: Codified the shipped admin/support redaction boundary into the durable inventory surfaces: security_inventory and log_safety_inventory now name the allowlist diagnostics, the backend-only detail classes, and the M021 quality-event prerequisite, while the architecture scan turns the same rule into a downstream observability contract instead of leaving it implicit in logger/API/UI code.
+  verification commands:
+    - rg -n "allowlist|redaction|trace_id|details|support|admin" backend/src/admin/api/security_inventory.py backend/src/common/monitoring/log_safety_inventory.py .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md
+    - backend/venv/bin/python -m py_compile backend/src/admin/api/security_inventory.py backend/src/common/monitoring/log_safety_inventory.py
+    - lsp diagnostics backend/src/admin/api/security_inventory.py
+    - lsp diagnostics backend/src/common/monitoring/log_safety_inventory.py
+  verification results: passed; the exact task-plan grep gate now exposes the allowlist/redaction/support wording in all three authority artifacts, py_compile succeeded on the two touched Python inventories, and LSP diagnostics stayed clean.
+  success signal status: future M021 quality/cost/failure event work no longer has to guess what support/admin may see — one code-owned inventory plus the architecture scan now say that only safe diagnostics like trace_id/error_code/phase/session_id/target_user_id may surface, while raw details/provider payloads/prompt/config secrets stay backend-only.
+  rollback note: if later work expands admin/support observability fields, update the logger policy constants, both inventory modules, the architecture scan section 7.2.2, and the downstream M021 proof/docs together; otherwise runtime behavior and support guidance will drift again.
+
 - time: 2026-04-13T18:04:04.426244+08:00
   mode: grow
   item id: M020-S01-T01
@@ -1307,3 +1327,32 @@
   verification results: passed; focused proof is green for explicit production-like startup failure and explicit repair-script handoff, the touched Python/revision/test files are diagnostics-clean, and the exact slice gate passes without relying on implicit startup schema patching outside development/test.
   success signal status: production-like startup no longer silently repairs legacy persona/knowledge schema drift, while operators still have two explicit recovery paths — `alembic upgrade head` (now including revision 20260413_1040_029) and `python scripts/repair_legacy_schema.py`.
   rollback note: if later tasks remove `Base.metadata.create_all()` or further narrow local bootstrap, keep `backend/src/common/db/session.py`, `backend/src/common/db/legacy_schema_repair.py`, `backend/scripts/repair_legacy_schema.py`, the explicit Alembic repair revision, and the focused startup authority tests aligned together so startup/bootstrap authority does not drift again.
+
+- time: 2026-04-13T22:20:00+08:00
+  mode: grow
+  item id: M020-S02-T02
+  files changed:
+    - .gsd/DECISIONS.md
+    - backend/src/common/monitoring/logger.py
+    - backend/src/admin/api/system_logs.py
+    - backend/tests/integration/test_admin_users_api.py
+    - backend/tests/unit/admin/test_system_logs_redaction.py
+    - web/src/app/admin/logs/page.tsx
+    - web/src/app/admin/logs/page.test.tsx
+    - web/src/lib/api/types.ts
+    - .codex/loop/state.json
+    - .codex/loop/log.md
+  summary: Unified the admin/support log redaction contract across logger, API, and UI by making logger.py the source of truth for safe diagnostic field order, teaching the system log API to emit ordered diagnostics plus policy metadata, and switching the admin logs page to render that server-supplied diagnostics list instead of reconstructing visibility client-side.
+  verification commands:
+    - backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/admin/test_system_logs_redaction.py backend/tests/integration/test_admin_users_api.py -k "system_logs_api_returns_shared_redaction_policy_and_safe_diagnostics or test_log_to_response_applies_admin_support_exposure_policy" -q
+    - backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/integration/test_admin_users_api.py backend/tests/unit/admin/test_admin_users_api_models.py -x -q && npm --prefix web test -- --run "src/app/admin/logs/page.test.tsx"
+    - backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/admin/test_system_logs_redaction.py -q
+    - lsp diagnostics backend/src/common/monitoring/logger.py
+    - lsp diagnostics backend/src/admin/api/system_logs.py
+    - lsp diagnostics web/src/app/admin/logs/page.tsx
+    - lsp diagnostics web/src/lib/api/types.ts
+    - lsp diagnostics backend/tests/unit/admin/test_system_logs_redaction.py
+    - lsp diagnostics web/src/app/admin/logs/page.test.tsx
+  verification results: passed; the new backend unit + integration proofs finished green, the exact task-plan backend/web verification command passed end-to-end, and diagnostics stayed clean on the touched runtime/test files.
+  success signal status: future M020/M021 observability work no longer has to guess whether trace_id/error_code/phase/session_id/target_user_id are safe to show or rebuild that selection in the UI — one ordered diagnostics contract now flows from backend policy to admin display.
+  rollback note: if later work changes which admin/support diagnostics are safe to expose, update logger.py diagnostic-field constants, the system-log API policy payload, the focused backend serializer/API proofs, and the admin logs page test together so backend/API/UI do not drift.

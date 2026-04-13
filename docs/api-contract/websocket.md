@@ -12,7 +12,7 @@
 |---|---|---|---|
 | 浏览器 websocket | session cookie | `?token=` query token | web 主链不再默认在 URL 上追加 `token=`；浏览器应优先复用登录后的 cookie-session。 |
 | 非浏览器 / script websocket | `Authorization: Bearer <jwt>` | `?token=` query token | 新调用方优先走 Authorization header；不要新增 query-token 依赖。 |
-| backend resolver（sales / presentation 共用） | `Authorization`、cookie | query token | 当前 shipped resolver 仍是 `Authorization -> query token -> session cookie`，因此 query token 仍是活跃兼容路径，但已被标记为 deprecated compatibility。 |
+| backend resolver（sales / presentation 共用） | `Authorization`、cookie | query token | 当前 shipped resolver 已收口为 `Authorization -> session cookie -> query token compatibility`；query token 仍是活跃兼容路径，但已明确标记为 deprecated compatibility。 |
 
 ### 连接 URL
 
