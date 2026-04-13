@@ -1,3 +1,17 @@
+/**
+ * M019/S03 extracted API domain builders.
+ *
+ * Edit here when changing page-proved runtime domains behind the outward `api` façade:
+ * - `createAuthDomain`          → learner auth/session endpoints
+ * - `createPracticeDomain`      → live session create/get/lifecycle transport
+ * - `createSessionsDomain`      → report/replay/history read surfaces and media fetch helpers
+ * - `createAgentsDomain`        → learner agent/persona lookup
+ * - `createPresentationsDomain` → learner/admin presentation runtime assets
+ * - `createAdminReportDomain`   → admin comprehensive report actions
+ *
+ * Keep cross-cutting auth/error/trace/request handling in `client.ts`; pages should continue
+ * importing `api` from `client.ts` instead of reaching into these builders directly.
+ */
 import type {
     Agent,
     Persona,

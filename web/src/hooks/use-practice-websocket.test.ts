@@ -482,6 +482,56 @@ describe("usePracticeWebSocket reconnect lifecycle", () => {
         }));
     });
 
+    it("cancels any throttled interim transcript update when interrupt resets the outward hook runtime", async () => {
+        const actualHandlers = await vi.importActual<typeof import("./websocket/message-handlers")>(
+            "./websocket/message-handlers",
+        );
+        vi.mocked(handleWebSocketMessage).mockImplementation((event, deps) =>
+            actualHandlers.handleWebSocketMessage(event, deps),
+        );
+
+        const { result } = renderHook(() =>
+            usePracticeWebSocket({
+                sessionId: "session-interrupt-clears-interim-transcript",
+                scenarioType: "sales",
+            }),
+        );
+
+        const ws = MockWebSocket.instances.at(-1);
+        expect(ws).toBeDefined();
+
+        act(() => {
+            if (!ws) return;
+            ws.readyState = MockWebSocket.OPEN;
+            ws.onopen?.(new Event("open"));
+            emitJsonMessage(ws, {
+                type: "status",
+                data: {
+                    session_status: "in_progress",
+                    ai_state: "listening",
+                    connection_state: "connected",
+                },
+            });
+            emitJsonMessage(ws, {
+                type: "transcript",
+                timestamp: new Date().toISOString(),
+                data: {
+                    text: "客户现在先打断一下，我要补充预算限制。",
+                    is_final: false,
+                },
+            });
+        });
+
+        expect(result.current.interimTranscript).toBe("");
+
+        act(() => {
+            result.current.sendInterrupt("user_speaking");
+            vi.advanceTimersByTime(100);
+        });
+
+        expect(result.current.interimTranscript).toBe("");
+    });
+
     it("waits for backend paused status before gating audio send", () => {
         const { result } = renderHook(() =>
             usePracticeWebSocket({

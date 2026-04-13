@@ -1409,9 +1409,10 @@ async function apiUpload<T>(
  * - error normalization: normalizeApiErrorPayload -> ApiRequestError -> getApiErrorMessage
  *
  * Domain surfaces currently exposed through the outward `api` façade:
- * - auth, user, dashboard, analyticsOpen, supportRuntime
- * - training, practice, sessions, scenarios, agents, analytics
- * - admin, adminTools, presentations, adminPresentations, internal
+ * - extracted in `client-domains.ts`: auth, practice, sessions, agents, presentations,
+ *   and admin report helpers consumed through `api.admin`
+ * - currently still inline in `client.ts`: user, dashboard, analyticsOpen, supportRuntime,
+ *   training, scenarios, analytics, admin, adminTools, adminPresentations, internal
  *
  * High-fan-out consumers confirmed by repo inventory:
  * - learner/auth/dashboard/practice/report/replay/profile pages import the façade directly

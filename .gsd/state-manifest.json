@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "exported_at": "2026-04-13T04:38:39.057Z",
+  "exported_at": "2026-04-13T04:47:55.441Z",
   "milestones": [
     {
       "id": "M001",
@@ -12274,19 +12274,29 @@
       "milestone_id": "M019",
       "slice_id": "S03",
       "id": "T03",
-      "title": "固定前端拆分后的 contract proof",
-      "status": "pending",
-      "one_liner": "",
-      "narrative": "",
-      "verification_result": "",
+      "title": "Locked the frontend websocket seam with interrupt transcript cleanup, focused contract proof, and updated domain/transport seam inventory docs.",
+      "status": "complete",
+      "one_liner": "Locked the frontend websocket seam with interrupt transcript cleanup, focused contract proof, and updated domain/transport seam inventory docs.",
+      "narrative": "I treated T03 as contract-proof hardening, not another broad refactor. First I added a red regression in `web/src/hooks/use-practice-websocket.test.ts` proving that `sendInterrupt()` must cancel any throttled interim transcript update; the failing run showed stale learner text reappearing after interrupt, which meant the outward hook still leaked cleanup responsibility into the page layer. I then fixed `web/src/hooks/use-practice-websocket.ts` so interrupt pre-cleanup clears the pending transcript throttle and blanks `interimTranscript` alongside the existing playback/backpressure cleanup. After the runtime fix, I tightened the seam inventory so downstream slices can see the split truth directly in code: `web/src/lib/api/client-domains.ts` now states which extracted builders own the proved runtime domains, `web/src/lib/api/client.ts` now distinguishes extracted versus still-inline façade domains, and the websocket hook header now points future work at `websocket/transport.ts` versus `websocket/message-handlers.ts` while documenting the responsibilities intentionally retained in the outward hook. I also updated `.gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md` with the same concrete module map and added a `.gsd/KNOWLEDGE.md` note for the interrupt/throttling gotcha so later slices do not reintroduce page-level cleanup hacks.",
+      "verification_result": "I followed a red-green verification loop on the new interrupt regression: `npm --prefix web test -- --run src/hooks/use-practice-websocket.test.ts` first failed with a stale `interimTranscript` after interrupt, then passed once the hook cleared the throttled transcript timer. I then ran the exact slice verification command, `npm --prefix web test -- --run \"src/hooks/use-practice-websocket.test.ts\" \"src/app/(user)/practice/[sessionId]/page.test.tsx\"`, which finished 30/30 green and confirmed the existing learner practice page contract still holds after the seam proof changes. Fresh LSP diagnostics for `web/src/hooks/use-practice-websocket.ts`, `web/src/hooks/use-practice-websocket.test.ts`, `web/src/lib/api/client.ts`, and `web/src/lib/api/client-domains.ts` were clean.",
       "duration": "",
-      "completed_at": null,
+      "completed_at": "2026-04-13T04:47:55.365Z",
       "blocker_discovered": false,
-      "deviations": "",
-      "known_issues": "",
-      "key_files": [],
-      "key_decisions": [],
-      "full_summary_md": "",
+      "deviations": "None.",
+      "known_issues": "None.",
+      "key_files": [
+        "web/src/hooks/use-practice-websocket.ts",
+        "web/src/hooks/use-practice-websocket.test.ts",
+        "web/src/lib/api/client.ts",
+        "web/src/lib/api/client-domains.ts",
+        ".gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md",
+        ".gsd/KNOWLEDGE.md"
+      ],
+      "key_decisions": [
+        "Keep throttled interim-transcript cancellation inside `usePracticeWebSocket()` interrupt pre-cleanup instead of pushing stale-transcript cleanup into the learner page or inbound message handlers.",
+        "Keep `client.ts` as the outward façade and cross-cutting seam while `client-domains.ts` documents the extracted page-proved domain builders future slices should extend."
+      ],
+      "full_summary_md": "---\nid: T03\nparent: S03\nmilestone: M019\nkey_files:\n  - web/src/hooks/use-practice-websocket.ts\n  - web/src/hooks/use-practice-websocket.test.ts\n  - web/src/lib/api/client.ts\n  - web/src/lib/api/client-domains.ts\n  - .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md\n  - .gsd/KNOWLEDGE.md\nkey_decisions:\n  - Keep throttled interim-transcript cancellation inside `usePracticeWebSocket()` interrupt pre-cleanup instead of pushing stale-transcript cleanup into the learner page or inbound message handlers.\n  - Keep `client.ts` as the outward façade and cross-cutting seam while `client-domains.ts` documents the extracted page-proved domain builders future slices should extend.\nduration: \nverification_result: mixed\ncompleted_at: 2026-04-13T04:47:55.365Z\nblocker_discovered: false\n---\n\n# T03: Locked the frontend websocket seam with interrupt transcript cleanup, focused contract proof, and updated domain/transport seam inventory docs.\n\n**Locked the frontend websocket seam with interrupt transcript cleanup, focused contract proof, and updated domain/transport seam inventory docs.**\n\n## What Happened\n\nI treated T03 as contract-proof hardening, not another broad refactor. First I added a red regression in `web/src/hooks/use-practice-websocket.test.ts` proving that `sendInterrupt()` must cancel any throttled interim transcript update; the failing run showed stale learner text reappearing after interrupt, which meant the outward hook still leaked cleanup responsibility into the page layer. I then fixed `web/src/hooks/use-practice-websocket.ts` so interrupt pre-cleanup clears the pending transcript throttle and blanks `interimTranscript` alongside the existing playback/backpressure cleanup. After the runtime fix, I tightened the seam inventory so downstream slices can see the split truth directly in code: `web/src/lib/api/client-domains.ts` now states which extracted builders own the proved runtime domains, `web/src/lib/api/client.ts` now distinguishes extracted versus still-inline façade domains, and the websocket hook header now points future work at `websocket/transport.ts` versus `websocket/message-handlers.ts` while documenting the responsibilities intentionally retained in the outward hook. I also updated `.gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md` with the same concrete module map and added a `.gsd/KNOWLEDGE.md` note for the interrupt/throttling gotcha so later slices do not reintroduce page-level cleanup hacks.\n\n## Verification\n\nI followed a red-green verification loop on the new interrupt regression: `npm --prefix web test -- --run src/hooks/use-practice-websocket.test.ts` first failed with a stale `interimTranscript` after interrupt, then passed once the hook cleared the throttled transcript timer. I then ran the exact slice verification command, `npm --prefix web test -- --run \"src/hooks/use-practice-websocket.test.ts\" \"src/app/(user)/practice/[sessionId]/page.test.tsx\"`, which finished 30/30 green and confirmed the existing learner practice page contract still holds after the seam proof changes. Fresh LSP diagnostics for `web/src/hooks/use-practice-websocket.ts`, `web/src/hooks/use-practice-websocket.test.ts`, `web/src/lib/api/client.ts`, and `web/src/lib/api/client-domains.ts` were clean.\n\n## Verification Evidence\n\n| # | Command | Exit Code | Verdict | Duration |\n|---|---------|-----------|---------|----------|\n| 1 | `npm --prefix web test -- --run src/hooks/use-practice-websocket.test.ts` | 1 | ❌ fail | 1630ms |\n| 2 | `npm --prefix web test -- --run src/hooks/use-practice-websocket.test.ts` | 0 | ✅ pass | 1510ms |\n| 3 | `npm --prefix web test -- --run \"src/hooks/use-practice-websocket.test.ts\" \"src/app/(user)/practice/[sessionId]/page.test.tsx\"` | 0 | ✅ pass | 2190ms |\n| 4 | `lsp diagnostics web/src/hooks/use-practice-websocket.ts` | 0 | ✅ pass | 0ms |\n| 5 | `lsp diagnostics web/src/hooks/use-practice-websocket.test.ts` | 0 | ✅ pass | 0ms |\n| 6 | `lsp diagnostics web/src/lib/api/client.ts` | 0 | ✅ pass | 0ms |\n| 7 | `lsp diagnostics web/src/lib/api/client-domains.ts` | 0 | ✅ pass | 0ms |\n\n## Deviations\n\nNone.\n\n## Known Issues\n\nNone.\n\n## Files Created/Modified\n\n- `web/src/hooks/use-practice-websocket.ts`\n- `web/src/hooks/use-practice-websocket.test.ts`\n- `web/src/lib/api/client.ts`\n- `web/src/lib/api/client-domains.ts`\n- `.gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md`\n- `.gsd/KNOWLEDGE.md`\n",
       "description": "- 更新 shared types / imports / architecture scan，让后续 slices 直接知道该改哪个 domain module、哪个 transport helper、哪个 inbound handler。\n- 对 reconnect/backpressure/interrupt 的 focused tests 补齐或重定位，确保拆分没有把 contract 流失到 page-level hacks。\n- 记录仍故意保留在 outward hook 中的职责，避免后续继续无依据地拆。",
       "estimate": "40m",
       "files": [
@@ -16410,6 +16420,18 @@
       "decision": "Downstream practice consumption after the S02 service extraction",
       "choice": "Keep `practice_session_service` and `practice_report_service` as the practice route-facing application seams, while preserving `SessionEvidenceService` as the canonical completed-session read model for replay/history/admin and manager-truth consumers.",
       "rationale": "This keeps write-side route orchestration changes out of `common/api/practice.py` without fragmenting the completed-session truth line. Practice route payload work can extend the extracted services, while replay/history/admin continue to share one projection authority instead of rebuilding reports from route helpers.",
+      "revisable": "Yes",
+      "made_by": "agent",
+      "superseded_by": null
+    },
+    {
+      "seq": 1585,
+      "id": "D215",
+      "when_context": "M019 S03 T03",
+      "scope": "frontend-architecture",
+      "decision": "Practice websocket interrupt cleanup ownership",
+      "choice": "Keep throttled interim-transcript cancellation inside usePracticeWebSocket() interrupt pre-cleanup instead of pushing stale-transcript cleanup into the learner page or message handlers.",
+      "rationale": "Interrupt is part of the outward transport/orchestration contract. Clearing pending transcript-throttle timers at the hook boundary prevents stale learner text from reappearing after interrupt and keeps reconnect/backpressure/interrupt cleanup in one transport-owned seam rather than scattering page-level cleanup hacks.",
       "revisable": "Yes",
       "made_by": "agent",
       "superseded_by": null
@@ -21222,6 +21244,83 @@
       "verdict": "✅ pass",
       "duration_ms": 0,
       "created_at": "2026-04-13T04:38:38.989Z"
+    },
+    {
+      "id": 443,
+      "task_id": "T03",
+      "slice_id": "S03",
+      "milestone_id": "M019",
+      "command": "npm --prefix web test -- --run src/hooks/use-practice-websocket.test.ts",
+      "exit_code": 1,
+      "verdict": "❌ fail",
+      "duration_ms": 1630,
+      "created_at": "2026-04-13T04:47:55.365Z"
+    },
+    {
+      "id": 444,
+      "task_id": "T03",
+      "slice_id": "S03",
+      "milestone_id": "M019",
+      "command": "npm --prefix web test -- --run src/hooks/use-practice-websocket.test.ts",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 1510,
+      "created_at": "2026-04-13T04:47:55.367Z"
+    },
+    {
+      "id": 445,
+      "task_id": "T03",
+      "slice_id": "S03",
+      "milestone_id": "M019",
+      "command": "npm --prefix web test -- --run \"src/hooks/use-practice-websocket.test.ts\" \"src/app/(user)/practice/[sessionId]/page.test.tsx\"",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 2190,
+      "created_at": "2026-04-13T04:47:55.367Z"
+    },
+    {
+      "id": 446,
+      "task_id": "T03",
+      "slice_id": "S03",
+      "milestone_id": "M019",
+      "command": "lsp diagnostics web/src/hooks/use-practice-websocket.ts",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 0,
+      "created_at": "2026-04-13T04:47:55.367Z"
+    },
+    {
+      "id": 447,
+      "task_id": "T03",
+      "slice_id": "S03",
+      "milestone_id": "M019",
+      "command": "lsp diagnostics web/src/hooks/use-practice-websocket.test.ts",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 0,
+      "created_at": "2026-04-13T04:47:55.367Z"
+    },
+    {
+      "id": 448,
+      "task_id": "T03",
+      "slice_id": "S03",
+      "milestone_id": "M019",
+      "command": "lsp diagnostics web/src/lib/api/client.ts",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 0,
+      "created_at": "2026-04-13T04:47:55.367Z"
+    },
+    {
+      "id": 449,
+      "task_id": "T03",
+      "slice_id": "S03",
+      "milestone_id": "M019",
+      "command": "lsp diagnostics web/src/lib/api/client-domains.ts",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 0,
+      "created_at": "2026-04-13T04:47:55.367Z"
     }
   ]
 }

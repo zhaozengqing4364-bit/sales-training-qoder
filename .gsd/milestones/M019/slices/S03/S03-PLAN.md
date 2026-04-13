@@ -37,7 +37,7 @@ S03 结束后，前端请求与 practice transport 不再被两个 mega file 独
   - Files: `web/src/lib/api`, `web/src/hooks/use-practice-websocket.ts`, `web/src/hooks/websocket`, `web/src/lib/auth-handler.ts`
   - Verify: npm --prefix web test -- --run "src/app/(auth)/login/page.test.tsx" "src/app/(user)/practice/[sessionId]/page.test.tsx" "src/app/(user)/practice/[sessionId]/report/page.test.tsx" "src/app/(user)/practice/[sessionId]/replay/page.test.tsx"
 
-- [ ] **T03: 固定前端拆分后的 contract proof** `est:40m`
+- [x] **T03: 固定前端拆分后的 contract proof** `est:40m`
   - 更新 shared types / imports / architecture scan，让后续 slices 直接知道该改哪个 domain module、哪个 transport helper、哪个 inbound handler。
 - 对 reconnect/backpressure/interrupt 的 focused tests 补齐或重定位，确保拆分没有把 contract 流失到 page-level hacks。
 - 记录仍故意保留在 outward hook 中的职责，避免后续继续无依据地拆。

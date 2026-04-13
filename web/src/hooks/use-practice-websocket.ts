@@ -7,13 +7,15 @@
  *   - websocket/types.ts              — All type definitions & constants
  *   - websocket/use-audio-playback.ts — Audio queue, playback, unlock
  *   - websocket/message-handlers.ts   — Inbound WebSocket protocol → practice state projection
+ *   - websocket/transport.ts          — URL assembly, reconnect/backoff policy, pending queue helpers
  *   - (this file)                     — Transport/orchestration boundary for the outward contract
  *
  * Real responsibility boundary (M017/S02/T01):
  *   - This hook owns transport lifecycle: connect/disconnect, reconnect budget, URL/runtime lock,
  *     pending outbound message flush, and binary negotiation on open.
  *   - This hook owns outbound realtime pacing: audio send gating, local backpressure buffering/
- *     flush aborts, and interrupt pre-cleanup across playback refs + browser speech synthesis.
+ *     flush aborts, and interrupt pre-cleanup across playback refs, throttled interim transcript state,
+ *     and browser speech synthesis.
  *   - message-handlers owns inbound protocol application: status/reconnected/interrupted/
  *     backpressure events become state updates once the server tells us what runtime state is true.
  *   - The remaining complexity seam is therefore outbound orchestration around reconnect /
@@ -23,12 +25,13 @@
  *   - outward consumer: `app/(user)/practice/[sessionId]/page.tsx` owns the live practice UI and
  *     page tests/mock wiring rely on the current `usePracticeWebSocket(...)` return contract.
  *   - already extracted behind this hook: `websocket/message-handlers.ts` (inbound projection),
- *     `websocket/use-audio-playback.ts` (legacy audio queue/unlock),
+ *     `websocket/transport.ts` (URL assembly, reconnect/backoff policy, pending outbound queue,
+ *     close-reason mapping), `websocket/use-audio-playback.ts` (legacy audio queue/unlock),
  *     `use-streaming-audio-player.ts` (chunk playback), and
  *     `use-voice-speed-preference.ts` (playback-rate preference).
- *   - intentionally retained here: URL/auth trace assembly, socket connect/disconnect,
- *     reconnect budget, pending outbound queue, binary negotiation, local backpressure
- *     buffer/flush abort, and interrupt cleanup across local playback/runtime refs.
+ *   - intentionally retained here: socket connect/disconnect lifecycle, runtime lock inputs,
+ *     binary negotiation, flush-session abort control, local backpressure buffer/flush,
+ *     interrupt cleanup across local playback/runtime refs, and the outward return contract.
  *   - follow-up split rule: transport helpers may move out, but the page must keep depending on
  *     this hook instead of rebuilding websocket lifecycle or backpressure logic locally.
  */
@@ -788,6 +791,7 @@ export function usePracticeWebSocket(options: UsePracticeWebSocketOptions) {
         const bufferedAudioChunks = localAudioBufferRef.current.length;
         localAudioBufferRef.current = [];
         clearPendingMessages();
+        clearInterimTranscriptThrottle();
 
         const { wasPlaying, clearedChunks } = interruptStreamingPlayback();
 
@@ -806,6 +810,7 @@ export function usePracticeWebSocket(options: UsePracticeWebSocketOptions) {
             isStreamingTTS: false,
             isBackpressureActive: false,
             isNetworkSlow: false,
+            interimTranscript: "",
         }));
 
         const interruptData: InterruptMessageData = { reason, timestamp: Date.now() };
@@ -814,7 +819,14 @@ export function usePracticeWebSocket(options: UsePracticeWebSocketOptions) {
         const totalCleared = clearedChunks + nonStreamingQueueLength + bufferedAudioChunks;
         debug.log(`[Interrupt] Sent interrupt signal (reason: ${reason}, wasPlaying: ${wasPlaying}, clearedChunks: ${totalCleared})`);
         return { wasPlaying, clearedChunks: totalCleared };
-    }, [clearPendingMessages, interruptStreamingPlayback, sendMessage, audioQueueRef, isPlayingRef]);
+    }, [
+        clearInterimTranscriptThrottle,
+        clearPendingMessages,
+        interruptStreamingPlayback,
+        sendMessage,
+        audioQueueRef,
+        isPlayingRef,
+    ]);
 
     // ── Auto-connect effect ──
     // Reconnect automatically if session runtime lock (scenario/voice mode) changes.
