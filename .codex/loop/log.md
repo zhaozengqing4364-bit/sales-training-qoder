@@ -1,3 +1,20 @@
+- time: 2026-04-13T13:05:41.478296+08:00
+  mode: grow
+  item id: M019-S04-T01
+  files changed:
+    - .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md
+    - .gsd/KNOWLEDGE.md
+    - .codex/loop/state.json
+    - .codex/loop/log.md
+  summary: Wrote the first assembled release-truth inventory for M019/S04 so downstream work stops assuming that workflow files, metrics helpers, frontend beacons, and legacy specs are all equally live: the architecture scan now separates backend NFR workflow plus router-backed docs/api-contract surfaces from disconnected frontend analytics beacons, helper-only Prometheus export code, and drifting openapi/api-spec artifacts, and the knowledge log records the relative /api/v1/analytics/* beacon trap for future agents.
+  verification commands:
+    - rg -n "analytics/error|metrics|openapi|api-contract|pip install -e|requirements.txt|package-lock" .github/workflows web/src/components/ErrorBoundary.tsx backend/src/common/monitoring/metrics.py api-spec.md specs/001-ai-practice-system/contracts/openapi.yaml docs/api-contract
+    - rg -n "analytics/error|analytics/performance|analytics/custom|MetricsMiddleware|initialize_metrics\(|get_metrics\(|/metrics|add_middleware\(|next.config" web/src/components/ErrorBoundary.tsx web/src/lib/performance.ts backend/src/common/api/analytics.py backend/src/common/monitoring/metrics.py backend/src/main.py backend/src/common/middleware/auth.py web/next.config.ts
+    - rg -n "/auth/wechat|/practice/sessions|/api/v1/admin/release-verification|/api/v1/support/runtime|POST /api/v1/sessions|POST /api/v1/practice/sessions|M019/S04 assembled release truth inventory|M019/S04 release-truth gotcha" specs/001-ai-practice-system/contracts/openapi.yaml api-spec.md docs/api-contract .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md .gsd/KNOWLEDGE.md
+  verification results: passed; the task-plan grep gate stayed green, repo-root grep proof showed the frontend analytics beacons and Prometheus helper file still lack a live backend/rewrite sink, and the new assembled inventory plus knowledge entry are themselves grep-discoverable for downstream slices.
+  success signal status: future S04 work no longer has to rediscover which release surfaces are real — backend NFR workflow and router-backed docs/api-contract are the current truth line, while frontend analytics beacons, backend metrics export, and legacy spec files are now explicitly marked as disconnected or drifting.
+  rollback note: if T02 wires a real metrics endpoint, adds frontend error/performance collection routes, or promotes a checked spec into release authority, update the architecture inventory, the beacon gotcha entry, and the repo-root proof commands together so the assembled truth line stays honest.
+
 - time: 2026-04-13T12:38:12.165299+08:00
   mode: grow
   item id: M019-S03-T02

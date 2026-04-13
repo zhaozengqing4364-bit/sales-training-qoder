@@ -1,8 +1,3 @@
-{"id":"4f12e5fc-b606-4e8e-9563-fab932079c49","ts":"2026-04-11T07:54:10.731Z","severity":"warning","message":"[reconcile] task M014/S01/T01 status reconciled from \"pending\" to \"complete\" (#2514)","source":"workflow-logger","read":false}
-{"id":"60b24548-9247-48ad-9036-f5a58bde3464","ts":"2026-04-11T08:02:19.674Z","severity":"warning","message":"[guided] preferences section parse failed: Source contains multiple documents; please use YAML.parseAllDocuments() at line 8, column 1:\n\n避免一次性大改、多点乱改、顺手修一堆。\n---\n^^^\n","source":"workflow-logger","read":false}
-{"id":"55d803ac-68a0-4fe2-a501-9143b71f67bf","ts":"2026-04-11T08:03:58.475Z","severity":"warning","message":"[reconcile] task M014/S01/T01 reconciled via SUMMARY on disk (#2514)","source":"workflow-logger","read":false}
-{"id":"8726b76e-3a51-4876-9a5a-b931c2c12e4c","ts":"2026-04-11T08:03:58.478Z","severity":"info","message":"Resuming paused session for M014.","source":"notify","read":false}
-{"id":"a2749a5c-f7a3-4900-b95f-a5876f94972f","ts":"2026-04-11T08:03:58.493Z","severity":"info","message":"Auto-mode resumed.","source":"notify","read":false}
 {"id":"a6ec6864-eb45-4612-b9ac-16d20dc511b2","ts":"2026-04-11T08:04:05.168Z","severity":"info","message":"Resume: applied 9 fix(es) to state.","source":"notify","read":false}
 {"id":"b0643771-60cc-4997-a741-1328e188c00f","ts":"2026-04-11T08:04:06.521Z","severity":"info","message":"Dynamic routing [S]: claude-sonnet-4-6 (capability-scored) — gpt-5.1-codex-max: 82.6, claude-sonnet-4-6: 81.1, GLM-5-turbo: 50.0, GLM-5.1: 50.0","source":"notify","read":false}
 {"id":"3f320fc3-78dc-4096-aeaf-046fd8e6377f","ts":"2026-04-11T08:04:06.524Z","severity":"warning","message":"Web search: Set BRAVE_API_KEY or use an Anthropic model for built-in search","source":"notify","read":false}
@@ -498,3 +493,8 @@
 {"id":"c5eee36f-7c66-4d25-959b-444ae66a6bd7","ts":"2026-04-13T04:38:47.857Z","severity":"warning","message":"[safety] file-change: web/src/lib/api/client-domains.ts — Modified but not in task plan's expected output","source":"workflow-logger","read":false}
 {"id":"7a789433-b80d-401c-a726-ba9af9196f8d","ts":"2026-04-13T04:38:47.859Z","severity":"warning","message":"Safety: 6 unexpected file change(s) outside task plan","source":"notify","read":false}
 {"id":"d16689f4-f2e5-486b-92db-4f687da570de","ts":"2026-04-13T04:38:52.408Z","severity":"info","message":"Verification gate: 1/1 checks passed","source":"notify","read":false}
+{"id":"aa12dd5f-da00-4054-9aba-497fdb6f8c90","ts":"2026-04-13T04:48:22.225Z","severity":"info","message":"Committed: docs: Locked the frontend websocket seam with interrupt transcript clea…","source":"notify","read":false}
+{"id":"de957416-9d50-4e88-b5e5-c673c7982b6e","ts":"2026-04-13T04:48:22.246Z","severity":"warning","message":"[safety] file-change: web/src/lib/api/client-domains.ts — Modified but not in task plan's expected output","source":"workflow-logger","read":false}
+{"id":"df8a2858-242c-438d-a10c-17f3c9aea227","ts":"2026-04-13T04:48:22.249Z","severity":"warning","message":"[safety] file-change: web/src/lib/api/client.ts — Modified but not in task plan's expected output","source":"workflow-logger","read":false}
+{"id":"c51b782f-54a8-4629-b813-2bff63de200b","ts":"2026-04-13T04:48:22.252Z","severity":"warning","message":"Safety: 2 unexpected file change(s) outside task plan","source":"notify","read":false}
+{"id":"7e5bae66-2b92-4859-b79f-dacb39d86b00","ts":"2026-04-13T04:48:25.986Z","severity":"info","message":"Verification gate: 1/1 checks passed","source":"notify","read":false}

@@ -39,6 +39,7 @@
 - **M018**：performance / dependency / recovery baselines 已完成——数据库性能疑点被收口为代码邻近、可执行的 discovery backlog；依赖安全/许可证/升级策略现在有 repo-local 可复跑的文档与脚本入口，并通过 web/backend audit + license inventory + shared `PyJWT` seam 回绿；备份 / 故障恢复 / 容灾现状被整理成 current-state inventory → manual runbook → analysis pointer 三层事实链，明确当前可执行恢复路径与仍未落地的运维缺口。
 - **M019 / S01**：数据库 startup / migration / legacy repair / auth bootstrap 的 authority line 已从隐式 startup 修补收口到可验证入口：Alembic 是 forward migration authority，legacy schema drift 由显式 repair seam 与 Alembic revision `20260413_1040_029` 承担，非开发环境 startup 对 legacy personas/knowledge drift 改为 fail-fast，runbook / architecture scan / CI migration wording 已对齐这一事实线。
 - **M019 / S02**：practice backend 已从 `common/api/practice.py` 的 mega-route 形态抽出明确应用层 seam：`practice_session_service` 负责 create/lifecycle/runtime-descriptor/retry-focus，`practice_report_service` 负责 report/audio-audit/audio-segment，`practice_service` 保留 route-facing compatibility bundle，而 replay/history/admin 的 completed-session truth 继续以 `SessionEvidenceService` 为 canonical read model。
+- **M019 / S03**：frontend API client 与 practice websocket transport 现在也有明确 seam：`web/src/lib/api/client.ts` 保留 outward `api` façade 和 shared auth/error/trace/request authority，page-proved runtime domains 抽到 `web/src/lib/api/client-domains.ts`；`usePracticeWebSocket()` 保留 outward transport/orchestration contract，`web/src/hooks/websocket/transport.ts` 承接 URL/queue/backoff/close-reason helpers，并把 interrupt 的 throttled interim-transcript cleanup 固定在 transport seam 内。
 
 ## Current Product Truths
 
@@ -102,20 +103,27 @@
   - `backend/src/common/services/practice_report_service.py` 负责 report payload、audio audit、audio-segment signing/register/failure flows；
   - completed-session truth 仍以 `common.conversation.session_evidence.SessionEvidenceService` 为准，replay/history/admin 不应回退到 `common/api/practice.py` 重新拼 projection；
   - lifecycle extraction 仍需保留 route-owned logger injection，否则既有 lifecycle observability proof 会失真。
+- M019/S03 frontend authority 现在也已明确：
+  - `web/src/lib/api/client.ts` 继续作为唯一 outward `api` façade 和 shared auth/error/trace/request seam；页面应继续从这里 import `api`，不要跨域直接拿内部 builder 或本地 `fetch(...)` 拼 transport；
+  - `web/src/lib/api/client-domains.ts` 目前承接已证实的 runtime-facing domain builders（`auth`、`practice`、`sessions`、`agents`、`presentations`、admin report actions）；其余 façade domains 仍可继续留在 `client.ts`，但后续拆分应沿 domain module 扩展；
+  - `usePracticeWebSocket()` 继续作为 live practice page 的唯一 outward transport/orchestration contract；
+  - `web/src/hooks/websocket/transport.ts` 负责 URL 组装、pending queue 规则、reconnect/backoff、close-reason mapping，`websocket/message-handlers.ts` 负责 inbound state projection；
+  - interrupt 的 throttled interim-transcript cleanup 必须留在 `usePracticeWebSocket()` transport seam 内，而不是回退到 page-level cleanup。
 
 ## Current Focus
 
-当前项目处于 **M019 进行中，S01-S02 已完成，后续进入 S03-S04 frontend seam / release gate 收口** 的状态：
+当前项目处于 **M019 进行中，S01-S03 已完成，进入 S04 release gate / metrics / doc-contract truth line 收口** 的状态：
 - S01 已把数据库 startup / migration / bootstrap authority 从“startup 隐式补洞”收口到显式、可验证的 entrypoint 和 fail-fast 信号。
 - S02 已把 practice backend 从 mega-route 向明确 application seam 收口：后续 backend 改动应优先落在 `practice_session_service` / `practice_report_service` / `SessionEvidenceService` 的正确 authority 上，而不是继续堆回 `common/api/practice.py`。
-- 接下来的重点是继续沿已明确的 authority seam 拆出：
-  1. **S03**：frontend domain client 与 transport seam，把 `client.ts` 与 `use-practice-websocket.ts` 的职责边界继续收口；
-  2. **S04**：release gate / metrics / doc-contract truth line，把 GitHub Actions、metrics、错误上报与 docs/spec 合到至少一条真实 release truth line。
+- S03 已把前端 mega client 与 mega websocket hook 收口成清晰的 domain/transport seam：后续 frontend 改动应优先落在 `client-domains.ts`、`websocket/transport.ts`、`message-handlers.ts` 或 outward seam 头文件标明的 owning layer，而不是把 auth/request/reconnect/backpressure/interrupt 逻辑重新散回页面。
+- 接下来的重点是完成：
+  1. **S04**：release gate / metrics / doc-contract truth line，把 GitHub Actions、metrics、错误上报与 docs/spec 合到至少一条真实 release truth line。
 - 当前更重要的是维持 M019 已建立的 authority truth：
   1. 不要重新把 non-development startup 当成 schema repair 常态入口；
   2. practice backend 的新增 write/report 逻辑不要再默认塞回 `practice.py`；
   3. replay/history/admin 的 completed-session truth 不要绕开 `SessionEvidenceService`；
-  4. 后续 slice 的 runbook / CI / docs / tests 必须继续引用同一 authority map，而不是各自发明新入口。
+  4. 前端页面不要绕开 outward `api` façade 或 `usePracticeWebSocket()` 自己重建 auth/error/trace/request transport 或 websocket lifecycle；
+  5. 后续 slice 的 runbook / CI / docs / tests 必须继续引用同一 authority map，而不是各自发明新入口。
 
 当前不应做的事：
 - 不要把 `init_db()` 的 `create_all()` / compat guard 继续外推成生产迁移 authority。
@@ -123,6 +131,7 @@
 - 不要在 S03-S04 又各自发明一套启动/迁移/恢复说明；必须复用 S01 已写回的 authority map。
 - 不要在 practice backend 后续切片里重新把 create/lifecycle/report/audio orchestration 塞回 `common/api/practice.py`。
 - 不要绕开现有 code-adjacent seam 再写并行 markdown-only inventory；后续更新应直接修改现有 authority-bearing files/tests/docs。
+- 不要让页面直接调用内部 domain builders 或本地拼 websocket transport；应继续沿 outward `api` façade 和 `usePracticeWebSocket()` 收口。
 
 ## Capability Contract
 
@@ -148,4 +157,4 @@
 - [x] M016 — Auth / API / admin security contract hardening
 - [x] M017 — Realtime contract 与 concurrency proof 收口
 - [x] M018 — Performance / dependency / recovery baselines
-- [ ] M019 — Authority seams 与 release gate 收口（S01-S02 complete, S03-S04 pending）
+- [ ] M019 — Authority seams 与 release gate 收口（S01-S03 complete, S04 pending）

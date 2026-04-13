@@ -1,6 +1,6 @@
 {
   "mode": "grow",
-  "current_issue_id": "M019-S03-T02",
+  "current_issue_id": "M019-S04-T01",
   "current_issue_type": "task",
   "current_issue_status": "done",
   "pending_issue_ids": [],
@@ -193,30 +193,24 @@
     "M019-S02-T03",
     "M019-S02",
     "M019-S03-T01",
-    "M019-S03-T02"
+    "M019-S03-T02",
+    "M019-S04-T01"
   ],
   "blocked_issue_ids": [],
   "deferred_issue_ids": [],
   "last_modified_files": [
-    "web/src/lib/api/client.ts",
-    "web/src/lib/api/client-domains.ts",
-    "web/src/hooks/use-practice-websocket.ts",
-    "web/src/hooks/websocket/transport.ts",
-    "web/src/lib/api/client-domains.test.ts",
-    "web/src/hooks/websocket/transport.test.ts",
+    ".gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md",
+    ".gsd/KNOWLEDGE.md",
     ".codex/loop/state.json",
     ".codex/loop/log.md"
   ],
   "last_verification_commands": [
-    "npm --prefix web test -- --run src/lib/api/client-domains.test.ts src/hooks/websocket/transport.test.ts src/hooks/use-practice-websocket.test.ts",
-    "npm --prefix web test -- --run \"src/app/(auth)/login/page.test.tsx\" \"src/app/(user)/practice/[sessionId]/page.test.tsx\" \"src/app/(user)/practice/[sessionId]/report/page.test.tsx\" \"src/app/(user)/practice/[sessionId]/replay/page.test.tsx\"",
-    "lsp diagnostics web/src/lib/api/client.ts",
-    "lsp diagnostics web/src/lib/api/client-domains.ts",
-    "lsp diagnostics web/src/hooks/use-practice-websocket.ts",
-    "lsp diagnostics web/src/hooks/websocket/transport.ts"
+    "rg -n \"analytics/error|metrics|openapi|api-contract|pip install -e|requirements.txt|package-lock\" .github/workflows web/src/components/ErrorBoundary.tsx backend/src/common/monitoring/metrics.py api-spec.md specs/001-ai-practice-system/contracts/openapi.yaml docs/api-contract",
+    "rg -n \"analytics/error|analytics/performance|analytics/custom|MetricsMiddleware|initialize_metrics\\(|get_metrics\\(|/metrics|add_middleware\\(|next.config\" web/src/components/ErrorBoundary.tsx web/src/lib/performance.ts backend/src/common/api/analytics.py backend/src/common/monitoring/metrics.py backend/src/main.py backend/src/common/middleware/auth.py web/next.config.ts",
+    "rg -n \"/auth/wechat|/practice/sessions|/api/v1/admin/release-verification|/api/v1/support/runtime|POST /api/v1/sessions|POST /api/v1/practice/sessions|M019/S04 assembled release truth inventory|M019/S04 release-truth gotcha\" specs/001-ai-practice-system/contracts/openapi.yaml api-spec.md docs/api-contract .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md .gsd/KNOWLEDGE.md"
   ],
-  "last_verification_result": "passed; the new client-domain factory seam and websocket transport helper seam are green in focused tests, the exact slice verification bundle finished 50/50 green across login/practice/report/replay pages, and fresh LSP diagnostics stayed clean on all touched TypeScript authority files.",
-  "last_success_signal": "runtime-facing frontend domains now sit behind client-domains.ts while pages still import the api façade, and usePracticeWebSocket() now delegates URL/queue/backoff transport helpers to websocket/transport.ts without changing its outward contract.",
+  "last_verification_result": "passed; the exact task-plan grep gate is green, focused repo-root grep proof shows frontend analytics beacons and Prometheus helpers are still disconnected from live server surfaces, and the assembled inventory/knowledge writeback is now grep-discoverable beside the current docs-api-contract truth line.",
+  "last_success_signal": "S04 now has one durable assembled release-truth inventory: backend NFR workflow plus live router-backed docs/api-contract surfaces are the real authority line, while frontend analytics beacons, Prometheus export helpers, and legacy openapi/api-spec artifacts are explicitly marked as disconnected or drifting instead of silently trusted.",
   "last_growth_scan": null,
-  "next_action": "Proceed to M019/S03/T03 by tightening the remaining client/websocket internal seams or documenting downstream proof, while keeping pages on the api façade and usePracticeWebSocket outward contract."
+  "next_action": "Proceed to M019/S04/T02 by aligning workflow authority, metrics/error-reporting closure, and doc/spec drift proof to this assembled inventory without treating disconnected beacons or helper-only metrics as live release surfaces."
 }

@@ -23,7 +23,7 @@ S04 是 M019 的最终 assembled slice；完成后 M020-M022 可以直接复用 
 
 ## Tasks
 
-- [ ] **T01: 盘点 release truth line 的真实接通状态** `est:45m`
+- [x] **T01: 盘点 release truth line 的真实接通状态** `est:45m`
   - 盘点现有 `.github/workflows`、frontend ErrorBoundary 上报路径、backend metrics helpers、api-spec/openapi/docs-api-contract 之间的真实接通情况。
 - 明确哪些是“文件存在但未接通”，哪些已有 live route 或 check。
 - 形成 assembled release truth inventory，作为 workflow 设计输入。
