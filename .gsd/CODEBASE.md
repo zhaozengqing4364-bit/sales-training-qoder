@@ -1,7 +1,7 @@
 # Codebase Map
 
-Generated: 2026-04-13T03:26:52Z | Files: 500 | Described: 0/500
-<!-- gsd:codebase-meta {"generatedAt":"2026-04-13T03:26:52Z","fingerprint":"b81402061f917d614d9c7db920ce35636d46827e","fileCount":500,"truncated":true} -->
+Generated: 2026-04-13T03:51:39Z | Files: 500 | Described: 0/500
+<!-- gsd:codebase-meta {"generatedAt":"2026-04-13T03:51:39Z","fingerprint":"a7962409338b69d6b9beba67aa5d3c4636c5350b","fileCount":500,"truncated":true} -->
 Note: Truncated to first 500 files. Run with higher --max-files to include all.
 
 ### (root)/
@@ -451,7 +451,9 @@ Note: Truncated to first 500 files. Run with higher --max-files to include all.
 ### backend/src/common/services/
 - `backend/src/common/services/__init__.py`
 - `backend/src/common/services/password_reset.py`
+- `backend/src/common/services/practice_report_service.py`
 - `backend/src/common/services/practice_service.py`
+- `backend/src/common/services/practice_session_service.py`
 
 ### backend/src/common/storage/
 - `backend/src/common/storage/__init__.py`
@@ -645,5 +647,3 @@ Note: Truncated to first 500 files. Run with higher --max-files to include all.
 - `backend/tests/unit/common/test_document_processor_image_ocr.py`
 - `backend/tests/unit/common/test_document_processor_spreadsheet.py`
 - `backend/tests/unit/common/test_document_storage_artifacts.py`
-- `backend/tests/unit/common/test_embedding_service_resilience.py`
-- `backend/tests/unit/common/test_haystack_adapter.py`

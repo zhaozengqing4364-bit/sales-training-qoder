@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import UTC, datetime
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -80,6 +81,34 @@ async def test_practice_application_service_bundle_exposes_extracted_session_and
     assert isinstance(services.session_create, PracticeSessionCreateService)
     assert isinstance(services.session_lifecycle, PracticeSessionLifecycleApplicationService)
     assert isinstance(services.session_report, PracticeReportService)
+
+
+@pytest.mark.asyncio
+async def test_practice_application_service_bundle_reuses_session_evidence_as_canonical_report_read_model(
+    db_session: AsyncSession,
+) -> None:
+    from common.conversation.session_evidence import SessionEvidenceService
+    from common.services.practice_report_service import PracticeAudioAuditService
+    from common.services.practice_service import build_practice_route_services
+
+    services = build_practice_route_services(db_session)
+
+    assert isinstance(services.session_report.evidence_service, SessionEvidenceService)
+    assert services.session_report.evidence_service is services.evidence
+    assert isinstance(services.session_report.audio_audit_service, PracticeAudioAuditService)
+    assert services.session_report.audio_audit_service is services.audio_audit
+
+
+def test_architecture_scan_documents_practice_service_seams_and_canonical_read_model_consumers() -> None:
+    architecture_scan = (
+        Path(__file__).resolve().parents[3]
+        / ".gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md"
+    ).read_text(encoding="utf-8")
+
+    assert "practice_session_service" in architecture_scan
+    assert "practice_report_service" in architecture_scan
+    assert "SessionEvidenceService" in architecture_scan
+    assert "S03 / M021 downstream consumption rule" in architecture_scan
 
 
 def _make_effectiveness_snapshot(*, evaluable: bool, reason: str | None) -> dict[str, object]:

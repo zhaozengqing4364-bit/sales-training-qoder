@@ -13,6 +13,7 @@ from sqlalchemy.orm import sessionmaker
 from agent.models import Agent, AgentPersona, Persona, VoiceRuntimeProfile
 from common.auth.service import create_access_token
 from common.conversation.models import ConversationMessage
+from common.conversation.session_evidence import SessionEvidenceService
 from common.db.models import (
     Base,
     Page,
@@ -237,8 +238,28 @@ async def test_user(db_session: AsyncSession):
 
 
 @pytest_asyncio.fixture
+async def admin_user(db_session: AsyncSession):
+    user = User(
+        wechat_user_id=f"flow-admin-{uuid.uuid4().hex[:8]}",
+        name="Evidence Flow Admin",
+        email=f"evidence_flow_admin_{uuid.uuid4().hex[:6]}@example.com",
+        role="admin",
+    )
+    db_session.add(user)
+    await db_session.commit()
+    await db_session.refresh(user)
+    return user
+
+
+@pytest_asyncio.fixture
 async def auth_headers(test_user: User):
     token = create_access_token(data={"sub": str(test_user.user_id)})
+    return {"Authorization": f"Bearer {token}"}
+
+
+@pytest_asyncio.fixture
+async def admin_headers(admin_user: User):
+    token = create_access_token(data={"sub": str(admin_user.user_id)})
     return {"Authorization": f"Bearer {token}"}
 
 
@@ -353,6 +374,202 @@ async def test_completed_session_report_and_replay_share_legacy_projection_fallb
     assert _without_replay_anchor(report_data["next_goal"]) == _without_replay_anchor(
         replay_data["next_goal"]
     )
+
+
+@pytest.mark.asyncio
+async def test_report_history_admin_and_replay_routes_keep_session_evidence_as_canonical_read_model(
+    async_client: AsyncClient,
+    db_session: AsyncSession,
+    test_user: User,
+    auth_headers: dict[str, str],
+    admin_headers: dict[str, str],
+    monkeypatch: pytest.MonkeyPatch,
+):
+    scenario = Scenario(
+        scenario_id=str(uuid.uuid4()),
+        scenario_type="sales",
+        name="canonical evidence route family",
+        is_active=True,
+    )
+    session = PracticeSession(
+        session_id=str(uuid.uuid4()),
+        user_id=str(test_user.user_id),
+        scenario_id=scenario.scenario_id,
+        status=SessionStatus.COMPLETED.value,
+        total_duration_seconds=96,
+        logic_score=None,
+        accuracy_score=None,
+        completeness_score=None,
+        effectiveness_snapshot=None,
+    )
+    db_session.add_all([scenario, session])
+    db_session.add_all(
+        [
+            ConversationMessage(
+                session_id=session.session_id,
+                turn_number=1,
+                role="user",
+                content="我们最近线索转化掉得很厉害。",
+                timestamp=datetime.now(UTC),
+                duration_ms=2100,
+                sales_stage="opening",
+                score_snapshot={"overall": 74},
+                ai_feedback="先确认当前漏斗现状",
+            ),
+            ConversationMessage(
+                session_id=session.session_id,
+                turn_number=2,
+                role="assistant",
+                content="主要卡在需求确认和预算环节。",
+                timestamp=datetime.now(UTC),
+                duration_ms=2600,
+                sales_stage="discovery",
+                score_snapshot={
+                    "overall_score": 89,
+                    "dimension_scores": {
+                        "professional": 88,
+                        "communication": 82,
+                        "discovery": 76,
+                    },
+                },
+                ai_feedback="继续追问预算和决策链",
+            ),
+        ]
+    )
+    await db_session.commit()
+
+    baseline_projection_result = await SessionEvidenceService(db_session).get_projection(
+        session_id=session.session_id,
+        require_completed=True,
+    )
+    assert baseline_projection_result.is_success
+    baseline_projection = baseline_projection_result.value
+
+    get_projection_calls: list[dict[str, object]] = []
+    build_projection_calls: list[dict[str, object]] = []
+    original_get_projection = SessionEvidenceService.get_projection
+    original_build_projection = SessionEvidenceService.build_projection
+
+    async def instrumented_get_projection(self, *args, **kwargs):
+        session_id = kwargs.get("session_id")
+        if session_id is None and args:
+            session_id = args[0]
+        get_projection_calls.append(
+            {
+                "session_id": str(session_id),
+                "require_completed": bool(kwargs.get("require_completed", False)),
+            }
+        )
+        return await original_get_projection(self, *args, **kwargs)
+
+    def instrumented_build_projection(cls, *args, **kwargs):
+        session_obj = kwargs.get("session") if kwargs else None
+        messages = kwargs.get("messages") if kwargs else None
+        if session_obj is None and args:
+            session_obj = args[0]
+        if messages is None and len(args) > 1:
+            messages = args[1]
+        scenario_type = kwargs.get("scenario_type") if kwargs else None
+        build_projection_calls.append(
+            {
+                "session_id": str(session_obj.session_id),
+                "message_count": len(messages),
+                "scenario_type": scenario_type,
+            }
+        )
+        return original_build_projection(
+            session_obj,
+            messages,
+            scenario_type=scenario_type,
+        )
+
+    monkeypatch.setattr(
+        SessionEvidenceService,
+        "get_projection",
+        instrumented_get_projection,
+    )
+    monkeypatch.setattr(
+        SessionEvidenceService,
+        "build_projection",
+        classmethod(instrumented_build_projection),
+    )
+
+    report_resp = await async_client.get(
+        f"/api/v1/practice/sessions/{session.session_id}/report",
+        headers=auth_headers,
+    )
+    replay_resp = await async_client.get(
+        f"/api/v1/sessions/{session.session_id}/replay",
+        headers=auth_headers,
+    )
+    history_resp = await async_client.get(
+        "/api/v1/users/me/history?page=1&page_size=10&scenario_type=sales_bot",
+        headers=auth_headers,
+    )
+    admin_resp = await async_client.get(
+        f"/api/v1/admin/users/{test_user.user_id}/sessions?page=1&page_size=10",
+        headers=admin_headers,
+    )
+
+    assert report_resp.status_code == 200
+    assert replay_resp.status_code == 200
+    assert history_resp.status_code == 200
+    assert admin_resp.status_code == 200
+
+    report_data = report_resp.json()["data"]
+    replay_data = replay_resp.json()["data"]
+    history_item = next(
+        item
+        for item in history_resp.json()["data"]["sessions"]
+        if item["session_id"] == session.session_id
+    )
+    admin_item = next(
+        item
+        for item in admin_resp.json()["data"]["items"]
+        if item["session_id"] == session.session_id
+    )
+
+    assert report_data["overall_score"] == pytest.approx(baseline_projection.overall_score)
+    assert replay_data["overall_score"] == pytest.approx(baseline_projection.overall_score)
+    assert history_item["overall_score"] == pytest.approx(baseline_projection.overall_score)
+    assert admin_item["scores"]["overall"] == pytest.approx(baseline_projection.overall_score)
+
+    assert report_data["evaluable"] is replay_data["evaluable"] is history_item["evaluable"]
+    assert history_item["evaluable"] is admin_item["evaluable"] is True
+    assert report_data["not_evaluable_reason"] is None
+    assert replay_data["not_evaluable_reason"] is None
+    assert history_item["not_evaluable_reason"] is None
+    assert admin_item["not_evaluable_reason"] is None
+
+    assert report_data["evidence_completeness"] == baseline_projection.evidence_completeness
+    assert replay_data["evidence_completeness"] == baseline_projection.evidence_completeness
+    assert history_item["evidence_completeness"] == baseline_projection.evidence_completeness
+    assert admin_item["evidence_completeness"] == baseline_projection.evidence_completeness
+
+    assert _without_replay_anchor(report_data["main_issue"]) == baseline_projection.main_issue
+    assert _without_replay_anchor(replay_data["main_issue"]) == baseline_projection.main_issue
+    assert history_item["main_issue"] == baseline_projection.main_issue
+    assert admin_item["main_issue"] == baseline_projection.main_issue
+
+    assert _without_replay_anchor(report_data["next_goal"]) == baseline_projection.next_goal
+    assert _without_replay_anchor(replay_data["next_goal"]) == baseline_projection.next_goal
+    assert history_item["next_goal"] == baseline_projection.next_goal
+    assert admin_item["next_goal"] == baseline_projection.next_goal
+
+    assert {
+        call["session_id"]
+        for call in get_projection_calls
+    } == {session.session_id}
+    assert any(call["require_completed"] is False for call in get_projection_calls)
+    assert any(call["require_completed"] is True for call in get_projection_calls)
+
+    canonical_build_calls = [
+        call
+        for call in build_projection_calls
+        if call["session_id"] == session.session_id
+    ]
+    assert len(canonical_build_calls) >= 4
+    assert all(call["message_count"] == 2 for call in canonical_build_calls)
 
 
 @pytest.mark.asyncio

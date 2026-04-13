@@ -116,6 +116,20 @@
 - PromptTemplateService、legacy evaluation、realtime scoring、report/read-side 并未完全统一。
 - 分数维度、prompt 来源、降级语义仍存在多轨并行。
 
+### 4.3 M019/S02 practice application seam closure
+`backend/src/common/api/practice.py` 仍是 practice route family 的 HTTP 入口，但当前 live split 已经不再要求后续工作回到 route 文件里拼装所有行为：
+- route-facing compatibility bundle：`common.services.practice_service.build_practice_route_services`
+- create / lifecycle / runtime descriptor / retry focus：`common.services.practice_session_service`
+- report payload / audio audit / audio segment registration：`common.services.practice_report_service`
+- completed-session canonical read model：`common.conversation.session_evidence.SessionEvidenceService`
+- replay / history / admin route family 继续分别落在 `common.conversation.replay.ReplayService`、`common.analytics.history_service`、`admin/api/users.py`，但它们消费的仍是 `SessionEvidenceService` projection，而不是重新回 `common/api/practice.py` 组装 completed-session truth。
+
+**S03 / M021 downstream consumption rule**
+- 如果改动的是 session create、voice/runtime descriptor、retry focus、lifecycle orchestration，优先扩展 `practice_session_service`，再由 `practice_service` compatibility bundle 暴露给 route。
+- 如果改动的是 practice report payload、audio audit、audio segment upload/register/failure surface，优先扩展 `practice_report_service`。
+- 如果改动的是 replay / history / admin / manager intervention 的 completed-session truth，优先扩展 `SessionEvidenceService`、`ReplayService` 或 `history_service`，不要在 `practice.py` 里重新拼 projection/read model。
+- 新的 backend consumer 应该从 `common.services.*` 或现有 read-model family import，而不是直接复用 `common/api/practice.py` 内部 helper。
+
 ### 4.4 M019/S01 数据库演进 / bootstrap authority inventory
 
 | 责任类型 | 当前真实 authority | 真实入口 | 当前状态 / 风险 |

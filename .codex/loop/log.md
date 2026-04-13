@@ -1,3 +1,23 @@
+- time: 2026-04-13T12:02:21.064291+08:00
+  mode: grow
+  item id: M019-S02-T03
+  files changed:
+    - .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md
+    - backend/tests/contract/test_practice_evidence_contract.py
+    - backend/tests/integration/test_practice_evidence_flow.py
+    - .gsd/DECISIONS.md
+    - .codex/loop/state.json
+    - .codex/loop/log.md
+  summary: Locked the extracted practice seam with durable proof and downstream rules: the architecture scan now names the practice_session_service/practice_report_service split plus the S03/M021 consumption rule, and focused backend proof now shows report/history/admin/replay still share SessionEvidenceService as the canonical completed-session read model instead of rebuilding truth in practice.py.
+  verification commands:
+    - backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/contract/test_practice_evidence_contract.py backend/tests/integration/test_practice_evidence_flow.py -x -q
+    - rg -n "practice_session_service|practice_report_service|SessionEvidenceService" .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md backend/src/common/api/practice.py backend/tests/contract/test_practice_evidence_contract.py
+    - lsp diagnostics backend/tests/contract/test_practice_evidence_contract.py
+    - lsp diagnostics backend/tests/integration/test_practice_evidence_flow.py
+  verification results: passed; the broader touched-file backend gate finished 37/37 green, the exact task-plan grep proof now surfaces the new seam docs and contract assertions, and diagnostics stayed clean on the touched Python proof files while markdown remained outside LSP coverage.
+  success signal status: downstream slices no longer need to infer whether to extend practice.py, the extracted application services, or the completed-session read model — the boundary is now written down and re-runnable from one focused backend proof.
+  rollback note: if later work moves report/replay/history/admin away from SessionEvidenceService or adds new practice route seams, update the architecture scan guidance, the focused contract/integration proof, and D214 together so the documented downstream rule stays aligned with the live call graph.
+
 - time: 2026-04-13T11:09:36+08:00
   mode: grow
   item id: M019-S01-T03
