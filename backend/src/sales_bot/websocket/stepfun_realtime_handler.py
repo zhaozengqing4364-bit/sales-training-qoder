@@ -55,6 +55,11 @@ from common.knowledge.kb_lock_guard import (
     resolve_kb_lock_mode,
 )
 from common.knowledge.service import KnowledgeService
+from common.knowledge_engine.runtime_events import (
+    build_claim_truth_runtime_event,
+    enrich_knowledge_answer_diagnostics,
+    merge_runtime_events,
+)
 from common.monitoring.logger import get_logger, get_trace_id, set_trace_id
 from common.monitoring.trace_context import normalize_trace_id
 from common.resilience.backoff import compute_jitter_backoff_seconds
@@ -2219,6 +2224,21 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
                 claim_truth = copy.deepcopy(summary_claim_truth)
         if claim_truth is None and isinstance(self._latest_claim_truth, dict):
             claim_truth = copy.deepcopy(self._latest_claim_truth)
+
+        knowledge_answer_diagnostics = None
+        if isinstance(self._latest_knowledge_answer_diagnostics, dict):
+            knowledge_answer_diagnostics = enrich_knowledge_answer_diagnostics(
+                self._latest_knowledge_answer_diagnostics
+            )
+
+        runtime_events = merge_runtime_events(
+            (
+                knowledge_answer_diagnostics.get("runtime_events")
+                if isinstance(knowledge_answer_diagnostics, dict)
+                else []
+            ),
+            [build_claim_truth_runtime_event(claim_truth)] if isinstance(claim_truth, dict) else [],
+        )
         return {
             "session_status": self.session_status,
             "ai_state": self.ai_state,
@@ -2229,11 +2249,8 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
             "claim_truth": claim_truth,
             "coach_health": self._coach_health_payload(),
             "reconnect_state": self._build_reconnect_state_payload(),
-            "knowledge_answer_diagnostics": copy.deepcopy(
-                self._latest_knowledge_answer_diagnostics
-            )
-            if isinstance(self._latest_knowledge_answer_diagnostics, dict)
-            else None,
+            "knowledge_answer_diagnostics": knowledge_answer_diagnostics,
+            "runtime_events": runtime_events,
         }
 
     async def _send_coach_health(self) -> None:

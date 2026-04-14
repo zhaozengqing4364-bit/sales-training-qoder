@@ -353,3 +353,45 @@ async def test_presentation_page_context_status_syncs_handler_ai_state():
     assert status_event["type"] == "status"
     assert status_event["data"]["ai_state"] == "listening"
     assert handler.ai_state == "listening"
+
+
+def test_stepfun_handler_runtime_diagnostics_include_unified_runtime_events() -> None:
+    handler = StepFunRealtimeHandler()
+    handler.session_status = "paused"
+    handler.ai_state = "idle"
+    handler._latest_claim_truth = {
+        "status": "weak_evidence",
+        "source": "score_snapshot",
+    }
+    handler._latest_knowledge_answer_diagnostics = {
+        "mode": "grounded_preferred",
+        "answerability": "partial",
+        "source_status": "hit",
+        "query": "石犀产品资料",
+        "path_mode": "compat",
+        "rollout_mode": "dual_run",
+        "shadow_audit_run_id": "audit-shadow-001",
+    }
+
+    diagnostics = handler.get_runtime_diagnostics()
+
+    assert diagnostics["knowledge_answer_diagnostics"]["path_mode"] == "compat"
+    events = diagnostics["runtime_events"]
+    assert any(
+        event["event_id"] == "knowledge_answer_path_mode"
+        and event["status"] == "compat"
+        and event["details"]["rollout_mode"] == "dual_run"
+        for event in events
+    )
+    assert any(
+        event["event_id"] == "knowledge_answer_quality"
+        and event["severity"] == "degraded"
+        and event["status"] == "partial"
+        for event in events
+    )
+    assert any(
+        event["event_id"] == "claim_truth_status"
+        and event["status"] == "weak_evidence"
+        and event["severity"] == "degraded"
+        for event in events
+    )

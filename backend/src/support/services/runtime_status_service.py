@@ -825,6 +825,11 @@ class RuntimeStatusService:
                     return
                 seen.add(key)
                 item_diagnostics = dict(diagnostics or {})
+                runtime_events = knowledge.get("runtime_events")
+                if isinstance(runtime_events, list) and runtime_events:
+                    item_diagnostics["runtime_events"] = [
+                        dict(event) for event in runtime_events if isinstance(event, dict)
+                    ]
                 if session_id:
                     linked_asset_changes = (
                         asset_change_refs_by_session or {}

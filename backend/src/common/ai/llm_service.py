@@ -20,6 +20,7 @@ from tenacity import retry, stop_after_attempt, wait_exponential
 from common.ai.config_manager import get_config_manager
 from common.ai.models import ModelConfig, ModelProvider, ModelType
 from common.error_handling.result import Result
+from common.knowledge_engine.runtime_events import build_runtime_event
 from common.monitoring.logger import get_logger
 from prompt_templates.compiled_contract import CompiledPromptContract
 
@@ -133,6 +134,7 @@ class LLMService:
         # Cost tracking (¥0.05/1K tokens default)
         self.cost_per_1k_tokens = 0.00005
         self.session_costs: dict[str, float] = {}
+        self.session_runtime_events: dict[str, list[dict[str, Any]]] = {}
 
         # Initialize LLM client
         self._llm = None
@@ -323,6 +325,13 @@ class LLMService:
         self._config = config
         self._init_client()
 
+    def _record_runtime_event(self, session_id: str, event: dict[str, Any]) -> None:
+        bucket = self.session_runtime_events.setdefault(session_id, [])
+        bucket.append(dict(event))
+
+    def get_session_runtime_events(self, session_id: str) -> list[dict[str, Any]]:
+        return [dict(event) for event in self.session_runtime_events.get(session_id, [])]
+
     def _log_compiled_prompt_contract(self, contract: CompiledPromptContract) -> None:
         """Emit explicit diagnostics for compiled prompt consumers."""
         for diagnostic in contract.diagnostics:
@@ -378,6 +387,22 @@ class LLMService:
                     else f"not_required_{self._runtime_policy.get('base_url_status') or 'unknown'}"
                 ),
             )
+            self._record_runtime_event(
+                session_id,
+                build_runtime_event(
+                    event_id="llm_fallback_response",
+                    category="failure",
+                    severity="failure",
+                    status="not_configured",
+                    source="llm.generate",
+                    summary="LLM generation fell back because the service was not configured.",
+                    details={
+                        "provider": self.provider,
+                        "model_name": self.model_name,
+                        "fallback_allowed": allow_fallback_response,
+                    },
+                ),
+            )
             if allow_fallback_response:
                 return Result.fail(self._get_fallback_response(prompt, context))
             return Result.fail("[LLM_NOT_CONFIGURED]")
@@ -414,12 +439,53 @@ class LLMService:
             # Track cost
             cost = (cost_handler.total_tokens / 1000) * self.cost_per_1k_tokens
             self.session_costs[session_id] = self.session_costs.get(session_id, 0) + cost
+            self._record_runtime_event(
+                session_id,
+                build_runtime_event(
+                    event_id="llm_cost_tracking_coarse_session_total",
+                    category="cost",
+                    severity="info",
+                    status="tracked",
+                    source="llm.generate",
+                    summary="LLM token usage and coarse session cost were recorded.",
+                    details={
+                        "provider": self.provider,
+                        "model_name": self.model_name,
+                    },
+                    metrics={
+                        "prompt_tokens": cost_handler.prompt_tokens,
+                        "completion_tokens": cost_handler.completion_tokens,
+                        "total_tokens": cost_handler.total_tokens,
+                        "request_cost": round(cost, 6),
+                        "session_cost": round(self.session_costs[session_id], 6),
+                    },
+                ),
+            )
 
             # Alert if approaching budget (<¥1 per session)
             if self.session_costs[session_id] > 0.8:
                 logger.warning(
                     f"Session {session_id} approaching budget: "
                     f"¥{self.session_costs[session_id]:.2f}"
+                )
+                self._record_runtime_event(
+                    session_id,
+                    build_runtime_event(
+                        event_id="llm_session_cost_budget_warning",
+                        category="cost",
+                        severity="degraded",
+                        status="budget_warning",
+                        source="llm.generate",
+                        summary="LLM session cost is approaching the configured budget threshold.",
+                        details={
+                            "provider": self.provider,
+                            "model_name": self.model_name,
+                        },
+                        metrics={
+                            "session_cost": round(self.session_costs[session_id], 6),
+                            "budget_warning_threshold": 0.8,
+                        },
+                    ),
                 )
 
             return Result.ok(response_text)
@@ -439,6 +505,23 @@ class LLMService:
             )
             # Return predefined fallback response
             fallback_response = self._get_fallback_response(prompt, context)
+            self._record_runtime_event(
+                session_id,
+                build_runtime_event(
+                    event_id="llm_fallback_response",
+                    category="failure",
+                    severity="failure",
+                    status=f"generation_error:{type(e).__name__}",
+                    source="llm.generate",
+                    summary="LLM generation fell back after a provider/runtime error.",
+                    details={
+                        "provider": self.provider,
+                        "model_name": self.model_name,
+                        "error_type": type(e).__name__,
+                        "fallback_allowed": allow_fallback_response,
+                    },
+                ),
+            )
             if allow_fallback_response:
                 return Result.fail(fallback_response)
             return Result.fail(f"[LLM_GENERATION_ERROR:{type(e).__name__}]")
@@ -556,6 +639,21 @@ class LLMService:
             evaluation_data = json_module.loads(response_text)
             return Result.ok(evaluation_data)
         except (json_module.JSONDecodeError, ValueError):
+            self._record_runtime_event(
+                session_id,
+                build_runtime_event(
+                    event_id="llm_evaluation_default_scores",
+                    category="quality",
+                    severity="degraded",
+                    status="default_scores_applied",
+                    source="llm.evaluate",
+                    summary="Evaluation parsing failed and default scores were returned.",
+                    details={
+                        "provider": self.provider,
+                        "model_name": self.model_name,
+                    },
+                ),
+            )
             return Result.ok({
                 "scores": {
                     "communication": 60,
@@ -629,6 +727,22 @@ class LLMService:
             )
 
         if not result.is_success:
+            self._record_runtime_event(
+                session_id,
+                build_runtime_event(
+                    event_id="llm_report_generation_failed",
+                    category="failure",
+                    severity="failure",
+                    status="report_failed",
+                    source="llm.generate_report",
+                    summary="Detailed report generation failed and surfaced a fallback token.",
+                    details={
+                        "provider": self.provider,
+                        "model_name": self.model_name,
+                        "error_token": result.fallback or "[REPORT_GENERATION_FAILED]",
+                    },
+                ),
+            )
             return Result.fail(result.fallback or "[REPORT_GENERATION_FAILED]")
 
         return Result.ok(result.value)
@@ -641,6 +755,7 @@ class LLMService:
         """Reset cost tracking for a session"""
         if session_id in self.session_costs:
             del self.session_costs[session_id]
+        self.session_runtime_events.pop(session_id, None)
 
 
 # Singleton instance

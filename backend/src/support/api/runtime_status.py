@@ -32,6 +32,18 @@ class SupportRuntimeKindSummary(BaseModel):
     count: int
 
 
+class SupportRuntimeEvent(BaseModel):
+    event_id: str
+    category: str
+    severity: str
+    status: str
+    source: str
+    summary: str
+    details: dict[str, Any] = Field(default_factory=dict)
+    metrics: dict[str, Any] = Field(default_factory=dict)
+    occurred_at: str | None = None
+
+
 class SupportRuntimeAnomalySummary(BaseModel):
     blocking: list[SupportRuntimeKindSummary] = Field(default_factory=list)
     warning: list[SupportRuntimeKindSummary] = Field(default_factory=list)
@@ -69,6 +81,7 @@ class SupportRuntimeFaultDiagnostics(BaseModel):
     model_config = ConfigDict(extra="allow")
 
     linked_asset_changes: list[LinkedAssetChangeReference] = Field(default_factory=list)
+    runtime_events: list[SupportRuntimeEvent] = Field(default_factory=list)
 
 
 class SupportRuntimeFaultItem(BaseModel):

@@ -16,6 +16,7 @@ from common.knowledge_engine.audit_repo import KnowledgeAnswerAuditRepository
 from common.knowledge_engine.engine import KnowledgeAnswerEngine
 from common.knowledge_engine.haystack_adapter import KnowledgeHaystackAdapter
 from common.knowledge_engine.reranker import KnowledgeReranker
+from common.knowledge_engine.runtime_events import enrich_knowledge_answer_diagnostics
 from common.knowledge_engine.schemas import (
     KnowledgeAnswerRequest,
     KnowledgeAnswerResult,
@@ -119,7 +120,9 @@ def build_message_transcript_metadata(
 ) -> dict[str, Any] | None:
     if not isinstance(diagnostics, dict):
         return None
-    return {"knowledge_answer_diagnostics": dict(diagnostics)}
+    return {
+        "knowledge_answer_diagnostics": enrich_knowledge_answer_diagnostics(diagnostics)
+    }
 
 
 def evaluate_answerability_from_rows(
@@ -234,6 +237,7 @@ async def execute_knowledge_answer_engine(
     attach_rollout_diagnostics(
         payload,
         rollout_mode="enabled",
+        path_mode="live",
         live_audit_run_id=result.audit_run_id,
     )
     return KnowledgeAnswerExecutionOutcome(
@@ -247,6 +251,7 @@ def attach_rollout_diagnostics(
     payload: dict[str, Any],
     *,
     rollout_mode: KnowledgeAnswerRolloutMode,
+    path_mode: Literal["live", "compat"] | None = None,
     live_audit_run_id: str | None = None,
     shadow_audit_run_id: str | None = None,
 ) -> dict[str, Any]:
@@ -256,11 +261,22 @@ def attach_rollout_diagnostics(
         payload["_diagnostics"] = diagnostics
 
     rollout_payload: dict[str, Any] = {"mode": rollout_mode}
+    if path_mode:
+        rollout_payload["path_mode"] = path_mode
     if live_audit_run_id:
         rollout_payload["live_audit_run_id"] = live_audit_run_id
     if shadow_audit_run_id:
         rollout_payload["shadow_audit_run_id"] = shadow_audit_run_id
     diagnostics["knowledge_answer_rollout"] = rollout_payload
+
+    payload["_answerability"] = enrich_knowledge_answer_diagnostics(
+        payload.get("_answerability") if isinstance(payload.get("_answerability"), dict) else None,
+        rollout_mode=rollout_mode,
+        path_mode=path_mode,
+        live_audit_run_id=live_audit_run_id,
+        shadow_audit_run_id=shadow_audit_run_id,
+    )
+    payload["knowledge_answer_diagnostics"] = dict(payload["_answerability"])
     return payload
 
 

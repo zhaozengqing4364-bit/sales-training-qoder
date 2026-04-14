@@ -29,7 +29,7 @@ S04 是 M021 的 final assembly slice；完成后 M022 可以在真实 quality/c
   - Files: `.gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md`, `backend/src/common/ai/llm_service.py`, `backend/src/sales_bot/websocket/stepfun_realtime_handler.py`, `backend/src/common/knowledge_engine`, `backend/src/evaluation/services`
   - Verify: rg -n "default|fallback|NO_STAGE_RESULTS|cost|report_generation_failed|knowledge_answer|degraded|claim_truth" backend/src/common backend/src/sales_bot backend/src/evaluation
 
-- [ ] **T02: 落地 unified quality/cost/failure events 与 knowledge path mode** `est:2.5h`
+- [x] **T02: 落地 unified quality/cost/failure events 与 knowledge path mode** `est:2.5h`
   - 设计并落地 quality/cost/failure event schema，让 runtime、report/read-side、knowledge-answer runs 共用同一条可检查的事件线。
 - 收敛 knowledge-answer dual-run/shadow 路径到明确的 live+compat mode，并把 event 写入 diagnostics/run history。
 - 保持不泄露 secret/base_url/token 等敏感信息。

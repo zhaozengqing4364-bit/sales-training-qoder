@@ -8,6 +8,12 @@ from typing import Any
 from common.db.models import PracticeSession
 from common.effectiveness import coerce_live_session_conclusion_summary
 from common.knowledge.kb_lock_guard import is_kb_lock_chain_failure_status
+from common.knowledge_engine.runtime_events import (
+    build_claim_truth_runtime_event,
+    build_kb_lock_runtime_event,
+    enrich_knowledge_answer_diagnostics,
+    merge_runtime_events,
+)
 
 
 DEFAULT_KB_LOCK_TIMEOUT_BUDGET_MS = 2200
@@ -423,6 +429,11 @@ def build_session_runtime_diagnostics(
     knowledge_metrics = runtime_metrics.get("knowledge_retrieval")
     if not isinstance(knowledge_metrics, dict):
         knowledge_metrics = {}
+    snapshot_knowledge_answer_diagnostics = runtime_metrics.get(
+        "knowledge_answer_diagnostics"
+    )
+    if not isinstance(snapshot_knowledge_answer_diagnostics, dict):
+        snapshot_knowledge_answer_diagnostics = None
     latest_valid_attempt = _resolve_latest_valid_knowledge_retrieval_attempt(
         knowledge_metrics
     )
@@ -508,6 +519,8 @@ def build_session_runtime_diagnostics(
         raw_answer_diagnostics = live_session_summary.get("knowledge_answer_diagnostics")
         if isinstance(raw_answer_diagnostics, dict):
             knowledge_answer_diagnostics = dict(raw_answer_diagnostics)
+    elif isinstance(snapshot_knowledge_answer_diagnostics, dict):
+        knowledge_answer_diagnostics = dict(snapshot_knowledge_answer_diagnostics)
 
     if live_runtime_active:
         main_issue = (
@@ -610,6 +623,31 @@ def build_session_runtime_diagnostics(
         hit_query_count=hit_query_count,
     )
 
+    if isinstance(knowledge_answer_diagnostics, dict):
+        knowledge_answer_diagnostics = enrich_knowledge_answer_diagnostics(
+            knowledge_answer_diagnostics,
+            occurred_at=updated_at,
+        )
+
+    runtime_events = merge_runtime_events(
+        (
+            knowledge_answer_diagnostics.get("runtime_events")
+            if isinstance(knowledge_answer_diagnostics, dict)
+            else []
+        ),
+        [build_kb_lock_runtime_event({
+            "kb_lock_required": kb_lock_required,
+            "kb_lock_status": kb_lock_status,
+            "last_status": last_status,
+            "status": status,
+        }, occurred_at=updated_at)]
+        if (kb_lock_required or kb_lock_status.startswith("blocked_"))
+        else [],
+        [build_claim_truth_runtime_event(claim_truth, occurred_at=updated_at)]
+        if isinstance(claim_truth, dict)
+        else [],
+    )
+
     return {
         "session_id": str(getattr(session, "session_id", "")),
         "voice_mode": getattr(session, "voice_mode", None),
@@ -644,6 +682,7 @@ def build_session_runtime_diagnostics(
         else [],
         "updated_at": updated_at,
         "knowledge_answer_diagnostics": knowledge_answer_diagnostics,
+        "runtime_events": runtime_events,
         "kb_lock_required": kb_lock_required,
         "kb_lock_status": kb_lock_status,
         "kb_lock_chain_failure": kb_lock_chain_failure,

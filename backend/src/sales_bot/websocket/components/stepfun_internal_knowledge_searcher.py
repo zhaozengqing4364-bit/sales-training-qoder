@@ -69,6 +69,22 @@ async def search_internal_knowledge(
         isinstance(effective_policy.get("tool_policy"), dict)
         and effective_policy.get("tool_policy", {}).get("require_kb_grounding", False)
     )
+    rollout_mode = resolve_knowledge_answer_rollout_mode()
+
+    def _finalize_payload(
+        payload: dict[str, Any],
+        *,
+        path_mode: str,
+        live_audit_run_id: str | None = None,
+        shadow_audit_run_id: str | None = None,
+    ) -> dict[str, Any]:
+        return attach_rollout_diagnostics(
+            payload,
+            rollout_mode=rollout_mode,
+            path_mode=path_mode,
+            live_audit_run_id=live_audit_run_id,
+            shadow_audit_run_id=shadow_audit_run_id,
+        )
 
     if not query:
         payload = build_missing_query_payload()
@@ -93,7 +109,10 @@ async def search_internal_knowledge(
             strict_kb_mode=strict_kb_mode,
             rewritten_queries=[],
         )
-        return payload
+        return _finalize_payload(
+            payload,
+            path_mode="live" if rollout_mode == "enabled" else "compat",
+        )
 
     if not kb_ids:
         payload = build_no_kb_payload(query)
@@ -118,7 +137,10 @@ async def search_internal_knowledge(
             strict_kb_mode=strict_kb_mode,
             rewritten_queries=[],
         )
-        return payload
+        return _finalize_payload(
+            payload,
+            path_mode="live" if rollout_mode == "enabled" else "compat",
+        )
 
     tool_policy = effective_policy.get("tool_policy")
     if not isinstance(tool_policy, dict):
@@ -138,7 +160,6 @@ async def search_internal_knowledge(
     metadata_filter = resolve_metadata_filter(arguments_obj, tool_policy)
     rewritten_queries = build_rewritten_queries(query)
     session_id = str(arguments_obj.get("session_id") or "").strip() or None
-    rollout_mode = resolve_knowledge_answer_rollout_mode()
 
     entity_resolution_payload: dict[str, Any] | None = None
     intent_payload: dict[str, Any] | None = None
@@ -222,7 +243,10 @@ async def search_internal_knowledge(
                     strict_kb_mode=strict_kb_mode,
                     rewritten_queries=rewritten_queries,
                 )
-                return payload
+                return _finalize_payload(
+                    payload,
+                    path_mode="live" if rollout_mode == "enabled" else "compat",
+                )
 
             config_snapshot = await _load_active_config_snapshot(db)
             aggregated_rows: list[dict[str, Any]] = []
@@ -286,12 +310,11 @@ async def search_internal_knowledge(
                             "execution_trace": dict(payload.get("execution_trace") or {}),
                         }
                     )
-                    attach_rollout_diagnostics(
+                    return _finalize_payload(
                         payload,
-                        rollout_mode="enabled",
+                        path_mode="live",
                         live_audit_run_id=engine_outcome.result.audit_run_id,
                     )
-                    return payload
 
                 shadow_audit_run_id = engine_outcome.result.audit_run_id
 
@@ -356,12 +379,12 @@ async def search_internal_knowledge(
                 if execution_trace_payload is not None:
                     payload["execution_trace"] = execution_trace_payload
                 if rollout_mode == "dual_run":
-                    attach_rollout_diagnostics(
+                    return _finalize_payload(
                         payload,
-                        rollout_mode="dual_run",
+                        path_mode="compat",
                         shadow_audit_run_id=shadow_audit_run_id,
                     )
-                return payload
+                return _finalize_payload(payload, path_mode="compat")
 
             if callable(getattr(knowledge_service, "get_last_search_timing", None)):
                 timing = knowledge_service.get_last_search_timing()
@@ -409,12 +432,15 @@ async def search_internal_knowledge(
             rewritten_queries=rewritten_queries,
         )
         if rollout_mode == "dual_run":
-            attach_rollout_diagnostics(
+            return _finalize_payload(
                 payload,
-                rollout_mode="dual_run",
+                path_mode="compat",
                 shadow_audit_run_id=shadow_audit_run_id,
             )
-        return payload
+        return _finalize_payload(
+            payload,
+            path_mode="live" if rollout_mode == "enabled" else "compat",
+        )
 
     rows = aggregated_rows
     results, effective_retrieval_mode, status = transform_search_rows(
@@ -473,12 +499,15 @@ async def search_internal_knowledge(
         rewritten_queries=rewritten_queries,
     )
     if rollout_mode == "dual_run":
-        attach_rollout_diagnostics(
+        return _finalize_payload(
             response_payload,
-            rollout_mode="dual_run",
+            path_mode="compat",
             shadow_audit_run_id=shadow_audit_run_id,
         )
-    return response_payload
+    return _finalize_payload(
+        response_payload,
+        path_mode="live" if rollout_mode == "enabled" else "compat",
+    )
 
 
 async def _load_active_config_snapshot(db: Any):

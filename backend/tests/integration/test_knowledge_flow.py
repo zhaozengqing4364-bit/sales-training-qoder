@@ -579,3 +579,100 @@ async def test_knowledge_check_distinguishes_runtime_statuses(
     assert body["data"]["summary"] == expected_summary
     assert body["data"]["last_status"] == last_status
     assert body["data"]["recent_queries"] == ["石犀产品资料"]
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_knowledge_check_surfaces_unified_runtime_events_and_knowledge_path_mode(
+    async_client: AsyncClient,
+    auth_headers: dict[str, str],
+    test_db: AsyncSession,
+):
+    kb, _ = await _create_knowledge_base_with_document(test_db, doc_status="ready")
+    _, agent, persona = await _create_runtime_entities(test_db, persona_kb_ids=[kb.id])
+    session_id = await _create_sales_session(
+        async_client,
+        auth_headers,
+        agent_id=agent.id,
+        persona_id=persona.id,
+    )
+
+    session = (
+        await test_db.execute(
+            select(PracticeSession).where(PracticeSession.session_id == session_id)
+        )
+    ).scalar_one()
+    snapshot = deepcopy(session.voice_policy_snapshot)
+    snapshot["tool_policy"] = {
+        "enable_internal_retrieval": True,
+        "require_kb_grounding": False,
+    }
+    snapshot["knowledge_base_ids"] = [kb.id]
+    snapshot["runtime_metrics"] = {
+        "knowledge_retrieval": {
+            "attempt_count": 1,
+            "hit_query_count": 1,
+            "total_results": 2,
+            "last_result_count": 2,
+            "hit_rate": 1.0,
+            "last_query": "石犀产品资料",
+            "last_status": "hit",
+            "last_error": "",
+            "recent_queries": ["石犀产品资料"],
+        },
+        "knowledge_answer_diagnostics": {
+            "mode": "grounded_preferred",
+            "answerability": "partial",
+            "source_status": "hit",
+            "query": "石犀产品资料",
+            "path_mode": "compat",
+            "rollout_mode": "dual_run",
+            "shadow_audit_run_id": "audit-shadow-001",
+        },
+    }
+    session.voice_policy_snapshot = snapshot
+    session.effectiveness_snapshot = {
+        "claim_truth": {
+            "status": "weak_evidence",
+            "source": "score_snapshot",
+        }
+    }
+    session.status = "completed"
+    await test_db.commit()
+
+    response = await async_client.get(
+        f"/api/v1/practice/sessions/{session_id}/knowledge-check",
+        headers=auth_headers,
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["success"] is True
+    diagnostics = body["data"]
+    assert diagnostics["knowledge_answer_diagnostics"]["path_mode"] == "compat"
+    assert diagnostics["knowledge_answer_diagnostics"]["rollout_mode"] == "dual_run"
+
+    events = diagnostics["runtime_events"]
+    assert any(
+        event["event_id"] == "knowledge_answer_path_mode"
+        and event["category"] == "mode"
+        and event["status"] == "compat"
+        and event["details"]["rollout_mode"] == "dual_run"
+        for event in events
+    )
+    assert any(
+        event["event_id"] == "knowledge_answer_quality"
+        and event["category"] == "quality"
+        and event["severity"] == "degraded"
+        and event["status"] == "partial"
+        for event in events
+    )
+    assert any(
+        event["event_id"] == "claim_truth_status"
+        and event["status"] == diagnostics["claim_truth_status"]
+        and event["severity"] == "degraded"
+        for event in events
+    )
+    serialized_events = str(events).lower()
+    assert "token" not in serialized_events
+    assert "base_url" not in serialized_events

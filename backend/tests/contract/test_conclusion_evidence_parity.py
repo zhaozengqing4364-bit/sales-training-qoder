@@ -7,6 +7,7 @@ import pytest
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from common.auth.service import create_access_token
 from common.conversation.models import ConversationMessage
 from common.db.models import (
     Page,
@@ -573,3 +574,100 @@ async def test_evidence_degradation_marks_enhanced_report_degraded_when_report_f
     }
 
     assert _extract_evidence_degradation(report_data) == _extract_evidence_degradation(replay_data) == _extract_evidence_degradation(knowledge_check_data) == expected
+
+
+@pytest.mark.asyncio
+async def test_support_runtime_faults_carry_same_runtime_event_line_for_knowledge_failures(
+    async_client: AsyncClient,
+    test_db: AsyncSession,
+    test_user: User,
+    contract_auth_headers: dict[str, str],
+):
+    test_user.role = "support"
+    await test_db.commit()
+    support_headers = {
+        "Authorization": f"Bearer {create_access_token(data={'sub': str(test_user.user_id)})}"
+    }
+
+    session = await _seed_completed_sales_session(
+        test_db,
+        owner=test_user,
+        include_retrieval_hit=False,
+        include_audio_segments=True,
+    )
+
+    snapshot = _make_voice_policy_snapshot_with_retrieval_hit()
+    snapshot["knowledge_base_ids"] = []
+    snapshot["tool_policy"] = {
+        "enable_internal_retrieval": True,
+        "require_kb_grounding": False,
+    }
+    snapshot["runtime_metrics"] = {
+        "knowledge_retrieval": {
+            "attempt_count": 1,
+            "hit_query_count": 0,
+            "total_results": 0,
+            "last_result_count": 0,
+            "hit_rate": 0.0,
+            "last_query": "ROI 回本案例",
+            "last_status": "search_failed",
+            "last_error": "[KNOWLEDGE_SEARCH_UNAVAILABLE]",
+            "recent_queries": ["ROI 回本案例"],
+        },
+        "knowledge_answer_diagnostics": {
+            "mode": "grounded_preferred",
+            "answerability": "insufficient",
+            "source_status": "search_failed",
+            "query": "ROI 回本案例",
+            "path_mode": "compat",
+            "rollout_mode": "dual_run",
+            "shadow_audit_run_id": "audit-shadow-002",
+        },
+    }
+    session.voice_policy_snapshot = snapshot
+    session.effectiveness_snapshot = {
+        **_make_sales_effectiveness_snapshot(),
+        "claim_truth": {
+            "status": "unsupported_claim",
+            "source": "score_snapshot",
+        },
+    }
+    session.report_status = "failed"
+    session.report_error = "[REPORT_GENERATION_FAILED]"
+    await test_db.commit()
+
+    response = await async_client.get(
+        "/api/v1/support/runtime/faults?limit=20",
+        headers=support_headers,
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["success"] is True
+    item = next(
+        entry
+        for entry in body["data"]["items"]
+        if entry["session_id"] == session.session_id
+    )
+    runtime_events = item["diagnostics"]["runtime_events"]
+    assert any(
+        event["event_id"] == "knowledge_answer_path_mode"
+        and event["status"] == "compat"
+        and event["details"]["rollout_mode"] == "dual_run"
+        for event in runtime_events
+    )
+    assert any(
+        event["event_id"] == "knowledge_answer_quality"
+        and event["status"] == "insufficient"
+        and event["severity"] == "failure"
+        for event in runtime_events
+    )
+    assert any(
+        event["event_id"] == "claim_truth_status"
+        and event["status"]
+        and event["severity"] in {"degraded", "failure"}
+        for event in runtime_events
+    )
+    serialized_events = str(runtime_events).lower()
+    assert "token" not in serialized_events
+    assert "base_url" not in serialized_events

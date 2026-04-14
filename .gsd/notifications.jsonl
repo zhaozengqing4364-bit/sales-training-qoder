@@ -1,10 +1,3 @@
-{"id":"a2c43be1-b3b1-4e04-bf42-80101287cfaf","ts":"2026-04-11T20:57:20.897Z","severity":"info","message":"Committed: feat: Added lifecycle race catalog and strict xfail proofs for stale pa…","source":"notify","read":false}
-{"id":"9a630e53-e711-4382-b5c7-9319566512c8","ts":"2026-04-11T20:57:29.976Z","severity":"info","message":"Verification gate: FAILED — npm run test","source":"notify","read":false}
-{"id":"bf1ed322-6c1a-4a5e-adb6-e61d088ee0d6","ts":"2026-04-11T20:57:29.977Z","severity":"warning","message":"Verification failed in auto-discovered package.json checks — treating as advisory.","source":"notify","read":false}
-{"id":"bd2a96fd-830a-4f3d-9ba0-f38c612e99eb","ts":"2026-04-11T21:08:12.242Z","severity":"info","message":"Committed: feat: Added optimistic lifecycle convergence so stale pause/resume writ…","source":"notify","read":false}
-{"id":"87b75f28-65e2-4f76-b694-1385d59851e0","ts":"2026-04-11T21:08:15.925Z","severity":"info","message":"Verification gate: 1/1 checks passed","source":"notify","read":false}
-{"id":"06aace0a-5cb0-4b7a-a442-748bcd32102b","ts":"2026-04-11T21:15:36.292Z","severity":"info","message":"Committed: test: Documented the lifecycle concurrency contract in focused tests an…","source":"notify","read":false}
-{"id":"ae1fa1b5-d964-441b-b5e7-aca0928abdaa","ts":"2026-04-11T21:15:40.092Z","severity":"info","message":"Verification gate: 1/1 checks passed","source":"notify","read":false}
 {"id":"e96d3425-af52-4714-9e3a-ddce5cf5f355","ts":"2026-04-11T21:26:56.636Z","severity":"info","message":"Committed: feat: Locked the real practice websocket seam with boundary notes and f…","source":"notify","read":false}
 {"id":"4c52e6bb-16a8-4c07-90b5-d542b6c312bf","ts":"2026-04-11T21:26:56.642Z","severity":"warning","message":"[safety] file-change: .codex/loop/log.md — Modified but not in task plan's expected output","source":"workflow-logger","read":false}
 {"id":"5e565606-c5de-4001-96fa-6285c667cc49","ts":"2026-04-11T21:26:56.642Z","severity":"warning","message":"[safety] file-change: .codex/loop/state.json — Modified but not in task plan's expected output","source":"workflow-logger","read":false}
@@ -498,3 +491,10 @@
 {"id":"3b73f087-b90c-49f0-b2db-25cbf7e01088","ts":"2026-04-14T03:47:35.158Z","severity":"warning","message":"Safety: 4 unexpected file change(s) outside task plan","source":"notify","read":false}
 {"id":"d45b0f07-c9d9-4692-978e-17bb4ce88f71","ts":"2026-04-14T03:47:39.324Z","severity":"info","message":"Verification gate: 1/1 checks passed","source":"notify","read":false}
 {"id":"1fb99b4a-ab3a-457f-8707-98abbdfddf10","ts":"2026-04-14T03:47:39.343Z","severity":"warning","message":"Post-execution checks passed with warnings","source":"notify","read":false}
+{"id":"f59d474b-bb22-4593-ac55-331a618f31be","ts":"2026-04-14T04:06:13.411Z","severity":"info","message":"Committed: feat: Cataloged hidden AI fallback, default-score, and cost/degradation…","source":"notify","read":false}
+{"id":"bc74320e-4b41-47c8-9958-9fe4cb9b427c","ts":"2026-04-14T04:06:13.424Z","severity":"warning","message":"[safety] file-change: .codex/loop/log.md — Modified but not in task plan's expected output","source":"workflow-logger","read":false}
+{"id":"6e4ffd6e-bbb2-4874-9e8b-29db3d63b3b9","ts":"2026-04-14T04:06:13.427Z","severity":"warning","message":"[safety] file-change: .codex/loop/state.json — Modified but not in task plan's expected output","source":"workflow-logger","read":false}
+{"id":"9a41948d-0e00-4e1f-95fa-d87a37fbbd7d","ts":"2026-04-14T04:06:13.429Z","severity":"warning","message":"[safety] file-change: backend/tests/unit/test_ai_quality_event_inventory.py — Modified but not in task plan's expected output","source":"workflow-logger","read":false}
+{"id":"326a2955-0e7a-4650-b149-4acb7a382152","ts":"2026-04-14T04:06:13.431Z","severity":"warning","message":"Safety: 3 unexpected file change(s) outside task plan","source":"notify","read":false}
+{"id":"ef159f8b-0df2-4c3f-a5fa-ec6ebd57552c","ts":"2026-04-14T04:06:31.699Z","severity":"info","message":"Verification gate: FAILED — npm run test","source":"notify","read":false}
+{"id":"e96c36fd-6eec-4d47-aef1-4b21d22ce119","ts":"2026-04-14T04:06:31.705Z","severity":"warning","message":"Verification failed in auto-discovered package.json checks — treating as advisory.","source":"notify","read":false}
