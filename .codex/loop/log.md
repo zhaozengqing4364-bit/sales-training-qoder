@@ -1,3 +1,17 @@
+- time: 2026-04-14T10:57:30+08:00
+  mode: grow
+  item id: M021-S03-T02
+  files changed:
+    - .codex/loop/state.json
+    - .codex/loop/log.md
+  summary: Started M021/S03/T02 execution, completed skill-required reads plus local code/test audit, and confirmed the current slice verification bundle is still green before any edits. The missing work is not a broken existing contract but the absence of a shipped canonical evaluation kernel payload/compat-reader implementation across realtime score snapshots and report/replay/history/admin read models.
+  verification commands:
+    - backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/contract/test_conclusion_evidence_parity.py backend/tests/contract/test_practice_evidence_contract.py backend/tests/unit/common/test_admin_analytics_service.py backend/tests/unit/test_history_service_evidence_projection.py -x -q
+    - rg -n "canonical|compatibility_reader|evaluation_kernel|dimension_scores|logic_score|accuracy_score|completeness_score|overall_score" backend/src/common backend/src/agent backend/src/presentation_coach -g '!**/__pycache__/**'
+  verification results: partial-pass; the exact task-plan verification command finished 47/47 green before any code edits, and grep confirmed the current backend still centralizes read-side projection logic in session_evidence/history/admin while realtime snapshots and report/replay schemas do not yet surface a canonical evaluation kernel object.
+  success signal status: durable handoff only; no implementation landed yet.
+  rollback note: no product code changed in this unit, so resume directly from the saved CONTEXT-DRAFT and then add fail-first canonical-kernel tests before editing runtime/read-side code.
+
 - time: 2026-04-14T10:32:06+08:00
   mode: grow
   item id: M021-S02-T03

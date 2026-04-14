@@ -1,7 +1,7 @@
 # Codebase Map
 
-Generated: 2026-04-14T02:41:43Z | Files: 500 | Described: 0/500
-<!-- gsd:codebase-meta {"generatedAt":"2026-04-14T02:41:43Z","fingerprint":"3bcddc408d20567520cac3a785a5938e50f04d1d","fileCount":500,"truncated":true} -->
+Generated: 2026-04-14T02:54:03Z | Files: 500 | Described: 0/500
+<!-- gsd:codebase-meta {"generatedAt":"2026-04-14T02:54:03Z","fingerprint":"497c78502cc44e0034e26b953754150176c07563","fileCount":500,"truncated":true} -->
 Note: Truncated to first 500 files. Run with higher --max-files to include all.
 
 ### (root)/
@@ -379,6 +379,7 @@ Note: Truncated to first 500 files. Run with higher --max-files to include all.
 
 ### backend/src/common/effectiveness/
 - `backend/src/common/effectiveness/__init__.py`
+- `backend/src/common/effectiveness/canonical.py`
 - `backend/src/common/effectiveness/evaluator.py`
 - `backend/src/common/effectiveness/schemas.py`
 
@@ -643,6 +644,3 @@ Note: Truncated to first 500 files. Run with higher --max-files to include all.
 ### backend/tests/unit/admin/
 - `backend/tests/unit/admin/test_admin_users_api_models.py`
 - `backend/tests/unit/admin/test_system_logs_redaction.py`
-
-### backend/tests/unit/common/
-- `backend/tests/unit/common/test_admin_analytics_service.py`
