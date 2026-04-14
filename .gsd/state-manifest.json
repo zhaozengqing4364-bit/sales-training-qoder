@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "exported_at": "2026-04-14T03:17:45.691Z",
+  "exported_at": "2026-04-14T03:47:24.737Z",
   "milestones": [
     {
       "id": "M001",
@@ -13437,19 +13437,27 @@
       "milestone_id": "M021",
       "slice_id": "S03",
       "id": "T03",
-      "title": "让前端读侧显式消费 canonical/compat contract",
-      "status": "pending",
-      "one_liner": "",
-      "narrative": "",
-      "verification_result": "",
+      "title": "Made report, replay, and history consume the shared canonical/compat score contract explicitly and fixed the broken report/replay page runtime.",
+      "status": "complete",
+      "one_liner": "Made report, replay, and history consume the shared canonical/compat score contract explicitly and fixed the broken report/replay page runtime.",
+      "narrative": "I resumed T03 from the stable baseline described in `.codex/loop/state.json`: the focused web tests already expressed the intended canonical-vs-compat behavior, but the previous attempt had left the runtime cutover incomplete and both report/replay pages syntactically broken. I first removed the accidental duplicated JSX tails at the end of `web/src/app/(user)/practice/[sessionId]/report/page.tsx` and `web/src/app/(user)/practice/[sessionId]/replay/page.tsx` so both pages could compile again. Then I finished the actual read-side contract work instead of just fixing syntax: `web/src/lib/api/types.ts` now declares `canonical_evaluation_kernel` and `compatibility_readers` on the shared session-evidence contract, and the existing shared helper in `web/src/lib/session-evidence.ts` is now the explicit score resolver for report, replay, and history surfaces. Report now resolves logic/accuracy/completeness/overall through canonical -> compatibility reader -> legacy and exposes the chosen source via `data-contract-source`; replay does the same for its headline score; history uses the same resolver for list cards and trend deltas so compat fallback is intentional instead of implicit. The retirement-order note for canonical -> compat -> legacy readers was already present in `.gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md`; I verified that durable doc still matches the runtime helper behavior rather than creating another parallel note.",
+      "verification_result": "Ran the exact task-plan verification bundle after the runtime fixes: `npm --prefix web test -- --run \"src/app/(user)/practice/[sessionId]/report/page.test.tsx\" \"src/app/(user)/practice/[sessionId]/replay/page.test.tsx\" \"src/app/(dashboard)/history/page.test.tsx\"` finished 44/44 green. I also verified the retirement-order documentation with `rg -n \"prefer `canonical_evaluation_kernel`|compatibility_readers|retire 阶段\" .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md -S`, which confirmed the architecture scan still records the canonical -> compatibility reader -> legacy fallback sequence that the shared web helper now enforces at runtime.",
       "duration": "",
-      "completed_at": null,
+      "completed_at": "2026-04-14T03:47:24.637Z",
       "blocker_discovered": false,
-      "deviations": "",
-      "known_issues": "",
-      "key_files": [],
-      "key_decisions": [],
-      "full_summary_md": "",
+      "deviations": "The task plan called out report/replay/history focused tests and shared types; locally I also had to remove duplicated trailing JSX from `report/page.tsx` and `replay/page.tsx` because the prior failed attempt left both pages unparsable. That was a necessary local recovery step, not a contract change.",
+      "known_issues": "None.",
+      "key_files": [
+        "web/src/lib/api/types.ts",
+        "web/src/lib/session-evidence.ts",
+        "web/src/app/(user)/practice/[sessionId]/report/page.tsx",
+        "web/src/app/(user)/practice/[sessionId]/replay/page.tsx",
+        "web/src/app/(dashboard)/history/page.tsx"
+      ],
+      "key_decisions": [
+        "Reuse one shared frontend score resolver with the same precedence as the documented retirement plan: canonical_evaluation_kernel first, compatibility_readers second, legacy top-level rollups last."
+      ],
+      "full_summary_md": "---\nid: T03\nparent: S03\nmilestone: M021\nkey_files:\n  - web/src/lib/api/types.ts\n  - web/src/lib/session-evidence.ts\n  - web/src/app/(user)/practice/[sessionId]/report/page.tsx\n  - web/src/app/(user)/practice/[sessionId]/replay/page.tsx\n  - web/src/app/(dashboard)/history/page.tsx\nkey_decisions:\n  - Reuse one shared frontend score resolver with the same precedence as the documented retirement plan: canonical_evaluation_kernel first, compatibility_readers second, legacy top-level rollups last.\nduration: \nverification_result: passed\ncompleted_at: 2026-04-14T03:47:24.631Z\nblocker_discovered: false\n---\n\n# T03: Made report, replay, and history consume the shared canonical/compat score contract explicitly and fixed the broken report/replay page runtime.\n\n**Made report, replay, and history consume the shared canonical/compat score contract explicitly and fixed the broken report/replay page runtime.**\n\n## What Happened\n\nI resumed T03 from the stable baseline described in `.codex/loop/state.json`: the focused web tests already expressed the intended canonical-vs-compat behavior, but the previous attempt had left the runtime cutover incomplete and both report/replay pages syntactically broken. I first removed the accidental duplicated JSX tails at the end of `web/src/app/(user)/practice/[sessionId]/report/page.tsx` and `web/src/app/(user)/practice/[sessionId]/replay/page.tsx` so both pages could compile again. Then I finished the actual read-side contract work instead of just fixing syntax: `web/src/lib/api/types.ts` now declares `canonical_evaluation_kernel` and `compatibility_readers` on the shared session-evidence contract, and the existing shared helper in `web/src/lib/session-evidence.ts` is now the explicit score resolver for report, replay, and history surfaces. Report now resolves logic/accuracy/completeness/overall through canonical -> compatibility reader -> legacy and exposes the chosen source via `data-contract-source`; replay does the same for its headline score; history uses the same resolver for list cards and trend deltas so compat fallback is intentional instead of implicit. The retirement-order note for canonical -> compat -> legacy readers was already present in `.gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md`; I verified that durable doc still matches the runtime helper behavior rather than creating another parallel note.\n\n## Verification\n\nRan the exact task-plan verification bundle after the runtime fixes: `npm --prefix web test -- --run \"src/app/(user)/practice/[sessionId]/report/page.test.tsx\" \"src/app/(user)/practice/[sessionId]/replay/page.test.tsx\" \"src/app/(dashboard)/history/page.test.tsx\"` finished 44/44 green. I also verified the retirement-order documentation with `rg -n \"prefer `canonical_evaluation_kernel`|compatibility_readers|retire 阶段\" .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md -S`, which confirmed the architecture scan still records the canonical -> compatibility reader -> legacy fallback sequence that the shared web helper now enforces at runtime.\n\n## Verification Evidence\n\n| # | Command | Exit Code | Verdict | Duration |\n|---|---------|-----------|---------|----------|\n| 1 | `npm --prefix web test -- --run \"src/app/(user)/practice/[sessionId]/report/page.test.tsx\" \"src/app/(user)/practice/[sessionId]/replay/page.test.tsx\" \"src/app/(dashboard)/history/page.test.tsx\"` | 0 | ✅ pass | 6029ms |\n| 2 | `rg -n \"prefer `canonical_evaluation_kernel`|compatibility_readers|retire 阶段\" .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md -S` | 0 | ✅ pass | 28ms |\n\n## Deviations\n\nThe task plan called out report/replay/history focused tests and shared types; locally I also had to remove duplicated trailing JSX from `report/page.tsx` and `replay/page.tsx` because the prior failed attempt left both pages unparsable. That was a necessary local recovery step, not a contract change.\n\n## Known Issues\n\nNone.\n\n## Files Created/Modified\n\n- `web/src/lib/api/types.ts`\n- `web/src/lib/session-evidence.ts`\n- `web/src/app/(user)/practice/[sessionId]/report/page.tsx`\n- `web/src/app/(user)/practice/[sessionId]/replay/page.tsx`\n- `web/src/app/(dashboard)/history/page.tsx`\n",
       "description": "- 更新 web shared types / report/replay/history/admin focused tests，让页面明确区分 canonical 字段与 compat 字段。\n- 文档化 canonical kernel 与 compat reader 的退役计划。",
       "estimate": "45m",
       "files": [
@@ -22467,6 +22475,28 @@
       "verdict": "✅ pass",
       "duration_ms": 21404,
       "created_at": "2026-04-14T03:17:45.599Z"
+    },
+    {
+      "id": 512,
+      "task_id": "T03",
+      "slice_id": "S03",
+      "milestone_id": "M021",
+      "command": "npm --prefix web test -- --run \"src/app/(user)/practice/[sessionId]/report/page.test.tsx\" \"src/app/(user)/practice/[sessionId]/replay/page.test.tsx\" \"src/app/(dashboard)/history/page.test.tsx\"",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 6029,
+      "created_at": "2026-04-14T03:47:24.637Z"
+    },
+    {
+      "id": 513,
+      "task_id": "T03",
+      "slice_id": "S03",
+      "milestone_id": "M021",
+      "command": "rg -n \"prefer `canonical_evaluation_kernel`|compatibility_readers|retire 阶段\" .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md -S",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 28,
+      "created_at": "2026-04-14T03:47:24.638Z"
     }
   ]
 }

@@ -2,7 +2,7 @@
   "mode": "grow",
   "current_issue_id": "M021-S03-T03",
   "current_issue_type": "task",
-  "current_issue_status": "doing",
+  "current_issue_status": "done",
   "pending_issue_ids": [],
   "completed_issue_ids": [
     "M001-S01-T01",
@@ -218,21 +218,16 @@
   "last_modified_files": [
     "web/src/lib/api/types.ts",
     "web/src/lib/session-evidence.ts",
-    "web/src/app/(user)/practice/[sessionId]/report/page.test.tsx",
-    "web/src/app/(user)/practice/[sessionId]/replay/page.test.tsx",
-    "web/src/app/(dashboard)/history/page.test.tsx",
     "web/src/app/(user)/practice/[sessionId]/report/page.tsx",
     "web/src/app/(user)/practice/[sessionId]/replay/page.tsx",
-    "web/src/app/(dashboard)/history/page.tsx",
-    ".gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md",
-    ".codex/loop/state.json",
-    ".codex/loop/log.md"
+    "web/src/app/(dashboard)/history/page.tsx"
   ],
   "last_verification_commands": [
-    "npm --prefix web test -- --run \"src/app/(user)/practice/[sessionId]/report/page.test.tsx\" \"src/app/(user)/practice/[sessionId]/replay/page.test.tsx\" \"src/app/(dashboard)/history/page.test.tsx\""
+    "npm --prefix web test -- --run \"src/app/(user)/practice/[sessionId]/report/page.test.tsx\" \"src/app/(user)/practice/[sessionId]/replay/page.test.tsx\" \"src/app/(dashboard)/history/page.test.tsx\"",
+    "rg -n \"prefer `canonical_evaluation_kernel`|compatibility_readers|retire 阶段\" .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md -S"
   ],
-  "last_verification_result": "failed; fail-first report/replay/history assertions were added for canonical-kernel and compatibility-reader consumption, but the first runtime wiring attempt destabilized the report/replay surfaces and was backed out before completion. The repo still needs a smaller follow-up that reintroduces shared contract readers without breaking existing report/replay rendering.",
-  "last_success_signal": "Partial only: T03 now has concrete fail-first web tests and a written retirement-order note for canonical -> compat -> legacy readers, but the frontend runtime cutover itself is not yet shipped.",
+  "last_verification_result": "passed; the exact T03 web verification bundle finished 44/44 green after removing duplicated JSX tails, teaching report/replay/history to resolve canonical -> compat -> legacy rollups through the shared reader helper, and extending the shared web evidence contract types to carry canonical_evaluation_kernel and compatibility_readers.",
+  "last_success_signal": "report, replay, and history now expose their score source explicitly at the read side, compatibility fallback remains intentional instead of implicit, and the retirement order note remains grep-discoverable in the architecture scan.",
   "last_growth_scan": null,
-  "next_action": "Resume M021/S03/T03 from a stable runtime baseline: keep the new fail-first tests as the target, reintroduce shared canonical/compat reader helpers incrementally (likely one surface at a time), and do not mark the task complete until the exact web verification bundle is green again."
+  "next_action": "Proceed to the next planned item; M021/S03/T03 no longer needs resume work."
 }

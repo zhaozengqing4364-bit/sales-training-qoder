@@ -49,6 +49,7 @@ import {
     formatMissExplanation,
     formatSearchFailedExplanation,
     formatWeakEvidenceRetrievalNote,
+    readSessionEvaluationRollups,
     type SessionClaimTruthTone,
 } from "@/lib/session-evidence";
 import { cn } from "@/lib/utils";
@@ -151,21 +152,25 @@ function getRetrievalStatusClasses(tone: ReturnType<typeof formatRetrievalStatus
     };
 }
 
-function buildSalesDimensionScores(report: PracticeSessionReport) {
+function buildSalesDimensionScores(scores: {
+    logic: number | null;
+    accuracy: number | null;
+    completeness: number | null;
+}) {
     return [
         {
             name: "价值表达",
-            score: report.logic_score,
+            score: scores.logic ?? 0,
             description: "是否把产品能力翻译成客户收益与业务价值。",
         },
         {
             name: "证据与收益",
-            score: report.accuracy_score,
+            score: scores.accuracy ?? 0,
             description: "是否用案例、数据或 ROI 证据支撑收益主张。",
         },
         {
             name: "异议推进",
-            score: report.completeness_score,
+            score: scores.completeness ?? 0,
             description: "是否处理价格/竞品/风险异议并推动下一步。",
         },
     ];
@@ -640,6 +645,16 @@ export default function ComprehensiveReportPage() {
         }
     };
 
+    const reportRollups = readSessionEvaluationRollups({
+        canonicalEvaluationKernel: report?.canonical_evaluation_kernel,
+        compatibilityReaders: report?.compatibility_readers,
+        logicScore: report?.logic_score,
+        accuracyScore: report?.accuracy_score,
+        completenessScore: report?.completeness_score,
+        overallScore: report?.overall_score,
+    });
+    const reportOverallScore = reportRollups.overall ?? 0;
+
     const dimensionScores = useMemo(() => {
         if (!report) {
             return [];
@@ -653,8 +668,12 @@ export default function ComprehensiveReportPage() {
             }));
         }
 
-        return buildSalesDimensionScores(report);
-    }, [report, presentationReview]);
+        return buildSalesDimensionScores({
+            logic: reportRollups.logic,
+            accuracy: reportRollups.accuracy,
+            completeness: reportRollups.completeness,
+        });
+    }, [presentationReview, reportRollups.accuracy, reportRollups.completeness, reportRollups.logic, report]);
 
     const practiceSuggestions = useMemo(() => {
         if (presentationReview?.recommendations?.length) {
@@ -748,13 +767,17 @@ export default function ComprehensiveReportPage() {
             <GlassCard className="p-6 mb-6">
                 <div className="text-center">
                     <div className="inline-flex items-center justify-center w-24 h-24 rounded-full bg-gradient-to-br from-blue-500 to-indigo-600 text-white mb-4">
-                        <span data-testid="report-overall-score" className="text-3xl font-bold">
-                            {report.overall_score.toFixed(0)}
+                        <span
+                            data-testid="report-overall-score"
+                            data-contract-source={reportRollups.source}
+                            className="text-3xl font-bold"
+                        >
+                            {reportOverallScore.toFixed(0)}
                         </span>
                     </div>
                     <h1 className="text-2xl font-bold text-zinc-900 mb-2">{reportTitle}</h1>
-                    <p className={cn("text-lg font-medium", getScoreColor(report.overall_score))}>
-                        {getScoreLabel(report.overall_score)}
+                    <p className={cn("text-lg font-medium", getScoreColor(reportOverallScore))}>
+                        {getScoreLabel(reportOverallScore)}
                     </p>
                     <p className="text-xs text-zinc-500 mt-2">
                         {reportIntro}
@@ -1590,19 +1613,4 @@ export default function ComprehensiveReportPage() {
             <AudioAuditCard audioAudit={report.audio_audit} sessionId={sessionId} />
         </div>
     );
-}
-                          <li key={`${item}-${index}`} className="flex items-start gap-2 text-sm text-zinc-700">
-                                <Target className="w-4 h-4 text-blue-500 flex-shrink-0 mt-0.5" />
-                                {item}
-                            </li>
-                        ))}
-                    </ul>
-                </GlassCard>
-            )}
-
-            <AudioAuditCard audioAudit={report.audio_audit} sessionId={sessionId} />
-        </div>
-    );
-}
-   );
 }

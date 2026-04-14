@@ -1,3 +1,22 @@
+- time: 2026-04-14T11:46:58+08:00
+  mode: grow
+  item id: M021-S03-T03
+  files changed:
+    - web/src/lib/api/types.ts
+    - web/src/lib/session-evidence.ts
+    - web/src/app/(user)/practice/[sessionId]/report/page.tsx
+    - web/src/app/(user)/practice/[sessionId]/replay/page.tsx
+    - web/src/app/(dashboard)/history/page.tsx
+    - .codex/loop/state.json
+    - .codex/loop/log.md
+  summary: Finished M021/S03/T03 by wiring the front-end read side onto the shared canonical/compat score reader instead of letting each surface guess from legacy rollups. Report and replay now expose the resolved score source via data-contract-source while still falling back in the contract order canonical -> compatibility reader -> legacy, history applies the same helper for list cards and trend deltas, the shared web API types now declare canonical_evaluation_kernel plus compatibility_readers, and the accidental duplicated JSX tails from the previous failed attempt were removed so report/replay parse cleanly again.
+  verification commands:
+    - npm --prefix web test -- --run "src/app/(user)/practice/[sessionId]/report/page.test.tsx" "src/app/(user)/practice/[sessionId]/replay/page.test.tsx" "src/app/(dashboard)/history/page.test.tsx"
+    - rg -n "prefer `canonical_evaluation_kernel`|compatibility_readers|retire 阶段" .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md -S
+  verification results: passed; the exact T03 web bundle finished 44/44 green, and the architecture scan still contains the canonical -> compat -> legacy retirement order note that the new read-side helper now matches at runtime.
+  success signal status: done; report, replay, and history now explicitly consume the canonical/compat contract rather than silently trusting stale legacy rollups.
+  rollback note: if later slices retire compatibility readers, keep web/src/lib/session-evidence.ts, web/src/lib/api/types.ts, the report/replay/history page surfaces, and the focused page tests aligned so the fallback order changes intentionally instead of drifting.
+
 - time: 2026-04-14T11:35:57+08:00
   mode: grow
   item id: M021-S03-T03

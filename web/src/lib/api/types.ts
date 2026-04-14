@@ -1758,9 +1758,51 @@ export interface EvidenceDegradation {
     enhanced_report: EvidenceDegradationLayer;
 }
 
+export interface CanonicalEvaluationRollup {
+    label?: string;
+    score: number;
+}
+
+export interface CanonicalEvaluationKernel {
+    schema_version: string;
+    scenario_type: "sales" | "presentation" | string;
+    surface_id?: string;
+    source_reader_id?: string;
+    primary_reader_id?: string;
+    mode?: string;
+    rollups?: {
+        logic?: CanonicalEvaluationRollup | null;
+        accuracy?: CanonicalEvaluationRollup | null;
+        completeness?: CanonicalEvaluationRollup | null;
+    } | null;
+    overall_score?: number | null;
+    dimensions?: Array<Record<string, unknown>> | null;
+    compatibility_reader_ids?: string[] | null;
+    downstream_surfaces?: string[] | null;
+}
+
+export interface PracticeSessionCompatibilityRollups {
+    logic_score?: number | null;
+    accuracy_score?: number | null;
+    completeness_score?: number | null;
+    overall_score?: number | null;
+}
+
+export interface PresentationReviewCompatibilityRollups {
+    overall_score?: number | null;
+}
+
+export interface CompatibilityReaders {
+    practice_session_rollup_fields_v1?: PracticeSessionCompatibilityRollups | null;
+    presentation_review_dimensions_v1?: PresentationReviewCompatibilityRollups | null;
+    [key: string]: Record<string, unknown> | null | undefined;
+}
+
 export interface SessionEvidenceContract {
     scenario_type?: "sales" | "presentation";
     overall_score: number | null;
+    canonical_evaluation_kernel?: CanonicalEvaluationKernel | null;
+    compatibility_readers?: CompatibilityReaders | null;
     effectiveness_snapshot?: Record<string, unknown> | null;
     pass_flags?: SessionPassFlags | null;
     main_capability_passed?: boolean | null;

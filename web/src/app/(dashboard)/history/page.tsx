@@ -28,6 +28,7 @@ import {
     extractSessionLearningCue,
     formatEvidenceCompletenessNote,
     formatNotEvaluableReason,
+    readSessionEvaluationRollups,
 } from "@/lib/session-evidence";
 
 type ScenarioFilter = "all" | "sales" | "presentation";
@@ -67,6 +68,24 @@ function scoreClass(score: number): string {
     if (score >= 80) return "text-emerald-600";
     if (score >= 60) return "text-amber-600";
     return "text-red-600";
+}
+
+function resolveSessionDisplayRollups(session: {
+    canonical_evaluation_kernel?: HistorySessionSummary["canonical_evaluation_kernel"] | HistoryTrendPoint["canonical_evaluation_kernel"];
+    compatibility_readers?: HistorySessionSummary["compatibility_readers"] | HistoryTrendPoint["compatibility_readers"];
+    logic_score?: number | null;
+    accuracy_score?: number | null;
+    completeness_score?: number | null;
+    overall_score?: number | null;
+}) {
+    return readSessionEvaluationRollups({
+        canonicalEvaluationKernel: session.canonical_evaluation_kernel,
+        compatibilityReaders: session.compatibility_readers,
+        logicScore: session.logic_score,
+        accuracyScore: session.accuracy_score,
+        completenessScore: session.completeness_score,
+        overallScore: session.overall_score,
+    });
 }
 
 function renderEnhancedStatusBadge(reportStatus: HistorySessionSummary["report_status"]) {
@@ -170,8 +189,8 @@ export default function HistoryPage() {
 
     const trendDelta = useMemo(() => {
         if (trends.length < 2) return null;
-        const latest = trends[trends.length - 1]?.overall_score ?? 0;
-        const previous = trends[trends.length - 2]?.overall_score ?? 0;
+        const latest = resolveSessionDisplayRollups(trends[trends.length - 1] || {}).overall ?? 0;
+        const previous = resolveSessionDisplayRollups(trends[trends.length - 2] || {}).overall ?? 0;
         return Number((latest - previous).toFixed(1));
     }, [trends]);
 
@@ -284,6 +303,8 @@ export default function HistoryPage() {
                             nextGoal: item.next_goal,
                             feedbackSummary: item.feedback_summary,
                         });
+                        const scoreRollups = resolveSessionDisplayRollups(item);
+                        const displayOverallScore = scoreRollups.overall;
 
                         return (
                             <GlassCard
@@ -373,13 +394,14 @@ export default function HistoryPage() {
                                                 <div className="text-lg font-bold text-amber-700">不可评估</div>
                                                 <span className="text-xs text-amber-600 font-medium">统一训练证据不足</span>
                                             </>
-                                        ) : item.overall_score !== null ? (
+                                        ) : displayOverallScore !== null ? (
                                             <>
                                                 <div
                                                     data-testid={`history-score-${item.session_id}`}
-                                                    className={`text-2xl font-bold ${scoreClass(item.overall_score)}`}
+                                                    data-contract-source={scoreRollups.source}
+                                                    className={`text-2xl font-bold ${scoreClass(displayOverallScore)}`}
                                                 >
-                                                    {Math.round(item.overall_score)}
+                                                    {Math.round(displayOverallScore)}
                                                     <span className="text-sm font-normal text-slate-400 ml-1">分</span>
                                                 </div>
                                                 <span className="text-xs text-slate-400 font-medium">统一训练证据评分</span>

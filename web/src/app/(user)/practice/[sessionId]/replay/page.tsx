@@ -37,6 +37,7 @@ import {
   formatPresentationIssueLabel,
   formatSessionStageLabel,
   getClaimTruthTone,
+  readSessionEvaluationRollups,
   type SessionClaimTruthTone,
 } from "@/lib/session-evidence";
 import { cn } from "@/lib/utils";
@@ -673,6 +674,12 @@ export default function SessionReplayPage() {
   const claimTruthSummary = formatClaimTruthSummary(claimTruth);
   const claimTruthEvidenceNote = formatClaimTruthEvidenceNote(claimTruth);
   const claimTruthClasses = getClaimTruthClasses(getClaimTruthTone(claimTruth?.status));
+  const replayRollups = readSessionEvaluationRollups({
+    canonicalEvaluationKernel: replayData?.canonical_evaluation_kernel,
+    compatibilityReaders: replayData?.compatibility_readers,
+    overallScore: replayData?.overall_score,
+  });
+  const replayOverallScore = replayRollups.overall ?? 0;
   const scenarioType = replayData?.scenario_type ?? reportSnapshot?.scenario_type ?? null;
   const isPresentationScenario = scenarioType === "presentation";
   const conclusionEvidenceSections = !isPresentationScenario
@@ -887,8 +894,12 @@ export default function SessionReplayPage() {
             <p className="text-xs text-slate-500 mt-2">本页消息与评分均直接来自统一训练证据 contract。</p>
           </div>
           <div className="text-right">
-            <div data-testid="replay-overall-score" className="text-4xl font-black text-blue-600">
-              {Math.round(replayData.overall_score)}
+            <div
+              data-testid="replay-overall-score"
+              data-contract-source={replayRollups.source}
+              className="text-4xl font-black text-blue-600"
+            >
+              {Math.round(replayOverallScore)}
             </div>
             <div className="text-xs text-slate-500 mt-1">统一训练证据评分</div>
           </div>
@@ -1632,8 +1643,5 @@ export default function SessionReplayPage() {
         )}
       </GlassCard>
     </div>
-  );
-}
-  </div>
   );
 }

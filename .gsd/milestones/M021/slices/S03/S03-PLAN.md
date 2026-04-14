@@ -36,7 +36,7 @@ S03 结束后，realtime/report/history/admin/replay 至少共享一套 canonica
   - Files: `backend/src/common/effectiveness`, `backend/src/common/conversation/session_evidence.py`, `backend/src/common/analytics`, `backend/src/agent/capabilities/realtime_scoring.py`, `backend/src/presentation_coach/services/presentation_report_service.py`
   - Verify: backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/contract/test_conclusion_evidence_parity.py backend/tests/contract/test_practice_evidence_contract.py backend/tests/unit/common/test_admin_analytics_service.py backend/tests/unit/test_history_service_evidence_projection.py -x -q
 
-- [ ] **T03: 让前端读侧显式消费 canonical/compat contract** `est:45m`
+- [x] **T03: 让前端读侧显式消费 canonical/compat contract** `est:45m`
   - 更新 web shared types / report/replay/history/admin focused tests，让页面明确区分 canonical 字段与 compat 字段。
 - 文档化 canonical kernel 与 compat reader 的退役计划。
   - Files: `web/src/lib/api/types.ts`, `web/src/app/(user)/practice/[sessionId]/report/page.test.tsx`, `web/src/app/(user)/practice/[sessionId]/replay/page.test.tsx`, `web/src/app/(dashboard)/history/page.tsx`, `web/src/app/admin`
