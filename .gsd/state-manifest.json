@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "exported_at": "2026-04-14T05:31:35.198Z",
+  "exported_at": "2026-04-14T05:37:21.321Z",
   "milestones": [
     {
       "id": "M001",
@@ -13742,19 +13742,26 @@
       "milestone_id": "M022",
       "slice_id": "S01",
       "id": "T03",
-      "title": "把 rubric 语义写回用户/管理面说明",
-      "status": "pending",
-      "one_liner": "",
-      "narrative": "",
-      "verification_result": "",
+      "title": "Clarified methodology-aware sales rubric semantics in learner reports and manager-facing contract docs.",
+      "status": "complete",
+      "one_liner": "Clarified methodology-aware sales rubric semantics in learner reports and manager-facing contract docs.",
+      "narrative": "I wrote the methodology-aware rubric semantics back into the user and manager explanation surfaces instead of leaving them only in backend contract code. `docs/api-contract/README.md` now points learner/manager readers to the effectiveness contract and explicitly frames the first-round rubric scope as `discovery / qualification`, `value`, `evidence`, `objection`, and `next-step`, with the qualification boundary called out honestly. `docs/api-contract/effectiveness.md` now adds dedicated learner-facing and manager-facing interpretation rules so report, history, admin, and coaching copy all explain `main_issue` and `next_goal` as methodology gap / next-action handles sourced from canonical evidence rather than a second score system. `.gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md` now records the T03 write-back rule and boundary rule so downstream M022 work reuses the same outward language. On the learner report page, `web/src/app/(user)/practice/[sessionId]/report/page.tsx` now renders a dedicated sales rubric explainer card that makes the five first-round rubric lenses visible and states the current qualification boundary in-product. I kept the existing top-line score intro sentence stable so the shipped learner report contract and tests did not churn unnecessarily; the new methodology explanation lives in the added explainer card and docs.",
+      "verification_result": "Ran the focused learner report test suite to confirm the added rubric explainer copy did not break the existing unified report contract UI: `npm --prefix web test -- --run 'src/app/(user)/practice/[sessionId]/report/page.test.tsx'` passed with 24/24 tests green. Then ran the exact task-plan grep gate `rg -n \"qualification|discovery|value|objection|next-step|rubric\" docs/api-contract .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md 'web/src/app/(user)/practice/[sessionId]/report/page.tsx'`, which confirmed the methodology terms and boundary language now exist in the contract docs, architecture scan, and learner-facing report page.",
       "duration": "",
-      "completed_at": null,
+      "completed_at": "2026-04-14T05:37:21.238Z",
       "blocker_discovered": false,
-      "deviations": "",
-      "known_issues": "",
-      "key_files": [],
-      "key_decisions": [],
-      "full_summary_md": "",
+      "deviations": "Kept the existing learner report header intro sentence unchanged and added a dedicated rubric explainer card instead, because the current report page test contract already locks that summary line and the new explainer card/doc updates satisfy the task goal without unnecessary UI contract churn.",
+      "known_issues": "None.",
+      "key_files": [
+        "docs/api-contract/README.md",
+        "docs/api-contract/effectiveness.md",
+        ".gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md",
+        "web/src/app/(user)/practice/[sessionId]/report/page.tsx"
+      ],
+      "key_decisions": [
+        "Preserve the existing learner report headline summary copy and introduce methodology-aware rubric semantics in a separate explainer card so user-facing tests stay stable while the new contract language becomes visible."
+      ],
+      "full_summary_md": "---\nid: T03\nparent: S01\nmilestone: M022\nkey_files:\n  - docs/api-contract/README.md\n  - docs/api-contract/effectiveness.md\n  - .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md\n  - web/src/app/(user)/practice/[sessionId]/report/page.tsx\nkey_decisions:\n  - Preserve the existing learner report headline summary copy and introduce methodology-aware rubric semantics in a separate explainer card so user-facing tests stay stable while the new contract language becomes visible.\nduration: \nverification_result: passed\ncompleted_at: 2026-04-14T05:37:21.236Z\nblocker_discovered: false\n---\n\n# T03: Clarified methodology-aware sales rubric semantics in learner reports and manager-facing contract docs.\n\n**Clarified methodology-aware sales rubric semantics in learner reports and manager-facing contract docs.**\n\n## What Happened\n\nI wrote the methodology-aware rubric semantics back into the user and manager explanation surfaces instead of leaving them only in backend contract code. `docs/api-contract/README.md` now points learner/manager readers to the effectiveness contract and explicitly frames the first-round rubric scope as `discovery / qualification`, `value`, `evidence`, `objection`, and `next-step`, with the qualification boundary called out honestly. `docs/api-contract/effectiveness.md` now adds dedicated learner-facing and manager-facing interpretation rules so report, history, admin, and coaching copy all explain `main_issue` and `next_goal` as methodology gap / next-action handles sourced from canonical evidence rather than a second score system. `.gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md` now records the T03 write-back rule and boundary rule so downstream M022 work reuses the same outward language. On the learner report page, `web/src/app/(user)/practice/[sessionId]/report/page.tsx` now renders a dedicated sales rubric explainer card that makes the five first-round rubric lenses visible and states the current qualification boundary in-product. I kept the existing top-line score intro sentence stable so the shipped learner report contract and tests did not churn unnecessarily; the new methodology explanation lives in the added explainer card and docs.\n\n## Verification\n\nRan the focused learner report test suite to confirm the added rubric explainer copy did not break the existing unified report contract UI: `npm --prefix web test -- --run 'src/app/(user)/practice/[sessionId]/report/page.test.tsx'` passed with 24/24 tests green. Then ran the exact task-plan grep gate `rg -n \"qualification|discovery|value|objection|next-step|rubric\" docs/api-contract .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md 'web/src/app/(user)/practice/[sessionId]/report/page.tsx'`, which confirmed the methodology terms and boundary language now exist in the contract docs, architecture scan, and learner-facing report page.\n\n## Verification Evidence\n\n| # | Command | Exit Code | Verdict | Duration |\n|---|---------|-----------|---------|----------|\n| 1 | `npm --prefix web test -- --run 'src/app/(user)/practice/[sessionId]/report/page.test.tsx'` | 0 | ✅ pass | 2771ms |\n| 2 | `rg -n \"qualification|discovery|value|objection|next-step|rubric\" docs/api-contract .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md 'web/src/app/(user)/practice/[sessionId]/report/page.tsx'` | 0 | ✅ pass | 36ms |\n\n## Deviations\n\nKept the existing learner report header intro sentence unchanged and added a dedicated rubric explainer card instead, because the current report page test contract already locks that summary line and the new explainer card/doc updates satisfy the task goal without unnecessary UI contract churn.\n\n## Known Issues\n\nNone.\n\n## Files Created/Modified\n\n- `docs/api-contract/README.md`\n- `docs/api-contract/effectiveness.md`\n- `.gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md`\n- `web/src/app/(user)/practice/[sessionId]/report/page.tsx`\n",
       "description": "- 更新 learner-facing 和 manager-facing 文档/文案，让方法论语义对用户可解释。\n- 写明首轮不覆盖的方法论边界，防止产品话术超过真实能力。",
       "estimate": "40m",
       "files": [
@@ -22725,6 +22732,28 @@
       "verdict": "✅ pass",
       "duration_ms": 7435,
       "created_at": "2026-04-14T05:31:35.115Z"
+    },
+    {
+      "id": 524,
+      "task_id": "T03",
+      "slice_id": "S01",
+      "milestone_id": "M022",
+      "command": "npm --prefix web test -- --run 'src/app/(user)/practice/[sessionId]/report/page.test.tsx'",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 2771,
+      "created_at": "2026-04-14T05:37:21.239Z"
+    },
+    {
+      "id": 525,
+      "task_id": "T03",
+      "slice_id": "S01",
+      "milestone_id": "M022",
+      "command": "rg -n \"qualification|discovery|value|objection|next-step|rubric\" docs/api-contract .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md 'web/src/app/(user)/practice/[sessionId]/report/page.tsx'",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 36,
+      "created_at": "2026-04-14T05:37:21.239Z"
     }
   ]
 }

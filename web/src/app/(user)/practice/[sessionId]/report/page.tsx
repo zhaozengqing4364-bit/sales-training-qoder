@@ -176,6 +176,34 @@ function buildSalesDimensionScores(scores: {
     ];
 }
 
+const SALES_RUBRIC_EXPLAINERS = [
+    {
+        id: "discovery_qualification",
+        label: "discovery / qualification",
+        description: "先确认现状、目标、优先级和决策线索；当前 qualification 仍并入 discovery。",
+    },
+    {
+        id: "value_story",
+        label: "value",
+        description: "把产品能力翻译成客户收益，而不是只讲功能清单。",
+    },
+    {
+        id: "evidence_proof",
+        label: "evidence",
+        description: "用案例、数据、ROI 或 benchmark 支撑价值主张。",
+    },
+    {
+        id: "objection_reframe",
+        label: "objection",
+        description: "先承接客户顾虑，再用收益和证据推进对话。",
+    },
+    {
+        id: "next_step_commitment",
+        label: "next-step",
+        description: "把对话收束为动作、时间点和责任人，不把推进留在口头上。",
+    },
+] as const;
+
 function buildPresentationIssueItems(review?: PresentationReview | null) {
     const pageIssueCounts = (review?.page_summaries || []).reduce((counts, pageSummary) => {
         for (const cluster of pageSummary.issue_clusters || []) {
@@ -798,6 +826,39 @@ export default function ComprehensiveReportPage() {
             {!isPresentationScenario && report.evaluable !== false && evidenceCompletenessNote && (
                 <GlassCard className="p-4 mb-6 border border-blue-200 bg-blue-50/80">
                     <p className="text-sm text-blue-800">{evidenceCompletenessNote}</p>
+                </GlassCard>
+            )}
+
+            {!isPresentationScenario && (
+                <GlassCard className="p-6 mb-6 border border-indigo-200 bg-indigo-50/70">
+                    <div className="flex items-start justify-between gap-3 mb-4 flex-wrap">
+                        <div>
+                            <h2 className="text-lg font-semibold text-zinc-900">本页的销售 rubric 怎么看</h2>
+                            <p className="text-sm text-zinc-700 mt-2 max-w-3xl leading-7">
+                                这页不是只给一个总分，而是把你的销售对话放回
+                                discovery / qualification、value、evidence、objection、next-step
+                                五个 rubric 视角里解释。主问题、下一轮目标和主张证据状态，
+                                都来自同一条 canonical evidence，而不是额外拼出来的第二套评分器。
+                            </p>
+                        </div>
+                        <span className="inline-flex rounded-full border border-indigo-200 bg-white/80 px-3 py-1 text-xs font-medium text-indigo-700">
+                            sales_methodology_rubric_v1
+                        </span>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-3">
+                        {SALES_RUBRIC_EXPLAINERS.map((item) => (
+                            <div key={item.id} className="rounded-xl border border-indigo-100 bg-white/80 p-4">
+                                <p className="text-xs font-semibold uppercase tracking-[0.12em] text-indigo-700">
+                                    {item.label}
+                                </p>
+                                <p className="text-sm text-zinc-700 mt-2 leading-6">{item.description}</p>
+                            </div>
+                        ))}
+                    </div>
+                    <p className="text-xs text-indigo-700 mt-4">
+                        首轮边界：qualification 目前仍并入 opening / discovery，本页不会宣称已经提供独立 qualification stage，
+                        也不会把当前 rubric 解释成完整销售方法论覆盖。
+                    </p>
                 </GlassCard>
             )}
 

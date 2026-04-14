@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "taskId": "T02",
+  "unitId": "M022/S01/T02",
+  "timestamp": 1776144706275,
+  "passed": true,
+  "discoverySource": "task-plan",
+  "checks": [
+    {
+      "command": "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests -k \"sales and (report or replay or history or analytics)\" -x -q",
+      "exitCode": 0,
+      "durationMs": 7437,
+      "verdict": "pass"
+    }
+  ]
+}

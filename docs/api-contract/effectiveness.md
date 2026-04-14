@@ -45,6 +45,35 @@
 - 相关证据表现为客户现状、目标、预算、负责人、优先级等探查语言；
 - 如果后续 `sales_stage` 拆出独立 `qualification`，该变更必须同步更新 code contract、本文件、以及 report/read-side proof。
 
+## 对用户与管理面如何解释
+
+### Learner-facing（报告页 / 练习页）
+
+报告页面向学员时，应该把本轮销售对话解释为五个固定 rubric 视角，而不是只说“总分高/低”：
+
+- `discovery / qualification`：有没有先问清现状、目标、优先级、决策线索；
+- `value`：有没有把产品能力翻译成客户收益，而不是只讲功能；
+- `evidence`：价值主张有没有案例、数据、ROI、benchmark 支撑；
+- `objection`：客户顾虑出现后，是否先承接再重构；
+- `next-step`：有没有收束成动作、时间点、责任人。
+
+对 learner 的 copy 要保持两条原则：
+
+1. 把 `main_issue` 解释成“这次最主要的 rubric 缺口”；
+2. 把 `next_goal` 解释成“下一轮最优先补强的方法论动作”。
+
+但 learner-facing copy 不能暗示首轮已经覆盖完整销售方法论，也不能说系统已经有独立 `qualification` rubric / stage。
+
+### Manager-facing（history / admin / coaching）
+
+manager 读侧当前也消费同一条 read-side truth line，因此管理面说明必须遵守：
+
+- 先看 `canonical_evaluation_kernel.dimensions[]` 定位命中/缺口来自哪类 evidence；
+- 再用 `effectiveness_snapshot.main_issue`、`next_goal`、`claim_truth` 解释 coaching 重点；
+- `healthy / watch / coach` 只表示当前证据校准状态，不表示系统已经提供完整的方法论认证或团队级 benchmark。
+
+换句话说：manager 面拿到的是**基于 canonical evidence 的方法论解释层**，不是第二套 manager-only 评分器。
+
 ## 可观察证据定位
 
 ### Realtime

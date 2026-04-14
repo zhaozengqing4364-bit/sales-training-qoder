@@ -98,6 +98,13 @@ docs/api-contract/
 }
 ```
 
+## 产品说明阅读顺序（M022/S01）
+
+- 面向 learner / manager 的销售方法论说明，统一以 `docs/api-contract/effectiveness.md` 为准。
+- 该文档当前描述的是**首轮方法论 / rubric contract**：`discovery / qualification`、`value`、`evidence`、`objection`、`next-step` 五个视角会映射到同一条 canonical evidence。
+- 首轮仍是 additive contract：它解释现有 `logic_score / accuracy_score / completeness_score / overall_score`、`main_issue`、`next_goal`，而不是宣布系统已经支持完整的独立方法论评分器。
+- 对外话术必须保留边界诚实：当前 `qualification` 仍并入 `opening + discovery`，不能在页面或管理文案里表述成“已经有独立 qualification rubric / stage”。
+
 ## 更新日志
 
 | 日期 | 变更 | 影响模块 |
