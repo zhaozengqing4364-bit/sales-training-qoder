@@ -161,6 +161,19 @@ export default function AdminDashboardPage() {
                 </div>
             </GlassCard>
 
+            <GlassCard className="p-5 border border-amber-100/70 bg-amber-50/60">
+                <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                    <div>
+                        <h2 className="text-sm font-bold text-slate-800 uppercase tracking-wider">管理首页真实度说明</h2>
+                        <p className="mt-2 text-sm text-slate-700 text-pretty">
+                            当前只有上方“训练效果核心看板（近7天）”直接读取 <code>api.internal.health()</code> 与 <code>api.analyticsOpen.getDashboard()</code>。
+                            以下卡片当前只作为 manager/admin truth surface inventory，用来标记还未接上真实 authority 的组织、资源与运维面。
+                        </p>
+                    </div>
+                    <Badge variant="secondary">其余卡片已降级为 inventory</Badge>
+                </div>
+            </GlassCard>
+
             {/* Bento Grid Stats */}
             <div className="grid grid-cols-12 gap-6">
 
@@ -173,41 +186,29 @@ export default function AdminDashboardPage() {
                             </div>
                             <div className="relative z-10">
                                 <div className="text-slate-500 text-xs font-bold uppercase tracking-widest mb-3">总用户数</div>
-                                <div className="text-5xl font-black text-slate-900 mb-6 tracking-tight">2,543</div>
-                                <div className="flex items-center gap-3 text-sm">
-                                    <span className="text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-full flex items-center font-bold border border-emerald-100"><ArrowUp className="w-3.5 h-3.5 mr-1" /> 12.5%</span>
-                                    <span className="text-slate-400 font-medium">较上月</span>
-                                </div>
-                            </div>
-                            {/* Mini Chart Decoration - Pastel */}
-                            <div className="absolute bottom-0 left-0 w-full h-20 flex items-end gap-1 px-8 pb-0 opacity-100">
-                                {[40, 60, 45, 70, 85, 65, 90].map((h, i) => (
-                                    <div key={i} className="flex-1 bg-blue-100/80 rounded-t-lg group-hover:bg-blue-200 transition-colors" style={{ height: `${h}%` }} />
-                                ))}
+                                <div className="text-3xl font-black text-slate-900 mb-4 tracking-tight">待接真实统计</div>
+                                <p className="text-sm text-slate-500 text-pretty">
+                                    当前首页没有统一的总用户 authority；需要回到用户列表 / admin analytics 决定应该复用哪条真实统计线。
+                                </p>
                             </div>
                         </GlassCard>
                     </DialogTrigger>
                     <DialogContent className="max-w-2xl">
                         <DialogHeader>
-                            <DialogTitle>用户增长分析</DialogTitle>
-                            <DialogDescription>用户获取与留存的详细细分。</DialogDescription>
+                            <DialogTitle>总用户数 truth surface 盘点</DialogTitle>
+                            <DialogDescription>这个入口当前只说明缺口，不再伪装增长统计已经接通。</DialogDescription>
                         </DialogHeader>
-                        <div className="py-6 grid grid-cols-2 gap-6">
-                            <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
-                                <div className="text-xs font-bold text-slate-400 uppercase">新增注册 (今日)</div>
-                                <div className="text-3xl font-black text-slate-900 mt-2">+124</div>
+                        <div className="py-6 space-y-4">
+                            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700 text-pretty">
+                                当前首页缺少“总用户数 / 新增注册 / 流失率”的统一 authority。若后续要恢复该卡片，应先明确是复用 `/admin/users` 的真实用户集合，还是复用 admin analytics 的 cohort 统计，而不是继续展示示意数字。
                             </div>
-                            <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100">
-                                <div className="text-xs font-bold text-slate-400 uppercase">流失率</div>
-                                <div className="text-3xl font-black text-red-500 mt-2">1.2%</div>
-                            </div>
-                            <div className="col-span-2 h-48 bg-slate-50 rounded-2xl flex items-center justify-center">
-                                <span className="text-slate-400 font-medium">高级增长图表组件</span>
+                            <div className="rounded-2xl border border-dashed border-slate-200 bg-white p-4 text-sm text-slate-500 text-pretty">
+                                T01 先把这块降级为 inventory；T02 再决定接真实聚合还是仅保留跳转入口。
                             </div>
                         </div>
                         <DialogFooter>
                             <Link href="/admin/users" className="w-full">
-                                <Button className="w-full rounded-full bg-slate-900 text-white">查看所有用户</Button>
+                                <Button className="w-full rounded-full bg-slate-900 text-white">前往用户管理</Button>
                             </Link>
                         </DialogFooter>
                     </DialogContent>
@@ -221,40 +222,31 @@ export default function AdminDashboardPage() {
                                 <Activity className="w-32 h-32 text-purple-600" />
                             </div>
                             <div className="relative z-10">
-                                <div className="text-slate-500 text-xs font-bold uppercase tracking-widest mb-3 flex items-center gap-2">
-                                    活跃会话 <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-pulse shadow-[0_0_10px_#10b981]" />
-                                </div>
-                                <div className="text-5xl font-black text-slate-900 mb-6 tracking-tight">84</div>
-                                <div className="flex items-center gap-3 text-sm">
-                                    <span className="text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-full flex items-center font-bold border border-emerald-100"><ArrowUp className="w-3.5 h-3.5 mr-1" /> 5.2%</span>
-                                    <span className="text-slate-400 font-medium">较昨日</span>
-                                </div>
+                                <div className="text-slate-500 text-xs font-bold uppercase tracking-widest mb-3">活跃会话</div>
+                                <div className="text-3xl font-black text-slate-900 mb-4 tracking-tight">待接真实统计</div>
+                                <p className="text-sm text-slate-500 text-pretty">
+                                    当前首页没有活跃会话的统一 authority；真实判断应回到 admin analytics / support runtime，而不是继续沿用示意值。
+                                </p>
                             </div>
                         </GlassCard>
                     </DialogTrigger>
                     <DialogContent>
                         <DialogHeader>
-                            <DialogTitle>实时会话监控</DialogTitle>
-                            <DialogDescription>当前活跃智能体与用户交互。</DialogDescription>
+                            <DialogTitle>活跃会话 truth surface 盘点</DialogTitle>
+                            <DialogDescription>这块当前保留为 inventory，提醒后续应接入真实会话线。</DialogDescription>
                         </DialogHeader>
                         <div className="space-y-4 py-4">
-                            <div className="flex items-center justify-between p-3 bg-slate-50 rounded-xl">
-                                <div className="flex items-center gap-3">
-                                    <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></div>
-                                    <div className="font-bold text-slate-700">销售教练 #01</div>
-                                </div>
-                                <div className="text-sm text-slate-500">24位活跃用户</div>
+                            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700 text-pretty">
+                                如果要展示“当前活跃会话”，应该优先复用 support/runtime 的 session health 或 admin analytics 的真实窗口统计，而不是在首页本地维护另一套数字。
                             </div>
-                            <div className="flex items-center justify-between p-3 bg-slate-50 rounded-xl">
-                                <div className="flex items-center gap-3">
-                                    <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse"></div>
-                                    <div className="font-bold text-slate-700">PPT 训练师</div>
-                                </div>
-                                <div className="text-sm text-slate-500">18位活跃用户</div>
+                            <div className="rounded-2xl border border-dashed border-slate-200 bg-white p-4 text-sm text-slate-500 text-pretty">
+                                当前管理面已有 projection-backed manager-lite 与趋势/排行榜页；首页这里只负责暴露还未 truthify 的入口。
                             </div>
                         </div>
                         <DialogFooter>
-                            <Button className="w-full rounded-full bg-slate-900 text-white">监控仪表盘</Button>
+                            <Link href="/admin/analytics" className="w-full">
+                                <Button className="w-full rounded-full bg-slate-900 text-white">前往数据分析</Button>
+                            </Link>
                         </DialogFooter>
                     </DialogContent>
                 </Dialog>
@@ -266,60 +258,55 @@ export default function AdminDashboardPage() {
                             <div className="flex justify-between items-start">
                                 <div>
                                     <div className="text-slate-500 text-xs font-bold uppercase tracking-widest mb-2">系统健康度</div>
-                                    <div className="text-2xl font-bold text-emerald-600">正常</div>
+                                    <div className={`text-2xl font-bold ${liveMetrics.backendStatus === "online" ? "text-emerald-600" : liveMetrics.backendStatus === "offline" ? "text-rose-600" : "text-slate-500"}`}>
+                                        {liveMetrics.backendStatus === "online" ? "仅后端状态已接通" : liveMetrics.backendStatus === "offline" ? "后端离线" : "状态未知"}
+                                    </div>
                                 </div>
-                                <div className="p-3 bg-emerald-50 rounded-2xl text-emerald-600">
+                                <div className={`p-3 rounded-2xl ${liveMetrics.backendStatus === "online" ? "bg-emerald-50 text-emerald-600" : liveMetrics.backendStatus === "offline" ? "bg-rose-50 text-rose-600" : "bg-slate-100 text-slate-500"}`}>
                                     <Activity className="w-6 h-6" />
                                 </div>
                             </div>
-                            <div className="space-y-5 mt-4">
-                                <div className="space-y-2">
-                                    <div className="flex justify-between text-xs font-bold text-slate-500">
-                                        <span>CPU 使用率</span>
-                                        <span>42%</span>
-                                    </div>
-                                    <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
-                                        <div className="h-full bg-emerald-400 w-[42%] rounded-full shadow-[0_2px_10px_rgba(52,211,153,0.3)]" />
-                                    </div>
-                                </div>
-
-                                <div className="space-y-2">
-                                    <div className="flex justify-between text-xs font-bold text-slate-500">
-                                        <span>内存使用率</span>
-                                        <span>68%</span>
-                                    </div>
-                                    <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
-                                        <div className="h-full bg-blue-400 w-[68%] rounded-full shadow-[0_2px_10px_rgba(96,165,250,0.3)]" />
-                                    </div>
-                                </div>
+                            <div className="space-y-4 mt-4 text-sm text-slate-500 text-pretty">
+                                <p>CPU、内存、数据库延迟等资源指标当前没有统一接入首页 authority。</p>
+                                <p>这张卡暂时只保留“后端在线 / 离线”这一条真实信号，其余内容已降级为待接监控 inventory。</p>
                             </div>
                         </GlassCard>
                     </DialogTrigger>
                     <DialogContent>
                         <DialogHeader>
-                            <DialogTitle>系统诊断</DialogTitle>
-                            <DialogDescription>服务器性能与资源利用率。</DialogDescription>
+                            <DialogTitle>系统诊断 truth surface 盘点</DialogTitle>
+                            <DialogDescription>当前首页不再伪装 CPU / 内存 / 延迟数字已经接通。</DialogDescription>
                         </DialogHeader>
-                        <div className="grid grid-cols-2 gap-4 py-4">
-                            <div className="p-3 border border-slate-200 rounded-xl text-center">
-                                <Server className="w-6 h-6 mx-auto text-slate-400 mb-2" />
-                                <div className="text-xs font-bold text-slate-500">服务器状态</div>
-                                <div className="text-emerald-600 font-bold">在线</div>
+                        <div className="grid gap-4 py-4">
+                            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700 text-pretty">
+                                已接通信号：后端健康检查（通过 <code>api.internal.health()</code> 读取在线 / 离线）。
                             </div>
-                            <div className="p-3 border border-slate-200 rounded-xl text-center">
-                                <Database className="w-6 h-6 mx-auto text-slate-400 mb-2" />
-                                <div className="text-xs font-bold text-slate-500">数据库延迟</div>
-                                <div className="text-blue-600 font-bold">24ms</div>
+                            <div className="rounded-2xl border border-dashed border-slate-200 bg-white p-4 text-sm text-slate-500 text-pretty">
+                                未接通信号：CPU、内存、数据库延迟、主机/磁盘资源。后续若要展示，应先明确复用哪条 support/runtime 或基础设施指标线。
                             </div>
                         </div>
                         <DialogFooter>
-                            <Button className="w-full rounded-full bg-slate-900 text-white">完整报告</Button>
+                            <Link href="/admin/logs" className="w-full">
+                                <Button className="w-full rounded-full bg-slate-900 text-white">查看系统日志入口</Button>
+                            </Link>
                         </DialogFooter>
                     </DialogContent>
                 </Dialog>
             </div>
 
             {/* Quick Actions & Recent */}
+            <GlassCard className="p-5 border border-slate-200/70 bg-slate-50/70">
+                <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
+                    <div>
+                        <h2 className="text-sm font-bold text-slate-800 uppercase tracking-wider">管理动作与运营动态盘点</h2>
+                        <p className="text-sm text-slate-600 text-pretty">
+                            下方区域当前主要用于盘点哪些入口仍是草拟动作、示意日志或待接告警；它们暂时不应被解读为已经接通的运营自动化或实时监控面。
+                        </p>
+                    </div>
+                    <Badge variant="secondary">draft / inventory only</Badge>
+                </div>
+            </GlassCard>
+
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
                 {/* Quick Actions Grid */}
@@ -542,66 +529,40 @@ export default function AdminDashboardPage() {
                         <GlassCard className="lg:col-span-1 p-8 flex flex-col relative overflow-hidden cursor-pointer hover:shadow-lg transition-all group">
                             <h3 className="font-bold text-lg mb-4 z-10 relative text-slate-800">存储使用率</h3>
                             <div className="flex-1 flex items-center justify-center relative z-10 p-4">
-                                <div className="relative w-56 h-56 transition-transform group-hover:scale-105">
-                                    <svg className="w-full h-full transform -rotate-90">
-                                        <circle cx="112" cy="112" r="90" stroke="#f1f5f9" strokeWidth="20" fill="transparent" />
-                                        <circle cx="112" cy="112" r="90" stroke="#3b82f6" strokeWidth="20" fill="transparent" strokeDasharray={565} strokeDashoffset={565 * (1 - 0.75)} strokeLinecap="round" className="text-blue-500 shadow-blue-200 drop-shadow-lg transition-all duration-1000 ease-out" />
-                                    </svg>
-                                    <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 text-center">
-                                        <span className="text-5xl font-black text-slate-800">75%</span>
-                                        <span className="block text-xs text-slate-400 uppercase tracking-widest mt-2 font-bold">已用</span>
-                                    </div>
+                                <div className="text-center space-y-3">
+                                    <div className="text-3xl font-black text-slate-800">待接真实统计</div>
+                                    <p className="text-sm text-slate-500 text-pretty max-w-xs">
+                                        首页当前没有统一的磁盘 / 对象存储遥测 authority，这里先保留为 inventory，避免继续伪装容量和使用率。
+                                    </p>
                                 </div>
                             </div>
                             <div className="mt-8 space-y-4 relative z-10 px-4">
                                 <div className="flex justify-between text-sm items-center">
-                                    <span className="text-slate-500 flex items-center gap-2 font-medium"><div className="w-2.5 h-2.5 rounded-full bg-blue-500 shadow-[0_0_8px_#3b82f6]" /> 数据库</span>
-                                    <span className="font-bold text-slate-800">450 GB</span>
+                                    <span className="text-slate-500 flex items-center gap-2 font-medium"><div className="w-2.5 h-2.5 rounded-full bg-blue-500 shadow-[0_0_8px_#3b82f6]" /> 当前状态</span>
+                                    <span className="font-bold text-slate-800">待接真实存储统计</span>
                                 </div>
                                 <div className="flex justify-between text-sm items-center">
-                                    <span className="text-slate-500 flex items-center gap-2 font-medium"><div className="w-2.5 h-2.5 rounded-full bg-slate-300" /> 剩余空间</span>
-                                    <span className="font-bold text-slate-800">150 GB</span>
+                                    <span className="text-slate-500 flex items-center gap-2 font-medium"><div className="w-2.5 h-2.5 rounded-full bg-slate-300" /> 后续处理</span>
+                                    <span className="font-bold text-slate-800">明确指标来源后再恢复</span>
                                 </div>
                             </div>
                         </GlassCard>
                     </DialogTrigger>
                     <DialogContent>
                         <DialogHeader>
-                            <DialogTitle>存储管理</DialogTitle>
-                            <DialogDescription>管理磁盘空间与备份。</DialogDescription>
+                            <DialogTitle>存储管理 truth surface 盘点</DialogTitle>
+                            <DialogDescription>当前 admin 首页不再展示伪造的存储百分比和容量。</DialogDescription>
                         </DialogHeader>
-                        <div className="py-6 space-y-6">
-                            <div className="p-4 rounded-xl bg-slate-50 border border-slate-100 flex items-center justify-between">
-                                <div className="flex items-center gap-3">
-                                    <Cloud className="w-6 h-6 text-blue-500" />
-                                    <div>
-                                        <div className="text-sm font-bold text-slate-900">S3 存储桶</div>
-                                        <div className="text-xs text-slate-500">区域: us-east-1</div>
-                                    </div>
-                                </div>
-                                <Button size="sm" variant="outline">管理</Button>
+                        <div className="py-6 space-y-4">
+                            <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700 text-pretty">
+                                目前仓库里没有一条已经接到 admin 首页的统一存储 telemetry：本地磁盘、对象存储、备份容量仍需要明确来自哪条基础设施指标或运维报告。
                             </div>
-                            <div className="space-y-2">
-                                <div className="flex justify-between text-xs font-bold text-slate-500">
-                                    <span>本地磁盘 A</span>
-                                    <span>92% 已满</span>
-                                </div>
-                                <div className="w-full bg-slate-100 rounded-full h-2">
-                                    <div className="bg-red-500 h-2 rounded-full w-[92%]"></div>
-                                </div>
-                            </div>
-                            <div className="space-y-2">
-                                <div className="flex justify-between text-xs font-bold text-slate-500">
-                                    <span>本地磁盘 B</span>
-                                    <span>30% 已满</span>
-                                </div>
-                                <div className="w-full bg-slate-100 rounded-full h-2">
-                                    <div className="bg-emerald-500 h-2 rounded-full w-[30%]"></div>
-                                </div>
+                            <div className="rounded-xl border border-dashed border-slate-200 bg-white p-4 text-sm text-slate-500 text-pretty">
+                                在那之前，这里只保留为 inventory 说明，不再给出使用率、剩余空间或扩容建议的假数字。
                             </div>
                         </div>
                         <DialogFooter>
-                            <Button className="w-full rounded-full bg-slate-900 text-white">扩容存储</Button>
+                            <Button className="w-full rounded-full bg-slate-900 text-white">记录为后续 truth surface</Button>
                         </DialogFooter>
                     </DialogContent>
                 </Dialog>

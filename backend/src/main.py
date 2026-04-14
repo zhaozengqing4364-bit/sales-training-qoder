@@ -51,6 +51,7 @@ from common.auth.service import (
     set_auth_session_cookie,
     create_access_token,
     get_current_admin_user,
+    get_current_admin_user_for_app_routes,
     get_dev_user,
     require_role,
 )
@@ -408,7 +409,7 @@ app.include_router(
     admin_presentations_router,
     prefix="/api/v1",
     tags=["admin-presentations"],
-    dependencies=[Depends(get_current_admin_user)],
+    dependencies=[Depends(get_current_admin_user_for_app_routes)],
 )
 app.include_router(users.router, prefix="/api/v1", tags=["users"])
 
@@ -428,7 +429,7 @@ app.include_router(
     knowledge_admin_router,
     prefix="/api/v1",
     tags=["admin-knowledge"],
-    dependencies=[Depends(get_current_admin_user)],
+    dependencies=[Depends(get_current_admin_user_for_app_routes)],
 )
 app.include_router(
     knowledge_internal_router, prefix="/api/v1", tags=["internal-knowledge"]
@@ -461,7 +462,7 @@ app.include_router(
     knowledge_bases_alias_router,
     prefix="/api/v1",
     tags=["admin-knowledge-bases"],
-    dependencies=[Depends(get_current_admin_user)],
+    dependencies=[Depends(get_current_admin_user_for_app_routes)],
 )
 
 # Conversation Replay API routes
@@ -484,7 +485,7 @@ app.include_router(
     admin_analytics_router,
     prefix="/api/v1",
     tags=["admin-analytics"],
-    dependencies=[Depends(get_current_admin_user)],
+    dependencies=[Depends(get_current_admin_user_for_app_routes)],
 )
 app.include_router(
     admin_interventions_router,

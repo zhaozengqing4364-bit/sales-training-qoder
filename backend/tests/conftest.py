@@ -69,15 +69,26 @@ async def test_db(test_engine):
 
 @pytest_asyncio.fixture
 async def async_client(test_db):
-    """Create async HTTP client for testing"""
-    from common.db.session import get_db
-    from main import app
+    """Create async HTTP client for testing."""
+    import common.auth.service as auth_service
+    import main as main_module
+    from common.db.session import get_db as current_get_db
 
-    # Override database dependency
+    app = main_module.app
+
     async def override_get_db():
         yield test_db
 
-    app.dependency_overrides[get_db] = override_get_db
+    # Some tests intentionally reload common.db.session. Routes and auth dependencies
+    # mounted before the reload still hold the original get_db callable, so keep both
+    # the current module export and the app/auth imported callables overridden.
+    override_targets = {
+        current_get_db,
+        getattr(main_module, "get_db", current_get_db),
+        getattr(auth_service, "get_db", current_get_db),
+    }
+    for target in override_targets:
+        app.dependency_overrides[target] = override_get_db
 
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
@@ -91,7 +102,7 @@ async def test_user(test_db: AsyncSession):
     """Create or return canonical development test user."""
     from common.auth.service import get_dev_user
 
-    os.environ.setdefault("ENVIRONMENT", "development")
+    os.environ["ENVIRONMENT"] = "development"
     return await get_dev_user(test_db)
 
 
@@ -115,10 +126,15 @@ async def another_user(test_db: AsyncSession):
 
 
 @pytest_asyncio.fixture
-async def auth_headers(async_client):
-    """Return authentication headers for testing with valid JWT token"""
+async def auth_headers(async_client, test_user):
+    """Return authentication headers for testing with valid JWT token."""
+    from common.auth.service import create_access_token
+
+    os.environ["ENVIRONMENT"] = "development"
+
     try:
-        # Call dev login endpoint to get valid JWT token
+        # Prefer the live dev-login path when it is available so cookie/session
+        # transport keeps exercising the mounted auth surface.
         response = await async_client.post("/api/v1/auth/dev-login")
         if response.status_code == 200:
             payload = response.json()
@@ -131,8 +147,9 @@ async def auth_headers(async_client):
                 return {"Authorization": f"Bearer {token}"}
     except Exception:
         pass
-    # Fallback for when dev endpoint is disabled or fails
-    return {"Authorization": "Bearer dev_test_token"}
+
+    token = create_access_token(data={"sub": str(test_user.user_id)})
+    return {"Authorization": f"Bearer {token}"}
 
 
 @pytest.fixture

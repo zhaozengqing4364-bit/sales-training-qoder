@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib
 import importlib.util
+import os
 from pathlib import Path
 
 import pytest
@@ -49,8 +50,16 @@ async def test_production_startup_refuses_to_patch_legacy_personas_schema(
 
     db_session = _load_db_session_module()
 
-    with pytest.raises(RuntimeError, match="Run Alembic migration 20260216_0100_015"):
-        await db_session.init_db()
+    try:
+        with pytest.raises(RuntimeError, match="Run Alembic migration 20260216_0100_015"):
+            await db_session.init_db()
+    finally:
+        # This test intentionally reloads common.db.session under a production env.
+        # Reload it back onto the development baseline so later tests do not inherit
+        # the production bootstrap module state via process-global imports.
+        os.environ.pop("DATABASE_URL", None)
+        os.environ["ENVIRONMENT"] = "development"
+        _load_db_session_module()
 
 
 def _load_db_session_module():

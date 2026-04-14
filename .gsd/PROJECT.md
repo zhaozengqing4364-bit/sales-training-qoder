@@ -2,113 +2,76 @@
 
 ## What This Is
 
-这是一个企业内部 AI 销售训练平台，围绕真实销售与 PPT 演练闭环建设：管理员配置 Persona / 知识库 / PPT，学员发起训练，会话经过实时语音与评分链路，训练结束后在统一 report / replay / history 路由上复盘，并让主管据此进行线下辅导。
+这是一个企业内部 AI 销售训练平台，围绕真实销售与 PPT 演练闭环建设：管理员配置 Agent / Persona / 知识库 / PPT，学员发起训练，会话经过实时语音与评分链路，训练结束后在统一 report / replay / history 路由上复盘，并让主管据此进行线下辅导。
 
 它不是一个“看起来有 AI 感”的演示站。当前工作的主方向是把已有能力收口成稳定、可信、可审计、可持续运营的产品能力。
 
 ## Core Value
 
 把“训练 → 反馈 → 复盘 → 再训练”做成真实可用闭环：
-- 训练过程尽量稳定，不因生命周期、重连、路由或前端异常轻易断链。
+- 训练过程稳定，不因生命周期、重连、路由或前端异常轻易断链。
 - 训练事实可审计，报告结论能回到 transcript / retrieval / audio evidence。
 - 管理员能维护长期运营资产，主管能用统一报告和趋势视角带人。
-- learner/admin 前端表层行为要统一、可信，不再依赖 demo 风格的弹窗、硬跳转或硬编码文案。
+- learner/admin 前端表层行为统一、可信，不再依赖 demo 风格的弹窗、硬跳转或硬编码文案。
 
 ## Current Product State
 
-### Core shipped baseline
-- 已有双训练模式：sales 与 presentation。
-- 已有前端骨架：Next.js 用户侧与管理侧、统一 practice / report / replay / history 路由族。
-- 已有后端骨架：FastAPI API、WebSocket runtime、PracticeSession 生命周期、报告与回放读侧。
-- 已有资产治理：Agent、Persona、知识库、PPT、语音 runtime policy 与对应 admin 页面。
+### Shipped baseline
+- 已有 sales / presentation 双训练模式。
+- 已有 learner/admin 前端骨架与统一 practice / report / replay / history 路由族。
+- 已有 FastAPI API、WebSocket runtime、PracticeSession 生命周期、报告与回放读侧。
+- 已有 Agent、Persona、知识库、PPT、voice runtime policy 与对应 admin 页面。
 
-### Already-validated milestone capabilities
-- **M001-M010**：首发训练闭环、知识与角色真实性、report/replay/history learner loop、主管趋势、retrieval truth、audio audit、conclusion evidence / degradation taxonomy 已全部验证。
-- **M011-M018**：KnowledgeAnswerEngine control plane、首登可用性与 learner 入口修复、frontend hygiene、auth/API/admin security contract、realtime/concurrency proof、performance / dependency / recovery baselines 已完成并封板。
-- **M019**：database / frontend / practice / release truth authority seams 已完成 assembled close-out。
-- **M020**：security / multi-instance runtime / recovery hardening 已完成 milestone close-out；auth transport、admin/support allowlist diagnostics、instance-local vs Redis reconnect authority、repo-local recovery drill bundle 已统一到真实代码、focused proof、长期文档与运行手册。
-- **M021**：AI control plane / prompt / evaluation kernel 统一已完成 milestone close-out：
-  - **S01**：AI/runtime/prompt/score/report 主链已盘点为 live / compat / shadow / retire candidate，后续工作不应再基于“文件名像主链”做误判。
-  - **S02**：PromptTemplateService 已真正驱动 legacy evaluation/report compiled prompt contract；missing vars / empty render / base_url / generation failure 已进入 explicit diagnostics / fail-closed contract。
-  - **S03**：canonical evaluation kernel 已完成 shared-kernel 收口：realtime、report、replay、history、admin 共享同一套 scenario-aware `canonical_evaluation_kernel` 与 `compatibility_readers`；web report/replay/history 已明确按 canonical -> compatibility -> legacy 的统一顺序消费分数事实。
-  - **S04**：AI quality/cost/failure events 与 knowledge path mode 已统一到 allowlist-safe `runtime_events` inspection surface；knowledge-answer 现以显式 `path_mode=live|compat` 暴露 provenance，support/runtime、knowledge-check、websocket diagnostics、report/replay proof 不再依赖默认分数或 fallback 文案来猜测真实状态。
-- **M022 / S01**：首轮 methodology-aware sales rubric contract 已完成 slice close-out：
-  - `common.effectiveness.methodology` 成为首轮销售方法论 authority seam，固定 `discovery_qualification`、`value_story`、`evidence_proof`、`objection_reframe`、`next_step_commitment` 五个 rubric 与 canonical dimension / stage / `main_issue` / `next_goal` 的映射。
-  - sales realtime、report/replay/history/admin 现在通过 `canonical_evaluation_kernel.methodology` 与 `compatibility_readers.sales_methodology_rubric_v1` 读取同一份方法论语义，而不是各自重解释。
-  - learner report 与 docs/api-contract 已明确写回五个 rubric 视角及其首轮边界：`qualification` 仍并入 `opening + discovery`，当前不宣称已覆盖完整销售方法论。
+### Validated milestone baseline
+- **M001-M010**：首发训练闭环、知识与角色真实性、report/replay/history learner loop、主管趋势、retrieval truth、audio audit、conclusion evidence / degradation taxonomy 已验证。
+- **M011-M018**：KnowledgeAnswerEngine control plane、learner launchability、frontend hygiene、auth/API/admin security contract、realtime/concurrency proof、performance / dependency / recovery baselines 已完成。
+- **M019-M021**：authority seams、security/multi-instance runtime/recovery hardening、AI control plane / prompt / evaluation kernel 统一已完成 assembled close-out。
+- **M022/S01-S02**：方法论/rubric contract 与 persona/scenario/industry-pack composed-asset contract 均已完成 slice close-out。
+
+### M022 current state
+- **S01 complete**：methodology-aware sales rubric contract 已落到 realtime、report、replay、history、admin shared seam。
+- **S02 complete**：industry-pack / customer-pressure composed-asset contract 已落到现有 admin entrypoints、frozen `voice_policy_snapshot_ref.runtime_binding`、session detail/report/replay 与文档 operating rules。
+- **S03 pending**：下一步应收口 manager calibration 与 admin truth surfaces，并直接复用 S01/S02 已固定的 canonical evidence / runtime-binding seams。
+- **S04 pending**：organization / team / tenant target-state plan 仍待基于 S01-S03 的稳定 authority seam 制定执行路线。
 
 ## Current Product Truths
 
-- 当前权威 learner surfaces 仍是现有 `/practice/{sessionId}`、`/practice/{sessionId}/report`、`/practice/{sessionId}/replay`、`/history`，不是新造第二套路由。
-- 当前权威 admin surfaces 仍是现有 `/admin/*` 页面族，不应平行再造管理工作台。
-- 训练事实权威线已经建立：会话生命周期、retrieval truth、audio audit、conclusion evidence、degradation taxonomy 都应复用现有 shared seam，而不是页面本地再推导。
-- 前端 hygiene 边界已有明确约束：raw `console.*` 只允许出现在 shared debug seam / instrumentation 例外；native dialog / hard navigation 只允许出现在已文档化例外，其余业务流程必须走 shared dialog / toast / router / auth-handler seam；learner shell fallback 只按 learner-core route families 闭合。
-- auth recovery 权威线已经明确：忘记密码/重置密码沿 `PasswordResetService`、`PasswordResetToken` 与 Alembic 026/027/028 演进；`User.hashed_password` 一旦存在就是登录 authority，兼容密码环境变量只留给未托管密码的历史用户。
-- audited API error-contract 权威线同样明确：route-local 4xx 用 `JSONResponse(error_response(...))` 暴露顶层 `error/message/trace_id`；dependency/auth/RBAC 失败继续走结构化 `detail={error,message}`；前端统一从 `web/src/lib/api/client.ts` 的 `normalizeApiErrorPayload` / `ApiRequestError` 读取。
-- admin security baseline 权威线已补齐第一批高风险 seam：admin-only RBAC 必须直接声明在 router module 上；token/password/cookie/email 的日志保护必须落在 `StructuredLogger` 共享 sink；`backend/src/admin/api/security_inventory.py` 与 `backend/src/common/monitoring/log_safety_inventory.py` 是后续 widening 的代码级事实源。
-- lifecycle concurrency 权威线已经明确：stale `pause` / `resume` writers 只能在写入时通过 status compare-and-swap 收敛；sales 终态语义仍是 `end -> scoring`、presentation 终态语义仍是 `end -> completed`。
-- websocket realtime 权威线已经明确：`usePracticeWebSocket()` 继续拥有 transport lifecycle、initial pending flush、binary negotiation、local backpressure buffering 与 interrupt pre-cleanup；`web/src/hooks/websocket/message-handlers.ts` 继续拥有 inbound state projection；reconnect 是 fresh transport epoch，不应 replay stale dead-socket intent。
-- **M020/S01 auth transport authority 已固定**：`backend/src/common/auth/service.py` 是 cookie/CSRF/websocket auth 的共享 authority seam；非 development 下 session/CSRF cookie 强制 `Secure`；cookie-backed unsafe request 走双提交 CSRF 校验；websocket auth authority 为 `Authorization -> session cookie -> query token compatibility`。
-- **M020/S02 admin/support observability authority 已固定**：`backend/src/common/monitoring/logger.py` 是 allowlist-first diagnostics authority seam；`/api/v1/admin/system-logs` 与 `/admin/logs` 只暴露 masked identifiers、safe diagnostics、policy metadata；raw details / precise IP / provider payload / secrets 保持 backend-only。
-- **M020/S03 runtime authority 已固定**：`SessionManager.get_stats()` 只回答 instance-local live connection，`SessionStateService.get_stats()` 才是 shared Redis reconnect snapshot authority；support/runtime 仍是 release-health summary，不是 cluster-wide websocket state API。
-- **M020/S04 recovery / deploy authority 已固定**：`scripts/recovery_drill_baseline.py` 是 repo-local recovery drill inventory authority，`scripts/recovery_drill_runner.py` 只执行同一 metadata 并把证据落到 `.dev/recovery-drills/<timestamp>/`；release/recovery proof 必须配对 deploy health、support runtime、以及最新 drill bundle。
-- **M021/S01 AI authority inventory 已固定**：live sales/presentation realtime authority 仍在 `sales_bot/websocket/stepfun_realtime_handler.py` 与 voice runtime policy/compiler；`PromptTemplateService` 是 governance + legacy compiled-contract seam，不是 live StepFun prompt authority；classic scoring、legacy evaluation/report、manual `/evaluation/*` 仍是 compat/enhancement surfaces。
-- **M021/S02 compiled prompt authority 已固定**：`PromptTemplateService.compile_runtime_prompt_contract(...)` 是 legacy evaluation/report compiled prompt handoff seam；compiled path 会显式记录并 fail-close 到 `[PROMPT_CONTRACT_MISSING_VARIABLES:*]`、`[PROMPT_CONTRACT_EMPTY_RENDERED_PROMPT]`、`[PROMPT_CONTRACT_BASE_URL_REQUIRED]`、`[LLM_GENERATION_ERROR:*]`。
-- **M021/S03 canonical evaluation authority 已固定**：
-  - `backend/src/common/effectiveness/canonical.py` 是 scenario-aware canonical dimension catalog、shared rollup contract、surface reader plan 的 code-owned authority；
-  - `SessionEvidenceService` 是 report/replay/history/admin 的 canonical projection authority，并把 canonical kernel 与 compatibility readers 一起暴露给下游；
-  - realtime score snapshot persistence 必须同步扩展 `sales_bot/websocket/components/stepfun_message_helpers.normalize_score_snapshot()`，否则新 kernel 字段会只在内存存在、落库时丢失；
-  - web read-side 必须复用 `web/src/lib/session-evidence.ts::readSessionEvaluationRollups(...)`，统一执行 `canonical_evaluation_kernel -> compatibility_readers -> legacy rollups`，不得再让页面各自重算或偷读旧字段。
-- **M021/S04 runtime-event authority 已固定**：
-  - `backend/src/common/knowledge_engine/runtime_events.py` 是 AI quality/cost/failure/mode eventization 的 shared authority seam；
-  - knowledge-answer 对外 provenance 现以显式 `path_mode=live|compat` 暴露，`rollout_mode` 退居 supporting detail；
-  - `build_session_runtime_diagnostics()`、StepFun websocket diagnostics、`/api/v1/support/runtime/faults.items[].diagnostics.runtime_events[]`、以及 `LLMService` runtime bookkeeping 共享同一 allowlist-safe event shape；
-  - `category=mode` 只回答路径来源，真正的 degraded/failure 由 `severity` 表达；report/replay 前端 proof 则继续用 `data-contract-source` 与显式 failure copy 锁定 compat/degraded 语义，而不是发明第二套 UI-only 状态层。
-- **M022/S01 methodology authority 已固定**：
-  - `backend/src/common/effectiveness/methodology.py` 是首轮销售方法论/rubric authority seam；
-  - sales methodology 语义应优先读取 `canonical_evaluation_kernel.methodology`，过渡消费者读取 `compatibility_readers.sales_methodology_rubric_v1`；
-  - 当前 `qualification` 仍并入 `opening + discovery`，除非 `sales_stage` 先扩展真实 stage，否则任何 surface 都不能单方面宣称独立 qualification stage 已存在；
-  - learner-facing report copy 与 manager-facing docs 必须继续把 `main_issue` / `next_goal` 解释为这套 rubric 在 canonical evidence 上的缺口与补强动作，而不是额外第二套评分器。
+- learner 权威 surfaces 仍是现有 `/practice/{sessionId}`、`/practice/{sessionId}/report`、`/practice/{sessionId}/replay`、`/history`。
+- admin 权威 surfaces 仍是现有 `/admin/*` 页面族，不应平行再造第二工作台。
+- 会话事实权威线已经建立：生命周期、retrieval truth、audio audit、conclusion evidence、degradation taxonomy、methodology rubric、industry-pack runtime binding 都应复用现有 shared seam，而不是页面本地再推导。
+- audited API error-contract 权威线明确：route-local 4xx 用 `JSONResponse(error_response(...))`，dependency/auth/RBAC 失败继续走结构化 `detail={error,message}`，前端统一经 `ApiRequestError` 读取。
+- lifecycle / websocket / auth / support-runtime / canonical evaluation / methodology / industry-pack seams 都已在 M019-M022/S02 收口，不应重开第二套入口或本地推导逻辑。
+- **industry pack 当前不是独立平台**：它仍是 composed asset，运行时 authority 来自现有 agent/persona/knowledge/scenario surfaces 与冻结的 `voice_policy_snapshot_ref.runtime_binding`，不是新表/新控制面。
 
 ## Current Focus
 
-当前项目处于 **M022 已启动且 S01 已完成、后续继续沿 productization / manager truth / organization-ready 路线推进** 的状态：
-- **M019/M020/M021** 的 authority seams 已全部完成 assembled close-out，当前最重要的工作不是重开新入口，而是沿已封板权威线做后续退休与修补。
-- **M021** 刚完成 fresh milestone-level verification：
-  - non-`.gsd` branch diff 已确认存在大量真实 backend/web/docs/test 改动；
-  - assembled milestone proof bundle `backend/venv/bin/python -m pytest -c backend/pyproject.toml ...` 覆盖 S01-S04 关键 seam，共 **86/86 通过**；
-  - `compile_runtime_prompt_contract|canonical_evaluation_kernel|runtime_events|path_mode` grep gate 与关键 authority 文件的 LSP diagnostics 均通过。
-- **M022/S01** 已 fresh close-out：
-  - slice plan 三条验证线全部 fresh 通过：backend `sales and (report or replay or history or analytics)` bundle、两条 exact grep gates、以及 learner report focused tests；
-  - S01 已把“方法论 aware 的 rubric contract”从 planner 文字推进成 code-owned + read-side-consumed + learner-doc-visible 的 authority seam，为 S02 persona/scenario/industry pack 和 S03 manager/admin truth surfaces 提供复用基线。
-- 仍然需要持续关注的遗留真实问题：`.dev/recovery-drills/20260414T010316Z/summary.json` 中 `auth_bootstrap`、`redis_session_state`、`oss_signing_playback`、`health_check` 已通过，但 `db_migration` 仍真实暴露 `KeyError: '20260412_0315_028'`，不能被 `/health` 掩盖。
+当前项目处于 **M022 进行中**：
+1. **推进 M022/S03-S04**：在已固定的 methodology contract 与 industry-pack contract 之上，完成 manager/admin truth surface 收口与 organization/team/tenant target-state plan。
+2. **保持已完成 seams 稳定**：S03 必须直接复用 `canonical_evaluation_kernel.methodology`、`compatibility_readers.sales_methodology_rubric_v1`、`voice_policy_snapshot_ref.runtime_binding`、canonical report/replay/detail surfaces，而不是重新发明 manager-only taxonomy 或第二条 evidence line。
+3. **继续沿现有 admin entrypoints 运营内容资产**：customer pressure、knowledge bundle、scenario narrative 仍通过 agent/persona/knowledge/scenario 现有 surface 管理，避免 scope 回到新平台建设。
 
-接下来的重点：
-1. 推进 **M022/S02-S04**：在已固定的 methodology contract 之上做 persona/scenario/industry pack 运营化、manager/admin truth surface 收口、organization/team/tenant target-state plan，而不是各自再解释什么叫“好销售对话”。
-2. 规划 **post-M021 compat retirement**：只有在 report/replay/history/admin/support 等所有消费面都不再依赖 compat fallback 后，才能开始退休 compatibility readers、legacy evaluation/report、manual `/evaluation/*` 等旧 surface。
-3. 修复 `20260412_0315_028` 对应的 Alembic revision / migration-graph drift，然后重跑同一套 recovery drills，直到 `db_migration` 也转绿。
-4. 保持 M019/M020/M021/M022-S01 已封板 authority seams 稳定，不要重开第二套 startup/migration/practice/frontend/release/auth/observability/evaluation/methodology 入口。
+## M022 precise resume notes
 
-当前不应做的事：
-- 不要把 `init_db()` 的 `create_all()` / compat guard 外推成生产迁移 authority。
-- 不要因为 `scripts/dev-up.sh` 能启动，就跳过 `alembic upgrade head` 或显式 repair。
-- 不要在 practice backend 后续切片里重新把 create/lifecycle/report/audio orchestration 塞回 `common/api/practice.py`。
-- 不要让页面直接调用内部 domain builders 或本地拼 websocket transport；应继续沿 outward `api` façade 和 `usePracticeWebSocket()` 收口。
-- 不要让后续 milestone 只凭 workflow 绿灯就宣称 release truth 完整；必须继续复用 web/backend/doc/metrics/error-reporting 的 assembled proof。
-- 不要让后续 auth slices 回退到隐含默认值：cookie secure、CSRF、websocket query token、shared password 都已经在 M020/S01 被写成显式 authority / compatibility / off-ramp 规则。
-- 不要让未来 admin/support observability slices 在 route 或 UI 层重新暴露 raw `details`、精确 identity/IP、provider/request payload 或 secret-adjacent config；这些已经在 M020/S02 被明确划回 backend-only。
-- 不要把单实例 `SessionManager.total_sessions=0` 误写成“集群已 drain 完毕”；S03 已明确这只是 instance-local 视角，真正 restart-safe 的 shared authority 只有 Redis reconnect snapshot。
-- 不要把 `/health`、systemd active、或一份 runbook 文档单独当成“recovery 已验证”；S04 已明确必须配对最新 `.dev/recovery-drills/<timestamp>/summary.json` + 逐 drill log，并把失败 drill 如实写进 release/recovery 记录。
-- 不要发明第二套 recovery command list；后续 drill / deploy / support guidance 必须直接复用 `scripts/recovery_drill_baseline.py` 的 metadata，而不是在 plan/doc/script 里各自维护一套。
-- 不要把 `PromptTemplateService` 倒推成 live StepFun prompt authority，也不要在 classic `voice_mode == "legacy"`、legacy report/evaluation readers、PromptTemplateService governance/helper surfaces、或 knowledge compat debug/audit consumers 仍存在时粗暴删除 legacy AI surfaces。
-- 不要让 compiled prompt failures 重新回到 silent fail-open：缺变量、空渲染、provider/base_url 缺失、generation error 已经在 M021/S02 被定义成 explicit diagnostics / fail-closed contract；后续工作应沿这条 seam 扩展，而不是重新引入 filler copy 掩盖失败。
-- 不要让 report / replay / history / future admin pages 绕开 shared frontend score resolver 重新解释 fallback 顺序；一旦某个 surface 私自重算，就会让 compatibility fallback 无法被准确退休。
-- 不要让 `runtime_events` 再分裂成 logger-only、support-only、UI-only 三套语义；S04 已固定必须沿同一 allowlist-safe event shape 暴露 degraded / failure / cost / mode 事实。
-- 不要为 sales methodology 再发明 manager-only taxonomy、report-only score block、或 page-local rubric heuristics；M022/S01 已固定一条 shared methodology seam，后续扩展必须沿它加法演进。
-
-## Capability Contract
-
-显式 requirement 状态与验证证据以 `.gsd/REQUIREMENTS.md` 为准。
+- **S02 delivered seams**
+  - `backend/src/agent/services/industry_pack_contract.py`
+  - `backend/src/common/db/voice_policy_snapshot.py`
+  - `backend/src/common/conversation/schemas.py`
+  - `web/src/app/admin/personas/[id]/page.tsx`
+  - `web/src/app/admin/agents/[id]/page.tsx`
+  - `.gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md`
+  - `.gsd/plans/GSD_PLAN_post-M018-next-wave.md`
+- **S02 close-out remediation that is now landed**
+  - `backend/src/common/knowledge/service.py`: embedding-failure fallback now drops from non-positive BM25 scores to a direct lexical scan on tiny collections instead of returning false `[KNOWLEDGE_SEARCH_UNAVAILABLE]` misses.
+  - `backend/src/common/services/practice_report_service.py`: audio-segment failure path refreshes the session after commit so the updated snapshot remains visible on the shared ORM identity line.
+  - `backend/tests/unit/test_audio_segment_api.py`: local ASGI fixture now overrides all live imported `get_db` callables, matching the broader test-harness pattern after app/auth reload tests.
+  - `.gsd/KNOWLEDGE.md`: captured the BM25 fallback gotcha and the live-imported `get_db` override gotcha for future auto-mode runs.
+- **Fresh S02 close-out proof**
+  - `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests -k "persona or knowledge or scenario or policy" -x -q`
+  - `npm --prefix web test -- --run "src/app/admin/personas/[id]/page.test.tsx"`
+  - `npm --prefix web test -- --run "src/app/admin/agents/[id]/page.test.tsx"`
+  - `rg -n "persona_policy|customer_pressure|scenario|knowledge_base|agent|industry" backend/src/agent backend/src/sales_bot backend/src/common/knowledge`
+  - `rg -n "industry pack|customer pressure|scenario package|knowledge bundle" .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md .gsd/plans/GSD_PLAN_post-M018-next-wave.md`
+- **Next session should start from S03 planning/execution**, not from additional S02 cleanup. Reuse `voice_policy_snapshot_ref.runtime_binding` and the existing admin detail/read surfaces as the manager/admin truth seam.
 
 ## Milestone Snapshot
 
@@ -133,4 +96,4 @@
 - [x] M019 — Authority seams 与 release gate 收口
 - [x] M020 — Security / multi-instance runtime / recovery hardening
 - [x] M021 — AI control plane / prompt / evaluation kernel 统一
-- [ ] M022 — Sales productization / manager truth / organization-ready roadmap（S01 complete；S02-S04 pending）
+- [ ] M022 — Sales productization / manager truth / organization-ready roadmap（S01-S02 complete；S03-S04 pending）

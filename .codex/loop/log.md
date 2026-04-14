@@ -1,3 +1,22 @@
+- time: 2026-04-14T15:47:30+08:00
+  mode: grow
+  item id: M022-S03-T01
+  files changed:
+    - web/src/app/admin/page.tsx
+    - web/src/app/admin/page.test.tsx
+    - .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md
+    - .gsd/DECISIONS.md
+    - .codex/loop/state.json
+    - .codex/loop/log.md
+  summary: Finished M022/S03/T01 by turning the admin home into an honesty-first inventory instead of a mixed live/demo dashboard. `web/src/app/admin/page.tsx` now keeps only the top effectiveness card on real `internal.health + analyticsOpen.getDashboard` data, explicitly marks the rest of the admin-home ops cards as truth-surface inventory, removes the hardcoded fake user/session/resource/storage numbers, and rewrites those dialogs as gap descriptions plus links into existing real surfaces. The architecture scan now records the exact priority order for S03: admin analytics, manager-lite, and user detail/interventions are already projection-backed P0 truth surfaces; the remaining admin-home cards and draft action areas are not.
+  verification commands:
+    - npm --prefix web test -- --run src/app/admin/page.test.tsx
+    - rg -n "2543|84|placeholder|demo|mock|dummy|manager-lite|analytics" web/src/app/admin web/src/components/admin backend/src/common/analytics backend/src/admin/api
+    - rg -n "2,543|84|42%|68%|75%|450 GB" web/src/app/admin/page.tsx
+  verification results: passed; the new fail-first admin page proof finished 1/1 green, the exact task-plan grep gate stayed green across the intended manager/admin/analytics surfaces, and the targeted old-literal grep exited 1 because the fake admin-home stats are gone.
+  success signal status: M022/S03 now has one durable inventory showing which manager/admin surfaces already sit on canonical evidence and which admin-home cards must stay downgraded until T02 connects real stats.
+  rollback note: if later work reconnects any admin-home card to real authority, update the page copy/dialogs, the focused admin page test, and the M022/S03 architecture inventory together so the home page never drifts back into mixed live/demo claims.
+
 - time: 2026-04-14T14:45:15+08:00
   mode: grow
   item id: M022-S02-T03

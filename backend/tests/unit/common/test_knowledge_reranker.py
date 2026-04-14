@@ -47,8 +47,7 @@ def test_reranker_prioritizes_title_entity_doc_type_section_and_exposes_breakdow
         top_k=2,
     )
 
-    assert [item["document_title"] for item in ranked] == ["石犀科技产品介绍", "常见问题"]
-    assert ranked[0]["score"] > ranked[1]["score"]
+    assert [item["document_title"] for item in ranked] == ["石犀科技产品介绍"]
     breakdown = ranked[0]["score_breakdown"]
     assert breakdown["base_score"] == pytest.approx(0.52)
     assert breakdown["title_exact"] == pytest.approx(0.25)

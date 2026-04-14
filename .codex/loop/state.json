@@ -1,6 +1,6 @@
 {
   "mode": "grow",
-  "current_issue_id": "M022-S02-T03",
+  "current_issue_id": "M022-S03-T01",
   "current_issue_type": "task",
   "current_issue_status": "done",
   "pending_issue_ids": [],
@@ -219,22 +219,26 @@
     "M022-S01-T02",
     "M022-S01-T03",
     "M022-S01",
-    "M022-S02-T03"
+    "M022-S02-T03",
+    "M022-S03-T01"
   ],
   "blocked_issue_ids": [],
   "deferred_issue_ids": [],
   "last_modified_files": [
+    "web/src/app/admin/page.tsx",
+    "web/src/app/admin/page.test.tsx",
     ".gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md",
-    ".gsd/plans/GSD_PLAN_post-M018-next-wave.md",
-    ".gsd/milestones/M022/slices/S02/tasks/T03-SUMMARY.md",
+    ".gsd/DECISIONS.md",
     ".codex/loop/state.json",
     ".codex/loop/log.md"
   ],
   "last_verification_commands": [
-    "rg -n \"industry pack|customer pressure|scenario package|knowledge bundle\" .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md .gsd/plans/GSD_PLAN_post-M018-next-wave.md"
+    "npm --prefix web test -- --run src/app/admin/page.test.tsx",
+    "rg -n \"2543|84|placeholder|demo|mock|dummy|manager-lite|analytics\" web/src/app/admin web/src/components/admin backend/src/common/analytics backend/src/admin/api",
+    "rg -n \"2,543|84|42%|68%|75%|450 GB\" web/src/app/admin/page.tsx"
   ],
-  "last_verification_result": "passed; the exact task-plan grep gate exited 0 and matched the new runtime/report/manager-calibration operating rules plus the manual-ops boundary in both the architecture scan and the next-wave plan.",
-  "last_success_signal": "M022/S02 now writes one boundary-honest operating rule set for industry pack, customer pressure, knowledge bundle, and scenario package back into both the architecture scan and the product plan.",
+  "last_verification_result": "passed; the new fail-first admin page test finished 1/1 green, the exact task-plan grep gate stayed green across admin/manager/analytics surfaces, and the targeted old-literal grep now exits 1 because the hardcoded fake admin-home stats were removed.",
+  "last_success_signal": "M022/S03/T01 leaves one explicit admin-home honesty line in code plus one durable architecture inventory: admin analytics, manager-lite, and user detail are the current canonical manager/admin truth surfaces, while the remaining admin-home ops cards are visibly downgraded to inventory instead of pretending to be live stats.",
   "last_growth_scan": null,
-  "next_action": "Close M022/S02 at slice level or proceed to M022-S03 using voice_policy_snapshot_ref.runtime_binding as the manager calibration truth source."
+  "next_action": "Proceed to M022-S03-T02 by wiring the downgraded admin-home cards and any remaining manager/admin decision surfaces onto existing projection-backed analytics, manager-lite, and user-detail truth lines instead of inventing new summary math."
 }

@@ -51,13 +51,22 @@ async def _db():
 @pytest_asyncio.fixture
 async def _client(_db: AsyncSession):
     """Async HTTP test client wired to the isolated DB."""
-    from common.db.session import get_db
-    from main import app
+    import common.auth.service as auth_service
+    import main as main_module
+    from common.db.session import get_db as current_get_db
+
+    app = main_module.app
 
     async def _override():
         yield _db
 
-    app.dependency_overrides[get_db] = _override
+    override_targets = {
+        current_get_db,
+        getattr(main_module, "get_db", current_get_db),
+        getattr(auth_service, "get_db", current_get_db),
+    }
+    for target in override_targets:
+        app.dependency_overrides[target] = _override
 
     # Ensure dev-login works
     os.environ.setdefault("ENVIRONMENT", "development")

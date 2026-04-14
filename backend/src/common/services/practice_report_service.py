@@ -602,6 +602,7 @@ class PracticeAudioSegmentService:
             error_token=error_token,
         )
         await self.db.commit()
+        await self.db.refresh(session)
         await self.db.refresh(segment)
 
         logger.info(

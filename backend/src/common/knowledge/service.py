@@ -1672,6 +1672,9 @@ class KnowledgeService:
             if collection is None:
                 continue
 
+            bm25_hits: list[tuple[str, float]] = []
+            max_bm25_score = 0.0
+
             # Ensure BM25 index is built and fresh (lazy + auto-rebuild on stale)
             try:
                 bm25_manager.ensure_index(
@@ -1681,64 +1684,112 @@ class KnowledgeService:
                     ),
                     get_chunk_count=lambda c=collection: c.count(),
                 )
+                bm25_hits = bm25_manager.search(
+                    collection_name=kb.vector_collection,
+                    query=expanded_query,
+                    top_k=max(top_k, 20),
+                )
+                if bm25_hits:
+                    max_bm25_score = bm25_hits[0][1]
             except Exception as exc:  # noqa: BLE001
                 logger.warning(
                     "BM25 index build failed, falling back to legacy scan",
                     knowledge_base_id=kb_id,
                     reason=str(exc),
                 )
+
+            if bm25_hits and max_bm25_score > 0:
+                # Fetch metadata for hit chunk IDs
+                hit_ids = [chunk_id for chunk_id, _ in bm25_hits]
+                id_to_meta = bm25_manager.get_metadatas(kb.vector_collection, hit_ids)
+
+                for chunk_id, bm25_score in bm25_hits:
+                    metadata = id_to_meta.get(chunk_id, {})
+
+                    # Apply metadata filter
+                    if not self._metadata_matches(metadata, metadata_filter):
+                        continue
+
+                    # Apply ready-document filter
+                    if ready_document_ids is not None:
+                        document_id = str(metadata.get("document_id") or "").strip()
+                        if not document_id or document_id not in ready_document_ids:
+                            continue
+
+                    # Normalize BM25 score to [0.45, 0.95] range for fusion compatibility
+                    # Formula mirrors the old: min(0.95, 0.45 + raw_score * 0.07)
+                    normalized_score = round(min(0.95, 0.45 + bm25_score * 0.07), 4)
+
+                    # Get content from collection for the matched chunk
+                    try:
+                        chunk_data = collection.get(ids=[chunk_id], include=["documents"])
+                        content = ""
+                        if isinstance(chunk_data, dict):
+                            docs = chunk_data.get("documents", [])
+                            if docs and isinstance(docs[0], str):
+                                content = docs[0]
+                    except Exception:  # noqa: BLE001
+                        content = ""
+
+                    if not content.strip():
+                        continue
+
+                    merged_results.append(
+                        {
+                            "content": content.strip(),
+                            "score": normalized_score,
+                            "source": metadata.get("document_title", "未知来源"),
+                            "metadata": {
+                                "document_id": metadata.get("document_id"),
+                                "document_title": metadata.get("document_title"),
+                                "chunk_index": metadata.get("chunk_index"),
+                            },
+                            "knowledge_base_id": kb_id,
+                            "knowledge_base_name": kb.name,
+                            "retrieval_mode": "keyword_fallback",
+                        }
+                    )
                 continue
 
-            # BM25 search
-            bm25_hits = bm25_manager.search(
-                collection_name=kb.vector_collection,
-                query=expanded_query,
-                top_k=max(top_k, 20),
-            )
-
-            if not bm25_hits:
+            try:
+                raw_chunks = collection.get(include=["documents", "metadatas"])
+            except Exception as exc:  # noqa: BLE001
+                logger.warning(
+                    "Keyword legacy scan failed after BM25 fallback",
+                    knowledge_base_id=kb_id,
+                    reason=str(exc),
+                )
                 continue
 
-            # Fetch metadata for hit chunk IDs
-            hit_ids = [chunk_id for chunk_id, _ in bm25_hits]
-            id_to_meta = bm25_manager.get_metadatas(kb.vector_collection, hit_ids)
+            raw_ids = raw_chunks.get("ids", []) if isinstance(raw_chunks, dict) else []
+            raw_docs = raw_chunks.get("documents", []) if isinstance(raw_chunks, dict) else []
+            raw_metas = raw_chunks.get("metadatas", []) if isinstance(raw_chunks, dict) else []
 
-            # Determine score range for normalization
-            max_bm25_score = bm25_hits[0][1] if bm25_hits else 1.0
-            if max_bm25_score <= 0:
-                continue
+            for index, content in enumerate(raw_docs):
+                if not isinstance(content, str) or not content.strip():
+                    continue
 
-            for chunk_id, bm25_score in bm25_hits:
-                metadata = id_to_meta.get(chunk_id, {})
+                metadata = raw_metas[index] if index < len(raw_metas) and isinstance(raw_metas[index], dict) else {}
 
-                # Apply metadata filter
                 if not self._metadata_matches(metadata, metadata_filter):
                     continue
 
-                # Apply ready-document filter
                 if ready_document_ids is not None:
                     document_id = str(metadata.get("document_id") or "").strip()
                     if not document_id or document_id not in ready_document_ids:
                         continue
 
-                # Normalize BM25 score to [0.45, 0.95] range for fusion compatibility
-                # Formula mirrors the old: min(0.95, 0.45 + raw_score * 0.07)
-                normalized_score = round(min(0.95, 0.45 + bm25_score * 0.07), 4)
-
-                # Get content from collection for the matched chunk
-                try:
-                    chunk_data = collection.get(ids=[chunk_id], include=["documents"])
-                    content = ""
-                    if isinstance(chunk_data, dict):
-                        docs = chunk_data.get("documents", [])
-                        if docs and isinstance(docs[0], str):
-                            content = docs[0]
-                except Exception:  # noqa: BLE001
-                    content = ""
-
-                if not content.strip():
+                score = self._keyword_match_score(
+                    normalized_content=content.strip().lower(),
+                    normalized_query=normalized_query,
+                    candidates=merged_candidates,
+                )
+                if score <= 0:
                     continue
 
+                chunk_index = metadata.get("chunk_index")
+                chunk_id = raw_ids[index] if index < len(raw_ids) else None
+                normalized_score = round(min(0.95, 0.45 + score * 0.07), 4)
                 merged_results.append(
                     {
                         "content": content.strip(),
@@ -1747,7 +1798,8 @@ class KnowledgeService:
                         "metadata": {
                             "document_id": metadata.get("document_id"),
                             "document_title": metadata.get("document_title"),
-                            "chunk_index": metadata.get("chunk_index"),
+                            "chunk_index": chunk_index,
+                            "chunk_id": chunk_id,
                         },
                         "knowledge_base_id": kb_id,
                         "knowledge_base_name": kb.name,

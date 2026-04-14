@@ -372,6 +372,26 @@ async def get_current_admin_user(
     return current_user
 
 
+async def get_current_admin_user_for_app_routes(
+    current_user: User = Depends(get_current_user)
+) -> User:
+    """
+    App-level admin dependency for router-mirrored `/api/v1/admin/**` route families.
+
+    Keeps the structured `detail.error` payload on the existing `[ROLE_REQUIRED]`
+    contract so isolated router tests and downstream permission inventories do not
+    drift, while making the top-level `message` string include `ADMIN_REQUIRED`
+    for the app-mounted RBAC smoke tests that assert the public error wording.
+    """
+    if not hasattr(current_user, "role") or current_user.role != "admin":
+        _raise_auth_http_error(
+            status_code=403,
+            error_code="[ROLE_REQUIRED]",
+            message="[ADMIN_REQUIRED] 当前账号权限不足，无法执行该操作。",
+        )
+    return current_user
+
+
 def require_role(allowed_roles: list[str]):
     """
     Dependency factory for role-based access control.

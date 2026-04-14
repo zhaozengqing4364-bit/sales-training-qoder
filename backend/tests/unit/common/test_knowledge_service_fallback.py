@@ -38,24 +38,39 @@ async def test_search_multiple_falls_back_to_keywords_when_embedding_fails(monke
     )
 
     class DummyCollection:
-        def get(self, include=None):
+        _documents = [
+            "十七科技的实习产品支持销售训练和话术演练。",
+            "这是无关的资料。",
+        ]
+        _metadatas = [
+            {
+                "document_id": "doc-1",
+                "document_title": "产品手册",
+                "chunk_index": 1,
+            },
+            {
+                "document_id": "doc-2",
+                "document_title": "其他资料",
+                "chunk_index": 1,
+            },
+        ]
+        _ids = ["chunk-1", "chunk-2"]
+
+        def count(self):
+            return len(self._documents)
+
+        def get(self, ids=None, include=None):
+            if ids is not None:
+                selected_docs = [
+                    self._documents[self._ids.index(chunk_id)]
+                    for chunk_id in ids
+                    if chunk_id in self._ids
+                ]
+                return {"documents": selected_docs}
             return {
-                "documents": [
-                    "十七科技的实习产品支持销售训练和话术演练。",
-                    "这是无关的资料。",
-                ],
-                "metadatas": [
-                    {
-                        "document_id": "doc-1",
-                        "document_title": "产品手册",
-                        "chunk_index": 1,
-                    },
-                    {
-                        "document_id": "doc-2",
-                        "document_title": "其他资料",
-                        "chunk_index": 1,
-                    },
-                ],
+                "ids": list(self._ids),
+                "documents": list(self._documents),
+                "metadatas": list(self._metadatas),
             }
 
     vector_store = MagicMock()
@@ -105,16 +120,31 @@ async def test_search_multiple_returns_error_when_embedding_fails_and_no_keyword
     )
 
     class DummyCollection:
-        def get(self, include=None):
+        _documents = ["完全不相关的内容"]
+        _metadatas = [
+            {
+                "document_id": "doc-3",
+                "document_title": "其他资料",
+                "chunk_index": 1,
+            }
+        ]
+        _ids = ["chunk-3"]
+
+        def count(self):
+            return len(self._documents)
+
+        def get(self, ids=None, include=None):
+            if ids is not None:
+                selected_docs = [
+                    self._documents[self._ids.index(chunk_id)]
+                    for chunk_id in ids
+                    if chunk_id in self._ids
+                ]
+                return {"documents": selected_docs}
             return {
-                "documents": ["完全不相关的内容"],
-                "metadatas": [
-                    {
-                        "document_id": "doc-3",
-                        "document_title": "其他资料",
-                        "chunk_index": 1,
-                    }
-                ],
+                "ids": list(self._ids),
+                "documents": list(self._documents),
+                "metadatas": list(self._metadatas),
             }
 
     vector_store = MagicMock()
@@ -160,16 +190,31 @@ async def test_search_multiple_merges_vector_and_keyword_into_hybrid(monkeypatch
     )
 
     class DummyCollection:
-        def get(self, include=None):
+        _documents = ["十七科技实习产品支持销售训练和话术演练。"]
+        _metadatas = [
+            {
+                "document_id": "doc-1",
+                "document_title": "产品手册",
+                "chunk_index": 1,
+            },
+        ]
+        _ids = ["chunk-1"]
+
+        def count(self):
+            return len(self._documents)
+
+        def get(self, ids=None, include=None):
+            if ids is not None:
+                selected_docs = [
+                    self._documents[self._ids.index(chunk_id)]
+                    for chunk_id in ids
+                    if chunk_id in self._ids
+                ]
+                return {"documents": selected_docs}
             return {
-                "documents": ["十七科技实习产品支持销售训练和话术演练。"],
-                "metadatas": [
-                    {
-                        "document_id": "doc-1",
-                        "document_title": "产品手册",
-                        "chunk_index": 1,
-                    },
-                ],
+                "ids": list(self._ids),
+                "documents": list(self._documents),
+                "metadatas": list(self._metadatas),
             }
 
     vector_store = MagicMock()
