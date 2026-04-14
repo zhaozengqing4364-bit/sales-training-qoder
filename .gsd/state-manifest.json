@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "exported_at": "2026-04-14T07:52:15.806Z",
+  "exported_at": "2026-04-14T08:04:26.604Z",
   "milestones": [
     {
       "id": "M001",
@@ -22991,6 +22991,28 @@
       "verdict": "✅ pass",
       "duration_ms": 90,
       "created_at": "2026-04-14T07:52:15.728Z"
+    },
+    {
+      "id": 537,
+      "task_id": "T02",
+      "slice_id": "S03",
+      "milestone_id": "M022",
+      "command": "npm --prefix web test -- --run src/app/admin/page.test.tsx",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 4213,
+      "created_at": "2026-04-14T08:04:26.502Z"
+    },
+    {
+      "id": 538,
+      "task_id": "T02",
+      "slice_id": "S03",
+      "milestone_id": "M022",
+      "command": "npm --prefix web test -- --run \"src/app/admin/page.test.tsx\" \"src/components/admin/manager-lite-panel.test.tsx\" && backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/common/test_admin_analytics_service.py -x -q",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 9001,
+      "created_at": "2026-04-14T08:04:26.504Z"
     }
   ]
 }
