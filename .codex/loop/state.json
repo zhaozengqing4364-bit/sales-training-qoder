@@ -1,8 +1,8 @@
 {
   "mode": "grow",
-  "current_issue_id": "M021-S03-T02",
+  "current_issue_id": "M021-S03-T03",
   "current_issue_type": "task",
-  "current_issue_status": "done",
+  "current_issue_status": "doing",
   "pending_issue_ids": [],
   "completed_issue_ids": [
     "M001-S01-T01",
@@ -216,29 +216,23 @@
   "blocked_issue_ids": [],
   "deferred_issue_ids": [],
   "last_modified_files": [
-    "backend/src/common/effectiveness/canonical.py",
-    "backend/src/common/effectiveness/__init__.py",
-    "backend/src/common/conversation/session_evidence.py",
-    "backend/src/common/analytics/history_service.py",
-    "backend/src/common/services/practice_report_service.py",
-    "backend/src/common/conversation/replay.py",
-    "backend/src/agent/capabilities/realtime_scoring.py",
-    "backend/src/sales_bot/websocket/components/stepfun_message_helpers.py",
-    "backend/src/common/db/schemas.py",
-    "backend/src/common/conversation/schemas.py",
-    "backend/tests/contract/test_practice_evidence_contract.py",
-    "backend/tests/unit/test_history_service_evidence_projection.py",
-    "backend/tests/unit/test_realtime_scoring.py",
-    ".gsd/KNOWLEDGE.md",
+    "web/src/lib/api/types.ts",
+    "web/src/lib/session-evidence.ts",
+    "web/src/app/(user)/practice/[sessionId]/report/page.test.tsx",
+    "web/src/app/(user)/practice/[sessionId]/replay/page.test.tsx",
+    "web/src/app/(dashboard)/history/page.test.tsx",
+    "web/src/app/(user)/practice/[sessionId]/report/page.tsx",
+    "web/src/app/(user)/practice/[sessionId]/replay/page.tsx",
+    "web/src/app/(dashboard)/history/page.tsx",
+    ".gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md",
     ".codex/loop/state.json",
     ".codex/loop/log.md"
   ],
   "last_verification_commands": [
-    "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/test_effectiveness_canonical_kernel.py backend/tests/unit/test_realtime_scoring.py backend/tests/unit/test_history_service_evidence_projection.py -q",
-    "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/contract/test_conclusion_evidence_parity.py backend/tests/contract/test_practice_evidence_contract.py backend/tests/unit/common/test_admin_analytics_service.py backend/tests/unit/test_history_service_evidence_projection.py -x -q"
+    "npm --prefix web test -- --run \"src/app/(user)/practice/[sessionId]/report/page.test.tsx\" \"src/app/(user)/practice/[sessionId]/replay/page.test.tsx\" \"src/app/(dashboard)/history/page.test.tsx\""
   ],
-  "last_verification_result": "passed; the new canonical-kernel focused unit bundle finished 16/16 green, the exact task-plan contract/admin/history gate finished 49/49 green, and LSP diagnostics were clean on the touched backend files.",
-  "last_success_signal": "M021/S03/T02 now emits one explicit canonical_evaluation_kernel plus compatibility_readers across realtime/report/replay/history projection seams, while legacy rollup fields remain intact and are derived from the same kernel instead of independent formulas.",
+  "last_verification_result": "failed; fail-first report/replay/history assertions were added for canonical-kernel and compatibility-reader consumption, but the first runtime wiring attempt destabilized the report/replay surfaces and was backed out before completion. The repo still needs a smaller follow-up that reintroduces shared contract readers without breaking existing report/replay rendering.",
+  "last_success_signal": "Partial only: T03 now has concrete fail-first web tests and a written retirement-order note for canonical -> compat -> legacy readers, but the frontend runtime cutover itself is not yet shipped.",
   "last_growth_scan": null,
-  "next_action": "Await M021/S03/T03; web shared types and reader surfaces can now consume canonical_evaluation_kernel / compatibility_readers without guessing sales vs presentation score semantics."
+  "next_action": "Resume M021/S03/T03 from a stable runtime baseline: keep the new fail-first tests as the target, reintroduce shared canonical/compat reader helpers incrementally (likely one surface at a time), and do not mark the task complete until the exact web verification bundle is green again."
 }

@@ -1,4 +1,25 @@
-- time: 2026-04-14T11:11:00+08:00
+- time: 2026-04-14T11:35:57+08:00
+  mode: grow
+  item id: M021-S03-T03
+  files changed:
+    - web/src/lib/api/types.ts
+    - web/src/lib/session-evidence.ts
+    - web/src/app/(user)/practice/[sessionId]/report/page.test.tsx
+    - web/src/app/(user)/practice/[sessionId]/replay/page.test.tsx
+    - web/src/app/(dashboard)/history/page.test.tsx
+    - web/src/app/(user)/practice/[sessionId]/report/page.tsx
+    - web/src/app/(user)/practice/[sessionId]/replay/page.tsx
+    - web/src/app/(dashboard)/history/page.tsx
+    - .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md
+    - .codex/loop/state.json
+    - .codex/loop/log.md
+  summary: Started M021/S03/T03 and completed the skill-required reads plus a fail-first web test pass for canonical-vs-compat consumption, then attempted a shared report/replay/history score-reader cutover. That runtime cutover did not converge inside the context budget: report/replay rendering regressed while trying to reuse a shared helper, so the risky path was backed out to leave the repo closer to the pre-task runtime baseline. The durable progress that remains is (1) explicit failing tests in report/replay/history that prove what T03 still needs, and (2) an architecture-scan note that fixes the intended retirement order as canonical -> compat -> legacy.
+  verification commands:
+    - npm --prefix web test -- --run "src/app/(user)/practice/[sessionId]/report/page.test.tsx" "src/app/(user)/practice/[sessionId]/replay/page.test.tsx" "src/app/(dashboard)/history/page.test.tsx"
+  verification results: failed; the new fail-first tests expose the intended canonical/compat cutover gaps, and the first runtime wiring attempt caused report/replay regressions before it was partially backed out. Resume from the stable baseline, then reintroduce the reader helper one surface at a time.
+  success signal status: partial only; the task is not complete and should not be checked off yet.
+  rollback note: before resuming, confirm report/replay/history pages are back on the legacy stable path, then use the new fail-first tests as the only acceptance target for the next incremental cutover.
+
   mode: grow
   item id: M021-S03-T02
   files changed:

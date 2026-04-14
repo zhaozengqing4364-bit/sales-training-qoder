@@ -1900,6 +1900,8 @@ export interface HistoryTrendPoint extends Pick<SessionEvidenceContract,
     | "evaluable"
     | "not_evaluable_reason"
     | "evidence_completeness"
+    | "canonical_evaluation_kernel"
+    | "compatibility_readers"
     | "stage_summary"
     | "main_issue"
     | "next_goal"

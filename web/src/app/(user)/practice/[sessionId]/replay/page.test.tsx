@@ -869,6 +869,43 @@ describe("SessionReplayPage", () => {
     expect(screen.getByText(/未知时长/)).toBeTruthy();
   });
 
+  it("prefers canonical replay rollups over stale legacy score fields", async () => {
+    renderReplayPage({
+      replayOverrides: {
+        overall_score: 55,
+        canonical_evaluation_kernel: {
+          schema_version: "evaluation_kernel_v1",
+          scenario_type: "sales",
+          surface_id: "replay",
+          source_reader_id: "session_evidence_projection_v1",
+          primary_reader_id: "session_evidence_projection_v1",
+          mode: "canonical_consumer",
+          rollups: {
+            logic: { label: "逻辑", score: 90 },
+            accuracy: { label: "准确", score: 86 },
+            completeness: { label: "完整", score: 81 },
+          },
+          overall_score: 88,
+          dimensions: [],
+          compatibility_reader_ids: ["practice_session_rollup_fields_v1"],
+          downstream_surfaces: ["replay", "report", "history"],
+        },
+        compatibility_readers: {
+          practice_session_rollup_fields_v1: {
+            logic_score: 90,
+            accuracy_score: 86,
+            completeness_score: 81,
+            overall_score: 88,
+          },
+        },
+      },
+    });
+
+    const overallScore = await screen.findByTestId("replay-overall-score");
+    expect(overallScore.textContent).toContain("88");
+    expect(overallScore.getAttribute("data-contract-source")).toBe("canonical_kernel");
+  });
+
   it("launches a focused retry from replay using the report retry_entry focus intent", async () => {
     renderReplayPage();
 

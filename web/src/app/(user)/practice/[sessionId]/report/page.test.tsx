@@ -495,6 +495,61 @@ describe("ReportPage", () => {
         expect(screen.getByText(/未知时长/)).toBeTruthy();
     });
 
+    it("prefers canonical report rollups over stale legacy score fields", async () => {
+        getReportMock.mockResolvedValue({
+            ...baseReport,
+            logic_score: 41,
+            accuracy_score: 42,
+            completeness_score: 43,
+            overall_score: 44,
+            evaluable: true,
+            not_evaluable_reason: null,
+            canonical_evaluation_kernel: {
+                schema_version: "evaluation_kernel_v1",
+                scenario_type: "sales",
+                surface_id: "report",
+                source_reader_id: "session_evidence_projection_v1",
+                primary_reader_id: "session_evidence_projection_v1",
+                mode: "canonical_consumer",
+                rollups: {
+                    logic: { label: "逻辑", score: 84 },
+                    accuracy: { label: "准确", score: 73 },
+                    completeness: { label: "完整", score: 69 },
+                },
+                overall_score: 76,
+                dimensions: [],
+                compatibility_reader_ids: ["practice_session_rollup_fields_v1"],
+                downstream_surfaces: ["report", "replay", "history"],
+            },
+            compatibility_readers: {
+                practice_session_rollup_fields_v1: {
+                    logic_score: 84,
+                    accuracy_score: 73,
+                    completeness_score: 69,
+                    overall_score: 76,
+                },
+            },
+        });
+        getComprehensiveReportMock.mockResolvedValue({
+            session_id: "session-1",
+            generated_at: "2026-03-23T00:00:00Z",
+            overall_score: 76,
+            dimension_scores: [],
+            stage_summaries: [],
+            key_strengths: [],
+            key_improvements: [],
+            detailed_feedback: "",
+            recommendations: [],
+            voice_policy_snapshot_ref: null,
+        });
+
+        render(<ReportPage />);
+
+        const overallScore = await screen.findByTestId("report-overall-score");
+        expect(overallScore.textContent).toContain("76");
+        expect(overallScore.getAttribute("data-contract-source")).toBe("canonical_kernel");
+    });
+
     it("deep-links the report issue and goal cards into replay using the stable replay anchors", async () => {
         getReportMock.mockResolvedValue({
             ...baseReport,

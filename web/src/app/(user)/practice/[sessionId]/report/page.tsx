@@ -1591,3 +1591,18 @@ export default function ComprehensiveReportPage() {
         </div>
     );
 }
+                          <li key={`${item}-${index}`} className="flex items-start gap-2 text-sm text-zinc-700">
+                                <Target className="w-4 h-4 text-blue-500 flex-shrink-0 mt-0.5" />
+                                {item}
+                            </li>
+                        ))}
+                    </ul>
+                </GlassCard>
+            )}
+
+            <AudioAuditCard audioAudit={report.audio_audit} sessionId={sessionId} />
+        </div>
+    );
+}
+   );
+}

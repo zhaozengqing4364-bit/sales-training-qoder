@@ -1634,3 +1634,6 @@ export default function SessionReplayPage() {
     </div>
   );
 }
+  </div>
+  );
+}

@@ -110,6 +110,62 @@ describe("HistoryPage", () => {
         expect(reportButton.disabled).toBe(false);
     });
 
+    it("falls back to compatibility reader rollups when canonical history scores are absent", async () => {
+        getMyHistoryMock.mockResolvedValue({
+            sessions: [
+                {
+                    session_id: "session-compat-1",
+                    scenario_name: "销售演练",
+                    scenario_type: "sales",
+                    persona_name: "采购经理",
+                    agent_name: "销售教练",
+                    start_time: "2026-03-23T00:00:00Z",
+                    duration_seconds: 180,
+                    overall_score: 12,
+                    report_status: "pending",
+                    report_generated_at: null,
+                    status: "completed",
+                    evaluable: true,
+                    not_evaluable_reason: null,
+                    evidence_completeness: { complete: true },
+                    compatibility_readers: {
+                        practice_session_rollup_fields_v1: {
+                            logic_score: 90,
+                            accuracy_score: 86,
+                            completeness_score: 81,
+                            overall_score: 88,
+                        },
+                    },
+                    effectiveness_snapshot: null,
+                    feedback_summary: null,
+                    stage_summary: [],
+                    main_issue: null,
+                    next_goal: null,
+                },
+            ],
+            total: 1,
+            page: 1,
+            page_size: 50,
+            total_pages: 1,
+        });
+        getHistoryStatisticsMock.mockResolvedValue({
+            total_sessions: 1,
+            evaluable_sessions: 1,
+            not_evaluable_sessions: 0,
+            average_score: 88,
+            best_score: 88,
+            total_practice_time_seconds: 180,
+            total_practice_time_minutes: 3,
+        });
+        getHistoryTrendsMock.mockResolvedValue([]);
+
+        render(<HistoryPage />);
+
+        const score = await screen.findByTestId("history-score-session-compat-1");
+        expect(score.textContent).toContain("88");
+        expect(score.getAttribute("data-contract-source")).toBe("compatibility_reader");
+    });
+
     it("keeps presentation history entries on the shared replay/report route family", async () => {
         getMyHistoryMock.mockResolvedValue({
             sessions: [

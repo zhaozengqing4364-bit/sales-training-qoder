@@ -1,4 +1,6 @@
 import type {
+    CanonicalEvaluationKernel,
+    CompatibilityReaders,
     ConclusionEvidence,
     ConclusionEvidenceEntry,
     ConclusionEvidenceSource,
@@ -341,6 +343,83 @@ export function formatWeakEvidenceRetrievalNote(
         return "知识库检索暂时异常，无法确认是否有相关内容支撑当前主张。";
     }
     return null;
+}
+
+export interface SessionEvaluationRollups {
+    source: "canonical_kernel" | "compatibility_reader" | "legacy_rollup";
+    logic: number | null;
+    accuracy: number | null;
+    completeness: number | null;
+    overall: number | null;
+}
+
+function coerceEvaluationScore(value: unknown): number | null {
+    return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function readCanonicalRollup(
+    kernel: CanonicalEvaluationKernel | null | undefined,
+    key: "logic" | "accuracy" | "completeness",
+): number | null {
+    return coerceEvaluationScore(kernel?.rollups?.[key]?.score);
+}
+
+function readCompatibilityRollups(
+    compatibilityReaders?: CompatibilityReaders | null,
+): CompatibilityReaders["practice_session_rollup_fields_v1"] | null {
+    const practiceRollups = compatibilityReaders?.practice_session_rollup_fields_v1;
+    if (practiceRollups && typeof practiceRollups === "object") {
+        return practiceRollups;
+    }
+
+    const presentationRollups = compatibilityReaders?.presentation_review_dimensions_v1;
+    if (presentationRollups && typeof presentationRollups === "object") {
+        return {
+            overall_score: coerceEvaluationScore(presentationRollups.overall_score),
+        };
+    }
+
+    return null;
+}
+
+export function readSessionEvaluationRollups(input: {
+    canonicalEvaluationKernel?: CanonicalEvaluationKernel | null;
+    compatibilityReaders?: CompatibilityReaders | null;
+    logicScore?: number | null;
+    accuracyScore?: number | null;
+    completenessScore?: number | null;
+    overallScore?: number | null;
+}): SessionEvaluationRollups {
+    const canonicalOverall = coerceEvaluationScore(input.canonicalEvaluationKernel?.overall_score);
+    if (canonicalOverall !== null) {
+        return {
+            source: "canonical_kernel",
+            logic: readCanonicalRollup(input.canonicalEvaluationKernel, "logic"),
+            accuracy: readCanonicalRollup(input.canonicalEvaluationKernel, "accuracy"),
+            completeness: readCanonicalRollup(input.canonicalEvaluationKernel, "completeness"),
+            overall: canonicalOverall,
+        };
+    }
+
+    const compatibilityRollups = readCompatibilityRollups(input.compatibilityReaders);
+    const compatibilityOverall = coerceEvaluationScore(compatibilityRollups?.overall_score);
+    if (compatibilityOverall !== null) {
+        return {
+            source: "compatibility_reader",
+            logic: coerceEvaluationScore(compatibilityRollups?.logic_score),
+            accuracy: coerceEvaluationScore(compatibilityRollups?.accuracy_score),
+            completeness: coerceEvaluationScore(compatibilityRollups?.completeness_score),
+            overall: compatibilityOverall,
+        };
+    }
+
+    return {
+        source: "legacy_rollup",
+        logic: coerceEvaluationScore(input.logicScore),
+        accuracy: coerceEvaluationScore(input.accuracyScore),
+        completeness: coerceEvaluationScore(input.completenessScore),
+        overall: coerceEvaluationScore(input.overallScore),
+    };
 }
 
 function isConclusionEvidenceSource(value: unknown): value is ConclusionEvidenceSource {
