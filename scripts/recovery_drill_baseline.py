@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 """Recovery drill baseline inventory for repo-local backup / restore operations.
 
-This script does not perform destructive recovery actions yet. Instead, it keeps the
-current recovery drill authority in one executable, grep-discoverable place so the
-runbook, tests, and later automation reuse the same commands and file seams.
+This script keeps the current recovery drill authority in one executable,
+grep-discoverable place so the runbook, tests, and automation reuse the same
+commands, preconditions, and file seams.
 """
 
 import argparse
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Iterable
 
@@ -20,6 +20,8 @@ class DrillDefinition:
     authority_paths: tuple[str, ...]
     evidence: tuple[str, ...]
     why_it_matters: str
+    preconditions: tuple[str, ...] = field(default_factory=tuple)
+    failure_signals: tuple[str, ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)
@@ -35,7 +37,7 @@ DRILLS: tuple[DrillDefinition, ...] = (
         id="db_migration",
         title="db migration / restore alignment",
         checked_command=(
-            "cd backend && alembic upgrade head"
+            "cd backend && venv/bin/python -m alembic upgrade head"
         ),
         authority_paths=(
             "backend/alembic.ini",
@@ -52,12 +54,17 @@ DRILLS: tuple[DrillDefinition, ...] = (
             "Schema authority must stay on Alembic plus explicit repair; startup bootstrap "
             "must not silently mutate production-like databases."
         ),
+        failure_signals=(
+            "non-zero alembic exit",
+            "legacy drift runtime error mentioning repair_legacy_schema.py",
+        ),
     ),
     DrillDefinition(
         id="auth_bootstrap",
         title="auth bootstrap / admin recovery",
         checked_command=(
-            "cd backend && python scripts/bootstrap_auth_admin.py --email admin@qoder.ai --name 管理员 --role admin"
+            'backend/venv/bin/python backend/scripts/bootstrap_auth_admin.py --email "${RECOVERY_ADMIN_EMAIL}" '
+            '--name "${RECOVERY_ADMIN_NAME}" --role "${RECOVERY_ADMIN_ROLE:-admin}"'
         ),
         authority_paths=(
             "backend/scripts/bootstrap_auth_admin.py",
@@ -70,6 +77,11 @@ DRILLS: tuple[DrillDefinition, ...] = (
         ),
         why_it_matters=(
             "Recovery must rebuild support/admin access without treating auth bootstrap as a schema-repair path."
+        ),
+        preconditions=("RECOVERY_ADMIN_EMAIL", "RECOVERY_ADMIN_NAME"),
+        failure_signals=(
+            "missing RECOVERY_ADMIN_EMAIL / RECOVERY_ADMIN_NAME",
+            "bootstrap_auth_admin.py non-zero exit",
         ),
     ),
     DrillDefinition(
@@ -90,6 +102,10 @@ DRILLS: tuple[DrillDefinition, ...] = (
         ),
         why_it_matters=(
             "Redis is the restart-safe reconnect surface; operators need proof that snapshot state survives outside a single process."
+        ),
+        failure_signals=(
+            "websocket status contract pytest failure",
+            "missing reconnect snapshot fields in proof output",
         ),
     ),
     DrillDefinition(
@@ -112,6 +128,10 @@ DRILLS: tuple[DrillDefinition, ...] = (
         why_it_matters=(
             "Restart and reconnect drills must prove process-local live sockets and shared redis snapshots are interpreted correctly."
         ),
+        failure_signals=(
+            "sales realtime reconnect pytest failure",
+            "missing restored_state/request_epoch evidence",
+        ),
     ),
     DrillDefinition(
         id="oss_signing_playback",
@@ -132,11 +152,15 @@ DRILLS: tuple[DrillDefinition, ...] = (
         why_it_matters=(
             "Audio recovery proof currently lives in signing/playback contracts, not in a bucket-export script the repo does not have."
         ),
+        failure_signals=(
+            "OSS signing/unit contract pytest failure",
+            "OSS_NOT_CONFIGURED contract regression",
+        ),
     ),
     DrillDefinition(
         id="health_check",
         title="post-recovery health check",
-        checked_command="curl -fsS http://127.0.0.1:3444/health",
+        checked_command='curl -fsS "${RECOVERY_HEALTH_URL:-http://127.0.0.1:3444/health}"',
         authority_paths=(
             "backend/src/main.py",
             "docs/backup-recovery-runbook.md",
@@ -147,6 +171,10 @@ DRILLS: tuple[DrillDefinition, ...] = (
         ),
         why_it_matters=(
             "Every recovery drill needs one cheap health endpoint proof before operators read deeper traces or logs."
+        ),
+        failure_signals=(
+            "curl non-zero exit",
+            "missing healthy/timestamp/version fields",
         ),
     ),
 )
@@ -191,6 +219,9 @@ def _all_paths() -> Iterable[str]:
         yield from drill.authority_paths
 
 
+DRILLS_BY_ID = {drill.id: drill for drill in DRILLS}
+
+
 def validate_repository(repo_root: Path) -> list[str]:
     missing: list[str] = []
     for relative_path in sorted(set(_all_paths())):
@@ -217,9 +248,13 @@ def build_status_report(repo_root: Path) -> str:
                 f"  authority_paths: {', '.join(drill.authority_paths)}",
                 f"  evidence: {', '.join(drill.evidence)}",
                 f"  why_it_matters: {drill.why_it_matters}",
-                "",
             ]
         )
+        if drill.preconditions:
+            lines.append(f"  preconditions: {', '.join(drill.preconditions)}")
+        if drill.failure_signals:
+            lines.append(f"  failure_signals: {', '.join(drill.failure_signals)}")
+        lines.append("")
 
     lines.append("Manual-only boundaries:")
     for boundary in MANUAL_ONLY:

@@ -1453,3 +1453,33 @@
   verification results: passed; the websocket authority grep gate stayed green, the exact slice-plan pytest bundle finished 11/11 green, the support-runtime/runbook/architecture grep gate stayed green, and LSP diagnostics were clean on the touched runtime/test files. Only the pre-existing pytest-cov no-data warning remained.
   success signal status: future S04 recovery drill work can start from one truthful runtime contract instead of rediscovering it — live connection visibility is explicitly process-local, Redis snapshots are explicitly restart-safe shared authority, request epoch and pacing state survive reconnect, stale action-card UI does not, and the operator docs now say that restart/drain still lacks repo-native cluster controls.
   rollback note: if later work adds cluster drain controls, widens /support/runtime, or changes reconnect snapshot contents, update SessionManager.get_stats(), SessionStateService.get_stats(), the StepFun reconnect snapshot contract, the support-runtime/runbook docs, and the focused status-contract/reconnect proof together so the authority split does not drift again.
+
+- time: 2026-04-14T08:27:27.661185+08:00
+  mode: grow
+  item id: M020-S04-T02
+  files changed:
+    - scripts/recovery_drill_baseline.py
+    - scripts/recovery_drill_runner.py
+    - scripts/recovery-drill-baseline.py
+    - scripts/recovery-drill-runner.py
+    - backend/scripts/bootstrap_auth_admin.py
+    - backend/tests/unit/test_recovery_drill_runner.py
+    - backend/tests/unit/test_bootstrap_auth_admin.py
+    - docs/backup-recovery-runbook.md
+    - docs/setup/backup-recovery-current-state.md
+    - .gsd/KNOWLEDGE.md
+    - .codex/loop/state.json
+    - .codex/loop/log.md
+  summary: Turned the recovery inventory into a minimal executable drill runner: the baseline now carries command templates, preconditions, and failure signals; the new runner executes those commands, writes per-drill logs plus summary.json under .dev/recovery-drills, and the auth bootstrap entrypoint now imports agent.models so recovery no longer dies on unresolved Agent/Persona mappers.
+  verification commands:
+    - backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/test_bootstrap_auth_admin.py backend/tests/unit/test_recovery_drill_baseline.py backend/tests/unit/test_recovery_drill_runner.py -q
+    - RECOVERY_ADMIN_EMAIL=admin@qoder.ai RECOVERY_ADMIN_NAME=管理员 python3 scripts/recovery-drill-runner.py run --continue-on-failure --drill db_migration --drill auth_bootstrap --drill redis_session_state --drill oss_signing_playback --drill health_check
+    - bash scripts/dependency-governance.sh status && rg -n "health|alembic|bootstrap|redis|oss|recovery" scripts/recovery-* docs/backup-recovery-runbook.md
+    - lsp diagnostics scripts/recovery_drill_baseline.py
+    - lsp diagnostics scripts/recovery_drill_runner.py
+    - lsp diagnostics backend/scripts/bootstrap_auth_admin.py
+    - lsp diagnostics backend/tests/unit/test_recovery_drill_runner.py
+    - lsp diagnostics backend/tests/unit/test_bootstrap_auth_admin.py
+  verification results: passed with one truthful environment blocker; the focused unit proof finished 7/7 green, the real drill run produced logs + summary.json, auth/runtime/OSS/health drills passed, the grep gate stayed green, diagnostics were clean, and db_migration surfaced the existing Alembic revision gap (`20260412_0315_028`) as explicit recovery evidence instead of a silent script failure.
+  success signal status: downstream recovery/deploy work can now consume one executable authority surface instead of markdown-only guidance — scripts, docs, and evidence all point at the same baseline + runner seam, and the current local migration blocker is already captured in machine-readable output.
+  rollback note: if later work changes any drill command, update scripts/recovery_drill_baseline.py, scripts/recovery_drill_runner.py, both hyphenated CLI entrypoints, the focused runner/bootstrap tests, and the runbook/current-state docs together; otherwise the executable recovery surface and the written guidance will drift again.

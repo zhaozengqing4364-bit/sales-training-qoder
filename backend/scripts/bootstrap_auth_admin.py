@@ -18,6 +18,8 @@ from sqlalchemy import select
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
+import agent.models as _agent_models  # noqa: F401 - register Agent/Persona mappers for PracticeSession relationships
+
 from common.db.models import User
 from common.db.session import AsyncSessionLocal
 

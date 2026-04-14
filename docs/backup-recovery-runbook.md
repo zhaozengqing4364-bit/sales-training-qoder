@@ -6,26 +6,51 @@
 
 > 当前基线只描述**今天仓库里真实能执行的路径**：本地脚本、PostgreSQL/Redis 标准工具、文件归档、Alembic、老库修复脚本、管理员账号重建。
 >
-> 本次文档已按当前仓库实物复核以下 repo-local 引用：`scripts/dev-up.sh`、`scripts/dev-stop.sh`、`scripts/recovery_drill_baseline.py`、`backend/src/main.py`、`backend/scripts/repair_legacy_schema.py`、`backend/scripts/bootstrap_auth_admin.py`、`backend/src/common/db/session.py`、`backend/src/common/config.py`、`backend/src/common/storage/document.py`、`backend/src/common/knowledge/vector_store.py`、`backend/src/admin/api/admin.py`、`docs/setup/auth-local.md`。
+> 本次文档已按当前仓库实物复核以下 repo-local 引用：`scripts/dev-up.sh`、`scripts/dev-stop.sh`、`scripts/recovery_drill_baseline.py`、`scripts/recovery_drill_runner.py`、`scripts/recovery-drill-baseline.py`、`scripts/recovery-drill-runner.py`、`backend/src/main.py`、`backend/scripts/repair_legacy_schema.py`、`backend/scripts/bootstrap_auth_admin.py`、`backend/src/common/db/session.py`、`backend/src/common/config.py`、`backend/src/common/storage/document.py`、`backend/src/common/knowledge/vector_store.py`、`backend/src/admin/api/admin.py`、`docs/setup/auth-local.md`。
 >
 > 当前仓库**没有** repo-native 的一键备份平台、OSS 批量导出脚本、统一灾备编排或明确值班名单；这些缺口会在文末的 **Follow-up（非当前基线）** 单列，不混入当前基线步骤。
 
 ## 0.1 Repo-local recovery drill baseline inventory
 
-当前 runbook 对应的最小可执行 drill inventory 已收口到：
+当前 runbook 对应的最小 recovery authority 已收口到一组 repo-local 脚本：
 
 ```bash
-python3 scripts/recovery_drill_baseline.py status
-python3 scripts/recovery_drill_baseline.py check
+python3 scripts/recovery-drill-baseline.py status
+python3 scripts/recovery-drill-baseline.py check
+python3 scripts/recovery-drill-runner.py plan
 ```
 
-这份脚本当前负责三件事：
+说明：
+
+- `scripts/recovery-drill-baseline.py` / `scripts/recovery-drill-runner.py` 是 CLI entrypoint；
+- 真正的 authority module 仍然是 `scripts/recovery_drill_baseline.py` + `scripts/recovery_drill_runner.py`；
+- runner 不维护第二套命令表，它直接复用 baseline 里同一组 `checked_command` / `preconditions` / `failure_signals`。
+
+baseline 当前负责三件事：
 
 1. 把最有价值的 recovery drills 固定成同一份 repo-local authority inventory：`db_migration`、`auth_bootstrap`、`redis_session_state`、`websocket_reconnect`、`oss_signing_playback`、`health_check`；
-2. 为每个 drill 绑定同一条 checked command 与 authority paths，避免 runbook、测试、后续自动化各写一份；
+2. 为每个 drill 绑定同一条 checked command、显式 env preconditions（如 `RECOVERY_ADMIN_EMAIL` / `RECOVERY_ADMIN_NAME`）与 authority paths，避免 runbook、测试、后续自动化各写一份；
 3. 显式列出仍然必须人工处理的边界：`redis_service_restore`、`oss_bucket_export`、`multi_instance_drain`。
 
-这里的 `status` / `check` 仍然是**checked command inventory**，不是破坏性恢复脚本：它只验证仓库里的 authority 路径是否存在，并输出当前建议 drill 命令。真正带副作用的恢复脚本会在后续任务里继续落地，但必须复用这里同一套 command / file seams。
+最小可执行 runner 则负责：检查前置条件、按 baseline command 真正执行 migrate/bootstrap/runtime/auth/health proof、把每个 drill 的 stdout/stderr 落到 `./.dev/recovery-drills/<timestamp>/`，并生成 `summary.json` 作为恢复/演练证据。
+
+常用示例：
+
+```bash
+RECOVERY_ADMIN_EMAIL=admin@qoder.ai \
+RECOVERY_ADMIN_NAME=管理员 \
+python3 scripts/recovery-drill-runner.py run --drill db_migration --drill auth_bootstrap --drill health_check
+```
+
+如果要把整组最小 drill 都跑完并继续记录后续失败信号：
+
+```bash
+RECOVERY_ADMIN_EMAIL=admin@qoder.ai \
+RECOVERY_ADMIN_NAME=管理员 \
+python3 scripts/recovery-drill-runner.py run --continue-on-failure
+```
+
+这里的 `status` / `check` 仍然是 inventory authority，不会执行破坏性 restore；真正会落副作用的内容只限于 baseline 已命名的 migrate / bootstrap / proof commands，manual-only 边界依旧不会被脚本伪装成已自动化能力。
 
 ## 1. 当前责任边界与证据位置
 
@@ -39,7 +64,7 @@ python3 scripts/recovery_drill_baseline.py check
 
 ### 1.1 数据库 authority line（执行恢复/启动时必须遵守）
 
-- `cd backend && alembic upgrade head` 是唯一的 forward schema migration authority；恢复后的 schema 对齐和 CI 都应先走这里。
+- `cd backend && venv/bin/python -m alembic upgrade head` 是唯一的 forward schema migration authority；恢复后的 schema 对齐和 CI 都应先走这里。
 - `cd backend && python scripts/repair_legacy_schema.py --database-url <DATABASE_URL>` 是一次性 legacy repair authority；只在发现历史 `personas.persona_policy` / `knowledge_documents` drift 时显式执行。
 - `cd backend && python scripts/bootstrap_auth_admin.py ...` 只负责账号 bootstrap，不拥有 schema authority。
 - `backend/src/common/db/session.py` 里的 `init_db()` 只是 startup/bootstrap 入口：它仍会 `create_all()`，但 compatibility guard 只允许在 `development` / `test` / `testing` 做自动补齐；非开发环境发现 legacy drift 会 fail-fast 并要求你回到 Alembic / repair script。

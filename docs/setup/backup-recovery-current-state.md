@@ -214,31 +214,45 @@ python scripts/bootstrap_auth_admin.py --email support@qoder.ai --name 支持工
 - Redis 会话恢复：`backend/src/common/websocket/session_state_service.py`
 - 音频 OSS：`backend/src/common/oss/signing.py`, `backend/src/common/db/models.py`
 
-### 7.1 T01 drill baseline 可直接复用的 repo-local authority
+### 7.1 T01/T02 drill baseline 与 runner 可直接复用的 repo-local authority
 
-当前仓库已经把最小 recovery drill baseline 收口到：`scripts/recovery_drill_baseline.py`
+当前仓库已经把最小 recovery drill authority 收口到两层同源脚本：
+
+- authority module：`scripts/recovery_drill_baseline.py`、`scripts/recovery_drill_runner.py`
+- CLI entrypoint：`scripts/recovery-drill-baseline.py`、`scripts/recovery-drill-runner.py`
 
 ```bash
-python3 scripts/recovery_drill_baseline.py status
-python3 scripts/recovery_drill_baseline.py check
+python3 scripts/recovery-drill-baseline.py status
+python3 scripts/recovery-drill-baseline.py check
+python3 scripts/recovery-drill-runner.py plan
 ```
 
-这份脚本当前不会执行破坏性 restore，而是把下一阶段要复用的 checked commands 固定下来：
+其中 baseline 负责固定 checked commands / authority paths / preconditions / failure signals，runner 只负责执行并留证，不维护第二套口径。当前 runner 会把日志与 summary 落到 `./.dev/recovery-drills/<timestamp>/`。
 
-- `db_migration`: `cd backend && alembic upgrade head`
-- `auth_bootstrap`: `cd backend && python scripts/bootstrap_auth_admin.py ...`
+当前可执行的最小 drills 仍是：
+
+- `db_migration`: `cd backend && venv/bin/python -m alembic upgrade head`
+- `auth_bootstrap`: `backend/venv/bin/python backend/scripts/bootstrap_auth_admin.py --email "${RECOVERY_ADMIN_EMAIL}" --name "${RECOVERY_ADMIN_NAME}" --role "${RECOVERY_ADMIN_ROLE:-admin}"`
 - `redis_session_state`: `backend/tests/integration/test_websocket_status_contract.py`
 - `websocket_reconnect`: `backend/tests/integration/test_sales_realtime_reconnect_flow.py`
 - `oss_signing_playback`: `backend/tests/unit/test_oss_signing_service.py` + `backend/tests/contract/test_audio_audit_contract.py`
-- `health_check`: `curl -fsS http://127.0.0.1:3444/health`
+- `health_check`: `curl -fsS "${RECOVERY_HEALTH_URL:-http://127.0.0.1:3444/health}"`
 
-同时它也明确标注了当前仍然必须人工完成的边界：
+最小执行示例：
+
+```bash
+RECOVERY_ADMIN_EMAIL=admin@qoder.ai \
+RECOVERY_ADMIN_NAME=管理员 \
+python3 scripts/recovery-drill-runner.py run --drill db_migration --drill auth_bootstrap --drill health_check
+```
+
+同时 baseline 也继续明确标注了当前仍然必须人工完成的边界：
 
 - `redis_service_restore`
 - `oss_bucket_export`
 - `multi_instance_drain`
 
-后续 T02/T03 如果继续补 recovery automation 或部署指导，应该直接复用这份脚本里的 command / authority paths，而不是重新发明 runbook 口径。
+后续 T03 如果继续补部署指导，应该直接复用这套 baseline + runner 产出的 commands / evidence path，而不是重新发明 runbook 口径。
 
 ## 8. 当前最小结论
 

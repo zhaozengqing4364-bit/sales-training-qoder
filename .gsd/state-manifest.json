@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "exported_at": "2026-04-14T00:09:54.235Z",
+  "exported_at": "2026-04-14T00:30:19.804Z",
   "milestones": [
     {
       "id": "M001",
@@ -12942,19 +12942,33 @@
       "milestone_id": "M020",
       "slice_id": "S04",
       "id": "T02",
-      "title": "落地最小 recovery/drill scripts",
-      "status": "pending",
-      "one_liner": "",
-      "narrative": "",
-      "verification_result": "",
+      "title": "Added a baseline-driven recovery drill runner that executes auth/runtime/OSS/health checks with logged evidence and exposes the current Alembic migration blocker.",
+      "status": "complete",
+      "one_liner": "Added a baseline-driven recovery drill runner that executes auth/runtime/OSS/health checks with logged evidence and exposes the current Alembic migration blocker.",
+      "narrative": "I turned the T01 recovery inventory into a minimal executable automation surface instead of leaving it as markdown plus unchecked command strings. `scripts/recovery_drill_baseline.py` now carries the baseline drill command templates, explicit env preconditions, and failure-signal hints; `scripts/recovery_drill_runner.py` consumes that same metadata directly, renders the selected drills, executes them, and writes per-drill logs plus `summary.json` under `.dev/recovery-drills/<timestamp>/`. I also added thin hyphenated CLI entrypoints (`scripts/recovery-drill-baseline.py`, `scripts/recovery-drill-runner.py`) so the task-plan grep contract can target `scripts/recovery-*` without creating a second authority surface.\n\nTo make the recovery path real, I fixed the existing auth bootstrap entrypoint instead of faking success in the runner. `backend/scripts/bootstrap_auth_admin.py` now imports `agent.models` before using `AsyncSessionLocal`, which avoids the late SQLAlchemy mapper failure on `PracticeSession -> Agent/Persona` relationships during a real recovery drill. Focused proof now locks both the baseline/runner behavior and that mapper-registration recovery gotcha. The runbook and current-state docs were updated to point at the new baseline + runner seam, document the evidence root, and keep auth bootstrap preconditions explicit rather than hardcoding secrets into the script layer.",
+      "verification_result": "Focused unit proof finished green with `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/test_bootstrap_auth_admin.py backend/tests/unit/test_recovery_drill_baseline.py backend/tests/unit/test_recovery_drill_runner.py -q` (7/7). A real drill run with `RECOVERY_ADMIN_EMAIL=admin@qoder.ai RECOVERY_ADMIN_NAME=管理员 python3 scripts/recovery-drill-runner.py run --continue-on-failure --drill db_migration --drill auth_bootstrap --drill redis_session_state --drill oss_signing_playback --drill health_check` wrote evidence to `.dev/recovery-drills/20260414T002842Z/summary.json`; `auth_bootstrap`, `redis_session_state`, `oss_signing_playback`, and `health_check` passed with captured per-drill logs, while `db_migration` truthfully failed on the current local environment with `KeyError: '20260412_0315_028'`, which is now an explicit recovery signal rather than a silent script crash. The task-plan verification gate `bash scripts/dependency-governance.sh status && rg -n \"health|alembic|bootstrap|redis|oss|recovery\" scripts/recovery-* docs/backup-recovery-runbook.md` passed, and LSP diagnostics were clean on `scripts/recovery_drill_baseline.py`, `scripts/recovery_drill_runner.py`, `backend/scripts/bootstrap_auth_admin.py`, `backend/tests/unit/test_recovery_drill_runner.py`, and `backend/tests/unit/test_bootstrap_auth_admin.py`.",
       "duration": "",
-      "completed_at": null,
+      "completed_at": "2026-04-14T00:30:19.729Z",
       "blocker_discovered": false,
-      "deviations": "",
-      "known_issues": "",
-      "key_files": [],
-      "key_decisions": [],
-      "full_summary_md": "",
+      "deviations": "Adjusted the baseline command forms to match the repo’s real executable paths after live drill runs exposed shell/cwd mismatches: auth bootstrap now uses `backend/venv/bin/python backend/scripts/bootstrap_auth_admin.py ...`, and db migration now uses `cd backend && venv/bin/python -m alembic upgrade head`. I also added hyphenated CLI entrypoints so the slice verification pattern `scripts/recovery-*` can discover the shipped scripts without moving the underscore-based authority modules established by T01.",
+      "known_issues": "The current local PostgreSQL/Alembic state is still inconsistent: the real `db_migration` drill fails with `KeyError: '20260412_0315_028'` when upgrading the repo’s configured `backend/.env` database. The new runner records that failure in `.dev/recovery-drills/<timestamp>/01-db_migration.log` and `summary.json`, but this task did not repair the underlying migration graph/database state.",
+      "key_files": [
+        "scripts/recovery_drill_baseline.py",
+        "scripts/recovery_drill_runner.py",
+        "scripts/recovery-drill-baseline.py",
+        "scripts/recovery-drill-runner.py",
+        "backend/scripts/bootstrap_auth_admin.py",
+        "backend/tests/unit/test_recovery_drill_runner.py",
+        "backend/tests/unit/test_bootstrap_auth_admin.py",
+        "docs/backup-recovery-runbook.md",
+        "docs/setup/backup-recovery-current-state.md",
+        ".gsd/KNOWLEDGE.md"
+      ],
+      "key_decisions": [
+        "D228 — keep the baseline script as the single source of drill command/precondition/failure-signal metadata and have the runner execute it directly while writing per-drill logs plus summary.json evidence.",
+        "Recovery entrypoint scripts that use AsyncSessionLocal outside the main app bootstrap must import agent.models first so SQLAlchemy can resolve PracticeSession -> Agent/Persona relationships during real drills."
+      ],
+      "full_summary_md": "---\nid: T02\nparent: S04\nmilestone: M020\nkey_files:\n  - scripts/recovery_drill_baseline.py\n  - scripts/recovery_drill_runner.py\n  - scripts/recovery-drill-baseline.py\n  - scripts/recovery-drill-runner.py\n  - backend/scripts/bootstrap_auth_admin.py\n  - backend/tests/unit/test_recovery_drill_runner.py\n  - backend/tests/unit/test_bootstrap_auth_admin.py\n  - docs/backup-recovery-runbook.md\n  - docs/setup/backup-recovery-current-state.md\n  - .gsd/KNOWLEDGE.md\nkey_decisions:\n  - D228 — keep the baseline script as the single source of drill command/precondition/failure-signal metadata and have the runner execute it directly while writing per-drill logs plus summary.json evidence.\n  - Recovery entrypoint scripts that use AsyncSessionLocal outside the main app bootstrap must import agent.models first so SQLAlchemy can resolve PracticeSession -> Agent/Persona relationships during real drills.\nduration: \nverification_result: mixed\ncompleted_at: 2026-04-14T00:30:19.727Z\nblocker_discovered: false\n---\n\n# T02: Added a baseline-driven recovery drill runner that executes auth/runtime/OSS/health checks with logged evidence and exposes the current Alembic migration blocker.\n\n**Added a baseline-driven recovery drill runner that executes auth/runtime/OSS/health checks with logged evidence and exposes the current Alembic migration blocker.**\n\n## What Happened\n\nI turned the T01 recovery inventory into a minimal executable automation surface instead of leaving it as markdown plus unchecked command strings. `scripts/recovery_drill_baseline.py` now carries the baseline drill command templates, explicit env preconditions, and failure-signal hints; `scripts/recovery_drill_runner.py` consumes that same metadata directly, renders the selected drills, executes them, and writes per-drill logs plus `summary.json` under `.dev/recovery-drills/<timestamp>/`. I also added thin hyphenated CLI entrypoints (`scripts/recovery-drill-baseline.py`, `scripts/recovery-drill-runner.py`) so the task-plan grep contract can target `scripts/recovery-*` without creating a second authority surface.\n\nTo make the recovery path real, I fixed the existing auth bootstrap entrypoint instead of faking success in the runner. `backend/scripts/bootstrap_auth_admin.py` now imports `agent.models` before using `AsyncSessionLocal`, which avoids the late SQLAlchemy mapper failure on `PracticeSession -> Agent/Persona` relationships during a real recovery drill. Focused proof now locks both the baseline/runner behavior and that mapper-registration recovery gotcha. The runbook and current-state docs were updated to point at the new baseline + runner seam, document the evidence root, and keep auth bootstrap preconditions explicit rather than hardcoding secrets into the script layer.\n\n## Verification\n\nFocused unit proof finished green with `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/test_bootstrap_auth_admin.py backend/tests/unit/test_recovery_drill_baseline.py backend/tests/unit/test_recovery_drill_runner.py -q` (7/7). A real drill run with `RECOVERY_ADMIN_EMAIL=admin@qoder.ai RECOVERY_ADMIN_NAME=管理员 python3 scripts/recovery-drill-runner.py run --continue-on-failure --drill db_migration --drill auth_bootstrap --drill redis_session_state --drill oss_signing_playback --drill health_check` wrote evidence to `.dev/recovery-drills/20260414T002842Z/summary.json`; `auth_bootstrap`, `redis_session_state`, `oss_signing_playback`, and `health_check` passed with captured per-drill logs, while `db_migration` truthfully failed on the current local environment with `KeyError: '20260412_0315_028'`, which is now an explicit recovery signal rather than a silent script crash. The task-plan verification gate `bash scripts/dependency-governance.sh status && rg -n \"health|alembic|bootstrap|redis|oss|recovery\" scripts/recovery-* docs/backup-recovery-runbook.md` passed, and LSP diagnostics were clean on `scripts/recovery_drill_baseline.py`, `scripts/recovery_drill_runner.py`, `backend/scripts/bootstrap_auth_admin.py`, `backend/tests/unit/test_recovery_drill_runner.py`, and `backend/tests/unit/test_bootstrap_auth_admin.py`.\n\n## Verification Evidence\n\n| # | Command | Exit Code | Verdict | Duration |\n|---|---------|-----------|---------|----------|\n| 1 | `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/test_bootstrap_auth_admin.py backend/tests/unit/test_recovery_drill_baseline.py backend/tests/unit/test_recovery_drill_runner.py -q` | 0 | ✅ pass | 1662ms |\n| 2 | `RECOVERY_ADMIN_EMAIL=admin@qoder.ai RECOVERY_ADMIN_NAME=管理员 python3 scripts/recovery-drill-runner.py run --continue-on-failure --drill db_migration --drill auth_bootstrap --drill redis_session_state --drill oss_signing_playback --drill health_check` | 1 | ❌ fail | 9524ms |\n| 3 | `bash scripts/dependency-governance.sh status && rg -n \"health|alembic|bootstrap|redis|oss|recovery\" scripts/recovery-* docs/backup-recovery-runbook.md` | 0 | ✅ pass | 100ms |\n\n## Deviations\n\nAdjusted the baseline command forms to match the repo’s real executable paths after live drill runs exposed shell/cwd mismatches: auth bootstrap now uses `backend/venv/bin/python backend/scripts/bootstrap_auth_admin.py ...`, and db migration now uses `cd backend && venv/bin/python -m alembic upgrade head`. I also added hyphenated CLI entrypoints so the slice verification pattern `scripts/recovery-*` can discover the shipped scripts without moving the underscore-based authority modules established by T01.\n\n## Known Issues\n\nThe current local PostgreSQL/Alembic state is still inconsistent: the real `db_migration` drill fails with `KeyError: '20260412_0315_028'` when upgrading the repo’s configured `backend/.env` database. The new runner records that failure in `.dev/recovery-drills/<timestamp>/01-db_migration.log` and `summary.json`, but this task did not repair the underlying migration graph/database state.\n\n## Files Created/Modified\n\n- `scripts/recovery_drill_baseline.py`\n- `scripts/recovery_drill_runner.py`\n- `scripts/recovery-drill-baseline.py`\n- `scripts/recovery-drill-runner.py`\n- `backend/scripts/bootstrap_auth_admin.py`\n- `backend/tests/unit/test_recovery_drill_runner.py`\n- `backend/tests/unit/test_bootstrap_auth_admin.py`\n- `docs/backup-recovery-runbook.md`\n- `docs/setup/backup-recovery-current-state.md`\n- `.gsd/KNOWLEDGE.md`\n",
       "description": "- 实现并验证最小 drill scripts：检查环境、执行必要 migrate/bootstrap、跑 health/runtime/auth checks、记录失败信号。\n- 确保这些脚本复用 runbook 中同一 authority commands，而不是发明另一套运维路径。\n- 对需要 secrets 的步骤继续保持显式前置条件，不在脚本中硬编码。",
       "estimate": "2h",
       "files": [
@@ -16672,6 +16686,18 @@
       "decision": "How recovery drill authority is represented before side-effecting automation lands",
       "choice": "Use scripts/recovery_drill_baseline.py as the single repo-local authority inventory for recovery drills and manual-only boundaries, and require later recovery automation to reuse its checked commands and authority paths instead of inventing a parallel script set.",
       "rationale": "S04/T01 needs executable recovery guidance now, but the repo still lacks truthful Redis restore, OSS export, and multi-instance drain automation. A non-destructive inventory script keeps auth/bootstrap, Alembic/repair, Redis snapshot authority, websocket reconnect proof, OSS signing/playback proof, and health checks in one grep-discoverable executable surface while leaving manual-only boundaries explicit. This prevents docs, tests, and later T02/T03 scripts from drifting into separate operational truth lines.",
+      "revisable": "Yes",
+      "made_by": "agent",
+      "superseded_by": null
+    },
+    {
+      "seq": 1598,
+      "id": "D228",
+      "when_context": "M020/S04/T02",
+      "scope": "observability",
+      "decision": "Recovery drill automation authority shape for M020/S04",
+      "choice": "Keep scripts/recovery_drill_baseline.py as the single source of drill command/precondition/failure-signal metadata, have scripts/recovery_drill_runner.py execute that metadata directly, and write per-drill logs plus summary.json under .dev/recovery-drills/<timestamp>.",
+      "rationale": "T02 needed executable recovery automation without creating a second operations surface. Reusing the baseline metadata keeps docs, tests, and runner behavior on one authority line, while summary.json + per-drill logs provide agent-usable evidence for drill outcomes and real environment blockers such as the current Alembic revision drift.",
       "revisable": "Yes",
       "made_by": "agent",
       "superseded_by": null
@@ -21968,6 +21994,39 @@
       "verdict": "✅ pass",
       "duration_ms": 29,
       "created_at": "2026-04-14T00:09:54.183Z"
+    },
+    {
+      "id": 487,
+      "task_id": "T02",
+      "slice_id": "S04",
+      "milestone_id": "M020",
+      "command": "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/test_bootstrap_auth_admin.py backend/tests/unit/test_recovery_drill_baseline.py backend/tests/unit/test_recovery_drill_runner.py -q",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 1662,
+      "created_at": "2026-04-14T00:30:19.729Z"
+    },
+    {
+      "id": 488,
+      "task_id": "T02",
+      "slice_id": "S04",
+      "milestone_id": "M020",
+      "command": "RECOVERY_ADMIN_EMAIL=admin@qoder.ai RECOVERY_ADMIN_NAME=管理员 python3 scripts/recovery-drill-runner.py run --continue-on-failure --drill db_migration --drill auth_bootstrap --drill redis_session_state --drill oss_signing_playback --drill health_check",
+      "exit_code": 1,
+      "verdict": "❌ fail",
+      "duration_ms": 9524,
+      "created_at": "2026-04-14T00:30:19.730Z"
+    },
+    {
+      "id": 489,
+      "task_id": "T02",
+      "slice_id": "S04",
+      "milestone_id": "M020",
+      "command": "bash scripts/dependency-governance.sh status && rg -n \"health|alembic|bootstrap|redis|oss|recovery\" scripts/recovery-* docs/backup-recovery-runbook.md",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 100,
+      "created_at": "2026-04-14T00:30:19.730Z"
     }
   ]
 }
