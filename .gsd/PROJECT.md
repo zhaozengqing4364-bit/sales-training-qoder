@@ -32,6 +32,10 @@
   - **S02**：PromptTemplateService 已真正驱动 legacy evaluation/report compiled prompt contract；missing vars / empty render / base_url / generation failure 已进入 explicit diagnostics / fail-closed contract。
   - **S03**：canonical evaluation kernel 已完成 shared-kernel 收口：realtime、report、replay、history、admin 共享同一套 scenario-aware `canonical_evaluation_kernel` 与 `compatibility_readers`；web report/replay/history 已明确按 canonical -> compatibility -> legacy 的统一顺序消费分数事实。
   - **S04**：AI quality/cost/failure events 与 knowledge path mode 已统一到 allowlist-safe `runtime_events` inspection surface；knowledge-answer 现以显式 `path_mode=live|compat` 暴露 provenance，support/runtime、knowledge-check、websocket diagnostics、report/replay proof 不再依赖默认分数或 fallback 文案来猜测真实状态。
+- **M022 / S01**：首轮 methodology-aware sales rubric contract 已完成 slice close-out：
+  - `common.effectiveness.methodology` 成为首轮销售方法论 authority seam，固定 `discovery_qualification`、`value_story`、`evidence_proof`、`objection_reframe`、`next_step_commitment` 五个 rubric 与 canonical dimension / stage / `main_issue` / `next_goal` 的映射。
+  - sales realtime、report/replay/history/admin 现在通过 `canonical_evaluation_kernel.methodology` 与 `compatibility_readers.sales_methodology_rubric_v1` 读取同一份方法论语义，而不是各自重解释。
+  - learner report 与 docs/api-contract 已明确写回五个 rubric 视角及其首轮边界：`qualification` 仍并入 `opening + discovery`，当前不宣称已覆盖完整销售方法论。
 
 ## Current Product Truths
 
@@ -60,22 +64,30 @@
   - knowledge-answer 对外 provenance 现以显式 `path_mode=live|compat` 暴露，`rollout_mode` 退居 supporting detail；
   - `build_session_runtime_diagnostics()`、StepFun websocket diagnostics、`/api/v1/support/runtime/faults.items[].diagnostics.runtime_events[]`、以及 `LLMService` runtime bookkeeping 共享同一 allowlist-safe event shape；
   - `category=mode` 只回答路径来源，真正的 degraded/failure 由 `severity` 表达；report/replay 前端 proof 则继续用 `data-contract-source` 与显式 failure copy 锁定 compat/degraded 语义，而不是发明第二套 UI-only 状态层。
+- **M022/S01 methodology authority 已固定**：
+  - `backend/src/common/effectiveness/methodology.py` 是首轮销售方法论/rubric authority seam；
+  - sales methodology 语义应优先读取 `canonical_evaluation_kernel.methodology`，过渡消费者读取 `compatibility_readers.sales_methodology_rubric_v1`；
+  - 当前 `qualification` 仍并入 `opening + discovery`，除非 `sales_stage` 先扩展真实 stage，否则任何 surface 都不能单方面宣称独立 qualification stage 已存在；
+  - learner-facing report copy 与 manager-facing docs 必须继续把 `main_issue` / `next_goal` 解释为这套 rubric 在 canonical evidence 上的缺口与补强动作，而不是额外第二套评分器。
 
 ## Current Focus
 
-当前项目处于 **M021 已完成 milestone close-out、进入 post-M021 收口与后续优先级选择** 的状态：
+当前项目处于 **M022 已启动且 S01 已完成、后续继续沿 productization / manager truth / organization-ready 路线推进** 的状态：
 - **M019/M020/M021** 的 authority seams 已全部完成 assembled close-out，当前最重要的工作不是重开新入口，而是沿已封板权威线做后续退休与修补。
 - **M021** 刚完成 fresh milestone-level verification：
   - non-`.gsd` branch diff 已确认存在大量真实 backend/web/docs/test 改动；
   - assembled milestone proof bundle `backend/venv/bin/python -m pytest -c backend/pyproject.toml ...` 覆盖 S01-S04 关键 seam，共 **86/86 通过**；
   - `compile_runtime_prompt_contract|canonical_evaluation_kernel|runtime_events|path_mode` grep gate 与关键 authority 文件的 LSP diagnostics 均通过。
+- **M022/S01** 已 fresh close-out：
+  - slice plan 三条验证线全部 fresh 通过：backend `sales and (report or replay or history or analytics)` bundle、两条 exact grep gates、以及 learner report focused tests；
+  - S01 已把“方法论 aware 的 rubric contract”从 planner 文字推进成 code-owned + read-side-consumed + learner-doc-visible 的 authority seam，为 S02 persona/scenario/industry pack 和 S03 manager/admin truth surfaces 提供复用基线。
 - 仍然需要持续关注的遗留真实问题：`.dev/recovery-drills/20260414T010316Z/summary.json` 中 `auth_bootstrap`、`redis_session_state`、`oss_signing_playback`、`health_check` 已通过，但 `db_migration` 仍真实暴露 `KeyError: '20260412_0315_028'`，不能被 `/health` 掩盖。
 
 接下来的重点：
-1. 规划 **post-M021 compat retirement**：只有在 report/replay/history/admin/support 等所有消费面都不再依赖 compat fallback 后，才能开始退休 compatibility readers、legacy evaluation/report、manual `/evaluation/*` 等旧 surface。
-2. 继续把 AI control-plane / evaluation / runtime-event work 落在 authority-bearing code、focused tests、workflow、runbook 与 contract docs 上，而不是退回 markdown-only inventory。
+1. 推进 **M022/S02-S04**：在已固定的 methodology contract 之上做 persona/scenario/industry pack 运营化、manager/admin truth surface 收口、organization/team/tenant target-state plan，而不是各自再解释什么叫“好销售对话”。
+2. 规划 **post-M021 compat retirement**：只有在 report/replay/history/admin/support 等所有消费面都不再依赖 compat fallback 后，才能开始退休 compatibility readers、legacy evaluation/report、manual `/evaluation/*` 等旧 surface。
 3. 修复 `20260412_0315_028` 对应的 Alembic revision / migration-graph drift，然后重跑同一套 recovery drills，直到 `db_migration` 也转绿。
-4. 保持 M019/M020/M021 已封板 authority seams 稳定，不要重开第二套 startup/migration/practice/frontend/release/auth/observability/runtime/evaluation 入口。
+4. 保持 M019/M020/M021/M022-S01 已封板 authority seams 稳定，不要重开第二套 startup/migration/practice/frontend/release/auth/observability/evaluation/methodology 入口。
 
 当前不应做的事：
 - 不要把 `init_db()` 的 `create_all()` / compat guard 外推成生产迁移 authority。
@@ -92,6 +104,7 @@
 - 不要让 compiled prompt failures 重新回到 silent fail-open：缺变量、空渲染、provider/base_url 缺失、generation error 已经在 M021/S02 被定义成 explicit diagnostics / fail-closed contract；后续工作应沿这条 seam 扩展，而不是重新引入 filler copy 掩盖失败。
 - 不要让 report / replay / history / future admin pages 绕开 shared frontend score resolver 重新解释 fallback 顺序；一旦某个 surface 私自重算，就会让 compatibility fallback 无法被准确退休。
 - 不要让 `runtime_events` 再分裂成 logger-only、support-only、UI-only 三套语义；S04 已固定必须沿同一 allowlist-safe event shape 暴露 degraded / failure / cost / mode 事实。
+- 不要为 sales methodology 再发明 manager-only taxonomy、report-only score block、或 page-local rubric heuristics；M022/S01 已固定一条 shared methodology seam，后续扩展必须沿它加法演进。
 
 ## Capability Contract
 
@@ -120,3 +133,4 @@
 - [x] M019 — Authority seams 与 release gate 收口
 - [x] M020 — Security / multi-instance runtime / recovery hardening
 - [x] M021 — AI control plane / prompt / evaluation kernel 统一
+- [ ] M022 — Sales productization / manager truth / organization-ready roadmap（S01 complete；S02-S04 pending）

@@ -1,3 +1,34 @@
+- time: 2026-04-14T13:43:55+08:00
+  mode: grow
+  item id: M022-S01
+  files changed:
+    - backend/src/common/effectiveness/methodology.py
+    - backend/src/common/effectiveness/canonical.py
+    - backend/src/agent/capabilities/realtime_scoring.py
+    - backend/src/common/conversation/session_evidence.py
+    - backend/src/common/services/practice_session_service.py
+    - backend/src/common/api/practice.py
+    - docs/api-contract/effectiveness.md
+    - docs/api-contract/README.md
+    - web/src/app/(user)/practice/[sessionId]/report/page.tsx
+    - .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md
+    - .gsd/DECISIONS.md
+    - .gsd/KNOWLEDGE.md
+    - .gsd/PROJECT.md
+    - .gsd/milestones/M022/slices/S01/S01-SUMMARY.md
+    - .gsd/milestones/M022/slices/S01/S01-UAT.md
+    - .codex/loop/state.json
+    - .codex/loop/log.md
+  summary: Closed M022/S01 after fresh slice-level verification confirmed the first methodology-aware sales rubric is now a real shared authority seam: `common.effectiveness.methodology` defines the five first-round rubrics, the canonical kernel and compatibility readers carry the same rubric status across realtime/report/replay/history/admin, learner-facing docs/report copy now explain the same contract honestly, and downstream M022 slices can reuse this seam instead of inventing their own sales taxonomy.
+  verification commands:
+    - rg -n "sales_stage|realtime_scoring|effectiveness|main_issue|next_goal|dimension_scores" backend/src/common backend/src/agent docs/api-contract
+    - backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests -k "sales and (report or replay or history or analytics)" -x -q
+    - rg -n "qualification|discovery|value|objection|next-step|rubric" docs/api-contract .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md web/src/app/(user)/practice/[sessionId]/report/page.tsx
+    - npm --prefix web test -- --run 'src/app/(user)/practice/[sessionId]/report/page.test.tsx'
+  verification results: passed; both exact slice-plan grep gates exited 0, the backend sales report/replay/history/analytics bundle finished 24 selected tests green (plus 1 skipped), and the learner report page suite finished 24/24 green.
+  success signal status: M022 can now build persona/scenario packs and manager truth surfaces on one explicit methodology contract instead of re-deriving what counts as good sales behavior in each subsystem.
+  rollback note: if a later slice adds a standalone qualification stage or changes rubric exposure, update `common.effectiveness.methodology`, the canonical builder/compat reader wiring, docs/api-contract, learner report copy, and the focused backend/web proof together so the outward language and runtime truth do not drift.
+
 - time: 2026-04-14T13:13:00+08:00
   mode: grow
   item id: M022-S01-T01

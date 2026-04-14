@@ -35,6 +35,7 @@ from ..schemas import (
     UpdateAgentRequest,
 )
 from ..services.agent_service import AgentService
+from ..services.industry_pack_contract import build_agent_industry_pack_contract
 
 logger = get_logger(__name__)
 
@@ -128,6 +129,18 @@ async def list_agents_admin(
             page=page,
             page_size=page_size
         ).model_dump()
+    }
+
+
+@admin_router.get("/industry-pack-contract", response_model=dict)
+async def get_industry_pack_contract(
+    current_user: User = Depends(get_current_admin_user),
+) -> dict[str, Any]:
+    """Expose the composed industry-pack authority on top of existing admin entrypoints."""
+    del current_user
+    return {
+        "success": True,
+        "data": build_agent_industry_pack_contract(),
     }
 
 

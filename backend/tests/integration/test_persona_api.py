@@ -557,3 +557,28 @@ class TestAdminPersonaAPI:
             and "pressure_model_legacy_only" in issue["issue_types"]
             for issue in data["sample_issues"]
         )
+
+    async def test_get_persona_industry_pack_contract(
+        self,
+        async_client,
+        auth_headers,
+    ):
+        """Should expose field ownership for persona/customer-pressure/knowledge bundles."""
+        response = await async_client.get(
+            "/api/v1/admin/personas/industry-pack-contract",
+            headers=auth_headers,
+        )
+
+        assert response.status_code == 200
+        data = response.json()["data"]
+        assert data["contract_version"] == 1
+        assert data["owned_fields"]["persona"] == [
+            "persona_policy.system_prompt",
+            "traits",
+            "behavior_config",
+            "tts_config",
+            "difficulty",
+        ]
+        assert "customer_pressure" in data["owned_fields"]
+        assert "knowledge_bundle" in data["owned_fields"]
+        assert data["runtime_targets"]["customer_pressure"]["compiled_instruction_section"] == "销售追问焦点"

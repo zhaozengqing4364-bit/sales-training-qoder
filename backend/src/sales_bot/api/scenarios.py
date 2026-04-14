@@ -7,6 +7,10 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from agent.models import Agent, AgentPersona, Persona
+from agent.services.industry_pack_contract import (
+    build_persona_runtime_binding_summary,
+    build_sales_scenario_runtime_contract,
+)
 from common.api.server_error import build_server_error
 from common.auth.service import get_current_user
 from common.db.models import Scenario, User
@@ -89,6 +93,16 @@ async def list_scenarios(
         return []
 
 
+@router.get("/scenarios/sales/runtime-contract")
+async def get_sales_runtime_contract(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Expose how sales scenarios compose persona/customer-pressure/knowledge runtime truth."""
+    del current_user, db
+    return build_sales_scenario_runtime_contract()
+
+
 @router.get("/scenarios/sales/personas")
 async def list_sales_personas(
     agent_id: str | None = Query(None, description="Optional agent ID filter"),
@@ -132,6 +146,7 @@ async def list_sales_personas(
                 "description": persona.description or "",
                 "characteristics": _extract_persona_characteristics(persona.traits),
                 "difficulty": persona.difficulty,
+                "runtime_binding": build_persona_runtime_binding_summary(persona),
             }
 
         return list(unique_personas.values())

@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from sales_bot.api.scenarios import list_sales_personas
+from sales_bot.api.scenarios import get_sales_runtime_contract, list_sales_personas
 
 
 class _DummyResult:
@@ -56,6 +56,12 @@ async def test_list_sales_personas_reads_from_database_and_deduplicates():
     assert len(payload) == 2
     assert payload[0]["id"] == "persona-a"
     assert payload[0]["characteristics"] == ["关注点: 技术细节", "风格: 严谨"]
+    assert payload[0]["runtime_binding"]["industry_pack_strategy"] == "persona_policy_plus_scenario_plus_knowledge"
+    assert payload[0]["runtime_binding"]["runtime_impacts"] == [
+        "compiled_instructions",
+        "voice_policy_snapshot.customer_pressure",
+        "voice_policy_snapshot.knowledge_base_ids",
+    ]
     assert payload[1]["id"] == "persona-b"
 
 
@@ -70,3 +76,18 @@ async def test_list_sales_personas_returns_empty_list_on_query_error():
     )
 
     assert payload == []
+
+
+@pytest.mark.asyncio
+async def test_get_sales_runtime_contract_exposes_industry_pack_mapping():
+    payload = await get_sales_runtime_contract(
+        current_user=SimpleNamespace(user_id="user-1"),
+        db=SimpleNamespace(),
+    )
+
+    assert payload["contract_version"] == 1
+    assert payload["industry_pack"]["authority_model"] == "composed_from_existing_surfaces"
+    assert payload["industry_pack"]["scenario_owner"] == "sales scenarios api"
+    assert "customer_pressure" in payload["runtime_targets"]
+    assert "knowledge_base_ids" in payload["runtime_targets"]
+    assert payload["runtime_targets"]["customer_pressure"]["persisted_in"] == "practice_sessions.voice_policy_snapshot"

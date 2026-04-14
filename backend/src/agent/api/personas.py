@@ -31,6 +31,7 @@ from ..schemas import (
     UpdatePersonaRequest,
 )
 from ..services.persona_service import PersonaService
+from ..services.industry_pack_contract import build_persona_industry_pack_contract
 
 logger = get_logger(__name__)
 
@@ -108,6 +109,18 @@ async def list_personas(
             page=page,
             page_size=page_size
         ).model_dump()
+    }
+
+
+@admin_router.get("/industry-pack-contract", response_model=dict)
+async def get_persona_industry_pack_contract(
+    current_user: User = Depends(get_current_admin_user),
+) -> dict[str, Any]:
+    """Expose persona/customer-pressure/knowledge ownership for industry-pack composition."""
+    del current_user
+    return {
+        "success": True,
+        "data": build_persona_industry_pack_contract(),
     }
 
 

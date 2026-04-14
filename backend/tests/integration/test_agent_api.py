@@ -557,3 +557,21 @@ class TestUserAgentAPI:
         # Should be sorted by display_order
         assert personas[0]["name"] == "价格敏感型"
         assert personas[0]["is_default"] is True
+
+    async def test_get_industry_pack_contract(
+        self,
+        async_client,
+        auth_headers,
+    ):
+        """Should expose composed industry-pack authority for existing admin entrypoints."""
+        response = await async_client.get(
+            "/api/v1/admin/agents/industry-pack-contract",
+            headers=auth_headers,
+        )
+
+        assert response.status_code == 200
+        data = response.json()["data"]
+        assert data["contract_version"] == 1
+        assert data["industry_pack"]["authority_model"] == "composed_from_existing_admin_surfaces"
+        assert data["entrypoints"]["persona"] == "/api/v1/admin/personas/{persona_id}"
+        assert "practice_sessions.voice_policy_snapshot" in data["runtime_authorities"]

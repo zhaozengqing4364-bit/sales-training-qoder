@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "exported_at": "2026-04-14T05:37:21.321Z",
+  "exported_at": "2026-04-14T05:54:10.797Z",
   "milestones": [
     {
       "id": "M001",
@@ -3036,14 +3036,14 @@
       "milestone_id": "M022",
       "id": "S01",
       "title": "S01",
-      "status": "pending",
+      "status": "complete",
       "risk": "high",
       "depends": [],
       "demo": "After this: 销售训练会有一套可配置方法论/rubric contract，可以明确映射到 realtime、report、manager coaching，而不是只剩关键词阶段和散分。",
       "created_at": "2026-04-13T02:11:02.999Z",
-      "completed_at": null,
-      "full_summary_md": "",
-      "full_uat_md": "",
+      "completed_at": "2026-04-14T05:43:17.665Z",
+      "full_summary_md": "---\nid: S01\nparent: M022\nmilestone: M022\nprovides:\n  - One code-owned sales methodology/rubric contract reusable by S02 persona/scenario/industry-pack work and S03 manager/admin truth surfaces.\n  - One shared transition payload (`sales_methodology_rubric_v1`) so current sales consumers can adopt methodology semantics without breaking existing report/realtime/read-side contracts.\n  - One boundary-honest learner/manager explanation seam that states what the first round does cover and what it still does not claim.\nrequires:\n  - slice: S01\n    provides: This slice establishes the methodology authority seam consumed by later M022 slices.\naffects:\n  - S02\n  - S03\n  - S04\nkey_files:\n  - backend/src/common/effectiveness/methodology.py\n  - backend/src/common/effectiveness/canonical.py\n  - backend/src/agent/capabilities/realtime_scoring.py\n  - backend/src/common/conversation/session_evidence.py\n  - backend/src/common/services/practice_session_service.py\n  - backend/src/common/api/practice.py\n  - docs/api-contract/effectiveness.md\n  - docs/api-contract/README.md\n  - web/src/app/(user)/practice/[sessionId]/report/page.tsx\n  - .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md\n  - .gsd/KNOWLEDGE.md\n  - .gsd/PROJECT.md\nkey_decisions:\n  - Keep methodology-aware sales rubric semantics additive to the canonical kernel and compatibility readers instead of replacing the shipped score schema.\n  - Expose shared methodology status through `canonical_evaluation_kernel.methodology` and mirror it through `compatibility_readers.sales_methodology_rubric_v1` for transition consumers.\n  - Keep the existing learner report headline stable and surface the new methodology language in a dedicated rubric explainer card.\npatterns_established:\n  - Introduce new sales semantics as additive canonical-kernel metadata plus compatibility readers, not as a second top-level score schema.\n  - Derive methodology status once in shared backend effectiveness code so realtime, report, replay, history, and admin surfaces cannot drift independently.\n  - Keep outward learner/manager language boundary-honest: if runtime stage support is missing, document that limit explicitly instead of inflating copy.\nobservability_surfaces:\n  - `canonical_evaluation_kernel.methodology` is now the primary cross-surface health signal for sales methodology parity.\n  - `compatibility_readers.sales_methodology_rubric_v1` is the transition reader that should stay identical to the canonical methodology summary until compat retirement.\n  - The learner report rubric explainer and docs/api-contract/effectiveness.md are the outward explanation surfaces that should stay aligned with the backend contract.\ndrill_down_paths:\n  - .gsd/milestones/M022/slices/S01/tasks/T01-SUMMARY.md\n  - .gsd/milestones/M022/slices/S01/tasks/T02-SUMMARY.md\n  - .gsd/milestones/M022/slices/S01/tasks/T03-SUMMARY.md\nduration: \"\"\nverification_result: passed\ncompleted_at: 2026-04-14T05:43:17.667Z\nblocker_discovered: false\n---\n\n# S01: Methodology-aware sales rubric 收口\n\n**Shipped the first methodology-aware sales rubric contract and wired the same rubric semantics through realtime, projection-backed read surfaces, and learner-facing report explanations.**\n\n## What Happened\n\nS01 turned M022’s methodology idea into a real shared contract instead of planner prose. T01 introduced `backend/src/common/effectiveness/methodology.py` as the code-owned authority for five first-round sales rubrics — `discovery_qualification`, `value_story`, `evidence_proof`, `objection_reframe`, and `next_step_commitment` — and tied each rubric to existing canonical dimensions, current `sales_stage` coverage, `main_issue` / `next_goal` families, and shipped evidence paths. T02 then wired that contract into the canonical evaluation builder so sales realtime snapshots, completed-session projection/read-side consumers, and transition readers all consume the same methodology summary through `canonical_evaluation_kernel.methodology` and `compatibility_readers.sales_methodology_rubric_v1` instead of inventing per-surface rubric logic. T03 wrote the same semantics back into docs and the learner report page: the report now explains the five rubric lenses in-product, while docs/api-contract and the architecture scan explicitly state the current first-round boundary that qualification still lives inside `opening + discovery` until the runtime stage contract changes.\n\nThis slice establishes a reusable pattern for the remaining milestone: add new sales semantics additively on top of the canonical kernel plus compatibility readers, keep learner/admin/read-side contracts stable, and make the outward language boundary-honest. The immediate downstream value is that S02 persona/scenario/industry-pack work and S03 manager/admin truth-surface work can now reuse one explicit definition of what “good sales behavior” means, rather than translating discovery/value/evidence/objection/next-step differently in each subsystem.\n\nOperational readiness for this runtime-adjacent slice is simple but important: the health signal is cross-surface parity of the methodology block on sales realtime/report/replay/history/admin payloads; the failure signal is any surface missing the methodology payload or disagreeing on rubric status while still showing canonical scores; the recovery path is to route the consumer back to `common.effectiveness.methodology` + the shared canonical builder and rerun the focused backend parity bundle plus the learner report test; the current monitoring gap is that there is still no dedicated admin truth panel that compares methodology parity across surfaces automatically, so the proof remains test- and contract-led.\n\n## Verification\n\nFresh slice-close verification passed on every planned gate. `rg -n \"sales_stage|realtime_scoring|effectiveness|main_issue|next_goal|dimension_scores\" backend/src/common backend/src/agent docs/api-contract` exited 0 and confirmed the methodology contract is discoverable on the existing effectiveness/realtime/report authority seams. `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests -k \"sales and (report or replay or history or analytics)\" -x -q` passed with 24 selected tests green (plus 1 skipped), proving the shared sales report/replay/history/analytics bundle still aligns after the methodology wiring. `rg -n \"qualification|discovery|value|objection|next-step|rubric\" docs/api-contract .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md 'web/src/app/(user)/practice/[sessionId]/report/page.tsx'` exited 0 and confirmed the outward rubric language exists in docs, architecture inventory, and the learner report page. As an extra learner-surface guard, `npm --prefix web test -- --run 'src/app/(user)/practice/[sessionId]/report/page.test.tsx'` passed 24/24 tests, confirming the shared report UI still renders correctly after the rubric explainer addition.\n\n## Requirements Advanced\n\nNone.\n\n## Requirements Validated\n\nNone.\n\n## New Requirements Surfaced\n\nNone.\n\n## Requirements Invalidated or Re-scoped\n\nNone.\n\n## Deviations\n\nTwo deliberate boundary-preserving deviations were kept. First, qualification remains merged into `opening + discovery` because the shipped `sales_stage` runtime still has no standalone qualification stage. Second, the learner report kept its existing top-line summary copy and introduced methodology language through a dedicated explainer card, which made the new contract visible without destabilizing the existing report summary contract.\n\n## Known Limitations\n\nThis is only the first-round methodology contract. It does not yet claim full sales-methodology coverage, it does not add a standalone qualification stage, and there is not yet a dedicated manager/admin UI that audits methodology parity visually across surfaces. Transition consumers may still read the mirrored compatibility reader while downstream slices complete the broader productization work.\n\n## Follow-ups\n\nS02 should bind persona/scenario/customer-pressure/industry-pack assets to this shared methodology contract instead of creating pack-local scoring language. S03 should use the same contract to make manager/admin truth surfaces evidence-backed and remove remaining demo/drift explanations. A later slice can only introduce a standalone qualification stage after the underlying `sales_stage` runtime contract changes as well.\n\n## Files Created/Modified\n\n- `backend/src/common/effectiveness/methodology.py` — Added the first-round code-owned sales methodology contract and shared rubric summary builder.\n- `backend/src/common/effectiveness/canonical.py` — Attached methodology summaries to the canonical evaluation kernel and compatibility readers for sales surfaces.\n- `backend/src/agent/capabilities/realtime_scoring.py` — Passed stage context into the shared methodology/canonical builder so live score snapshots expose the same rubric semantics.\n- `backend/src/common/conversation/session_evidence.py` — Rebuilt completed-session sales methodology context from shared aligned evidence so report/replay/history/admin consumers stay consistent.\n- `backend/src/common/services/practice_session_service.py` — Threaded stage-aware realtime snapshot context into persisted session evidence compatibility paths.\n- `backend/src/common/api/practice.py` — Kept sales read-side/practice compatibility routes aligned with the shared methodology-aware effectiveness helpers.\n- `docs/api-contract/effectiveness.md` — Documented the first-round methodology/rubric contract, learner-facing interpretation rules, and boundary-honest qualification behavior.\n- `docs/api-contract/README.md` — Surfaced the methodology contract as a first-round API-contract concern and linked the new documentation.\n- `web/src/app/(user)/practice/[sessionId]/report/page.tsx` — Added a learner-visible rubric explainer card that exposes the five first-round methodology lenses and their current boundary.\n- `.gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md` — Recorded the methodology authority line and downstream reuse rule for the rest of M022.\n- `.gsd/KNOWLEDGE.md` — Captured the qualification-stage gotcha and the canonical methodology consumption seam for future slices.\n- `.gsd/PROJECT.md` — Refreshed project state to record M022/S01 as complete and to describe the new methodology authority seam.\n",
+      "full_uat_md": "# S01: Methodology-aware sales rubric 收口 — UAT\n\n**Milestone:** M022\n**Written:** 2026-04-14T05:43:17.667Z\n\n# UAT — M022 / S01 Methodology-aware sales rubric 收口\n\n## Preconditions\n- Backend dependencies are installed and the repo-root backend command works: `backend/venv/bin/python -m pytest -c backend/pyproject.toml ...`.\n- Web dependencies are installed and `npm --prefix web test -- --run ...` works.\n- There is at least one sales practice session fixture or reproducible test session that produces realtime score updates and a completed canonical report/replay/history payload.\n- The tester can inspect API payloads or page-rendered data for sales realtime/report/replay/history/admin surfaces.\n\n## Test Case 1 — Realtime sales scoring exposes the shared methodology summary\n1. Start or replay a sales practice session that produces a `score_update` / realtime scoring snapshot.\n2. Inspect the sales scoring payload emitted by the backend/runtime contract.\n3. Confirm the payload still includes the existing score fields (`overall_score`, dimension scores, existing sales score context) and now also carries the additive methodology block.\n\n**Expected outcomes**\n- A sales-only methodology summary is present under the shared canonical kernel contract rather than a new ad-hoc top-level score schema.\n- The summary exposes the five first-round rubric ids: `discovery_qualification`, `value_story`, `evidence_proof`, `objection_reframe`, `next_step_commitment`.\n- The same summary is mirrored through `compatibility_readers.sales_methodology_rubric_v1` for transition consumers.\n- The payload does **not** claim an independent `qualification` stage; qualification remains part of `opening + discovery`.\n\n## Test Case 2 — Completed-session read surfaces agree on the same rubric semantics\n1. Complete a sales session that has enough evidence to produce canonical report/replay/history data.\n2. Inspect the completed-session report payload.\n3. Inspect the replay payload for the same session.\n4. Inspect a history/admin/session summary surface for the same session.\n\n**Expected outcomes**\n- All inspected sales surfaces expose methodology semantics derived from the same shared builder rather than each surface inventing its own rubric health.\n- `main_issue` and `next_goal` remain the outward conclusion handles, but they line up with the same rubric gap/next-action interpretation across report/replay/history/admin.\n- The rubric ids and health/degraded states are consistent across surfaces for the same session.\n- No surface introduces a manager-only or report-only methodology taxonomy.\n\n## Test Case 3 — Learner report explains the rubric contract without breaking the existing report headline\n1. Open `/practice/{sessionId}/report` for a completed sales session.\n2. Locate the new rubric explainer section on the report page.\n3. Read the explainer copy and compare it with the top-line report summary.\n\n**Expected outcomes**\n- The report page shows a dedicated sales rubric explainer card describing the five first-round lenses: `discovery / qualification`, `value`, `evidence`, `objection`, `next-step`.\n- The existing top-line learner report summary/headline still renders normally; methodology semantics are additive, not a second competing summary block.\n- The explainer makes it clear that `main_issue`, `next_goal`, and claim/evidence status come from the same canonical evidence line.\n\n## Test Case 4 — Boundary honesty for qualification remains visible\n1. Use the learner report page and docs/api-contract/effectiveness references for the slice.\n2. Look specifically for qualification-related wording.\n3. Verify that the same wording is present in both docs and the learner-facing report explanation.\n\n**Expected outcomes**\n- Qualification is explicitly described as currently merged into `opening + discovery`.\n- Neither docs nor page copy claim that the product already ships a standalone qualification stage or complete methodology coverage.\n- If the tester only reads the learner report page, they still see the current first-round boundary rather than inflated product claims.\n\n## Test Case 5 — Regression guard on the shared report UI\n1. Run `npm --prefix web test -- --run 'src/app/(user)/practice/[sessionId]/report/page.test.tsx'`.\n2. Review the report test result.\n\n**Expected outcomes**\n- The report page suite passes green.\n- Existing sales report rendering behavior remains intact after the methodology explainer addition.\n- The new methodology explanation does not force unrelated report contract churn.\n\n## Edge cases to confirm\n- Discovery-only sessions still map qualification evidence through the `discovery_qualification` rubric instead of inventing a separate `qualification` runtime stage.\n- Consumers that still rely on compatibility readers can read `sales_methodology_rubric_v1` without losing parity with the canonical methodology payload.\n- If a future surface omits the methodology block but still shows canonical sales scores, treat that as a parity regression and recover by reusing the shared methodology builder rather than adding local fallback heuristics.\n",
       "goal": "把销售训练从‘通用训练框架 + 销售规则’推进到方法论 aware 的 rubric contract。",
       "success_criteria": "- 至少一套销售方法论/rubric contract（例如 discovery/qualification/value/objection/next-step 维度）接入 canonical evaluation kernel。\n- realtime/report/manager coaching 能读同一方法论语义，而不是各自解释。\n- 不要求首轮就覆盖所有方法论，但必须明确配置入口与证据映射。",
       "proof_level": "integration",
@@ -3055,12 +3055,10 @@
     {
       "milestone_id": "M022",
       "id": "S02",
-      "title": "Persona / scenario / industry pack 运营化",
+      "title": "S02",
       "status": "pending",
       "risk": "medium",
-      "depends": [
-        "S01"
-      ],
+      "depends": [],
       "demo": "After this: persona/customer-pressure/scenario/industry pack 会通过现有 admin entrypoints 运作，角色扮演与场景深度不再只靠单条 prompt。",
       "created_at": "2026-04-13T02:11:02.999Z",
       "completed_at": null,
@@ -13786,19 +13784,31 @@
       "milestone_id": "M022",
       "slice_id": "S02",
       "id": "T01",
-      "title": "定义 industry pack / customer-pressure 资产合同",
-      "status": "pending",
-      "one_liner": "",
-      "narrative": "",
-      "verification_result": "",
+      "title": "Added inspectable industry-pack contract surfaces across agent/persona/scenario APIs and documented their runtime mapping.",
+      "status": "complete",
+      "one_liner": "Added inspectable industry-pack contract surfaces across agent/persona/scenario APIs and documented their runtime mapping.",
+      "narrative": "I introduced a new shared helper at `backend/src/agent/services/industry_pack_contract.py` to make the first-round industry-pack/customer-pressure contract explicit instead of leaving it implicit across persona policy, scenario metadata, and knowledge bindings. Using that helper, I added `GET /api/v1/admin/agents/industry-pack-contract` to expose the composed-asset authority model, `GET /api/v1/admin/personas/industry-pack-contract` to expose field ownership and runtime targets, and `GET /api/v1/scenarios/sales/runtime-contract` to expose the sales-scenario runtime mapping. I also extended `GET /api/v1/scenarios/sales/personas` with a `runtime_binding` summary so future agents can inspect which customer-pressure source, objection axes, questions, and knowledge bindings a persona will push into runtime surfaces. Finally, I updated `.gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md` with the M022/S02 contract rules and wrote the composed-asset decision/knowledge back to GSD artifacts.",
+      "verification_result": "Fresh focused backend tests passed for the new agent/persona/scenario contract surfaces and the augmented sales persona payload. I then reran the task-plan verification command `rg -n \"persona_policy|customer_pressure|scenario|knowledge_base|agent|industry\" backend/src/agent backend/src/sales_bot backend/src/common/knowledge` and confirmed the new contract endpoints and helper are discoverable in the expected code surfaces. I also ran LSP diagnostics on `backend/src/agent/api/agents.py`, `backend/src/agent/api/personas.py`, `backend/src/sales_bot/api/scenarios.py`, and `backend/src/agent/services/industry_pack_contract.py`; all returned no diagnostics.",
       "duration": "",
-      "completed_at": null,
+      "completed_at": "2026-04-14T05:54:10.740Z",
       "blocker_discovered": false,
-      "deviations": "",
-      "known_issues": "",
-      "key_files": [],
-      "key_decisions": [],
-      "full_summary_md": "",
+      "deviations": "None.",
+      "known_issues": "Focused pytest still emits pre-existing coverage/no-data warnings under the repository’s current pytest-cov configuration; the task’s contract surfaces and tests passed despite those warnings.",
+      "key_files": [
+        "backend/src/agent/services/industry_pack_contract.py",
+        ".gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md",
+        "backend/src/agent/api/agents.py",
+        "backend/src/agent/api/personas.py",
+        "backend/src/sales_bot/api/scenarios.py",
+        "backend/tests/unit/test_sales_scenarios_api.py",
+        "backend/tests/integration/test_agent_api.py",
+        "backend/tests/integration/test_persona_api.py",
+        ".gsd/KNOWLEDGE.md"
+      ],
+      "key_decisions": [
+        "Keep industry pack as a composed asset over existing agent/persona/knowledge/scenario surfaces and expose inspectable read-only contract endpoints instead of creating a standalone content platform in T01."
+      ],
+      "full_summary_md": "---\nid: T01\nparent: S02\nmilestone: M022\nkey_files:\n  - backend/src/agent/services/industry_pack_contract.py\n  - .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md\n  - backend/src/agent/api/agents.py\n  - backend/src/agent/api/personas.py\n  - backend/src/sales_bot/api/scenarios.py\n  - backend/tests/unit/test_sales_scenarios_api.py\n  - backend/tests/integration/test_agent_api.py\n  - backend/tests/integration/test_persona_api.py\n  - .gsd/KNOWLEDGE.md\nkey_decisions:\n  - Keep industry pack as a composed asset over existing agent/persona/knowledge/scenario surfaces and expose inspectable read-only contract endpoints instead of creating a standalone content platform in T01.\nduration: \nverification_result: passed\ncompleted_at: 2026-04-14T05:54:10.739Z\nblocker_discovered: false\n---\n\n# T01: Added inspectable industry-pack contract surfaces across agent/persona/scenario APIs and documented their runtime mapping.\n\n**Added inspectable industry-pack contract surfaces across agent/persona/scenario APIs and documented their runtime mapping.**\n\n## What Happened\n\nI introduced a new shared helper at `backend/src/agent/services/industry_pack_contract.py` to make the first-round industry-pack/customer-pressure contract explicit instead of leaving it implicit across persona policy, scenario metadata, and knowledge bindings. Using that helper, I added `GET /api/v1/admin/agents/industry-pack-contract` to expose the composed-asset authority model, `GET /api/v1/admin/personas/industry-pack-contract` to expose field ownership and runtime targets, and `GET /api/v1/scenarios/sales/runtime-contract` to expose the sales-scenario runtime mapping. I also extended `GET /api/v1/scenarios/sales/personas` with a `runtime_binding` summary so future agents can inspect which customer-pressure source, objection axes, questions, and knowledge bindings a persona will push into runtime surfaces. Finally, I updated `.gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md` with the M022/S02 contract rules and wrote the composed-asset decision/knowledge back to GSD artifacts.\n\n## Verification\n\nFresh focused backend tests passed for the new agent/persona/scenario contract surfaces and the augmented sales persona payload. I then reran the task-plan verification command `rg -n \"persona_policy|customer_pressure|scenario|knowledge_base|agent|industry\" backend/src/agent backend/src/sales_bot backend/src/common/knowledge` and confirmed the new contract endpoints and helper are discoverable in the expected code surfaces. I also ran LSP diagnostics on `backend/src/agent/api/agents.py`, `backend/src/agent/api/personas.py`, `backend/src/sales_bot/api/scenarios.py`, and `backend/src/agent/services/industry_pack_contract.py`; all returned no diagnostics.\n\n## Verification Evidence\n\n| # | Command | Exit Code | Verdict | Duration |\n|---|---------|-----------|---------|----------|\n| 1 | `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/test_sales_scenarios_api.py backend/tests/integration/test_agent_api.py backend/tests/integration/test_persona_api.py -q` | 0 | ✅ pass | 8478ms |\n| 2 | `rg -n \"persona_policy|customer_pressure|scenario|knowledge_base|agent|industry\" backend/src/agent backend/src/sales_bot backend/src/common/knowledge` | 0 | ✅ pass | 37ms |\n\n## Deviations\n\nNone.\n\n## Known Issues\n\nFocused pytest still emits pre-existing coverage/no-data warnings under the repository’s current pytest-cov configuration; the task’s contract surfaces and tests passed despite those warnings.\n\n## Files Created/Modified\n\n- `backend/src/agent/services/industry_pack_contract.py`\n- `.gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md`\n- `backend/src/agent/api/agents.py`\n- `backend/src/agent/api/personas.py`\n- `backend/src/sales_bot/api/scenarios.py`\n- `backend/tests/unit/test_sales_scenarios_api.py`\n- `backend/tests/integration/test_agent_api.py`\n- `backend/tests/integration/test_persona_api.py`\n- `.gsd/KNOWLEDGE.md`\n",
       "description": "- 盘点现有 admin agents/personas/knowledge/scenarios surfaces 与 runtime snapshot 之间的映射。\n- 定义首轮 industry pack contract：哪些字段属于 persona、哪些属于 scenario、哪些属于 knowledge bundle/customer pressure。",
       "estimate": "50m",
       "files": [
@@ -17029,6 +17039,30 @@
       "decision": "How methodology-aware sales rubric semantics are exposed to runtime and read-side consumers",
       "choice": "Attach methodology summaries additively to `canonical_evaluation_kernel.methodology` and mirror the same payload through `compatibility_readers.sales_methodology_rubric_v1` for sales surfaces.",
       "rationale": "This keeps existing report/replay/history/admin/realtime outer contracts stable while giving every sales surface one shared rubric interpretation derived from canonical dimensions plus stage/issue/goal context. It avoids inventing another top-level payload per surface and lets manager/read-side consumers transition through compatibility readers.",
+      "revisable": "Yes",
+      "made_by": "agent",
+      "superseded_by": null
+    },
+    {
+      "seq": 1613,
+      "id": "D243",
+      "when_context": "M022/S01/T03",
+      "scope": "frontend-contract",
+      "decision": "How learner-facing methodology semantics should surface on the shared sales report page without destabilizing existing report summary copy",
+      "choice": "Keep the existing report headline/summary copy stable and expose the five first-round methodology lenses in a dedicated rubric explainer card on the shared sales report page.",
+      "rationale": "This makes the new methodology-aware contract visible to learners and managers while preserving the shipped report top-line contract and focused tests. It keeps methodology semantics additive instead of creating a second report summary system or forcing unnecessary copy churn across existing report consumers.",
+      "revisable": "Yes",
+      "made_by": "agent",
+      "superseded_by": null
+    },
+    {
+      "seq": 1614,
+      "id": "D244",
+      "when_context": "M022/S02/T01",
+      "scope": "architecture",
+      "decision": "Industry pack / customer-pressure asset authority for M022/S02",
+      "choice": "Treat industry pack as a composed asset over existing agent/persona/knowledge/scenario surfaces and expose read-only contract endpoints instead of introducing a standalone industry_pack platform",
+      "rationale": "Current runtime truth already flows through persona_policy -> voice_runtime_policy -> voice_policy_snapshot. Reusing existing admin entrypoints preserves shipped authority, makes runtime impact inspectable, and avoids splitting content governance across a second control plane.",
       "revisable": "Yes",
       "made_by": "agent",
       "superseded_by": null
@@ -22754,6 +22788,28 @@
       "verdict": "✅ pass",
       "duration_ms": 36,
       "created_at": "2026-04-14T05:37:21.239Z"
+    },
+    {
+      "id": 526,
+      "task_id": "T01",
+      "slice_id": "S02",
+      "milestone_id": "M022",
+      "command": "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/test_sales_scenarios_api.py backend/tests/integration/test_agent_api.py backend/tests/integration/test_persona_api.py -q",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 8478,
+      "created_at": "2026-04-14T05:54:10.740Z"
+    },
+    {
+      "id": 527,
+      "task_id": "T01",
+      "slice_id": "S02",
+      "milestone_id": "M022",
+      "command": "rg -n \"persona_policy|customer_pressure|scenario|knowledge_base|agent|industry\" backend/src/agent backend/src/sales_bot backend/src/common/knowledge",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 37,
+      "created_at": "2026-04-14T05:54:10.740Z"
     }
   ]
 }

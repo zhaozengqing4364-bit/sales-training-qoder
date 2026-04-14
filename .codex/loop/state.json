@@ -1,7 +1,7 @@
 {
   "mode": "grow",
-  "current_issue_id": "M022-S01-T01",
-  "current_issue_type": "task",
+  "current_issue_id": "M022-S01",
+  "current_issue_type": "slice",
   "current_issue_status": "done",
   "pending_issue_ids": [],
   "completed_issue_ids": [
@@ -215,29 +215,40 @@
     "M021-S04-T01",
     "M021-S04-T02",
     "M021-S04-T03",
-    "M022-S01-T01"
+    "M022-S01-T01",
+    "M022-S01-T02",
+    "M022-S01-T03",
+    "M022-S01"
   ],
   "blocked_issue_ids": [],
   "deferred_issue_ids": [],
   "last_modified_files": [
     "backend/src/common/effectiveness/methodology.py",
-    "backend/src/common/effectiveness/__init__.py",
-    "backend/tests/unit/test_sales_methodology_contract.py",
+    "backend/src/common/effectiveness/canonical.py",
+    "backend/src/agent/capabilities/realtime_scoring.py",
+    "backend/src/common/conversation/session_evidence.py",
+    "backend/src/common/services/practice_session_service.py",
+    "backend/src/common/api/practice.py",
     "docs/api-contract/effectiveness.md",
     "docs/api-contract/README.md",
+    "web/src/app/(user)/practice/[sessionId]/report/page.tsx",
     ".gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md",
     ".gsd/DECISIONS.md",
     ".gsd/KNOWLEDGE.md",
+    ".gsd/PROJECT.md",
+    ".gsd/milestones/M022/slices/S01/S01-SUMMARY.md",
+    ".gsd/milestones/M022/slices/S01/S01-UAT.md",
     ".codex/loop/state.json",
     ".codex/loop/log.md"
   ],
   "last_verification_commands": [
-    "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/test_sales_methodology_contract.py -q",
     "rg -n \"sales_stage|realtime_scoring|effectiveness|main_issue|next_goal|dimension_scores\" backend/src/common backend/src/agent docs/api-contract",
-    "lsp diagnostics backend/src/common/effectiveness/methodology.py backend/src/common/effectiveness/__init__.py backend/tests/unit/test_sales_methodology_contract.py"
+    "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests -k \"sales and (report or replay or history or analytics)\" -x -q",
+    "rg -n \"qualification|discovery|value|objection|next-step|rubric\" docs/api-contract .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md web/src/app/(user)/practice/[sessionId]/report/page.tsx",
+    "npm --prefix web test -- --run 'src/app/(user)/practice/[sessionId]/report/page.test.tsx'"
   ],
-  "last_verification_result": "passed; the fail-first methodology-contract proof finished 2/2 green, the exact task-plan grep gate now surfaces sales_stage/realtime_scoring/effectiveness/main_issue/next_goal/dimension_scores through the new effectiveness contract docs and code, and LSP diagnostics stayed clean on the touched Python files.",
-  "last_success_signal": "future T02/T03 work now has one code-owned methodology-aware rubric crosswalk tying canonical kernel dimensions, sales_stage, report gaps, and manager read-side surfaces together without inventing a second score schema.",
+  "last_verification_result": "passed; both exact slice-plan grep gates exited 0, the backend sales report/replay/history/analytics bundle finished 24 selected tests green (plus 1 skipped), and the learner report page suite finished 24/24 green.",
+  "last_success_signal": "M022/S01 now provides one shared methodology-aware sales rubric seam that realtime, report, replay, history, admin, docs, and learner report copy all reuse without inventing a second score schema.",
   "last_growth_scan": null,
-  "next_action": "Proceed to M022/S01/T02; wire the new methodology contract into realtime/session-evidence/read-side consumers and lock cross-surface interpretation with focused tests."
+  "next_action": "Proceed to M022/S02; bind persona/scenario/customer-pressure/industry-pack work to the shared methodology contract instead of creating pack-local sales semantics."
 }
