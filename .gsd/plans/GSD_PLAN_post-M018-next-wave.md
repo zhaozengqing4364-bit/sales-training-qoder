@@ -221,6 +221,13 @@
 - Risk Level：High
 - Recommended Executor：Strong model
 
+**M021 S02-S04 input matrix（from S01 inventory）**
+- **must keep**：`stepfun_realtime_handler.py`、`voice_runtime_policy.py`、`voice_instruction_compiler.py`、`presentation_stepfun_realtime_handler.py`、`stepfun_internal_knowledge_searcher.py`、`common.knowledge_engine.compat`。这些是 live runtime / compiled snapshot / shipped knowledge rollout authority，后续 slices 只能围绕它们收口，不能另起第二条主链。
+- **compat**：`prompt_templates/service.py` + routes、`evaluation/services/realtime_scoring.py`、`ai_scoring.py`、`score_processor.py`。这些仍有 shipped consumer（admin prompt governance、presentation interruption fallback、classic `voice_mode == "legacy"` score_update / report trigger），只能降格治理，不能在 M021 中直接拔掉。
+- **retire candidate**：`staged_evaluation.py`、`comprehensive_report.py`、`report_generation_trigger.py`、`evaluation/api.py`、`common/ai/llm_service.py::evaluate/generate_report`。它们不是 canonical truth，但还有 history/support/admin `report_status` consumer、`/practice/*/comprehensive-report`、manual `/evaluation/*` operator consumer 在依赖，所以只可在 consumer 迁走后退役。
+- **legacy consumer guardrail**：M021 期间禁止一次性粗暴删除 classic `voice_mode == "legacy"` runtime、`report_status` / comprehensive-report read-side、manual `/evaluation/*` operator flow、PromptTemplateService 的 admin/runtime helper surface、以及 knowledge compat debug/audit consumer。
+- **Slice handoff**：`S02` 必须把 compiled prompt contract 建在 must keep seam 上，并保留 compat consumer；`S03` 先迁 `report_status` / report readers 再判 retire candidate；`S04` 继续沿 `common.knowledge_engine.compat` 暴露 quality/cost/failure/mode 事件，不能旁路成 engine-only truth。
+
 ### [M021-S02] Prompt control plane 统一
 - Goal：让 PromptTemplateService、voice instruction、persona policy、runtime guardrail 形成真实 compiled prompt contract。
 - Why：当前存在 template 假接入、prompt 来源碎片化、missing vars fail-open。

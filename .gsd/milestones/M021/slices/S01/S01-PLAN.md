@@ -36,7 +36,7 @@ S01 结束后，后续 prompt/evaluation/kernel 工作都有同一张 live/compa
   - Files: `backend/tests`, `docs/api-contract`, `.gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md`
   - Verify: rg -n "live|compat|shadow|retire|authority" .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md docs/api-contract backend/tests
 
-- [ ] **T03: 输出 live/compat/retire 输入矩阵** `est:30m`
+- [x] **T03: 输出 live/compat/retire 输入矩阵** `est:30m`
   - 从 inventory 中筛出必须保留、可兼容、应退役的路径，形成 S02-S04 的输入矩阵。
 - 明确不能在本 milestone 中一次性粗暴删除的 legacy consumers。
   - Files: `.gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md`, `.gsd/plans/GSD_PLAN_post-M018-next-wave.md`

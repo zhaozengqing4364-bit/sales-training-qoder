@@ -1,7 +1,7 @@
 # Codebase Map
 
-Generated: 2026-04-14T01:32:05Z | Files: 500 | Described: 0/500
-<!-- gsd:codebase-meta {"generatedAt":"2026-04-14T01:32:05Z","fingerprint":"faf96f7be969135aae1c4116237fe8d7c48aab81","fileCount":500,"truncated":true} -->
+Generated: 2026-04-14T01:46:53Z | Files: 500 | Described: 0/500
+<!-- gsd:codebase-meta {"generatedAt":"2026-04-14T01:46:53Z","fingerprint":"e4549ffb33e96e66f37674de975f50c73bdf009e","fileCount":500,"truncated":true} -->
 Note: Truncated to first 500 files. Run with higher --max-files to include all.
 
 ### (root)/
@@ -14,6 +14,7 @@ Note: Truncated to first 500 files. Run with higher --max-files to include all.
 - `api-spec.md`
 - `AUDIT_REPORT.md`
 - `CLAUDE.md`
+- `FULL_STACK_AUDIT_REPORT_2025.md`
 - `PROJECT_AUDIT_REPORT.md`
 - `PROJECT_COMPLETION_REPORT.md`
 - `SYSTEM_AUDIT_REPORT.md`
@@ -645,4 +646,3 @@ Note: Truncated to first 500 files. Run with higher --max-files to include all.
 - `backend/tests/unit/common/test_admin_analytics_service.py`
 - `backend/tests/unit/common/test_analytics_api_normalization.py`
 - `backend/tests/unit/common/test_api_users.py`
-- `backend/tests/unit/common/test_auth_transport_matrix.py`

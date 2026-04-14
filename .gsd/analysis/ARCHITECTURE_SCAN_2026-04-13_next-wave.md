@@ -393,6 +393,24 @@ S04/T02 之后，当前仓库已经有一条**可复用的 assembled release gat
 - 如果改的是 `score_update`、`report_status`、`/evaluation/*`、`/practice/*/comprehensive-report`，默认把它们当 **compat/enhancement** surface；除非后续 slice 明确晋升，否则不要倒推它们为 canonical report/evaluation kernel。
 - 当前没有可以直接标成 **retire now** 的 AI 路径：legacy evaluation/classic scoring 仍有 shipped consumers。真正的 retire 判断要等 S02/S03 先把 compiled prompt contract 和 canonical evaluation kernel 收口后再做。
 
+**T03 live/compat/retire input matrix（供 S02-S04 直接复用）**
+
+| Bucket | Path / seam | Why it stays in this bucket now | Current consumer / blocker | Downstream input |
+|---|---|---|---|---|
+| **must keep** | `sales_bot/websocket/router.py` → `stepfun_realtime_handler.py` | 这是当前 learner live AI/runtime authority，本 milestone 不能绕开。 | learner websocket runtime、session snapshot、terminal evidence sync、live knowledge-check consumer | `S02` 只能把 compiled prompt contract 收口到这条 seam；`S03/S04` 默认围绕这条 authority 扩展 canonical evaluation 与 quality events。 |
+| **must keep** | `voice_runtime_policy.py` + `voice_instruction_compiler.py` + `presentation_stepfun_realtime_handler.py` | StepFun session 的 frozen snapshot、instruction contract hash、presentation adapter 都来自这里。 | practice session create、sales/presentation StepFun runtime consumer | `S02` 必须把 prompt/runtime 统一建立在 compiled snapshot 上，而不是重新抬升 `PromptTemplateService` 为 live runtime authority。 |
+| **must keep** | `stepfun_internal_knowledge_searcher.py` + `common.knowledge_engine.compat` | shipped knowledge rollout authority 已固定在 compat seam，而不是 engine direct call。 | learner `_answerability` / `knowledge_answer_diagnostics`、transcript metadata、admin debug consumer | `S04` 的 degraded/failure/cost/mode 事件必须沿同一 compat seam 暴露，不能旁路成第二条 knowledge truth line。 |
+| **compat** | `prompt_templates/service.py` + `prompt_templates/api/routes.py` | 这是 live governance surface，但 runtime 上仍只是 compat helper。 | admin prompt governance UI、presentation interruption fallback、legacy evaluation/report prompt consumer | `S02` 可以收紧 taxonomy/compiled contract，但必须保住这些 consumer，直到 runtime-adjacent helper 完成迁移。 |
+| **compat** | `evaluation/services/realtime_scoring.py` + `ai_scoring.py` + `score_processor.py` | classic voice mode 仍 shipped，legacy score path 不是死代码。 | `voice_mode == "legacy"` session、`score_update` consumer、report trigger scoring context | `S03` 可以把它降格为 compatibility readers，但不能在 classic mode 仍对外时直接删除。 |
+| **retire candidate** | `evaluation/services/staged_evaluation.py` + `comprehensive_report.py` + `report_generation_trigger.py` + `evaluation/api.py` | 这是 enhancement/read-side surface，不是 canonical completed-session truth。 | history/support/admin `report_status` consumer、`/practice/*/comprehensive-report`、manual `/evaluation/*` operator consumer | `S03` 先把这些 consumer 迁回 canonical evidence/report line，再判断是否 retire；本 milestone 不能一刀切删除。 |
+| **retire candidate** | `common/ai/llm_service.py::evaluate/generate_report` | 当前只服务 legacy evaluation/report stack，本身不直接挂在 live StepFun authority 上。 | `StagedEvaluationService`、`ComprehensiveReportService` consumer | 只有在 legacy evaluation/report consumer 迁完后才能退役；`S02-S04` 期间默认继续把它当 compat backend adapter。 |
+
+**不能在本 milestone 里粗暴删除的 legacy consumers**
+- persisted `voice_mode == "legacy"` 的 classic runtime / `score_update` consumer 仍然存在，所以 scoring compat path 不能在 `S03` 之前被删空。
+- `history` / `support` / `admin` 侧的 `report_status`、`/practice/*/comprehensive-report`、manual `/evaluation/*` operator consumer 还在吃 legacy evaluation 输出，必须先迁到 canonical evidence line。
+- `PromptTemplateService` 仍服务 admin prompt governance 与 presentation interruption fallback consumer；即使 `S02` 收口 compiled prompt contract，也不能把它当场拔掉。
+- knowledge-answer rollout audit / admin debug consumer 仍通过 `common.knowledge_engine.compat` 观察 mode 与 diagnostics，所以 `S04` 不能直接跳过 compat seam 改成 engine-only truth。
+
 **T02 proof/doc consumer sync**
 - `docs/api-contract/sessions.md` 现在负责写清 live runtime/read-side consumers：session create + websocket mode selection 固化 snapshot authority，而 detail/report/knowledge-check/replay 都回读同一条 authority line。
 - `docs/api-contract/prompt-templates.md` 现在负责写清 prompt governance 的 live consumer 与 runtime-adjacent compat consumers，明确 `PromptTemplateService` 不是 live StepFun instruction authority。

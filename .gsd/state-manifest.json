@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "exported_at": "2026-04-14T01:46:23.155Z",
+  "exported_at": "2026-04-14T01:50:36.837Z",
   "milestones": [
     {
       "id": "M001",
@@ -13142,19 +13142,26 @@
       "milestone_id": "M021",
       "slice_id": "S01",
       "id": "T03",
-      "title": "输出 live/compat/retire 输入矩阵",
-      "status": "pending",
-      "one_liner": "",
-      "narrative": "",
-      "verification_result": "",
+      "title": "Added the M021 live/compat/retire input matrix and legacy-consumer guardrails to the architecture scan and next-wave plan.",
+      "status": "complete",
+      "one_liner": "Added the M021 live/compat/retire input matrix and legacy-consumer guardrails to the architecture scan and next-wave plan.",
+      "narrative": "I turned the existing M021/S01 live AI authority inventory into an execution-ready downstream matrix instead of leaving it as descriptive labels only. In `.gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md`, I added a T03 matrix that classifies the real AI/runtime/prompt/score/report seams into **must keep**, **compat**, and **retire candidate**, and pairs each seam with its current consumer/blocker plus the intended S02-S04 handling. That write-back now makes the downstream contract explicit: the live StepFun runtime, compiled voice snapshot, and knowledge compat rollout seams remain the authority; PromptTemplateService and classic scoring stay compat-owned; staged/comprehensive evaluation plus `common/ai/llm_service.py::evaluate/generate_report` are retire candidates only after their shipped consumers migrate. In `.gsd/plans/GSD_PLAN_post-M018-next-wave.md`, I added the matching M021 S02-S04 input matrix so later slices can execute against the same keep/compat/retire model without rediscovering it. I also made the no-brute-delete rule explicit for the legacy consumers that still matter in this milestone: classic `voice_mode == \"legacy\"` runtime, `report_status` / comprehensive-report readers, manual `/evaluation/*` operator flows, PromptTemplateService admin/runtime helper usage, and knowledge compat debug/audit consumers. Because that consumer-migration rule is now a real downstream authority decision rather than a transient note, I recorded it as GSD decision D230.",
+      "verification_result": "Ran the exact task-plan verification command `rg -n \"must keep|compat|retire candidate|consumer\" .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md .gsd/plans/GSD_PLAN_post-M018-next-wave.md` and confirmed both target documents now expose the keep/compat/retire matrix language plus explicit consumer guardrails for downstream slices. Read back the edited sections to confirm the matrix content landed under the M021/S01 analysis section and the M021 slice block in the next-wave plan.",
       "duration": "",
-      "completed_at": null,
+      "completed_at": "2026-04-14T01:50:36.777Z",
       "blocker_discovered": false,
-      "deviations": "",
-      "known_issues": "",
-      "key_files": [],
-      "key_decisions": [],
-      "full_summary_md": "",
+      "deviations": "None.",
+      "known_issues": "None.",
+      "key_files": [
+        ".gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md",
+        ".gsd/plans/GSD_PLAN_post-M018-next-wave.md",
+        ".gsd/DECISIONS.md"
+      ],
+      "key_decisions": [
+        "Treat the M021/S01 must-keep / compat / retire-candidate matrix as the execution authority for S02-S04 instead of re-deriving AI seam status in each later slice.",
+        "Do not retire legacy evaluation/report or classic scoring paths until their shipped report-status, operator, classic-runtime, and debug consumers are migrated to canonical live evidence surfaces."
+      ],
+      "full_summary_md": "---\nid: T03\nparent: S01\nmilestone: M021\nkey_files:\n  - .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md\n  - .gsd/plans/GSD_PLAN_post-M018-next-wave.md\n  - .gsd/DECISIONS.md\nkey_decisions:\n  - Treat the M021/S01 must-keep / compat / retire-candidate matrix as the execution authority for S02-S04 instead of re-deriving AI seam status in each later slice.\n  - Do not retire legacy evaluation/report or classic scoring paths until their shipped report-status, operator, classic-runtime, and debug consumers are migrated to canonical live evidence surfaces.\nduration: \nverification_result: passed\ncompleted_at: 2026-04-14T01:50:36.776Z\nblocker_discovered: false\n---\n\n# T03: Added the M021 live/compat/retire input matrix and legacy-consumer guardrails to the architecture scan and next-wave plan.\n\n**Added the M021 live/compat/retire input matrix and legacy-consumer guardrails to the architecture scan and next-wave plan.**\n\n## What Happened\n\nI turned the existing M021/S01 live AI authority inventory into an execution-ready downstream matrix instead of leaving it as descriptive labels only. In `.gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md`, I added a T03 matrix that classifies the real AI/runtime/prompt/score/report seams into **must keep**, **compat**, and **retire candidate**, and pairs each seam with its current consumer/blocker plus the intended S02-S04 handling. That write-back now makes the downstream contract explicit: the live StepFun runtime, compiled voice snapshot, and knowledge compat rollout seams remain the authority; PromptTemplateService and classic scoring stay compat-owned; staged/comprehensive evaluation plus `common/ai/llm_service.py::evaluate/generate_report` are retire candidates only after their shipped consumers migrate. In `.gsd/plans/GSD_PLAN_post-M018-next-wave.md`, I added the matching M021 S02-S04 input matrix so later slices can execute against the same keep/compat/retire model without rediscovering it. I also made the no-brute-delete rule explicit for the legacy consumers that still matter in this milestone: classic `voice_mode == \"legacy\"` runtime, `report_status` / comprehensive-report readers, manual `/evaluation/*` operator flows, PromptTemplateService admin/runtime helper usage, and knowledge compat debug/audit consumers. Because that consumer-migration rule is now a real downstream authority decision rather than a transient note, I recorded it as GSD decision D230.\n\n## Verification\n\nRan the exact task-plan verification command `rg -n \"must keep|compat|retire candidate|consumer\" .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md .gsd/plans/GSD_PLAN_post-M018-next-wave.md` and confirmed both target documents now expose the keep/compat/retire matrix language plus explicit consumer guardrails for downstream slices. Read back the edited sections to confirm the matrix content landed under the M021/S01 analysis section and the M021 slice block in the next-wave plan.\n\n## Verification Evidence\n\n| # | Command | Exit Code | Verdict | Duration |\n|---|---------|-----------|---------|----------|\n| 1 | `rg -n \"must keep|compat|retire candidate|consumer\" .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md .gsd/plans/GSD_PLAN_post-M018-next-wave.md` | 0 | ✅ pass | 43ms |\n\n## Deviations\n\nNone.\n\n## Known Issues\n\nNone.\n\n## Files Created/Modified\n\n- `.gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md`\n- `.gsd/plans/GSD_PLAN_post-M018-next-wave.md`\n- `.gsd/DECISIONS.md`\n",
       "description": "- 从 inventory 中筛出必须保留、可兼容、应退役的路径，形成 S02-S04 的输入矩阵。\n- 明确不能在本 milestone 中一次性粗暴删除的 legacy consumers。",
       "estimate": "30m",
       "files": [
@@ -16740,6 +16747,18 @@
       "decision": "How deploy health and recovery drill evidence should be interpreted for the shipped native deployment bundle",
       "choice": "Treat the systemd+nginx deployment bundle as single-node authority only, and require release/recovery proof to pair node-local /health captures with repo-local recovery drill summary/log evidence.",
       "rationale": "The current .sisyphus/deploy bundle binds one backend and one frontend instance on loopback, so /health and systemd-active checks only prove one node is up. Recovery readiness also depends on db/auth/redis/oss/runtime drills, and the latest drill run already showed that node health can stay green while db_migration still exposes a real Alembic blocker. Recording the pair-proof rule prevents downstream work from overclaiming multi-instance or recovery readiness from deploy smoke alone.",
+      "revisable": "Yes",
+      "made_by": "agent",
+      "superseded_by": null
+    },
+    {
+      "seq": 1600,
+      "id": "D230",
+      "when_context": "M021/S01/T03",
+      "scope": "architecture",
+      "decision": "M021 AI downstream migration authority",
+      "choice": "Use the M021/S01 must-keep / compat / retire-candidate matrix as the execution authority for S02-S04, and defer deletion of legacy AI surfaces until their shipped consumers migrate to the canonical live evidence line.",
+      "rationale": "The StepFun runtime, compiled voice snapshot, and knowledge compat rollout seams are the current live authority, while PromptTemplateService, classic scoring, and legacy evaluation/report routes still have shipped admin, report-status, presentation fallback, debug, or classic-runtime consumers. Encoding this as an explicit matrix prevents downstream slices from promoting compat paths back to canonical truth or deleting live consumer dependencies too early.",
       "revisable": "Yes",
       "made_by": "agent",
       "superseded_by": null
@@ -22168,6 +22187,17 @@
       "verdict": "unknown (coerced from string)",
       "duration_ms": 0,
       "created_at": "2026-04-14T01:46:23.107Z"
+    },
+    {
+      "id": 499,
+      "task_id": "T03",
+      "slice_id": "S01",
+      "milestone_id": "M021",
+      "command": "rg -n \"must keep|compat|retire candidate|consumer\" .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md .gsd/plans/GSD_PLAN_post-M018-next-wave.md",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 43,
+      "created_at": "2026-04-14T01:50:36.777Z"
     }
   ]
 }
