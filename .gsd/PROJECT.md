@@ -44,6 +44,7 @@
 - **M020 / S04**：M018 的手工 recovery baseline 已升级为 repo-local drill bundle：`scripts/recovery_drill_baseline.py` 固定 db/auth/redis/websocket/oss/health authority，`scripts/recovery_drill_runner.py` 直接执行同一 metadata 并把证据落到 `.dev/recovery-drills/<timestamp>/summary.json` + `*.log`，runbook / support runtime / deploy bundle / cloud redeploy plan / architecture scan 也已统一写明单机部署边界与 release-health + drill-evidence 配对留证规则。
 - **M020 milestone**：Security / multi-instance runtime / recovery hardening 已完成 milestone close-out；验收按 slice overview `After this` outcome 逐条核对，确认 auth transport、admin/support diagnostics、runtime authority split、以及 executable recovery drills 均已落到真实代码、focused proof 与长期文档/运行手册。里程碑同时保留了一个明确 follow-up：`.dev/recovery-drills/20260414T010316Z/summary.json` 真实暴露 `db_migration -> KeyError: '20260412_0315_028'`，后续必须修复并重跑 drill，而不能被 `/health` 掩盖。
 - **M021 / S01**：live AI authority inventory 已完成：architecture scan、API contract、focused proof 文件、以及 post-M018 next-wave plan 现在都把 StepFun realtime + compiled voice snapshot 标成 live authority，把 `common.knowledge_engine.compat` 标成 shipped knowledge rollout seam，把 `PromptTemplateService` 标成 live governance + compat helper，把 classic scoring / legacy evaluation-report stack 标成 compat/enhancement 或 retire candidate。后续 M021 切片不应再把文件名看起来“像 prompt / evaluation 主链”的模块误判成真实 live authority。
+- **M021 / S02**：prompt control plane 已完成第一轮真实统一：`PromptTemplateService.compile_runtime_prompt_contract(...)` 现在把 legacy evaluation/report 模板编译成带 `contract_hash`、`runtime_consumer`、`base_url_policy` 与 diagnostics 的 `CompiledPromptContract`，`StagedEvaluationService` / `ComprehensiveReportService` 已真正消费这份 compiled artifact，compiled-path missing vars / empty render / base_url / generation errors 会显式 fail-closed，不再 silent fail-open。相应 authority 也已写回 `prompt-templates` / `voice-runtime` / `personas` / `model-configs` docs 与架构扫描，后续 S03 必须沿这条 seam 收口 canonical evaluation kernel，S04 必须沿这条 diagnostics seam 暴露 quality/failure events。
 
 ## Current Product Truths
 
@@ -90,32 +91,44 @@
   - `backend/src/prompt_templates/service.py` + routes 是 live governance surface，也是 runtime-adjacent compat helper，但**不是** live sales StepFun prompt authority；
   - `backend/src/evaluation/services/realtime_scoring.py`、`ai_scoring.py`、`score_processor.py` 仍是 classic `voice_mode == "legacy"` 的 compat runtime；`staged_evaluation.py`、`comprehensive_report.py`、`report_generation_trigger.py`、`evaluation/api.py`、`common/ai/llm_service.py::evaluate/generate_report` 仍有 shipped readers/consumers，所以目前只能视为 compat/enhancement 或 retire candidate，不能粗暴删除；
   - 对外 consumer-facing authority docs 现在以 `docs/api-contract/sessions.md` 与 `docs/api-contract/prompt-templates.md` 为主，`docs/api-contract/support-runtime.md` 保持 support/read-side authority explainer，不承担 live AI control-plane spec 角色。
+- **M021/S02 compiled prompt authority 已固定**：
+  - `PromptTemplateService.compile_runtime_prompt_contract(...)` 是 legacy evaluation/report 的 compiled prompt handoff seam，会产出带 `contract_hash`、`runtime_consumer`、`base_url_policy`、`model_provider`/`model_name` 与 diagnostics 的 `CompiledPromptContract`；
+  - `StagedEvaluationService.evaluate_stage()` 与 `ComprehensiveReportService._generate_detailed_feedback()` 现在必须先编译 contract 再调用 `LLMService.evaluate()` / `generate_report()`，模板 lookup 不再只是“看起来接上了”；
+  - `LLMService` 对 compiled-contract 调用会记录 `PROMPT_TEMPLATE_RENDERED` / `LLM_BASE_URL_POLICY` diagnostics，并显式 fail-closed 到 `[PROMPT_CONTRACT_MISSING_VARIABLES:*]`、`[PROMPT_CONTRACT_EMPTY_RENDERED_PROMPT]`、`[PROMPT_CONTRACT_BASE_URL_REQUIRED]`、`[LLM_GENERATION_ERROR:*]`，不再回落到 filler copy；
+  - `backend/src/prompt_templates/taxonomy.py` 现在是 prompt source taxonomy 的 code-owned authority：`prompt_template_service` 是 legacy compiled-template authority，`voice_instruction_compiler` / `persona_policy` / `runtime_guardrails` 仍是 live StepFun authority，`presentation_prompt_resolver` 是 compat runtime helper，legacy raw dict prompt 只是 compatibility fallback；
+  - admin/operator routing 现在固定为：改 `prompt-templates` / `scenario-prompts` 影响 legacy evaluation/report compiled contract 与 presentation helper copy；改 `personas` / `voice-runtime` 影响下一次 StepFun 会话的 live instruction contract；改 `model-configs` 的 provider / `base_url` 决定 legacy compiled contract 能否执行。
 
 ## Current Focus
 
-当前项目处于 **M020 已完成里程碑收口、M021/S01 已完成 AI authority inventory、M021 后续切片准备执行** 的状态：
+当前项目处于 **M020 已完成里程碑收口、M021/S01-S02 已完成 AI authority inventory + prompt control plane unified seam、M021/S03-S04 准备执行** 的状态：
 - **M019** 已完成 milestone close-out：数据库 authority map、practice backend seam、frontend domain/transport seam、以及 assembled release truth line 都已经过 fresh milestone-level verification。
 - **M020** 已完成 milestone close-out，四个切片都已被 milestone-level assembled evidence 吸收：
   1. **S01** auth transport、cookie/CSRF posture、websocket auth authority、shared-password compatibility diagnosis 已在代码、focused tests、runbook、API contract 与 architecture scan 上收口；
   2. **S02** sensitive log 与 admin observability redaction 已在 logger、system-log API、admin logs UI、focused tests、inventory 与 architecture scan 上收口；
   3. **S03** runtime connection visibility、session snapshot、reconnect epoch、restart/drain semantics 已在 runtime surfaces、focused reconnect proofs、support/runtime docs 与 recovery runbook 上收口；
   4. **S04** recovery drill automation 与部署指导已完成：repo-local drill inventory/runner、runbook/current-state/support-runtime/deploy/cloud plan/architecture scan、以及 `.dev/recovery-drills/<timestamp>/summary.json` evidence bundle 已收口到同一 authority line。
-- **M021/S01** 已完成 slice close-out准备：
+- **M021/S01** 已完成 slice close-out：
   1. AI/runtime/prompt/score/report 主链已被明确标成 live / compat / shadow / retire candidate；
   2. `docs/api-contract/sessions.md`、`docs/api-contract/prompt-templates.md`、`docs/api-contract/support-runtime.md` 与 focused proof 文件已写明 authority boundary；
   3. `.gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md` 与 `.gsd/plans/GSD_PLAN_post-M018-next-wave.md` 已包含 S02-S04 直接可用的 must-keep / compat / retire-candidate matrix；
   4. 最终 `M021-CONTEXT.md` 仍受 depth verification gate 限制，当前应以 `M021-CONTEXT-DRAFT.md` + architecture scan §7.3.1 作为 downstream 研究输入。
+- **M021/S02** 已完成 slice close-out：
+  1. PromptTemplateService 已真正驱动 legacy evaluation/report runtime，而不是 lookup 后被 hardcoded prompt 覆盖；
+  2. prompt source taxonomy 已收口成 code-owned inventory，live StepFun instruction authority 与 legacy compiled-template authority 已被明确分开；
+  3. missing vars / empty render / provider-base_url / generation failure 已进入 explicit diagnostics / fail-closed contract；
+  4. `prompt-templates` / `voice-runtime` / `personas` / `model-configs` 的 admin routing map 已同步写回 docs 与 architecture scan。
 - 当前最新 close-out evidence 确认：
   - M020 的 roadmap `After this` outcomes 已全部逐条满足；
   - `.dev/recovery-drills/20260414T010316Z/summary.json` 中 `auth_bootstrap`、`redis_session_state`、`oss_signing_playback`、`health_check` 通过；
   - `db_migration` 仍真实暴露 `KeyError: '20260412_0315_028'`，这已经被收口为 recovery evidence 的一部分，而不是被节点健康状态掩盖；
-  - M021/S01 的 fresh slice verification 已重新确认 AI inventory grep gate、focused backend proof bundle、authority wording grep gate、以及 keep/compat/retire matrix grep gate全部通过。
+  - M021/S02 的 fresh slice verification 已重新确认 compiled prompt contract focused tests、prompt taxonomy grep gate、broad backend `prompt or knowledge_answer or report` gate（274 passed, 6 skipped）、authority wording grep gate，以及关键 Python authority files diagnostics 全部通过。
 
 接下来的重点：
 1. 修复 `20260412_0315_028` 对应的 Alembic revision / migration-graph drift，然后重跑同一套 recovery drills，直到 `db_migration` 也转绿。
-2. 按 M021/S01 的 must-keep / compat / retire-candidate matrix 执行 M021/S02-S04，不要再把 `PromptTemplateService`、classic scoring、legacy evaluation/report 文件名误判成 live AI authority。
-3. 保持 M019 assembled release truth 与 M020 的四条 authority seam 稳定，不要重开第二套 startup/migration/practice/frontend/release/auth/observability/runtime/recovery 入口。
-4. 继续把 AI control-plane / evaluation / quality-event work 落在 authority-bearing code、focused tests、workflow、runbook 与 contract docs 上，而不是退回 markdown-only inventory。
+2. 在 **M021/S03** 把 canonical evaluation kernel 收口到 `CompiledPromptContract -> LLMService` 这条 seam，不要再让 legacy evaluation/report consumers 各自重建 prompt 或各自解释 authority。
+3. 在 **M021/S04** 把 compiled prompt diagnostics 与 AI failure/cost/quality signals拉到 support/runtime 与知识路径的显式事件面，同时继续复用 M020/S02 的 allowlist-first observability contract。
+4. 保持 M019 assembled release truth 与 M020 的四条 authority seam 稳定，不要重开第二套 startup/migration/practice/frontend/release/auth/observability/runtime/recovery 入口。
+5. 继续把 AI control-plane / evaluation / quality-event work 落在 authority-bearing code、focused tests、workflow、runbook 与 contract docs 上，而不是退回 markdown-only inventory。
 
 当前不应做的事：
 - 不要把 `init_db()` 的 `create_all()` / compat guard 外推成生产迁移 authority。
@@ -129,6 +142,7 @@
 - 不要把 `/health`、systemd active、或一份 runbook 文档单独当成“recovery 已验证”；S04 已明确必须配对最新 `.dev/recovery-drills/<timestamp>/summary.json` + 逐 drill log，并把失败 drill 如实写进 release/recovery 记录。
 - 不要发明第二套 recovery command list；后续 drill / deploy / support guidance 必须直接复用 `scripts/recovery_drill_baseline.py` 的 metadata，而不是在 plan/doc/script 里各自维护一套。
 - 不要在 M021 后续切片里把 `PromptTemplateService` 倒推成 live StepFun prompt authority，也不要在 classic `voice_mode == "legacy"`、`report_status` / comprehensive-report readers、manual `/evaluation/*` operator flow、PromptTemplateService admin/runtime helper、或 knowledge compat debug/audit consumer 仍存在时粗暴删除 legacy AI surfaces。
+- 不要让 compiled prompt failures重新回到 silent fail-open：缺变量、空渲染、provider/base_url 缺失、generation error 已经在 M021/S02 被定义成 explicit diagnostics / fail-closed contract；后续切片应沿这条 seam 扩展，而不是重新引入 filler copy 掩盖失败。
 
 ## Capability Contract
 

@@ -15,7 +15,11 @@ from common.conversation.runtime_diagnostics import build_retrieval_facts
 from common.conversation.storage import normalize_objection_ledger
 from common.db.models import PracticeSession, SessionStatus
 from common.effectiveness import (
+    CANONICAL_EVALUATION_KERNEL_VERSION,
+    CANONICAL_ROLLUP_IDS,
     evaluate_effectiveness_snapshot,
+    get_canonical_dimension_definitions,
+    get_surface_reader_plan,
     resolve_sales_report_alignment,
 )
 from common.error_handling.result import Result
@@ -71,6 +75,26 @@ SESSION_EVIDENCE_DB_PERFORMANCE_BASELINE: tuple[dict[str, Any], ...] = (
         "evidence_level": "code_path_confirmed_for_batch_message_read__index_priority_requires_real_query_plan_evidence",
     },
 )
+
+
+def describe_projection_kernel_contract(scenario_type: str) -> dict[str, Any]:
+    normalized_scenario = "presentation" if str(scenario_type).lower() == "presentation" else "sales"
+    dimension_definitions = get_canonical_dimension_definitions(normalized_scenario)
+    surface_plan = get_surface_reader_plan(
+        surface_id="report",
+        scenario_type=normalized_scenario,
+    )
+    return {
+        "schema_version": CANONICAL_EVALUATION_KERNEL_VERSION,
+        "surface": "session_evidence_projection",
+        "scenario_type": normalized_scenario,
+        "primary_reader_id": surface_plan.primary_reader_id,
+        "mode": surface_plan.mode,
+        "dimension_ids": [item.dimension_id for item in dimension_definitions],
+        "rollup_ids": list(CANONICAL_ROLLUP_IDS),
+        "compatibility_reader_ids": list(surface_plan.compatibility_reader_ids),
+        "downstream_surfaces": list(surface_plan.downstream_surfaces),
+    }
 
 
 @dataclass(slots=True)
@@ -163,6 +187,9 @@ class SessionEvidenceService:
                 "practice_session_evidence_projection_built",
                 session_id=projection.session_id,
                 scenario_type=projection.scenario_type,
+                evaluation_kernel_contract=describe_projection_kernel_contract(
+                    projection.scenario_type
+                ),
                 message_count=projection.evidence_completeness["message_count"],
                 legacy_score_key_used=projection.legacy_score_key_used,
                 projection_complete=projection.evidence_completeness["complete"],

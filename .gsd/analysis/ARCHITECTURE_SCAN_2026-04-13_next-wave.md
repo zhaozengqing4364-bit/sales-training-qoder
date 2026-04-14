@@ -429,6 +429,32 @@ S04/T02 之后，当前仓库已经有一条**可复用的 assembled release gat
 - `docs/api-contract/model-configs.md` 现在承接 provider / `base_url` policy 的管理面修复入口，说明它决定的是 legacy compiled contract 能否执行，而不是 prompt source 选择。
 - `docs/api-contract/support-runtime.md` 继续承接 support/read-side consumer 解释：`/support/runtime/*` 是 release-health / fault summary surface，不能替代 process-local live connection authority 或 shared Redis reconnect snapshot authority。
 
+#### 7.3.2 M021/S03 canonical evaluation kernel baseline（T01 write-back）
+
+T01 之后，canonical evaluation schema 与 compatibility reader map 不再只存在于计划文字里，而是已经固化到代码：
+- `backend/src/common/effectiveness/canonical.py`
+- `backend/src/common/conversation/session_evidence.py::describe_projection_kernel_contract(...)`
+
+**统一 rollup contract（sales / presentation 共享）**
+- canonical schema version：`evaluation_kernel_v1`
+- shared rollup ids：`logic` / `accuracy` / `completeness`
+- 这三个 rollup 继续兼容当前 DB / API 的 `logic_score`、`accuracy_score`、`completeness_score`，但维度层改为 scenario-aware catalog，而不是假设 sales / presentation 共享同一组 dimension label。
+
+| Scenario | Canonical dimensions | Rollup mapping | 当前 compat 映射 |
+|---|---|---|---|
+| sales | `value_expression`、`customer_benefit_connection`、`evidence_usage`、`objection_handling`、`next_step_commitment` | `customer_benefit_connection` 同时参与 `logic` 与 `accuracy`；其余按当前 sales rollup 权重映射 | `practice_session_rollup_fields_v1`、`effectiveness_snapshot_v1`、`sales_realtime_score_snapshot_v1`、`comprehensive_sales_report_v1` |
+| presentation | `fluency_coherence`、`factual_accuracy`、`professionalism`、`vividness`、`qa_handling`、`overall_presence` | `fluency_coherence -> logic`、`factual_accuracy -> accuracy`、其余四项平均进入 `completeness` | `practice_session_rollup_fields_v1`、`presentation_review_dimensions_v1` |
+
+**surface cutover rule（当前 authoritative map）**
+- `report` / `replay` / `history` / `admin`：`canonical_consumer`，primary reader 一律是 `session_evidence_projection_v1`
+- `realtime`：仍是 canonical source，但 sales 读 `sales_realtime_score_snapshot_v1`，presentation 读 `presentation_review_dimensions_v1` 作为 terminal dimension source
+- `comprehensive_report`：明确降格为 `compat_mirror`，不是 completed-session truth
+
+**downstream execution rule（S03/T02-T03 直接复用）**
+- 如果要判断某个 surface 现在是否已经切 canonical，先查 `get_surface_reader_plan(...)`，不要再从页面/接口字段名倒推。
+- 如果要判断 projection 这条事实线对外暴露的 canonical schema/version/dimension ids，先查 `describe_projection_kernel_contract(...)`，不要再在 report/replay/history/admin 各自维护一份解释。
+- S03 后续实现只能新增 canonical reader 或替换 compat reader 的调用点；不能再引入第三套 score dimension / rollup vocabulary。
+
 ### 7.4 Theme D — Sales productization / org-ready roadmap
 对应问题：
 - 更像内部训练平台，不像成熟销售产品

@@ -1,5 +1,17 @@
 """Communication effectiveness utilities."""
 
+from .canonical import (
+    CANONICAL_EVALUATION_KERNEL_VERSION,
+    CANONICAL_ROLLUP_IDS,
+    CanonicalDimensionDefinition,
+    CanonicalRollupId,
+    CanonicalScenarioType,
+    RollupContribution,
+    SurfaceMode,
+    SurfaceReaderPlan,
+    get_canonical_dimension_definitions,
+    get_surface_reader_plan,
+)
 from .evaluator import (
     RULE_VERSION,
     build_action_card,
@@ -15,7 +27,15 @@ from .evaluator import (
 )
 
 __all__ = [
+    "CANONICAL_EVALUATION_KERNEL_VERSION",
+    "CANONICAL_ROLLUP_IDS",
+    "CanonicalDimensionDefinition",
+    "CanonicalRollupId",
+    "CanonicalScenarioType",
+    "RollupContribution",
     "RULE_VERSION",
+    "SurfaceMode",
+    "SurfaceReaderPlan",
     "build_action_card",
     "build_live_session_conclusion_summary",
     "build_sales_effectiveness_metrics",
@@ -23,6 +43,8 @@ __all__ = [
     "coerce_live_session_conclusion_summary",
     "evaluate_effectiveness_snapshot",
     "evaluate_pass_flags",
+    "get_canonical_dimension_definitions",
+    "get_surface_reader_plan",
     "resolve_next_goal",
     "resolve_sales_coaching_focus",
     "resolve_sales_report_alignment",

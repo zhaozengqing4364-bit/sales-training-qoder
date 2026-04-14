@@ -23,7 +23,7 @@ S03 结束后，realtime/report/history/admin/replay 至少共享一套 canonica
 
 ## Tasks
 
-- [ ] **T01: 定义 canonical evaluation schema 与 compatibility reader map** `est:55m`
+- [x] **T01: 定义 canonical evaluation schema 与 compatibility reader map** `est:55m`
   - 盘点现有 sales/presentation 评分维度、rollup、report 字段、history/admin 聚合字段，写出 canonical schema 候选与 compatibility readers 列表。
 - 明确哪些 surface 先切 canonical，哪些只能暂时镜像。
   - Files: `.gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md`, `backend/src/common/effectiveness`, `backend/src/common/conversation/session_evidence.py`, `backend/src/common/analytics`, `web/src/lib/api/types.ts`
