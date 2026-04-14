@@ -105,7 +105,7 @@ async def test_start_session_persists_voice_policy_snapshot(
     auth_headers: dict,
     test_db: AsyncSession,
 ):
-    """Creating an enhanced sales session should persist resolved voice policy snapshot."""
+    """Creating an enhanced sales session should persist the live StepFun/session-snapshot authority instead of any prompt-governance fallback."""
     _, agent, persona = await _create_runtime_entities(test_db)
 
     response = await async_client.post(

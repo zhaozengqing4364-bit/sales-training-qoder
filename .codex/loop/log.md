@@ -1504,3 +1504,42 @@
   verification results: passed with one truthful environment blocker; the focused unit proof finished 7/7 green, the real drill run produced logs + summary.json, auth/runtime/OSS/health drills passed, the grep gate stayed green, diagnostics were clean, and db_migration surfaced the existing Alembic revision gap (`20260412_0315_028`) as explicit recovery evidence instead of a silent script failure.
   success signal status: downstream recovery/deploy work can now consume one executable authority surface instead of markdown-only guidance — scripts, docs, and evidence all point at the same baseline + runner seam, and the current local migration blocker is already captured in machine-readable output.
   rollback note: if later work changes any drill command, update scripts/recovery_drill_baseline.py, scripts/recovery_drill_runner.py, both hyphenated CLI entrypoints, the focused runner/bootstrap tests, and the runbook/current-state docs together; otherwise the executable recovery surface and the written guidance will drift again.
+
+- time: 2026-04-14T09:36:59.952541+08:00
+  mode: grow
+  item id: M021-S01-T01
+  files changed:
+    - .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md
+    - .gsd/milestones/M021/M021-CONTEXT-DRAFT.md
+    - .codex/loop/state.json
+    - .codex/loop/log.md
+  summary: Wrote the first M021 live AI authority inventory into the architecture scan and milestone context draft so downstream slices stop guessing which AI seams are truly live. The new map distinguishes the StepFun/session-snapshot runtime authority, the compat-owned knowledge-answer rollout seam, PromptTemplateService governance helpers, and the still-shipped compatibility scoring/comprehensive-report stack.
+  verification commands:
+    - rg -n "PromptTemplateService|generate_report|evaluate\(|stepfun|knowledge_answer|voice_instruction|compiled" backend/src/sales_bot backend/src/evaluation backend/src/prompt_templates backend/src/common backend/src/presentation_coach
+    - rg -n "M021/S01 live AI authority inventory|live rollout seam|compat enhancement / retire candidate|shadow by default; live only when enabled" .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md && test -f .gsd/milestones/M021/M021-CONTEXT-DRAFT.md
+  verification results: passed; the exact task-plan grep gate stayed green across the intended source trees, the architecture scan now exposes the concrete M021/S01 live/compat/shadow labels, and the milestone context content is persisted as CONTEXT-DRAFT because the final CONTEXT artifact is depth-gated rather than safely writable in auto-mode.
+  success signal status: future M021 work can now cite one truthful AI authority map instead of rediscovering whether StepFun, PromptTemplateService, knowledge-answer engine rollout, classic scoring, or comprehensive-report paths are live, compat, or shadow.
+  rollback note: if later slices promote the engine to always-live, retire classic voice mode, or replace comprehensive-report/report_status consumers, update the architecture scan AI inventory and the M021 context artifact together so the authority map does not drift.
+
+- time: 2026-04-14T09:44:43+08:00
+  mode: grow
+  item id: M021-S01-T02
+  files changed:
+    - .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md
+    - docs/api-contract/sessions.md
+    - docs/api-contract/prompt-templates.md
+    - backend/tests/integration/test_voice_runtime_session_snapshot.py
+    - backend/tests/unit/common/test_knowledge_answer_feature_flag.py
+    - backend/tests/unit/test_report_generation_trigger.py
+    - .codex/loop/state.json
+    - .codex/loop/log.md
+  summary: Turned the T01 AI authority inventory into durable proof and contract language: the live StepFun/session-snapshot path, the compat-owned knowledge-answer rollout seam, and the compat report-generation sidecar are now named directly in focused tests, while sessions/prompt-templates/support-runtime docs and the architecture scan now say which consumers belong to the live runtime line versus compat helper/report surfaces.
+  verification commands:
+    - backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/integration/test_voice_runtime_session_snapshot.py::test_start_session_persists_voice_policy_snapshot backend/tests/integration/test_voice_runtime_session_snapshot.py::test_snapshot_baseline_is_immutable_and_report_replay_refer_same_baseline backend/tests/unit/common/test_knowledge_answer_feature_flag.py backend/tests/unit/test_report_generation_trigger.py -q
+    - rg -n "live|compat|shadow|retire|authority" .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md docs/api-contract backend/tests
+    - lsp diagnostics backend/tests/integration/test_voice_runtime_session_snapshot.py
+    - lsp diagnostics backend/tests/unit/common/test_knowledge_answer_feature_flag.py
+    - lsp diagnostics backend/tests/unit/test_report_generation_trigger.py
+  verification results: passed after one syntax-only fix to the touched knowledge-rollout test file; the focused pytest bundle finished 15/15 green, the exact task-plan grep gate exposes live/compat/shadow/authority wording across analysis/docs/tests, and LSP diagnostics were clean on all touched Python proof files.
+  success signal status: downstream M021 work no longer has to infer consumer ownership from the raw inventory table alone — the live runtime/read-side contract is now documented in sessions/support-runtime, the governance-vs-runtime prompt boundary is explicit in prompt-templates, and the focused proof files explain which authority path each assertion is locking.
+  rollback note: if later slices promote PromptTemplateService into the live runtime contract, retire the legacy evaluation/report sidecar, or change which read-side surfaces consume the frozen session snapshot, update the focused proof docstrings/comments, the two api-contract docs, and the architecture scan consumer-sync bullets together so proof language and shipped authority stay aligned.

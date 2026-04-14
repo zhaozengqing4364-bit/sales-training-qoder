@@ -1,6 +1,6 @@
 {
   "mode": "grow",
-  "current_issue_id": "M020-S04-T03",
+  "current_issue_id": "M021-S01-T02",
   "current_issue_type": "task",
   "current_issue_status": "done",
   "pending_issue_ids": [],
@@ -206,27 +206,31 @@
     "M020-S03",
     "M020-S04-T01",
     "M020-S04-T02",
-    "M020-S04-T03"
+    "M020-S04-T03",
+    "M021-S01-T01",
+    "M021-S01-T02"
   ],
   "blocked_issue_ids": [],
   "deferred_issue_ids": [],
   "last_modified_files": [
-    ".sisyphus/deploy/ai-backend.service",
-    ".sisyphus/deploy/ai-frontend.service",
-    ".sisyphus/deploy/ai-practice.nginx.conf",
-    ".sisyphus/plans/cloud-full-redeploy-115-191-36-90.md",
-    "docs/backup-recovery-runbook.md",
-    "docs/api-contract/support-runtime.md",
     ".gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md",
+    "docs/api-contract/sessions.md",
+    "docs/api-contract/prompt-templates.md",
+    "backend/tests/integration/test_voice_runtime_session_snapshot.py",
+    "backend/tests/unit/common/test_knowledge_answer_feature_flag.py",
+    "backend/tests/unit/test_report_generation_trigger.py",
     ".codex/loop/state.json",
     ".codex/loop/log.md"
   ],
   "last_verification_commands": [
-    "rg -n \"single-node|multi-instance|drill|recovery|health\" .sisyphus/deploy .sisyphus/plans docs/backup-recovery-runbook.md .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md",
-    "rg -n \"release-health|recovery drill|summary.json|process-local|redis snapshot|healthy\" docs/api-contract/support-runtime.md docs/backup-recovery-runbook.md .sisyphus/plans/cloud-full-redeploy-115-191-36-90.md"
+    "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/integration/test_voice_runtime_session_snapshot.py::test_start_session_persists_voice_policy_snapshot backend/tests/integration/test_voice_runtime_session_snapshot.py::test_snapshot_baseline_is_immutable_and_report_replay_refer_same_baseline backend/tests/unit/common/test_knowledge_answer_feature_flag.py backend/tests/unit/test_report_generation_trigger.py -q",
+    "rg -n \"live|compat|shadow|retire|authority\" .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md docs/api-contract backend/tests",
+    "lsp diagnostics backend/tests/integration/test_voice_runtime_session_snapshot.py",
+    "lsp diagnostics backend/tests/unit/common/test_knowledge_answer_feature_flag.py",
+    "lsp diagnostics backend/tests/unit/test_report_generation_trigger.py"
   ],
-  "last_verification_result": "passed; the exact task-plan grep gate now exposes single-node deploy, multi-instance boundary, drill evidence, and health-proof wording across .sisyphus/deploy, the cloud redeploy plan, the recovery runbook, and the architecture scan, while the focused support/runtime grep confirms release-health summaries are now explicitly paired with repo-local recovery drill evidence instead of being treated as sufficient on their own.",
-  "last_success_signal": "M020/S04/T03 closed the documentation gap between deploy and recovery: systemd/nginx files, the redeploy plan, the runbook, support runtime guidance, and the architecture scan all now agree that the shipped bundle is single-node today, future multi-instance rollout needs external drain orchestration, and release/recovery proof must include both /health captures and recovery drill summary/log evidence.",
+  "last_verification_result": "passed after one local syntax-fix iteration; the focused authority proof bundle finished 15/15 green across live session-snapshot, knowledge-rollout, and compat report-sidecar tests, the exact T02 grep gate exposes live/compat/shadow/authority wording across analysis/docs/tests, and LSP diagnostics were clean on all touched Python proof files.",
+  "last_success_signal": "M021/S01/T02 turned the inventory into durable proof and doc contracts: runtime/read-side tests now state which live/compat/shadow authority they lock, and sessions/prompt-templates/support-runtime docs can now answer who consumes the live runtime line versus the compat prompt/report sidecars without reopening the code scan.",
   "last_growth_scan": null,
-  "next_action": "M020/S04 tasks are complete; use the assembled deploy + drill evidence bundle for slice closure and downstream release/recovery work rather than rediscovering the boundary again."
+  "next_action": "Use architecture scan section 7.3.1 plus the new docs/api-contract sessions/prompt-templates/support-runtime consumer sync as the input for M021/S01/T03; build the must-keep/compat/retire consumer matrix without promoting PromptTemplateService or /evaluation/* back into live runtime authority."
 }

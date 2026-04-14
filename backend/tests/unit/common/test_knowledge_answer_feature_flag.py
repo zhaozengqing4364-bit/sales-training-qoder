@@ -263,6 +263,7 @@ async def test_feature_flags_use_new_engine_path_when_enabled(
     monkeypatch: pytest.MonkeyPatch,
     async_session_factory: async_sessionmaker[AsyncSession],
 ):
+    """The compat rollout seam should promote the engine-backed path to live learner-visible authority when enabled."""
     await _seed_runtime_config(async_session_factory)
     session_id = await _seed_practice_session(async_session_factory)
     monkeypatch.setenv("KNOWLEDGE_ANSWER_ENGINE_ENABLED", "true")
@@ -312,6 +313,7 @@ async def test_feature_flags_dual_run_records_audit_without_user_visible_cutover
     monkeypatch: pytest.MonkeyPatch,
     async_session_factory: async_sessionmaker[AsyncSession],
 ):
+    """Dual-run should keep the compat payload live while the engine remains a shadow audit surface."""
     await _seed_runtime_config(async_session_factory)
     session_id = await _seed_practice_session(async_session_factory)
     monkeypatch.setenv("KNOWLEDGE_ANSWER_ENGINE_ENABLED", "false")

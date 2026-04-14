@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "exported_at": "2026-04-14T01:19:17.569Z",
+  "exported_at": "2026-04-14T01:46:23.155Z",
   "milestones": [
     {
       "id": "M001",
@@ -2955,7 +2955,7 @@
     {
       "milestone_id": "M021",
       "id": "S01",
-      "title": "Live AI authority inventory",
+      "title": "S01",
       "status": "pending",
       "risk": "high",
       "depends": [],
@@ -13045,19 +13045,28 @@
       "milestone_id": "M021",
       "slice_id": "S01",
       "id": "T01",
-      "title": "盘点 live/compat/shadow AI 路径",
-      "status": "pending",
-      "one_liner": "",
-      "narrative": "",
-      "verification_result": "",
+      "title": "Added the M021 live/compat/shadow AI authority inventory to the architecture scan and milestone context draft.",
+      "status": "complete",
+      "one_liner": "Added the M021 live/compat/shadow AI authority inventory to the architecture scan and milestone context draft.",
+      "narrative": "I traced the shipped AI/runtime/prompt/score/report seams from the actual code paths instead of relying on file names. The inventory now distinguishes the live StepFun runtime authority (`sales_bot/websocket/stepfun_realtime_handler.py` plus `voice_runtime_policy.py` and `voice_instruction_compiler.py`), the live presentation StepFun adapter, the compat-owned knowledge-answer rollout seam (`common.knowledge_engine.compat` + `stepfun_internal_knowledge_searcher.py`), the shadow-by-default engine (`common.knowledge_engine.engine.py`), the live-but-governance-oriented PromptTemplateService surface, and the still-shipped compatibility evaluation stack (`realtime_scoring.py`, `ai_scoring.py`, `staged_evaluation.py`, `comprehensive_report.py`, `report_generation_trigger.py`, `evaluation/api.py`). I wrote that map into `.gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md` as a concrete M021/S01 subsection with callers, consumers, and labels, then prepared milestone context content and persisted it as `.gsd/milestones/M021/M021-CONTEXT-DRAFT.md` because the canonical CONTEXT artifact is depth-gated and auto-mode cannot perform the required human confirmation step. I also updated `.codex/loop/state.json` and `.codex/loop/log.md` so the next single-item iteration starts from the new AI authority map rather than the previous M020 recovery close-out state.",
+      "verification_result": "Ran the exact task-plan grep gate across the intended backend source trees to confirm the relevant StepFun, prompt-template, evaluation, knowledge-answer, and voice-instruction seams are still the live code surfaces being inventoried. Then ran a focused artifact check to confirm the architecture scan now exposes the concrete M021/S01 labels (`live rollout seam`, `shadow by default; live only when enabled`, `compat enhancement / retire candidate`) and that the milestone context content was persisted to `.gsd/milestones/M021/M021-CONTEXT-DRAFT.md`. Both commands exited 0.",
       "duration": "",
-      "completed_at": null,
+      "completed_at": "2026-04-14T01:37:46.977Z",
       "blocker_discovered": false,
-      "deviations": "",
-      "known_issues": "",
-      "key_files": [],
-      "key_decisions": [],
-      "full_summary_md": "",
+      "deviations": "The task plan expected `.gsd/milestones/M021/M021-CONTEXT.md`, but `gsd_summary_save` hard-blocked final `CONTEXT` creation because M021 lacks depth verification and auto-mode cannot call `ask_user_questions`. I persisted the same material as `M021-CONTEXT-DRAFT.md` instead of bypassing the gate.",
+      "known_issues": "Final `M021-CONTEXT.md` is still blocked on human depth verification; downstream slices should use `.gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md` section 7.3.1 plus `.gsd/milestones/M021/M021-CONTEXT-DRAFT.md` until that gate is cleared.",
+      "key_files": [
+        ".gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md",
+        ".gsd/milestones/M021/M021-CONTEXT-DRAFT.md",
+        ".codex/loop/state.json",
+        ".codex/loop/log.md"
+      ],
+      "key_decisions": [
+        "Treat the StepFun/session-snapshot seam as the live AI runtime authority for M021 work instead of PromptTemplateService or `/evaluation/*`.",
+        "Treat `common.knowledge_engine.compat` as the rollout authority seam; `engine.py` remains shadow-by-default unless explicitly enabled.",
+        "Keep classic scoring and comprehensive-report services labeled as compatibility/enhancement surfaces until later M021 slices can retire or replace their shipped consumers."
+      ],
+      "full_summary_md": "---\nid: T01\nparent: S01\nmilestone: M021\nkey_files:\n  - .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md\n  - .gsd/milestones/M021/M021-CONTEXT-DRAFT.md\n  - .codex/loop/state.json\n  - .codex/loop/log.md\nkey_decisions:\n  - Treat the StepFun/session-snapshot seam as the live AI runtime authority for M021 work instead of PromptTemplateService or `/evaluation/*`.\n  - Treat `common.knowledge_engine.compat` as the rollout authority seam; `engine.py` remains shadow-by-default unless explicitly enabled.\n  - Keep classic scoring and comprehensive-report services labeled as compatibility/enhancement surfaces until later M021 slices can retire or replace their shipped consumers.\nduration: \nverification_result: passed\ncompleted_at: 2026-04-14T01:37:46.971Z\nblocker_discovered: false\n---\n\n# T01: Added the M021 live/compat/shadow AI authority inventory to the architecture scan and milestone context draft.\n\n**Added the M021 live/compat/shadow AI authority inventory to the architecture scan and milestone context draft.**\n\n## What Happened\n\nI traced the shipped AI/runtime/prompt/score/report seams from the actual code paths instead of relying on file names. The inventory now distinguishes the live StepFun runtime authority (`sales_bot/websocket/stepfun_realtime_handler.py` plus `voice_runtime_policy.py` and `voice_instruction_compiler.py`), the live presentation StepFun adapter, the compat-owned knowledge-answer rollout seam (`common.knowledge_engine.compat` + `stepfun_internal_knowledge_searcher.py`), the shadow-by-default engine (`common.knowledge_engine.engine.py`), the live-but-governance-oriented PromptTemplateService surface, and the still-shipped compatibility evaluation stack (`realtime_scoring.py`, `ai_scoring.py`, `staged_evaluation.py`, `comprehensive_report.py`, `report_generation_trigger.py`, `evaluation/api.py`). I wrote that map into `.gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md` as a concrete M021/S01 subsection with callers, consumers, and labels, then prepared milestone context content and persisted it as `.gsd/milestones/M021/M021-CONTEXT-DRAFT.md` because the canonical CONTEXT artifact is depth-gated and auto-mode cannot perform the required human confirmation step. I also updated `.codex/loop/state.json` and `.codex/loop/log.md` so the next single-item iteration starts from the new AI authority map rather than the previous M020 recovery close-out state.\n\n## Verification\n\nRan the exact task-plan grep gate across the intended backend source trees to confirm the relevant StepFun, prompt-template, evaluation, knowledge-answer, and voice-instruction seams are still the live code surfaces being inventoried. Then ran a focused artifact check to confirm the architecture scan now exposes the concrete M021/S01 labels (`live rollout seam`, `shadow by default; live only when enabled`, `compat enhancement / retire candidate`) and that the milestone context content was persisted to `.gsd/milestones/M021/M021-CONTEXT-DRAFT.md`. Both commands exited 0.\n\n## Verification Evidence\n\n| # | Command | Exit Code | Verdict | Duration |\n|---|---------|-----------|---------|----------|\n| 1 | `rg -n \"PromptTemplateService|generate_report|evaluate\\(|stepfun|knowledge_answer|voice_instruction|compiled\" backend/src/sales_bot backend/src/evaluation backend/src/prompt_templates backend/src/common backend/src/presentation_coach` | 0 | ✅ pass | 150ms |\n| 2 | `rg -n \"M021/S01 live AI authority inventory|live rollout seam|compat enhancement / retire candidate|shadow by default; live only when enabled\" .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md && test -f .gsd/milestones/M021/M021-CONTEXT-DRAFT.md` | 0 | ✅ pass | 19ms |\n\n## Deviations\n\nThe task plan expected `.gsd/milestones/M021/M021-CONTEXT.md`, but `gsd_summary_save` hard-blocked final `CONTEXT` creation because M021 lacks depth verification and auto-mode cannot call `ask_user_questions`. I persisted the same material as `M021-CONTEXT-DRAFT.md` instead of bypassing the gate.\n\n## Known Issues\n\nFinal `M021-CONTEXT.md` is still blocked on human depth verification; downstream slices should use `.gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md` section 7.3.1 plus `.gsd/milestones/M021/M021-CONTEXT-DRAFT.md` until that gate is cleared.\n\n## Files Created/Modified\n\n- `.gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md`\n- `.gsd/milestones/M021/M021-CONTEXT-DRAFT.md`\n- `.codex/loop/state.json`\n- `.codex/loop/log.md`\n",
       "description": "- 沿 `backend/src/sales_bot/websocket/stepfun_realtime_handler.py`、`evaluation/services/*`、`prompt_templates/*`、`common/ai/*`、knowledge-answer 路径盘点 live/compat/shadow responsibilities。\n- 对每条路径记录：入口、调用者、输出消费者、是否当前真实在线。\n- 把 inventory 写入 architecture scan 和 milestone context。",
       "estimate": "1h",
       "files": [
@@ -13086,19 +13095,28 @@
       "milestone_id": "M021",
       "slice_id": "S01",
       "id": "T02",
-      "title": "把 authority inventory 写进 proof 与文档",
-      "status": "pending",
-      "one_liner": "",
-      "narrative": "",
-      "verification_result": "",
+      "title": "Wired the M021 AI authority inventory into focused proof files and API-contract docs.",
+      "status": "complete",
+      "one_liner": "Wired the M021 AI authority inventory into focused proof files and API-contract docs.",
+      "narrative": "I turned the T01 live/compat/shadow inventory into durable proof and documentation instead of leaving it only in the architecture scan. On the proof side, I updated the focused session-snapshot, knowledge-rollout, and report-trigger test files so they explicitly say which authority path they lock: the live StepFun/session-snapshot runtime line, the compat-owned knowledge-answer rollout seam with shadow dual-run behavior, and the compatibility/enhancement report sidecar that must not be confused with canonical session evidence. On the docs side, I added authority-boundary sections to `docs/api-contract/sessions.md` and `docs/api-contract/prompt-templates.md`, then synced `.gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md` with a proof/doc consumer map that points downstream work at `sessions`, `prompt-templates`, and `support-runtime` for the live-vs-compat consumer split.\n\nDuring verification, one syntax-only regression slipped into `backend/tests/unit/common/test_knowledge_answer_feature_flag.py` while inserting the new proof wording. I stopped, read the broken tail, removed the stray fragment, and reran the same pytest bundle until it passed cleanly. No plan-invalidating blocker was discovered.",
+      "verification_result": "Ran a focused backend pytest bundle covering the live session-snapshot proof, the knowledge-answer rollout seam, and the report-generation sidecar proof: `backend/tests/integration/test_voice_runtime_session_snapshot.py::test_start_session_persists_voice_policy_snapshot`, `backend/tests/integration/test_voice_runtime_session_snapshot.py::test_snapshot_baseline_is_immutable_and_report_replay_refer_same_baseline`, `backend/tests/unit/common/test_knowledge_answer_feature_flag.py`, and `backend/tests/unit/test_report_generation_trigger.py`. The rerun finished 15/15 passing after the syntax-only fix. Ran the exact task-plan grep gate `rg -n \"live|compat|shadow|retire|authority\" .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md docs/api-contract backend/tests`, which returned the expected authority wording across analysis, docs, and proof files. Also ran LSP diagnostics on the three touched Python test files, and all came back with no diagnostics.",
       "duration": "",
-      "completed_at": null,
+      "completed_at": "2026-04-14T01:46:23.106Z",
       "blocker_discovered": false,
-      "deviations": "",
-      "known_issues": "",
-      "key_files": [],
-      "key_decisions": [],
-      "full_summary_md": "",
+      "deviations": "None.",
+      "known_issues": "None.",
+      "key_files": [
+        ".gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md",
+        "docs/api-contract/sessions.md",
+        "docs/api-contract/prompt-templates.md",
+        "backend/tests/integration/test_voice_runtime_session_snapshot.py",
+        "backend/tests/unit/common/test_knowledge_answer_feature_flag.py",
+        "backend/tests/unit/test_report_generation_trigger.py"
+      ],
+      "key_decisions": [
+        "Use `docs/api-contract/sessions.md` and `docs/api-contract/prompt-templates.md` as the durable consumer-facing contract surfaces for the M021 live-vs-compat authority split, while `docs/api-contract/support-runtime.md` remains the read-side authority explainer for support/runtime health consumers."
+      ],
+      "full_summary_md": "---\nid: T02\nparent: S01\nmilestone: M021\nkey_files:\n  - .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md\n  - docs/api-contract/sessions.md\n  - docs/api-contract/prompt-templates.md\n  - backend/tests/integration/test_voice_runtime_session_snapshot.py\n  - backend/tests/unit/common/test_knowledge_answer_feature_flag.py\n  - backend/tests/unit/test_report_generation_trigger.py\nkey_decisions:\n  - Use `docs/api-contract/sessions.md` and `docs/api-contract/prompt-templates.md` as the durable consumer-facing contract surfaces for the M021 live-vs-compat authority split, while `docs/api-contract/support-runtime.md` remains the read-side authority explainer for support/runtime health consumers.\nduration: \nverification_result: mixed\ncompleted_at: 2026-04-14T01:46:23.105Z\nblocker_discovered: false\n---\n\n# T02: Wired the M021 AI authority inventory into focused proof files and API-contract docs.\n\n**Wired the M021 AI authority inventory into focused proof files and API-contract docs.**\n\n## What Happened\n\nI turned the T01 live/compat/shadow inventory into durable proof and documentation instead of leaving it only in the architecture scan. On the proof side, I updated the focused session-snapshot, knowledge-rollout, and report-trigger test files so they explicitly say which authority path they lock: the live StepFun/session-snapshot runtime line, the compat-owned knowledge-answer rollout seam with shadow dual-run behavior, and the compatibility/enhancement report sidecar that must not be confused with canonical session evidence. On the docs side, I added authority-boundary sections to `docs/api-contract/sessions.md` and `docs/api-contract/prompt-templates.md`, then synced `.gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md` with a proof/doc consumer map that points downstream work at `sessions`, `prompt-templates`, and `support-runtime` for the live-vs-compat consumer split.\n\nDuring verification, one syntax-only regression slipped into `backend/tests/unit/common/test_knowledge_answer_feature_flag.py` while inserting the new proof wording. I stopped, read the broken tail, removed the stray fragment, and reran the same pytest bundle until it passed cleanly. No plan-invalidating blocker was discovered.\n\n## Verification\n\nRan a focused backend pytest bundle covering the live session-snapshot proof, the knowledge-answer rollout seam, and the report-generation sidecar proof: `backend/tests/integration/test_voice_runtime_session_snapshot.py::test_start_session_persists_voice_policy_snapshot`, `backend/tests/integration/test_voice_runtime_session_snapshot.py::test_snapshot_baseline_is_immutable_and_report_replay_refer_same_baseline`, `backend/tests/unit/common/test_knowledge_answer_feature_flag.py`, and `backend/tests/unit/test_report_generation_trigger.py`. The rerun finished 15/15 passing after the syntax-only fix. Ran the exact task-plan grep gate `rg -n \"live|compat|shadow|retire|authority\" .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md docs/api-contract backend/tests`, which returned the expected authority wording across analysis, docs, and proof files. Also ran LSP diagnostics on the three touched Python test files, and all came back with no diagnostics.\n\n## Verification Evidence\n\n| # | Command | Exit Code | Verdict | Duration |\n|---|---------|-----------|---------|----------|\n| 1 | `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/integration/test_voice_runtime_session_snapshot.py::test_start_session_persists_voice_policy_snapshot backend/tests/integration/test_voice_runtime_session_snapshot.py::test_snapshot_baseline_is_immutable_and_report_replay_refer_same_baseline backend/tests/unit/common/test_knowledge_answer_feature_flag.py backend/tests/unit/test_report_generation_trigger.py -q` | 0 | ✅ pass | 7624ms |\n| 2 | `rg -n \"live|compat|shadow|retire|authority\" .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md docs/api-contract backend/tests` | 0 | ✅ pass | 77ms |\n| 3 | `lsp diagnostics backend/tests/integration/test_voice_runtime_session_snapshot.py — no diagnostics` | -1 | unknown (coerced from string) | 0ms |\n| 4 | `lsp diagnostics backend/tests/unit/common/test_knowledge_answer_feature_flag.py — no diagnostics` | -1 | unknown (coerced from string) | 0ms |\n| 5 | `lsp diagnostics backend/tests/unit/test_report_generation_trigger.py — no diagnostics` | -1 | unknown (coerced from string) | 0ms |\n\n## Deviations\n\nNone.\n\n## Known Issues\n\nNone.\n\n## Files Created/Modified\n\n- `.gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md`\n- `docs/api-contract/sessions.md`\n- `docs/api-contract/prompt-templates.md`\n- `backend/tests/integration/test_voice_runtime_session_snapshot.py`\n- `backend/tests/unit/common/test_knowledge_answer_feature_flag.py`\n- `backend/tests/unit/test_report_generation_trigger.py`\n",
       "description": "- 为关键 runtime/read-side tests 补 inventory assertions 或注释，明确它们锁的是哪条 authority path。\n- 在 docs/api-contract 或 analysis 中写清 live path 与 compat path 的 consumer list。",
       "estimate": "40m",
       "files": [
@@ -22073,6 +22091,83 @@
       "verdict": "✅ pass",
       "duration_ms": 12,
       "created_at": "2026-04-14T00:48:27.951Z"
+    },
+    {
+      "id": 492,
+      "task_id": "T01",
+      "slice_id": "S01",
+      "milestone_id": "M021",
+      "command": "rg -n \"PromptTemplateService|generate_report|evaluate\\(|stepfun|knowledge_answer|voice_instruction|compiled\" backend/src/sales_bot backend/src/evaluation backend/src/prompt_templates backend/src/common backend/src/presentation_coach",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 150,
+      "created_at": "2026-04-14T01:37:46.977Z"
+    },
+    {
+      "id": 493,
+      "task_id": "T01",
+      "slice_id": "S01",
+      "milestone_id": "M021",
+      "command": "rg -n \"M021/S01 live AI authority inventory|live rollout seam|compat enhancement / retire candidate|shadow by default; live only when enabled\" .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md && test -f .gsd/milestones/M021/M021-CONTEXT-DRAFT.md",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 19,
+      "created_at": "2026-04-14T01:37:46.979Z"
+    },
+    {
+      "id": 494,
+      "task_id": "T02",
+      "slice_id": "S01",
+      "milestone_id": "M021",
+      "command": "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/integration/test_voice_runtime_session_snapshot.py::test_start_session_persists_voice_policy_snapshot backend/tests/integration/test_voice_runtime_session_snapshot.py::test_snapshot_baseline_is_immutable_and_report_replay_refer_same_baseline backend/tests/unit/common/test_knowledge_answer_feature_flag.py backend/tests/unit/test_report_generation_trigger.py -q",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 7624,
+      "created_at": "2026-04-14T01:46:23.107Z"
+    },
+    {
+      "id": 495,
+      "task_id": "T02",
+      "slice_id": "S01",
+      "milestone_id": "M021",
+      "command": "rg -n \"live|compat|shadow|retire|authority\" .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md docs/api-contract backend/tests",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 77,
+      "created_at": "2026-04-14T01:46:23.107Z"
+    },
+    {
+      "id": 496,
+      "task_id": "T02",
+      "slice_id": "S01",
+      "milestone_id": "M021",
+      "command": "lsp diagnostics backend/tests/integration/test_voice_runtime_session_snapshot.py — no diagnostics",
+      "exit_code": -1,
+      "verdict": "unknown (coerced from string)",
+      "duration_ms": 0,
+      "created_at": "2026-04-14T01:46:23.107Z"
+    },
+    {
+      "id": 497,
+      "task_id": "T02",
+      "slice_id": "S01",
+      "milestone_id": "M021",
+      "command": "lsp diagnostics backend/tests/unit/common/test_knowledge_answer_feature_flag.py — no diagnostics",
+      "exit_code": -1,
+      "verdict": "unknown (coerced from string)",
+      "duration_ms": 0,
+      "created_at": "2026-04-14T01:46:23.107Z"
+    },
+    {
+      "id": 498,
+      "task_id": "T02",
+      "slice_id": "S01",
+      "milestone_id": "M021",
+      "command": "lsp diagnostics backend/tests/unit/test_report_generation_trigger.py — no diagnostics",
+      "exit_code": -1,
+      "verdict": "unknown (coerced from string)",
+      "duration_ms": 0,
+      "created_at": "2026-04-14T01:46:23.107Z"
     }
   ]
 }

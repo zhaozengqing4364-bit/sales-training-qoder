@@ -23,14 +23,14 @@ S01 结束后，后续 prompt/evaluation/kernel 工作都有同一张 live/compa
 
 ## Tasks
 
-- [ ] **T01: 盘点 live/compat/shadow AI 路径** `est:1h`
+- [x] **T01: 盘点 live/compat/shadow AI 路径** `est:1h`
   - 沿 `backend/src/sales_bot/websocket/stepfun_realtime_handler.py`、`evaluation/services/*`、`prompt_templates/*`、`common/ai/*`、knowledge-answer 路径盘点 live/compat/shadow responsibilities。
 - 对每条路径记录：入口、调用者、输出消费者、是否当前真实在线。
 - 把 inventory 写入 architecture scan 和 milestone context。
   - Files: `.gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md`, `backend/src/sales_bot/websocket/stepfun_realtime_handler.py`, `backend/src/evaluation/services`, `backend/src/prompt_templates`, `backend/src/common/knowledge_engine`
   - Verify: rg -n "PromptTemplateService|generate_report|evaluate\(|stepfun|knowledge_answer|voice_instruction|compiled" backend/src/sales_bot backend/src/evaluation backend/src/prompt_templates backend/src/common backend/src/presentation_coach
 
-- [ ] **T02: 把 authority inventory 写进 proof 与文档** `est:40m`
+- [x] **T02: 把 authority inventory 写进 proof 与文档** `est:40m`
   - 为关键 runtime/read-side tests 补 inventory assertions 或注释，明确它们锁的是哪条 authority path。
 - 在 docs/api-contract 或 analysis 中写清 live path 与 compat path 的 consumer list。
   - Files: `backend/tests`, `docs/api-contract`, `.gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md`

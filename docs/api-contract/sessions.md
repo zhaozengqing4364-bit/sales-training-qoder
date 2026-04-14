@@ -19,6 +19,12 @@
 - 运行时对外统一主语为 `training_scenario_runtime`，避免会话接口、权限校验、统计口径继续按实体类型分叉。
 - `PracticeSession` 是运行时事实锚点；配置实体只负责提供运行参数，不直接充当运行时主语。
 
+## Authority boundary（M021/S01 inventory sync）
+
+- **live runtime authority**：`POST /api/v1/practice/sessions` 固化 `voice_policy_snapshot`，持久化的 `voice_mode` 决定 `/ws/sales` / presentation websocket 走哪条 runtime；`GET /practice/sessions/{id}`、`GET /practice/sessions/{id}/report`、`GET /practice/sessions/{id}/knowledge-check`、`GET /sessions/{id}/replay` 都读取同一条 snapshot/evidence authority line。
+- **compat runtime**：`voice_mode="legacy"` 仍是 shipped compatibility runtime；classic scoring / `score_update` / legacy websocket 语义仍需保留兼容，但它不是默认 live StepFun 主链。
+- **compat enhancement / report sidecar**：`report_status`、support fault summary、以及可选 comprehensive/evaluation 报告读取，仍可能经过 legacy evaluation/report stack；但 canonical completed-session truth 仍是 `/practice/sessions/{id}/report` + `SessionEvidenceService`。
+
 ---
 
 ## 统一响应格式

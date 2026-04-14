@@ -1,6 +1,9 @@
 """
 Unit tests for report generation trigger (Story 3.1)
 
+These proofs lock the optional enhanced-report sidecar as a compatibility/enhancement
+surface. Canonical completed-session truth still comes from the session-evidence read line.
+
 Tests:
 - Report generation trigger on session end
 - Own-session commit semantics for fire-and-forget execution
