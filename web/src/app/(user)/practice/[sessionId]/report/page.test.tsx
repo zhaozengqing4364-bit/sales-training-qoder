@@ -550,6 +550,49 @@ describe("ReportPage", () => {
         expect(overallScore.getAttribute("data-contract-source")).toBe("canonical_kernel");
     });
 
+    it("marks compatibility-reader score fallback explicitly instead of treating it as canonical success", async () => {
+        getReportMock.mockResolvedValue({
+            ...baseReport,
+            logic_score: 41,
+            accuracy_score: 42,
+            completeness_score: 43,
+            overall_score: 44,
+            evaluable: true,
+            not_evaluable_reason: null,
+            evidence_completeness: {
+                ...baseReport.evidence_completeness,
+                legacy_score_key_used: true,
+            },
+            compatibility_readers: {
+                practice_session_rollup_fields_v1: {
+                    logic_score: 84,
+                    accuracy_score: 73,
+                    completeness_score: 69,
+                    overall_score: 76,
+                },
+            },
+        });
+        getComprehensiveReportMock.mockResolvedValue({
+            session_id: "session-1",
+            generated_at: "2026-03-23T00:00:00Z",
+            overall_score: 76,
+            dimension_scores: [],
+            stage_summaries: [],
+            key_strengths: [],
+            key_improvements: [],
+            detailed_feedback: "",
+            recommendations: [],
+            voice_policy_snapshot_ref: null,
+        });
+
+        render(<ReportPage />);
+
+        const overallScore = await screen.findByTestId("report-overall-score");
+        expect(overallScore.textContent).toContain("76");
+        expect(overallScore.getAttribute("data-contract-source")).toBe("compatibility_reader");
+        expect(screen.getByText("兼容了 legacy score key")).toBeTruthy();
+    });
+
     it("deep-links the report issue and goal cards into replay using the stable replay anchors", async () => {
         getReportMock.mockResolvedValue({
             ...baseReport,
@@ -1123,6 +1166,8 @@ describe("ReportPage", () => {
 
         expect(await screen.findByText("知识库检索事实")).toBeTruthy();
         expect(screen.getAllByText("检索失败").length).toBeGreaterThan(0);
+        expect(screen.queryByText("已命中")).toBeNull();
+        expect(screen.queryByText("未命中")).toBeNull();
         expect(screen.getByText("知识检索触发失败，当前无法获取知识库证据")).toBeTruthy();
         expect(screen.getByText("知识检索服务异常：向量检索服务超时")).toBeTruthy();
         expect(screen.getByText("知识库检索暂时异常，无法确认是否有相关内容支撑当前主张。")).toBeTruthy();

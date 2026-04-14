@@ -199,6 +199,44 @@ GET /api/v1/support/runtime/faults?limit=20&severity=warning
 - `summary`: 给 support/admin 的可读摘要
 - `diagnostics`: allowlist-first 的安全诊断字段，不保证包含 raw backend details
 
+### `diagnostics.runtime_events[]` 读法
+
+当某条 fault 来自 AI / knowledge-answer / report 运行链时，`diagnostics.runtime_events[]` 会附带同一条 allowlist-safe runtime event 线。当前 event shape 如下：
+
+```json
+{
+  "event_id": "knowledge_answer_path_mode",
+  "category": "mode",
+  "severity": "info",
+  "status": "compat",
+  "source": "knowledge_answer",
+  "summary": "Knowledge answer served the compatibility path.",
+  "details": {
+    "rollout_mode": "dual_run"
+  },
+  "metrics": {},
+  "occurred_at": "2026-04-14T04:00:00Z"
+}
+```
+
+字段解释：
+
+- `event_id`: 稳定事件标识；当前已覆盖 knowledge path mode、knowledge quality、kb lock、claim-truth、LLM cost/failure 等 runtime 事件。
+- `category`: 当前约定为 `quality` / `cost` / `failure` / `mode`。
+- `severity`: 当前约定为 `info` / `ok` / `degraded` / `failure`。
+- `status`: 该事件自己的状态值；例如 knowledge path 会给出 `live` / `compat`，claim-truth 会给出具体 truth 状态，cost 会给出 `tracked` / `budget_warning` 等。
+- `source`: 事件 authority seam；当前主要是 `knowledge_answer`、`kb_lock`、`claim_truth`、`llm`。
+- `summary`: 支持 support/admin 直接阅读的安全摘要，不需要回看默认分数或 fallback 文案猜状态。
+- `details` / `metrics`: allowlist-safe 细节与计量，只保留可对 support/admin 暴露的诊断字段。
+
+解释规则：
+
+- **`category = mode` 说明来源路径，不等于异常。** 例如 `knowledge_answer_path_mode.status = live|compat` 用来回答“当前知识问答是 live 还是 compat”，不是质量判定本身。
+- **`severity = degraded` 说明结果仍对外返回，但质量/完整性已经下降。** 例如 knowledge grounding partial、audio upload partial、budget warning、fallback anchor 等都属于 degraded，而不是成功低分。
+- **`severity = failure` 说明该运行面无法提供可靠结果。** 例如 `knowledge_answer_quality` 在 `search_failed` / `blocked` / `insufficient` 时会显式落成 failure；support 不应再把这类情况解释成“只是分数一般”。
+- **`category = cost` 是观测事件，不自动代表成功。** 成本事件可以与 `degraded` / `failure` 并存，用来回答“这次失败/降级是否仍消耗了 token / session budget”。
+- **优先读 runtime event，不要反推默认文案。** 如果 `summary` 或 `details` 已经显式给出 degraded / failure / compat，就不要再用 `overall_score`、fallback 回答文案、`[REPORT_GENERATION_FAILED]` 之类外围信号做二次猜测。
+
 ### 已知边界
 
 - 这里不会返回 live websocket connection registry。

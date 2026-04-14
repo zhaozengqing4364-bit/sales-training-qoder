@@ -1,7 +1,7 @@
 # Codebase Map
 
-Generated: 2026-04-14T04:06:31Z | Files: 500 | Described: 0/500
-<!-- gsd:codebase-meta {"generatedAt":"2026-04-14T04:06:31Z","fingerprint":"497c78502cc44e0034e26b953754150176c07563","fileCount":500,"truncated":true} -->
+Generated: 2026-04-14T04:34:10Z | Files: 500 | Described: 0/500
+<!-- gsd:codebase-meta {"generatedAt":"2026-04-14T04:34:10Z","fingerprint":"6e765b55b0e9dfc6e5433cc433d8c854ae6c9a13","fileCount":500,"truncated":true} -->
 Note: Truncated to first 500 files. Run with higher --max-files to include all.
 
 ### (root)/
@@ -419,6 +419,7 @@ Note: Truncated to first 500 files. Run with higher --max-files to include all.
 - `backend/src/common/knowledge_engine/intent_classifier.py`
 - `backend/src/common/knowledge_engine/reranker.py`
 - `backend/src/common/knowledge_engine/retrieval_planner.py`
+- `backend/src/common/knowledge_engine/runtime_events.py`
 - `backend/src/common/knowledge_engine/schemas.py`
 
 ### backend/src/common/logging/
@@ -643,4 +644,3 @@ Note: Truncated to first 500 files. Run with higher --max-files to include all.
 
 ### backend/tests/unit/admin/
 - `backend/tests/unit/admin/test_admin_users_api_models.py`
-- `backend/tests/unit/admin/test_system_logs_redaction.py`

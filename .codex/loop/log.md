@@ -1718,3 +1718,21 @@
   verification results: passed after one syntax-only fix to the touched knowledge-rollout test file; the focused pytest bundle finished 15/15 green, the exact task-plan grep gate exposes live/compat/shadow/authority wording across analysis/docs/tests, and LSP diagnostics were clean on all touched Python proof files.
   success signal status: downstream M021 work no longer has to infer consumer ownership from the raw inventory table alone — the live runtime/read-side contract is now documented in sessions/support-runtime, the governance-vs-runtime prompt boundary is explicit in prompt-templates, and the focused proof files explain which authority path each assertion is locking.
   rollback note: if later slices promote PromptTemplateService into the live runtime contract, retire the legacy evaluation/report sidecar, or change which read-side surfaces consume the frozen session snapshot, update the focused proof docstrings/comments, the two api-contract docs, and the architecture scan consumer-sync bullets together so proof language and shipped authority stay aligned.
+
+- time: 2026-04-14T12:41:43.712765+08:00
+  mode: grow
+  item id: M021-S04-T03
+  files changed:
+    - docs/api-contract/support-runtime.md
+    - web/src/app/(user)/practice/[sessionId]/report/page.test.tsx
+    - web/src/app/(user)/practice/[sessionId]/replay/page.test.tsx
+    - .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md
+    - .codex/loop/state.json
+    - .codex/loop/log.md
+  summary: Wrote the S04 runtime-event read-side back into durable support/runtime and architecture docs, and strengthened report/replay proof so compat-reader score fallbacks and retrieval failure states stay explicit instead of being misread as canonical or low-quality success.
+  verification commands:
+    - npm --prefix web test -- --run "src/app/(user)/practice/[sessionId]/report/page.test.tsx" "src/app/(user)/practice/[sessionId]/replay/page.test.tsx"
+    - rg -n "quality|cost|failure|degraded|compat" docs/api-contract/support-runtime.md .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md
+  verification results: passed; the exact T03 web bundle finished 39/39 green, the new tests prove report/replay explicitly label compatibility-reader rollups and keep retrieval search_failed copy from collapsing into hit/miss success text, and the grep gate now exposes the runtime-event read rules directly in the intended long-lived docs.
+  success signal status: future agents no longer need to infer support/runtime event semantics or UI fallback meaning from scattered code — the docs say how to read mode/degraded/failure/cost events, and the front-end proof locks compat/failure presentation in place.
+  rollback note: if later slices change runtime_event fields, compat score source handling, or the learner-facing degradation copy, update support-runtime.md, the architecture scan read-side bullets, and the focused report/replay assertions together so documentation and proof keep matching the shipped UI/runtime semantics.

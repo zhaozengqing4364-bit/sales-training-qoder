@@ -1,6 +1,6 @@
 {
   "mode": "grow",
-  "current_issue_id": "M021-S04-T01",
+  "current_issue_id": "M021-S04-T03",
   "current_issue_type": "task",
   "current_issue_status": "done",
   "pending_issue_ids": [],
@@ -211,26 +211,27 @@
     "M021-S01-T02",
     "M021-S02-T01",
     "M021-S02-T02",
-    "M021-S02-T03"
+    "M021-S02-T03",
+    "M021-S04-T01",
+    "M021-S04-T02",
+    "M021-S04-T03"
   ],
   "blocked_issue_ids": [],
   "deferred_issue_ids": [],
   "last_modified_files": [
-    "backend/src/common/ai/llm_service.py",
-    "backend/src/sales_bot/websocket/stepfun_realtime_handler.py",
-    "backend/tests/unit/test_ai_quality_event_inventory.py",
+    "docs/api-contract/support-runtime.md",
+    "web/src/app/(user)/practice/[sessionId]/report/page.test.tsx",
+    "web/src/app/(user)/practice/[sessionId]/replay/page.test.tsx",
     ".gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md",
-    ".gsd/KNOWLEDGE.md",
     ".codex/loop/state.json",
     ".codex/loop/log.md"
   ],
   "last_verification_commands": [
-    "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/test_ai_quality_event_inventory.py -q",
-    "rg -n \"default|fallback|NO_STAGE_RESULTS|cost|report_generation_failed|knowledge_answer|degraded|claim_truth\" backend/src/common backend/src/sales_bot backend/src/evaluation",
-    "rg -n \"quality / cost / failure inventory baseline|LLM_RUNTIME_EVENT_INVENTORY|STEPFUN_RUNTIME_EVENT_INVENTORY|default score 不等于真实低分|knowledge-answer path truth 仍必须沿 compat seam 读取\" .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md backend/src/common/ai/llm_service.py backend/src/sales_bot/websocket/stepfun_realtime_handler.py"
+    "npm --prefix web test -- --run \"src/app/(user)/practice/[sessionId]/report/page.test.tsx\" \"src/app/(user)/practice/[sessionId]/replay/page.test.tsx\"",
+    "rg -n \"quality|cost|failure|degraded|compat\" docs/api-contract/support-runtime.md .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md"
   ],
-  "last_verification_result": "passed; the new fail-first inventory test finished green after adding code-owned runtime event inventories for legacy LLM defaults/cost tracking and StepFun degradation/mode surfaces, the exact task-plan grep gate still exposes the live fallback/degraded/cost/knowledge seams in backend code, the focused architecture grep proves the S04 inventory write-back is durable, and LSP diagnostics stayed clean on all touched Python files.",
-  "last_success_signal": "future S04 work no longer has to rediscover where AI failures are being hidden: the repo now has one grep-discoverable inventory for legacy LLM fallback/default/cost paths, one for StepFun live runtime degradations, and an architecture note that ties knowledge-answer mode truth back to the compat seam.",
+  "last_verification_result": "passed; the exact T03 web proof bundle finished 39/39 green, including new focused compat-source assertions plus a failure-path assertion that search_failed retrieval stays explicit instead of degrading into hit/miss success copy, and the task-plan grep gate now exposes the support/runtime and architecture-scan read rules for quality/cost/failure/degraded/compat directly.",
+  "last_success_signal": "future agents can now inspect how to read runtime_events on support/runtime, how to distinguish mode/degraded/failure/cost semantics, and the report/replay proof now locks compat-reader and failure states so the UI cannot silently reinterpret them as canonical success.",
   "last_growth_scan": null,
-  "next_action": "Proceed to M021/S04/T02; implement a unified quality/cost/failure event schema on top of the newly-fixed LLM and StepFun inventory seams without inventing a second knowledge-answer truth line."
+  "next_action": "Proceed to M021/S04 slice wrap-up; all three planned tasks are complete and the slice-level proof can now rely on the explicit support/runtime docs plus report/replay assertions."
 }

@@ -906,6 +906,26 @@ describe("SessionReplayPage", () => {
     expect(overallScore.getAttribute("data-contract-source")).toBe("canonical_kernel");
   });
 
+  it("marks compatibility-reader replay rollups explicitly instead of treating them as canonical", async () => {
+    renderReplayPage({
+      replayOverrides: {
+        overall_score: 55,
+        compatibility_readers: {
+          practice_session_rollup_fields_v1: {
+            logic_score: 90,
+            accuracy_score: 86,
+            completeness_score: 81,
+            overall_score: 88,
+          },
+        },
+      },
+    });
+
+    const overallScore = await screen.findByTestId("replay-overall-score");
+    expect(overallScore.textContent).toContain("88");
+    expect(overallScore.getAttribute("data-contract-source")).toBe("compatibility_reader");
+  });
+
   it("launches a focused retry from replay using the report retry_entry focus intent", async () => {
     renderReplayPage();
 

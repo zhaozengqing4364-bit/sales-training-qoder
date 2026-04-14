@@ -36,7 +36,7 @@ S04 是 M021 的 final assembly slice；完成后 M022 可以在真实 quality/c
   - Files: `backend/src/common/knowledge_engine`, `backend/src/common/ai/llm_service.py`, `backend/src/sales_bot/websocket/components`, `backend/src/support/api/runtime_status.py`, `backend/src/common/conversation/runtime_diagnostics.py`
   - Verify: backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/contract/test_conclusion_evidence_parity.py backend/tests/integration/test_knowledge_flow.py backend/tests/integration/test_websocket_status_contract.py -x -q
 
-- [ ] **T03: 把 quality/cost/failure event 读法写回 support 与前端 proof** `est:45m`
+- [x] **T03: 把 quality/cost/failure event 读法写回 support 与前端 proof** `est:45m`
   - 更新 support/runtime、report/replay docs、architecture scan，明确如何读这些事件以及如何区分 degraded / failure / compat。
 - 前端如已展示对应降级状态，补 focused assertions，确保不是继续把失败翻译成‘低质量成功’。
   - Files: `docs/api-contract/support-runtime.md`, `web/src/app/(user)/practice/[sessionId]/report/page.test.tsx`, `web/src/app/(user)/practice/[sessionId]/replay/page.test.tsx`, `.gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md`
