@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "exported_at": "2026-04-14T08:04:26.604Z",
+  "exported_at": "2026-04-14T08:09:24.720Z",
   "milestones": [
     {
       "id": "M001",
@@ -14022,19 +14022,27 @@
       "milestone_id": "M022",
       "slice_id": "S03",
       "id": "T03",
-      "title": "固定 manager/admin truth surface 的产品边界",
-      "status": "pending",
-      "one_liner": "",
-      "narrative": "",
-      "verification_result": "",
+      "title": "Documented the real manager/admin truth-surface boundary in the architecture scan and post-M018 plan, including the shipped calibration/coaching entry points and the inventory-only follow-up surfaces.",
+      "status": "complete",
+      "one_liner": "Documented the real manager/admin truth-surface boundary in the architecture scan and post-M018 plan, including the shipped calibration/coaching entry points and the inventory-only follow-up surfaces.",
+      "narrative": "This task closed the documentation gap left after the admin-home cleanup by writing the manager/admin product boundary back into the durable planning artifacts instead of leaving it implicit in the UI changes from T01/T02. In `.gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md` I expanded the M022/S03 section so it now names the three real manager calibration/team coaching entry points (`manager-lite-panel`, `/admin/users/[id]`, and `/admin/analytics`), states that those surfaces are the current P0 truth surfaces because they sit on canonical evidence or projection-backed statistics, and explicitly marks the admin-home inventory cards plus standalone calibration/coaching workspaces as future/inventory-only surfaces. In `.gsd/plans/GSD_PLAN_post-M018-next-wave.md` I mirrored the same boundary in the M022-S03 plan entry so downstream roadmap work, implementation, and product language all point at the same shipped surface area. I also recorded decision D247 so later slices inherit the same boundary instead of broadening claims from placeholder shells back into ‘live operator tooling.’",
+      "verification_result": "Ran the exact task-plan verification command to confirm both target documents now expose the required manager/calibration/truth-surface/fake-stats/canonical-evidence language. The grep exited 0 and matched the newly added entry-point definitions, the productized-vs-inventory boundary, and the messaging guardrail in both artifacts.",
       "duration": "",
-      "completed_at": null,
+      "completed_at": "2026-04-14T08:09:24.613Z",
       "blocker_discovered": false,
-      "deviations": "",
-      "known_issues": "",
-      "key_files": [],
-      "key_decisions": [],
-      "full_summary_md": "",
+      "deviations": "None.",
+      "known_issues": "None.",
+      "key_files": [
+        ".gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md",
+        ".gsd/plans/GSD_PLAN_post-M018-next-wave.md",
+        ".gsd/DECISIONS.md",
+        ".codex/loop/state.json",
+        ".codex/loop/log.md"
+      ],
+      "key_decisions": [
+        "D247 — Treat manager-lite, admin analytics, and admin user detail/interventions as the only currently productized manager/admin truth surfaces; keep admin-home inventory cards and standalone calibration/coaching workspaces documented as future/inventory-only surfaces."
+      ],
+      "full_summary_md": "---\nid: T03\nparent: S03\nmilestone: M022\nkey_files:\n  - .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md\n  - .gsd/plans/GSD_PLAN_post-M018-next-wave.md\n  - .gsd/DECISIONS.md\n  - .codex/loop/state.json\n  - .codex/loop/log.md\nkey_decisions:\n  - D247 — Treat manager-lite, admin analytics, and admin user detail/interventions as the only currently productized manager/admin truth surfaces; keep admin-home inventory cards and standalone calibration/coaching workspaces documented as future/inventory-only surfaces.\nduration: \nverification_result: passed\ncompleted_at: 2026-04-14T08:09:24.610Z\nblocker_discovered: false\n---\n\n# T03: Documented the real manager/admin truth-surface boundary in the architecture scan and post-M018 plan, including the shipped calibration/coaching entry points and the inventory-only follow-up surfaces.\n\n**Documented the real manager/admin truth-surface boundary in the architecture scan and post-M018 plan, including the shipped calibration/coaching entry points and the inventory-only follow-up surfaces.**\n\n## What Happened\n\nThis task closed the documentation gap left after the admin-home cleanup by writing the manager/admin product boundary back into the durable planning artifacts instead of leaving it implicit in the UI changes from T01/T02. In `.gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md` I expanded the M022/S03 section so it now names the three real manager calibration/team coaching entry points (`manager-lite-panel`, `/admin/users/[id]`, and `/admin/analytics`), states that those surfaces are the current P0 truth surfaces because they sit on canonical evidence or projection-backed statistics, and explicitly marks the admin-home inventory cards plus standalone calibration/coaching workspaces as future/inventory-only surfaces. In `.gsd/plans/GSD_PLAN_post-M018-next-wave.md` I mirrored the same boundary in the M022-S03 plan entry so downstream roadmap work, implementation, and product language all point at the same shipped surface area. I also recorded decision D247 so later slices inherit the same boundary instead of broadening claims from placeholder shells back into ‘live operator tooling.’\n\n## Verification\n\nRan the exact task-plan verification command to confirm both target documents now expose the required manager/calibration/truth-surface/fake-stats/canonical-evidence language. The grep exited 0 and matched the newly added entry-point definitions, the productized-vs-inventory boundary, and the messaging guardrail in both artifacts.\n\n## Verification Evidence\n\n| # | Command | Exit Code | Verdict | Duration |\n|---|---------|-----------|---------|----------|\n| 1 | `rg -n \"manager|calibration|truth surface|fake stats|placeholder|canonical evidence\" .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md .gsd/plans/GSD_PLAN_post-M018-next-wave.md` | 0 | ✅ pass | 25ms |\n\n## Deviations\n\nNone.\n\n## Known Issues\n\nNone.\n\n## Files Created/Modified\n\n- `.gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md`\n- `.gsd/plans/GSD_PLAN_post-M018-next-wave.md`\n- `.gsd/DECISIONS.md`\n- `.codex/loop/state.json`\n- `.codex/loop/log.md`\n",
       "description": "- 把 manager calibration/team coaching 入口、truth surface 说明写回 architecture scan 和 product plan。\n- 明确哪些管理能力已可产品化，哪些仍是后续工作，避免商业话术超过真实实现。",
       "estimate": "35m",
       "files": [
@@ -17118,6 +17126,18 @@
       "decision": "Manager/admin truth-surface boundary for the admin home",
       "choice": "Keep only the admin-home effectiveness card on live authority and downgrade the remaining admin-home ops cards to inventory; treat admin analytics, manager-lite, and admin user detail/interventions as the current P0 manager/admin truth surfaces.",
       "rationale": "The codebase already has projection-backed analytics, manager-lite lists, and user-detail/intervention surfaces on canonical evidence, but the plain admin home still mixed those with hardcoded fake user/session/resource/storage numbers. Downgrading the non-authoritative cards prevents a second drifting summary line while giving T02 a clear reuse target.",
+      "revisable": "Yes",
+      "made_by": "agent",
+      "superseded_by": null
+    },
+    {
+      "seq": 1617,
+      "id": "D247",
+      "when_context": "M022-S03-T03",
+      "scope": "architecture",
+      "decision": "Manager/admin truth-surface product boundary",
+      "choice": "Treat manager-lite, admin analytics, and admin user detail/interventions as the only currently productized manager/admin truth surfaces; keep admin-home inventory cards and independent calibration/coaching workspaces documented as future/inventory-only surfaces.",
+      "rationale": "These are the only manager/admin surfaces already backed by canonical evidence or projection-backed stats. Documenting them as the product boundary prevents roadmap, marketing, and downstream implementation work from overstating placeholder cards or non-authoritative shells as shipped operator tooling.",
       "revisable": "Yes",
       "made_by": "agent",
       "superseded_by": null
@@ -22986,6 +23006,17 @@
       "verdict": "✅ pass",
       "duration_ms": 9001,
       "created_at": "2026-04-14T08:04:26.504Z"
+    },
+    {
+      "id": 539,
+      "task_id": "T03",
+      "slice_id": "S03",
+      "milestone_id": "M022",
+      "command": "rg -n \"manager|calibration|truth surface|fake stats|placeholder|canonical evidence\" .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md .gsd/plans/GSD_PLAN_post-M018-next-wave.md",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 25,
+      "created_at": "2026-04-14T08:09:24.613Z"
     }
   ]
 }

@@ -1,6 +1,6 @@
 {
   "mode": "grow",
-  "current_issue_id": "M022-S03-T02",
+  "current_issue_id": "M022-S03-T03",
   "current_issue_type": "task",
   "current_issue_status": "done",
   "pending_issue_ids": [],
@@ -221,22 +221,23 @@
     "M022-S01",
     "M022-S02-T03",
     "M022-S03-T01",
-    "M022-S03-T02"
+    "M022-S03-T02",
+    "M022-S03-T03"
   ],
   "blocked_issue_ids": [],
   "deferred_issue_ids": [],
   "last_modified_files": [
-    "web/src/app/admin/page.tsx",
-    "web/src/app/admin/page.test.tsx",
+    ".gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md",
+    ".gsd/plans/GSD_PLAN_post-M018-next-wave.md",
+    ".gsd/DECISIONS.md",
     ".codex/loop/state.json",
     ".codex/loop/log.md"
   ],
   "last_verification_commands": [
-    "npm --prefix web test -- --run src/app/admin/page.test.tsx",
-    "npm --prefix web test -- --run \"src/app/admin/page.test.tsx\" \"src/components/admin/manager-lite-panel.test.tsx\" && backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/common/test_admin_analytics_service.py -x -q"
+    "rg -n \"manager|calibration|truth surface|fake stats|placeholder|canonical evidence\" .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md .gsd/plans/GSD_PLAN_post-M018-next-wave.md"
   ],
-  "last_verification_result": "passed; the fail-first admin home proof is green, the exact T02 verification bundle finished 3/3 web tests and 5/5 backend admin analytics tests green, and the lower admin home no longer renders fake action/log/alert/activity copy.",
-  "last_success_signal": "M022/S03/T02 leaves the admin home with one live effectiveness card plus explicit links into the real user-management, analytics, and logs surfaces; manager-lite and admin analytics remain on the same projection-backed evidence line.",
+  "last_verification_result": "passed; the exact task-plan grep gate now exposes the manager calibration/team coaching entry points plus the explicit productized-vs-inventory truth-surface boundary in both the architecture scan and the post-M018 plan.",
+  "last_success_signal": "M022/S03 now has durable planning artifacts that truthfully say which manager/admin surfaces are real canonical-evidence products today and which remain inventory-only follow-up work.",
   "last_growth_scan": null,
-  "next_action": "Proceed to M022-S03-T03 by writing the manager/admin truth-surface boundary back into the architecture scan and product plan so the shipped surfaces and product story stay aligned."
+  "next_action": "Proceed to M022-S03 slice completion or downstream roadmap work using the documented manager/admin truth-surface boundary instead of re-inferring it from UI copy."
 }

@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "taskId": "T02",
+  "unitId": "M022/S03/T02",
+  "timestamp": 1776153879109,
+  "passed": false,
+  "discoverySource": "task-plan",
+  "checks": [
+    {
+      "command": "npm --prefix web test -- --run \"src/app/admin/page.test.tsx\" \"src/components/admin/manager-lite-panel.test.tsx\"",
+      "exitCode": 0,
+      "durationMs": 2757,
+      "verdict": "pass"
+    },
+    {
+      "command": "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/common/test_admin_analytics_service.py -x -q",
+      "exitCode": 0,
+      "durationMs": 4785,
+      "verdict": "pass"
+    }
+  ],
+  "retryAttempt": 1,
+  "maxRetries": 2,
+  "runtimeErrors": [
+    {
+      "source": "bg-shell",
+      "severity": "crash",
+      "message": "[web-dev-admin-home] exitCode=1",
+      "blocking": true
+    }
+  ]
+}

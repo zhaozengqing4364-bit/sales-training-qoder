@@ -307,8 +307,12 @@
 - Out of Scope：完整管理系统重建。
 - Inputs / Preconditions：M022-S01/S02；另外直接继承 M019/S04 的已知输入：`web/src/app/admin/page.tsx` 当前只有顶部“训练效果核心看板（近7天）”读取真实 API，其余卡片仍硬编码 `2,543`、`84`、`42%`、`68%`、`75%`、`450 GB` 以及静态日志/告警文案。
 - Target Files / Modules：`web/src/app/admin/page.tsx`、`web/src/components/admin/*`、`backend/src/common/analytics/*`。
-- Implementation Notes：没有真实数据的卡片要降级或移除，不再硬造运行中数字；M019/S04 已明确这些 admin home demo stats 不是 release truth，也不能被营销/运营文案包装成 live monitoring。
-- Done When：关键 admin/manager 决策面只显示真实数字和真实 summary。
+- Implementation Notes：没有真实数据的卡片要降级或移除，不再硬造运行中数字；M019/S04 已明确这些 admin home demo stats 不是 release truth，也不能被营销/运营文案包装成 live monitoring。产品边界按现有入口写死：`manager-lite-panel` 是主管分诊入口，`/admin/users/[id]` 是单人 calibration / team coaching drill-in 入口，`/admin/analytics` 是 team summary / degraded breakdown / runtime fault 回顾入口。
+- Product Boundary：
+  - 已可产品化：canonical evidence 驱动的 manager-lite、admin analytics、user detail / manager interventions。它们已经能支持主管做 not passed、trend、calibration、team coaching 的真实判断。
+  - 仍属后续工作：admin 首页组织/资源/运维汇总卡、快捷动作/系统动态/告警自动化、独立 manager calibration workspace、独立 team coaching cockpit。它们仍只是 inventory / roadmap surface，不能在对外文案里写成已交付能力。
+- Messaging Guardrail：任何计划/销售话术都必须把这些 surface 说成 “truth surface” 或 inventory boundary，而不是把 placeholder card、fake stats、静态动作入口包装成实时运营中枢。
+- Done When：关键 admin/manager 决策面只显示真实数字和真实 summary，且产品计划明确区分“已产品化 truth surface”与“仍是后续工作的 inventory / placeholder surface”。
 - Verification：admin home / manager-lite web tests + admin analytics backend tests。
 - Deliverable：manager/admin truth surfaces。
 - Risk Level：Medium
