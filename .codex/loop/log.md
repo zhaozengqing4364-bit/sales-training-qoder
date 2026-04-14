@@ -1,3 +1,27 @@
+- time: 2026-04-14T13:13:00+08:00
+  mode: grow
+  item id: M022-S01-T01
+  files changed:
+    - backend/src/common/effectiveness/methodology.py
+    - backend/src/common/effectiveness/__init__.py
+    - backend/tests/unit/test_sales_methodology_contract.py
+    - docs/api-contract/effectiveness.md
+    - docs/api-contract/README.md
+    - .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md
+    - .gsd/KNOWLEDGE.md
+    - .codex/loop/state.json
+    - .codex/loop/log.md
+  summary: Defined the first methodology-aware sales rubric contract as a code-owned additive crosswalk instead of another score schema. `common.effectiveness.methodology.get_sales_methodology_contract()` now pins five first-round rubrics (`discovery_qualification`, `value_story`, `evidence_proof`, `objection_reframe`, `next_step_commitment`) to the shipped canonical kernel dimensions, sales_stage coverage, report `main_issue` / `next_goal` families, and realtime/report/history/admin evidence paths; docs/api-contract/effectiveness.md and the architecture scan now point downstream work at the same authority line, while the knowledge log records the non-obvious boundary that qualification is still merged into opening/discovery until the runtime stage contract changes.
+  verification commands:
+    - backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/test_sales_methodology_contract.py -q
+    - rg -n "sales_stage|realtime_scoring|effectiveness|main_issue|next_goal|dimension_scores" backend/src/common backend/src/agent docs/api-contract
+    - lsp diagnostics backend/src/common/effectiveness/methodology.py
+    - lsp diagnostics backend/src/common/effectiveness/__init__.py
+    - lsp diagnostics backend/tests/unit/test_sales_methodology_contract.py
+  verification results: passed; the fail-first focused contract suite finished 2/2 green, the exact task-plan grep gate now exposes the new methodology authority through both code and docs, and diagnostics stayed clean on every touched Python file.
+  success signal status: future T02 work can wire realtime/report/manager read-side consumers onto one explicit methodology contract instead of re-deriving sales semantics from scattered dimension aliases and issue-family heuristics.
+  rollback note: if later slices split qualification into its own stage or promote a new manager surface into authority, update `common.effectiveness.methodology`, docs/api-contract/effectiveness.md, the architecture scan note, and the focused unit proof together so the rubric crosswalk remains truthful.
+
 - time: 2026-04-14T12:08:00+08:00
   mode: grow
   item id: M021-S04-T01

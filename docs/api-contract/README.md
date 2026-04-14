@@ -13,6 +13,7 @@ docs/api-contract/
 ├── knowledge.md        # 知识库管理 API 契约
 ├── prompt-templates.md # 提示词与场景绑定 API 契约
 ├── support-runtime.md  # 支持角色运行状态只读 API 契约
+├── effectiveness.md    # 销售方法论 / rubric contract
 ├── sessions.md         # 会话管理 API 契约 (增强)
 ├── replay.md           # 对话回放 API 契约
 ├── model-configs.md    # 模型配置 API 契约
@@ -112,4 +113,5 @@ docs/api-contract/
 | 2026-02-16 | 收敛角色策略入口并同步弃用写入约束（Persona Centered） | agents, personas, voice-runtime |
 | 2026-02-16 | 提示词治理域收敛为 admin-only，补充独立契约文档 | prompt-templates |
 | 2026-02-16 | 新增 Persona 策略健康审计接口与 Voice Runtime 旧写入字段移除说明 | personas, voice-runtime |
+| 2026-04-14 | 新增销售方法论 / rubric contract，明确 canonical kernel 与 realtime/report/read-side 的首轮映射 | effectiveness |
 | 2026-03-14 | 统一契约认证语义为 “Bearer 或 HttpOnly session cookie”，补充训练运行时主语说明 | sessions, replay, agents, personas, analytics, knowledge, support-runtime |

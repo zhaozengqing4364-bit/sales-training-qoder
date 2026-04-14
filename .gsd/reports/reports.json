@@ -211,6 +211,22 @@
       "doneMilestones": 20,
       "totalMilestones": 22,
       "phase": "evaluating-gates"
+    },
+    {
+      "filename": "M021-2026-04-14T05-02-35.html",
+      "generatedAt": "2026-04-14T05:02:35.402Z",
+      "milestoneId": "M021",
+      "milestoneTitle": "AI control plane / prompt / evaluation kernel 统一",
+      "label": "M021: AI control plane / prompt / evaluation kernel 统一",
+      "kind": "milestone",
+      "totalCost": 207.2959414999999,
+      "totalTokens": 2205287836,
+      "totalDuration": 414949880,
+      "doneSlices": 83,
+      "totalSlices": 89,
+      "doneMilestones": 21,
+      "totalMilestones": 22,
+      "phase": "evaluating-gates"
     }
   ]
 }

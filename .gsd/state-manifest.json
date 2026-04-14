@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "exported_at": "2026-04-14T05:00:21.049Z",
+  "exported_at": "2026-04-14T05:14:19.693Z",
   "milestones": [
     {
       "id": "M001",
@@ -3035,7 +3035,7 @@
     {
       "milestone_id": "M022",
       "id": "S01",
-      "title": "Methodology-aware sales rubric 收口",
+      "title": "S01",
       "status": "pending",
       "risk": "high",
       "depends": [],
@@ -13636,19 +13636,30 @@
       "milestone_id": "M022",
       "slice_id": "S01",
       "id": "T01",
-      "title": "定义首轮方法论-aware rubric contract",
-      "status": "pending",
-      "one_liner": "",
-      "narrative": "",
-      "verification_result": "",
+      "title": "Added an additive methodology-aware sales rubric contract that crosswalks canonical kernel dimensions to realtime, report, history, and admin evidence surfaces.",
+      "status": "complete",
+      "one_liner": "Added an additive methodology-aware sales rubric contract that crosswalks canonical kernel dimensions to realtime, report, history, and admin evidence surfaces.",
+      "narrative": "I implemented a new code-owned contract in `backend/src/common/effectiveness/methodology.py` so M022 no longer has to infer sales methodology semantics from scattered dimension aliases and issue-family heuristics. The contract defines five first-round rubrics — `discovery_qualification`, `value_story`, `evidence_proof`, `objection_reframe`, and `next_step_commitment` — and ties each one to shipped canonical dimension ids, `sales_stage` coverage, `main_issue` / `next_goal` mappings, evidence paths, and compatibility rules. I exported the new contract through `common.effectiveness`, added a fail-first focused unit test to lock the crosswalk, wrote the authority line back into `docs/api-contract/effectiveness.md` plus `docs/api-contract/README.md`, updated the M022 architecture scan handoff, recorded the additive-schema decision in GSD, and captured the non-obvious qualification-stage boundary in `.gsd/KNOWLEDGE.md`. The only local adaptation from the planner snapshot is that qualification is explicitly merged into `opening + discovery`, because the current shipped `sales_stage` runtime still has no standalone `qualification` stage.",
+      "verification_result": "Ran the fail-first focused backend proof and watched it pass after the new contract landed: `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/test_sales_methodology_contract.py -q` finished 2/2 green. Ran the exact task-plan grep gate: `rg -n \"sales_stage|realtime_scoring|effectiveness|main_issue|next_goal|dimension_scores\" backend/src/common backend/src/agent docs/api-contract`, which now exposes the new methodology authority through both code and docs. Also checked LSP diagnostics on `backend/src/common/effectiveness/methodology.py`, `backend/src/common/effectiveness/__init__.py`, and `backend/tests/unit/test_sales_methodology_contract.py`; all were clean.",
       "duration": "",
-      "completed_at": null,
+      "completed_at": "2026-04-14T05:14:19.631Z",
       "blocker_discovered": false,
-      "deviations": "",
-      "known_issues": "",
-      "key_files": [],
-      "key_decisions": [],
-      "full_summary_md": "",
+      "deviations": "Merged qualification into the `opening` / `discovery` methodology contract instead of inventing a new runtime stage, because the current shipped `sales_stage` capability does not yet expose a standalone `qualification` state. This preserves truthful alignment with local reality while still defining the first-round rubric contract.",
+      "known_issues": "None.",
+      "key_files": [
+        "backend/src/common/effectiveness/methodology.py",
+        "backend/src/common/effectiveness/__init__.py",
+        "backend/tests/unit/test_sales_methodology_contract.py",
+        "docs/api-contract/effectiveness.md",
+        "docs/api-contract/README.md",
+        ".gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md",
+        ".gsd/KNOWLEDGE.md"
+      ],
+      "key_decisions": [
+        "Keep methodology-aware rubric semantics additive to the existing canonical kernel and compatibility readers instead of replacing the shipped score schema.",
+        "Treat qualification as part of the first-round `opening + discovery` contract until `sales_stage` gains a real standalone qualification stage."
+      ],
+      "full_summary_md": "---\nid: T01\nparent: S01\nmilestone: M022\nkey_files:\n  - backend/src/common/effectiveness/methodology.py\n  - backend/src/common/effectiveness/__init__.py\n  - backend/tests/unit/test_sales_methodology_contract.py\n  - docs/api-contract/effectiveness.md\n  - docs/api-contract/README.md\n  - .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md\n  - .gsd/KNOWLEDGE.md\nkey_decisions:\n  - Keep methodology-aware rubric semantics additive to the existing canonical kernel and compatibility readers instead of replacing the shipped score schema.\n  - Treat qualification as part of the first-round `opening + discovery` contract until `sales_stage` gains a real standalone qualification stage.\nduration: \nverification_result: passed\ncompleted_at: 2026-04-14T05:14:19.630Z\nblocker_discovered: false\n---\n\n# T01: Added an additive methodology-aware sales rubric contract that crosswalks canonical kernel dimensions to realtime, report, history, and admin evidence surfaces.\n\n**Added an additive methodology-aware sales rubric contract that crosswalks canonical kernel dimensions to realtime, report, history, and admin evidence surfaces.**\n\n## What Happened\n\nI implemented a new code-owned contract in `backend/src/common/effectiveness/methodology.py` so M022 no longer has to infer sales methodology semantics from scattered dimension aliases and issue-family heuristics. The contract defines five first-round rubrics — `discovery_qualification`, `value_story`, `evidence_proof`, `objection_reframe`, and `next_step_commitment` — and ties each one to shipped canonical dimension ids, `sales_stage` coverage, `main_issue` / `next_goal` mappings, evidence paths, and compatibility rules. I exported the new contract through `common.effectiveness`, added a fail-first focused unit test to lock the crosswalk, wrote the authority line back into `docs/api-contract/effectiveness.md` plus `docs/api-contract/README.md`, updated the M022 architecture scan handoff, recorded the additive-schema decision in GSD, and captured the non-obvious qualification-stage boundary in `.gsd/KNOWLEDGE.md`. The only local adaptation from the planner snapshot is that qualification is explicitly merged into `opening + discovery`, because the current shipped `sales_stage` runtime still has no standalone `qualification` stage.\n\n## Verification\n\nRan the fail-first focused backend proof and watched it pass after the new contract landed: `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/test_sales_methodology_contract.py -q` finished 2/2 green. Ran the exact task-plan grep gate: `rg -n \"sales_stage|realtime_scoring|effectiveness|main_issue|next_goal|dimension_scores\" backend/src/common backend/src/agent docs/api-contract`, which now exposes the new methodology authority through both code and docs. Also checked LSP diagnostics on `backend/src/common/effectiveness/methodology.py`, `backend/src/common/effectiveness/__init__.py`, and `backend/tests/unit/test_sales_methodology_contract.py`; all were clean.\n\n## Verification Evidence\n\n| # | Command | Exit Code | Verdict | Duration |\n|---|---------|-----------|---------|----------|\n| 1 | `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/test_sales_methodology_contract.py -q` | 0 | ✅ pass | 1518ms |\n| 2 | `rg -n \"sales_stage|realtime_scoring|effectiveness|main_issue|next_goal|dimension_scores\" backend/src/common backend/src/agent docs/api-contract` | 0 | ✅ pass | 36ms |\n\n## Deviations\n\nMerged qualification into the `opening` / `discovery` methodology contract instead of inventing a new runtime stage, because the current shipped `sales_stage` capability does not yet expose a standalone `qualification` state. This preserves truthful alignment with local reality while still defining the first-round rubric contract.\n\n## Known Issues\n\nNone.\n\n## Files Created/Modified\n\n- `backend/src/common/effectiveness/methodology.py`\n- `backend/src/common/effectiveness/__init__.py`\n- `backend/tests/unit/test_sales_methodology_contract.py`\n- `docs/api-contract/effectiveness.md`\n- `docs/api-contract/README.md`\n- `.gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md`\n- `.gsd/KNOWLEDGE.md`\n",
       "description": "- 结合当前 sales_stage/realtime_scoring/effectiveness_snapshot 与 report surfaces，选定首轮方法论维度映射。\n- 写出 rubric contract：方法论概念、可观察证据、评分/建议映射、兼容当前 score schema 的方式。",
       "estimate": "1h",
       "files": [
@@ -16971,6 +16982,18 @@
       "decision": "How M021/S04 quality/cost/failure events should be proven on support and learner read-side surfaces",
       "choice": "Keep the shipped read-side proof on the existing `/support/runtime/faults.items[].diagnostics.runtime_events[]` contract plus report/replay `data-contract-source` and explicit failure copy, instead of inventing a second support payload or UI-only status layer.",
       "rationale": "T02 already unified runtime events on the backend authority seam. Reusing the existing support/runtime fault payload and the learner report/replay source/failure surfaces keeps diagnostics, docs, and frontend proof aligned to one truth line, makes compat vs degraded/failure visible without new transport fields, and avoids reopening leakage or drift risk through a parallel status contract.",
+      "revisable": "Yes",
+      "made_by": "agent",
+      "superseded_by": null
+    },
+    {
+      "seq": 1611,
+      "id": "D241",
+      "when_context": "M022-S01-T01",
+      "scope": "architecture",
+      "decision": "How methodology-aware sales rubrics should be introduced on top of the existing evaluation surfaces",
+      "choice": "Introduce the first-round sales methodology rubric as an additive contract module (`common.effectiveness.methodology`) that crosswalks canonical kernel dimensions, sales_stage, main_issue, and next_goal instead of replacing the shipped score schema.",
+      "rationale": "Current realtime/report/history/admin surfaces already share the canonical evaluation kernel plus compatibility readers and report-side issue/goal semantics. Adding methodology as a separate crosswalk keeps those surfaces stable, gives T02 one authoritative mapping to wire, and avoids creating a second truth source or breaking existing consumers of logic/accuracy/completeness and dimension_scores.",
       "revisable": "Yes",
       "made_by": "agent",
       "superseded_by": null
@@ -22630,6 +22653,28 @@
       "verdict": "✅ pass",
       "duration_ms": 37,
       "created_at": "2026-04-14T04:42:38.210Z"
+    },
+    {
+      "id": 520,
+      "task_id": "T01",
+      "slice_id": "S01",
+      "milestone_id": "M022",
+      "command": "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/test_sales_methodology_contract.py -q",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 1518,
+      "created_at": "2026-04-14T05:14:19.631Z"
+    },
+    {
+      "id": 521,
+      "task_id": "T01",
+      "slice_id": "S01",
+      "milestone_id": "M022",
+      "command": "rg -n \"sales_stage|realtime_scoring|effectiveness|main_issue|next_goal|dimension_scores\" backend/src/common backend/src/agent docs/api-contract",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 36,
+      "created_at": "2026-04-14T05:14:19.631Z"
     }
   ]
 }

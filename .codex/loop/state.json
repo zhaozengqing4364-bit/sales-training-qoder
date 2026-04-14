@@ -1,6 +1,6 @@
 {
   "mode": "grow",
-  "current_issue_id": "M021-S04-T03",
+  "current_issue_id": "M022-S01-T01",
   "current_issue_type": "task",
   "current_issue_status": "done",
   "pending_issue_ids": [],
@@ -214,24 +214,30 @@
     "M021-S02-T03",
     "M021-S04-T01",
     "M021-S04-T02",
-    "M021-S04-T03"
+    "M021-S04-T03",
+    "M022-S01-T01"
   ],
   "blocked_issue_ids": [],
   "deferred_issue_ids": [],
   "last_modified_files": [
-    "docs/api-contract/support-runtime.md",
-    "web/src/app/(user)/practice/[sessionId]/report/page.test.tsx",
-    "web/src/app/(user)/practice/[sessionId]/replay/page.test.tsx",
+    "backend/src/common/effectiveness/methodology.py",
+    "backend/src/common/effectiveness/__init__.py",
+    "backend/tests/unit/test_sales_methodology_contract.py",
+    "docs/api-contract/effectiveness.md",
+    "docs/api-contract/README.md",
     ".gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md",
+    ".gsd/DECISIONS.md",
+    ".gsd/KNOWLEDGE.md",
     ".codex/loop/state.json",
     ".codex/loop/log.md"
   ],
   "last_verification_commands": [
-    "npm --prefix web test -- --run \"src/app/(user)/practice/[sessionId]/report/page.test.tsx\" \"src/app/(user)/practice/[sessionId]/replay/page.test.tsx\"",
-    "rg -n \"quality|cost|failure|degraded|compat\" docs/api-contract/support-runtime.md .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md"
+    "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/test_sales_methodology_contract.py -q",
+    "rg -n \"sales_stage|realtime_scoring|effectiveness|main_issue|next_goal|dimension_scores\" backend/src/common backend/src/agent docs/api-contract",
+    "lsp diagnostics backend/src/common/effectiveness/methodology.py backend/src/common/effectiveness/__init__.py backend/tests/unit/test_sales_methodology_contract.py"
   ],
-  "last_verification_result": "passed; the exact T03 web proof bundle finished 39/39 green, including new focused compat-source assertions plus a failure-path assertion that search_failed retrieval stays explicit instead of degrading into hit/miss success copy, and the task-plan grep gate now exposes the support/runtime and architecture-scan read rules for quality/cost/failure/degraded/compat directly.",
-  "last_success_signal": "future agents can now inspect how to read runtime_events on support/runtime, how to distinguish mode/degraded/failure/cost semantics, and the report/replay proof now locks compat-reader and failure states so the UI cannot silently reinterpret them as canonical success.",
+  "last_verification_result": "passed; the fail-first methodology-contract proof finished 2/2 green, the exact task-plan grep gate now surfaces sales_stage/realtime_scoring/effectiveness/main_issue/next_goal/dimension_scores through the new effectiveness contract docs and code, and LSP diagnostics stayed clean on the touched Python files.",
+  "last_success_signal": "future T02/T03 work now has one code-owned methodology-aware rubric crosswalk tying canonical kernel dimensions, sales_stage, report gaps, and manager read-side surfaces together without inventing a second score schema.",
   "last_growth_scan": null,
-  "next_action": "Proceed to M021/S04 slice wrap-up; all three planned tasks are complete and the slice-level proof can now rely on the explicit support/runtime docs plus report/replay assertions."
+  "next_action": "Proceed to M022/S01/T02; wire the new methodology contract into realtime/session-evidence/read-side consumers and lock cross-surface interpretation with focused tests."
 }
