@@ -1,3 +1,19 @@
+- time: 2026-04-14T16:08:22+08:00
+  mode: grow
+  item id: M022-S03-T03
+  files changed:
+    - .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md
+    - .gsd/plans/GSD_PLAN_post-M018-next-wave.md
+    - .gsd/DECISIONS.md
+    - .codex/loop/state.json
+    - .codex/loop/log.md
+  summary: Finished M022/S03/T03 by writing the manager/admin truth-surface product boundary back into the durable planning artifacts. The architecture scan now names the three real manager calibration/team coaching entry points (`manager-lite-panel`, `/admin/users/[id]`, `/admin/analytics`), distinguishes the already-productized canonical-evidence surfaces from the still-inventory admin-home and workflow shells, and locks the messaging guardrail against selling placeholder cards as live ops tooling. The post-M018 plan now mirrors that same boundary so downstream roadmap work cannot drift into broader commercial claims than the shipped evidence line supports, and decision D247 records that these are the only currently productized manager/admin truth surfaces.
+  verification commands:
+    - rg -n "manager|calibration|truth surface|fake stats|placeholder|canonical evidence" .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md .gsd/plans/GSD_PLAN_post-M018-next-wave.md
+  verification results: passed; the exact task-plan grep gate exited 0 and matched the new entry-point, truth-surface, placeholder, fake-stats, and canonical-evidence boundary language in both target documents.
+  success signal status: M022/S03 now has one durable product story for manager/admin truth surfaces — supervisors can rely on evidence-backed analytics, manager-lite, and user drill-in today, while admin-home inventory cards and independent calibration workspaces remain explicitly future work.
+  rollback note: if later slices productize new manager/admin surfaces, update the architecture scan boundary section, the M022-S03 product-plan entry, and the corresponding UI/runtime proof in the same change so the docs never get ahead of the shipped evidence line.
+
 - time: 2026-04-14T16:01:23+08:00
   mode: grow
   item id: M022-S03-T02

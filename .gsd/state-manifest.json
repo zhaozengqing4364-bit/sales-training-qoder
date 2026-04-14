@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "exported_at": "2026-04-14T08:04:26.604Z",
+  "exported_at": "2026-04-14T08:09:24.720Z",
   "milestones": [
     {
       "id": "M001",
@@ -17148,6 +17148,18 @@
       "revisable": "Yes",
       "made_by": "agent",
       "superseded_by": null
+    },
+    {
+      "seq": 1617,
+      "id": "D247",
+      "when_context": "M022-S03-T03",
+      "scope": "architecture",
+      "decision": "Manager/admin truth-surface product boundary",
+      "choice": "Treat manager-lite, admin analytics, and admin user detail/interventions as the only currently productized manager/admin truth surfaces; keep admin-home inventory cards and independent calibration/coaching workspaces documented as future/inventory-only surfaces.",
+      "rationale": "These are the only manager/admin surfaces already backed by canonical evidence or projection-backed stats. Documenting them as the product boundary prevents roadmap, marketing, and downstream implementation work from overstating placeholder cards or non-authoritative shells as shipped operator tooling.",
+      "revisable": "Yes",
+      "made_by": "agent",
+      "superseded_by": null
     }
   ],
   "verification_evidence": [
@@ -23013,6 +23025,17 @@
       "verdict": "✅ pass",
       "duration_ms": 9001,
       "created_at": "2026-04-14T08:04:26.504Z"
+    },
+    {
+      "id": 539,
+      "task_id": "T03",
+      "slice_id": "S03",
+      "milestone_id": "M022",
+      "command": "rg -n \"manager|calibration|truth surface|fake stats|placeholder|canonical evidence\" .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md .gsd/plans/GSD_PLAN_post-M018-next-wave.md",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 25,
+      "created_at": "2026-04-14T08:09:24.613Z"
     }
   ]
 }
