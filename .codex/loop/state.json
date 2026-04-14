@@ -1,6 +1,6 @@
 {
   "mode": "grow",
-  "current_issue_id": "M022-S03-T01",
+  "current_issue_id": "M022-S03-T02",
   "current_issue_type": "task",
   "current_issue_status": "done",
   "pending_issue_ids": [],
@@ -220,25 +220,23 @@
     "M022-S01-T03",
     "M022-S01",
     "M022-S02-T03",
-    "M022-S03-T01"
+    "M022-S03-T01",
+    "M022-S03-T02"
   ],
   "blocked_issue_ids": [],
   "deferred_issue_ids": [],
   "last_modified_files": [
     "web/src/app/admin/page.tsx",
     "web/src/app/admin/page.test.tsx",
-    ".gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md",
-    ".gsd/DECISIONS.md",
     ".codex/loop/state.json",
     ".codex/loop/log.md"
   ],
   "last_verification_commands": [
     "npm --prefix web test -- --run src/app/admin/page.test.tsx",
-    "rg -n \"2543|84|placeholder|demo|mock|dummy|manager-lite|analytics\" web/src/app/admin web/src/components/admin backend/src/common/analytics backend/src/admin/api",
-    "rg -n \"2,543|84|42%|68%|75%|450 GB\" web/src/app/admin/page.tsx"
+    "npm --prefix web test -- --run \"src/app/admin/page.test.tsx\" \"src/components/admin/manager-lite-panel.test.tsx\" && backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/common/test_admin_analytics_service.py -x -q"
   ],
-  "last_verification_result": "passed; the new fail-first admin page test finished 1/1 green, the exact task-plan grep gate stayed green across admin/manager/analytics surfaces, and the targeted old-literal grep now exits 1 because the hardcoded fake admin-home stats were removed.",
-  "last_success_signal": "M022/S03/T01 leaves one explicit admin-home honesty line in code plus one durable architecture inventory: admin analytics, manager-lite, and user detail are the current canonical manager/admin truth surfaces, while the remaining admin-home ops cards are visibly downgraded to inventory instead of pretending to be live stats.",
+  "last_verification_result": "passed; the fail-first admin home proof is green, the exact T02 verification bundle finished 3/3 web tests and 5/5 backend admin analytics tests green, and the lower admin home no longer renders fake action/log/alert/activity copy.",
+  "last_success_signal": "M022/S03/T02 leaves the admin home with one live effectiveness card plus explicit links into the real user-management, analytics, and logs surfaces; manager-lite and admin analytics remain on the same projection-backed evidence line.",
   "last_growth_scan": null,
-  "next_action": "Proceed to M022-S03-T02 by wiring the downgraded admin-home cards and any remaining manager/admin decision surfaces onto existing projection-backed analytics, manager-lite, and user-detail truth lines instead of inventing new summary math."
+  "next_action": "Proceed to M022-S03-T03 by writing the manager/admin truth-surface boundary back into the architecture scan and product plan so the shipped surfaces and product story stay aligned."
 }

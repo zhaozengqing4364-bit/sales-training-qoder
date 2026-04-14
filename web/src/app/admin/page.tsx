@@ -2,24 +2,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { GlassCard } from "@/components/ui/glass-card";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import {
-    Users, Activity, HardDrive, Plus, ArrowUp, AlertCircle, Search,
-    Server, Database, Cloud
-} from "lucide-react";
 import Link from "next/link";
+import { Activity, Database, HardDrive, Search, Server, Users } from "lucide-react";
+
 import { api } from "@/lib/api/client";
-import {
-    Dialog,
-    DialogContent,
-    DialogDescription,
-    DialogFooter,
-    DialogHeader,
-    DialogTitle,
-    DialogTrigger,
-} from "@/components/ui/glass-modal";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { GlassCard } from "@/components/ui/glass-card";
 
 function toPercent(value: unknown): number {
     if (typeof value === "number" && Number.isFinite(value)) {
@@ -29,7 +18,6 @@ function toPercent(value: unknown): number {
 }
 
 export default function AdminDashboardPage() {
-    // State to manage specific dialogs if needed, or rely on Radix primitives
     const [searchTerm, setSearchTerm] = useState("");
     const [liveMetrics, setLiveMetrics] = useState({
         backendStatus: "unknown" as "unknown" | "online" | "offline",
@@ -61,18 +49,16 @@ export default function AdminDashboardPage() {
                 next_day_retry_rate: 0,
             };
 
-            const next = {
-                backendStatus: healthResult.status === "fulfilled" ? "online" as const : "offline" as const,
+            setLiveMetrics({
+                backendStatus: healthResult.status === "fulfilled" ? "online" : "offline",
                 passRate3minFlow: toPercent(effect.pass_rate_3min_flow),
                 passRate5turnDefense: toPercent(effect.pass_rate_5turn_defense),
                 passRate4stepStructure: toPercent(effect.pass_rate_4step_structure),
                 nextDayRetryRate: toPercent(effect.next_day_retry_rate),
-            };
-
-            setLiveMetrics(next);
+            });
         };
 
-        loadLiveMetrics();
+        void loadLiveMetrics();
 
         return () => {
             cancelled = true;
@@ -81,8 +67,6 @@ export default function AdminDashboardPage() {
 
     return (
         <div className="space-y-10 animate-in fade-in slide-in-from-bottom-4 duration-500 pb-20">
-
-            {/* Admin Header */}
             <header className="flex flex-col md:flex-row justify-between items-end gap-4">
                 <div>
                     <h1 className="text-4xl font-black text-slate-900 tracking-tight">管理控制台</h1>
@@ -95,42 +79,16 @@ export default function AdminDashboardPage() {
                             type="text"
                             placeholder="全局搜索..."
                             value={searchTerm}
-                            onChange={(e) => setSearchTerm(e.target.value)}
+                            onChange={(event) => setSearchTerm(event.target.value)}
                             className="h-11 pl-11 pr-4 bg-white/60 border border-slate-200/60 rounded-full text-sm text-slate-700 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500/10 focus:border-blue-500 transition-all w-full md:w-72 shadow-sm"
                         />
                     </div>
-
-                    <Dialog>
-                        <DialogTrigger asChild>
-                            <Button className="h-11 rounded-full bg-slate-900 hover:bg-slate-800 text-white shadow-lg shadow-slate-900/20 px-6">
-                                <Plus className="w-4 h-4 mr-2" /> 新增公告
-                            </Button>
-                        </DialogTrigger>
-                        <DialogContent>
-                            <DialogHeader>
-                                <DialogTitle>发布公告</DialogTitle>
-                                <DialogDescription>向所有系统用户广播消息。</DialogDescription>
-                            </DialogHeader>
-                            <div className="space-y-4 py-4">
-                                <div className="space-y-2">
-                                    <label className="text-sm font-bold text-slate-700">标题</label>
-                                    <input type="text" className="w-full h-10 rounded-lg border border-slate-200 px-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none" placeholder="例如：系统维护通知" />
-                                </div>
-                                <div className="space-y-2">
-                                    <label className="text-sm font-bold text-slate-700">内容</label>
-                                    <textarea className="w-full h-24 rounded-lg border border-slate-200 p-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none resize-none" placeholder="在此输入详细内容..." />
-                                </div>
-                                <div className="flex items-center gap-2">
-                                    <input type="checkbox" id="urgent" className="rounded text-blue-600 focus:ring-blue-500" />
-                                    <label htmlFor="urgent" className="text-sm text-slate-600">标记为紧急</label>
-                                </div>
-                            </div>
-                            <DialogFooter>
-                                <Button variant="outline" className="rounded-full">取消</Button>
-                                <Button className="rounded-full bg-slate-900 text-white">立即发布</Button>
-                            </DialogFooter>
-                        </DialogContent>
-                    </Dialog>
+                    <Link
+                        href="/admin/analytics"
+                        className="inline-flex h-11 items-center justify-center rounded-full bg-slate-900 px-6 text-sm font-medium text-white shadow-lg shadow-slate-900/20 transition hover:bg-slate-800"
+                    >
+                        进入数据分析
+                    </Link>
                 </div>
             </header>
 
@@ -174,399 +132,203 @@ export default function AdminDashboardPage() {
                 </div>
             </GlassCard>
 
-            {/* Bento Grid Stats */}
-            <div className="grid grid-cols-12 gap-6">
-
-                {/* Total Users (Span 4) */}
-                <Dialog>
-                    <DialogTrigger asChild>
-                        <GlassCard className="col-span-12 md:col-span-4 p-8 relative overflow-hidden group cursor-pointer hover:shadow-lg transition-all">
-                            <div className="absolute right-0 top-0 p-8 opacity-5 group-hover:scale-110 transition-transform duration-500">
-                                <Users className="w-32 h-32 text-slate-900" />
-                            </div>
-                            <div className="relative z-10">
-                                <div className="text-slate-500 text-xs font-bold uppercase tracking-widest mb-3">总用户数</div>
-                                <div className="text-3xl font-black text-slate-900 mb-4 tracking-tight">待接真实统计</div>
-                                <p className="text-sm text-slate-500 text-pretty">
-                                    当前首页没有统一的总用户 authority；需要回到用户列表 / admin analytics 决定应该复用哪条真实统计线。
-                                </p>
-                            </div>
-                        </GlassCard>
-                    </DialogTrigger>
-                    <DialogContent className="max-w-2xl">
-                        <DialogHeader>
-                            <DialogTitle>总用户数 truth surface 盘点</DialogTitle>
-                            <DialogDescription>这个入口当前只说明缺口，不再伪装增长统计已经接通。</DialogDescription>
-                        </DialogHeader>
-                        <div className="py-6 space-y-4">
-                            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700 text-pretty">
-                                当前首页缺少“总用户数 / 新增注册 / 流失率”的统一 authority。若后续要恢复该卡片，应先明确是复用 `/admin/users` 的真实用户集合，还是复用 admin analytics 的 cohort 统计，而不是继续展示示意数字。
-                            </div>
-                            <div className="rounded-2xl border border-dashed border-slate-200 bg-white p-4 text-sm text-slate-500 text-pretty">
-                                T01 先把这块降级为 inventory；T02 再决定接真实聚合还是仅保留跳转入口。
-                            </div>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <GlassCard className="p-8 border border-slate-200/70">
+                    <div className="flex items-start justify-between gap-4">
+                        <div>
+                            <div className="text-slate-500 text-xs font-bold uppercase tracking-widest mb-3">总用户数</div>
+                            <div className="text-3xl font-black text-slate-900 mb-4 tracking-tight">待接真实统计</div>
+                            <p className="text-sm text-slate-500 text-pretty">
+                                首页当前没有统一的总用户 authority；如果恢复该卡片，应先明确是复用用户集合还是 admin analytics 的 cohort 统计。
+                            </p>
                         </div>
-                        <DialogFooter>
-                            <Link href="/admin/users" className="w-full">
-                                <Button className="w-full rounded-full bg-slate-900 text-white">前往用户管理</Button>
-                            </Link>
-                        </DialogFooter>
-                    </DialogContent>
-                </Dialog>
+                        <Users className="w-10 h-10 text-slate-300" />
+                    </div>
+                    <div className="mt-5">
+                        <Link href="/admin/users" className="text-sm font-medium text-blue-600 hover:text-blue-700">
+                            进入用户管理
+                        </Link>
+                    </div>
+                </GlassCard>
 
-                {/* Active Sessions (Span 4) */}
-                <Dialog>
-                    <DialogTrigger asChild>
-                        <GlassCard className="col-span-12 md:col-span-4 p-8 relative overflow-hidden group cursor-pointer hover:shadow-lg transition-all">
-                            <div className="absolute right-0 top-0 p-8 opacity-5 group-hover:scale-110 transition-transform duration-500">
-                                <Activity className="w-32 h-32 text-purple-600" />
-                            </div>
-                            <div className="relative z-10">
-                                <div className="text-slate-500 text-xs font-bold uppercase tracking-widest mb-3">活跃会话</div>
-                                <div className="text-3xl font-black text-slate-900 mb-4 tracking-tight">待接真实统计</div>
-                                <p className="text-sm text-slate-500 text-pretty">
-                                    当前首页没有活跃会话的统一 authority；真实判断应回到 admin analytics / support runtime，而不是继续沿用示意值。
-                                </p>
-                            </div>
-                        </GlassCard>
-                    </DialogTrigger>
-                    <DialogContent>
-                        <DialogHeader>
-                            <DialogTitle>活跃会话 truth surface 盘点</DialogTitle>
-                            <DialogDescription>这块当前保留为 inventory，提醒后续应接入真实会话线。</DialogDescription>
-                        </DialogHeader>
-                        <div className="space-y-4 py-4">
-                            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700 text-pretty">
-                                如果要展示“当前活跃会话”，应该优先复用 support/runtime 的 session health 或 admin analytics 的真实窗口统计，而不是在首页本地维护另一套数字。
-                            </div>
-                            <div className="rounded-2xl border border-dashed border-slate-200 bg-white p-4 text-sm text-slate-500 text-pretty">
-                                当前管理面已有 projection-backed manager-lite 与趋势/排行榜页；首页这里只负责暴露还未 truthify 的入口。
-                            </div>
+                <GlassCard className="p-8 border border-slate-200/70">
+                    <div className="flex items-start justify-between gap-4">
+                        <div>
+                            <div className="text-slate-500 text-xs font-bold uppercase tracking-widest mb-3">活跃会话</div>
+                            <div className="text-3xl font-black text-slate-900 mb-4 tracking-tight">待接真实统计</div>
+                            <p className="text-sm text-slate-500 text-pretty">
+                                首页不再本地维护活跃会话示意值；真实判断应回到 admin analytics 的 operating pack、趋势页或 support/runtime 相关观测面。
+                            </p>
                         </div>
-                        <DialogFooter>
-                            <Link href="/admin/analytics" className="w-full">
-                                <Button className="w-full rounded-full bg-slate-900 text-white">前往数据分析</Button>
-                            </Link>
-                        </DialogFooter>
-                    </DialogContent>
-                </Dialog>
+                        <Activity className="w-10 h-10 text-slate-300" />
+                    </div>
+                    <div className="mt-5">
+                        <Link href="/admin/analytics" className="text-sm font-medium text-blue-600 hover:text-blue-700">
+                            进入数据分析
+                        </Link>
+                    </div>
+                </GlassCard>
 
-                {/* System Health (Span 4) */}
-                <Dialog>
-                    <DialogTrigger asChild>
-                        <GlassCard className="col-span-12 md:col-span-4 p-8 flex flex-col justify-between cursor-pointer hover:shadow-lg transition-all">
-                            <div className="flex justify-between items-start">
-                                <div>
-                                    <div className="text-slate-500 text-xs font-bold uppercase tracking-widest mb-2">系统健康度</div>
-                                    <div className={`text-2xl font-bold ${liveMetrics.backendStatus === "online" ? "text-emerald-600" : liveMetrics.backendStatus === "offline" ? "text-rose-600" : "text-slate-500"}`}>
-                                        {liveMetrics.backendStatus === "online" ? "仅后端状态已接通" : liveMetrics.backendStatus === "offline" ? "后端离线" : "状态未知"}
-                                    </div>
-                                </div>
-                                <div className={`p-3 rounded-2xl ${liveMetrics.backendStatus === "online" ? "bg-emerald-50 text-emerald-600" : liveMetrics.backendStatus === "offline" ? "bg-rose-50 text-rose-600" : "bg-slate-100 text-slate-500"}`}>
-                                    <Activity className="w-6 h-6" />
-                                </div>
+                <GlassCard className="p-8 border border-slate-200/70">
+                    <div className="flex items-start justify-between gap-4">
+                        <div>
+                            <div className="text-slate-500 text-xs font-bold uppercase tracking-widest mb-3">系统健康度</div>
+                            <div className={`text-2xl font-bold ${liveMetrics.backendStatus === "online" ? "text-emerald-600" : liveMetrics.backendStatus === "offline" ? "text-rose-600" : "text-slate-500"}`}>
+                                {liveMetrics.backendStatus === "online" ? "仅后端状态已接通" : liveMetrics.backendStatus === "offline" ? "后端离线" : "状态未知"}
                             </div>
-                            <div className="space-y-4 mt-4 text-sm text-slate-500 text-pretty">
-                                <p>CPU、内存、数据库延迟等资源指标当前没有统一接入首页 authority。</p>
-                                <p>这张卡暂时只保留“后端在线 / 离线”这一条真实信号，其余内容已降级为待接监控 inventory。</p>
-                            </div>
-                        </GlassCard>
-                    </DialogTrigger>
-                    <DialogContent>
-                        <DialogHeader>
-                            <DialogTitle>系统诊断 truth surface 盘点</DialogTitle>
-                            <DialogDescription>当前首页不再伪装 CPU / 内存 / 延迟数字已经接通。</DialogDescription>
-                        </DialogHeader>
-                        <div className="grid gap-4 py-4">
-                            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700 text-pretty">
-                                已接通信号：后端健康检查（通过 <code>api.internal.health()</code> 读取在线 / 离线）。
-                            </div>
-                            <div className="rounded-2xl border border-dashed border-slate-200 bg-white p-4 text-sm text-slate-500 text-pretty">
-                                未接通信号：CPU、内存、数据库延迟、主机/磁盘资源。后续若要展示，应先明确复用哪条 support/runtime 或基础设施指标线。
-                            </div>
+                            <p className="mt-4 text-sm text-slate-500 text-pretty">
+                                首页目前只保留后端在线 / 离线这一条真实信号；CPU、内存、数据库延迟与主机资源仍未接入统一 authority。
+                            </p>
                         </div>
-                        <DialogFooter>
-                            <Link href="/admin/logs" className="w-full">
-                                <Button className="w-full rounded-full bg-slate-900 text-white">查看系统日志入口</Button>
-                            </Link>
-                        </DialogFooter>
-                    </DialogContent>
-                </Dialog>
+                        <Server className="w-10 h-10 text-slate-300" />
+                    </div>
+                    <div className="mt-5">
+                        <Link href="/admin/logs" className="text-sm font-medium text-blue-600 hover:text-blue-700">
+                            进入系统日志
+                        </Link>
+                    </div>
+                </GlassCard>
             </div>
 
-            {/* Quick Actions & Recent */}
-            <GlassCard className="p-5 border border-slate-200/70 bg-slate-50/70">
-                <div className="flex flex-col gap-2 lg:flex-row lg:items-start lg:justify-between">
+            <GlassCard className="p-6 border border-emerald-100 bg-emerald-50/60">
+                <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                     <div>
-                        <h2 className="text-sm font-bold text-slate-800 uppercase tracking-wider">管理动作与运营动态盘点</h2>
-                        <p className="text-sm text-slate-600 text-pretty">
-                            下方区域当前主要用于盘点哪些入口仍是草拟动作、示意日志或待接告警；它们暂时不应被解读为已经接通的运营自动化或实时监控面。
+                        <h2 className="text-sm font-bold text-slate-800 uppercase tracking-wider">当前真实管理入口</h2>
+                        <p className="mt-2 text-sm text-slate-700 text-pretty">
+                            直接进入当前已接真实 authority 的管理面，不再在首页伪装表单、日志控制台或自动告警。
                         </p>
                     </div>
-                    <Badge variant="secondary">draft / inventory only</Badge>
+                    <Badge variant="green">live authority only</Badge>
+                </div>
+                <div className="mt-6 grid grid-cols-1 lg:grid-cols-3 gap-4">
+                    <GlassCard className="p-5 border border-white/80 bg-white/80">
+                        <div className="flex items-start justify-between gap-3">
+                            <div>
+                                <h3 className="text-base font-bold text-slate-900">用户管理与主管详情</h3>
+                                <p className="mt-2 text-sm text-slate-600 text-pretty">
+                                    用户列表、详情页、主管重点与 intervention 闭环都建立在当前真实用户集合和统一训练证据上。
+                                </p>
+                            </div>
+                            <Users className="w-5 h-5 text-blue-600" />
+                        </div>
+                        <Link href="/admin/users" className="mt-4 inline-flex text-sm font-medium text-blue-600 hover:text-blue-700">
+                            进入用户管理
+                        </Link>
+                    </GlassCard>
+
+                    <GlassCard className="p-5 border border-white/80 bg-white/80">
+                        <div className="flex items-start justify-between gap-3">
+                            <div>
+                                <h3 className="text-base font-bold text-slate-900">数据分析与 manager-lite</h3>
+                                <p className="mt-2 text-sm text-slate-600 text-pretty">
+                                    not passed、趋势、重复 blocker、证据不足分布和 manager-lite 名单都从 projection-backed analytics 读真实统计。
+                                </p>
+                            </div>
+                            <Database className="w-5 h-5 text-blue-600" />
+                        </div>
+                        <Link href="/admin/analytics" className="mt-4 inline-flex text-sm font-medium text-blue-600 hover:text-blue-700">
+                            进入数据分析
+                        </Link>
+                    </GlassCard>
+
+                    <GlassCard className="p-5 border border-white/80 bg-white/80">
+                        <div className="flex items-start justify-between gap-3">
+                            <div>
+                                <h3 className="text-base font-bold text-slate-900">系统日志与后端状态</h3>
+                                <p className="mt-2 text-sm text-slate-600 text-pretty">
+                                    需要看系统侧证据时，直接回到日志与后端健康信号，而不是留在首页消费示意控制台或虚构告警。
+                                </p>
+                            </div>
+                            <Server className="w-5 h-5 text-blue-600" />
+                        </div>
+                        <Link href="/admin/logs" className="mt-4 inline-flex text-sm font-medium text-blue-600 hover:text-blue-700">
+                            进入系统日志
+                        </Link>
+                    </GlassCard>
                 </div>
             </GlassCard>
 
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-
-                {/* Quick Actions Grid */}
-                <div className="lg:col-span-2 grid grid-cols-2 md:grid-cols-4 gap-4">
-                    {/* Action 1: Add User */}
-                    <Dialog>
-                        <DialogTrigger asChild>
-                            <GlassCard hoverEffect className="p-6 flex flex-col items-center justify-center gap-4 group cursor-pointer">
-                                <div className="w-14 h-14 rounded-[1.2rem] bg-blue-50 hover:bg-blue-100 border-blue-100 text-blue-600 border flex items-center justify-center transition-all duration-300 group-hover:scale-110 group-hover:rotate-3 shadow-sm">
-                                    <Users className="w-7 h-7" strokeWidth={1.5} />
-                                </div>
-                                <span className="text-sm font-bold text-slate-600 group-hover:text-slate-900 transition-colors">新增用户</span>
-                            </GlassCard>
-                        </DialogTrigger>
-                        <DialogContent>
-                            <DialogHeader>
-                                <DialogTitle>新增用户</DialogTitle>
-                                <DialogDescription>为员工或管理员创建新账户。</DialogDescription>
-                            </DialogHeader>
-                            <div className="space-y-4 py-4">
-                                <div className="grid grid-cols-2 gap-4">
-                                    <div className="space-y-2">
-                                        <label className="text-xs font-bold uppercase text-slate-500">名字</label>
-                                        <input className="w-full h-10 border rounded-lg px-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none" />
-                                    </div>
-                                    <div className="space-y-2">
-                                        <label className="text-xs font-bold uppercase text-slate-500">姓氏</label>
-                                        <input className="w-full h-10 border rounded-lg px-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none" />
-                                    </div>
-                                </div>
-                                <div className="space-y-2">
-                                    <label className="text-xs font-bold uppercase text-slate-500">电子邮箱</label>
-                                    <input className="w-full h-10 border rounded-lg px-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none" />
-                                </div>
-                                <div className="space-y-2">
-                                    <label className="text-xs font-bold uppercase text-slate-500">角色</label>
-                                    <select className="w-full h-10 border rounded-lg px-3 text-sm focus:ring-2 focus:ring-blue-500 outline-none bg-white">
-                                        <option>用户</option>
-                                        <option>经理</option>
-                                        <option>管理员</option>
-                                    </select>
-                                </div>
+            <GlassCard className="p-6 border border-slate-200/70 bg-slate-50/70">
+                <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                    <div>
+                        <h2 className="text-sm font-bold text-slate-800 uppercase tracking-wider">仍为 inventory 的管理面</h2>
+                        <p className="mt-2 text-sm text-slate-600 text-pretty">
+                            这些区域当前仍然没有统一 authority；首页只保留缺口说明，避免误导主管把草拟 UI 当成已经接通的系统能力。
+                        </p>
+                    </div>
+                    <Badge variant="secondary">inventory only</Badge>
+                </div>
+                <div className="mt-6 grid grid-cols-1 lg:grid-cols-3 gap-4">
+                    <GlassCard className="p-5 border border-dashed border-slate-200 bg-white/80">
+                        <div className="flex items-start justify-between gap-3">
+                            <div>
+                                <h3 className="text-base font-bold text-slate-900">首页动作编排</h3>
+                                <p className="mt-2 text-sm text-slate-600 text-pretty">
+                                    公告发布、批量动作、配置快捷入口等还没有一条首页级 authority；当前只保留到真实管理面的跳转，不再假装本页已经具备这些操作流。
+                                </p>
                             </div>
-                            <DialogFooter>
-                                <Button className="w-full rounded-full bg-blue-600 hover:bg-blue-500 text-white">创建账户</Button>
-                            </DialogFooter>
-                        </DialogContent>
-                    </Dialog>
-
-                    {/* Action 2: Config Agent */}
-                    <Dialog>
-                        <DialogTrigger asChild>
-                            <GlassCard hoverEffect className="p-6 flex flex-col items-center justify-center gap-4 group cursor-pointer">
-                                <div className="w-14 h-14 rounded-[1.2rem] bg-purple-50 hover:bg-purple-100 border-purple-100 text-purple-600 border flex items-center justify-center transition-all duration-300 group-hover:scale-110 group-hover:rotate-3 shadow-sm">
-                                    <HardDrive className="w-7 h-7" strokeWidth={1.5} />
-                                </div>
-                                <span className="text-sm font-bold text-slate-600 group-hover:text-slate-900 transition-colors">配置智能体</span>
-                            </GlassCard>
-                        </DialogTrigger>
-                        <DialogContent>
-                            <DialogHeader>
-                                <DialogTitle>智能体配置</DialogTitle>
-                                <DialogDescription>修改 AI 智能体的全局设置。</DialogDescription>
-                            </DialogHeader>
-                            <div className="py-4 space-y-4">
-                                <div className="flex justify-between items-center p-3 border rounded-xl">
-                                    <span className="text-sm font-bold text-slate-700">模型版本</span>
-                                    <span className="text-sm text-slate-500 bg-slate-100 px-2 py-1 rounded">GPT-4-Turbo</span>
-                                </div>
-                                <div className="flex justify-between items-center p-3 border rounded-xl">
-                                    <span className="text-sm font-bold text-slate-700">随机性 (Temperature)</span>
-                                    <span className="text-sm text-slate-500 bg-slate-100 px-2 py-1 rounded">0.7</span>
-                                </div>
-                            </div>
-                            <DialogFooter>
-                                <Button className="w-full rounded-full bg-purple-600 text-white">保存更改</Button>
-                            </DialogFooter>
-                        </DialogContent>
-                    </Dialog>
-
-                    {/* Action 3: Logs */}
-                    <Dialog>
-                        <DialogTrigger asChild>
-                            <GlassCard hoverEffect className="p-6 flex flex-col items-center justify-center gap-4 group cursor-pointer">
-                                <div className="w-14 h-14 rounded-[1.2rem] bg-orange-50 hover:bg-orange-100 border-orange-100 text-orange-600 border flex items-center justify-center transition-all duration-300 group-hover:scale-110 group-hover:rotate-3 shadow-sm">
-                                    <Activity className="w-7 h-7" strokeWidth={1.5} />
-                                </div>
-                                <span className="text-sm font-bold text-slate-600 group-hover:text-slate-900 transition-colors">查看日志</span>
-                            </GlassCard>
-                        </DialogTrigger>
-                        <DialogContent className="max-w-2xl">
-                            <DialogHeader>
-                                <DialogTitle>系统日志</DialogTitle>
-                                <DialogDescription>最近的系统事件与错误。</DialogDescription>
-                            </DialogHeader>
-                            <div className="bg-slate-900 rounded-xl p-4 font-mono text-xs text-green-400 h-64 overflow-y-auto">
-                                <div className="opacity-50 border-b border-white/10 pb-2 mb-2">最后 50 行...</div>
-                                <div>[INFO] 10:42:31 - System backup initiated</div>
-                                <div>[INFO] 10:42:35 - Database snapshot created</div>
-                                <div>[WARN] 10:43:12 - API latency high (450ms) on /v1/agents</div>
-                                <div>[INFO] 10:45:00 - User login: admin_01</div>
-                                <div className="text-yellow-400">[DEBUG] 10:45:12 - Token refreshed</div>
-                            </div>
-                            <DialogFooter>
-                                <Button variant="outline" className="rounded-full">导出日志</Button>
-                                <Button className="rounded-full bg-slate-900 text-white">清空控制台</Button>
-                            </DialogFooter>
-                        </DialogContent>
-                    </Dialog>
-
-                    {/* Action 4: Alerts */}
-                    <Dialog>
-                        <DialogTrigger asChild>
-                            <GlassCard hoverEffect className="p-6 flex flex-col items-center justify-center gap-4 group cursor-pointer">
-                                <div className="w-14 h-14 rounded-[1.2rem] bg-red-50 hover:bg-red-100 border-red-100 text-red-600 border flex items-center justify-center transition-all duration-300 group-hover:scale-110 group-hover:rotate-3 shadow-sm">
-                                    <AlertCircle className="w-7 h-7" strokeWidth={1.5} />
-                                </div>
-                                <span className="text-sm font-bold text-slate-600 group-hover:text-slate-900 transition-colors">系统告警</span>
-                            </GlassCard>
-                        </DialogTrigger>
-                        <DialogContent>
-                            <DialogHeader>
-                                <DialogTitle className="text-red-600 flex items-center gap-2">
-                                    <AlertCircle className="w-5 h-5" /> 活跃告警
-                                </DialogTitle>
-                                <DialogDescription>需要注意的关键系统通知。</DialogDescription>
-                            </DialogHeader>
-                            <div className="py-2 space-y-3">
-                                <div className="p-4 bg-red-50 border border-red-100 rounded-xl flex gap-3">
-                                    <div className="min-w-2 w-2 h-2 rounded-full bg-red-500 mt-2"></div>
-                                    <div>
-                                        <div className="text-sm font-bold text-red-900">API 速率限制临近</div>
-                                        <div className="text-xs text-red-700 mt-1">今日配额已用 85%。4小时后重置。</div>
-                                    </div>
-                                </div>
-                                <div className="p-4 bg-yellow-50 border border-yellow-100 rounded-xl flex gap-3">
-                                    <div className="min-w-2 w-2 h-2 rounded-full bg-yellow-500 mt-2"></div>
-                                    <div>
-                                        <div className="text-sm font-bold text-yellow-900">证书过期</div>
-                                        <div className="text-xs text-yellow-700 mt-1">SSL 证书将在 14 天后过期。</div>
-                                    </div>
-                                </div>
-                            </div>
-                            <DialogFooter>
-                                <Button className="w-full rounded-full bg-red-600 hover:bg-red-500 text-white">全部知晓</Button>
-                            </DialogFooter>
-                        </DialogContent>
-                    </Dialog>
-
-                    {/* Recent Activity List (Span 2 col inside the left block) */}
-                    <GlassCard className="col-span-2 md:col-span-4 mt-2 p-8">
-                        <div className="flex items-center justify-between mb-8">
-                            <h3 className="font-bold text-lg text-slate-800">系统动态</h3>
-                            <Dialog>
-                                <DialogTrigger asChild>
-                                    <Button variant="ghost" size="sm" className="text-slate-400 hover:text-slate-900 hover:bg-slate-100 rounded-full">查看全部</Button>
-                                </DialogTrigger>
-                                <DialogContent className="max-w-2xl h-[600px] flex flex-col">
-                                    <DialogHeader>
-                                        <DialogTitle>完整动态日志</DialogTitle>
-                                    </DialogHeader>
-                                    <div className="flex-1 overflow-y-auto space-y-2 py-4 pr-2">
-                                        {[1, 2, 3, 4, 5, 6, 7, 8].map(i => (
-                                            <div key={i} className="flex items-center justify-between p-3 rounded-xl hover:bg-slate-50 transition-colors border border-transparent hover:border-slate-100">
-                                                <span className="text-sm text-slate-700">动态项 #{i} 描述...</span>
-                                                <span className="text-xs text-slate-400">2小时前</span>
-                                            </div>
-                                        ))}
-                                    </div>
-                                </DialogContent>
-                            </Dialog>
+                            <Activity className="w-5 h-5 text-slate-400" />
                         </div>
-                        <div className="space-y-1">
-                            {[1, 2, 3].map(i => (
-                                <Dialog key={i}>
-                                    <DialogTrigger asChild>
-                                        <div className="flex items-center justify-between p-4 rounded-2xl hover:bg-slate-50 transition-colors cursor-pointer group">
-                                            <div className="flex items-center gap-4">
-                                                <div className="w-12 h-12 rounded-2xl bg-slate-100 flex items-center justify-center text-sm font-bold text-slate-500 group-hover:bg-white group-hover:shadow-md transition-all">
-                                                    JS
-                                                </div>
-                                                <div>
-                                                    <div className="text-sm font-bold text-slate-800">系统备份完成</div>
-                                                    <div className="text-xs text-slate-400 mt-0.5">自动任务 • 2分钟前</div>
-                                                </div>
-                                            </div>
-                                            <Badge variant="secondary" className="bg-emerald-50 text-emerald-600 border border-emerald-100">成功</Badge>
-                                        </div>
-                                    </DialogTrigger>
-                                    <DialogContent>
-                                        <DialogHeader>
-                                            <DialogTitle>动态详情</DialogTitle>
-                                            <DialogDescription>事件 ID: #EVT-892334</DialogDescription>
-                                        </DialogHeader>
-                                        <div className="py-4 space-y-4">
-                                            <div className="grid grid-cols-2 gap-4 text-sm">
-                                                <div className="text-slate-500">发起人</div>
-                                                <div className="font-bold text-slate-900 text-right">系统 (Cron)</div>
+                    </GlassCard>
 
-                                                <div className="text-slate-500">耗时</div>
-                                                <div className="font-bold text-slate-900 text-right">4s 230ms</div>
+                    <GlassCard className="p-5 border border-dashed border-slate-200 bg-white/80">
+                        <div className="flex items-start justify-between gap-3">
+                            <div>
+                                <h3 className="text-base font-bold text-slate-900">统一告警与动态</h3>
+                                <p className="mt-2 text-sm text-slate-600 text-pretty">
+                                    当前仓库还没有一条可直接复用到首页的统一告警 / 动态 authority；如果未来恢复，应先明确事件来源、过滤口径和 operator 响应动作。
+                                </p>
+                            </div>
+                            <Server className="w-5 h-5 text-slate-400" />
+                        </div>
+                    </GlassCard>
 
-                                                <div className="text-slate-500">资源</div>
-                                                <div className="font-bold text-slate-900 text-right">主备份节点</div>
-                                            </div>
-                                            <div className="p-3 bg-emerald-50 border border-emerald-100 rounded-xl text-xs text-emerald-700">
-                                                备份验证成功。完整性检查通过。
-                                            </div>
-                                        </div>
-                                    </DialogContent>
-                                </Dialog>
-                            ))}
+                    <GlassCard className="p-5 border border-dashed border-slate-200 bg-white/80">
+                        <div className="flex items-start justify-between gap-3">
+                            <div>
+                                <h3 className="text-base font-bold text-slate-900">存储与资源遥测</h3>
+                                <div className="mt-2 text-2xl font-black text-slate-900">待接真实统计</div>
+                                <p className="mt-2 text-sm text-slate-600 text-pretty">
+                                    首页当前没有统一的磁盘、对象存储或备份容量 authority；在真实 telemetry 接通之前，这块继续保留为 inventory，不再展示容量、百分比或扩容建议。
+                                </p>
+                            </div>
+                            <HardDrive className="w-5 h-5 text-slate-400" />
                         </div>
                     </GlassCard>
                 </div>
+            </GlassCard>
 
-                {/* Right Column: Server Status & Storage */}
-                <Dialog>
-                    <DialogTrigger asChild>
-                        <GlassCard className="lg:col-span-1 p-8 flex flex-col relative overflow-hidden cursor-pointer hover:shadow-lg transition-all group">
-                            <h3 className="font-bold text-lg mb-4 z-10 relative text-slate-800">存储使用率</h3>
-                            <div className="flex-1 flex items-center justify-center relative z-10 p-4">
-                                <div className="text-center space-y-3">
-                                    <div className="text-3xl font-black text-slate-800">待接真实统计</div>
-                                    <p className="text-sm text-slate-500 text-pretty max-w-xs">
-                                        首页当前没有统一的磁盘 / 对象存储遥测 authority，这里先保留为 inventory，避免继续伪装容量和使用率。
-                                    </p>
-                                </div>
-                            </div>
-                            <div className="mt-8 space-y-4 relative z-10 px-4">
-                                <div className="flex justify-between text-sm items-center">
-                                    <span className="text-slate-500 flex items-center gap-2 font-medium"><div className="w-2.5 h-2.5 rounded-full bg-blue-500 shadow-[0_0_8px_#3b82f6]" /> 当前状态</span>
-                                    <span className="font-bold text-slate-800">待接真实存储统计</span>
-                                </div>
-                                <div className="flex justify-between text-sm items-center">
-                                    <span className="text-slate-500 flex items-center gap-2 font-medium"><div className="w-2.5 h-2.5 rounded-full bg-slate-300" /> 后续处理</span>
-                                    <span className="font-bold text-slate-800">明确指标来源后再恢复</span>
-                                </div>
-                            </div>
-                        </GlassCard>
-                    </DialogTrigger>
-                    <DialogContent>
-                        <DialogHeader>
-                            <DialogTitle>存储管理 truth surface 盘点</DialogTitle>
-                            <DialogDescription>当前 admin 首页不再展示伪造的存储百分比和容量。</DialogDescription>
-                        </DialogHeader>
-                        <div className="py-6 space-y-4">
-                            <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700 text-pretty">
-                                目前仓库里没有一条已经接到 admin 首页的统一存储 telemetry：本地磁盘、对象存储、备份容量仍需要明确来自哪条基础设施指标或运维报告。
-                            </div>
-                            <div className="rounded-xl border border-dashed border-slate-200 bg-white p-4 text-sm text-slate-500 text-pretty">
-                                在那之前，这里只保留为 inventory 说明，不再给出使用率、剩余空间或扩容建议的假数字。
-                            </div>
-                        </div>
-                        <DialogFooter>
-                            <Button className="w-full rounded-full bg-slate-900 text-white">记录为后续 truth surface</Button>
-                        </DialogFooter>
-                    </DialogContent>
-                </Dialog>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <GlassCard className="p-6 border border-slate-200/70">
+                    <h2 className="text-sm font-bold text-slate-800 uppercase tracking-wider">首页后续 truth surface</h2>
+                    <p className="mt-3 text-sm text-slate-600 text-pretty">
+                        若后续要恢复首页级组织运营卡片，必须先明确复用哪条 backend authority，并让 admin home 只做 read-side 展示，不能再在本地维护第二套统计口径。
+                    </p>
+                    <ul className="mt-4 space-y-2 text-sm text-slate-600 list-disc pl-5">
+                        <li>组织侧统计优先复用 <code>/admin/users</code> 或 <code>/admin/analytics</code> 的真实集合。</li>
+                        <li>系统侧状态优先复用 <code>api.internal.health()</code>、日志页和后续统一 runtime surfaces。</li>
+                        <li>主管视图优先复用 manager-lite、用户详情连续变化和 intervention 闭环。</li>
+                    </ul>
+                </GlassCard>
+
+                <GlassCard className="p-6 border border-slate-200/70">
+                    <h2 className="text-sm font-bold text-slate-800 uppercase tracking-wider">首页不再承担的职责</h2>
+                    <p className="mt-3 text-sm text-slate-600 text-pretty">
+                        首页只负责显示当前已接通的极少数 live authority 与尚未 truthify 的缺口，不再伪装实时运营、配置控制台、动态流或告警面已经建成。
+                    </p>
+                    <div className="mt-5 flex flex-wrap gap-3">
+                        <Badge variant="secondary">不再展示示意日志</Badge>
+                        <Badge variant="secondary">不再展示示意告警</Badge>
+                        <Badge variant="secondary">不再展示示意配置</Badge>
+                        <Badge variant="secondary">不再展示示意动态</Badge>
+                    </div>
+                    <div className="mt-5">
+                        <Link href="/admin/analytics">
+                            <Button className="rounded-full bg-slate-900 text-white">查看真实主管统计面</Button>
+                        </Link>
+                    </div>
+                </GlassCard>
             </div>
         </div>
-    )
+    );
 }

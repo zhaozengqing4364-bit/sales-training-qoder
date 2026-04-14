@@ -1,3 +1,20 @@
+- time: 2026-04-14T16:01:23+08:00
+  mode: grow
+  item id: M022-S03-T02
+  files changed:
+    - web/src/app/admin/page.tsx
+    - web/src/app/admin/page.test.tsx
+    - .codex/loop/state.json
+    - .codex/loop/log.md
+  summary: Finished M022/S03/T02 by removing the remaining fake admin-home decision surfaces instead of trying to fake-connect them. `web/src/app/admin/page.tsx` now keeps only the one live effectiveness card on `api.internal.health + api.analyticsOpen.getDashboard`, replaces the old faux announcement/log/alert/activity/config blocks with an explicit “当前真实管理入口” section, and turns the rest of the home into inventory-only gap cards that point supervisors back to `/admin/users`, `/admin/analytics`, and `/admin/logs`. The focused admin page proof now also locks out the old fake strings (`GPT-4-Turbo`, quota alerts, backup activity rows, etc.), while manager-lite and backend admin analytics stay green on the same projection-backed evidence line.
+  verification commands:
+    - npm --prefix web test -- --run src/app/admin/page.test.tsx
+    - npm --prefix web test -- --run "src/app/admin/page.test.tsx" "src/components/admin/manager-lite-panel.test.tsx" && backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/common/test_admin_analytics_service.py -x -q
+    - browser_navigate http://127.0.0.1:3000/admin
+  verification results: passed for the focused admin-page proof and the exact task-plan bundle (3 web tests + 5 backend tests). Browser automation itself is still blocked in this environment because the Playwright Chromium binary is missing, so the runtime UI attempt failed before navigation and is recorded as an environment limitation rather than a product regression.
+  success signal status: M022/S03 manager/admin surfaces now present one honest home-page boundary: live authority lives in the effectiveness card and the existing user/analytics/log surfaces, while the remaining home sections are explicitly inventory-only instead of pretending to be operational tooling.
+  rollback note: if later work restores homepage actions, alerts, or activity streams, reconnect them to a real backend authority first and update the focused admin page test in the same change so the home page cannot drift back into fake operator UI.
+
 - time: 2026-04-14T15:47:30+08:00
   mode: grow
   item id: M022-S03-T01
