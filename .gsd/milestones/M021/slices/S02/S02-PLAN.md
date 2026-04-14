@@ -23,7 +23,7 @@ S02 结束后，S03 canonical evaluation kernel 与 S04 quality events 都建立
 
 ## Tasks
 
-- [ ] **T01: 定义 prompt source taxonomy 与假接入点** `est:50m`
+- [x] **T01: 定义 prompt source taxonomy 与假接入点** `est:50m`
   - 沿 S01 inventory 明确 prompt source taxonomy：PromptTemplateService、voice_instruction_compiler、persona_policy、presentation prompt resolver、runtime guardrails、legacy hardcoded prompts。
 - 找出当前‘取了 template 但最终没驱动模型调用’的真实代码点。
   - Files: `backend/src/prompt_templates`, `backend/src/common/ai/llm_service.py`, `backend/src/sales_bot/services/voice_instruction_compiler.py`, `backend/src/presentation_coach/services/prompt_role_resolver.py`, `.gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md`

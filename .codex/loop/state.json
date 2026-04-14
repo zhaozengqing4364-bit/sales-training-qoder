@@ -1,6 +1,6 @@
 {
   "mode": "grow",
-  "current_issue_id": "M021-S01-T02",
+  "current_issue_id": "M021-S02-T01",
   "current_issue_type": "task",
   "current_issue_status": "done",
   "pending_issue_ids": [],
@@ -208,29 +208,29 @@
     "M020-S04-T02",
     "M020-S04-T03",
     "M021-S01-T01",
-    "M021-S01-T02"
+    "M021-S01-T02",
+    "M021-S02-T01"
   ],
   "blocked_issue_ids": [],
   "deferred_issue_ids": [],
   "last_modified_files": [
+    "backend/src/common/ai/llm_service.py",
+    "backend/src/prompt_templates/taxonomy.py",
+    "backend/tests/unit/prompt_templates/test_taxonomy.py",
     ".gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md",
-    "docs/api-contract/sessions.md",
-    "docs/api-contract/prompt-templates.md",
-    "backend/tests/integration/test_voice_runtime_session_snapshot.py",
-    "backend/tests/unit/common/test_knowledge_answer_feature_flag.py",
-    "backend/tests/unit/test_report_generation_trigger.py",
+    ".gsd/KNOWLEDGE.md",
     ".codex/loop/state.json",
     ".codex/loop/log.md"
   ],
   "last_verification_commands": [
-    "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/integration/test_voice_runtime_session_snapshot.py::test_start_session_persists_voice_policy_snapshot backend/tests/integration/test_voice_runtime_session_snapshot.py::test_snapshot_baseline_is_immutable_and_report_replay_refer_same_baseline backend/tests/unit/common/test_knowledge_answer_feature_flag.py backend/tests/unit/test_report_generation_trigger.py -q",
-    "rg -n \"live|compat|shadow|retire|authority\" .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md docs/api-contract backend/tests",
-    "lsp diagnostics backend/tests/integration/test_voice_runtime_session_snapshot.py",
-    "lsp diagnostics backend/tests/unit/common/test_knowledge_answer_feature_flag.py",
-    "lsp diagnostics backend/tests/unit/test_report_generation_trigger.py"
+    "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/prompt_templates/test_taxonomy.py backend/tests/unit/test_voice_instruction_compiler.py backend/tests/unit/evaluation/test_staged_evaluation_service.py backend/tests/unit/evaluation/test_comprehensive_report_service.py backend/tests/unit/test_report_generation_trigger.py -q",
+    "rg -n \"PromptTemplateService|render\\(|generate_report|evaluate\\(|instructions|persona_policy|strict=|SilentUndefined|base_url\" backend/src/prompt_templates backend/src/common/ai backend/src/sales_bot/services backend/src/presentation_coach/services backend/src/evaluation/services",
+    "lsp diagnostics backend/src/common/ai/llm_service.py",
+    "lsp diagnostics backend/src/prompt_templates/taxonomy.py",
+    "lsp diagnostics backend/tests/unit/prompt_templates/test_taxonomy.py"
   ],
-  "last_verification_result": "passed after one local syntax-fix iteration; the focused authority proof bundle finished 15/15 green across live session-snapshot, knowledge-rollout, and compat report-sidecar tests, the exact T02 grep gate exposes live/compat/shadow/authority wording across analysis/docs/tests, and LSP diagnostics were clean on all touched Python proof files.",
-  "last_success_signal": "M021/S01/T02 turned the inventory into durable proof and doc contracts: runtime/read-side tests now state which live/compat/shadow authority they lock, and sessions/prompt-templates/support-runtime docs can now answer who consumes the live runtime line versus the compat prompt/report sidecars without reopening the code scan.",
+  "last_verification_result": "passed; the new prompt-taxonomy proof bundle finished 86/86 green across taxonomy, voice-instruction, staged-evaluation, comprehensive-report, and report-trigger tests, the exact slice grep gate now exposes the real template-bypass entrypoints alongside live instruction/persona surfaces, and LSP diagnostics stayed clean on all touched Python files.",
+  "last_success_signal": "M021/S02/T01 turned the prompt inventory into code-owned taxonomy: StepFun compiled instructions are now explicitly marked as the live runtime authority, PromptTemplateService is marked as compat governance/runtime-adjacent, and the two real template-bypass entrypoints in staged evaluation and comprehensive report are documented in code and architecture artifacts instead of hiding behind lookup calls.",
   "last_growth_scan": null,
-  "next_action": "Use architecture scan section 7.3.1 plus the new docs/api-contract sessions/prompt-templates/support-runtime consumer sync as the input for M021/S01/T03; build the must-keep/compat/retire consumer matrix without promoting PromptTemplateService or /evaluation/* back into live runtime authority."
+  "next_action": "Use prompt_templates/taxonomy.py + LEGACY_PROMPT_ENTRYPOINTS as the input for M021/S02/T02, then make one compiled prompt contract actually drive a live or legacy runtime path with explicit missing-var/base_url diagnostics."
 }

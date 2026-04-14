@@ -25,6 +25,22 @@ from common.monitoring.logger import get_logger
 logger = get_logger(__name__)
 
 
+LEGACY_PROMPT_ENTRYPOINTS: dict[str, dict[str, Any]] = {
+    "evaluate": {
+        "prompt_contract_mode": "hardcoded_builtin_prompt",
+        "consumes_template_text": False,
+        "template_lookup_context": "render_request carries template_id + variables, but the method rebuilds an internal evaluation prompt from selected variables only.",
+        "runtime_consumer": "evaluation.services.staged_evaluation.StagedEvaluationService.evaluate_stage",
+    },
+    "generate_report": {
+        "prompt_contract_mode": "hardcoded_builtin_prompt",
+        "consumes_template_text": False,
+        "template_lookup_context": "report context is forwarded from ComprehensiveReportService after a template lookup, but the method rebuilds its own report prompt instead of consuming rendered template text.",
+        "runtime_consumer": "evaluation.services.comprehensive_report.ComprehensiveReportService._generate_detailed_feedback",
+    },
+}
+
+
 class CostTrackingHandler(AsyncCallbackHandler):
     """Track LLM token usage for cost control"""
 

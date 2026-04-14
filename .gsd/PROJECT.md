@@ -43,6 +43,7 @@
 - **M020 / S03**：multi-instance session state 与 reconnect authority 已收口：`SessionManager` 明确成为 instance-local live connection authority，`SessionStateService` 明确成为 shared Redis reconnect snapshot authority，StepFun reconnect snapshot 保留 `current_request_id` 与 `feedback_pacing_state` 但不重放 `latest_action_card`，support/runbook/architecture scan 也已写清 restart/drain 语义与缺失的 cluster drain control。
 - **M020 / S04**：M018 的手工 recovery baseline 已升级为 repo-local drill bundle：`scripts/recovery_drill_baseline.py` 固定 db/auth/redis/websocket/oss/health authority，`scripts/recovery_drill_runner.py` 直接执行同一 metadata 并把证据落到 `.dev/recovery-drills/<timestamp>/summary.json` + `*.log`，runbook / support runtime / deploy bundle / cloud redeploy plan / architecture scan 也已统一写明单机部署边界与 release-health + drill-evidence 配对留证规则。
 - **M020 milestone**：Security / multi-instance runtime / recovery hardening 已完成 milestone close-out；验收按 slice overview `After this` outcome 逐条核对，确认 auth transport、admin/support diagnostics、runtime authority split、以及 executable recovery drills 均已落到真实代码、focused proof 与长期文档/运行手册。里程碑同时保留了一个明确 follow-up：`.dev/recovery-drills/20260414T010316Z/summary.json` 真实暴露 `db_migration -> KeyError: '20260412_0315_028'`，后续必须修复并重跑 drill，而不能被 `/health` 掩盖。
+- **M021 / S01**：live AI authority inventory 已完成：architecture scan、API contract、focused proof 文件、以及 post-M018 next-wave plan 现在都把 StepFun realtime + compiled voice snapshot 标成 live authority，把 `common.knowledge_engine.compat` 标成 shipped knowledge rollout seam，把 `PromptTemplateService` 标成 live governance + compat helper，把 classic scoring / legacy evaluation-report stack 标成 compat/enhancement 或 retire candidate。后续 M021 切片不应再把文件名看起来“像 prompt / evaluation 主链”的模块误判成真实 live authority。
 
 ## Current Product Truths
 
@@ -82,26 +83,39 @@
   - `.sisyphus/deploy/*` 当前只描述 **single-node native deploy bundle**，`/health` 与 `systemctl is-active` 只能证明单节点健康，不能外推出 multi-instance drain 或 cluster-wide runtime truth；
   - release/recovery proof 现在必须同时归档 deploy `/health` capture、`/api/v1/support/runtime/*` release-health/fault summary，以及最新 repo-local recovery drill bundle；单靠其中任何一层都不足以宣称“可恢复”；
   - manual-only 边界仍然是 `redis_service_restore`、`oss_bucket_export`、`multi_instance_drain`，后续工作不能把它们包装成已自动化能力。
+- **M021/S01 AI authority inventory 已固定**：
+  - `backend/src/sales_bot/websocket/router.py` → `backend/src/sales_bot/websocket/stepfun_realtime_handler.py` 是当前 learner-facing sales live AI/runtime authority；presentation StepFun realtime 仍是同一 runtime seam 的 adapter，而不是第二套 AI 栈；
+  - `backend/src/sales_bot/services/voice_runtime_policy.py` + `backend/src/sales_bot/services/voice_instruction_compiler.py` 是当前 compiled prompt/runtime contract authority；live StepFun 指令来自会话创建时固化的 `voice_policy_snapshot`，不是 `PromptTemplateService`；
+  - `backend/src/sales_bot/websocket/components/stepfun_internal_knowledge_searcher.py` + `backend/src/common/knowledge_engine/compat.py` 是当前 shipped knowledge rollout authority seam；`common.knowledge_engine.engine.py` 默认仍是 shadow-by-default / enabled-only live path；
+  - `backend/src/prompt_templates/service.py` + routes 是 live governance surface，也是 runtime-adjacent compat helper，但**不是** live sales StepFun prompt authority；
+  - `backend/src/evaluation/services/realtime_scoring.py`、`ai_scoring.py`、`score_processor.py` 仍是 classic `voice_mode == "legacy"` 的 compat runtime；`staged_evaluation.py`、`comprehensive_report.py`、`report_generation_trigger.py`、`evaluation/api.py`、`common/ai/llm_service.py::evaluate/generate_report` 仍有 shipped readers/consumers，所以目前只能视为 compat/enhancement 或 retire candidate，不能粗暴删除；
+  - 对外 consumer-facing authority docs 现在以 `docs/api-contract/sessions.md` 与 `docs/api-contract/prompt-templates.md` 为主，`docs/api-contract/support-runtime.md` 保持 support/read-side authority explainer，不承担 live AI control-plane spec 角色。
 
 ## Current Focus
 
-当前项目处于 **M020 已完成 milestone close-out、进入后续 remediation / next-milestone 输入整理** 的状态：
+当前项目处于 **M020 已完成里程碑收口、M021/S01 已完成 AI authority inventory、M021 后续切片准备执行** 的状态：
 - **M019** 已完成 milestone close-out：数据库 authority map、practice backend seam、frontend domain/transport seam、以及 assembled release truth line 都已经过 fresh milestone-level verification。
 - **M020** 已完成 milestone close-out，四个切片都已被 milestone-level assembled evidence 吸收：
   1. **S01** auth transport、cookie/CSRF posture、websocket auth authority、shared-password compatibility diagnosis 已在代码、focused tests、runbook、API contract 与 architecture scan 上收口；
   2. **S02** sensitive log 与 admin observability redaction 已在 logger、system-log API、admin logs UI、focused tests、inventory 与 architecture scan 上收口；
   3. **S03** runtime connection visibility、session snapshot、reconnect epoch、restart/drain semantics 已在 runtime surfaces、focused reconnect proofs、support/runtime docs 与 recovery runbook 上收口；
   4. **S04** recovery drill automation 与部署指导已完成：repo-local drill inventory/runner、runbook/current-state/support-runtime/deploy/cloud plan/architecture scan、以及 `.dev/recovery-drills/<timestamp>/summary.json` evidence bundle 已收口到同一 authority line。
-- 当前最新 milestone close-out evidence 确认：
+- **M021/S01** 已完成 slice close-out准备：
+  1. AI/runtime/prompt/score/report 主链已被明确标成 live / compat / shadow / retire candidate；
+  2. `docs/api-contract/sessions.md`、`docs/api-contract/prompt-templates.md`、`docs/api-contract/support-runtime.md` 与 focused proof 文件已写明 authority boundary；
+  3. `.gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md` 与 `.gsd/plans/GSD_PLAN_post-M018-next-wave.md` 已包含 S02-S04 直接可用的 must-keep / compat / retire-candidate matrix；
+  4. 最终 `M021-CONTEXT.md` 仍受 depth verification gate 限制，当前应以 `M021-CONTEXT-DRAFT.md` + architecture scan §7.3.1 作为 downstream 研究输入。
+- 当前最新 close-out evidence 确认：
   - M020 的 roadmap `After this` outcomes 已全部逐条满足；
   - `.dev/recovery-drills/20260414T010316Z/summary.json` 中 `auth_bootstrap`、`redis_session_state`、`oss_signing_playback`、`health_check` 通过；
-  - `db_migration` 仍真实暴露 `KeyError: '20260412_0315_028'`，这已经被收口为 recovery evidence 的一部分，而不是被节点健康状态掩盖。
+  - `db_migration` 仍真实暴露 `KeyError: '20260412_0315_028'`，这已经被收口为 recovery evidence 的一部分，而不是被节点健康状态掩盖；
+  - M021/S01 的 fresh slice verification 已重新确认 AI inventory grep gate、focused backend proof bundle、authority wording grep gate、以及 keep/compat/retire matrix grep gate全部通过。
 
 接下来的重点：
 1. 修复 `20260412_0315_028` 对应的 Alembic revision / migration-graph drift，然后重跑同一套 recovery drills，直到 `db_migration` 也转绿。
-2. 保持 M019 assembled release truth 与 M020 的四条 authority seam 稳定，不要重开第二套 startup/migration/practice/frontend/release/auth/observability/runtime/recovery 入口。
-3. M021 及以后：admin/support observability work 继续复用 S02 的 backend-owned diagnostics contract；多实例/runtime 扩容类工作继续复用 S03 的 runtime authority split；恢复/发布类工作继续复用 S04 的 drill-evidence + health-evidence 配对规则。
-4. 继续把安全/运行时/恢复类工作落在 authority-bearing code、focused tests、workflow、runbook 与 contract docs 上，而不是退回 markdown-only inventory。
+2. 按 M021/S01 的 must-keep / compat / retire-candidate matrix 执行 M021/S02-S04，不要再把 `PromptTemplateService`、classic scoring、legacy evaluation/report 文件名误判成 live AI authority。
+3. 保持 M019 assembled release truth 与 M020 的四条 authority seam 稳定，不要重开第二套 startup/migration/practice/frontend/release/auth/observability/runtime/recovery 入口。
+4. 继续把 AI control-plane / evaluation / quality-event work 落在 authority-bearing code、focused tests、workflow、runbook 与 contract docs 上，而不是退回 markdown-only inventory。
 
 当前不应做的事：
 - 不要把 `init_db()` 的 `create_all()` / compat guard 外推成生产迁移 authority。
@@ -114,6 +128,7 @@
 - 不要把单实例 `SessionManager.total_sessions=0` 误写成“集群已 drain 完毕”；S03 已明确这只是 instance-local 视角，真正 restart-safe 的 shared authority 只有 Redis reconnect snapshot。
 - 不要把 `/health`、systemd active、或一份 runbook 文档单独当成“recovery 已验证”；S04 已明确必须配对最新 `.dev/recovery-drills/<timestamp>/summary.json` + 逐 drill log，并把失败 drill 如实写进 release/recovery 记录。
 - 不要发明第二套 recovery command list；后续 drill / deploy / support guidance 必须直接复用 `scripts/recovery_drill_baseline.py` 的 metadata，而不是在 plan/doc/script 里各自维护一套。
+- 不要在 M021 后续切片里把 `PromptTemplateService` 倒推成 live StepFun prompt authority，也不要在 classic `voice_mode == "legacy"`、`report_status` / comprehensive-report readers、manual `/evaluation/*` operator flow、PromptTemplateService admin/runtime helper、或 knowledge compat debug/audit consumer 仍存在时粗暴删除 legacy AI surfaces。
 
 ## Capability Contract
 
@@ -141,3 +156,4 @@
 - [x] M018 — Performance / dependency / recovery baselines
 - [x] M019 — Authority seams 与 release gate 收口
 - [x] M020 — Security / multi-instance runtime / recovery hardening
+- [ ] M021 — AI control plane / prompt / evaluation kernel 统一

@@ -1,6 +1,3 @@
-{"id":"01c9dd0e-c163-421f-b69a-334f0efb1758","ts":"2026-04-11T19:04:15.066Z","severity":"info","message":"Report saved: .gsd/reports/M015-2026-04-11T19-04-15.html — open index.html to browse progression.","source":"notify","read":false}
-{"id":"1d6c234e-3f5e-446d-b9d6-5f5dcc050672","ts":"2026-04-11T19:09:22.325Z","severity":"info","message":"Committed: feat: Documented the password-reset authority seam and the hashed_passw…","source":"notify","read":false}
-{"id":"48cabac9-e22d-4cb0-8bee-f2f202f75a83","ts":"2026-04-11T19:09:22.331Z","severity":"warning","message":"[safety] file-change: .codex/loop/log.md — Modified but not in task plan's expected output","source":"workflow-logger","read":false}
 {"id":"b2ca975d-05cf-4555-89d5-08e8690e3eee","ts":"2026-04-11T19:09:22.331Z","severity":"warning","message":"[safety] file-change: .codex/loop/state.json — Modified but not in task plan's expected output","source":"workflow-logger","read":false}
 {"id":"bc092bad-61c3-4dd8-9058-d491cf7a19b2","ts":"2026-04-11T19:09:22.331Z","severity":"warning","message":"Safety: 2 unexpected file change(s) outside task plan","source":"notify","read":false}
 {"id":"c6fa285b-cf5f-4200-ae0e-99acdc19423f","ts":"2026-04-11T19:09:30.973Z","severity":"info","message":"Verification gate: FAILED — npm run test","source":"notify","read":false}
@@ -498,3 +495,6 @@
 {"id":"e76620c1-284e-40a2-a677-041b20f77921","ts":"2026-04-14T01:46:29.575Z","severity":"warning","message":"Safety: 8 unexpected file change(s) outside task plan","source":"notify","read":false}
 {"id":"49521735-0ffe-47a8-8f1c-77850298f3cc","ts":"2026-04-14T01:46:53.661Z","severity":"info","message":"Verification gate: FAILED — npm run test","source":"notify","read":false}
 {"id":"b586f8ae-931f-4395-8cbf-f83581945808","ts":"2026-04-14T01:46:53.667Z","severity":"warning","message":"Verification failed in auto-discovered package.json checks — treating as advisory.","source":"notify","read":false}
+{"id":"1eebe963-8cdd-4eb1-8a90-025f6f062ebb","ts":"2026-04-14T01:50:43.771Z","severity":"info","message":"Committed: feat: Added the M021 live/compat/retire input matrix and legacy-consume…","source":"notify","read":false}
+{"id":"7056f66d-0062-46d6-a9c1-0dca0261123c","ts":"2026-04-14T01:51:05.774Z","severity":"info","message":"Verification gate: FAILED — npm run test","source":"notify","read":false}
+{"id":"5a98e89d-03fc-4fa5-97b3-e98761fe5873","ts":"2026-04-14T01:51:05.780Z","severity":"warning","message":"Verification failed in auto-discovered package.json checks — treating as advisory.","source":"notify","read":false}

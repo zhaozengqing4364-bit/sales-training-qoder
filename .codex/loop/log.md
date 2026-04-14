@@ -1,3 +1,25 @@
+- time: 2026-04-14T10:04:33+08:00
+  mode: grow
+  item id: M021-S02-T01
+  files changed:
+    - backend/src/common/ai/llm_service.py
+    - backend/src/prompt_templates/taxonomy.py
+    - backend/tests/unit/prompt_templates/test_taxonomy.py
+    - .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md
+    - .gsd/KNOWLEDGE.md
+    - .codex/loop/state.json
+    - .codex/loop/log.md
+  summary: Codified the prompt control-plane taxonomy into code-owned inventory so downstream runtime work stops guessing which prompt surfaces are live, compat, or fake integrations: llm_service now flags its legacy hardcoded prompt entrypoints explicitly, prompt_templates/taxonomy.py maps the current sources and runtime consumers, and the architecture scan/knowledge log now name the two real template-bypass seams where template lookup still does not drive the model call.
+  verification commands:
+    - backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/prompt_templates/test_taxonomy.py backend/tests/unit/test_voice_instruction_compiler.py backend/tests/unit/evaluation/test_staged_evaluation_service.py backend/tests/unit/evaluation/test_comprehensive_report_service.py backend/tests/unit/test_report_generation_trigger.py -q
+    - rg -n "PromptTemplateService|render\(|generate_report|evaluate\(|instructions|persona_policy|strict=|SilentUndefined|base_url" backend/src/prompt_templates backend/src/common/ai backend/src/sales_bot/services backend/src/presentation_coach/services backend/src/evaluation/services
+    - lsp diagnostics backend/src/common/ai/llm_service.py
+    - lsp diagnostics backend/src/prompt_templates/taxonomy.py
+    - lsp diagnostics backend/tests/unit/prompt_templates/test_taxonomy.py
+  verification results: passed; the focused prompt-taxonomy proof bundle finished 86/86 green, the exact slice grep gate now surfaces the live instruction/persona/guardrail seams plus the staged-evaluation/report template-bypass entrypoints, and LSP diagnostics were clean on all touched Python files.
+  success signal status: future M021/S02 work can now start from one truthful prompt authority map instead of inferring it from call-site names — StepFun compiled instructions are clearly the live runtime contract, presentation interruption templates are real runtime helpers, and legacy evaluation/report still flow through hardcoded llm_service prompts despite resolving templates first.
+  rollback note: if T02 rewires legacy evaluation/report to consume rendered templates or promotes another prompt surface into live runtime authority, update common.ai.llm_service LEGACY_PROMPT_ENTRYPOINTS, prompt_templates/taxonomy.py, the architecture scan prompt-control section, and the focused taxonomy tests together so code-owned inventory and runtime truth do not drift again.
+
 - time: 2026-04-14T08:45:46+08:00
   mode: grow
   item id: M020-S04-T03
