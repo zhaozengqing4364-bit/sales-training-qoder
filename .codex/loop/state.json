@@ -1,7 +1,7 @@
 {
   "mode": "grow",
-  "current_issue_id": "M022-S03-T03",
-  "current_issue_type": "task",
+  "current_issue_id": "M022-S03",
+  "current_issue_type": "slice",
   "current_issue_status": "done",
   "pending_issue_ids": [],
   "completed_issue_ids": [
@@ -222,22 +222,30 @@
     "M022-S02-T03",
     "M022-S03-T01",
     "M022-S03-T02",
-    "M022-S03-T03"
+    "M022-S03-T03",
+    "M022-S03"
   ],
   "blocked_issue_ids": [],
   "deferred_issue_ids": [],
   "last_modified_files": [
+    "web/src/app/admin/page.tsx",
+    "web/src/app/admin/page.test.tsx",
     ".gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md",
     ".gsd/plans/GSD_PLAN_post-M018-next-wave.md",
     ".gsd/DECISIONS.md",
+    ".gsd/KNOWLEDGE.md",
+    ".gsd/PROJECT.md",
     ".codex/loop/state.json",
     ".codex/loop/log.md"
   ],
   "last_verification_commands": [
-    "rg -n \"manager|calibration|truth surface|fake stats|placeholder|canonical evidence\" .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md .gsd/plans/GSD_PLAN_post-M018-next-wave.md"
+    "npm --prefix web test -- --run \"src/app/admin/page.test.tsx\" \"src/components/admin/manager-lite-panel.test.tsx\"",
+    "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/common/test_admin_analytics_service.py -x -q",
+    "rg -n \"manager|calibration|truth surface|fake stats|placeholder|canonical evidence\" .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md .gsd/plans/GSD_PLAN_post-M018-next-wave.md",
+    "lsp diagnostics web/src/app/admin/page.tsx web/src/app/admin/page.test.tsx web/src/components/admin/manager-lite-panel.tsx backend/src/admin/api/users.py backend/src/common/analytics/admin_analytics_service.py backend/tests/unit/common/test_admin_analytics_service.py"
   ],
-  "last_verification_result": "passed; the exact task-plan grep gate now exposes the manager calibration/team coaching entry points plus the explicit productized-vs-inventory truth-surface boundary in both the architecture scan and the post-M018 plan.",
-  "last_success_signal": "M022/S03 now has durable planning artifacts that truthfully say which manager/admin surfaces are real canonical-evidence products today and which remain inventory-only follow-up work.",
+  "last_verification_result": "passed; fresh slice-close verification reran the exact web admin-home + manager-lite bundle (3/3 green), the backend admin analytics bundle (5/5 green), the exact architecture/plan grep gate, and diagnostics stayed clean on the touched web/backend authority files.",
+  "last_success_signal": "M022/S03 is ready to close: manager-lite, admin analytics, and admin user detail/interventions are now the only productized manager/admin truth surfaces, while admin-home cards without backend authority are explicitly inventory-only.",
   "last_growth_scan": null,
-  "next_action": "Proceed to M022-S03 slice completion or downstream roadmap work using the documented manager/admin truth-surface boundary instead of re-inferring it from UI copy."
+  "next_action": "Proceed to M022-S04 planning/execution using the locked manager/admin truth-surface boundary from S03 as the upstream authority seam."
 }

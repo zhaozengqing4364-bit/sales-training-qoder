@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "exported_at": "2026-04-14T08:09:24.720Z",
+  "exported_at": "2026-04-14T08:24:30.039Z",
   "milestones": [
     {
       "id": "M001",
@@ -3076,7 +3076,7 @@
       "milestone_id": "M022",
       "id": "S03",
       "title": "S03",
-      "status": "pending",
+      "status": "complete",
       "risk": "medium",
       "depends": [],
       "demo": "After this: manager/admin 的关键决策面会使用真实 canonical evidence 和真实统计，不再混用 demo 数字、漂移口径或不可解释总分。",
@@ -3096,7 +3096,7 @@
       "milestone_id": "M022",
       "id": "S04",
       "title": "S04",
-      "status": "complete",
+      "status": "pending",
       "risk": "high",
       "depends": [],
       "demo": "After this: organization/team/tenant 的目标态、authz 影响、数据迁移、SSO/CRM/org-sync 插槽会有一份可执行路线，而不是继续停留在‘以后再说’。",
@@ -17160,6 +17160,18 @@
       "revisable": "Yes",
       "made_by": "agent",
       "superseded_by": null
+    },
+    {
+      "seq": 1618,
+      "id": "D248",
+      "when_context": "M022-S04-T01",
+      "scope": "architecture",
+      "decision": "How organization, team, and tenant should be separated in the post-M022 target state",
+      "choice": "Use organization as the top authz/account boundary, team as the manager/coaching cohort boundary, and tenant only as a future heavier isolation slot; keep agent/persona/knowledge assets as global templates first and add org rollout bindings before making them org-owned rows.",
+      "rationale": "The shipped system is still global-user/global-role and session.user_id centric, while the real manager/admin evidence surfaces already live on manager-lite, admin analytics, and admin user drill-in. Treating org/team as scope readers and rollout bindings first preserves the current modular monolith and canonical evidence line, avoids premature asset-table duplication, and leaves SSO/CRM/org-sync with a clear landing zone without claiming multi-tenant implementation now.",
+      "revisable": "Yes",
+      "made_by": "agent",
+      "superseded_by": null
     }
   ],
   "verification_evidence": [
@@ -23036,6 +23048,17 @@
       "verdict": "✅ pass",
       "duration_ms": 25,
       "created_at": "2026-04-14T08:09:24.613Z"
+    },
+    {
+      "id": 540,
+      "task_id": "T01",
+      "slice_id": "S04",
+      "milestone_id": "M022",
+      "command": "rg -n \"user_id|role|owner|agent_id|persona_id|knowledge_base|organization|tenant|team\" backend/src/common backend/src/admin web/src/app/admin .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md .gsd/plans/GSD_PLAN_post-M018-next-wave.md",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 53,
+      "created_at": "2026-04-14T08:24:29.917Z"
     }
   ]
 }
