@@ -40,6 +40,7 @@
 - **M019**：authority seams 与 release gate 收口已完成。
 - **M020 / S01**：auth transport hardening 第一片已完成：非 development session/CSRF cookie 强制 `Secure`，cookie-backed unsafe request 走双提交 CSRF 校验，websocket auth authority 收口为 `Authorization -> session cookie -> query_token compatibility`，并把 shared-password compatibility 诊断、repo-root proof、runbook/doc contract 一起写回。
 - **M020 / S02**：sensitive log 与 admin observability redaction 已完成：logger、`/api/v1/admin/system-logs`、`/admin/logs` 现在共用一个 backend-owned allowlist-first diagnostics contract，admin/support 保留 `trace_id`/`error_code`/`phase`/`session_id`/`target_user_id` 等排障字段，但 raw `details`、精确 identifier/IP、provider/request/prompt/secret-adjacent payload 保持 backend-only。
+- **M020 / S03**：multi-instance session state 与 reconnect authority 已收口：`SessionManager` 明确成为 instance-local live connection authority，`SessionStateService` 明确成为 shared Redis reconnect snapshot authority，StepFun reconnect snapshot 保留 `current_request_id` 与 `feedback_pacing_state` 但不重放 `latest_action_card`，support/runbook/architecture scan 也已写清 restart/drain 语义与缺失的 cluster drain control。
 
 ## Current Product Truths
 
@@ -61,29 +62,34 @@
   - cookie-backed unsafe HTTP request 必须通过 `app_csrf` ↔ `X-CSRF-Token` 双提交校验；
   - websocket auth authority 已收口为 `Authorization -> session cookie -> query token compatibility`，并通过 `resolve_websocket_auth(...)` / `resolve_websocket_token(...)` 统一；
   - `common.auth.api.login` 会通过 `X-Auth-Authority` / `X-Auth-Compatibility-Mode` 暴露 managed password / env compatibility authority，shared password 只作为显式 compatibility 模式存在。
-- **M020/S02 admin/support observability authority 也已固定**：
+- **M020/S02 admin/support observability authority 已固定**：
   - `backend/src/common/monitoring/logger.py` 现在是 admin/support 日志可见性的 backend-owned authority seam；
   - `/api/v1/admin/system-logs` 通过 `policy.version`、`policy.diagnostic_fields`、masked identifiers、safe `details` summary、ordered `diagnostics[]` 暴露唯一可信的 admin/support diagnostics contract；
   - `/admin/logs` 只渲染 backend 返回的 diagnostics 列表，不再在前端本地重建 allowlist；
   - raw `details`、精确 `user_identifier` / `ip_address`、provider/request/response payload、prompt text、token/password/cookie/email、`base_url`、stack trace 与 secrets 保持 backend-only；
   - 未来 M021 quality/cost/failure events 若进入 admin/support 诊断面，必须复用这套 allowlist-first diagnostics contract，而不是发明第二套 support payload。
+- **M020/S03 websocket runtime authority 已固定**：
+  - `SessionManager.get_stats()` 是 **instance-local live connection** inspection surface，只能回答“当前进程持有哪些 live sockets / runtime diagnostics”；
+  - `SessionStateService.get_stats()` 是 **shared Redis reconnect snapshot** inspection surface，负责 `last_saved_snapshot`、`last_loaded_snapshot`、`request_epoch`、`connection_epoch`、`last_disconnect_reason`、`last_error` 等 restart-safe reconnect authority；
+  - StepFun reconnect snapshot 现在保留 `current_request_id` 与 `feedback_pacing_state`，但仍故意不持久化 `latest_action_card`，避免断线后重放陈旧教练卡片；
+  - `/api/v1/support/runtime` 明确保持 release-health / fault summary contract，不承担 cluster-wide websocket state API 职责；
+  - restart / drain 语义必须显式区分 instance-local live sockets 与 shared Redis snapshot，当前仓库仍**没有** repo-native cluster drain endpoint、cross-instance live connection authority 或 ingress/LB orchestration。
 
 ## Current Focus
 
-当前项目处于 **M019 已完成、M020 进行中** 的状态：
+当前项目处于 **M019 已完成、M020 接近收口** 的状态：
 - M019 已完成 milestone close-out：数据库 authority map、practice backend seam、frontend domain/transport seam、以及 assembled release truth line 都已经过 fresh milestone-level verification。
-- M020 已完成前两片：
+- M020 已完成前三片：
   1. **S01** auth transport、cookie/CSRF posture、websocket auth authority、shared-password compatibility diagnosis 已在代码、focused tests、runbook、API contract 与 architecture scan 上收口；
-  2. **S02** sensitive log 与 admin observability redaction 已在 logger、system-log API、admin logs UI、focused tests、inventory 与 architecture scan 上收口。
-- M020 后续切片仍待执行：
-  1. **S03** multi-instance session state 与 reconnect authority 收口；
-  2. **S04** recovery drill automation 与部署指导收口。
+  2. **S02** sensitive log 与 admin observability redaction 已在 logger、system-log API、admin logs UI、focused tests、inventory 与 architecture scan 上收口；
+  3. **S03** runtime connection visibility、session snapshot、reconnect epoch、restart/drain semantics 已在 runtime surfaces、focused reconnect proofs、support/runtime docs 与 recovery runbook 上收口。
+- **M020 仅剩 S04**：把 M018 的 backup/recovery baseline 升级成可执行 recovery drill / automation / deployment guidance，并直接消费 S01-S03 已固定的 auth、observability、runtime authority seams。
 
 接下来的重点：
-1. 保持 M019 authority truth 稳定，不要重开第二套 startup/migration/practice/frontend/release 入口。
-2. 把 M020/S01 的 auth boundary 与 M020/S02 的 diagnostics redaction boundary 当成固定前提，再推进 S03-S04；不要让 session-state、reconnect、recovery drill 再次绕开这些 seam 发明隐式规则。
-3. 后续安全/运行时工作优先落在现有 authority-bearing files、focused tests、workflow、runbook 与 contract docs 上，而不是写一套 markdown-only inventory。
-4. M021 及以后的 quality/cost/failure/admin-support observability work 必须复用 S02 的 backend-owned diagnostics contract，而不是让 route/UI 各自决定哪些错误细节可以展示。
+1. 继续保持 M019 assembled release truth 稳定，不要重开第二套 startup/migration/practice/frontend/release 入口。
+2. 把 M020/S01-S03 当成固定前提推进 S04：recovery drill 必须显式复用 auth boundary、diagnostics redaction boundary、以及 SessionManager / SessionStateService authority split。
+3. 后续安全/运行时工作优先落在 authority-bearing code、focused tests、workflow、runbook 与 contract docs 上，而不是写一套 markdown-only inventory。
+4. M021 及以后的 quality/cost/failure/admin-support observability work 必须复用 S02 的 backend-owned diagnostics contract；多实例/runtime 扩容类工作必须复用 S03 的 runtime authority split，而不是让 `/api/v1/support/runtime` 长成第二套 cluster-state API。
 
 当前不应做的事：
 - 不要把 `init_db()` 的 `create_all()` / compat guard 外推成生产迁移 authority。
@@ -93,6 +99,7 @@
 - 不要让后续 milestone 只凭 workflow 绿灯就宣称 release truth 完整；必须继续复用 web/backend/doc/metrics/error-reporting 的 assembled proof。
 - 不要让后续 auth slices 回退到隐含默认值：cookie secure、CSRF、websocket query token、shared password 都已经在 M020/S01 被写成显式 authority / compatibility / off-ramp 规则。
 - 不要让未来 admin/support observability slices 在 route 或 UI 层重新暴露 raw `details`、精确 identity/IP、provider/request payload 或 secret-adjacent config；这些已经在 M020/S02 被明确划回 backend-only。
+- 不要把单实例 `SessionManager.total_sessions=0` 误写成“集群已 drain 完毕”；S03 已明确这只是 instance-local 视角，真正 restart-safe 的 shared authority 只有 Redis reconnect snapshot。
 
 ## Capability Contract
 
@@ -119,4 +126,4 @@
 - [x] M017 — Realtime contract 与 concurrency proof 收口
 - [x] M018 — Performance / dependency / recovery baselines
 - [x] M019 — Authority seams 与 release gate 收口
-- [ ] M020 — Security / multi-instance runtime / recovery hardening（S01-S02 complete; S03-S04 pending）
+- [ ] M020 — Security / multi-instance runtime / recovery hardening（S01-S03 complete; S04 pending）

@@ -1,6 +1,6 @@
 # Backup / Recovery 当前现状清单
 
-最后更新：2026-04-13  
+最后更新：2026-04-14  
 适用范围：当前仓库可见的本地开发 / 仓库内运维入口  
 用途：给 `docs/backup-recovery-runbook.md` 提供事实基线；这里只记录仓库里已经存在的真实路径、命令和缺口，不补写不存在的自动化。
 
@@ -213,6 +213,32 @@ python scripts/bootstrap_auth_admin.py --email support@qoder.ai --name 支持工
 - 向量库存储：`backend/src/common/knowledge/vector_store.py`
 - Redis 会话恢复：`backend/src/common/websocket/session_state_service.py`
 - 音频 OSS：`backend/src/common/oss/signing.py`, `backend/src/common/db/models.py`
+
+### 7.1 T01 drill baseline 可直接复用的 repo-local authority
+
+当前仓库已经把最小 recovery drill baseline 收口到：`scripts/recovery_drill_baseline.py`
+
+```bash
+python3 scripts/recovery_drill_baseline.py status
+python3 scripts/recovery_drill_baseline.py check
+```
+
+这份脚本当前不会执行破坏性 restore，而是把下一阶段要复用的 checked commands 固定下来：
+
+- `db_migration`: `cd backend && alembic upgrade head`
+- `auth_bootstrap`: `cd backend && python scripts/bootstrap_auth_admin.py ...`
+- `redis_session_state`: `backend/tests/integration/test_websocket_status_contract.py`
+- `websocket_reconnect`: `backend/tests/integration/test_sales_realtime_reconnect_flow.py`
+- `oss_signing_playback`: `backend/tests/unit/test_oss_signing_service.py` + `backend/tests/contract/test_audio_audit_contract.py`
+- `health_check`: `curl -fsS http://127.0.0.1:3444/health`
+
+同时它也明确标注了当前仍然必须人工完成的边界：
+
+- `redis_service_restore`
+- `oss_bucket_export`
+- `multi_instance_drain`
+
+后续 T02/T03 如果继续补 recovery automation 或部署指导，应该直接复用这份脚本里的 command / authority paths，而不是重新发明 runbook 口径。
 
 ## 8. 当前最小结论
 

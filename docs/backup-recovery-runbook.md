@@ -1,14 +1,31 @@
 # Backup / Recovery Baseline Runbook
 
-最后更新：2026-04-13  
+最后更新：2026-04-14  
 适用范围：当前仓库可见的本地开发 / 轻量手工运维场景  
 配套现状清单：`docs/setup/backup-recovery-current-state.md`
 
 > 当前基线只描述**今天仓库里真实能执行的路径**：本地脚本、PostgreSQL/Redis 标准工具、文件归档、Alembic、老库修复脚本、管理员账号重建。
 >
-> 本次文档已按当前仓库实物复核以下 repo-local 引用：`scripts/dev-up.sh`、`scripts/dev-stop.sh`、`backend/src/main.py`、`backend/scripts/repair_legacy_schema.py`、`backend/scripts/bootstrap_auth_admin.py`、`backend/src/common/db/session.py`、`backend/src/common/config.py`、`backend/src/common/storage/document.py`、`backend/src/common/knowledge/vector_store.py`、`backend/src/admin/api/admin.py`、`docs/setup/auth-local.md`。
+> 本次文档已按当前仓库实物复核以下 repo-local 引用：`scripts/dev-up.sh`、`scripts/dev-stop.sh`、`scripts/recovery_drill_baseline.py`、`backend/src/main.py`、`backend/scripts/repair_legacy_schema.py`、`backend/scripts/bootstrap_auth_admin.py`、`backend/src/common/db/session.py`、`backend/src/common/config.py`、`backend/src/common/storage/document.py`、`backend/src/common/knowledge/vector_store.py`、`backend/src/admin/api/admin.py`、`docs/setup/auth-local.md`。
 >
 > 当前仓库**没有** repo-native 的一键备份平台、OSS 批量导出脚本、统一灾备编排或明确值班名单；这些缺口会在文末的 **Follow-up（非当前基线）** 单列，不混入当前基线步骤。
+
+## 0.1 Repo-local recovery drill baseline inventory
+
+当前 runbook 对应的最小可执行 drill inventory 已收口到：
+
+```bash
+python3 scripts/recovery_drill_baseline.py status
+python3 scripts/recovery_drill_baseline.py check
+```
+
+这份脚本当前负责三件事：
+
+1. 把最有价值的 recovery drills 固定成同一份 repo-local authority inventory：`db_migration`、`auth_bootstrap`、`redis_session_state`、`websocket_reconnect`、`oss_signing_playback`、`health_check`；
+2. 为每个 drill 绑定同一条 checked command 与 authority paths，避免 runbook、测试、后续自动化各写一份；
+3. 显式列出仍然必须人工处理的边界：`redis_service_restore`、`oss_bucket_export`、`multi_instance_drain`。
+
+这里的 `status` / `check` 仍然是**checked command inventory**，不是破坏性恢复脚本：它只验证仓库里的 authority 路径是否存在，并输出当前建议 drill 命令。真正带副作用的恢复脚本会在后续任务里继续落地，但必须复用这里同一套 command / file seams。
 
 ## 1. 当前责任边界与证据位置
 

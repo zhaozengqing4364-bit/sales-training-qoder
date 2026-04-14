@@ -1,6 +1,6 @@
 {
   "mode": "grow",
-  "current_issue_id": "M020-S03-T03",
+  "current_issue_id": "M020-S04-T01",
   "current_issue_type": "task",
   "current_issue_status": "done",
   "pending_issue_ids": [],
@@ -200,22 +200,32 @@
     "M020-S02-T02",
     "M020-S02-T03",
     "M020-S02",
-    "M020-S03-T03"
+    "M020-S03-T03",
+    "M020-S03-T01",
+    "M020-S03-T02",
+    "M020-S03",
+    "M020-S04-T01"
   ],
   "blocked_issue_ids": [],
   "deferred_issue_ids": [],
   "last_modified_files": [
-    "docs/api-contract/support-runtime.md",
+    "scripts/recovery_drill_baseline.py",
+    "backend/tests/unit/test_recovery_drill_baseline.py",
     "docs/backup-recovery-runbook.md",
-    ".gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md",
+    "docs/setup/backup-recovery-current-state.md",
+    ".gsd/DECISIONS.md",
     ".codex/loop/state.json",
     ".codex/loop/log.md"
   ],
   "last_verification_commands": [
-    "rg -n \"reconnect|epoch|snapshot|active connection|drain|restart\" docs/api-contract/support-runtime.md docs/backup-recovery-runbook.md .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md"
+    "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/test_recovery_drill_baseline.py -q",
+    "python3 scripts/recovery_drill_baseline.py check",
+    "rg -n \"backup|restore|recovery|drill|auth|redis|oss|websocket\" scripts docs/backup-recovery-runbook.md docs/setup/backup-recovery-current-state.md",
+    "lsp diagnostics scripts/recovery_drill_baseline.py",
+    "lsp diagnostics backend/tests/unit/test_recovery_drill_baseline.py"
   ],
-  "last_verification_result": "passed; the exact task-plan grep gate was rerun fresh and now exposes reconnect/epoch/snapshot/active connection/drain/restart guidance across the support-runtime contract, backup-recovery runbook, and architecture scan.",
-  "last_success_signal": "M020/S03/T03 wrote the runtime authority split into durable support/operator surfaces: /api/v1/support/runtime is now documented as release-health summary only, SessionManager remains the instance-local live connection authority, SessionStateService remains the shared Redis reconnect authority, and the runbook now says restart/drain cannot be treated as a cluster-aware no-op.",
+  "last_verification_result": "passed; the new recovery drill baseline unit proof finished 3/3 green, the repo-local inventory script printed all planned drills and manual-only boundaries while validating every referenced authority path, the exact task-plan grep gate stayed green across scripts + runbook + current-state docs, and LSP diagnostics were clean on the new Python script/test files.",
+  "last_success_signal": "M020/S04/T01 now gives downstream recovery work one executable authority inventory instead of markdown-only guidance: db migration, auth bootstrap, redis snapshot authority, websocket reconnect, OSS signing/playback, and health checks are all named in one repo-local script with explicit manual-only boundaries for Redis restore, OSS export, and multi-instance drain.",
   "last_growth_scan": null,
-  "next_action": "Proceed to M020/S03 slice closure now that support/runtime docs, the recovery runbook, and the architecture scan all encode instance-local live connections versus shared Redis snapshots plus restart/drain guidance."
+  "next_action": "Proceed to M020/S04/T02 by turning scripts/recovery_drill_baseline.py's checked commands into minimal side-effecting recovery/drill scripts without creating a second authority surface."
 }

@@ -1,3 +1,25 @@
+- time: 2026-04-14T08:07:41+08:00
+  mode: grow
+  item id: M020-S04-T01
+  files changed:
+    - scripts/recovery_drill_baseline.py
+    - backend/tests/unit/test_recovery_drill_baseline.py
+    - docs/backup-recovery-runbook.md
+    - docs/setup/backup-recovery-current-state.md
+    - .gsd/DECISIONS.md
+    - .codex/loop/state.json
+    - .codex/loop/log.md
+  summary: Promoted the manual M018 recovery baseline into one executable repo-local drill inventory: scripts/recovery_drill_baseline.py now names the checked db/auth/redis/websocket/OSS/health drills plus the still-manual Redis restore, OSS export, and multi-instance drain boundaries, while the runbook/current-state docs point to that same inventory instead of carrying a parallel command list.
+  verification commands:
+    - backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/test_recovery_drill_baseline.py -q
+    - python3 scripts/recovery_drill_baseline.py check
+    - rg -n "backup|restore|recovery|drill|auth|redis|oss|websocket" scripts docs/backup-recovery-runbook.md docs/setup/backup-recovery-current-state.md
+    - lsp diagnostics scripts/recovery_drill_baseline.py
+    - lsp diagnostics backend/tests/unit/test_recovery_drill_baseline.py
+  verification results: passed; the fail-first recovery-drill unit suite finished 3/3 green after the new script landed, the inventory script validated all referenced authority paths and emitted the planned drill/manual-only split, the exact task-plan grep gate stayed green across scripts and docs, and diagnostics were clean on the touched Python files.
+  success signal status: future S04 tasks no longer have to rediscover which recovery checks are real and which steps remain manual — one script now exposes the recovery drill authority line and the docs reuse it verbatim.
+  rollback note: if later work changes the recovery command set, update scripts/recovery_drill_baseline.py, the focused unit test, and both recovery docs together; otherwise T02/T03 automation will drift from the documented drill baseline.
+
 - time: 2026-04-13T23:07:58+0800
   mode: grow
   item id: M020-S02-T03
@@ -1399,3 +1421,35 @@
   verification results: passed; the exact task-plan grep gate was rerun fresh and now exposes reconnect, epoch, snapshot, active connection, drain, and restart wording across all three durable surfaces.
   success signal status: future support/runtime, recovery, and multi-instance hardening work no longer has to guess whether /api/v1/support/runtime is a websocket truth surface or whether restart empties cluster state — the docs now say release-health summary lives in the API, live connections are process-local, Redis snapshots are the restart-safe authority, and drain still depends on external traffic steering.
   rollback note: if later work adds a real websocket drain endpoint, cluster-wide live-connection authority, or new support/runtime inspection payloads, update docs/api-contract/support-runtime.md, docs/backup-recovery-runbook.md, and section 7.2.3 of the architecture scan together so operator guidance does not drift again.
+
+- time: 2026-04-14T07:50:41+08:00
+  mode: grow
+  item id: M020-S03
+  files changed:
+    - backend/src/common/websocket/session_manager.py
+    - backend/src/common/websocket/session_state_service.py
+    - backend/src/sales_bot/websocket/stepfun_realtime_handler.py
+    - backend/tests/unit/test_session_runtime_authority.py
+    - backend/tests/integration/test_websocket_status_contract.py
+    - backend/tests/integration/test_sales_realtime_reconnect_flow.py
+    - docs/api-contract/support-runtime.md
+    - docs/backup-recovery-runbook.md
+    - .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md
+    - .gsd/DECISIONS.md
+    - .gsd/KNOWLEDGE.md
+    - .gsd/PROJECT.md
+    - .codex/loop/state.json
+    - .codex/loop/log.md
+  summary: Closed M020/S03 after fresh slice-level verification confirmed the runtime authority split is now explicit and durable: SessionManager is the instance-local live-connection surface, SessionStateService is the shared Redis reconnect authority, StepFun reconnect snapshots preserve request/pacing continuity without replaying stale action-card UI, and support/runbook surfaces now explain restart/drain semantics without pretending /support/runtime is a cluster-state API.
+  verification commands:
+    - rg -n "SessionManager|SessionStateService|snapshot|reconnect|active_connections|runtime_state" backend/src/common/websocket backend/src/sales_bot/websocket backend/src/presentation_coach/websocket
+    - backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/integration/test_websocket_status_contract.py backend/tests/integration/test_sales_realtime_reconnect_flow.py -x -q
+    - rg -n "reconnect|epoch|snapshot|active connection|drain|restart" docs/api-contract/support-runtime.md docs/backup-recovery-runbook.md .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md
+    - lsp diagnostics backend/src/common/websocket/session_manager.py
+    - lsp diagnostics backend/src/common/websocket/session_state_service.py
+    - lsp diagnostics backend/src/sales_bot/websocket/stepfun_realtime_handler.py
+    - lsp diagnostics backend/tests/integration/test_websocket_status_contract.py
+    - lsp diagnostics backend/tests/integration/test_sales_realtime_reconnect_flow.py
+  verification results: passed; the websocket authority grep gate stayed green, the exact slice-plan pytest bundle finished 11/11 green, the support-runtime/runbook/architecture grep gate stayed green, and LSP diagnostics were clean on the touched runtime/test files. Only the pre-existing pytest-cov no-data warning remained.
+  success signal status: future S04 recovery drill work can start from one truthful runtime contract instead of rediscovering it — live connection visibility is explicitly process-local, Redis snapshots are explicitly restart-safe shared authority, request epoch and pacing state survive reconnect, stale action-card UI does not, and the operator docs now say that restart/drain still lacks repo-native cluster controls.
+  rollback note: if later work adds cluster drain controls, widens /support/runtime, or changes reconnect snapshot contents, update SessionManager.get_stats(), SessionStateService.get_stats(), the StepFun reconnect snapshot contract, the support-runtime/runbook docs, and the focused status-contract/reconnect proof together so the authority split does not drift again.
