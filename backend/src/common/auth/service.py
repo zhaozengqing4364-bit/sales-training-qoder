@@ -555,7 +555,7 @@ async def get_current_admin_user(
 
 
 async def get_current_admin_user_for_app_routes(
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user)
 ) -> User:
     """
     App-level admin dependency for router-mirrored `/api/v1/admin/**` route families.

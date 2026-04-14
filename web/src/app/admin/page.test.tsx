@@ -49,7 +49,7 @@ describe("AdminDashboardPage", () => {
         });
     });
 
-    it("keeps only the top effectiveness card as live data and marks the rest as pending connected data", async () => {
+    it("keeps only the top effectiveness card as live data and downgrades the rest of the admin home to truth-surface inventory", async () => {
         render(<AdminDashboardPage />);
 
         await waitFor(() => {
@@ -57,31 +57,16 @@ describe("AdminDashboardPage", () => {
             expect(getDashboardMock).toHaveBeenCalledWith({ days: 7 });
         });
 
-        expect(await screen.findByText("管理首页数据来源说明")).toBeTruthy();
-        expect(screen.queryByPlaceholderText("全局搜索...")).toBeNull();
+        expect(await screen.findByText("管理首页真实度说明")).toBeTruthy();
         expect(screen.getByText("66.7%")).toBeTruthy();
         expect(screen.getByText("58.3%")).toBeTruthy();
         expect(screen.getAllByText("待接真实统计").length).toBeGreaterThanOrEqual(3);
-        expect(screen.getByText(/以下卡片当前作为管理入口与待接权威数据提示/)).toBeTruthy();
-        expect(screen.getByText("当前管理入口")).toBeTruthy();
-        expect(screen.getByText("直接进入当前已接入数据源的管理面；首页不提供未接入的表单、日志控制台或自动告警入口。"))
-            .toBeTruthy();
-        expect(screen.getAllByRole("link", { name: "进入用户管理" }).some((link) => link.getAttribute("href") === "/admin/users"))
-            .toBe(true);
-        expect(screen.getAllByRole("link", { name: "进入数据分析" }).some((link) => link.getAttribute("href") === "/admin/analytics"))
-            .toBe(true);
-        expect(screen.getAllByRole("link", { name: "进入系统日志" }).some((link) => link.getAttribute("href") === "/admin/logs"))
-            .toBe(true);
+        expect(screen.getByText(/以下卡片当前只作为 manager\/admin truth surface inventory/)).toBeTruthy();
         expect(screen.queryByText("2,543")).toBeNull();
         expect(screen.queryByText("84")).toBeNull();
         expect(screen.queryByText("42%")).toBeNull();
         expect(screen.queryByText("68%")).toBeNull();
         expect(screen.queryByText("75%")).toBeNull();
         expect(screen.queryByText("450 GB")).toBeNull();
-        expect(screen.queryByText("GPT-4-Turbo")).toBeNull();
-        expect(screen.queryByText("API 速率限制临近")).toBeNull();
-        expect(screen.queryByText("证书过期")).toBeNull();
-        expect(screen.queryByText("系统备份完成")).toBeNull();
-        expect(screen.queryByText("动态项 #1 描述...")).toBeNull();
     });
 });
