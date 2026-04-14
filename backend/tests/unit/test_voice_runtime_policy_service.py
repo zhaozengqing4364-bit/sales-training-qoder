@@ -518,7 +518,7 @@ async def test_env_fallback_policy_defaults_to_latest_realtime_model(
 
     service = VoiceRuntimePolicyService(test_db)
 
-    assert service._env_fallback_policy()["model_name"] == "step-audio-r1.1"
+    assert service._env_fallback_policy()["model_name"] == "step-audio-2"
     assert service._env_fallback_policy()["tool_policy"]["kb_lock_mode"] == "coach_mode"
     assert service._env_fallback_policy()["tool_policy"]["max_questions_per_turn"] == 1
 

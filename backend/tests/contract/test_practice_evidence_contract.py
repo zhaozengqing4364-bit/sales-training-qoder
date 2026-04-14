@@ -17,6 +17,7 @@ from common.auth.service import create_access_token
 from common.conversation.models import ConversationMessage
 from common.db.models import Base, PracticeSession, Scenario, SessionAudioSegment, SessionStatus, User
 from common.db.session import get_db
+from common.db.voice_policy_snapshot import build_voice_policy_snapshot_ref_payload
 from common.error_handling.result import Result
 from common.websocket.session_manager import get_session_manager
 from evaluation.services.report_generation_trigger import ReportGenerationTrigger
@@ -204,29 +205,8 @@ def _without_replay_anchor(value: dict[str, object] | None) -> dict[str, object]
 def _snapshot_ref(snapshot: dict[str, object] | None) -> dict[str, object] | None:
     if not isinstance(snapshot, dict):
         return None
-
-    source = snapshot.get("source")
-    tool_policy = snapshot.get("tool_policy")
-    ref: dict[str, object] = {
-        "voice_mode": snapshot.get("voice_mode"),
-        "runtime_profile_id": snapshot.get("runtime_profile_id"),
-        "instruction_contract_hash": snapshot.get("instruction_contract_hash"),
-        "network_access_mode": snapshot.get("network_access_mode"),
-        "resolved_at": snapshot.get("resolved_at"),
-        "tool_policy": tool_policy if isinstance(tool_policy, dict) else {},
-        "knowledge_base_ids": [
-            str(item)
-            for item in (snapshot.get("knowledge_base_ids") or [])
-            if item is not None
-        ],
-        "source": {str(k): str(v) for k, v in source.items()}
-        if isinstance(source, dict)
-        else {},
-    }
-    association_override = snapshot.get("agent_persona_override_config")
-    if isinstance(association_override, dict):
-        ref["agent_persona_override_config"] = association_override
-    return ref
+    payload = build_voice_policy_snapshot_ref_payload(snapshot)
+    return payload if isinstance(payload, dict) else None
 
 
 @pytest_asyncio.fixture(scope="function")

@@ -144,7 +144,7 @@ const EMPTY_FORM: Omit<RuntimeProfile, "id"> = {
     is_default: false,
     is_active: true,
     voice_mode: "stepfun_realtime",
-    model_name: "step-audio-r1.1",
+    model_name: "step-audio-2",
     voice_name: "qingchunshaonv",
     temperature: 0.7,
     input_audio_format: "pcm16",

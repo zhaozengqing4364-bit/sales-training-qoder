@@ -7,6 +7,7 @@ from __future__ import annotations
 from typing import Any
 
 from common.db.schemas import VoicePolicySnapshotReference
+from agent.services.industry_pack_contract import build_runtime_binding_summary
 
 
 def build_voice_policy_snapshot_ref_payload(snapshot: Any) -> dict[str, Any] | None:
@@ -20,6 +21,7 @@ def build_voice_policy_snapshot_ref_payload(snapshot: Any) -> dict[str, Any] | N
         "instruction_contract_hash": snapshot.get("instruction_contract_hash"),
         "network_access_mode": snapshot.get("network_access_mode"),
         "resolved_at": snapshot.get("resolved_at"),
+        "runtime_binding": build_runtime_binding_summary(snapshot),
     }
 
     tool_policy = snapshot.get("tool_policy")

@@ -8,6 +8,7 @@ import {
     AdminPersona,
     AdminKnowledgeBase,
     AdminPersonaCustomerPressure,
+    AdminPersonaIndustryPackContract,
     AdminPersonaPolicy,
 } from "@/lib/api/types";
 import { GlassCard } from "@/components/ui/glass-card";
@@ -81,6 +82,13 @@ const PRESSURE_AUDIT_LABELS: Record<string, string> = {
     kb_lock_unbound: "知识库强制模式已开启，但当前没有绑定知识库。",
     pressure_model_legacy_only: "当前仍依赖旧 sales_focus 字段推导 pressure model；保存后会写回显式结构。",
     no_pressure_context: "当前还没有可追问的压力方向、价值轴或示例追问。",
+};
+
+const OWNED_FIELD_LABELS: Record<string, string> = {
+    persona: "persona",
+    customer_pressure: "customer pressure",
+    knowledge_bundle: "knowledge bundle",
+    scenario: "scenario",
 };
 
 const emptyCustomerPressureFormState = (): CustomerPressureFormState => ({
@@ -292,6 +300,7 @@ export default function EditPersonaPage() {
 
     const [persona, setPersona] = useState<AdminPersona | null>(null);
     const [personaPolicy, setPersonaPolicy] = useState<AdminPersonaPolicy | null>(null);
+    const [industryPackContract, setIndustryPackContract] = useState<AdminPersonaIndustryPackContract | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [isSaving, setIsSaving] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -340,12 +349,14 @@ export default function EditPersonaPage() {
         setIsLoading(true);
         setError(null);
         try {
-            const [personaData, allKnowledgeBases] = await Promise.all([
+            const [personaData, allKnowledgeBases, personaIndustryPackContract] = await Promise.all([
                 api.admin.getPersona(personaId),
                 api.admin.getKnowledgeBases({ page_size: 100 }),
+                api.admin.getPersonaIndustryPackContract(),
             ]);
             setPersona(personaData);
             setPersonaPolicy(personaData.persona_policy || null);
+            setIndustryPackContract(personaIndustryPackContract);
             setCustomerPressureForm(buildCustomerPressureFormState(personaData.persona_policy));
             setFormData({
                 name: personaData.name || "",
@@ -551,6 +562,8 @@ export default function EditPersonaPage() {
         customerPressureForm.source === "legacy_sales_focus_extensions" ? "pressure_model_legacy_only" : null,
         !hasPressureContext ? "no_pressure_context" : null,
     ].filter((value): value is string => Boolean(value));
+    const contractOwnedFieldEntries = Object.entries(industryPackContract?.owned_fields || {});
+    const runtimeTargets = industryPackContract?.runtime_targets || {};
 
     if (isLoading) {
         return (
@@ -936,6 +949,63 @@ export default function EditPersonaPage() {
                             </div>
                         )}
                     </GlassCard>
+
+                    {industryPackContract ? (
+                        <GlassCard className="p-6 space-y-4">
+                            <div className="space-y-2">
+                                <h3 className="text-sm font-bold text-slate-800">Industry Pack 合同</h3>
+                                <p className="text-xs text-slate-500">
+                                    当前运营入口仍复用 persona / knowledge / scenario surfaces，下面这些字段会落到 runtime snapshot 与报告证据里。
+                                </p>
+                            </div>
+
+                            <div className="flex flex-wrap gap-2">
+                                {contractOwnedFieldEntries.map(([group, fields]) => (
+                                    <Badge key={group} variant="secondary">
+                                        {(OWNED_FIELD_LABELS[group] || group).replace(/_/g, " ") + ` · ${fields.length} 个字段`}
+                                    </Badge>
+                                ))}
+                            </div>
+
+                            <div className="space-y-3 text-xs text-slate-600">
+                                <div className="rounded-2xl border border-slate-100 bg-slate-50/70 p-4 space-y-2">
+                                    <div className="font-semibold text-slate-800">当前运行时落点</div>
+                                    <div className="space-y-2">
+                                        {runtimeTargets.customer_pressure?.persisted_in ? (
+                                            <div className="space-y-1">
+                                                <div className="font-medium text-slate-700">Customer pressure</div>
+                                                <code className="block rounded-xl bg-white px-3 py-2 text-[11px] text-slate-700 break-all">
+                                                    {String(runtimeTargets.customer_pressure.persisted_in)}
+                                                </code>
+                                            </div>
+                                        ) : null}
+                                        {runtimeTargets.knowledge_bundle?.persisted_in ? (
+                                            <div className="space-y-1">
+                                                <div className="font-medium text-slate-700">Knowledge bundle</div>
+                                                <code className="block rounded-xl bg-white px-3 py-2 text-[11px] text-slate-700 break-all">
+                                                    {String(runtimeTargets.knowledge_bundle.persisted_in)}
+                                                </code>
+                                            </div>
+                                        ) : null}
+                                    </div>
+                                </div>
+
+                                <div className="rounded-2xl border border-blue-200 bg-blue-50 p-4 space-y-2">
+                                    <div className="font-semibold text-blue-900">当前绑定摘要</div>
+                                    <div className="flex flex-wrap gap-2">
+                                        <Badge variant="blue">{`source · ${PRESSURE_SOURCE_LABELS[customerPressureForm.source] || customerPressureForm.source || "未配置"}`}</Badge>
+                                        <Badge variant="secondary">{`sales focus · ${describeSalesFocus(customerPressureForm.salesFocus)}`}</Badge>
+                                        <Badge variant="secondary">{`KB · ${linkedKnowledgeBases.length}`}</Badge>
+                                    </div>
+                                    {pressureExpectedQuestions.length > 0 ? (
+                                        <div className="rounded-xl bg-white px-3 py-2 text-[11px] text-slate-700">
+                                            {pressureExpectedQuestions[0]}
+                                        </div>
+                                    ) : null}
+                                </div>
+                            </div>
+                        </GlassCard>
+                    ) : null}
 
                     <GlassCard className="p-6 space-y-4">
                         <h3 className="text-sm font-bold text-slate-800">知识库回答策略</h3>

@@ -316,6 +316,20 @@ class TestSessionsContract:
                 "runtime_profile_id": "profile-123",
                 "tool_policy": {"enable_internal_retrieval": True},
                 "knowledge_base_ids": ["kb-001"],
+                "customer_pressure": {
+                    "source": "explicit",
+                    "pressure_direction": {
+                        "sales_focus": "proof",
+                        "value_axes": ["ROI"],
+                        "objection_axes": ["价格"],
+                    },
+                    "follow_up_behavior": {
+                        "question_strategy": "single_issue",
+                        "revisit_on_evasion": True,
+                        "require_evidence": True,
+                        "expected_customer_questions": ["你拿什么证明 ROI？"],
+                    },
+                },
                 "source": {"runtime_profile": "system_default"},
                 "resolved_at": "2026-02-11T12:00:00+00:00",
             },
@@ -341,6 +355,12 @@ class TestSessionsContract:
         assert snapshot_ref.get("voice_mode") == "stepfun_realtime"
         assert snapshot_ref.get("runtime_profile_id") == "profile-123"
         assert snapshot_ref.get("knowledge_base_ids") == ["kb-001"]
+        runtime_binding = _require_dict(
+            snapshot_ref.get("runtime_binding"), "voice_policy_snapshot_ref.runtime_binding"
+        )
+        assert runtime_binding.get("customer_pressure_source") == "explicit"
+        assert runtime_binding.get("sales_focus") == "proof"
+        assert runtime_binding.get("knowledge_base_ids") == ["kb-001"]
 
     async def test_get_replay_contract_contains_snapshot_reference(
         self,
@@ -369,7 +389,21 @@ class TestSessionsContract:
                 "runtime_profile_id": None,
                 "tool_policy": {"enable_internal_retrieval": False},
                 "knowledge_base_ids": [],
-                "source": {"base": "env"},
+                "customer_pressure": {
+                    "source": "legacy_sales_focus_extensions",
+                    "pressure_direction": {
+                        "sales_focus": "price",
+                        "value_axes": ["预算优先级"],
+                        "objection_axes": ["价格"],
+                    },
+                    "follow_up_behavior": {
+                        "question_strategy": "single_issue",
+                        "revisit_on_evasion": True,
+                        "require_evidence": True,
+                        "expected_customer_questions": ["预算这么紧为什么还要推进？"],
+                    },
+                },
+                "source": {"base": "env", "customer_pressure_source": "legacy_sales_focus_extensions"},
                 "resolved_at": "2026-02-11T12:00:00+00:00",
             },
         )
@@ -391,8 +425,13 @@ class TestSessionsContract:
         source = _require_dict(
             snapshot_ref.get("source"), "voice_policy_snapshot_ref.source"
         )
+        runtime_binding = _require_dict(
+            snapshot_ref.get("runtime_binding"), "voice_policy_snapshot_ref.runtime_binding"
+        )
         assert snapshot_ref.get("voice_mode") == "legacy"
         assert source.get("base") == "env"
+        assert runtime_binding.get("customer_pressure_source") == "legacy_sales_focus_extensions"
+        assert runtime_binding.get("sales_focus") == "price"
 
     async def test_lifecycle_control_contract_success_response(
         self,

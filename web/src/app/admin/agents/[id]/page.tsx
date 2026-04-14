@@ -11,7 +11,7 @@ import { useToast } from "@/components/ui/toast";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { ArrowLeft, Save, Trash2, Loader2, Plus, User, GripVertical, Star, X, Database } from "lucide-react";
 import { api } from "@/lib/api/client";
-import { AdminAgent, AdminPersona } from "@/lib/api/types";
+import { AdminAgent, AdminAgentIndustryPackContract, AdminPersona } from "@/lib/api/types";
 import {
     Dialog,
     DialogContent,
@@ -112,6 +112,7 @@ export default function AgentEditPage({ params }: { params: Promise<{ id: string
     const { id } = use(params);
 
     const [agent, setAgent] = useState<AdminAgent | null>(null);
+    const [industryPackContract, setIndustryPackContract] = useState<AdminAgentIndustryPackContract | null>(null);
     const [linkedPersonas, setLinkedPersonas] = useState<LinkedPersona[]>([]);
     const [availablePersonas, setAvailablePersonas] = useState<AdminPersona[]>([]);
     const [isLoading, setIsLoading] = useState(true);
@@ -138,15 +139,25 @@ export default function AgentEditPage({ params }: { params: Promise<{ id: string
     useEffect(() => {
         const loadData = async () => {
             try {
-                const [agentData, personasData, allPersonas, modelConfigsData, voiceProfiles, voicePolicy] = await Promise.all([
+                const [
+                    agentData,
+                    personasData,
+                    allPersonas,
+                    modelConfigsData,
+                    voiceProfiles,
+                    voicePolicy,
+                    agentIndustryPackContract,
+                ] = await Promise.all([
                     api.admin.getAgent(id),
                     api.admin.getAgentPersonas(id),
                     api.admin.getPersonas({ page_size: 100 }),
                     api.admin.getModelConfigs(),
                     api.admin.getVoiceRuntimeProfiles({ only_active: true }),
                     api.admin.getAgentVoicePolicy(id),
+                    api.admin.getAgentIndustryPackContract(),
                 ]);
                 setAgent(agentData);
+                setIndustryPackContract(agentIndustryPackContract);
                 setLinkedPersonas(personasData as LinkedPersona[]);
                 setAvailablePersonas(allPersonas.items || []);
                 setRuntimeProfiles((voiceProfiles.items || []) as RuntimeProfileItem[]);
@@ -606,6 +617,38 @@ export default function AgentEditPage({ params }: { params: Promise<{ id: string
                             </Button>
                         </div>
                     </GlassCard>
+
+                    {industryPackContract ? (
+                        <GlassCard className="p-6 space-y-4">
+                            <div className="space-y-2">
+                                <h3 className="text-sm font-bold text-slate-800">Industry Pack 运行合同</h3>
+                                <p className="text-xs text-slate-500 leading-relaxed">
+                                    智能体继续只负责 runtime shell；行业包语义仍由 persona / knowledge / scenario surfaces 组合。
+                                </p>
+                            </div>
+
+                            <div className="rounded-xl border border-slate-100 bg-slate-50/70 p-3 space-y-2">
+                                <div className="text-[10px] font-bold uppercase text-slate-400">Authority model</div>
+                                <div className="text-sm font-semibold text-slate-900">
+                                    {industryPackContract.industry_pack.authority_model}
+                                </div>
+                            </div>
+
+                            <div className="space-y-2">
+                                {industryPackContract.runtime_authorities.map((authority) => (
+                                    <code key={authority} className="block rounded-xl bg-slate-50 px-3 py-2 text-[11px] text-slate-700 break-all">
+                                        {authority}
+                                    </code>
+                                ))}
+                            </div>
+
+                            {industryPackContract.composition_rules.length > 0 ? (
+                                <div className="rounded-xl border border-blue-200 bg-blue-50 p-3 text-xs text-blue-800 leading-relaxed">
+                                    {industryPackContract.composition_rules[0]}
+                                </div>
+                            ) : null}
+                        </GlassCard>
+                    ) : null}
 
                     <GlassCard className="p-6">
                         <div className="flex items-start gap-3">

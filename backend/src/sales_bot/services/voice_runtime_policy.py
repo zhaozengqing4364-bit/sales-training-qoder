@@ -287,7 +287,7 @@ class VoiceRuntimePolicyService:
             ),
             model_name=str(
                 payload.get("model_name")
-                or os.getenv("STEPFUN_REALTIME_MODEL", "step-audio-r1.1")
+                or os.getenv("STEPFUN_REALTIME_MODEL", "step-audio-2")
             ),
             voice_name=str(
                 payload.get("voice_name")
@@ -806,7 +806,7 @@ class VoiceRuntimePolicyService:
             "voice_mode": env_mode,
             "runtime_profile_id": None,
             "runtime_profile_name": None,
-            "model_name": os.getenv("STEPFUN_REALTIME_MODEL", "step-audio-r1.1"),
+            "model_name": os.getenv("STEPFUN_REALTIME_MODEL", "step-audio-2"),
             "voice_name": os.getenv("STEPFUN_REALTIME_VOICE", "qingchunshaonv"),
             "temperature": _to_float(
                 os.getenv("STEPFUN_REALTIME_TEMPERATURE", 0.7), 0.7

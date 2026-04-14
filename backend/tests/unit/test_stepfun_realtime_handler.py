@@ -30,7 +30,7 @@ def test_stepfun_realtime_handler_defaults_to_latest_realtime_model(
 
     handler = StepFunRealtimeHandler()
 
-    assert handler._stepfun_model == "step-audio-r1.1"
+    assert handler._stepfun_model == "step-audio-2"
 
 
 @pytest.mark.asyncio
@@ -1172,7 +1172,7 @@ async def test_load_effective_policy_prefers_frozen_session_snapshot_over_live_r
     frozen_snapshot = {
         "voice_mode": "stepfun_realtime",
         "runtime_profile_id": "profile-frozen",
-        "model_name": "step-audio-r1.1",
+        "model_name": "step-audio-2",
         "voice_name": "qingchunshaonv",
         "temperature": 0.7,
         "input_audio_format": "pcm16",

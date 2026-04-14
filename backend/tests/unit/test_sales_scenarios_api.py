@@ -61,6 +61,7 @@ async def test_list_sales_personas_reads_from_database_and_deduplicates():
         "compiled_instructions",
         "voice_policy_snapshot.customer_pressure",
         "voice_policy_snapshot.knowledge_base_ids",
+        "practice_session_report.voice_policy_snapshot_ref.runtime_binding",
     ]
     assert payload[1]["id"] == "persona-b"
 

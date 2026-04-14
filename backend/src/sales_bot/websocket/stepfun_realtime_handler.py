@@ -249,7 +249,7 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
         self._stepfun_url = os.getenv(
             "STEPFUN_REALTIME_URL", "wss://api.stepfun.com/v1/realtime"
         )
-        self._stepfun_model = os.getenv("STEPFUN_REALTIME_MODEL", "step-audio-r1.1")
+        self._stepfun_model = os.getenv("STEPFUN_REALTIME_MODEL", "step-audio-2")
         self._stepfun_voice = os.getenv("STEPFUN_REALTIME_VOICE", "qingchunshaonv")
         self._stepfun_temperature = float(
             os.getenv("STEPFUN_REALTIME_TEMPERATURE", "0.7")

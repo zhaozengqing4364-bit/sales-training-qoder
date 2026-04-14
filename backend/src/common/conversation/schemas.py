@@ -90,6 +90,22 @@ class StageSummarySchema(BaseModel):
     score: int = Field(..., ge=0, le=100, description="Average score for this stage")
 
 
+class VoicePolicyRuntimeBindingSchema(BaseModel):
+    """Compact industry-pack binding summary reused by replay/report evidence."""
+
+    industry_pack_strategy: str = Field(..., description="How the industry pack is composed")
+    customer_pressure_source: str = Field(..., description="Resolved customer-pressure source")
+    sales_focus: str = Field(default="", description="Primary pressure focus")
+    value_axes: list[str] = Field(default_factory=list, description="Active value axes")
+    objection_axes: list[str] = Field(default_factory=list, description="Active objection axes")
+    question_strategy: str = Field(default="", description="Follow-up question strategy")
+    revisit_on_evasion: bool = Field(default=False, description="Whether evasions trigger follow-up")
+    require_evidence: bool = Field(default=False, description="Whether the persona requires evidence")
+    expected_customer_questions: list[str] = Field(default_factory=list, description="Example customer pressure questions")
+    knowledge_base_ids: list[str] = Field(default_factory=list, description="Bound knowledge base IDs")
+    runtime_impacts: list[str] = Field(default_factory=list, description="Runtime and evidence surfaces affected")
+
+
 class VoicePolicySnapshotReferenceSchema(BaseModel):
     """Voice policy baseline reference captured at session creation time."""
 
@@ -107,6 +123,10 @@ class VoicePolicySnapshotReferenceSchema(BaseModel):
     knowledge_base_ids: list[str] = Field(default_factory=list, description="Bound knowledge base IDs")
     source: dict[str, str] = Field(default_factory=dict, description="Policy resolution source map")
     resolved_at: str | None = Field(None, description="ISO8601 policy resolution timestamp")
+    runtime_binding: VoicePolicyRuntimeBindingSchema | None = Field(
+        None,
+        description="Compact industry-pack binding summary frozen into report/replay evidence",
+    )
     agent_persona_override_config: dict[str, Any] | None = Field(
         None,
         description="Agent-persona association override config snapshot",

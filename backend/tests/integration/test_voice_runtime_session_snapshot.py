@@ -53,6 +53,32 @@ async def _create_runtime_entities(
         status="active",
         system_prompt="你是谨慎型采购经理。",
         knowledge_base_ids=["kb_test_2"],
+        persona_policy={
+            "version": 1,
+            "system_prompt": "你是谨慎型采购经理。",
+            "knowledge_base_ids": ["kb_test_2"],
+            "customer_pressure": {
+                "source": "explicit",
+                "pressure_direction": {
+                    "sales_focus": "proof",
+                    "value_axes": ["ROI", "案例证据"],
+                    "objection_axes": ["价格", "实施风险"],
+                },
+                "follow_up_behavior": {
+                    "question_strategy": "single_issue",
+                    "revisit_on_evasion": True,
+                    "require_evidence": True,
+                    "expected_customer_questions": [
+                        "你拿什么证明这个 ROI 不是口号？",
+                    ],
+                },
+            },
+            "tool_policy": {
+                "enable_internal_retrieval": True,
+                "require_kb_grounding": True,
+                "network_access_mode": "off",
+            },
+        },
     )
     agent_persona = AgentPersona(
         id=str(uuid.uuid4()),
@@ -87,6 +113,24 @@ def _snapshot_ref(snapshot: Any) -> dict[str, Any] | None:
         "source": {str(k): str(v) for k, v in source.items()}
         if isinstance(source, dict)
         else {},
+        "runtime_binding": {
+            "industry_pack_strategy": "persona_policy_plus_scenario_plus_knowledge",
+            "customer_pressure_source": "explicit",
+            "sales_focus": "proof",
+            "value_axes": ["ROI", "案例证据"],
+            "objection_axes": ["价格", "实施风险"],
+            "question_strategy": "single_issue",
+            "revisit_on_evasion": True,
+            "require_evidence": True,
+            "expected_customer_questions": ["你拿什么证明这个 ROI 不是口号？"],
+            "knowledge_base_ids": ["kb_test_2"],
+            "runtime_impacts": [
+                "compiled_instructions",
+                "voice_policy_snapshot.customer_pressure",
+                "voice_policy_snapshot.knowledge_base_ids",
+                "practice_session_report.voice_policy_snapshot_ref.runtime_binding",
+            ],
+        },
     }
     association_override = snapshot.get("agent_persona_override_config")
     if isinstance(association_override, dict):

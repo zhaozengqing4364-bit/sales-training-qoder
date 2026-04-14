@@ -291,10 +291,12 @@
 - Out of Scope：新造内容管理平台。
 - Inputs / Preconditions：M022-S01 rubric contract。
 - Target Files / Modules：`backend/src/agent/api/*`、`sales_bot/api/scenarios.py`、admin personas/agents/knowledge pages。
-- Implementation Notes：继续复用现有 admin surfaces。
-- Done When：资产合同明确，runtime/evidence 可指出用了哪种行业包/压力模型。
-- Verification：persona/knowledge/scenario backend suites + admin personas web suite。
-- Deliverable：industry pack operating contract。
+- Implementation Notes：继续复用现有 admin surfaces；把 `industry pack` 明确定义成 composed asset：agent 负责 runtime shell，persona policy + `customer pressure` 负责角色与追问压力，`knowledge bundle` 负责 retrieval/evidence，`scenario package` 负责入口 narrative/routing 而不是 runtime truth。
+- Operating Rules：运营改 `customer pressure` 时，预期 live runtime instruction、report evidence、future manager calibration 一起变化；运营改 `knowledge bundle` 时，必须能从 frozen `runtime_binding` / retrieval facts 解释证据来源；运营改 `scenario package` 时，只能宣称影响 session 入口与叙事，不可包装成独立 runtime authority。
+- Manual Ops Boundary：行业话术、persona system prompt、pressure axes / expected questions、knowledge bundle 选编、scenario package narrative 仍是手工内容运营项；系统提供的是 inspectable contract、runtime evidence、admin read surfaces，而不是自动生成行业包内容。
+- Done When：资产合同明确，runtime/report/manager calibration 都能指出用了哪种 industry pack / customer pressure / knowledge bundle，且边界说明不把 `scenario package` 冒充成 runtime truth。
+- Verification：persona/knowledge/scenario backend suites + admin personas web suite；文档 grep 需能直接找到 `industry pack` / `customer pressure` / `scenario package` / `knowledge bundle` 运营规则。
+- Deliverable：industry pack operating contract + write-back rules in architecture scan / product plan.
 - Risk Level：Medium
 - Recommended Executor：Strong model
 

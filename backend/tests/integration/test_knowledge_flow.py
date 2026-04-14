@@ -58,7 +58,7 @@ async def _create_runtime_entities(
         is_default=True,
         is_active=True,
         voice_mode="stepfun_realtime",
-        model_name="step-audio-r1.1",
+        model_name="step-audio-2",
         voice_name="qingchunshaonv",
         temperature=0.7,
     )

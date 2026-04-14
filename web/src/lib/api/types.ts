@@ -29,6 +29,20 @@ export interface DashboardStats {
     };
 }
 
+export interface VoicePolicyRuntimeBinding {
+    industry_pack_strategy: string;
+    customer_pressure_source: string;
+    sales_focus: string;
+    value_axes: string[];
+    objection_axes: string[];
+    question_strategy: string;
+    revisit_on_evasion: boolean;
+    require_evidence: boolean;
+    expected_customer_questions: string[];
+    knowledge_base_ids: string[];
+    runtime_impacts: string[];
+}
+
 export interface VoicePolicySnapshotReference {
     voice_mode?: string | null;
     runtime_profile_id?: string | null;
@@ -38,6 +52,7 @@ export interface VoicePolicySnapshotReference {
     knowledge_base_ids: string[];
     source: Record<string, string>;
     resolved_at?: string | null;
+    runtime_binding?: VoicePolicyRuntimeBinding | null;
     agent_persona_override_config?: Record<string, unknown> | null;
 }
 
@@ -511,6 +526,40 @@ export interface AdminPersonaPolicy {
     expected_customer_questions?: string[];
     customer_pressure?: AdminPersonaCustomerPressure;
     [key: string]: unknown;
+}
+
+export interface AdminIndustryPackRuntimeTarget {
+    persisted_in?: string;
+    compiled_instruction_section?: string;
+    compiled_instruction_sections?: string[];
+    runtime_service?: string;
+    tool_builder?: string;
+    read_side?: string;
+    report_evidence_surface?: string;
+    session_entry?: string;
+    websocket_router?: string;
+    note?: string;
+    [key: string]: unknown;
+}
+
+export interface AdminAgentIndustryPackContract {
+    contract_version: number;
+    industry_pack: {
+        authority_model: string;
+        summary: string;
+        composition_units?: string[];
+    };
+    entrypoints: Record<string, string>;
+    runtime_authorities: string[];
+    composition_rules: string[];
+    observability_surfaces: string[];
+}
+
+export interface AdminPersonaIndustryPackContract {
+    contract_version: number;
+    owned_fields: Record<string, string[]>;
+    runtime_targets: Record<string, AdminIndustryPackRuntimeTarget>;
+    governance_rules: string[];
 }
 
 export interface AdminPersonaPolicyHealthIssue {

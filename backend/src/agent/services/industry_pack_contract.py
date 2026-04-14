@@ -76,6 +76,7 @@ def build_agent_industry_pack_contract() -> dict[str, Any]:
         "observability_surfaces": [
             "/api/v1/admin/personas/policy-health",
             "practice_sessions.voice_policy_snapshot",
+            "practice_session_report.voice_policy_snapshot_ref.runtime_binding",
             "common.conversation.runtime_diagnostics.build_retrieval_facts",
         ],
     }
@@ -125,11 +126,13 @@ def build_persona_industry_pack_contract() -> dict[str, Any]:
                 "persisted_in": "practice_sessions.voice_policy_snapshot.customer_pressure",
                 "compiled_instruction_section": "销售追问焦点",
                 "runtime_service": "sales_bot.services.voice_runtime_policy.resolve_effective_policy",
+                "report_evidence_surface": "practice_session_report.voice_policy_snapshot_ref.runtime_binding",
             },
             "knowledge_bundle": {
                 "persisted_in": "practice_sessions.voice_policy_snapshot.knowledge_base_ids",
                 "tool_builder": "sales_bot.services.voice_runtime_policy.build_stepfun_tools",
                 "read_side": "common.conversation.runtime_diagnostics.build_retrieval_facts",
+                "report_evidence_surface": "practice_session_report.voice_policy_snapshot_ref.runtime_binding",
             },
             "scenario": {
                 "session_entry": "common.api.practice",
@@ -184,8 +187,20 @@ def build_sales_scenario_runtime_contract() -> dict[str, Any]:
     }
 
 
-def build_persona_runtime_binding_summary(persona: Any) -> dict[str, Any]:
-    persona_policy = resolve_persona_policy(persona)
+def _resolve_runtime_binding_policy(source: Any) -> dict[str, Any]:
+    if isinstance(source, dict):
+        base_policy = _as_dict(source.get("persona_policy"))
+        if source.get("knowledge_base_ids") is not None and "knowledge_base_ids" not in base_policy:
+            base_policy["knowledge_base_ids"] = source.get("knowledge_base_ids")
+        if isinstance(source.get("customer_pressure"), dict):
+            base_policy["customer_pressure"] = source.get("customer_pressure")
+        return base_policy
+    return resolve_persona_policy(source)
+
+
+
+def build_runtime_binding_summary(source: Any) -> dict[str, Any]:
+    persona_policy = _resolve_runtime_binding_policy(source)
     customer_pressure = _as_dict(persona_policy.get("customer_pressure"))
     pressure_direction = _as_dict(customer_pressure.get("pressure_direction"))
     follow_up_behavior = _as_dict(customer_pressure.get("follow_up_behavior"))
@@ -196,6 +211,9 @@ def build_persona_runtime_binding_summary(persona: Any) -> dict[str, Any]:
         "sales_focus": str(pressure_direction.get("sales_focus") or ""),
         "value_axes": _as_str_list(pressure_direction.get("value_axes")),
         "objection_axes": _as_str_list(pressure_direction.get("objection_axes")),
+        "question_strategy": str(follow_up_behavior.get("question_strategy") or ""),
+        "revisit_on_evasion": bool(follow_up_behavior.get("revisit_on_evasion")),
+        "require_evidence": bool(follow_up_behavior.get("require_evidence")),
         "expected_customer_questions": _as_str_list(
             follow_up_behavior.get("expected_customer_questions")
         ),
@@ -204,5 +222,11 @@ def build_persona_runtime_binding_summary(persona: Any) -> dict[str, Any]:
             "compiled_instructions",
             "voice_policy_snapshot.customer_pressure",
             "voice_policy_snapshot.knowledge_base_ids",
+            "practice_session_report.voice_policy_snapshot_ref.runtime_binding",
         ],
     }
+
+
+
+def build_persona_runtime_binding_summary(persona: Any) -> dict[str, Any]:
+    return build_runtime_binding_summary(persona)

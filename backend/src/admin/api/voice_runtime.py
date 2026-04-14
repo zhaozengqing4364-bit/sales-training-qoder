@@ -37,7 +37,7 @@ class RuntimeProfilePayload(BaseModel):
     voice_mode: Literal["legacy", "stepfun_realtime"] = Field(
         default="stepfun_realtime"
     )
-    model_name: str = Field(default="step-audio-r1.1", max_length=100)
+    model_name: str = Field(default="step-audio-2", max_length=100)
     voice_name: str = Field(default="qingchunshaonv", max_length=100)
     temperature: float = Field(default=0.7, ge=0, le=2)
     input_audio_format: str = Field(default="pcm16", max_length=20)

@@ -1,3 +1,19 @@
+- time: 2026-04-14T14:45:15+08:00
+  mode: grow
+  item id: M022-S02-T03
+  files changed:
+    - .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md
+    - .gsd/plans/GSD_PLAN_post-M018-next-wave.md
+    - .gsd/milestones/M022/slices/S02/tasks/T03-SUMMARY.md
+    - .codex/loop/state.json
+    - .codex/loop/log.md
+  summary: Wrote the industry-pack operating rules back into the durable planning artifacts so the architecture scan and next-wave plan now agree on the honest control boundary: `industry pack` remains a composed asset over existing admin surfaces, `customer pressure` is a live runtime lever, `knowledge bundle` is the retrieval/report evidence lever, `scenario package` is only the entry/routing narrative lever, and future manager calibration must reuse `voice_policy_snapshot_ref.runtime_binding` instead of inventing a second asset taxonomy.
+  verification commands:
+    - rg -n "industry pack|customer pressure|scenario package|knowledge bundle" .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md .gsd/plans/GSD_PLAN_post-M018-next-wave.md
+  verification results: passed; the exact task-plan grep gate exited 0 and matched the new operating-rule/manual-boundary language in both documents.
+  success signal status: M022/S02 no longer relies on planner memory to explain which asset changes affect runtime, report evidence, manager calibration, or still require manual content operations.
+  rollback note: if later slices promote a new asset authority or let `scenario package` influence runtime truth directly, update the M022/S02 architecture section, the next-wave plan entry, and the frozen runtime-binding/read-side wording together so docs do not drift from the shipped control boundary.
+
 - time: 2026-04-14T13:43:55+08:00
   mode: grow
   item id: M022-S01

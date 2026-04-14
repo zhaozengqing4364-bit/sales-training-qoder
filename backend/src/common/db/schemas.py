@@ -394,6 +394,22 @@ class PresentationReview(BaseModel):
 
 
 # ========== Voice Policy Snapshot Schemas ==========
+class VoicePolicyRuntimeBinding(BaseModel):
+    """Compact industry-pack binding summary persisted into report/replay evidence."""
+
+    industry_pack_strategy: str
+    customer_pressure_source: str
+    sales_focus: str = ""
+    value_axes: list[str] = Field(default_factory=list)
+    objection_axes: list[str] = Field(default_factory=list)
+    question_strategy: str = ""
+    revisit_on_evasion: bool = False
+    require_evidence: bool = False
+    expected_customer_questions: list[str] = Field(default_factory=list)
+    knowledge_base_ids: list[str] = Field(default_factory=list)
+    runtime_impacts: list[str] = Field(default_factory=list)
+
+
 class VoicePolicySnapshotReference(BaseModel):
     """Immutable voice policy baseline reference stored at session creation time."""
 
@@ -405,6 +421,7 @@ class VoicePolicySnapshotReference(BaseModel):
     knowledge_base_ids: list[str] = Field(default_factory=list)
     source: dict[str, str] = Field(default_factory=dict)
     resolved_at: str | None = None
+    runtime_binding: VoicePolicyRuntimeBinding | None = None
     agent_persona_override_config: dict[str, Any] | None = None
 
 

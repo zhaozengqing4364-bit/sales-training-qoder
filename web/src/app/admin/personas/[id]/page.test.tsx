@@ -9,6 +9,7 @@ const {
     errorToastMock,
     getPersonaMock,
     getKnowledgeBasesMock,
+    getPersonaIndustryPackContractMock,
     updatePersonaMock,
 } = vi.hoisted(() => ({
     backMock: vi.fn(),
@@ -16,6 +17,7 @@ const {
     errorToastMock: vi.fn(),
     getPersonaMock: vi.fn(),
     getKnowledgeBasesMock: vi.fn(),
+    getPersonaIndustryPackContractMock: vi.fn(),
     updatePersonaMock: vi.fn(),
 }));
 
@@ -47,6 +49,7 @@ vi.mock("@/lib/api/client", async () => {
                 ...actual.api.admin,
                 getPersona: getPersonaMock,
                 getKnowledgeBases: getKnowledgeBasesMock,
+                getPersonaIndustryPackContract: getPersonaIndustryPackContractMock,
                 updatePersona: updatePersonaMock,
             },
         },
@@ -107,9 +110,32 @@ describe("EditPersonaPage", () => {
         errorToastMock.mockReset();
         getPersonaMock.mockReset();
         getKnowledgeBasesMock.mockReset();
+        getPersonaIndustryPackContractMock.mockReset();
         updatePersonaMock.mockReset();
 
         getPersonaMock.mockResolvedValue(basePersona);
+        getPersonaIndustryPackContractMock.mockResolvedValue({
+            contract_version: 1,
+            owned_fields: {
+                persona: ["persona_policy.system_prompt", "traits"],
+                customer_pressure: ["persona_policy.customer_pressure.pressure_direction.sales_focus"],
+                knowledge_bundle: ["persona_policy.knowledge_base_ids"],
+                scenario: ["scenarios.persona_prompt"],
+            },
+            runtime_targets: {
+                customer_pressure: {
+                    persisted_in: "practice_sessions.voice_policy_snapshot.customer_pressure",
+                    compiled_instruction_section: "销售追问焦点",
+                },
+                knowledge_bundle: {
+                    persisted_in: "practice_sessions.voice_policy_snapshot.knowledge_base_ids",
+                    read_side: "common.conversation.runtime_diagnostics.build_retrieval_facts",
+                },
+            },
+            governance_rules: [
+                "Customer-pressure and knowledge-bundle rules must be updated through persona_policy, not ad-hoc prompt text.",
+            ],
+        });
         getKnowledgeBasesMock.mockResolvedValue({
             items: [
                 {
@@ -163,6 +189,18 @@ describe("EditPersonaPage", () => {
         expect((screen.getByLabelText("异议维度") as HTMLTextAreaElement).value).toBe("价格\n实施风险");
         expect((screen.getByLabelText("示例追问") as HTMLTextAreaElement).value).toBe("你拿什么证明这个 ROI 不是口号？");
         expect(screen.getByText("当前 pressure model 已具备可冻结的显式结构；保存后，runtime snapshot 可以直接审计这些字段。")).toBeTruthy();
+    });
+
+    it("renders the industry-pack runtime contract alongside the editable pressure model", async () => {
+        render(<EditPersonaPage />);
+
+        expect(await screen.findByText("当前 Persona 压力模型")).toBeTruthy();
+        expect(await screen.findByText("Industry Pack 合同")).toBeTruthy();
+        expect(screen.getByText("当前运营入口仍复用 persona / knowledge / scenario surfaces，下面这些字段会落到 runtime snapshot 与报告证据里。")).toBeTruthy();
+        expect(screen.getByText("customer pressure · 1 个字段")).toBeTruthy();
+        expect(screen.getByText("knowledge bundle · 1 个字段")).toBeTruthy();
+        expect(screen.getByText("practice_sessions.voice_policy_snapshot.customer_pressure")).toBeTruthy();
+        expect(screen.getByText("practice_sessions.voice_policy_snapshot.knowledge_base_ids")).toBeTruthy();
     });
 
     it("saves the nested customer pressure contract back into persona_policy", async () => {

@@ -24,6 +24,8 @@ import {
     AdminPersonaCustomerPressure,
     AdminPersonaPolicy,
     AdminPersonaPolicyHealthReport,
+    AdminAgentIndustryPackContract,
+    AdminPersonaIndustryPackContract,
     AdminKnowledgeBase,
     AdminKnowledgeDocument,
     AdminKnowledgeDocumentPreviewResponse,
@@ -2087,6 +2089,10 @@ export const api = {
             return apiFetch<AdminAgent>(`/admin/agents/${id}`);
         },
 
+        getAgentIndustryPackContract: async () => {
+            return apiFetch<AdminAgentIndustryPackContract>("/admin/agents/industry-pack-contract");
+        },
+
         createAgent: async (data: AgentWritePayload) => {
             return apiFetch<AdminAgent>("/admin/agents", {
                 method: "POST",
@@ -2196,6 +2202,10 @@ export const api = {
         getPersona: async (id: string) => {
             const result = await apiFetch<AdminPersona>(`/admin/personas/${id}`);
             return normalizeAdminPersona(result);
+        },
+
+        getPersonaIndustryPackContract: async () => {
+            return apiFetch<AdminPersonaIndustryPackContract>("/admin/personas/industry-pack-contract");
         },
 
         createPersona: async (data: Partial<AdminPersona>) => {
