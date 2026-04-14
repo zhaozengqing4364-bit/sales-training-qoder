@@ -1,7 +1,7 @@
 {
   "mode": "grow",
-  "current_issue_id": "M022-S04-T03",
-  "current_issue_type": "task",
+  "current_issue_id": "M022-S04",
+  "current_issue_type": "slice",
   "current_issue_status": "done",
   "pending_issue_ids": [],
   "completed_issue_ids": [
@@ -225,23 +225,25 @@
     "M022-S03-T03",
     "M022-S03",
     "M022-S04-T02",
-    "M022-S04-T03"
+    "M022-S04-T03",
+    "M022-S04-T01",
+    "M022-S04"
   ],
   "blocked_issue_ids": [],
   "deferred_issue_ids": [],
   "last_modified_files": [
-    ".gsd/plans/GSD_PLAN_post-M018-next-wave.md",
-    ".codex/roadmap/PROJECT_FUTURE.md",
-    ".gsd/DECISIONS.md",
-    ".codex/loop/state.json",
-    ".codex/loop/log.md"
+    ".gsd/milestones/M022/slices/S04/S04-SUMMARY.md",
+    ".gsd/milestones/M022/slices/S04/S04-UAT.md",
+    ".gsd/milestones/M022/M022-ROADMAP.md",
+    ".gsd/PROJECT.md"
   ],
   "last_verification_commands": [
-    "rg -n \"organization|team|tenant|monolith|service split|out-of-scope|SSO|CRM\" .gsd/plans/GSD_PLAN_post-M018-next-wave.md .codex/roadmap/PROJECT_FUTURE.md",
-    "rg -n \"modular monolith|service split|SSO|CRM|org sync\" .gsd/DECISIONS.md"
+    "rg -n \"user_id|role|owner|agent_id|persona_id|knowledge_base|organization|tenant|team\" backend/src/common backend/src/admin web/src/app/admin .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md",
+    "rg -n \"migration path|organization|team|tenant|SSO|CRM|org sync|compatibility reader\" .gsd/plans/GSD_PLAN_post-M018-next-wave.md .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md",
+    "rg -n \"organization|team|tenant|monolith|service split|out-of-scope|SSO|CRM\" .gsd/plans/GSD_PLAN_post-M018-next-wave.md .codex/roadmap/PROJECT_FUTURE.md"
   ],
-  "last_verification_result": "passed; the exact task-plan grep gate now matches the roadmap handoff language in both the post-M018 plan and PROJECT_FUTURE, and decision D250 records the modular-monolith default plus explicit service-split triggers.",
-  "last_success_signal": "M022/S04 now has a downstream enterprise roadmap entry: org/team/member work stays inside the modular monolith by default, service split has explicit pressure-based triggers, and SSO/CRM/org sync remain out-of-scope adapter seams instead of runtime authorities.",
+  "last_verification_result": "passed; all S04 slice-plan grep gates confirmed the current single-org seams, the reader-first migration path, and the roadmap handoff/service-split guardrails in the durable planning artifacts.",
+  "last_success_signal": "M022/S04 is complete: future enterprise work now has one durable organization/team/member/tenant contract, a modular-monolith default, explicit service-split triggers, and adapter-only SSO/CRM/org-sync slots.",
   "last_growth_scan": null,
-  "next_action": "Proceed to M022-S04 slice completion using T01-T03 outputs as the enterprise roadmap handoff bundle."
+  "next_action": "Proceed to M022 milestone validation and close-out using the completed S01-S04 slice bundle."
 }
