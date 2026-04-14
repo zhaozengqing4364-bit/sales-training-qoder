@@ -1,7 +1,7 @@
 # Codebase Map
 
-Generated: 2026-04-14T05:31:53Z | Files: 500 | Described: 0/500
-<!-- gsd:codebase-meta {"generatedAt":"2026-04-14T05:31:53Z","fingerprint":"def7f151b808b98948943faec25cc6ce6cf9882b","fileCount":500,"truncated":true} -->
+Generated: 2026-04-14T05:54:37Z | Files: 500 | Described: 0/500
+<!-- gsd:codebase-meta {"generatedAt":"2026-04-14T05:54:37Z","fingerprint":"56d634355fa49d186266ff75c2d7cd90ecb163f1","fileCount":500,"truncated":true} -->
 Note: Truncated to first 500 files. Run with higher --max-files to include all.
 
 ### (root)/
@@ -304,6 +304,7 @@ Note: Truncated to first 500 files. Run with higher --max-files to include all.
 - `backend/src/agent/services/__init__.py`
 - `backend/src/agent/services/agent_persona_service.py`
 - `backend/src/agent/services/agent_service.py`
+- `backend/src/agent/services/industry_pack_contract.py`
 - `backend/src/agent/services/persona_policy.py`
 - `backend/src/agent/services/persona_service.py`
 
@@ -639,6 +640,3 @@ Note: Truncated to first 500 files. Run with higher --max-files to include all.
 - `backend/tests/performance/test_interruption_latency.py`
 - `backend/tests/performance/test_nfr_metrics.py`
 - `backend/tests/performance/test_vagueness_detection.py`
-
-### backend/tests/scripts/
-- `backend/tests/scripts/run_nfr_tests.sh`
