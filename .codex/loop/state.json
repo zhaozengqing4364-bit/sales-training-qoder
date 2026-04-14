@@ -2,7 +2,7 @@
   "mode": "grow",
   "current_issue_id": "M021-S03-T02",
   "current_issue_type": "task",
-  "current_issue_status": "doing",
+  "current_issue_status": "done",
   "pending_issue_ids": [],
   "completed_issue_ids": [
     "M001-S01-T01",
@@ -216,20 +216,29 @@
   "blocked_issue_ids": [],
   "deferred_issue_ids": [],
   "last_modified_files": [
-    "docs/api-contract/prompt-templates.md",
-    "docs/api-contract/voice-runtime.md",
-    "docs/api-contract/personas.md",
-    "docs/api-contract/model-configs.md",
-    ".gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md",
+    "backend/src/common/effectiveness/canonical.py",
+    "backend/src/common/effectiveness/__init__.py",
+    "backend/src/common/conversation/session_evidence.py",
+    "backend/src/common/analytics/history_service.py",
+    "backend/src/common/services/practice_report_service.py",
+    "backend/src/common/conversation/replay.py",
+    "backend/src/agent/capabilities/realtime_scoring.py",
+    "backend/src/sales_bot/websocket/components/stepfun_message_helpers.py",
+    "backend/src/common/db/schemas.py",
+    "backend/src/common/conversation/schemas.py",
+    "backend/tests/contract/test_practice_evidence_contract.py",
+    "backend/tests/unit/test_history_service_evidence_projection.py",
+    "backend/tests/unit/test_realtime_scoring.py",
+    ".gsd/KNOWLEDGE.md",
     ".codex/loop/state.json",
     ".codex/loop/log.md"
   ],
   "last_verification_commands": [
-    "rg -n \"compiled prompt|template source|guardrail|missing var|base_url\" docs/api-contract .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md backend/src/prompt_templates -S",
-    "rg -n \"Admin 变更路由|Authority boundary|canonical evaluation kernel authority entry|instruction_contract_hash|PROMPT_CONTRACT_BASE_URL_REQUIRED\" docs/api-contract/prompt-templates.md docs/api-contract/voice-runtime.md docs/api-contract/personas.md docs/api-contract/model-configs.md .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md -S"
+    "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/test_effectiveness_canonical_kernel.py backend/tests/unit/test_realtime_scoring.py backend/tests/unit/test_history_service_evidence_projection.py -q",
+    "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/contract/test_conclusion_evidence_parity.py backend/tests/contract/test_practice_evidence_contract.py backend/tests/unit/common/test_admin_analytics_service.py backend/tests/unit/test_history_service_evidence_projection.py -x -q"
   ],
-  "last_verification_result": "passed; the exact task-plan grep gate now exposes compiled prompt, guardrail, missing-var, and base_url authority lines across docs/api-contract plus the architecture scan, and the focused authority-routing grep confirms admin guidance now distinguishes prompt-templates, personas, voice-runtime, and model-configs instead of leaving operators to infer runtime impact from code.",
-  "last_success_signal": "M021/S02/T03 wrote the prompt authority line back into durable docs: prompt-templates now documents compiled legacy evaluation/report contracts and their fail-closed diagnostics, personas + voice-runtime document the live StepFun instruction authority and frozen snapshot boundary, model-configs owns the base_url repair path, and the architecture scan now points S03 at the compiled prompt seam instead of the old fake-integration story.",
+  "last_verification_result": "passed; the new canonical-kernel focused unit bundle finished 16/16 green, the exact task-plan contract/admin/history gate finished 49/49 green, and LSP diagnostics were clean on the touched backend files.",
+  "last_success_signal": "M021/S03/T02 now emits one explicit canonical_evaluation_kernel plus compatibility_readers across realtime/report/replay/history projection seams, while legacy rollup fields remain intact and are derived from the same kernel instead of independent formulas.",
   "last_growth_scan": null,
-  "next_action": "Await the next planned issue after M021/S02/T03; the repository now has one durable admin-facing prompt authority map spanning prompt-templates, personas, voice-runtime, model-configs, and the architecture scan."
+  "next_action": "Await M021/S03/T03; web shared types and reader surfaces can now consume canonical_evaluation_kernel / compatibility_readers without guessing sales vs presentation score semantics."
 }

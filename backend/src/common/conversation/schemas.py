@@ -312,6 +312,14 @@ class ReplayDataResponse(BaseModel):
         None,
         description="Projection completeness diagnostics",
     )
+    canonical_evaluation_kernel: dict[str, Any] | None = Field(
+        None,
+        description="Scenario-aware canonical evaluation kernel shared across read surfaces",
+    )
+    compatibility_readers: dict[str, Any] | None = Field(
+        None,
+        description="Legacy-compatible projections derived from the canonical evaluation kernel",
+    )
     presentation_review: PresentationReview | None = Field(
         None,
         description="Page-level PPT review payload for presentation sessions",

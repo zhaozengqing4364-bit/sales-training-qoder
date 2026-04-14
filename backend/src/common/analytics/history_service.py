@@ -119,6 +119,8 @@ class HistorySessionSummary:
     stage_summary: list[dict[str, Any]]
     main_issue: dict[str, Any] | None
     next_goal: dict[str, Any] | None
+    canonical_evaluation_kernel: dict[str, Any] | None = None
+    compatibility_readers: dict[str, Any] | None = None
 
 
 class HistoryService:
@@ -279,6 +281,12 @@ class HistoryService:
                     stage_summary=(projection.stage_summary if projection else []),
                     main_issue=(projection.main_issue if projection else None),
                     next_goal=(projection.next_goal if projection else None),
+                    canonical_evaluation_kernel=(
+                        projection.canonical_evaluation_kernel if projection else None
+                    ),
+                    compatibility_readers=(
+                        projection.compatibility_readers if projection else None
+                    ),
                 )
             )
 

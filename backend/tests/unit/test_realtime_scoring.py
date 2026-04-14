@@ -144,6 +144,37 @@ class TestRealtimeScoringCapability:
         assert "overall_score" in history[-1]
 
     @pytest.mark.asyncio
+    async def test_execute_emits_canonical_kernel_and_compatibility_readers(self, capability, context):
+        await capability.on_session_start(context)
+
+        result = await capability.execute(
+            context,
+            "我们已经有同类客户在 6 个月内回本，本周可以先安排试点和负责人对齐。",
+        )
+
+        kernel = result.data["canonical_evaluation_kernel"]
+        compat = result.data["compatibility_readers"]
+
+        assert kernel["schema_version"] == "evaluation_kernel_v1"
+        assert kernel["scenario_type"] == "sales"
+        assert [item["dimension_id"] for item in kernel["dimensions"]] == [
+            "value_expression",
+            "customer_benefit_connection",
+            "evidence_usage",
+            "objection_handling",
+            "next_step_commitment",
+        ]
+        assert kernel["rollups"]["logic"]["score"] == pytest.approx(
+            compat["practice_session_rollup_fields_v1"]["logic_score"]
+        )
+        assert compat["sales_realtime_score_snapshot_v1"]["overall_score"] == pytest.approx(
+            result.data["overall_score"]
+        )
+        assert list(
+            compat["sales_realtime_score_snapshot_v1"]["dimension_scores"].keys()
+        ) == SALES_DIMENSIONS
+
+    @pytest.mark.asyncio
     async def test_on_session_end_returns_stats(self, capability, context):
         await capability.on_session_start(context)
         await capability.execute(context, "我们能帮助你们降低成本并安排下周试点。")

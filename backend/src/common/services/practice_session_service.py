@@ -27,8 +27,8 @@ from common.db.session_lifecycle import (
 )
 from common.db.voice_policy_snapshot import build_voice_policy_snapshot_ref
 from common.effectiveness import (
+    build_canonical_views,
     build_sales_effectiveness_metrics,
-    build_sales_rollup_scores,
     evaluate_effectiveness_snapshot,
 )
 from common.monitoring.logger import get_logger, get_trace_id
@@ -987,15 +987,18 @@ def _apply_sales_realtime_score_snapshot_to_session(
     if normalized_score_snapshot is None:
         return False
 
-    overall_score = float(normalized_score_snapshot.get("overall_score") or 0.0)
-    rollups = build_sales_rollup_scores(
-        overall_score=overall_score,
+    canonical_kernel, compatibility_readers = build_canonical_views(
+        scenario_type="sales",
+        surface_id="realtime",
+        source_reader_id="sales_realtime_score_snapshot_v1",
+        overall_score=float(normalized_score_snapshot.get("overall_score") or 0.0),
         dimension_scores=normalized_score_snapshot.get("dimension_scores"),
     )
+    rollups = compatibility_readers.get("practice_session_rollup_fields_v1", {})
 
-    session.logic_score = rollups["logic_score"]
-    session.accuracy_score = rollups["accuracy_score"]
-    session.completeness_score = rollups["completeness_score"]
+    session.logic_score = float(rollups.get("logic_score") or 0.0)
+    session.accuracy_score = float(rollups.get("accuracy_score") or 0.0)
+    session.completeness_score = float(rollups.get("completeness_score") or 0.0)
     session.effectiveness_snapshot = None
     return True
 

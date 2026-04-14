@@ -1,3 +1,32 @@
+- time: 2026-04-14T11:11:00+08:00
+  mode: grow
+  item id: M021-S03-T02
+  files changed:
+    - backend/src/common/effectiveness/canonical.py
+    - backend/src/common/effectiveness/__init__.py
+    - backend/src/common/conversation/session_evidence.py
+    - backend/src/common/analytics/history_service.py
+    - backend/src/common/services/practice_report_service.py
+    - backend/src/common/conversation/replay.py
+    - backend/src/agent/capabilities/realtime_scoring.py
+    - backend/src/sales_bot/websocket/components/stepfun_message_helpers.py
+    - backend/src/common/db/schemas.py
+    - backend/src/common/conversation/schemas.py
+    - backend/tests/contract/test_practice_evidence_contract.py
+    - backend/tests/unit/test_history_service_evidence_projection.py
+    - backend/tests/unit/test_realtime_scoring.py
+    - .gsd/KNOWLEDGE.md
+    - .codex/loop/state.json
+    - .codex/loop/log.md
+  summary: Implemented the canonical evaluation kernel as a real runtime/read-side payload instead of a schema-only note: `common.effectiveness.canonical` now builds one scenario-aware kernel plus compatibility readers, realtime scoring emits and persists it, session-evidence/history/report/replay now expose the same kernel while still returning legacy rollup fields, and the focused contract/history/realtime tests lock the shared-kernel + compat-reader behavior in place.
+  verification commands:
+    - backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/test_effectiveness_canonical_kernel.py backend/tests/unit/test_realtime_scoring.py backend/tests/unit/test_history_service_evidence_projection.py -q
+    - backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/contract/test_conclusion_evidence_parity.py backend/tests/contract/test_practice_evidence_contract.py backend/tests/unit/common/test_admin_analytics_service.py backend/tests/unit/test_history_service_evidence_projection.py -x -q
+    - lsp diagnostics backend/src/common/effectiveness/canonical.py backend/src/common/conversation/session_evidence.py backend/src/common/analytics/history_service.py backend/src/common/services/practice_report_service.py backend/src/common/conversation/replay.py backend/src/agent/capabilities/realtime_scoring.py backend/src/common/db/schemas.py backend/src/common/conversation/schemas.py backend/src/common/api/practice.py backend/src/common/services/practice_session_service.py
+  verification results: passed; the new canonical-kernel focused unit bundle finished 16/16 green, the exact task-plan verification bundle finished 49/49 green, and LSP diagnostics stayed clean on every touched backend file.
+  success signal status: downstream T03 web readers can now distinguish canonical truth from compatibility mirrors directly from API payloads instead of reverse-engineering sales/presentation score semantics from top-level legacy fields.
+  rollback note: if later work changes the canonical payload shape, update `common.effectiveness.canonical`, StepFun score-snapshot normalization, session-evidence/report/replay/history projections, and the focused realtime/history/practice-contract tests together or persisted message snapshots will silently drop the new kernel view again.
+
 - time: 2026-04-14T10:57:30+08:00
   mode: grow
   item id: M021-S03-T02

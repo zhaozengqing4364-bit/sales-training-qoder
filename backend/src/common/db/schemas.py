@@ -480,6 +480,8 @@ class SessionReport(BaseModel):
     evaluable: bool | None = None
     not_evaluable_reason: str | None = None
     evidence_completeness: dict[str, Any] | None = None
+    canonical_evaluation_kernel: dict[str, Any] | None = None
+    compatibility_readers: dict[str, Any] | None = None
     presentation_review: PresentationReview | None = None
     retry_entry: dict[str, Any] | None = None
     audio_audit: "AudioAuditPayloadSchema | None" = None

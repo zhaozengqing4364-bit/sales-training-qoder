@@ -10,6 +10,7 @@ from typing import Any, ClassVar
 from agent.capabilities.base import BaseCapability, CapabilityConfig, CapabilityResult
 from agent.capabilities.registry import CapabilityRegistry
 from agent.context import AgentContext
+from common.effectiveness import build_canonical_views
 from common.monitoring.logger import get_logger
 
 logger = get_logger(__name__)
@@ -240,6 +241,13 @@ class RealtimeScoringCapability(BaseCapability):
                 sum(canonical_scores[dim["name"]] * float(dim["weight"]) for dim in dimensions),
                 2,
             )
+            canonical_kernel, compatibility_readers = build_canonical_views(
+                scenario_type="sales",
+                surface_id="realtime",
+                source_reader_id="sales_realtime_score_snapshot_v1",
+                overall_score=overall_score,
+                dimension_scores=canonical_scores,
+            )
 
             history_key = "score_history"
             history = context.state.get(history_key, [])
@@ -250,6 +258,8 @@ class RealtimeScoringCapability(BaseCapability):
                     "overall_score": overall_score,
                     "dimensions": dimension_scores,
                     "dimension_scores": canonical_scores,
+                    "canonical_evaluation_kernel": canonical_kernel,
+                    "compatibility_readers": compatibility_readers,
                 }
             )
             if len(history) > MAX_SCORE_HISTORY_SIZE:
@@ -272,6 +282,8 @@ class RealtimeScoringCapability(BaseCapability):
                     "overall_score": overall_score,
                     "dimensions": dimension_scores,
                     "dimension_scores": canonical_scores,
+                    "canonical_evaluation_kernel": canonical_kernel,
+                    "compatibility_readers": compatibility_readers,
                     "feedback": feedback,
                 },
                 feedback=feedback,

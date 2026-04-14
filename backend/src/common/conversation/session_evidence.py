@@ -17,6 +17,7 @@ from common.db.models import PracticeSession, SessionStatus
 from common.effectiveness import (
     CANONICAL_EVALUATION_KERNEL_VERSION,
     CANONICAL_ROLLUP_IDS,
+    build_canonical_views,
     evaluate_effectiveness_snapshot,
     get_canonical_dimension_definitions,
     get_surface_reader_plan,
@@ -120,6 +121,8 @@ class SessionEvidenceProjection:
     not_evaluable_reason: str | None
     evidence_completeness: dict[str, Any]
     legacy_score_key_used: bool
+    canonical_evaluation_kernel: dict[str, Any] | None = None
+    compatibility_readers: dict[str, Any] | None = None
     sales_alignment_used: bool = False
     sales_alignment_stage_key: str | None = None
     sales_alignment_focus_type: str | None = None
@@ -305,34 +308,36 @@ class SessionEvidenceService:
         dimension_scores = review.get("dimension_scores")
         if not isinstance(dimension_scores, list):
             dimension_scores = []
-        dimension_values = {
-            str(item.get("name")): float(item.get("score") or 0.0)
-            for item in dimension_scores
-            if isinstance(item, dict)
-        }
-
-        remainder_scores = [
-            dimension_values.get("专业性"),
-            dimension_values.get("生动性"),
-            dimension_values.get("互动问答"),
-            dimension_values.get("其他表现"),
-        ]
-        remainder_scores = [score for score in remainder_scores if score is not None]
-
-        projection.logic_score = float(
-            dimension_values.get("流畅连贯性", projection.logic_score)
-        )
-        projection.accuracy_score = float(
-            dimension_values.get("准确性", projection.accuracy_score)
-        )
-        if remainder_scores:
-            projection.completeness_score = round(
-                sum(remainder_scores) / len(remainder_scores),
-                2,
-            )
         overall_score = review.get("overall_score")
-        if isinstance(overall_score, (int, float)):
-            projection.overall_score = round(float(overall_score), 2)
+        canonical_kernel, compatibility_readers = build_canonical_views(
+            scenario_type="presentation",
+            surface_id="report",
+            source_reader_id="presentation_review_dimensions_v1",
+            overall_score=(float(overall_score) if isinstance(overall_score, (int, float)) else None),
+            dimension_details=dimension_scores,
+            dimension_scores={
+                str(item.get("name")): float(item.get("score") or 0.0)
+                for item in dimension_scores
+                if isinstance(item, dict)
+            },
+            logic_score=projection.logic_score,
+            accuracy_score=projection.accuracy_score,
+            completeness_score=projection.completeness_score,
+        )
+        rollup_fields = compatibility_readers.get("practice_session_rollup_fields_v1", {})
+
+        projection.logic_score = float(rollup_fields.get("logic_score") or projection.logic_score)
+        projection.accuracy_score = float(
+            rollup_fields.get("accuracy_score") or projection.accuracy_score
+        )
+        projection.completeness_score = float(
+            rollup_fields.get("completeness_score") or projection.completeness_score
+        )
+        projection.overall_score = float(
+            rollup_fields.get("overall_score") or projection.overall_score
+        )
+        projection.canonical_evaluation_kernel = canonical_kernel
+        projection.compatibility_readers = compatibility_readers
         projection.stage_summary = []
         projection.effectiveness_snapshot = None
         projection.pass_flags = None
@@ -696,6 +701,36 @@ class SessionEvidenceService:
             normalized_messages,
         )
         overall_score = round((logic_score + accuracy_score + completeness_score) / 3.0, 2)
+        latest_score_snapshot = cls._get_latest_score_snapshot(normalized_messages)
+        canonical_kernel, compatibility_readers = build_canonical_views(
+            scenario_type=resolved_scenario_type,
+            surface_id="report",
+            source_reader_id=(
+                "sales_realtime_score_snapshot_v1"
+                if resolved_scenario_type == "sales" and isinstance(latest_score_snapshot, dict)
+                else (
+                    "presentation_review_dimensions_v1"
+                    if resolved_scenario_type == "presentation" and isinstance(latest_score_snapshot, dict)
+                    else "session_evidence_projection_v1"
+                )
+            ),
+            overall_score=overall_score,
+            dimension_scores=(
+                latest_score_snapshot.get("dimension_scores")
+                if isinstance(latest_score_snapshot, dict)
+                else None
+            ),
+            logic_score=logic_score,
+            accuracy_score=accuracy_score,
+            completeness_score=completeness_score,
+        )
+        rollup_fields = compatibility_readers.get("practice_session_rollup_fields_v1", {})
+        logic_score = float(rollup_fields.get("logic_score") or logic_score)
+        accuracy_score = float(rollup_fields.get("accuracy_score") or accuracy_score)
+        completeness_score = float(
+            rollup_fields.get("completeness_score") or completeness_score
+        )
+        overall_score = float(rollup_fields.get("overall_score") or overall_score)
         snapshot = ensure_effectiveness_snapshot(
             session,
             resolved_scores=(logic_score, accuracy_score, completeness_score),
@@ -832,6 +867,8 @@ class SessionEvidenceService:
             ),
             evidence_completeness=evidence_completeness,
             legacy_score_key_used=legacy_score_key_used,
+            canonical_evaluation_kernel=canonical_kernel,
+            compatibility_readers=compatibility_readers,
             sales_alignment_used=sales_alignment_used,
             sales_alignment_stage_key=sales_alignment_stage_key,
             sales_alignment_focus_type=sales_alignment_focus_type,

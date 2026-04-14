@@ -573,3 +573,79 @@ def test_build_supervisor_progress_snapshot_groups_truthfully_and_flags_repeated
     assert logged.kwargs["repeated_next_goals"] == week_snapshot["repeated_next_goals"]
     assert logged.kwargs["should_switch_focus"] is True
     assert logged.kwargs["recommendation_reason"] == "stalled_repeated_focus"
+
+
+def test_build_history_entries_attach_canonical_kernel_and_compat_readers() -> None:
+    sales_session = _make_session(
+        status="completed",
+        start_time=datetime(2026, 3, 22, 12, 0, tzinfo=UTC),
+        scenario_type="sales",
+        scenario_name="销售对练",
+        logic_score=80.0,
+        accuracy_score=69.5,
+        completeness_score=71.5,
+        total_duration_seconds=180,
+        effectiveness_snapshot=_make_stale_sales_snapshot(),
+    )
+    presentation_session = _make_session(
+        status="completed",
+        start_time=datetime(2026, 3, 23, 12, 0, tzinfo=UTC),
+        scenario_type="presentation",
+        scenario_name="演讲训练",
+        logic_score=90.0,
+        accuracy_score=84.0,
+        completeness_score=87.0,
+        total_duration_seconds=180,
+        effectiveness_snapshot=_make_effectiveness_snapshot(
+            evaluable=True,
+            reason=None,
+        ),
+    )
+
+    summaries = HistoryService.build_history_entries(
+        [sales_session, presentation_session],
+        messages_by_session={
+            sales_session.session_id: [
+                _make_message(
+                    session_id=sales_session.session_id,
+                    turn_number=1,
+                    timestamp=sales_session.start_time,
+                    sales_stage="objection",
+                    score_snapshot={
+                        "overall_score": 88.0,
+                        "dimension_scores": {
+                            "价值表达": 86.0,
+                            "客户收益连接": 84.0,
+                            "证据使用": 89.0,
+                            "异议处理": 81.0,
+                            "推进下一步": 79.0,
+                        },
+                    },
+                )
+            ],
+            presentation_session.session_id: [],
+        },
+    )
+
+    sales_summary = next(item for item in summaries if item.scenario_type == "sales")
+    presentation_summary = next(
+        item for item in summaries if item.scenario_type == "presentation"
+    )
+
+    assert sales_summary.canonical_evaluation_kernel["schema_version"] == "evaluation_kernel_v1"
+    assert sales_summary.canonical_evaluation_kernel["scenario_type"] == "sales"
+    assert sales_summary.compatibility_readers["practice_session_rollup_fields_v1"]["logic_score"] == pytest.approx(
+        sales_summary.logic_score
+    )
+    assert sales_summary.compatibility_readers["sales_realtime_score_snapshot_v1"]["overall_score"] == pytest.approx(
+        sales_summary.overall_score
+    )
+
+    assert presentation_summary.canonical_evaluation_kernel["schema_version"] == "evaluation_kernel_v1"
+    assert presentation_summary.canonical_evaluation_kernel["scenario_type"] == "presentation"
+    assert presentation_summary.compatibility_readers["practice_session_rollup_fields_v1"]["accuracy_score"] == pytest.approx(
+        presentation_summary.accuracy_score
+    )
+    assert presentation_summary.compatibility_readers["presentation_review_dimensions_v1"]["overall_score"] == pytest.approx(
+        presentation_summary.overall_score
+    )

@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "exported_at": "2026-04-14T02:53:32.272Z",
+  "exported_at": "2026-04-14T03:17:45.691Z",
   "milestones": [
     {
       "id": "M001",
@@ -13383,19 +13383,32 @@
       "milestone_id": "M021",
       "slice_id": "S03",
       "id": "T02",
-      "title": "实现 canonical evaluation kernel 与 compatibility readers",
-      "status": "pending",
-      "one_liner": "",
-      "narrative": "",
-      "verification_result": "",
+      "title": "Added a shared canonical evaluation kernel plus compatibility readers across realtime scoring and projection-backed report/replay/history surfaces.",
+      "status": "complete",
+      "one_liner": "Added a shared canonical evaluation kernel plus compatibility readers across realtime scoring and projection-backed report/replay/history surfaces.",
+      "narrative": "I turned the T01 schema inventory into a real shared runtime/read-side contract. In `backend/src/common/effectiveness/canonical.py` I added builders that materialize one scenario-aware `canonical_evaluation_kernel` plus `compatibility_readers` for sales and presentation instead of leaving the canonical schema as metadata only. I wired realtime scoring to emit the kernel alongside the legacy score payload and updated StepFun score-snapshot normalization so those new fields survive persistence into `ConversationMessage.score_snapshot`. In `backend/src/common/conversation/session_evidence.py` I made the shared projection build and carry the canonical kernel, derive legacy rollup fields from the same compat reader, and project presentation review data through the same kernel contract. I then threaded that projection through `common/analytics/history_service.py`, `common/services/practice_report_service.py`, and `common/conversation/replay.py`, plus the response schemas in `common/db/schemas.py` and `common/conversation/schemas.py`, so report/replay/history-facing consumers can read explicit canonical truth while old top-level fields remain stable. I also updated the realtime session write path in `common/api/practice.py` and `common/services/practice_session_service.py` to derive persisted rollups from the same canonical kernel builder, saved decision D237 for the explicit kernel+compat exposure strategy, and wrote a knowledge note about StepFun score-snapshot normalization silently dropping new fields unless it is extended in lockstep.",
+      "verification_result": "Verified in three layers. First, I did a red-green cycle with new focused tests that required realtime scoring, history summaries, and report/replay contracts to expose `canonical_evaluation_kernel` and `compatibility_readers`; those now pass. Second, I ran the exact task-plan verification command and it finished green across conclusion-evidence parity, practice evidence contract, admin analytics, and history projection. Third, I ran LSP diagnostics on every touched backend authority file and got no diagnostics, confirming the new kernel/plumbing changes are syntactically and structurally clean.",
       "duration": "",
-      "completed_at": null,
+      "completed_at": "2026-04-14T03:17:45.596Z",
       "blocker_discovered": false,
-      "deviations": "",
-      "known_issues": "",
-      "key_files": [],
-      "key_decisions": [],
-      "full_summary_md": "",
+      "deviations": "Added score-snapshot normalization and API schema plumbing (`sales_bot/websocket/components/stepfun_message_helpers.py`, `common/db/schemas.py`, `common/conversation/schemas.py`) so the new kernel survives persistence and serialization. This was a local implementation adaptation required to make the planned canonical contract actually durable across realtime -> storage -> read-side flows.",
+      "known_issues": "Pre-existing focused-test warnings from pytest-cov (no data collected for that focused subset) and third-party Python 3.14 deprecation warnings from LangChain/Chroma remain, but the product code and task verification gates are green.",
+      "key_files": [
+        "backend/src/common/effectiveness/canonical.py",
+        "backend/src/common/conversation/session_evidence.py",
+        "backend/src/common/analytics/history_service.py",
+        "backend/src/common/services/practice_report_service.py",
+        "backend/src/common/conversation/replay.py",
+        "backend/src/agent/capabilities/realtime_scoring.py",
+        "backend/src/sales_bot/websocket/components/stepfun_message_helpers.py",
+        "backend/tests/contract/test_practice_evidence_contract.py",
+        "backend/tests/unit/test_history_service_evidence_projection.py",
+        "backend/tests/unit/test_realtime_scoring.py"
+      ],
+      "key_decisions": [
+        "D237 — emit explicit canonical_evaluation_kernel plus compatibility_readers while preserving legacy rollup fields during the migration."
+      ],
+      "full_summary_md": "---\nid: T02\nparent: S03\nmilestone: M021\nkey_files:\n  - backend/src/common/effectiveness/canonical.py\n  - backend/src/common/conversation/session_evidence.py\n  - backend/src/common/analytics/history_service.py\n  - backend/src/common/services/practice_report_service.py\n  - backend/src/common/conversation/replay.py\n  - backend/src/agent/capabilities/realtime_scoring.py\n  - backend/src/sales_bot/websocket/components/stepfun_message_helpers.py\n  - backend/tests/contract/test_practice_evidence_contract.py\n  - backend/tests/unit/test_history_service_evidence_projection.py\n  - backend/tests/unit/test_realtime_scoring.py\nkey_decisions:\n  - D237 — emit explicit canonical_evaluation_kernel plus compatibility_readers while preserving legacy rollup fields during the migration.\nduration: \nverification_result: passed\ncompleted_at: 2026-04-14T03:17:45.589Z\nblocker_discovered: false\n---\n\n# T02: Added a shared canonical evaluation kernel plus compatibility readers across realtime scoring and projection-backed report/replay/history surfaces.\n\n**Added a shared canonical evaluation kernel plus compatibility readers across realtime scoring and projection-backed report/replay/history surfaces.**\n\n## What Happened\n\nI turned the T01 schema inventory into a real shared runtime/read-side contract. In `backend/src/common/effectiveness/canonical.py` I added builders that materialize one scenario-aware `canonical_evaluation_kernel` plus `compatibility_readers` for sales and presentation instead of leaving the canonical schema as metadata only. I wired realtime scoring to emit the kernel alongside the legacy score payload and updated StepFun score-snapshot normalization so those new fields survive persistence into `ConversationMessage.score_snapshot`. In `backend/src/common/conversation/session_evidence.py` I made the shared projection build and carry the canonical kernel, derive legacy rollup fields from the same compat reader, and project presentation review data through the same kernel contract. I then threaded that projection through `common/analytics/history_service.py`, `common/services/practice_report_service.py`, and `common/conversation/replay.py`, plus the response schemas in `common/db/schemas.py` and `common/conversation/schemas.py`, so report/replay/history-facing consumers can read explicit canonical truth while old top-level fields remain stable. I also updated the realtime session write path in `common/api/practice.py` and `common/services/practice_session_service.py` to derive persisted rollups from the same canonical kernel builder, saved decision D237 for the explicit kernel+compat exposure strategy, and wrote a knowledge note about StepFun score-snapshot normalization silently dropping new fields unless it is extended in lockstep.\n\n## Verification\n\nVerified in three layers. First, I did a red-green cycle with new focused tests that required realtime scoring, history summaries, and report/replay contracts to expose `canonical_evaluation_kernel` and `compatibility_readers`; those now pass. Second, I ran the exact task-plan verification command and it finished green across conclusion-evidence parity, practice evidence contract, admin analytics, and history projection. Third, I ran LSP diagnostics on every touched backend authority file and got no diagnostics, confirming the new kernel/plumbing changes are syntactically and structurally clean.\n\n## Verification Evidence\n\n| # | Command | Exit Code | Verdict | Duration |\n|---|---------|-----------|---------|----------|\n| 1 | `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/test_effectiveness_canonical_kernel.py backend/tests/unit/test_realtime_scoring.py backend/tests/unit/test_history_service_evidence_projection.py -q` | 0 | ✅ pass | 4294ms |\n| 2 | `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/contract/test_conclusion_evidence_parity.py backend/tests/contract/test_practice_evidence_contract.py backend/tests/unit/common/test_admin_analytics_service.py backend/tests/unit/test_history_service_evidence_projection.py -x -q` | 0 | ✅ pass | 21404ms |\n\n## Deviations\n\nAdded score-snapshot normalization and API schema plumbing (`sales_bot/websocket/components/stepfun_message_helpers.py`, `common/db/schemas.py`, `common/conversation/schemas.py`) so the new kernel survives persistence and serialization. This was a local implementation adaptation required to make the planned canonical contract actually durable across realtime -> storage -> read-side flows.\n\n## Known Issues\n\nPre-existing focused-test warnings from pytest-cov (no data collected for that focused subset) and third-party Python 3.14 deprecation warnings from LangChain/Chroma remain, but the product code and task verification gates are green.\n\n## Files Created/Modified\n\n- `backend/src/common/effectiveness/canonical.py`\n- `backend/src/common/conversation/session_evidence.py`\n- `backend/src/common/analytics/history_service.py`\n- `backend/src/common/services/practice_report_service.py`\n- `backend/src/common/conversation/replay.py`\n- `backend/src/agent/capabilities/realtime_scoring.py`\n- `backend/src/sales_bot/websocket/components/stepfun_message_helpers.py`\n- `backend/tests/contract/test_practice_evidence_contract.py`\n- `backend/tests/unit/test_history_service_evidence_projection.py`\n- `backend/tests/unit/test_realtime_scoring.py`\n",
       "description": "- 在 backend shared effectiveness/session-evidence/read-side services 中实现 canonical kernel，并让 realtime write path 与 report/history/admin/replay 统一读它。\n- 保留旧字段通过 compatibility readers 输出，避免一次性打断当前前端 surfaces。\n- 对 sales 与 presentation 的差异使用同一 kernel 下的 scenario-aware schema，而不是两套完全不同 contract。",
       "estimate": "3h",
       "files": [
@@ -16871,6 +16884,18 @@
       "decision": "Canonical evaluation kernel shape for sales and presentation read-side convergence",
       "choice": "Adopt a scenario-aware canonical dimension catalog under shared logic/accuracy/completeness rollups, and treat SessionEvidence projection as the primary canonical reader while legacy score/report paths remain compatibility readers.",
       "rationale": "Current score truth is split across realtime score snapshots, persisted rollup columns, effectiveness_snapshot, presentation review payloads, and comprehensive report surfaces. A shared rollup contract keeps current DB/API fields stable while allowing sales and presentation to use distinct dimension sets without inventing separate kernels. Marking report/replay/history/admin as SessionEvidence-based canonical consumers gives downstream slices one authoritative read-model to migrate toward while legacy comprehensive report and raw session fields stay available as mirrors during transition.",
+      "revisable": "Yes",
+      "made_by": "agent",
+      "superseded_by": null
+    },
+    {
+      "seq": 1607,
+      "id": "D237",
+      "when_context": "M021/S03/T02",
+      "scope": "architecture",
+      "decision": "How canonical evaluation data is exposed during the S03 migration",
+      "choice": "Emit an explicit canonical_evaluation_kernel plus compatibility_readers on realtime/report/replay/history-facing projections while keeping legacy top-level rollup fields unchanged during the transition.",
+      "rationale": "This gives downstream consumers one scenario-aware source of truth for dimensions and rollups immediately, while compatibility readers preserve existing report/replay/history/admin contracts so T03 can migrate web readers without reintroducing score drift.",
       "revisable": "Yes",
       "made_by": "agent",
       "superseded_by": null
@@ -22420,6 +22445,28 @@
       "verdict": "unknown (coerced from string)",
       "duration_ms": 0,
       "created_at": "2026-04-14T02:53:32.174Z"
+    },
+    {
+      "id": 510,
+      "task_id": "T02",
+      "slice_id": "S03",
+      "milestone_id": "M021",
+      "command": "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/test_effectiveness_canonical_kernel.py backend/tests/unit/test_realtime_scoring.py backend/tests/unit/test_history_service_evidence_projection.py -q",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 4294,
+      "created_at": "2026-04-14T03:17:45.597Z"
+    },
+    {
+      "id": 511,
+      "task_id": "T02",
+      "slice_id": "S03",
+      "milestone_id": "M021",
+      "command": "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/contract/test_conclusion_evidence_parity.py backend/tests/contract/test_practice_evidence_contract.py backend/tests/unit/common/test_admin_analytics_service.py backend/tests/unit/test_history_service_evidence_projection.py -x -q",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 21404,
+      "created_at": "2026-04-14T03:17:45.599Z"
     }
   ]
 }

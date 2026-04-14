@@ -69,6 +69,14 @@ def normalize_score_snapshot(score_snapshot: dict[str, Any] | None) -> dict[str,
         if normalized_suggestions:
             normalized["suggestions"] = normalized_suggestions
 
+    canonical_kernel = score_snapshot.get("canonical_evaluation_kernel")
+    if isinstance(canonical_kernel, dict) and canonical_kernel:
+        normalized["canonical_evaluation_kernel"] = canonical_kernel
+
+    compatibility_readers = score_snapshot.get("compatibility_readers")
+    if isinstance(compatibility_readers, dict) and compatibility_readers:
+        normalized["compatibility_readers"] = compatibility_readers
+
     return normalized or None
 
 

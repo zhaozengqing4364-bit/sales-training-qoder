@@ -29,7 +29,7 @@ S03 结束后，realtime/report/history/admin/replay 至少共享一套 canonica
   - Files: `.gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md`, `backend/src/common/effectiveness`, `backend/src/common/conversation/session_evidence.py`, `backend/src/common/analytics`, `web/src/lib/api/types.ts`
   - Verify: rg -n "logic_score|accuracy_score|completeness_score|overall_score|dimension_scores|effectiveness_snapshot|leaderboard|history" backend/src/common backend/src/agent web/src/lib/api/types.ts
 
-- [ ] **T02: 实现 canonical evaluation kernel 与 compatibility readers** `est:3h`
+- [x] **T02: 实现 canonical evaluation kernel 与 compatibility readers** `est:3h`
   - 在 backend shared effectiveness/session-evidence/read-side services 中实现 canonical kernel，并让 realtime write path 与 report/history/admin/replay 统一读它。
 - 保留旧字段通过 compatibility readers 输出，避免一次性打断当前前端 surfaces。
 - 对 sales 与 presentation 的差异使用同一 kernel 下的 scenario-aware schema，而不是两套完全不同 contract。

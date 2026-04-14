@@ -279,6 +279,8 @@ class ReplayService:
                     None if is_presentation_scenario else projection.not_evaluable_reason
                 ),
                 "evidence_completeness": projection.evidence_completeness,
+                "canonical_evaluation_kernel": projection.canonical_evaluation_kernel,
+                "compatibility_readers": projection.compatibility_readers,
                 "presentation_review": presentation_review,
             }
 
