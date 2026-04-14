@@ -389,6 +389,9 @@ def _apply_sales_realtime_score_snapshot_to_session(
         source_reader_id="sales_realtime_score_snapshot_v1",
         overall_score=float(normalized_score_snapshot.get("overall_score") or 0.0),
         dimension_scores=normalized_score_snapshot.get("dimension_scores"),
+        methodology_context={
+            "current_stage": normalized_score_snapshot.get("stage_name"),
+        },
     )
     rollups = compatibility_readers.get("practice_session_rollup_fields_v1", {})
 

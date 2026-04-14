@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "exported_at": "2026-04-14T05:14:19.693Z",
+  "exported_at": "2026-04-14T05:31:35.198Z",
   "milestones": [
     {
       "id": "M001",
@@ -13687,19 +13687,35 @@
       "milestone_id": "M022",
       "slice_id": "S01",
       "id": "T02",
-      "title": "把 rubric contract 接入 realtime 与 read-side",
-      "status": "pending",
-      "one_liner": "",
-      "narrative": "",
-      "verification_result": "",
+      "title": "Wired methodology-aware rubric summaries into sales canonical kernels and compatibility readers for realtime, report/replay, and history surfaces.",
+      "status": "complete",
+      "one_liner": "Wired methodology-aware rubric summaries into sales canonical kernels and compatibility readers for realtime, report/replay, and history surfaces.",
+      "narrative": "I connected the T01 sales methodology contract into the shared effectiveness runtime/read-side path instead of letting each surface reinterpret rubric meaning on its own. `backend/src/common/effectiveness/canonical.py` now attaches sales-only methodology metadata to canonical dimension payloads, emits an additive `canonical_evaluation_kernel.methodology` summary, and mirrors that same summary through a new compatibility reader `sales_methodology_rubric_v1` on sales realtime/report/replay/history/admin surfaces. `backend/src/common/effectiveness/methodology.py` now owns the rubric-to-dimension map plus the cross-surface methodology summary builder, while `common.effectiveness.__init__` exports those helpers for shared use. `backend/src/agent/capabilities/realtime_scoring.py` now passes stage context into the shared builder so live scoring snapshots expose the methodology summary immediately. `backend/src/common/conversation/session_evidence.py` rebuilds the final report/read-side kernel after sales alignment so report/replay/history consumers read methodology status from the same aligned stage + main_issue + next_goal + claim_truth context instead of stale session rows. I also threaded the optional stage context through the two realtime snapshot-to-session compatibility paths in `backend/src/common/services/practice_session_service.py` and `backend/src/common/api/practice.py` so persisted realtime score snapshots stay on the same builder contract. Focused tests were extended at the contract, canonical-kernel, realtime, report/replay, and history layers so the same rubric summary is asserted across runtime and manager-facing read-side consumers.",
+      "verification_result": "Ran the fresh focused methodology proof bundle after the implementation landed: `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/test_sales_methodology_contract.py backend/tests/unit/test_effectiveness_canonical_kernel.py backend/tests/unit/test_realtime_scoring.py backend/tests/unit/test_history_service_evidence_projection.py backend/tests/contract/test_practice_evidence_contract.py -k \"methodology or canonical_kernel or attach_canonical_kernel or emits_canonical_kernel or same_kernel\" -x -q`, which finished 8 selected tests green and proved the new shared methodology reader on contract, realtime, report/replay, and history surfaces. Then ran the exact task-plan verification command `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests -k \"sales and (report or replay or history or analytics)\" -x -q`, which finished 24 selected tests green. Finally checked LSP diagnostics on the touched Python files in `common/effectiveness`, `agent/capabilities/realtime_scoring.py`, `common/conversation/session_evidence.py`, `common/services/practice_session_service.py`, and `common/api/practice.py`; all returned clean.",
       "duration": "",
-      "completed_at": null,
+      "completed_at": "2026-04-14T05:31:35.115Z",
       "blocker_discovered": false,
-      "deviations": "",
-      "known_issues": "",
-      "key_files": [],
-      "key_decisions": [],
-      "full_summary_md": "",
+      "deviations": "None.",
+      "known_issues": "Pre-existing pytest-cov 'module-not-imported / no-data-collected' warnings still appear on focused repo-root backend pytest commands, but the verification suites exited 0 and the task-specific assertions all passed.",
+      "key_files": [
+        "backend/src/common/effectiveness/canonical.py",
+        "backend/src/common/effectiveness/methodology.py",
+        "backend/src/common/effectiveness/__init__.py",
+        "backend/src/agent/capabilities/realtime_scoring.py",
+        "backend/src/common/conversation/session_evidence.py",
+        "backend/src/common/services/practice_session_service.py",
+        "backend/src/common/api/practice.py",
+        "backend/tests/unit/test_sales_methodology_contract.py",
+        "backend/tests/unit/test_effectiveness_canonical_kernel.py",
+        "backend/tests/unit/test_realtime_scoring.py",
+        "backend/tests/unit/test_history_service_evidence_projection.py",
+        "backend/tests/contract/test_practice_evidence_contract.py"
+      ],
+      "key_decisions": [
+        "Expose methodology semantics additively via `canonical_evaluation_kernel.methodology` and mirror the same payload through `compatibility_readers.sales_methodology_rubric_v1` instead of inventing new top-level report/realtime fields.",
+        "Derive sales methodology status only inside the shared canonical builder from dimension scores plus optional stage / main_issue / next_goal / claim_truth context so realtime and read-side consumers cannot drift."
+      ],
+      "full_summary_md": "---\nid: T02\nparent: S01\nmilestone: M022\nkey_files:\n  - backend/src/common/effectiveness/canonical.py\n  - backend/src/common/effectiveness/methodology.py\n  - backend/src/common/effectiveness/__init__.py\n  - backend/src/agent/capabilities/realtime_scoring.py\n  - backend/src/common/conversation/session_evidence.py\n  - backend/src/common/services/practice_session_service.py\n  - backend/src/common/api/practice.py\n  - backend/tests/unit/test_sales_methodology_contract.py\n  - backend/tests/unit/test_effectiveness_canonical_kernel.py\n  - backend/tests/unit/test_realtime_scoring.py\n  - backend/tests/unit/test_history_service_evidence_projection.py\n  - backend/tests/contract/test_practice_evidence_contract.py\nkey_decisions:\n  - Expose methodology semantics additively via `canonical_evaluation_kernel.methodology` and mirror the same payload through `compatibility_readers.sales_methodology_rubric_v1` instead of inventing new top-level report/realtime fields.\n  - Derive sales methodology status only inside the shared canonical builder from dimension scores plus optional stage / main_issue / next_goal / claim_truth context so realtime and read-side consumers cannot drift.\nduration: \nverification_result: passed\ncompleted_at: 2026-04-14T05:31:35.114Z\nblocker_discovered: false\n---\n\n# T02: Wired methodology-aware rubric summaries into sales canonical kernels and compatibility readers for realtime, report/replay, and history surfaces.\n\n**Wired methodology-aware rubric summaries into sales canonical kernels and compatibility readers for realtime, report/replay, and history surfaces.**\n\n## What Happened\n\nI connected the T01 sales methodology contract into the shared effectiveness runtime/read-side path instead of letting each surface reinterpret rubric meaning on its own. `backend/src/common/effectiveness/canonical.py` now attaches sales-only methodology metadata to canonical dimension payloads, emits an additive `canonical_evaluation_kernel.methodology` summary, and mirrors that same summary through a new compatibility reader `sales_methodology_rubric_v1` on sales realtime/report/replay/history/admin surfaces. `backend/src/common/effectiveness/methodology.py` now owns the rubric-to-dimension map plus the cross-surface methodology summary builder, while `common.effectiveness.__init__` exports those helpers for shared use. `backend/src/agent/capabilities/realtime_scoring.py` now passes stage context into the shared builder so live scoring snapshots expose the methodology summary immediately. `backend/src/common/conversation/session_evidence.py` rebuilds the final report/read-side kernel after sales alignment so report/replay/history consumers read methodology status from the same aligned stage + main_issue + next_goal + claim_truth context instead of stale session rows. I also threaded the optional stage context through the two realtime snapshot-to-session compatibility paths in `backend/src/common/services/practice_session_service.py` and `backend/src/common/api/practice.py` so persisted realtime score snapshots stay on the same builder contract. Focused tests were extended at the contract, canonical-kernel, realtime, report/replay, and history layers so the same rubric summary is asserted across runtime and manager-facing read-side consumers.\n\n## Verification\n\nRan the fresh focused methodology proof bundle after the implementation landed: `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/test_sales_methodology_contract.py backend/tests/unit/test_effectiveness_canonical_kernel.py backend/tests/unit/test_realtime_scoring.py backend/tests/unit/test_history_service_evidence_projection.py backend/tests/contract/test_practice_evidence_contract.py -k \"methodology or canonical_kernel or attach_canonical_kernel or emits_canonical_kernel or same_kernel\" -x -q`, which finished 8 selected tests green and proved the new shared methodology reader on contract, realtime, report/replay, and history surfaces. Then ran the exact task-plan verification command `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests -k \"sales and (report or replay or history or analytics)\" -x -q`, which finished 24 selected tests green. Finally checked LSP diagnostics on the touched Python files in `common/effectiveness`, `agent/capabilities/realtime_scoring.py`, `common/conversation/session_evidence.py`, `common/services/practice_session_service.py`, and `common/api/practice.py`; all returned clean.\n\n## Verification Evidence\n\n| # | Command | Exit Code | Verdict | Duration |\n|---|---------|-----------|---------|----------|\n| 1 | `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/test_sales_methodology_contract.py backend/tests/unit/test_effectiveness_canonical_kernel.py backend/tests/unit/test_realtime_scoring.py backend/tests/unit/test_history_service_evidence_projection.py backend/tests/contract/test_practice_evidence_contract.py -k \"methodology or canonical_kernel or attach_canonical_kernel or emits_canonical_kernel or same_kernel\" -x -q` | 0 | ✅ pass | 5320ms |\n| 2 | `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests -k \"sales and (report or replay or history or analytics)\" -x -q` | 0 | ✅ pass | 7435ms |\n\n## Deviations\n\nNone.\n\n## Known Issues\n\nPre-existing pytest-cov 'module-not-imported / no-data-collected' warnings still appear on focused repo-root backend pytest commands, but the verification suites exited 0 and the task-specific assertions all passed.\n\n## Files Created/Modified\n\n- `backend/src/common/effectiveness/canonical.py`\n- `backend/src/common/effectiveness/methodology.py`\n- `backend/src/common/effectiveness/__init__.py`\n- `backend/src/agent/capabilities/realtime_scoring.py`\n- `backend/src/common/conversation/session_evidence.py`\n- `backend/src/common/services/practice_session_service.py`\n- `backend/src/common/api/practice.py`\n- `backend/tests/unit/test_sales_methodology_contract.py`\n- `backend/tests/unit/test_effectiveness_canonical_kernel.py`\n- `backend/tests/unit/test_realtime_scoring.py`\n- `backend/tests/unit/test_history_service_evidence_projection.py`\n- `backend/tests/contract/test_practice_evidence_contract.py`\n",
       "description": "- 在 shared effectiveness/realtime scoring/report readers 中接入方法论语义。\n- 保持当前外部 contract 尽量稳定，通过 compatibility readers 过渡。\n- focused tests 锁定 report/realtime/manager surfaces 对同一 rubric 的解释一致。",
       "estimate": "2.5h",
       "files": [
@@ -16994,6 +17010,18 @@
       "decision": "How methodology-aware sales rubrics should be introduced on top of the existing evaluation surfaces",
       "choice": "Introduce the first-round sales methodology rubric as an additive contract module (`common.effectiveness.methodology`) that crosswalks canonical kernel dimensions, sales_stage, main_issue, and next_goal instead of replacing the shipped score schema.",
       "rationale": "Current realtime/report/history/admin surfaces already share the canonical evaluation kernel plus compatibility readers and report-side issue/goal semantics. Adding methodology as a separate crosswalk keeps those surfaces stable, gives T02 one authoritative mapping to wire, and avoids creating a second truth source or breaking existing consumers of logic/accuracy/completeness and dimension_scores.",
+      "revisable": "Yes",
+      "made_by": "agent",
+      "superseded_by": null
+    },
+    {
+      "seq": 1612,
+      "id": "D242",
+      "when_context": "M022/S01/T02",
+      "scope": "architecture",
+      "decision": "How methodology-aware sales rubric semantics are exposed to runtime and read-side consumers",
+      "choice": "Attach methodology summaries additively to `canonical_evaluation_kernel.methodology` and mirror the same payload through `compatibility_readers.sales_methodology_rubric_v1` for sales surfaces.",
+      "rationale": "This keeps existing report/replay/history/admin/realtime outer contracts stable while giving every sales surface one shared rubric interpretation derived from canonical dimensions plus stage/issue/goal context. It avoids inventing another top-level payload per surface and lets manager/read-side consumers transition through compatibility readers.",
       "revisable": "Yes",
       "made_by": "agent",
       "superseded_by": null
@@ -22675,6 +22703,28 @@
       "verdict": "✅ pass",
       "duration_ms": 36,
       "created_at": "2026-04-14T05:14:19.631Z"
+    },
+    {
+      "id": 522,
+      "task_id": "T02",
+      "slice_id": "S01",
+      "milestone_id": "M022",
+      "command": "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/test_sales_methodology_contract.py backend/tests/unit/test_effectiveness_canonical_kernel.py backend/tests/unit/test_realtime_scoring.py backend/tests/unit/test_history_service_evidence_projection.py backend/tests/contract/test_practice_evidence_contract.py -k \"methodology or canonical_kernel or attach_canonical_kernel or emits_canonical_kernel or same_kernel\" -x -q",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 5320,
+      "created_at": "2026-04-14T05:31:35.115Z"
+    },
+    {
+      "id": 523,
+      "task_id": "T02",
+      "slice_id": "S01",
+      "milestone_id": "M022",
+      "command": "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests -k \"sales and (report or replay or history or analytics)\" -x -q",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 7435,
+      "created_at": "2026-04-14T05:31:35.115Z"
     }
   ]
 }

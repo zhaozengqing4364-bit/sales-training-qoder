@@ -1,7 +1,7 @@
 # Codebase Map
 
-Generated: 2026-04-14T04:49:16Z | Files: 500 | Described: 0/500
-<!-- gsd:codebase-meta {"generatedAt":"2026-04-14T04:49:16Z","fingerprint":"6e765b55b0e9dfc6e5433cc433d8c854ae6c9a13","fileCount":500,"truncated":true} -->
+Generated: 2026-04-14T05:14:45Z | Files: 500 | Described: 0/500
+<!-- gsd:codebase-meta {"generatedAt":"2026-04-14T05:14:45Z","fingerprint":"def7f151b808b98948943faec25cc6ce6cf9882b","fileCount":500,"truncated":true} -->
 Note: Truncated to first 500 files. Run with higher --max-files to include all.
 
 ### (root)/
@@ -381,6 +381,7 @@ Note: Truncated to first 500 files. Run with higher --max-files to include all.
 - `backend/src/common/effectiveness/__init__.py`
 - `backend/src/common/effectiveness/canonical.py`
 - `backend/src/common/effectiveness/evaluator.py`
+- `backend/src/common/effectiveness/methodology.py`
 - `backend/src/common/effectiveness/schemas.py`
 
 ### backend/src/common/error_handling/
@@ -641,6 +642,3 @@ Note: Truncated to first 500 files. Run with higher --max-files to include all.
 
 ### backend/tests/scripts/
 - `backend/tests/scripts/run_nfr_tests.sh`
-
-### backend/tests/unit/admin/
-- `backend/tests/unit/admin/test_admin_users_api_models.py`

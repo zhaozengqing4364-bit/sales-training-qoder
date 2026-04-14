@@ -247,6 +247,7 @@ class RealtimeScoringCapability(BaseCapability):
                 source_reader_id="sales_realtime_score_snapshot_v1",
                 overall_score=overall_score,
                 dimension_scores=canonical_scores,
+                methodology_context={"current_stage": stage_name},
             )
 
             history_key = "score_history"

@@ -30,6 +30,8 @@ from .evaluator import (
 )
 from .methodology import (
     SalesMethodologyRubricId,
+    build_sales_dimension_rubric_map,
+    build_sales_methodology_summary,
     get_sales_methodology_contract,
 )
 
@@ -49,7 +51,9 @@ __all__ = [
     "build_canonical_views",
     "build_compatibility_readers",
     "build_live_session_conclusion_summary",
+    "build_sales_dimension_rubric_map",
     "build_sales_effectiveness_metrics",
+    "build_sales_methodology_summary",
     "build_sales_rollup_scores",
     "coerce_live_session_conclusion_summary",
     "evaluate_effectiveness_snapshot",

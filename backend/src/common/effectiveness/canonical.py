@@ -8,6 +8,7 @@ returning the old field shapes.
 
 from __future__ import annotations
 
+from copy import deepcopy
 from dataclasses import dataclass
 from typing import Any, Literal
 
@@ -166,6 +167,7 @@ _SURFACE_READER_PLANS: dict[tuple[str, CanonicalScenarioType], SurfaceReaderPlan
             "practice_session_rollup_fields_v1",
             "effectiveness_snapshot_v1",
             "legacy_score_update_v1",
+            "sales_methodology_rubric_v1",
         ),
     ),
     (
@@ -191,6 +193,7 @@ _SURFACE_READER_PLANS: dict[tuple[str, CanonicalScenarioType], SurfaceReaderPlan
             "effectiveness_snapshot_v1",
             "sales_realtime_score_snapshot_v1",
             "comprehensive_sales_report_v1",
+            "sales_methodology_rubric_v1",
         ),
         downstream_surfaces=("report", "replay", "history", "admin"),
     ),
@@ -207,6 +210,7 @@ _SURFACE_READER_PLANS: dict[tuple[str, CanonicalScenarioType], SurfaceReaderPlan
             "effectiveness_snapshot_v1",
             "sales_realtime_score_snapshot_v1",
             "comprehensive_sales_report_v1",
+            "sales_methodology_rubric_v1",
         ),
         downstream_surfaces=("report", "replay", "history", "admin"),
     ),
@@ -223,6 +227,7 @@ _SURFACE_READER_PLANS: dict[tuple[str, CanonicalScenarioType], SurfaceReaderPlan
             "effectiveness_snapshot_v1",
             "sales_realtime_score_snapshot_v1",
             "comprehensive_sales_report_v1",
+            "sales_methodology_rubric_v1",
         ),
         downstream_surfaces=("report", "replay", "history", "admin"),
     ),
@@ -239,6 +244,7 @@ _SURFACE_READER_PLANS: dict[tuple[str, CanonicalScenarioType], SurfaceReaderPlan
             "effectiveness_snapshot_v1",
             "sales_realtime_score_snapshot_v1",
             "comprehensive_sales_report_v1",
+            "sales_methodology_rubric_v1",
         ),
         downstream_surfaces=("report", "replay", "history", "admin"),
     ),
@@ -459,6 +465,11 @@ def _build_dimension_payloads(
 ) -> list[dict[str, Any]]:
     detail_map = _resolve_dimension_details_map(dimension_details)
     payloads: list[dict[str, Any]] = []
+    sales_rubric_map: dict[str, list[str]] = {}
+    if scenario_type == "sales":
+        from .methodology import build_sales_dimension_rubric_map
+
+        sales_rubric_map = build_sales_dimension_rubric_map()
 
     for definition in get_canonical_dimension_definitions(scenario_type):
         detail = (
@@ -497,6 +508,10 @@ def _build_dimension_payloads(
         }
         if isinstance(description, str) and description.strip():
             payload["description"] = description.strip()
+        if scenario_type == "sales":
+            payload["methodology_rubric_ids"] = list(
+                sales_rubric_map.get(definition.dimension_id, [])
+            )
         payloads.append(payload)
 
     return payloads
@@ -546,6 +561,7 @@ def build_canonical_evaluation_kernel(
     logic_score: float | None = None,
     accuracy_score: float | None = None,
     completeness_score: float | None = None,
+    methodology_context: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     normalized_scenario = _normalize_scenario_type(scenario_type)
     inferred_surface_id = _infer_surface_id(
@@ -603,7 +619,7 @@ def build_canonical_evaluation_kernel(
         fallback=sum(resolved_rollups.values()) / len(CANONICAL_ROLLUP_IDS),
     )
 
-    return {
+    kernel = {
         "schema_version": CANONICAL_EVALUATION_KERNEL_VERSION,
         "scenario_type": normalized_scenario,
         "surface_id": inferred_surface_id,
@@ -622,6 +638,18 @@ def build_canonical_evaluation_kernel(
         "compatibility_reader_ids": list(surface_plan.compatibility_reader_ids),
         "downstream_surfaces": list(surface_plan.downstream_surfaces),
     }
+    if normalized_scenario == "sales":
+        from .methodology import build_sales_methodology_summary
+
+        kernel["methodology"] = build_sales_methodology_summary(
+            canonical_kernel=kernel,
+            surface_id=inferred_surface_id,
+            current_stage=(methodology_context or {}).get("current_stage"),
+            main_issue=(methodology_context or {}).get("main_issue"),
+            next_goal=(methodology_context or {}).get("next_goal"),
+            claim_truth=(methodology_context or {}).get("claim_truth"),
+        )
+    return kernel
 
 
 
@@ -730,6 +758,9 @@ def build_compatibility_readers(
                     if isinstance(item, dict) and isinstance(item.get("label"), str)
                 ],
             }
+        elif reader_id == "sales_methodology_rubric_v1":
+            methodology = canonical_kernel.get("methodology")
+            readers[reader_id] = deepcopy(methodology) if isinstance(methodology, dict) else {}
         else:
             readers[reader_id] = dict(rollup_fields)
 
@@ -748,6 +779,7 @@ def build_canonical_views(
     logic_score: float | None = None,
     accuracy_score: float | None = None,
     completeness_score: float | None = None,
+    methodology_context: dict[str, Any] | None = None,
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     kernel = build_canonical_evaluation_kernel(
         scenario_type=scenario_type,
@@ -759,6 +791,7 @@ def build_canonical_views(
         logic_score=logic_score,
         accuracy_score=accuracy_score,
         completeness_score=completeness_score,
+        methodology_context=methodology_context,
     )
     return kernel, build_compatibility_readers(
         canonical_kernel=kernel,

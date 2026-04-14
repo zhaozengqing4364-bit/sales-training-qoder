@@ -173,6 +173,18 @@ class TestRealtimeScoringCapability:
         assert list(
             compat["sales_realtime_score_snapshot_v1"]["dimension_scores"].keys()
         ) == SALES_DIMENSIONS
+        assert kernel["methodology"]["contract_id"] == "sales_methodology_rubric_v1"
+        assert kernel["methodology"]["surface_id"] == "realtime"
+        assert compat["sales_methodology_rubric_v1"] == kernel["methodology"]
+        assert [
+            item["rubric_id"] for item in kernel["methodology"]["rubric_assessments"]
+        ] == [
+            "discovery_qualification",
+            "value_story",
+            "evidence_proof",
+            "objection_reframe",
+            "next_step_commitment",
+        ]
 
     @pytest.mark.asyncio
     async def test_on_session_end_returns_stats(self, capability, context):

@@ -640,6 +640,10 @@ def test_build_history_entries_attach_canonical_kernel_and_compat_readers() -> N
     assert sales_summary.compatibility_readers["sales_realtime_score_snapshot_v1"]["overall_score"] == pytest.approx(
         sales_summary.overall_score
     )
+    assert sales_summary.canonical_evaluation_kernel["methodology"]["contract_id"] == "sales_methodology_rubric_v1"
+    assert sales_summary.canonical_evaluation_kernel["methodology"]["surface_id"] == "report"
+    assert sales_summary.canonical_evaluation_kernel["methodology"]["current_stage"] == "objection"
+    assert sales_summary.compatibility_readers["sales_methodology_rubric_v1"] == sales_summary.canonical_evaluation_kernel["methodology"]
 
     assert presentation_summary.canonical_evaluation_kernel["schema_version"] == "evaluation_kernel_v1"
     assert presentation_summary.canonical_evaluation_kernel["scenario_type"] == "presentation"

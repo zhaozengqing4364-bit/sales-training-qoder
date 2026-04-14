@@ -29,7 +29,7 @@ S01 结束后，S02 persona/industry pack 和 S03 manager calibration 都可以�
   - Files: `.gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md`, `backend/src/common/effectiveness`, `backend/src/agent/capabilities/realtime_scoring.py`, `backend/src/agent/capabilities/sales_stage.py`, `docs/api-contract`
   - Verify: rg -n "sales_stage|realtime_scoring|effectiveness|main_issue|next_goal|dimension_scores" backend/src/common backend/src/agent docs/api-contract
 
-- [ ] **T02: 把 rubric contract 接入 realtime 与 read-side** `est:2.5h`
+- [x] **T02: 把 rubric contract 接入 realtime 与 read-side** `est:2.5h`
   - 在 shared effectiveness/realtime scoring/report readers 中接入方法论语义。
 - 保持当前外部 contract 尽量稳定，通过 compatibility readers 过渡。
 - focused tests 锁定 report/realtime/manager surfaces 对同一 rubric 的解释一致。

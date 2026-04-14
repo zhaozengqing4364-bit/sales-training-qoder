@@ -85,6 +85,7 @@ def test_projection_kernel_contract_exposes_shared_kernel_metadata() -> None:
             "effectiveness_snapshot_v1",
             "sales_realtime_score_snapshot_v1",
             "comprehensive_sales_report_v1",
+            "sales_methodology_rubric_v1",
         ],
         "downstream_surfaces": ["report", "replay", "history", "admin"],
     }

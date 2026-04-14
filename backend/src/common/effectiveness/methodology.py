@@ -225,4 +225,184 @@ def get_sales_methodology_contract() -> dict[str, Any]:
     }
 
 
-__all__ = ["SalesMethodologyRubricId", "get_sales_methodology_contract"]
+def build_sales_dimension_rubric_map() -> dict[str, list[str]]:
+    """Map canonical sales dimensions to the rubric ids they support."""
+
+    mapping: dict[str, list[str]] = {}
+    for rubric in _RUBRICS:
+        rubric_id = str(rubric["rubric_id"])
+        for dimension_id in rubric.get("canonical_dimension_ids", []):
+            if not isinstance(dimension_id, str) or not dimension_id:
+                continue
+            mapping.setdefault(dimension_id, []).append(rubric_id)
+    return mapping
+
+
+def _coerce_methodology_score(value: Any) -> float:
+    try:
+        normalized = float(value)
+    except (TypeError, ValueError):
+        normalized = 0.0
+    return round(max(0.0, min(100.0, normalized)), 2)
+
+
+def _resolve_calibration_status(*, score: float, calibration: dict[str, Any]) -> str:
+    healthy_min = _coerce_methodology_score(calibration.get("healthy_min"))
+    watch_min = _coerce_methodology_score(calibration.get("watch_min"))
+    if score >= healthy_min:
+        return "healthy"
+    if score >= watch_min:
+        return "watch"
+    return "gap"
+
+
+def build_sales_methodology_summary(
+    *,
+    canonical_kernel: dict[str, Any],
+    surface_id: str,
+    current_stage: str | None = None,
+    main_issue: dict[str, Any] | None = None,
+    next_goal: dict[str, Any] | None = None,
+    claim_truth: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Build a cross-surface methodology summary from canonical evidence."""
+
+    contract = get_sales_methodology_contract()
+    dimensions = canonical_kernel.get("dimensions") if isinstance(canonical_kernel, dict) else None
+    if not isinstance(dimensions, list):
+        dimensions = []
+
+    dimensions_by_id = {
+        str(item.get("dimension_id")): item
+        for item in dimensions
+        if isinstance(item, dict) and isinstance(item.get("dimension_id"), str)
+    }
+
+    normalized_stage = str(current_stage or "").strip().lower() or None
+    issue_type = (
+        str(main_issue.get("issue_type")).strip()
+        if isinstance(main_issue, dict) and main_issue.get("issue_type") is not None
+        else None
+    )
+    goal_type = (
+        str(next_goal.get("goal_type")).strip()
+        if isinstance(next_goal, dict) and next_goal.get("goal_type") is not None
+        else None
+    )
+    claim_truth_status = (
+        str(claim_truth.get("status")).strip()
+        if isinstance(claim_truth, dict) and claim_truth.get("status") is not None
+        else None
+    )
+
+    rubric_assessments: list[dict[str, Any]] = []
+    active_rubric_id: str | None = None
+
+    for rubric in contract["rubrics"]:
+        scored_dimensions: list[dict[str, Any]] = []
+        for dimension_id in rubric.get("canonical_dimension_ids", []):
+            if not isinstance(dimension_id, str):
+                continue
+            payload = dimensions_by_id.get(dimension_id)
+            if not isinstance(payload, dict):
+                continue
+            scored_dimensions.append(
+                {
+                    "dimension_id": dimension_id,
+                    "label": str(payload.get("label") or dimension_id),
+                    "score": _coerce_methodology_score(payload.get("score")),
+                }
+            )
+
+        rubric_score = round(
+            sum(item["score"] for item in scored_dimensions) / max(1, len(scored_dimensions)),
+            2,
+        )
+        calibration = dict(rubric.get("calibration") or {})
+        calibration_status = _resolve_calibration_status(
+            score=rubric_score,
+            calibration=calibration,
+        )
+        stage_match = normalized_stage in {
+            str(item).strip().lower()
+            for item in (rubric.get("stage_ids") or [])
+            if isinstance(item, str) and item.strip()
+        }
+        issue_match = issue_type == rubric.get("main_issue_type")
+        goal_match = goal_type == rubric.get("next_goal_type")
+        if active_rubric_id is None and (issue_match or goal_match or stage_match):
+            active_rubric_id = str(rubric["rubric_id"])
+
+        rubric_assessments.append(
+            {
+                "rubric_id": str(rubric["rubric_id"]),
+                "label": str(rubric.get("label") or rubric["rubric_id"]),
+                "score": rubric_score,
+                "status": calibration_status,
+                "matched": bool(stage_match or issue_match or goal_match),
+                "current_stage_match": bool(stage_match),
+                "issue_type_match": bool(issue_match),
+                "goal_type_match": bool(goal_match),
+                "focus_type": rubric.get("focus_type"),
+                "main_issue_type": rubric.get("main_issue_type"),
+                "next_goal_type": rubric.get("next_goal_type"),
+                "canonical_dimension_ids": list(rubric.get("canonical_dimension_ids") or []),
+                "dimension_scores": scored_dimensions,
+                "calibration": {
+                    "healthy_min": _coerce_methodology_score(calibration.get("healthy_min")),
+                    "watch_min": _coerce_methodology_score(calibration.get("watch_min")),
+                    "coach_for": calibration.get("coach_for"),
+                },
+            }
+        )
+
+    if active_rubric_id is None and rubric_assessments:
+        active_rubric_id = min(
+            rubric_assessments,
+            key=lambda item: (float(item.get("score") or 0.0), str(item.get("rubric_id") or "")),
+        )["rubric_id"]
+
+    weakest_rubric_id = (
+        min(
+            rubric_assessments,
+            key=lambda item: (float(item.get("score") or 0.0), str(item.get("rubric_id") or "")),
+        )["rubric_id"]
+        if rubric_assessments
+        else None
+    )
+
+    surface_contracts = {
+        str(item["surface_id"]): item
+        for item in contract["surface_contracts"]
+        if isinstance(item, dict) and isinstance(item.get("surface_id"), str)
+    }
+    surface_contract = dict(surface_contracts.get(surface_id) or {})
+
+    return {
+        "contract_id": contract["contract_id"],
+        "methodology_id": contract["methodology_id"],
+        "methodology_name": contract["methodology_name"],
+        "surface_id": surface_id,
+        "surface_reader_id": canonical_kernel.get("primary_reader_id"),
+        "current_stage": normalized_stage,
+        "main_issue_type": issue_type,
+        "next_goal_type": goal_type,
+        "claim_truth_status": claim_truth_status,
+        "active_rubric_id": active_rubric_id,
+        "weakest_rubric_id": weakest_rubric_id,
+        "summary": {
+            "healthy_count": sum(1 for item in rubric_assessments if item["status"] == "healthy"),
+            "watch_count": sum(1 for item in rubric_assessments if item["status"] == "watch"),
+            "gap_count": sum(1 for item in rubric_assessments if item["status"] == "gap"),
+        },
+        "evidence_paths": list(surface_contract.get("evidence_paths") or []),
+        "rubric_assessments": rubric_assessments,
+    }
+
+
+__all__ = [
+    "SalesMethodologyRubricId",
+    "build_sales_dimension_rubric_map",
+    "build_sales_methodology_summary",
+    "get_sales_methodology_contract",
+]

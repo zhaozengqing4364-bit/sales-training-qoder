@@ -702,6 +702,7 @@ class SessionEvidenceService:
         )
         overall_score = round((logic_score + accuracy_score + completeness_score) / 3.0, 2)
         latest_score_snapshot = cls._get_latest_score_snapshot(normalized_messages)
+        latest_sales_stage = cls._get_latest_sales_stage(normalized_messages)
         canonical_kernel, compatibility_readers = build_canonical_views(
             scenario_type=resolved_scenario_type,
             surface_id="report",
@@ -830,6 +831,37 @@ class SessionEvidenceService:
                     if isinstance(token, str) and token:
                         degraded_reasons.append(token)
             evidence_completeness = {**evidence_completeness, "degraded_reasons": degraded_reasons}
+
+        canonical_kernel, compatibility_readers = build_canonical_views(
+            scenario_type=resolved_scenario_type,
+            surface_id="report",
+            source_reader_id=(
+                "sales_realtime_score_snapshot_v1"
+                if resolved_scenario_type == "sales" and isinstance(latest_score_snapshot, dict)
+                else (
+                    "presentation_review_dimensions_v1"
+                    if resolved_scenario_type == "presentation" and isinstance(latest_score_snapshot, dict)
+                    else "session_evidence_projection_v1"
+                )
+            ),
+            overall_score=overall_score,
+            dimension_scores=(
+                latest_score_snapshot.get("dimension_scores")
+                if isinstance(latest_score_snapshot, dict)
+                else None
+            ),
+            logic_score=logic_score,
+            accuracy_score=accuracy_score,
+            completeness_score=completeness_score,
+            methodology_context={
+                "current_stage": latest_sales_stage,
+                "main_issue": main_issue,
+                "next_goal": next_goal,
+                "claim_truth": projection_snapshot.get("claim_truth")
+                if isinstance(projection_snapshot.get("claim_truth"), dict)
+                else None,
+            },
+        )
 
         return SessionEvidenceProjection(
             session=session,

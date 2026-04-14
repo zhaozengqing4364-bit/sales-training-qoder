@@ -67,6 +67,7 @@ def test_sales_methodology_contract_reuses_canonical_surface_readers() -> None:
         "practice_session_rollup_fields_v1",
         "effectiveness_snapshot_v1",
         "legacy_score_update_v1",
+        "sales_methodology_rubric_v1",
     ]
     assert realtime["evidence_paths"] == [
         "canonical_evaluation_kernel.dimensions[]",
@@ -81,6 +82,7 @@ def test_sales_methodology_contract_reuses_canonical_surface_readers() -> None:
         "effectiveness_snapshot_v1",
         "sales_realtime_score_snapshot_v1",
         "comprehensive_sales_report_v1",
+        "sales_methodology_rubric_v1",
     ]
     assert report["evidence_paths"] == [
         "canonical_evaluation_kernel.dimensions[]",

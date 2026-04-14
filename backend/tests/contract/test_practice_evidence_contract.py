@@ -2444,3 +2444,16 @@ async def test_report_and_replay_contract_expose_shared_canonical_kernel_and_com
         "异议处理",
         "推进下一步",
     ]
+    assert compat["sales_methodology_rubric_v1"] == kernel["methodology"]
+    assert kernel["methodology"]["contract_id"] == "sales_methodology_rubric_v1"
+    assert kernel["methodology"]["surface_id"] == "report"
+    assert kernel["methodology"]["current_stage"] == "objection"
+    assert [
+        item["rubric_id"] for item in kernel["methodology"]["rubric_assessments"]
+    ] == [
+        "discovery_qualification",
+        "value_story",
+        "evidence_proof",
+        "objection_reframe",
+        "next_step_commitment",
+    ]
