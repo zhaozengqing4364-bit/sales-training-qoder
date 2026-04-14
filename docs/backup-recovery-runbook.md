@@ -52,6 +52,22 @@ python3 scripts/recovery-drill-runner.py run --continue-on-failure
 
 这里的 `status` / `check` 仍然是 inventory authority，不会执行破坏性 restore；真正会落副作用的内容只限于 baseline 已命名的 migrate / bootstrap / proof commands，manual-only 边界依旧不会被脚本伪装成已自动化能力。
 
+## 0.2 Deploy bundle boundary / drill 适用范围
+
+当前仓库里的 `.sisyphus/deploy/ai-backend.service`、`.sisyphus/deploy/ai-frontend.service`、`.sisyphus/deploy/ai-practice.nginx.conf` 描述的是**single-node / 单机 native deploy bundle**：
+
+- backend 只绑定一个 loopback 进程到 `127.0.0.1:3444`；
+- frontend 只绑定一个 loopback 进程到 `127.0.0.1:3445`；
+- nginx 只把 `/`、`/api/`、`/health`、`/ws/` 代理到这一个节点。
+
+这意味着：
+
+1. `/health` 是**单节点 release/recovery proof**，不是 cluster-wide health truth；
+2. 当前 repo-local recovery drills 直接适用于单机 restart/redeploy、恢复后验收、以及未来 multi-instance cutover 前后的**单节点校验**；
+3. 这些 drill **不**替代 cluster drain、负载均衡摘流、stickiness、跨实例 failover 编排；未来 multi-instance 仍要依赖仓库外的 LB / ingress / orchestrator；
+4. 发布或恢复留证时，应该把 deploy health 证据与 recovery drill 证据一起归档，而不是只保留 `/health` 回包；
+5. 当前写文档时可复核的最新 runner 证据是 `.dev/recovery-drills/20260414T002842Z/summary.json`：`auth_bootstrap`、`redis_session_state`、`oss_signing_playback`、`health_check` 已通过，`db_migration` 真实暴露了 `KeyError: '20260412_0315_028'`，因此后续 release/recovery proof 必须把这类失败信号写明，不能被“节点 health 仍然绿色”掩盖。
+
 ## 1. 当前责任边界与证据位置
 
 | 项目 | 当前真实口径 | 执行时必须留证的位置 |
@@ -60,6 +76,8 @@ python3 scripts/recovery-drill-runner.py run --continue-on-failure
 | 审批人 | 当前环境负责人；仓库内未记录具体人名 | 工单审批记录 |
 | 仓库内事实依据 | 本 runbook + `docs/setup/backup-recovery-current-state.md` | 仓库文档本身 |
 | 备份产物目录（建议） | 当前仓库无固定目录；最小基线建议放到本机或挂载盘的 `./.dev/backup-evidence/<YYYYMMDD-HHMM>/`，不要提交到 Git | 备份目录、截图、命令回显 |
+| Deploy health 证据 | `.sisyphus/evidence/<deploy-run>/health-*.txt` 或等价的 systemd/nginx 健康检查回显 | 同一发布 / 恢复记录 |
+| Drill automation 证据 | `./.dev/recovery-drills/<timestamp>/summary.json` + 同目录逐 drill `*.log` | 同一发布 / 恢复记录 |
 | 恢复验证证据 | `/health` 回包、`alembic upgrade head` 输出、必要时 legacy repair / 管理员重建回显 | 同一工单 / 恢复演练记录 |
 
 ### 1.1 数据库 authority line（执行恢复/启动时必须遵守）

@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "exported_at": "2026-04-14T00:30:19.804Z",
+  "exported_at": "2026-04-14T00:48:28.024Z",
   "milestones": [
     {
       "id": "M001",
@@ -12994,19 +12994,31 @@
       "milestone_id": "M020",
       "slice_id": "S04",
       "id": "T03",
-      "title": "把 recovery drill 与部署边界写回运维文档",
-      "status": "pending",
-      "one_liner": "",
-      "narrative": "",
-      "verification_result": "",
+      "title": "Wrote the recovery-drill/deploy boundary into the ops docs so single-node deploy guidance, future multi-instance limits, and release/recovery proof now use the same evidence rules.",
+      "status": "complete",
+      "one_liner": "Wrote the recovery-drill/deploy boundary into the ops docs so single-node deploy guidance, future multi-instance limits, and release/recovery proof now use the same evidence rules.",
+      "narrative": "I closed the last S04 documentation gap by writing the shipped deploy boundary back into the authority surfaces that operators and future slices will actually reuse. The `.sisyphus/deploy` systemd/nginx files now state that the current native bundle is single-node only, binds backend/frontend on loopback, treats `/health` as node-local proof, and does not imply cluster drain or cross-instance websocket authority. I then aligned the long-lived prose artifacts around that same contract: `docs/backup-recovery-runbook.md` now explains the deploy bundle scope, lists deploy-health plus drill-summary evidence locations, and cites the latest real drill output including the still-failing `db_migration` signal; `docs/api-contract/support-runtime.md` now tells support to pair release-health summaries with drill evidence instead of treating `/overview` as sufficient; `.sisyphus/plans/cloud-full-redeploy-115-191-36-90.md` now frames the cloud rollout as single-node today / multi-instance later and requires release/recovery proof to cite the latest recovery drill summary; and `.gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md` now records the downstream rule so M021/M022 work can reuse it without rediscovering the boundary. I also recorded D229 plus a knowledge entry so downstream work keeps the same node-health-plus-drill-evidence rule.",
+      "verification_result": "Ran the exact task-plan verification gate `rg -n \"single-node|multi-instance|drill|recovery|health\" .sisyphus/deploy .sisyphus/plans docs/backup-recovery-runbook.md .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md`, which passed and surfaced the expected wording across the deploy files, cloud redeploy plan, runbook, and architecture scan. Then ran a focused support/runtime grep gate `rg -n \"release-health|recovery drill|summary.json|process-local|redis snapshot|healthy\" docs/api-contract/support-runtime.md docs/backup-recovery-runbook.md .sisyphus/plans/cloud-full-redeploy-115-191-36-90.md`, which also passed and confirmed the support contract now explicitly pairs release-health summaries with recovery drill evidence and preserves the process-local vs Redis-snapshot runtime split.",
       "duration": "",
-      "completed_at": null,
+      "completed_at": "2026-04-14T00:48:27.951Z",
       "blocker_discovered": false,
-      "deviations": "",
-      "known_issues": "",
-      "key_files": [],
-      "key_decisions": [],
-      "full_summary_md": "",
+      "deviations": "In addition to the task plan’s expected output surfaces, I updated `docs/api-contract/support-runtime.md` because the task explicitly called for support guidance and that file is the durable support-facing runtime contract. I also wrote the single-node/multi-instance boundary directly into `.sisyphus/deploy/*` comments so the deploy authority files themselves carry the rule instead of relying only on plan prose.",
+      "known_issues": "The latest referenced drill evidence still records a real local migration blocker: `.dev/recovery-drills/20260414T002842Z/summary.json` shows `db_migration` failing with `KeyError: '20260412_0315_028'` while the other drills passed. This task intentionally documented that signal rather than masking it behind healthy node status.",
+      "key_files": [
+        ".sisyphus/deploy/ai-backend.service",
+        ".sisyphus/deploy/ai-frontend.service",
+        ".sisyphus/deploy/ai-practice.nginx.conf",
+        ".sisyphus/plans/cloud-full-redeploy-115-191-36-90.md",
+        "docs/backup-recovery-runbook.md",
+        "docs/api-contract/support-runtime.md",
+        ".gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md",
+        ".gsd/KNOWLEDGE.md",
+        ".gsd/DECISIONS.md"
+      ],
+      "key_decisions": [
+        "D229 — treat the shipped systemd+nginx bundle as single-node authority only, and require release/recovery proof to pair node-local /health captures with repo-local recovery drill summary/log evidence."
+      ],
+      "full_summary_md": "---\nid: T03\nparent: S04\nmilestone: M020\nkey_files:\n  - .sisyphus/deploy/ai-backend.service\n  - .sisyphus/deploy/ai-frontend.service\n  - .sisyphus/deploy/ai-practice.nginx.conf\n  - .sisyphus/plans/cloud-full-redeploy-115-191-36-90.md\n  - docs/backup-recovery-runbook.md\n  - docs/api-contract/support-runtime.md\n  - .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md\n  - .gsd/KNOWLEDGE.md\n  - .gsd/DECISIONS.md\nkey_decisions:\n  - D229 — treat the shipped systemd+nginx bundle as single-node authority only, and require release/recovery proof to pair node-local /health captures with repo-local recovery drill summary/log evidence.\nduration: \nverification_result: passed\ncompleted_at: 2026-04-14T00:48:27.948Z\nblocker_discovered: false\n---\n\n# T03: Wrote the recovery-drill/deploy boundary into the ops docs so single-node deploy guidance, future multi-instance limits, and release/recovery proof now use the same evidence rules.\n\n**Wrote the recovery-drill/deploy boundary into the ops docs so single-node deploy guidance, future multi-instance limits, and release/recovery proof now use the same evidence rules.**\n\n## What Happened\n\nI closed the last S04 documentation gap by writing the shipped deploy boundary back into the authority surfaces that operators and future slices will actually reuse. The `.sisyphus/deploy` systemd/nginx files now state that the current native bundle is single-node only, binds backend/frontend on loopback, treats `/health` as node-local proof, and does not imply cluster drain or cross-instance websocket authority. I then aligned the long-lived prose artifacts around that same contract: `docs/backup-recovery-runbook.md` now explains the deploy bundle scope, lists deploy-health plus drill-summary evidence locations, and cites the latest real drill output including the still-failing `db_migration` signal; `docs/api-contract/support-runtime.md` now tells support to pair release-health summaries with drill evidence instead of treating `/overview` as sufficient; `.sisyphus/plans/cloud-full-redeploy-115-191-36-90.md` now frames the cloud rollout as single-node today / multi-instance later and requires release/recovery proof to cite the latest recovery drill summary; and `.gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md` now records the downstream rule so M021/M022 work can reuse it without rediscovering the boundary. I also recorded D229 plus a knowledge entry so downstream work keeps the same node-health-plus-drill-evidence rule.\n\n## Verification\n\nRan the exact task-plan verification gate `rg -n \"single-node|multi-instance|drill|recovery|health\" .sisyphus/deploy .sisyphus/plans docs/backup-recovery-runbook.md .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md`, which passed and surfaced the expected wording across the deploy files, cloud redeploy plan, runbook, and architecture scan. Then ran a focused support/runtime grep gate `rg -n \"release-health|recovery drill|summary.json|process-local|redis snapshot|healthy\" docs/api-contract/support-runtime.md docs/backup-recovery-runbook.md .sisyphus/plans/cloud-full-redeploy-115-191-36-90.md`, which also passed and confirmed the support contract now explicitly pairs release-health summaries with recovery drill evidence and preserves the process-local vs Redis-snapshot runtime split.\n\n## Verification Evidence\n\n| # | Command | Exit Code | Verdict | Duration |\n|---|---------|-----------|---------|----------|\n| 1 | `rg -n \"single-node|multi-instance|drill|recovery|health\" .sisyphus/deploy .sisyphus/plans docs/backup-recovery-runbook.md .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md` | 0 | ✅ pass | 32ms |\n| 2 | `rg -n \"release-health|recovery drill|summary.json|process-local|redis snapshot|healthy\" docs/api-contract/support-runtime.md docs/backup-recovery-runbook.md .sisyphus/plans/cloud-full-redeploy-115-191-36-90.md` | 0 | ✅ pass | 12ms |\n\n## Deviations\n\nIn addition to the task plan’s expected output surfaces, I updated `docs/api-contract/support-runtime.md` because the task explicitly called for support guidance and that file is the durable support-facing runtime contract. I also wrote the single-node/multi-instance boundary directly into `.sisyphus/deploy/*` comments so the deploy authority files themselves carry the rule instead of relying only on plan prose.\n\n## Known Issues\n\nThe latest referenced drill evidence still records a real local migration blocker: `.dev/recovery-drills/20260414T002842Z/summary.json` shows `db_migration` failing with `KeyError: '20260412_0315_028'` while the other drills passed. This task intentionally documented that signal rather than masking it behind healthy node status.\n\n## Files Created/Modified\n\n- `.sisyphus/deploy/ai-backend.service`\n- `.sisyphus/deploy/ai-frontend.service`\n- `.sisyphus/deploy/ai-practice.nginx.conf`\n- `.sisyphus/plans/cloud-full-redeploy-115-191-36-90.md`\n- `docs/backup-recovery-runbook.md`\n- `docs/api-contract/support-runtime.md`\n- `.gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md`\n- `.gsd/KNOWLEDGE.md`\n- `.gsd/DECISIONS.md`\n",
       "description": "- 更新部署指导、architecture scan、support guidance，明确单机部署、未来多实例、以及 drill 适用范围。\n- 把 drill outputs 纳入 release/recovery proof 说明，供后续 milestone 复用。",
       "estimate": "35m",
       "files": [
@@ -16698,6 +16710,18 @@
       "decision": "Recovery drill automation authority shape for M020/S04",
       "choice": "Keep scripts/recovery_drill_baseline.py as the single source of drill command/precondition/failure-signal metadata, have scripts/recovery_drill_runner.py execute that metadata directly, and write per-drill logs plus summary.json under .dev/recovery-drills/<timestamp>.",
       "rationale": "T02 needed executable recovery automation without creating a second operations surface. Reusing the baseline metadata keeps docs, tests, and runner behavior on one authority line, while summary.json + per-drill logs provide agent-usable evidence for drill outcomes and real environment blockers such as the current Alembic revision drift.",
+      "revisable": "Yes",
+      "made_by": "agent",
+      "superseded_by": null
+    },
+    {
+      "seq": 1599,
+      "id": "D229",
+      "when_context": "M020/S04/T03",
+      "scope": "operations",
+      "decision": "How deploy health and recovery drill evidence should be interpreted for the shipped native deployment bundle",
+      "choice": "Treat the systemd+nginx deployment bundle as single-node authority only, and require release/recovery proof to pair node-local /health captures with repo-local recovery drill summary/log evidence.",
+      "rationale": "The current .sisyphus/deploy bundle binds one backend and one frontend instance on loopback, so /health and systemd-active checks only prove one node is up. Recovery readiness also depends on db/auth/redis/oss/runtime drills, and the latest drill run already showed that node health can stay green while db_migration still exposes a real Alembic blocker. Recording the pair-proof rule prevents downstream work from overclaiming multi-instance or recovery readiness from deploy smoke alone.",
       "revisable": "Yes",
       "made_by": "agent",
       "superseded_by": null
@@ -22027,6 +22051,28 @@
       "verdict": "✅ pass",
       "duration_ms": 100,
       "created_at": "2026-04-14T00:30:19.730Z"
+    },
+    {
+      "id": 490,
+      "task_id": "T03",
+      "slice_id": "S04",
+      "milestone_id": "M020",
+      "command": "rg -n \"single-node|multi-instance|drill|recovery|health\" .sisyphus/deploy .sisyphus/plans docs/backup-recovery-runbook.md .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 32,
+      "created_at": "2026-04-14T00:48:27.951Z"
+    },
+    {
+      "id": 491,
+      "task_id": "T03",
+      "slice_id": "S04",
+      "milestone_id": "M020",
+      "command": "rg -n \"release-health|recovery drill|summary.json|process-local|redis snapshot|healthy\" docs/api-contract/support-runtime.md docs/backup-recovery-runbook.md .sisyphus/plans/cloud-full-redeploy-115-191-36-90.md",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 12,
+      "created_at": "2026-04-14T00:48:27.951Z"
     }
   ]
 }

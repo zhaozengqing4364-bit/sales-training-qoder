@@ -87,6 +87,7 @@
 - `SessionManager.get_stats()` 用来回答“当前实例还持有哪些 live connections / runtime diagnostics”。
 - `SessionStateService.get_stats()` 用来回答“重启后还能依赖哪些 reconnect snapshots / epochs / last_error”。
 - 任何 support/runbook 结论都必须明确区分 **process-local active connections** 与 **shared Redis snapshot**，不能把两者混成同一个 runtime truth surface。
+- release/recovery proof 也必须成对留证：把 `/support/runtime/*` 的 release-health / fault summary 与 `.dev/recovery-drills/<timestamp>/summary.json`、逐 drill `*.log`、以及 deploy `/health` capture 一起归档；`/overview` 看起来 healthy 并不自动代表 db/auth/redis/oss drills 都通过。
 
 ---
 

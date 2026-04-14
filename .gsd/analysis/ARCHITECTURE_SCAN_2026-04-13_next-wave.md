@@ -347,6 +347,18 @@ S04/T02 之后，当前仓库已经有一条**可复用的 assembled release gat
 - repo-root proof 继续以 docs grep 为准：
   `rg -n "reconnect|epoch|snapshot|active connection|drain|restart" docs/api-contract/support-runtime.md docs/backup-recovery-runbook.md .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md`
 
+#### 7.2.4 M020/S04 recovery drill + deploy boundary closure（T03 write-back）
+
+- `scripts/recovery_drill_baseline.py` + `scripts/recovery_drill_runner.py` 现在已经把 recovery authority 从“手工 runbook 说明”提升成**最小可执行 drill bundle**：evidence 统一落到 `./.dev/recovery-drills/<timestamp>/summary.json` 与逐 drill `*.log`，而不是只剩 markdown 描述。
+- 当前 deploy authority 也必须一起看：`.sisyphus/deploy/ai-backend.service`、`.sisyphus/deploy/ai-frontend.service`、`.sisyphus/deploy/ai-practice.nginx.conf` 共同定义的是 **single-node native deploy bundle**，即一个 loopback backend（`127.0.0.1:3444`）+ 一个 loopback frontend（`127.0.0.1:3445`）+ 一个 nginx proxy。`/health` 在这里是**单节点 release/recovery proof**，不是 cluster-wide health truth。
+- 因此 drill 适用范围现在要写死成两层：
+  1. **今天直接适用**：单机 restart/redeploy、恢复后验收、release 前后节点健康校验；
+  2. **未来 multi-instance 仍可复用但不能越权**：db/auth/redis/oss/health drills 仍可作为每个目标节点的 cutover proof，但 cluster drain、流量摘除、stickiness、跨实例 failover orchestration 仍在 repo 外的 LB / ingress / orchestrator 里。
+- 最新已知 proof（写本文档时的真实 runner 输出）是 `.dev/recovery-drills/20260414T002842Z/summary.json`：`auth_bootstrap`、`redis_session_state`、`oss_signing_playback`、`health_check` 已通过，而 `db_migration` 继续真实暴露 `KeyError: '20260412_0315_028'`。这意味着 downstream release/recovery 说明必须把 drill failure signal 与 `/health` 一起呈现，不能因为节点健康仍可返回 `healthy` 就把 migration blocker 隐去。
+- downstream reuse rule 现在扩展为：云部署或 systemd/nginx 发布的证据包至少要同时包含 `.sisyphus/evidence/<deploy-run>/health-*.txt`（或等价 deploy health capture）以及最新 repo-local recovery drill summary/log bundle；单靠 `/health`、单靠 systemd active，或者单靠 markdown runbook，任何一个都不足以宣称“可恢复”。
+- repo-root write-back proof：
+  `rg -n "single-node|multi-instance|drill|recovery|health" .sisyphus/deploy .sisyphus/plans docs/backup-recovery-runbook.md .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md`
+
 ### 7.3 Theme C — AI control plane / evaluation kernel
 对应问题：
 - live path 与 legacy path 并存

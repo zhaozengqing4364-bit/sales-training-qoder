@@ -55,11 +55,18 @@ Replace the broken cloud deployment with a verified full sync of the local codeb
 - Nginx routes `/`, `/api/`, `/health`, `/ws/` correctly.
 - Evidence artifacts saved under `.sisyphus/evidence/cloud-redeploy-115-191-36-90/`.
 
+### Deployment Boundary (single-node today, multi-instance later)
+- `.sisyphus/deploy/ai-backend.service`, `.sisyphus/deploy/ai-frontend.service`, and `.sisyphus/deploy/ai-practice.nginx.conf` together describe a **single-node native deploy bundle**.
+- In this plan, `/health` is **per-node release/recovery proof** for the target machine, not cluster-wide health truth.
+- If future multi-instance rollout is introduced, keep the same per-node health checks and recovery drills, but move drain/stickiness/failover orchestration to external LB/ingress automation instead of overloading systemd restart or one node's `/health` result.
+- Release/recovery proof for this plan should be assembled from deploy smoke evidence under `.sisyphus/evidence/cloud-redeploy-115-191-36-90/` **plus** the latest repo-local recovery drill output under `.dev/recovery-drills/<timestamp>/summary.json` and `*.log`.
+
 ### Definition of Done
 - [ ] `curl -sS http://115.191.36.90/health | jq -r '.status'` returns `healthy`.
 - [ ] `ssh root@115.191.36.90 "sudo systemctl is-active ai-backend ai-frontend nginx"` returns all `active`.
 - [ ] `rsync --dry-run --checksum` post-sync reports no file changes.
 - [ ] WebSocket invalid-session contract returns close code `4400:INVALID_SESSION_ID` through Nginx path.
+- [ ] Final release/recovery proof record cites the latest `.dev/recovery-drills/<timestamp>/summary.json` (and any failing drill ids) alongside deploy health evidence.
 
 ### Must Have
 - Full upload parity with local working tree at execution time.
@@ -656,6 +663,8 @@ Critical Path: `1 -> 2 -> 3 -> 4 -> 7 -> 8`
   - Validate WS close contract for invalid session.
   - Save all outputs as evidence artifacts.
   - Record rollback command set using Task 2 backup archive.
+  - Pair the deploy smoke outputs with the latest repo-local recovery drill bundle (`.dev/recovery-drills/<timestamp>/summary.json` + `*.log`) so release/recovery proof does not rely on `/health` alone.
+  - If the latest drill run still contains a known failure signal (for example `db_migration`), record that explicitly in the final evidence package instead of hiding it behind green node health.
 
   **Must NOT do**:
   - Do not declare success if any single gate fails.
@@ -756,4 +765,5 @@ curl -sS http://115.191.36.90/health | jq -r '.status'
 - [ ] Nginx reverse proxy and websocket upgrade routing validated.
 - [ ] Public endpoint reachable and healthy.
 - [ ] Evidence package complete under `.sisyphus/evidence/cloud-redeploy-115-191-36-90/`.
+- [ ] Latest repo-local recovery drill `summary.json` / logs linked in the same release or recovery record.
 - [ ] Rollback command set documented with concrete backup archive path.

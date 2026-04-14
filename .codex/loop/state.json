@@ -1,6 +1,6 @@
 {
   "mode": "grow",
-  "current_issue_id": "M020-S04-T02",
+  "current_issue_id": "M020-S04-T03",
   "current_issue_type": "task",
   "current_issue_status": "done",
   "pending_issue_ids": [],
@@ -205,36 +205,28 @@
     "M020-S03-T02",
     "M020-S03",
     "M020-S04-T01",
-    "M020-S04-T02"
+    "M020-S04-T02",
+    "M020-S04-T03"
   ],
   "blocked_issue_ids": [],
   "deferred_issue_ids": [],
   "last_modified_files": [
-    "scripts/recovery_drill_baseline.py",
-    "scripts/recovery_drill_runner.py",
-    "scripts/recovery-drill-baseline.py",
-    "scripts/recovery-drill-runner.py",
-    "backend/scripts/bootstrap_auth_admin.py",
-    "backend/tests/unit/test_recovery_drill_runner.py",
-    "backend/tests/unit/test_bootstrap_auth_admin.py",
+    ".sisyphus/deploy/ai-backend.service",
+    ".sisyphus/deploy/ai-frontend.service",
+    ".sisyphus/deploy/ai-practice.nginx.conf",
+    ".sisyphus/plans/cloud-full-redeploy-115-191-36-90.md",
     "docs/backup-recovery-runbook.md",
-    "docs/setup/backup-recovery-current-state.md",
-    ".gsd/KNOWLEDGE.md",
+    "docs/api-contract/support-runtime.md",
+    ".gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md",
     ".codex/loop/state.json",
     ".codex/loop/log.md"
   ],
   "last_verification_commands": [
-    "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/test_bootstrap_auth_admin.py backend/tests/unit/test_recovery_drill_baseline.py backend/tests/unit/test_recovery_drill_runner.py -q",
-    "RECOVERY_ADMIN_EMAIL=admin@qoder.ai RECOVERY_ADMIN_NAME=管理员 python3 scripts/recovery-drill-runner.py run --continue-on-failure --drill db_migration --drill auth_bootstrap --drill redis_session_state --drill oss_signing_playback --drill health_check",
-    "bash scripts/dependency-governance.sh status && rg -n \"health|alembic|bootstrap|redis|oss|recovery\" scripts/recovery-* docs/backup-recovery-runbook.md",
-    "lsp diagnostics scripts/recovery_drill_baseline.py",
-    "lsp diagnostics scripts/recovery_drill_runner.py",
-    "lsp diagnostics backend/scripts/bootstrap_auth_admin.py",
-    "lsp diagnostics backend/tests/unit/test_recovery_drill_runner.py",
-    "lsp diagnostics backend/tests/unit/test_bootstrap_auth_admin.py"
+    "rg -n \"single-node|multi-instance|drill|recovery|health\" .sisyphus/deploy .sisyphus/plans docs/backup-recovery-runbook.md .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md",
+    "rg -n \"release-health|recovery drill|summary.json|process-local|redis snapshot|healthy\" docs/api-contract/support-runtime.md docs/backup-recovery-runbook.md .sisyphus/plans/cloud-full-redeploy-115-191-36-90.md"
   ],
-  "last_verification_result": "passed with one environment-level recovery flag; focused unit proof finished 7/7 green, the real runner execution wrote per-drill logs plus summary.json under .dev/recovery-drills, auth_bootstrap + redis_session_state + oss_signing_playback + health_check passed, the dependency-governance/grep gate stayed green, and diagnostics were clean. db_migration intentionally remained red with KeyError 20260412_0315_028, which is now captured as a truthful Alembic recovery failure signal instead of being hidden by the script.",
-  "last_success_signal": "M020/S04/T02 now turns the recovery baseline into executable automation: one repo-local runner reuses the baseline command authority, enforces explicit env preconditions for auth bootstrap, records stdout/stderr + summary.json evidence, and can surface both green drills and real recovery blockers from the same evidence root.",
+  "last_verification_result": "passed; the exact task-plan grep gate now exposes single-node deploy, multi-instance boundary, drill evidence, and health-proof wording across .sisyphus/deploy, the cloud redeploy plan, the recovery runbook, and the architecture scan, while the focused support/runtime grep confirms release-health summaries are now explicitly paired with repo-local recovery drill evidence instead of being treated as sufficient on their own.",
+  "last_success_signal": "M020/S04/T03 closed the documentation gap between deploy and recovery: systemd/nginx files, the redeploy plan, the runbook, support runtime guidance, and the architecture scan all now agree that the shipped bundle is single-node today, future multi-instance rollout needs external drain orchestration, and release/recovery proof must include both /health captures and recovery drill summary/log evidence.",
   "last_growth_scan": null,
-  "next_action": "Proceed to M020/S04/T03 by writing the new drill evidence path, single-node/runtime boundary, and the observed Alembic failure mode back into deployment/support guidance without inventing a second authority surface."
+  "next_action": "M020/S04 tasks are complete; use the assembled deploy + drill evidence bundle for slice closure and downstream release/recovery work rather than rediscovering the boundary again."
 }

@@ -9,6 +9,9 @@ User=root
 WorkingDirectory=/opt/ai-practice/backend
 Environment=PYTHONPATH=/opt/ai-practice/backend/src
 EnvironmentFile=-/opt/ai-practice/backend/.env
+# single-node deploy contract: one loopback backend instance on 127.0.0.1:3444.
+# websocket live connection state stays process-local to this node; systemd restart here is not a multi-instance drain primitive.
+# release/recovery proof for this unit should pair /health with repo-local drill evidence under .dev/recovery-drills/<timestamp>/summary.json.
 ExecStart=/opt/ai-practice/backend/venv/bin/uvicorn src.main:app --host 127.0.0.1 --port 3444
 Restart=always
 RestartSec=5

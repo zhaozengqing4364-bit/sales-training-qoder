@@ -1,3 +1,24 @@
+- time: 2026-04-14T08:45:46+08:00
+  mode: grow
+  item id: M020-S04-T03
+  files changed:
+    - .sisyphus/deploy/ai-backend.service
+    - .sisyphus/deploy/ai-frontend.service
+    - .sisyphus/deploy/ai-practice.nginx.conf
+    - .sisyphus/plans/cloud-full-redeploy-115-191-36-90.md
+    - docs/backup-recovery-runbook.md
+    - docs/api-contract/support-runtime.md
+    - .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md
+    - .codex/loop/state.json
+    - .codex/loop/log.md
+  summary: Wrote the recovery-drill and deploy boundary back into the long-lived ops surfaces so the shipped systemd/nginx bundle, support runtime contract, runbook, and cloud redeploy plan all agree that the current deployment is single-node, future multi-instance rollout needs external drain orchestration, and release/recovery proof must pair node health with repo-local drill evidence instead of treating either one as sufficient alone.
+  verification commands:
+    - rg -n "single-node|multi-instance|drill|recovery|health" .sisyphus/deploy .sisyphus/plans docs/backup-recovery-runbook.md .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md
+    - rg -n "release-health|recovery drill|summary.json|process-local|redis snapshot|healthy" docs/api-contract/support-runtime.md docs/backup-recovery-runbook.md .sisyphus/plans/cloud-full-redeploy-115-191-36-90.md
+  verification results: passed; the exact task-plan grep gate now surfaces the single-node/multi-instance/drill/health wording in every intended authority artifact, and the focused support/runtime grep proves release-health summaries are explicitly tied to recovery drill summary.json + log evidence rather than standing alone.
+  success signal status: downstream deployment and recovery work can now start from one truthful boundary map — node-local `/health` proves one single-node bundle, recovery drills provide the db/auth/redis/oss/runtime evidence layer, and future multi-instance work is clearly marked as external-orchestrator territory instead of being implied by current systemd/nginx files.
+  rollback note: if later work introduces cluster-aware drain automation, multi-instance websocket authority, or a new recovery evidence sink, update the .sisyphus/deploy comments, cloud redeploy plan, support runtime contract, runbook, and architecture scan together so deploy truth and recovery proof do not fork again.
+
 - time: 2026-04-14T08:07:41+08:00
   mode: grow
   item id: M020-S04-T01

@@ -8,6 +8,8 @@ Type=simple
 User=root
 WorkingDirectory=/opt/ai-practice/web
 Environment=NODE_ENV=production
+# single-node deploy contract: one loopback frontend instance on 127.0.0.1:3445 behind nginx.
+# future multi-instance rollout still needs external ingress/LB orchestration; this unit is node-local only.
 ExecStart=/usr/bin/npm run start -- -p 3445 -H 127.0.0.1
 Restart=always
 RestartSec=5
