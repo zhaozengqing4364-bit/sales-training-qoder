@@ -39,8 +39,10 @@
 - **M018**：performance / dependency / recovery baselines 已完成。
 - **M019**：authority seams 与 release gate 收口已完成。
 - **M020 / S01**：auth transport hardening 第一片已完成：非 development session/CSRF cookie 强制 `Secure`，cookie-backed unsafe request 走双提交 CSRF 校验，websocket auth authority 收口为 `Authorization -> session cookie -> query_token compatibility`，并把 shared-password compatibility 诊断、repo-root proof、runbook/doc contract 一起写回。
-- **M020 / S02**：sensitive log 与 admin observability redaction 已完成：logger、`/api/v1/admin/system-logs`、`/admin/logs` 现在共用一个 backend-owned allowlist-first diagnostics contract，admin/support 保留 `trace_id`/`error_code`/`phase`/`session_id`/`target_user_id` 等排障字段，但 raw `details`、精确 identifier/IP、provider/request/prompt/secret-adjacent payload 保持 backend-only。
+- **M020 / S02**：sensitive log 与 admin observability redaction 已完成：logger、`/api/v1/admin/system-logs`、`/admin/logs` 现在共用一个 backend-owned allowlist-first diagnostics contract，admin/support 保留 `trace_id`/`error_code`/`phase`/`session_id`/`target_user_id` 等排障字段，但 raw `details`、精确 identifier/IP、provider/request/prompt/config secrets 保持 backend-only。
 - **M020 / S03**：multi-instance session state 与 reconnect authority 已收口：`SessionManager` 明确成为 instance-local live connection authority，`SessionStateService` 明确成为 shared Redis reconnect snapshot authority，StepFun reconnect snapshot 保留 `current_request_id` 与 `feedback_pacing_state` 但不重放 `latest_action_card`，support/runbook/architecture scan 也已写清 restart/drain 语义与缺失的 cluster drain control。
+- **M020 / S04**：M018 的手工 recovery baseline 已升级为 repo-local drill bundle：`scripts/recovery_drill_baseline.py` 固定 db/auth/redis/websocket/oss/health authority，`scripts/recovery_drill_runner.py` 直接执行同一 metadata 并把证据落到 `.dev/recovery-drills/<timestamp>/summary.json` + `*.log`，runbook / support runtime / deploy bundle / cloud redeploy plan / architecture scan 也已统一写明单机部署边界与 release-health + drill-evidence 配对留证规则。
+- **M020 milestone**：Security / multi-instance runtime / recovery hardening 已完成 milestone close-out；验收按 slice overview `After this` outcome 逐条核对，确认 auth transport、admin/support diagnostics、runtime authority split、以及 executable recovery drills 均已落到真实代码、focused proof 与长期文档/运行手册。里程碑同时保留了一个明确 follow-up：`.dev/recovery-drills/20260414T010316Z/summary.json` 真实暴露 `db_migration -> KeyError: '20260412_0315_028'`，后续必须修复并重跑 drill，而不能被 `/health` 掩盖。
 
 ## Current Product Truths
 
@@ -74,22 +76,32 @@
   - StepFun reconnect snapshot 现在保留 `current_request_id` 与 `feedback_pacing_state`，但仍故意不持久化 `latest_action_card`，避免断线后重放陈旧教练卡片；
   - `/api/v1/support/runtime` 明确保持 release-health / fault summary contract，不承担 cluster-wide websocket state API 职责；
   - restart / drain 语义必须显式区分 instance-local live sockets 与 shared Redis snapshot，当前仓库仍**没有** repo-native cluster drain endpoint、cross-instance live connection authority 或 ingress/LB orchestration。
+- **M020/S04 recovery / deploy authority 已固定**：
+  - `scripts/recovery_drill_baseline.py` 是 recovery drills 的唯一 repo-local authority inventory，固定 `db_migration`、`auth_bootstrap`、`redis_session_state`、`websocket_reconnect`、`oss_signing_playback`、`health_check` 的 checked commands / preconditions / failure signals / authority paths；
+  - `scripts/recovery_drill_runner.py` 不维护第二套 runbook，它只执行 baseline metadata 并把逐 drill `*.log` 与 `summary.json` 落到 `.dev/recovery-drills/<timestamp>/`；
+  - `.sisyphus/deploy/*` 当前只描述 **single-node native deploy bundle**，`/health` 与 `systemctl is-active` 只能证明单节点健康，不能外推出 multi-instance drain 或 cluster-wide runtime truth；
+  - release/recovery proof 现在必须同时归档 deploy `/health` capture、`/api/v1/support/runtime/*` release-health/fault summary，以及最新 repo-local recovery drill bundle；单靠其中任何一层都不足以宣称“可恢复”；
+  - manual-only 边界仍然是 `redis_service_restore`、`oss_bucket_export`、`multi_instance_drain`，后续工作不能把它们包装成已自动化能力。
 
 ## Current Focus
 
-当前项目处于 **M019 已完成、M020 接近收口** 的状态：
-- M019 已完成 milestone close-out：数据库 authority map、practice backend seam、frontend domain/transport seam、以及 assembled release truth line 都已经过 fresh milestone-level verification。
-- M020 已完成前三片：
+当前项目处于 **M020 已完成 milestone close-out、进入后续 remediation / next-milestone 输入整理** 的状态：
+- **M019** 已完成 milestone close-out：数据库 authority map、practice backend seam、frontend domain/transport seam、以及 assembled release truth line 都已经过 fresh milestone-level verification。
+- **M020** 已完成 milestone close-out，四个切片都已被 milestone-level assembled evidence 吸收：
   1. **S01** auth transport、cookie/CSRF posture、websocket auth authority、shared-password compatibility diagnosis 已在代码、focused tests、runbook、API contract 与 architecture scan 上收口；
   2. **S02** sensitive log 与 admin observability redaction 已在 logger、system-log API、admin logs UI、focused tests、inventory 与 architecture scan 上收口；
-  3. **S03** runtime connection visibility、session snapshot、reconnect epoch、restart/drain semantics 已在 runtime surfaces、focused reconnect proofs、support/runtime docs 与 recovery runbook 上收口。
-- **M020 仅剩 S04**：把 M018 的 backup/recovery baseline 升级成可执行 recovery drill / automation / deployment guidance，并直接消费 S01-S03 已固定的 auth、observability、runtime authority seams。
+  3. **S03** runtime connection visibility、session snapshot、reconnect epoch、restart/drain semantics 已在 runtime surfaces、focused reconnect proofs、support/runtime docs 与 recovery runbook 上收口；
+  4. **S04** recovery drill automation 与部署指导已完成：repo-local drill inventory/runner、runbook/current-state/support-runtime/deploy/cloud plan/architecture scan、以及 `.dev/recovery-drills/<timestamp>/summary.json` evidence bundle 已收口到同一 authority line。
+- 当前最新 milestone close-out evidence 确认：
+  - M020 的 roadmap `After this` outcomes 已全部逐条满足；
+  - `.dev/recovery-drills/20260414T010316Z/summary.json` 中 `auth_bootstrap`、`redis_session_state`、`oss_signing_playback`、`health_check` 通过；
+  - `db_migration` 仍真实暴露 `KeyError: '20260412_0315_028'`，这已经被收口为 recovery evidence 的一部分，而不是被节点健康状态掩盖。
 
 接下来的重点：
-1. 继续保持 M019 assembled release truth 稳定，不要重开第二套 startup/migration/practice/frontend/release 入口。
-2. 把 M020/S01-S03 当成固定前提推进 S04：recovery drill 必须显式复用 auth boundary、diagnostics redaction boundary、以及 SessionManager / SessionStateService authority split。
-3. 后续安全/运行时工作优先落在 authority-bearing code、focused tests、workflow、runbook 与 contract docs 上，而不是写一套 markdown-only inventory。
-4. M021 及以后的 quality/cost/failure/admin-support observability work 必须复用 S02 的 backend-owned diagnostics contract；多实例/runtime 扩容类工作必须复用 S03 的 runtime authority split，而不是让 `/api/v1/support/runtime` 长成第二套 cluster-state API。
+1. 修复 `20260412_0315_028` 对应的 Alembic revision / migration-graph drift，然后重跑同一套 recovery drills，直到 `db_migration` 也转绿。
+2. 保持 M019 assembled release truth 与 M020 的四条 authority seam 稳定，不要重开第二套 startup/migration/practice/frontend/release/auth/observability/runtime/recovery 入口。
+3. M021 及以后：admin/support observability work 继续复用 S02 的 backend-owned diagnostics contract；多实例/runtime 扩容类工作继续复用 S03 的 runtime authority split；恢复/发布类工作继续复用 S04 的 drill-evidence + health-evidence 配对规则。
+4. 继续把安全/运行时/恢复类工作落在 authority-bearing code、focused tests、workflow、runbook 与 contract docs 上，而不是退回 markdown-only inventory。
 
 当前不应做的事：
 - 不要把 `init_db()` 的 `create_all()` / compat guard 外推成生产迁移 authority。
@@ -100,6 +112,8 @@
 - 不要让后续 auth slices 回退到隐含默认值：cookie secure、CSRF、websocket query token、shared password 都已经在 M020/S01 被写成显式 authority / compatibility / off-ramp 规则。
 - 不要让未来 admin/support observability slices 在 route 或 UI 层重新暴露 raw `details`、精确 identity/IP、provider/request payload 或 secret-adjacent config；这些已经在 M020/S02 被明确划回 backend-only。
 - 不要把单实例 `SessionManager.total_sessions=0` 误写成“集群已 drain 完毕”；S03 已明确这只是 instance-local 视角，真正 restart-safe 的 shared authority 只有 Redis reconnect snapshot。
+- 不要把 `/health`、systemd active、或一份 runbook 文档单独当成“recovery 已验证”；S04 已明确必须配对最新 `.dev/recovery-drills/<timestamp>/summary.json` + 逐 drill log，并把失败 drill 如实写进 release/recovery 记录。
+- 不要发明第二套 recovery command list；后续 drill / deploy / support guidance 必须直接复用 `scripts/recovery_drill_baseline.py` 的 metadata，而不是在 plan/doc/script 里各自维护一套。
 
 ## Capability Contract
 
@@ -126,4 +140,4 @@
 - [x] M017 — Realtime contract 与 concurrency proof 收口
 - [x] M018 — Performance / dependency / recovery baselines
 - [x] M019 — Authority seams 与 release gate 收口
-- [ ] M020 — Security / multi-instance runtime / recovery hardening（S01-S03 complete; S04 pending）
+- [x] M020 — Security / multi-instance runtime / recovery hardening
