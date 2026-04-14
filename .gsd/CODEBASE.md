@@ -1,7 +1,7 @@
 # Codebase Map
 
-Generated: 2026-04-14T08:10:10Z | Files: 500 | Described: 0/500
-<!-- gsd:codebase-meta {"generatedAt":"2026-04-14T08:10:10Z","fingerprint":"56d634355fa49d186266ff75c2d7cd90ecb163f1","fileCount":500,"truncated":true} -->
+Generated: 2026-04-14T08:25:25Z | Files: 500 | Described: 0/500
+<!-- gsd:codebase-meta {"generatedAt":"2026-04-14T08:25:25Z","fingerprint":"56d634355fa49d186266ff75c2d7cd90ecb163f1","fileCount":500,"truncated":true} -->
 Note: Truncated to first 500 files. Run with higher --max-files to include all.
 
 ### (root)/

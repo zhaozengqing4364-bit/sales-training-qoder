@@ -1,9 +1,3 @@
-{"id":"381c5abf-f590-49dc-a6e5-f10adeefe867","ts":"2026-04-13T02:57:39.712Z","severity":"warning","message":"Safety: 6 unexpected file change(s) outside task plan","source":"notify","read":false}
-{"id":"92bd5385-4c0a-41c5-85f0-e5efe73501b1","ts":"2026-04-13T02:57:47.087Z","severity":"info","message":"Verification gate: 1/1 checks passed","source":"notify","read":false}
-{"id":"de357102-394d-4e9a-91a5-3bf028cb1070","ts":"2026-04-13T03:10:08.536Z","severity":"info","message":"Committed: chore: Wrote the narrowed startup/migration/bootstrap authority line ba…","source":"notify","read":false}
-{"id":"216a3c37-29b0-476a-962e-b63734fe3ef6","ts":"2026-04-13T03:10:08.547Z","severity":"warning","message":"[safety] file-change: .codex/loop/log.md — Modified but not in task plan's expected output","source":"workflow-logger","read":false}
-{"id":"3daf183d-0a23-45c8-8d60-320b7ac82c8c","ts":"2026-04-13T03:10:08.549Z","severity":"warning","message":"[safety] file-change: .codex/loop/state.json — Modified but not in task plan's expected output","source":"workflow-logger","read":false}
-{"id":"200adce3-eff0-448e-b21f-f3f7195d0bef","ts":"2026-04-13T03:10:08.550Z","severity":"warning","message":"[safety] file-change: .github/workflows/nfr-performance-check.yml — Modified but not in task plan's expected output","source":"workflow-logger","read":false}
 {"id":"7eb5aa3e-dc01-4dac-aa5c-c40019a0e1f4","ts":"2026-04-13T03:10:08.551Z","severity":"warning","message":"[safety] file-change: docs/setup/backup-recovery-current-state.md — Modified but not in task plan's expected output","source":"workflow-logger","read":false}
 {"id":"cdeab611-9070-4575-92a3-13988d54f23b","ts":"2026-04-13T03:10:08.553Z","severity":"warning","message":"Safety: 4 unexpected file change(s) outside task plan","source":"notify","read":false}
 {"id":"4301dce9-40be-45ca-b5f2-56e52059a099","ts":"2026-04-13T03:10:24.554Z","severity":"info","message":"Verification gate: FAILED — npm run test","source":"notify","read":false}
@@ -498,3 +492,9 @@
 {"id":"2f1438b1-9884-4c97-bd46-53fa80bc25bc","ts":"2026-04-14T08:09:34.361Z","severity":"warning","message":"Safety: 2 unexpected file change(s) outside task plan","source":"notify","read":false}
 {"id":"c0bc76de-ca7c-427a-82a6-5d3e63b0adcd","ts":"2026-04-14T08:10:10.469Z","severity":"info","message":"Verification gate: FAILED — npm run test","source":"notify","read":false}
 {"id":"d27d248c-a4af-4c9e-9554-9563a0b3e553","ts":"2026-04-14T08:10:10.476Z","severity":"warning","message":"Verification failed in auto-discovered package.json checks — treating as advisory.","source":"notify","read":false}
+{"id":"2703367b-cf7e-42bf-9f89-6b9d9e5c504c","ts":"2026-04-14T08:24:38.671Z","severity":"info","message":"Committed: docs: Documented the current single-org ownership model and a concrete…","source":"notify","read":false}
+{"id":"6c9945dc-29bd-46be-b384-312ad35c1b22","ts":"2026-04-14T08:24:38.694Z","severity":"warning","message":"[safety] file-change: .codex/loop/log.md — Modified but not in task plan's expected output","source":"workflow-logger","read":false}
+{"id":"586bee5f-9d6f-4202-86df-5d124ab46d24","ts":"2026-04-14T08:24:38.706Z","severity":"warning","message":"[safety] file-change: .codex/loop/state.json — Modified but not in task plan's expected output","source":"workflow-logger","read":false}
+{"id":"8a65e7d4-8828-478d-8768-eae02e63a76b","ts":"2026-04-14T08:24:38.710Z","severity":"warning","message":"Safety: 2 unexpected file change(s) outside task plan","source":"notify","read":false}
+{"id":"70fa7f27-f118-405c-aad9-67b9448e193d","ts":"2026-04-14T08:25:25.050Z","severity":"info","message":"Verification gate: FAILED — npm run test","source":"notify","read":false}
+{"id":"a7dfbc3a-2c60-49a0-8f7a-c5998ed16489","ts":"2026-04-14T08:25:25.062Z","severity":"warning","message":"Verification failed in auto-discovered package.json checks — treating as advisory.","source":"notify","read":false}
