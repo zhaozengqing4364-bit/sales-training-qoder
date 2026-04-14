@@ -41,6 +41,40 @@ LEGACY_PROMPT_ENTRYPOINTS: dict[str, dict[str, Any]] = {
     },
 }
 
+# T01 inventory for M021/S04: these are the shipped compatibility/default paths that
+# currently hide runtime quality/cost/failure state and therefore need explicit
+# eventization in the next task instead of being inferred from user-facing copy.
+LLM_RUNTIME_EVENT_INVENTORY: tuple[dict[str, Any], ...] = (
+    {
+        "event_id": "llm_fallback_response",
+        "phase": "generate",
+        "trigger": "LLMService.generate() returns Result.fail(fallback_response) when the provider is unavailable or the service is not configured and allow_fallback_response=True.",
+        "current_surface": "_get_fallback_response() produces plausible assistant copy instead of an explicit failure token.",
+        "hidden_risk": "provider/config/runtime failure is translated into conversational text, so downstream readers must infer degradation from context instead of a first-class quality event.",
+    },
+    {
+        "event_id": "llm_evaluation_default_scores",
+        "phase": "evaluate",
+        "trigger": "LLMService.evaluate() returns Result.ok(...) with hardcoded 60 scores when json.loads() fails after the model answered.",
+        "current_surface": "communication/product_knowledge/problem_solving/customer_focus/professionalism all default to 60 with generic strengths/weaknesses/summary text.",
+        "hidden_risk": "evaluation parse failure currently looks like a successful low-score evaluation instead of an explicit degraded/failure event.",
+    },
+    {
+        "event_id": "llm_report_generation_failed",
+        "phase": "generate_report",
+        "trigger": "CompiledPromptContract/base_url/provider/report generation failures surface through Result.fail(result.fallback or [REPORT_GENERATION_FAILED]).",
+        "current_surface": "callers usually receive only the propagated fallback string or [REPORT_GENERATION_FAILED], without a normalized phase-specific quality event.",
+        "hidden_risk": "operators can see that report generation failed, but cannot reliably distinguish prompt compile failure, provider rejection, or fallback narrative without reading logs.",
+    },
+    {
+        "event_id": "llm_cost_tracking_coarse_session_total",
+        "phase": "cost",
+        "trigger": "Successful agenerate() calls only update cost_per_1k_tokens * total_tokens into session_costs[session_id].",
+        "current_surface": "CostTrackingHandler stores prompt/completion/total tokens in memory and emits a budget warning around ¥0.8, but there is no persisted per-call/provider/contract cost event line.",
+        "hidden_risk": "future support/runtime readers cannot inspect where cost came from or whether a degraded/failure path still consumed tokens without re-reading logs.",
+    },
+)
+
 
 class CostTrackingHandler(AsyncCallbackHandler):
     """Track LLM token usage for cost control"""

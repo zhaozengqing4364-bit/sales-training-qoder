@@ -1,6 +1,6 @@
 {
   "mode": "grow",
-  "current_issue_id": "M021-S03-T03",
+  "current_issue_id": "M021-S04-T01",
   "current_issue_type": "task",
   "current_issue_status": "done",
   "pending_issue_ids": [],
@@ -216,18 +216,21 @@
   "blocked_issue_ids": [],
   "deferred_issue_ids": [],
   "last_modified_files": [
-    "web/src/lib/api/types.ts",
-    "web/src/lib/session-evidence.ts",
-    "web/src/app/(user)/practice/[sessionId]/report/page.tsx",
-    "web/src/app/(user)/practice/[sessionId]/replay/page.tsx",
-    "web/src/app/(dashboard)/history/page.tsx"
+    "backend/src/common/ai/llm_service.py",
+    "backend/src/sales_bot/websocket/stepfun_realtime_handler.py",
+    "backend/tests/unit/test_ai_quality_event_inventory.py",
+    ".gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md",
+    ".gsd/KNOWLEDGE.md",
+    ".codex/loop/state.json",
+    ".codex/loop/log.md"
   ],
   "last_verification_commands": [
-    "npm --prefix web test -- --run \"src/app/(user)/practice/[sessionId]/report/page.test.tsx\" \"src/app/(user)/practice/[sessionId]/replay/page.test.tsx\" \"src/app/(dashboard)/history/page.test.tsx\"",
-    "rg -n \"prefer `canonical_evaluation_kernel`|compatibility_readers|retire 阶段\" .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md -S"
+    "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/test_ai_quality_event_inventory.py -q",
+    "rg -n \"default|fallback|NO_STAGE_RESULTS|cost|report_generation_failed|knowledge_answer|degraded|claim_truth\" backend/src/common backend/src/sales_bot backend/src/evaluation",
+    "rg -n \"quality / cost / failure inventory baseline|LLM_RUNTIME_EVENT_INVENTORY|STEPFUN_RUNTIME_EVENT_INVENTORY|default score 不等于真实低分|knowledge-answer path truth 仍必须沿 compat seam 读取\" .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md backend/src/common/ai/llm_service.py backend/src/sales_bot/websocket/stepfun_realtime_handler.py"
   ],
-  "last_verification_result": "passed; the exact T03 web verification bundle finished 44/44 green after removing duplicated JSX tails, teaching report/replay/history to resolve canonical -> compat -> legacy rollups through the shared reader helper, and extending the shared web evidence contract types to carry canonical_evaluation_kernel and compatibility_readers.",
-  "last_success_signal": "report, replay, and history now expose their score source explicitly at the read side, compatibility fallback remains intentional instead of implicit, and the retirement order note remains grep-discoverable in the architecture scan.",
+  "last_verification_result": "passed; the new fail-first inventory test finished green after adding code-owned runtime event inventories for legacy LLM defaults/cost tracking and StepFun degradation/mode surfaces, the exact task-plan grep gate still exposes the live fallback/degraded/cost/knowledge seams in backend code, the focused architecture grep proves the S04 inventory write-back is durable, and LSP diagnostics stayed clean on all touched Python files.",
+  "last_success_signal": "future S04 work no longer has to rediscover where AI failures are being hidden: the repo now has one grep-discoverable inventory for legacy LLM fallback/default/cost paths, one for StepFun live runtime degradations, and an architecture note that ties knowledge-answer mode truth back to the compat seam.",
   "last_growth_scan": null,
-  "next_action": "Proceed to the next planned item; M021/S03/T03 no longer needs resume work."
+  "next_action": "Proceed to M021/S04/T02; implement a unified quality/cost/failure event schema on top of the newly-fixed LLM and StepFun inventory seams without inventing a second knowledge-answer truth line."
 }

@@ -1,3 +1,26 @@
+- time: 2026-04-14T12:08:00+08:00
+  mode: grow
+  item id: M021-S04-T01
+  files changed:
+    - backend/src/common/ai/llm_service.py
+    - backend/src/sales_bot/websocket/stepfun_realtime_handler.py
+    - backend/tests/unit/test_ai_quality_event_inventory.py
+    - .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md
+    - .gsd/KNOWLEDGE.md
+    - .codex/loop/state.json
+    - .codex/loop/log.md
+  summary: Finished M021/S04/T01 by turning the hidden AI fallback/default/cost behavior into a code-owned inventory instead of planner prose. `LLM_RUNTIME_EVENT_INVENTORY` now names the four shipped compat blind spots in `common.ai.llm_service` (filler fallback responses, parse-to-default 60 scores, coarse `[REPORT_GENERATION_FAILED]` surfaces, and session-only cost totals), `STEPFUN_RUNTIME_EVENT_INVENTORY` now names the live realtime degradations/mode seams in `stepfun_realtime_handler` (KB warmup degradation, capability pipeline failure, knowledge-answer rollout mode, browser TTS fallback, and transcription-timeout blocking), and the architecture scan/knowledge log write back the same authority line so T02 can add one explicit event schema instead of rediscovering these paths.
+  verification commands:
+    - backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/test_ai_quality_event_inventory.py -q
+    - rg -n "default|fallback|NO_STAGE_RESULTS|cost|report_generation_failed|knowledge_answer|degraded|claim_truth" backend/src/common backend/src/sales_bot backend/src/evaluation
+    - rg -n "quality / cost / failure inventory baseline|LLM_RUNTIME_EVENT_INVENTORY|STEPFUN_RUNTIME_EVENT_INVENTORY|default score 不等于真实低分|knowledge-answer path truth 仍必须沿 compat seam 读取" .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md backend/src/common/ai/llm_service.py backend/src/sales_bot/websocket/stepfun_realtime_handler.py
+    - lsp diagnostics backend/src/common/ai/llm_service.py
+    - lsp diagnostics backend/src/sales_bot/websocket/stepfun_realtime_handler.py
+    - lsp diagnostics backend/tests/unit/test_ai_quality_event_inventory.py
+  verification results: passed; the fail-first focused inventory test finished 2/2 green, the exact task-plan grep gate stayed green after the write-back, the focused architecture grep proves the new inventory section and code constants are grep-discoverable, and LSP diagnostics stayed clean on every touched Python file.
+  success signal status: future agents can now inspect explicit LLM/StepFun event inventories and the architecture note instead of reverse-engineering hidden AI failures from default scores, fallback copy, or scattered logs.
+  rollback note: if T02 changes event ids or migrates any of these surfaces into a real unified event schema, keep `LLM_RUNTIME_EVENT_INVENTORY`, `STEPFUN_RUNTIME_EVENT_INVENTORY`, the focused unit test, and the architecture/knowledge write-back aligned so the discovery inventory remains truthful until the unified event line fully replaces it.
+
 - time: 2026-04-14T11:46:58+08:00
   mode: grow
   item id: M021-S03-T03

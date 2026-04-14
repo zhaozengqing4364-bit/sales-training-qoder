@@ -23,28 +23,13 @@
 - 已有资产治理：Agent、Persona、知识库、PPT、语音 runtime policy 与对应 admin 页面。
 
 ### Already-validated milestone capabilities
-- **M001**：桌面端销售训练、PPT 会后复盘、知识生效链、单次报告与主管连续变化闭环已验证。
-- **M003**：Persona / knowledge 已能真实影响 objection-heavy 销售训练，而不是只停留在 prompt 文案层。
-- **M004**：report / replay / history / retry learner loop 已完成 explanation-rich 收口。
-- **M005-M006**：admin analytics / intervention / governance / weekly operating pack 与共享 seam 已完成并封板。
-- **M007**：实时教练闭环与 same-session report/replay unlock 已正式封板，R009 已验证。
-- **M008-M010**：retrieval truth、raw audio audit、report conclusion evidence / degradation taxonomy 已全部打通并验证。
-- **M011**：KnowledgeAnswerEngine、control plane、audit、debug API、compat rollout 已接入现有 runtime。
-- **M012**：首登与 learner 基础体验已补齐（forgot-password、可信 dashboard/profile、shared help、practice route fallback 等）。
-- **M013**：system audit findings 已归一化成可信 repair backlog 与 focused verification baseline。
-- **M014**：learner 入口与体验闭环补齐（dashboard CTA、profile→forgot/reset、shared help、practice preflight/interruption guidance）。
-- **M015**：frontend hygiene 与 learner shell 保护收口已完成并封板。
-- **M016**：auth / API / admin security contract hardening 已完成。
-- **M017**：realtime contract 与 concurrency proof 收口已完成。
-- **M018**：performance / dependency / recovery baselines 已完成。
-- **M019**：authority seams 与 release gate 收口已完成。
-- **M020 / S01**：auth transport hardening 第一片已完成：非 development session/CSRF cookie 强制 `Secure`，cookie-backed unsafe request 走双提交 CSRF 校验，websocket auth authority 收口为 `Authorization -> session cookie -> query_token compatibility`，并把 shared-password compatibility 诊断、repo-root proof、runbook/doc contract 一起写回。
-- **M020 / S02**：sensitive log 与 admin observability redaction 已完成：logger、`/api/v1/admin/system-logs`、`/admin/logs` 现在共用一个 backend-owned allowlist-first diagnostics contract，admin/support 保留 `trace_id`/`error_code`/`phase`/`session_id`/`target_user_id` 等排障字段，但 raw `details`、精确 identifier/IP、provider/request/prompt/config secrets 保持 backend-only。
-- **M020 / S03**：multi-instance session state 与 reconnect authority 已收口：`SessionManager` 明确成为 instance-local live connection authority，`SessionStateService` 明确成为 shared Redis reconnect snapshot authority，StepFun reconnect snapshot 保留 `current_request_id` 与 `feedback_pacing_state` 但不重放 `latest_action_card`，support/runbook/architecture scan 也已写清 restart/drain 语义与缺失的 cluster drain control。
-- **M020 / S04**：M018 的手工 recovery baseline 已升级为 repo-local drill bundle：`scripts/recovery_drill_baseline.py` 固定 db/auth/redis/websocket/oss/health authority，`scripts/recovery_drill_runner.py` 直接执行同一 metadata 并把证据落到 `.dev/recovery-drills/<timestamp>/summary.json` + `*.log`，runbook / support runtime / deploy bundle / cloud redeploy plan / architecture scan 也已统一写明单机部署边界与 release-health + drill-evidence 配对留证规则。
-- **M020 milestone**：Security / multi-instance runtime / recovery hardening 已完成 milestone close-out；验收按 slice overview `After this` outcome 逐条核对，确认 auth transport、admin/support diagnostics、runtime authority split、以及 executable recovery drills 均已落到真实代码、focused proof 与长期文档/运行手册。里程碑同时保留了一个明确 follow-up：`.dev/recovery-drills/20260414T010316Z/summary.json` 真实暴露 `db_migration -> KeyError: '20260412_0315_028'`，后续必须修复并重跑 drill，而不能被 `/health` 掩盖。
-- **M021 / S01**：live AI authority inventory 已完成：architecture scan、API contract、focused proof 文件、以及 post-M018 next-wave plan 现在都把 StepFun realtime + compiled voice snapshot 标成 live authority，把 `common.knowledge_engine.compat` 标成 shipped knowledge rollout seam，把 `PromptTemplateService` 标成 live governance + compat helper，把 classic scoring / legacy evaluation-report stack 标成 compat/enhancement 或 retire candidate。后续 M021 切片不应再把文件名看起来“像 prompt / evaluation 主链”的模块误判成真实 live authority。
-- **M021 / S02**：prompt control plane 已完成第一轮真实统一：`PromptTemplateService.compile_runtime_prompt_contract(...)` 现在把 legacy evaluation/report 模板编译成带 `contract_hash`、`runtime_consumer`、`base_url_policy` 与 diagnostics 的 `CompiledPromptContract`，`StagedEvaluationService` / `ComprehensiveReportService` 已真正消费这份 compiled artifact，compiled-path missing vars / empty render / base_url / generation errors 会显式 fail-closed，不再 silent fail-open。相应 authority 也已写回 `prompt-templates` / `voice-runtime` / `personas` / `model-configs` docs 与架构扫描，后续 S03 必须沿这条 seam 收口 canonical evaluation kernel，S04 必须沿这条 diagnostics seam 暴露 quality/failure events。
+- **M001-M010**：首发训练闭环、知识与角色真实性、report/replay/history learner loop、主管趋势、retrieval truth、audio audit、conclusion evidence / degradation taxonomy 已全部验证。
+- **M011-M018**：KnowledgeAnswerEngine control plane、首登可用性与 learner 入口修复、frontend hygiene、auth/API/admin security contract、realtime/concurrency proof、performance / dependency / recovery baselines 已完成并封板。
+- **M019**：database / frontend / practice / release truth authority seams 已完成 assembled close-out。
+- **M020**：security / multi-instance runtime / recovery hardening 已完成 milestone close-out；auth transport、admin/support allowlist diagnostics、instance-local vs Redis reconnect authority、repo-local recovery drill bundle 已统一到真实代码、focused proof、长期文档与运行手册。
+- **M021 / S01**：AI/runtime/prompt/score/report 主链已盘点为 live / compat / shadow / retire candidate，后续切片不应再基于“文件名像主链”做误判。
+- **M021 / S02**：PromptTemplateService 已真正驱动 legacy evaluation/report compiled prompt contract；missing vars / empty render / base_url / generation failure 已进入 explicit diagnostics / fail-closed contract。
+- **M021 / S03**：canonical evaluation kernel 已完成 shared-kernel 收口：realtime、report、replay、history、admin 现在共享同一套 scenario-aware `canonical_evaluation_kernel` 与 `compatibility_readers`；legacy top-level rollups 只作为过渡镜像保留，web report/replay/history 已明确按 canonical -> compatibility -> legacy 的同一读侧顺序消费分数事实。
 
 ## Current Product Truths
 
@@ -56,78 +41,42 @@
 - audited API error-contract 权威线同样明确：route-local 4xx 用 `JSONResponse(error_response(...))` 暴露顶层 `error/message/trace_id`；dependency/auth/RBAC 失败继续走结构化 `detail={error,message}`；前端统一从 `web/src/lib/api/client.ts` 的 `normalizeApiErrorPayload` / `ApiRequestError` 读取。
 - admin security baseline 权威线已补齐第一批高风险 seam：admin-only RBAC 必须直接声明在 router module 上；token/password/cookie/email 的日志保护必须落在 `StructuredLogger` 共享 sink；`backend/src/admin/api/security_inventory.py` 与 `backend/src/common/monitoring/log_safety_inventory.py` 是后续 widening 的代码级事实源。
 - lifecycle concurrency 权威线已经明确：stale `pause` / `resume` writers 只能在写入时通过 status compare-and-swap 收敛；sales 终态语义仍是 `end -> scoring`、presentation 终态语义仍是 `end -> completed`。
-- websocket realtime 权威线已经明确：`usePracticeWebSocket()` 继续拥有 transport lifecycle、initial pending flush、binary negotiation、local backpressure buffering 与 interrupt pre-cleanup；`web/src/hooks/websocket/message-handlers.ts` 继续拥有 inbound state projection；reconnect 是 fresh transport epoch，不应 replay stale dead-socket interrupt/control intent。
-- M019 database authority 现在已明确：`backend/src/common/db/session.py::STARTUP_DB_AUTHORITY` 是 startup / migration / legacy repair / auth bootstrap 的 code-level authority map；`init_db()` 仍是 startup bootstrap seam，但非 development/test 不再承担 schema repair 责任；显式 drift 需走 Alembic 或 `python scripts/repair_legacy_schema.py`。
-- M019 frontend authority 也已明确：`web/src/lib/api/client.ts` 继续作为唯一 outward `api` façade；`usePracticeWebSocket()` 继续作为 live practice page 的唯一 outward transport/orchestration contract；页面不要绕开这些 seam 自己重建 auth/error/request transport 或 websocket lifecycle。
-- M019 release truth authority 同样已明确：`.github/workflows/release-truth-gate.yml` + `.github/workflows/nfr-performance-check.yml`、live `/metrics` + `/api/v1/analytics/*`、以及 router-backed `docs/api-contract/*` 共同形成当前 assembled release truth line；legacy spec 与 admin home demo stats 仍只是 drift inventory，不得包装成 release authority。
-- **M020/S01 auth transport authority 已固定**：
-  - `backend/src/common/auth/service.py` 是 auth transport/cookie/CSRF 的共享 authority seam；
-  - 非 development 环境下 `app_session` 与 `app_csrf` cookie 会被强制标记为 `Secure`；
-  - cookie-backed unsafe HTTP request 必须通过 `app_csrf` ↔ `X-CSRF-Token` 双提交校验；
-  - websocket auth authority 已收口为 `Authorization -> session cookie -> query token compatibility`，并通过 `resolve_websocket_auth(...)` / `resolve_websocket_token(...)` 统一；
-  - `common.auth.api.login` 会通过 `X-Auth-Authority` / `X-Auth-Compatibility-Mode` 暴露 managed password / env compatibility authority，shared password 只作为显式 compatibility 模式存在。
-- **M020/S02 admin/support observability authority 已固定**：
-  - `backend/src/common/monitoring/logger.py` 现在是 admin/support 日志可见性的 backend-owned authority seam；
-  - `/api/v1/admin/system-logs` 通过 `policy.version`、`policy.diagnostic_fields`、masked identifiers、safe `details` summary、ordered `diagnostics[]` 暴露唯一可信的 admin/support diagnostics contract；
-  - `/admin/logs` 只渲染 backend 返回的 diagnostics 列表，不再在前端本地重建 allowlist；
-  - raw `details`、精确 `user_identifier` / `ip_address`、provider/request/response payload、prompt text、token/password/cookie/email、`base_url`、stack trace 与 secrets 保持 backend-only；
-  - 未来 M021 quality/cost/failure events 若进入 admin/support 诊断面，必须复用这套 allowlist-first diagnostics contract，而不是发明第二套 support payload。
-- **M020/S03 websocket runtime authority 已固定**：
-  - `SessionManager.get_stats()` 是 **instance-local live connection** inspection surface，只能回答“当前进程持有哪些 live sockets / runtime diagnostics”；
-  - `SessionStateService.get_stats()` 是 **shared Redis reconnect snapshot** inspection surface，负责 `last_saved_snapshot`、`last_loaded_snapshot`、`request_epoch`、`connection_epoch`、`last_disconnect_reason`、`last_error` 等 restart-safe reconnect authority；
-  - StepFun reconnect snapshot 现在保留 `current_request_id` 与 `feedback_pacing_state`，但仍故意不持久化 `latest_action_card`，避免断线后重放陈旧教练卡片；
-  - `/api/v1/support/runtime` 明确保持 release-health / fault summary contract，不承担 cluster-wide websocket state API 职责；
-  - restart / drain 语义必须显式区分 instance-local live sockets 与 shared Redis snapshot，当前仓库仍**没有** repo-native cluster drain endpoint、cross-instance live connection authority 或 ingress/LB orchestration。
-- **M020/S04 recovery / deploy authority 已固定**：
-  - `scripts/recovery_drill_baseline.py` 是 recovery drills 的唯一 repo-local authority inventory，固定 `db_migration`、`auth_bootstrap`、`redis_session_state`、`websocket_reconnect`、`oss_signing_playback`、`health_check` 的 checked commands / preconditions / failure signals / authority paths；
-  - `scripts/recovery_drill_runner.py` 不维护第二套 runbook，它只执行 baseline metadata 并把逐 drill `*.log` 与 `summary.json` 落到 `.dev/recovery-drills/<timestamp>/`；
-  - `.sisyphus/deploy/*` 当前只描述 **single-node native deploy bundle**，`/health` 与 `systemctl is-active` 只能证明单节点健康，不能外推出 multi-instance drain 或 cluster-wide runtime truth；
-  - release/recovery proof 现在必须同时归档 deploy `/health` capture、`/api/v1/support/runtime/*` release-health/fault summary，以及最新 repo-local recovery drill bundle；单靠其中任何一层都不足以宣称“可恢复”；
-  - manual-only 边界仍然是 `redis_service_restore`、`oss_bucket_export`、`multi_instance_drain`，后续工作不能把它们包装成已自动化能力。
-- **M021/S01 AI authority inventory 已固定**：
-  - `backend/src/sales_bot/websocket/router.py` → `backend/src/sales_bot/websocket/stepfun_realtime_handler.py` 是当前 learner-facing sales live AI/runtime authority；presentation StepFun realtime 仍是同一 runtime seam 的 adapter，而不是第二套 AI 栈；
-  - `backend/src/sales_bot/services/voice_runtime_policy.py` + `backend/src/sales_bot/services/voice_instruction_compiler.py` 是当前 compiled prompt/runtime contract authority；live StepFun 指令来自会话创建时固化的 `voice_policy_snapshot`，不是 `PromptTemplateService`；
-  - `backend/src/sales_bot/websocket/components/stepfun_internal_knowledge_searcher.py` + `backend/src/common/knowledge_engine/compat.py` 是当前 shipped knowledge rollout authority seam；`common.knowledge_engine.engine.py` 默认仍是 shadow-by-default / enabled-only live path；
-  - `backend/src/prompt_templates/service.py` + routes 是 live governance surface，也是 runtime-adjacent compat helper，但**不是** live sales StepFun prompt authority；
-  - `backend/src/evaluation/services/realtime_scoring.py`、`ai_scoring.py`、`score_processor.py` 仍是 classic `voice_mode == "legacy"` 的 compat runtime；`staged_evaluation.py`、`comprehensive_report.py`、`report_generation_trigger.py`、`evaluation/api.py`、`common/ai/llm_service.py::evaluate/generate_report` 仍有 shipped readers/consumers，所以目前只能视为 compat/enhancement 或 retire candidate，不能粗暴删除；
-  - 对外 consumer-facing authority docs 现在以 `docs/api-contract/sessions.md` 与 `docs/api-contract/prompt-templates.md` 为主，`docs/api-contract/support-runtime.md` 保持 support/read-side authority explainer，不承担 live AI control-plane spec 角色。
-- **M021/S02 compiled prompt authority 已固定**：
-  - `PromptTemplateService.compile_runtime_prompt_contract(...)` 是 legacy evaluation/report 的 compiled prompt handoff seam，会产出带 `contract_hash`、`runtime_consumer`、`base_url_policy`、`model_provider`/`model_name` 与 diagnostics 的 `CompiledPromptContract`；
-  - `StagedEvaluationService.evaluate_stage()` 与 `ComprehensiveReportService._generate_detailed_feedback()` 现在必须先编译 contract 再调用 `LLMService.evaluate()` / `generate_report()`，模板 lookup 不再只是“看起来接上了”；
-  - `LLMService` 对 compiled-contract 调用会记录 `PROMPT_TEMPLATE_RENDERED` / `LLM_BASE_URL_POLICY` diagnostics，并显式 fail-closed 到 `[PROMPT_CONTRACT_MISSING_VARIABLES:*]`、`[PROMPT_CONTRACT_EMPTY_RENDERED_PROMPT]`、`[PROMPT_CONTRACT_BASE_URL_REQUIRED]`、`[LLM_GENERATION_ERROR:*]`，不再回落到 filler copy；
-  - `backend/src/prompt_templates/taxonomy.py` 现在是 prompt source taxonomy 的 code-owned authority：`prompt_template_service` 是 legacy compiled-template authority，`voice_instruction_compiler` / `persona_policy` / `runtime_guardrails` 仍是 live StepFun authority，`presentation_prompt_resolver` 是 compat runtime helper，legacy raw dict prompt 只是 compatibility fallback；
-  - admin/operator routing 现在固定为：改 `prompt-templates` / `scenario-prompts` 影响 legacy evaluation/report compiled contract 与 presentation helper copy；改 `personas` / `voice-runtime` 影响下一次 StepFun 会话的 live instruction contract；改 `model-configs` 的 provider / `base_url` 决定 legacy compiled contract 能否执行。
+- websocket realtime 权威线已经明确：`usePracticeWebSocket()` 继续拥有 transport lifecycle、initial pending flush、binary negotiation、local backpressure buffering 与 interrupt pre-cleanup；`web/src/hooks/websocket/message-handlers.ts` 继续拥有 inbound state projection；reconnect 是 fresh transport epoch，不应 replay stale dead-socket intent。
+- **M020/S01 auth transport authority 已固定**：`backend/src/common/auth/service.py` 是 cookie/CSRF/websocket auth 的共享 authority seam；非 development 下 session/CSRF cookie 强制 `Secure`；cookie-backed unsafe request 走双提交 CSRF 校验；websocket auth authority 为 `Authorization -> session cookie -> query token compatibility`。
+- **M020/S02 admin/support observability authority 已固定**：`backend/src/common/monitoring/logger.py` 是 allowlist-first diagnostics authority seam；`/api/v1/admin/system-logs` 与 `/admin/logs` 只暴露 masked identifiers、safe diagnostics、policy metadata；raw details / precise IP / provider payload / secrets 保持 backend-only。
+- **M020/S03 runtime authority 已固定**：`SessionManager.get_stats()` 只回答 instance-local live connection，`SessionStateService.get_stats()` 才是 shared Redis reconnect snapshot authority；support/runtime 仍是 release-health summary，不是 cluster-wide websocket state API。
+- **M020/S04 recovery / deploy authority 已固定**：`scripts/recovery_drill_baseline.py` 是 repo-local recovery drill inventory authority，`scripts/recovery_drill_runner.py` 只执行同一 metadata 并把证据落到 `.dev/recovery-drills/<timestamp>/`；release/recovery proof 必须配对 deploy health、support runtime、以及最新 drill bundle。
+- **M021/S01 AI authority inventory 已固定**：live sales/presentation realtime authority 仍在 `sales_bot/websocket/stepfun_realtime_handler.py` 与 voice runtime policy/compiler；`PromptTemplateService` 是 governance + legacy compiled-contract seam，不是 live StepFun prompt authority；classic scoring、legacy evaluation/report、manual `/evaluation/*` 仍是 compat/enhancement surfaces。
+- **M021/S02 compiled prompt authority 已固定**：`PromptTemplateService.compile_runtime_prompt_contract(...)` 是 legacy evaluation/report compiled prompt handoff seam；compiled path 会显式记录并 fail-close 到 `[PROMPT_CONTRACT_MISSING_VARIABLES:*]`、`[PROMPT_CONTRACT_EMPTY_RENDERED_PROMPT]`、`[PROMPT_CONTRACT_BASE_URL_REQUIRED]`、`[LLM_GENERATION_ERROR:*]`。
+- **M021/S03 canonical evaluation authority 已固定**：
+  - `backend/src/common/effectiveness/canonical.py` 是 scenario-aware canonical dimension catalog、shared rollup contract、surface reader plan 的 code-owned authority；
+  - `SessionEvidenceService` 是 report/replay/history/admin 的 canonical projection authority，并把 canonical kernel 与 compatibility readers 一起暴露给下游；
+  - realtime score snapshot persistence 必须同步扩展 `sales_bot/websocket/components/stepfun_message_helpers.normalize_score_snapshot()`，否则新 kernel 字段会只在内存存在、落库时丢失；
+  - web read-side 必须复用 `web/src/lib/session-evidence.ts::readSessionEvaluationRollups(...)`，统一执行 `canonical_evaluation_kernel -> compatibility_readers -> legacy rollups`，不得再让页面各自重算或偷读旧字段。
 
 ## Current Focus
 
-当前项目处于 **M020 已完成里程碑收口、M021/S01-S02 已完成 AI authority inventory + prompt control plane unified seam、M021/S03-S04 准备执行** 的状态：
-- **M019** 已完成 milestone close-out：数据库 authority map、practice backend seam、frontend domain/transport seam、以及 assembled release truth line 都已经过 fresh milestone-level verification。
-- **M020** 已完成 milestone close-out，四个切片都已被 milestone-level assembled evidence 吸收：
-  1. **S01** auth transport、cookie/CSRF posture、websocket auth authority、shared-password compatibility diagnosis 已在代码、focused tests、runbook、API contract 与 architecture scan 上收口；
-  2. **S02** sensitive log 与 admin observability redaction 已在 logger、system-log API、admin logs UI、focused tests、inventory 与 architecture scan 上收口；
-  3. **S03** runtime connection visibility、session snapshot、reconnect epoch、restart/drain semantics 已在 runtime surfaces、focused reconnect proofs、support/runtime docs 与 recovery runbook 上收口；
-  4. **S04** recovery drill automation 与部署指导已完成：repo-local drill inventory/runner、runbook/current-state/support-runtime/deploy/cloud plan/architecture scan、以及 `.dev/recovery-drills/<timestamp>/summary.json` evidence bundle 已收口到同一 authority line。
-- **M021/S01** 已完成 slice close-out：
-  1. AI/runtime/prompt/score/report 主链已被明确标成 live / compat / shadow / retire candidate；
-  2. `docs/api-contract/sessions.md`、`docs/api-contract/prompt-templates.md`、`docs/api-contract/support-runtime.md` 与 focused proof 文件已写明 authority boundary；
-  3. `.gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md` 与 `.gsd/plans/GSD_PLAN_post-M018-next-wave.md` 已包含 S02-S04 直接可用的 must-keep / compat / retire-candidate matrix；
-  4. 最终 `M021-CONTEXT.md` 仍受 depth verification gate 限制，当前应以 `M021-CONTEXT-DRAFT.md` + architecture scan §7.3.1 作为 downstream 研究输入。
-- **M021/S02** 已完成 slice close-out：
-  1. PromptTemplateService 已真正驱动 legacy evaluation/report runtime，而不是 lookup 后被 hardcoded prompt 覆盖；
-  2. prompt source taxonomy 已收口成 code-owned inventory，live StepFun instruction authority 与 legacy compiled-template authority 已被明确分开；
-  3. missing vars / empty render / provider-base_url / generation failure 已进入 explicit diagnostics / fail-closed contract；
-  4. `prompt-templates` / `voice-runtime` / `personas` / `model-configs` 的 admin routing map 已同步写回 docs 与 architecture scan。
-- 当前最新 close-out evidence 确认：
+当前项目处于 **M020 已完成里程碑收口、M021/S01-S03 已完成 AI authority inventory + prompt control plane + canonical evaluation kernel unified seam、M021/S04 待执行** 的状态：
+- **M019** 已完成 milestone close-out：数据库 authority map、practice backend seam、frontend domain/transport seam、assembled release truth line 已经过 fresh milestone-level verification。
+- **M020** 已完成 milestone close-out，auth transport、sensitive log/admin observability redaction、instance-local vs shared reconnect authority、以及 executable recovery drills 均已落到真实代码、focused proof 与长期文档/手册。
+- **M021/S01** 已完成 AI authority inventory：live / compat / shadow / retire-candidate matrix 已写回 architecture scan、API contract 与 downstream plan。
+- **M021/S02** 已完成 prompt control plane 收口：PromptTemplateService 现在真正驱动 legacy evaluation/report compiled prompt runtime，并显式暴露 fail-closed diagnostics。
+- **M021/S03** 已完成 canonical evaluation kernel 收口：
+  1. `common.effectiveness.canonical` 已定义并构建 one shared scenario-aware kernel；
+  2. realtime scoring / StepFun snapshot normalization / session evidence projection / report / replay / history / admin 现在共享同一 canonical kernel 与 compatibility readers；
+  3. report / replay / history 前端已经显式改成 shared resolver 读取 canonical -> compat -> legacy，而不是页面各自猜测分数来源；
+  4. 旧 top-level rollup 字段仍保留为 compatibility mirrors，方便后续 S04 与后续 retire work 在现有 surfaces 上平滑过渡。
+- 当前最新 close-out evidence 还确认：
   - M020 的 roadmap `After this` outcomes 已全部逐条满足；
   - `.dev/recovery-drills/20260414T010316Z/summary.json` 中 `auth_bootstrap`、`redis_session_state`、`oss_signing_playback`、`health_check` 通过；
-  - `db_migration` 仍真实暴露 `KeyError: '20260412_0315_028'`，这已经被收口为 recovery evidence 的一部分，而不是被节点健康状态掩盖；
-  - M021/S02 的 fresh slice verification 已重新确认 compiled prompt contract focused tests、prompt taxonomy grep gate、broad backend `prompt or knowledge_answer or report` gate（274 passed, 6 skipped）、authority wording grep gate，以及关键 Python authority files diagnostics 全部通过。
+  - `db_migration` 仍真实暴露 `KeyError: '20260412_0315_028'`，这已被纳入 recovery evidence，而不是被 `/health` 掩盖；
+  - M021/S03 fresh verification 已重新确认：backend canonical-evidence/admin/history bundle 49/49 通过，web report/replay/history bundle 44/44 通过，canonical -> compat -> legacy retirement-order 文档 grep gate 通过。
 
 接下来的重点：
 1. 修复 `20260412_0315_028` 对应的 Alembic revision / migration-graph drift，然后重跑同一套 recovery drills，直到 `db_migration` 也转绿。
-2. 在 **M021/S03** 把 canonical evaluation kernel 收口到 `CompiledPromptContract -> LLMService` 这条 seam，不要再让 legacy evaluation/report consumers 各自重建 prompt 或各自解释 authority。
-3. 在 **M021/S04** 把 compiled prompt diagnostics 与 AI failure/cost/quality signals拉到 support/runtime 与知识路径的显式事件面，同时继续复用 M020/S02 的 allowlist-first observability contract。
-4. 保持 M019 assembled release truth 与 M020 的四条 authority seam 稳定，不要重开第二套 startup/migration/practice/frontend/release/auth/observability/runtime/recovery 入口。
+2. 在 **M021/S04** 把 compiled prompt diagnostics 与 AI quality/cost/failure signals 收口成显式事件面，并继续复用 M020/S02 的 allowlist-first observability contract。
+3. 继续沿 M021/S03 已建立的 canonical evaluation kernel seam 推进 compatibility reader retire 条件检查，而不是回到页面/route 各自重算 rollup 的旧模式。
+4. 保持 M019 assembled release truth 与 M020/M021 已封板 authority seams 稳定，不要重开第二套 startup/migration/practice/frontend/release/auth/observability/runtime/evaluation 入口。
 5. 继续把 AI control-plane / evaluation / quality-event work 落在 authority-bearing code、focused tests、workflow、runbook 与 contract docs 上，而不是退回 markdown-only inventory。
 
 当前不应做的事：
@@ -141,8 +90,9 @@
 - 不要把单实例 `SessionManager.total_sessions=0` 误写成“集群已 drain 完毕”；S03 已明确这只是 instance-local 视角，真正 restart-safe 的 shared authority 只有 Redis reconnect snapshot。
 - 不要把 `/health`、systemd active、或一份 runbook 文档单独当成“recovery 已验证”；S04 已明确必须配对最新 `.dev/recovery-drills/<timestamp>/summary.json` + 逐 drill log，并把失败 drill 如实写进 release/recovery 记录。
 - 不要发明第二套 recovery command list；后续 drill / deploy / support guidance 必须直接复用 `scripts/recovery_drill_baseline.py` 的 metadata，而不是在 plan/doc/script 里各自维护一套。
-- 不要在 M021 后续切片里把 `PromptTemplateService` 倒推成 live StepFun prompt authority，也不要在 classic `voice_mode == "legacy"`、`report_status` / comprehensive-report readers、manual `/evaluation/*` operator flow、PromptTemplateService admin/runtime helper、或 knowledge compat debug/audit consumer 仍存在时粗暴删除 legacy AI surfaces。
+- 不要在 M021 后续切片里把 `PromptTemplateService` 倒推成 live StepFun prompt authority，也不要在 classic `voice_mode == "legacy"`、legacy report/evaluation readers、PromptTemplateService governance/helper surfaces、或 knowledge compat debug/audit consumers 仍存在时粗暴删除 legacy AI surfaces。
 - 不要让 compiled prompt failures重新回到 silent fail-open：缺变量、空渲染、provider/base_url 缺失、generation error 已经在 M021/S02 被定义成 explicit diagnostics / fail-closed contract；后续切片应沿这条 seam 扩展，而不是重新引入 filler copy 掩盖失败。
+- 不要让 report / replay / history / future admin pages 绕开 shared frontend score resolver 重新解释 fallback 顺序；一旦某个 surface 私自重算，就会让 compatibility fallback 无法被准确退休。
 
 ## Capability Contract
 
