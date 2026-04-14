@@ -1916,3 +1916,21 @@
   success signal status: future enterprise/org-boundary work can now start from one explicit ordering rule — scope readers first, authz seam second, rollout binding third, external integration automation last — without reinterpreting the T01 matrix or accidentally promoting SSO/CRM/org sync into present-tense product scope.
   rollback note: if later slices change the migration order or promote org-owned assets/service split sooner, update the M022/S04 sections in both durable docs and the architectural decision together so downstream roadmap work does not fork the org-boundary story.
 
+
+- time: 2026-04-14T16:44:24+08:00
+  mode: grow
+  item id: M022-S04
+  files changed:
+    - .gsd/milestones/M022/slices/S04/S04-SUMMARY.md
+    - .gsd/milestones/M022/slices/S04/S04-UAT.md
+    - .gsd/PROJECT.md
+    - .codex/loop/state.json
+    - .codex/loop/log.md
+  summary: Closed M022/S04 by compressing T01-T03 into the canonical slice summary/UAT artifacts and refreshing project state. The slice now gives downstream milestone and roadmap work one durable enterprise contract: organization is the account/authz/analytics boundary, team is the coaching cohort boundary, member is the membership seam, tenant remains a future heavier isolation slot, org/team rollout stays reader-first inside the modular monolith, and SSO/CRM/org-sync remain provisioning adapters until real internal org/member/team seams exist.
+  verification commands:
+    - rg -n "user_id|role|owner|agent_id|persona_id|knowledge_base|organization|tenant|team" backend/src/common backend/src/admin web/src/app/admin .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md
+    - rg -n "migration path|organization|team|tenant|SSO|CRM|org sync|compatibility reader" .gsd/plans/GSD_PLAN_post-M018-next-wave.md .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md
+    - rg -n "organization|team|tenant|monolith|service split|out-of-scope|SSO|CRM" .gsd/plans/GSD_PLAN_post-M018-next-wave.md .codex/roadmap/PROJECT_FUTURE.md
+  verification results: passed; all three slice-plan grep gates exited 0 and confirmed the current global-user seams, the reader-first migration path, and the downstream roadmap/service-split guardrails in the durable planning artifacts before slice completion.
+  success signal status: M022 now has all four slices complete, and future enterprise planning can start directly from the S04 contract instead of rerunning a repository-wide org-boundary investigation.
+  rollback note: if later work changes organization/member/team ownership, service-split pressure, or integration authority, update the architecture scan, post-M018 plan, future roadmap, decisions, knowledge note, and focused verification bundle together so the enterprise contract does not drift.

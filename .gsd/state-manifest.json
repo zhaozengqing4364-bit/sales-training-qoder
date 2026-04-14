@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "exported_at": "2026-04-14T08:37:55.094Z",
+  "exported_at": "2026-04-14T08:55:39.324Z",
   "milestones": [
     {
       "id": "M001",
@@ -3096,7 +3096,7 @@
       "milestone_id": "M022",
       "id": "S04",
       "title": "S04",
-      "status": "pending",
+      "status": "complete",
       "risk": "high",
       "depends": [],
       "demo": "After this: organization/team/tenant 的目标态、authz 影响、数据迁移、SSO/CRM/org-sync 插槽会有一份可执行路线，而不是继续停留在‘以后再说’。",
