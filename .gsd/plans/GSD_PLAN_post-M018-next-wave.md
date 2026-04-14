@@ -320,13 +320,29 @@
 
 ### [M022-S04] Organization / team / tenant target-state plan
 - Goal：定义 organization/team/tenant 目标态、authz 影响和 modular-monolith 迁移路径。
-- Why：再不规划，后续每个功能都会继续绑定到 user/session。
+- Why：再不规划，后续每个功能都会继续绑定到 `user/session/global-admin`，enterprise 需求一进来就只能继续堆兼容分支。
 - In Scope：ownership/authz matrix、migration path、future integration slots。
 - Out of Scope：本轮实现多租户/SSO/CRM/org sync。
 - Inputs / Preconditions：M022-S03、M020 hardened auth boundary。
 - Target Files / Modules：analysis/plan docs、`backend/src/common/db/models.py`、`common/auth/*`、`admin/*`。
-- Implementation Notes：这是 contract/roadmap slice，不是实现 slice。
-- Done When：组织边界与迁移路线可直接作为下一轮企业化 milestone 输入。
+- Implementation Notes：这是 contract/roadmap slice，不是实现 slice。T01 先锁当前 shipped ownership matrix 与 target-state 概念边界；T02 再决定 modular monolith 下哪些实体先补 compatibility readers；T03 最后把 out-of-scope 与 future milestone 入口写回 roadmap。
+- Current-state assumptions to retire：
+  - `users.role` 目前只表达 global `user/support/admin`，还不能表示 org/team 内角色。
+  - `practice_sessions.user_id`、`manager_interventions.manager_user_id/user_id`、`admin/api/users.py`、`admin/api/analytics.py` 都默认全局单组织上下文。
+  - `agents/personas/knowledge_bases` 目前最多只有 `created_by/updated_by` 审计字段，不是 org-owned 资产。
+- Target-state matrix（固定 contract）：
+  - `organization` = account / authz / analytics 顶层边界，未来 SSO/CRM/org-sync 都挂这里。
+  - `team` = organization 下的 manager/coaching cohort，manager-lite、user drill-in、admin analytics 默认先按 team scope 出真相。
+  - `member` = global `user` 在某个 organization 内的一条 membership；org/team role 应挂在 membership，而不是继续塞进 `users.role`。
+  - `tenant` = 更重的数据/部署隔离边界，不等于 organization；本轮只留 slot，不提前实现。
+  - asset ownership 先走 `global template + org rollout binding` 两层：agent/persona/knowledge 不立即按 org 复制，先给 rollout/authz 留 seam。
+- Authz rule：后续 enterprise work 应从 `platform role + org membership role + access scope(self/team/org/platform)` 推导权限；当前 `global admin` 只能视为 compatibility seam。
+- Analytics rule：未来 organization/team 视角要复用现有 `manager-lite-panel`、`/admin/users/[id]`、`/admin/analytics` 真实 surface，加 scope-aware reader，而不是另做一套 org dashboard。
+- Integration slots：
+  - SSO / directory sync → membership provisioning + team assignment source
+  - CRM / account sync → organization account metadata / segmentation source
+  - Org sync / HRIS → manager chain、team transfer、deactivation source
+- Done When：组织边界与迁移路线可直接作为下一轮企业化 milestone 输入，并且后续 agent 可以据此判断新需求应挂在 self/team/org/platform 哪个 seam。
 - Verification：grep plan/analysis/future roadmap。
 - Deliverable：org/team/tenant target-state roadmap。
 - Risk Level：High

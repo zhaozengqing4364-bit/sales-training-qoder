@@ -23,7 +23,7 @@ S04 是 M022 的 final assembly/contract slice；完成后 org-boundary、SSO、
 
 ## Tasks
 
-- [ ] **T01: 建立 org/team target-state matrix** `est:1h`
+- [x] **T01: 建立 org/team target-state matrix** `est:1h`
   - 盘点当前 user/session/agent/persona/knowledge/report/admin ownership 模型，找出所有隐含的‘单组织/单租户’假设。
 - 建一张 org/team/member/role/access scope target-state matrix，对齐 authz、analytics、asset ownership。
   - Files: `.gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md`, `.gsd/plans/GSD_PLAN_post-M018-next-wave.md`, `backend/src/common/db/models.py`, `backend/src/common/auth`, `backend/src/admin/api`, `web/src/app/admin`

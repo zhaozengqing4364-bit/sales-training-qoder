@@ -8,5 +8,5 @@
 |----|-------|------|---------|------|------------|
 | S01 | S01 | high | — | ✅ | After this: 销售训练会有一套可配置方法论/rubric contract，可以明确映射到 realtime、report、manager coaching，而不是只剩关键词阶段和散分。 |
 | S02 | S02 | medium | — | ✅ | After this: persona/customer-pressure/scenario/industry pack 会通过现有 admin entrypoints 运作，角色扮演与场景深度不再只靠单条 prompt。 |
-| S03 | S03 | medium | — | ⬜ | After this: manager/admin 的关键决策面会使用真实 canonical evidence 和真实统计，不再混用 demo 数字、漂移口径或不可解释总分。 |
-| S04 | Organization / team / tenant target-state plan | high | S01, S02, S03 | ⬜ | After this: organization/team/tenant 的目标态、authz 影响、数据迁移、SSO/CRM/org-sync 插槽会有一份可执行路线，而不是继续停留在‘以后再说’。 |
+| S03 | S03 | medium | — | ✅ | After this: manager/admin 的关键决策面会使用真实 canonical evidence 和真实统计，不再混用 demo 数字、漂移口径或不可解释总分。 |
+| S04 | S04 | high | — | ⬜ | After this: organization/team/tenant 的目标态、authz 影响、数据迁移、SSO/CRM/org-sync 插槽会有一份可执行路线，而不是继续停留在‘以后再说’。 |

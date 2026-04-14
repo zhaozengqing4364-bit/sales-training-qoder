@@ -1,3 +1,26 @@
+- time: 2026-04-14T16:13:30+08:00
+  mode: grow
+  item id: M022-S03
+  files changed:
+    - web/src/app/admin/page.tsx
+    - web/src/app/admin/page.test.tsx
+    - .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md
+    - .gsd/plans/GSD_PLAN_post-M018-next-wave.md
+    - .gsd/DECISIONS.md
+    - .gsd/KNOWLEDGE.md
+    - .gsd/PROJECT.md
+    - .codex/loop/state.json
+    - .codex/loop/log.md
+  summary: Closed M022/S03 after fresh slice-level verification confirmed the manager/admin truth-surface boundary now holds end to end. The admin home no longer pretends to be a live operator dashboard beyond the single real effectiveness card; manager-lite, admin analytics, and admin user detail/interventions are the only currently productized manager/admin truth surfaces; the architecture scan and post-M018 plan now document the same product boundary; and the knowledge log records the guardrail against reintroducing homepage-only rollups or fake metrics.
+  verification commands:
+    - npm --prefix web test -- --run "src/app/admin/page.test.tsx" "src/components/admin/manager-lite-panel.test.tsx"
+    - backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/common/test_admin_analytics_service.py -x -q
+    - rg -n "manager|calibration|truth surface|fake stats|placeholder|canonical evidence" .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md .gsd/plans/GSD_PLAN_post-M018-next-wave.md
+    - lsp diagnostics web/src/app/admin/page.tsx web/src/app/admin/page.test.tsx web/src/components/admin/manager-lite-panel.tsx backend/src/admin/api/users.py backend/src/common/analytics/admin_analytics_service.py backend/tests/unit/common/test_admin_analytics_service.py
+  verification results: passed; the exact web slice bundle finished 3/3 green, the backend admin analytics bundle finished 5/5 green, the architecture/plan grep gate matched the documented truth-surface boundary, and diagnostics were clean on the touched authority files.
+  success signal status: M022/S03 is ready for slice completion and downstream roadmap reassessment; future organization/team/tenant planning can now treat manager-lite, admin analytics, and admin user detail/interventions as the real manager/admin evidence surfaces while keeping admin-home inventory cards and standalone calibration workspaces in future scope.
+  rollback note: if later work productizes new manager/admin surfaces, update the admin-home read side, the focused web/backend proof bundle, the architecture scan, the post-M018 plan, and the knowledge/decision guardrails together so the product story never gets ahead of the shipped evidence line.
+
 - time: 2026-04-14T16:08:22+08:00
   mode: grow
   item id: M022-S03-T03
