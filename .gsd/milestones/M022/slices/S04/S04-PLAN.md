@@ -29,7 +29,7 @@ S04 是 M022 的 final assembly/contract slice；完成后 org-boundary、SSO、
   - Files: `.gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md`, `.gsd/plans/GSD_PLAN_post-M018-next-wave.md`, `backend/src/common/db/models.py`, `backend/src/common/auth`, `backend/src/admin/api`, `web/src/app/admin`
   - Verify: rg -n "user_id|role|owner|agent_id|persona_id|knowledge_base|organization|tenant|team" backend/src/common backend/src/admin web/src/app/admin .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md
 
-- [ ] **T02: 设计保持单体边界的 org-boundary migration path** `est:1.5h`
+- [x] **T02: 设计保持单体边界的 org-boundary migration path** `est:1.5h`
   - 设计 modular monolith 下的迁移路径：哪些实体先加 organization/team ownership，哪些 authz/analytics/report surfaces 需要 compatibility readers。
 - 为未来 SSO/CRM/org-sync/enterprise directory 预留 integration slots，但不把它们拉进当前实现范围。
   - Files: `.gsd/plans/GSD_PLAN_post-M018-next-wave.md`, `.gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md`, `backend/src/common/db/models.py`, `backend/src/common/auth/service.py`

@@ -341,7 +341,18 @@
 - Integration slots：
   - SSO / directory sync → membership provisioning + team assignment source
   - CRM / account sync → organization account metadata / segmentation source
-  - Org sync / HRIS → manager chain、team transfer、deactivation source
+  - org sync / HRIS → manager chain、team transfer、deactivation source
+- T02 migration path（固定 contract）：
+  1. **Phase 1 — reader-first within the modular monolith**：先不拆服务，也不重写主表；优先给 `practice_sessions`、`manager_interventions`、`SessionEvidenceService` projection、`/admin/users/[id]`、`/admin/analytics`、manager-lite 补 `organization_id` / `team_id` compatibility reader，让 report/replay/history/admin surfaces 能按 `self/team/org/platform` scope 解释既有 evidence。
+  2. **Phase 2 — authz seam before asset cloning**：引入 `organization_member` / team assignment 作为 membership seam，把 org/team role 与 access scope 从 `users.role` 中拆开；`get_current_admin_user()`、`_can_read_session(...)`、manager/admin queries 先走 platform-role + membership-role + scope reader 的 compatibility path，`global admin` 继续保留 override 语义。
+  3. **Phase 3 — rollout binding for content/control plane**：agent / persona / knowledge / prompt / voice-runtime / knowledge-config 继续保留 global template row，不直接改成 org-owned；先增加 org rollout binding / visibility seam，让 runtime snapshot、`voice_policy_snapshot_ref.runtime_binding`、report evidence 还能解释“模板来源 + org 发布范围”。
+  4. **Phase 4 — integration adapters stay outside runtime truth**：SSO、CRM、org sync 只写 organization/member/team/account metadata seam，不直接接管 session runtime、manager analytics、prompt runtime 或 knowledge truth；这些 integration source 只是 provisioning / metadata adapter，不是新的业务 authority。
+  5. **Phase 5 — service split only after monolith pressure is real**：只有当 organization-scoped write path、membership sync、或 org-level analytics 因吞吐/隔离/合规要求出现独立扩缩容与发布节奏时，才考虑拆 service；在那之前继续留在 modular monolith，用模块边界 + compatibility readers 演进。
+- Migration ordering rule：session/read-side scope 先于 authz write path，authz write path 先于 asset ownership，asset ownership 先于外部 integration automation；禁止跳过 compatibility reader 直接把现有 global row 改成 org-owned。
+- Compatibility-reader surfaces（必须先补）:
+  - session/report/replay/history：`practice_sessions.user_id` 周边 read model、`SessionEvidenceService`、`voice_policy_snapshot_ref.runtime_binding`
+  - manager/admin：`manager_interventions`、`/admin/users/[id]`、`/admin/analytics`、manager-lite
+  - authz：`get_current_admin_user()`、`require_role(...)`、`common.api.practice._can_read_session(...)`
 - Done When：组织边界与迁移路线可直接作为下一轮企业化 milestone 输入，并且后续 agent 可以据此判断新需求应挂在 self/team/org/platform 哪个 seam。
 - Verification：grep plan/analysis/future roadmap。
 - Deliverable：org/team/tenant target-state roadmap。

@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "exported_at": "2026-04-14T08:24:30.039Z",
+  "exported_at": "2026-04-14T08:32:25.038Z",
   "milestones": [
     {
       "id": "M001",
@@ -14109,19 +14109,27 @@
       "milestone_id": "M022",
       "slice_id": "S04",
       "id": "T02",
-      "title": "设计保持单体边界的 org-boundary migration path",
-      "status": "pending",
-      "one_liner": "",
-      "narrative": "",
-      "verification_result": "",
+      "title": "Documented a reader-first org-boundary migration path for the modular monolith, including authz sequencing, compatibility-reader surfaces, and future SSO/CRM/org sync slots.",
+      "status": "complete",
+      "one_liner": "Documented a reader-first org-boundary migration path for the modular monolith, including authz sequencing, compatibility-reader surfaces, and future SSO/CRM/org sync slots.",
+      "narrative": "I used the T01 matrix plus the current shipped ownership/auth seams in `backend/src/common/db/models.py`, `backend/src/common/auth/service.py`, `common/api/practice.py`, `admin/api/users.py`, and `admin/api/analytics.py` to turn the org/team/tenant target-state into an executable migration sequence rather than leaving it as a static concept table. The two durable planning artifacts now both say the same thing: stay inside the modular monolith, add organization/team compatibility readers to session/report/replay/history/admin truth surfaces first, move authz onto membership + access-scope readers before changing `users.role` semantics, keep agent/persona/knowledge/prompt/runtime assets on global-template plus org-rollout-binding seams instead of cloning org-owned rows, and treat future SSO/CRM/org sync work as provisioning/metadata adapters instead of new runtime authorities. I also recorded D249 so downstream slices inherit the same reader-first ordering rule and do not fork the org-boundary story when future enterprise work starts.",
+      "verification_result": "Ran the exact task-plan grep gate after the final edits and continuity updates. It exited 0 and matched the new migration-path language, compatibility-reader surfaces, organization/team/tenant target-state references, and future SSO/CRM/org sync adapter slots in both `.gsd/plans/GSD_PLAN_post-M018-next-wave.md` and `.gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md`. I also confirmed the architectural decision write-back landed in `.gsd/DECISIONS.md` as D249 so the migration order is durable for downstream work.",
       "duration": "",
-      "completed_at": null,
+      "completed_at": "2026-04-14T08:32:24.940Z",
       "blocker_discovered": false,
-      "deviations": "",
-      "known_issues": "",
-      "key_files": [],
-      "key_decisions": [],
-      "full_summary_md": "",
+      "deviations": "None.",
+      "known_issues": "None.",
+      "key_files": [
+        ".gsd/plans/GSD_PLAN_post-M018-next-wave.md",
+        ".gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md",
+        ".gsd/DECISIONS.md",
+        ".codex/loop/state.json",
+        ".codex/loop/log.md"
+      ],
+      "key_decisions": [
+        "D249 — Keep the org-boundary migration inside the modular monolith by introducing session/admin/auth compatibility readers and org rollout bindings before any org-owned asset cloning or service split."
+      ],
+      "full_summary_md": "---\nid: T02\nparent: S04\nmilestone: M022\nkey_files:\n  - .gsd/plans/GSD_PLAN_post-M018-next-wave.md\n  - .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md\n  - .gsd/DECISIONS.md\n  - .codex/loop/state.json\n  - .codex/loop/log.md\nkey_decisions:\n  - D249 — Keep the org-boundary migration inside the modular monolith by introducing session/admin/auth compatibility readers and org rollout bindings before any org-owned asset cloning or service split.\nduration: \nverification_result: passed\ncompleted_at: 2026-04-14T08:32:24.936Z\nblocker_discovered: false\n---\n\n# T02: Documented a reader-first org-boundary migration path for the modular monolith, including authz sequencing, compatibility-reader surfaces, and future SSO/CRM/org sync slots.\n\n**Documented a reader-first org-boundary migration path for the modular monolith, including authz sequencing, compatibility-reader surfaces, and future SSO/CRM/org sync slots.**\n\n## What Happened\n\nI used the T01 matrix plus the current shipped ownership/auth seams in `backend/src/common/db/models.py`, `backend/src/common/auth/service.py`, `common/api/practice.py`, `admin/api/users.py`, and `admin/api/analytics.py` to turn the org/team/tenant target-state into an executable migration sequence rather than leaving it as a static concept table. The two durable planning artifacts now both say the same thing: stay inside the modular monolith, add organization/team compatibility readers to session/report/replay/history/admin truth surfaces first, move authz onto membership + access-scope readers before changing `users.role` semantics, keep agent/persona/knowledge/prompt/runtime assets on global-template plus org-rollout-binding seams instead of cloning org-owned rows, and treat future SSO/CRM/org sync work as provisioning/metadata adapters instead of new runtime authorities. I also recorded D249 so downstream slices inherit the same reader-first ordering rule and do not fork the org-boundary story when future enterprise work starts.\n\n## Verification\n\nRan the exact task-plan grep gate after the final edits and continuity updates. It exited 0 and matched the new migration-path language, compatibility-reader surfaces, organization/team/tenant target-state references, and future SSO/CRM/org sync adapter slots in both `.gsd/plans/GSD_PLAN_post-M018-next-wave.md` and `.gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md`. I also confirmed the architectural decision write-back landed in `.gsd/DECISIONS.md` as D249 so the migration order is durable for downstream work.\n\n## Verification Evidence\n\n| # | Command | Exit Code | Verdict | Duration |\n|---|---------|-----------|---------|----------|\n| 1 | `rg -n \"migration path|organization|team|tenant|SSO|CRM|org sync|compatibility reader\" .gsd/plans/GSD_PLAN_post-M018-next-wave.md .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md` | 0 | ✅ pass | 27ms |\n\n## Deviations\n\nNone.\n\n## Known Issues\n\nNone.\n\n## Files Created/Modified\n\n- `.gsd/plans/GSD_PLAN_post-M018-next-wave.md`\n- `.gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md`\n- `.gsd/DECISIONS.md`\n- `.codex/loop/state.json`\n- `.codex/loop/log.md`\n",
       "description": "- 设计 modular monolith 下的迁移路径：哪些实体先加 organization/team ownership，哪些 authz/analytics/report surfaces 需要 compatibility readers。\n- 为未来 SSO/CRM/org-sync/enterprise directory 预留 integration slots，但不把它们拉进当前实现范围。",
       "estimate": "1.5h",
       "files": [
@@ -17153,6 +17161,18 @@
       "decision": "How organization, team, and tenant should be separated in the post-M022 target state",
       "choice": "Use organization as the top authz/account boundary, team as the manager/coaching cohort boundary, and tenant only as a future heavier isolation slot; keep agent/persona/knowledge assets as global templates first and add org rollout bindings before making them org-owned rows.",
       "rationale": "The shipped system is still global-user/global-role and session.user_id centric, while the real manager/admin evidence surfaces already live on manager-lite, admin analytics, and admin user drill-in. Treating org/team as scope readers and rollout bindings first preserves the current modular monolith and canonical evidence line, avoids premature asset-table duplication, and leaves SSO/CRM/org-sync with a clear landing zone without claiming multi-tenant implementation now.",
+      "revisable": "Yes",
+      "made_by": "agent",
+      "superseded_by": null
+    },
+    {
+      "seq": 1619,
+      "id": "D249",
+      "when_context": "M022-S04-T02",
+      "scope": "architecture",
+      "decision": "How to phase organization/team adoption for enterprise-ready ownership and authz",
+      "choice": "Keep the org-boundary migration inside the modular monolith by introducing session/admin/auth compatibility readers and org rollout bindings before any org-owned asset cloning or service split.",
+      "rationale": "Current runtime, report, manager, and admin truth lines are anchored in global user/session rows plus shared template assets. Adding org-owned rows or external integration authority before scope readers and membership seams would fork the evidence line and make runtime/report ownership harder to explain. A reader-first, authz-second, rollout-binding-third sequence preserves the shipped monolith boundary while creating a safe migration path toward org-aware authz and analytics.",
       "revisable": "Yes",
       "made_by": "agent",
       "superseded_by": null
@@ -23043,6 +23063,17 @@
       "verdict": "✅ pass",
       "duration_ms": 53,
       "created_at": "2026-04-14T08:24:29.917Z"
+    },
+    {
+      "id": 541,
+      "task_id": "T02",
+      "slice_id": "S04",
+      "milestone_id": "M022",
+      "command": "rg -n \"migration path|organization|team|tenant|SSO|CRM|org sync|compatibility reader\" .gsd/plans/GSD_PLAN_post-M018-next-wave.md .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 27,
+      "created_at": "2026-04-14T08:32:24.941Z"
     }
   ]
 }

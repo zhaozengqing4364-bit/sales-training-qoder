@@ -1882,3 +1882,20 @@
   verification results: passed; the exact T03 web bundle finished 39/39 green, the new tests prove report/replay explicitly label compatibility-reader rollups and keep retrieval search_failed copy from collapsing into hit/miss success text, and the grep gate now exposes the runtime-event read rules directly in the intended long-lived docs.
   success signal status: future agents no longer need to infer support/runtime event semantics or UI fallback meaning from scattered code — the docs say how to read mode/degraded/failure/cost events, and the front-end proof locks compat/failure presentation in place.
   rollback note: if later slices change runtime_event fields, compat score source handling, or the learner-facing degradation copy, update support-runtime.md, the architecture scan read-side bullets, and the focused report/replay assertions together so documentation and proof keep matching the shipped UI/runtime semantics.
+
+- time: 2026-04-14T16:31:10+08:00
+  mode: grow
+  item id: M022-S04-T02
+  files changed:
+    - .gsd/plans/GSD_PLAN_post-M018-next-wave.md
+    - .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md
+    - .gsd/DECISIONS.md
+    - .codex/loop/state.json
+    - .codex/loop/log.md
+  summary: Finished M022/S04/T02 by turning the org/team/tenant target-state matrix into a concrete modular-monolith migration contract. The post-M018 plan and next-wave architecture scan now both say the same thing: keep the runtime inside the monolith, add organization/team compatibility readers to session/report/replay/history/admin truth surfaces first, move authz onto membership + scope readers before changing global-role semantics, keep agent/persona/knowledge/prompt/runtime assets on global-template plus org-rollout-binding seams instead of cloning org-owned rows, and treat future SSO/CRM/org sync integrations as metadata/provisioning adapters rather than new runtime authorities.
+  verification commands:
+    - rg -n "migration path|organization|team|tenant|SSO|CRM|org sync|compatibility reader" .gsd/plans/GSD_PLAN_post-M018-next-wave.md .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md
+  verification results: passed; the exact task-plan grep gate exited 0 and matched the new migration path, compatibility-reader surfaces, service-split trigger, and future integration-slot language in both durable planning artifacts.
+  success signal status: future enterprise/org-boundary work can now start from one explicit ordering rule — scope readers first, authz seam second, rollout binding third, external integration automation last — without reinterpreting the T01 matrix or accidentally promoting SSO/CRM/org sync into present-tense product scope.
+  rollback note: if later slices change the migration order or promote org-owned assets/service split sooner, update the M022/S04 sections in both durable docs and the architectural decision together so downstream roadmap work does not fork the org-boundary story.
+
