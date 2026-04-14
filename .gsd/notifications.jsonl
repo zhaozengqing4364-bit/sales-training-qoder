@@ -1,9 +1,3 @@
-{"id":"7eb5aa3e-dc01-4dac-aa5c-c40019a0e1f4","ts":"2026-04-13T03:10:08.551Z","severity":"warning","message":"[safety] file-change: docs/setup/backup-recovery-current-state.md — Modified but not in task plan's expected output","source":"workflow-logger","read":false}
-{"id":"cdeab611-9070-4575-92a3-13988d54f23b","ts":"2026-04-13T03:10:08.553Z","severity":"warning","message":"Safety: 4 unexpected file change(s) outside task plan","source":"notify","read":false}
-{"id":"4301dce9-40be-45ca-b5f2-56e52059a099","ts":"2026-04-13T03:10:24.554Z","severity":"info","message":"Verification gate: FAILED — npm run test","source":"notify","read":false}
-{"id":"39d583f9-f8ff-49af-bdce-4f8bae0baa44","ts":"2026-04-13T03:10:24.558Z","severity":"warning","message":"Verification failed in auto-discovered package.json checks — treating as advisory.","source":"notify","read":false}
-{"id":"81f6a6b6-a371-4694-882c-c1826943e9e7","ts":"2026-04-13T03:26:36.540Z","severity":"info","message":"Committed: feat: Added a minimal practice application seam bundle and routed audio…","source":"notify","read":false}
-{"id":"38114724-9bca-486a-bbd1-37c99f600309","ts":"2026-04-13T03:26:36.567Z","severity":"warning","message":"[safety] file-change: backend/src/common/services/__init__.py — Modified but not in task plan's expected output","source":"workflow-logger","read":false}
 {"id":"1a38011d-5eba-4e13-b826-85fd544da347","ts":"2026-04-13T03:26:36.570Z","severity":"warning","message":"[safety] file-change: backend/src/common/services/practice_service.py — Modified but not in task plan's expected output","source":"workflow-logger","read":false}
 {"id":"6c86c453-cf90-41df-a011-19862df26f42","ts":"2026-04-13T03:26:36.574Z","severity":"warning","message":"Safety: 2 unexpected file change(s) outside task plan","source":"notify","read":false}
 {"id":"489aed04-5a0f-4394-b1eb-707c8ff89dc0","ts":"2026-04-13T03:26:52.120Z","severity":"info","message":"Verification gate: 1/1 checks passed","source":"notify","read":false}
@@ -498,3 +492,9 @@
 {"id":"8a65e7d4-8828-478d-8768-eae02e63a76b","ts":"2026-04-14T08:24:38.710Z","severity":"warning","message":"Safety: 2 unexpected file change(s) outside task plan","source":"notify","read":false}
 {"id":"70fa7f27-f118-405c-aad9-67b9448e193d","ts":"2026-04-14T08:25:25.050Z","severity":"info","message":"Verification gate: FAILED — npm run test","source":"notify","read":false}
 {"id":"a7dfbc3a-2c60-49a0-8f7a-c5998ed16489","ts":"2026-04-14T08:25:25.062Z","severity":"warning","message":"Verification failed in auto-discovered package.json checks — treating as advisory.","source":"notify","read":false}
+{"id":"8caa491c-2995-4462-b27b-b8f66e85321a","ts":"2026-04-14T08:32:38.130Z","severity":"info","message":"Committed: feat: Documented a reader-first org-boundary migration path for the mod…","source":"notify","read":false}
+{"id":"b1128301-7762-49ad-bc19-775c52728cee","ts":"2026-04-14T08:32:38.144Z","severity":"warning","message":"[safety] file-change: .codex/loop/log.md — Modified but not in task plan's expected output","source":"workflow-logger","read":false}
+{"id":"704b28aa-5ca0-4f2b-9017-6eb9777a7f92","ts":"2026-04-14T08:32:38.145Z","severity":"warning","message":"[safety] file-change: .codex/loop/state.json — Modified but not in task plan's expected output","source":"workflow-logger","read":false}
+{"id":"4ef28f3a-6eb3-4157-8062-fa99e57fc7a4","ts":"2026-04-14T08:32:38.147Z","severity":"warning","message":"Safety: 2 unexpected file change(s) outside task plan","source":"notify","read":false}
+{"id":"87dcc9c8-8e8c-4f2f-86b8-407ff537dd1e","ts":"2026-04-14T08:33:02.669Z","severity":"info","message":"Verification gate: FAILED — npm run test","source":"notify","read":false}
+{"id":"60c2c8ca-b266-4412-8c3e-aeb1e6c1f0f2","ts":"2026-04-14T08:33:02.675Z","severity":"warning","message":"Verification failed in auto-discovered package.json checks — treating as advisory.","source":"notify","read":false}

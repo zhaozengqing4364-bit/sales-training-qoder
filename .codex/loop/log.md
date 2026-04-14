@@ -1,3 +1,20 @@
+- time: 2026-04-14T16:33:03+08:00
+  mode: grow
+  item id: M022-S04-T03
+  files changed:
+    - .gsd/plans/GSD_PLAN_post-M018-next-wave.md
+    - .codex/roadmap/PROJECT_FUTURE.md
+    - .gsd/DECISIONS.md
+    - .codex/loop/state.json
+    - .codex/loop/log.md
+  summary: Finished M022/S04/T03 by turning the org-boundary target-state into a concrete next-wave enterprise roadmap input instead of leaving it buried in the slice plan. The post-M018 plan now states the default stay-in-modular-monolith rule, the exact enterprise inputs to schedule next (`organization_member`, scope-aware readers, org rollout binding, organization metadata, and provisioning adapter contracts), the explicit service split triggers, and the out-of-scope guardrail against multi-tenant runtime, direct SSO/CRM integration, new org dashboards, or rewriting existing global rows into org-owned rows. `.codex/roadmap/PROJECT_FUTURE.md` is no longer a stub; it now records the same product promise, evidence snapshot, priority order, candidate scoring, service split test, and out-of-scope rules. Decision D250 locks the same execution path into the shared decision log.
+  verification commands:
+    - rg -n "organization|team|tenant|monolith|service split|out-of-scope|SSO|CRM" .gsd/plans/GSD_PLAN_post-M018-next-wave.md .codex/roadmap/PROJECT_FUTURE.md
+    - rg -n "modular monolith|service split|SSO|CRM|org sync" .gsd/DECISIONS.md
+  verification results: passed; the exact task-plan grep gate exited 0 and matched the roadmap handoff language in both durable planning artifacts, and the focused decision grep confirmed D250 wrote back the modular-monolith default, service-split triggers, and SSO/CRM/org-sync adapter boundary.
+  success signal status: future enterprise work now has one durable entry rule — keep organization/team/member rollout inside the modular monolith until real scale/isolation/compliance pressure appears, and treat SSO/CRM/org sync as metadata/provisioning adapters rather than runtime authority.
+  rollback note: if a later milestone introduces real org-scoped write isolation or external integration authority, update the M022/S04 section, PROJECT_FUTURE candidate scoring, and the recorded decision together so roadmap language does not drift from the actual execution contract.
+
 - time: 2026-04-14T16:13:30+08:00
   mode: grow
   item id: M022-S03

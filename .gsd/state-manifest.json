@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "exported_at": "2026-04-14T08:32:25.038Z",
+  "exported_at": "2026-04-14T08:37:55.094Z",
   "milestones": [
     {
       "id": "M001",
@@ -17184,6 +17184,18 @@
       "revisable": "Yes",
       "made_by": "agent",
       "superseded_by": null
+    },
+    {
+      "seq": 1620,
+      "id": "D250",
+      "when_context": "M022-S04-T03",
+      "scope": "architecture",
+      "decision": "Post-M022 enterprise org-boundary execution path",
+      "choice": "Keep organization/team/member rollout inside the modular monolith by default; only consider service split after organization-scoped writes, membership sync, and org-level analytics/export/compliance require independent scale, failure isolation, or release cadence. Treat SSO/CRM/org sync as provisioning and metadata adapters, not runtime authorities.",
+      "rationale": "M022/S04 already established reader-first compatibility seams, membership-first authz, and org rollout bindings as the next executable steps. Splitting earlier would add architecture churn before the real organization/team scope readers and authz contracts exist, while direct SSO/CRM takeover would bypass the documented runtime truth surfaces.",
+      "revisable": "Yes",
+      "made_by": "agent",
+      "superseded_by": null
     }
   ],
   "verification_evidence": [
@@ -23082,6 +23094,28 @@
       "verdict": "✅ pass",
       "duration_ms": 27,
       "created_at": "2026-04-14T08:32:24.941Z"
+    },
+    {
+      "id": 542,
+      "task_id": "T03",
+      "slice_id": "S04",
+      "milestone_id": "M022",
+      "command": "rg -n \"organization|team|tenant|monolith|service split|out-of-scope|SSO|CRM\" .gsd/plans/GSD_PLAN_post-M018-next-wave.md .codex/roadmap/PROJECT_FUTURE.md",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 36,
+      "created_at": "2026-04-14T08:37:54.710Z"
+    },
+    {
+      "id": 543,
+      "task_id": "T03",
+      "slice_id": "S04",
+      "milestone_id": "M022",
+      "command": "rg -n \"modular monolith|service split|SSO|CRM|org sync\" .gsd/DECISIONS.md",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 12,
+      "created_at": "2026-04-14T08:37:54.710Z"
     }
   ]
 }
