@@ -353,6 +353,11 @@
   - session/report/replay/history：`practice_sessions.user_id` 周边 read model、`SessionEvidenceService`、`voice_policy_snapshot_ref.runtime_binding`
   - manager/admin：`manager_interventions`、`/admin/users/[id]`、`/admin/analytics`、manager-lite
   - authz：`get_current_admin_user()`、`require_role(...)`、`common.api.practice._can_read_session(...)`
+- Roadmap handoff（下一轮 enterprise roadmap 固定入口）:
+  - **继续留在 modular monolith 的默认条件**：新需求如果只是把现有 learner / manager / admin truth surface 补成 `self/team/org/platform` scope-aware reader、membership authz、org rollout binding、organization metadata seam，默认继续在 modular monolith 内推进，不额外创建 org service、team service 或 tenant service。
+  - **下一轮应该优先排入的 enterprise 输入**：`organization_member` / team assignment seam、session/report/replay/history/admin scope-aware reader、`global template + org rollout binding` 可见性、organization account metadata inventory、以及 SSO/CRM/org sync 的 provisioning adapter contract。
+  - **service split 触发器（缺一不可）**：只有当 `organization` 范围写路径或 membership sync 需要独立扩缩容/失败隔离、org-level analytics/export/compliance 需要独立发布与数据保留策略、并且这些压力已经不能靠 modular monolith 模块边界 + compatibility readers 消化时，才值得进入 service split roadmap。
+  - **out-of-scope（本轮与下一轮入口都不抢跑）**：当前不做多租户 runtime/tenant implementation，不接 SSO/CRM 的生产集成，不改外部集成 authority，不新造 org dashboard，也不把现有 global row 直接改写成 org-owned row。
 - Done When：组织边界与迁移路线可直接作为下一轮企业化 milestone 输入，并且后续 agent 可以据此判断新需求应挂在 self/team/org/platform 哪个 seam。
 - Verification：grep plan/analysis/future roadmap。
 - Deliverable：org/team/tenant target-state roadmap。

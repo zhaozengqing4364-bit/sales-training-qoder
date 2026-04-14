@@ -35,7 +35,7 @@ S04 是 M022 的 final assembly/contract slice；完成后 org-boundary、SSO、
   - Files: `.gsd/plans/GSD_PLAN_post-M018-next-wave.md`, `.gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md`, `backend/src/common/db/models.py`, `backend/src/common/auth/service.py`
   - Verify: rg -n "migration path|organization|team|tenant|SSO|CRM|org sync|compatibility reader" .gsd/plans/GSD_PLAN_post-M018-next-wave.md .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md
 
-- [ ] **T03: 把 org-boundary plan 写成下一轮企业化 roadmap 输入** `est:35m`
+- [x] **T03: 把 org-boundary plan 写成下一轮企业化 roadmap 输入** `est:35m`
   - 把这份 org target-state plan 绑定到下一轮 roadmap 入口，明确什么情况下继续留在 modular monolith，什么情况下才值得拆服务。
 - 记录 out-of-scope：当前不做多租户实现、不接 SSO/CRM、不改外部集成。
   - Files: `.gsd/plans/GSD_PLAN_post-M018-next-wave.md`, `.codex/roadmap/PROJECT_FUTURE.md`
