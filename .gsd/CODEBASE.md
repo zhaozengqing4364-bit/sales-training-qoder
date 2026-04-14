@@ -1,7 +1,7 @@
 # Codebase Map
 
-Generated: 2026-04-14T02:06:26Z | Files: 500 | Described: 0/500
-<!-- gsd:codebase-meta {"generatedAt":"2026-04-14T02:06:26Z","fingerprint":"9248a272d51726718a7530608485847361c20761","fileCount":500,"truncated":true} -->
+Generated: 2026-04-14T02:26:25Z | Files: 500 | Described: 0/500
+<!-- gsd:codebase-meta {"generatedAt":"2026-04-14T02:26:25Z","fingerprint":"3bcddc408d20567520cac3a785a5938e50f04d1d","fileCount":500,"truncated":true} -->
 Note: Truncated to first 500 files. Run with higher --max-files to include all.
 
 ### (root)/
@@ -526,6 +526,7 @@ Note: Truncated to first 500 files. Run with higher --max-files to include all.
 
 ### backend/src/prompt_templates/
 - `backend/src/prompt_templates/__init__.py`
+- `backend/src/prompt_templates/compiled_contract.py`
 - `backend/src/prompt_templates/loader.py`
 - `backend/src/prompt_templates/models.py`
 - `backend/src/prompt_templates/renderer.py`
@@ -645,4 +646,3 @@ Note: Truncated to first 500 files. Run with higher --max-files to include all.
 
 ### backend/tests/unit/common/
 - `backend/tests/unit/common/test_admin_analytics_service.py`
-- `backend/tests/unit/common/test_analytics_api_normalization.py`

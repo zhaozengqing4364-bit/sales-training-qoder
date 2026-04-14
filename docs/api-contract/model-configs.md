@@ -3,6 +3,12 @@
 > 状态：✅ 已实现  
 > 前缀：`/api/v1/admin/model-configs`
 
+## Prompt/runtime dependency routing
+
+- `provider` / `base_url` / `model_name` 是 legacy evaluation/report compiled prompt contract 的运行时前提；`PromptTemplateService.compile_runtime_prompt_contract(...)` 会读取当前 LLM model config 并生成对应的 `base_url` policy diagnostics。
+- 如果 provider 要求 `base_url` 但当前配置缺失，运行时会 fail-closed 并显式返回 `[PROMPT_CONTRACT_BASE_URL_REQUIRED]`，修复入口是 `/admin/model-configs`，不是继续修改 prompt template 文本或 persona policy。
+- 这个 surface 决定的是 compiled prompt contract 能否执行，不负责选择 prompt source，也不会单独生成新的 StepFun `instruction_contract_hash`。
+
 ## 1) 数据模型（`ModelConfig`）
 
 ```ts

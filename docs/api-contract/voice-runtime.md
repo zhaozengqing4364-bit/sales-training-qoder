@@ -3,6 +3,13 @@
 > 状态：✅ 已实现（2026-02-16 更新）  
 > 前缀：`/api/v1/admin/voice-runtime`
 
+## Authority boundary（M021/S02 contract sync）
+
+- **live compiled prompt authority**：`VoiceRuntimePolicyService` + `VoiceInstructionCompiler` 会把 `persona_policy`、customer pressure、runtime profile 的 `tool_policy` 编译进 `voice_policy_snapshot.instructions` 与 `instruction_contract_hash`；这条 compiled artifact 才是新的 StepFun / presentation 会话真正执行的实时指令合同。
+- **runtime guardrail authority**：`network_access_mode`、`require_kb_grounding`、`allow_web_search_without_kb`、`retrieval_priority` 等字段不只是配置展示，它们会同时改变 compiled instruction 文本与 StepFun tool surface。
+- **frozen snapshot rule**：这些调整默认影响“下一次会话创建 / effective policy preview”；已经落库的 `voice_policy_snapshot` 不会被 prompt admin 页面回写覆盖。
+- **not the legacy template authority**：如果目标是修改 legacy evaluation/report 的 compiled prompt，入口在 `prompt-templates` / `scenario-prompts`；如果 diagnostics 指向 `base_url` 缺失，则修复入口在 `model-configs`，而不是继续改 runtime profile。
+
 ## 1) Runtime Profile（`VoiceRuntimeProfile`）
 
 ### 数据结构（核心字段）

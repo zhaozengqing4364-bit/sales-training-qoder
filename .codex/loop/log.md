@@ -1,3 +1,22 @@
+- time: 2026-04-14T10:32:06+08:00
+  mode: grow
+  item id: M021-S02-T03
+  files changed:
+    - docs/api-contract/prompt-templates.md
+    - docs/api-contract/voice-runtime.md
+    - docs/api-contract/personas.md
+    - docs/api-contract/model-configs.md
+    - .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md
+    - .codex/loop/state.json
+    - .codex/loop/log.md
+  summary: Wrote the post-T02 prompt authority line back into durable admin-facing docs so operators no longer have to infer runtime impact from code: prompt-templates now names the compiled legacy evaluation/report contract and its fail-closed diagnostics, personas + voice-runtime name the live StepFun instruction authority and frozen snapshot rule, model-configs owns the provider/base_url repair path, and the architecture scan now points S03 at the compiled prompt seam instead of the old fake-integration story.
+  verification commands:
+    - rg -n "compiled prompt|template source|guardrail|missing var|base_url" docs/api-contract .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md backend/src/prompt_templates -S
+    - rg -n "Admin 变更路由|Authority boundary|canonical evaluation kernel authority entry|instruction_contract_hash|PROMPT_CONTRACT_BASE_URL_REQUIRED" docs/api-contract/prompt-templates.md docs/api-contract/voice-runtime.md docs/api-contract/personas.md docs/api-contract/model-configs.md .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md -S
+  verification results: passed; the exact task-plan grep gate stayed green after the doc sync, and the focused routing grep proves the admin-facing surfaces now distinguish which changes affect legacy compiled prompt contracts versus live StepFun instruction contracts and which failures route to model-configs.
+  success signal status: future S03 work can now start from one truthful compiled-prompt authority entry in both docs and architecture inventory instead of relying on stale template-bypass explanations or guessing which admin surface owns each runtime effect.
+  rollback note: if later work changes the compiled-contract seam, base_url policy handling, or which admin surface owns a runtime prompt effect, update prompt-templates.md, voice-runtime.md, personas.md, model-configs.md, and the architecture scan together so operator guidance stays aligned with the shipped control plane.
+
 - time: 2026-04-14T10:31:00+08:00
   mode: grow
   item id: M021-S02-T02

@@ -36,7 +36,7 @@ S02 结束后，S03 canonical evaluation kernel 与 S04 quality events 都建立
   - Files: `backend/src/prompt_templates`, `backend/src/common/ai/config_manager.py`, `backend/src/common/ai/llm_service.py`, `backend/src/sales_bot/services/voice_instruction_compiler.py`, `backend/src/presentation_coach/services/prompt_role_resolver.py`, `backend/src/evaluation/services`
   - Verify: backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests -k "prompt or knowledge_answer or report" -x -q
 
-- [ ] **T03: 把 prompt authority 写回文档与管理面说明** `est:40m`
+- [x] **T03: 把 prompt authority 写回文档与管理面说明** `est:40m`
   - 更新 prompt docs、architecture scan 与 admin-facing guidance，说明哪个 surface 改模板会影响哪些 live path。
 - 为后续 S03 canonical evaluation kernel 标明 compiled prompt 的 authority entry。
   - Files: `docs/api-contract`, `.gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md`, `backend/src/prompt_templates`

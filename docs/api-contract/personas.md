@@ -104,6 +104,13 @@ interface AgentPersonaResponse {
 
 ---
 
+## Authority boundary（M021/S02 contract sync）
+
+- `persona_policy` 是 live StepFun / presentation compiled instruction contract 的上游输入，而不是一个只给管理端展示的静态字段。
+- `persona_policy.system_prompt`、`knowledge_base_ids`、`tool_policy` 会在会话创建和 `/admin/voice-runtime/agents/{agent_id}/effective` 预览时被编译进新的 `instruction_contract_hash`；因此 Persona 修改默认影响未来会话，不回写已冻结的 `voice_policy_snapshot`。
+- 兼容字段 `system_prompt`、`knowledge_base_ids` 仍会返回，但只是与 `persona_policy` 保持同步的兼容外观，真正的 authority 仍是 `persona_policy`。
+- Persona 调整不会直接改写 legacy evaluation/report 模板正文；这部分 authority 在 `prompt-templates` / `scenario-prompts`，而不是 Persona API。
+
 ## 角色中心策略约束
 
 - Persona 的 `persona_policy` 是角色提示词与知识库绑定的单一事实源（source-of-truth）。

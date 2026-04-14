@@ -1,6 +1,6 @@
 {
   "mode": "grow",
-  "current_issue_id": "M021-S02-T02",
+  "current_issue_id": "M021-S02-T03",
   "current_issue_type": "task",
   "current_issue_status": "done",
   "pending_issue_ids": [],
@@ -210,34 +210,26 @@
     "M021-S01-T01",
     "M021-S01-T02",
     "M021-S02-T01",
-    "M021-S02-T02"
+    "M021-S02-T02",
+    "M021-S02-T03"
   ],
   "blocked_issue_ids": [],
   "deferred_issue_ids": [],
   "last_modified_files": [
-    "backend/src/prompt_templates/compiled_contract.py",
-    "backend/src/prompt_templates/service.py",
-    "backend/src/common/ai/config_manager.py",
-    "backend/src/common/ai/llm_service.py",
-    "backend/src/evaluation/services/staged_evaluation.py",
-    "backend/src/evaluation/services/comprehensive_report.py",
-    "backend/src/common/services/practice_report_service.py",
-    "backend/src/prompt_templates/taxonomy.py",
-    "backend/src/sales_bot/services/voice_instruction_compiler.py",
-    "backend/tests/unit/prompt_templates/test_compiled_prompt_contract.py",
-    "backend/tests/unit/prompt_templates/test_taxonomy.py",
-    "backend/tests/unit/evaluation/test_staged_evaluation_service.py",
-    "backend/tests/unit/evaluation/test_comprehensive_report_service.py",
+    "docs/api-contract/prompt-templates.md",
+    "docs/api-contract/voice-runtime.md",
+    "docs/api-contract/personas.md",
+    "docs/api-contract/model-configs.md",
+    ".gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md",
     ".codex/loop/state.json",
     ".codex/loop/log.md"
   ],
   "last_verification_commands": [
-    "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/prompt_templates/test_compiled_prompt_contract.py backend/tests/unit/prompt_templates/test_taxonomy.py backend/tests/unit/evaluation/test_staged_evaluation_service.py backend/tests/unit/evaluation/test_comprehensive_report_service.py backend/tests/unit/test_voice_instruction_compiler.py -q",
-    "lsp diagnostics backend/src/prompt_templates/compiled_contract.py backend/src/prompt_templates/service.py backend/src/common/ai/config_manager.py backend/src/common/ai/llm_service.py backend/src/evaluation/services/staged_evaluation.py backend/src/evaluation/services/comprehensive_report.py backend/src/prompt_templates/taxonomy.py backend/src/sales_bot/services/voice_instruction_compiler.py backend/src/common/services/practice_report_service.py",
-    "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests -k \"prompt or knowledge_answer or report\" -x -q"
+    "rg -n \"compiled prompt|template source|guardrail|missing var|base_url\" docs/api-contract .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md backend/src/prompt_templates -S",
+    "rg -n \"Admin 变更路由|Authority boundary|canonical evaluation kernel authority entry|instruction_contract_hash|PROMPT_CONTRACT_BASE_URL_REQUIRED\" docs/api-contract/prompt-templates.md docs/api-contract/voice-runtime.md docs/api-contract/personas.md docs/api-contract/model-configs.md .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md -S"
   ],
-  "last_verification_result": "passed; the focused compiled-contract suite finished 80/80 green, LSP diagnostics were clean on every touched Python file, and the exact slice gate finished 274 passed / 6 skipped across the prompt, knowledge-answer, and report surfaces after one exposed structured-logger call in practice_report_service was corrected.",
-  "last_success_signal": "M021/S02/T02 made PromptTemplateService a real runtime authority for legacy evaluation/report: staged evaluation and comprehensive report now compile hashed runtime prompt contracts, LLMService consumes those contracts with explicit missing-variable/base_url diagnostics and fail-closed behavior, taxonomy moved from template-bypass to compiled-consumer truth, and the old raw-dict hardcoded prompts remain only as compatibility fallback.",
+  "last_verification_result": "passed; the exact task-plan grep gate now exposes compiled prompt, guardrail, missing-var, and base_url authority lines across docs/api-contract plus the architecture scan, and the focused authority-routing grep confirms admin guidance now distinguishes prompt-templates, personas, voice-runtime, and model-configs instead of leaving operators to infer runtime impact from code.",
+  "last_success_signal": "M021/S02/T03 wrote the prompt authority line back into durable docs: prompt-templates now documents compiled legacy evaluation/report contracts and their fail-closed diagnostics, personas + voice-runtime document the live StepFun instruction authority and frozen snapshot boundary, model-configs owns the base_url repair path, and the architecture scan now points S03 at the compiled prompt seam instead of the old fake-integration story.",
   "last_growth_scan": null,
-  "next_action": "Proceed to M021/S02/T03 and write the compiled prompt authority line back into docs/admin-facing guidance so the new runtime contract and compatibility fallback are documented outside the code."
+  "next_action": "Await the next planned issue after M021/S02/T03; the repository now has one durable admin-facing prompt authority map spanning prompt-templates, personas, voice-runtime, model-configs, and the architecture scan."
 }
