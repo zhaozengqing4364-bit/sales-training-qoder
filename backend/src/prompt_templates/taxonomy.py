@@ -1,8 +1,8 @@
 """Prompt-source taxonomy for the current AI control plane.
 
 This module turns the M021 prompt inventory into a code-owned artifact so follow-up slices
-can reason about live runtime authority, compatibility helpers, and known fake integration
-points without reopening a full repository scan.
+can reason about live runtime authority, compatibility helpers, and compiled prompt
+consumers without reopening a full repository scan.
 """
 
 from __future__ import annotations
@@ -12,7 +12,7 @@ from dataclasses import dataclass
 from common.ai.llm_service import LEGACY_PROMPT_ENTRYPOINTS
 
 
-PROMPT_SOURCE_TAXONOMY_VERSION = "m021_s02_t01"
+PROMPT_SOURCE_TAXONOMY_VERSION = "m021_s02_t02"
 
 
 @dataclass(frozen=True)
@@ -51,22 +51,22 @@ class PromptSourceTaxonomySnapshot:
 PROMPT_SOURCE_TAXONOMY: tuple[PromptSourceTaxonomyEntry, ...] = (
     PromptSourceTaxonomyEntry(
         source_key="prompt_template_service",
-        authority_level="compat_governance",
-        integration_status="governance_and_runtime_adjacent",
-        compiled_artifact="resolved PromptTemplate rows + rendered Jinja output",
+        authority_level="live_compiled_template",
+        integration_status="drives_runtime",
+        compiled_artifact="CompiledPromptContract(rendered_prompt + system_message + contract_hash)",
         primary_module="prompt_templates.service.PromptTemplateService",
         runtime_consumers=(
             "evaluation.services.staged_evaluation.StagedEvaluationService",
             "evaluation.services.comprehensive_report.ComprehensiveReportService",
             "presentation_coach.services.prompt_role_resolver.PresentationPromptRoleResolver",
         ),
-        notes="Owns admin/governance lookup and some runtime-adjacent helpers, but it is not the live StepFun instruction authority.",
+        notes="Owns admin/governance lookup and now compiles the concrete evaluation/report prompt contract that legacy backend consumers execute.",
     ),
     PromptSourceTaxonomyEntry(
         source_key="voice_instruction_compiler",
         authority_level="live",
         integration_status="drives_runtime",
-        compiled_artifact="policy['instructions'] + instruction_contract_hash",
+        compiled_artifact="policy['instructions'] + instruction_contract_hash + contract_version",
         primary_module="sales_bot.services.voice_instruction_compiler.VoiceInstructionCompiler",
         runtime_consumers=(
             "sales_bot.services.voice_runtime_policy.VoiceRuntimePolicyService.resolve_effective_policy",
@@ -113,8 +113,8 @@ PROMPT_SOURCE_TAXONOMY: tuple[PromptSourceTaxonomyEntry, ...] = (
     PromptSourceTaxonomyEntry(
         source_key="legacy_llm_hardcoded_prompts",
         authority_level="compat_backend_adapter",
-        integration_status="drives_runtime",
-        compiled_artifact="hardcoded evaluate()/generate_report() prompt strings inside LLMService",
+        integration_status="compiled_contract_consumer_with_compat_fallback",
+        compiled_artifact="CompiledPromptContract consumer in evaluate()/generate_report() with raw-dict hardcoded fallback",
         primary_module="common.ai.llm_service.LLMService",
         runtime_consumers=(
             "evaluation.services.staged_evaluation.StagedEvaluationService",
@@ -122,27 +122,12 @@ PROMPT_SOURCE_TAXONOMY: tuple[PromptSourceTaxonomyEntry, ...] = (
             "evaluation.services.report_generation_trigger.ReportGenerationTrigger",
             "evaluation.services.ai_scoring.AIScoringService",
         ),
-        notes="Legacy evaluation/report/scoring still reaches the model through built-in prompt strings instead of PromptTemplateService-rendered contracts.",
+        notes="Legacy evaluation/report now reach the model through compiled prompt contracts, while raw dict input keeps a compatibility-only hardcoded fallback for untouched callers.",
     ),
 )
 
 
-TEMPLATE_BYPASS_ENTRYPOINTS: tuple[TemplateBypassEntrypoint, ...] = (
-    TemplateBypassEntrypoint(
-        consumer="evaluation.services.staged_evaluation.StagedEvaluationService.evaluate_stage",
-        template_lookup="prompt_service.get_template_for_scenario",
-        runtime_call="LLMService.evaluate",
-        consumes_template_text=bool(LEGACY_PROMPT_ENTRYPOINTS["evaluate"]["consumes_template_text"]),
-        bypass_reason="PromptTemplateService resolves a template ID, but LLMService.evaluate rebuilds a hardcoded evaluation prompt from selected variables instead of consuming template text.",
-    ),
-    TemplateBypassEntrypoint(
-        consumer="evaluation.services.comprehensive_report.ComprehensiveReportService._generate_detailed_feedback",
-        template_lookup="prompt_service.get_template_for_scenario",
-        runtime_call="LLMService.generate_report",
-        consumes_template_text=bool(LEGACY_PROMPT_ENTRYPOINTS["generate_report"]["consumes_template_text"]),
-        bypass_reason="A report template lookup happens first, but the template lookup result is not forwarded into the model call because LLMService.generate_report renders its own hardcoded report prompt from context.",
-    ),
-)
+TEMPLATE_BYPASS_ENTRYPOINTS: tuple[TemplateBypassEntrypoint, ...] = ()
 
 
 def build_prompt_source_taxonomy() -> PromptSourceTaxonomySnapshot:

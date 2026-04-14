@@ -403,18 +403,20 @@ class PracticeReportService:
             )
             if comprehensive_result.is_success:
                 logger.info(
-                    "Comprehensive report generated for session %s",
-                    session_id,
+                    "Comprehensive report generated",
+                    session_id=session_id,
                 )
             else:
                 logger.warning(
-                    "Comprehensive report generation failed: %s",
-                    comprehensive_result.fallback,
+                    "Comprehensive report generation failed",
+                    session_id=session_id,
+                    error_code=comprehensive_result.fallback,
                 )
         except (RuntimeError, ValueError, OSError, ImportError) as exc:
             logger.warning(
-                "Comprehensive report generation skipped: %s",
-                str(exc),
+                "Comprehensive report generation skipped",
+                session_id=session_id,
+                error=str(exc),
             )
 
 

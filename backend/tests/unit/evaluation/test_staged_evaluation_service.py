@@ -15,6 +15,7 @@ Test Coverage:
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, Mock
 from uuid import uuid4
 
@@ -65,6 +66,15 @@ class TestStagedEvaluationService:
         """Create mock prompt template service."""
         service = AsyncMock()
         service.get_template_for_scenario = AsyncMock()
+        service.compile_runtime_prompt_contract = MagicMock(
+            side_effect=lambda template, variables, runtime_consumer, system_message: Result.ok(
+                SimpleNamespace(
+                    rendered_prompt=str(getattr(template, "template", "")),
+                    system_message=system_message,
+                    contract_hash="test-stage-contract",
+                )
+            )
+        )
         return service
 
     @pytest.fixture
@@ -160,6 +170,44 @@ class TestStagedEvaluationService:
         # Assert
         assert not result.is_success
         assert "PROMPT_NOT_FOUND" in result.fallback
+
+    @pytest.mark.asyncio
+    async def test_evaluate_stage_uses_compiled_prompt_contract_for_llm_runtime(
+        self,
+        service,
+        mock_prompt_service,
+        mock_llm_service,
+        sample_stage_config,
+        sample_conversation_history,
+    ):
+        """Stage evaluation should pass the compiled prompt contract into the LLM runtime."""
+        session_id = str(uuid4())
+        mock_prompt_template = MagicMock()
+        mock_prompt_template.id = uuid4()
+        mock_prompt_template.template = "阶段：{{ stage_name }}\n对话：{{ conversation }}"
+        mock_prompt_service.get_template_for_scenario.return_value = mock_prompt_template
+
+        compiled_contract = SimpleNamespace(
+            rendered_prompt="阶段：Opening\n对话：user: hi",
+            system_message="你是评估专家。",
+            contract_hash="contract-hash-1",
+        )
+        mock_prompt_service.compile_runtime_prompt_contract = MagicMock(
+            return_value=Result.ok(compiled_contract)
+        )
+        mock_llm_service.evaluate.return_value = Result.ok(
+            '{"scores":{"communication":85.0},"strengths":[],"weaknesses":[],"suggestions":[],"summary":"ok"}'
+        )
+
+        result = await service.evaluate_stage(
+            session_id=session_id,
+            stage_config=sample_stage_config,
+            conversation_history=sample_conversation_history,
+        )
+
+        assert result.is_success
+        mock_prompt_service.compile_runtime_prompt_contract.assert_called_once()
+        mock_llm_service.evaluate.assert_awaited_once_with(compiled_contract)
 
     @pytest.mark.asyncio
     async def test_evaluate_stage_llm_failure(self, service, mock_prompt_service, mock_llm_service, sample_stage_config, sample_conversation_history):

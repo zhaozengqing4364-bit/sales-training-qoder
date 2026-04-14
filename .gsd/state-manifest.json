@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "exported_at": "2026-04-14T02:05:56.847Z",
+  "exported_at": "2026-04-14T02:25:54.892Z",
   "milestones": [
     {
       "id": "M001",
@@ -13233,19 +13233,36 @@
       "milestone_id": "M021",
       "slice_id": "S02",
       "id": "T02",
-      "title": "让 compiled prompt contract 真正驱动 runtime",
-      "status": "pending",
-      "one_liner": "",
-      "narrative": "",
-      "verification_result": "",
+      "title": "Compiled prompt contracts now drive legacy evaluation/report runtime with explicit fail-closed diagnostics.",
+      "status": "complete",
+      "one_liner": "Compiled prompt contracts now drive legacy evaluation/report runtime with explicit fail-closed diagnostics.",
+      "narrative": "I promoted PromptTemplateService from a lookup-only helper into a real runtime compiler for legacy evaluation/report flows. First, I added `backend/src/prompt_templates/compiled_contract.py` and `PromptTemplateService.compile_runtime_prompt_contract(...)` so a resolved template now becomes a hashed contract with version, runtime consumer, rendered prompt, system message, base_url policy, and attached diagnostics. Then I rewired `StagedEvaluationService.evaluate_stage()` and `ComprehensiveReportService._generate_detailed_feedback()` to compile that contract before calling the model layer, which means the template text is now the actual prompt artifact sent downstream instead of being looked up and ignored.\n\nOn the model side, I updated `LLMService` to consume `CompiledPromptContract` objects directly, log their diagnostics, and use fail-closed generation for contract-driven calls. Missing config and generation failures now return explicit error codes for these compiled paths instead of conversational filler fallbacks, while the old raw-dict hardcoded prompt behavior remains as compatibility-only fallback for untouched callers. I also added provider/base_url runtime policy description in `ConfigManager`, aligned the prompt taxonomy to the new truth (compiled-contract consumers instead of template-bypass seams), versioned the voice instruction contract hashing around the same shared contract utility, and fixed one pre-existing structured-logger formatting call in `practice_report_service` that the new fail-closed report path exposed during the broader slice gate.",
+      "verification_result": "I followed a red/green cycle. I first wrote failing tests proving three things that were not true yet: PromptTemplateService should compile a runtime prompt contract, staged evaluation should pass that contract into `LLMService.evaluate`, and comprehensive report feedback should pass the compiled contract into `LLMService.generate_report`. After the implementation landed, the focused prompt-contract/taxonomy/evaluation/report/voice-instruction suite passed 80/80, LSP diagnostics were clean on every touched Python file, and the exact task-plan verification command `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests -k \"prompt or knowledge_answer or report\" -x -q` passed with 274 tests green and 6 skips. The first full-gate run surfaced one adjacent runtime issue — an old printf-style structured logger call in `practice_report_service` — which I fixed and then reran the gate successfully.",
       "duration": "",
-      "completed_at": null,
+      "completed_at": "2026-04-14T02:25:54.821Z",
       "blocker_discovered": false,
-      "deviations": "",
-      "known_issues": "",
-      "key_files": [],
-      "key_decisions": [],
-      "full_summary_md": "",
+      "deviations": "None.",
+      "known_issues": "The repository still emits pre-existing pytest-cov `Module src was never imported` / `No data was collected` warnings on these focused/backend gates, and the broad slice gate still reports pre-existing ResourceWarnings for unclosed sqlite connections plus unrelated deprecation/runtime warnings outside the touched prompt-control files.",
+      "key_files": [
+        "backend/src/prompt_templates/compiled_contract.py",
+        "backend/src/prompt_templates/service.py",
+        "backend/src/common/ai/config_manager.py",
+        "backend/src/common/ai/llm_service.py",
+        "backend/src/evaluation/services/staged_evaluation.py",
+        "backend/src/evaluation/services/comprehensive_report.py",
+        "backend/src/common/services/practice_report_service.py",
+        "backend/src/prompt_templates/taxonomy.py",
+        "backend/src/sales_bot/services/voice_instruction_compiler.py",
+        "backend/tests/unit/prompt_templates/test_compiled_prompt_contract.py",
+        "backend/tests/unit/prompt_templates/test_taxonomy.py",
+        "backend/tests/unit/evaluation/test_staged_evaluation_service.py",
+        "backend/tests/unit/evaluation/test_comprehensive_report_service.py"
+      ],
+      "key_decisions": [
+        "Compile PromptTemplateService output into a hashed runtime contract before evaluation/report model calls instead of forwarding lookup context and rebuilding prompts inside LLMService.",
+        "Keep raw dict-based hardcoded prompts inside LLMService only as compatibility fallback, while compiled-contract consumers fail closed on missing variables, missing config, and generation errors."
+      ],
+      "full_summary_md": "---\nid: T02\nparent: S02\nmilestone: M021\nkey_files:\n  - backend/src/prompt_templates/compiled_contract.py\n  - backend/src/prompt_templates/service.py\n  - backend/src/common/ai/config_manager.py\n  - backend/src/common/ai/llm_service.py\n  - backend/src/evaluation/services/staged_evaluation.py\n  - backend/src/evaluation/services/comprehensive_report.py\n  - backend/src/common/services/practice_report_service.py\n  - backend/src/prompt_templates/taxonomy.py\n  - backend/src/sales_bot/services/voice_instruction_compiler.py\n  - backend/tests/unit/prompt_templates/test_compiled_prompt_contract.py\n  - backend/tests/unit/prompt_templates/test_taxonomy.py\n  - backend/tests/unit/evaluation/test_staged_evaluation_service.py\n  - backend/tests/unit/evaluation/test_comprehensive_report_service.py\nkey_decisions:\n  - Compile PromptTemplateService output into a hashed runtime contract before evaluation/report model calls instead of forwarding lookup context and rebuilding prompts inside LLMService.\n  - Keep raw dict-based hardcoded prompts inside LLMService only as compatibility fallback, while compiled-contract consumers fail closed on missing variables, missing config, and generation errors.\nduration: \nverification_result: mixed\ncompleted_at: 2026-04-14T02:25:54.817Z\nblocker_discovered: false\n---\n\n# T02: Compiled prompt contracts now drive legacy evaluation/report runtime with explicit fail-closed diagnostics.\n\n**Compiled prompt contracts now drive legacy evaluation/report runtime with explicit fail-closed diagnostics.**\n\n## What Happened\n\nI promoted PromptTemplateService from a lookup-only helper into a real runtime compiler for legacy evaluation/report flows. First, I added `backend/src/prompt_templates/compiled_contract.py` and `PromptTemplateService.compile_runtime_prompt_contract(...)` so a resolved template now becomes a hashed contract with version, runtime consumer, rendered prompt, system message, base_url policy, and attached diagnostics. Then I rewired `StagedEvaluationService.evaluate_stage()` and `ComprehensiveReportService._generate_detailed_feedback()` to compile that contract before calling the model layer, which means the template text is now the actual prompt artifact sent downstream instead of being looked up and ignored.\n\nOn the model side, I updated `LLMService` to consume `CompiledPromptContract` objects directly, log their diagnostics, and use fail-closed generation for contract-driven calls. Missing config and generation failures now return explicit error codes for these compiled paths instead of conversational filler fallbacks, while the old raw-dict hardcoded prompt behavior remains as compatibility-only fallback for untouched callers. I also added provider/base_url runtime policy description in `ConfigManager`, aligned the prompt taxonomy to the new truth (compiled-contract consumers instead of template-bypass seams), versioned the voice instruction contract hashing around the same shared contract utility, and fixed one pre-existing structured-logger formatting call in `practice_report_service` that the new fail-closed report path exposed during the broader slice gate.\n\n## Verification\n\nI followed a red/green cycle. I first wrote failing tests proving three things that were not true yet: PromptTemplateService should compile a runtime prompt contract, staged evaluation should pass that contract into `LLMService.evaluate`, and comprehensive report feedback should pass the compiled contract into `LLMService.generate_report`. After the implementation landed, the focused prompt-contract/taxonomy/evaluation/report/voice-instruction suite passed 80/80, LSP diagnostics were clean on every touched Python file, and the exact task-plan verification command `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests -k \"prompt or knowledge_answer or report\" -x -q` passed with 274 tests green and 6 skips. The first full-gate run surfaced one adjacent runtime issue — an old printf-style structured logger call in `practice_report_service` — which I fixed and then reran the gate successfully.\n\n## Verification Evidence\n\n| # | Command | Exit Code | Verdict | Duration |\n|---|---------|-----------|---------|----------|\n| 1 | `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/prompt_templates/test_compiled_prompt_contract.py backend/tests/unit/prompt_templates/test_taxonomy.py backend/tests/unit/evaluation/test_staged_evaluation_service.py backend/tests/unit/evaluation/test_comprehensive_report_service.py backend/tests/unit/test_voice_instruction_compiler.py -q` | 0 | ✅ pass | 310ms |\n| 2 | `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests -k \"prompt or knowledge_answer or report\" -x -q` | 1 | ❌ fail | 10700ms |\n| 3 | `backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests -k \"prompt or knowledge_answer or report\" -x -q` | 0 | ✅ pass | 17200ms |\n\n## Deviations\n\nNone.\n\n## Known Issues\n\nThe repository still emits pre-existing pytest-cov `Module src was never imported` / `No data was collected` warnings on these focused/backend gates, and the broad slice gate still reports pre-existing ResourceWarnings for unclosed sqlite connections plus unrelated deprecation/runtime warnings outside the touched prompt-control files.\n\n## Files Created/Modified\n\n- `backend/src/prompt_templates/compiled_contract.py`\n- `backend/src/prompt_templates/service.py`\n- `backend/src/common/ai/config_manager.py`\n- `backend/src/common/ai/llm_service.py`\n- `backend/src/evaluation/services/staged_evaluation.py`\n- `backend/src/evaluation/services/comprehensive_report.py`\n- `backend/src/common/services/practice_report_service.py`\n- `backend/src/prompt_templates/taxonomy.py`\n- `backend/src/sales_bot/services/voice_instruction_compiler.py`\n- `backend/tests/unit/prompt_templates/test_compiled_prompt_contract.py`\n- `backend/tests/unit/prompt_templates/test_taxonomy.py`\n- `backend/tests/unit/evaluation/test_staged_evaluation_service.py`\n- `backend/tests/unit/evaluation/test_comprehensive_report_service.py`\n",
       "description": "- 设计并实现一个 compiled prompt contract：明确输入来源、编译结果、hash/version、runtime consumer。\n- 让 live/legacy 仍保留的路径实际消费这个 compiled contract，而不是分别硬编码。\n- 对 missing vars/fail-open/base_url policy 增加显式 diagnostics 或 guardrails。",
       "estimate": "2.5h",
       "files": [
@@ -22265,6 +22282,39 @@
       "verdict": "✅ pass",
       "duration_ms": 39,
       "created_at": "2026-04-14T02:05:56.796Z"
+    },
+    {
+      "id": 502,
+      "task_id": "T02",
+      "slice_id": "S02",
+      "milestone_id": "M021",
+      "command": "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/prompt_templates/test_compiled_prompt_contract.py backend/tests/unit/prompt_templates/test_taxonomy.py backend/tests/unit/evaluation/test_staged_evaluation_service.py backend/tests/unit/evaluation/test_comprehensive_report_service.py backend/tests/unit/test_voice_instruction_compiler.py -q",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 310,
+      "created_at": "2026-04-14T02:25:54.822Z"
+    },
+    {
+      "id": 503,
+      "task_id": "T02",
+      "slice_id": "S02",
+      "milestone_id": "M021",
+      "command": "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests -k \"prompt or knowledge_answer or report\" -x -q",
+      "exit_code": 1,
+      "verdict": "❌ fail",
+      "duration_ms": 10700,
+      "created_at": "2026-04-14T02:25:54.823Z"
+    },
+    {
+      "id": 504,
+      "task_id": "T02",
+      "slice_id": "S02",
+      "milestone_id": "M021",
+      "command": "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests -k \"prompt or knowledge_answer or report\" -x -q",
+      "exit_code": 0,
+      "verdict": "✅ pass",
+      "duration_ms": 17200,
+      "created_at": "2026-04-14T02:25:54.823Z"
     }
   ]
 }

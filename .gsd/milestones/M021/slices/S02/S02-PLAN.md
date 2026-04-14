@@ -29,7 +29,7 @@ S02 结束后，S03 canonical evaluation kernel 与 S04 quality events 都建立
   - Files: `backend/src/prompt_templates`, `backend/src/common/ai/llm_service.py`, `backend/src/sales_bot/services/voice_instruction_compiler.py`, `backend/src/presentation_coach/services/prompt_role_resolver.py`, `.gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md`
   - Verify: rg -n "PromptTemplateService|render\(|generate_report|evaluate\(|instructions|persona_policy|strict=|SilentUndefined|base_url" backend/src/prompt_templates backend/src/common/ai backend/src/sales_bot/services backend/src/presentation_coach/services backend/src/evaluation/services
 
-- [ ] **T02: 让 compiled prompt contract 真正驱动 runtime** `est:2.5h`
+- [x] **T02: 让 compiled prompt contract 真正驱动 runtime** `est:2.5h`
   - 设计并实现一个 compiled prompt contract：明确输入来源、编译结果、hash/version、runtime consumer。
 - 让 live/legacy 仍保留的路径实际消费这个 compiled contract，而不是分别硬编码。
 - 对 missing vars/fail-open/base_url policy 增加显式 diagnostics 或 guardrails。

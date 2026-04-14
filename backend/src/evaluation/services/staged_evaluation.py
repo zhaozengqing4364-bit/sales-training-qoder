@@ -116,17 +116,30 @@ class StagedEvaluationService:
                 return Result.fail(f"[PROMPT_NOT_FOUND:{stage_config.evaluation_prompt_type}]")
 
             # Render prompt with conversation
-            render_request = {
-                "template_id": prompt_result.id,
-                "variables": {
-                    "conversation": self._format_conversation(stage_conversation),
-                    "stage_name": stage_config.name,
-                    "stage_description": stage_config.description,
-                },
+            render_variables = {
+                "conversation": self._format_conversation(stage_conversation),
+                "stage_name": stage_config.name,
+                "stage_description": stage_config.description,
             }
+            contract_result = self.prompt_service.compile_runtime_prompt_contract(
+                template=prompt_result,
+                variables=render_variables,
+                runtime_consumer=(
+                    "evaluation.services.staged_evaluation."
+                    "StagedEvaluationService.evaluate_stage"
+                ),
+                system_message=(
+                    "你是一个专业的销售培训评估专家。"
+                    "请严格按照JSON格式返回评估结果。"
+                ),
+            )
+            if not contract_result.is_success:
+                return Result.fail(
+                    contract_result.fallback or "[PROMPT_CONTRACT_COMPILE_FAILED]"
+                )
 
             # Call LLM for evaluation
-            llm_result = await self.llm.evaluate(render_request)
+            llm_result = await self.llm.evaluate(contract_result.value)
 
             if not llm_result.is_success:
                 return Result.fail("[LLM_EVALUATION_FAILED]")

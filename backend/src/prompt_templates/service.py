@@ -20,7 +20,16 @@ from pydantic import ValidationError
 from sqlalchemy import and_, or_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from common.ai.config_manager import get_config_manager
+from common.ai.models import ModelType
+from common.error_handling.result import Result
 from common.monitoring.logger import get_logger
+from prompt_templates.compiled_contract import (
+    PROMPT_CONTRACT_VERSION,
+    CompiledPromptContract,
+    PromptContractDiagnostic,
+    build_prompt_contract_hash,
+)
 from prompt_templates.models import (
     PromptTemplate,
     PromptTemplateCreate,
@@ -378,6 +387,148 @@ class PromptTemplateService:
             rendered=result.rendered,
             missing_variables=result.missing_variables,
             extra_variables=result.extra_variables,
+        )
+
+    def compile_runtime_prompt_contract(
+        self,
+        *,
+        template: PromptTemplate,
+        variables: dict[str, Any],
+        runtime_consumer: str,
+        system_message: str,
+        model_config: dict[str, Any] | None = None,
+    ) -> Result[CompiledPromptContract]:
+        """Compile a runtime prompt contract from a resolved template.
+
+        This is the control-plane handoff point where PromptTemplateService stops being a
+        governance-only lookup helper and starts producing the exact prompt artifact that the
+        runtime LLM consumer will execute.
+        """
+        render_result = render_template(template.template, variables, strict=True)
+        if not render_result.success:
+            if render_result.missing_variables:
+                missing = ",".join(render_result.missing_variables)
+                logger.warning(
+                    "Prompt contract compilation failed due to missing template variables",
+                    template_id=str(template.id),
+                    runtime_consumer=runtime_consumer,
+                    prompt_type=(
+                        template.prompt_type.value
+                        if hasattr(template.prompt_type, "value")
+                        else str(template.prompt_type)
+                    ),
+                    missing_variables=render_result.missing_variables,
+                )
+                return Result.fail(
+                    f"[PROMPT_CONTRACT_MISSING_VARIABLES:{missing}]"
+                )
+            logger.warning(
+                "Prompt contract compilation failed due to render error",
+                template_id=str(template.id),
+                runtime_consumer=runtime_consumer,
+                error_message=render_result.error_message,
+            )
+            return Result.fail("[PROMPT_CONTRACT_RENDER_ERROR]")
+
+        rendered_prompt = render_result.rendered.strip()
+        if not rendered_prompt:
+            logger.warning(
+                "Prompt contract compilation produced empty rendered prompt",
+                template_id=str(template.id),
+                runtime_consumer=runtime_consumer,
+            )
+            return Result.fail("[PROMPT_CONTRACT_EMPTY_RENDERED_PROMPT]")
+
+        config_manager = get_config_manager()
+        effective_config = model_config or config_manager.get_effective_config(ModelType.LLM)
+        runtime_policy = config_manager.describe_runtime_policy(
+            ModelType.LLM,
+            effective_config,
+        )
+        base_url_status = str(runtime_policy.get("base_url_status") or "unknown")
+        base_url_required = bool(runtime_policy.get("base_url_required", False))
+        base_url_policy = (
+            f"required_{base_url_status}"
+            if base_url_required
+            else f"not_required_{base_url_status}"
+        )
+        if base_url_required and base_url_status != "configured":
+            logger.error(
+                "Prompt contract blocked by LLM base_url policy",
+                template_id=str(template.id),
+                runtime_consumer=runtime_consumer,
+                provider=str(runtime_policy.get("provider") or ""),
+                model_name=str(runtime_policy.get("model_name") or ""),
+                base_url_policy=base_url_policy,
+            )
+            return Result.fail("[PROMPT_CONTRACT_BASE_URL_REQUIRED]")
+
+        diagnostics: list[PromptContractDiagnostic] = [
+            PromptContractDiagnostic(
+                code="PROMPT_TEMPLATE_RENDERED",
+                severity="info",
+                detail=(
+                    f"template_id={template.id} prompt_type="
+                    f"{template.prompt_type.value if hasattr(template.prompt_type, 'value') else template.prompt_type}"
+                ),
+            ),
+            PromptContractDiagnostic(
+                code="LLM_BASE_URL_POLICY",
+                severity="info",
+                detail=(
+                    f"provider={runtime_policy.get('provider') or ''} "
+                    f"model={runtime_policy.get('model_name') or ''} "
+                    f"policy={base_url_policy}"
+                ),
+            ),
+        ]
+        if render_result.extra_variables:
+            diagnostics.append(
+                PromptContractDiagnostic(
+                    code="PROMPT_TEMPLATE_EXTRA_VARIABLES",
+                    severity="warning",
+                    detail=",".join(render_result.extra_variables),
+                )
+            )
+
+        contract_hash = build_prompt_contract_hash(
+            PROMPT_CONTRACT_VERSION,
+            template.id,
+            runtime_consumer,
+            system_message,
+            rendered_prompt,
+        )
+        prompt_type = (
+            template.prompt_type.value
+            if hasattr(template.prompt_type, "value")
+            else str(template.prompt_type)
+        )
+        logger.info(
+            "Compiled runtime prompt contract",
+            template_id=str(template.id),
+            runtime_consumer=runtime_consumer,
+            contract_hash=contract_hash,
+            prompt_type=prompt_type,
+            base_url_policy=base_url_policy,
+        )
+        return Result.ok(
+            CompiledPromptContract(
+                contract_version=PROMPT_CONTRACT_VERSION,
+                prompt_source="prompt_template_service",
+                template_id=str(template.id),
+                template_name=template.name,
+                prompt_type=prompt_type,
+                rendered_prompt=rendered_prompt,
+                system_message=system_message,
+                runtime_consumer=runtime_consumer,
+                contract_hash=contract_hash,
+                model_provider=str(runtime_policy.get("provider") or ""),
+                model_name=str(runtime_policy.get("model_name") or ""),
+                base_url_policy=base_url_policy,
+                missing_variables=tuple(render_result.missing_variables),
+                extra_variables=tuple(render_result.extra_variables),
+                diagnostics=tuple(diagnostics),
+            )
         )
 
     async def assign_template_to_scenario(

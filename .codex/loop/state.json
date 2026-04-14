@@ -1,6 +1,6 @@
 {
   "mode": "grow",
-  "current_issue_id": "M021-S02-T01",
+  "current_issue_id": "M021-S02-T02",
   "current_issue_type": "task",
   "current_issue_status": "done",
   "pending_issue_ids": [],
@@ -209,28 +209,35 @@
     "M020-S04-T03",
     "M021-S01-T01",
     "M021-S01-T02",
-    "M021-S02-T01"
+    "M021-S02-T01",
+    "M021-S02-T02"
   ],
   "blocked_issue_ids": [],
   "deferred_issue_ids": [],
   "last_modified_files": [
+    "backend/src/prompt_templates/compiled_contract.py",
+    "backend/src/prompt_templates/service.py",
+    "backend/src/common/ai/config_manager.py",
     "backend/src/common/ai/llm_service.py",
+    "backend/src/evaluation/services/staged_evaluation.py",
+    "backend/src/evaluation/services/comprehensive_report.py",
+    "backend/src/common/services/practice_report_service.py",
     "backend/src/prompt_templates/taxonomy.py",
+    "backend/src/sales_bot/services/voice_instruction_compiler.py",
+    "backend/tests/unit/prompt_templates/test_compiled_prompt_contract.py",
     "backend/tests/unit/prompt_templates/test_taxonomy.py",
-    ".gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md",
-    ".gsd/KNOWLEDGE.md",
+    "backend/tests/unit/evaluation/test_staged_evaluation_service.py",
+    "backend/tests/unit/evaluation/test_comprehensive_report_service.py",
     ".codex/loop/state.json",
     ".codex/loop/log.md"
   ],
   "last_verification_commands": [
-    "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/prompt_templates/test_taxonomy.py backend/tests/unit/test_voice_instruction_compiler.py backend/tests/unit/evaluation/test_staged_evaluation_service.py backend/tests/unit/evaluation/test_comprehensive_report_service.py backend/tests/unit/test_report_generation_trigger.py -q",
-    "rg -n \"PromptTemplateService|render\\(|generate_report|evaluate\\(|instructions|persona_policy|strict=|SilentUndefined|base_url\" backend/src/prompt_templates backend/src/common/ai backend/src/sales_bot/services backend/src/presentation_coach/services backend/src/evaluation/services",
-    "lsp diagnostics backend/src/common/ai/llm_service.py",
-    "lsp diagnostics backend/src/prompt_templates/taxonomy.py",
-    "lsp diagnostics backend/tests/unit/prompt_templates/test_taxonomy.py"
+    "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/prompt_templates/test_compiled_prompt_contract.py backend/tests/unit/prompt_templates/test_taxonomy.py backend/tests/unit/evaluation/test_staged_evaluation_service.py backend/tests/unit/evaluation/test_comprehensive_report_service.py backend/tests/unit/test_voice_instruction_compiler.py -q",
+    "lsp diagnostics backend/src/prompt_templates/compiled_contract.py backend/src/prompt_templates/service.py backend/src/common/ai/config_manager.py backend/src/common/ai/llm_service.py backend/src/evaluation/services/staged_evaluation.py backend/src/evaluation/services/comprehensive_report.py backend/src/prompt_templates/taxonomy.py backend/src/sales_bot/services/voice_instruction_compiler.py backend/src/common/services/practice_report_service.py",
+    "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests -k \"prompt or knowledge_answer or report\" -x -q"
   ],
-  "last_verification_result": "passed; the new prompt-taxonomy proof bundle finished 86/86 green across taxonomy, voice-instruction, staged-evaluation, comprehensive-report, and report-trigger tests, the exact slice grep gate now exposes the real template-bypass entrypoints alongside live instruction/persona surfaces, and LSP diagnostics stayed clean on all touched Python files.",
-  "last_success_signal": "M021/S02/T01 turned the prompt inventory into code-owned taxonomy: StepFun compiled instructions are now explicitly marked as the live runtime authority, PromptTemplateService is marked as compat governance/runtime-adjacent, and the two real template-bypass entrypoints in staged evaluation and comprehensive report are documented in code and architecture artifacts instead of hiding behind lookup calls.",
+  "last_verification_result": "passed; the focused compiled-contract suite finished 80/80 green, LSP diagnostics were clean on every touched Python file, and the exact slice gate finished 274 passed / 6 skipped across the prompt, knowledge-answer, and report surfaces after one exposed structured-logger call in practice_report_service was corrected.",
+  "last_success_signal": "M021/S02/T02 made PromptTemplateService a real runtime authority for legacy evaluation/report: staged evaluation and comprehensive report now compile hashed runtime prompt contracts, LLMService consumes those contracts with explicit missing-variable/base_url diagnostics and fail-closed behavior, taxonomy moved from template-bypass to compiled-consumer truth, and the old raw-dict hardcoded prompts remain only as compatibility fallback.",
   "last_growth_scan": null,
-  "next_action": "Use prompt_templates/taxonomy.py + LEGACY_PROMPT_ENTRYPOINTS as the input for M021/S02/T02, then make one compiled prompt contract actually drive a live or legacy runtime path with explicit missing-var/base_url diagnostics."
+  "next_action": "Proceed to M021/S02/T03 and write the compiled prompt authority line back into docs/admin-facing guidance so the new runtime contract and compatibility fallback are documented outside the code."
 }

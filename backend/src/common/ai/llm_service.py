@@ -21,21 +21,22 @@ from common.ai.config_manager import get_config_manager
 from common.ai.models import ModelConfig, ModelProvider, ModelType
 from common.error_handling.result import Result
 from common.monitoring.logger import get_logger
+from prompt_templates.compiled_contract import CompiledPromptContract
 
 logger = get_logger(__name__)
 
 
 LEGACY_PROMPT_ENTRYPOINTS: dict[str, dict[str, Any]] = {
     "evaluate": {
-        "prompt_contract_mode": "hardcoded_builtin_prompt",
-        "consumes_template_text": False,
-        "template_lookup_context": "render_request carries template_id + variables, but the method rebuilds an internal evaluation prompt from selected variables only.",
+        "prompt_contract_mode": "compiled_prompt_contract",
+        "consumes_template_text": True,
+        "template_lookup_context": "StagedEvaluationService now compiles PromptTemplateService output into a concrete runtime contract before calling evaluate(). Raw dict input remains a compatibility fallback only.",
         "runtime_consumer": "evaluation.services.staged_evaluation.StagedEvaluationService.evaluate_stage",
     },
     "generate_report": {
-        "prompt_contract_mode": "hardcoded_builtin_prompt",
-        "consumes_template_text": False,
-        "template_lookup_context": "report context is forwarded from ComprehensiveReportService after a template lookup, but the method rebuilds its own report prompt instead of consuming rendered template text.",
+        "prompt_contract_mode": "compiled_prompt_contract",
+        "consumes_template_text": True,
+        "template_lookup_context": "ComprehensiveReportService now compiles PromptTemplateService output into a concrete runtime contract before calling generate_report(). Raw context dict input remains a compatibility fallback only.",
         "runtime_consumer": "evaluation.services.comprehensive_report.ComprehensiveReportService._generate_detailed_feedback",
     },
 }
@@ -90,6 +91,10 @@ class LLMService:
         self._config_manager = get_config_manager()
         self._config = config
         self._effective_config: dict[str, Any] | None = None
+        self._runtime_policy: dict[str, Any] = self._config_manager.describe_runtime_policy(
+            ModelType.LLM,
+            None,
+        )
 
         # Cost tracking (¥0.05/1K tokens default)
         self.cost_per_1k_tokens = 0.00005
@@ -123,8 +128,16 @@ class LLMService:
             # Get from ConfigManager (database or env fallback)
             self._effective_config = self._config_manager.get_effective_config(ModelType.LLM)
 
+        self._runtime_policy = self._config_manager.describe_runtime_policy(
+            ModelType.LLM,
+            self._effective_config,
+        )
+
         if not self._effective_config:
-            logger.warning("No LLM configuration available")
+            logger.warning(
+                "No LLM configuration available",
+                base_url_policy=str(self._runtime_policy.get("base_url_status") or "unknown"),
+            )
             return
 
         # Extract config values
@@ -133,6 +146,17 @@ class LLMService:
         api_key = self._effective_config.get("api_key", "")
         model_name = self._effective_config.get("model_name", "gpt-4o")
         extra_config = self._effective_config.get("extra_config", {})
+
+        if self._runtime_policy.get("base_url_required") and not str(base_url).strip():
+            logger.error(
+                "LLM configuration rejected by base_url policy",
+                provider=str(provider),
+                model_name=str(model_name),
+                base_url_policy=(
+                    f"required_{self._runtime_policy.get('base_url_status') or 'unknown'}"
+                ),
+            )
+            return
 
         # Get parameters from extra_config
         temperature = extra_config.get("temperature", 0.7)
@@ -265,6 +289,22 @@ class LLMService:
         self._config = config
         self._init_client()
 
+    def _log_compiled_prompt_contract(self, contract: CompiledPromptContract) -> None:
+        """Emit explicit diagnostics for compiled prompt consumers."""
+        for diagnostic in contract.diagnostics:
+            log_kwargs = {
+                "runtime_consumer": contract.runtime_consumer,
+                "contract_hash": contract.contract_hash,
+                "code": diagnostic.code,
+                "severity": diagnostic.severity,
+                "detail": diagnostic.detail,
+                "base_url_policy": contract.base_url_policy,
+            }
+            if diagnostic.severity == "warning":
+                logger.warning("Compiled prompt contract diagnostic", **log_kwargs)
+            else:
+                logger.info("Compiled prompt contract diagnostic", **log_kwargs)
+
     @retry(
         stop=stop_after_attempt(2),
         wait=wait_exponential(multiplier=1, min=2, max=10)
@@ -274,7 +314,9 @@ class LLMService:
         prompt: str,
         session_id: str,
         system_message: str | None = None,
-        context: dict[str, Any] | None = None
+        context: dict[str, Any] | None = None,
+        *,
+        allow_fallback_response: bool = True,
     ) -> Result[str]:
         """
         Generate LLM response with timeout and retry.
@@ -292,8 +334,19 @@ class LLMService:
             return Result.ok(self._get_fallback_response(prompt, context))
 
         if not self.is_configured:
-            logger.error("LLM service not configured")
-            return Result.fail(self._get_fallback_response(prompt, context))
+            logger.error(
+                "LLM service not configured",
+                provider=self.provider,
+                model_name=self.model_name,
+                base_url_policy=(
+                    f"required_{self._runtime_policy.get('base_url_status') or 'unknown'}"
+                    if self._runtime_policy.get("base_url_required")
+                    else f"not_required_{self._runtime_policy.get('base_url_status') or 'unknown'}"
+                ),
+            )
+            if allow_fallback_response:
+                return Result.fail(self._get_fallback_response(prompt, context))
+            return Result.fail("[LLM_NOT_CONFIGURED]")
 
         try:
             messages = []
@@ -338,10 +391,23 @@ class LLMService:
             return Result.ok(response_text)
 
         except (ConnectionError, TimeoutError, RuntimeError, ValueError, OSError) as e:
-            logger.error(f"LLM generation error: {str(e)}")
+            logger.error(
+                "LLM generation error",
+                provider=self.provider,
+                model_name=self.model_name,
+                error_type=type(e).__name__,
+                error=str(e),
+                base_url_policy=(
+                    f"required_{self._runtime_policy.get('base_url_status') or 'unknown'}"
+                    if self._runtime_policy.get("base_url_required")
+                    else f"not_required_{self._runtime_policy.get('base_url_status') or 'unknown'}"
+                ),
+            )
             # Return predefined fallback response
             fallback_response = self._get_fallback_response(prompt, context)
-            return Result.fail(fallback_response)
+            if allow_fallback_response:
+                return Result.fail(fallback_response)
+            return Result.fail(f"[LLM_GENERATION_ERROR:{type(e).__name__}]")
 
     def _get_fallback_response(
         self,
@@ -376,14 +442,14 @@ class LLMService:
 
     async def evaluate(
         self,
-        render_request: dict,
+        render_request: dict[str, Any] | CompiledPromptContract,
         session_id: str = "evaluation",
     ) -> Result[dict]:
         """
         Evaluate a conversation stage using LLM.
 
         Args:
-            render_request: Dict with template_id and variables
+            render_request: Dict with template_id and variables, or a compiled prompt contract
             session_id: Session ID for cost tracking
 
         Returns:
@@ -391,12 +457,30 @@ class LLMService:
         """
         import json as json_module
 
-        variables = render_request.get("variables", {})
-        conversation = variables.get("conversation", "")
-        stage_name = variables.get("stage_name", "")
-        stage_description = variables.get("stage_description", "")
+        if isinstance(render_request, CompiledPromptContract):
+            self._log_compiled_prompt_contract(render_request)
+            prompt = render_request.rendered_prompt
+            system_message = (
+                render_request.system_message
+                or "你是一个专业的销售培训评估专家。请严格按照JSON格式返回评估结果。"
+            )
+            result = await self.generate(
+                prompt=prompt,
+                session_id=session_id,
+                system_message=system_message,
+                context={
+                    "contract_hash": render_request.contract_hash,
+                    "runtime_consumer": render_request.runtime_consumer,
+                },
+                allow_fallback_response=False,
+            )
+        else:
+            variables = render_request.get("variables", {})
+            conversation = variables.get("conversation", "")
+            stage_name = variables.get("stage_name", "")
+            stage_description = variables.get("stage_description", "")
 
-        prompt = f"""请评估以下销售对话阶段的表现，并以JSON格式返回评估结果。
+            prompt = f"""请评估以下销售对话阶段的表现，并以JSON格式返回评估结果。
 
 阶段名称: {stage_name}
 阶段描述: {stage_description}
@@ -419,14 +503,14 @@ class LLMService:
     "summary": "阶段总结"
 }}"""
 
-        result = await self.generate(
-            prompt=prompt,
-            session_id=session_id,
-            system_message="你是一个专业的销售培训评估专家。请严格按照JSON格式返回评估结果。",
-        )
+            result = await self.generate(
+                prompt=prompt,
+                session_id=session_id,
+                system_message="你是一个专业的销售培训评估专家。请严格按照JSON格式返回评估结果。",
+            )
 
         if not result.is_success:
-            return Result.fail("[LLM_EVALUATION_FAILED]")
+            return Result.fail(result.fallback or "[LLM_EVALUATION_FAILED]")
 
         try:
             response_text = result.value.strip()
@@ -454,24 +538,42 @@ class LLMService:
 
     async def generate_report(
         self,
-        context: dict,
+        context: dict[str, Any] | CompiledPromptContract,
         session_id: str = "report",
     ) -> Result[str]:
         """
         Generate detailed feedback report using LLM.
 
         Args:
-            context: Dict with session_id, stage_count, overall_summary
+            context: Dict with session_id/stage_count/overall_summary, or a compiled prompt contract
             session_id: Session ID for cost tracking
 
         Returns:
             Result with detailed feedback text
         """
-        stage_count = context.get("stage_count", 0)
-        overall_summary = context.get("overall_summary", "")
-        ctx_session_id = context.get("session_id", "unknown")
+        if isinstance(context, CompiledPromptContract):
+            self._log_compiled_prompt_contract(context)
+            prompt = context.rendered_prompt
+            system_message = (
+                context.system_message
+                or "你是一个专业的销售培训教练，请提供详细、有建设性的反馈。"
+            )
+            result = await self.generate(
+                prompt=prompt,
+                session_id=session_id,
+                system_message=system_message,
+                context={
+                    "contract_hash": context.contract_hash,
+                    "runtime_consumer": context.runtime_consumer,
+                },
+                allow_fallback_response=False,
+            )
+        else:
+            stage_count = context.get("stage_count", 0)
+            overall_summary = context.get("overall_summary", "")
+            ctx_session_id = context.get("session_id", "unknown")
 
-        prompt = f"""请为以下销售练习会话生成详细的反馈报告。
+            prompt = f"""请为以下销售练习会话生成详细的反馈报告。
 
 会话ID: {ctx_session_id}
 阶段数量: {stage_count}
@@ -486,14 +588,14 @@ class LLMService:
 4. 需要改进的方面
 5. 具体的提升建议"""
 
-        result = await self.generate(
-            prompt=prompt,
-            session_id=session_id,
-            system_message="你是一个专业的销售培训教练，请提供详细、有建设性的反馈。",
-        )
+            result = await self.generate(
+                prompt=prompt,
+                session_id=session_id,
+                system_message="你是一个专业的销售培训教练，请提供详细、有建设性的反馈。",
+            )
 
         if not result.is_success:
-            return Result.fail("[REPORT_GENERATION_FAILED]")
+            return Result.fail(result.fallback or "[REPORT_GENERATION_FAILED]")
 
         return Result.ok(result.value)
 

@@ -492,9 +492,22 @@ class ComprehensiveReportService:
                 "stage_count": len(stage_results),
                 "overall_summary": self._format_stage_summaries(stage_results),
             }
+            contract_result = self.prompt_service.compile_runtime_prompt_contract(
+                template=prompt_template,
+                variables=context,
+                runtime_consumer=(
+                    "evaluation.services.comprehensive_report."
+                    "ComprehensiveReportService._generate_detailed_feedback"
+                ),
+                system_message="你是一个专业的销售培训教练，请提供详细、有建设性的反馈。",
+            )
+            if not contract_result.is_success:
+                return Result.fail(
+                    contract_result.fallback or "[REPORT_PROMPT_COMPILE_FAILED]"
+                )
 
             # Call LLM
-            llm_result = await self.llm.generate_report(context)
+            llm_result = await self.llm.generate_report(contract_result.value)
             if not llm_result.is_success:
                 return Result.fail(llm_result.fallback or "[LLM_ERROR]")
 

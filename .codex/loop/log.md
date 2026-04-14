@@ -1,3 +1,31 @@
+- time: 2026-04-14T10:31:00+08:00
+  mode: grow
+  item id: M021-S02-T02
+  files changed:
+    - backend/src/prompt_templates/compiled_contract.py
+    - backend/src/prompt_templates/service.py
+    - backend/src/common/ai/config_manager.py
+    - backend/src/common/ai/llm_service.py
+    - backend/src/evaluation/services/staged_evaluation.py
+    - backend/src/evaluation/services/comprehensive_report.py
+    - backend/src/common/services/practice_report_service.py
+    - backend/src/prompt_templates/taxonomy.py
+    - backend/src/sales_bot/services/voice_instruction_compiler.py
+    - backend/tests/unit/prompt_templates/test_compiled_prompt_contract.py
+    - backend/tests/unit/prompt_templates/test_taxonomy.py
+    - backend/tests/unit/evaluation/test_staged_evaluation_service.py
+    - backend/tests/unit/evaluation/test_comprehensive_report_service.py
+    - .codex/loop/state.json
+    - .codex/loop/log.md
+  summary: Promoted PromptTemplateService from lookup-only governance helper into a real runtime authority for legacy evaluation/report flows: staged evaluation and comprehensive report now compile hashed prompt contracts with runtime consumer metadata, LLMService consumes those contracts with explicit missing-variable and base_url diagnostics plus fail-closed behavior, taxonomy now marks evaluation/report as compiled-contract consumers instead of template-bypass seams, and the only compatibility leftover is the raw dict hardcoded prompt fallback inside LLMService for untouched callers.
+  verification commands:
+    - backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/prompt_templates/test_compiled_prompt_contract.py backend/tests/unit/prompt_templates/test_taxonomy.py backend/tests/unit/evaluation/test_staged_evaluation_service.py backend/tests/unit/evaluation/test_comprehensive_report_service.py backend/tests/unit/test_voice_instruction_compiler.py -q
+    - lsp diagnostics backend/src/prompt_templates/compiled_contract.py backend/src/prompt_templates/service.py backend/src/common/ai/config_manager.py backend/src/common/ai/llm_service.py backend/src/evaluation/services/staged_evaluation.py backend/src/evaluation/services/comprehensive_report.py backend/src/prompt_templates/taxonomy.py backend/src/sales_bot/services/voice_instruction_compiler.py backend/src/common/services/practice_report_service.py
+    - backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests -k "prompt or knowledge_answer or report" -x -q
+  verification results: passed; the focused compiled-contract suite finished 80/80 green, diagnostics stayed clean on every touched Python file, and the exact slice gate finished 274 passed / 6 skipped after one logger-formatting failure surfaced by the new fail-closed path was fixed in practice_report_service.
+  success signal status: downstream prompt work can now rely on one truthful authority line — PromptTemplateService compiles evaluation/report contracts, LLMService records and enforces their runtime diagnostics, voice instructions share the same contract-versioned hashing scheme, and taxonomy no longer claims the staged-evaluation/report consumers are fake template integrations.
+  rollback note: if T03 or later work removes the raw dict compatibility fallback or extends compiled contracts to more consumers, update prompt_templates/compiled_contract.py, PromptTemplateService.compile_runtime_prompt_contract, LLMService LEGACY_PROMPT_ENTRYPOINTS + contract logging, taxonomy tests, and the slice docs together so code/runtime/document truth stays aligned.
+
 - time: 2026-04-14T10:04:33+08:00
   mode: grow
   item id: M021-S02-T01

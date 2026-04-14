@@ -1,7 +1,7 @@
 # Codebase Map
 
-Generated: 2026-04-14T01:46:53Z | Files: 500 | Described: 0/500
-<!-- gsd:codebase-meta {"generatedAt":"2026-04-14T01:46:53Z","fingerprint":"e4549ffb33e96e66f37674de975f50c73bdf009e","fileCount":500,"truncated":true} -->
+Generated: 2026-04-14T02:06:26Z | Files: 500 | Described: 0/500
+<!-- gsd:codebase-meta {"generatedAt":"2026-04-14T02:06:26Z","fingerprint":"9248a272d51726718a7530608485847361c20761","fileCount":500,"truncated":true} -->
 Note: Truncated to first 500 files. Run with higher --max-files to include all.
 
 ### (root)/
@@ -530,6 +530,7 @@ Note: Truncated to first 500 files. Run with higher --max-files to include all.
 - `backend/src/prompt_templates/models.py`
 - `backend/src/prompt_templates/renderer.py`
 - `backend/src/prompt_templates/service.py`
+- `backend/src/prompt_templates/taxonomy.py`
 
 ### backend/src/prompt_templates/api/
 - `backend/src/prompt_templates/api/__init__.py`
@@ -645,4 +646,3 @@ Note: Truncated to first 500 files. Run with higher --max-files to include all.
 ### backend/tests/unit/common/
 - `backend/tests/unit/common/test_admin_analytics_service.py`
 - `backend/tests/unit/common/test_analytics_api_normalization.py`
-- `backend/tests/unit/common/test_api_users.py`

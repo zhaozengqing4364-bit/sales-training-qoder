@@ -83,6 +83,15 @@ class TestComprehensiveReportService:
         """Create mock prompt template service."""
         service = AsyncMock()
         service.get_template_for_scenario = AsyncMock()
+        service.compile_runtime_prompt_contract = MagicMock(
+            side_effect=lambda template, variables, runtime_consumer, system_message: Result.ok(
+                SimpleNamespace(
+                    rendered_prompt=str(getattr(template, "template", "")),
+                    system_message=system_message,
+                    contract_hash="test-report-contract",
+                )
+            )
+        )
         return service
 
     @pytest.fixture
@@ -664,6 +673,44 @@ class TestComprehensiveReportService:
         # Assert
         assert not result.is_success
         assert "REPORT_PROMPT_NOT_FOUND" in result.fallback
+
+    @pytest.mark.asyncio
+    async def test_generate_detailed_feedback_uses_compiled_prompt_contract_for_llm_runtime(
+        self,
+        service,
+        mock_prompt_service,
+        mock_llm_service,
+        sample_stage_results,
+    ):
+        """Detailed feedback should consume a compiled prompt contract, not raw context."""
+        session_id = str(uuid4())
+        mock_prompt_template = MagicMock()
+        mock_prompt_template.id = uuid4()
+        mock_prompt_template.template = "报告：{{ overall_summary }}"
+        mock_prompt_service.get_template_for_scenario.return_value = mock_prompt_template
+
+        compiled_contract = SimpleNamespace(
+            rendered_prompt="报告：第一阶段表现稳定",
+            system_message="你是销售教练。",
+            contract_hash="contract-hash-2",
+        )
+        mock_prompt_service.compile_runtime_prompt_contract = MagicMock(
+            return_value=Result.ok(compiled_contract)
+        )
+        mock_llm_service.generate_report.return_value = Result.ok(
+            '{"overall_score":80.0,"dimension_scores":{},"key_strengths":[],"key_improvements":[],"recommendations":[],"detailed_feedback":"Detailed feedback from LLM","stage_summaries":{}}'
+        )
+
+        result = await service._generate_detailed_feedback(
+            session_id,
+            sample_stage_results,
+            "sales",
+        )
+
+        assert result.is_success
+        assert result.value == "Detailed feedback from LLM"
+        mock_prompt_service.compile_runtime_prompt_contract.assert_called_once()
+        mock_llm_service.generate_report.assert_awaited_once_with(compiled_contract)
 
     @pytest.mark.asyncio
     async def test_generate_detailed_feedback_llm_failure(self, service, mock_prompt_service, mock_llm_service, sample_stage_results):

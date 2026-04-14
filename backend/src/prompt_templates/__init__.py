@@ -23,6 +23,14 @@ from prompt_templates.renderer import (
     render_template,
 )
 
+# Import compiled contracts (runtime artifacts)
+from prompt_templates.compiled_contract import (
+    PROMPT_CONTRACT_VERSION,
+    CompiledPromptContract,
+    PromptContractDiagnostic,
+    build_prompt_contract_hash,
+)
+
 # Import loader (only depends on models)
 from prompt_templates.loader import (
     PromptTemplateLoader,
@@ -47,6 +55,11 @@ __all__ = [
     "PromptRenderer",
     "RenderResult",
     "render_template",
+    # Compiled contracts
+    "PROMPT_CONTRACT_VERSION",
+    "CompiledPromptContract",
+    "PromptContractDiagnostic",
+    "build_prompt_contract_hash",
     # Loader
     "PromptTemplateLoader",
     "CachedTemplate",

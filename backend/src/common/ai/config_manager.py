@@ -51,6 +51,18 @@ class ConfigManager:
             }
         return True
 
+    @staticmethod
+    def _base_url_required(model_type: ModelType, provider: str) -> bool:
+        """Mirror the runtime base_url policy used by remote model providers."""
+        if model_type == ModelType.TTS:
+            return False
+        if model_type == ModelType.ASR and provider in {
+            ModelProvider.LOCAL.value,
+            ModelProvider.LOCAL_STREAMING.value,
+        }:
+            return False
+        return True
+
     def __new__(cls) -> "ConfigManager":
         if cls._instance is None:
             cls._instance = super().__new__(cls)
@@ -317,6 +329,35 @@ class ConfigManager:
             }
 
         return None
+
+    def describe_runtime_policy(
+        self,
+        model_type: ModelType,
+        config: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Describe provider/base_url policy for the effective runtime config."""
+        effective = config if config is not None else self.get_effective_config(model_type)
+        effective = effective or {}
+
+        provider = str(effective.get("provider") or "").strip().lower()
+        model_name = str(effective.get("model_name") or "").strip()
+        base_url = str(effective.get("base_url") or "").strip()
+        base_url_required = self._base_url_required(model_type, provider)
+        if base_url:
+            base_url_status = "configured"
+        elif base_url_required:
+            base_url_status = "missing"
+        else:
+            base_url_status = "not_required"
+
+        return {
+            "provider": provider,
+            "model_name": model_name,
+            "base_url": base_url,
+            "base_url_required": base_url_required,
+            "base_url_status": base_url_status,
+            "config_present": bool(effective),
+        }
 
     def get_effective_config(self, model_type: ModelType) -> dict[str, Any] | None:
         """

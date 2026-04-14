@@ -7,10 +7,14 @@ turn-level grounding context without replacing the base role contract.
 
 from __future__ import annotations
 
-import hashlib
 import re
 from dataclasses import dataclass
 from typing import Any
+
+from prompt_templates.compiled_contract import (
+    PROMPT_CONTRACT_VERSION,
+    build_prompt_contract_hash,
+)
 
 
 _SALES_FOCUS_LABELS = {
@@ -38,8 +42,7 @@ _SALES_FOCUS_LABELS = {
 
 def build_instruction_contract_hash(instructions: str) -> str:
     """Build a short stable hash for instruction contract auditing."""
-    normalized = instructions.strip().encode("utf-8")
-    return hashlib.sha256(normalized).hexdigest()[:16]
+    return build_prompt_contract_hash("voice_instruction", instructions)
 
 
 @dataclass(frozen=True)
@@ -48,6 +51,7 @@ class CompiledInstructionContract:
 
     base_instructions: str
     contract_hash: str
+    contract_version: str = PROMPT_CONTRACT_VERSION
 
 
 class VoiceInstructionCompiler:
