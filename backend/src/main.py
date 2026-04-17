@@ -78,7 +78,7 @@ from common.error_handling.middleware import (
 # Knowledge API
 from common.knowledge.api import admin_router as knowledge_admin_router
 from common.knowledge.api import internal_router as knowledge_internal_router
-from common.knowledge.kb_lock_guard import is_kb_lock_unbound_snapshot
+from common.monitoring.logger import configure_logging, get_logger, get_trace_id
 from common.monitoring.health import build_health_payload
 from common.monitoring.logger import configure_logging, get_logger
 from common.monitoring.metrics import (
@@ -350,6 +350,47 @@ app.add_middleware(MetricsMiddleware)
 # Add global exception handler
 app.exception_handler(HTTPException)(http_exception_handler)
 app.exception_handler(Exception)(global_exception_handler)
+
+CSRF_EXEMPT_PATHS = {
+    "/health",
+    "/metrics",
+    "/api/v1/auth/login",
+    "/api/v1/auth/dev-login",
+    "/api/v1/auth/forgot-password",
+    "/api/v1/auth/reset-password",
+}
+
+
+def _is_csrf_exempt_path(path: str) -> bool:
+    return path in CSRF_EXEMPT_PATHS
+
+
+def _csrf_validation_failed_response(exc: HTTPException) -> JSONResponse:
+    detail = exc.detail if isinstance(exc.detail, dict) else {}
+    error = str(detail.get("error") or "[CSRF_VALIDATION_FAILED]")
+    message = str(detail.get("message") or "当前请求缺少有效 CSRF 凭证。")
+    return JSONResponse(
+        status_code=exc.status_code,
+        content={
+            "success": False,
+            "error": error,
+            "message": message,
+            "detail": exc.detail,
+            "trace_id": get_trace_id(),
+        },
+    )
+
+
+@app.middleware("http")
+async def csrf_cookie_session_middleware(request: Request, call_next):
+    """Enforce double-submit CSRF for unsafe cookie-authenticated requests."""
+    if not _is_csrf_exempt_path(request.url.path) and should_enforce_csrf(request):
+        try:
+            validate_csrf_request(request)
+        except HTTPException as exc:
+            return _csrf_validation_failed_response(exc)
+
+    return await call_next(request)
 
 
 @app.middleware("http")
