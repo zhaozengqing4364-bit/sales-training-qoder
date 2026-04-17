@@ -3,7 +3,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import SupportRuntimePage from "./page";
 import { ApiRequestError } from "@/lib/api/client";
-import type { SupportRuntimeFaultsResponse, SupportRuntimeOverview } from "@/lib/api/types";
+import type {
+    SupportRuntimeFaultsResponse,
+    SupportRuntimeOverview,
+} from "@/lib/api/types";
 
 const {
     getOverviewMock,
