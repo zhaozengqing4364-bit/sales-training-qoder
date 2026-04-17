@@ -7,8 +7,20 @@ import {
 import type { SupportRuntimeFaultItem } from "@/lib/api/types";
 
 describe("runtime-faults", () => {
-  const runtimeFaults: SupportRuntimeFaultItem[] = [
+  const faultBase = {
+    source: "session",
+    severity: "warning",
+    summary: "runtime fault",
+    detected_at: "2026-03-25T08:00:00Z",
+    scenario_type: "sales",
+    session_status: "completed",
+    report_status: "completed",
+  } satisfies Omit<SupportRuntimeFaultItem, "kind" | "session_id" | "diagnostics">;
+
+  const runtimeFaults = [
     {
+      ...faultBase,
+      severity: "blocking",
       kind: "kb_lock_blocked_search_failed",
       source: "session",
       severity: "blocking",
@@ -38,6 +50,7 @@ describe("runtime-faults", () => {
       },
     },
     {
+      ...faultBase,
       kind: "message_scores_missing",
       source: "session",
       severity: "warning",
@@ -67,6 +80,10 @@ describe("runtime-faults", () => {
       },
     },
     {
+      ...faultBase,
+      severity: "blocking",
+      session_status: "scoring",
+      report_status: "processing",
       kind: "stuck_scoring",
       source: "session",
       severity: "blocking",
@@ -81,6 +98,7 @@ describe("runtime-faults", () => {
       },
     },
     {
+      ...faultBase,
       kind: "warning_without_session",
       source: "system_log",
       severity: "warning",
