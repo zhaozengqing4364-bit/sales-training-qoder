@@ -7,6 +7,7 @@ import { buildAdminUserDrillInHref } from "@/lib/admin/drill-in";
 import type {
     LinkedAssetChangeReference,
     ManagerInterventionListResponse,
+    ManagerInterventionRemindResponse,
     SupportRuntimeFaultsResponse,
     UserProgressResponse,
     UserSessionsResponse,
