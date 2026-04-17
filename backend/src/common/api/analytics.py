@@ -174,6 +174,9 @@ async def get_leaderboard(
         response_payload = {
             "scenario_type": normalized_scenario_type,
             "time_period": stats.time_period,
+            "score_basis": stats.score_basis,
+            "evaluable_sessions": stats.evaluable_sessions,
+            "not_evaluable_sessions": stats.not_evaluable_sessions,
             "total_users": stats.total_users,
             "entries": [
                 {
@@ -183,6 +186,9 @@ async def get_leaderboard(
                     "total_sessions": entry.total_sessions,
                     "average_score": entry.average_score,
                     "best_score": entry.best_score,
+                    "score_basis": entry.score_basis,
+                    "evaluable_sessions": entry.total_sessions,
+                    "not_evaluable_sessions": 0,
                 }
                 for entry in stats.entries
             ],

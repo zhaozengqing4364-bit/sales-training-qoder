@@ -108,6 +108,9 @@ describe("HomePage dashboard header", () => {
         getStatsMock.mockResolvedValue({
             weekly_activity: { total_duration_minutes: 0, session_count: 0, trend_direction: "flat", trend_percentage: 0 },
             last_session: { score: 0, percentile: 0, trend: "stable" },
+            score_basis: "session_evidence_projection_evaluable_only",
+            evaluable_sessions: 2,
+            not_evaluable_sessions: 1,
             effectiveness: {
                 pass_rate_3min_flow: 0,
                 pass_rate_5turn_defense: 0,
@@ -147,7 +150,26 @@ describe("HomePage dashboard header", () => {
         expect(getStatsMock).toHaveBeenCalled();
         expect(screen.getByRole("heading", { name: /早安, 王小明/i })).toBeTruthy();
         expect(screen.getByRole("button", { name: `v${packageJson.version}` })).toBeTruthy();
+        expect(screen.getByText("均分仅统计 2 次可评估训练，1 次证据不足训练不会计入均分。")).toBeTruthy();
         expect(screen.queryByText("2026年1月10日")).toBeNull();
+    });
+
+    it("surfaces next-goal dashboard recommendations as a direct focused retry CTA", async () => {
+        getRecommendationMock.mockResolvedValue({
+            title: "按上次主问题再练一轮",
+            reason: "先用案例、数据或ROI证据支撑主张，再推进下一步。 上次主问题：价值主张缺少案例。",
+            action_label: "按目标再练一轮",
+            target_path: "/agents/agent-1?persona_id=persona-1&focus_intent=%7B%7D",
+            score_basis: "session_evidence_projection_evaluable_only",
+        });
+
+        render(<HomePage />);
+        await flushDashboardData();
+
+        expect(screen.getAllByText("按上次主问题再练一轮").length).toBeGreaterThan(0);
+        expect(screen.getAllByText("推荐来源：上次可评估训练报告的主问题与下一轮目标。").length).toBeGreaterThan(0);
+        const retryLinks = screen.getAllByRole("link", { name: "按目标再练一轮" });
+        expect(retryLinks.some((link) => link.getAttribute("href") === "/agents/agent-1?persona_id=persona-1&focus_intent=%7B%7D")).toBe(true);
     });
 
     it("falls back to the email prefix and switches to an evening greeting when no name is present", async () => {

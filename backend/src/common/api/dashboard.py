@@ -10,18 +10,23 @@ Response Format:
 
 Requirements: 2.1, 2.2, 2.3, 2.4, 2.5
 """
+import json
 from datetime import UTC, datetime, timedelta
 from typing import Literal
+from urllib.parse import quote
 
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
+from common.analytics.history_service import PROJECTION_SCORE_BASIS, history_service
 from common.auth.service import get_current_user
 from common.db.models import PracticeSession, User
 from common.db.session import get_db
 from common.monitoring.logger import get_logger, get_trace_id
+from common.services.practice_session_service import PracticeRetryEntryAssembler
 
 logger = get_logger(__name__)
 
@@ -50,6 +55,9 @@ class DashboardStats(BaseModel):
     weekly_activity: WeeklyActivity
     last_session: LastSession
     effectiveness: dict[str, float] | None = None
+    score_basis: str = PROJECTION_SCORE_BASIS
+    evaluable_sessions: int = 0
+    not_evaluable_sessions: int = 0
 
 
 class Recommendation(BaseModel):
@@ -58,6 +66,79 @@ class Recommendation(BaseModel):
     reason: str
     action_label: str
     target_path: str
+    score_basis: str | None = None
+
+
+def _encode_focus_intent(focus_intent: dict | None) -> str | None:
+    if not focus_intent:
+        return None
+    return quote(json.dumps(focus_intent, ensure_ascii=False, separators=(",", ":")))
+
+
+def _build_retry_target_path(retry_entry: dict) -> str:
+    scenario_type = retry_entry.get("scenario_type")
+    agent_id = retry_entry.get("agent_id")
+    persona_id = retry_entry.get("persona_id")
+    focus_intent = retry_entry.get("focus_intent")
+
+    if scenario_type == "sales":
+        if agent_id and persona_id and focus_intent:
+            return (
+                f"/agents/{quote(str(agent_id))}"
+                f"?persona_id={quote(str(persona_id))}"
+                f"&focus_intent={_encode_focus_intent(focus_intent)}"
+            )
+        return "/training/sales"
+
+    if scenario_type == "presentation":
+        return "/training/presentation"
+
+    return "/training"
+
+
+def _build_next_goal_recommendation(session: PracticeSession) -> Recommendation | None:
+    scenario = getattr(session, "scenario", None)
+    scenario_type = getattr(scenario, "scenario_type", None) or "sales"
+    snapshot = session.effectiveness_snapshot if isinstance(session.effectiveness_snapshot, dict) else {}
+    main_issue = snapshot.get("main_issue") if isinstance(snapshot.get("main_issue"), dict) else None
+    next_goal = snapshot.get("next_goal") if isinstance(snapshot.get("next_goal"), dict) else None
+
+    if not main_issue and not next_goal:
+        return None
+
+    retry_entry = PracticeRetryEntryAssembler.build_retry_entry(
+        session=session,
+        scenario_type=str(scenario_type),
+        main_issue=main_issue,
+        next_goal=next_goal,
+    )
+    focus_intent = retry_entry.get("focus_intent")
+    if not isinstance(focus_intent, dict):
+        return None
+
+    goal_text = (
+        str(next_goal.get("goal_text"))
+        if isinstance(next_goal, dict) and next_goal.get("goal_text")
+        else "沿着上次报告的主问题再练一轮。"
+    )
+    issue_text = (
+        str(main_issue.get("issue_text"))
+        if isinstance(main_issue, dict) and main_issue.get("issue_text")
+        else "上次报告已经给出可复练重点。"
+    )
+    target_path = _build_retry_target_path(retry_entry)
+    if target_path == "/training/sales" and scenario_type == "sales":
+        reason = f"{goal_text} 当前报告缺少完整智能体或客户画像配置，请先在销售训练页重新选择。"
+    else:
+        reason = f"{goal_text} 上次主问题：{issue_text}"
+
+    return Recommendation(
+        title="按上次主问题再练一轮",
+        reason=reason,
+        action_label="按目标再练一轮",
+        target_path=target_path,
+        score_basis=PROJECTION_SCORE_BASIS,
+    )
 
 
 # ========== Helper Functions ==========
@@ -176,81 +257,70 @@ async def get_dashboard_stats(
             trend_direction=trend_direction
         )
 
-        # ========== Last Session Score ==========
-        last_session_stmt = select(PracticeSession).where(
-            PracticeSession.user_id == user_id,
-            PracticeSession.status == "completed"
-        ).order_by(PracticeSession.end_time.desc()).limit(1)
+        # ========== Projection-backed score summary ==========
+        history_result = await history_service.get_user_history(
+            db=db,
+            user_id=current_user.user_id,
+            limit=100,
+            offset=0,
+        )
+        history_summaries = history_result.value if history_result.is_success else []
+        score_summary = history_service.build_projection_score_summary(history_summaries)
+        evaluable_summaries = [
+            summary
+            for summary in history_summaries
+            if summary.status == "completed"
+            and summary.evaluable is True
+            and summary.overall_score is not None
+        ]
 
-        last_session_result = await db.execute(last_session_stmt)
-        last_session = last_session_result.scalar_one_or_none()
-
-        if last_session:
-            # Calculate overall score
-            logic = last_session.logic_score or 0
-            accuracy = last_session.accuracy_score or 0
-            completeness = last_session.completeness_score or 0
-            last_score = round((logic + accuracy + completeness) / 3, 1)
-
-            # Get previous session for trend
-            prev_session_stmt = select(PracticeSession).where(
-                PracticeSession.user_id == user_id,
-                PracticeSession.status == "completed",
-                PracticeSession.session_id != last_session.session_id
-            ).order_by(PracticeSession.end_time.desc()).limit(1)
-
-            prev_session_result = await db.execute(prev_session_stmt)
-            prev_session = prev_session_result.scalar_one_or_none()
-
-            if prev_session:
-                prev_logic = prev_session.logic_score or 0
-                prev_accuracy = prev_session.accuracy_score or 0
-                prev_completeness = prev_session.completeness_score or 0
-                prev_score = (prev_logic + prev_accuracy + prev_completeness) / 3
-
-                if last_score > prev_score + 5:
-                    score_trend = "up"
-                elif last_score < prev_score - 5:
-                    score_trend = "down"
-                else:
-                    score_trend = "stable"
+        if evaluable_summaries:
+            ordered_evaluable = sorted(
+                evaluable_summaries,
+                key=lambda summary: summary.end_time or summary.start_time,
+                reverse=True,
+            )
+            last_score = round(float(ordered_evaluable[0].overall_score or 0.0), 1)
+            previous_score = (
+                float(ordered_evaluable[1].overall_score or 0.0)
+                if len(ordered_evaluable) > 1
+                else last_score
+            )
+            if last_score > previous_score + 5:
+                score_trend = "up"
+            elif last_score < previous_score - 5:
+                score_trend = "down"
             else:
                 score_trend = "stable"
 
-            # Calculate percentile (simplified: based on all completed sessions)
-            all_scores_stmt = select(
-                (func.coalesce(PracticeSession.logic_score, 0) +
-                 func.coalesce(PracticeSession.accuracy_score, 0) +
-                 func.coalesce(PracticeSession.completeness_score, 0)) / 3
-            ).where(
-                PracticeSession.status == "completed"
+            all_projection_scores = [
+                float(summary.overall_score or 0.0)
+                for summary in evaluable_summaries
+            ]
+            below_count = sum(1 for score in all_projection_scores if score < last_score)
+            percentile = (
+                int((below_count / len(all_projection_scores)) * 100)
+                if all_projection_scores
+                else 50
             )
-
-            scores_result = await db.execute(all_scores_stmt)
-            all_scores = [row[0] for row in scores_result.all() if row[0] is not None]
-
-            if all_scores:
-                below_count = sum(1 for s in all_scores if s < last_score)
-                total_sessions = len(all_scores)
-                percentile = int((below_count / total_sessions) * 100) if total_sessions > 0 else 50
-            else:
-                percentile = 50
-
             last_session_info = LastSession(
                 score=last_score,
                 percentile=percentile,
-                trend=score_trend
+                trend=score_trend,
             )
         else:
             last_session_info = LastSession(
                 score=0.0,
                 percentile=50,
-                trend="stable"
+                trend="stable",
             )
 
         stats = DashboardStats(
             weekly_activity=weekly_activity,
             last_session=last_session_info,
+            score_basis=str(score_summary.get("score_basis", PROJECTION_SCORE_BASIS)),
+            evaluable_sessions=int(score_summary.get("evaluable_sessions", 0)),
+            not_evaluable_sessions=int(score_summary.get("not_evaluable_sessions", 0)),
         )
 
         # 80/20 communication effectiveness metrics (last 30 days, evaluable snapshots only)
@@ -349,10 +419,12 @@ async def get_recommendation(
         recent_result = await db.execute(recent_sessions_stmt)
         recent_sessions = recent_result.scalars().all()
 
-        # Get last completed session with scores
+        # Get last completed session with evidence for retry recommendation
         last_completed_stmt = select(PracticeSession).where(
             PracticeSession.user_id == user_id,
             PracticeSession.status == "completed"
+        ).options(
+            selectinload(PracticeSession.scenario),
         ).order_by(PracticeSession.end_time.desc()).limit(1)
 
         last_completed_result = await db.execute(last_completed_stmt)
@@ -368,6 +440,10 @@ async def get_recommendation(
                 target_path="/training"
             )
         elif last_completed:
+            next_goal_recommendation = _build_next_goal_recommendation(last_completed)
+            if next_goal_recommendation is not None:
+                return success_response(next_goal_recommendation.model_dump())
+
             # Analyze scores to find weakest area
             logic = last_completed.logic_score or 0
             accuracy = last_completed.accuracy_score or 0

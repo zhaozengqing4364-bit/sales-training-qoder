@@ -313,6 +313,7 @@ class HistoryService:
                 "not_evaluable_sessions": 0,
                 "average_score": 0,
                 "best_score": 0,
+                "score_basis": PROJECTION_SCORE_BASIS,
                 "total_practice_time_seconds": 0,
                 "total_practice_time_minutes": 0,
             }
@@ -327,6 +328,7 @@ class HistoryService:
             "not_evaluable_sessions": int(score_summary["not_evaluable_sessions"]),
             "average_score": float(score_summary["average_score"]),
             "best_score": float(score_summary["best_score"]),
+            "score_basis": str(score_summary["score_basis"]),
             "total_practice_time_seconds": total_practice_time_seconds,
             "total_practice_time_minutes": round(total_practice_time_seconds / 60, 1),
         }

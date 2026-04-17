@@ -24,6 +24,11 @@ type MyRank = {
     average_score: number;
 };
 
+type LeaderboardMeta = {
+    evaluableSessions: number;
+    notEvaluableSessions: number;
+};
+
 const TIME_PERIOD_OPTIONS: Array<{ value: TimePeriod; label: string }> = [
     { value: "weekly", label: "本周" },
     { value: "monthly", label: "本月" },
@@ -51,6 +56,10 @@ export default function LeaderboardPage() {
     const [isLoading, setIsLoading] = useState(true);
     const [loadError, setLoadError] = useState<string | null>(null);
     const [reloadVersion, setReloadVersion] = useState(0);
+    const [leaderboardMeta, setLeaderboardMeta] = useState<LeaderboardMeta>({
+        evaluableSessions: 0,
+        notEvaluableSessions: 0,
+    });
 
     useEffect(() => {
         let cancelled = false;
@@ -73,6 +82,10 @@ export default function LeaderboardPage() {
             if (leaderboardResult && "error" in leaderboardResult) {
                 setEntries([]);
                 setMyRank(null);
+                setLeaderboardMeta({
+                    evaluableSessions: 0,
+                    notEvaluableSessions: 0,
+                });
                 setLoadError(getApiErrorMessage(leaderboardResult.error));
                 setIsLoading(false);
                 return;
@@ -80,6 +93,10 @@ export default function LeaderboardPage() {
 
             setLoadError(null);
             setEntries(leaderboardResult.entries || []);
+            setLeaderboardMeta({
+                evaluableSessions: leaderboardResult.evaluable_sessions ?? 0,
+                notEvaluableSessions: leaderboardResult.not_evaluable_sessions ?? 0,
+            });
 
             if (leaderboardResult.my_rank) {
                 setMyRank({
@@ -130,6 +147,9 @@ export default function LeaderboardPage() {
                     <h1 className="text-2xl font-bold text-slate-900">排行榜</h1>
                     <p className="text-sm text-slate-500 mt-1">
                         均分与排名只纳入可评估的已完成训练，证据不足会话会单独记账，不会混入榜单。
+                    </p>
+                    <p className="text-xs text-slate-400 mt-1">
+                        当前榜单纳入 {leaderboardMeta.evaluableSessions} 次可评估训练，{leaderboardMeta.notEvaluableSessions} 次证据不足训练未计入排名。
                     </p>
                 </div>
                 <div className="flex bg-white p-1 rounded-full shadow-sm border border-slate-100">

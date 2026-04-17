@@ -720,6 +720,7 @@ describe("ReportPage", () => {
 
         render(<ReportPage />);
 
+        expect(await screen.findByText("本分数来自当前会话的 canonical evidence；只有可评估训练才会纳入首页、个人中心和排行榜均分。")).toBeTruthy();
         fireEvent.click(await screen.findByRole("button", { name: "按目标再练一轮" }));
 
         await waitFor(() => {

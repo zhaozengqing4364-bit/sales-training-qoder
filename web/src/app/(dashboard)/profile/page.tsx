@@ -26,8 +26,11 @@ type ProfileForm = {
 
 type HistoryStats = {
     total_sessions: number;
+    evaluable_sessions: number;
+    not_evaluable_sessions: number;
     average_score: number;
     best_score: number;
+    score_basis?: string;
     total_practice_time_seconds: number;
     total_practice_time_minutes: number;
 };
@@ -42,8 +45,11 @@ type SessionStats = {
 
 const DEFAULT_STATS: HistoryStats = {
     total_sessions: 0,
+    evaluable_sessions: 0,
+    not_evaluable_sessions: 0,
     average_score: 0,
     best_score: 0,
+    score_basis: "session_evidence_projection_evaluable_only",
     total_practice_time_seconds: 0,
     total_practice_time_minutes: 0,
 };
@@ -133,6 +139,7 @@ export default function ProfilePage() {
     const passwordResetDescription = normalizedProfileEmail
         ? "通过邮箱重置密码，会带入当前账号邮箱。"
         : "通过邮箱重置密码，进入邮箱找回流程。";
+    const scoreBasisCopy = `仅统计 ${stats.evaluable_sessions} 次可评估训练，${stats.not_evaluable_sessions} 次证据不足训练不计入均分。`;
 
     const onFieldChange = (field: keyof ProfileForm, value: string) => {
         setProfile((prev) => ({ ...prev, [field]: value }));
@@ -297,8 +304,9 @@ export default function ProfilePage() {
                 <GlassCard className="p-6 text-center">
                     <div className="text-slate-500 text-sm mb-1">平均评分</div>
                     <div className="text-2xl font-bold text-indigo-600">
-                        {Math.round(stats.average_score || sessionStats.average_score || 0)} <span className="text-sm font-normal text-slate-400">分</span>
+                        {Math.round(stats.average_score || 0)} <span className="text-sm font-normal text-slate-400">分</span>
                     </div>
+                    <div className="mt-2 text-xs text-slate-400">{scoreBasisCopy}</div>
                 </GlassCard>
                 <GlassCard className="p-6 text-center">
                     <div className="text-slate-500 text-sm mb-1">本周练习</div>

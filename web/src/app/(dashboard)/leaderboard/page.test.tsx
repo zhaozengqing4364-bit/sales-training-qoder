@@ -62,6 +62,9 @@ describe("LeaderboardPage", () => {
         getMyRankMock.mockReset();
         getPublicLeaderboardMock.mockResolvedValue({
             time_period: "weekly",
+            score_basis: "session_evidence_projection_evaluable_only",
+            evaluable_sessions: 14,
+            not_evaluable_sessions: 3,
             total_users: 4,
             entries: [
                 createLeaderboardEntry(),
@@ -95,6 +98,9 @@ describe("LeaderboardPage", () => {
                 rank: 5,
                 total_sessions: 2,
                 average_score: 79.5,
+                score_basis: "session_evidence_projection_evaluable_only",
+                evaluable_sessions: 2,
+                not_evaluable_sessions: 0,
             },
         });
         getMyRankMock.mockResolvedValue({
@@ -124,6 +130,7 @@ describe("LeaderboardPage", () => {
         expect(
             screen.getByText("若某次训练因证据不足暂不可评估，它会保留在训练记录里，但不会拉高或拉低排行榜均分。"),
         ).toBeTruthy();
+        expect(screen.getByText("当前榜单纳入 14 次可评估训练，3 次证据不足训练未计入排名。")).toBeTruthy();
         expect(screen.getByText("我的排名")).toBeTruthy();
         expect(screen.getByText(/均分 80/)).toBeTruthy();
         expect(screen.queryByText(/weighted-score/i)).toBeNull();

@@ -15,6 +15,7 @@ from sqlalchemy import desc, func, select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from common.analytics.history_service import PROJECTION_SCORE_BASIS
 from common.db.models import LeaderboardEntry, PracticeSession, Scenario, User
 from common.error_handling.result import Result
 
@@ -31,6 +32,7 @@ class LeaderboardView:
     average_score: float
     best_score: float
     rank: int
+    score_basis: str = PROJECTION_SCORE_BASIS
 
 
 @dataclass
@@ -40,6 +42,9 @@ class LeaderboardStats:
     entries: list[LeaderboardView]
     total_users: int
     time_period: str  # daily, weekly, monthly, all_time
+    score_basis: str = PROJECTION_SCORE_BASIS
+    evaluable_sessions: int = 0
+    not_evaluable_sessions: int = 0
 
 
 class LeaderboardService:
@@ -88,6 +93,22 @@ class LeaderboardService:
             return None
         return self.scenario_aliases.get(scenario_type, scenario_type)
 
+    @staticmethod
+    def _evaluable_filter():
+        return PracticeSession.effectiveness_snapshot["evaluable"].as_boolean().is_(True)
+
+    @staticmethod
+    def _not_evaluable_filter():
+        return PracticeSession.effectiveness_snapshot["evaluable"].as_boolean().is_(False)
+
+    @staticmethod
+    def _score_expr():
+        return (
+            PracticeSession.logic_score
+            + PracticeSession.accuracy_score
+            + PracticeSession.completeness_score
+        ) / 3.0
+
     async def calculate_leaderboard(
         self,
         db: AsyncSession,
@@ -110,27 +131,25 @@ class LeaderboardService:
             )
             cutoff_time = datetime.now() - time_delta
 
-            # Build query
+            score_expr = self._score_expr()
+
+            # Build query. Leaderboard scores are evaluable-only: completed
+            # sessions must carry an evidence snapshot explicitly marked
+            # evaluable, and score fields must be present. Evidence-deficient
+            # sessions remain in history but are not coalesced to 0 here.
             query = (
                 select(
                     User.user_id,
                     User.name.label("username"),
                     func.count(PracticeSession.session_id).label("total_sessions"),
-                    func.avg(
-                        PracticeSession.logic_score * 0.4
-                        + PracticeSession.accuracy_score * 0.3
-                        + PracticeSession.completeness_score * 0.3
-                    ).label("average_score"),
-                    func.max(
-                        PracticeSession.logic_score * 0.4
-                        + PracticeSession.accuracy_score * 0.3
-                        + PracticeSession.completeness_score * 0.3
-                    ).label("best_score"),
+                    func.avg(score_expr).label("average_score"),
+                    func.max(score_expr).label("best_score"),
                 )
                 .join(PracticeSession, User.user_id == PracticeSession.user_id)
                 .join(Scenario, PracticeSession.scenario_id == Scenario.scenario_id)
                 .where(PracticeSession.start_time >= cutoff_time)
                 .where(PracticeSession.status == "completed")
+                .where(self._evaluable_filter())
                 .where(
                     (PracticeSession.logic_score.isnot(None))
                     & (PracticeSession.accuracy_score.isnot(None))
@@ -168,6 +187,12 @@ class LeaderboardService:
                 .join(Scenario, PracticeSession.scenario_id == Scenario.scenario_id)
                 .where(PracticeSession.start_time >= cutoff_time)
                 .where(PracticeSession.status == "completed")
+                .where(self._evaluable_filter())
+                .where(
+                    (PracticeSession.logic_score.isnot(None))
+                    & (PracticeSession.accuracy_score.isnot(None))
+                    & (PracticeSession.completeness_score.isnot(None))
+                )
             )
 
             if normalized_scenario_type:
@@ -178,10 +203,44 @@ class LeaderboardService:
             count_result = await db.execute(count_query)
             total_users = count_result.scalar() or 0
 
+            evaluable_sessions_query = (
+                select(func.count(PracticeSession.session_id))
+                .join(Scenario, PracticeSession.scenario_id == Scenario.scenario_id)
+                .where(PracticeSession.start_time >= cutoff_time)
+                .where(PracticeSession.status == "completed")
+                .where(self._evaluable_filter())
+                .where(
+                    (PracticeSession.logic_score.isnot(None))
+                    & (PracticeSession.accuracy_score.isnot(None))
+                    & (PracticeSession.completeness_score.isnot(None))
+                )
+            )
+            if normalized_scenario_type:
+                evaluable_sessions_query = evaluable_sessions_query.where(
+                    Scenario.scenario_type == normalized_scenario_type
+                )
+            evaluable_sessions_result = await db.execute(evaluable_sessions_query)
+            evaluable_sessions = int(evaluable_sessions_result.scalar() or 0)
+            not_evaluable_query = (
+                select(func.count(PracticeSession.session_id))
+                .join(Scenario, PracticeSession.scenario_id == Scenario.scenario_id)
+                .where(PracticeSession.start_time >= cutoff_time)
+                .where(PracticeSession.status == "completed")
+                .where(self._not_evaluable_filter())
+            )
+            if normalized_scenario_type:
+                not_evaluable_query = not_evaluable_query.where(
+                    Scenario.scenario_type == normalized_scenario_type
+                )
+            not_evaluable_result = await db.execute(not_evaluable_query)
+            not_evaluable_sessions = int(not_evaluable_result.scalar() or 0)
+
             stats = LeaderboardStats(
                 entries=entries,
                 total_users=total_users,
                 time_period=normalized_time_period,
+                evaluable_sessions=int(evaluable_sessions),
+                not_evaluable_sessions=not_evaluable_sessions,
             )
 
             logger.info(
@@ -280,11 +339,7 @@ class LeaderboardService:
                 normalized_time_period, self.time_periods["all_time"]
             )
 
-            score_expr = (
-                PracticeSession.logic_score * 0.4
-                + PracticeSession.accuracy_score * 0.3
-                + PracticeSession.completeness_score * 0.3
-            )
+            score_expr = self._score_expr()
 
             aggregated_query = (
                 select(
@@ -295,6 +350,7 @@ class LeaderboardService:
                 .join(Scenario, PracticeSession.scenario_id == Scenario.scenario_id)
                 .where(PracticeSession.status == "completed")
                 .where(PracticeSession.start_time >= cutoff_time)
+                .where(self._evaluable_filter())
                 .where(
                     (PracticeSession.logic_score.isnot(None))
                     & (PracticeSession.accuracy_score.isnot(None))
@@ -320,6 +376,20 @@ class LeaderboardService:
             ).where(aggregated_subquery.c.user_id == normalized_user_id)
             user_result = await db.execute(user_query)
             user_row = user_result.one_or_none()
+            user_not_evaluable_query = (
+                select(func.count(PracticeSession.session_id))
+                .join(Scenario, PracticeSession.scenario_id == Scenario.scenario_id)
+                .where(PracticeSession.user_id == normalized_user_id)
+                .where(PracticeSession.status == "completed")
+                .where(PracticeSession.start_time >= cutoff_time)
+                .where(self._not_evaluable_filter())
+            )
+            if normalized_scenario_type:
+                user_not_evaluable_query = user_not_evaluable_query.where(
+                    Scenario.scenario_type == normalized_scenario_type
+                )
+            user_not_evaluable_result = await db.execute(user_not_evaluable_query)
+            user_not_evaluable_sessions = int(user_not_evaluable_result.scalar() or 0)
 
             if not user_row:
                 return Result(
@@ -328,6 +398,9 @@ class LeaderboardService:
                         "rank": None,
                         "total_sessions": 0,
                         "average_score": 0,
+                        "score_basis": PROJECTION_SCORE_BASIS,
+                        "evaluable_sessions": 0,
+                        "not_evaluable_sessions": user_not_evaluable_sessions,
                         "total_users": total_users,
                         "percentile": 0,
                         "time_period": normalized_time_period,
@@ -356,6 +429,9 @@ class LeaderboardService:
                     "rank": rank,
                     "total_sessions": int(user_row.total_sessions or 0),
                     "average_score": round(user_row.average_score or 0, 2),
+                    "score_basis": PROJECTION_SCORE_BASIS,
+                    "evaluable_sessions": int(user_row.total_sessions or 0),
+                    "not_evaluable_sessions": user_not_evaluable_sessions,
                     "total_users": total_users,
                     "percentile": percentile,
                     "time_period": normalized_time_period,

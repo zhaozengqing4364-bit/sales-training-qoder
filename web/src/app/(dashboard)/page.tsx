@@ -56,6 +56,9 @@ const formatTimeAgo = (isoString: string) => {
 const DEFAULT_STATS: DashboardStats = {
     weekly_activity: { total_duration_minutes: 0, session_count: 0, trend_direction: "flat", trend_percentage: 0 },
     last_session: { score: 0, percentile: 50, trend: "stable" },
+    score_basis: "session_evidence_projection_evaluable_only",
+    evaluable_sessions: 0,
+    not_evaluable_sessions: 0,
     effectiveness: {
         pass_rate_3min_flow: 0,
         pass_rate_5turn_defense: 0,
@@ -63,6 +66,12 @@ const DEFAULT_STATS: DashboardStats = {
         next_day_retry_rate: 0,
     },
 };
+
+function formatScoreBasisCopy(stats: DashboardStats): string {
+    const evaluableSessions = stats.evaluable_sessions ?? 0;
+    const notEvaluableSessions = stats.not_evaluable_sessions ?? 0;
+    return `均分仅统计 ${evaluableSessions} 次可评估训练，${notEvaluableSessions} 次证据不足训练不会计入均分。`;
+}
 
 const DEFAULT_RECOMMENDATION: Recommendation = {
     title: "开始练习",
@@ -527,6 +536,11 @@ export default function HomePage() {
                             <p className="text-slate-300 text-sm leading-relaxed max-w-lg">
                                 {recommendation.reason}
                             </p>
+                            {recommendation.score_basis && (
+                                <p className="text-xs text-blue-100/80 mt-3">
+                                    推荐来源：上次可评估训练报告的主问题与下一轮目标。
+                                </p>
+                            )}
                         </div>
                         <Link href={recommendation.target_path}>
                             <Button className="w-fit rounded-full bg-white text-slate-900 hover:bg-blue-50 font-bold">
@@ -544,7 +558,7 @@ export default function HomePage() {
                         <div className="text-3xl font-black text-slate-900">{stats.last_session?.score ?? 0}</div>
                         <div className="text-xs font-bold text-slate-400 uppercase mt-1">上次得分</div>
                     </div>
-                    <p className="text-xs text-slate-500 px-4">您的表现优于 {stats.last_session?.percentile ?? 0}% 的用户，继续保持！</p>
+                    <p className="text-xs text-slate-500 px-4">{formatScoreBasisCopy(stats)}</p>
                 </GlassCard>
             </section>
 

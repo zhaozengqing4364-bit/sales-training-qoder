@@ -1666,6 +1666,9 @@ export const api = {
             return apiFetch<{
                 scenario_type?: string | null;
                 time_period: string;
+                score_basis?: string;
+                evaluable_sessions?: number;
+                not_evaluable_sessions?: number;
                 total_users: number;
                 entries: Array<{
                     rank: number;
@@ -1674,12 +1677,18 @@ export const api = {
                     total_sessions: number;
                     average_score: number;
                     best_score: number;
+                    score_basis?: string;
+                    evaluable_sessions?: number;
+                    not_evaluable_sessions?: number;
                 }>;
                 my_rank?: {
                     user_id: string;
                     rank: number | null;
                     total_sessions: number;
                     average_score: number;
+                    score_basis?: string;
+                    evaluable_sessions?: number;
+                    not_evaluable_sessions?: number;
                     total_users?: number;
                     percentile?: number;
                     time_period?: string;
@@ -1711,6 +1720,9 @@ export const api = {
                 rank: number | null;
                 total_sessions: number;
                 average_score: number;
+                score_basis?: string;
+                evaluable_sessions?: number;
+                not_evaluable_sessions?: number;
                 total_users?: number;
                 percentile?: number;
                 time_period?: string;

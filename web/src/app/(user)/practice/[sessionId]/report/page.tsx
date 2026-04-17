@@ -718,6 +718,9 @@ export default function ComprehensiveReportPage() {
     const reportIntro = isPresentationScenario
         ? "综合评分反映流畅连贯、内容准确、专业表达、互动问答与整体表现。"
         : "综合评分反映价值翻译、证据支撑和异议推进的完成度。";
+    const scoreBasisIntro = report?.evaluable === false
+        ? "本会话证据不足，不会纳入首页、个人中心或排行榜均分。"
+        : "本分数来自当前会话的 canonical evidence；只有可评估训练才会纳入首页、个人中心和排行榜均分。";
     const overallResult = report?.overall_result || null;
     const overallResultLabel = overallResult === "strong_pass"
         ? "销售价值表达优秀"
@@ -809,6 +812,9 @@ export default function ComprehensiveReportPage() {
                     </p>
                     <p className="text-xs text-zinc-500 mt-2">
                         {reportIntro}
+                    </p>
+                    <p className="text-xs text-zinc-500 mt-1">
+                        {scoreBasisIntro}
                     </p>
                 </div>
             </GlassCard>

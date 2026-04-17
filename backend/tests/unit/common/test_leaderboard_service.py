@@ -2,22 +2,40 @@
 Unit tests for leaderboard service filters and rank calculation.
 """
 
-from contextlib import contextmanager
-from datetime import datetime, timedelta, timezone
 import uuid
-from typing import Iterator
+from collections.abc import Iterator
+from contextlib import contextmanager
+from datetime import UTC, datetime, timedelta
 
 import pytest
 import pytest_asyncio
 from sqlalchemy import event
-from sqlalchemy.ext.asyncio import AsyncSession, AsyncEngine, create_async_engine
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 
 from common.analytics.leaderboard_service import LeaderboardService
 from common.db.models import Base, PracticeSession, Scenario, User
 
-
 TEST_DATABASE_URL = "sqlite+aiosqlite:///:memory:"
+
+
+def _effectiveness_snapshot(*, evaluable: bool) -> dict[str, object]:
+    return {
+        "pass_flags": {
+            "pass_3min_flow": evaluable,
+            "pass_5turn_defense": evaluable,
+            "pass_4step_structure": evaluable,
+        },
+        "overall_result": "pass" if evaluable else "fail",
+        "main_issue": {
+            "issue_type": "ok" if evaluable else "insufficient",
+            "issue_text": "fixture",
+            "recovery_rule": "fixture",
+        },
+        "next_goal": {"goal_type": "continue", "goal_text": "fixture", "rule": "fixture"},
+        "evaluable": evaluable,
+        "not_evaluable_reason": None if evaluable else "INSUFFICIENT_TURN_DATA",
+    }
 
 
 @contextmanager
@@ -62,7 +80,7 @@ async def leaderboard_db() -> AsyncSession:
 
 @pytest_asyncio.fixture()
 async def seeded_leaderboard_data(leaderboard_db: AsyncSession) -> dict[str, str]:
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
 
     user_a = User(
         user_id=str(uuid.uuid4()),
@@ -100,9 +118,22 @@ async def seeded_leaderboard_data(leaderboard_db: AsyncSession) -> dict[str, str
                 scenario_id=sales_scenario.scenario_id,
                 status="completed",
                 start_time=now - timedelta(days=2),
-                logic_score=90,
-                accuracy_score=88,
-                completeness_score=92,
+                logic_score=100,
+                accuracy_score=0,
+                completeness_score=0,
+                effectiveness_snapshot=_effectiveness_snapshot(evaluable=True),
+            ),
+            # Bob: sales recent; projection-compatible unweighted score should outrank Alice.
+            PracticeSession(
+                session_id=str(uuid.uuid4()),
+                user_id=user_b.user_id,
+                scenario_id=sales_scenario.scenario_id,
+                status="completed",
+                start_time=now - timedelta(days=2),
+                logic_score=0,
+                accuracy_score=60,
+                completeness_score=60,
+                effectiveness_snapshot=_effectiveness_snapshot(evaluable=True),
             ),
             # Bob: sales old (outside "month"/"week", still in all_time)
             PracticeSession(
@@ -114,6 +145,7 @@ async def seeded_leaderboard_data(leaderboard_db: AsyncSession) -> dict[str, str
                 logic_score=95,
                 accuracy_score=95,
                 completeness_score=95,
+                effectiveness_snapshot=_effectiveness_snapshot(evaluable=True),
             ),
             # Bob: presentation recent
             PracticeSession(
@@ -125,6 +157,19 @@ async def seeded_leaderboard_data(leaderboard_db: AsyncSession) -> dict[str, str
                 logic_score=85,
                 accuracy_score=86,
                 completeness_score=87,
+                effectiveness_snapshot=_effectiveness_snapshot(evaluable=True),
+            ),
+            # Bob: sales recent but not evaluable, should never outrank Alice.
+            PracticeSession(
+                session_id=str(uuid.uuid4()),
+                user_id=user_b.user_id,
+                scenario_id=sales_scenario.scenario_id,
+                status="completed",
+                start_time=now - timedelta(days=1),
+                logic_score=100,
+                accuracy_score=100,
+                completeness_score=100,
+                effectiveness_snapshot=_effectiveness_snapshot(evaluable=False),
             ),
         ]
     )
@@ -151,8 +196,8 @@ async def test_get_user_rank_respects_time_period_and_scenario(
         time_period="week",
     )
     assert weekly_rank.is_success
-    assert weekly_rank.value["rank"] == 1
-    assert weekly_rank.value["total_users"] == 1
+    assert weekly_rank.value["rank"] == 2
+    assert weekly_rank.value["total_users"] == 2
     assert weekly_rank.value["time_period"] == "weekly"
 
     all_time_rank = await service.get_user_rank(
@@ -182,8 +227,14 @@ async def test_calculate_leaderboard_accepts_alias_filters(
     )
     assert sales_monthly.is_success
     assert sales_monthly.value.time_period == "monthly"
-    assert len(sales_monthly.value.entries) == 1
-    assert sales_monthly.value.entries[0].username == "Alice"
+    assert sales_monthly.value.score_basis == "session_evidence_projection_evaluable_only"
+    assert sales_monthly.value.evaluable_sessions == 2
+    assert sales_monthly.value.not_evaluable_sessions == 1
+    assert len(sales_monthly.value.entries) == 2
+    assert sales_monthly.value.entries[0].username == "Bob"
+    assert sales_monthly.value.entries[0].average_score == 40.0
+    assert sales_monthly.value.entries[1].username == "Alice"
+    assert sales_monthly.value.entries[1].average_score == 33.33
 
     presentation_weekly = await service.calculate_leaderboard(
         db=leaderboard_db,
@@ -212,12 +263,12 @@ async def test_calculate_leaderboard_pushes_ranking_aggregation_into_sql(
         )
 
     assert sales_monthly.is_success
-    assert len(sales_monthly.value.entries) == 1
+    assert len(sales_monthly.value.entries) == 2
 
     aggregate_queries = [
         statement
         for statement in statements
-        if "avg(practice_sessions.logic_score" in statement.lower()
+        if "GROUP BY users.user_id, users.name" in statement
     ]
     count_queries = [
         statement
@@ -225,9 +276,9 @@ async def test_calculate_leaderboard_pushes_ranking_aggregation_into_sql(
         if "count(distinct(users.user_id))" in statement.lower()
     ]
 
-    assert len(statements) == 2
+    assert len(statements) == 4
     assert len(aggregate_queries) == 1
     assert len(count_queries) == 1
-    assert "GROUP BY users.user_id, users.name" in aggregate_queries[0]
+    assert "practice_sessions.logic_score + practice_sessions.accuracy_score + practice_sessions.completeness_score" in aggregate_queries[0]
     assert "ORDER BY average_score DESC" in aggregate_queries[0]
     assert "JOIN scenarios" in aggregate_queries[0]

@@ -105,8 +105,11 @@ describe("ProfilePage password route handoff", () => {
         });
         getHistoryStatisticsMock.mockResolvedValue({
             total_sessions: 4,
+            evaluable_sessions: 3,
+            not_evaluable_sessions: 1,
             average_score: 86,
             best_score: 92,
+            score_basis: "session_evidence_projection_evaluable_only",
             total_practice_time_seconds: 1200,
             total_practice_time_minutes: 20,
         });
@@ -129,10 +132,37 @@ describe("ProfilePage password route handoff", () => {
         });
 
         expect(screen.getByText("通过邮箱重置密码，会带入当前账号邮箱。", { exact: false })).toBeTruthy();
+        expect(screen.getByText("仅统计 3 次可评估训练，1 次证据不足训练不计入均分。")).toBeTruthy();
         expect(screen.getByText("仅保存在当前浏览器，刷新后会保留。", { exact: false })).toBeTruthy();
         expect(screen.queryByText(/通知/)).toBeNull();
         const resetLink = screen.getByRole("link", { name: "通过邮箱重置密码" }) as HTMLAnchorElement;
         expect(resetLink.getAttribute("href")).toBe("/forgot-password?email=learner%40example.com");
+    });
+
+    it("does not fall back to legacy session average when no evaluable history score exists", async () => {
+        getHistoryStatisticsMock.mockResolvedValueOnce({
+            total_sessions: 2,
+            evaluable_sessions: 0,
+            not_evaluable_sessions: 2,
+            average_score: 0,
+            best_score: 0,
+            score_basis: "session_evidence_projection_evaluable_only",
+            total_practice_time_seconds: 600,
+            total_practice_time_minutes: 10,
+        });
+        getSessionStatsMock.mockResolvedValueOnce({
+            total_sessions: 2,
+            weekly_sessions: 1,
+            average_score: 99,
+            completed_sessions: 2,
+            total_practice_minutes: 10,
+        });
+
+        renderProfilePage();
+
+        expect(await screen.findByText("仅统计 0 次可评估训练，2 次证据不足训练不计入均分。")).toBeTruthy();
+        expect(screen.getByText("0", { exact: true })).toBeTruthy();
+        expect(screen.queryByText("99")).toBeNull();
     });
 
     it("hydrates the voice speed select from the shared preference seam and never PATCHes fake persistence", async () => {

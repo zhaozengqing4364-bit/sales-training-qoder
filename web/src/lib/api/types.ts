@@ -27,6 +27,9 @@ export interface DashboardStats {
         pass_rate_4step_structure: number;
         next_day_retry_rate: number;
     };
+    score_basis?: string;
+    evaluable_sessions?: number;
+    not_evaluable_sessions?: number;
 }
 
 export interface VoicePolicyRuntimeBinding {
@@ -152,6 +155,7 @@ export interface Recommendation {
     reason: string;
     action_label: string;
     target_path: string;
+    score_basis?: string | null;
 }
 
 // Agent types
@@ -2066,6 +2070,7 @@ export interface HistoryStatistics {
     not_evaluable_sessions: number;
     average_score: number;
     best_score: number;
+    score_basis?: string;
     total_practice_time_seconds: number;
     total_practice_time_minutes: number;
 }
