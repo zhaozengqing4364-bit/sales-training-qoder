@@ -20,6 +20,7 @@ from sqlalchemy.orm import sessionmaker
 # VoiceRuntimeProfile) are in separate modules and only register their
 # tables when imported.
 import agent.models  # noqa: F401 — registers Agent, Persona, VoiceRuntimeProfile
+from common.auth.service import AUTH_CSRF_COOKIE_NAME, AUTH_CSRF_HEADER_NAME
 from common.db.models import Base, PracticeSession, Scenario, SessionAudioSegment, User
 
 # ---------------------------------------------------------------------------
@@ -130,6 +131,50 @@ async def _session_id(_db: AsyncSession, _user: User):
 
 
 class TestGenerateUploadUrl:
+    @pytest.mark.asyncio
+    async def test_cookie_session_missing_csrf_is_rejected(
+        self, _client, _auth, _session_id
+    ):
+        assert _auth["Authorization"].startswith("Bearer ")
+
+        resp = await _client.post(
+            f"/api/v1/practice/sessions/{_session_id}/audio-upload-urls",
+            json={"segment_sequence": 0, "content_type": "audio/webm"},
+        )
+
+        assert resp.status_code == 403
+        payload = resp.json()
+        assert payload["error"] == "[CSRF_VALIDATION_FAILED]"
+        assert payload["detail"]["error"] == "[CSRF_VALIDATION_FAILED]"
+
+    @pytest.mark.asyncio
+    async def test_cookie_session_matching_csrf_is_allowed(
+        self, _client, _auth, _session_id
+    ):
+        assert _auth["Authorization"].startswith("Bearer ")
+        csrf_token = _client.cookies.get(AUTH_CSRF_COOKIE_NAME)
+        assert csrf_token
+
+        with patch.dict(os.environ, _TEST_OSS_ENV, clear=False):
+            import common.oss.signing as mod
+
+            mod._instance = None
+            mock_bucket = MagicMock()
+            mock_bucket.sign_url.return_value = "https://oss.example.com/signed"
+
+            with patch.object(mod, "oss2") as m_oss2:
+                m_oss2.Auth.return_value = MagicMock()
+                m_oss2.Bucket.return_value = mock_bucket
+
+                resp = await _client.post(
+                    f"/api/v1/practice/sessions/{_session_id}/audio-upload-urls",
+                    json={"segment_sequence": 0, "content_type": "audio/webm"},
+                    headers={AUTH_CSRF_HEADER_NAME: csrf_token},
+                )
+
+        assert resp.status_code == 200
+        mod._instance = None
+
     @pytest.mark.asyncio
     async def test_success(self, _client, _auth, _session_id):
         with patch.dict(os.environ, _TEST_OSS_ENV, clear=False):

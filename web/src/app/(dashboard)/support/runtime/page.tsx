@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import { AlertTriangle, Activity, RefreshCcw, ShieldAlert, ShieldCheck } from "lucide-react";
 
 import { api, getApiErrorMessage } from "@/lib/api/client";
@@ -170,7 +170,7 @@ export default function SupportRuntimeStatusPage() {
     const refreshing = overviewLoading || faultsLoading;
     const releaseMeta = releaseStatusMeta(overview?.release_health.status ?? null);
 
-    const loadData = async () => {
+    const loadData = useCallback(async () => {
         setOverviewLoading(true);
         setFaultsLoading(true);
         setOverviewError(null);
@@ -194,13 +194,13 @@ export default function SupportRuntimeStatusPage() {
             setFaultsError(getApiErrorMessage(faultsResult.reason));
         }
         setFaultsLoading(false);
-    };
+    }, []);
 
     useEffect(() => {
         if (!authLoading && isAuthorized) {
             void loadData();
         }
-    }, [authLoading, isAuthorized]);
+    }, [authLoading, isAuthorized, loadData]);
 
     if (authLoading || !isAuthorized) {
         return (
