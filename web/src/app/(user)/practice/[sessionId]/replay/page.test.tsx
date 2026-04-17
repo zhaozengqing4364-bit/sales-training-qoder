@@ -53,7 +53,16 @@ vi.mock("next/image", () => ({
 }));
 
 vi.mock("@/components/highlights", () => ({
-  HighlightList: ({ highlights }: { highlights: Array<any> }) => (
+  HighlightList: ({
+    highlights,
+  }: {
+    highlights: Array<{
+      learning_evidence?: {
+        reason?: string;
+        issue_family?: string;
+      };
+    }>;
+  }) => (
     <div data-testid="replay-highlight-list">
       <div>高光数:{highlights.length}</div>
       <div>高光学习证据:{highlights[0]?.learning_evidence?.reason ?? "none"}</div>

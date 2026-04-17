@@ -4,7 +4,13 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import UserDetailPage from "./page";
 import { ApiRequestError } from "@/lib/api/client";
 import { buildAdminUserDrillInHref } from "@/lib/admin/drill-in";
-import type { LinkedAssetChangeReference, ManagerInterventionListResponse, SupportRuntimeFaultsResponse, UserProgressResponse, UserSessionsResponse } from "@/lib/api/types";
+import type {
+    LinkedAssetChangeReference,
+    ManagerInterventionListResponse,
+    SupportRuntimeFaultsResponse,
+    UserProgressResponse,
+    UserSessionsResponse,
+} from "@/lib/api/types";
 
 const {
     pushMock,
@@ -462,7 +468,7 @@ describe("UserDetailPage", () => {
                 reason: "insufficient_evaluable_history",
                 summary: "最近完成的训练里仍有证据不足的会话，先补齐有效互动再判断是否切换重点。",
             },
-        } as unknown as UserProgressResponse);
+        } as unknown as UserSessionsResponse);
 
         render(<UserDetailPage />);
 
