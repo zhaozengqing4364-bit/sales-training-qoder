@@ -3,6 +3,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import SupportRuntimePage from "./page";
 import { ApiRequestError } from "@/lib/api/client";
+import type {
+    SupportRuntimeFaultsResponse,
+    SupportRuntimeOverview,
+} from "@/lib/api/types";
 
 const {
     getOverviewMock,
@@ -204,8 +208,8 @@ describe("SupportRuntimePage", () => {
     });
 
     it("renders blocking release health from the typed overview and typed anomaly list", async () => {
-        getOverviewMock.mockResolvedValue(blockingOverview as any);
-        getFaultsMock.mockResolvedValue(blockingFaults as any);
+        getOverviewMock.mockResolvedValue(blockingOverview as unknown as SupportRuntimeOverview);
+        getFaultsMock.mockResolvedValue(blockingFaults as unknown as SupportRuntimeFaultsResponse);
 
         render(<SupportRuntimePage />);
 
@@ -226,8 +230,8 @@ describe("SupportRuntimePage", () => {
     });
 
     it("renders a warning-only release state without inventing blocking severity on the client", async () => {
-        getOverviewMock.mockResolvedValue(warningOverview as any);
-        getFaultsMock.mockResolvedValue(warningFaults as any);
+        getOverviewMock.mockResolvedValue(warningOverview as unknown as SupportRuntimeOverview);
+        getFaultsMock.mockResolvedValue(warningFaults as unknown as SupportRuntimeFaultsResponse);
 
         render(<SupportRuntimePage />);
 
@@ -239,14 +243,14 @@ describe("SupportRuntimePage", () => {
     });
 
     it("shows a local empty state when the typed anomaly list is empty", async () => {
-        getOverviewMock.mockResolvedValue(healthyOverview as any);
+        getOverviewMock.mockResolvedValue(healthyOverview as unknown as SupportRuntimeOverview);
         getFaultsMock.mockResolvedValue({
             generated_at: "2026-03-24T08:00:00Z",
             items: [],
             count: 0,
             limit: 20,
             severity: null,
-        } as any);
+        } as unknown as SupportRuntimeFaultsResponse);
 
         render(<SupportRuntimePage />);
 
@@ -257,7 +261,7 @@ describe("SupportRuntimePage", () => {
     });
 
     it("keeps the release summary visible and shows a local anomaly-list error when faults loading fails", async () => {
-        getOverviewMock.mockResolvedValue(blockingOverview as any);
+        getOverviewMock.mockResolvedValue(blockingOverview as unknown as SupportRuntimeOverview);
         getFaultsMock.mockRejectedValue(
             new ApiRequestError({
                 status: 0,
@@ -277,11 +281,11 @@ describe("SupportRuntimePage", () => {
 
     it("refreshes the typed overview and faults together without leaving the page shell", async () => {
         getOverviewMock
-            .mockResolvedValueOnce(warningOverview as any)
-            .mockResolvedValueOnce(blockingOverview as any);
+            .mockResolvedValueOnce(warningOverview as unknown as SupportRuntimeOverview)
+            .mockResolvedValueOnce(blockingOverview as unknown as SupportRuntimeOverview);
         getFaultsMock
-            .mockResolvedValueOnce(warningFaults as any)
-            .mockResolvedValueOnce(blockingFaults as any);
+            .mockResolvedValueOnce(warningFaults as unknown as SupportRuntimeFaultsResponse)
+            .mockResolvedValueOnce(blockingFaults as unknown as SupportRuntimeFaultsResponse);
 
         render(<SupportRuntimePage />);
 
