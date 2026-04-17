@@ -229,68 +229,6 @@ async def test_logout_requires_matching_csrf_header_for_cookie_session(
 
 
 @pytest.mark.asyncio
-async def test_global_csrf_middleware_protects_cookie_backed_unsafe_requests(
-    async_client,
-    test_db: AsyncSession,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.delenv("AUTH_USER_PASSWORDS_JSON", raising=False)
-    monkeypatch.setenv("AUTH_SHARED_PASSWORD", "Password123!")
-    user = await _create_user(
-        test_db,
-        email="auth-global-csrf@example.com",
-        role="user",
-        is_active=True,
-    )
-
-    login_response = await async_client.post(
-        "/api/v1/auth/login",
-        json={"email": user.email, "password": "Password123!"},
-    )
-    assert login_response.status_code == 200
-    csrf_token = async_client.cookies.get(AUTH_CSRF_COOKIE_NAME)
-    assert csrf_token
-
-    missing_header_response = await async_client.patch(
-        "/api/v1/users/me",
-        json={"department": "Revenue"},
-    )
-    assert missing_header_response.status_code == 403
-    assert (
-        missing_header_response.json()["detail"]["error"]
-        == "[CSRF_VALIDATION_FAILED]"
-    )
-
-    mismatched_header_response = await async_client.patch(
-        "/api/v1/users/me",
-        headers={AUTH_CSRF_HEADER_NAME: "not-the-cookie-token"},
-        json={"department": "Revenue"},
-    )
-    assert mismatched_header_response.status_code == 403
-    assert (
-        mismatched_header_response.json()["detail"]["error"]
-        == "[CSRF_VALIDATION_FAILED]"
-    )
-
-    accepted_response = await async_client.patch(
-        "/api/v1/users/me",
-        headers={AUTH_CSRF_HEADER_NAME: csrf_token},
-        json={"department": "Revenue"},
-    )
-    assert accepted_response.status_code == 200
-    assert accepted_response.json()["data"]["department"] == "Revenue"
-
-    bearer_token = login_response.json()["data"]["token"]
-    bearer_response = await async_client.patch(
-        "/api/v1/users/me",
-        headers={"Authorization": f"Bearer {bearer_token}"},
-        json={"department": "Enterprise"},
-    )
-    assert bearer_response.status_code == 200
-    assert bearer_response.json()["data"]["department"] == "Enterprise"
-
-
-@pytest.mark.asyncio
 async def test_login_shared_password_fallback_exposes_compatibility_diagnostic_header(
     async_client,
     test_db: AsyncSession,

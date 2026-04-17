@@ -97,18 +97,6 @@ type PracticeDomainDependencies = {
     request: ApiRequest;
 };
 
-type AudioUploadUrlResponse = {
-    url: string;
-    object_key: string;
-    expires_at?: string;
-};
-
-type RegisterAudioSegmentResponse = {
-    id?: string;
-    segment_sequence: number;
-    upload_status?: string;
-};
-
 type AdminReportDomainDependencies = {
     request: ApiRequest;
 };
