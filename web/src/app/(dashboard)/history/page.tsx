@@ -187,7 +187,6 @@ export default function HistoryPage() {
         const timeoutId = window.setTimeout(() => {
             void loadData();
         }, 0);
-
         return () => window.clearTimeout(timeoutId);
     }, [loadData]);
 

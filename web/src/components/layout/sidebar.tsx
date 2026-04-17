@@ -223,7 +223,6 @@ function SidebarUser({ isCollapsed, userInfo }: { isCollapsed: boolean; userInfo
         const timeoutId = window.setTimeout(() => {
             setMounted(true);
         }, 0);
-
         return () => window.clearTimeout(timeoutId);
     }, []);
 

@@ -201,11 +201,10 @@ export default function SupportRuntimeStatusPage() {
             const timeoutId = window.setTimeout(() => {
                 void loadData();
             }, 0);
-
             return () => window.clearTimeout(timeoutId);
         }
         return undefined;
-    }, [authLoading, isAuthorized, loadData]);
+    }, [authLoading, isAuthorized]);
 
     if (authLoading || !isAuthorized) {
         return (
