@@ -236,7 +236,7 @@ class AuthHandler {
     private listeners: Set<AuthListener> = new Set();
     private navigator: AuthNavigator | null = null;
     private pendingNavigation: { to: string; mode: AuthNavigationMode } | null = null;
-    private sessionExpiredTimer: ReturnType<typeof setTimeout> | null = null;
+    private sessionExpiredTimer: number | null = null;
     private lastNotifyMessage: string | null = null;
     private lastNotifyTime = 0;
     private readonly notifyCooldownMs = 1200;

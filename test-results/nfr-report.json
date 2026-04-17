@@ -1,0 +1,78 @@
+{
+  "metadata": {
+    "timestamp": "2026-04-15T01:31:33.459341",
+    "commit_sha": "test-sha-12345",
+    "branch": "feature/test-branch",
+    "environment": "ci",
+    "test_duration_seconds": 123.45
+  },
+  "summary": {
+    "total_metrics": 1,
+    "passed_metrics": 1,
+    "failed_metrics": 0,
+    "pass_rate": 1.0,
+    "overall_status": "PASS"
+  },
+  "thresholds": [
+    {
+      "metric_name": "end_to_end_latency",
+      "p95_target_ms": 300.0,
+      "p99_target_ms": null,
+      "description": "User speech to AI response latency"
+    },
+    {
+      "metric_name": "websocket_connection",
+      "p95_target_ms": 100.0,
+      "p99_target_ms": null,
+      "description": "WebSocket connection establishment time"
+    },
+    {
+      "metric_name": "asr_streaming_latency",
+      "p95_target_ms": 200.0,
+      "p99_target_ms": null,
+      "description": "ASR transcription streaming latency"
+    },
+    {
+      "metric_name": "asr_first_result",
+      "p95_target_ms": 200.0,
+      "p99_target_ms": null,
+      "description": "ASR first transcription result"
+    },
+    {
+      "metric_name": "tts_first_byte_latency",
+      "p95_target_ms": 300.0,
+      "p99_target_ms": null,
+      "description": "TTS first audio chunk latency"
+    },
+    {
+      "metric_name": "tts_total_synthesis",
+      "p95_target_ms": 500.0,
+      "p99_target_ms": null,
+      "description": "TTS total synthesis time"
+    },
+    {
+      "metric_name": "interrupt_detection",
+      "p95_target_ms": 100.0,
+      "p99_target_ms": null,
+      "description": "Interrupt detection response time"
+    },
+    {
+      "metric_name": "session_creation",
+      "p95_target_ms": 100.0,
+      "p99_target_ms": 200.0,
+      "description": "Session creation API response"
+    }
+  ],
+  "results": [
+    {
+      "metric_name": "websocket_connection",
+      "p95_actual_ms": 80,
+      "p99_actual_ms": 80,
+      "passed": true,
+      "samples": 3,
+      "min_ms": 50,
+      "max_ms": 80,
+      "avg_ms": 66.67
+    }
+  ]
+}

@@ -86,7 +86,9 @@ async def auth_headers(users):
     }
 
 
-async def _create_template(async_client: AsyncClient, admin_headers: dict[str, str]) -> dict:
+async def _create_template(
+    async_client: AsyncClient, admin_headers: dict[str, str]
+) -> dict:
     response = await async_client.post(
         "/api/v1/prompt-templates",
         headers=admin_headers,
@@ -112,8 +114,11 @@ class TestPromptTemplateRBAC:
         )
 
         assert response.status_code == 403
-        detail = response.json().get("detail", {})
-        assert detail.get("error") == "[PROMPT_TEMPLATE_EDIT_ADMIN_ONLY]"
+        body = response.json()
+        assert body["success"] is False
+        assert body["error"] == "[PROMPT_TEMPLATE_EDIT_ADMIN_ONLY]"
+        assert body["message"] == "仅管理员可访问提示词治理接口。"
+        assert body.get("trace_id")
 
     async def test_support_cannot_toggle_activation(self, async_client, auth_headers):
         created = await _create_template(async_client, auth_headers["admin"])
@@ -125,8 +130,11 @@ class TestPromptTemplateRBAC:
         )
 
         assert response.status_code == 403
-        detail = response.json().get("detail", {})
-        assert detail.get("error") == "[PROMPT_TEMPLATE_EDIT_ADMIN_ONLY]"
+        body = response.json()
+        assert body["success"] is False
+        assert body["error"] == "[PROMPT_TEMPLATE_EDIT_ADMIN_ONLY]"
+        assert body["message"] == "仅管理员可访问提示词治理接口。"
+        assert body.get("trace_id")
 
     async def test_support_cannot_edit_template_body(self, async_client, auth_headers):
         created = await _create_template(async_client, auth_headers["admin"])
@@ -138,8 +146,11 @@ class TestPromptTemplateRBAC:
         )
 
         assert response.status_code == 403
-        detail = response.json().get("detail", {})
-        assert detail.get("error") == "[PROMPT_TEMPLATE_EDIT_ADMIN_ONLY]"
+        body = response.json()
+        assert body["success"] is False
+        assert body["error"] == "[PROMPT_TEMPLATE_EDIT_ADMIN_ONLY]"
+        assert body["message"] == "仅管理员可访问提示词治理接口。"
+        assert body.get("trace_id")
 
     async def test_support_cannot_create_template(self, async_client, auth_headers):
         response = await async_client.post(
@@ -155,20 +166,30 @@ class TestPromptTemplateRBAC:
         )
 
         assert response.status_code == 403
-        detail = response.json().get("detail", {})
-        assert detail.get("error") == "[PROMPT_TEMPLATE_EDIT_ADMIN_ONLY]"
+        body = response.json()
+        assert body["success"] is False
+        assert body["error"] == "[PROMPT_TEMPLATE_EDIT_ADMIN_ONLY]"
+        assert body["message"] == "仅管理员可访问提示词治理接口。"
+        assert body.get("trace_id")
 
-    async def test_support_cannot_list_scenario_prompts(self, async_client, auth_headers):
+    async def test_support_cannot_list_scenario_prompts(
+        self, async_client, auth_headers
+    ):
         response = await async_client.get(
             "/api/v1/scenario-prompts",
             headers=auth_headers["support"],
         )
 
         assert response.status_code == 403
-        detail = response.json().get("detail", {})
-        assert detail.get("error") == "[PROMPT_TEMPLATE_EDIT_ADMIN_ONLY]"
+        body = response.json()
+        assert body["success"] is False
+        assert body["error"] == "[PROMPT_TEMPLATE_EDIT_ADMIN_ONLY]"
+        assert body["message"] == "仅管理员可访问提示词治理接口。"
+        assert body.get("trace_id")
 
-    async def test_support_cannot_create_scenario_prompt(self, async_client, auth_headers):
+    async def test_support_cannot_create_scenario_prompt(
+        self, async_client, auth_headers
+    ):
         created = await _create_template(async_client, auth_headers["admin"])
         response = await async_client.post(
             "/api/v1/scenario-prompts",
@@ -182,20 +203,30 @@ class TestPromptTemplateRBAC:
         )
 
         assert response.status_code == 403
-        detail = response.json().get("detail", {})
-        assert detail.get("error") == "[PROMPT_TEMPLATE_EDIT_ADMIN_ONLY]"
+        body = response.json()
+        assert body["success"] is False
+        assert body["error"] == "[PROMPT_TEMPLATE_EDIT_ADMIN_ONLY]"
+        assert body["message"] == "仅管理员可访问提示词治理接口。"
+        assert body.get("trace_id")
 
-    async def test_admin_get_template_with_invalid_id_returns_400(self, async_client, auth_headers):
+    async def test_admin_get_template_with_invalid_id_returns_400(
+        self, async_client, auth_headers
+    ):
         response = await async_client.get(
             "/api/v1/prompt-templates/undefined",
             headers=auth_headers["admin"],
         )
 
         assert response.status_code == 400
-        detail = response.json().get("detail", {})
-        assert detail.get("error") == "[PROMPT_TEMPLATE_ID_INVALID]"
+        body = response.json()
+        assert body["success"] is False
+        assert body["error"] == "[PROMPT_TEMPLATE_ID_INVALID]"
+        assert body["message"] == "模板ID无效，请检查请求参数。"
+        assert body.get("trace_id")
 
-    async def test_admin_get_missing_template_returns_structured_not_found_envelope(self, async_client, auth_headers):
+    async def test_admin_get_missing_template_returns_structured_not_found_envelope(
+        self, async_client, auth_headers
+    ):
         response = await async_client.get(
             "/api/v1/prompt-templates/123e4567-e89b-12d3-a456-426614174000",
             headers=auth_headers["admin"],

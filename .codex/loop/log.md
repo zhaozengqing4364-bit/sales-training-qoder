@@ -1934,3 +1934,61 @@
   verification results: passed; all three slice-plan grep gates exited 0 and confirmed the current global-user seams, the reader-first migration path, and the downstream roadmap/service-split guardrails in the durable planning artifacts before slice completion.
   success signal status: M022 now has all four slices complete, and future enterprise planning can start directly from the S04 contract instead of rerunning a repository-wide org-boundary investigation.
   rollback note: if later work changes organization/member/team ownership, service-split pressure, or integration authority, update the architecture scan, post-M018 plan, future roadmap, decisions, knowledge note, and focused verification bundle together so the enterprise contract does not drift.
+
+- time: 2026-04-14T17:57:13+08:00
+  mode: grow
+  item id: ADHOC-2026-04-14-realtime-clarity
+  files changed:
+    - backend/src/common/knowledge_engine/intent_classifier.py
+    - backend/src/sales_bot/services/voice_instruction_compiler.py
+    - backend/src/sales_bot/services/voice_runtime_policy.py
+    - backend/src/sales_bot/websocket/stepfun_realtime_handler.py
+    - backend/tests/unit/common/test_knowledge_intent_classifier.py
+    - backend/tests/unit/test_stepfun_realtime_handler.py
+    - backend/tests/unit/test_voice_instruction_compiler.py
+    - backend/tests/unit/test_voice_runtime_policy_service.py
+    - web/src/hooks/use-streaming-audio-player.ts
+    - web/src/hooks/use-streaming-audio-player.test.ts
+    - web/src/hooks/websocket/message-handlers.ts
+    - web/src/hooks/websocket/message-handlers.test.ts
+    - web/src/hooks/websocket/types.ts
+    - web/src/hooks/websocket/use-audio-playback.ts
+    - docs/plans/2026-04-14-realtime-clarity-and-retrieval-guard.md
+  summary: Finished one user-directed realtime clarification fix outside the milestone queue. The backend no longer appends the hardcoded “先回答这一点即可。” suffix when trimming multi-question replies, knowledge-intent fallback no longer routes unmatched queries into the first configured retrieval profile, and the realtime voice policy now derives a normalized playback_rate from persona tts_config.rate and emits it on StepFun tts_audio/tts_chunk payloads. The frontend streaming and queued-audio playback paths now honor that per-stream server override while keeping local preference as the default when no backend override is present.
+  verification commands:
+    - backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/test_voice_instruction_compiler.py backend/tests/unit/common/test_knowledge_intent_classifier.py backend/tests/unit/test_voice_runtime_policy_service.py backend/tests/unit/test_stepfun_realtime_handler.py -k "enforce_question_limit or entity_keyword_rules_only_when_entity_and_keyword_both_match or playback_rate or local_blocked_message or forward_audio_delta_chunk" -q
+    - npm --prefix web test -- --run src/hooks/use-streaming-audio-player.test.ts src/hooks/websocket/message-handlers.test.ts
+    - curl -fsS http://127.0.0.1:3444/health
+  verification results: passed; the focused backend regression bundle finished 5 selected tests green, the focused web bundle finished 38/38 green, and the local backend health endpoint returned healthy after reload.
+  success signal status: Realtime now stops appending backend filler copy, unmatched knowledge queries no longer auto-fall into the first retrieval profile, and server-managed persona TTS rate is exposed as normalized playback_rate metadata that the realtime frontend honors per stream.
+  rollback note: if later work reintroduces backend prompt phrasing, first-profile retrieval fallback, or local-only realtime speed control, update the focused backend/web regression tests in the same change so the old behavior cannot silently return.
+
+- time: 2026-04-14T18:27:40+08:00
+  mode: grow
+  item id: ADHOC-2026-04-14-realtime-clarity
+  files changed:
+    - backend/src/common/knowledge_engine/intent_classifier.py
+    - backend/src/sales_bot/services/voice_instruction_compiler.py
+    - backend/src/sales_bot/services/voice_runtime_policy.py
+    - backend/src/sales_bot/websocket/stepfun_realtime_handler.py
+    - backend/tests/unit/common/test_knowledge_intent_classifier.py
+    - backend/tests/unit/test_stepfun_realtime_handler.py
+    - backend/tests/unit/test_voice_instruction_compiler.py
+    - backend/tests/unit/test_voice_runtime_policy_service.py
+    - web/src/hooks/use-streaming-audio-player.ts
+    - web/src/hooks/use-streaming-audio-player.test.ts
+    - web/src/hooks/websocket/message-handlers.ts
+    - web/src/hooks/websocket/message-handlers.test.ts
+    - web/src/hooks/websocket/transport.ts
+    - web/src/hooks/websocket/transport.test.ts
+    - web/src/hooks/websocket/types.ts
+    - web/src/hooks/websocket/use-audio-playback.ts
+    - docs/plans/2026-04-14-realtime-clarity-and-retrieval-guard.md
+  summary: Extended the realtime clarity fix to the transport layer. The StepFun handler now treats missing final transcription under KB-lock as a suppressed timeout instead of emitting a learner-facing assistant message, preserves a late-transcript recovery path, tracks upstream activity on send/receive, and runs protocol-level websocket ping keepalives when the upstream sits idle. The frontend transport helper now hides raw provider idle-timeout reasons so reconnect UX falls back to generic copy instead of surfacing “too long without operation”.
+  verification commands:
+    - backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/test_voice_instruction_compiler.py backend/tests/unit/common/test_knowledge_intent_classifier.py backend/tests/unit/test_voice_runtime_policy_service.py backend/tests/unit/test_stepfun_realtime_handler.py -k "enforce_question_limit or entity_keyword_rules_only_when_entity_and_keyword_both_match or playback_rate or local_blocked_message or forward_audio_delta_chunk or upstream_keepalive_loop or pending_response_timeout_fallback or suppressed_timeout or transcription_completed" -q
+    - npm --prefix web test -- --run src/hooks/websocket/transport.test.ts src/hooks/use-streaming-audio-player.test.ts src/hooks/websocket/message-handlers.test.ts
+    - curl -fsS http://127.0.0.1:3444/health
+  verification results: passed; focused backend bundle finished 17 selected tests green, focused web bundle finished 42/42 green, and local backend health still returns healthy.
+  success signal status: Realtime no longer emits the learner-facing KB-lock/transcription-timeout assistant copy, late final transcripts can still recover a real response, upstream idle timeouts are masked from learner reconnect copy, and the StepFun upstream now sends protocol-level keepalive pings when idle.
+  rollback note: if a future realtime refactor reintroduces assistant-side timeout copy or raw provider idle reasons, restore the focused transport/StepFun handler regressions in the same change before shipping.

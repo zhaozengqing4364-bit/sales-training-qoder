@@ -12,6 +12,7 @@ Test Coverage:
 - _format_conversation() helper method
 - Error handling and edge cases
 """
+
 from __future__ import annotations
 
 from datetime import datetime, timezone
@@ -67,7 +68,10 @@ class TestStagedEvaluationService:
         service = AsyncMock()
         service.get_template_for_scenario = AsyncMock()
         service.compile_runtime_prompt_contract = MagicMock(
-            side_effect=lambda template, variables, runtime_consumer, system_message: Result.ok(
+            side_effect=lambda template,
+            variables,
+            runtime_consumer,
+            system_message: Result.ok(
                 SimpleNamespace(
                     rendered_prompt=str(getattr(template, "template", "")),
                     system_message=system_message,
@@ -110,18 +114,30 @@ class TestStagedEvaluationService:
         return [
             {"role": "assistant", "content": "Hello! How can I help you today?"},
             {"role": "user", "content": "I'm interested in your products."},
-            {"role": "assistant", "content": "Great! What products are you looking for?"},
+            {
+                "role": "assistant",
+                "content": "Great! What products are you looking for?",
+            },
             {"role": "user", "content": "Sales training software."},
         ]
 
     @pytest.mark.asyncio
-    async def test_evaluate_stage_success(self, service, mock_prompt_service, mock_llm_service, sample_stage_config, sample_conversation_history):
+    async def test_evaluate_stage_success(
+        self,
+        service,
+        mock_prompt_service,
+        mock_llm_service,
+        sample_stage_config,
+        sample_conversation_history,
+    ):
         """Test successful stage evaluation."""
         # Arrange
         session_id = str(uuid4())
         mock_prompt_template = MagicMock()
         mock_prompt_template.id = uuid4()
-        mock_prompt_service.get_template_for_scenario.return_value = mock_prompt_template
+        mock_prompt_service.get_template_for_scenario.return_value = (
+            mock_prompt_template
+        )
 
         mock_llm_response = """{
             "scores": {"communication": 85.0, "product_knowledge": 90.0},
@@ -154,7 +170,13 @@ class TestStagedEvaluationService:
         service.db.commit.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_evaluate_stage_prompt_not_found(self, service, mock_prompt_service, sample_stage_config, sample_conversation_history):
+    async def test_evaluate_stage_prompt_not_found(
+        self,
+        service,
+        mock_prompt_service,
+        sample_stage_config,
+        sample_conversation_history,
+    ):
         """Test evaluation when prompt template is not found."""
         # Arrange
         session_id = str(uuid4())
@@ -184,8 +206,12 @@ class TestStagedEvaluationService:
         session_id = str(uuid4())
         mock_prompt_template = MagicMock()
         mock_prompt_template.id = uuid4()
-        mock_prompt_template.template = "阶段：{{ stage_name }}\n对话：{{ conversation }}"
-        mock_prompt_service.get_template_for_scenario.return_value = mock_prompt_template
+        mock_prompt_template.template = (
+            "阶段：{{ stage_name }}\n对话：{{ conversation }}"
+        )
+        mock_prompt_service.get_template_for_scenario.return_value = (
+            mock_prompt_template
+        )
 
         compiled_contract = SimpleNamespace(
             rendered_prompt="阶段：Opening\n对话：user: hi",
@@ -210,13 +236,22 @@ class TestStagedEvaluationService:
         mock_llm_service.evaluate.assert_awaited_once_with(compiled_contract)
 
     @pytest.mark.asyncio
-    async def test_evaluate_stage_llm_failure(self, service, mock_prompt_service, mock_llm_service, sample_stage_config, sample_conversation_history):
+    async def test_evaluate_stage_llm_failure(
+        self,
+        service,
+        mock_prompt_service,
+        mock_llm_service,
+        sample_stage_config,
+        sample_conversation_history,
+    ):
         """Test evaluation when LLM call fails."""
         # Arrange
         session_id = str(uuid4())
         mock_prompt_template = MagicMock()
         mock_prompt_template.id = uuid4()
-        mock_prompt_service.get_template_for_scenario.return_value = mock_prompt_template
+        mock_prompt_service.get_template_for_scenario.return_value = (
+            mock_prompt_template
+        )
         mock_llm_service.evaluate.return_value = Result.fail("[LLM_TIMEOUT]")
 
         # Act
@@ -231,13 +266,22 @@ class TestStagedEvaluationService:
         assert "LLM_EVALUATION_FAILED" in result.fallback
 
     @pytest.mark.asyncio
-    async def test_evaluate_stage_validation_failure(self, service, mock_prompt_service, mock_llm_service, sample_stage_config, sample_conversation_history):
+    async def test_evaluate_stage_validation_failure(
+        self,
+        service,
+        mock_prompt_service,
+        mock_llm_service,
+        sample_stage_config,
+        sample_conversation_history,
+    ):
         """Test evaluation when LLM response validation fails."""
         # Arrange
         session_id = str(uuid4())
         mock_prompt_template = MagicMock()
         mock_prompt_template.id = uuid4()
-        mock_prompt_service.get_template_for_scenario.return_value = mock_prompt_template
+        mock_prompt_service.get_template_for_scenario.return_value = (
+            mock_prompt_template
+        )
 
         # Invalid response (missing required fields in wrong format)
         invalid_response = "This is not valid JSON"
@@ -252,14 +296,24 @@ class TestStagedEvaluationService:
 
         # Assert
         assert not result.is_success
-        assert "LLM_VALIDATION_FAILED" in result.fallback or "LLM_PARSE" in result.fallback
+        assert (
+            "LLM_VALIDATION_FAILED" in result.fallback or "LLM_PARSE" in result.fallback
+        )
 
     @pytest.mark.asyncio
-    async def test_evaluate_stage_exception_handling(self, service, mock_prompt_service, sample_stage_config, sample_conversation_history):
+    async def test_evaluate_stage_exception_handling(
+        self,
+        service,
+        mock_prompt_service,
+        sample_stage_config,
+        sample_conversation_history,
+    ):
         """Test evaluation when an unexpected exception occurs."""
         # Arrange
         session_id = str(uuid4())
-        mock_prompt_service.get_template_for_scenario.side_effect = Exception("Database connection failed")
+        mock_prompt_service.get_template_for_scenario.side_effect = Exception(
+            "Database connection failed"
+        )
 
         # Act
         result = await service.evaluate_stage(
@@ -273,7 +327,9 @@ class TestStagedEvaluationService:
         assert "STAGE_EVALUATION_ERROR" in result.fallback
 
     @pytest.mark.asyncio
-    async def test_check_triggers_no_triggers_fired(self, service, sample_stage_config, sample_conversation_history):
+    async def test_check_triggers_no_triggers_fired(
+        self, service, sample_stage_config, sample_conversation_history
+    ):
         """Test check_triggers when no triggers are activated."""
         # Arrange
         session_id = str(uuid4())
@@ -296,7 +352,9 @@ class TestStagedEvaluationService:
         assert len(triggered) == 0
 
     @pytest.mark.asyncio
-    async def test_check_triggers_one_trigger_fired(self, service, sample_stage_config, sample_conversation_history):
+    async def test_check_triggers_one_trigger_fired(
+        self, service, sample_stage_config, sample_conversation_history
+    ):
         """Test check_triggers when one trigger is activated."""
         # Arrange
         session_id = str(uuid4())
@@ -313,7 +371,9 @@ class TestStagedEvaluationService:
         assert triggered[0].stage_number == 1
 
     @pytest.mark.asyncio
-    async def test_check_triggers_multiple_stages(self, service, sample_conversation_history):
+    async def test_check_triggers_multiple_stages(
+        self, service, sample_conversation_history
+    ):
         """Test check_triggers with multiple stage configurations."""
         # Arrange
         session_id = str(uuid4())
@@ -354,7 +414,9 @@ class TestStagedEvaluationService:
         assert triggered[1].stage_number == 3
 
     @pytest.mark.asyncio
-    async def test_check_triggers_extracts_last_messages(self, service, sample_conversation_history):
+    async def test_check_triggers_extracts_last_messages(
+        self, service, sample_conversation_history
+    ):
         """Test that check_triggers correctly extracts last user and bot messages."""
         # Arrange
         session_id = str(uuid4())
@@ -378,7 +440,9 @@ class TestStagedEvaluationService:
         assert trigger.check_called
 
     @pytest.mark.asyncio
-    async def test_check_triggers_empty_conversation(self, service, sample_stage_config):
+    async def test_check_triggers_empty_conversation(
+        self, service, sample_stage_config
+    ):
         """Test check_triggers with empty conversation history."""
         # Arrange
         session_id = str(uuid4())
@@ -414,13 +478,14 @@ class TestStagedEvaluationService:
         """Test get_stage_results returns existing results."""
         # Arrange
         session_id = str(uuid4())
+        created_at = datetime.now(timezone.utc)
 
         # Mock database results
         mock_db_result = MagicMock()
         mock_db_result.stage_number = 1
         mock_db_result.start_turn = 0
         mock_db_result.end_turn = 4
-        mock_db_result.timestamp = datetime.now(timezone.utc)
+        mock_db_result.created_at = created_at
         mock_db_result.scores = {"communication": 85.0}
         mock_db_result.strengths = ["Good"]
         mock_db_result.weaknesses = ["Needs improvement"]
@@ -437,6 +502,7 @@ class TestStagedEvaluationService:
         # Assert
         assert len(results) == 1
         assert results[0].stage_number == 1
+        assert results[0].timestamp == created_at
         assert results[0].scores["communication"] == 85.0
 
     @pytest.mark.asyncio
@@ -519,7 +585,9 @@ class TestStagedEvaluationService:
         assert "user: " in formatted
 
     @pytest.mark.asyncio
-    async def test_evaluate_stage_calculates_turns_correctly(self, service, mock_prompt_service, mock_llm_service, sample_stage_config):
+    async def test_evaluate_stage_calculates_turns_correctly(
+        self, service, mock_prompt_service, mock_llm_service, sample_stage_config
+    ):
         """Test that evaluate_stage calculates start and end turns correctly."""
         # Arrange
         session_id = str(uuid4())
@@ -534,7 +602,9 @@ class TestStagedEvaluationService:
 
         mock_prompt_template = MagicMock()
         mock_prompt_template.id = uuid4()
-        mock_prompt_service.get_template_for_scenario.return_value = mock_prompt_template
+        mock_prompt_service.get_template_for_scenario.return_value = (
+            mock_prompt_template
+        )
 
         mock_llm_response = """{
             "scores": {"communication": 80.0},
@@ -560,7 +630,13 @@ class TestStagedEvaluationService:
         assert result.value.end_turn == 6
 
     @pytest.mark.asyncio
-    async def test_evaluate_stage_stage_number_zero(self, service, mock_prompt_service, mock_llm_service, sample_conversation_history):
+    async def test_evaluate_stage_stage_number_zero(
+        self,
+        service,
+        mock_prompt_service,
+        mock_llm_service,
+        sample_conversation_history,
+    ):
         """Test evaluate_stage with stage_number=0."""
         # Arrange
         session_id = str(uuid4())
@@ -574,7 +650,9 @@ class TestStagedEvaluationService:
 
         mock_prompt_template = MagicMock()
         mock_prompt_template.id = uuid4()
-        mock_prompt_service.get_template_for_scenario.return_value = mock_prompt_template
+        mock_prompt_service.get_template_for_scenario.return_value = (
+            mock_prompt_template
+        )
 
         mock_llm_response = """{
             "scores": {"communication": 80.0},
@@ -597,17 +675,28 @@ class TestStagedEvaluationService:
         assert result.value.start_turn == 0  # 0 * 2 = 0
 
     @pytest.mark.asyncio
-    async def test_store_evaluation_called(self, service, mock_db_session, mock_prompt_service, mock_llm_service, sample_stage_config, sample_conversation_history):
+    async def test_store_evaluation_called(
+        self,
+        service,
+        mock_db_session,
+        mock_prompt_service,
+        mock_llm_service,
+        sample_stage_config,
+        sample_conversation_history,
+    ):
         """Test that _store_evaluation is called and database operations are performed."""
         # Arrange
         session_id = str(uuid4())
         mock_prompt_template = MagicMock()
         mock_prompt_template.id = uuid4()
-        mock_prompt_service.get_template_for_scenario.return_value = mock_prompt_template
+        mock_prompt_service.get_template_for_scenario.return_value = (
+            mock_prompt_template
+        )
 
         mock_llm_response = """{
             "scores": {"communication": 85.0},
             "strengths": ["Good"],
+            "weaknesses": ["Needs more specificity"],
             "suggestions": [],
             "summary": "Test",
             "confidence": 0.85
@@ -625,6 +714,10 @@ class TestStagedEvaluationService:
         assert result.is_success
         service.db.add.assert_called_once()
         service.db.commit.assert_called_once()
+        stored_row = service.db.add.call_args.args[0]
+        assert stored_row.session_id == session_id
+        assert stored_row.weaknesses == ["Needs more specificity"]
+        assert stored_row.created_at == result.value.timestamp
 
     @pytest.mark.asyncio
     async def test_multiple_stage_configs_same_scenario(self, service):

@@ -59,13 +59,13 @@ describe("admin linked-asset helpers", () => {
         expect(
             formatLinkedAssetLabel({
                 asset_type: "presentation",
-                asset_name: "标准 PPT",
+                asset_label: "PPT",
             }),
         ).toBe("PPT");
         expect(
             formatLinkedAssetLabel({
                 asset_label: "知识库别名",
-                asset_name: "石犀产品知识库",
+                asset_type: "knowledge_base",
             }),
         ).toBe("知识库别名");
         expect(formatLinkedAssetImpactLevelLabel("medium")).toBe("中影响");

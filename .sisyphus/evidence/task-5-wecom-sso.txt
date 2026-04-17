@@ -1,0 +1,51 @@
+T5 WeCom SSO evidence
+Date: 2026-04-15
+Scope: closure evidence only; no auth code changes were needed in this run.
+
+Observed auth surfaces
+- `backend/src/common/auth/api.py` exposes `/api/v1/auth/providers`, `/api/v1/auth/wecom/start`, and `/api/v1/auth/wecom/callback`.
+- `handle_wecom_callback(...)` exchanges the callback code, upserts the WeCom user, sets the auth session cookie, clears temporary OAuth flow cookies, and redirects back to the frontend `return_to` path.
+- `web/src/app/(auth)/login/page.tsx` fetches `/auth/providers` and uses the returned provider state instead of hard-coded “coming soon” copy.
+
+Command 1
+$ backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/integration/test_auth_login_api.py -k "wecom_callback_exchanges_code_sets_cookie_and_redirects_to_frontend" -q
+
+Observed outcome
+- `1 passed, 21 deselected, 2 warnings in 2.91s`
+- The exercised scenario covers `/api/v1/auth/wecom/start` -> `/api/v1/auth/wecom/callback` -> session cookie establishment -> `/api/v1/users/me` success.
+- Warning text was non-blocking coverage noise under this repo-root invocation:
+  - `Module src was never imported.`
+  - `No data was collected.`
+
+Command 2
+$ backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/integration/test_auth_login_api.py -q
+
+Observed outcome
+- `22 passed, 2 warnings in 4.22s`
+- Confirms the broader auth integration slice stays green with the WeCom callback/session path enabled.
+
+Command 3
+$ cd web && npx vitest run "src/app/(auth)/login/page.test.tsx" "src/lib/api/client.auth.test.ts" "src/lib/server-auth.test.ts"
+
+Observed outcome
+- `Test Files  3 passed (3)`
+- `Tests  18 passed (18)`
+- `Duration  1.67s`
+- Confirms the frontend login/auth flow stays green alongside provider discovery, cookie-backed auth requests, and server-session guards.
+
+Conclusion
+- Real/testable WeCom SSO callback and session establishment are verified in the live test suite.
+- No tiny auth-only fix was required during this evidence pass.
+
+Post-close addendum — auth-local LSP cleanup
+- Date: 2026-04-15
+- Tiny fix required after initial evidence closure: auth helper typing/control-flow annotations only.
+- Files touched:
+  - `backend/src/common/auth/api.py`
+  - `backend/src/common/auth/service.py`
+- LSP outcome after the fix:
+  - `backend/src/common/auth/api.py`: the real `reportArgumentType` defects at the old helper signatures are gone; only known `reportMissingImports` environment noise remains.
+  - `backend/src/common/auth/service.py`: the real `reportArgumentType` / `reportPossiblyUnboundVariable` defects in `get_current_user` are gone; only known `reportMissingImports` environment noise remains.
+- Reverification command:
+  - `$ backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/integration/test_auth_login_api.py -q`
+  - Observed outcome: `22 passed, 2 warnings in 3.46s`

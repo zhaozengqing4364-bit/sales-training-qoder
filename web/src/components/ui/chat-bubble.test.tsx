@@ -16,11 +16,9 @@ describe("ChatBubble", () => {
           source_status: "hit",
           citations: [
             {
-              claim: "实习专家是一款企业内部智能演练平台。",
               knowledge_base_name: "产品知识库",
               document_title: "实习专家产品手册",
               snippet: "实习专家是一款面向企业内部训练的智能演练平台。",
-              score: 0.92,
             },
           ],
         }}

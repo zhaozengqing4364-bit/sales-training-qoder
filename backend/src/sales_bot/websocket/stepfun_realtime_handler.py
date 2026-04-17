@@ -12,6 +12,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import copy
+import inspect
 import json
 import os
 import re
@@ -19,7 +20,7 @@ import time
 import uuid
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
-from typing import Any
+from typing import Any, cast
 from urllib.parse import urlencode
 
 import websockets
@@ -36,6 +37,12 @@ from common.ai.embedding_service import get_embedding_service
 from common.auth.service import JWTError, resolve_websocket_token, verify_token
 from common.conversation.storage import normalize_objection_ledger
 from common.db.models import PracticeSession
+from common.db.session import AsyncSessionLocal
+from common.db.session_lifecycle import (
+    InvalidSessionTransitionError,
+    SessionLifecycleAction,
+    SessionLifecycleService,
+)
 from common.effectiveness import (
     build_live_session_conclusion_summary,
     build_sales_effectiveness_metrics,
@@ -44,11 +51,7 @@ from common.effectiveness import (
     evaluate_effectiveness_snapshot,
     evaluate_pass_flags,
 )
-from common.db.session import AsyncSessionLocal
-from common.db.session_lifecycle import (
-    InvalidSessionTransitionError,
-    SessionLifecycleService,
-)
+from common.effectiveness.schemas import ActionCard, PassFlags
 from common.knowledge.kb_lock_guard import (
     build_kb_coach_grounding_context,
     evaluate_kb_lock_decision,
@@ -69,16 +72,20 @@ from common.websocket.base_handler import (
 )
 from common.websocket.session_manager import get_session_manager
 from common.websocket.session_state_service import SessionStateSnapshot
+from sales_bot.services.transcript_normalization import (
+    TranscriptNormalizationResult,
+    TranscriptNormalizationService,
+)
 from sales_bot.services.voice_instruction_compiler import (
     VoiceInstructionCompiler,
     build_instruction_contract_hash,
     enforce_question_limit,
 )
-from sales_bot.services.transcript_normalization import (
-    TranscriptNormalizationResult,
-    TranscriptNormalizationService,
-)
 from sales_bot.services.voice_runtime_policy import VoiceRuntimePolicyService
+from sales_bot.websocket.components.objection_ledger_helpers import (
+    merge_arbiter_context_with_objection_ledger,
+    resolve_turn_objection_ledger,
+)
 from sales_bot.websocket.components.stepfun_event_payloads import (
     build_asr_transcript_event,
     build_error_event,
@@ -98,10 +105,6 @@ from sales_bot.websocket.components.stepfun_helpers import (
     extract_response_text,
     extract_text_payload,
     format_stage_name,
-)
-from sales_bot.websocket.components.objection_ledger_helpers import (
-    merge_arbiter_context_with_objection_ledger,
-    resolve_turn_objection_ledger,
 )
 from sales_bot.websocket.components.stepfun_internal_knowledge_searcher import (
     search_internal_knowledge,
@@ -124,16 +127,16 @@ from sales_bot.websocket.components.stepfun_runtime_metrics_helpers import (
 from sales_bot.websocket.components.stepfun_tool_helpers import (
     build_stepfun_tools_from_policy,
 )
-from sales_bot.websocket.realtime_feedback_arbiter import (
-    RealtimeFeedbackArbiter,
-    RealtimeFeedbackPacingState,
-)
 from sales_bot.websocket.components.stepfun_upstream_router import (
     UpstreamEventRoute,
     classify_upstream_event,
     extract_error_message,
     extract_function_call_from_item_created,
     extract_response_done_function_calls,
+)
+from sales_bot.websocket.realtime_feedback_arbiter import (
+    RealtimeFeedbackArbiter,
+    RealtimeFeedbackPacingState,
 )
 
 logger = get_logger(__name__)
@@ -152,6 +155,9 @@ DEFAULT_UPSTREAM_AUTO_RECOVER_ENABLED = True
 DEFAULT_UPSTREAM_AUTO_RECOVER_MAX_RETRIES = 4
 DEFAULT_UPSTREAM_AUTO_RECOVER_BASE_DELAY_MS = 400
 DEFAULT_UPSTREAM_AUTO_RECOVER_MAX_DELAY_MS = 5000
+DEFAULT_UPSTREAM_KEEPALIVE_ENABLED = True
+DEFAULT_UPSTREAM_KEEPALIVE_INTERVAL_MS = 20000
+DEFAULT_UPSTREAM_KEEPALIVE_PONG_TIMEOUT_MS = 5000
 TERMINAL_SESSION_STATUSES = {"scoring", "completed"}
 
 # T01 inventory for M021/S04: these are the shipped StepFun/runtime behaviors that
@@ -189,9 +195,9 @@ STEPFUN_RUNTIME_EVENT_INVENTORY: tuple[dict[str, Any], ...] = (
     {
         "event_id": "transcription_timeout_blocked",
         "phase": "transcription_wait",
-        "trigger": "_pending_response_timeout_fallback() records blocked_transcription_timeout when KB grounding is required but final ASR never completes in time.",
-        "current_surface": "blocked coach copy to the learner plus _record_kb_lock_decision(status='blocked_transcription_timeout', blocked=True).",
-        "hidden_risk": "a real runtime timeout currently appears as blocked coaching guidance; operators still need to inspect the KB-lock decision path to distinguish timeout from ordinary answerability blocking.",
+        "trigger": "_pending_response_timeout_fallback() suppresses learner-facing blocked copy when KB grounding is required but final ASR never completes in time, records transcription_timeout_suppressed, and leaves late transcripts recoverable.",
+        "current_surface": "runtime diagnostics via _record_kb_lock_decision(status='transcription_timeout_suppressed', blocked=False) plus grounding debug logs; no assistant-side blocked coach copy is emitted anymore.",
+        "hidden_risk": "the timeout is now intentionally silent for learners, so operators still need diagnostics to distinguish a suppressed ASR timeout from an ordinary no-response turn.",
     },
 )
 
@@ -263,12 +269,10 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
         self._stepfun_output_sample_rate = int(
             os.getenv("STEPFUN_REALTIME_OUTPUT_SAMPLE_RATE", "24000")
         )
-        self._stepfun_input_transcription_enabled = (
-            str(
-                os.getenv("STEPFUN_REALTIME_ENABLE_INPUT_TRANSCRIPTION", "true")
-            ).strip().lower()
-            in {"1", "true", "yes", "on"}
-        )
+        self._stepfun_playback_rate = 1.0
+        self._stepfun_input_transcription_enabled = str(
+            os.getenv("STEPFUN_REALTIME_ENABLE_INPUT_TRANSCRIPTION", "true")
+        ).strip().lower() in {"1", "true", "yes", "on"}
         self._stepfun_input_transcription_language = str(
             os.getenv("STEPFUN_REALTIME_INPUT_TRANSCRIPTION_LANGUAGE", "zh")
         ).strip()
@@ -315,7 +319,7 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
         self._latest_score_snapshot: dict[str, Any] | None = None
         self._latest_live_session_summary: dict[str, Any] | None = None
         self._latest_claim_truth: dict[str, Any] | None = None
-        self._latest_action_card: dict[str, Any] | None = None
+        self._latest_action_card: ActionCard | None = None
         self._latest_knowledge_answer_diagnostics: dict[str, Any] | None = None
         self._objection_ledger: dict[str, Any] | None = None
         self._feedback_arbiter = RealtimeFeedbackArbiter()
@@ -326,6 +330,7 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
         self._pending_blocked_response_text: str = ""
         self._pending_response_after_commit = False
         self._awaiting_transcription_after_commit = False
+        self._allow_late_transcription_response = False
         self._pending_response_timeout_task: asyncio.Task | None = None
         self._pending_response_generation = 0
         self._pending_response_lock = asyncio.Lock()
@@ -379,7 +384,28 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
                 max_ms=30000,
             )
         )
+        self._upstream_keepalive_enabled = (
+            self._resolve_upstream_keepalive_enabled_from_env()
+        )
+        self._upstream_keepalive_interval_seconds = (
+            self._resolve_upstream_auto_recover_delay_seconds_from_env(
+                "STEPFUN_UPSTREAM_KEEPALIVE_INTERVAL_MS",
+                default_ms=DEFAULT_UPSTREAM_KEEPALIVE_INTERVAL_MS,
+                min_ms=5000,
+                max_ms=45000,
+            )
+        )
+        self._upstream_keepalive_pong_timeout_seconds = (
+            self._resolve_upstream_auto_recover_delay_seconds_from_env(
+                "STEPFUN_UPSTREAM_KEEPALIVE_PONG_TIMEOUT_MS",
+                default_ms=DEFAULT_UPSTREAM_KEEPALIVE_PONG_TIMEOUT_MS,
+                min_ms=500,
+                max_ms=15000,
+            )
+        )
+        self._upstream_keepalive_task: asyncio.Task | None = None
         self._upstream_connected_at: float = 0.0
+        self._upstream_last_activity_at: float = 0.0
         self._last_upstream_event_type: str = ""
         self._timeout_disconnect_requested = False
         self._connection_epoch = 0
@@ -409,7 +435,9 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
 
     def _build_reconnect_state_payload(self) -> dict[str, Any]:
         return {
-            "connection_epoch": self._normalize_connection_epoch(self._connection_epoch),
+            "connection_epoch": self._normalize_connection_epoch(
+                self._connection_epoch
+            ),
             "request_epoch": int(self.current_request_id or 0),
             "last_disconnect_reason": self._last_disconnect_reason,
             "last_error": self._copy_runtime_error(self._last_runtime_error),
@@ -427,6 +455,26 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
                 "message": message,
             }
         )
+
+    def _reset_turn_runtime_state(self) -> None:
+        """Clear turn-scoped state that must not leak across reconnects or interrupts."""
+        self._pending_grounding_context = ""
+        self._pending_blocked_response_text = ""
+        self._latest_input_transcript_delta = ""
+        self._pending_tool_followup_response = False
+        self._awaiting_transcription_after_commit = False
+        self._allow_late_transcription_response = False
+        self._has_uncommitted_audio = False
+        self._active_response = None
+        self._function_call_states.clear()
+        self._executed_call_ids.clear()
+
+    async def _clear_upstream_generation(self) -> None:
+        """Abort any active upstream response and clear buffered audio input."""
+        if self.upstream_ws is None:
+            return
+        await self._send_upstream({"type": "response.cancel"})
+        await self._send_upstream({"type": "input_audio_buffer.clear"})
 
     def _log_grounding_debug(self, event: str, **fields: Any) -> None:
         if not self._grounding_debug_log:
@@ -479,7 +527,11 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
             return "blocked", diagnostics
         if answerability == "partial":
             return "partial", diagnostics
-        if answerability in {"blocked", "insufficient"} or source_status in {"miss", "kb_not_ready", "search_failed"}:
+        if answerability in {"blocked", "insufficient"} or source_status in {
+            "miss",
+            "kb_not_ready",
+            "search_failed",
+        }:
             return "ungrounded", diagnostics
         return "grounded", diagnostics
 
@@ -496,7 +548,9 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
         citations = diagnostics.get("citations")
         query_line = ""
         if isinstance(rewritten_queries, list):
-            normalized_queries = [str(item).strip() for item in rewritten_queries if str(item).strip()]
+            normalized_queries = [
+                str(item).strip() for item in rewritten_queries if str(item).strip()
+            ]
             if normalized_queries:
                 query_line = "\n本轮检索改写：" + "；".join(normalized_queries[:4])
         citation_count = len(citations) if isinstance(citations, list) else 0
@@ -576,7 +630,8 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
         for sentence in self._split_response_sentences(response_text):
             compact_sentence = sentence.replace(" ", "")
             if any(
-                compact_sentence and (
+                compact_sentence
+                and (
                     compact_sentence in support_text.replace(" ", "")
                     or support_text.replace(" ", "") in compact_sentence
                 )
@@ -696,6 +751,14 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
         return str(raw_value).strip().lower() in {"1", "true", "yes", "on"}
 
     @staticmethod
+    def _resolve_upstream_keepalive_enabled_from_env() -> bool:
+        raw_value = os.getenv(
+            "STEPFUN_UPSTREAM_KEEPALIVE_ENABLED",
+            "true" if DEFAULT_UPSTREAM_KEEPALIVE_ENABLED else "false",
+        )
+        return str(raw_value).strip().lower() in {"1", "true", "yes", "on"}
+
+    @staticmethod
     def _resolve_upstream_auto_recover_max_retries_from_env() -> int:
         raw_value = os.getenv(
             "STEPFUN_UPSTREAM_AUTO_RECOVER_MAX_RETRIES",
@@ -728,6 +791,74 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
         if self.session_id:
             await get_session_manager().update_activity(self.session_id)
 
+    def _mark_upstream_activity(self) -> None:
+        self._upstream_last_activity_at = asyncio.get_running_loop().time()
+
+    async def _stop_upstream_keepalive_task(self) -> None:
+        keepalive_task = self._upstream_keepalive_task
+        self._upstream_keepalive_task = None
+        if keepalive_task and not keepalive_task.done():
+            keepalive_task.cancel()
+            try:
+                await keepalive_task
+            except asyncio.CancelledError:
+                pass
+
+    def _ensure_upstream_keepalive_task(self) -> None:
+        if (
+            not self._upstream_keepalive_enabled
+            or self.upstream_ws is None
+            or not self.running
+        ):
+            return
+        if self._upstream_keepalive_task and not self._upstream_keepalive_task.done():
+            return
+        self._upstream_keepalive_task = asyncio.create_task(
+            self._run_upstream_keepalive_loop(self.upstream_ws)
+        )
+
+    async def _send_upstream_keepalive_ping(self, upstream_ws: Any) -> None:
+        ping = getattr(upstream_ws, "ping", None)
+        if not callable(ping):
+            return
+        ping_result = ping()
+        pong_waiter = (
+            await ping_result if inspect.isawaitable(ping_result) else ping_result
+        )
+        self._mark_upstream_activity()
+        if pong_waiter is not None and inspect.isawaitable(pong_waiter):
+            await asyncio.wait_for(
+                pong_waiter,
+                timeout=self._upstream_keepalive_pong_timeout_seconds,
+            )
+
+    async def _run_upstream_keepalive_loop(self, upstream_ws: Any) -> None:
+        while self.running and self.upstream_ws is upstream_ws:
+            await asyncio.sleep(self._upstream_keepalive_interval_seconds)
+            if self.upstream_ws is not upstream_ws:
+                break
+            last_activity_at = max(
+                self._upstream_last_activity_at,
+                self._upstream_connected_at,
+            )
+            if last_activity_at > 0:
+                idle_seconds = asyncio.get_running_loop().time() - last_activity_at
+                if idle_seconds < self._upstream_keepalive_interval_seconds:
+                    continue
+            try:
+                await self._send_upstream_keepalive_ping(upstream_ws)
+            except asyncio.CancelledError:
+                raise
+            except ConnectionClosed:
+                break
+            except (RuntimeError, ValueError, OSError, TimeoutError) as exc:
+                logger.warning(
+                    "StepFun upstream keepalive degraded",
+                    session_id=self.session_id,
+                    error=str(exc),
+                )
+                break
+
     def _create_state_snapshot(self) -> SessionStateSnapshot:
         """Persist only reconnect-safe runtime fields for StepFun sales sessions."""
         runtime_state: dict[str, Any] = {}
@@ -735,7 +866,9 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
             runtime_state["current_request_id"] = self.current_request_id
         if self._last_emitted_stage:
             runtime_state["last_emitted_stage"] = self._last_emitted_stage
-        normalized_score_snapshot = normalize_score_snapshot(self._latest_score_snapshot)
+        normalized_score_snapshot = normalize_score_snapshot(
+            self._latest_score_snapshot
+        )
         if normalized_score_snapshot is not None:
             runtime_state["latest_score_snapshot"] = copy.deepcopy(
                 normalized_score_snapshot
@@ -748,7 +881,9 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
                 normalized_live_session_summary
             )
         if isinstance(self._latest_claim_truth, dict):
-            runtime_state["latest_claim_truth"] = copy.deepcopy(self._latest_claim_truth)
+            runtime_state["latest_claim_truth"] = copy.deepcopy(
+                self._latest_claim_truth
+            )
         normalized_objection_ledger = normalize_objection_ledger(self._objection_ledger)
         if normalized_objection_ledger is not None:
             runtime_state["objection_ledger"] = copy.deepcopy(
@@ -777,10 +912,13 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
         """Restore the minimal StepFun runtime subset required to continue training."""
         await super()._restore_session_state(state)
 
-        runtime_state = state.runtime_state if isinstance(state.runtime_state, dict) else {}
-        reconnect_state = (
-            copy.deepcopy(runtime_state.get("reconnect_state"))
-            if isinstance(runtime_state.get("reconnect_state"), dict)
+        runtime_state = (
+            state.runtime_state if isinstance(state.runtime_state, dict) else {}
+        )
+        reconnect_state_raw = runtime_state.get("reconnect_state")
+        reconnect_state: dict[str, Any] = (
+            copy.deepcopy(reconnect_state_raw)
+            if isinstance(reconnect_state_raw, dict)
             else {}
         )
         self._connection_epoch = self._normalize_connection_epoch(
@@ -836,17 +974,9 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
             self._coach_health = "healthy"
             self._coach_health_reason = None
 
-        self._active_response = None
-        self._function_call_states.clear()
-        self._executed_call_ids.clear()
-        self._pending_grounding_context = ""
-        self._pending_blocked_response_text = ""
-        self._pending_tool_followup_response = False
+        self._reset_turn_runtime_state()
         self._pending_response_after_commit = False
-        self._awaiting_transcription_after_commit = False
-        self._has_uncommitted_audio = False
         self._grounding_preparation_in_progress = False
-        self._latest_input_transcript_delta = ""
         self._last_final_transcript_text = ""
         self._last_final_transcript_turn = None
         self._last_final_transcript_at = 0.0
@@ -964,15 +1094,15 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
 
         existing_state_result = await self.state_service.get_state(session_id)
         existing_state = (
-            existing_state_result.value
-            if existing_state_result.is_success
-            else None
+            existing_state_result.value if existing_state_result.is_success else None
         )
 
         self.websocket = websocket
         self.session_id = session_id
         self._timeout_disconnect_requested = False
-        self._connection_epoch = max(1, self._normalize_connection_epoch(self._connection_epoch))
+        self._connection_epoch = max(
+            1, self._normalize_connection_epoch(self._connection_epoch)
+        )
 
         await self.manager.connect(websocket, self.scenario, session_id)
 
@@ -1002,11 +1132,7 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
             initial_ai_state = (
                 self.ai_state
                 if self.ai_state in {"idle", "listening"}
-                else (
-                    "listening"
-                    if self.session_status == "in_progress"
-                    else "idle"
-                )
+                else ("listening" if self.session_status == "in_progress" else "idle")
             )
             await self._send_status(initial_ai_state)
 
@@ -1137,6 +1263,12 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
                     "output_sample_rate", self._stepfun_output_sample_rate
                 )
             )
+            self._stepfun_playback_rate = float(
+                self._effective_policy.get(
+                    "playback_rate",
+                    self._stepfun_playback_rate,
+                )
+            )
             self._stepfun_instructions = str(
                 self._effective_policy.get("instructions", self._stepfun_instructions)
             )
@@ -1196,6 +1328,7 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
             "instruction_contract_hash": str(
                 policy.get("instruction_contract_hash") or ""
             ),
+            "playback_rate": float(policy.get("playback_rate") or 1.0),
             "knowledge_base_ids": cls._normalize_kb_ids(
                 policy.get("knowledge_base_ids")
             ),
@@ -1290,9 +1423,9 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
 
         has_raw_kb_lock_flag = "require_kb_grounding" in tool_policy
         require_kb_grounding = bool(tool_policy.get("require_kb_grounding", False))
-        retrieval_priority = str(
-            tool_policy.get("retrieval_priority") or ""
-        ).strip().lower()
+        retrieval_priority = (
+            str(tool_policy.get("retrieval_priority") or "").strip().lower()
+        )
         has_explicit_persona_kb_lock_flag = self._has_explicit_persona_kb_lock_flag(
             policy
         )
@@ -1363,7 +1496,11 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
 
         # `kb_only` must be equivalent to strict KB lock, otherwise model can still
         # generate from parametric memory when retrieval misses or is weak.
-        if has_bound_knowledge_base and retrieval_priority == "kb_only" and not require_kb_grounding:
+        if (
+            has_bound_knowledge_base
+            and retrieval_priority == "kb_only"
+            and not require_kb_grounding
+        ):
             require_kb_grounding = True
             tool_policy["require_kb_grounding"] = True
             changed = True
@@ -1634,7 +1771,9 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
 
     def _apply_latest_scores_to_session(self, session: PracticeSession) -> None:
         """Sync latest realtime score snapshot into session-level score fields."""
-        normalized_score_snapshot = normalize_score_snapshot(self._latest_score_snapshot)
+        normalized_score_snapshot = normalize_score_snapshot(
+            self._latest_score_snapshot
+        )
         evaluable = self.turn_count > 0
         not_evaluable_reason = None if evaluable else "INSUFFICIENT_TURN_DATA"
 
@@ -1709,7 +1848,7 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
                 turn_count=max(0, self.turn_count),
             )
 
-    async def _apply_lifecycle_action(self, action: str):
+    async def _apply_lifecycle_action(self, action: SessionLifecycleAction):
         if not self.session_id:
             return None
 
@@ -1730,7 +1869,7 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
                     transition = await lifecycle_service.transition(
                         session=session,
                         scenario_type=self.session_scenario_type,
-                        action=action,
+                        action=cast(SessionLifecycleAction, action),
                     )
                 except InvalidSessionTransitionError as exc:
                     await db.rollback()
@@ -1781,7 +1920,9 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
         self.upstream_ws = await websockets.connect(
             endpoint, additional_headers=headers
         )
-        self._upstream_connected_at = asyncio.get_running_loop().time()
+        now = asyncio.get_running_loop().time()
+        self._upstream_connected_at = now
+        self._upstream_last_activity_at = now
         self._last_upstream_event_type = ""
 
         turn_detection_value = None
@@ -1836,11 +1977,13 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
             session_payload["session"]["tools"] = tools
 
         await self._send_upstream(session_payload)
+        self._ensure_upstream_keepalive_task()
         logger.info("StepFun session.update sent")
         await self._maybe_start_kb_lock_warmup()
 
     async def _close_upstream(self):
         """Close upstream connection safely."""
+        await self._stop_upstream_keepalive_task()
         if self.upstream_ws:
             try:
                 await self.upstream_ws.close()
@@ -1848,6 +1991,7 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
                 pass
             self.upstream_ws = None
         self._upstream_connected_at = 0.0
+        self._upstream_last_activity_at = 0.0
 
     async def _maybe_start_kb_lock_warmup(self) -> None:
         if not self._kb_lock_warmup_enabled:
@@ -2064,7 +2208,9 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
                     "trace_id": get_trace_id(),
                     "data": {
                         "accepted": True,
-                        "prefer_binary": bool(runtime_options.get("prefer_binary", False)),
+                        "prefer_binary": bool(
+                            runtime_options.get("prefer_binary", False)
+                        ),
                     },
                 },
             )
@@ -2182,7 +2328,7 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
             },
         )
 
-    async def _send_action_card(self, card: dict[str, str]) -> None:
+    async def _send_action_card(self, card: ActionCard) -> None:
         """Send one actionable card for the next turn."""
         await self.manager.send_json(
             self.websocket,
@@ -2237,7 +2383,9 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
                 if isinstance(knowledge_answer_diagnostics, dict)
                 else []
             ),
-            [build_claim_truth_runtime_event(claim_truth)] if isinstance(claim_truth, dict) else [],
+            [build_claim_truth_runtime_event(claim_truth)]
+            if isinstance(claim_truth, dict)
+            else [],
         )
         return {
             "session_status": self.session_status,
@@ -2265,8 +2413,13 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
         )
 
     async def _set_coach_health(self, status: str, reason: str | None = None) -> None:
-        normalized_reason = reason.strip() if isinstance(reason, str) and reason.strip() else None
-        if self._coach_health == status and self._coach_health_reason == normalized_reason:
+        normalized_reason = (
+            reason.strip() if isinstance(reason, str) and reason.strip() else None
+        )
+        if (
+            self._coach_health == status
+            and self._coach_health_reason == normalized_reason
+        ):
             return
         self._coach_health = status
         self._coach_health_reason = normalized_reason
@@ -2287,7 +2440,7 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
         analysis_data: dict[str, Any] = {}
         detections_for_card: list[dict[str, Any]] = []
         suggestions_for_card: list[str] = []
-        pass_flags_for_card: dict[str, bool] | None = None
+        pass_flags_for_card: PassFlags | None = None
         stage_context_for_arbiter: dict[str, Any] | None = None
         score_context_for_arbiter: dict[str, Any] | None = None
 
@@ -2370,7 +2523,9 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
                     )
                     if not isinstance(dimension_scores, dict):
                         dimensions = (
-                            score_payload.get("dimensions") if isinstance(score_payload, dict) else None
+                            score_payload.get("dimensions")
+                            if isinstance(score_payload, dict)
+                            else None
                         )
                         dimension_scores = {}
                         if isinstance(dimensions, list):
@@ -2379,15 +2534,23 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
                                     continue
                                 name = item.get("name")
                                 score = item.get("score")
-                                if isinstance(name, str) and isinstance(score, (int, float)):
-                                    dimension_scores[name] = max(0.0, min(100.0, float(score)))
+                                if isinstance(name, str) and isinstance(
+                                    score, (int, float)
+                                ):
+                                    dimension_scores[name] = max(
+                                        0.0, min(100.0, float(score))
+                                    )
 
                     overall_raw = (
-                        score_payload.get("overall_score") if isinstance(score_payload, dict) else None
+                        score_payload.get("overall_score")
+                        if isinstance(score_payload, dict)
+                        else None
                     )
                     if not isinstance(overall_raw, (int, float)):
                         overall_raw = (
-                            score_payload.get("overall") if isinstance(score_payload, dict) else None
+                            score_payload.get("overall")
+                            if isinstance(score_payload, dict)
+                            else None
                         )
                     if not isinstance(overall_raw, (int, float)):
                         overall_raw = (
@@ -2398,7 +2561,9 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
                     overall_score = max(0.0, min(100.0, float(overall_raw)))
 
                     feedback_message = (
-                        score_payload.get("feedback") if isinstance(score_payload, dict) else None
+                        score_payload.get("feedback")
+                        if isinstance(score_payload, dict)
+                        else None
                     )
                     suggestions: list[str] = []
                     if isinstance(feedback_message, str) and feedback_message.strip():
@@ -2416,9 +2581,13 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
                         analysis_data["score_snapshot"] = score_snapshot
                         score_context_for_arbiter = copy.deepcopy(score_payload)
                         score_context_for_arbiter["overall_score"] = overall_score
-                        score_context_for_arbiter["dimension_scores"] = dict(dimension_scores)
+                        score_context_for_arbiter["dimension_scores"] = dict(
+                            dimension_scores
+                        )
                         score_context_for_arbiter["suggestions"] = list(suggestions)
-                        score_context_for_arbiter["stage_name"] = score_snapshot["stage_name"]
+                        score_context_for_arbiter["stage_name"] = score_snapshot[
+                            "stage_name"
+                        ]
                         score_update_payload = {
                             "turn_number": turn_number,
                             "overall_score": overall_score,
@@ -2477,11 +2646,16 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
         live_claim_truth: dict[str, Any] | None = None
         live_session_summary: dict[str, Any] | None = None
         live_score_snapshot = analysis_data.get("score_snapshot")
-        if isinstance(live_score_snapshot, dict) or resolved_objection_ledger is not None:
+        if (
+            isinstance(live_score_snapshot, dict)
+            or resolved_objection_ledger is not None
+        ):
             live_session_summary = build_live_session_conclusion_summary(
                 sales_stage=sales_stage,
                 score_snapshot=(
-                    live_score_snapshot if isinstance(live_score_snapshot, dict) else None
+                    live_score_snapshot
+                    if isinstance(live_score_snapshot, dict)
+                    else None
                 ),
                 objection_ledger=resolved_objection_ledger,
             )
@@ -2561,7 +2735,7 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
                     decision_coro,
                     timeout=kb_lock_timeout_seconds,
                 )
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 decision_coro.close()
                 decision_duration_ms = round(
                     (asyncio.get_running_loop().time() - decision_started_at) * 1000,
@@ -2694,7 +2868,9 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
                     "prefetch_kb_lock_blocked",
                     decision_id=decision_id,
                     query_length=len(normalized_query),
-                    kb_count=len(knowledge_base_ids) if isinstance(knowledge_base_ids, list) else 0,
+                    kb_count=len(knowledge_base_ids)
+                    if isinstance(knowledge_base_ids, list)
+                    else 0,
                     status=decision.status,
                     error_detail=decision.error_detail,
                     decision_duration_ms=round(decision_duration_ms, 1),
@@ -2722,7 +2898,9 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
                     phase_breakdown.get("phase_total_ms"), decision_duration_ms
                 ),
                 cache_hit_health=bool(phase_breakdown.get("cache_hit_health", False)),
-                cache_hit_ready_docs=bool(phase_breakdown.get("cache_hit_ready_docs", False)),
+                cache_hit_ready_docs=bool(
+                    phase_breakdown.get("cache_hit_ready_docs", False)
+                ),
                 cache_hit_internal_retrieval=bool(
                     phase_breakdown.get("cache_hit_internal_retrieval", False)
                 ),
@@ -2764,7 +2942,7 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
                     self._tool_search_internal_knowledge(retrieval_payload),
                     timeout=prefetch_timeout_seconds,
                 )
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 self._log_grounding_debug(
                     "prefetch_timeout",
                     query_length=len(normalized_query),
@@ -2799,7 +2977,10 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
             )
             if has_bound_knowledge_base:
                 retrieval_message = str(retrieval.get("message") or "").strip()
-                if "尚未处理完成" in retrieval_message or "kb_not_ready" in retrieval_message.lower():
+                if (
+                    "尚未处理完成" in retrieval_message
+                    or "kb_not_ready" in retrieval_message.lower()
+                ):
                     self._pending_grounding_context = (
                         "当前内部知识库尚未就绪。\n"
                         f"用户问题：{normalized_query}\n"
@@ -2863,17 +3044,25 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
             + "\n".join(snippets)
             + "\n若信息不足，请明确说明不确定之处。"
         )
-        answerability_mode, answerability_diagnostics = self._resolve_answerability_mode()
+        answerability_mode, answerability_diagnostics = (
+            self._resolve_answerability_mode()
+        )
         if answerability_mode == "blocked":
             self._pending_grounding_context = ""
-            self._pending_blocked_response_text = self._build_blocked_response_from_answerability(
-                answerability_diagnostics,
+            self._pending_blocked_response_text = (
+                self._build_blocked_response_from_answerability(
+                    answerability_diagnostics,
+                )
             )
             self._log_grounding_debug(
                 "prefetch_answerability_blocked",
                 query_length=len(normalized_query),
-                answerability=str((answerability_diagnostics or {}).get("answerability") or ""),
-                source_status=str((answerability_diagnostics or {}).get("source_status") or ""),
+                answerability=str(
+                    (answerability_diagnostics or {}).get("answerability") or ""
+                ),
+                source_status=str(
+                    (answerability_diagnostics or {}).get("source_status") or ""
+                ),
             )
             return
         answerability_overlay = self._build_answerability_instruction_overlay(
@@ -2901,6 +3090,7 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
                 return
             self._pending_response_after_commit = True
             self._awaiting_transcription_after_commit = True
+            self._allow_late_transcription_response = False
             self._latest_input_transcript_delta = ""
             self._pending_response_generation += 1
             generation = self._pending_response_generation
@@ -2947,22 +3137,22 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
                     )
                     await self._handle_final_user_transcript(fallback_transcript)
                     return
+
+                self._pending_grounding_context = ""
+                self._pending_blocked_response_text = ""
+                await self._cancel_pending_response_after_commit()
+                self._allow_late_transcription_response = True
+
                 if self._is_kb_lock_required_for_current_policy():
-                    self._pending_grounding_context = ""
-                    self._pending_blocked_response_text = (
-                        "当前会话已开启知识库强制模式，但本轮语音转写尚未完成，"
-                        "无法执行知识检索。请放慢语速并重述问题。"
-                    )
                     await self._record_kb_lock_decision(
-                        status="blocked_transcription_timeout",
-                        blocked=True,
+                        status="transcription_timeout_suppressed",
+                        blocked=False,
                     )
                 else:
-                    self._pending_grounding_context = ""
-                    self._pending_blocked_response_text = (
-                        "本轮未识别到可用语音文本，无法准确回答。请放慢语速并重述问题。"
-                    )
-                    self._log_grounding_debug("timeout_blocked_without_transcript")
+                    self._log_grounding_debug("timeout_suppressed_without_transcript")
+
+                await self._send_status("listening")
+                return
             if self._grounding_preparation_in_progress:
                 self._log_grounding_debug("timeout_waiting_for_prefetch")
             deadline = asyncio.get_running_loop().time() + GROUNDING_WAIT_GRACE_SECONDS
@@ -2985,6 +3175,7 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
         async with self._pending_response_lock:
             self._pending_response_after_commit = False
             self._awaiting_transcription_after_commit = False
+            self._allow_late_transcription_response = False
             self._latest_input_transcript_delta = ""
             self._pending_response_generation += 1
             timeout_task = self._pending_response_timeout_task
@@ -3078,6 +3269,7 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
                         "audio_format": "",
                         "duration_ms": len(blocked_response_text) * 100,
                         "fallback": "browser_tts",
+                        "playback_rate": self._stepfun_playback_rate,
                     },
                 },
             )
@@ -3127,20 +3319,12 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
 
     async def _handle_interrupt(self, reason: str):
         """Stop current generation and clear buffered input."""
-        await self._cancel_pending_response_after_commit()
-        self._pending_grounding_context = ""
-        self._pending_blocked_response_text = ""
-        self._latest_input_transcript_delta = ""
-        self._pending_tool_followup_response = False
-        self._awaiting_transcription_after_commit = False
-        self._has_uncommitted_audio = False
-        await self._send_upstream({"type": "response.cancel"})
-        await self._send_upstream({"type": "input_audio_buffer.clear"})
-
         interrupted_stream_id = (
             self._active_response.stream_id if self._active_response else None
         )
-        self._active_response = None
+        await self._cancel_pending_response_after_commit()
+        await self._clear_upstream_generation()
+        self._reset_turn_runtime_state()
 
         await self.manager.send_json(
             self.websocket,
@@ -3166,9 +3350,7 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
     async def _handle_session_end(self):
         """Close session after notifying frontend."""
         await self._cancel_pending_response_after_commit()
-        self._pending_grounding_context = ""
-        self._pending_blocked_response_text = ""
-        self._latest_input_transcript_delta = ""
+        self._reset_turn_runtime_state()
         if self._feedback_context is not None:
             if self._fuzzy_detection_enabled:
                 await self._fuzzy_detection_capability.on_session_end(
@@ -3269,17 +3451,9 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
                 await self._close_upstream()
                 await self._connect_upstream()
                 await self._cancel_pending_response_after_commit()
-                self._active_response = None
-                self._pending_tool_followup_response = False
-                self._pending_grounding_context = ""
-                self._pending_blocked_response_text = ""
-                self._latest_input_transcript_delta = ""
-                self._function_call_states.clear()
-                self._executed_call_ids.clear()
+                self._reset_turn_runtime_state()
                 await self._send_status(
-                    "listening"
-                    if self.session_status == "in_progress"
-                    else "idle"
+                    "listening" if self.session_status == "in_progress" else "idle"
                 )
                 logger.info(
                     "StepFun upstream recovered",
@@ -3313,13 +3487,10 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
 
         if transition.action in {"pause", "end"}:
             await self._cancel_pending_response_after_commit()
-            self._pending_grounding_context = ""
-            self._pending_blocked_response_text = ""
-            self._latest_input_transcript_delta = ""
+            self._reset_turn_runtime_state()
             if self.upstream_ws is not None:
                 try:
-                    await self._send_upstream({"type": "response.cancel"})
-                    await self._send_upstream({"type": "input_audio_buffer.clear"})
+                    await self._clear_upstream_generation()
                 except Exception as exc:  # noqa: BLE001
                     logger.warning(
                         "Failed to sync StepFun upstream after REST lifecycle change",
@@ -3336,6 +3507,7 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
                 continue
             try:
                 raw = await self.upstream_ws.recv()
+                self._mark_upstream_activity()
                 event = json.loads(raw)
                 await self._handle_upstream_event(event)
             except asyncio.CancelledError:
@@ -3597,9 +3769,12 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
             )
             if not isinstance(realtime_analysis, dict):
                 realtime_analysis = {}
-            if self._get_effective_tool_policy().get(
-                "transcript_normalization_enabled", False
-            ) or normalization_result.replacements:
+            if (
+                self._get_effective_tool_policy().get(
+                    "transcript_normalization_enabled", False
+                )
+                or normalization_result.replacements
+            ):
                 realtime_analysis = {
                     **realtime_analysis,
                     "transcript_metadata": self._build_transcript_metadata(
@@ -3631,7 +3806,11 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
                     pass
             raise
         finally:
-            if grounding_task is not None and grounding_task.done() and grounding_finished_at <= grounding_started_at:
+            if (
+                grounding_task is not None
+                and grounding_task.done()
+                and grounding_finished_at <= grounding_started_at
+            ):
                 try:
                     grounding_finished_at = grounding_task.result()
                 except asyncio.CancelledError:
@@ -3659,7 +3838,21 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
             self._grounding_preparation_in_progress = False
 
         try:
-            await self._create_response_from_pending_commit()
+            allow_late_transcription_response = self._allow_late_transcription_response
+            self._allow_late_transcription_response = False
+            response_created = await self._create_response_from_pending_commit()
+            if (
+                not response_created
+                and allow_late_transcription_response
+                and self._active_response is None
+                and self.session_status not in TERMINAL_SESSION_STATUSES
+            ):
+                self._log_grounding_debug(
+                    "late_transcription_response_recovered",
+                    turn_number=turn_number,
+                    transcript_length=len(normalized_transcript),
+                )
+                response_created = await self._create_response(count_turn=True)
             response_created_at = asyncio.get_running_loop().time()
             ready_to_create_at = max(feedback_finished_at, grounding_finished_at)
             self._log_latency_debug(
@@ -3667,9 +3860,16 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
                 turn_number=turn_number,
                 transcript_length=len(normalized_transcript),
                 total_ms=round((response_created_at - turn_started_at) * 1000, 1),
-                feedback_ms=round((feedback_finished_at - feedback_started_at) * 1000, 1),
-                grounding_ms=round((grounding_finished_at - grounding_started_at) * 1000, 1),
-                response_create_ms=round((response_created_at - ready_to_create_at) * 1000, 1),
+                feedback_ms=round(
+                    (feedback_finished_at - feedback_started_at) * 1000, 1
+                ),
+                grounding_ms=round(
+                    (grounding_finished_at - grounding_started_at) * 1000, 1
+                ),
+                response_create_ms=round(
+                    (response_created_at - ready_to_create_at) * 1000, 1
+                ),
+                late_recovery=allow_late_transcription_response and response_created,
             )
         except asyncio.CancelledError:
             raise
@@ -3816,6 +4016,7 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
                         "total_duration_ms": response_state.total_duration_ms,
                         "audio_format": self._stepfun_output_audio_format.lower(),
                         "sample_rate": self._stepfun_output_sample_rate,
+                        "playback_rate": self._stepfun_playback_rate,
                     },
                 },
             )
@@ -3829,6 +4030,7 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
             "audio_format": "",
             "duration_ms": len(response_text) * 100,
             "fallback": "browser_tts",
+            "playback_rate": self._stepfun_playback_rate,
         }
         if isinstance(self._latest_knowledge_answer_diagnostics, dict):
             payload_data["knowledge_answer_diagnostics"] = copy.deepcopy(
@@ -3889,6 +4091,7 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
                     "is_final": False,
                     "audio_format": output_format,
                     "sample_rate": self._stepfun_output_sample_rate,
+                    "playback_rate": self._stepfun_playback_rate,
                 },
             },
         )
@@ -4055,6 +4258,7 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
         """Search internal knowledge bases bound to current policy."""
         cache_key = self._build_internal_retrieval_cache_key(arguments_obj)
         cache_hit = False
+        output: dict[str, Any] = {}
         if cache_key and self._internal_retrieval_cache_ttl_seconds > 0:
             cached = self._internal_retrieval_cache.get(cache_key)
             now = asyncio.get_running_loop().time()
@@ -4099,7 +4303,10 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
                 and isinstance(output, dict)
                 and not output.get("error")
             ):
-                if len(self._internal_retrieval_cache) >= self._internal_retrieval_cache_max_entries:
+                if (
+                    len(self._internal_retrieval_cache)
+                    >= self._internal_retrieval_cache_max_entries
+                ):
                     self._internal_retrieval_cache.clear()
                 self._internal_retrieval_cache[cache_key] = (
                     asyncio.get_running_loop().time()
@@ -4212,9 +4419,9 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
             metrics["kb_lock_last_status"] = status
             metrics["kb_lock_updated_at"] = datetime.now(UTC).isoformat()
             if blocked:
-                metrics["kb_lock_block_count"] = int(
-                    metrics.get("kb_lock_block_count") or 0
-                ) + 1
+                metrics["kb_lock_block_count"] = (
+                    int(metrics.get("kb_lock_block_count") or 0) + 1
+                )
             else:
                 metrics.setdefault("kb_lock_block_count", 0)
             metrics["last_decision_id"] = str(decision_id or "")
@@ -4279,7 +4486,10 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
             ws_lifetime_ms = None
             if self._upstream_connected_at > 0:
                 ws_lifetime_ms = round(
-                    max(0.0, asyncio.get_running_loop().time() - self._upstream_connected_at)
+                    max(
+                        0.0,
+                        asyncio.get_running_loop().time() - self._upstream_connected_at,
+                    )
                     * 1000,
                     1,
                 )
@@ -4361,6 +4571,7 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
         if self.upstream_ws is None:
             return
         await self.upstream_ws.send(json.dumps(payload, ensure_ascii=False))
+        self._mark_upstream_activity()
 
     async def _ensure_sales_stage_context(self) -> None:
         """Initialize sales-stage capability context once per handler session."""
@@ -4549,9 +4760,7 @@ class StepFunRealtimeHandler(BaseWebSocketHandler):
                         "transcript_metadata"
                     ]
                 if patch_fields["objection_ledger"] is not None:
-                    patch_kwargs["objection_ledger"] = patch_fields[
-                        "objection_ledger"
-                    ]
+                    patch_kwargs["objection_ledger"] = patch_fields["objection_ledger"]
                 await self._update_existing_message_sales_stage(
                     **patch_kwargs,
                 )

@@ -75,6 +75,17 @@ interface ToolPolicy {
 }
 ```
 
+失败响应同样使用统一 envelope：
+
+```json
+{
+  "success": false,
+  "error": "[VOICE_RUNTIME_PROFILE_NOT_FOUND]",
+  "message": "运行时配置不存在。",
+  "trace_id": "trace-xxx"
+}
+```
+
 ## 2) Agent Voice Policy（`AgentVoicePolicy`）
 
 ### 数据结构（核心字段）
@@ -122,6 +133,7 @@ interface AgentVoicePolicy {
 - `[VOICE_RUNTIME_PROFILE_UPDATE_FAILED]`
 - `[VOICE_RUNTIME_PROFILE_DELETE_FAILED]`
 - `[AGENT_VOICE_POLICY_UPSERT_FAILED]`
+- `[AGENT_NOT_FOUND]`（更新 Agent voice policy 时目标 Agent 不存在）
 - `[FIELD_DEPRECATED_PERSONA_CENTERED]`（尝试覆盖 Persona 所有权工具策略键）
 
 兼容收敛说明：

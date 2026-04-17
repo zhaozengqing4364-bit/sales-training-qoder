@@ -9,21 +9,19 @@ from __future__ import annotations
 
 from typing import Sequence, Union
 
-from common.db.legacy_schema_repair import (
-    repair_knowledge_document_legacy_schema,
-    repair_persona_policy_legacy_schema,
-)
-
-
 # revision identifiers, used by Alembic.
 revision: str = "20260413_1040_029"
-down_revision: Union[str, None] = "20260412_0315_028"
+down_revision: Union[str, None] = "028_reset_single_active_token"
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
     from alembic import op
+    from common.db.legacy_schema_repair import (
+        repair_knowledge_document_legacy_schema,
+        repair_persona_policy_legacy_schema,
+    )
 
     bind = op.get_bind()
     repair_persona_policy_legacy_schema(

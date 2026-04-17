@@ -1,0 +1,43 @@
+{
+  "include": [
+    "src",
+    "tests",
+    "alembic",
+    "scripts"
+  ],
+  "exclude": [
+    "**/__pycache__",
+    ".pytest_cache",
+    "htmlcov",
+    "test-results"
+  ],
+  "pythonVersion": "3.11",
+  "typeCheckingMode": "standard",
+  "executionEnvironments": [
+    {
+      "root": "src",
+      "extraPaths": [
+        "src"
+      ]
+    },
+    {
+      "root": "tests",
+      "extraPaths": [
+        "src",
+        "tests"
+      ]
+    },
+    {
+      "root": "alembic",
+      "extraPaths": [
+        "src"
+      ]
+    },
+    {
+      "root": "scripts",
+      "extraPaths": [
+        "src"
+      ]
+    }
+  ]
+}

@@ -10,10 +10,10 @@
 - 非管理员访问时返回:
 ```json
 {
-  "detail": {
-    "error": "[PROMPT_TEMPLATE_EDIT_ADMIN_ONLY]",
-    "message": "仅管理员可访问提示词治理接口。"
-  }
+  "success": false,
+  "error": "[PROMPT_TEMPLATE_EDIT_ADMIN_ONLY]",
+  "message": "仅管理员可访问提示词治理接口。",
+  "trace_id": "trace-xxx"
 }
 ```
 
@@ -57,6 +57,16 @@
 
 ### GET `/prompt-templates/{template_id}`
 - 说明: 获取模板详情
+- 非法 `template_id`（空值 / `undefined` / 非 UUID）返回 `400` + 顶层 envelope：
+
+```json
+{
+  "success": false,
+  "error": "[PROMPT_TEMPLATE_ID_INVALID]",
+  "message": "模板ID无效，请检查请求参数。",
+  "trace_id": "trace-xxx"
+}
+```
 
 ### PUT `/prompt-templates/{template_id}`
 - 说明: 更新模板
@@ -66,6 +76,7 @@
 
 ### POST `/prompt-templates/{template_id}/render`
 - 说明: 变量渲染模板
+- 若模板范围不允许当前场景 / 类型组合，返回 `400` + `[PROMPT_SCOPE_VIOLATION]`
 
 ### POST `/prompt-templates/{template_id}/set-default?prompt_type={type}`
 - 说明: 设置模板为指定类型默认模板

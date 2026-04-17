@@ -40,6 +40,7 @@ export interface TTSChunkData {
     total_duration_ms?: number;
     audio_format?: string;
     sample_rate?: number;
+    playback_rate?: number;
 }
 
 /**
@@ -521,8 +522,20 @@ export function useStreamingAudioPlayer(
             total_duration_ms,
             audio_format,
             sample_rate,
+            playback_rate,
         } = chunk;
         const normalizedFormat = (audio_format || 'mp3').toLowerCase();
+
+        if (playback_rate !== undefined) {
+            const normalizedChunkPlaybackRate = normalizeVoiceSpeedPreference(playback_rate);
+            playbackRateRef.current = normalizedChunkPlaybackRate;
+            if (audioRef.current) {
+                audioRef.current.playbackRate = normalizedChunkPlaybackRate;
+            }
+            for (const source of pcmActiveSourcesRef.current) {
+                source.playbackRate.value = normalizedChunkPlaybackRate;
+            }
+        }
 
         // Update total duration if provided
         if (total_duration_ms) {

@@ -182,3 +182,12 @@ vendor/
 
 # ── GSD baseline (auto-generated) ──
 .gsd-id
+.omx/
+.codex/*
+!.codex/agents/
+!.codex/agents/**
+!.codex/skills/
+!.codex/skills/**
+.codex/skills/.system/**
+!.codex/prompts/
+!.codex/prompts/**

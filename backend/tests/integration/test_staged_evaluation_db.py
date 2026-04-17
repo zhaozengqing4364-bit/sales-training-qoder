@@ -3,6 +3,7 @@ Integration Tests for Staged Evaluation Database Tables
 
 TDD Tests for Task C1: Create Staged Evaluation Database Tables
 """
+
 import pytest
 from uuid import uuid4
 
@@ -59,23 +60,32 @@ class TestStagedEvaluationResultsTable:
         )
         columns = {row[0]: (row[1], row[2]) for row in result.fetchall()}
 
-        # Check required columns exist
-        assert "id" in columns
-        assert "session_id" in columns
-        assert "stage_number" in columns
-        assert "start_turn" in columns
-        assert "end_turn" in columns
-        assert "timestamp" in columns
-        assert "scores" in columns
-        assert "strengths" in columns
-        assert "weaknesses" in columns
-        assert "key_insights" in columns
-        assert "improvement_suggestions" in columns
-        assert "stage_summary" in columns
-        assert "comparison_with_previous" in columns
-        assert "is_fallback" in columns
-        assert "cost_tokens" in columns
-        assert "processing_time_ms" in columns
+        expected_columns = {
+            "id",
+            "session_id",
+            "stage_number",
+            "start_turn",
+            "end_turn",
+            "created_at",
+            "scores",
+            "strengths",
+            "weaknesses",
+            "suggestions",
+            "summary",
+        }
+        legacy_columns = {
+            "timestamp",
+            "key_insights",
+            "improvement_suggestions",
+            "stage_summary",
+            "comparison_with_previous",
+            "is_fallback",
+            "cost_tokens",
+            "processing_time_ms",
+        }
+
+        assert expected_columns.issubset(columns)
+        assert legacy_columns.isdisjoint(columns)
 
     @pytest.mark.asyncio
     async def test_session_index_exists(self, test_db: AsyncSession):
@@ -106,7 +116,9 @@ class TestStagedEvaluationResultsTable:
         assert exists is True
 
     @pytest.mark.asyncio
-    async def test_insert_and_retrieve(self, test_db: AsyncSession, clean_staged_eval_tables):
+    async def test_insert_and_retrieve(
+        self, test_db: AsyncSession, clean_staged_eval_tables
+    ):
         """Should be able to insert and retrieve staged evaluation."""
         session_id = str(uuid4())
 
@@ -114,20 +126,17 @@ class TestStagedEvaluationResultsTable:
             text("""
                 INSERT INTO staged_evaluation_results (
                     session_id, stage_number, start_turn, end_turn,
-                    scores, strengths, weaknesses, key_insights,
-                    improvement_suggestions, stage_summary, is_fallback
+                    scores, strengths, weaknesses, suggestions, summary
                 ) VALUES (
                     :session_id, 1, 0, 5,
                     '{"professionalism": 85, "communication": 90}',
                     '["Good clarity", "Strong points"]',
                     '["Needs more data", "Slow response"]',
-                    '["Key insight 1"]',
                     '["Practice more"]',
-                    'Stage 1 summary text',
-                    false
+                    'Stage 1 summary text'
                 )
             """),
-            {"session_id": session_id}
+            {"session_id": session_id},
         )
         await test_db.commit()
 
@@ -138,7 +147,7 @@ class TestStagedEvaluationResultsTable:
                 FROM staged_evaluation_results
                 WHERE session_id = :session_id
             """),
-            {"session_id": session_id}
+            {"session_id": session_id},
         )
         row = result.fetchone()
         assert row is not None
@@ -177,88 +186,105 @@ class TestComprehensiveReportsTable:
         )
         columns = {row[0]: (row[1], row[2]) for row in result.fetchall()}
 
-        # Check required columns exist
-        assert "id" in columns
-        assert "session_id" in columns
-        assert "generated_at" in columns
-        assert "total_stages" in columns
-        assert "total_turns" in columns
-        assert "overall_assessment" in columns
-        assert "key_strengths" in columns
-        assert "priority_improvements" in columns
-        assert "trend_summary" in columns
-        assert "personalized_advice" in columns
-        assert "practice_recommendations" in columns
-        assert "estimated_skill_level" in columns
-        assert "trend_analysis" in columns
-        assert "score_timeline" in columns
-        assert "is_fallback" in columns
+        expected_columns = {
+            "session_id",
+            "created_at",
+            "overall_score",
+            "dimension_scores",
+            "stage_summaries",
+            "key_strengths",
+            "key_improvements",
+            "detailed_feedback",
+            "recommendations",
+        }
+        legacy_columns = {
+            "id",
+            "generated_at",
+            "total_stages",
+            "total_turns",
+            "overall_assessment",
+            "priority_improvements",
+            "trend_summary",
+            "personalized_advice",
+            "practice_recommendations",
+            "estimated_skill_level",
+            "trend_analysis",
+            "score_timeline",
+            "is_fallback",
+            "comparison_to_baseline",
+        }
+
+        assert expected_columns.issubset(columns)
+        assert legacy_columns.isdisjoint(columns)
 
     @pytest.mark.asyncio
-    async def test_session_unique_index_exists(self, test_db: AsyncSession):
-        """Should have unique index on session_id."""
+    async def test_session_id_is_primary_key(self, test_db: AsyncSession):
+        """Should use session_id as the canonical primary key."""
         result = await test_db.execute(
             text("""
-                SELECT EXISTS (
-                    SELECT FROM pg_indexes
-                    WHERE indexname = 'idx_comprehensive_reports_session'
-                )
+                SELECT kcu.column_name
+                FROM information_schema.table_constraints tc
+                JOIN information_schema.key_column_usage kcu
+                  ON tc.constraint_name = kcu.constraint_name
+                 AND tc.table_schema = kcu.table_schema
+                WHERE tc.table_name = 'comprehensive_reports'
+                  AND tc.constraint_type = 'PRIMARY KEY'
+                ORDER BY kcu.ordinal_position
             """)
         )
-        exists = result.scalar()
-        assert exists is True
+        pk_columns = [row[0] for row in result.fetchall()]
+        assert pk_columns == ["session_id"]
 
     @pytest.mark.asyncio
-    async def test_insert_and_retrieve(self, test_db: AsyncSession, clean_staged_eval_tables):
+    async def test_insert_and_retrieve(
+        self, test_db: AsyncSession, clean_staged_eval_tables
+    ):
         """Should be able to insert and retrieve comprehensive report."""
         session_id = str(uuid4())
 
         await test_db.execute(
             text("""
                 INSERT INTO comprehensive_reports (
-                    session_id, total_stages, total_turns,
-                    overall_assessment, key_strengths, priority_improvements,
-                    trend_summary, personalized_advice, practice_recommendations,
-                    estimated_skill_level, trend_analysis, score_timeline
+                    session_id, overall_score, dimension_scores,
+                    stage_summaries, key_strengths, key_improvements,
+                    detailed_feedback, recommendations
                 ) VALUES (
-                    :session_id, 3, 15,
-                    'Overall assessment text',
+                    :session_id, 87.5,
+                    '[{"name": "communication", "score": 87.5, "weight": 0.25, "description": "Communication"}]',
+                    '[{"stage_number": 1, "summary": "Stage 1 summary text"}]',
                     '["Strength 1", "Strength 2"]',
                     '["Improvement 1"]',
-                    'Trend summary text',
-                    'Personalized advice text',
-                    '["Recommendation 1"]',
-                    'intermediate',
-                    '[{"stage": 1, "score": 80}]',
-                    '[{"turn": 5, "score": 85}]'
+                    'Overall assessment text',
+                    '["Recommendation 1"]'
                 )
             """),
-            {"session_id": session_id}
+            {"session_id": session_id},
         )
         await test_db.commit()
 
         # Retrieve the record
         result = await test_db.execute(
             text("""
-                SELECT session_id, total_stages, overall_assessment, estimated_skill_level
+                SELECT session_id, overall_score, detailed_feedback
                 FROM comprehensive_reports
                 WHERE session_id = :session_id
             """),
-            {"session_id": session_id}
+            {"session_id": session_id},
         )
         row = result.fetchone()
         assert row is not None
         assert row[0] == session_id
-        assert row[1] == 3
+        assert row[1] == 87.5
         assert row[2] == "Overall assessment text"
-        assert row[3] == "intermediate"
 
 
 class TestStagedEvaluationConstraints:
     """Test database constraints."""
 
     @pytest.mark.asyncio
-    async def test_unique_stage_per_session(self, test_db: AsyncSession, clean_staged_eval_tables):
+    async def test_unique_stage_per_session(
+        self, test_db: AsyncSession, clean_staged_eval_tables
+    ):
         """Should enforce unique stage_number per session."""
         session_id = str(uuid4())
 
@@ -269,7 +295,7 @@ class TestStagedEvaluationConstraints:
                     session_id, stage_number, start_turn, end_turn
                 ) VALUES (:session_id, 1, 0, 5)
             """),
-            {"session_id": session_id}
+            {"session_id": session_id},
         )
         await test_db.commit()
 
@@ -281,24 +307,29 @@ class TestStagedEvaluationConstraints:
                         session_id, stage_number, start_turn, end_turn
                     ) VALUES (:session_id, 1, 6, 10)
                 """),
-                {"session_id": session_id}
+                {"session_id": session_id},
             )
             await test_db.commit()
 
-        assert "unique" in str(exc_info.value).lower() or "duplicate" in str(exc_info.value).lower()
+        assert (
+            "unique" in str(exc_info.value).lower()
+            or "duplicate" in str(exc_info.value).lower()
+        )
 
     @pytest.mark.asyncio
-    async def test_unique_session_in_comprehensive_reports(self, test_db: AsyncSession, clean_staged_eval_tables):
+    async def test_unique_session_in_comprehensive_reports(
+        self, test_db: AsyncSession, clean_staged_eval_tables
+    ):
         """Should enforce unique session_id in comprehensive_reports."""
         session_id = str(uuid4())
 
         # Insert first report
         await test_db.execute(
             text("""
-                INSERT INTO comprehensive_reports (session_id, total_stages)
+                INSERT INTO comprehensive_reports (session_id, overall_score)
                 VALUES (:session_id, 3)
             """),
-            {"session_id": session_id}
+            {"session_id": session_id},
         )
         await test_db.commit()
 
@@ -306,21 +337,26 @@ class TestStagedEvaluationConstraints:
         with pytest.raises(Exception) as exc_info:
             await test_db.execute(
                 text("""
-                    INSERT INTO comprehensive_reports (session_id, total_stages)
+                    INSERT INTO comprehensive_reports (session_id, overall_score)
                     VALUES (:session_id, 5)
                 """),
-                {"session_id": session_id}
+                {"session_id": session_id},
             )
             await test_db.commit()
 
-        assert "unique" in str(exc_info.value).lower() or "duplicate" in str(exc_info.value).lower()
+        assert (
+            "unique" in str(exc_info.value).lower()
+            or "duplicate" in str(exc_info.value).lower()
+        )
 
 
 class TestJSONBColumns:
     """Test JSONB column functionality."""
 
     @pytest.mark.asyncio
-    async def test_jsonb_scores_storage(self, test_db: AsyncSession, clean_staged_eval_tables):
+    async def test_jsonb_scores_storage(
+        self, test_db: AsyncSession, clean_staged_eval_tables
+    ):
         """Should store and retrieve JSONB scores correctly."""
         session_id = str(uuid4())
         scores = {"professionalism": 85, "communication": 90, "overall": 87}
@@ -331,7 +367,7 @@ class TestJSONBColumns:
                     session_id, stage_number, start_turn, end_turn, scores
                 ) VALUES (:session_id, 1, 0, 5, :scores)
             """),
-            {"session_id": session_id, "scores": str(scores).replace("'", '"')}
+            {"session_id": session_id, "scores": str(scores).replace("'", '"')},
         )
         await test_db.commit()
 
@@ -342,7 +378,7 @@ class TestJSONBColumns:
                 FROM staged_evaluation_results
                 WHERE session_id = :session_id
             """),
-            {"session_id": session_id}
+            {"session_id": session_id},
         )
         row = result.fetchone()
         assert row is not None

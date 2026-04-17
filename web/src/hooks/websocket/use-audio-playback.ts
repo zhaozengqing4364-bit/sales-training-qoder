@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef } from "react";
 import type { Dispatch, SetStateAction } from "react";
 import { debug } from "@/lib/debug";
+import { normalizeVoiceSpeedPreference } from "../use-voice-speed-preference";
 import type { PracticeState, TTSAudioData } from "./types";
 
 interface UseAudioPlaybackOptions {
@@ -46,11 +47,14 @@ export function useAudioPlayback({ onTTSAudio, setState }: UseAudioPlaybackOptio
 
     // 内部播放函数
     const playTTSAudioInternal = useCallback(async (data: TTSAudioData) => {
+        const normalizedPlaybackRate = normalizeVoiceSpeedPreference(data.playback_rate);
+
         // 使用浏览器 TTS 作为 fallback
         if (data.fallback === "browser_tts" || !data.audio) {
             if ("speechSynthesis" in window) {
                 const utterance = new SpeechSynthesisUtterance(data.text);
                 utterance.lang = "zh-CN";
+                utterance.rate = normalizedPlaybackRate;
                 utterance.onend = () => {
                     setState(prev => ({ ...prev, isPlayingAudio: false, aiState: "listening" }));
                     isPlayingRef.current = false;
@@ -87,6 +91,7 @@ export function useAudioPlayback({ onTTSAudio, setState }: UseAudioPlaybackOptio
             const blob = new Blob([bytes], { type: mimeType });
             const audioUrl = URL.createObjectURL(blob);
             const audio = new Audio(audioUrl);
+            audio.playbackRate = normalizedPlaybackRate;
 
             setState(prev => ({ ...prev, isPlayingAudio: true, aiState: "speaking" }));
 
@@ -105,6 +110,7 @@ export function useAudioPlayback({ onTTSAudio, setState }: UseAudioPlaybackOptio
                 if ("speechSynthesis" in window) {
                     const utterance = new SpeechSynthesisUtterance(data.text);
                     utterance.lang = "zh-CN";
+                    utterance.rate = normalizedPlaybackRate;
                     window.speechSynthesis.speak(utterance);
                 }
                 processAudioQueue();
@@ -119,6 +125,7 @@ export function useAudioPlayback({ onTTSAudio, setState }: UseAudioPlaybackOptio
             if ("speechSynthesis" in window) {
                 const utterance = new SpeechSynthesisUtterance(data.text);
                 utterance.lang = "zh-CN";
+                utterance.rate = normalizedPlaybackRate;
                 window.speechSynthesis.speak(utterance);
             }
             processAudioQueue();

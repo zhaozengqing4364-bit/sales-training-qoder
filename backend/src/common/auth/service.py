@@ -2,16 +2,19 @@
 JWT Authentication and Enterprise WeChat SSO
 Constitution Principle VI: Data Privacy & Compliance
 """
+
 import hmac
 import os
 import uuid
 from datetime import UTC, datetime, timedelta
 from http.cookies import SimpleCookie
-from typing import Any
+from typing import Any, NoReturn
+from urllib.parse import urlencode
 
 from dotenv import load_dotenv
 from fastapi import Cookie, Depends, HTTPException, Request, Response
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+import httpx
 import jwt
 from jwt import InvalidTokenError as JWTError
 from passlib.context import CryptContext
@@ -27,13 +30,17 @@ load_dotenv()
 logger = get_logger(__name__)
 
 # JWT Configuration
-JWT_SECRET = os.getenv("JWT_SECRET", "your-super-secret-key-change-in-production-min-32-chars")
+JWT_SECRET = os.getenv(
+    "JWT_SECRET", "your-super-secret-key-change-in-production-min-32-chars"
+)
 JWT_ALGORITHM = os.getenv("JWT_ALGORITHM", "HS256")
 JWT_EXPIRATION_HOURS = int(os.getenv("JWT_EXPIRATION_HOURS", "24"))
 AUTH_SESSION_COOKIE_NAME = os.getenv("AUTH_SESSION_COOKIE_NAME", "app_session")
 AUTH_CSRF_COOKIE_NAME = os.getenv("AUTH_CSRF_COOKIE_NAME", "app_csrf")
 AUTH_CSRF_HEADER_NAME = os.getenv("AUTH_CSRF_HEADER_NAME", "X-CSRF-Token")
-AUTH_SESSION_COOKIE_SAMESITE = os.getenv("AUTH_SESSION_COOKIE_SAMESITE", "lax").strip().lower() or "lax"
+AUTH_SESSION_COOKIE_SAMESITE = (
+    os.getenv("AUTH_SESSION_COOKIE_SAMESITE", "lax").strip().lower() or "lax"
+)
 
 security = HTTPBearer(auto_error=False)
 # Login compatibility seam:
@@ -71,8 +78,174 @@ AUTH_TRANSPORT_MATRIX: dict[str, dict[str, list[str] | str]] = {
     },
 }
 
+WECOM_API_BASE_URL = "https://qyapi.weixin.qq.com"
+WECOM_AUTHORIZE_URL = "https://open.weixin.qq.com/connect/oauth2/authorize"
 
-def _raise_auth_http_error(*, status_code: int, error_code: str, message: str) -> None:
+
+def _read_env(*names: str) -> str:
+    for name in names:
+        value = os.getenv(name, "").strip()
+        if value:
+            return value
+    return ""
+
+
+def get_wecom_corp_id() -> str:
+    return _read_env("WECOM_CORP_ID", "WECHAT_CORP_ID")
+
+
+def get_wecom_secret() -> str:
+    return _read_env("WECOM_SECRET", "WECHAT_SECRET")
+
+
+def get_wecom_agent_id() -> str:
+    return _read_env("WECOM_AGENT_ID", "WECHAT_AGENT_ID")
+
+
+def get_wecom_scope() -> str:
+    return _read_env("AUTH_WECOM_SCOPE") or "snsapi_base"
+
+
+def get_frontend_base_url() -> str:
+    return (
+        _read_env("AUTH_FRONTEND_BASE_URL", "NEXT_PUBLIC_APP_URL")
+        or "http://localhost:3445"
+    ).rstrip("/")
+
+
+def get_wecom_oauth_state_cookie_name() -> str:
+    return _read_env("AUTH_WECOM_STATE_COOKIE_NAME") or "app_wecom_oauth_state"
+
+
+def get_wecom_oauth_return_to_cookie_name() -> str:
+    return _read_env("AUTH_WECOM_RETURN_TO_COOKIE_NAME") or "app_wecom_return_to"
+
+
+def get_wecom_oauth_cookie_max_age_seconds() -> int:
+    raw = _read_env("AUTH_WECOM_OAUTH_COOKIE_MAX_AGE_SECONDS")
+    if not raw:
+        return 600
+    try:
+        return max(60, int(raw))
+    except ValueError:
+        return 600
+
+
+def is_dev_login_enabled() -> bool:
+    explicit = os.getenv("AUTH_ENABLE_DEV_LOGIN")
+    if explicit is not None and explicit.strip():
+        return _env_truthy(explicit) and _current_environment() != "production"
+    return _current_environment() == "development"
+
+
+def get_wecom_provider_diagnostics() -> dict[str, Any]:
+    corp_id = get_wecom_corp_id()
+    secret = get_wecom_secret()
+    agent_id = get_wecom_agent_id()
+    configured = bool(corp_id and secret and agent_id)
+    return {
+        "enabled": configured,
+        "configured": configured,
+        "corp_id_configured": bool(corp_id),
+        "secret_configured": bool(secret),
+        "agent_id_configured": bool(agent_id),
+        "message": "企业微信 SSO 已配置，可直接发起授权。"
+        if configured
+        else "当前环境未配置企业微信 SSO。",
+    }
+
+
+def _get_wecom_oauth_cookie_options(*, key: str) -> dict[str, Any]:
+    return {
+        "key": key,
+        "httponly": True,
+        "secure": get_session_cookie_secure(),
+        "samesite": get_session_cookie_samesite(),
+        "path": "/",
+        "max_age": get_wecom_oauth_cookie_max_age_seconds(),
+    }
+
+
+def set_wecom_oauth_flow_cookies(
+    response: Response, *, state: str, return_to: str
+) -> None:
+    response.set_cookie(
+        value=state,
+        **_get_wecom_oauth_cookie_options(key=get_wecom_oauth_state_cookie_name()),
+    )
+    response.set_cookie(
+        value=return_to,
+        **_get_wecom_oauth_cookie_options(key=get_wecom_oauth_return_to_cookie_name()),
+    )
+
+
+def clear_wecom_oauth_flow_cookies(response: Response) -> None:
+    for key in (
+        get_wecom_oauth_state_cookie_name(),
+        get_wecom_oauth_return_to_cookie_name(),
+    ):
+        response.delete_cookie(
+            key=key,
+            path="/",
+            secure=get_session_cookie_secure(),
+            samesite=get_session_cookie_samesite(),
+        )
+
+
+def build_wecom_authorization_url(*, redirect_uri: str, state: str) -> str:
+    params = urlencode(
+        {
+            "appid": get_wecom_corp_id(),
+            "redirect_uri": redirect_uri,
+            "response_type": "code",
+            "scope": get_wecom_scope(),
+            "state": state,
+            "agentid": get_wecom_agent_id(),
+        }
+    )
+    return f"{WECOM_AUTHORIZE_URL}?{params}#wechat_redirect"
+
+
+def _create_wecom_http_client() -> httpx.AsyncClient:
+    timeout_raw = _read_env("AUTH_WECOM_TIMEOUT_SECONDS")
+    timeout = float(timeout_raw) if timeout_raw else 10.0
+    return httpx.AsyncClient(base_url=WECOM_API_BASE_URL, timeout=timeout)
+
+
+def _normalize_optional_string(value: Any) -> str | None:
+    if value is None:
+        return None
+    normalized = str(value).strip()
+    return normalized or None
+
+
+def _normalize_department_value(value: Any) -> str | None:
+    if isinstance(value, list):
+        parts = [str(item).strip() for item in value if str(item).strip()]
+        return ",".join(parts) if parts else None
+    return _normalize_optional_string(value)
+
+
+async def _request_wecom_json(
+    client: httpx.AsyncClient,
+    path: str,
+    *,
+    params: dict[str, Any],
+) -> dict[str, Any]:
+    response = await client.get(path, params=params)
+    response.raise_for_status()
+    payload = response.json()
+    if not isinstance(payload, dict):
+        raise ValueError(f"WeCom API returned a non-object payload for {path}")
+    errcode = payload.get("errcode", 0)
+    if errcode not in (0, None):
+        raise ValueError(f"WeCom API {path} failed: {payload.get('errmsg') or errcode}")
+    return payload
+
+
+def _raise_auth_http_error(
+    *, status_code: int, error_code: str, message: str
+) -> NoReturn:
     raise HTTPException(
         status_code=status_code,
         detail={
@@ -138,7 +311,9 @@ def get_csrf_cookie_options() -> dict[str, Any]:
     }
 
 
-def set_auth_session_cookie(response: Response, token: str, csrf_token: str | None = None) -> str:
+def set_auth_session_cookie(
+    response: Response, token: str, csrf_token: str | None = None
+) -> str:
     issued_csrf_token = (csrf_token or uuid.uuid4().hex).strip()
     response.set_cookie(
         value=token,
@@ -181,7 +356,11 @@ def validate_csrf_request(request: Request) -> None:
     csrf_cookie = (request.cookies.get(get_csrf_cookie_name()) or "").strip()
     csrf_header = (request.headers.get(get_csrf_header_name()) or "").strip()
 
-    if not csrf_cookie or not csrf_header or not hmac.compare_digest(csrf_cookie, csrf_header):
+    if (
+        not csrf_cookie
+        or not csrf_header
+        or not hmac.compare_digest(csrf_cookie, csrf_header)
+    ):
         raise HTTPException(
             status_code=403,
             detail={
@@ -304,7 +483,7 @@ async def get_current_user(
     request: Request,
     credentials: HTTPAuthorizationCredentials = Depends(security),
     cookie_token: str | None = Cookie(default=None, alias=AUTH_SESSION_COOKIE_NAME),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ) -> User:
     """Get current authenticated user from JWT token"""
     token = resolve_bearer_or_cookie_token(
@@ -321,8 +500,9 @@ async def get_current_user(
 
     try:
         payload = verify_token(token)
-        user_id: str = payload.get("sub")
-        if user_id is None:
+        raw_user_id = payload.get("sub")
+        user_id = str(raw_user_id).strip() if raw_user_id is not None else ""
+        if not user_id:
             _raise_auth_http_error(
                 status_code=401,
                 error_code="[INVALID_TOKEN]",
@@ -336,7 +516,9 @@ async def get_current_user(
         )
 
     # Cast UUID column to VARCHAR for string comparison
-    result = await db.execute(select(User).where(cast(User.user_id, SQLAlchemyString) == user_id))
+    result = await db.execute(
+        select(User).where(cast(User.user_id, SQLAlchemyString) == user_id)
+    )
     user = result.scalar_one_or_none()
 
     if user is None:
@@ -357,7 +539,7 @@ async def get_current_user(
 
 
 async def get_current_admin_user(
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
 ) -> User:
     """
     Get current user and verify they have admin role.
@@ -373,7 +555,7 @@ async def get_current_admin_user(
 
 
 async def get_current_admin_user_for_app_routes(
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
 ) -> User:
     """
     App-level admin dependency for router-mirrored `/api/v1/admin/**` route families.
@@ -401,6 +583,7 @@ def require_role(allowed_roles: list[str]):
         async def admin_endpoint(user: User = Depends(require_role(["admin"]))):
             ...
     """
+
     async def role_checker(current_user: User = Depends(get_current_user)) -> User:
         user_role = getattr(current_user, "role", "user")
         if user_role not in allowed_roles:
@@ -410,26 +593,114 @@ def require_role(allowed_roles: list[str]):
                 message="当前账号权限不足，无法执行该操作。",
             )
         return current_user
+
     return role_checker
 
 
-async def authenticate_wechat(code: str) -> User | None:
-    """
-    Authenticate with Enterprise WeChat
-    In production, this would call WeChat API to exchange code for user info
-    For now, this is a mock implementation
-    """
-    # TODO: Implement actual WeChat SSO API call
-    # from wechatpy import WeChatClient
-    # client = WeChatClient(corp_id, secret)
-    # user_info = client.auth.getuserinfo(code)
+async def authenticate_wechat(code: str) -> dict[str, Any]:
+    """Exchange a WeCom OAuth code for a stable member identity payload."""
+    corp_id = get_wecom_corp_id()
+    secret = get_wecom_secret()
+    if not corp_id or not secret:
+        raise ValueError("WeCom SSO is not configured")
 
-    # Mock implementation for development
-    logger.info(f"Mock WeChat authentication for code: {code}")
+    normalized_code = code.strip()
+    if not normalized_code:
+        raise ValueError("WeCom callback code is required")
 
-    # In production, fetch actual user info from WeChat
-    # For now, create or return mock user
-    return None
+    async with _create_wecom_http_client() as client:
+        token_payload = await _request_wecom_json(
+            client,
+            "/cgi-bin/gettoken",
+            params={
+                "corpid": corp_id,
+                "corpsecret": secret,
+            },
+        )
+        access_token = str(token_payload.get("access_token") or "").strip()
+        if not access_token:
+            raise ValueError("WeCom token exchange returned an empty access_token")
+
+        identity_payload = await _request_wecom_json(
+            client,
+            "/cgi-bin/auth/getuserinfo",
+            params={
+                "access_token": access_token,
+                "code": normalized_code,
+            },
+        )
+        user_id = str(identity_payload.get("userid") or "").strip()
+        if not user_id:
+            raise ValueError("WeCom callback did not return a userid")
+
+        profile: dict[str, Any] = {
+            "userid": user_id,
+        }
+        try:
+            detail_payload = await _request_wecom_json(
+                client,
+                "/cgi-bin/user/get",
+                params={
+                    "access_token": access_token,
+                    "userid": user_id,
+                },
+            )
+        except (httpx.HTTPError, ValueError) as exc:
+            logger.warning(
+                "WeCom user detail lookup failed",
+                wecom_user_id=user_id,
+                error_type=type(exc).__name__,
+            )
+        else:
+            profile.update(detail_payload)
+
+        return profile
+
+
+async def upsert_wecom_user(db: AsyncSession, profile: dict[str, Any]) -> User:
+    """Create or update the local user that corresponds to a WeCom identity."""
+    wecom_user_id = _normalize_optional_string(profile.get("userid"))
+    if wecom_user_id is None:
+        raise ValueError("WeCom profile is missing userid")
+
+    email = _normalize_optional_string(profile.get("email"))
+    name = _normalize_optional_string(profile.get("name")) or wecom_user_id
+    department = _normalize_department_value(profile.get("department"))
+
+    result = await db.execute(select(User).where(User.wechat_user_id == wecom_user_id))
+    user = result.scalar_one_or_none()
+
+    if user is None and email:
+        email_result = await db.execute(select(User).where(User.email == email))
+        user = email_result.scalar_one_or_none()
+
+    if user is None:
+        user = User(
+            user_id=str(uuid.uuid4()),
+            wechat_user_id=wecom_user_id,
+            email=email,
+            name=name,
+            department=department,
+        )
+        db.add(user)
+    else:
+        user.wechat_user_id = wecom_user_id
+        user.name = name or user.name or wecom_user_id
+        if email:
+            user.email = email
+        if department is not None:
+            user.department = department
+
+    await db.commit()
+    await db.refresh(user)
+    return user
+
+
+async def mark_user_logged_in(db: AsyncSession, user: User) -> User:
+    user.last_login = datetime.now(UTC)
+    await db.commit()
+    await db.refresh(user)
+    return user
 
 
 async def get_dev_user(db: AsyncSession) -> User:
@@ -481,7 +752,7 @@ async def get_current_user_optional(
     request: Request,
     credentials: HTTPAuthorizationCredentials = Depends(security),
     cookie_token: str | None = Cookie(default=None, alias=AUTH_SESSION_COOKIE_NAME),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ) -> User | None:
     """
     Optional authentication - returns None if not authenticated

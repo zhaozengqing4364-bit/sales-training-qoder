@@ -258,4 +258,40 @@ describe("API client 401 handling", () => {
             rawMessage: "当前账号权限不足，无法执行该操作。",
         });
     });
+
+    it("normalizes top-level voice runtime profile errors into ApiRequestError", async () => {
+        mockFetchResponse(404, {
+            success: false,
+            error: "[VOICE_RUNTIME_PROFILE_NOT_FOUND]",
+            message: "运行时配置不存在。",
+            trace_id: "trace-runtime-1",
+        });
+
+        await expect(
+            api.admin.updateVoiceRuntimeProfile("profile-missing", { name: "新名称" }),
+        ).rejects.toMatchObject({
+            name: "ApiRequestError",
+            status: 404,
+            errorCode: "[VOICE_RUNTIME_PROFILE_NOT_FOUND]",
+            rawMessage: "运行时配置不存在。",
+            traceId: "trace-runtime-1",
+        });
+    });
+
+    it("normalizes top-level evaluation report errors into ApiRequestError", async () => {
+        mockFetchResponse(404, {
+            success: false,
+            error: "[REPORT_NOT_FOUND]",
+            message: "报告不存在。",
+            trace_id: "trace-report-1",
+        });
+
+        await expect(api.admin.getComprehensiveReport("session-1")).rejects.toMatchObject({
+            name: "ApiRequestError",
+            status: 404,
+            errorCode: "[REPORT_NOT_FOUND]",
+            rawMessage: "报告不存在。",
+            traceId: "trace-report-1",
+        });
+    });
 });

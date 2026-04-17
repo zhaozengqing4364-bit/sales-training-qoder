@@ -12,6 +12,74 @@ bash scripts/dev-up.sh
 - 自动拉起 PostgreSQL / Redis（`brew services`）
 - 启动 Backend（`uvicorn`）和 Frontend（`next dev`）
 
+## Smoke baseline：一键启动最小全栈验收环境
+
+```bash
+bash scripts/dev-smoke-up.sh
+```
+
+该入口建立在现有 `scripts/dev-up.sh` 之上，只补齐 smoke 需要的最小约定：
+- 固定本地 smoke 管理员账号：`admin@qoder.ai`
+- 固定本地 smoke 密码：`change-me`（可通过 `SMOKE_ADMIN_PASSWORD` 覆盖）
+- 启动后自动执行 `backend/scripts/bootstrap_auth_admin.py`，确保 admin 路由可进入
+- 记录 PostgreSQL / Redis 是否原本已在运行，供 teardown 时避免误停用户已有本地依赖
+- `http://localhost:3444/health` 现在返回稳定的 machine-readable readiness payload（包含 `ready=true` 与 `readiness=ready`），供 smoke/轮询脚本直接消费
+
+对应停止命令：
+
+```bash
+bash scripts/dev-smoke-stop.sh
+```
+
+## Playwright smoke：最小关键流
+
+在仓库根目录或单独终端中运行：
+
+```bash
+cd web && npx playwright test
+```
+
+当前 smoke 现在覆盖 8 条关键流：
+- login
+- dashboard
+- training entry
+- practice session smoke
+- report smoke
+- replay smoke
+- admin analytics smoke
+- support/runtime smoke
+
+Playwright 会通过 `web/playwright.config.ts` 的 global setup/teardown 自动调用 `scripts/dev-smoke-up.sh` / `scripts/dev-smoke-stop.sh`，因此无需额外手动拉起测试栈。
+
+默认使用下列环境变量（必要时可覆盖）：
+- `SMOKE_ADMIN_EMAIL`
+- `SMOKE_ADMIN_PASSWORD`
+- `SMOKE_WEB_BASE_URL`
+- `SMOKE_BACKEND_BASE_URL`
+
+HTML 报告默认输出到：
+- `.sisyphus/evidence/task-9-playwright-report/`
+
+## 一键质量门禁（本地 / CI 共用）
+
+```bash
+bash scripts/critical-quality-gate.sh
+```
+
+固定顺序：
+1. backend tests（auth、history/report/replay、support runtime、admin analytics contract）
+2. Alembic upgrade head
+3. web typecheck
+4. vitest
+5. Playwright critical smoke matrix
+
+脚本会把完整输出保存到：
+- `.sisyphus/evidence/task-9-quality-gate.txt`
+
+Playwright 报告会输出到：
+- `.sisyphus/evidence/task-9-playwright-report/`
+- `.sisyphus/evidence/task-9-playwright-report.html`
+
 ## 一键停止开发环境
 
 ```bash

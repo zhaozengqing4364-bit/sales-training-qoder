@@ -32,15 +32,45 @@ interface ModelConfig {
 
 ## 2) 接口
 
-- `POST /`：创建配置
-- `GET /`：分页列表
-  - query: `model_type?`, `provider?`, `is_active?`, `page`, `page_size`
+- `POST /`：创建配置（返回创建摘要，不是完整详情）
+- `GET /`：按 `model_type` 分组的列表
+  - query: `model_type?`
+  - `data` 结构：`{ llm: ModelConfigListItem[]; embedding: ModelConfigListItem[]; asr: ModelConfigListItem[]; tts: ModelConfigListItem[]; total: number }`
 - `GET /{config_id}`：详情
 - `PUT /{config_id}` / `PATCH /{config_id}`：更新
 - `DELETE /{config_id}`：删除
 - `POST /{config_id}/test`：测试指定配置
 - `POST /test`：使用临时参数执行内联测试
 - `POST /tts/preview`：生成 TTS 预览音频
+
+### `ModelConfigListItem`（`GET /` 列表项）
+
+```ts
+interface ModelConfigListItem {
+  id: string;
+  name: string;
+  model_type: 'llm' | 'embedding' | 'asr' | 'tts';
+  provider: 'openai' | 'azure' | 'alibaba' | 'anthropic' | 'local' | 'local_streaming';
+  model_name: string;
+  is_default: boolean;
+  is_active: boolean;
+  last_test_status?: string | null;
+}
+```
+
+### `ModelConfigCreateResponse`（`POST /`）
+
+```ts
+interface ModelConfigCreateResponse {
+  id: string;
+  name: string;
+  model_type: 'llm' | 'embedding' | 'asr' | 'tts';
+  provider: 'openai' | 'azure' | 'alibaba' | 'anthropic' | 'local' | 'local_streaming';
+  model_name: string;
+  is_default: boolean;
+  created_at: string;
+}
+```
 
 ## 3) 响应格式
 
@@ -71,7 +101,12 @@ interface ModelConfig {
 - `[MODEL_CONFIG_PROVIDER_NOT_SUPPORTED]`
 - `[MODEL_CONFIG_BASE_URL_REQUIRED]`
 - `[MODEL_CONFIG_API_KEY_REQUIRED]`
+- `[MODEL_CONFIG_DUPLICATE]`
+- `[MODEL_CONFIG_LIST_FAILED]`
+- `[MODEL_CONFIG_GET_FAILED]`
 - `[MODEL_CONFIG_CREATE_FAILED]`
 - `[MODEL_CONFIG_UPDATE_FAILED]`
 - `[MODEL_CONFIG_DELETE_FAILED]`
-
+- `[CANNOT_UNSET_DEFAULT]`
+- `[CANNOT_DELETE_DEFAULT]`
+- `[ENCRYPTION_ERROR]`

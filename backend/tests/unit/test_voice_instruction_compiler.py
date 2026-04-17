@@ -4,7 +4,10 @@ from __future__ import annotations
 
 from types import SimpleNamespace
 
-from sales_bot.services.voice_instruction_compiler import VoiceInstructionCompiler
+from sales_bot.services.voice_instruction_compiler import (
+    VoiceInstructionCompiler,
+    enforce_question_limit,
+)
 
 
 def test_compile_base_contract_contains_role_and_network_constraints():
@@ -159,3 +162,12 @@ def test_compile_base_contract_uses_structured_customer_pressure_contract():
     assert "回到同一阻塞点继续追问" in compiled.base_instructions
     assert "可验证证据" in compiled.base_instructions
     assert "你拿什么证明这个 ROI 不是口号" in compiled.base_instructions
+
+
+def test_enforce_question_limit_trims_extra_questions_without_appending_template_copy():
+    text = "你知道实习是什么吗？它有哪些功能？适合谁用？"
+
+    trimmed = enforce_question_limit(text, max_questions_per_turn=1)
+
+    assert trimmed == "你知道实习是什么吗？"
+    assert "先回答这一点即可" not in trimmed

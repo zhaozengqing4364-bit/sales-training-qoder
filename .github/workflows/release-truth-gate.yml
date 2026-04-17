@@ -11,6 +11,43 @@ jobs:
   release-truth:
     name: release-truth
     runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: dev
+          POSTGRES_PASSWORD: dev
+          POSTGRES_DB: sales_training
+        options: >-
+          --health-cmd pg_isready -U dev -d sales_training
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+      redis:
+        image: redis:7
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 6379:6379
+
+    env:
+      DATABASE_URL: postgresql+asyncpg://dev:dev@127.0.0.1:5432/sales_training
+      REDIS_URL: redis://127.0.0.1:6379/0
+      NEXT_PUBLIC_API_URL: http://localhost:3444/api/v1
+      NEXT_PUBLIC_WS_URL: ws://localhost:3444
+      SMOKE_ADMIN_EMAIL: admin@qoder.ai
+      SMOKE_ADMIN_PASSWORD: change-me
+      AUTH_SHARED_PASSWORD: change-me
+      AUTO_START_INFRA: "0"
+      PORTS_TO_CLEAN: 3444,3445
+      PLAYWRIGHT_SKIP_BROWSER_INSTALL: "1"
 
     steps:
       - name: Checkout repository
@@ -39,17 +76,21 @@ jobs:
           backend/venv/bin/pip install --upgrade pip
           backend/venv/bin/pip install -r backend/requirements.txt
 
-      - name: Web focused gate
+      - name: Install Playwright browser + system dependencies
         run: |
-          npm --prefix web test -- --run "src/app/(auth)/login/page.test.tsx" "src/components/error-reporting.test.tsx"
+          cd web
+          npx playwright install --with-deps chromium
 
-      - name: Backend auth + metrics + analytics/error gate
+      - name: Critical full-stack quality gate
         run: |
-          backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/integration/test_auth_login_api.py backend/tests/integration/test_observability_surfaces.py -x -q
+          bash scripts/critical-quality-gate.sh
 
-      - name: Docs/spec drift inventory gate
-        run: |
-          # docs/api-contract/* is the current contract authority.
-          rg -n "/api/v1/practice/sessions|/api/v1/admin/release-verification|/api/v1/support/runtime" docs/api-contract
-          # api-spec.md and checked-in openapi.yaml remain explicit legacy/drift surfaces until promoted.
-          rg -n "/auth/wechat|POST /api/v1/sessions" api-spec.md specs/001-ai-practice-system/contracts/openapi.yaml
+      - name: Upload T9 quality-gate evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: t9-quality-gate-evidence
+          path: |
+            .sisyphus/evidence/task-9-quality-gate.txt
+            .sisyphus/evidence/task-9-playwright-report.html
+            .sisyphus/evidence/task-9-playwright-report/

@@ -1,0 +1,58 @@
+Task T1 sampled proof cases
+Date: 2026-04-15
+
+Sample A — environment noise
+File: `backend/src/main.py`
+LSP sample:
+- `reportMissingImports` for `dotenv` at line 11
+- `reportMissingImports` for `fastapi` at line 12
+- `reportMissingImports` for `sqlalchemy` at line 16
+- `reportMissingImports` for `uvicorn` at line 778
+Why this stays in environment-noise bucket:
+- `fastapi` is declared in `backend/requirements.txt:2`
+- `sqlalchemy` is declared in `backend/requirements.txt:33`
+- shell probes show the active interpreters are not aligned (`python3` = 3.14.3, `pytest` = 3.13.12)
+
+Sample B — real defect
+File: `backend/src/common/auth/service.py:323-339`
+Code shape:
+- `payload = verify_token(token)`
+- `user_id: str = payload.get("sub")`
+- query later uses `user_id` after the `try/except`
+LSP sample:
+- `reportArgumentType` at line 323
+- `reportAssignmentType` at line 324
+- `reportPossiblyUnboundVariable` at line 339
+Why this stays in real-defect bucket:
+- it is a local control-flow/type narrowing problem, independent of package resolution
+
+Sample C — real defect cluster in realtime hotspot
+File: `backend/src/sales_bot/websocket/stepfun_realtime_handler.py`
+LSP sample:
+- `reportArgumentType` at line 1842 (`str` vs `SessionLifecycleAction`)
+- `reportAssignmentType` at line 2543 (`PassFlags` vs `dict[str, bool] | None`)
+- `reportArgumentType` at line 2627 (`dict[str, bool] | None` vs `PassFlags | None`)
+- `reportPossiblyUnboundVariable` at lines 4245-4266 (`output`)
+Why this stays in real-defect bucket:
+- same file also has import noise, but these diagnostics are local model/control-flow mismatches that remain actionable after import-noise filtering
+
+Sample D — stale-path noise
+File: `backend/tests/integration/test_nfr_ci_integration.py`
+Path hack:
+- line 19 inserts `Path(__file__).parent.parent / "src"`
+- from this file that points to `backend/tests/src`, not `backend/src`
+Observed contradiction:
+- LSP reports `common.monitoring.nfr_reporter` missing at lines 56/94/129/.../415
+- actual module exists at `backend/src/common/monitoring/nfr_reporter.py`
+Why this stays in stale-path bucket:
+- the missing-import report contradicts the repository layout and is traced to an incorrect manual path bootstrap
+
+Sample E — baseline config effect check
+Config files added:
+- `backend/pyrightconfig.json`
+- `pyrightconfig.json`
+Observed outcome:
+- current `lsp_diagnostics` samples did not change after config creation
+Interpretation:
+- active LSP service likely needs restart or is pinned to an external/global environment
+- unchanged live diagnostics are evidence of tooling-state drift, not evidence that the config files are business-logic changes

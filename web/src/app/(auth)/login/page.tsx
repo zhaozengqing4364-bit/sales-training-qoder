@@ -1,28 +1,164 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
-import { GlassCard } from "@/components/ui/glass-card";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { ArrowRight, Loader2, AlertCircle } from "lucide-react";
-import { api, getApiErrorMessage } from "@/lib/api/client";
 import Link from "next/link";
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { AlertCircle, ArrowRight, Loader2 } from "lucide-react";
+
+import { api, getApiErrorMessage } from "@/lib/api/client";
+import { Button } from "@/components/ui/button";
+import { GlassCard } from "@/components/ui/glass-card";
+import { Input } from "@/components/ui/input";
+
+const API_BASE_URL = (
+    process.env.NEXT_PUBLIC_API_URL || "http://localhost:3444/api/v1"
+).replace(/\/+$/, "");
+
+type ProviderStatus = {
+    enabled: boolean;
+    loginUrl: string;
+    message: string;
+};
+
+type AuthProviderState = {
+    environment: string;
+    wecom: ProviderStatus;
+    devFallback: ProviderStatus;
+};
+
+const DEFAULT_PROVIDER_STATE: AuthProviderState = {
+    environment: "development",
+    wecom: {
+        enabled: false,
+        loginUrl: "",
+        message: "正在检查企业微信登录配置…",
+    },
+    devFallback: {
+        enabled: false,
+        loginUrl: "",
+        message: "",
+    },
+};
+
+const AUTH_ERROR_MESSAGE_MAP: Record<string, string> = {
+    "wecom-unavailable": "当前环境未配置企业微信 SSO，请联系管理员或使用明确标注的开发者登录。",
+    "wecom-state-invalid": "企业微信登录状态已失效，请重新发起登录。",
+    "wecom-user-disabled": "当前企业微信账号已被停用，请联系管理员。",
+    "wecom-callback-failed": "企业微信登录失败，请稍后重试。",
+};
+
+function buildApiUrl(path: string): string {
+    const normalizedPath = path.startsWith("/") ? path : `/${path}`;
+    return `${API_BASE_URL}${normalizedPath}`;
+}
+
+function toProviderStatus(input: unknown, fallbackMessage: string): ProviderStatus {
+    const record = input && typeof input === "object" ? input as Record<string, unknown> : {};
+    return {
+        enabled: record.enabled === true,
+        loginUrl: typeof record.login_url === "string" ? record.login_url : "",
+        message: typeof record.message === "string" && record.message.trim()
+            ? record.message.trim()
+            : fallbackMessage,
+    };
+}
+
+function toAuthProviderState(payload: unknown): AuthProviderState {
+    const root = payload && typeof payload === "object" ? payload as Record<string, unknown> : {};
+    const data = root.data && typeof root.data === "object" ? root.data as Record<string, unknown> : {};
+
+    return {
+        environment: typeof data.environment === "string" && data.environment.trim()
+            ? data.environment.trim()
+            : "development",
+        wecom: toProviderStatus(data.wecom, "当前环境未配置企业微信 SSO。"),
+        devFallback: toProviderStatus(data.dev_fallback, "开发者登录当前不可用。"),
+    };
+}
+
+function getAuthErrorMessageFromLocation(): string {
+    if (typeof window === "undefined") {
+        return "";
+    }
+
+    const authError = new URLSearchParams(window.location.search).get("authError");
+    if (!authError) {
+        return "";
+    }
+
+    return AUTH_ERROR_MESSAGE_MAP[authError] || "登录失败，请稍后重试。";
+}
 
 export default function LoginPage() {
     const router = useRouter();
     const [email, setEmail] = useState("");
     const [password, setPassword] = useState("");
-    const [isLoading, setIsLoading] = useState(false);
+    const [isPasswordLoginLoading, setIsPasswordLoginLoading] = useState(false);
+    const [isDevLoginLoading, setIsDevLoginLoading] = useState(false);
     const [error, setError] = useState("");
+    const [providerState, setProviderState] = useState<AuthProviderState>(DEFAULT_PROVIDER_STATE);
     const normalizedEmail = email.trim();
     const forgotPasswordHref = normalizedEmail
         ? `/forgot-password?email=${encodeURIComponent(normalizedEmail)}`
         : "/forgot-password";
 
+    useEffect(() => {
+        let active = true;
+        const authErrorMessage = getAuthErrorMessageFromLocation();
+        if (authErrorMessage) {
+            setError(authErrorMessage);
+        }
+
+        const loadProviders = async () => {
+            try {
+                const response = await fetch(buildApiUrl("/auth/providers"), {
+                    method: "GET",
+                    cache: "no-store",
+                    credentials: "include",
+                });
+                const payload = await response.json().catch(() => null);
+                if (!response.ok) {
+                    throw new Error(
+                        payload && typeof payload === "object" && "message" in payload
+                            ? String((payload as { message?: unknown }).message || "")
+                            : "登录配置加载失败，请刷新页面后重试。",
+                    );
+                }
+                if (active) {
+                    setProviderState(toAuthProviderState(payload));
+                }
+            } catch (loadError) {
+                if (!active) {
+                    return;
+                }
+                setProviderState({
+                    environment: "development",
+                    wecom: {
+                        enabled: false,
+                        loginUrl: "",
+                        message: "登录配置加载失败，请刷新页面后重试。",
+                    },
+                    devFallback: {
+                        enabled: false,
+                        loginUrl: "",
+                        message: "开发者登录当前不可用。",
+                    },
+                });
+                if (!authErrorMessage) {
+                    setError(loadError instanceof Error ? loadError.message : "登录配置加载失败，请刷新页面后重试。");
+                }
+            }
+        };
+
+        void loadProviders();
+        return () => {
+            active = false;
+        };
+    }, []);
+
     const handleLogin = async (e: React.FormEvent) => {
         e.preventDefault();
-        setIsLoading(true);
+        setIsPasswordLoginLoading(true);
         setError("");
 
         try {
@@ -31,13 +167,49 @@ export default function LoginPage() {
         } catch (err: unknown) {
             setError(getApiErrorMessage(err));
         } finally {
-            setIsLoading(false);
+            setIsPasswordLoginLoading(false);
         }
     };
 
+    const handleWecomLogin = () => {
+        if (!providerState.wecom.enabled || !providerState.wecom.loginUrl) {
+            return;
+        }
+        window.location.assign(providerState.wecom.loginUrl);
+    };
+
+    const handleDevLogin = async () => {
+        if (!providerState.devFallback.enabled || !providerState.devFallback.loginUrl) {
+            return;
+        }
+
+        setIsDevLoginLoading(true);
+        setError("");
+        try {
+            const response = await fetch(providerState.devFallback.loginUrl, {
+                method: "POST",
+                credentials: "include",
+            });
+            const payload = await response.json().catch(() => null);
+            if (!response.ok || (payload && typeof payload === "object" && (payload as { success?: unknown }).success === false)) {
+                throw new Error(
+                    payload && typeof payload === "object" && "message" in payload
+                        ? String((payload as { message?: unknown }).message || "开发者登录失败，请稍后重试。")
+                        : "开发者登录失败，请稍后重试。",
+                );
+            }
+            router.push("/");
+        } catch (err) {
+            setError(err instanceof Error ? err.message : "开发者登录失败，请稍后重试。");
+        } finally {
+            setIsDevLoginLoading(false);
+        }
+    };
+
+    const isWecomDisabled = !providerState.wecom.enabled;
+
     return (
         <div className="min-h-screen flex items-center justify-center relative overflow-hidden">
-            {/* Background Decor */}
             <div className="absolute top-[-20%] left-[-20%] w-[800px] h-[800px] bg-blue-100/30 rounded-full blur-[140px] pointer-events-none" />
             <div className="absolute bottom-[-20%] right-[-20%] w-[800px] h-[800px] bg-indigo-100/30 rounded-full blur-[140px] pointer-events-none" />
 
@@ -53,24 +225,50 @@ export default function LoginPage() {
                 <div className="space-y-4">
                     <div className="space-y-2">
                         <Button
-                            disabled
-                            aria-describedby="wecom-login-coming-soon"
-                            className="w-full h-12 bg-slate-100 text-slate-400 border border-slate-200 shadow-none rounded-full font-medium cursor-not-allowed opacity-70"
-                            title="即将支持，敬请期待"
+                            type="button"
+                            disabled={isWecomDisabled}
+                            aria-describedby="wecom-login-status"
+                            className={`w-full h-12 rounded-full font-medium ${
+                                isWecomDisabled
+                                    ? "bg-slate-100 text-slate-400 border border-slate-200 shadow-none cursor-not-allowed opacity-70"
+                                    : "bg-slate-900 hover:bg-slate-800 text-white shadow-lg shadow-slate-900/20"
+                            }`}
+                            title={providerState.wecom.message}
+                            onClick={handleWecomLogin}
                         >
-                            企业微信登录 (WeCom) — 即将支持
+                            企业微信登录 (WeCom)
                         </Button>
-                        <p
-                            id="wecom-login-coming-soon"
-                            className="text-center text-xs text-slate-400"
-                        >
-                            企业微信登录即将支持，敬请期待
+                        <p id="wecom-login-status" className="text-center text-xs text-slate-400">
+                            {providerState.wecom.message}
                         </p>
                     </div>
 
+                    {providerState.devFallback.enabled && (
+                        <div className="space-y-2">
+                            <Button
+                                type="button"
+                                variant="outline"
+                                className="w-full h-12 rounded-full border-slate-200 text-slate-700"
+                                disabled={isDevLoginLoading}
+                                onClick={handleDevLogin}
+                            >
+                                {isDevLoginLoading ? (
+                                    <>
+                                        <Loader2 className="mr-2 h-4 w-4 animate-spin" /> 开发者登录中...
+                                    </>
+                                ) : (
+                                    "开发者快速登录"
+                                )}
+                            </Button>
+                            <p className="text-center text-xs text-amber-600">
+                                {providerState.devFallback.message}
+                            </p>
+                        </div>
+                    )}
+
                     <div className="relative flex justify-center text-xs uppercase my-6">
                         <span className="bg-white/50 px-3 text-slate-400 z-10 font-medium">或者使用账号登录</span>
-                        <div className="absolute top-1/2 left-0 w-full border-t border-slate-200 -z-0"></div>
+                        <div className="absolute top-1/2 left-0 w-full border-t border-slate-200 -z-0" />
                     </div>
 
                     <form onSubmit={handleLogin} className="space-y-4">
@@ -82,12 +280,12 @@ export default function LoginPage() {
                         )}
                         <div className="space-y-2">
                             <label className="sr-only" htmlFor="login-email">邮箱地址</label>
-                            <Input 
+                            <Input
                                 id="login-email"
                                 type="email"
                                 name="email"
                                 autoComplete="username"
-                                placeholder="name@company.com" 
+                                placeholder="name@company.com"
                                 className="bg-white/50 focus:bg-white transition-colors h-12 rounded-full px-6"
                                 value={email}
                                 onChange={(e) => setEmail(e.target.value)}
@@ -116,12 +314,12 @@ export default function LoginPage() {
                                 required
                             />
                         </div>
-                        <Button 
-                            type="submit" 
-                            disabled={isLoading}
+                        <Button
+                            type="submit"
+                            disabled={isPasswordLoginLoading}
                             className="w-full h-12 rounded-full mt-4 text-base shadow-lg shadow-slate-900/20 bg-slate-900 hover:bg-slate-800 text-white"
                         >
-                            {isLoading ? (
+                            {isPasswordLoginLoading ? (
                                 <>
                                     <Loader2 className="mr-2 h-4 w-4 animate-spin" /> 登录中...
                                 </>
@@ -139,5 +337,5 @@ export default function LoginPage() {
                 </div>
             </GlassCard>
         </div>
-    )
+    );
 }

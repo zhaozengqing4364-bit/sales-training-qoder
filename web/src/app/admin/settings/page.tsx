@@ -41,71 +41,17 @@ import {
     DialogTitle,
 } from "@/components/ui/glass-modal";
 import { api } from "@/lib/api/client";
-
-// ============ Model Config Types ============
-type ModelType = "llm" | "embedding" | "asr" | "tts";
-type ModelProvider = "openai" | "azure" | "alibaba" | "anthropic" | "local" | "local_streaming";
-
-interface ModelConfigItem {
-    id: string;
-    name: string;
-    model_type: string;
-    provider: string;
-    model_name: string;
-    is_default: boolean;
-    is_active: boolean;
-    last_test_status: string | null;
-}
-
-interface ModelConfigArrayItem extends ModelConfigItem {
-    model_type: ModelType;
-}
-
-interface ModelConfigDetail {
-    id: string;
-    name: string;
-    model_type: string;
-    provider: string;
-    base_url: string;
-    api_key_masked: string;
-    model_name: string;
-    extra_config: Record<string, unknown>;
-    is_default: boolean;
-    is_active: boolean;
-    last_tested_at: string | null;
-    last_test_status: string | null;
-    created_at: string;
-    updated_at: string;
-}
-
-interface ModelConfigListResponse {
-    llm: ModelConfigItem[];
-    embedding: ModelConfigItem[];
-    asr: ModelConfigItem[];
-    tts: ModelConfigItem[];
-    total: number;
-}
-
-interface CreateModelConfigRequest {
-    name: string;
-    model_type: ModelType;
-    provider: ModelProvider;
-    base_url: string;
-    api_key: string;
-    model_name: string;
-    extra_config?: Record<string, unknown>;
-    is_default?: boolean;
-}
-
-interface UpdateModelConfigRequest {
-    name?: string;
-    base_url?: string;
-    api_key?: string;
-    model_name?: string;
-    extra_config?: Record<string, unknown>;
-    is_default?: boolean;
-    is_active?: boolean;
-}
+import type {
+    AdminModelConfigCreateRequest as CreateModelConfigRequest,
+    AdminModelConfigDetail as ModelConfigDetail,
+    AdminModelConfigGrouped as ModelConfigListResponse,
+    AdminModelConfigListItem as ModelConfigItem,
+    AdminModelConfigProvider as ModelProvider,
+    AdminModelConfigTestResponse,
+    AdminModelConfigTestRequest,
+    AdminModelConfigType as ModelType,
+    AdminModelConfigUpdateRequest as UpdateModelConfigRequest,
+} from "@/lib/api/types";
 
 const MODEL_TYPE_CONFIG = {
     llm: {
@@ -209,7 +155,7 @@ export default function SettingsPage() {
     });
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [isTesting, setIsTesting] = useState(false);
-    const [testResult, setTestResult] = useState<{ success: boolean; message: string } | null>(null);
+    const [testResult, setTestResult] = useState<AdminModelConfigTestResponse | null>(null);
     const [isPreviewingTTS, setIsPreviewingTTS] = useState(false);
     const previewAudioRef = useRef<HTMLAudioElement | null>(null);
 
@@ -289,19 +235,7 @@ export default function SettingsPage() {
         setIsLoadingModels(true);
         try {
             const data = await api.admin.getModelConfigs();
-            if (Array.isArray(data)) {
-                const arrayData = data as ModelConfigArrayItem[];
-                const formatted: ModelConfigListResponse = {
-                    llm: arrayData.filter((c) => c.model_type === 'llm'),
-                    embedding: arrayData.filter((c) => c.model_type === 'embedding'),
-                    asr: arrayData.filter((c) => c.model_type === 'asr'),
-                    tts: arrayData.filter((c) => c.model_type === 'tts'),
-                    total: data.length
-                };
-                setConfigs(formatted);
-            } else {
-                setConfigs(data as ModelConfigListResponse);
-            }
+            setConfigs(data);
         } catch (err) {
             debug.error("Failed to load model configs:", err);
             toast.error("加载配置失败");
@@ -359,8 +293,8 @@ export default function SettingsPage() {
             setEditingConfig(detail);
             setFormData({
                 name: detail.name,
-                model_type: detail.model_type as ModelType,
-                provider: detail.provider as ModelProvider,
+                model_type: detail.model_type,
+                provider: detail.provider,
                 base_url: detail.base_url,
                 api_key: "",
                 model_name: detail.model_name,
@@ -376,8 +310,8 @@ export default function SettingsPage() {
 
     const handleUpdate = async () => {
         if (!editingConfig) return;
-        const modelType = editingConfig.model_type as ModelType;
-        const provider = editingConfig.provider as ModelProvider;
+        const modelType = editingConfig.model_type;
+        const provider = editingConfig.provider;
         const baseUrlRequired = requiresBaseUrl(modelType, provider);
         const apiKeyRequired = requiresApiKey(modelType, provider);
 
@@ -444,14 +378,15 @@ export default function SettingsPage() {
             if (configId) {
                 result = await api.admin.testModelConfig(configId);
             } else {
-                result = await api.admin.testModelConfigInline({
+                const testPayload: AdminModelConfigTestRequest = {
                     model_type: formData.model_type,
                     provider: formData.provider,
                     base_url: formData.base_url,
                     api_key: formData.api_key,
                     model_name: formData.model_name,
                     extra_config: formData.extra_config || {},
-                });
+                };
+                result = await api.admin.testModelConfigInline(testPayload);
             }
             setTestResult({ success: result.success, message: result.message });
             if (result.success) {

@@ -437,7 +437,7 @@ export default function HomePage() {
                                 </div>
                                 <p className="text-sm leading-6 text-slate-600 min-h-[72px]">{step.description}</p>
                                 <Link href={step.href}>
-                                    <Button variant={step.key === "train" ? "default" : "outline"} className={step.buttonClassName}>
+                                    <Button variant={step.key === "train" ? "primary" : "outline"} className={step.buttonClassName}>
                                         {step.actionLabel} <ArrowRight className="ml-2 w-4 h-4" />
                                     </Button>
                                 </Link>

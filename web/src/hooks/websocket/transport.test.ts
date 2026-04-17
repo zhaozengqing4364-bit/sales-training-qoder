@@ -4,6 +4,7 @@ import {
     buildPracticeWebSocketUrl,
     createPendingMessageQueue,
     nextReconnectDelay,
+    toCloseReasonMessage,
 } from "./transport";
 
 describe("websocket transport helpers", () => {
@@ -48,6 +49,11 @@ describe("websocket transport helpers", () => {
             expect.objectContaining({ type: "interrupt", priority: "high" }),
             expect.objectContaining({ type: "text", data: { text: "hello" } }),
         ]);
+    });
+
+    it("hides raw upstream idle-timeout reasons from the learner-facing reconnect copy", () => {
+        expect(toCloseReasonMessage("too long without operation")).toBeNull();
+        expect(toCloseReasonMessage("Too Long Without Operatio")).toBeNull();
     });
 
     it("caps reconnect delay with the shared backoff policy", () => {

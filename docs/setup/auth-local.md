@@ -10,7 +10,25 @@
 | WebSocket | `Authorization` header、session cookie | `?token=` query token | sales / presentation websocket 都复用 `resolve_websocket_auth(...)` / `resolve_websocket_token(...)`；当前 shipped 顺序已收口为 `Authorization -> session cookie -> query token compatibility`，query token 仍是**活跃兼容路径**，但已明确降为 compatibility-only。 |
 | 登录凭证 | `User.hashed_password` | `AUTH_USER_PASSWORDS_JSON`、`AUTH_SHARED_PASSWORD` | password reset 后的 `hashed_password` 是正式 authority；env password 只用于本地/兼容账号恢复，不是长期主路径。登录成功时会通过 `X-Auth-Authority` / `X-Auth-Compatibility-Mode` 暴露当前 authority。 |
 
-## 2) 本地环境变量
+## 2) WeCom SSO 配置
+
+当环境已经配置真实企业微信 SSO 时，登录页会从 `GET /api/v1/auth/providers` 拉取状态，并把“企业微信登录 (WeCom)”按钮指向 `GET /api/v1/auth/wecom/start`。该起始端点会设置短时 OAuth state/return_to cookie，再由 `GET /api/v1/auth/wecom/callback` 完成 code 换取、用户映射和 session cookie 建立。
+
+最小必填变量：
+
+```env
+WECHAT_CORP_ID=your_corp_id
+WECHAT_SECRET=your_secret
+WECHAT_AGENT_ID=your_agent_id
+AUTH_FRONTEND_BASE_URL=http://localhost:3445
+```
+
+说明：
+- 也兼容 `WECOM_CORP_ID` / `WECOM_SECRET` / `WECOM_AGENT_ID` 这组三个别名；
+- `AUTH_FRONTEND_BASE_URL` 决定 callback 成功/失败后浏览器回跳的前端地址；
+- 非 development 环境若缺少上述 WeCom 变量，启动阶段会直接 fail closed，而不是把按钮伪装成可用。
+
+## 3) 本地环境变量
 
 在 `backend/.env`（或项目根 `.env`）中，至少保留一个兼容登录入口：
 
@@ -25,16 +43,18 @@ AUTH_USER_PASSWORDS_JSON={"admin@qoder.ai":"admin123","support@qoder.ai":"suppor
 - 两者都未配置时，`POST /api/v1/auth/login` 返回 `503 [AUTH_SERVICE_UNAVAILABLE]`；
 - 一旦用户通过 reset-password 写入 `User.hashed_password`，该用户后续登录就应由 managed password authority 接管，而不是继续依赖 shared password。
 
-## 3) 浏览器 / API / WebSocket 调用约定
+## 4) 浏览器 / API / WebSocket 调用约定
 
 ### 浏览器 HTTP 主链
 - 浏览器页面默认通过 `web/src/lib/api/client.ts` 发请求，并自动携带 `credentials: "include"`；
+- 登录页会先读取 `GET /api/v1/auth/providers`，只在 provider 明确可用时暴露 WeCom CTA；
 - 对带 session cookie 的 unsafe 请求（如 logout），client 会自动附带 `X-CSRF-Token`，并与 `app_csrf` cookie 做双提交校验；
 - 401 由统一 transport seam 触发 `authHandler.sessionExpired()`，而不是页面各自弹错或各自跳转；
 - login / logout / forgot-password / reset-password 这些 auth 自身接口显式设置 `skipSessionExpiredHandling: true`，避免把“登录失败”误当成“会话过期”。
 
 ### API / 脚本调用
 - 非浏览器调用优先使用 `Authorization: Bearer <jwt>`；
+- 若必须触发真实企业微信登录，请从浏览器打开 `/api/v1/auth/wecom/start`，不要在前端自行拼接第三方 OAuth URL；
 - 不要依赖 localStorage token 约定，仓库当前前端主链已经是 cookie-session + centralized auth handler。
 
 ### WebSocket 调用
@@ -42,7 +62,7 @@ AUTH_USER_PASSWORDS_JSON={"admin@qoder.ai":"admin123","support@qoder.ai":"suppor
 - 非浏览器 / 明确 bearer caller：使用 `Authorization: Bearer <jwt>`；
 - `?token=` 仅允许作为 legacy compatibility transport；新调用方不要新增该依赖。
 
-## 4) 兼容路径的关闭条件（off-ramp）
+## 5) 兼容路径的关闭条件（off-ramp）
 
 ### shared password / user-password env 关闭条件
 仅当以下条件同时满足时，才应移除 `AUTH_SHARED_PASSWORD` / `AUTH_USER_PASSWORDS_JSON`：
@@ -57,7 +77,7 @@ AUTH_USER_PASSWORDS_JSON={"admin@qoder.ai":"admin123","support@qoder.ai":"suppor
 3. backend websocket contract proof 明确证明 query token 已降为兼容或已完全移除；
 4. `docs/api-contract/websocket.md` 与 `.gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md` 同步更新，不保留双重 authority。
 
-## 5) 初始化管理员账号
+## 6) 初始化管理员账号
 
 ```bash
 cd backend
@@ -74,7 +94,7 @@ python scripts/bootstrap_auth_admin.py --email support@qoder.ai --name 支持工
 - `bootstrap_auth_admin.py` 只负责账号引导，不拥有 schema authority；
 - schema authority 仍在 Alembic / `init_db()` / `repair_legacy_schema.py` 这一条链上，不能把 auth bootstrap 误读为 DB 修复入口。
 
-## 6) 启动后检查
+## 7) 启动后检查
 
 后端启动日志会输出认证配置诊断（不含明文口令）：
 - 是否配置 shared password；
@@ -84,7 +104,7 @@ python scripts/bootstrap_auth_admin.py --email support@qoder.ai --name 支持工
 
 如果是非 development 环境，凭证缺失或 `AUTH_USER_PASSWORDS_JSON` 非法会直接阻断启动，而不是等到请求路径再隐式降级。
 
-## 7) Repo-root 验证命令
+## 8) Repo-root 验证命令
 
 在仓库根目录执行以下命令，验证 auth authority / compat / 前端 session-expired seam：
 

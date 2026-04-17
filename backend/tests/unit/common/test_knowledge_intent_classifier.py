@@ -132,6 +132,6 @@ class TestKnowledgeIntentClassifier:
 
         assert unmatched.matched is False
         assert unmatched.intent_key == "general_lookup"
-        assert unmatched.profile_key == "pricing_lookup"
+        assert unmatched.profile_key == ""
         assert unmatched.trace is None
-        assert unmatched.fallback_reason == "first_available_profile"
+        assert unmatched.fallback_reason == "no_matching_rule"

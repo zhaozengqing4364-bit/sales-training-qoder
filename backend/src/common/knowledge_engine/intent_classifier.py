@@ -1,8 +1,7 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 import re
-from typing import Pattern
+from dataclasses import dataclass, field
 
 from common.knowledge_engine.config_repo import (
     KnowledgeIntentRuleConfig,
@@ -90,8 +89,8 @@ class KnowledgeIntentClassifier:
                 trace=trace,
             )
 
-        fallback_profile_key = self._resolve_fallback_profile_key()
-        fallback_reason = "first_available_profile" if fallback_profile_key else "no_available_profile"
+        fallback_profile_key = ""
+        fallback_reason = "no_matching_rule"
         return KnowledgeIntentClassification(
             original_query=query,
             normalized_query=normalized_query,
@@ -151,7 +150,7 @@ def _split_keywords(pattern: str) -> list[str]:
     return [token.strip() for token in raw_tokens if token and token.strip()]
 
 
-def _safe_compile_regex(pattern: str) -> Pattern[str] | None:
+def _safe_compile_regex(pattern: str) -> re.Pattern[str] | None:
     try:
         return re.compile(pattern, re.IGNORECASE)
     except re.error:

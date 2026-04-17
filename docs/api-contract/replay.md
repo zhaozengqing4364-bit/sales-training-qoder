@@ -21,6 +21,8 @@
 }
 ```
 
+> 除 `GET /api/v1/sessions/{session_id}/audio/{message_id}` 会直接返回重定向/音频流外，消息、回放、高光读取接口都使用该 envelope。
+
 ## 数据模型（关键）
 
 ### `voice_policy_snapshot_ref`
@@ -56,20 +58,24 @@
 
 ```json
 {
-  "messages": [
-    {
-      "id": "msg-001",
-      "session_id": "session-uuid",
-      "turn_number": 1,
-      "role": "assistant",
-      "content": "你好...",
-      "timestamp": "2026-02-11T12:00:00+00:00",
-      "duration_ms": 3200,
-      "sales_stage": "opening",
-      "is_highlight": false
-    }
-  ],
-  "total": 12
+  "success": true,
+  "data": {
+    "messages": [
+      {
+        "id": "msg-001",
+        "session_id": "session-uuid",
+        "turn_number": 1,
+        "role": "assistant",
+        "content": "你好...",
+        "timestamp": "2026-02-11T12:00:00+00:00",
+        "duration_ms": 3200,
+        "sales_stage": "opening",
+        "is_highlight": false
+      }
+    ],
+    "total": 12
+  },
+  "trace_id": "trace-xxx"
 }
 ```
 
@@ -85,27 +91,45 @@
 
 ```json
 {
-  "session_id": "session-uuid",
-  "agent_name": "销售教练",
-  "persona_name": "怀疑型客户",
-  "voice_policy_snapshot_ref": {
-    "voice_mode": "stepfun_realtime",
-    "runtime_profile_id": "uuid-or-null",
-    "tool_policy": {},
-    "knowledge_base_ids": [],
-    "source": {},
-    "resolved_at": "2026-02-11T12:00:00+00:00"
+  "success": true,
+  "data": {
+    "session_id": "session-uuid",
+    "agent_name": "销售教练",
+    "persona_name": "怀疑型客户",
+    "voice_policy_snapshot_ref": {
+      "voice_mode": "stepfun_realtime",
+      "runtime_profile_id": "uuid-or-null",
+      "tool_policy": {},
+      "knowledge_base_ids": [],
+      "source": {},
+      "resolved_at": "2026-02-11T12:00:00+00:00"
+    },
+    "total_duration_ms": 512000,
+    "messages": [],
+    "timeline_markers": [],
+    "stage_summary": []
   },
-  "total_duration_ms": 512000,
-  "messages": [],
-  "timeline_markers": [],
-  "stage_summary": []
+  "trace_id": "trace-xxx"
 }
 ```
 
 ### 4) 获取高光片段
 
 `GET /api/v1/sessions/{session_id}/highlights`
+
+返回:
+
+```json
+{
+  "success": true,
+  "data": {
+    "highlights": [],
+    "total_good": 0,
+    "total_bad": 0
+  },
+  "trace_id": "trace-xxx"
+}
+```
 
 ### 5) 获取消息音频
 

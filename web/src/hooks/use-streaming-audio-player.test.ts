@@ -203,6 +203,32 @@ describe("useStreamingAudioPlayer voice speed playbackRate wiring", () => {
         expect(mediaSource?.sourceBuffer.appendBuffer).toHaveBeenCalled();
     });
 
+    it("prefers server playbackRate embedded in chunk metadata over the local default", () => {
+        const { result } = renderHook(() => useStreamingAudioPlayer({ playbackRate: 1 }));
+
+        act(() => {
+            result.current.start();
+        });
+
+        const mediaSource = createdMediaSources.at(-1);
+        expect(mediaSource).toBeDefined();
+
+        act(() => {
+            mediaSource?.open();
+            result.current.appendChunk({
+                chunk_index: 0,
+                audio: toBase64(Uint8Array.from([13, 14, 15]).buffer),
+                duration_ms: 120,
+                is_final: false,
+                audio_format: "mp3",
+                playback_rate: 1.25,
+            });
+        });
+
+        const audioElement = createdAudioElements.at(-1);
+        expect(audioElement?.playbackRate).toBe(1.25);
+    });
+
     it("applies the shared playbackRate to fallback Audio playback when MediaSource is unsupported", () => {
         mediaSourceSupported = false;
 

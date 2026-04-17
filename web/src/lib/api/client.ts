@@ -107,6 +107,13 @@ import {
     AdminKnowledgeChunkingPreset,
     CreateKnowledgeChunkingPresetRequest,
     UpdateKnowledgeChunkingPresetRequest,
+    AdminModelConfigCreateRequest,
+    AdminModelConfigCreateResponse,
+    AdminModelConfigDetail,
+    AdminModelConfigGrouped,
+    AdminModelConfigTestResponse,
+    AdminModelConfigTestRequest,
+    AdminModelConfigUpdateRequest,
 } from "./types";
 import { authHandler } from "@/lib/auth-handler";
 import { normalizeCurrentUser } from "@/lib/auth/current-user";
@@ -222,7 +229,12 @@ const API_ERROR_MESSAGE_MAP: Record<string, string> = {
     "[PERSONA_INACTIVE]": "该角色已停用，请更换角色。",
     "[PERSONA_NOT_LINKED_TO_AGENT]": "所选角色未关联当前智能体，请重新选择。",
     "[AGENT_CATEGORY_RESTRICTED]": "当前仅支持创建「销售」与「演讲」两类智能体。",
+    "[AGENT_NOT_FOUND]": "智能体不存在，请刷新后重试。",
+    "[AGENT_CANNOT_DELETE]": "该智能体仍有关联会话，暂时不能删除。",
+    "[AGENT_ALREADY_PUBLISHED]": "该智能体已经发布，无需重复操作。",
+    "[AGENT_ALREADY_DRAFT]": "该智能体已经处于草稿状态。",
     "[FIELD_DEPRECATED_PERSONA_CENTERED]": "该配置入口已下线，请改为在角色中心（Persona）配置。",
+    "[PROMPT_TEMPLATE_ID_INVALID]": "模板ID无效，请检查后重试。",
     "[PROMPT_SCOPE_VIOLATION]": "销售场景仅允许评估/报告相关模板。",
     "[SALES_PERSONA_REQUIRED]": "请先选择销售角色。",
     "[SESSION_NOT_FOUND]": "未找到目标会话，请刷新后重试。",
@@ -237,6 +249,10 @@ const API_ERROR_MESSAGE_MAP: Record<string, string> = {
     "[PRESENTATION_PAGE_NOT_FOUND]": "演示页不存在。",
     "[PRESENTATION_THUMBNAIL_NOT_FOUND]": "演示页缩略图不存在。",
     "[PRESENTATION_REPLACE_BLOCKED_ACTIVE_SESSION]": "当前有进行中的演练正在使用该标准PPT，请结束后再替换。",
+    "[VOICE_RUNTIME_PROFILE_NOT_FOUND]": "运行时配置不存在，请刷新后重试。",
+    "[REPORT_NOT_FOUND]": "目标报告尚未生成或已不存在。",
+    "[REPORT_FETCH_FAILED]": "报告暂时无法读取，请稍后重试。",
+    "[REPORT_GENERATION_FAILED]": "报告生成失败，请稍后重试。",
 };
 
 type NormalizedApiErrorPayload = {
@@ -390,54 +406,6 @@ function normalizeSessionStatus(value: unknown): SessionStatus {
     }
     return "completed";
 }
-
-type AdminModelConfigListItem = {
-    id: string;
-    name: string;
-    model_type: string;
-    provider: string;
-    model_name: string;
-    is_default: boolean;
-    is_active: boolean;
-    last_test_status: string | null;
-};
-
-type AdminModelConfigGrouped = {
-    llm: AdminModelConfigListItem[];
-    embedding: AdminModelConfigListItem[];
-    asr: AdminModelConfigListItem[];
-    tts: AdminModelConfigListItem[];
-    total: number;
-};
-
-type AdminModelConfigDetail = {
-    id: string;
-    name: string;
-    model_type: string;
-    provider: string;
-    base_url: string;
-    api_key_masked: string;
-    model_name: string;
-    extra_config: Record<string, unknown>;
-    is_default: boolean;
-    is_active: boolean;
-    last_tested_at: string | null;
-    last_test_status: string | null;
-    created_at: string;
-    updated_at: string;
-};
-
-type AdminModelConfigUpsertPayload = {
-    name?: string;
-    model_type?: string;
-    provider?: string;
-    base_url?: string;
-    api_key?: string;
-    model_name?: string;
-    extra_config?: Record<string, unknown>;
-    is_default?: boolean;
-    is_active?: boolean;
-};
 
 type VoiceRuntimeProfile = AdminVoiceRuntimeProfile;
 
@@ -2629,21 +2597,21 @@ export const api = {
 
         // Model Configs
         getModelConfigs: async () => {
-            return apiFetch<AdminModelConfigGrouped | AdminModelConfigListItem[]>("/admin/model-configs");
+            return apiFetch<AdminModelConfigGrouped>("/admin/model-configs");
         },
 
         getModelConfig: async (id: string) => {
             return apiFetch<AdminModelConfigDetail>(`/admin/model-configs/${id}`);
         },
 
-        createModelConfig: async (data: AdminModelConfigUpsertPayload) => {
-            return apiFetch<AdminModelConfigDetail>("/admin/model-configs", {
+        createModelConfig: async (data: AdminModelConfigCreateRequest) => {
+            return apiFetch<AdminModelConfigCreateResponse>("/admin/model-configs", {
                 method: "POST",
                 body: JSON.stringify(data),
             });
         },
 
-        updateModelConfig: async (id: string, data: AdminModelConfigUpsertPayload) => {
+        updateModelConfig: async (id: string, data: AdminModelConfigUpdateRequest) => {
             return apiFetch<AdminModelConfigDetail>(`/admin/model-configs/${id}`, {
                 method: "PUT",
                 body: JSON.stringify(data),
@@ -2655,13 +2623,13 @@ export const api = {
         },
 
         testModelConfig: async (id: string) => {
-            return apiFetch<{ success: boolean; message: string; latency_ms?: number }>(`/admin/model-configs/${id}/test`, {
+            return apiFetch<AdminModelConfigTestResponse>(`/admin/model-configs/${id}/test`, {
                 method: "POST",
             });
         },
 
-        testModelConfigInline: async (data: AdminModelConfigUpsertPayload) => {
-            return apiFetch<{ success: boolean; message: string; latency_ms?: number }>("/admin/model-configs/test", {
+        testModelConfigInline: async (data: AdminModelConfigTestRequest) => {
+            return apiFetch<AdminModelConfigTestResponse>("/admin/model-configs/test", {
                 method: "POST",
                 body: JSON.stringify(data),
             });

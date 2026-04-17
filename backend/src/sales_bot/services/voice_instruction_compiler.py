@@ -16,7 +16,6 @@ from prompt_templates.compiled_contract import (
     build_prompt_contract_hash,
 )
 
-
 _SALES_FOCUS_LABELS = {
     "value_translation": "价值翻译",
     "customer_value": "客户价值",
@@ -386,6 +385,7 @@ class VoiceInstructionCompiler:
 
 
 QUESTION_SENTENCE_RE = re.compile(r"[^。！？!?]*[？?][^。！？!?]*")
+QUESTION_MARK_RE = re.compile(r"[？?]")
 
 
 def enforce_question_limit(text: str, max_questions_per_turn: int = 1) -> str:
@@ -398,14 +398,12 @@ def enforce_question_limit(text: str, max_questions_per_turn: int = 1) -> str:
     except (TypeError, ValueError):
         question_limit = 1
 
-    question_matches = list(QUESTION_SENTENCE_RE.finditer(normalized))
-    if len(question_matches) <= question_limit:
+    question_marks = list(QUESTION_MARK_RE.finditer(normalized))
+    if len(question_marks) <= question_limit:
         return normalized
 
-    cutoff = question_matches[question_limit - 1].end()
+    cutoff = question_marks[question_limit - 1].end()
     compact = normalized[:cutoff].strip()
     if compact and compact[-1] not in "。！？!?":
         compact += "。"
-    if not compact.endswith("先回答这一点即可。"):
-        compact += " 先回答这一点即可。"
     return compact

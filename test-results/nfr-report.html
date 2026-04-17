@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NFR Performance Report</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: #f5f5f7;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            padding: 30px;
+        }
+        h1 {
+            color: #1a1a1a;
+            border-bottom: 2px solid #1890ff;
+            padding-bottom: 10px;
+        }
+        h2 {
+            color: #333;
+            margin-top: 30px;
+        }
+        .summary {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin: 20px 0;
+        }
+        .metric-card {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 6px;
+            border-left: 4px solid #1890ff;
+        }
+        .metric-card.pass {
+            border-left-color: #52c41a;
+        }
+        .metric-card.fail {
+            border-left-color: #ff4d4f;
+        }
+        .metric-value {
+            font-size: 24px;
+            font-weight: bold;
+            margin: 10px 0;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+        }
+        th, td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+        th {
+            background: #f0f0f0;
+            font-weight: 600;
+        }
+        .status-pass {
+            color: #52c41a;
+            font-weight: bold;
+        }
+        .status-fail {
+            color: #ff4d4f;
+            font-weight: bold;
+        }
+        .badge {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+        .badge-pass {
+            background: #f6ffed;
+            color: #52c41a;
+        }
+        .badge-fail {
+            background: #fff1f0;
+            color: #ff4d4f;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>NFR Performance Report</h1>
+
+        <p><strong>Generated:</strong> 2026-04-15T01:31:33.455180</p>
+        <p><strong>Commit:</strong> <code>unknown</code></p>
+        <p><strong>Branch:</strong> <code>unknown</code></p>
+        <p><strong>Environment:</strong> <code>development</code></p>
+
+        <h2>Summary</h2>
+        <div class="summary">
+            <div class="metric-card">
+                <div>Total Metrics Tested</div>
+                <div class="metric-value">2</div>
+            </div>
+            <div class="metric-card pass">
+                <div>Passed</div>
+                <div class="metric-value">1</div>
+            </div>
+            <div class="metric-card fail">
+                <div>Failed</div>
+                <div class="metric-value">1</div>
+            </div>
+            <div class="metric-card fail">
+                <div>Overall Status</div>
+                <div class="metric-value">
+                    <span class="status-fail">
+                        FAIL
+                    </span>
+                </div>
+            </div>
+        </div>
+
+        <h2>Performance Targets (Constitution Principle II)</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>Metric</th>
+                    <th>P95 Target</th>
+                    <th>P95 Actual</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+            <tbody>
+        
+                <tr>
+                    <td>User speech to AI response latency</td>
+                    <td>300.0ms</td>
+                    <td>320.00ms</td>
+                    <td><span class="badge badge-fail">FAIL</span></td>
+                </tr>
+                
+                <tr>
+                    <td>WebSocket connection establishment time</td>
+                    <td>100.0ms</td>
+                    <td>90.00ms</td>
+                    <td><span class="badge badge-pass">PASS</span></td>
+                </tr>
+                
+            </tbody>
+        </table>
+
+        <h2>Detailed Results</h2>
+        <table>
+            <thead>
+                <tr>
+                    <th>Metric</th>
+                    <th>Status</th>
+                    <th>Samples</th>
+                    <th>P95</th>
+                    <th>P99</th>
+                    <th>Min</th>
+                    <th>Max</th>
+                    <th>Avg</th>
+                </tr>
+            </thead>
+            <tbody>
+        
+            <tr>
+                <td>End To End Latency</td>
+                <td class="status-fail">FAIL</td>
+                <td>5</td>
+                <td>320.00ms</td>
+                <td>320.00ms</td>
+                <td>250.00ms</td>
+                <td>320.00ms</td>
+                <td>290.00ms</td>
+            </tr>
+            
+            <tr>
+                <td>Websocket Connection</td>
+                <td class="status-pass">PASS</td>
+                <td>5</td>
+                <td>90.00ms</td>
+                <td>90.00ms</td>
+                <td>50.00ms</td>
+                <td>90.00ms</td>
+                <td>70.00ms</td>
+            </tr>
+            
+            </tbody>
+        </table>
+    </div>
+</body>
+</html>
+        

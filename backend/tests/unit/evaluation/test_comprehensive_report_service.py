@@ -14,6 +14,7 @@ Test Coverage:
 - _generate_detailed_feedback() and _generate_recommendations() methods
 - Error handling and edge cases
 """
+
 from __future__ import annotations
 
 from datetime import datetime, timezone
@@ -84,7 +85,10 @@ class TestComprehensiveReportService:
         service = AsyncMock()
         service.get_template_for_scenario = AsyncMock()
         service.compile_runtime_prompt_contract = MagicMock(
-            side_effect=lambda template, variables, runtime_consumer, system_message: Result.ok(
+            side_effect=lambda template,
+            variables,
+            runtime_consumer,
+            system_message: Result.ok(
                 SimpleNamespace(
                     rendered_prompt=str(getattr(template, "template", "")),
                     system_message=system_message,
@@ -102,7 +106,13 @@ class TestComprehensiveReportService:
         return service
 
     @pytest.fixture
-    def service(self, mock_db_session, mock_staged_eval_service, mock_prompt_service, mock_llm_service):
+    def service(
+        self,
+        mock_db_session,
+        mock_staged_eval_service,
+        mock_prompt_service,
+        mock_llm_service,
+    ):
         """Create ComprehensiveReportService instance with mocked dependencies."""
         return ComprehensiveReportService(
             db_session=mock_db_session,
@@ -119,7 +129,6 @@ class TestComprehensiveReportService:
                 stage_number=1,
                 start_turn=0,
                 end_turn=4,
-                
                 scores={"communication": 85.0, "product_knowledge": 80.0},
                 strengths=["Clear opening", "Good greeting"],
                 weaknesses=["Rushed introduction"],
@@ -130,7 +139,6 @@ class TestComprehensiveReportService:
                 stage_number=2,
                 start_turn=4,
                 end_turn=8,
-                
                 scores={"communication": 75.0, "problem_solving": 70.0},
                 strengths=["Good questions"],
                 weaknesses=["Missed opportunities"],
@@ -140,7 +148,14 @@ class TestComprehensiveReportService:
         ]
 
     @pytest.mark.asyncio
-    async def test_generate_report_success(self, service, mock_staged_eval_service, mock_prompt_service, mock_llm_service, sample_stage_results):
+    async def test_generate_report_success(
+        self,
+        service,
+        mock_staged_eval_service,
+        mock_prompt_service,
+        mock_llm_service,
+        sample_stage_results,
+    ):
         """Test successful report generation."""
         # Arrange
         session_id = str(uuid4())
@@ -148,7 +163,9 @@ class TestComprehensiveReportService:
         mock_staged_eval_service.get_stage_results.return_value = sample_stage_results
 
         mock_prompt_template = MagicMock()
-        mock_prompt_service.get_template_for_scenario.return_value = mock_prompt_template
+        mock_prompt_service.get_template_for_scenario.return_value = (
+            mock_prompt_template
+        )
 
         mock_llm_response = """{
             "overall_score": 80.0,
@@ -179,7 +196,9 @@ class TestComprehensiveReportService:
         mock_llm_service.generate_report.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_generate_report_no_stage_results(self, service, mock_staged_eval_service):
+    async def test_generate_report_no_stage_results(
+        self, service, mock_staged_eval_service
+    ):
         """Test report generation when no stage results exist."""
         # Arrange
         session_id = str(uuid4())
@@ -245,14 +264,24 @@ class TestComprehensiveReportService:
         assert result.value.dimension_scores[0].name == "流畅连贯性"
 
     @pytest.mark.asyncio
-    async def test_generate_report_database_error(self, service, mock_staged_eval_service, mock_prompt_service, mock_llm_service, mock_db_session, sample_stage_results):
+    async def test_generate_report_database_error(
+        self,
+        service,
+        mock_staged_eval_service,
+        mock_prompt_service,
+        mock_llm_service,
+        mock_db_session,
+        sample_stage_results,
+    ):
         """Test report generation with database error."""
         # Arrange
         session_id = str(uuid4())
         mock_staged_eval_service.get_stage_results.return_value = sample_stage_results
 
         mock_prompt_template = MagicMock()
-        mock_prompt_service.get_template_for_scenario.return_value = mock_prompt_template
+        mock_prompt_service.get_template_for_scenario.return_value = (
+            mock_prompt_template
+        )
 
         mock_llm_response = """{
             "overall_score": 80.0,
@@ -276,7 +305,9 @@ class TestComprehensiveReportService:
         assert "DATABASE_ERROR" in result.fallback or "SQLAlchemy" in result.fallback
 
     @pytest.mark.asyncio
-    async def test_generate_report_validation_error(self, service, mock_staged_eval_service, mock_prompt_service, mock_llm_service):
+    async def test_generate_report_validation_error(
+        self, service, mock_staged_eval_service, mock_prompt_service, mock_llm_service
+    ):
         """Test report generation with validation error."""
         # Arrange
         session_id = str(uuid4())
@@ -287,7 +318,6 @@ class TestComprehensiveReportService:
                 stage_number=1,
                 start_turn=0,
                 end_turn=4,
-                
                 scores={},  # Empty scores might cause calculation issues
                 strengths=[],
                 weaknesses=[],
@@ -308,11 +338,15 @@ class TestComprehensiveReportService:
         assert result is not None
 
     @pytest.mark.asyncio
-    async def test_generate_report_unexpected_error(self, service, mock_staged_eval_service):
+    async def test_generate_report_unexpected_error(
+        self, service, mock_staged_eval_service
+    ):
         """Test report generation with unexpected error."""
         # Arrange
         session_id = str(uuid4())
-        mock_staged_eval_service.get_stage_results.side_effect = Exception("Unexpected error")
+        mock_staged_eval_service.get_stage_results.side_effect = Exception(
+            "Unexpected error"
+        )
 
         # Act
         result = await service.generate_report(session_id)
@@ -326,13 +360,19 @@ class TestComprehensiveReportService:
         """Test retrieving existing report."""
         # Arrange
         session_id = str(uuid4())
+        created_at = datetime.now(timezone.utc)
 
         mock_db_report = MagicMock()
         mock_db_report.session_id = session_id
-        mock_db_report.generated_at = datetime.now(timezone.utc)
+        mock_db_report.created_at = created_at
         mock_db_report.overall_score = 85.0
         mock_db_report.dimension_scores = [
-            {"name": "communication", "score": 85.0, "weight": 0.25, "description": "Communication skills"}
+            {
+                "name": "communication",
+                "score": 85.0,
+                "weight": 0.25,
+                "description": "Communication skills",
+            }
         ]
         mock_db_report.stage_summaries = []
         mock_db_report.key_strengths = ["Good communication"]
@@ -352,6 +392,7 @@ class TestComprehensiveReportService:
         assert result.is_success
         report = result.value
         assert report.session_id == session_id
+        assert report.generated_at == created_at
         assert report.overall_score == 85.0
         assert len(report.dimension_scores) == 1
 
@@ -390,10 +431,11 @@ class TestComprehensiveReportService:
         """Test retrieving report with validation error."""
         # Arrange
         session_id = str(uuid4())
+        created_at = datetime.now(timezone.utc)
 
         mock_db_report = MagicMock()
         mock_db_report.session_id = session_id
-        mock_db_report.generated_at = datetime.now(timezone.utc)
+        mock_db_report.created_at = created_at
         mock_db_report.overall_score = 85.0
         # Invalid dimension_scores (missing required fields)
         mock_db_report.dimension_scores = [{"name": "test"}]
@@ -450,7 +492,6 @@ class TestComprehensiveReportService:
                 stage_number=1,
                 start_turn=0,
                 end_turn=2,
-                
                 scores={"communication": 90.0},
                 strengths=[],
                 weaknesses=[],
@@ -461,7 +502,6 @@ class TestComprehensiveReportService:
                 stage_number=2,
                 start_turn=2,
                 end_turn=4,
-                
                 scores={"professionalism": 85.0},
                 strengths=[],
                 weaknesses=[],
@@ -483,11 +523,21 @@ class TestComprehensiveReportService:
         """Test _calculate_overall_score helper."""
         # Arrange
         dimension_scores = [
-            DimensionScore(name="communication", score=80.0, weight=0.25, description=""),
-            DimensionScore(name="product_knowledge", score=90.0, weight=0.20, description=""),
-            DimensionScore(name="problem_solving", score=70.0, weight=0.20, description=""),
-            DimensionScore(name="customer_focus", score=85.0, weight=0.20, description=""),
-            DimensionScore(name="professionalism", score=75.0, weight=0.15, description=""),
+            DimensionScore(
+                name="communication", score=80.0, weight=0.25, description=""
+            ),
+            DimensionScore(
+                name="product_knowledge", score=90.0, weight=0.20, description=""
+            ),
+            DimensionScore(
+                name="problem_solving", score=70.0, weight=0.20, description=""
+            ),
+            DimensionScore(
+                name="customer_focus", score=85.0, weight=0.20, description=""
+            ),
+            DimensionScore(
+                name="professionalism", score=75.0, weight=0.15, description=""
+            ),
         ]
 
         # Act
@@ -546,7 +596,6 @@ class TestComprehensiveReportService:
                 stage_number=1,
                 start_turn=0,
                 end_turn=2,
-                
                 scores={},
                 strengths=["Good communication", "Clear speech"],
                 weaknesses=[],
@@ -557,7 +606,6 @@ class TestComprehensiveReportService:
                 stage_number=2,
                 start_turn=2,
                 end_turn=4,
-                
                 scores={},
                 strengths=["Good communication", "Active listening"],  # Duplicate
                 weaknesses=[],
@@ -619,7 +667,6 @@ class TestComprehensiveReportService:
             stage_number=1,
             start_turn=0,
             end_turn=2,
-            
             scores={"communication": 80.0, "product_knowledge": 90.0},
             strengths=["Good"],
             weaknesses=[],
@@ -634,13 +681,17 @@ class TestComprehensiveReportService:
         assert summaries[0]["average_score"] == 85.0
 
     @pytest.mark.asyncio
-    async def test_generate_detailed_feedback_success(self, service, mock_prompt_service, mock_llm_service, sample_stage_results):
+    async def test_generate_detailed_feedback_success(
+        self, service, mock_prompt_service, mock_llm_service, sample_stage_results
+    ):
         """Test _generate_detailed_feedback with successful LLM call."""
         # Arrange
         session_id = str(uuid4())
 
         mock_prompt_template = MagicMock()
-        mock_prompt_service.get_template_for_scenario.return_value = mock_prompt_template
+        mock_prompt_service.get_template_for_scenario.return_value = (
+            mock_prompt_template
+        )
 
         mock_llm_response = """{
             "overall_score": 80.0,
@@ -654,21 +705,27 @@ class TestComprehensiveReportService:
         mock_llm_service.generate_report.return_value = Result.ok(mock_llm_response)
 
         # Act
-        result = await service._generate_detailed_feedback(session_id, sample_stage_results, "sales")
+        result = await service._generate_detailed_feedback(
+            session_id, sample_stage_results, "sales"
+        )
 
         # Assert
         assert result.is_success
         assert result.value == "Detailed feedback from LLM"
 
     @pytest.mark.asyncio
-    async def test_generate_detailed_feedback_prompt_not_found(self, service, mock_prompt_service, sample_stage_results):
+    async def test_generate_detailed_feedback_prompt_not_found(
+        self, service, mock_prompt_service, sample_stage_results
+    ):
         """Test _generate_detailed_feedback when prompt template not found."""
         # Arrange
         session_id = str(uuid4())
         mock_prompt_service.get_template_for_scenario.return_value = None
 
         # Act
-        result = await service._generate_detailed_feedback(session_id, sample_stage_results, "sales")
+        result = await service._generate_detailed_feedback(
+            session_id, sample_stage_results, "sales"
+        )
 
         # Assert
         assert not result.is_success
@@ -687,7 +744,9 @@ class TestComprehensiveReportService:
         mock_prompt_template = MagicMock()
         mock_prompt_template.id = uuid4()
         mock_prompt_template.template = "报告：{{ overall_summary }}"
-        mock_prompt_service.get_template_for_scenario.return_value = mock_prompt_template
+        mock_prompt_service.get_template_for_scenario.return_value = (
+            mock_prompt_template
+        )
 
         compiled_contract = SimpleNamespace(
             rendered_prompt="报告：第一阶段表现稳定",
@@ -713,47 +772,65 @@ class TestComprehensiveReportService:
         mock_llm_service.generate_report.assert_awaited_once_with(compiled_contract)
 
     @pytest.mark.asyncio
-    async def test_generate_detailed_feedback_llm_failure(self, service, mock_prompt_service, mock_llm_service, sample_stage_results):
+    async def test_generate_detailed_feedback_llm_failure(
+        self, service, mock_prompt_service, mock_llm_service, sample_stage_results
+    ):
         """Test _generate_detailed_feedback when LLM call fails."""
         # Arrange
         session_id = str(uuid4())
         mock_prompt_template = MagicMock()
-        mock_prompt_service.get_template_for_scenario.return_value = mock_prompt_template
+        mock_prompt_service.get_template_for_scenario.return_value = (
+            mock_prompt_template
+        )
         mock_llm_service.generate_report.return_value = Result.fail("[LLM_ERROR]")
 
         # Act
-        result = await service._generate_detailed_feedback(session_id, sample_stage_results, "sales")
+        result = await service._generate_detailed_feedback(
+            session_id, sample_stage_results, "sales"
+        )
 
         # Assert
         assert not result.is_success
 
     @pytest.mark.asyncio
-    async def test_generate_detailed_feedback_validation_failure(self, service, mock_prompt_service, mock_llm_service, sample_stage_results):
+    async def test_generate_detailed_feedback_validation_failure(
+        self, service, mock_prompt_service, mock_llm_service, sample_stage_results
+    ):
         """Test _generate_detailed_feedback when LLM response validation fails."""
         # Arrange
         session_id = str(uuid4())
         mock_prompt_template = MagicMock()
-        mock_prompt_service.get_template_for_scenario.return_value = mock_prompt_template
+        mock_prompt_service.get_template_for_scenario.return_value = (
+            mock_prompt_template
+        )
 
         # Invalid LLM response
         mock_llm_service.generate_report.return_value = Result.ok("Not valid JSON")
 
         # Act
-        result = await service._generate_detailed_feedback(session_id, sample_stage_results, "sales")
+        result = await service._generate_detailed_feedback(
+            session_id, sample_stage_results, "sales"
+        )
 
         # Assert
         assert not result.is_success
         assert "LLM_VALIDATION_FAILED" in result.fallback
 
     @pytest.mark.asyncio
-    async def test_generate_detailed_feedback_exception_returns_empty(self, service, mock_prompt_service, sample_stage_results):
+    async def test_generate_detailed_feedback_exception_returns_empty(
+        self, service, mock_prompt_service, sample_stage_results
+    ):
         """Test _generate_detailed_feedback returns empty string on exception."""
         # Arrange
         session_id = str(uuid4())
-        mock_prompt_service.get_template_for_scenario.side_effect = RuntimeError("Test error")
+        mock_prompt_service.get_template_for_scenario.side_effect = RuntimeError(
+            "Test error"
+        )
 
         # Act
-        result = await service._generate_detailed_feedback(session_id, sample_stage_results, "sales")
+        result = await service._generate_detailed_feedback(
+            session_id, sample_stage_results, "sales"
+        )
 
         # Assert - Should return success with empty string (graceful degradation)
         assert result.is_success
@@ -764,13 +841,19 @@ class TestComprehensiveReportService:
         """Test _generate_recommendations helper."""
         # Arrange
         dimension_scores = [
-            DimensionScore(name="communication", score=50.0, weight=0.25, description=""),  # Low score
-            DimensionScore(name="product_knowledge", score=90.0, weight=0.20, description=""),  # High score
+            DimensionScore(
+                name="communication", score=50.0, weight=0.25, description=""
+            ),  # Low score
+            DimensionScore(
+                name="product_knowledge", score=90.0, weight=0.20, description=""
+            ),  # High score
         ]
         key_improvements = ["Product knowledge", "Closing techniques"]
 
         # Act
-        recommendations = await service._generate_recommendations(dimension_scores, key_improvements, "sales")
+        recommendations = await service._generate_recommendations(
+            dimension_scores, key_improvements, "sales"
+        )
 
         # Assert
         assert len(recommendations) > 0
@@ -781,13 +864,19 @@ class TestComprehensiveReportService:
         """Test _generate_recommendations when all scores are good."""
         # Arrange
         dimension_scores = [
-            DimensionScore(name="communication", score=85.0, weight=0.25, description=""),
-            DimensionScore(name="product_knowledge", score=90.0, weight=0.20, description=""),
+            DimensionScore(
+                name="communication", score=85.0, weight=0.25, description=""
+            ),
+            DimensionScore(
+                name="product_knowledge", score=90.0, weight=0.20, description=""
+            ),
         ]
         key_improvements = ["Minor improvements"]
 
         # Act
-        recommendations = await service._generate_recommendations(dimension_scores, key_improvements, "sales")
+        recommendations = await service._generate_recommendations(
+            dimension_scores, key_improvements, "sales"
+        )
 
         # Assert - Should only include improvement-based recommendations
         assert len(recommendations) > 0
@@ -804,7 +893,9 @@ class TestComprehensiveReportService:
         key_improvements = [f"Improvement {i}" for i in range(10)]
 
         # Act
-        recommendations = await service._generate_recommendations(dimension_scores, key_improvements, "sales")
+        recommendations = await service._generate_recommendations(
+            dimension_scores, key_improvements, "sales"
+        )
 
         # Assert
         assert len(recommendations) <= 5
@@ -816,7 +907,9 @@ class TestComprehensiveReportService:
         dimension_scores = None  # This will cause an error
 
         # Act
-        recommendations = await service._generate_recommendations(dimension_scores, [], "sales")
+        recommendations = await service._generate_recommendations(
+            dimension_scores, [], "sales"
+        )
 
         # Assert - Should return empty list on error
         assert recommendations == []
@@ -825,10 +918,18 @@ class TestComprehensiveReportService:
         """Test _get_dimension_description helper."""
         # Act & Assert
         assert "clarity" in service._get_dimension_description("communication").lower()
-        assert "understanding" in service._get_dimension_description("product_knowledge").lower()
-        assert "ability" in service._get_dimension_description("problem_solving").lower()
+        assert (
+            "understanding"
+            in service._get_dimension_description("product_knowledge").lower()
+        )
+        assert (
+            "ability" in service._get_dimension_description("problem_solving").lower()
+        )
         assert "empathy" in service._get_dimension_description("customer_focus").lower()
-        assert "professional" in service._get_dimension_description("professionalism").lower()
+        assert (
+            "professional"
+            in service._get_dimension_description("professionalism").lower()
+        )
 
     def test_get_dimension_description_unknown(self, service):
         """Test _get_dimension_description with unknown dimension."""
@@ -865,7 +966,9 @@ class TestComprehensiveReportService:
             generated_at=datetime.now(timezone.utc),
             overall_score=85.0,
             dimension_scores=[
-                DimensionScore(name="communication", score=85.0, weight=0.25, description="Test")
+                DimensionScore(
+                    name="communication", score=85.0, weight=0.25, description="Test"
+                )
             ],
             stage_summaries=[],
             key_strengths=[],
@@ -881,6 +984,9 @@ class TestComprehensiveReportService:
         assert result.is_success
         mock_db_session.add.assert_called_once()
         mock_db_session.commit.assert_called_once()
+        stored_row = mock_db_session.add.call_args.args[0]
+        assert stored_row.session_id == report.session_id
+        assert stored_row.created_at == report.generated_at
 
     @pytest.mark.asyncio
     async def test_store_report_database_error(self, service, mock_db_session):
@@ -933,14 +1039,24 @@ class TestComprehensiveReportService:
         mock_db_session.rollback.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_generate_report_store_failure(self, service, mock_staged_eval_service, mock_prompt_service, mock_llm_service, mock_db_session, sample_stage_results):
+    async def test_generate_report_store_failure(
+        self,
+        service,
+        mock_staged_eval_service,
+        mock_prompt_service,
+        mock_llm_service,
+        mock_db_session,
+        sample_stage_results,
+    ):
         """Test generate_report when storing report fails."""
         # Arrange
         session_id = str(uuid4())
         mock_staged_eval_service.get_stage_results.return_value = sample_stage_results
 
         mock_prompt_template = MagicMock()
-        mock_prompt_service.get_template_for_scenario.return_value = mock_prompt_template
+        mock_prompt_service.get_template_for_scenario.return_value = (
+            mock_prompt_template
+        )
 
         mock_llm_response = """{
             "overall_score": 80.0,
@@ -963,14 +1079,24 @@ class TestComprehensiveReportService:
         assert "DATABASE_ERROR" in result.fallback or "STORAGE" in result.fallback
 
     @pytest.mark.asyncio
-    async def test_generate_report_with_feedback_failure_continues(self, service, mock_staged_eval_service, mock_prompt_service, mock_llm_service, mock_db_session, sample_stage_results):
+    async def test_generate_report_with_feedback_failure_continues(
+        self,
+        service,
+        mock_staged_eval_service,
+        mock_prompt_service,
+        mock_llm_service,
+        mock_db_session,
+        sample_stage_results,
+    ):
         """Test that report generation continues even if detailed feedback generation fails."""
         # Arrange
         session_id = str(uuid4())
         mock_staged_eval_service.get_stage_results.return_value = sample_stage_results
 
         mock_prompt_template = MagicMock()
-        mock_prompt_service.get_template_for_scenario.return_value = mock_prompt_template
+        mock_prompt_service.get_template_for_scenario.return_value = (
+            mock_prompt_template
+        )
 
         # LLM fails for feedback
         mock_llm_service.generate_report.return_value = Result.fail("[LLM_ERROR]")
@@ -1057,7 +1183,10 @@ class TestPresentationReportService:
         assert review["has_page_metadata"] is True
         assert review["coverage_status"] == "complete"
         assert len(review["dimension_scores"]) == 6
-        assert [summary["page_number"] for summary in review["page_summaries"]] == [1, 2]
+        assert [summary["page_number"] for summary in review["page_summaries"]] == [
+            1,
+            2,
+        ]
         assert review["required_talking_points"] == {
             "status": "complete",
             "total": 3,

@@ -10,8 +10,10 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import agent.models  # noqa: F401  # ensure Agent/Persona tables are registered on Base metadata for sqlite tests
+import httpx
 import pytest
 from sqlalchemy import func, select, text
+from urllib.parse import parse_qs, urlparse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.auth.api import AUTH_FORMALIZATION_SURFACE
@@ -19,6 +21,8 @@ from common.auth.service import (
     AUTH_CSRF_COOKIE_NAME,
     AUTH_CSRF_HEADER_NAME,
     AUTH_SESSION_COOKIE_NAME,
+    get_wecom_oauth_return_to_cookie_name,
+    get_wecom_oauth_state_cookie_name,
     verify_token,
 )
 from common.db.models import User
@@ -342,6 +346,114 @@ async def test_login_returns_503_when_credentials_not_configured(
 
 
 @pytest.mark.asyncio
+async def test_auth_providers_report_explicit_dev_fallback_when_wecom_is_not_configured(
+    async_client,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("ENVIRONMENT", "development")
+    for key in ("WECOM_CORP_ID", "WECOM_SECRET", "WECOM_AGENT_ID", "WECHAT_CORP_ID", "WECHAT_SECRET", "WECHAT_AGENT_ID"):
+        monkeypatch.delenv(key, raising=False)
+
+    response = await async_client.get("/api/v1/auth/providers")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["success"] is True
+    assert payload["data"]["environment"] == "development"
+    assert payload["data"]["wecom"]["enabled"] is False
+    assert payload["data"]["wecom"]["configured"] is False
+    assert "未配置" in payload["data"]["wecom"]["message"]
+    assert payload["data"]["dev_fallback"]["enabled"] is True
+    assert payload["data"]["dev_fallback"]["login_url"].endswith("/api/v1/auth/dev-login")
+    assert "development" in payload["data"]["dev_fallback"]["message"].lower()
+
+
+@pytest.mark.asyncio
+async def test_wecom_callback_exchanges_code_sets_cookie_and_redirects_to_frontend(
+    async_client,
+    test_db: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("ENVIRONMENT", "production")
+    monkeypatch.setenv("WECHAT_CORP_ID", "corp-id")
+    monkeypatch.setenv("WECHAT_SECRET", "corp-secret")
+    monkeypatch.setenv("WECHAT_AGENT_ID", "100001")
+    monkeypatch.setenv("AUTH_FRONTEND_BASE_URL", "http://localhost:3445")
+
+    seen_paths: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        seen_paths.append(request.url.path)
+        if request.url.path == "/cgi-bin/gettoken":
+            assert request.url.params["corpid"] == "corp-id"
+            assert request.url.params["corpsecret"] == "corp-secret"
+            return httpx.Response(200, json={"errcode": 0, "errmsg": "ok", "access_token": "token-123", "expires_in": 7200})
+        if request.url.path == "/cgi-bin/auth/getuserinfo":
+            assert request.url.params["code"] == "callback-code-1"
+            return httpx.Response(200, json={"errcode": 0, "errmsg": "ok", "userid": "wecom-user-1"})
+        if request.url.path == "/cgi-bin/user/get":
+            assert request.url.params["userid"] == "wecom-user-1"
+            return httpx.Response(200, json={"errcode": 0, "errmsg": "ok", "userid": "wecom-user-1", "name": "企业微信成员", "department": [42], "email": "wecom-user@example.com"})
+        raise AssertionError(f"unexpected WeCom request: {request.method} {request.url}")
+
+    transport = httpx.MockTransport(handler)
+    monkeypatch.setattr(
+        "common.auth.service._create_wecom_http_client",
+        lambda: httpx.AsyncClient(transport=transport, base_url="https://qyapi.weixin.qq.com"),
+    )
+
+    start_response = await async_client.get(
+        "/api/v1/auth/wecom/start?return_to=/training",
+        follow_redirects=False,
+    )
+
+    assert start_response.status_code in {302, 307}
+    authorize_url = start_response.headers["location"]
+    authorize_query = parse_qs(urlparse(authorize_url).query)
+    state = authorize_query["state"][0]
+    async_client.cookies.set(get_wecom_oauth_state_cookie_name(), state)
+    async_client.cookies.set(get_wecom_oauth_return_to_cookie_name(), "/training")
+
+    callback_response = await async_client.get(
+        f"/api/v1/auth/wecom/callback?code=callback-code-1&state={state}",
+        follow_redirects=False,
+    )
+
+    assert callback_response.status_code in {302, 303, 307}
+    assert callback_response.headers["location"] == "http://localhost:3445/training"
+
+    set_cookie_headers = callback_response.headers.get_list("set-cookie")
+    session_cookie_header = next(
+        header for header in set_cookie_headers if header.startswith(f"{AUTH_SESSION_COOKIE_NAME}=")
+    )
+    assert "HttpOnly" in session_cookie_header
+    session_token = callback_response.cookies.get(AUTH_SESSION_COOKIE_NAME)
+    assert session_token
+    async_client.cookies.set(AUTH_SESSION_COOKIE_NAME, session_token)
+
+    me_response = await async_client.get("/api/v1/users/me")
+    assert me_response.status_code == 200
+    me_payload = me_response.json()
+    assert me_payload["success"] is True
+    assert me_payload["data"]["email"] == "wecom-user@example.com"
+    assert me_payload["data"]["display_name"] == "企业微信成员"
+
+    stored_user = (
+        await test_db.execute(select(User).where(User.wechat_user_id == "wecom-user-1"))
+    ).scalar_one()
+    assert stored_user.email == "wecom-user@example.com"
+    assert stored_user.name == "企业微信成员"
+    assert stored_user.department == "42"
+    assert str(stored_user.last_login)
+
+    assert seen_paths == [
+        "/cgi-bin/gettoken",
+        "/cgi-bin/auth/getuserinfo",
+        "/cgi-bin/user/get",
+    ]
+
+
+@pytest.mark.asyncio
 async def test_login_user_specific_password_mapping_isolation(
     async_client,
     test_db: AsyncSession,
@@ -417,6 +529,21 @@ async def test_login_falls_back_to_shared_password_when_user_not_in_override_map
     payload = response.json()
     assert payload["success"] is True
     assert payload["data"]["user"]["role"] == "admin"
+
+
+@pytest.mark.asyncio
+async def test_dev_login_is_explicitly_disabled_outside_development(
+    async_client,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv("ENVIRONMENT", "production")
+
+    response = await async_client.post("/api/v1/auth/dev-login")
+
+    assert response.status_code == 403
+    payload = response.json()
+    assert payload["success"] is False
+    assert payload["error"] == "[DEV_LOGIN_DISABLED]"
 
 
 @pytest.mark.asyncio

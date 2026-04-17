@@ -609,6 +609,90 @@ export interface AdminPersona {
     };
 }
 
+export type AdminModelConfigType = "llm" | "embedding" | "asr" | "tts";
+
+export type AdminModelConfigProvider =
+    | "openai"
+    | "azure"
+    | "alibaba"
+    | "anthropic"
+    | "local"
+    | "local_streaming";
+
+export interface AdminModelConfigListItem {
+    id: string;
+    name: string;
+    model_type: AdminModelConfigType;
+    provider: AdminModelConfigProvider;
+    model_name: string;
+    is_default: boolean;
+    is_active: boolean;
+    last_test_status: string | null;
+}
+
+export interface AdminModelConfigGrouped {
+    llm: AdminModelConfigListItem[];
+    embedding: AdminModelConfigListItem[];
+    asr: AdminModelConfigListItem[];
+    tts: AdminModelConfigListItem[];
+    total: number;
+}
+
+export interface AdminModelConfigDetail extends AdminModelConfigListItem {
+    base_url: string;
+    api_key_masked: string;
+    extra_config: Record<string, unknown>;
+    last_tested_at: string | null;
+    created_at: string;
+    updated_at: string;
+}
+
+export interface AdminModelConfigCreateRequest {
+    name: string;
+    model_type: AdminModelConfigType;
+    provider: AdminModelConfigProvider;
+    base_url: string;
+    api_key: string;
+    model_name: string;
+    extra_config?: Record<string, unknown>;
+    is_default?: boolean;
+}
+
+export interface AdminModelConfigTestRequest {
+    model_type: AdminModelConfigType;
+    provider: AdminModelConfigProvider;
+    base_url: string;
+    api_key: string;
+    model_name: string;
+    extra_config?: Record<string, unknown>;
+}
+
+export interface AdminModelConfigUpdateRequest {
+    name?: string;
+    base_url?: string;
+    api_key?: string;
+    model_name?: string;
+    extra_config?: Record<string, unknown>;
+    is_default?: boolean;
+    is_active?: boolean;
+}
+
+export interface AdminModelConfigCreateResponse {
+    id: string;
+    name: string;
+    model_type: AdminModelConfigType;
+    provider: AdminModelConfigProvider;
+    model_name: string;
+    is_default: boolean;
+    created_at: string;
+}
+
+export interface AdminModelConfigTestResponse {
+    success: boolean;
+    message: string;
+    latency_ms?: number;
+}
+
 export interface AdminKnowledgeBase {
     id: string;
     name: string;
@@ -1844,7 +1928,7 @@ export interface PresentationReviewCompatibilityRollups {
 export interface CompatibilityReaders {
     practice_session_rollup_fields_v1?: PracticeSessionCompatibilityRollups | null;
     presentation_review_dimensions_v1?: PresentationReviewCompatibilityRollups | null;
-    [key: string]: Record<string, unknown> | null | undefined;
+    [key: string]: unknown;
 }
 
 export interface SessionEvidenceContract {
@@ -1868,7 +1952,7 @@ export interface SessionEvidenceContract {
     audio_audit?: AudioAuditPayload | null;
 }
 
-export interface ReplayStageSummary extends SessionStageSummary {}
+export type ReplayStageSummary = SessionStageSummary;
 
 export interface ReplayData extends SessionEvidenceContract {
     session_id: string;

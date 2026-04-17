@@ -8,27 +8,41 @@ Implements Constitution Principles:
 Response Format:
 - All endpoints return {"success": true/false, "data": ..., "trace_id": ...}
 """
+
 import hmac
 import json
 import os
+import uuid
 from datetime import UTC, datetime
 from typing import Any
 
-from fastapi import APIRouter, Depends, Request, status
-from fastapi.responses import JSONResponse
+from fastapi import APIRouter, Depends, Request, Response, status
+from fastapi.responses import JSONResponse, RedirectResponse
+import httpx
 from pydantic import BaseModel, EmailStr
 from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.auth.service import (
+    authenticate_wechat,
+    build_wecom_authorization_url,
     clear_auth_session_cookie,
+    clear_wecom_oauth_flow_cookies,
     create_access_token,
     get_current_user,
-    set_auth_session_cookie,
-    should_enforce_csrf,
-    validate_csrf_request,
+    get_frontend_base_url,
+    get_wecom_oauth_return_to_cookie_name,
+    get_wecom_oauth_state_cookie_name,
+    get_wecom_provider_diagnostics,
+    is_dev_login_enabled,
+    mark_user_logged_in,
     pwd_context,
+    set_auth_session_cookie,
+    set_wecom_oauth_flow_cookies,
+    should_enforce_csrf,
+    upsert_wecom_user,
+    validate_csrf_request,
 )
 from common.db.models import User
 from common.db.session import get_db
@@ -66,25 +80,30 @@ AUTH_FORMALIZATION_SURFACE = {
 
 # ========== Schemas ==========
 
+
 class LoginRequest(BaseModel):
     """Login request schema"""
+
     email: EmailStr
     password: str
 
 
 class ForgotPasswordRequest(BaseModel):
     """Forgot password request schema"""
+
     email: EmailStr
 
 
 class ResetPasswordRequest(BaseModel):
     """Reset password request schema"""
+
     token: str
     new_password: str
 
 
 class LoginUserResponse(BaseModel):
     """User info in login response"""
+
     id: str
     name: str
     email: str
@@ -93,27 +112,39 @@ class LoginUserResponse(BaseModel):
 
 class LoginResponse(BaseModel):
     """Login response schema"""
+
     token: str
     user: LoginUserResponse
 
 
 class LogoutResponse(BaseModel):
     """Logout response schema"""
+
     message: str = "Logged out successfully"
 
 
 # ========== Helper Functions ==========
 
-def success_response(data, trace_id: str = None):
+
+def success_response(data: Any, trace_id: str | None = None) -> dict[str, Any]:
     """Create unified success response"""
     return {
         "success": True,
-        "data": data if isinstance(data, dict) else data.model_dump() if hasattr(data, 'model_dump') else data,
-        "trace_id": trace_id or get_trace_id()
+        "data": data
+        if isinstance(data, dict)
+        else data.model_dump()
+        if hasattr(data, "model_dump")
+        else data,
+        "trace_id": trace_id or get_trace_id(),
     }
 
 
-def error_response(error_code: str, message: str = None, trace_id: str = None, status_code: int = 400):
+def error_response(
+    error_code: str,
+    message: str | None = None,
+    trace_id: str | None = None,
+    status_code: int = 400,
+) -> JSONResponse:
     """Create unified error response with explicit HTTP status."""
     return JSONResponse(
         status_code=status_code,
@@ -204,7 +235,7 @@ def hash_password(password: str) -> str:
 
 
 def _set_login_authority_headers(
-    response: JSONResponse,
+    response: Response,
     *,
     compatibility_mode: str | None,
     authority: str,
@@ -214,13 +245,33 @@ def _set_login_authority_headers(
         response.headers["X-Auth-Compatibility-Mode"] = compatibility_mode
 
 
+def _build_absolute_api_url(request: Request, path: str) -> str:
+    return f"{str(request.base_url).rstrip('/')}{path}"
+
+
+def _sanitize_return_to(value: str | None) -> str:
+    normalized = (value or "/").strip() or "/"
+    if not normalized.startswith("/") or normalized.startswith("//"):
+        return "/"
+    return normalized
+
+
+def _build_frontend_url(path: str) -> str:
+    base_url = get_frontend_base_url()
+    normalized_path = path if path.startswith("/") else f"/{path}"
+    return f"{base_url}{normalized_path}"
+
+
+def _auth_error_redirect(error_code: str) -> str:
+    return _build_frontend_url(f"/login?authError={error_code}")
+
+
 # ========== Endpoints ==========
+
 
 @router.post("/auth/login")
 async def login(
-    credentials: LoginRequest,
-    request: Request,
-    db: AsyncSession = Depends(get_db)
+    credentials: LoginRequest, request: Request, db: AsyncSession = Depends(get_db)
 ):
     """
     Controlled login endpoint.
@@ -245,9 +296,7 @@ async def login(
             )
 
         # Find user by email
-        result = await db.execute(
-            select(User).where(User.email == credentials.email)
-        )
+        result = await db.execute(select(User).where(User.email == credentials.email))
         user = result.scalar_one_or_none()
 
         # Secure failure response to prevent user/account state enumeration
@@ -302,8 +351,8 @@ async def login(
                 id=str(user.user_id),
                 name=user.name or "用户",
                 email=user.email or "",
-                role=user_role
-            )
+                role=user_role,
+            ),
         )
 
         logger.info(
@@ -339,7 +388,7 @@ async def login(
 async def logout(
     request: Request,
     current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
 ):
     """
     User logout endpoint
@@ -365,9 +414,7 @@ async def logout(
 
         response = JSONResponse(
             status_code=status.HTTP_200_OK,
-            content=success_response({
-                "message": "登出成功"
-            }),
+            content=success_response({"message": "登出成功"}),
         )
         clear_auth_session_cookie(response)
         return response
@@ -380,6 +427,128 @@ async def logout(
             error_type=type(e).__name__,
         )
         return error_response("[LOGOUT_FAILED]", "登出失败")
+
+
+@router.get("/auth/providers")
+async def get_auth_providers(request: Request):
+    wecom = get_wecom_provider_diagnostics()
+    dev_fallback_enabled = is_dev_login_enabled()
+    return success_response(
+        {
+            "environment": os.getenv("ENVIRONMENT", "development").strip().lower()
+            or "development",
+            "wecom": {
+                "enabled": wecom["enabled"],
+                "configured": wecom["configured"],
+                "login_url": _build_absolute_api_url(
+                    request, "/api/v1/auth/wecom/start?return_to=%2F"
+                ),
+                "message": wecom["message"],
+            },
+            "dev_fallback": {
+                "enabled": dev_fallback_enabled,
+                "login_url": _build_absolute_api_url(request, "/api/v1/auth/dev-login"),
+                "message": "仅 development 环境可用的开发者登录。"
+                if dev_fallback_enabled
+                else "开发者登录默认关闭，且不会在生产环境暴露。",
+            },
+        }
+    )
+
+
+@router.get("/auth/wecom/start", name="wecom_start")
+async def start_wecom_login(request: Request):
+    wecom = get_wecom_provider_diagnostics()
+    if not wecom["configured"]:
+        return error_response(
+            "[WECOM_SSO_UNAVAILABLE]",
+            wecom["message"],
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+        )
+
+    state = uuid.uuid4().hex
+    return_to = _sanitize_return_to(request.query_params.get("return_to"))
+    authorize_url = build_wecom_authorization_url(
+        redirect_uri=str(request.url_for("wecom_callback")),
+        state=state,
+    )
+    response = RedirectResponse(
+        url=authorize_url,
+        status_code=status.HTTP_307_TEMPORARY_REDIRECT,
+    )
+    set_wecom_oauth_flow_cookies(response, state=state, return_to=return_to)
+    return response
+
+
+@router.get("/auth/wecom/callback", name="wecom_callback")
+async def handle_wecom_callback(
+    request: Request,
+    code: str | None = None,
+    state: str | None = None,
+    db: AsyncSession = Depends(get_db),
+):
+    expected_state = (
+        request.cookies.get(get_wecom_oauth_state_cookie_name()) or ""
+    ).strip()
+    return_to = _sanitize_return_to(
+        request.cookies.get(get_wecom_oauth_return_to_cookie_name())
+    )
+    wecom = get_wecom_provider_diagnostics()
+
+    def redirect_with_error(error_code: str) -> RedirectResponse:
+        response = RedirectResponse(
+            url=_auth_error_redirect(error_code),
+            status_code=status.HTTP_303_SEE_OTHER,
+        )
+        clear_wecom_oauth_flow_cookies(response)
+        return response
+
+    if not wecom["configured"]:
+        return redirect_with_error("wecom-unavailable")
+
+    normalized_state = (state or "").strip()
+    normalized_code = (code or "").strip()
+    if (
+        not normalized_code
+        or not normalized_state
+        or not expected_state
+        or not hmac.compare_digest(expected_state, normalized_state)
+    ):
+        return redirect_with_error("wecom-state-invalid")
+
+    try:
+        profile = await authenticate_wechat(normalized_code)
+        user = await upsert_wecom_user(db, profile)
+        if not getattr(user, "is_active", False):
+            return redirect_with_error("wecom-user-disabled")
+        user = await mark_user_logged_in(db, user)
+    except (SQLAlchemyError, ValueError, httpx.HTTPError) as exc:
+        logger.error(
+            "WeCom callback failed",
+            error_type=type(exc).__name__,
+        )
+        await db.rollback()
+        return redirect_with_error("wecom-callback-failed")
+
+    user_role = getattr(user, "role", None) or "user"
+    token = create_access_token(
+        data={
+            "sub": str(user.user_id),
+            "role": user_role,
+        }
+    )
+    response = RedirectResponse(
+        url=_build_frontend_url(return_to),
+        status_code=status.HTTP_303_SEE_OTHER,
+    )
+    set_auth_session_cookie(response, token)
+    clear_wecom_oauth_flow_cookies(response)
+    _set_login_authority_headers(
+        response,
+        compatibility_mode=None,
+        authority="wecom_sso",
+    )
+    return response
 
 
 # ========== Password Reset ==========
@@ -416,9 +585,9 @@ async def forgot_password(
 
     return JSONResponse(
         status_code=status.HTTP_200_OK,
-        content=success_response({
-            "message": "如果该邮箱已注册，重置链接将发送到您的邮箱"
-        }),
+        content=success_response(
+            {"message": "如果该邮箱已注册，重置链接将发送到您的邮箱"}
+        ),
     )
 
 
@@ -437,9 +606,7 @@ async def reset_password(
 
         return JSONResponse(
             status_code=status.HTTP_200_OK,
-            content=success_response({
-                "message": "密码重置成功"
-            }),
+            content=success_response({"message": "密码重置成功"}),
         )
     except ValueError as exc:
         await db.rollback()
@@ -464,4 +631,3 @@ async def reset_password(
             error_type=type(e).__name__,
         )
         return error_response("[RESET_FAILED]", "密码重置失败，请稍后重试")
-

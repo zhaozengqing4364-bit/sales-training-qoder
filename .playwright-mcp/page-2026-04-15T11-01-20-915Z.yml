@@ -1,0 +1,34 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e4]:
+    - generic [ref=e6]:
+      - generic [ref=e7]: AI
+      - heading "欢迎回来" [level=1] [ref=e8]
+      - paragraph [ref=e9]: 登录 AI 智能练习平台 开始训练
+    - generic [ref=e10]:
+      - generic [ref=e11]:
+        - button "企业微信登录 (WeCom) — 即将支持" [disabled]
+        - paragraph [ref=e12]: 企业微信登录即将支持，敬请期待
+      - generic [ref=e14]: 或者使用账号登录
+      - generic [ref=e16]:
+        - alert [ref=e39]:
+          - img [ref=e40]
+          - text: "账号或凭证无效 (trace_id: 9492d1ffebad9cc9e0b91b264b5d558c)"
+        - generic [ref=e17]:
+          - generic [ref=e18]: 邮箱地址
+          - textbox "邮箱地址" [ref=e19]:
+            - /placeholder: name@company.com
+            - text: admin@qoder.ai
+        - generic [ref=e20]:
+          - link "忘记密码？" [ref=e22] [cursor=pointer]:
+            - /url: /forgot-password?email=admin%40qoder.ai
+          - generic [ref=e23]: 密码
+          - textbox "密码" [ref=e24]:
+            - /placeholder: ••••••••
+            - text: change-me
+        - button "登录" [ref=e25]:
+          - text: 登录
+          - img [ref=e42]
+      - paragraph [ref=e28]: 仅供内部人员使用，如需帮助请联系管理员
+  - button "Open Next.js Dev Tools" [ref=e35] [cursor=pointer]:
+    - img [ref=e36]
+  - alert [ref=e29]

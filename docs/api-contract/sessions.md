@@ -230,6 +230,27 @@ interface SessionLifecycleResponse {
 
 ## 创建会话契约要点
 
+## 补充：legacy evaluation/report 读取面
+
+除了 canonical `GET /api/v1/practice/sessions/{session_id}/report` 外，当前仍保留 legacy evaluation/report 读取面：
+
+- `GET /api/v1/evaluation/sessions/{session_id}/report`
+- `POST /api/v1/evaluation/sessions/{session_id}/report`
+- `GET /api/v1/evaluation/sessions/{session_id}/feedback`
+
+这些接口的**成功体保持现有裸 payload / report schema**，但失败体统一使用顶层 envelope：
+
+```json
+{
+  "success": false,
+  "error": "[ACCESS_DENIED]",
+  "message": "你没有权限访问该会话。",
+  "trace_id": "trace-xxx"
+}
+```
+
+常见错误码：`[ACCESS_DENIED]`、`[REPORT_NOT_FOUND]`、`[REPORT_FETCH_FAILED]`、`[REPORT_GENERATION_FAILED]`
+
 ### 1) 入参约束
 
 - `agent_id` 与 `persona_id` 必须成对提供

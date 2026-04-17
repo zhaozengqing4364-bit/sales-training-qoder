@@ -341,6 +341,40 @@ async def test_resolve_effective_policy_legacy_agent_kb_fallback_keeps_kb_lock(
 
 
 @pytest.mark.asyncio
+async def test_resolve_effective_policy_derives_realtime_playback_rate_from_persona_tts_config(
+    test_db: AsyncSession,
+):
+    persona = Persona(
+        id=str(uuid.uuid4()),
+        name="语速角色",
+        description="需要更快语速",
+        category="customer",
+        difficulty="medium",
+        status="active",
+        system_prompt="你是采购负责人。",
+        tts_config={"rate": "+20%", "voice": "zh-CN-XiaoxiaoNeural"},
+    )
+    profile = VoiceRuntimeProfile(
+        id=str(uuid.uuid4()),
+        name="默认实时档位",
+        is_default=True,
+        is_active=True,
+        voice_mode="stepfun_realtime",
+        model_name="step-audio-2",
+        voice_name="qingchunshaonv",
+        temperature=0.7,
+    )
+    test_db.add_all([persona, profile])
+    await test_db.commit()
+
+    service = VoiceRuntimePolicyService(test_db)
+    effective = await service.resolve_effective_policy(persona_id=persona.id)
+
+    assert effective["playback_rate"] == 1.25
+    assert effective["source"]["playback_rate_source"] == "persona_tts_config"
+
+
+@pytest.mark.asyncio
 async def test_resolve_effective_policy_uses_lower_default_similarity_threshold(
     test_db: AsyncSession,
 ):

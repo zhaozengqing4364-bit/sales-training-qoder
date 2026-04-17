@@ -12,6 +12,16 @@ import { debug } from "./debug";
 
 import { useEffect } from 'react';
 
+const LOOPBACK_HOST_FALLBACK_MAP: Record<string, string> = {
+    localhost: '127.0.0.1',
+    '127.0.0.1': 'localhost',
+    '::1': '127.0.0.1',
+};
+
+const DEFAULT_API_BASE_URL = 'http://localhost:3444/api/v1';
+
+type TelemetryEventType = 'custom' | 'error' | 'performance';
+
 // Core Web Vitals types
 interface Metric {
     name: string;
@@ -33,6 +43,102 @@ interface FirstInputPerformanceEntry extends PerformanceEntry {
 }
 
 type ReportHandler = (metric: Metric) => void;
+
+function isLoopbackHost(hostname: string): boolean {
+    return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1';
+}
+
+function resolveTelemetryApiBaseUrl(): string | null {
+    const configuredApiBaseUrl = (process.env.NEXT_PUBLIC_API_URL || DEFAULT_API_BASE_URL).trim();
+    if (!configuredApiBaseUrl) {
+        return null;
+    }
+
+    try {
+        const parsed = new URL(configuredApiBaseUrl);
+        if (typeof window !== 'undefined') {
+            const pageHost = window.location.hostname;
+            if (pageHost && !isLoopbackHost(pageHost) && isLoopbackHost(parsed.hostname)) {
+                parsed.hostname = pageHost;
+            }
+        }
+
+        return parsed.toString().replace(/\/+$/, '');
+    } catch {
+        debug.warn('[Performance] Telemetry disabled: invalid NEXT_PUBLIC_API_URL', configuredApiBaseUrl);
+        return null;
+    }
+}
+
+export function resolveTelemetryUrl(eventType: TelemetryEventType): string | null {
+    const apiBaseUrl = resolveTelemetryApiBaseUrl();
+    if (!apiBaseUrl) {
+        return null;
+    }
+
+    return `${apiBaseUrl}/analytics/${eventType}`;
+}
+
+function getLoopbackFallbackUrl(url: string): string | null {
+    try {
+        const parsed = new URL(url);
+        const fallbackHost = LOOPBACK_HOST_FALLBACK_MAP[parsed.hostname];
+        if (!fallbackHost) {
+            return null;
+        }
+
+        parsed.hostname = fallbackHost;
+        return parsed.toString();
+    } catch {
+        return null;
+    }
+}
+
+async function fetchTelemetry(targetUrl: string, body: string): Promise<void> {
+    try {
+        await fetch(targetUrl, {
+            method: 'POST',
+            body,
+            keepalive: true,
+            headers: { 'Content-Type': 'application/json' },
+        });
+    } catch (error) {
+        if (!(error instanceof TypeError)) {
+            throw error;
+        }
+
+        const fallbackUrl = getLoopbackFallbackUrl(targetUrl);
+        if (!fallbackUrl) {
+            throw error;
+        }
+
+        await fetch(fallbackUrl, {
+            method: 'POST',
+            body,
+            keepalive: true,
+            headers: { 'Content-Type': 'application/json' },
+        });
+    }
+}
+
+export function postTelemetryEvent(eventType: TelemetryEventType, body: string): void {
+    const targetUrl = resolveTelemetryUrl(eventType);
+    if (!targetUrl) {
+        return;
+    }
+
+    const beaconBody = new Blob([body], { type: 'application/json' });
+    if (typeof navigator !== 'undefined' && typeof navigator.sendBeacon === 'function') {
+        const accepted = navigator.sendBeacon(targetUrl, beaconBody);
+        if (accepted) {
+            return;
+        }
+    }
+
+    fetchTelemetry(targetUrl, body).catch(() => {
+        debug.warn(`[Performance] Failed to deliver ${eventType} telemetry beacon`, targetUrl);
+    });
+}
 
 /**
  * Get CLS (Cumulative Layout Shift)
@@ -185,19 +291,7 @@ function sendToAnalytics(metric: Metric) {
         timestamp: new Date().toISOString()
     });
 
-    // Use sendBeacon for reliability
-    if (navigator.sendBeacon) {
-        navigator.sendBeacon('/api/v1/analytics/performance', body);
-    } else {
-        fetch('/api/v1/analytics/performance', {
-            method: 'POST',
-            body,
-            keepalive: true,
-            headers: { 'Content-Type': 'application/json' }
-        }).catch(() => {
-            // Silent fail
-        });
-    }
+    postTelemetryEvent('performance', body);
 
     // Also log to console in development
     if (process.env.NODE_ENV === 'development') {
@@ -217,16 +311,7 @@ export function trackCustomMetric(name: string, value: number, metadata?: Record
         timestamp: new Date().toISOString()
     });
 
-    if (navigator.sendBeacon) {
-        navigator.sendBeacon('/api/v1/analytics/custom', body);
-    } else {
-        fetch('/api/v1/analytics/custom', {
-            method: 'POST',
-            body,
-            keepalive: true,
-            headers: { 'Content-Type': 'application/json' }
-        }).catch(() => {});
-    }
+    postTelemetryEvent('custom', body);
 }
 
 /**

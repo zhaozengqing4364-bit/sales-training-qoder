@@ -11,6 +11,7 @@
 import React, { Component, ErrorInfo, ReactNode } from 'react';
 
 import { debug } from '@/lib/debug';
+import { postTelemetryEvent } from '@/lib/performance';
 
 interface Props {
     children: ReactNode;
@@ -76,25 +77,16 @@ export class ErrorBoundary extends Component<Props, State> {
                 });
             }
 
-            // Custom error tracking
-            fetch('/api/v1/analytics/error', {
-                method: 'POST',
-                keepalive: true,
-                credentials: 'include',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    error: error.message,
-                    stack: error.stack,
-                    componentStack: errorInfo.componentStack,
-                    url: window.location.href,
-                    userAgent: navigator.userAgent,
-                    timestamp: new Date().toISOString(),
-                    source: 'react.error-boundary',
-                    boundary: 'ErrorBoundary',
-                })
-            }).catch(() => {
-                // Silent fail - don't trigger another error
-            });
+            postTelemetryEvent('error', JSON.stringify({
+                error: error.message,
+                stack: error.stack,
+                componentStack: errorInfo.componentStack,
+                url: window.location.href,
+                userAgent: navigator.userAgent,
+                timestamp: new Date().toISOString(),
+                source: 'react.error-boundary',
+                boundary: 'ErrorBoundary',
+            }));
         }
 
         // Call custom error handler

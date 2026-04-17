@@ -43,6 +43,7 @@ ALLOWED_RETRIEVAL_PRIORITIES = {"kb_only", "kb_first", "web_first", "balanced"}
 ALLOWED_NETWORK_ACCESS_MODES = {"off", "controlled"}
 ALLOWED_ENFORCEMENT_LEVELS = {"strict", "best_effort"}
 ALLOWED_KB_LOCK_MODES = {"strict_audit", "coach_mode"}
+REALTIME_PLAYBACK_RATE_OPTIONS = (0.75, 1.0, 1.25, 1.5)
 
 DEFAULT_TOOL_POLICY: dict[str, Any] = {
     "enable_web_search": False,
@@ -155,6 +156,48 @@ def _normalize_transcript_normalization_lexicon(value: Any) -> list[dict[str, An
             }
         )
     return normalized_entries
+
+
+def _quantize_playback_rate(value: float) -> float:
+    return min(
+        REALTIME_PLAYBACK_RATE_OPTIONS,
+        key=lambda candidate: (abs(candidate - value), candidate),
+    )
+
+
+def _normalize_realtime_playback_rate(value: Any, default: float = 1.0) -> float:
+    parsed: float | None = None
+    if isinstance(value, (int, float)):
+        parsed = float(value)
+    elif isinstance(value, str):
+        compact = value.strip().lower()
+        if compact.endswith("%"):
+            try:
+                parsed = 1.0 + (float(compact[:-1]) / 100.0)
+            except ValueError:
+                parsed = None
+        elif compact.endswith("x"):
+            try:
+                parsed = float(compact[:-1])
+            except ValueError:
+                parsed = None
+        elif compact:
+            try:
+                parsed = float(compact)
+            except ValueError:
+                parsed = None
+
+    if parsed is None:
+        parsed = default
+
+    bounded = max(min(REALTIME_PLAYBACK_RATE_OPTIONS), min(max(REALTIME_PLAYBACK_RATE_OPTIONS), parsed))
+    return _quantize_playback_rate(bounded)
+
+
+def _resolve_persona_playback_rate(persona: Persona | None) -> float:
+    if persona is None or not isinstance(getattr(persona, "tts_config", None), dict):
+        return 1.0
+    return _normalize_realtime_playback_rate(persona.tts_config.get("rate"), 1.0)
 
 
 class VoiceRuntimePolicyService:
@@ -520,6 +563,9 @@ class VoiceRuntimePolicyService:
             persona = persona_result.scalar_one_or_none()
         persona_policy = resolve_persona_policy(persona)
         customer_pressure = _as_dict(persona_policy.get("customer_pressure"))
+        policy["playback_rate"] = _resolve_persona_playback_rate(persona)
+        if persona is not None and isinstance(persona.tts_config, dict) and persona.tts_config.get("rate"):
+            source["playback_rate_source"] = "persona_tts_config"
 
         if runtime_profile_override:
             runtime_profile = await self.get_profile(runtime_profile_override)
@@ -822,6 +868,7 @@ class VoiceRuntimePolicyService:
                 24000,
                 minimum=8000,
             ),
+            "playback_rate": 1.0,
             "turn_detection": None,
             "tool_policy": self._normalize_tool_policy(DEFAULT_TOOL_POLICY),
         }

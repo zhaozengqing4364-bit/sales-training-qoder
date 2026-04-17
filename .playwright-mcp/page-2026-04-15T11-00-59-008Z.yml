@@ -1,0 +1,27 @@
+- generic [active] [ref=e1]:
+  - generic [ref=e4]:
+    - generic [ref=e6]:
+      - generic [ref=e7]: AI
+      - heading "欢迎回来" [level=1] [ref=e8]
+      - paragraph [ref=e9]: 登录 AI 智能练习平台 开始训练
+    - generic [ref=e10]:
+      - generic [ref=e11]:
+        - button "企业微信登录 (WeCom) — 即将支持" [disabled]
+        - paragraph [ref=e12]: 企业微信登录即将支持，敬请期待
+      - generic [ref=e14]: 或者使用账号登录
+      - generic [ref=e16]:
+        - generic [ref=e17]:
+          - generic [ref=e18]: 邮箱地址
+          - textbox "邮箱地址" [ref=e19]:
+            - /placeholder: name@company.com
+        - generic [ref=e20]:
+          - link "忘记密码？" [ref=e22] [cursor=pointer]:
+            - /url: /forgot-password
+          - generic [ref=e23]: 密码
+          - textbox "密码" [ref=e24]:
+            - /placeholder: ••••••••
+        - button "登录" [ref=e25]:
+          - text: 登录
+          - img [ref=e26]
+      - paragraph [ref=e28]: 仅供内部人员使用，如需帮助请联系管理员
+  - alert [ref=e29]

@@ -1,0 +1,44 @@
+{
+  "include": [
+    "backend/src",
+    "backend/tests",
+    "backend/alembic",
+    "backend/scripts"
+  ],
+  "exclude": [
+    "**/__pycache__",
+    "web",
+    "backend/htmlcov",
+    "backend/test-results",
+    "node_modules"
+  ],
+  "pythonVersion": "3.11",
+  "typeCheckingMode": "standard",
+  "executionEnvironments": [
+    {
+      "root": "backend/src",
+      "extraPaths": [
+        "backend/src"
+      ]
+    },
+    {
+      "root": "backend/tests",
+      "extraPaths": [
+        "backend/src",
+        "backend/tests"
+      ]
+    },
+    {
+      "root": "backend/alembic",
+      "extraPaths": [
+        "backend/src"
+      ]
+    },
+    {
+      "root": "backend/scripts",
+      "extraPaths": [
+        "backend/src"
+      ]
+    }
+  ]
+}

@@ -35,7 +35,7 @@ export function toCloseReasonMessage(reason: string): string | null {
         normalized.includes("too long without operation")
         || normalized.includes("too long without operatio")
     ) {
-        return "Realtime 上游连接空闲超时，请继续提问或点击“重新连接”。";
+        return null;
     }
     return reason.trim();
 }

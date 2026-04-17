@@ -3,11 +3,13 @@ Evaluation API Routes
 Staged Evaluation and Comprehensive Report endpoints (C6-C7)
 """
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
+from fastapi.responses import JSONResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.ai.llm_service import LLMService
+from common.api.response import error_response
 from common.api.server_error import build_server_error
 from common.auth.service import get_current_user
 from common.db.models import PracticeSession, User
@@ -23,6 +25,18 @@ from evaluation.services.staged_evaluation import StagedEvaluationService
 from prompt_templates.service import PromptTemplateService
 
 router = APIRouter(prefix="/evaluation", tags=["evaluation"])
+
+
+def _evaluation_error_response(
+    *,
+    status_code: int,
+    error_code: str,
+    message: str,
+) -> JSONResponse:
+    return JSONResponse(
+        status_code=status_code,
+        content=error_response(error_code, message=message),
+    )
 
 
 async def verify_session_access(
@@ -60,7 +74,11 @@ def _build_response(report) -> ComprehensiveReportResponse:
     """Convert internal ComprehensiveReport to API response."""
     generated_at = ""
     if hasattr(report, "generated_at") and report.generated_at:
-        generated_at = report.generated_at.isoformat() if hasattr(report.generated_at, "isoformat") else str(report.generated_at)
+        generated_at = (
+            report.generated_at.isoformat()
+            if hasattr(report.generated_at, "isoformat")
+            else str(report.generated_at)
+        )
 
     return ComprehensiveReportResponse(
         session_id=report.session_id,
@@ -102,7 +120,11 @@ async def get_comprehensive_report(
     """Get existing comprehensive report for a session."""
     has_access = await verify_session_access(session_id, current_user, db)
     if not has_access:
-        raise HTTPException(status_code=403, detail="Access denied")
+        return _evaluation_error_response(
+            status_code=403,
+            error_code="[ACCESS_DENIED]",
+            message="你没有权限访问该会话。",
+        )
 
     service = _build_report_service(db)
     report_result = await service.get_report(session_id)
@@ -110,7 +132,11 @@ async def get_comprehensive_report(
     if not report_result.is_success or report_result.value is None:
         detail = report_result.fallback or "Report not found"
         if "REPORT_NOT_FOUND" in detail:
-            raise HTTPException(status_code=404, detail=detail)
+            return _evaluation_error_response(
+                status_code=404,
+                error_code="[REPORT_NOT_FOUND]",
+                message="报告不存在。",
+            )
         return build_server_error(
             "[REPORT_FETCH_FAILED]",
             message=detail,
@@ -120,7 +146,9 @@ async def get_comprehensive_report(
     return _build_response(report_result.value)
 
 
-@router.post("/sessions/{session_id}/report", response_model=ComprehensiveReportResponse)
+@router.post(
+    "/sessions/{session_id}/report", response_model=ComprehensiveReportResponse
+)
 async def generate_comprehensive_report(
     session_id: str,
     current_user: User = Depends(get_current_user),
@@ -129,7 +157,11 @@ async def generate_comprehensive_report(
     """Generate a new comprehensive report for a session using AI evaluation."""
     has_access = await verify_session_access(session_id, current_user, db)
     if not has_access:
-        raise HTTPException(status_code=403, detail="Access denied")
+        return _evaluation_error_response(
+            status_code=403,
+            error_code="[ACCESS_DENIED]",
+            message="你没有权限访问该会话。",
+        )
 
     service = _build_report_service(db)
     result = await service.generate_report(session_id)
@@ -155,7 +187,11 @@ async def get_realtime_feedback(
 
     has_access = await verify_session_access(session_id, current_user, db)
     if not has_access:
-        raise HTTPException(status_code=403, detail="Access denied")
+        return _evaluation_error_response(
+            status_code=403,
+            error_code="[ACCESS_DENIED]",
+            message="你没有权限访问该会话。",
+        )
 
     result = await db.execute(
         select(StagedEvaluationResult)

@@ -9,7 +9,7 @@ from __future__ import annotations
 import asyncio
 import json
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, call
 
 import pytest
 
@@ -18,6 +18,7 @@ from common.error_handling.result import Result
 from common.websocket.session_state_service import SessionStateSnapshot
 from sales_bot.websocket.realtime_feedback_arbiter import RealtimeFeedbackPacingState
 from sales_bot.websocket.stepfun_realtime_handler import (
+    FunctionCallState,
     RealtimeResponseState,
     StepFunRealtimeHandler,
 )
@@ -214,8 +215,13 @@ async def test_handle_upstream_transcription_completed_applies_transcript_normal
     )
     persisted_kwargs = handler._persist_message.await_args.kwargs
     assert persisted_kwargs["content"] == "这是石犀平台的最终识别文本"
-    assert persisted_kwargs["analysis_data"]["transcript_metadata"]["raw_text"] == "这是石溪平台的最终识别文本"
-    handler._prepare_grounding_context.assert_awaited_once_with("这是石犀平台的最终识别文本")
+    assert (
+        persisted_kwargs["analysis_data"]["transcript_metadata"]["raw_text"]
+        == "这是石溪平台的最终识别文本"
+    )
+    handler._prepare_grounding_context.assert_awaited_once_with(
+        "这是石犀平台的最终识别文本"
+    )
 
 
 @pytest.mark.asyncio
@@ -343,6 +349,180 @@ async def test_recover_upstream_after_disconnect_uses_shared_jitter_backoff(
         }
     ]
     sleep_mock.assert_awaited_once_with(0.05)
+
+
+@pytest.mark.asyncio
+async def test_recover_upstream_after_disconnect_clears_stale_turn_runtime_state(
+    monkeypatch,
+):
+    handler = StepFunRealtimeHandler()
+    handler.running = True
+    handler.session_status = "in_progress"
+    handler._upstream_auto_recover_enabled = True
+    handler._upstream_auto_recover_max_retries = 1
+    handler._active_response = RealtimeResponseState(
+        request_id=5,
+        stream_id="stream-recover-reset",
+    )
+    handler._function_call_states = {
+        "call-recover-reset": FunctionCallState(
+            call_id="call-recover-reset",
+            name="search_internal_knowledge",
+            delta_arguments='{"query":"报价"}',
+        )
+    }
+    handler._executed_call_ids = {"call-recover-reset"}
+    handler._pending_grounding_context = "stale grounding"
+    handler._pending_blocked_response_text = "stale blocked"
+    handler._latest_input_transcript_delta = "stale delta"
+    handler._pending_tool_followup_response = True
+    handler._awaiting_transcription_after_commit = True
+    handler._allow_late_transcription_response = True
+    handler._has_uncommitted_audio = True
+
+    sleep_mock = AsyncMock()
+    handler._close_upstream = AsyncMock()
+    handler._connect_upstream = AsyncMock()
+    handler._cancel_pending_response_after_commit = AsyncMock()
+    handler._send_status = AsyncMock()
+
+    monkeypatch.setattr(
+        stepfun_module,
+        "compute_jitter_backoff_seconds",
+        lambda **_kwargs: 0.0,
+    )
+    monkeypatch.setattr(stepfun_module.asyncio, "sleep", sleep_mock)
+
+    recovered = await handler._recover_upstream_after_disconnect(
+        close_code=1006,
+        close_reason="socket closed",
+        ws_lifetime_ms=1800.0,
+    )
+
+    assert recovered is True
+    assert handler._active_response is None
+    assert handler._function_call_states == {}
+    assert handler._executed_call_ids == set()
+    assert handler._pending_grounding_context == ""
+    assert handler._pending_blocked_response_text == ""
+    assert handler._latest_input_transcript_delta == ""
+    assert handler._pending_tool_followup_response is False
+    assert handler._awaiting_transcription_after_commit is False
+    assert handler._allow_late_transcription_response is False
+    assert handler._has_uncommitted_audio is False
+    handler._cancel_pending_response_after_commit.assert_awaited_once()
+    handler._send_status.assert_awaited_once_with("listening")
+
+
+@pytest.mark.asyncio
+async def test_handle_interrupt_clears_turn_runtime_state_before_notifying_client():
+    handler = StepFunRealtimeHandler()
+    handler.session_status = "in_progress"
+    handler.websocket = MagicMock()
+    handler.upstream_ws = object()
+    handler.manager = MagicMock()
+    handler.manager.send_json = AsyncMock()
+    handler._cancel_pending_response_after_commit = AsyncMock()
+    handler._send_upstream = AsyncMock()
+    handler._send_status = AsyncMock()
+    handler._active_response = RealtimeResponseState(
+        request_id=7,
+        stream_id="stream-interrupt-reset",
+    )
+    handler._function_call_states = {
+        "call-interrupt-reset": FunctionCallState(
+            call_id="call-interrupt-reset",
+            name="search_internal_knowledge",
+            delta_arguments='{"query":"预算"}',
+        )
+    }
+    handler._executed_call_ids = {"call-interrupt-reset"}
+    handler._pending_grounding_context = "stale grounding"
+    handler._pending_blocked_response_text = "stale blocked"
+    handler._latest_input_transcript_delta = "stale delta"
+    handler._pending_tool_followup_response = True
+    handler._awaiting_transcription_after_commit = True
+    handler._allow_late_transcription_response = True
+    handler._has_uncommitted_audio = True
+
+    await handler._handle_interrupt("user_speaking")
+
+    assert handler._active_response is None
+    assert handler._function_call_states == {}
+    assert handler._executed_call_ids == set()
+    assert handler._pending_grounding_context == ""
+    assert handler._pending_blocked_response_text == ""
+    assert handler._latest_input_transcript_delta == ""
+    assert handler._pending_tool_followup_response is False
+    assert handler._awaiting_transcription_after_commit is False
+    assert handler._allow_late_transcription_response is False
+    assert handler._has_uncommitted_audio is False
+    handler._cancel_pending_response_after_commit.assert_awaited_once()
+    handler._send_upstream.assert_has_awaits(
+        [
+            call({"type": "response.cancel"}),
+            call({"type": "input_audio_buffer.clear"}),
+        ]
+    )
+    handler._send_status.assert_awaited_once_with("listening")
+
+
+@pytest.mark.asyncio
+async def test_sync_lifecycle_transition_clears_turn_runtime_state_when_paused():
+    handler = StepFunRealtimeHandler()
+    handler.session_status = "in_progress"
+    handler.ai_state = "speaking"
+    handler.upstream_ws = object()
+    handler._cancel_pending_response_after_commit = AsyncMock()
+    handler._send_upstream = AsyncMock()
+    handler._active_response = RealtimeResponseState(
+        request_id=11,
+        stream_id="stream-pause-reset",
+    )
+    handler._function_call_states = {
+        "call-pause-reset": FunctionCallState(
+            call_id="call-pause-reset",
+            name="search_internal_knowledge",
+            delta_arguments='{"query":"方案"}',
+        )
+    }
+    handler._executed_call_ids = {"call-pause-reset"}
+    handler._pending_grounding_context = "stale grounding"
+    handler._pending_blocked_response_text = "stale blocked"
+    handler._latest_input_transcript_delta = "stale delta"
+    handler._pending_tool_followup_response = True
+    handler._awaiting_transcription_after_commit = True
+    handler._allow_late_transcription_response = True
+    handler._has_uncommitted_audio = True
+
+    transition = SimpleNamespace(
+        action="pause",
+        to_status="paused",
+        ai_state="idle",
+        scenario_type="sales",
+    )
+
+    await handler.sync_lifecycle_transition(transition)
+
+    assert handler.session_status == "paused"
+    assert handler.ai_state == "idle"
+    assert handler._active_response is None
+    assert handler._function_call_states == {}
+    assert handler._executed_call_ids == set()
+    assert handler._pending_grounding_context == ""
+    assert handler._pending_blocked_response_text == ""
+    assert handler._latest_input_transcript_delta == ""
+    assert handler._pending_tool_followup_response is False
+    assert handler._awaiting_transcription_after_commit is False
+    assert handler._allow_late_transcription_response is False
+    assert handler._has_uncommitted_audio is False
+    handler._cancel_pending_response_after_commit.assert_awaited_once()
+    handler._send_upstream.assert_has_awaits(
+        [
+            call({"type": "response.cancel"}),
+            call({"type": "input_audio_buffer.clear"}),
+        ]
+    )
 
 
 @pytest.mark.asyncio
@@ -585,7 +765,10 @@ def test_enforce_tool_policy_guardrails_auto_enables_kb_lock_for_legacy_snapshot
     assert tool_policy["require_kb_grounding"] is True
     assert tool_policy["retrieval_priority"] == "kb_only"
     assert tool_policy["enable_web_search"] is False
-    assert handler._effective_policy["source"]["kb_lock_default"] == "auto_enabled_when_kb_bound"
+    assert (
+        handler._effective_policy["source"]["kb_lock_default"]
+        == "auto_enabled_when_kb_bound"
+    )
 
 
 def test_enforce_tool_policy_guardrails_backfills_legacy_false_kb_lock(
@@ -660,6 +843,7 @@ async def test_create_response_uses_local_blocked_message_without_upstream_call(
     handler._send_upstream = AsyncMock()
     handler._persist_message = AsyncMock()
     handler._pending_blocked_response_text = "当前会话必须先命中知识库，暂不生成回答。"
+    handler._stepfun_playback_rate = 1.25
     handler.turn_count = 0
 
     created = await handler._create_response(count_turn=True)
@@ -676,6 +860,29 @@ async def test_create_response_uses_local_blocked_message_without_upstream_call(
     payload = handler.manager.send_json.await_args_list[0].args[1]
     assert payload["type"] == "tts_audio"
     assert payload["data"]["text"] == "当前会话必须先命中知识库，暂不生成回答。"
+    assert payload["data"]["playback_rate"] == 1.25
+
+
+@pytest.mark.asyncio
+async def test_forward_audio_delta_chunk_includes_server_playback_rate():
+    handler = StepFunRealtimeHandler()
+    handler.websocket = MagicMock()
+    handler.manager = MagicMock()
+    handler.manager.send_json = AsyncMock()
+    handler._send_status = AsyncMock()
+    handler._active_response = RealtimeResponseState(
+        request_id=3,
+        stream_id="stream-rate",
+    )
+    handler._stepfun_output_audio_format = "pcm16"
+    handler._stepfun_output_sample_rate = 24000
+    handler._stepfun_playback_rate = 1.25
+
+    await handler._forward_audio_delta_chunk("AAECAw==")
+
+    payload = handler.manager.send_json.await_args.args[1]
+    assert payload["type"] == "tts_chunk"
+    assert payload["data"]["playback_rate"] == 1.25
 
 
 @pytest.mark.asyncio
@@ -969,7 +1176,60 @@ async def test_pending_response_timeout_fallback_skips_stale_generation(monkeypa
 
 
 @pytest.mark.asyncio
-async def test_pending_response_timeout_fallback_blocks_when_transcription_missing_under_kb_lock(
+async def test_upstream_keepalive_loop_sends_ping_when_upstream_connection_is_idle(
+    monkeypatch,
+):
+    handler = StepFunRealtimeHandler()
+    handler.running = True
+    handler._upstream_keepalive_interval_seconds = 5.0
+    handler._upstream_keepalive_pong_timeout_seconds = 1.0
+    handler._upstream_last_activity_at = 0.0
+
+    pong_waiter = asyncio.Future()
+    pong_waiter.set_result(0.02)
+    upstream_ws = SimpleNamespace(ping=AsyncMock(return_value=pong_waiter))
+    handler.upstream_ws = upstream_ws
+
+    sleep_calls = 0
+
+    async def _fake_sleep(_seconds: float) -> None:
+        nonlocal sleep_calls
+        sleep_calls += 1
+        if sleep_calls >= 1:
+            handler.running = False
+
+    monkeypatch.setattr(stepfun_module.asyncio, "sleep", _fake_sleep)
+
+    await handler._run_upstream_keepalive_loop(upstream_ws)
+
+    upstream_ws.ping.assert_awaited_once()
+    assert handler._upstream_last_activity_at > 0
+
+
+@pytest.mark.asyncio
+async def test_upstream_keepalive_loop_skips_ping_when_recent_activity_exists(
+    monkeypatch,
+):
+    handler = StepFunRealtimeHandler()
+    handler.running = True
+    handler._upstream_keepalive_interval_seconds = 5.0
+    handler._upstream_last_activity_at = asyncio.get_running_loop().time()
+
+    upstream_ws = SimpleNamespace(ping=AsyncMock())
+    handler.upstream_ws = upstream_ws
+
+    async def _fake_sleep(_seconds: float) -> None:
+        handler.running = False
+
+    monkeypatch.setattr(stepfun_module.asyncio, "sleep", _fake_sleep)
+
+    await handler._run_upstream_keepalive_loop(upstream_ws)
+
+    upstream_ws.ping.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_pending_response_timeout_fallback_suppresses_blocked_copy_when_transcription_missing_under_kb_lock(
     monkeypatch,
 ):
     handler = StepFunRealtimeHandler()
@@ -981,6 +1241,8 @@ async def test_pending_response_timeout_fallback_blocks_when_transcription_missi
     handler._pending_response_after_commit = True
     handler._record_kb_lock_decision = AsyncMock()
     handler._create_response_from_pending_commit = AsyncMock(return_value=True)
+    handler._cancel_pending_response_after_commit = AsyncMock()
+    handler._send_status = AsyncMock()
 
     monkeypatch.setattr(stepfun_module, "PENDING_RESPONSE_FALLBACK_SECONDS", 0.0)
     monkeypatch.setattr(stepfun_module, "TRANSCRIPTION_WAIT_GRACE_SECONDS", 0.0)
@@ -988,13 +1250,34 @@ async def test_pending_response_timeout_fallback_blocks_when_transcription_missi
 
     await handler._pending_response_timeout_fallback()
 
-    assert "知识库强制模式" in handler._pending_blocked_response_text
-    assert "语音转写尚未完成" in handler._pending_blocked_response_text
+    assert handler._pending_blocked_response_text == ""
     handler._record_kb_lock_decision.assert_awaited_once_with(
-        status="blocked_transcription_timeout",
-        blocked=True,
+        status="transcription_timeout_suppressed",
+        blocked=False,
     )
+    handler._cancel_pending_response_after_commit.assert_awaited_once()
+    handler._send_status.assert_awaited_once_with("listening")
+    handler._create_response_from_pending_commit.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_handle_final_user_transcript_creates_response_after_suppressed_timeout_when_transcript_arrives_late():
+    handler = StepFunRealtimeHandler()
+    handler.turn_count = 0
+    handler._allow_late_transcription_response = True
+    handler._send_transcript = AsyncMock()
+    handler._analyze_and_emit_sales_stage = AsyncMock(return_value="discovery")
+    handler._run_realtime_feedback = AsyncMock(return_value={})
+    handler._persist_message = AsyncMock()
+    handler._prepare_grounding_context = AsyncMock()
+    handler._create_response_from_pending_commit = AsyncMock(return_value=False)
+    handler._create_response = AsyncMock(return_value=True)
+
+    await handler._handle_final_user_transcript("这是晚到的最终转写")
+
     handler._create_response_from_pending_commit.assert_awaited_once()
+    handler._create_response.assert_awaited_once_with(count_turn=True)
+    assert handler._allow_late_transcription_response is False
 
 
 @pytest.mark.asyncio
@@ -1612,7 +1895,9 @@ def test_apply_latest_scores_to_session_maps_sales_rollups_and_snapshot():
     assert session.accuracy_score == pytest.approx(69.7)
     assert session.completeness_score == pytest.approx(80.0)
     assert session.effectiveness_snapshot["main_issue"]["issue_type"] == "evidence_gap"
-    assert session.effectiveness_snapshot["next_goal"]["goal_type"] == "evidence_backing"
+    assert (
+        session.effectiveness_snapshot["next_goal"]["goal_type"] == "evidence_backing"
+    )
     assert session.effectiveness_snapshot["evaluable"] is True
 
 
@@ -1698,7 +1983,9 @@ async def test_create_response_blocks_when_strict_kb_answerability_is_insufficie
         "rewritten_queries": ["实习 产品介绍"],
         "citations": [],
     }
-    handler._pending_blocked_response_text = "当前内部知识库没有足够依据回答这个问题，请补充更具体的产品关键词或版本信息。"
+    handler._pending_blocked_response_text = (
+        "当前内部知识库没有足够依据回答这个问题，请补充更具体的产品关键词或版本信息。"
+    )
 
     created = await handler._create_response(count_turn=True)
 
@@ -1802,7 +2089,9 @@ async def test_flush_active_response_trims_unsupported_sentences_in_partial_mode
         ],
     }
 
-    await handler._flush_active_response({"type": "response.done", "response": {"id": "resp-1"}})
+    await handler._flush_active_response(
+        {"type": "response.done", "response": {"id": "resp-1"}}
+    )
 
     sent_payload = handler.manager.send_json.await_args_list[0].args[1]
     assert sent_payload["type"] == "tts_audio"
@@ -1827,7 +2116,9 @@ async def test_flush_active_response_falls_back_when_partial_mode_has_no_support
         request_id=1,
         stream_id="stream-1",
     )
-    handler._active_response.text_parts = ["它覆盖所有海外市场并且已经支持 200 个国家。"]
+    handler._active_response.text_parts = [
+        "它覆盖所有海外市场并且已经支持 200 个国家。"
+    ]
     handler._latest_knowledge_answer_diagnostics = {
         "mode": "grounded_preferred",
         "answerability": "partial",
@@ -1845,10 +2136,15 @@ async def test_flush_active_response_falls_back_when_partial_mode_has_no_support
         ],
     }
 
-    await handler._flush_active_response({"type": "response.done", "response": {"id": "resp-1"}})
+    await handler._flush_active_response(
+        {"type": "response.done", "response": {"id": "resp-1"}}
+    )
 
     sent_payload = handler.manager.send_json.await_args_list[0].args[1]
-    assert sent_payload["data"]["text"] == "当前内部知识库仅支持部分信息，暂无法确认更多细节。"
+    assert (
+        sent_payload["data"]["text"]
+        == "当前内部知识库仅支持部分信息，暂无法确认更多细节。"
+    )
     persisted_text = handler._persist_message.await_args.kwargs["content"]
     assert persisted_text == "当前内部知识库仅支持部分信息，暂无法确认更多细节。"
 
@@ -1871,17 +2167,17 @@ async def test_prepare_grounding_context_blocks_product_overview_when_coach_mode
         await asyncio.sleep(0.02)
         return {}
 
-    original_wait_for = stepfun_module.asyncio.wait_for
-
     async def fake_wait_for(awaitable, timeout):
         awaitable.close()
-        raise asyncio.TimeoutError
+        raise TimeoutError
 
     with pytest.MonkeyPatch.context() as mp:
         mp.setattr(stepfun_module, "evaluate_kb_lock_decision", _never_returns)
         mp.setattr(stepfun_module.asyncio, "wait_for", fake_wait_for)
         mp.setattr(handler, "_record_kb_lock_decision", AsyncMock())
-        await handler._prepare_grounding_context("请你讲一下实习，介绍一下实习这个产品。")
+        await handler._prepare_grounding_context(
+            "请你讲一下实习，介绍一下实习这个产品。"
+        )
 
     assert handler._pending_grounding_context == ""
     assert "暂时无法基于内部资料确认" in handler._pending_blocked_response_text
@@ -1899,11 +2195,16 @@ async def test_handle_upstream_response_text_delta_does_not_cancel_stream_on_que
     handler._active_response = RealtimeResponseState(request_id=1, stream_id="stream-1")
 
     await handler._handle_upstream_response_text_delta(
-        {"type": "response.text.delta", "delta": "好的，我先介绍产品。你更关心哪个方向？还想了解价格吗？"}
+        {
+            "type": "response.text.delta",
+            "delta": "好的，我先介绍产品。你更关心哪个方向？还想了解价格吗？",
+        }
     )
 
     assert handler._active_response is not None
-    assert handler._active_response.text_parts == ["好的，我先介绍产品。你更关心哪个方向？还想了解价格吗？"]
+    assert handler._active_response.text_parts == [
+        "好的，我先介绍产品。你更关心哪个方向？还想了解价格吗？"
+    ]
     handler._send_upstream.assert_not_awaited()
 
 
@@ -1941,15 +2242,30 @@ async def test_flush_active_response_emits_runtime_answer_diagnostics_and_citati
         ],
     }
 
-    await handler._flush_active_response({"type": "response.done", "response": {"id": "resp-1"}})
+    await handler._flush_active_response(
+        {"type": "response.done", "response": {"id": "resp-1"}}
+    )
 
     sent_payload = handler.manager.send_json.await_args_list[0].args[1]
     assert sent_payload["type"] == "tts_audio"
     assert sent_payload["data"]["text"] == "实习专家是一款企业内部智能演练平台。"
-    assert sent_payload["data"]["knowledge_answer_diagnostics"]["answerability"] == "sufficient"
-    assert sent_payload["data"]["knowledge_answer_diagnostics"]["audit_run_id"] == "run-knowledge-1"
-    assert sent_payload["data"]["knowledge_answer_diagnostics"]["rewritten_queries"] == ["实习专家 产品介绍", "实习专家 核心能力"]
-    assert sent_payload["data"]["knowledge_answer_diagnostics"]["citations"][0]["document_title"] == "实习专家产品手册"
+    assert (
+        sent_payload["data"]["knowledge_answer_diagnostics"]["answerability"]
+        == "sufficient"
+    )
+    assert (
+        sent_payload["data"]["knowledge_answer_diagnostics"]["audit_run_id"]
+        == "run-knowledge-1"
+    )
+    assert sent_payload["data"]["knowledge_answer_diagnostics"][
+        "rewritten_queries"
+    ] == ["实习专家 产品介绍", "实习专家 核心能力"]
+    assert (
+        sent_payload["data"]["knowledge_answer_diagnostics"]["citations"][0][
+            "document_title"
+        ]
+        == "实习专家产品手册"
+    )
     handler._persist_message.assert_awaited_once()
 
 
@@ -2029,7 +2345,9 @@ async def test_run_realtime_feedback_keeps_single_action_card_and_prioritizes_sc
     )
 
     sent_payloads = [call.args[1] for call in handler.manager.send_json.await_args_list]
-    action_cards = [payload for payload in sent_payloads if payload["type"] == "action_card"]
+    action_cards = [
+        payload for payload in sent_payloads if payload["type"] == "action_card"
+    ]
 
     assert analysis["fuzzy_words"] == [
         {
@@ -2040,7 +2358,9 @@ async def test_run_realtime_feedback_keeps_single_action_card_and_prioritizes_sc
         }
     ]
     assert analysis["score_snapshot"]["overall_score"] == 83.0
-    assert analysis["ai_feedback"] == "在确认痛点后，补一个同类客户案例、数据或ROI区间。"
+    assert (
+        analysis["ai_feedback"] == "在确认痛点后，补一个同类客户案例、数据或ROI区间。"
+    )
     assert len(action_cards) == 1
     assert action_cards[0]["data"] == {
         "issue": "痛点已经聊到，但价值主张还缺少可验证的案例或数据。",
@@ -2093,10 +2413,17 @@ async def test_run_realtime_feedback_suppresses_duplicate_action_card_for_same_t
         "next_turn_rule": "下一轮先确认痛点影响，再补一个案例或ROI数据。",
     }
     sent_payloads = [call.args[1] for call in handler.manager.send_json.await_args_list]
-    action_cards = [payload for payload in sent_payloads if payload["type"] == "action_card"]
-    score_updates = [payload for payload in sent_payloads if payload["type"] == "score_update"]
+    action_cards = [
+        payload for payload in sent_payloads if payload["type"] == "action_card"
+    ]
+    score_updates = [
+        payload for payload in sent_payloads if payload["type"] == "score_update"
+    ]
 
-    assert first_analysis["ai_feedback"] == "在确认痛点后，补一个同类客户案例、数据或ROI区间。"
+    assert (
+        first_analysis["ai_feedback"]
+        == "在确认痛点后，补一个同类客户案例、数据或ROI区间。"
+    )
     assert second_analysis == {
         "score_snapshot": {
             "overall_score": 82.0,
@@ -2188,8 +2515,12 @@ async def test_run_realtime_feedback_emits_canonical_sales_score_and_action_card
     assert handler._latest_action_card == expected_action_card
 
     sent_payloads = [call.args[1] for call in handler.manager.send_json.await_args_list]
-    score_update = next(payload for payload in sent_payloads if payload["type"] == "score_update")
-    action_card = next(payload for payload in sent_payloads if payload["type"] == "action_card")
+    score_update = next(
+        payload for payload in sent_payloads if payload["type"] == "score_update"
+    )
+    action_card = next(
+        payload for payload in sent_payloads if payload["type"] == "action_card"
+    )
 
     assert score_update["data"] == {
         "session_id": "session-realtime-feedback",
@@ -2345,13 +2676,20 @@ async def test_run_realtime_feedback_passes_rich_stage_and_raw_score_context_to_
         "progress": 0.8,
         "stage_changed": True,
     }
-    assert arbiter_kwargs["score_context"]["dimensions"] == raw_score_payload["dimensions"]
+    assert (
+        arbiter_kwargs["score_context"]["dimensions"] == raw_score_payload["dimensions"]
+    )
     assert arbiter_kwargs["score_context"]["feedback"] == "继续回应客户顾虑。"
-    assert arbiter_kwargs["score_context"]["dimension_scores"] == raw_score_payload["dimension_scores"]
+    assert (
+        arbiter_kwargs["score_context"]["dimension_scores"]
+        == raw_score_payload["dimension_scores"]
+    )
     assert arbiter_kwargs["score_context"]["stage_name"] == "促成成交"
 
     sent_payloads = [call.args[1] for call in handler.manager.send_json.await_args_list]
-    score_update = next(payload for payload in sent_payloads if payload["type"] == "score_update")
+    score_update = next(
+        payload for payload in sent_payloads if payload["type"] == "score_update"
+    )
     assert score_update["data"] == {
         "session_id": "session-realtime-rich-context",
         "turn_count": 4,
@@ -2477,12 +2815,16 @@ async def test_run_realtime_feedback_uses_declining_dimension_to_match_classic_a
     assert handler._latest_action_card == expected_action_card
 
     sent_payloads = [call.args[1] for call in handler.manager.send_json.await_args_list]
-    action_card = next(payload for payload in sent_payloads if payload["type"] == "action_card")
+    action_card = next(
+        payload for payload in sent_payloads if payload["type"] == "action_card"
+    )
     assert action_card["data"] == expected_action_card
 
 
 @pytest.mark.asyncio
-async def test_run_realtime_feedback_opens_competitor_objection_ledger_and_keeps_claim_truth_pending() -> None:
+async def test_run_realtime_feedback_opens_competitor_objection_ledger_and_keeps_claim_truth_pending() -> (
+    None
+):
     handler = StepFunRealtimeHandler()
     handler.session_id = "session-competitor-ledger-open"
     handler.websocket = MagicMock()
@@ -2560,7 +2902,9 @@ async def test_run_realtime_feedback_opens_competitor_objection_ledger_and_keeps
     }
 
     sent_payloads = [call.args[1] for call in handler.manager.send_json.await_args_list]
-    score_update = next(payload for payload in sent_payloads if payload["type"] == "score_update")
+    score_update = next(
+        payload for payload in sent_payloads if payload["type"] == "score_update"
+    )
     assert score_update["data"]["claim_truth"] == {
         "status": "evidence_pending",
         "label": "证据待补齐",
@@ -2571,7 +2915,9 @@ async def test_run_realtime_feedback_opens_competitor_objection_ledger_and_keeps
 
 
 @pytest.mark.asyncio
-async def test_run_realtime_feedback_marks_implementation_evidence_verified_after_risk_proof_arrives() -> None:
+async def test_run_realtime_feedback_marks_implementation_evidence_verified_after_risk_proof_arrives() -> (
+    None
+):
     handler = StepFunRealtimeHandler()
     handler.session_id = "session-implementation-ledger-verified"
     handler.websocket = MagicMock()
@@ -2657,12 +3003,16 @@ async def test_run_realtime_feedback_marks_implementation_evidence_verified_afte
     assert handler._latest_claim_truth == expected_claim_truth
 
     sent_payloads = [call.args[1] for call in handler.manager.send_json.await_args_list]
-    score_update = next(payload for payload in sent_payloads if payload["type"] == "score_update")
+    score_update = next(
+        payload for payload in sent_payloads if payload["type"] == "score_update"
+    )
     assert score_update["data"]["claim_truth"] == expected_claim_truth
 
 
 @pytest.mark.asyncio
-async def test_run_realtime_feedback_reuses_open_objection_ledger_when_score_focus_drifts() -> None:
+async def test_run_realtime_feedback_reuses_open_objection_ledger_when_score_focus_drifts() -> (
+    None
+):
     handler = StepFunRealtimeHandler()
     handler.session_id = "session-objection-ledger-drift"
     handler.websocket = MagicMock()
@@ -2741,12 +3091,16 @@ async def test_run_realtime_feedback_reuses_open_objection_ledger_when_score_foc
     assert handler._latest_action_card == expected_action_card
 
     sent_payloads = [call.args[1] for call in handler.manager.send_json.await_args_list]
-    action_card = next(payload for payload in sent_payloads if payload["type"] == "action_card")
+    action_card = next(
+        payload for payload in sent_payloads if payload["type"] == "action_card"
+    )
     assert action_card["data"] == expected_action_card
 
 
 @pytest.mark.asyncio
-async def test_run_realtime_feedback_marks_objection_ledger_gap_acknowledged_and_releases_focus() -> None:
+async def test_run_realtime_feedback_marks_objection_ledger_gap_acknowledged_and_releases_focus() -> (
+    None
+):
     handler = StepFunRealtimeHandler()
     handler.session_id = "session-objection-ledger-close"
     handler.websocket = MagicMock()
@@ -2825,7 +3179,9 @@ async def test_run_realtime_feedback_marks_objection_ledger_gap_acknowledged_and
     assert handler._latest_action_card == expected_action_card
 
     sent_payloads = [call.args[1] for call in handler.manager.send_json.await_args_list]
-    action_card = next(payload for payload in sent_payloads if payload["type"] == "action_card")
+    action_card = next(
+        payload for payload in sent_payloads if payload["type"] == "action_card"
+    )
     assert action_card["data"] == expected_action_card
 
 
@@ -2887,13 +3243,21 @@ async def test_restore_session_state_rehydrates_objection_ledger() -> None:
     assert emitted_snapshot.turn_count == state.turn_count
     assert emitted_snapshot.session_status == state.session_status
     assert emitted_snapshot.ai_state == state.ai_state
-    assert emitted_snapshot.runtime_state == {
+    emitted_runtime_state = emitted_snapshot.runtime_state
+    assert emitted_runtime_state is not None
+    assert emitted_runtime_state == {
         "objection_ledger": {
             "objection_family": "implementation_risk",
             "promised_proof": "补实施排期与服务边界",
             "next_expected_evidence": "确认试点负责人",
             "closure_state": "open",
-        }
+        },
+        "reconnect_state": {
+            "connection_epoch": 1,
+            "request_epoch": 0,
+            "last_disconnect_reason": None,
+            "last_error": None,
+        },
     }
 
 
@@ -2933,7 +3297,7 @@ async def test_run_realtime_feedback_marks_coach_degraded_when_capability_pipeli
 
     handler._sales_stage_enabled = True
 
-    analysis = await handler._run_realtime_feedback(
+    await handler._run_realtime_feedback(
         user_text="我们这个产品的 ROI 很高",
         turn_number=1,
         sales_stage="discovery",
@@ -3044,7 +3408,5 @@ async def test_capability_pipeline_fails_does_not_change_training_session_status
     assert handler.session_status == "in_progress"
     assert handler._coach_health == "degraded"
 
-
     assert handler.session_status == "in_progress"
     assert handler._coach_health == "degraded"
-

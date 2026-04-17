@@ -15,7 +15,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 import json
-from typing import Any
+from typing import Any, cast
 from uuid import UUID, uuid4
 
 from sqlalchemy import select, and_, desc
@@ -113,7 +113,9 @@ class StagedEvaluationService:
             )
 
             if not prompt_result:
-                return Result.fail(f"[PROMPT_NOT_FOUND:{stage_config.evaluation_prompt_type}]")
+                return Result.fail(
+                    f"[PROMPT_NOT_FOUND:{stage_config.evaluation_prompt_type}]"
+                )
 
             # Render prompt with conversation
             render_variables = {
@@ -129,23 +131,32 @@ class StagedEvaluationService:
                     "StagedEvaluationService.evaluate_stage"
                 ),
                 system_message=(
-                    "你是一个专业的销售培训评估专家。"
-                    "请严格按照JSON格式返回评估结果。"
+                    "你是一个专业的销售培训评估专家。请严格按照JSON格式返回评估结果。"
                 ),
             )
             if not contract_result.is_success:
                 return Result.fail(
                     contract_result.fallback or "[PROMPT_CONTRACT_COMPILE_FAILED]"
                 )
+            compiled_contract = contract_result.value
+            if compiled_contract is None:
+                return Result.fail("[PROMPT_CONTRACT_COMPILE_FAILED:EMPTY_CONTRACT]")
+            compiled_contract = cast(Any, compiled_contract)
 
             # Call LLM for evaluation
-            llm_result = await self.llm.evaluate(contract_result.value)
+            llm_result = await self.llm.evaluate(compiled_contract)
 
             if not llm_result.is_success:
                 return Result.fail("[LLM_EVALUATION_FAILED]")
+            llm_payload = llm_result.value
+            if llm_payload is None:
+                return Result.fail("[LLM_EVALUATION_FAILED:EMPTY_RESPONSE]")
+            llm_payload = cast(str | dict[Any, Any] | bytes, llm_payload)
 
             # Parse evaluation result
-            parse_result = await parse_llm_response(llm_result.value, StageEvaluationResponse)
+            parse_result = await parse_llm_response(
+                llm_payload, StageEvaluationResponse
+            )
             if not parse_result.is_success:
                 return Result.fail(f"[LLM_VALIDATION_FAILED:{parse_result.fallback}]")
 
@@ -154,12 +165,18 @@ class StagedEvaluationService:
                 return Result.fail("[LLM_VALIDATION_FAILED:EMPTY_RESPONSE]")
 
             weaknesses: list[str] = []
-            raw_value = llm_result.value
+            raw_value = llm_payload
             if isinstance(raw_value, str):
                 try:
                     raw_dict = json.loads(raw_value)
-                    raw_weaknesses = raw_dict.get("weaknesses", []) if isinstance(raw_dict, dict) else []
-                    weaknesses = raw_weaknesses if isinstance(raw_weaknesses, list) else []
+                    raw_weaknesses = (
+                        raw_dict.get("weaknesses", [])
+                        if isinstance(raw_dict, dict)
+                        else []
+                    )
+                    weaknesses = (
+                        raw_weaknesses if isinstance(raw_weaknesses, list) else []
+                    )
                 except json.JSONDecodeError:
                     weaknesses = []
             elif isinstance(raw_value, dict):
@@ -262,11 +279,7 @@ class StagedEvaluationService:
                 stage_number=r.stage_number,
                 start_turn=r.start_turn,
                 end_turn=r.end_turn,
-                timestamp=(
-                    r.created_at
-                    if getattr(r, "created_at", None) is not None
-                    else getattr(r, "timestamp", datetime.now(timezone.utc))
-                ),
+                timestamp=r.created_at,
                 scores=r.scores or {},
                 strengths=r.strengths or [],
                 weaknesses=r.weaknesses or [],
@@ -335,8 +348,10 @@ class StagedEvaluationService:
             stage_number=result.stage_number,
             start_turn=result.start_turn,
             end_turn=result.end_turn,
+            created_at=result.timestamp,
             scores=result.scores,
             strengths=result.strengths,
+            weaknesses=result.weaknesses,
             suggestions=result.suggestions,
             summary=result.summary,
         )

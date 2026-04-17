@@ -575,6 +575,7 @@ export function handleWebSocketMessage(
                     total_duration_ms: chunkData.total_duration_ms,
                     audio_format: chunkData.audio_format,
                     sample_rate: chunkData.sample_rate,
+                    playback_rate: chunkData.playback_rate,
                 };
                 
                 // Notify callback

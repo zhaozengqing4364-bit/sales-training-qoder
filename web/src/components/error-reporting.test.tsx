@@ -55,12 +55,15 @@ import AdminError from "@/app/admin/error";
 import { LearnerRouteErrorState } from "@/components/learner/learner-route-error-state";
 import { AsyncErrorBoundary, ErrorBoundary } from "./ErrorBoundary";
 
-function ThrowOnRender() {
+function ThrowOnRender(): never {
     throw new Error("boundary exploded");
 }
 
 describe("frontend route error reporting seam", () => {
+    const originalApiUrl = process.env.NEXT_PUBLIC_API_URL;
+
     beforeEach(() => {
+        process.env.NEXT_PUBLIC_API_URL = "http://localhost:3444/api/v1";
         durableErrorMock.mockReset();
         fetchMock.mockReset();
         fetchMock.mockResolvedValue({ ok: true, status: 202, json: async () => ({ accepted: true }) });
@@ -69,6 +72,7 @@ describe("frontend route error reporting seam", () => {
     });
 
     afterEach(() => {
+        process.env.NEXT_PUBLIC_API_URL = originalApiUrl;
         vi.restoreAllMocks();
     });
 
@@ -134,11 +138,10 @@ describe("frontend route error reporting seam", () => {
 
         await waitFor(() => {
             expect(fetchMock).toHaveBeenCalledWith(
-                "/api/v1/analytics/error",
+                "http://localhost:3444/api/v1/analytics/error",
                 expect.objectContaining({
                     method: "POST",
                     keepalive: true,
-                    credentials: "include",
                     headers: expect.objectContaining({
                         "Content-Type": "application/json",
                     }),
