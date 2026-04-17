@@ -135,7 +135,7 @@ function base64ToArrayBuffer(base64: string): ArrayBuffer {
     return bytes.buffer;
 }
 
-function applyPlaybackRateToActivePcmSources(
+function applyPlaybackRateToPcmSources(
     sources: Iterable<AudioBufferSourceNode>,
     playbackRate: number,
 ): void {
@@ -225,9 +225,10 @@ export function useStreamingAudioPlayer(
             audioRef.current.playbackRate = normalizedPlaybackRate;
         }
 
-        for (const source of pcmActiveSourcesRef.current) {
-            source.playbackRate.value = normalizedPlaybackRate;
-        }
+        applyPlaybackRateToPcmSources(
+            pcmActiveSourcesRef.current,
+            normalizedPlaybackRate,
+        );
     }, [normalizedPlaybackRate]);
 
     /**
@@ -541,7 +542,7 @@ export function useStreamingAudioPlayer(
             if (audioRef.current) {
                 audioRef.current.playbackRate = normalizedChunkPlaybackRate;
             }
-            applyPlaybackRateToActivePcmSources(
+            applyPlaybackRateToPcmSources(
                 pcmActiveSourcesRef.current,
                 normalizedChunkPlaybackRate,
             );
