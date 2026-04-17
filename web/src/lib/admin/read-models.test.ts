@@ -20,7 +20,6 @@ import {
     getUserSessionPreview,
     hasEvaluableUserProgress,
 } from "./read-models";
-import type { UserSessionItem } from "@/lib/api/types";
 
 describe("read-models", () => {
     it("provides stable empty admin read-model defaults", () => {

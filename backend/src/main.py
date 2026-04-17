@@ -9,8 +9,15 @@ import uuid
 from contextlib import asynccontextmanager
 
 from dotenv import load_dotenv
-from fastapi import APIRouter, Depends, FastAPI, HTTPException, Query, WebSocket
-from fastapi.responses import JSONResponse, Response
+from fastapi import (
+    APIRouter,
+    Depends,
+    FastAPI,
+    HTTPException,
+    Query,
+    Request,
+    WebSocket,
+)
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
 from fastapi.routing import APIRoute
@@ -56,6 +63,8 @@ from common.auth.service import (
     require_role,
     resolve_websocket_token,
     set_auth_session_cookie,
+    should_enforce_csrf,
+    validate_csrf_request,
 )
 
 # Conversation Replay API
@@ -101,14 +110,6 @@ from support.api.runtime_status import router as support_runtime_router
 load_dotenv()
 configure_logging(os.getenv("LOG_LEVEL", "INFO"))
 logger = get_logger(__name__)
-
-
-CSRF_EXEMPT_PATHS = frozenset(
-    {
-        "/api/v1/auth/login",
-        "/api/v1/auth/dev-login",
-    }
-)
 
 
 DEV_CORS_ORIGINS = [
@@ -372,6 +373,17 @@ def _csrf_validation_failed_response(exc: HTTPException) -> JSONResponse:
             "trace_id": get_trace_id(),
         },
     )
+
+
+@app.middleware("http")
+async def csrf_protection_middleware(request: Request, call_next):
+    if not _is_csrf_exempt_path(request.url.path) and should_enforce_csrf(request):
+        try:
+            validate_csrf_request(request)
+        except HTTPException as exc:
+            return _csrf_validation_failed_response(exc)
+
+    return await call_next(request)
 
 
 # Health check

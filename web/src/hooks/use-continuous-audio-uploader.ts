@@ -126,22 +126,6 @@ export function useContinuousAudioUploader(
         mediaRecorderRef.current = null;
     }, []);
 
-    const registerSegmentFailure = useCallback(
-        async (sequence: number, errorToken: AudioSegmentFailureToken) => {
-            try {
-                await api.audioSegments.registerFailure(sessionId, {
-                    segment_sequence: sequence,
-                    error_token: errorToken,
-                });
-            } catch (err) {
-                debug.warn(
-                    `[ContinuousAudioUploader] failure registration failed for segment ${sequence}: ${getApiErrorMessage(err)}`,
-                );
-            }
-        },
-        [sessionId],
-    );
-
     /**
      * Upload a single segment blob to OSS via presigned URL + register metadata.
      * Failures are caught and surfaced via lastError — they don't crash the loop.
@@ -250,7 +234,7 @@ export function useContinuousAudioUploader(
                 setLastError(message);
             }
         },
-        [sessionId, registerSegmentFailure],
+        [sessionId],
     );
 
     const startUpload = useCallback(async () => {

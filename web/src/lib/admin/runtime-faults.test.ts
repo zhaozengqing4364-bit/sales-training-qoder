@@ -5,7 +5,6 @@ import {
   buildLinkedRuntimeFaultEntries,
   buildRuntimeFaultBySessionId,
 } from "./runtime-faults";
-import type { SupportRuntimeFaultItem } from "@/lib/api/types";
 
 describe("runtime-faults", () => {
   const faultBase = {
