@@ -8,7 +8,13 @@ from __future__ import annotations
 import os
 import sys
 
-from fastapi import WebSocket
+from dotenv import load_dotenv
+from fastapi import APIRouter, Depends, FastAPI, HTTPException, Query, Request, WebSocket
+from fastapi.responses import JSONResponse, Response
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.routing import APIRoute
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 # Add src to path for imports when this module is executed directly.
 sys.path.insert(0, os.path.dirname(__file__))
@@ -50,6 +56,8 @@ from common.auth.service import (
     require_role,
     resolve_websocket_token,
     set_auth_session_cookie,
+    should_enforce_csrf,
+    validate_csrf_request,
 )
 
 # Conversation Replay API
@@ -329,6 +337,31 @@ app.add_middleware(MetricsMiddleware)
 # Add global exception handler
 app.exception_handler(HTTPException)(http_exception_handler)
 app.exception_handler(Exception)(global_exception_handler)
+
+
+CSRF_EXEMPT_PATHS = {
+    "/api/v1/auth/login",
+    "/api/v1/auth/dev-login",
+    "/api/v1/auth/forgot-password",
+    "/api/v1/auth/reset-password",
+}
+
+
+def _is_csrf_exempt_path(path: str) -> bool:
+    return path in CSRF_EXEMPT_PATHS
+
+
+@app.middleware("http")
+async def enforce_cookie_session_csrf(request: Request, call_next):
+    """Protect unsafe cookie-backed requests with double-submit CSRF tokens."""
+
+    if not _is_csrf_exempt_path(request.url.path) and should_enforce_csrf(request):
+        try:
+            validate_csrf_request(request)
+        except HTTPException as exc:
+            return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
+
+    return await call_next(request)
 
 
 # Health check
