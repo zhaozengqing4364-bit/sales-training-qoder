@@ -84,6 +84,24 @@ const MODEL_TYPE_CONFIG = {
     },
 };
 
+const SETTINGS_READ_ONLY_TABS = new Set(["general", "security", "notifications"]);
+
+const READ_ONLY_SETTINGS_NOTICE = "这些配置项当前仅展示目标状态，尚未接入持久化接口，暂不会保存。";
+
+const readOnlyInputClassName = "bg-slate-100 border-slate-200 text-slate-500 cursor-not-allowed";
+
+const readOnlySelectClassName = "w-full p-3 rounded-xl border border-slate-200 bg-slate-100 outline-none font-medium text-slate-500 cursor-not-allowed";
+
+const readOnlyTextareaClassName = "w-full p-3 rounded-xl border border-slate-200 bg-slate-100 outline-none transition-all font-medium text-slate-500 h-24 resize-none cursor-not-allowed";
+
+function ReadOnlySettingsNotice() {
+    return (
+        <div role="status" className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+            {READ_ONLY_SETTINGS_NOTICE}
+        </div>
+    );
+}
+
 const PROVIDER_OPTIONS: { value: ModelProvider; label: string }[] = [
     { value: "openai", label: "OpenAI" },
     { value: "azure", label: "Azure OpenAI" },
@@ -425,6 +443,7 @@ export default function SettingsPage() {
             case "general":
                 return (
                     <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
+                        <ReadOnlySettingsNotice />
                         <GlassCard className="p-8">
                             <h3 className="text-lg font-bold text-slate-900 mb-6 flex items-center gap-2">
                                 <Globe className="w-5 h-5 text-blue-500" /> 平台信息
@@ -432,15 +451,15 @@ export default function SettingsPage() {
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                 <div className="space-y-2">
                                     <label className="text-xs font-bold text-slate-500 uppercase">平台名称</label>
-                                    <Input defaultValue="Intelligent Coach AI" className="bg-slate-50 border-slate-200" />
+                                    <Input value="Intelligent Coach AI" readOnly aria-describedby="settings-readonly-notice" className={readOnlyInputClassName} />
                                 </div>
                                 <div className="space-y-2">
                                     <label className="text-xs font-bold text-slate-500 uppercase">支持邮箱</label>
-                                    <Input defaultValue="support@company.com" className="bg-slate-50 border-slate-200" />
+                                    <Input value="support@company.com" readOnly aria-describedby="settings-readonly-notice" className={readOnlyInputClassName} />
                                 </div>
                                 <div className="col-span-2 space-y-2">
                                     <label className="text-xs font-bold text-slate-500 uppercase">欢迎语</label>
-                                    <textarea defaultValue="欢迎使用高级训练平台，开启您的学习之旅！" className="w-full p-3 rounded-xl border border-slate-200 bg-slate-50 focus:ring-2 focus:ring-blue-500 focus:bg-white outline-none transition-all font-medium text-slate-700 h-24 resize-none" />
+                                    <textarea value="欢迎使用高级训练平台，开启您的学习之旅！" readOnly aria-describedby="settings-readonly-notice" className={readOnlyTextareaClassName} />
                                 </div>
                             </div>
                         </GlassCard>
@@ -452,21 +471,21 @@ export default function SettingsPage() {
                             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                                 <div className="space-y-2">
                                     <label className="text-xs font-bold text-slate-500 uppercase">默认语言</label>
-                                    <select className="w-full p-3 rounded-xl border border-slate-200 bg-slate-50 focus:ring-2 focus:ring-blue-500 outline-none font-medium text-slate-700">
+                                    <select disabled aria-describedby="settings-readonly-notice" className={readOnlySelectClassName}>
                                         <option>简体中文</option>
                                         <option>English (US)</option>
                                     </select>
                                 </div>
                                 <div className="space-y-2">
                                     <label className="text-xs font-bold text-slate-500 uppercase">时区</label>
-                                    <select className="w-full p-3 rounded-xl border border-slate-200 bg-slate-50 focus:ring-2 focus:ring-blue-500 outline-none font-medium text-slate-700">
+                                    <select disabled aria-describedby="settings-readonly-notice" className={readOnlySelectClassName}>
                                         <option>Asia/Shanghai (GMT+8)</option>
                                         <option>UTC</option>
                                     </select>
                                 </div>
                                 <div className="space-y-2">
                                     <label className="text-xs font-bold text-slate-500 uppercase">日期格式</label>
-                                    <select className="w-full p-3 rounded-xl border border-slate-200 bg-slate-50 focus:ring-2 focus:ring-blue-500 outline-none font-medium text-slate-700">
+                                    <select disabled aria-describedby="settings-readonly-notice" className={readOnlySelectClassName}>
                                         <option>YYYY-MM-DD</option>
                                         <option>MM/DD/YYYY</option>
                                     </select>
@@ -478,6 +497,7 @@ export default function SettingsPage() {
             case "security":
                 return (
                     <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
+                        <ReadOnlySettingsNotice />
                         <GlassCard className="p-8">
                             <h3 className="text-lg font-bold text-slate-900 mb-6 flex items-center gap-2">
                                 <Lock className="w-5 h-5 text-emerald-500" /> 安全策略
@@ -488,14 +508,14 @@ export default function SettingsPage() {
                                         <div className="text-sm font-bold text-slate-900">强制双重认证 (2FA)</div>
                                         <div className="text-xs text-slate-500">所有管理员必须启用两步验证才能登录</div>
                                     </div>
-                                    <input type="checkbox" className="w-6 h-6 accent-slate-900 rounded-lg" defaultChecked />
+                                    <input type="checkbox" className="w-6 h-6 accent-slate-900 rounded-lg" checked readOnly aria-describedby="settings-readonly-notice" />
                                 </div>
                                 <div className="flex items-center justify-between p-4 bg-slate-50 rounded-2xl border border-slate-100">
                                     <div className="space-y-1">
                                         <div className="text-sm font-bold text-slate-900">新设备登录提醒</div>
                                         <div className="text-xs text-slate-500">检测到未知设备时发送邮件通知</div>
                                     </div>
-                                    <input type="checkbox" className="w-6 h-6 accent-slate-900 rounded-lg" defaultChecked />
+                                    <input type="checkbox" className="w-6 h-6 accent-slate-900 rounded-lg" checked readOnly aria-describedby="settings-readonly-notice" />
                                 </div>
                             </div>
                         </GlassCard>
@@ -507,11 +527,11 @@ export default function SettingsPage() {
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                 <div className="space-y-2">
                                     <label className="text-xs font-bold text-slate-500 uppercase">最小长度</label>
-                                    <Input type="number" defaultValue="8" className="bg-slate-50 border-slate-200" />
+                                    <Input type="number" value="8" readOnly aria-describedby="settings-readonly-notice" className={readOnlyInputClassName} />
                                 </div>
                                 <div className="space-y-2">
                                     <label className="text-xs font-bold text-slate-500 uppercase">有效期 (天)</label>
-                                    <Input type="number" defaultValue="90" className="bg-slate-50 border-slate-200" />
+                                    <Input type="number" value="90" readOnly aria-describedby="settings-readonly-notice" className={readOnlyInputClassName} />
                                 </div>
                             </div>
                         </GlassCard>
@@ -520,6 +540,7 @@ export default function SettingsPage() {
             case "notifications":
                 return (
                     <div className="space-y-6 animate-in fade-in slide-in-from-right-4 duration-300">
+                        <ReadOnlySettingsNotice />
                         <GlassCard className="p-8">
                             <h3 className="text-lg font-bold text-slate-900 mb-6 flex items-center gap-2">
                                 <Mail className="w-5 h-5 text-indigo-500" /> 邮件通知
@@ -533,7 +554,7 @@ export default function SettingsPage() {
                                 ].map((item, i) => (
                                     <div key={i} className="flex items-center justify-between py-3 border-b border-slate-100 last:border-0">
                                         <span className="text-sm font-medium text-slate-700">{item}</span>
-                                        <input type="checkbox" className="w-5 h-5 accent-slate-900 rounded" defaultChecked={i % 2 === 0} />
+                                        <input type="checkbox" className="w-5 h-5 accent-slate-900 rounded" checked={i % 2 === 0} readOnly aria-describedby="settings-readonly-notice" />
                                     </div>
                                 ))}
                             </div>
@@ -696,7 +717,17 @@ export default function SettingsPage() {
                     <p className="text-slate-500 mt-1">管理全局配置与参数</p>
                 </div>
                 <div className="flex gap-3">
-                    {activeTab === "models" ? (
+                    {SETTINGS_READ_ONLY_TABS.has(activeTab) ? (
+                        <div className="flex flex-col items-start gap-2 sm:flex-row sm:items-center">
+                            <span id="settings-readonly-notice" className="text-sm text-amber-700">{READ_ONLY_SETTINGS_NOTICE}</span>
+                            <Button variant="outline" className="rounded-full border-slate-200 text-slate-400" disabled title="未接入持久化接口">
+                                <RefreshCw className="w-4 h-4 mr-2" /> 放弃更改
+                            </Button>
+                            <Button className="rounded-full bg-slate-300 text-white shadow-none px-6" disabled title="未接入持久化接口">
+                                <Save className="w-4 h-4 mr-2" /> 保存配置
+                            </Button>
+                        </div>
+                    ) : activeTab === "models" ? (
                         <Button
                             variant="outline"
                             className="rounded-full border-slate-200"
@@ -706,16 +737,7 @@ export default function SettingsPage() {
                             <RefreshCw className={`w-4 h-4 mr-2 ${isLoadingModels ? "animate-spin" : ""}`} />
                             刷新
                         </Button>
-                    ) : (
-                        <>
-                            <Button variant="outline" className="rounded-full border-slate-200 text-slate-600 hover:bg-slate-50">
-                                <RefreshCw className="w-4 h-4 mr-2" /> 放弃更改
-                            </Button>
-                            <Button className="rounded-full bg-slate-900 hover:bg-slate-800 text-white shadow-lg shadow-slate-900/20 px-6">
-                                <Save className="w-4 h-4 mr-2" /> 保存配置
-                            </Button>
-                        </>
-                    )}
+                    ) : null}
                 </div>
             </div>
 
