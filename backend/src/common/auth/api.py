@@ -16,9 +16,9 @@ import uuid
 from datetime import UTC, datetime
 from typing import Any
 
-import httpx
 from fastapi import APIRouter, Depends, Request, Response, status
 from fastapi.responses import JSONResponse, RedirectResponse
+import httpx
 from pydantic import BaseModel, EmailStr
 from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError

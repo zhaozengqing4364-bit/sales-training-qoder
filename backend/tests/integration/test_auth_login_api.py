@@ -10,9 +10,11 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
+import agent.models  # noqa: F401  # ensure Agent/Persona tables are registered on Base metadata for sqlite tests
 import httpx
 import pytest
 from sqlalchemy import func, select, text
+from urllib.parse import parse_qs, urlparse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 import agent.models  # noqa: F401  # ensure Agent/Persona tables are registered on Base metadata for sqlite tests
@@ -363,14 +365,7 @@ async def test_auth_providers_report_explicit_dev_fallback_when_wecom_is_not_con
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv("ENVIRONMENT", "development")
-    for key in (
-        "WECOM_CORP_ID",
-        "WECOM_SECRET",
-        "WECOM_AGENT_ID",
-        "WECHAT_CORP_ID",
-        "WECHAT_SECRET",
-        "WECHAT_AGENT_ID",
-    ):
+    for key in ("WECOM_CORP_ID", "WECOM_SECRET", "WECOM_AGENT_ID", "WECHAT_CORP_ID", "WECHAT_SECRET", "WECHAT_AGENT_ID"):
         monkeypatch.delenv(key, raising=False)
 
     response = await async_client.get("/api/v1/auth/providers")
@@ -383,9 +378,7 @@ async def test_auth_providers_report_explicit_dev_fallback_when_wecom_is_not_con
     assert payload["data"]["wecom"]["configured"] is False
     assert "未配置" in payload["data"]["wecom"]["message"]
     assert payload["data"]["dev_fallback"]["enabled"] is True
-    assert payload["data"]["dev_fallback"]["login_url"].endswith(
-        "/api/v1/auth/dev-login"
-    )
+    assert payload["data"]["dev_fallback"]["login_url"].endswith("/api/v1/auth/dev-login")
     assert "development" in payload["data"]["dev_fallback"]["message"].lower()
 
 
@@ -408,43 +401,19 @@ async def test_wecom_callback_exchanges_code_sets_cookie_and_redirects_to_fronte
         if request.url.path == "/cgi-bin/gettoken":
             assert request.url.params["corpid"] == "corp-id"
             assert request.url.params["corpsecret"] == "corp-secret"
-            return httpx.Response(
-                200,
-                json={
-                    "errcode": 0,
-                    "errmsg": "ok",
-                    "access_token": "token-123",
-                    "expires_in": 7200,
-                },
-            )
+            return httpx.Response(200, json={"errcode": 0, "errmsg": "ok", "access_token": "token-123", "expires_in": 7200})
         if request.url.path == "/cgi-bin/auth/getuserinfo":
             assert request.url.params["code"] == "callback-code-1"
-            return httpx.Response(
-                200, json={"errcode": 0, "errmsg": "ok", "userid": "wecom-user-1"}
-            )
+            return httpx.Response(200, json={"errcode": 0, "errmsg": "ok", "userid": "wecom-user-1"})
         if request.url.path == "/cgi-bin/user/get":
             assert request.url.params["userid"] == "wecom-user-1"
-            return httpx.Response(
-                200,
-                json={
-                    "errcode": 0,
-                    "errmsg": "ok",
-                    "userid": "wecom-user-1",
-                    "name": "企业微信成员",
-                    "department": [42],
-                    "email": "wecom-user@example.com",
-                },
-            )
-        raise AssertionError(
-            f"unexpected WeCom request: {request.method} {request.url}"
-        )
+            return httpx.Response(200, json={"errcode": 0, "errmsg": "ok", "userid": "wecom-user-1", "name": "企业微信成员", "department": [42], "email": "wecom-user@example.com"})
+        raise AssertionError(f"unexpected WeCom request: {request.method} {request.url}")
 
     transport = httpx.MockTransport(handler)
     monkeypatch.setattr(
         "common.auth.service._create_wecom_http_client",
-        lambda: httpx.AsyncClient(
-            transport=transport, base_url="https://qyapi.weixin.qq.com"
-        ),
+        lambda: httpx.AsyncClient(transport=transport, base_url="https://qyapi.weixin.qq.com"),
     )
 
     start_response = await async_client.get(
@@ -469,9 +438,7 @@ async def test_wecom_callback_exchanges_code_sets_cookie_and_redirects_to_fronte
 
     set_cookie_headers = callback_response.headers.get_list("set-cookie")
     session_cookie_header = next(
-        header
-        for header in set_cookie_headers
-        if header.startswith(f"{AUTH_SESSION_COOKIE_NAME}=")
+        header for header in set_cookie_headers if header.startswith(f"{AUTH_SESSION_COOKIE_NAME}=")
     )
     assert "HttpOnly" in session_cookie_header
     session_token = callback_response.cookies.get(AUTH_SESSION_COOKIE_NAME)

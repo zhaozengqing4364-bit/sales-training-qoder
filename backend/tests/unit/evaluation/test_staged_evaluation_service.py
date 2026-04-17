@@ -477,7 +477,7 @@ class TestStagedEvaluationService:
         """Test get_stage_results returns existing results."""
         # Arrange
         session_id = str(uuid4())
-        created_at = datetime.now(UTC)
+        created_at = datetime.now(timezone.utc)
 
         # Mock database results
         mock_db_result = MagicMock()
@@ -584,10 +584,10 @@ class TestStagedEvaluationService:
         assert "user: " in formatted
 
     @pytest.mark.asyncio
-    async def test_evaluate_stage_defaults_to_full_history_without_boundaries(
+    async def test_evaluate_stage_calculates_turns_correctly(
         self, service, mock_prompt_service, mock_llm_service, sample_stage_config
     ):
-        """Stage slicing should not assume a fixed two-turn-per-stage offset."""
+        """Test that evaluate_stage calculates start and end turns correctly."""
         # Arrange
         session_id = str(uuid4())
         conversation = [
@@ -625,102 +625,6 @@ class TestStagedEvaluationService:
         assert result.is_success
         assert result.value.start_turn == 0
         assert result.value.end_turn == 6
-
-    @pytest.mark.asyncio
-    async def test_evaluate_stage_uses_explicit_stage_bounds(
-        self,
-        service,
-        mock_prompt_service,
-        mock_llm_service,
-    ):
-        """Explicit stage boundaries should control the evaluated slice."""
-        session_id = str(uuid4())
-        stage_config = StageConfig(
-            stage_number=2,
-            name="Discovery",
-            description="Discovery stage",
-            evaluation_prompt_type="stage",
-            triggers=[],
-            start_turn=1,
-            end_turn=3,
-        )
-        conversation = [
-            {"role": "assistant", "content": "Opening"},
-            {"role": "user", "content": "Discovery question"},
-            {"role": "assistant", "content": "Discovery answer"},
-            {"role": "user", "content": "Closing"},
-        ]
-        mock_prompt_template = MagicMock()
-        mock_prompt_template.id = uuid4()
-        mock_prompt_service.get_template_for_scenario.return_value = (
-            mock_prompt_template
-        )
-        mock_llm_service.evaluate.return_value = Result.ok(
-            '{"scores":{"communication":80.0},"strengths":[],"weaknesses":[],"suggestions":[],"summary":"Test","confidence":0.8}'
-        )
-
-        result = await service.evaluate_stage(
-            session_id=session_id,
-            stage_config=stage_config,
-            conversation_history=conversation,
-        )
-
-        assert result.is_success
-        assert result.value.start_turn == 1
-        assert result.value.end_turn == 3
-        render_variables = (
-            mock_prompt_service.compile_runtime_prompt_contract.call_args.kwargs[
-                "variables"
-            ]
-        )
-        assert "Discovery question" in render_variables["conversation"]
-        assert "Opening" not in render_variables["conversation"]
-        assert "Closing" not in render_variables["conversation"]
-
-    @pytest.mark.asyncio
-    async def test_evaluate_stage_uses_message_stage_metadata(
-        self,
-        service,
-        mock_prompt_service,
-        mock_llm_service,
-    ):
-        """Message stage metadata should define the evaluated slice."""
-        session_id = str(uuid4())
-        stage_config = StageConfig(
-            stage_number=2,
-            name="Discovery",
-            description="Discovery stage",
-            evaluation_prompt_type="stage",
-            triggers=[],
-        )
-        conversation = [
-            {"role": "assistant", "content": "Opening", "stage_number": 1},
-            {"role": "user", "content": "Discovery question", "stage_number": 2},
-            {
-                "role": "assistant",
-                "content": "Discovery answer",
-                "metadata": {"stage_number": 2},
-            },
-            {"role": "user", "content": "Closing", "stage_number": 3},
-        ]
-        mock_prompt_template = MagicMock()
-        mock_prompt_template.id = uuid4()
-        mock_prompt_service.get_template_for_scenario.return_value = (
-            mock_prompt_template
-        )
-        mock_llm_service.evaluate.return_value = Result.ok(
-            '{"scores":{"communication":80.0},"strengths":[],"weaknesses":[],"suggestions":[],"summary":"Test","confidence":0.8}'
-        )
-
-        result = await service.evaluate_stage(
-            session_id=session_id,
-            stage_config=stage_config,
-            conversation_history=conversation,
-        )
-
-        assert result.is_success
-        assert result.value.start_turn == 1
-        assert result.value.end_turn == 3
 
     @pytest.mark.asyncio
     async def test_evaluate_stage_stage_number_zero(

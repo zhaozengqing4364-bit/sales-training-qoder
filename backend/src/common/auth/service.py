@@ -16,6 +16,8 @@ import jwt
 from dotenv import load_dotenv
 from fastapi import Cookie, Depends, HTTPException, Request, Response
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+import httpx
+import jwt
 from jwt import InvalidTokenError as JWTError
 from passlib.context import CryptContext
 from sqlalchemy import cast, or_, select
@@ -555,7 +557,7 @@ async def get_current_admin_user(
 
 
 async def get_current_admin_user_for_app_routes(
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
 ) -> User:
     """
     App-level admin dependency for router-mirrored `/api/v1/admin/**` route families.

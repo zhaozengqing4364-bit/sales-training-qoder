@@ -4,6 +4,7 @@ Integration Tests for Staged Evaluation Database Tables
 TDD Tests for Task C1: Create Staged Evaluation Database Tables
 """
 
+import pytest
 from uuid import uuid4
 
 import pytest

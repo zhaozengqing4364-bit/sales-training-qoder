@@ -121,6 +121,35 @@ describe("handleWebSocketMessage connection/status behavior", () => {
         expect((deps.streamingPlayer as { appendChunk: ReturnType<typeof vi.fn> }).appendChunk).toHaveBeenCalledWith(
             expect.objectContaining({ playback_rate: 1.25 }),
         );
+        expect(deps.queueTTSAudio).toHaveBeenCalledWith(
+            expect.objectContaining({ playback_rate: 1.25 }),
+        );
+    });
+
+    it("forwards server playbackRate metadata to the streaming chunk player", () => {
+        const { deps } = createDeps(INITIAL_PRACTICE_STATE);
+
+        handleWebSocketMessage(
+            createMessageEvent({
+                type: "tts_chunk",
+                stream_id: "stream-rate",
+                request_id: 7,
+                timestamp: new Date().toISOString(),
+                data: {
+                    chunk_index: 0,
+                    audio: "AAECAw==",
+                    duration_ms: 120,
+                    is_final: false,
+                    audio_format: "mp3",
+                    playback_rate: 1.25,
+                },
+            }),
+            deps as never,
+        );
+
+        expect((deps.streamingPlayer as { appendChunk: ReturnType<typeof vi.fn> }).appendChunk).toHaveBeenCalledWith(
+            expect.objectContaining({ playback_rate: 1.25 }),
+        );
     });
     it("shows coach degraded state without breaking the active practice session", () => {
         const { deps, getState } = createDeps({

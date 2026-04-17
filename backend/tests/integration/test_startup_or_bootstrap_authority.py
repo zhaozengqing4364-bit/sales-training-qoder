@@ -51,12 +51,36 @@ async def test_production_startup_refuses_to_patch_legacy_personas_schema(
     db_session = _load_db_session_module()
 
     try:
-        with pytest.raises(RuntimeError, match="Run Alembic migration 20260216_0100_015"):
+        with pytest.raises(
+            RuntimeError, match="Run Alembic migration 20260216_0100_015"
+        ):
             await db_session.init_db()
     finally:
         # This test intentionally reloads common.db.session under a production env.
         # Reload it back onto the development baseline so later tests do not inherit
         # the production bootstrap module state via process-global imports.
+        os.environ.pop("DATABASE_URL", None)
+        os.environ["ENVIRONMENT"] = "development"
+        _load_db_session_module()
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_production_startup_refuses_missing_report_evaluation_tables(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    db_path = tmp_path / "missing-report-eval-production.db"
+
+    monkeypatch.setenv("DATABASE_URL", f"sqlite+aiosqlite:///{db_path}")
+    monkeypatch.setenv("ENVIRONMENT", "production")
+
+    db_session = _load_db_session_module()
+
+    try:
+        with pytest.raises(RuntimeError, match="report/evaluation schema drift"):
+            await db_session.init_db()
+    finally:
         os.environ.pop("DATABASE_URL", None)
         os.environ["ENVIRONMENT"] = "development"
         _load_db_session_module()

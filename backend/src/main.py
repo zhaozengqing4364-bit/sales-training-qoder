@@ -35,19 +35,21 @@ from agent.api.agents import user_router as agent_user_router
 from agent.api.personas import admin_router as persona_admin_router
 from common.api import analytics, dashboard, practice, training, users
 from common.api.knowledge_debug import router as knowledge_debug_router
-from common.auth.api import router as auth_router
+from common.auth.api import error_response, router as auth_router
 from common.auth.api import get_auth_config_diagnostics
 
 # Development mode auth (for testing without WeChat SSO)
 from common.auth.service import (
     JWTError,
-    resolve_websocket_token,
-    set_auth_session_cookie,
     create_access_token,
     get_current_admin_user,
     get_current_admin_user_for_app_routes,
     get_dev_user,
+    get_wecom_provider_diagnostics,
+    is_dev_login_enabled,
     require_role,
+    resolve_websocket_token,
+    set_auth_session_cookie,
 )
 
 # Conversation Replay API
@@ -70,6 +72,7 @@ from common.knowledge.kb_lock_guard import is_kb_lock_unbound_snapshot
 from common.knowledge.api import admin_router as knowledge_admin_router
 from common.knowledge.api import internal_router as knowledge_internal_router
 from common.monitoring.logger import configure_logging, get_logger
+from common.monitoring.health import build_health_payload
 from common.monitoring.metrics import (
     MetricsMiddleware,
     get_metrics,
@@ -172,15 +175,11 @@ async def lifespan(app: FastAPI):
     logger.info(
         "Database authority map resolved for startup",
         startup_initializer=STARTUP_DB_AUTHORITY["startup_initializer"],
-        schema_migration_entrypoint=STARTUP_DB_AUTHORITY[
-            "schema_migration_entrypoint"
-        ],
+        schema_migration_entrypoint=STARTUP_DB_AUTHORITY["schema_migration_entrypoint"],
         legacy_schema_repair_entrypoint=STARTUP_DB_AUTHORITY[
             "legacy_schema_repair_entrypoint"
         ],
-        auth_bootstrap_entrypoint=STARTUP_DB_AUTHORITY[
-            "auth_bootstrap_entrypoint"
-        ],
+        auth_bootstrap_entrypoint=STARTUP_DB_AUTHORITY["auth_bootstrap_entrypoint"],
         startup_compatibility_guards=STARTUP_DB_AUTHORITY[
             "startup_compatibility_guards"
         ],
@@ -188,6 +187,7 @@ async def lifespan(app: FastAPI):
     await init_db()
 
     auth_config = get_auth_config_diagnostics()
+    wecom_config = get_wecom_provider_diagnostics()
     if env != "development":
         if not auth_config["user_overrides_valid"]:
             raise RuntimeError(
@@ -197,6 +197,11 @@ async def lifespan(app: FastAPI):
             raise RuntimeError(
                 "Auth credentials are not configured. Set AUTH_SHARED_PASSWORD "
                 "or AUTH_USER_PASSWORDS_JSON before startup."
+            )
+        if not wecom_config["configured"]:
+            raise RuntimeError(
+                "WeCom SSO is not configured. Set WECHAT_CORP_ID/WECHAT_SECRET/WECHAT_AGENT_ID "
+                "(or WECOM_CORP_ID/WECOM_SECRET/WECOM_AGENT_ID) before startup."
             )
 
     if auth_config["credentials_ready"] and auth_config["user_overrides_valid"]:
@@ -215,6 +220,19 @@ async def lifespan(app: FastAPI):
             "Auth credentials are not configured; login endpoint will return 503",
             shared_password=auth_config["shared_password_configured"],
             user_overrides=auth_config["user_override_count"],
+        )
+
+    if wecom_config["configured"]:
+        logger.info(
+            "WeCom SSO configured",
+            corp_id_configured=wecom_config["corp_id_configured"],
+            agent_id_configured=wecom_config["agent_id_configured"],
+        )
+    else:
+        logger.warning(
+            "WeCom SSO is not configured",
+            corp_id_configured=wecom_config["corp_id_configured"],
+            agent_id_configured=wecom_config["agent_id_configured"],
         )
 
     # Initialize ConfigManager for AI model configurations
@@ -317,13 +335,7 @@ app.exception_handler(Exception)(global_exception_handler)
 @app.get("/health")
 async def health_check():
     """Health check endpoint"""
-    from datetime import UTC, datetime
-
-    return {
-        "status": "healthy",
-        "timestamp": datetime.now(UTC).isoformat(),
-        "version": "1.0.0",
-    }
+    return build_health_payload()
 
 
 @app.get("/metrics", include_in_schema=False)
@@ -335,23 +347,23 @@ async def metrics_export():
     )
 
 
-# Development login endpoint (for testing without WeChat SSO)
+# Development login endpoint (for testing without WeCom SSO)
 @app.post("/api/v1/auth/dev-login")
 async def dev_login(db: AsyncSession = Depends(get_db)):
     """
-    Development mode login - creates a mock user and returns a JWT token
-    Only active when ENVIRONMENT=development
+    Development mode login - creates a mock user and returns a JWT token.
+    This path is explicit fallback only and is disabled outside development by default.
     """
-    if os.getenv("ENVIRONMENT", "development").strip().lower() != "development":
-        from fastapi import HTTPException
+    if not is_dev_login_enabled():
+        return error_response(
+            "[DEV_LOGIN_DISABLED]",
+            "开发者登录仅在 development 环境可用。",
+            status_code=403,
+        )
 
-        raise HTTPException(status_code=403, detail="Development mode only")
-
-    # Get or create dev user
     user = await get_dev_user(db)
-
-    # Create JWT token
-    token = create_access_token(data={"sub": str(user.user_id)})
+    user_role = getattr(user, "role", None) or "user"
+    token = create_access_token(data={"sub": str(user.user_id), "role": user_role})
 
     response = JSONResponse(
         status_code=200,
@@ -364,11 +376,14 @@ async def dev_login(db: AsyncSession = Depends(get_db)):
                     "user_id": str(user.user_id),
                     "email": user.email,
                     "name": user.name,
+                    "role": user_role,
                 },
             },
         },
     )
     set_auth_session_cookie(response, token)
+    response.headers["X-Auth-Authority"] = "development_fallback"
+    response.headers["X-Auth-Compatibility-Mode"] = "explicit_dev_login"
     return response
 
 
@@ -569,48 +584,201 @@ async def _handle_presentation_websocket(
     """
     Backward-compatible presentation WebSocket helper.
 
-    Existing tests and integrations patch helper functions on ``main`` directly;
-    route wiring lives in ``websocket_routes`` while this facade preserves that
-    import-and-patch contract.
-    """
-    await _presentation_websocket_handler(
-        websocket=websocket,
-        session_id=session_id,
-        token=token,
-        voice_mode=voice_mode,
-        trace_id=trace_id,
-        resolve_runtime=_resolve_presentation_runtime,
-        is_kb_lock_unbound=_is_presentation_kb_lock_unbound_session,
-        resolve_owner_id=_resolve_presentation_session_owner_id,
-        is_admin_user_id=_is_admin_user_id,
+    resolved_session_id = _parse_session_id(session_id)
+    if not resolved_session_id:
+        await _reject_invalid_presentation_session(websocket, session_id)
+        return
+
+    scenario_type, persisted_voice_mode = await _resolve_presentation_runtime(
+        resolved_session_id
+    )
+    if scenario_type and scenario_type != "presentation":
+        logger.warning(
+            "Rejected /ws/presentation connection due to scenario mismatch",
+            session_id=resolved_session_id,
+            expected="presentation",
+            actual=scenario_type,
+        )
+        await websocket.accept()
+        await websocket.close(code=4409, reason="SESSION_SCENARIO_MISMATCH")
+        return
+
+    kb_lock_unbound = await _is_presentation_kb_lock_unbound_session(
+        resolved_session_id
+    )
+    if kb_lock_unbound:
+        logger.warning(
+            "Rejected /ws/presentation connection due to KB lock without bound knowledge base",
+            session_id=resolved_session_id,
+        )
+        await websocket.accept()
+        await websocket.close(code=4410, reason="KB_LOCK_UNBOUND")
+        return
+
+    token = resolve_websocket_token(
+        query_token=token,
+        authorization_header=websocket.headers.get("authorization", ""),
+        cookie_header=websocket.headers.get("cookie", ""),
+    )
+
+    requested_mode = _normalize_requested_voice_mode(voice_mode)
+    if requested_mode and requested_mode != persisted_voice_mode:
+        logger.warning(
+            "Ignoring mismatched presentation ws voice_mode override",
+            session_id=resolved_session_id,
+            requested=requested_mode,
+            persisted=persisted_voice_mode,
+        )
+
+    effective_voice_mode = persisted_voice_mode
+    if effective_voice_mode == "stepfun_realtime":
+        handler = PresentationStepFunRealtimeHandler()
+    else:
+        handler = PresentationWebSocketHandler()
+
+    session_manager = get_session_manager()
+    try:
+        payload = verify_token(token)
+        if payload and isinstance(payload.get("sub"), str):
+            user_id = payload["sub"]
+        elif payload and isinstance(payload.get("user_id"), str):
+            user_id = payload["user_id"]
+        else:
+            user_id = None
+    except (JWTError, RuntimeError, ValueError, OSError):
+        logger.warning(
+            "Failed to resolve websocket user from token",
+            session_id=resolved_session_id,
+        )
+        user_id = None
+
+    if user_id is None:
+        await websocket.accept()
+        await websocket.close(code=4001, reason="Unauthorized")
+        return
+
+    await session_manager.register_session(
+        resolved_session_id,
+        handler,
+        user_id=user_id,
+    )
+    try:
+        await handler.handle_connection(
+            websocket,
+            resolved_session_id,
+            token,
+            trace_id=normalize_trace_id(trace_id),
+        )
+    finally:
+        await session_manager.unregister_session(resolved_session_id)
+
+
+@app.websocket("/ws/presentation")
+async def presentation_websocket(
+    websocket: WebSocket,
+    session_id: str | None = Query(None),
+    token: str = Query(""),
+    voice_mode: str | None = Query(
+        None, description="Voice mode: legacy | stepfun_realtime"
+    ),
+    trace_id: str = Query("", description="Request trace id for observability"),
+):
+    """WebSocket endpoint for PPT presentation coaching (query session_id)."""
+    await _handle_presentation_websocket(
+        websocket,
+        session_id,
+        token,
+        voice_mode,
+        trace_id,
     )
 
 
-__all__ = [
-    "CSRF_EXEMPT_PATHS",
-    "_check_database_readiness",
-    "_csrf_validation_failed_response",
-    "_default_voice_mode",
-    "_handle_presentation_websocket",
-    "_is_admin_user_id",
-    "_is_csrf_exempt_path",
-    "_is_presentation_kb_lock_unbound_session",
-    "_normalize_requested_voice_mode",
-    "_parse_session_id",
-    "_reject_invalid_presentation_session",
-    "_resolve_presentation_runtime",
-    "_resolve_presentation_session_owner_id",
-    "app",
-    "create_app",
-    "csrf_protection_middleware",
-    "dev_login",
-    "get_db",
-    "health_check",
-    "lifespan",
-    "metrics_export",
-    "presentation_websocket",
-    "presentation_websocket_with_path",
-]
+@app.websocket("/ws/presentation/{session_id}")
+async def presentation_websocket_with_path(
+    websocket: WebSocket,
+    session_id: str,
+    token: str = Query(""),
+    voice_mode: str | None = Query(
+        None, description="Voice mode: legacy | stepfun_realtime"
+    ),
+    trace_id: str = Query("", description="Request trace id for observability"),
+):
+    """WebSocket endpoint for PPT presentation coaching (path session_id)."""
+    await _handle_presentation_websocket(
+        websocket,
+        session_id,
+        token,
+        voice_mode,
+        trace_id,
+    )
+
+
+def _normalize_requested_voice_mode(voice_mode: str | None) -> str | None:
+    mode = (voice_mode or "").strip().lower()
+    if mode in {"legacy", "stepfun_realtime"}:
+        return mode
+    return None
+
+
+def _default_voice_mode() -> str:
+    default_mode = os.getenv("DEFAULT_VOICE_MODE", "legacy").strip().lower()
+    if default_mode not in {"legacy", "stepfun_realtime"}:
+        default_mode = "legacy"
+    return default_mode
+
+
+async def _resolve_presentation_runtime(
+    session_id: str,
+) -> tuple[str | None, str]:
+    default_mode = _default_voice_mode()
+    try:
+        async with AsyncSessionLocal() as db:
+            result = await db.execute(
+                select(
+                    Scenario.scenario_type,
+                    PracticeSession.voice_mode,
+                )
+                .join(
+                    Scenario,
+                    Scenario.scenario_id == PracticeSession.scenario_id,
+                    isouter=True,
+                )
+                .where(PracticeSession.session_id == session_id)
+            )
+            row = result.first()
+            if row:
+                scenario_type, resolved_mode = row
+                mode = str(resolved_mode or "").strip().lower()
+                if mode not in {"legacy", "stepfun_realtime"}:
+                    mode = default_mode
+                return str(scenario_type or "").lower() or None, mode
+    except (RuntimeError, ValueError, OSError) as exc:
+        logger.warning(
+            f"Failed to resolve presentation runtime for {session_id}: {exc}"
+        )
+    return None, default_mode
+
+
+async def _is_presentation_kb_lock_unbound_session(session_id: str) -> bool:
+    try:
+        async with AsyncSessionLocal() as db:
+            result = await db.execute(
+                select(PracticeSession.voice_policy_snapshot).where(
+                    PracticeSession.session_id == session_id
+                )
+            )
+            snapshot = result.scalar_one_or_none()
+            return is_kb_lock_unbound_snapshot(snapshot)
+    except (RuntimeError, ValueError, OSError) as exc:
+        logger.warning(
+            "Failed to evaluate presentation KB lock binding before websocket connect",
+            session_id=session_id,
+            error=str(exc),
+        )
+        return False
+
+
+app.include_router(sales_ws_router, tags=["sales-websocket"])
 
 
 if __name__ == "__main__":

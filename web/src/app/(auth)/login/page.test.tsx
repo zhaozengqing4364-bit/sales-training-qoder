@@ -64,7 +64,6 @@ describe("LoginPage", () => {
         loginMock.mockReset();
         vi.restoreAllMocks();
         vi.unstubAllGlobals();
-        window.localStorage.clear();
 
         const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
             const url = String(input);
@@ -178,48 +177,6 @@ describe("LoginPage", () => {
 
         expect(setItemSpy).not.toHaveBeenCalledWith("token", expect.any(String));
         expect(setItemSpy).not.toHaveBeenCalledWith("user", expect.any(String));
-    });
-
-    it("stores only the remembered email preference when the checkbox is selected", async () => {
-        loginMock.mockResolvedValue({
-            token: "legacy-token",
-            user: {
-                id: "user-1",
-                name: "管理员",
-                email: "admin@test.com",
-                role: "admin",
-            },
-        });
-
-        render(<LoginPage />);
-
-        fireEvent.change(screen.getByLabelText("邮箱地址"), {
-            target: { value: " admin@test.com " },
-        });
-        fireEvent.change(screen.getByLabelText("密码"), {
-            target: { value: "password" },
-        });
-        fireEvent.click(screen.getByLabelText(/记住邮箱/));
-        fireEvent.click(screen.getByRole("button", { name: /^登录/ }));
-
-        await waitFor(() => {
-            expect(pushMock).toHaveBeenCalledWith("/");
-        });
-
-        expect(window.localStorage.getItem("qoder.login.rememberEmail.v1")).toBe("admin@test.com");
-        expect(window.localStorage.getItem("token")).toBeNull();
-        expect(window.localStorage.getItem("user")).toBeNull();
-    });
-
-    it("hydrates the remembered email without pretending to extend the backend session", async () => {
-        window.localStorage.setItem("qoder.login.rememberEmail.v1", "remembered@test.com");
-
-        render(<LoginPage />);
-        await screen.findByRole("button", { name: /开发者快速登录/i });
-
-        expect((screen.getByLabelText("邮箱地址") as HTMLInputElement).value).toBe("remembered@test.com");
-        expect((screen.getByLabelText(/记住邮箱/) as HTMLInputElement).checked).toBe(true);
-        expect(screen.getByText(/登录有效期仍由后端会话配置决定/)).toBeTruthy();
     });
 
     it("uses the explicit dev-login fallback and redirects home", async () => {

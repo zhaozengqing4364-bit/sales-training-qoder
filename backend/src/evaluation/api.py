@@ -41,6 +41,18 @@ def _evaluation_error_response(
     )
 
 
+def _evaluation_error_response(
+    *,
+    status_code: int,
+    error_code: str,
+    message: str,
+) -> JSONResponse:
+    return JSONResponse(
+        status_code=status_code,
+        content=error_response(error_code, message=message),
+    )
+
+
 async def verify_session_access(
     session_id: str, current_user: User, db: AsyncSession
 ) -> bool:

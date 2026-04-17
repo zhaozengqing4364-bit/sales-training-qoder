@@ -1,7 +1,7 @@
 {
   "mode": "grow",
-  "current_issue_id": "M022-S04",
-  "current_issue_type": "slice",
+  "current_issue_id": "ADHOC-2026-04-14-realtime-clarity",
+  "current_issue_type": "ad-hoc",
   "current_issue_status": "done",
   "pending_issue_ids": [],
   "completed_issue_ids": [
@@ -227,23 +227,37 @@
     "M022-S04-T02",
     "M022-S04-T03",
     "M022-S04-T01",
-    "M022-S04"
+    "M022-S04",
+    "ADHOC-2026-04-14-realtime-clarity"
   ],
   "blocked_issue_ids": [],
   "deferred_issue_ids": [],
   "last_modified_files": [
-    ".gsd/milestones/M022/slices/S04/S04-SUMMARY.md",
-    ".gsd/milestones/M022/slices/S04/S04-UAT.md",
-    ".gsd/milestones/M022/M022-ROADMAP.md",
-    ".gsd/PROJECT.md"
+    "backend/src/common/knowledge_engine/intent_classifier.py",
+    "backend/src/sales_bot/services/voice_instruction_compiler.py",
+    "backend/src/sales_bot/services/voice_runtime_policy.py",
+    "backend/src/sales_bot/websocket/stepfun_realtime_handler.py",
+    "backend/tests/unit/common/test_knowledge_intent_classifier.py",
+    "backend/tests/unit/test_stepfun_realtime_handler.py",
+    "backend/tests/unit/test_voice_instruction_compiler.py",
+    "backend/tests/unit/test_voice_runtime_policy_service.py",
+    "web/src/hooks/use-streaming-audio-player.ts",
+    "web/src/hooks/use-streaming-audio-player.test.ts",
+    "web/src/hooks/websocket/message-handlers.ts",
+    "web/src/hooks/websocket/message-handlers.test.ts",
+    "web/src/hooks/websocket/transport.ts",
+    "web/src/hooks/websocket/transport.test.ts",
+    "web/src/hooks/websocket/types.ts",
+    "web/src/hooks/websocket/use-audio-playback.ts",
+    "docs/plans/2026-04-14-realtime-clarity-and-retrieval-guard.md"
   ],
   "last_verification_commands": [
-    "rg -n \"user_id|role|owner|agent_id|persona_id|knowledge_base|organization|tenant|team\" backend/src/common backend/src/admin web/src/app/admin .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md",
-    "rg -n \"migration path|organization|team|tenant|SSO|CRM|org sync|compatibility reader\" .gsd/plans/GSD_PLAN_post-M018-next-wave.md .gsd/analysis/ARCHITECTURE_SCAN_2026-04-13_next-wave.md",
-    "rg -n \"organization|team|tenant|monolith|service split|out-of-scope|SSO|CRM\" .gsd/plans/GSD_PLAN_post-M018-next-wave.md .codex/roadmap/PROJECT_FUTURE.md"
+    "backend/venv/bin/python -m pytest -c backend/pyproject.toml backend/tests/unit/test_voice_instruction_compiler.py backend/tests/unit/common/test_knowledge_intent_classifier.py backend/tests/unit/test_voice_runtime_policy_service.py backend/tests/unit/test_stepfun_realtime_handler.py -k \"enforce_question_limit or entity_keyword_rules_only_when_entity_and_keyword_both_match or playback_rate or local_blocked_message or forward_audio_delta_chunk or upstream_keepalive_loop or pending_response_timeout_fallback or suppressed_timeout or transcription_completed\" -q",
+    "npm --prefix web test -- --run src/hooks/websocket/transport.test.ts src/hooks/use-streaming-audio-player.test.ts src/hooks/websocket/message-handlers.test.ts",
+    "curl -fsS http://127.0.0.1:3444/health"
   ],
-  "last_verification_result": "passed; all S04 slice-plan grep gates confirmed the current single-org seams, the reader-first migration path, and the roadmap handoff/service-split guardrails in the durable planning artifacts.",
-  "last_success_signal": "M022/S04 is complete: future enterprise work now has one durable organization/team/member/tenant contract, a modular-monolith default, explicit service-split triggers, and adapter-only SSO/CRM/org-sync slots.",
+  "last_verification_result": "passed; focused backend bundle finished 17 selected tests green, focused web bundle finished 42/42 green, and local backend health still returns healthy.",
+  "last_success_signal": "Realtime no longer emits the learner-facing KB-lock/transcription-timeout assistant copy, late final transcripts can still recover a real response, upstream idle timeouts are masked from learner reconnect copy, and the StepFun upstream now sends protocol-level keepalive pings when idle.",
   "last_growth_scan": null,
-  "next_action": "Proceed to M022 milestone validation and close-out using the completed S01-S04 slice bundle."
+  "next_action": "Wait for user validation of live realtime behavior, then continue with any remaining knowledge alias disambiguation or deployment follow-up."
 }

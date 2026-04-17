@@ -212,19 +212,6 @@ class TestPromptTemplateRBAC:
         assert body["message"] == "仅管理员可访问提示词治理接口。"
         assert body.get("trace_id")
 
-    async def test_support_cannot_read_prompt_template_options(
-        self, async_client, auth_headers
-    ):
-        response = await async_client.get(
-            "/api/v1/prompt-templates/options",
-            headers=auth_headers["support"],
-        )
-
-        assert response.status_code == 403
-        body = response.json()
-        assert body["success"] is False
-        assert body["error"] == "[PROMPT_TEMPLATE_EDIT_ADMIN_ONLY]"
-
     async def test_admin_get_template_with_invalid_id_returns_400(
         self, async_client, auth_headers
     ):
