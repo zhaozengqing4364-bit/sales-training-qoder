@@ -117,6 +117,7 @@ const blockingFaults = {
             session_status: "scoring",
             report_status: "processing",
             diagnostics: {
+                linked_asset_changes: [],
                 stuck_for_minutes: 35,
             },
         },
@@ -131,6 +132,7 @@ const blockingFaults = {
             session_status: "completed",
             report_status: "completed",
             diagnostics: {
+                linked_asset_changes: [],
                 last_status: "search_failed",
                 last_error: "[KNOWLEDGE_SEARCH_UNAVAILABLE]",
             },
@@ -146,6 +148,7 @@ const blockingFaults = {
             session_status: "completed",
             report_status: "completed",
             diagnostics: {
+                linked_asset_changes: [],
                 upstream_disconnect_count_5m: 4,
             },
         },
@@ -169,6 +172,7 @@ const warningFaults = {
             session_status: "completed",
             report_status: "completed",
             diagnostics: {
+                linked_asset_changes: [],
                 degraded_reasons: ["missing_page_metadata"],
             },
         },
@@ -183,6 +187,7 @@ const warningFaults = {
             session_status: "completed",
             report_status: "failed",
             diagnostics: {
+                linked_asset_changes: [],
                 report_error_code: "[REPORT_GENERATION_FAILED]",
             },
         },
