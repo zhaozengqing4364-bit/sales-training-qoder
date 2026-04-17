@@ -2,13 +2,14 @@
 import { debug } from "@/lib/debug";
 
 import { useEffect, useMemo, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { GlassCard } from "@/components/ui/glass-card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, Sparkles, Play, User, Presentation } from "lucide-react";
 import { ApiRequestError, api, getApiErrorMessage } from "@/lib/api/client";
 import { cn } from "@/lib/utils";
+import { RetryFocusIntent } from "@/lib/api/types";
 
 const DIFFICULTY_CONFIG: Record<string, { label: string; className: string }> = {
     easy: { label: "简单", className: "text-emerald-600 border-emerald-200 bg-emerald-50" },
@@ -68,10 +69,35 @@ function getPresentationStatusLabel(status: PresentationOption["status"]): strin
     }
 }
 
+function parseFocusIntent(raw: string | null): RetryFocusIntent | null {
+    if (!raw) return null;
+
+    try {
+        const parsed = JSON.parse(raw) as Partial<RetryFocusIntent>;
+        const hasMainIssue = typeof parsed.main_issue === "object" && parsed.main_issue !== null;
+        const hasNextGoal = typeof parsed.next_goal === "object" && parsed.next_goal !== null;
+        if (!hasMainIssue && !hasNextGoal) {
+            return null;
+        }
+
+        return {
+            version: String(parsed.version || "sales_core_combination_v1"),
+            source_session_id: String(parsed.source_session_id || "sales-core-combination"),
+            main_issue: parsed.main_issue || null,
+            next_goal: parsed.next_goal || null,
+        };
+    } catch {
+        return null;
+    }
+}
+
 export default function AgentPersonaSelectPage() {
     const params = useParams();
     const router = useRouter();
+    const searchParams = useSearchParams();
     const agentId = params.agentId as string;
+    const requestedPersonaId = searchParams.get("persona_id");
+    const focusIntent = useMemo(() => parseFocusIntent(searchParams.get("focus_intent")), [searchParams]);
 
     const [agent, setAgent] = useState<AgentDetail | null>(null);
     const [selectedPersona, setSelectedPersona] = useState<string | null>(null);
@@ -89,7 +115,10 @@ export default function AgentPersonaSelectPage() {
             try {
                 const data = await api.agents.getAgentWithPersonas(agentId);
                 setAgent(data as AgentDetail);
-                const defaultPersona = data.personas.find((p: Persona) => p.is_default) || data.personas[0];
+                const requestedPersona = requestedPersonaId
+                    ? data.personas.find((p: Persona) => p.id === requestedPersonaId)
+                    : null;
+                const defaultPersona = requestedPersona || data.personas.find((p: Persona) => p.is_default) || data.personas[0];
                 if (defaultPersona) {
                     setSelectedPersona(defaultPersona.id);
                 }
@@ -100,7 +129,7 @@ export default function AgentPersonaSelectPage() {
             }
         };
         void loadAgent();
-    }, [agentId]);
+    }, [agentId, requestedPersonaId]);
 
     useEffect(() => {
         let cancelled = false;
@@ -187,6 +216,7 @@ export default function AgentPersonaSelectPage() {
                 scenario_type: scenarioType,
                 presentation_id: scenarioType === "presentation" ? selectedPresentationId : undefined,
                 voice_mode: voiceMode,
+                focus_intent: scenarioType === "sales" && focusIntent ? focusIntent : undefined,
             } as const;
 
             let session: Awaited<ReturnType<typeof api.practice.createSession>> | null = null;
@@ -275,6 +305,18 @@ export default function AgentPersonaSelectPage() {
                     </div>
                 </div>
             </GlassCard>
+
+            {agent.category === "sales" && focusIntent ? (
+                <div className="rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">
+                    <div className="font-bold">本轮训练重点已带入</div>
+                    {focusIntent.main_issue?.issue_text ? (
+                        <div className="mt-1">问题焦点：{focusIntent.main_issue.issue_text}</div>
+                    ) : null}
+                    {focusIntent.next_goal?.goal_text ? (
+                        <div className="mt-1">训练目标：{focusIntent.next_goal.goal_text}</div>
+                    ) : null}
+                </div>
+            ) : null}
 
             <div>
                 <h2 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2">

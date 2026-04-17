@@ -1,12 +1,12 @@
 "use client";
 import { debug } from "@/lib/debug";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, Users2, Target } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { api } from "@/lib/api/client";
-import { Agent, SalesPersonaOption, ScenarioSummary } from "@/lib/api/types";
+import { Agent, RetryFocusIntent, SalesPersonaOption, ScenarioSummary } from "@/lib/api/types";
 import { AgentCard } from "@/components/ui/agent-card";
 
 const CORE_COMBINATIONS: Array<{
@@ -25,6 +25,60 @@ const CORE_COMBINATIONS: Array<{
     { id: "c9", capability: "推进下一步行动", role: "拖延决策型客户" },
     { id: "c10", capability: "推进下一步行动", role: "冷淡型客户" },
 ];
+
+const normalizeCombinationText = (value: string) => value
+    .toLowerCase()
+    .replace(/客户/g, "")
+    .replace(/[^\p{Letter}\p{Number}]/gu, "");
+
+function textMatchesTarget(text: string | undefined, target: string): boolean {
+    if (!text) return false;
+    const normalizedText = normalizeCombinationText(text);
+    const normalizedTarget = normalizeCombinationText(target);
+    return normalizedText.includes(normalizedTarget) || normalizedTarget.includes(normalizedText);
+}
+
+function resolvePersonaForRole(personas: SalesPersonaOption[], role: string) {
+    return personas.find((persona) => {
+        const characteristics = persona.characteristics || [];
+        return (
+            textMatchesTarget(persona.name, role)
+            || textMatchesTarget(persona.description, role)
+            || characteristics.some((item) => textMatchesTarget(item, role))
+        );
+    }) || null;
+}
+
+function resolveAgentForCapability(agents: Agent[], capability: string) {
+    return agents.find((agent) => {
+        const tags = agent.ui_metadata?.tags || [];
+        return (
+            textMatchesTarget(agent.name, capability)
+            || textMatchesTarget(agent.role, capability)
+            || textMatchesTarget(agent.description, capability)
+            || tags.some((tag) => textMatchesTarget(tag, capability))
+        );
+    }) || agents[0] || null;
+}
+
+function buildCombinationFocusIntent(
+    combination: { id: string; capability: string; role: string },
+): RetryFocusIntent {
+    return {
+        version: "sales_core_combination_v1",
+        source_session_id: `sales-core-combination-${combination.id}`,
+        main_issue: {
+            issue_type: combination.capability,
+            issue_text: `本轮重点练习「${combination.capability}」在「${combination.role}」场景下的对话短板。`,
+            recovery_rule: `围绕${combination.role}，优先演练${combination.capability}。`,
+        },
+        next_goal: {
+            goal_type: combination.capability,
+            goal_text: `用一轮完整销售对练完成「${combination.capability} × ${combination.role}」。`,
+            rule: "sales_core_combination",
+        },
+    };
+}
 
 export default function SalesTrainingPage() {
     const router = useRouter();
@@ -82,6 +136,28 @@ export default function SalesTrainingPage() {
         // 跳转到角色选择页面
         router.push(`/agents/${agentId}`);
     };
+
+    const combinationCards = useMemo(() => (
+        CORE_COMBINATIONS.map((combination) => {
+            const agent = resolveAgentForCapability(agents, combination.capability);
+            const persona = resolvePersonaForRole(salesPersonas, combination.role);
+            const focusIntent = buildCombinationFocusIntent(combination);
+            const focusIntentParam = encodeURIComponent(JSON.stringify(focusIntent));
+            const href = agent && persona
+                ? `/agents/${agent.id}?persona_id=${encodeURIComponent(persona.id)}&focus_intent=${focusIntentParam}`
+                : null;
+
+            return {
+                ...combination,
+                href,
+                agentName: agent?.name || null,
+                personaName: persona?.name || null,
+                unavailableReason: agent
+                    ? `管理员尚未配置「${combination.role}」角色`
+                    : "管理员尚未发布销售智能体",
+            };
+        })
+    ), [agents, salesPersonas]);
 
     return (
         <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700 pb-20">
@@ -147,10 +223,21 @@ export default function SalesTrainingPage() {
                     <span className="text-xs text-slate-500">首期优先练这些组合，先拿稳定效果</span>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
-                    {CORE_COMBINATIONS.map((item, idx) => (
-                        <div
+                    {combinationCards.map((item, idx) => (
+                        <button
                             key={item.id}
-                            className="rounded-2xl border border-slate-200 bg-slate-50/70 p-3"
+                            type="button"
+                            disabled={!item.href}
+                            onClick={() => {
+                                if (item.href) {
+                                    router.push(item.href);
+                                }
+                            }}
+                            className={`rounded-2xl border p-3 text-left transition-colors ${
+                                item.href
+                                    ? "border-slate-200 bg-slate-50/70 hover:border-blue-300 hover:bg-blue-50"
+                                    : "cursor-not-allowed border-amber-200 bg-amber-50/60"
+                            }`}
                         >
                             <p className="text-[11px] text-slate-500 font-semibold">
                                 组合 {idx + 1}
@@ -161,7 +248,16 @@ export default function SalesTrainingPage() {
                             <p className="text-xs text-slate-600 mt-1">
                                 客户角色：{item.role}
                             </p>
-                        </div>
+                            {item.href ? (
+                                <p className="mt-2 text-xs font-bold text-blue-600">
+                                    去开练：{item.agentName} · {item.personaName}
+                                </p>
+                            ) : (
+                                <p className="mt-2 text-xs font-bold text-amber-700">
+                                    {item.unavailableReason}
+                                </p>
+                            )}
+                        </button>
                     ))}
                 </div>
             </div>
