@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import type { SupportRuntimeFaultItem } from "@/lib/api/types";
 import {
   buildLinkedRuntimeFaultEntries,
   buildRuntimeFaultBySessionId,
@@ -19,13 +20,11 @@ describe("runtime-faults", () => {
 
   const runtimeFaults = [
     {
-      ...faultBase,
-      severity: "blocking",
-      kind: "kb_lock_blocked_search_failed",
       source: "session",
       severity: "blocking",
-      summary: "知识库检索失败",
-      detected_at: "2026-03-25T08:00:00Z",
+      kind: "kb_lock_blocked_search_failed",
+      summary: "知识库锁定检索失败。",
+      detected_at: "2026-03-25T08:10:00Z",
       session_id: "session-1",
       scenario_type: "sales",
       session_status: "completed",
@@ -50,12 +49,11 @@ describe("runtime-faults", () => {
       },
     },
     {
-      ...faultBase,
-      kind: "message_scores_missing",
       source: "session",
       severity: "warning",
-      summary: "消息评分缺失",
-      detected_at: "2026-03-25T09:00:00Z",
+      kind: "message_scores_missing",
+      summary: "消息评分缺失。",
+      detected_at: "2026-03-25T09:10:00Z",
       session_id: "session-1",
       scenario_type: "sales",
       session_status: "completed",
@@ -80,15 +78,11 @@ describe("runtime-faults", () => {
       },
     },
     {
-      ...faultBase,
-      severity: "blocking",
-      session_status: "scoring",
-      report_status: "processing",
-      kind: "stuck_scoring",
       source: "session",
       severity: "blocking",
-      summary: "评分卡住",
-      detected_at: "2026-03-25T09:30:00Z",
+      kind: "stuck_scoring",
+      summary: "评分卡住。",
+      detected_at: "2026-03-25T09:20:00Z",
       session_id: "session-2",
       scenario_type: "sales",
       session_status: "scoring",
@@ -98,12 +92,11 @@ describe("runtime-faults", () => {
       },
     },
     {
-      ...faultBase,
-      kind: "warning_without_session",
       source: "system_log",
       severity: "warning",
-      summary: "系统警告",
-      detected_at: "2026-03-25T10:00:00Z",
+      kind: "warning_without_session",
+      summary: "没有会话的运行时告警。",
+      detected_at: "2026-03-25T10:10:00Z",
       session_id: null,
       scenario_type: null,
       session_status: null,
