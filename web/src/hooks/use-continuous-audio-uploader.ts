@@ -191,6 +191,16 @@ export function useContinuousAudioUploader(
                     );
                 }
 
+                if (!signRes.ok) {
+                    const body = await signRes.json().catch(() => ({}));
+                    const msg =
+                        body?.error || body?.message || `签名请求失败 (${signRes.status})`;
+                    throw new Error(`segment ${sequence}: ${msg}`);
+                }
+
+                const signData = await signRes.json();
+                const { url, object_key } = signData.data ?? signData;
+
                 // Step 2: PUT blob directly to OSS
                 try {
                     const putRes = await fetch(uploadUrl, {
