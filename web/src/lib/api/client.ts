@@ -1498,6 +1498,36 @@ const presentationsDomain = createPresentationsDomain({
 });
 const adminReportDomain = createAdminReportDomain({ request: apiFetch });
 
+export interface AudioSegmentUploadUrlRequest {
+    segment_sequence: number;
+    content_type: string;
+}
+
+export interface AudioSegmentUploadUrlResponse {
+    url: string;
+    object_key: string;
+    expires_at?: string;
+}
+
+export interface AudioSegmentRegisterRequest {
+    segment_sequence: number;
+    object_key: string;
+    size_bytes: number;
+    duration_ms?: number;
+}
+
+export type AudioSegmentFailureToken =
+    | "signing_failed"
+    | "oss_put_failed"
+    | "register_failed"
+    | "network_error"
+    | "unknown";
+
+export interface AudioSegmentFailureRequest {
+    segment_sequence: number;
+    error_token: AudioSegmentFailureToken;
+}
+
 export const api = {
     // Authentication
     auth: authDomain,
@@ -1777,6 +1807,48 @@ export const api = {
 
     // Practice / Sessions
     practice: practiceDomain,
+
+    // Browser-direct audio segment upload metadata.
+    // Keep these calls on apiFetch so base URL resolution, cookies, CSRF,
+    // trace headers, session-expiry handling, and error normalization stay unified.
+    audioSegments: {
+        createUploadUrl: async (
+            sessionId: string,
+            payload: AudioSegmentUploadUrlRequest,
+        ) => {
+            return apiFetch<AudioSegmentUploadUrlResponse>(
+                `/practice/sessions/${sessionId}/audio-upload-urls`,
+                {
+                    method: "POST",
+                    body: JSON.stringify(payload),
+                },
+            );
+        },
+        register: async (
+            sessionId: string,
+            payload: AudioSegmentRegisterRequest,
+        ) => {
+            return apiFetch<Record<string, unknown>>(
+                `/practice/sessions/${sessionId}/audio-segments`,
+                {
+                    method: "POST",
+                    body: JSON.stringify(payload),
+                },
+            );
+        },
+        registerFailure: async (
+            sessionId: string,
+            payload: AudioSegmentFailureRequest,
+        ) => {
+            return apiFetch<Record<string, unknown>>(
+                `/practice/sessions/${sessionId}/audio-segments/failure`,
+                {
+                    method: "POST",
+                    body: JSON.stringify(payload),
+                },
+            );
+        },
+    },
 
     // Sessions
     sessions: sessionsDomain,
