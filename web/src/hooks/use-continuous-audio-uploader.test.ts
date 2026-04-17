@@ -8,6 +8,28 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { renderHook, act, waitFor } from "@testing-library/react";
+const {
+    createAudioUploadUrlMock,
+    registerAudioSegmentMock,
+    registerAudioSegmentFailureMock,
+} = vi.hoisted(() => ({
+    createAudioUploadUrlMock: vi.fn(),
+    registerAudioSegmentMock: vi.fn(),
+    registerAudioSegmentFailureMock: vi.fn(),
+}));
+
+vi.mock("@/lib/api/client", () => ({
+    api: {
+        practice: {
+            createAudioUploadUrl: createAudioUploadUrlMock,
+            registerAudioSegment: registerAudioSegmentMock,
+            registerAudioSegmentFailure: registerAudioSegmentFailureMock,
+        },
+    },
+    getApiErrorMessage: (error: unknown) =>
+        error instanceof Error ? error.message : "请求失败，请稍后重试。",
+}));
+
 import { useContinuousAudioUploader } from "./use-continuous-audio-uploader";
 
 // ---------------------------------------------------------------------------
@@ -106,29 +128,26 @@ beforeEach(() => {
     // Mock fetch
     globalThis.fetch = mockFetch;
 
-    // Default: signing endpoint returns success
+    createAudioUploadUrlMock.mockResolvedValue({
+        url: "https://oss.example.com/signed-put",
+        object_key: "audio/session/seg-0.webm",
+        expires_at: "2026-03-29T12:00:00Z",
+    });
+    registerAudioSegmentMock.mockResolvedValue({
+        id: "seg-uuid",
+        segment_sequence: 0,
+        upload_status: "uploaded",
+    });
+    registerAudioSegmentFailureMock.mockResolvedValue({
+        id: "seg-failed",
+        segment_sequence: 0,
+        upload_status: "failed",
+    });
+
+    // Mock direct OSS PUT. Backend signing/register calls go through api.practice.
     mockFetch.mockImplementation((url: string | Request) => {
         const urlStr = typeof url === "string" ? url : url.url;
 
-        if (urlStr.includes("/audio-upload-urls")) {
-            return mockFetchResponse(200, {
-                data: {
-                    url: "https://oss.example.com/signed-put",
-                    object_key: "audio/session/seg-0.webm",
-                    expires_at: "2026-03-29T12:00:00Z",
-                },
-            });
-        }
-        if (urlStr.includes("/audio-segments") && urlStr.includes("practice")) {
-            return mockFetchResponse(200, {
-                data: {
-                    id: "seg-uuid",
-                    segment_sequence: 0,
-                    upload_status: "uploaded",
-                },
-            });
-        }
-        // OSS PUT
         if (urlStr.includes("oss.example.com")) {
             return mockFetchResponse(200, {});
         }
@@ -205,18 +224,13 @@ describe("useContinuousAudioUploader", () => {
             expect(result.current.segmentCount).toBe(2);
         });
 
-        // Verify both segments requested signed URLs
-        const signCalls = mockFetch.mock.calls.filter(
-            (c) => typeof c[0] === "string" && c[0].includes("/audio-upload-urls"),
-        );
-        expect(signCalls.length).toBe(2);
-
-        // Verify sequences in request bodies
-        expect(JSON.parse(signCalls[0][1].body)).toEqual({
+        // Verify both segments requested signed URLs via the unified API client.
+        expect(createAudioUploadUrlMock).toHaveBeenCalledTimes(2);
+        expect(createAudioUploadUrlMock).toHaveBeenNthCalledWith(1, sessionId, {
             segment_sequence: 0,
             content_type: "audio/webm",
         });
-        expect(JSON.parse(signCalls[1][1].body)).toEqual({
+        expect(createAudioUploadUrlMock).toHaveBeenNthCalledWith(2, sessionId, {
             segment_sequence: 1,
             content_type: "audio/webm",
         });
@@ -267,32 +281,16 @@ describe("useContinuousAudioUploader", () => {
             expect(result.current.segmentCount).toBe(1);
         });
 
-        const regCalls = mockFetch.mock.calls.filter(
-            (c) =>
-                typeof c[0] === "string" &&
-                c[0].includes("/audio-segments") &&
-                c[0].includes("practice") &&
-                c[1]?.method === "POST",
-        );
-        expect(regCalls.length).toBe(1);
-
-        const body = JSON.parse(regCalls[0][1].body);
-        expect(body.segment_sequence).toBe(0);
-        expect(body.object_key).toBe("audio/session/seg-0.webm");
-        expect(body.size_bytes).toBe(8192);
+        expect(registerAudioSegmentMock).toHaveBeenCalledTimes(1);
+        expect(registerAudioSegmentMock).toHaveBeenCalledWith(sessionId, {
+            segment_sequence: 0,
+            object_key: "audio/session/seg-0.webm",
+            size_bytes: 8192,
+        });
     });
 
     it("handles upload failure without crashing the recording loop", async () => {
-        // Make signing endpoint fail
-        mockFetch.mockImplementation((url: string | Request) => {
-            const urlStr = typeof url === "string" ? url : url.url;
-            if (urlStr.includes("/audio-upload-urls")) {
-                return mockFetchResponse(503, {
-                    error: "OSS 服务暂不可用",
-                });
-            }
-            return mockFetchResponse(200, {});
-        });
+        createAudioUploadUrlMock.mockRejectedValueOnce(new Error("OSS 服务暂不可用"));
 
         const { result } = renderHook(() =>
             useContinuousAudioUploader({ sessionId, enabled: true }),
@@ -316,25 +314,9 @@ describe("useContinuousAudioUploader", () => {
         expect(result.current.uploadStatus).toBe("uploading");
         expect(result.current.lastError).toContain("OSS 服务暂不可用");
 
-        // Now make it succeed and fire another segment
-        mockFetch.mockImplementation((url: string | Request) => {
-            const urlStr = typeof url === "string" ? url : url.url;
-            if (urlStr.includes("/audio-upload-urls")) {
-                return mockFetchResponse(200, {
-                    data: {
-                        url: "https://oss.example.com/signed-put",
-                        object_key: "audio/session/seg-1.webm",
-                        expires_at: "2026-03-29T12:00:00Z",
-                    },
-                });
-            }
-            if (urlStr.includes("oss.example.com")) {
-                return mockFetchResponse(200, {});
-            }
-            if (urlStr.includes("/audio-segments") && urlStr.includes("practice")) {
-                return mockFetchResponse(200, { data: { id: "seg-1" } });
-            }
-            return mockFetchResponse(404, {});
+        expect(registerAudioSegmentFailureMock).toHaveBeenCalledWith(sessionId, {
+            segment_sequence: 0,
+            error_token: "signing_failed",
         });
 
         await act(async () => {
@@ -350,19 +332,10 @@ describe("useContinuousAudioUploader", () => {
     it("handles OSS PUT failure without crashing", async () => {
         mockFetch.mockImplementation((url: string | Request) => {
             const urlStr = typeof url === "string" ? url : url.url;
-            if (urlStr.includes("/audio-upload-urls")) {
-                return mockFetchResponse(200, {
-                    data: {
-                        url: "https://oss.example.com/signed-put",
-                        object_key: "audio/session/seg-0.webm",
-                        expires_at: "2026-03-29T12:00:00Z",
-                    },
-                });
-            }
             if (urlStr.includes("oss.example.com")) {
                 return mockFetchResponse(403, {}); // OSS rejects
             }
-            return mockFetchResponse(200, {});
+            return mockFetchResponse(404, { error: "not found" });
         });
 
         const { result } = renderHook(() =>
@@ -382,18 +355,14 @@ describe("useContinuousAudioUploader", () => {
         });
 
         expect(result.current.isUploading).toBe(true);
+        expect(registerAudioSegmentFailureMock).toHaveBeenCalledWith(sessionId, {
+            segment_sequence: 0,
+            error_token: "oss_put_failed",
+        });
     });
 
     it("handles backend 401/403 and surfaces error", async () => {
-        mockFetch.mockImplementation((url: string | Request) => {
-            const urlStr = typeof url === "string" ? url : url.url;
-            if (urlStr.includes("/audio-upload-urls")) {
-                return mockFetchResponse(401, {
-                    error: "未授权，请先登录",
-                });
-            }
-            return mockFetchResponse(200, {});
-        });
+        createAudioUploadUrlMock.mockRejectedValueOnce(new Error("未授权，请先登录"));
 
         const { result } = renderHook(() =>
             useContinuousAudioUploader({ sessionId, enabled: true }),
@@ -409,6 +378,10 @@ describe("useContinuousAudioUploader", () => {
 
         await waitFor(() => {
             expect(result.current.lastError).toContain("未授权");
+        });
+        expect(registerAudioSegmentFailureMock).toHaveBeenCalledWith(sessionId, {
+            segment_sequence: 0,
+            error_token: "signing_failed",
         });
     });
 
