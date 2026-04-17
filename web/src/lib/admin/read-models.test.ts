@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 
+import type { UserSessionItem } from "@/lib/api/types";
 import {
     EMPTY_ADMIN_MANAGER_INTERVENTIONS,
     EMPTY_ADMIN_MANAGER_LITE_LISTS,
@@ -158,9 +159,9 @@ describe("read-models", () => {
         const nonEvaluableSession: UserSessionItem = {
             session_id: "session-1",
             start_time: "2026-03-23T09:00:00Z",
-            end_time: "2026-03-23T09:04:00Z",
+            end_time: "2026-03-23T09:03:00Z",
             status: "completed",
-            duration_minutes: 4,
+            duration_minutes: 3,
             scenario_name: "销售演练",
             scenario_type: "sales",
             agent_name: "销售教练",
@@ -191,9 +192,9 @@ describe("read-models", () => {
             persona_name: "采购经理",
             scores: {
                 logic: 80,
-                accuracy: 82,
-                completeness: 84,
-                overall: 82,
+                accuracy: 78,
+                completeness: 82,
+                overall: 80,
             },
             evaluable: true,
             overall_result: "pass",
@@ -202,12 +203,12 @@ describe("read-models", () => {
             main_issue: {
                 issue_type: "value_expression",
                 issue_text: "价值表达不具体。",
-                recovery_rule: "补齐客户案例证据。",
+                recovery_rule: "补齐客户业务影响。",
             },
             next_goal: {
                 goal_type: "evidence_backing",
                 goal_text: "下一轮补齐客户案例证据。",
-                rule: "至少讲清一个案例。",
+                rule: "至少补 1 个可验证客户案例。",
             },
             interruption_count: 0,
         } satisfies UserSessionItem;
