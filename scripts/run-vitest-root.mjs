@@ -9,6 +9,8 @@ const hasExplicitProjectPath = normalizedArgs.some(
 );
 const vitestArgs = hasExplicitProjectPath ? normalizedArgs : ["src", ...normalizedArgs];
 
+normalizedArgs.forEach(assertProjectScopedArg);
+
 const result = spawnSync(
   "pnpm",
   ["--dir", "web", "exec", "vitest", "run", ...vitestArgs],
