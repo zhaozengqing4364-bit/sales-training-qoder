@@ -3,10 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import SupportRuntimePage from "./page";
 import { ApiRequestError } from "@/lib/api/client";
-import type {
-    SupportRuntimeFaultsResponse,
-    SupportRuntimeOverview,
-} from "@/lib/api/types";
+import type { SupportRuntimeFaultsResponse, SupportRuntimeOverview } from "@/lib/api/types";
 
 const {
     getOverviewMock,
@@ -65,7 +62,7 @@ const blockingOverview = {
         ],
         warning: [{ kind: "upstream_unstable", count: 1 }],
     },
-};
+} satisfies SupportRuntimeOverview;
 
 const warningOverview = {
     ...blockingOverview,
@@ -86,7 +83,7 @@ const warningOverview = {
             { kind: "optional_report_failed", count: 1 },
         ],
     },
-};
+} satisfies SupportRuntimeOverview;
 
 const healthyOverview = {
     ...blockingOverview,
@@ -104,7 +101,7 @@ const healthyOverview = {
         blocking: [],
         warning: [],
     },
-};
+} satisfies SupportRuntimeOverview;
 
 const blockingFaults = {
     generated_at: "2026-03-24T08:00:00Z",
@@ -156,7 +153,7 @@ const blockingFaults = {
     count: 3,
     limit: 20,
     severity: null,
-};
+} satisfies SupportRuntimeFaultsResponse;
 
 const warningFaults = {
     generated_at: "2026-03-24T08:00:00Z",
@@ -193,7 +190,7 @@ const warningFaults = {
     count: 2,
     limit: 20,
     severity: null,
-};
+} satisfies SupportRuntimeFaultsResponse;
 
 describe("SupportRuntimePage", () => {
     beforeEach(() => {
@@ -208,8 +205,8 @@ describe("SupportRuntimePage", () => {
     });
 
     it("renders blocking release health from the typed overview and typed anomaly list", async () => {
-        getOverviewMock.mockResolvedValue(blockingOverview as unknown as SupportRuntimeOverview);
-        getFaultsMock.mockResolvedValue(blockingFaults as unknown as SupportRuntimeFaultsResponse);
+        getOverviewMock.mockResolvedValue(blockingOverview);
+        getFaultsMock.mockResolvedValue(blockingFaults);
 
         render(<SupportRuntimePage />);
 
@@ -230,8 +227,8 @@ describe("SupportRuntimePage", () => {
     });
 
     it("renders a warning-only release state without inventing blocking severity on the client", async () => {
-        getOverviewMock.mockResolvedValue(warningOverview as unknown as SupportRuntimeOverview);
-        getFaultsMock.mockResolvedValue(warningFaults as unknown as SupportRuntimeFaultsResponse);
+        getOverviewMock.mockResolvedValue(warningOverview);
+        getFaultsMock.mockResolvedValue(warningFaults);
 
         render(<SupportRuntimePage />);
 
@@ -243,14 +240,14 @@ describe("SupportRuntimePage", () => {
     });
 
     it("shows a local empty state when the typed anomaly list is empty", async () => {
-        getOverviewMock.mockResolvedValue(healthyOverview as unknown as SupportRuntimeOverview);
+        getOverviewMock.mockResolvedValue(healthyOverview);
         getFaultsMock.mockResolvedValue({
             generated_at: "2026-03-24T08:00:00Z",
             items: [],
             count: 0,
             limit: 20,
             severity: null,
-        } as unknown as SupportRuntimeFaultsResponse);
+        } satisfies SupportRuntimeFaultsResponse);
 
         render(<SupportRuntimePage />);
 
@@ -261,7 +258,7 @@ describe("SupportRuntimePage", () => {
     });
 
     it("keeps the release summary visible and shows a local anomaly-list error when faults loading fails", async () => {
-        getOverviewMock.mockResolvedValue(blockingOverview as unknown as SupportRuntimeOverview);
+        getOverviewMock.mockResolvedValue(blockingOverview);
         getFaultsMock.mockRejectedValue(
             new ApiRequestError({
                 status: 0,
@@ -281,11 +278,11 @@ describe("SupportRuntimePage", () => {
 
     it("refreshes the typed overview and faults together without leaving the page shell", async () => {
         getOverviewMock
-            .mockResolvedValueOnce(warningOverview as unknown as SupportRuntimeOverview)
-            .mockResolvedValueOnce(blockingOverview as unknown as SupportRuntimeOverview);
+            .mockResolvedValueOnce(warningOverview)
+            .mockResolvedValueOnce(blockingOverview);
         getFaultsMock
-            .mockResolvedValueOnce(warningFaults as unknown as SupportRuntimeFaultsResponse)
-            .mockResolvedValueOnce(blockingFaults as unknown as SupportRuntimeFaultsResponse);
+            .mockResolvedValueOnce(warningFaults)
+            .mockResolvedValueOnce(blockingFaults);
 
         render(<SupportRuntimePage />);
 

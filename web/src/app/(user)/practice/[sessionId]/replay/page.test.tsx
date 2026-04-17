@@ -58,9 +58,9 @@ vi.mock("@/components/highlights", () => ({
   }: {
     highlights: Array<{
       learning_evidence?: {
-        reason?: string;
-        issue_family?: string;
-      };
+        reason?: string | null;
+        issue_family?: string | null;
+      } | null;
     }>;
   }) => (
     <div data-testid="replay-highlight-list">
