@@ -105,6 +105,12 @@ configure_logging(os.getenv("LOG_LEVEL", "INFO"))
 logger = get_logger(__name__)
 
 
+CSRF_EXEMPT_PATHS = frozenset({
+    "/api/v1/auth/login",
+    "/api/v1/auth/dev-login",
+})
+
+
 DEV_CORS_ORIGINS = [
     "http://localhost:3445",
     "http://localhost:3000",
@@ -382,9 +388,9 @@ def _csrf_validation_failed_response(exc: HTTPException) -> JSONResponse:
 
 
 @app.middleware("http")
-async def csrf_cookie_session_middleware(request: Request, call_next):
-    """Enforce double-submit CSRF for unsafe cookie-authenticated requests."""
-    if not _is_csrf_exempt_path(request.url.path) and should_enforce_csrf(request):
+async def enforce_cookie_session_csrf(request: Request, call_next):
+    """Reject unsafe cookie-backed requests unless they present a matching CSRF token."""
+    if request.url.path not in CSRF_EXEMPT_PATHS and should_enforce_csrf(request):
         try:
             validate_csrf_request(request)
         except HTTPException as exc:
