@@ -30,7 +30,7 @@ export function KnowledgeAnswerConsole() {
     const [isSaving, setIsSaving] = useState(false);
     const [showVersionManager, setShowVersionManager] = useState(false);
     const [debugOpen, setDebugOpen] = useState(false);
-    const [historyOpen, setHistoryOpen] = useState(false);
+    const [historyOpen, setHistoryOpen] = useState(true);
 
     /* ── Load config + options ── */
     const loadData = useCallback(async () => {
@@ -76,12 +76,18 @@ export function KnowledgeAnswerConsole() {
     /* ── Render ── */
     return (
         <div className="space-y-6">
+            <div>
+                <h2 className="text-lg font-bold text-slate-900">知识问答配置（全局）</h2>
+                <p className="mt-1 text-sm text-slate-500">当前作用于知识问答引擎的全局 active 配置，入口挂在知识库详情页，便于联动排查。</p>
+            </div>
+
             {/* 1. Overview */}
             <ConfigOverview config={config} />
 
             {/* 2. Version selector row */}
             <div className="flex flex-wrap items-center gap-3">
                 <select
+                    aria-label="切换 active config version"
                     className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-slate-300"
                     value={selectedVersionId}
                     onChange={(e) => setSelectedVersionId(e.target.value)}

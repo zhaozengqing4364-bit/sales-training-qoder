@@ -17,20 +17,28 @@ import type {
 const PAGE_SIZE = 10;
 
 const ANSWERABILITY_OPTIONS = [
-    { value: "", label: "全部可回答性" },
-    { value: "sufficient", label: "充分" },
-    { value: "partial", label: "部分" },
-    { value: "insufficient", label: "不足" },
+    { value: "", label: "全部回答约束" },
+    { value: "sufficient", label: "证据充分" },
+    { value: "partial", label: "部分充分" },
+    { value: "insufficient", label: "证据不足" },
     { value: "blocked", label: "已阻止" },
 ];
 
 const STATUS_OPTIONS = [
-    { value: "", label: "全部状态" },
+    { value: "", label: "全部运行状态" },
     { value: "completed", label: "已完成" },
     { value: "failed", label: "失败" },
     { value: "blocked", label: "已阻止" },
     { value: "running", label: "运行中" },
 ];
+
+const ANSWERABILITY_LABEL_MAP: Record<string, string> = Object.fromEntries(
+    ANSWERABILITY_OPTIONS.filter((option) => option.value).map((option) => [option.value, option.label]),
+);
+
+const STATUS_LABEL_MAP: Record<string, string> = Object.fromEntries(
+    STATUS_OPTIONS.filter((option) => option.value).map((option) => [option.value, option.label]),
+);
 
 const ANSWERABILITY_BADGE_MAP: Record<string, string> = {
     sufficient: "bg-green-100 text-green-800",
@@ -60,7 +68,7 @@ export function RunHistory() {
     const toast = useToast();
 
     // Section collapsed state
-    const [expanded, setExpanded] = useState(false);
+    const [expanded, setExpanded] = useState(true);
 
     // Filter state
     const [searchText, setSearchText] = useState("");
@@ -88,10 +96,19 @@ export function RunHistory() {
     const loadRuns = useCallback(async (p: number, search: string, answerability: string, status: string) => {
         setLoading(true);
         try {
-            const params: Record<string, string> = { limit: String(PAGE_SIZE), page: String(p) };
-            if (search) params.query = search;
-            if (answerability) params.answerability = answerability;
-            if (status) params.final_status = status;
+            const params: {
+                limit: number;
+                page: number;
+                query?: string;
+                answerability?: string;
+                final_status?: string;
+            } = {
+                limit: PAGE_SIZE,
+                page: p,
+                query: search || undefined,
+                answerability: answerability || undefined,
+                final_status: status || undefined,
+            };
             const result = await api.admin.listKnowledgeAnswerRuns(params);
             setRuns(result.items);
             setTotal(result.total);
@@ -132,6 +149,7 @@ export function RunHistory() {
     }
 
     const hasActiveFilters = activeSearch || activeAnswerability || activeStatus;
+    const hasVisibleFilters = hasActiveFilters || searchText || answerabilityFilter || statusFilter;
 
     async function toggleRunDetail(runId: string) {
         if (expandedRunId === runId) {
@@ -166,7 +184,7 @@ export function RunHistory() {
             >
                 <div className="flex items-center gap-2">
                     <History className="h-4 w-4 text-indigo-600" />
-                    <span className="font-medium text-slate-900">运行记录</span>
+                    <span className="font-medium text-slate-900">最近知识问答运行（全局）</span>
                 </div>
                 {expanded ? (
                     <ChevronUp className="h-4 w-4 text-slate-500" />
@@ -177,6 +195,7 @@ export function RunHistory() {
 
             {expanded && (
                 <div className="space-y-4 rounded-lg border border-slate-200 bg-white p-4">
+                    <p className="text-sm text-slate-500">当前展示的是全局最近运行记录，不保证只来自本知识库；请结合本页搜索诊断一起排查。</p>
                     {/* Filter bar */}
                     <div className="flex flex-wrap items-end gap-2">
                         <div className="min-w-[200px] flex-1">
@@ -186,14 +205,14 @@ export function RunHistory() {
                                 <Input
                                     value={searchText}
                                     onChange={(e) => setSearchText(e.target.value)}
-                                    placeholder="搜索查询文本..."
+                                    placeholder="按 query 搜索 recent runs"
                                     className="h-9 pl-9 text-sm"
                                     onKeyDown={(e) => {
                                         if (e.key === "Enter") applyFilters();
                                     }}
                                 />
-                            </div>
                         </div>
+                    </div>
                         <div>
                             <label className="mb-1 block text-xs text-slate-500">可回答性</label>
                             <select
@@ -228,7 +247,7 @@ export function RunHistory() {
                     </div>
 
                     {/* Active filter badges */}
-                    {hasActiveFilters && (
+                    {hasVisibleFilters && (
                         <div className="flex flex-wrap items-center gap-1.5">
                             <span className="text-xs text-slate-400">当前筛选:</span>
                             {activeSearch && (
@@ -269,17 +288,18 @@ export function RunHistory() {
                             )}
                             <button
                                 type="button"
+                                aria-label="清空筛选条件"
                                 onClick={clearFilters}
                                 className="text-xs text-slate-500 underline decoration-slate-300 hover:text-slate-700"
                             >
-                                清除全部
+                                清空筛选
                             </button>
                         </div>
                     )}
 
                     {/* Total count */}
                     <div className="text-xs text-slate-400">
-                        共 {total} 条记录
+                        当前第 {page} / {totalPages} 页 · 共 {total} 条 recent runs
                     </div>
 
                     {/* Run list */}
@@ -290,7 +310,7 @@ export function RunHistory() {
                         </div>
                     ) : runs.length === 0 ? (
                         <div className="py-8 text-center text-sm text-slate-400">
-                            暂无运行记录
+                            当前筛选条件下暂无运行记录，可调整筛选或清空后重试。
                         </div>
                     ) : (
                         <div className="space-y-2">
@@ -304,6 +324,7 @@ export function RunHistory() {
                                         {/* Run header row */}
                                         <button
                                             type="button"
+                                            aria-label="查看运行详情"
                                             onClick={() => toggleRunDetail(run.id)}
                                             className="flex w-full items-center justify-between px-3 py-2.5 text-left transition-colors hover:bg-slate-50"
                                         >
@@ -318,7 +339,7 @@ export function RunHistory() {
                                                             "bg-slate-100 text-slate-600"
                                                         }
                                                     >
-                                                        {run.answerability}
+                                                        {ANSWERABILITY_LABEL_MAP[run.answerability] || run.answerability}
                                                     </Badge>
                                                     <Badge
                                                         className={
@@ -326,7 +347,7 @@ export function RunHistory() {
                                                             "bg-slate-100 text-slate-600"
                                                         }
                                                     >
-                                                        {run.final_status}
+                                                        {STATUS_LABEL_MAP[run.final_status] || run.final_status}
                                                     </Badge>
                                                     <span className="text-xs text-slate-400">
                                                         {run.step_count} 步
@@ -368,12 +389,11 @@ export function RunHistory() {
                     )}
 
                     {/* Pagination */}
-                    {totalPages > 1 && (
-                        <div className="flex items-center justify-between pt-2">
-                            <span className="text-xs text-slate-400">
+                    <div className="flex items-center justify-between pt-2">
+                        <span className="text-xs text-slate-400">
                                 第 {page} / {totalPages} 页
-                            </span>
-                            <div className="flex gap-2">
+                        </span>
+                        <div className="flex gap-2">
                                 <Button
                                     variant="outline"
                                     size="sm"
@@ -400,9 +420,8 @@ export function RunHistory() {
                                 >
                                     下一页
                                 </Button>
-                            </div>
                         </div>
-                    )}
+                    </div>
                 </div>
             )}
         </div>

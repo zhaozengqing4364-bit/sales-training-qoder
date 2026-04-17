@@ -51,12 +51,15 @@ vi.mock("next/link", () => ({
     ),
 }));
 
-vi.mock("@/components/ui/toast", () => ({
-    useToast: () => ({
+vi.mock("@/components/ui/toast", () => {
+    const toastApi = {
         success: successToastMock,
         error: errorToastMock,
-    }),
-}));
+    };
+    return {
+        useToast: () => toastApi,
+    };
+});
 
 vi.mock("@/lib/api/client", async () => {
     const actual = await vi.importActual<typeof import("@/lib/api/client")>("@/lib/api/client");
@@ -76,6 +79,9 @@ vi.mock("@/lib/api/client", async () => {
                 getKnowledgeAnswerRunSteps: getKnowledgeAnswerRunStepsMock,
                 uploadDocument: uploadDocumentMock,
                 searchKnowledgeBase: searchKnowledgeBaseMock,
+            },
+            adminTools: {
+                ...actual.api.adminTools,
                 reprocessKnowledgeDocument: reprocessKnowledgeDocumentMock,
             },
         },
@@ -315,8 +321,8 @@ describe("KnowledgeDetailPage", () => {
 
         await screen.findByText("知识问答配置（全局）");
         expect(screen.getByText("当前作用于知识问答引擎的全局 active 配置，入口挂在知识库详情页，便于联动排查。"));
-        expect(screen.getAllByText("rollout-v1").length).toBeGreaterThan(0);
-        expect(screen.getByText("database")).toBeTruthy();
+        expect((await screen.findAllByText(/rollout-v1/)).length).toBeGreaterThan(0);
+        expect(await screen.findByText("database")).toBeTruthy();
         expect(screen.queryByText(/DUAL_RUN/i)).toBeNull();
         expect(screen.queryByText(/ENABLED/i)).toBeNull();
 
@@ -335,7 +341,7 @@ describe("KnowledgeDetailPage", () => {
 
         await screen.findByText("最近知识问答运行（全局）");
         expect(screen.getByText("当前展示的是全局最近运行记录，不保证只来自本知识库；请结合本页搜索诊断一起排查。"));
-        expect(screen.getByText("请介绍一下石犀科技")).toBeTruthy();
+        expect(await screen.findByText("请介绍一下石犀科技")).toBeTruthy();
         expect(screen.getAllByText("证据充分").length).toBeGreaterThan(0);
 
         const queryFilter = screen.getByPlaceholderText("按 query 搜索 recent runs");
@@ -362,9 +368,9 @@ describe("KnowledgeDetailPage", () => {
         });
 
         expect(await screen.findByText("产品手册")).toBeTruthy();
-        expect(screen.getByText("resolve")).toBeTruthy();
-        expect(screen.getByText("命中片段数")).toBeTruthy();
-        expect(screen.getByText("1")).toBeTruthy();
+        expect(await screen.findByText("resolve")).toBeTruthy();
+        expect(await screen.findByText("命中片段数")).toBeTruthy();
+        expect(screen.getAllByText("1").length).toBeGreaterThan(0);
         expect(screen.getByText("执行入口")).toBeTruthy();
         expect(screen.getAllByText("stepfun_realtime").length).toBeGreaterThan(0);
         expect(screen.getByText("输入")).toBeTruthy();
@@ -374,6 +380,7 @@ describe("KnowledgeDetailPage", () => {
     it("resets to page 1 on filter apply and shows empty state for no matching runs", async () => {
         render(<KnowledgeDetailPage />);
         await screen.findByText("最近知识问答运行（全局）");
+        await screen.findByText("请介绍一下石犀科技");
 
         listKnowledgeAnswerRunsMock.mockResolvedValueOnce({
             items: [],
@@ -407,6 +414,7 @@ describe("KnowledgeDetailPage", () => {
     it("requests the next page from the server when pagination advances", async () => {
         render(<KnowledgeDetailPage />);
         await screen.findByText("最近知识问答运行（全局）");
+        await screen.findByText("请介绍一下石犀科技");
 
         listKnowledgeAnswerRunsMock.mockResolvedValueOnce({
             items: [
@@ -450,6 +458,7 @@ describe("KnowledgeDetailPage", () => {
     it("clears filters and reloads page 1 with unfiltered recent runs", async () => {
         render(<KnowledgeDetailPage />);
         await screen.findByText("最近知识问答运行（全局）");
+        await screen.findByText("请介绍一下石犀科技");
 
         fireEvent.change(screen.getByPlaceholderText("按 query 搜索 recent runs"), { target: { value: "价格" } });
         fireEvent.change(screen.getByDisplayValue("全部回答约束"), { target: { value: "blocked" } });
@@ -478,7 +487,7 @@ describe("KnowledgeDetailPage", () => {
             session_id: null,
         });
 
-        fireEvent.click(screen.getByRole("button", { name: "清空筛选" }));
+        fireEvent.click(screen.getByLabelText("清空筛选条件"));
 
         await waitFor(() => {
             expect(listKnowledgeAnswerRunsMock).toHaveBeenLastCalledWith({
@@ -491,8 +500,8 @@ describe("KnowledgeDetailPage", () => {
         });
 
         expect((screen.getByPlaceholderText("按 query 搜索 recent runs") as HTMLInputElement).value).toBe("");
-        expect((screen.getByDisplayValue("全部回答约束") as HTMLSelectElement).value).toBe("all");
-        expect((screen.getByDisplayValue("全部运行状态") as HTMLSelectElement).value).toBe("all");
+        expect((screen.getByDisplayValue("全部回答约束") as HTMLSelectElement).value).toBe("");
+        expect((screen.getByDisplayValue("全部运行状态") as HTMLSelectElement).value).toBe("");
     });
 
     it("shows an inline reprocess action for failed documents", async () => {

@@ -53,7 +53,7 @@ export function RunDetail({ detail, steps }: RunDetailProps) {
                     </p>
                 </GlassCard>
                 <GlassCard className="p-2.5">
-                    <p className="text-xs text-slate-400">入口</p>
+                    <p className="text-xs text-slate-400">执行入口</p>
                     <p className="mt-0.5 text-sm font-medium text-slate-900">{detail.entrypoint}</p>
                 </GlassCard>
                 <GlassCard className="p-2.5">
@@ -166,12 +166,12 @@ export function RunDetail({ detail, steps }: RunDetailProps) {
                             <div className="space-y-3 border-t border-slate-100 px-3 py-3">
                                 {/* Input payload */}
                                 <div className="space-y-1">
-                                    <p className="text-xs font-medium text-slate-500">输入载荷</p>
+                                    <p className="text-xs font-medium text-slate-500">输入</p>
                                     <StructuredPayloadViewer data={step.input_payload} />
                                 </div>
                                 {/* Output payload */}
                                 <div className="space-y-1">
-                                    <p className="text-xs font-medium text-slate-500">输出载荷</p>
+                                    <p className="text-xs font-medium text-slate-500">输出</p>
                                     <StructuredPayloadViewer data={step.output_payload} />
                                 </div>
                             </div>
