@@ -270,7 +270,7 @@ const baseSessionsResponse = {
             },
         },
     ],
-};
+} satisfies UserSessionsResponse;
 
 const richProgressResponse = {
     granularity: "week",
@@ -359,7 +359,7 @@ const richProgressResponse = {
         reason: "stalled_repeated_focus",
         summary: "最近多次训练仍卡在同一重点且没有改善，建议切换训练重点或训练方法。",
     },
-};
+} satisfies UserProgressResponse;
 
 const baseInterventionsResponse = {
     items: [
@@ -378,7 +378,7 @@ const baseInterventionsResponse = {
         },
     ],
     total: 1,
-};
+} satisfies ManagerInterventionListResponse;
 
 describe("UserDetailPage", () => {
     beforeEach(() => {
@@ -394,9 +394,9 @@ describe("UserDetailPage", () => {
 
         useSearchParamsMock.mockReturnValue(new URLSearchParams());
         getUserStatsMock.mockResolvedValue(baseStatsResponse);
-        getUserSessionsMock.mockResolvedValue(baseSessionsResponse as unknown as UserSessionsResponse);
-        getUserProgressMock.mockResolvedValue(richProgressResponse as unknown as UserProgressResponse);
-        listManagerInterventionsMock.mockResolvedValue(baseInterventionsResponse as unknown as ManagerInterventionListResponse);
+        getUserSessionsMock.mockResolvedValue(baseSessionsResponse);
+        getUserProgressMock.mockResolvedValue(richProgressResponse);
+        listManagerInterventionsMock.mockResolvedValue(baseInterventionsResponse);
         getSupportRuntimeFaultsMock.mockResolvedValue(supportRuntimeFaultsResponse);
         createManagerInterventionMock.mockResolvedValue({
             intervention_id: "intervention-2",
@@ -468,7 +468,7 @@ describe("UserDetailPage", () => {
                 reason: "insufficient_evaluable_history",
                 summary: "最近完成的训练里仍有证据不足的会话，先补齐有效互动再判断是否切换重点。",
             },
-        } as unknown as UserSessionsResponse);
+        } satisfies UserProgressResponse);
 
         render(<UserDetailPage />);
 
@@ -653,7 +653,7 @@ describe("UserDetailPage", () => {
                     next_goal: null,
                 },
             ],
-        } as unknown as UserProgressResponse);
+        } satisfies UserSessionsResponse);
 
         render(<UserDetailPage />);
 
