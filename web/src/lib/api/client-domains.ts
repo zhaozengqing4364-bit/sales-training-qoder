@@ -97,6 +97,18 @@ type PracticeDomainDependencies = {
     request: ApiRequest;
 };
 
+type AudioUploadUrlResponse = {
+    url: string;
+    object_key: string;
+    expires_at?: string;
+};
+
+type RegisterAudioSegmentResponse = {
+    id?: string;
+    segment_sequence: number;
+    upload_status?: string;
+};
+
 type AdminReportDomainDependencies = {
     request: ApiRequest;
 };
@@ -201,39 +213,35 @@ export function createPracticeDomain({ request }: PracticeDomainDependencies) {
         pauseSession: async (sessionId: string) => controlLifecycle(sessionId, "pause"),
         resumeSession: async (sessionId: string) => controlLifecycle(sessionId, "resume"),
         endSession: async (sessionId: string) => controlLifecycle(sessionId, "end"),
-        audioSegments: {
-            createUploadUrl: async (
-                sessionId: string,
-                payload: { segment_sequence: number; content_type: string },
-            ) => {
-                return request<AudioSegmentUploadUrl>(`/practice/sessions/${sessionId}/audio-upload-urls`, {
-                    method: "POST",
-                    body: JSON.stringify(payload),
-                });
-            },
-            register: async (
-                sessionId: string,
-                payload: {
-                    segment_sequence: number;
-                    object_key: string;
-                    size_bytes: number;
-                    duration_ms?: number;
-                },
-            ) => {
-                return request<AudioSegment>(`/practice/sessions/${sessionId}/audio-segments`, {
-                    method: "POST",
-                    body: JSON.stringify(payload),
-                });
-            },
-            registerFailure: async (
-                sessionId: string,
-                payload: { segment_sequence: number; error_token: AudioSegmentFailureToken },
-            ) => {
-                return request<AudioSegment>(`/practice/sessions/${sessionId}/audio-segments/failure`, {
-                    method: "POST",
-                    body: JSON.stringify(payload),
-                });
-            },
+
+        createAudioUploadUrl: async (
+            sessionId: string,
+            payload: { segment_sequence: number; content_type: string },
+        ) => {
+            return request<AudioUploadUrlResponse>(`/practice/sessions/${sessionId}/audio-upload-urls`, {
+                method: "POST",
+                body: JSON.stringify(payload),
+            });
+        },
+
+        registerAudioSegment: async (
+            sessionId: string,
+            payload: { segment_sequence: number; object_key: string; size_bytes: number; duration_ms?: number },
+        ) => {
+            return request<RegisterAudioSegmentResponse>(`/practice/sessions/${sessionId}/audio-segments`, {
+                method: "POST",
+                body: JSON.stringify(payload),
+            });
+        },
+
+        registerAudioSegmentFailure: async (
+            sessionId: string,
+            payload: { segment_sequence: number; error_token: "signing_failed" | "oss_put_failed" | "register_failed" | "network_error" | "unknown" },
+        ) => {
+            return request<RegisterAudioSegmentResponse>(`/practice/sessions/${sessionId}/audio-segments/failure`, {
+                method: "POST",
+                body: JSON.stringify(payload),
+            });
         },
     };
 }
