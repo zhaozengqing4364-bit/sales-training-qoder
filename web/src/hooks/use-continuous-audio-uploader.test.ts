@@ -83,6 +83,19 @@ function mockFetchResponse(status: number, body: Record<string, unknown>) {
     } as Response);
 }
 
+function getHeaderValue(headers: HeadersInit | undefined, name: string): string | null {
+    if (!headers) return null;
+    if (headers instanceof Headers) {
+        return headers.get(name);
+    }
+    if (Array.isArray(headers)) {
+        const entry = headers.find(([key]) => key.toLowerCase() === name.toLowerCase());
+        return entry?.[1] ?? null;
+    }
+    const record = headers as Record<string, string>;
+    return record[name] ?? record[name.toLowerCase()] ?? null;
+}
+
 beforeEach(() => {
     vi.clearAllMocks();
 
@@ -250,6 +263,48 @@ describe("useContinuousAudioUploader", () => {
         expect(putCalls[0][1].headers["Content-Type"]).toBe("audio/webm");
     });
 
+    it("uses the unified API base and CSRF header for backend segment requests", async () => {
+        document.cookie = "app_csrf=csrf-token";
+
+        const { result } = renderHook(() =>
+            useContinuousAudioUploader({ sessionId, enabled: true }),
+        );
+
+        await act(async () => {
+            await result.current.startUpload();
+        });
+
+        await act(async () => {
+            fireDataAvailable(4096);
+        });
+
+        await waitFor(() => {
+            expect(result.current.segmentCount).toBe(1);
+        });
+
+        const signCall = mockFetch.mock.calls.find(
+            (c) => typeof c[0] === "string" && c[0].includes("/audio-upload-urls"),
+        ) as [string, RequestInit] | undefined;
+        const registerCall = mockFetch.mock.calls.find(
+            (c) =>
+                typeof c[0] === "string" &&
+                c[0].includes("/audio-segments") &&
+                c[0].includes("practice") &&
+                c[1]?.method === "POST",
+        ) as [string, RequestInit] | undefined;
+
+        expect(signCall?.[0]).toBe(
+            `http://localhost:3444/api/v1/practice/sessions/${sessionId}/audio-upload-urls`,
+        );
+        expect(getHeaderValue(signCall?.[1].headers, "X-CSRF-Token")).toBe("csrf-token");
+        expect(registerCall?.[0]).toBe(
+            `http://localhost:3444/api/v1/practice/sessions/${sessionId}/audio-segments`,
+        );
+        expect(getHeaderValue(registerCall?.[1].headers, "X-CSRF-Token")).toBe("csrf-token");
+
+        document.cookie = "app_csrf=; Max-Age=0";
+    });
+
     it("registers segment metadata after successful OSS upload", async () => {
         const { result } = renderHook(() =>
             useContinuousAudioUploader({ sessionId, enabled: true }),
@@ -315,6 +370,13 @@ describe("useContinuousAudioUploader", () => {
         expect(result.current.isUploading).toBe(true);
         expect(result.current.uploadStatus).toBe("uploading");
         expect(result.current.lastError).toContain("OSS 服务暂不可用");
+        const failureCall = mockFetch.mock.calls.find(
+            (c) => typeof c[0] === "string" && c[0].includes("/audio-segments/failure"),
+        ) as [string, RequestInit] | undefined;
+        expect(JSON.parse(String(failureCall?.[1].body))).toEqual({
+            segment_sequence: 0,
+            error_token: "signing_failed",
+        });
 
         // Now make it succeed and fire another segment
         mockFetch.mockImplementation((url: string | Request) => {
@@ -379,6 +441,13 @@ describe("useContinuousAudioUploader", () => {
 
         await waitFor(() => {
             expect(result.current.lastError).toContain("OSS PUT 失败");
+        });
+        const failureCall = mockFetch.mock.calls.find(
+            (c) => typeof c[0] === "string" && c[0].includes("/audio-segments/failure"),
+        ) as [string, RequestInit] | undefined;
+        expect(JSON.parse(String(failureCall?.[1].body))).toEqual({
+            segment_sequence: 0,
+            error_token: "oss_put_failed",
         });
 
         expect(result.current.isUploading).toBe(true);
