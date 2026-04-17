@@ -256,15 +256,20 @@ async def test_cookie_session_unsafe_write_requires_global_csrf_header(
         json={"department": "Missing CSRF"},
     )
     assert missing_header_response.status_code == 403
-    assert missing_header_response.json()["detail"]["error"] == "[CSRF_VALIDATION_FAILED]"
+    assert (
+        missing_header_response.json()["detail"]["error"] == "[CSRF_VALIDATION_FAILED]"
+    )
 
     mismatched_header_response = await async_client.patch(
         "/api/v1/users/me",
         json={"department": "Bad CSRF"},
         headers={AUTH_CSRF_HEADER_NAME: "not-the-cookie-token"},
     )
-    assert missing_csrf_response.status_code == 403
-    assert missing_csrf_response.json()["detail"]["error"] == "[CSRF_VALIDATION_FAILED]"
+    assert mismatched_header_response.status_code == 403
+    assert (
+        mismatched_header_response.json()["detail"]["error"]
+        == "[CSRF_VALIDATION_FAILED]"
+    )
 
     accepted_response = await async_client.patch(
         "/api/v1/users/me",

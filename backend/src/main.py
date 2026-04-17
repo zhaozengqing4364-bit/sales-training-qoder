@@ -9,8 +9,15 @@ import uuid
 from contextlib import asynccontextmanager
 
 from dotenv import load_dotenv
-from fastapi import APIRouter, Depends, FastAPI, HTTPException, Query, Request, WebSocket
-from fastapi.responses import JSONResponse, Response
+from fastapi import (
+    APIRouter,
+    Depends,
+    FastAPI,
+    HTTPException,
+    Query,
+    Request,
+    WebSocket,
+)
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
 from fastapi.routing import APIRoute
@@ -80,7 +87,7 @@ from common.knowledge.api import admin_router as knowledge_admin_router
 from common.knowledge.api import internal_router as knowledge_internal_router
 from common.knowledge.kb_lock_guard import is_kb_lock_unbound_snapshot
 from common.monitoring.health import build_health_payload
-from common.monitoring.logger import configure_logging, get_logger
+from common.monitoring.logger import configure_logging, get_logger, get_trace_id
 from common.monitoring.metrics import (
     MetricsMiddleware,
     get_metrics,
@@ -105,10 +112,12 @@ configure_logging(os.getenv("LOG_LEVEL", "INFO"))
 logger = get_logger(__name__)
 
 
-CSRF_EXEMPT_PATHS = frozenset({
-    "/api/v1/auth/login",
-    "/api/v1/auth/dev-login",
-})
+CSRF_EXEMPT_PATHS = frozenset(
+    {
+        "/api/v1/auth/login",
+        "/api/v1/auth/dev-login",
+    }
+)
 
 
 DEV_CORS_ORIGINS = [
@@ -390,78 +399,11 @@ def _csrf_validation_failed_response(exc: HTTPException) -> JSONResponse:
 @app.middleware("http")
 async def enforce_cookie_session_csrf(request: Request, call_next):
     """Reject unsafe cookie-backed requests unless they present a matching CSRF token."""
-    if request.url.path not in CSRF_EXEMPT_PATHS and should_enforce_csrf(request):
+    if not _is_csrf_exempt_path(request.url.path) and should_enforce_csrf(request):
         try:
             validate_csrf_request(request)
         except HTTPException as exc:
             return _csrf_validation_failed_response(exc)
-
-    return await call_next(request)
-
-
-@app.middleware("http")
-async def enforce_cookie_csrf(request: Request, call_next):
-    """Protect cookie-backed unsafe requests with double-submit CSRF."""
-    if request.url.path not in CSRF_EXEMPT_PATHS and should_enforce_csrf(request):
-        try:
-            validate_csrf_request(request)
-        except HTTPException as exc:
-            return JSONResponse(
-                status_code=exc.status_code,
-                content={"detail": exc.detail},
-            )
-
-    return await call_next(request)
-
-
-CSRF_EXEMPT_PATHS = {
-    "/api/v1/auth/login",
-    "/api/v1/auth/dev-login",
-    "/api/v1/auth/forgot-password",
-    "/api/v1/auth/reset-password",
-}
-
-
-def _is_csrf_exempt_path(path: str) -> bool:
-    return path in CSRF_EXEMPT_PATHS
-
-
-@app.middleware("http")
-async def enforce_cookie_session_csrf(request: Request, call_next):
-    """Protect unsafe cookie-backed requests with double-submit CSRF tokens."""
-
-    if not _is_csrf_exempt_path(request.url.path) and should_enforce_csrf(request):
-        try:
-            validate_csrf_request(request)
-        except HTTPException as exc:
-            return JSONResponse(
-                status_code=exc.status_code, content={"detail": exc.detail}
-            )
-
-    return await call_next(request)
-
-
-CSRF_EXEMPT_PATHS = {
-    "/api/v1/auth/login",
-    "/api/v1/auth/dev-login",
-    "/api/v1/auth/forgot-password",
-    "/api/v1/auth/reset-password",
-}
-
-
-def _is_csrf_exempt_path(path: str) -> bool:
-    return path in CSRF_EXEMPT_PATHS
-
-
-@app.middleware("http")
-async def enforce_cookie_session_csrf(request: Request, call_next):
-    """Protect unsafe cookie-backed requests with double-submit CSRF tokens."""
-
-    if not _is_csrf_exempt_path(request.url.path) and should_enforce_csrf(request):
-        try:
-            validate_csrf_request(request)
-        except HTTPException as exc:
-            return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail})
 
     return await call_next(request)
 
