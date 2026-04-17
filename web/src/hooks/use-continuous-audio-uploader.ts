@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useRef, useState } from "react";
-import { ApiRequestError, api, getApiErrorMessage } from "@/lib/api/client";
+import { api, getApiErrorMessage } from "@/lib/api/client";
 import { debug } from "@/lib/debug";
 
 export type UploadStatus = "idle" | "uploading" | "error" | "stopped";
@@ -24,6 +24,23 @@ export interface ContinuousAudioUploaderState {
 const SEGMENT_TIMESLICE_MS = 15_000;
 const WEBM_OPUS_MIME = "audio/webm;codecs=opus";
 const WEBM_MIME = "audio/webm";
+type AudioUploadFailureToken =
+    | "signing_failed"
+    | "oss_put_failed"
+    | "register_failed"
+    | "network_error"
+    | "unknown";
+
+class AudioSegmentUploadError extends Error {
+    readonly errorToken: AudioUploadFailureToken;
+
+    constructor(message: string, errorToken: AudioUploadFailureToken) {
+        super(message);
+        this.name = "AudioSegmentUploadError";
+        this.errorToken = errorToken;
+    }
+}
+
 type AudioUploadFailureToken =
     | "signing_failed"
     | "oss_put_failed"
@@ -129,6 +146,7 @@ export function useContinuousAudioUploader(
     const uploadSegment = useCallback(
         async (blob: Blob, sequence: number) => {
             const contentType = blob.type || WEBM_MIME;
+            let failureToken: AudioUploadFailureToken = "unknown";
 
             const registerFailure = async (
                 errorToken: AudioUploadFailureToken,
@@ -147,87 +165,65 @@ export function useContinuousAudioUploader(
 
             try {
                 // Step 1: Request presigned PUT URL from backend
-                let uploadUrl: string;
-                let objectKey: string;
-                try {
-                    const signedUpload = await api.practice.audioSegments.createUploadUrl(
-                        sessionId,
-                        {
-                            segment_sequence: sequence,
-                            content_type: contentType,
-                        },
-                    );
-                    uploadUrl = signedUpload.url;
-                    objectKey = signedUpload.object_key;
-                } catch (signError) {
-                    const errorToken = getNetworkAwareToken(
-                        signError,
-                        "signing_failed",
-                    );
-                    await registerFailure(errorToken);
-                    throw new AudioSegmentUploadError(
-                        `segment ${sequence}: ${getUploadErrorMessage(signError)}`,
-                        errorToken,
-                    );
-                }
+                failureToken = "signing_failed";
+                const { url, object_key } = await api.practice.createAudioUploadUrl(
+                    sessionId,
+                    {
+                        segment_sequence: sequence,
+                        content_type: contentType,
+                    },
+                );
 
                 // Step 2: PUT blob directly to OSS
-                try {
-                    const putRes = await fetch(uploadUrl, {
-                        method: "PUT",
-                        headers: { "Content-Type": contentType },
-                        body: blob,
-                    });
+                failureToken = "oss_put_failed";
+                const putRes = await fetch(url, {
+                    method: "PUT",
+                    headers: { "Content-Type": contentType },
+                    body: blob,
+                });
 
-                    if (!putRes.ok) {
-                        throw new Error(
-                            `OSS PUT 失败 (${putRes.status})`,
-                        );
-                    }
-                } catch (putError) {
-                    const errorToken = getNetworkAwareToken(
-                        putError,
-                        "oss_put_failed",
-                    );
-                    await registerFailure(errorToken);
+                if (!putRes.ok) {
                     throw new AudioSegmentUploadError(
-                        `segment ${sequence}: ${getUploadErrorMessage(putError)}`,
-                        errorToken,
+                        `segment ${sequence}: OSS PUT 失败 (${putRes.status})`,
+                        "oss_put_failed",
                     );
                 }
 
                 // Step 3: Register segment metadata with backend
-                try {
-                    await api.practice.audioSegments.register(sessionId, {
-                        segment_sequence: sequence,
-                        object_key: objectKey,
-                        size_bytes: blob.size,
-                    });
-                } catch (registerError) {
-                    const errorToken = getNetworkAwareToken(
-                        registerError,
-                        "register_failed",
-                    );
-                    await registerFailure(errorToken);
-                    throw new AudioSegmentUploadError(
-                        `segment ${sequence}: ${getUploadErrorMessage(registerError)}`,
-                        errorToken,
-                    );
-                }
+                failureToken = "register_failed";
+                await api.practice.registerAudioSegment(sessionId, {
+                    segment_sequence: sequence,
+                    object_key,
+                    size_bytes: blob.size,
+                });
 
                 debug.log(
                     `[ContinuousAudioUploader] segment ${sequence} uploaded (${blob.size} bytes)`,
                 );
                 setSegmentCount(sequence + 1);
             } catch (err) {
+                const token =
+                    err instanceof AudioSegmentUploadError
+                        ? err.errorToken
+                        : failureToken;
                 const message =
-                    err instanceof Error && err.message.trim()
-                        ? err.message
+                    err instanceof Error
+                        ? err.message || getApiErrorMessage(err)
                         : `segment ${sequence}: 未知上传错误`;
                 debug.warn(
                     `[ContinuousAudioUploader] upload failed: ${message}`,
                 );
                 setLastError(message);
+                try {
+                    await api.practice.registerAudioSegmentFailure(sessionId, {
+                        segment_sequence: sequence,
+                        error_token: token,
+                    });
+                } catch (failureErr) {
+                    debug.warn(
+                        `[ContinuousAudioUploader] failed to register upload failure: ${getApiErrorMessage(failureErr)}`,
+                    );
+                }
             }
         },
         [sessionId],
