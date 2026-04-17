@@ -43,6 +43,23 @@ class AudioSegmentUploadError extends Error {
     }
 }
 
+type AudioUploadFailureToken =
+    | "signing_failed"
+    | "oss_put_failed"
+    | "register_failed"
+    | "network_error"
+    | "unknown";
+
+class AudioSegmentUploadError extends Error {
+    readonly errorToken: AudioUploadFailureToken;
+
+    constructor(message: string, errorToken: AudioUploadFailureToken) {
+        super(message);
+        this.name = "AudioSegmentUploadError";
+        this.errorToken = errorToken;
+    }
+}
+
 /**
  * Select the best available MediaRecorder mime type.
  * Prefers webm/opus, falls back to plain webm, then empty string.
@@ -149,6 +166,7 @@ export function useContinuousAudioUploader(
     const uploadSegment = useCallback(
         async (blob: Blob, sequence: number) => {
             const contentType = blob.type || WEBM_MIME;
+            let failureToken: AudioUploadFailureToken = "unknown";
 
             const registerFailure = async (
                 errorToken: AudioUploadFailureToken,
@@ -240,6 +258,10 @@ export function useContinuousAudioUploader(
                 );
                 setSegmentCount(sequence + 1);
             } catch (err) {
+                const token =
+                    err instanceof AudioSegmentUploadError
+                        ? err.errorToken
+                        : failureToken;
                 const message =
                     err instanceof Error && err.message.trim()
                         ? err.message
@@ -248,6 +270,16 @@ export function useContinuousAudioUploader(
                     `[ContinuousAudioUploader] upload failed: ${message}`,
                 );
                 setLastError(message);
+                try {
+                    await api.practice.registerAudioSegmentFailure(sessionId, {
+                        segment_sequence: sequence,
+                        error_token: token,
+                    });
+                } catch (failureErr) {
+                    debug.warn(
+                        `[ContinuousAudioUploader] failed to register upload failure: ${getApiErrorMessage(failureErr)}`,
+                    );
+                }
             }
         },
         [sessionId, registerSegmentFailure],
