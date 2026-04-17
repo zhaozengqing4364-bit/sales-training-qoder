@@ -157,14 +157,14 @@ describe("read-models", () => {
     it("derives current user session and intervention read models without page-local branching", () => {
         const nonEvaluableSession: UserSessionItem = {
             session_id: "session-1",
-            start_time: null,
-            end_time: null,
+            start_time: "2026-03-23T09:00:00Z",
+            end_time: "2026-03-23T09:04:00Z",
             status: "completed",
-            duration_minutes: 0,
-            scenario_name: null,
-            scenario_type: null,
-            agent_name: null,
-            persona_name: null,
+            duration_minutes: 4,
+            scenario_name: "销售演练",
+            scenario_type: "sales",
+            agent_name: "销售教练",
+            persona_name: "采购经理",
             scores: {
                 logic: null,
                 accuracy: null,
@@ -178,31 +178,39 @@ describe("read-models", () => {
             main_issue: null,
             next_goal: null,
             interruption_count: 0,
-        };
-        const completedSession: UserSessionItem = {
+        } satisfies UserSessionItem;
+        const completedSession = {
             session_id: "session-2",
-            start_time: null,
-            end_time: null,
+            start_time: "2026-03-23T10:00:00Z",
+            end_time: "2026-03-23T10:05:00Z",
             status: "completed",
-            duration_minutes: 0,
-            scenario_name: null,
-            scenario_type: null,
-            agent_name: null,
-            persona_name: null,
+            duration_minutes: 5,
+            scenario_name: "销售演练",
+            scenario_type: "sales",
+            agent_name: "销售教练",
+            persona_name: "采购经理",
             scores: {
-                logic: null,
-                accuracy: null,
-                completeness: null,
-                overall: null,
+                logic: 80,
+                accuracy: 82,
+                completeness: 84,
+                overall: 82,
             },
             evaluable: true,
             overall_result: "pass",
             not_evaluable_reason: null,
             feedback_summary: "最近一次报告提示：先把价值表达说具体。",
-            main_issue: { issue_text: "价值表达不具体。" },
-            next_goal: { goal_text: "下一轮补齐客户案例证据。" },
+            main_issue: {
+                issue_type: "value_expression",
+                issue_text: "价值表达不具体。",
+                recovery_rule: "补齐客户案例证据。",
+            },
+            next_goal: {
+                goal_type: "evidence_backing",
+                goal_text: "下一轮补齐客户案例证据。",
+                rule: "至少讲清一个案例。",
+            },
             interruption_count: 0,
-        };
+        } satisfies UserSessionItem;
 
         expect(getUserSessionOverallResultLabel(nonEvaluableSession)).toBe("不可评估");
         expect(getUserSessionOverallResultTone(nonEvaluableSession)).toBe("bg-amber-50 text-amber-700");

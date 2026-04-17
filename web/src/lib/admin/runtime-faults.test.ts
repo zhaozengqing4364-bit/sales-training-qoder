@@ -109,7 +109,7 @@ describe("runtime-faults", () => {
         ],
       },
     },
-  ];
+  ] satisfies SupportRuntimeFaultItem[];
 
   it("builds analytics-linked runtime fault entries from only faults with linked assets", () => {
     expect(buildLinkedRuntimeFaultEntries(runtimeFaults)).toHaveLength(3);
