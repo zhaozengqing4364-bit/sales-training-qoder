@@ -1,6 +1,7 @@
 import { spawnSync } from "node:child_process";
 
-const normalizedArgs = process.argv.slice(2).map((arg) =>
+const rawArgs = process.argv.slice(2);
+const normalizedArgs = rawArgs.map((arg) =>
   typeof arg === "string" ? arg.replace(/^web\//, "") : arg,
 );
 const hasExplicitProjectPath = normalizedArgs.some(
