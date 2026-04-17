@@ -4,12 +4,20 @@ import {
   buildLinkedRuntimeFaultEntries,
   buildRuntimeFaultBySessionId,
 } from "./runtime-faults";
+import type { SupportRuntimeFaultItem } from "@/lib/api/types";
 
 describe("runtime-faults", () => {
-  const runtimeFaults = [
+  const runtimeFaults: SupportRuntimeFaultItem[] = [
     {
       kind: "kb_lock_blocked_search_failed",
+      source: "session",
+      severity: "blocking",
+      summary: "知识库检索失败",
+      detected_at: "2026-03-25T08:00:00Z",
       session_id: "session-1",
+      scenario_type: "sales",
+      session_status: "completed",
+      report_status: "completed",
       diagnostics: {
         linked_asset_changes: [
           {
@@ -31,7 +39,14 @@ describe("runtime-faults", () => {
     },
     {
       kind: "message_scores_missing",
+      source: "session",
+      severity: "warning",
+      summary: "消息评分缺失",
+      detected_at: "2026-03-25T09:00:00Z",
       session_id: "session-1",
+      scenario_type: "sales",
+      session_status: "completed",
+      report_status: "completed",
       diagnostics: {
         linked_asset_changes: [
           {
@@ -53,14 +68,28 @@ describe("runtime-faults", () => {
     },
     {
       kind: "stuck_scoring",
+      source: "session",
+      severity: "blocking",
+      summary: "评分卡住",
+      detected_at: "2026-03-25T09:30:00Z",
       session_id: "session-2",
+      scenario_type: "sales",
+      session_status: "scoring",
+      report_status: "processing",
       diagnostics: {
         linked_asset_changes: [],
       },
     },
     {
       kind: "warning_without_session",
+      source: "system_log",
+      severity: "warning",
+      summary: "系统警告",
+      detected_at: "2026-03-25T10:00:00Z",
       session_id: null,
+      scenario_type: null,
+      session_status: null,
+      report_status: null,
       diagnostics: {
         linked_asset_changes: [
           {
@@ -83,16 +112,16 @@ describe("runtime-faults", () => {
   ];
 
   it("builds analytics-linked runtime fault entries from only faults with linked assets", () => {
-    expect(buildLinkedRuntimeFaultEntries(runtimeFaults as any)).toHaveLength(3);
-    expect(buildLinkedRuntimeFaultEntries(runtimeFaults as any, { limit: 2 })).toHaveLength(2);
-    expect(buildLinkedRuntimeFaultEntries(runtimeFaults as any)[0]).toMatchObject({
+    expect(buildLinkedRuntimeFaultEntries(runtimeFaults)).toHaveLength(3);
+    expect(buildLinkedRuntimeFaultEntries(runtimeFaults, { limit: 2 })).toHaveLength(2);
+    expect(buildLinkedRuntimeFaultEntries(runtimeFaults)[0]).toMatchObject({
       fault: runtimeFaults[0],
       assetChanges: runtimeFaults[0].diagnostics.linked_asset_changes,
     });
   });
 
   it("indexes the first linked runtime fault per session for user-detail drill-ins", () => {
-    const bySessionId = buildRuntimeFaultBySessionId(runtimeFaults as any);
+    const bySessionId = buildRuntimeFaultBySessionId(runtimeFaults);
 
     expect(Array.from(bySessionId.keys())).toEqual(["session-1"]);
     expect(bySessionId.get("session-1")).toMatchObject({

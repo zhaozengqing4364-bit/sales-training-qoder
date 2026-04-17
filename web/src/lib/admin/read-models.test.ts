@@ -19,6 +19,7 @@ import {
     getUserSessionPreview,
     hasEvaluableUserProgress,
 } from "./read-models";
+import type { UserSessionItem } from "@/lib/api/types";
 
 describe("read-models", () => {
     it("provides stable empty admin read-model defaults", () => {
@@ -154,33 +155,61 @@ describe("read-models", () => {
     });
 
     it("derives current user session and intervention read models without page-local branching", () => {
-        const nonEvaluableSession = {
+        const nonEvaluableSession: UserSessionItem = {
             session_id: "session-1",
+            start_time: null,
+            end_time: null,
             status: "completed",
+            duration_minutes: 0,
+            scenario_name: null,
+            scenario_type: null,
+            agent_name: null,
+            persona_name: null,
+            scores: {
+                logic: null,
+                accuracy: null,
+                completeness: null,
+                overall: null,
+            },
             evaluable: false,
             overall_result: null,
             not_evaluable_reason: "INSUFFICIENT_TURN_DATA",
             feedback_summary: null,
             main_issue: null,
             next_goal: null,
+            interruption_count: 0,
         };
-        const completedSession = {
+        const completedSession: UserSessionItem = {
             session_id: "session-2",
+            start_time: null,
+            end_time: null,
             status: "completed",
+            duration_minutes: 0,
+            scenario_name: null,
+            scenario_type: null,
+            agent_name: null,
+            persona_name: null,
+            scores: {
+                logic: null,
+                accuracy: null,
+                completeness: null,
+                overall: null,
+            },
             evaluable: true,
             overall_result: "pass",
             not_evaluable_reason: null,
             feedback_summary: "最近一次报告提示：先把价值表达说具体。",
             main_issue: { issue_text: "价值表达不具体。" },
             next_goal: { goal_text: "下一轮补齐客户案例证据。" },
+            interruption_count: 0,
         };
 
-        expect(getUserSessionOverallResultLabel(nonEvaluableSession as any)).toBe("不可评估");
-        expect(getUserSessionOverallResultTone(nonEvaluableSession as any)).toBe("bg-amber-50 text-amber-700");
-        expect(getUserSessionOverallResultLabel(completedSession as any)).toBe("Pass");
-        expect(getUserSessionOverallResultTone(completedSession as any)).toBe("bg-blue-50 text-blue-700");
-        expect(getUserSessionPreview(nonEvaluableSession as any)).toBe("对话轮次不足，暂无法形成稳定评估。");
-        expect(getUserSessionPreview(completedSession as any)).toBe("最近一次报告提示：先把价值表达说具体。");
+        expect(getUserSessionOverallResultLabel(nonEvaluableSession)).toBe("不可评估");
+        expect(getUserSessionOverallResultTone(nonEvaluableSession)).toBe("bg-amber-50 text-amber-700");
+        expect(getUserSessionOverallResultLabel(completedSession)).toBe("Pass");
+        expect(getUserSessionOverallResultTone(completedSession)).toBe("bg-blue-50 text-blue-700");
+        expect(getUserSessionPreview(nonEvaluableSession)).toBe("对话轮次不足，暂无法形成稳定评估。");
+        expect(getUserSessionPreview(completedSession)).toBe("最近一次报告提示：先把价值表达说具体。");
 
         const byId = buildInterventionResultById({
             manager_intervention_results: [
