@@ -198,8 +198,13 @@ export default function SupportRuntimeStatusPage() {
 
     useEffect(() => {
         if (!authLoading && isAuthorized) {
-            void loadData();
+            const timeoutId = window.setTimeout(() => {
+                void loadData();
+            }, 0);
+
+            return () => window.clearTimeout(timeoutId);
         }
+        return undefined;
     }, [authLoading, isAuthorized, loadData]);
 
     if (authLoading || !isAuthorized) {
