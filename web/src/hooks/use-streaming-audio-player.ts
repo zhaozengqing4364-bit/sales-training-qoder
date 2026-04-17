@@ -514,6 +514,12 @@ export function useStreamingAudioPlayer(
         debug.log('[StreamingAudioPlayer] Started new stream (previous cleaned up)');
     }, [initializeMediaSource, stopPCMPlayback]);
 
+    const applyPCMPlaybackRate = useCallback((playbackRate: number) => {
+        for (const source of Array.from(pcmActiveSourcesRef.current)) {
+            source.playbackRate.value = playbackRate;
+        }
+    }, []);
+
     /**
      * Append an audio chunk to the buffer
      * 
@@ -542,10 +548,7 @@ export function useStreamingAudioPlayer(
             if (audioRef.current) {
                 audioRef.current.playbackRate = normalizedChunkPlaybackRate;
             }
-            applyPlaybackRateToPcmSources(
-                pcmActiveSourcesRef.current,
-                normalizedChunkPlaybackRate,
-            );
+            applyPCMPlaybackRate(normalizedChunkPlaybackRate);
         }
 
         // Update total duration if provided
@@ -680,7 +683,7 @@ export function useStreamingAudioPlayer(
         }
 
         debug.log(`[StreamingAudioPlayer] Chunk ${chunk_index} appended (${audioBuffer.byteLength} bytes, duration: ${duration_ms}ms, final: ${is_final}, initialized: ${isInitializedRef.current})`);
-    }, [ensurePCMContext, initializeMediaSource, processChunkQueue]);
+    }, [applyPCMPlaybackRate, ensurePCMContext, initializeMediaSource, processChunkQueue]);
 
     /**
      * Play audio in fallback mode (buffered playback)
