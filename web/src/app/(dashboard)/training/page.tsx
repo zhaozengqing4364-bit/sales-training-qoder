@@ -97,19 +97,24 @@ function mapCategoryToViewModel(category: TrainingCategory): CategoryViewModel {
 export default function TrainingCategoriesPage() {
     const [categories, setCategories] = useState<TrainingCategory[]>([]);
     const [isLoading, setIsLoading] = useState(true);
+    const [isDegraded, setIsDegraded] = useState(false);
+    const [reloadVersion, setReloadVersion] = useState(0);
 
     useEffect(() => {
         let cancelled = false;
 
         const loadCategories = async () => {
+            setIsLoading(true);
             try {
                 const result = await api.training.getCategories();
                 if (!cancelled) {
                     setCategories(result.length ? result : FALLBACK_CATEGORIES);
+                    setIsDegraded(false);
                 }
             } catch {
                 if (!cancelled) {
                     setCategories(FALLBACK_CATEGORIES);
+                    setIsDegraded(true);
                 }
             } finally {
                 if (!cancelled) {
@@ -123,7 +128,7 @@ export default function TrainingCategoriesPage() {
         return () => {
             cancelled = true;
         };
-    }, []);
+    }, [reloadVersion]);
 
     const viewModels = useMemo(() => categories.map(mapCategoryToViewModel), [categories]);
 
@@ -142,6 +147,19 @@ export default function TrainingCategoriesPage() {
                     </div>
                 </div>
             </div>
+
+            {isDegraded && (
+                <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                    <span>训练分类暂不可用，当前展示的是本地兜底入口，不代表后端没有训练模式。</span>
+                    <button
+                        type="button"
+                        onClick={() => setReloadVersion((version) => version + 1)}
+                        className="rounded-full border border-amber-300 bg-white px-3 py-1 text-xs font-bold text-amber-800 shadow-sm hover:bg-amber-100"
+                    >
+                        重试训练分类
+                    </button>
+                </div>
+            )}
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 {isLoading

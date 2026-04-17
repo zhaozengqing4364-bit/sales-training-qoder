@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { GlassCard } from "@/components/ui/glass-card";
-import { api } from "@/lib/api/client";
+import { api, getApiErrorMessage } from "@/lib/api/client";
 import { Loader2, Trophy, User } from "lucide-react";
 
 type TimePeriod = "weekly" | "monthly" | "all_time";
@@ -49,6 +49,8 @@ export default function LeaderboardPage() {
     const [entries, setEntries] = useState<LeaderboardEntry[]>([]);
     const [myRank, setMyRank] = useState<MyRank | null>(null);
     const [isLoading, setIsLoading] = useState(true);
+    const [loadError, setLoadError] = useState<string | null>(null);
+    const [reloadVersion, setReloadVersion] = useState(0);
 
     useEffect(() => {
         let cancelled = false;
@@ -64,17 +66,19 @@ export default function LeaderboardPage() {
                     include_me: true,
                     limit: 20,
                 })
-                .catch(() => null);
+                .catch((error) => ({ error }));
 
             if (cancelled) return;
 
-            if (!leaderboardResult) {
+            if (leaderboardResult && "error" in leaderboardResult) {
                 setEntries([]);
                 setMyRank(null);
+                setLoadError(getApiErrorMessage(leaderboardResult.error));
                 setIsLoading(false);
                 return;
             }
 
+            setLoadError(null);
             setEntries(leaderboardResult.entries || []);
 
             if (leaderboardResult.my_rank) {
@@ -114,7 +118,7 @@ export default function LeaderboardPage() {
         return () => {
             cancelled = true;
         };
-    }, [timePeriod, scenarioFilter]);
+    }, [timePeriod, scenarioFilter, reloadVersion]);
 
     const topEntries = useMemo(() => entries.slice(0, 3), [entries]);
     const remainingEntries = useMemo(() => entries.slice(3), [entries]);
@@ -176,6 +180,17 @@ export default function LeaderboardPage() {
                 <GlassCard className="p-10 flex items-center justify-center text-slate-500 gap-2">
                     <Loader2 className="w-4 h-4 animate-spin" />
                     正在加载排行榜...
+                </GlassCard>
+            ) : loadError ? (
+                <GlassCard className="p-10 text-center text-amber-700 bg-amber-50 border border-amber-200">
+                    <div>排行榜暂时无法加载：{loadError}</div>
+                    <button
+                        type="button"
+                        onClick={() => setReloadVersion((version) => version + 1)}
+                        className="mt-4 rounded-full border border-amber-300 bg-white px-4 py-2 text-sm font-bold text-amber-800 shadow-sm hover:bg-amber-100"
+                    >
+                        重试排行榜
+                    </button>
                 </GlassCard>
             ) : entries.length === 0 ? (
                 <GlassCard className="p-10 text-center text-slate-500">暂无排行榜数据，完成可评估练习后会自动上榜。</GlassCard>

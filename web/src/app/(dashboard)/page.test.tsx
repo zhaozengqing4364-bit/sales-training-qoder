@@ -1,4 +1,4 @@
-import { act, render, screen } from "@testing-library/react";
+import { act, fireEvent, render, screen } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -356,17 +356,52 @@ describe("HomePage dashboard header", () => {
     });
 
     it("falls back to history and training actions when dashboard history fails", async () => {
-        getHistoryMock.mockRejectedValue(new Error("history unavailable"));
+        getHistoryMock
+            .mockRejectedValueOnce(new Error("history unavailable"))
+            .mockResolvedValueOnce([
+                {
+                    id: "recovered-session",
+                    session_id: "recovered-session",
+                    title: "恢复后的销售复盘",
+                    scenario_type: "sales",
+                    overall_score: 86,
+                    duration_seconds: 180,
+                    start_time: "2026-04-09T00:00:00Z",
+                    status: "completed",
+                    feedback_summary: "继续补强成交证据。",
+                },
+            ]);
 
         render(<HomePage />);
         await flushDashboardData();
 
-        expect(screen.getByText("暂无历史记录")).toBeTruthy();
+        expect(screen.getByText("最近记录暂不可用")).toBeTruthy();
+        expect(screen.getByText("最近记录暂不可用，页面已保留可用入口；请稍后重试或前往对应页面查看。")).toBeTruthy();
+        expect(screen.getByRole("button", { name: "重试首页数据" })).toBeTruthy();
         expect(screen.getByRole("link", { name: "去历史页筛选" }).getAttribute("href")).toBe("/history");
-        expect(screen.getAllByRole("button", { name: "开始训练" }).length).toBeGreaterThan(0);
+        expect(screen.getAllByRole("button", { name: "去历史页重试" }).length).toBeGreaterThan(0);
         expect(screen.queryByRole("link", { name: "查看报告" })).toBeNull();
         expect(screen.queryByRole("button", { name: "查看详情" })).toBeNull();
         expect(screen.queryByText("应用筛选")).toBeNull();
+
+        fireEvent.click(screen.getByRole("button", { name: "重试首页数据" }));
+        await flushDashboardData();
+
+        expect(screen.getByText("恢复后的销售复盘")).toBeTruthy();
+        expect(screen.queryByText("最近记录暂不可用")).toBeNull();
+    });
+
+    it("marks the dashboard as degraded instead of showing fake normal defaults when all home APIs fail", async () => {
+        getStatsMock.mockRejectedValueOnce(new Error("stats unavailable"));
+        getRecommendationMock.mockRejectedValueOnce(new Error("recommendation unavailable"));
+        getHistoryMock.mockRejectedValueOnce(new Error("history unavailable"));
+
+        render(<HomePage />);
+        await flushDashboardData();
+
+        expect(screen.getByText("训练统计、推荐入口、最近记录暂不可用，页面已保留可用入口；请稍后重试或前往对应页面查看。")).toBeTruthy();
+        expect(screen.getByRole("button", { name: "重试首页数据" })).toBeTruthy();
+        expect(screen.getByText("最近记录暂不可用")).toBeTruthy();
     });
 
     it("keeps the shared learner help guidance visible on dashboard home", async () => {

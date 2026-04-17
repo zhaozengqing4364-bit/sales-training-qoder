@@ -160,6 +160,8 @@ export default function HomePage() {
     const [stats, setStats] = useState<DashboardStats>(DEFAULT_STATS);
     const [recommendation, setRecommendation] = useState<Recommendation>(DEFAULT_RECOMMENDATION);
     const [historyItems, setHistoryItems] = useState<SessionItem[]>([]);
+    const [dashboardDegradedSections, setDashboardDegradedSections] = useState<string[]>([]);
+    const [dashboardReloadVersion, setDashboardReloadVersion] = useState(0);
 
     const handleDeleteHistory = (id: string) => {
         setHistoryItems((prev) => prev.filter((item) => item.id !== id));
@@ -174,14 +176,35 @@ export default function HomePage() {
                 api.dashboard.getHistory(),
             ]);
 
-            setStats(statsResult.status === "fulfilled" ? statsResult.value : DEFAULT_STATS);
-            setRecommendation(recResult.status === "fulfilled" ? recResult.value : DEFAULT_RECOMMENDATION);
-            setHistoryItems(historyResult.status === "fulfilled" ? historyResult.value : []);
+            const degradedSections: string[] = [];
+
+            if (statsResult.status === "fulfilled") {
+                setStats(statsResult.value);
+            } else {
+                setStats(DEFAULT_STATS);
+                degradedSections.push("训练统计");
+            }
+
+            if (recResult.status === "fulfilled") {
+                setRecommendation(recResult.value);
+            } else {
+                setRecommendation(DEFAULT_RECOMMENDATION);
+                degradedSections.push("推荐入口");
+            }
+
+            if (historyResult.status === "fulfilled") {
+                setHistoryItems(historyResult.value);
+            } else {
+                setHistoryItems([]);
+                degradedSections.push("最近记录");
+            }
+
+            setDashboardDegradedSections(degradedSections);
             setIsLoading(false);
         };
 
         void loadDashboardData();
-    }, []);
+    }, [dashboardReloadVersion]);
 
     const resolvedHistoryItems = historyItems.map((item) => ({
         item,
@@ -206,6 +229,7 @@ export default function HomePage() {
             return rightTime - leftTime;
         })[0];
     const hasHistory = historyItems.length > 0;
+    const isHistoryDegraded = dashboardDegradedSections.includes("最近记录");
     const onboardingSteps = [
         {
             key: "train",
@@ -400,6 +424,19 @@ export default function HomePage() {
                 </div>
             </header>
 
+            {dashboardDegradedSections.length > 0 && (
+                <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                    <span>{dashboardDegradedSections.join("、")}暂不可用，页面已保留可用入口；请稍后重试或前往对应页面查看。</span>
+                    <button
+                        type="button"
+                        onClick={() => setDashboardReloadVersion((version) => version + 1)}
+                        className="rounded-full border border-amber-300 bg-white px-3 py-1 text-xs font-bold text-amber-800 shadow-sm hover:bg-amber-100"
+                    >
+                        重试首页数据
+                    </button>
+                </div>
+            )}
+
             <section className="grid grid-cols-1 xl:grid-cols-[0.9fr_2.1fr] gap-4">
                 <GlassCard className="p-6 bg-white/80 border-none shadow-sm ring-1 ring-slate-100">
                     <div className="flex items-center gap-3 mb-3">
@@ -531,10 +568,10 @@ export default function HomePage() {
                     {historyItems.length === 0 ? (
                         <div className="col-span-full">
                             <EmptyState
-                                title="暂无历史记录"
-                                description="开始您的第一次 AI 角色扮演，记录将显示在这里。"
-                                actionLabel="开始训练"
-                                onAction={() => router.push("/training")}
+                                title={isHistoryDegraded ? "最近记录暂不可用" : "暂无历史记录"}
+                                description={isHistoryDegraded ? "训练历史接口暂时无法读取，不代表你没有训练记录；可进入历史页重试查看。" : "开始您的第一次 AI 角色扮演，记录将显示在这里。"}
+                                actionLabel={isHistoryDegraded ? "去历史页重试" : "开始训练"}
+                                onAction={() => router.push(isHistoryDegraded ? "/history" : "/training")}
                             />
                         </div>
                     ) : (

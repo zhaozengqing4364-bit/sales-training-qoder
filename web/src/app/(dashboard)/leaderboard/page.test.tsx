@@ -129,16 +129,14 @@ describe("LeaderboardPage", () => {
         expect(screen.queryByText(/weighted-score/i)).toBeNull();
     });
 
-    it("keeps the evaluable-session explanation and empty state when leaderboard data is empty, malformed, or the main request fails", async () => {
-        getPublicLeaderboardMock
-            .mockResolvedValueOnce({
-                time_period: "weekly",
-                total_users: 0,
-            })
-            .mockRejectedValueOnce(new Error("leaderboard failed"));
+    it("keeps the evaluable-session explanation and empty state when leaderboard data is empty or malformed", async () => {
+        getPublicLeaderboardMock.mockResolvedValueOnce({
+            time_period: "weekly",
+            total_users: 0,
+        });
         getMyRankMock.mockResolvedValueOnce(null);
 
-        const { rerender } = render(<LeaderboardPage />);
+        render(<LeaderboardPage />);
 
         expect(
             await screen.findByText("暂无排行榜数据，完成可评估练习后会自动上榜。"),
@@ -154,13 +152,30 @@ describe("LeaderboardPage", () => {
             time_period: "weekly",
         });
         expect(screen.queryByText("我的排名")).toBeNull();
+    });
 
-        rerender(<LeaderboardPage />);
+    it("distinguishes leaderboard request failures from a genuinely empty leaderboard", async () => {
+        getPublicLeaderboardMock
+            .mockRejectedValueOnce(new Error("leaderboard failed"))
+            .mockResolvedValueOnce({
+                time_period: "weekly",
+                total_users: 1,
+                entries: [createLeaderboardEntry({ username: "恢复后的张三" })],
+            });
+
+        render(<LeaderboardPage />);
 
         expect(
-            await screen.findByText("暂无排行榜数据，完成可评估练习后会自动上榜。"),
+            await screen.findByText("排行榜暂时无法加载：leaderboard failed"),
         ).toBeTruthy();
+        expect(screen.queryByText("暂无排行榜数据，完成可评估练习后会自动上榜。")).toBeNull();
         expect(screen.queryByText("我的排名")).toBeNull();
+        expect(getMyRankMock).not.toHaveBeenCalled();
+
+        fireEvent.click(screen.getByRole("button", { name: "重试排行榜" }));
+
+        expect(await screen.findByText("恢复后的张三")).toBeTruthy();
+        expect(screen.queryByText(/排行榜暂时无法加载/)).toBeNull();
     });
 
     it("preserves filter interactions and fallback my-rank loading while keeping evaluable-session copy", async () => {
