@@ -1,7 +1,12 @@
 "use client";
 
 import { useCallback, useRef, useState } from "react";
-import { api, getApiErrorMessage } from "@/lib/api/client";
+import {
+    api,
+    ApiRequestError,
+    getApiErrorMessage,
+    type AudioSegmentFailureToken,
+} from "@/lib/api/client";
 import { debug } from "@/lib/debug";
 
 export type UploadStatus = "idle" | "uploading" | "error" | "stopped";
@@ -10,6 +15,8 @@ export interface UseContinuousAudioUploaderOptions {
     sessionId: string;
     /** When false, startUpload is a no-op */
     enabled: boolean;
+    /** Optional microphone stream owned by the main recorder to avoid a second permission prompt. */
+    mediaStream?: MediaStream | null;
 }
 
 export interface ContinuousAudioUploaderState {
@@ -107,7 +114,7 @@ function getNetworkAwareToken(
 export function useContinuousAudioUploader(
     options: UseContinuousAudioUploaderOptions,
 ): ContinuousAudioUploaderState {
-    const { sessionId, enabled } = options;
+    const { sessionId, enabled, mediaStream } = options;
 
     const [isUploading, setIsUploading] = useState(false);
     const [segmentCount, setSegmentCount] = useState(0);
@@ -117,6 +124,7 @@ export function useContinuousAudioUploader(
     // Refs to persist across renders without triggering re-renders
     const mediaRecorderRef = useRef<MediaRecorder | null>(null);
     const streamRef = useRef<MediaStream | null>(null);
+    const ownsStreamRef = useRef(false);
     const segmentSequenceRef = useRef(0);
     const isStoppingRef = useRef(false);
     const isUploadingRef = useRef(false);
@@ -132,12 +140,29 @@ export function useContinuousAudioUploader(
     }, []);
 
     const cleanupStream = useCallback(() => {
-        if (streamRef.current) {
+        if (streamRef.current && ownsStreamRef.current) {
             streamRef.current.getTracks().forEach((t) => t.stop());
-            streamRef.current = null;
         }
+        streamRef.current = null;
+        ownsStreamRef.current = false;
         mediaRecorderRef.current = null;
     }, []);
+
+    const registerSegmentFailure = useCallback(
+        async (sequence: number, errorToken: AudioSegmentFailureToken) => {
+            try {
+                await api.audioSegments.registerFailure(sessionId, {
+                    segment_sequence: sequence,
+                    error_token: errorToken,
+                });
+            } catch (err) {
+                debug.warn(
+                    `[ContinuousAudioUploader] failure registration failed for segment ${sequence}: ${getApiErrorMessage(err)}`,
+                );
+            }
+        },
+        [sessionId],
+    );
 
     /**
      * Upload a single segment blob to OSS via presigned URL + register metadata.
@@ -146,27 +171,12 @@ export function useContinuousAudioUploader(
     const uploadSegment = useCallback(
         async (blob: Blob, sequence: number) => {
             const contentType = blob.type || WEBM_MIME;
-            let failureToken: AudioUploadFailureToken = "unknown";
-
-            const registerFailure = async (
-                errorToken: AudioUploadFailureToken,
-            ) => {
-                try {
-                    await api.practice.audioSegments.registerFailure(sessionId, {
-                        segment_sequence: sequence,
-                        error_token: errorToken,
-                    });
-                } catch (failureError) {
-                    debug.warn(
-                        `[ContinuousAudioUploader] failure registration failed for segment ${sequence}: ${getUploadErrorMessage(failureError)}`,
-                    );
-                }
-            };
+            let failureToken: AudioSegmentFailureToken = "unknown";
 
             try {
                 // Step 1: Request presigned PUT URL from backend
                 failureToken = "signing_failed";
-                const { url, object_key } = await api.practice.createAudioUploadUrl(
+                const { url, object_key } = await api.audioSegments.createUploadUrl(
                     sessionId,
                     {
                         segment_sequence: sequence,
@@ -191,7 +201,7 @@ export function useContinuousAudioUploader(
 
                 // Step 3: Register segment metadata with backend
                 failureToken = "register_failed";
-                await api.practice.registerAudioSegment(sessionId, {
+                await api.audioSegments.register(sessionId, {
                     segment_sequence: sequence,
                     object_key,
                     size_bytes: blob.size,
@@ -202,31 +212,25 @@ export function useContinuousAudioUploader(
                 );
                 setSegmentCount(sequence + 1);
             } catch (err) {
-                const token =
-                    err instanceof AudioSegmentUploadError
-                        ? err.errorToken
+                const errorToken =
+                    err instanceof TypeError ||
+                    (err instanceof ApiRequestError && err.status === 0)
+                        ? "network_error"
                         : failureToken;
                 const message =
-                    err instanceof Error
-                        ? err.message || getApiErrorMessage(err)
+                    err instanceof TypeError
+                        ? `segment ${sequence}: 网络连接失败`
+                        : err instanceof Error
+                        ? `segment ${sequence}: ${getApiErrorMessage(err)}`
                         : `segment ${sequence}: 未知上传错误`;
                 debug.warn(
                     `[ContinuousAudioUploader] upload failed: ${message}`,
                 );
                 setLastError(message);
-                try {
-                    await api.practice.registerAudioSegmentFailure(sessionId, {
-                        segment_sequence: sequence,
-                        error_token: token,
-                    });
-                } catch (failureErr) {
-                    debug.warn(
-                        `[ContinuousAudioUploader] failed to register upload failure: ${getApiErrorMessage(failureErr)}`,
-                    );
-                }
+                await registerSegmentFailure(sequence, errorToken);
             }
         },
-        [sessionId],
+        [sessionId, registerSegmentFailure],
     );
 
     const startUpload = useCallback(async () => {
@@ -234,9 +238,7 @@ export function useContinuousAudioUploader(
         if (isUploadingRef.current) return;
 
         try {
-            debug.log("[ContinuousAudioUploader] requesting microphone…");
-
-            const stream = await navigator.mediaDevices.getUserMedia({
+            const stream = mediaStream ?? await navigator.mediaDevices.getUserMedia({
                 audio: {
                     channelCount: 1,
                     echoCancellation: true,
@@ -246,6 +248,7 @@ export function useContinuousAudioUploader(
             });
 
             streamRef.current = stream;
+            ownsStreamRef.current = !mediaStream;
             isUploadingRef.current = true;
             setIsUploading(true);
             setUploadStatus("uploading");
@@ -290,7 +293,7 @@ export function useContinuousAudioUploader(
             isUploadingRef.current = false;
             cleanupStream();
         }
-    }, [enabled, uploadSegment, cleanupStream]);
+    }, [enabled, mediaStream, uploadSegment, cleanupStream]);
 
     const stopUpload = useCallback(async () => {
         if (!isUploadingRef.current) return;

@@ -170,6 +170,7 @@ export default function PracticeSessionPage() {
     const continuousUploader = useContinuousAudioUploader({
         sessionId,
         enabled: true,
+        mediaStream: stream,
     });
 
     const {
