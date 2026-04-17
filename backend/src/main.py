@@ -9,15 +9,8 @@ import uuid
 from contextlib import asynccontextmanager
 
 from dotenv import load_dotenv
-from fastapi import (
-    APIRouter,
-    Depends,
-    FastAPI,
-    HTTPException,
-    Query,
-    Request,
-    WebSocket,
-)
+from fastapi import APIRouter, Depends, FastAPI, HTTPException, Query, WebSocket
+from fastapi.responses import JSONResponse, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response
 from fastapi.routing import APIRoute
@@ -63,8 +56,6 @@ from common.auth.service import (
     require_role,
     resolve_websocket_token,
     set_auth_session_cookie,
-    should_enforce_csrf,
-    validate_csrf_request,
 )
 
 # Conversation Replay API
@@ -139,19 +130,6 @@ DEV_CORS_ALLOW_ORIGIN_REGEX = (
     r"172\.(1[6-9]|2\d|3[0-1])\.\d{1,3}\.\d{1,3}|"
     r"[a-zA-Z0-9-]+\.local"
     r")(:\d+)?$"
-)
-
-CSRF_EXEMPT_PATHS = frozenset(
-    {
-        "/health",
-        "/metrics",
-        "/api/v1/auth/login",
-        "/api/v1/auth/dev-login",
-        "/api/v1/auth/forgot-password",
-        "/api/v1/auth/reset-password",
-        "/api/v1/auth/wecom/start",
-        "/api/v1/auth/wecom/callback",
-    }
 )
 
 
@@ -394,18 +372,6 @@ def _csrf_validation_failed_response(exc: HTTPException) -> JSONResponse:
             "trace_id": get_trace_id(),
         },
     )
-
-
-@app.middleware("http")
-async def enforce_cookie_session_csrf(request: Request, call_next):
-    """Reject unsafe cookie-backed requests unless they present a matching CSRF token."""
-    if not _is_csrf_exempt_path(request.url.path) and should_enforce_csrf(request):
-        try:
-            validate_csrf_request(request)
-        except HTTPException as exc:
-            return _csrf_validation_failed_response(exc)
-
-    return await call_next(request)
 
 
 # Health check

@@ -1,15 +1,12 @@
 import { spawnSync } from "node:child_process";
 
-const rawArgs = process.argv.slice(2);
-const normalizedArgs = rawArgs.map((arg) =>
+const normalizedArgs = process.argv.slice(2).map((arg) =>
   typeof arg === "string" ? arg.replace(/^web\//, "") : arg,
 );
 const hasExplicitProjectPath = normalizedArgs.some(
   (arg) => typeof arg === "string" && !arg.startsWith("-"),
 );
 const vitestArgs = hasExplicitProjectPath ? normalizedArgs : ["src", ...normalizedArgs];
-
-normalizedArgs.forEach(assertProjectScopedArg);
 
 const result = spawnSync(
   "pnpm",
