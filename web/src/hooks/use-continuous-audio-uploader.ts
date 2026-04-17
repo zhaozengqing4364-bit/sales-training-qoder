@@ -218,10 +218,8 @@ export function useContinuousAudioUploader(
                         ? "network_error"
                         : failureToken;
                 const message =
-                    err instanceof TypeError
-                        ? `segment ${sequence}: 网络连接失败`
-                        : err instanceof Error
-                        ? `segment ${sequence}: ${getApiErrorMessage(err)}`
+                    err instanceof Error
+                        ? getApiErrorMessage(err)
                         : `segment ${sequence}: 未知上传错误`;
                 debug.warn(
                     `[ContinuousAudioUploader] upload failed: ${message}`,
