@@ -216,7 +216,7 @@ export function ProfileListDetail<T extends ProfileItem>({
                 ) : (
                     <div className="flex h-full items-center justify-center rounded-xl border border-dashed border-slate-200 bg-slate-50 p-8">
                         <p className="text-sm text-slate-400">
-                            从左侧选择一项进行编辑，或点击"{newItemLabel}"创建
+                            从左侧选择一项进行编辑，或点击&quot;{newItemLabel}&quot;创建
                         </p>
                     </div>
                 )}
