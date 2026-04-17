@@ -3,7 +3,6 @@ Keyword Trigger
 
 Triggers evaluation when specific keywords are detected in user messages.
 """
-import re
 
 from evaluation.triggers.base_trigger import BaseTrigger, TriggerContext
 

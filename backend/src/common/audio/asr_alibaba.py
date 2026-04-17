@@ -51,7 +51,7 @@ class AlibabaASRProvider(ASRProvider):
             api_url: WebSocket URL (required)
             app_key: App key / model name (optional)
             extra_config: Additional configuration options
-        
+
         Note: ConfigManager handles env fallback, this class should not.
         """
         # 不再 fallback 到 settings，由 ConfigManager 统一管理
@@ -74,7 +74,7 @@ class AlibabaASRProvider(ASRProvider):
     ) -> AsyncIterator[Result[str]]:
         """
         Stream transcribe using Alibaba Cloud WebSocket API
-        
+
         使用 Manual 模式（手动断句），适合"按住说话"场景
         基于官方文档: https://help.aliyun.com/zh/model-studio/real-time-speech-recognition
 
@@ -125,7 +125,7 @@ class AlibabaASRProvider(ASRProvider):
 
             await ws_connection.send(json.dumps(session_config))
             logger.info("Sent session config (Manual mode, turn_detection=null)")
-            
+
             # 等待 session.created 或 session.updated 响应
             try:
                 response = await asyncio.wait_for(ws_connection.recv(), timeout=5.0)
@@ -136,14 +136,14 @@ class AlibabaASRProvider(ASRProvider):
                     logger.error(f"Session config error: {error_msg}")
                     yield Result.fail("[USE_BROWSER_ASR]")
                     return
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 logger.warning("Timeout waiting for session response, continuing...")
 
             # Start receiving task
             transcript_queue = asyncio.Queue(maxsize=64)
             final_event = asyncio.Event()
             accumulated_text = []
-            
+
             receive_task = asyncio.create_task(
                 self._receive_transcriptions(ws_connection, transcript_queue, final_event, accumulated_text)
             )
@@ -155,7 +155,7 @@ class AlibabaASRProvider(ASRProvider):
                 if len(chunk) > 0:
                     chunk_count += 1
                     total_bytes += len(chunk)
-                    
+
                     # Encode to base64
                     audio_b64 = base64.b64encode(chunk).decode('utf-8')
 
@@ -191,7 +191,7 @@ class AlibabaASRProvider(ASRProvider):
             try:
                 await asyncio.wait_for(final_event.wait(), timeout=10.0)
                 logger.info("Received final transcription event")
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 logger.warning("Timeout waiting for final transcription")
 
             # Yield the final accumulated text
@@ -210,7 +210,7 @@ class AlibabaASRProvider(ASRProvider):
                 except asyncio.QueueEmpty:
                     pass
 
-        except asyncio.TimeoutError:
+        except TimeoutError:
             logger.error("ASR WebSocket connection timeout")
             yield Result.fail("[USE_BROWSER_ASR]")
 

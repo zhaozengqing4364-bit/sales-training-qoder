@@ -36,12 +36,12 @@ DANGEROUS_REGEX_PATTERNS = [
 class FuzzyDetectionCapability(BaseCapability):
     """
     模糊词检测能力
-    
+
     检测用户语音中的模糊表达，支持三种类型：
     - uncertain: 不确定词（大概、可能、也许）
     - filler: 填充词（嗯、那个、就是说）
     - vague: 模糊数值（差不多、左右、大约）
-    
+
     配置项:
     - fuzzy_patterns: 自定义模糊词模式列表
     - detection_mode: 检测模式 (realtime/batch)
@@ -208,11 +208,11 @@ class FuzzyDetectionCapability(BaseCapability):
     ) -> CapabilityResult:
         """
         检测文本中的模糊词
-        
+
         Args:
             context: AgentContext with session state
             input_data: 用户输入文本 (str)
-            
+
         Returns:
             CapabilityResult with detections list
         """

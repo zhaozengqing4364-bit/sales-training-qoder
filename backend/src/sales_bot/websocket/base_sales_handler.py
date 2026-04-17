@@ -29,11 +29,10 @@ import json
 import time
 import uuid
 from contextlib import suppress
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import WebSocket, WebSocketDisconnect
-from starlette.websockets import WebSocketState
 
 from common.audio.asr_service import get_asr_service
 from common.db.session import AsyncSessionLocal
@@ -405,7 +404,7 @@ class BaseSalesHandler(BaseWebSocketHandler):
                     self.websocket,
                     {
                         "type": "negotiate_ack",
-                        "timestamp": datetime.now(timezone.utc).isoformat(),
+                        "timestamp": datetime.now(UTC).isoformat(),
                         "trace_id": get_trace_id(),
                         "data": {
                             "accepted": True,
@@ -429,7 +428,7 @@ class BaseSalesHandler(BaseWebSocketHandler):
 
     async def _handle_session_end(self):
         """Handle session end request from client.
-        
+
         Stops ASR, sends session_ended confirmation, and closes the WebSocket.
         Subclasses can override to add capability cleanup, report generation, etc.
         """
@@ -441,7 +440,7 @@ class BaseSalesHandler(BaseWebSocketHandler):
         # Send session_ended confirmation so frontend knows it's safe to navigate
         await self.manager.send_json(self.websocket, {
             "type": "session_ended",
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
             "trace_id": get_trace_id(),
             "data": {
                 "session_id": self.session_id,
@@ -464,7 +463,7 @@ class BaseSalesHandler(BaseWebSocketHandler):
             self.websocket,
             {
                 "type": "interrupted",
-                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "timestamp": datetime.now(UTC).isoformat(),
                 "trace_id": get_trace_id(),
                 "stream_id": interrupted_stream_id,
                 "data": {
@@ -886,7 +885,7 @@ class BaseSalesHandler(BaseWebSocketHandler):
         """Send ASR transcript to client."""
         await self.manager.send_json(self.websocket, {
             "type": "asr_transcript",
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
             "data": {
                 "text": text,
                 "is_final": is_final,
@@ -898,7 +897,7 @@ class BaseSalesHandler(BaseWebSocketHandler):
         """
         Send TTS audio response to client.
         Override in subclasses for streaming TTS or custom TTS config.
-        
+
         Critical Fix #2: 添加stream_id和request_id防止消息乱序
         """
         from common.audio.tts_service import get_tts_service
@@ -920,7 +919,7 @@ class BaseSalesHandler(BaseWebSocketHandler):
 
                 await self.manager.send_json(self.websocket, {
                     "type": "tts_audio",
-                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "timestamp": datetime.now(UTC).isoformat(),
                     "stream_id": self.current_stream_id,
                     "request_id": request_id,
                     "data": {
@@ -941,7 +940,7 @@ class BaseSalesHandler(BaseWebSocketHandler):
         """Send text-only TTS fallback for browser TTS."""
         await self.manager.send_json(self.websocket, {
             "type": "tts_audio",
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
             "stream_id": self.current_stream_id,
             "request_id": request_id,
             "data": {
@@ -957,7 +956,7 @@ class BaseSalesHandler(BaseWebSocketHandler):
         self.ai_state = ai_state
         await self.manager.send_json(self.websocket, {
             "type": "status",
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
             "trace_id": get_trace_id(),
             "data": {
                 "session_status": self.session_status,
@@ -970,7 +969,7 @@ class BaseSalesHandler(BaseWebSocketHandler):
         """Send heartbeat to client."""
         await self.manager.send_json(self.websocket, {
             "type": "heartbeat",
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
             "data": {},
         })
 
@@ -978,7 +977,7 @@ class BaseSalesHandler(BaseWebSocketHandler):
         """Send error to client."""
         await self.manager.send_json(self.websocket, {
             "type": "error",
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
             "trace_id": get_trace_id(),
             "data": {
                 "code": code,
@@ -993,7 +992,7 @@ class BaseSalesHandler(BaseWebSocketHandler):
     async def _send_backpressure(self, action: str, queue_size: int):
         """Send backpressure signal to client."""
         payload = {
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
             "trace_id": get_trace_id(),
             "data": {
                 "action": action,
@@ -1024,7 +1023,7 @@ class BaseSalesHandler(BaseWebSocketHandler):
             self.websocket,
             {
                 "type": "audio_drop_notice",
-                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "timestamp": datetime.now(UTC).isoformat(),
                 "trace_id": get_trace_id(),
                 "data": {
                     "reason": "queue_overflow",

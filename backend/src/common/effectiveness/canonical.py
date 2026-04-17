@@ -12,7 +12,6 @@ from copy import deepcopy
 from dataclasses import dataclass
 from typing import Any, Literal
 
-
 CanonicalScenarioType = Literal["sales", "presentation"]
 CanonicalRollupId = Literal["logic", "accuracy", "completeness"]
 SurfaceMode = Literal["canonical_source", "canonical_consumer", "compat_mirror"]

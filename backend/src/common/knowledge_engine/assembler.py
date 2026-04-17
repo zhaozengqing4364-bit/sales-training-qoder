@@ -6,7 +6,6 @@ from common.knowledge_engine.answerability import KnowledgeAnswerabilityResult
 from common.knowledge_engine.haystack_adapter import KnowledgeHaystackExecutionResult
 from common.knowledge_engine.schemas import KnowledgeAnswerResult, KnowledgeCitation
 
-
 _BLOCKED_TEXT = "当前无法基于知识库证据生成回答，请稍后重试。"
 
 

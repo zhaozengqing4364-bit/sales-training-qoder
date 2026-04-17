@@ -12,12 +12,12 @@ Features:
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from typing import Any
 from uuid import UUID, uuid4
-from datetime import datetime, timezone
 
 from pydantic import ValidationError
-from sqlalchemy import and_, or_, select, update
+from sqlalchemy import and_, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.ai.config_manager import get_config_manager
@@ -30,18 +30,18 @@ from prompt_templates.compiled_contract import (
     PromptContractDiagnostic,
     build_prompt_contract_hash,
 )
+from prompt_templates.loader import get_loader
 from prompt_templates.models import (
+    PromptRenderRequest,
+    PromptRenderResponse,
     PromptTemplate,
     PromptTemplateCreate,
     PromptTemplateUpdate,
+    PromptType,
     ScenarioPrompt,
     ScenarioPromptCreate,
-    PromptType,
-    PromptRenderRequest,
-    PromptRenderResponse,
 )
 from prompt_templates.renderer import render_template
-from prompt_templates.loader import get_loader
 
 logger = get_logger(__name__)
 SALES_PROMPT_SCOPE_ALLOWED_TYPES = {"evaluation", "report", "stage", "scoring"}
@@ -92,7 +92,7 @@ class PromptTemplateService:
         from common.db.models import PromptTemplate as PromptTemplateDB
 
         template_id = str(uuid4())
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
 
         db_template = PromptTemplateDB(
             id=template_id,
@@ -178,7 +178,7 @@ class PromptTemplateService:
                 value = value.value if hasattr(value, "value") else value
             setattr(db_template, field, value)
 
-        db_template.updated_at = datetime.now(timezone.utc)
+        db_template.updated_at = datetime.now(UTC)
 
         await self.db.commit()
         await self.db.refresh(db_template)
@@ -212,7 +212,7 @@ class PromptTemplateService:
 
         # Soft delete - just deactivate
         db_template.is_active = False
-        db_template.updated_at = datetime.now(timezone.utc)
+        db_template.updated_at = datetime.now(UTC)
 
         await self.db.commit()
 
@@ -292,6 +292,8 @@ class PromptTemplateService:
         )
         from common.db.models import (
             PromptTemplate as PromptTemplateDB,
+        )
+        from common.db.models import (
             ScenarioPrompt as ScenarioPromptDB,
         )
 
@@ -305,8 +307,8 @@ class PromptTemplateService:
                         ScenarioPromptDB.scenario_type == scenario_type,
                         ScenarioPromptDB.scenario_id == scenario_id,
                         ScenarioPromptDB.prompt_type == prompt_type,
-                        ScenarioPromptDB.is_active == True,
-                        PromptTemplateDB.is_active == True,
+                        ScenarioPromptDB.is_active.is_(True),
+                        PromptTemplateDB.is_active.is_(True),
                     )
                 )
             )
@@ -327,8 +329,8 @@ class PromptTemplateService:
                         ScenarioPromptDB.scenario_type == scenario_type,
                         ScenarioPromptDB.scenario_id.is_(None),
                         ScenarioPromptDB.prompt_type == prompt_type,
-                        ScenarioPromptDB.is_active == True,
-                        PromptTemplateDB.is_active == True,
+                        ScenarioPromptDB.is_active.is_(True),
+                        PromptTemplateDB.is_active.is_(True),
                     )
                 )
             )
@@ -344,8 +346,8 @@ class PromptTemplateService:
             select(PromptTemplateDB).where(
                 and_(
                     PromptTemplateDB.prompt_type == prompt_type,
-                    PromptTemplateDB.is_default == True,
-                    PromptTemplateDB.is_active == True,
+                    PromptTemplateDB.is_default.is_(True),
+                    PromptTemplateDB.is_active.is_(True),
                 )
             )
         )
@@ -559,7 +561,7 @@ class PromptTemplateService:
             prompt_type=data.prompt_type,
             template_id=str(data.template_id),
             is_active=data.is_active,
-            created_at=datetime.now(timezone.utc),
+            created_at=datetime.now(UTC),
         )
 
         self.db.add(db_assignment)
@@ -584,14 +586,14 @@ class PromptTemplateService:
         """
         from common.db.models import PromptTemplate as PromptTemplateDB
 
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
 
         # First, unset existing defaults for this prompt type.
         await self.db.execute(
             update(PromptTemplateDB)
             .where(
                 PromptTemplateDB.prompt_type == prompt_type.value,
-                PromptTemplateDB.is_default == True,
+                PromptTemplateDB.is_default.is_(True),
             )
             .values(is_default=False, updated_at=now)
         )
@@ -632,8 +634,10 @@ class PromptTemplateService:
             List of ScenarioPrompt assignments
         """
         from common.db.models import (
-            ScenarioPrompt as ScenarioPromptDB,
             PromptTemplate as PromptTemplateDB,
+        )
+        from common.db.models import (
+            ScenarioPrompt as ScenarioPromptDB,
         )
 
         query = select(ScenarioPromptDB).join(

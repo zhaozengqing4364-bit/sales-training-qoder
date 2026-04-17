@@ -24,7 +24,11 @@ from common.analytics.manager_intervention_results import (
 )
 from common.conversation.models import ConversationMessage
 from common.conversation.session_evidence import SessionEvidenceService
-from common.db.models import ManagerIntervention, PracticeSession, Scenario, SessionStatus
+from common.db.models import (
+    ManagerIntervention,
+    PracticeSession,
+    SessionStatus,
+)
 from common.error_handling.result import Result
 from common.monitoring.logger import get_logger
 

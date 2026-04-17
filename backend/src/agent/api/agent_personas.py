@@ -14,8 +14,8 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import JSONResponse
-from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.api.server_error import build_server_error
 from common.auth.service import get_current_admin_user
@@ -74,7 +74,7 @@ async def add_persona_to_agent(
     """Add a Persona to an Agent - R4.1"""
     service = AgentPersonaService(db)
     result = await service.add_persona(agent_id, request)
-    
+
     if not result.is_success:
         if result.fallback == "[AGENT_NOT_FOUND]":
             raise HTTPException(status_code=404, detail="Agent not found")
@@ -87,7 +87,7 @@ async def add_persona_to_agent(
         if result.fallback == "[PERSONA_ALREADY_LINKED]":
             raise HTTPException(status_code=400, detail="Persona already linked to this agent")
         raise HTTPException(status_code=400, detail=result.fallback)
-    
+
     link = result.value
     commit_error = await commit_or_500(db, "add_persona_to_agent")
     if commit_error is not None:
@@ -115,10 +115,10 @@ async def list_agent_personas(
     """Get all Personas linked to an Agent - R4.2"""
     service = AgentPersonaService(db)
     result = await service.list_personas(agent_id)
-    
+
     if not result.is_success:
         raise HTTPException(status_code=404, detail=result.fallback)
-    
+
     return {
         "success": True,
         "data": AgentPersonaListResponse(
@@ -138,7 +138,7 @@ async def update_agent_persona(
     """Update Agent-Persona association - R4.3"""
     service = AgentPersonaService(db)
     result = await service.update_link(agent_id, persona_id, request)
-    
+
     if not result.is_success:
         if result.fallback == "[AGENT_NOT_FOUND]":
             raise HTTPException(status_code=404, detail="Agent not found")
@@ -151,7 +151,7 @@ async def update_agent_persona(
         if result.fallback == "[PERSONA_INACTIVE]":
             return error_response("[PERSONA_INACTIVE]", status_code=400)
         raise HTTPException(status_code=400, detail=result.fallback)
-    
+
     link = result.value
     commit_error = await commit_or_500(db, "update_agent_persona")
     if commit_error is not None:
@@ -180,10 +180,10 @@ async def remove_persona_from_agent(
     """Remove Persona from Agent - R4.4"""
     service = AgentPersonaService(db)
     result = await service.remove_persona(agent_id, persona_id)
-    
+
     if not result.is_success:
         raise HTTPException(status_code=404, detail=result.fallback)
-    
+
     commit_error = await commit_or_500(db, "remove_persona_from_agent")
     if commit_error is not None:
         return commit_error

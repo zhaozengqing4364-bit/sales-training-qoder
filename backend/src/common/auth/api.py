@@ -16,9 +16,9 @@ import uuid
 from datetime import UTC, datetime
 from typing import Any
 
+import httpx
 from fastapi import APIRouter, Depends, Request, Response, status
 from fastapi.responses import JSONResponse, RedirectResponse
-import httpx
 from pydantic import BaseModel, EmailStr
 from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
@@ -49,9 +49,9 @@ from common.db.session import get_db
 from common.monitoring.logger import get_logger, get_trace_id
 from common.rate_limit.api_limiter import rate_limit
 from common.services.password_reset import (
-    InvalidResetPasswordTokenError,
     PASSWORD_RESET_RATE_LIMIT_CALLS,
     PASSWORD_RESET_RATE_LIMIT_PERIOD_SECONDS,
+    InvalidResetPasswordTokenError,
     PasswordResetService,
 )
 

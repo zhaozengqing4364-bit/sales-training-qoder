@@ -29,8 +29,10 @@ from sales_bot.services.voice_runtime_policy import VoiceRuntimePolicyService
 from support.services.asset_registry import (
     build_empty_asset_governance_indexes,
     get_asset_registration,
-    iter_asset_refs as iter_registered_asset_refs,
     supported_asset_types,
+)
+from support.services.asset_registry import (
+    iter_asset_refs as iter_registered_asset_refs,
 )
 
 logger = get_logger(__name__)

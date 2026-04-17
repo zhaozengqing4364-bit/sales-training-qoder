@@ -12,7 +12,6 @@ from __future__ import annotations
 
 from typing import Any
 
-
 PERSONA_POLICY_VERSION = 1
 
 PERSONA_OWNED_TOOL_POLICY_KEYS: set[str] = {

@@ -14,8 +14,8 @@ References:
 - Design: Section 22 (Hardcoded Persona Migration)
 """
 import asyncio
-import sys
 import os
+import sys
 
 # Add src to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
@@ -113,7 +113,7 @@ DEFAULT_AGENT_CONFIG = {
 async def get_system_prompt(persona_id: str) -> str:
     """Get system prompt from simple_handler.py PERSONA_CONFIG"""
     from sales_bot.websocket.simple_handler import PERSONA_CONFIG
-    
+
     config = PERSONA_CONFIG.get(persona_id, {})
     return config.get("system_prompt", "")
 
@@ -121,12 +121,12 @@ async def get_system_prompt(persona_id: str) -> str:
 async def migrate_personas(db: AsyncSession) -> dict:
     """
     Migrate hardcoded personas to database.
-    
+
     Returns:
         dict: Migration results with created/skipped counts
     """
-    from agent.models import Agent, AgentPersona, Persona, AgentStatus, PersonaStatus
-    
+    from agent.models import Agent, AgentPersona, AgentStatus, Persona, PersonaStatus
+
     results = {
         "agent_created": False,
         "agent_id": None,
@@ -135,13 +135,13 @@ async def migrate_personas(db: AsyncSession) -> dict:
         "links_created": 0,
         "errors": []
     }
-    
+
     try:
         # Step 1: Create or get default Sales Coach Agent
         agent_stmt = select(Agent).where(Agent.name == DEFAULT_AGENT_CONFIG["name"])
         agent_result = await db.execute(agent_stmt)
         agent = agent_result.scalar_one_or_none()
-        
+
         if not agent:
             agent = Agent(
                 name=DEFAULT_AGENT_CONFIG["name"],
@@ -161,19 +161,19 @@ async def migrate_personas(db: AsyncSession) -> dict:
             logger.info(f"Created default Agent: {agent.name} ({agent.id})")
         else:
             logger.info(f"Agent '{agent.name}' already exists, skipping creation")
-        
+
         results["agent_id"] = agent.id
-        
+
         # Step 2: Migrate each persona
         display_order = 0
         is_first = True
-        
+
         for old_id, config in PERSONA_CONFIG_MAPPING.items():
             # Check if persona already exists by name
             persona_stmt = select(Persona).where(Persona.name == config["name"])
             persona_result = await db.execute(persona_stmt)
             existing_persona = persona_result.scalar_one_or_none()
-            
+
             if existing_persona:
                 logger.info(f"Persona '{config['name']}' already exists, skipping")
                 results["personas_skipped"] += 1
@@ -181,13 +181,13 @@ async def migrate_personas(db: AsyncSession) -> dict:
             else:
                 # Get system prompt from simple_handler
                 system_prompt = await get_system_prompt(old_id)
-                
+
                 if not system_prompt:
                     error_msg = f"No system_prompt found for persona: {old_id}"
                     logger.error(error_msg)
                     results["errors"].append(error_msg)
                     continue
-                
+
                 # Create new persona
                 persona = Persona(
                     name=config["name"],
@@ -207,7 +207,7 @@ async def migrate_personas(db: AsyncSession) -> dict:
                 await db.refresh(persona)
                 results["personas_created"] += 1
                 logger.info(f"Created Persona: {persona.name} ({persona.id})")
-            
+
             # Step 3: Link persona to agent if not already linked
             link_stmt = select(AgentPersona).where(
                 AgentPersona.agent_id == agent.id,
@@ -215,7 +215,7 @@ async def migrate_personas(db: AsyncSession) -> dict:
             )
             link_result = await db.execute(link_stmt)
             existing_link = link_result.scalar_one_or_none()
-            
+
             if not existing_link:
                 link = AgentPersona(
                     agent_id=agent.id,
@@ -229,20 +229,20 @@ async def migrate_personas(db: AsyncSession) -> dict:
                 is_first = False
             else:
                 logger.info(f"Link already exists for Persona '{persona.name}'")
-            
+
             display_order += 1
-        
+
         # Commit all changes
         await db.commit()
         logger.info("Migration completed successfully")
-        
+
     except (RuntimeError, ValueError, OSError) as e:
         await db.rollback()
         error_msg = f"Migration failed: {str(e)}"
         logger.error(error_msg)
         results["errors"].append(error_msg)
         raise
-    
+
     return results
 
 
@@ -251,16 +251,16 @@ async def main():
     logger.info("=" * 60)
     logger.info("Persona Migration Script")
     logger.info("=" * 60)
-    
+
     # Initialize database
     logger.info("Initializing database connection...")
     await init_db()
-    
+
     # Run migration
     async with AsyncSessionLocal() as db:
         logger.info("Running migration...")
         results = await migrate_personas(db)
-    
+
     # Log results
     logger.info("=" * 60)
     logger.info("Migration Results")
@@ -270,12 +270,12 @@ async def main():
     logger.info(f"Personas created: {results['personas_created']}")
     logger.info(f"Personas skipped: {results['personas_skipped']}")
     logger.info(f"Links created: {results['links_created']}")
-    
+
     if results["errors"]:
         logger.error("Errors:")
         for error in results["errors"]:
             logger.error(f"  - {error}")
-    
+
     logger.info("Migration complete!")
 
 

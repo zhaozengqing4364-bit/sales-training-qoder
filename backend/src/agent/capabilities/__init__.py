@@ -23,14 +23,14 @@ from .base import (
     CapabilityConfig,
     CapabilityResult,
 )
-from .registry import CapabilityRegistry
-from .runner import CapabilityRunner
 
 # Import capabilities to trigger registration
 from .fuzzy_detection import FuzzyDetectionCapability
-from .sales_stage import SalesStageCapability
-from .realtime_scoring import RealtimeScoringCapability
 from .knowledge_retrieval import KnowledgeRetrievalCapability
+from .realtime_scoring import RealtimeScoringCapability
+from .registry import CapabilityRegistry
+from .runner import CapabilityRunner
+from .sales_stage import SalesStageCapability
 
 __all__ = [
     "BaseCapability",

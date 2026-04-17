@@ -11,10 +11,9 @@ References:
 import asyncio
 import time
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, Query
-from fastapi.responses import JSONResponse
 from sqlalchemy import and_, select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -22,7 +21,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from common.ai.config_manager import get_config_manager
 from common.ai.encryption import decrypt_api_key, encrypt_api_key, mask_api_key
 from common.ai.models import ModelConfig, ModelProvider, ModelType
-from common.api.server_error import build_server_error
 from common.ai.schemas import (
     CreateModelConfigRequest,
     ModelConfigCreateResponse,
@@ -36,6 +34,7 @@ from common.ai.schemas import (
     TestModelConfigRequest,
     UpdateModelConfigRequest,
 )
+from common.api.server_error import build_server_error
 from common.auth.service import get_current_admin_user
 from common.db.models import User
 from common.db.session import get_db
@@ -490,7 +489,7 @@ async def update_model_config(
             replacement.is_default = True
             config.is_default = False
 
-        config.updated_at = datetime.now(timezone.utc)
+        config.updated_at = datetime.now(UTC)
 
         await db.commit()
         await db.refresh(config)
@@ -660,7 +659,7 @@ async def test_model_config(
         test_result.latency_ms = latency_ms
 
         # Update test status in database
-        config.last_tested_at = datetime.now(timezone.utc)
+        config.last_tested_at = datetime.now(UTC)
         config.last_test_status = "success" if test_result.success else "failed"
         await db.commit()
 
@@ -963,13 +962,14 @@ async def preview_tts(
     Preview TTS with specified parameters.
 
     Returns audio stream for playback.
-    
+
     Note: This endpoint returns raw audio stream (not JSON) for direct playback.
     Error responses still follow the standard format.
     """
     import io
-    from fastapi.responses import StreamingResponse
+
     import edge_tts
+    from fastapi.responses import StreamingResponse
 
     try:
         # Limit text length for preview

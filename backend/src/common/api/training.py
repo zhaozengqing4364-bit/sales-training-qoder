@@ -10,12 +10,13 @@ Response Format:
 
 Requirements: 3.1, 3.2, 3.3
 """
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Literal
 
 from fastapi import APIRouter, Depends, Query
 from pydantic import BaseModel
 from sqlalchemy import func, select
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -23,7 +24,6 @@ from common.auth.service import get_current_user
 from common.db.models import PracticeSession, User
 from common.db.session import get_db
 from common.monitoring.logger import get_logger, get_trace_id
-from sqlalchemy.exc import SQLAlchemyError
 
 logger = get_logger(__name__)
 
@@ -117,34 +117,34 @@ async def get_training_categories(
 ):
     """
     Get list of training categories
-    
+
     Returns training categories with agent counts.
-    
+
     Requirements: 3.1
     """
     try:
         # Get agent counts per category from database
         from agent.models import Agent
-        
+
         agent_counts_stmt = select(
             Agent.category,
             func.count(Agent.id).label("count")
         ).where(
             Agent.status == "published"
         ).group_by(Agent.category)
-        
+
         result = await db.execute(agent_counts_stmt)
         agent_counts = {row.category: row.count for row in result}
-        
+
         # Update categories with actual agent counts
         categories = []
         for cat in TRAINING_CATEGORIES:
             cat_copy = cat.model_copy()
             cat_copy.agent_count = agent_counts.get(cat.id, 0)
             categories.append(cat_copy.model_dump())
-        
+
         return success_response(categories)
-        
+
     except (SQLAlchemyError, ValueError) as e:
         logger.error(f"Failed to get training categories: {str(e)}")
         return error_response("[TRAINING_CATEGORIES_FAILED]", "获取训练分类失败")
@@ -161,26 +161,26 @@ async def get_sessions(
 ):
     """
     Get user's session history with pagination
-    
+
     Supports:
     - limit: Maximum number of items (overrides page_size if smaller)
     - page, page_size: Standard pagination
     - sort: Sort field and direction (e.g., "start_time:desc", "score:asc")
-    
+
     Returns:
     - total: Total number of sessions
     - items: List of session items with id, title, agent_type, start_time, duration_seconds, score
-    
+
     Requirements: 3.1, 3.2, 3.3
     """
     try:
         user_id = str(current_user.user_id)
-        
+
         # Parse sort parameter
         sort_parts = sort.split(":")
         sort_field = sort_parts[0] if sort_parts else "start_time"
         sort_dir = sort_parts[1] if len(sort_parts) > 1 else "desc"
-        
+
         # Build base query
         base_query = (
             select(PracticeSession)
@@ -197,7 +197,7 @@ async def get_sessions(
             PracticeSession.user_id == user_id
         )
         total = (await db.execute(count_query)).scalar() or 0
-        
+
         # Apply sorting
         if sort_field == "start_time":
             order_col = PracticeSession.start_time
@@ -212,21 +212,21 @@ async def get_sessions(
             order_col = PracticeSession.total_duration_seconds
         else:
             order_col = PracticeSession.start_time
-        
+
         if sort_dir == "asc":
             base_query = base_query.order_by(order_col.asc())
         else:
             base_query = base_query.order_by(order_col.desc())
-        
+
         # Apply pagination - use smaller of limit and page_size
         effective_page_size = min(limit, page_size)
         offset = (page - 1) * effective_page_size
         base_query = base_query.offset(offset).limit(effective_page_size)
-        
+
         # Execute query
         result = await db.execute(base_query)
         sessions = result.scalars().all()
-        
+
         # Transform to response format
         items = []
         for session in sessions:
@@ -237,17 +237,17 @@ async def get_sessions(
                 duration_seconds = int((session.end_time - session.start_time).total_seconds())
             else:
                 duration_seconds = 0
-            
+
             # Calculate overall score
             logic = session.logic_score or 0
             accuracy = session.accuracy_score or 0
             completeness = session.completeness_score or 0
             score = round((logic + accuracy + completeness) / 3, 1) if any([logic, accuracy, completeness]) else 0
-            
+
             # Determine agent type and title
             agent_type = "sales_bot"  # Default
             title = "练习会话"
-            
+
             # Use preloaded relations to avoid N+1 queries
             scenario = session.scenario
             if scenario:
@@ -265,16 +265,16 @@ async def get_sessions(
             persona = session.persona
             if persona:
                 title = f"{title} - {persona.name}"
-            
+
             items.append(SessionItem(
                 id=str(session.session_id),
                 title=title,
                 agent_type=agent_type,
-                start_time=session.start_time.isoformat() if session.start_time else datetime.now(timezone.utc).isoformat(),
+                start_time=session.start_time.isoformat() if session.start_time else datetime.now(UTC).isoformat(),
                 duration_seconds=duration_seconds,
                 score=score
             ).model_dump())
-        
+
         response_data = {
             "total": total,
             "items": items,
@@ -282,9 +282,9 @@ async def get_sessions(
             "page_size": effective_page_size,
             "has_more": (page * effective_page_size) < total
         }
-        
+
         return success_response(response_data)
-        
+
     except (SQLAlchemyError, ValueError) as e:
         logger.error(f"Failed to get sessions: {str(e)}")
         return error_response("[SESSIONS_FAILED]", "获取会话历史失败")

@@ -6,10 +6,8 @@ Pure HMAC computation via oss2.Auth; no network I/O during signing.
 from __future__ import annotations
 
 import os
-import time
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-from typing import Any
 
 import oss2
 

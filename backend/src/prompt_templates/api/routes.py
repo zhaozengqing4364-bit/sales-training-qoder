@@ -16,7 +16,6 @@ Endpoints:
 
 from __future__ import annotations
 
-from typing import Any
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, Query, status
@@ -31,14 +30,14 @@ from common.db.models import User
 from common.db.session import get_db
 from common.monitoring.logger import get_logger
 from prompt_templates.models import (
+    PromptRenderRequest,
+    PromptRenderResponse,
     PromptTemplate,
     PromptTemplateCreate,
     PromptTemplateUpdate,
-    PromptRenderRequest,
-    PromptRenderResponse,
+    PromptType,
     ScenarioPrompt,
     ScenarioPromptCreate,
-    PromptType,
 )
 from prompt_templates.service import PromptTemplateService
 

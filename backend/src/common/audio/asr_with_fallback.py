@@ -10,13 +10,12 @@ Requirements: P0-FIXES.md Issue #11
 """
 
 import asyncio
-from typing import Optional
 
 from common.audio.asr_service import ASRService, get_asr_service
 from common.error_handling.result import Result
 from common.monitoring.logger import get_logger
 from common.resilience.backoff import compute_jitter_backoff_seconds
-from common.resilience.circuit_breaker import get_circuit_registry, CircuitBreaker
+from common.resilience.circuit_breaker import get_circuit_registry
 
 logger = get_logger(__name__)
 
@@ -52,7 +51,7 @@ class ASRServiceWithFallback:
         request_timeout: float = 5.0,
         circuit_name: str = "asr_service",
     ):
-        self._asr_service: Optional[ASRService] = None
+        self._asr_service: ASRService | None = None
         self.retry_count = retry_count
         self.base_retry_delay = base_retry_delay
         self.request_timeout = request_timeout
@@ -114,8 +113,8 @@ class ASRServiceWithFallback:
                     # Transcription failed but no exception
                     last_error = Exception(result.fallback or "Transcription failed")
 
-            except asyncio.TimeoutError:
-                last_error = asyncio.TimeoutError("ASR request timeout")
+            except TimeoutError:
+                last_error = TimeoutError("ASR request timeout")
                 logger.warning(
                     f"ASR timeout on attempt {attempt + 1}/{self.retry_count}",
                     extra={"attempt": attempt + 1, "max_attempts": self.retry_count},
@@ -190,9 +189,9 @@ class ASRServiceWithFallback:
             else:
                 return Result.fail("[ASR_NO_RESULT]")
 
-        except (ConnectionError, OSError, RuntimeError, asyncio.TimeoutError) as e:
+        except (TimeoutError, ConnectionError, OSError, RuntimeError) as e:
             logger.error(f"ASR streaming error: {e}")
-            return Result.fail(f"[ASR_STREAMING_ERROR]")
+            return Result.fail("[ASR_STREAMING_ERROR]")
 
     async def health_check(self) -> Result[bool]:
         """Check ASR service health"""
@@ -209,7 +208,7 @@ class ASRServiceWithFallback:
 
 
 # Singleton instance
-_asr_with_fallback: Optional[ASRServiceWithFallback] = None
+_asr_with_fallback: ASRServiceWithFallback | None = None
 
 
 def get_asr_with_fallback() -> ASRServiceWithFallback:

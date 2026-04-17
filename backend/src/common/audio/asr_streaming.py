@@ -153,7 +153,7 @@ class LocalStreamingASRProvider(ASRProvider):
         audio_buffer = bytearray()
         chunk_count = 0
         first_result = True
-        
+
         # 关键修复：手动累积所有识别结果
         # FunASR 流式模型每次返回的是当前 chunk 的局部识别，不是累积文本
         accumulated_texts: list[str] = []

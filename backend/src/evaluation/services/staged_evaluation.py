@@ -12,20 +12,20 @@ Features:
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from datetime import datetime, timezone
 import json
+from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from typing import Any, cast
-from uuid import UUID, uuid4
+from uuid import uuid4
 
-from sqlalchemy import select, and_, desc
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from evaluation.triggers.base_trigger import TriggerContext
-from evaluation.schemas import StageEvaluationResponse, parse_llm_response
-from prompt_templates.service import PromptTemplateService
 from common.ai.llm_service import LLMService
 from common.error_handling.result import Result
+from evaluation.schemas import StageEvaluationResponse, parse_llm_response
+from evaluation.triggers.base_trigger import TriggerContext
+from prompt_templates.service import PromptTemplateService
 
 
 @dataclass
@@ -35,7 +35,7 @@ class StageEvaluationResult:
     stage_number: int
     start_turn: int
     end_turn: int
-    timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    timestamp: datetime = field(default_factory=lambda: datetime.now(UTC))
     scores: dict[str, float] = field(default_factory=dict)
     strengths: list[str] = field(default_factory=list)
     weaknesses: list[str] = field(default_factory=list)
@@ -187,7 +187,7 @@ class StagedEvaluationService:
                 stage_number=stage_config.stage_number,
                 start_turn=start_turn,
                 end_turn=end_turn,
-                timestamp=datetime.now(timezone.utc),
+                timestamp=datetime.now(UTC),
                 scores=parsed_eval.scores,
                 strengths=parsed_eval.strengths,
                 weaknesses=weaknesses,

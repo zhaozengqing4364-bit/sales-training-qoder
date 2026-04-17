@@ -6,7 +6,6 @@ Implements Constitution Principles:
 - V. Cost control - Efficient embedding usage
 """
 
-import logging
 import uuid
 
 from common.error_handling.result import Result

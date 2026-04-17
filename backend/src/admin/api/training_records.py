@@ -9,14 +9,12 @@ References:
 """
 from __future__ import annotations
 
-from datetime import datetime
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
 
 from common.auth.service import get_current_admin_user
 from common.db.models import PracticeSession, Scenario, User
@@ -144,7 +142,7 @@ async def session_to_response(
     # Get agent and persona names if available
     agent_name = None
     persona_name = None
-    
+
     if session.agent_id:
         from agent.models import Agent
         agent_result = await db.execute(
@@ -153,7 +151,7 @@ async def session_to_response(
         agent = agent_result.scalar_one_or_none()
         if agent:
             agent_name = agent.name
-    
+
     if session.persona_id:
         from agent.models import Persona
         persona_result = await db.execute(
@@ -162,7 +160,7 @@ async def session_to_response(
         persona = persona_result.scalar_one_or_none()
         if persona:
             persona_name = persona.name
-    
+
     return TrainingRecordResponse(
         id=str(session.session_id),
         scenario_type=scenario.scenario_type if scenario else "unknown",
@@ -190,7 +188,7 @@ async def list_training_records(
 ) -> dict[str, Any]:
     """
     Get all training records (admin view - not filtered by user)
-    
+
     Requirements: 6.1, 6.2
     """
     # Build base query with joins
@@ -199,9 +197,9 @@ async def list_training_records(
         .outerjoin(Scenario, PracticeSession.scenario_id == Scenario.scenario_id)
         .outerjoin(User, PracticeSession.user_id == User.user_id)
     )
-    
+
     count_query = select(func.count()).select_from(PracticeSession)
-    
+
     # Apply search filter
     if search:
         search_filter = or_(
@@ -217,7 +215,7 @@ async def list_training_records(
             .outerjoin(User, PracticeSession.user_id == User.user_id)
             .where(search_filter)
         )
-    
+
     # Apply status filter
     if status:
         query = query.where(PracticeSession.status == status)
@@ -225,7 +223,7 @@ async def list_training_records(
             count_query = count_query.where(PracticeSession.status == status)
         else:
             count_query = count_query.where(PracticeSession.status == status)
-    
+
     # Apply scenario type filter
     if scenario_type:
         query = query.where(Scenario.scenario_type == scenario_type)
@@ -238,25 +236,25 @@ async def list_training_records(
             )
             if status:
                 count_query = count_query.where(PracticeSession.status == status)
-    
+
     # Get total count
     total = (await db.execute(count_query)).scalar() or 0
-    
+
     # Apply pagination and ordering
     query = query.order_by(PracticeSession.start_time.desc())
     query = query.offset((page - 1) * page_size).limit(page_size)
-    
+
     # Execute query
     result = await db.execute(query)
     rows = result.all()
-    
+
     # Convert to response format
     items = []
     for row in rows:
         session, scenario, user = row
         item = await session_to_response(session, scenario, user, db)
         items.append(item)
-    
+
     response = TrainingRecordListResponse(
         items=items,
         total=total,
@@ -264,7 +262,7 @@ async def list_training_records(
         page_size=page_size,
         has_more=(page * page_size) < total
     )
-    
+
     return success_response(response.model_dump())
 
 
@@ -282,13 +280,13 @@ async def get_training_record(
         .where(PracticeSession.session_id == record_id)
     )
     row = result.first()
-    
+
     if not row:
         raise HTTPException(status_code=404, detail="[TRAINING_RECORD_NOT_FOUND]")
-    
+
     session, scenario, user = row
     item = await session_to_response(session, scenario, user, db)
-    
+
     return success_response(item.model_dump())
 
 
@@ -300,19 +298,19 @@ async def delete_training_record(
 ) -> dict[str, Any]:
     """
     Delete a training record
-    
+
     Requirements: 6.3
     """
     result = await db.execute(
         select(PracticeSession).where(PracticeSession.session_id == record_id)
     )
     session = result.scalar_one_or_none()
-    
+
     if not session:
         raise HTTPException(status_code=404, detail="[TRAINING_RECORD_NOT_FOUND]")
-    
+
     # Delete the session (cascade will handle related records)
     await db.delete(session)
     await db.commit()
-    
+
     return success_response({"deleted": True})

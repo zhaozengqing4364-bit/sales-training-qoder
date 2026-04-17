@@ -6,7 +6,6 @@ Legacy simple-handler mode is disabled to prevent policy bypass.
 """
 import os
 import uuid
-from typing import Optional
 
 from fastapi import APIRouter, Query, WebSocket
 from sqlalchemy import select
@@ -45,10 +44,10 @@ SALES_WS_AUTH_POLICY: dict[str, list[str] | dict[str, int] | str] = {
 @router.websocket("/ws/sales")
 async def sales_websocket(
     websocket: WebSocket,
-    session_id: Optional[str] = Query(None, description="Practice session UUID"),
+    session_id: str | None = Query(None, description="Practice session UUID"),
     token: str = Query("", description="JWT authentication token (deprecated; use Authorization header)"),
-    agent_id: Optional[str] = Query(None, description="Agent UUID for enhanced mode"),
-    persona_id: Optional[str] = Query(None, description="Persona UUID for enhanced mode"),
+    agent_id: str | None = Query(None, description="Agent UUID for enhanced mode"),
+    persona_id: str | None = Query(None, description="Persona UUID for enhanced mode"),
     voice_mode: str = Query("", description="Voice mode: legacy | stepfun_realtime"),
     trace_id: str = Query("", description="Request trace id for observability"),
 ):
@@ -68,8 +67,8 @@ async def sales_websocket_with_path(
     websocket: WebSocket,
     session_id: str,
     token: str = Query("", description="JWT authentication token (deprecated; use Authorization header)"),
-    agent_id: Optional[str] = Query(None, description="Agent UUID for enhanced mode"),
-    persona_id: Optional[str] = Query(None, description="Persona UUID for enhanced mode"),
+    agent_id: str | None = Query(None, description="Agent UUID for enhanced mode"),
+    persona_id: str | None = Query(None, description="Persona UUID for enhanced mode"),
     voice_mode: str = Query("", description="Voice mode: legacy | stepfun_realtime"),
     trace_id: str = Query("", description="Request trace id for observability"),
 ):
@@ -84,7 +83,7 @@ async def sales_websocket_with_path(
     )
 
 
-def _parse_session_id(session_id: Optional[str]) -> str | None:
+def _parse_session_id(session_id: str | None) -> str | None:
     candidate = (session_id or "").strip()
     if not candidate:
         return None
@@ -95,7 +94,7 @@ def _parse_session_id(session_id: Optional[str]) -> str | None:
         return None
 
 
-async def _reject_invalid_session_id(websocket: WebSocket, session_id: Optional[str]):
+async def _reject_invalid_session_id(websocket: WebSocket, session_id: str | None):
     logger.warning("Rejected /ws/sales connection due to invalid session_id", session_id=session_id)
     await websocket.accept()
     await websocket.close(code=4400, reason="INVALID_SESSION_ID")
@@ -116,10 +115,10 @@ async def _reject_sales_websocket(
 
 async def _handle_sales_websocket(
     websocket: WebSocket,
-    session_id: Optional[str],
+    session_id: str | None,
     token: str,
-    agent_id: Optional[str],
-    persona_id: Optional[str],
+    agent_id: str | None,
+    persona_id: str | None,
     voice_mode: str,
     trace_id: str,
 ):
@@ -494,7 +493,7 @@ async def _handle_enhanced_connection(
 
     if not init_success:
         logger.error(
-            f"Failed to initialize EnhancedSalesHandler",
+            "Failed to initialize EnhancedSalesHandler",
             session_id=session_id,
             agent_id=agent_id,
             persona_id=persona_id,

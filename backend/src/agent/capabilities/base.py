@@ -23,10 +23,10 @@ Usage:
             # Implementation
             return CapabilityResult(success=True, data={"result": "value"})
 """
+import json
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Any, ClassVar
-import json
 
 from agent.context import AgentContext
 from common.monitoring.logger import get_logger

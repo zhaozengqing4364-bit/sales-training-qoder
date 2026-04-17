@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import asyncio
-from collections.abc import Awaitable, Callable
 import time
+from collections.abc import Awaitable, Callable
 from typing import Any, cast
 
 from common.knowledge_engine.compat import (

@@ -13,7 +13,7 @@ import csv
 import io
 import json
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
@@ -185,14 +185,14 @@ def error_response(error_code: str, message: str | None = None, trace_id: str | 
 
 def _resolve_time_range_start(time_range: str) -> datetime:
     """Map supported time-range aliases to a UTC lower bound."""
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     if time_range == "7d":
         return now - timedelta(days=7)
     if time_range == "30d":
         return now - timedelta(days=30)
     if time_range == "90d":
         return now - timedelta(days=90)
-    return datetime(2000, 1, 1, tzinfo=timezone.utc)
+    return datetime(2000, 1, 1, tzinfo=UTC)
 
 
 def user_to_response(user: User) -> AdminUserResponse:
@@ -266,7 +266,7 @@ def _queue_user_audit_log(
         "operator_email_masked": _mask_email(operator.email),
         "target_user_id": target_user_id,
         "reason": _normalize_audit_reason(reason),
-        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "timestamp": datetime.now(UTC).isoformat(),
         "before": before,
         "after": after,
     }
@@ -405,8 +405,9 @@ async def get_user_stats(
     - Recent activity info
     """
     from sqlalchemy import case, distinct
-    from common.db.models import PracticeSession
+
     from agent.models import Agent, Persona
+    from common.db.models import PracticeSession
 
     del current_user
 
@@ -782,7 +783,7 @@ async def create_user(
         department=payload.department,
         role=payload.role,
         is_active=True,
-        created_at=datetime.now(timezone.utc)
+        created_at=datetime.now(UTC)
     )
 
     db.add(new_user)

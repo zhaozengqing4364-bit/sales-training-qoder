@@ -10,9 +10,9 @@ Requirements: P1-FIXES.md Issue #23
 """
 
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from functools import wraps
-from typing import Callable, Dict, Optional, Set
 
 from fastapi import HTTPException, Request
 
@@ -52,7 +52,7 @@ class APIRateLimiter:
     def __init__(self, default_calls: int = 100, default_period: int = 60):
         self.default_calls = default_calls
         self.default_period = default_period
-        self._storage: Dict[str, RateLimitEntry] = {}
+        self._storage: dict[str, RateLimitEntry] = {}
         self._last_cleanup = time.time()
         self._cleanup_interval = 300  # 5 minutes
 
@@ -155,8 +155,8 @@ class APIRateLimiter:
 
     def limit(
         self,
-        calls: Optional[int] = None,
-        period: Optional[int] = None,
+        calls: int | None = None,
+        period: int | None = None,
         scope: str = "ip",
     ):
         """
@@ -248,7 +248,7 @@ def _get_user_id(request: Request) -> str:
 
 
 # Global rate limiter instance
-_rate_limiter: Optional[APIRateLimiter] = None
+_rate_limiter: APIRateLimiter | None = None
 
 
 def get_rate_limiter() -> APIRateLimiter:

@@ -2,13 +2,15 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from copy import deepcopy
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Any, Callable
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from common.conversation.session_evidence import SessionEvidenceService
 from common.db.models import PracticeSession, SessionAudioSegment
 from common.db.schemas import ScenarioType, SessionReport
 from common.db.voice_policy_snapshot import build_voice_policy_snapshot_ref
@@ -19,7 +21,6 @@ from common.services.practice_session_service import (
     PracticeServiceError,
     ensure_effectiveness_snapshot,
 )
-from common.conversation.session_evidence import SessionEvidenceService
 
 if TYPE_CHECKING:
     from common.db.schemas import AudioAuditPayloadSchema
@@ -46,7 +47,7 @@ class PracticeAudioAuditService:
         *,
         session_id: str,
         session: PracticeSession,
-    ) -> "AudioAuditPayloadSchema | None":
+    ) -> AudioAuditPayloadSchema | None:
         from common.db.schemas import (
             AudioAuditPayloadSchema,
             AudioAuditSegmentSchema,

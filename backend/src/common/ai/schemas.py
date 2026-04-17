@@ -15,7 +15,6 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from common.ai.models import ModelProvider, ModelType
 
-
 # ========== Request Schemas ==========
 
 class CreateModelConfigRequest(BaseModel):

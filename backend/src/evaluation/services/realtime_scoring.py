@@ -13,13 +13,12 @@ Features:
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from common.ai.llm_service import LLMService
 from common.error_handling.result import Result
 from common.monitoring.logger import get_logger
-from evaluation.schemas import RealtimeScoringResponse, parse_llm_response
 from evaluation.services.ai_scoring import AIScoringService
 
 logger = get_logger(__name__)
@@ -82,7 +81,7 @@ class IncrementalScoreState:
     turn_scores: list[dict] = field(default_factory=list)
     current_overall: float = 0.0
     dimension_history: dict[str, list[float]] = field(default_factory=dict)
-    last_update: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    last_update: datetime = field(default_factory=lambda: datetime.now(UTC))
 
     # Weight configuration for incremental scoring
     HISTORY_WEIGHT: float = 0.7  # Weight for historical scores
@@ -107,7 +106,7 @@ class IncrementalScoreState:
         # Store turn score
         turn_data = {
             "turn": turn_number,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
             "dimensions": dimension_scores,
             "overall": overall_score,
         }
@@ -130,7 +129,7 @@ class IncrementalScoreState:
                 + overall_score * self.CURRENT_WEIGHT
             )
 
-        self.last_update = datetime.now(timezone.utc)
+        self.last_update = datetime.now(UTC)
 
         # Calculate incremental dimension scores
         incremental_dimensions = {}
@@ -285,7 +284,7 @@ class RealtimeScoringService:
             # Create score update event
             event = ScoreUpdateEvent(
                 session_id=session_id,
-                timestamp=datetime.now(timezone.utc).isoformat(),
+                timestamp=datetime.now(UTC).isoformat(),
                 turn_count=turn_number,
                 overall_score=updated_scores["overall"],
                 dimension_scores=updated_scores["dimensions"],
@@ -575,12 +574,13 @@ class RealtimeScoringService:
             else:
                 summary["scoring_history"] = []
 
-            summary["stored_at"] = datetime.now(timezone.utc).isoformat()
+            summary["stored_at"] = datetime.now(UTC).isoformat()
 
             # If database session provided, persist to database
             if db_session is not None:
                 try:
                     from sqlalchemy import select
+
                     from common.db.models import PracticeSession
 
                     # Update session with scoring data
@@ -669,6 +669,7 @@ class RealtimeScoringService:
         """
         try:
             from sqlalchemy import select
+
             from common.db.models import PracticeSession
 
             result = await db_session.execute(

@@ -10,14 +10,14 @@ References:
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from datetime import datetime, timezone
 import hashlib
 import io
 import os
 import re
-from tempfile import NamedTemporaryFile
 import time
+from dataclasses import dataclass, field
+from datetime import UTC, datetime
+from tempfile import NamedTemporaryFile
 from typing import Any
 from xml.etree import ElementTree as ET
 from zipfile import BadZipFile, ZipFile
@@ -69,7 +69,7 @@ class ParseResult:
     ) -> dict[str, Any]:
         return {
             "artifact_version": self.parser_version,
-            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "generated_at": datetime.now(UTC).isoformat(),
             "file_type": file_type,
             "content": self.content,
             "warnings": list(self.warnings),

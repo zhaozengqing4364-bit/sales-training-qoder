@@ -35,7 +35,7 @@ class RealtimeFeedbackPacingState:
         return payload
 
     @classmethod
-    def from_dict(cls, payload: dict[str, Any] | None) -> "RealtimeFeedbackPacingState":
+    def from_dict(cls, payload: dict[str, Any] | None) -> RealtimeFeedbackPacingState:
         if not isinstance(payload, dict):
             return cls()
 

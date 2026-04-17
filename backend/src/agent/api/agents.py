@@ -15,8 +15,8 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import JSONResponse
-from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.api.response import error_response
 from common.api.server_error import build_server_error
@@ -27,13 +27,10 @@ from common.monitoring.logger import get_logger
 
 from ..schemas import (
     AgentCreateResponse,
-    AgentListItem,
     AgentListResponse,
     AgentPublishResponse,
     AgentResponse,
-    AgentUserResponse,
     CreateAgentRequest,
-    PersonaUserListItem,
     UpdateAgentRequest,
 )
 from ..services.agent_service import AgentService

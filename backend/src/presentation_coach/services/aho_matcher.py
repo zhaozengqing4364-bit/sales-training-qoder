@@ -5,10 +5,9 @@ Time complexity: O(n + m + z) where n=text length, m=pattern total length, z=mat
 """
 
 from collections import deque
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any
 
-from common.error_handling.result import Result
 from common.monitoring.logger import get_logger
 
 logger = get_logger(__name__)
@@ -28,8 +27,8 @@ class AhoCorasickNode:
     """Node in the Aho-Corasick trie"""
 
     def __init__(self):
-        self.children: dict[str, "AhoCorasickNode"] = {}
-        self.fail_link: "AhoCorasickNode" | None = None
+        self.children: dict[str, AhoCorasickNode] = {}
+        self.fail_link: AhoCorasickNode | None = None
         self.output: list[str] = []  # Patterns ending at this node
         self.is_end = False
 

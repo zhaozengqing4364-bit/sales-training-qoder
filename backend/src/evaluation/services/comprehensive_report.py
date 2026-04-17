@@ -12,28 +12,30 @@ Features:
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from datetime import datetime, timezone
 import inspect
 import json
+from dataclasses import dataclass, field
+from datetime import UTC, datetime
 from typing import Any
-from uuid import UUID, uuid4
 
 from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from evaluation.services.staged_evaluation import StagedEvaluationService, StageEvaluationResult
+from common.ai.llm_service import LLMService
+from common.error_handling.result import Result
 from evaluation.schemas import (
     ComprehensiveReportResponse,
     parse_llm_response,
 )
-from prompt_templates.service import PromptTemplateService
-from common.ai.llm_service import LLMService
-from common.error_handling.result import Result
+from evaluation.services.staged_evaluation import (
+    StagedEvaluationService,
+    StageEvaluationResult,
+)
 from presentation_coach.services.presentation_report_service import (
     PresentationReportService,
 )
+from prompt_templates.service import PromptTemplateService
 
 
 def _is_test_mock_object(value: Any) -> bool:
@@ -167,7 +169,7 @@ class ComprehensiveReportService:
 
             report = ComprehensiveReport(
                 session_id=session_id,
-                generated_at=datetime.now(timezone.utc),
+                generated_at=datetime.now(UTC),
                 overall_score=overall_score,
                 dimension_scores=dimension_scores,
                 stage_summaries=stage_summaries,
@@ -262,8 +264,9 @@ class ComprehensiveReportService:
 
         # 2. Fallback to in-memory context_manager (SimpleSalesHandler path)
         try:
-            from sales_bot.services.context_manager import context_manager
             import uuid as uuid_mod
+
+            from sales_bot.services.context_manager import context_manager
 
             context_result = await context_manager.get_context(uuid_mod.UUID(session_id))
             if not context_result.is_success:
@@ -304,7 +307,7 @@ class ComprehensiveReportService:
 
             report = ComprehensiveReport(
                 session_id=db_report.session_id,
-                generated_at=db_report.created_at or datetime.now(timezone.utc),
+                generated_at=db_report.created_at or datetime.now(UTC),
                 overall_score=db_report.overall_score or 0.0,
                 dimension_scores=[
                     DimensionScore(**d) for d in (db_report.dimension_scores or [])

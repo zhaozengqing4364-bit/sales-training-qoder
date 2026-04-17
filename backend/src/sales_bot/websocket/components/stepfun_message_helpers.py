@@ -8,7 +8,10 @@ from typing import Any
 from sqlalchemy import select
 
 from common.conversation.models import ConversationMessage
-from common.conversation.storage import MessageStorageService, normalize_objection_ledger
+from common.conversation.storage import (
+    MessageStorageService,
+    normalize_objection_ledger,
+)
 from common.db.session import AsyncSessionLocal
 from common.monitoring.logger import get_logger
 

@@ -18,7 +18,7 @@ import json
 import re
 from datetime import datetime
 from enum import Enum
-from typing import Any, List, Optional
+from typing import Any
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -50,7 +50,7 @@ class PromptTemplateBase(BaseModel):
         default="common", min_length=1, max_length=100, description="Category for grouping"
     )
     template: str = Field(..., min_length=1, description="Jinja2 template string")
-    variables: List[str] = Field(
+    variables: list[str] = Field(
         default_factory=list, description="Variable names used in template"
     )
     is_active: bool = Field(default=True, description="Whether template is active")
@@ -70,7 +70,7 @@ class PromptTemplateCreate(PromptTemplateBase):
         return self
 
     @staticmethod
-    def _extract_variables_from_template(template: str) -> List[str]:
+    def _extract_variables_from_template(template: str) -> list[str]:
         """
         Extract Jinja2 variable names from template.
 
@@ -83,12 +83,12 @@ class PromptTemplateCreate(PromptTemplateBase):
             List of unique variable names.
         """
 
-        def dedupe(values: List[str]) -> List[str]:
+        def dedupe(values: list[str]) -> list[str]:
             return list(dict.fromkeys(values))
 
-        def extract_output_vars(raw_template: str) -> List[str]:
+        def extract_output_vars(raw_template: str) -> list[str]:
             """Extract first identifier from each top-level output block, tolerating nested braces."""
-            variables: List[str] = []
+            variables: list[str] = []
             depth = 0
             start = -1
             index = 0
@@ -149,13 +149,13 @@ class PromptTemplateUpdate(BaseModel):
 
     model_config = ConfigDict(extra="forbid")
 
-    name: Optional[str] = Field(default=None, min_length=1, max_length=255)
-    prompt_type: Optional[PromptType] = None
-    category: Optional[str] = Field(default=None, min_length=1, max_length=100)
-    template: Optional[str] = None
-    variables: Optional[List[str]] = None
-    is_active: Optional[bool] = None
-    is_default: Optional[bool] = None
+    name: str | None = Field(default=None, min_length=1, max_length=255)
+    prompt_type: PromptType | None = None
+    category: str | None = Field(default=None, min_length=1, max_length=100)
+    template: str | None = None
+    variables: list[str] | None = None
+    is_active: bool | None = None
+    is_default: bool | None = None
 
     @model_validator(mode="after")
     def extract_variables_on_template_change(self) -> PromptTemplateUpdate:
@@ -177,7 +177,7 @@ class PromptTemplate(PromptTemplateBase):
 
     @field_validator("variables", mode="before")
     @classmethod
-    def validate_variables(cls, v: Any) -> List[str]:
+    def validate_variables(cls, v: Any) -> list[str]:
         """Ensure variables is always a list of strings."""
         if v is None:
             return []
@@ -197,7 +197,7 @@ class ScenarioPromptBase(BaseModel):
     scenario_type: str = Field(
         ..., min_length=1, max_length=50, description="Type of scenario (sales, presentation)"
     )
-    scenario_id: Optional[str] = Field(
+    scenario_id: str | None = Field(
         default=None, max_length=255, description="Optional specific scenario ID"
     )
     prompt_type: str = Field(
@@ -232,7 +232,7 @@ class PromptTemplateResponse(BaseModel):
     prompt_type: PromptType
     category: str
     template: str
-    variables: List[str]
+    variables: list[str]
     is_active: bool
     is_default: bool
     is_system: bool
@@ -247,9 +247,9 @@ class ScenarioPromptResponse(BaseModel):
 
     id: UUID
     scenario_type: str
-    scenario_id: Optional[str]
+    scenario_id: str | None
     prompt_type: str
-    template: Optional[PromptTemplateResponse] = None  # Expanded template
+    template: PromptTemplateResponse | None = None  # Expanded template
     is_active: bool
     created_at: datetime
 
@@ -272,9 +272,9 @@ class PromptRenderResponse(BaseModel):
 
     template_id: UUID
     rendered: str = Field(..., description="Rendered template string")
-    missing_variables: List[str] = Field(
+    missing_variables: list[str] = Field(
         default_factory=list, description="Variables that were not provided"
     )
-    extra_variables: List[str] = Field(
+    extra_variables: list[str] = Field(
         default_factory=list, description="Variables provided but not in template"
     )

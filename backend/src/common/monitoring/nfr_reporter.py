@@ -15,7 +15,6 @@ Requirements:
 - NFR-C1: Support >= 50 concurrent sessions
 """
 import json
-import time
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -256,8 +255,8 @@ class NFRReporter:
             "",
             "## Summary",
             "",
-            f"| Metric | Value |",
-            f"|--------|-------|",
+            "| Metric | Value |",
+            "|--------|-------|",
             f"| Total Metrics Tested | {self.get_summary()['total_metrics']} |",
             f"| Passed | {self.get_summary()['passed_metrics']} |",
             f"| Failed | {self.get_summary()['failed_metrics']} |",

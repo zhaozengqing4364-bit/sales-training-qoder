@@ -18,10 +18,15 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.conversation.models import ConversationMessage
-from common.db.models import PracticeSession, Scenario, SessionStatus, User
-from common.db.schemas import SessionCreate, SessionLifecycleResponse, SessionResponse, SessionUpdate, ScenarioType
+from common.db.models import PracticeSession, Scenario, User
+from common.db.schemas import (
+    ScenarioType,
+    SessionCreate,
+    SessionLifecycleResponse,
+    SessionResponse,
+    SessionUpdate,
+)
 from common.db.session_lifecycle import (
-    InvalidSessionTransitionError,
     SessionLifecycleService,
     SessionLifecycleTransition,
 )
@@ -38,7 +43,9 @@ from presentation_coach.services.coach_service import PresentationCoachService
 from sales_bot.services.bot_service import sales_bot_service
 from sales_bot.services.summary_service import summary_service
 from sales_bot.services.voice_runtime_policy import VoiceRuntimePolicyService
-from sales_bot.websocket.components.stepfun_message_helpers import normalize_score_snapshot
+from sales_bot.websocket.components.stepfun_message_helpers import (
+    normalize_score_snapshot,
+)
 from training_runtime.service import build_training_runtime_descriptor
 
 logger = get_logger(__name__)

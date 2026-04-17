@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from collections import defaultdict
-from datetime import datetime, timezone
 import re
+from collections import defaultdict
+from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy import select
@@ -154,7 +154,7 @@ class PresentationReportService:
 
             report = ComprehensiveReport(
                 session_id=session_id,
-                generated_at=datetime.now(timezone.utc),
+                generated_at=datetime.now(UTC),
                 overall_score=review["overall_score"],
                 dimension_scores=dimension_scores,
                 stage_summaries=review["page_summaries"],

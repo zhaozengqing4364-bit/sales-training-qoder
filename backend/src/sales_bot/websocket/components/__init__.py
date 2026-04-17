@@ -6,8 +6,8 @@ v1-8: Composition components extracted from EnhancedSalesHandler.
 - MessagePersistence: Database message storage operations
 """
 
-from .tts_component import TTSComponent
 from .capability_processor import CapabilityProcessor
 from .message_persistence import MessagePersistence
+from .tts_component import TTSComponent
 
 __all__ = ["TTSComponent", "CapabilityProcessor", "MessagePersistence"]

@@ -10,7 +10,7 @@ References:
 - API Contract: docs/api-contract/replay.md
 """
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy import select
@@ -19,7 +19,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from common.conversation.models import ConversationMessage
 from common.error_handling.result import Result
 from common.monitoring.logger import get_logger
-from sqlalchemy.exc import SQLAlchemyError
 
 logger = get_logger(__name__)
 
@@ -143,7 +142,7 @@ class MessageStorageService:
                 content=content,
                 audio_url=audio_url,
                 duration_ms=duration_ms,
-                timestamp=datetime.now(timezone.utc)
+                timestamp=datetime.now(UTC)
             )
 
             # Apply analysis data if provided

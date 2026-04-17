@@ -14,8 +14,8 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import JSONResponse
-from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.api.server_error import build_server_error
 from common.auth.service import get_current_admin_user
@@ -30,8 +30,8 @@ from ..schemas import (
     PersonaResponse,
     UpdatePersonaRequest,
 )
-from ..services.persona_service import PersonaService
 from ..services.industry_pack_contract import build_persona_industry_pack_contract
+from ..services.persona_service import PersonaService
 
 logger = get_logger(__name__)
 
@@ -62,10 +62,10 @@ async def create_persona(
     """Create a new Persona - R3.1"""
     service = PersonaService(db)
     result = await service.create(request, user_id=current_user.user_id)
-    
+
     if not result.is_success:
         raise HTTPException(status_code=400, detail=result.fallback)
-    
+
     persona = result.value
     commit_error = await commit_or_500(db, "create_persona")
     if commit_error is not None:
@@ -100,7 +100,7 @@ async def list_personas(
         difficulty=difficulty,
         status=status
     )
-    
+
     return {
         "success": True,
         "data": PersonaListResponse(
@@ -149,10 +149,10 @@ async def get_persona(
     """Get Persona details - R3.3"""
     service = PersonaService(db)
     result = await service.get_by_id(persona_id)
-    
+
     if not result.is_success:
         raise HTTPException(status_code=404, detail=result.fallback)
-    
+
     persona = result.value
     return {
         "success": True,
@@ -170,10 +170,10 @@ async def update_persona(
     """Update Persona - R3.4"""
     service = PersonaService(db)
     result = await service.update(persona_id, request)
-    
+
     if not result.is_success:
         raise HTTPException(status_code=404, detail=result.fallback)
-    
+
     persona = result.value
     commit_error = await commit_or_500(db, "update_persona")
     if commit_error is not None:
@@ -193,7 +193,7 @@ async def delete_persona(
     """Delete Persona - R3.5"""
     service = PersonaService(db)
     result = await service.delete(persona_id)
-    
+
     if not result.is_success:
         if result.fallback == "[PERSONA_IN_USE]":
             raise HTTPException(
@@ -201,7 +201,7 @@ async def delete_persona(
                 detail="Persona is linked to agents and cannot be deleted"
             )
         raise HTTPException(status_code=404, detail=result.fallback)
-    
+
     commit_error = await commit_or_500(db, "delete_persona")
     if commit_error is not None:
         return commit_error
@@ -220,10 +220,10 @@ async def duplicate_persona(
     """Duplicate Persona - R3.6"""
     service = PersonaService(db)
     result = await service.duplicate(persona_id, user_id=current_user.user_id)
-    
+
     if not result.is_success:
         raise HTTPException(status_code=404, detail=result.fallback)
-    
+
     persona = result.value
     commit_error = await commit_or_500(db, "duplicate_persona")
     if commit_error is not None:

@@ -18,23 +18,16 @@ References:
 
 from __future__ import annotations
 
-import asyncio
 import json
-import logging
-import subprocess
-import uuid
-from dataclasses import asdict, dataclass, field, is_dataclass
-from datetime import datetime, timezone
-from pathlib import Path
-from typing import Any, Literal
 import re
-
-import pytest
+import subprocess
+from dataclasses import asdict, dataclass, is_dataclass
+from datetime import UTC, datetime
+from pathlib import Path
+from typing import Any
 
 from common.analytics.release_verification_service import (
     CheckType,
-    CheckStatus,
-    release_verification_service,
 )
 from common.error_handling.result import Result
 from common.monitoring.logger import get_logger
@@ -221,7 +214,7 @@ class VerificationRunner:
         """Run unit tests with proper result parsing"""
         logger.info("Starting unit tests execution...")
 
-        start_time = datetime.now(timezone.utc)
+        start_time = datetime.now(UTC)
         try:
             # Run pytest with coverage and JSON report
             result = subprocess.run(
@@ -240,7 +233,7 @@ class VerificationRunner:
                 timeout=600,  # 10 minutes timeout
             )
 
-            end_time = datetime.now(timezone.utc)
+            end_time = datetime.now(UTC)
             duration_ms = int((end_time - start_time).total_seconds() * 1000)
 
             # Parse pytest output to extract test counts
@@ -352,12 +345,12 @@ class VerificationRunner:
         """Run coverage check and verify against quality gate"""
         logger.info("Starting coverage check...")
 
-        start_time = datetime.now(timezone.utc)
+        start_time = datetime.now(UTC)
         try:
             # Load coverage report
             coverage_report = self._load_coverage_report()
 
-            end_time = datetime.now(timezone.utc)
+            end_time = datetime.now(UTC)
             duration_ms = int((end_time - start_time).total_seconds() * 1000)
 
             if not coverage_report:
@@ -440,7 +433,7 @@ class VerificationRunner:
         """Run integration tests"""
         logger.info("Starting integration tests...")
 
-        start_time = datetime.now(timezone.utc)
+        start_time = datetime.now(UTC)
         try:
             result = subprocess.run(
                 [
@@ -455,7 +448,7 @@ class VerificationRunner:
                 timeout=900,  # 15 minutes timeout
             )
 
-            end_time = datetime.now(timezone.utc)
+            end_time = datetime.now(UTC)
             duration_ms = int((end_time - start_time).total_seconds() * 1000)
 
             passed = result.returncode == 0
@@ -518,7 +511,7 @@ class VerificationRunner:
         """Run contract tests (NFR19: 100% required)"""
         logger.info("Starting contract tests...")
 
-        start_time = datetime.now(timezone.utc)
+        start_time = datetime.now(UTC)
         try:
             result = subprocess.run(
                 [
@@ -533,7 +526,7 @@ class VerificationRunner:
                 timeout=600,  # 10 minutes timeout
             )
 
-            end_time = datetime.now(timezone.utc)
+            end_time = datetime.now(UTC)
             duration_ms = int((end_time - start_time).total_seconds() * 1000)
 
             # NFR19: Contract tests must be 100% passing
@@ -605,7 +598,7 @@ class VerificationRunner:
         """Run performance tests and verify NFR metrics"""
         logger.info("Starting performance tests...")
 
-        start_time = datetime.now(timezone.utc)
+        start_time = datetime.now(UTC)
         try:
             result = subprocess.run(
                 [
@@ -620,7 +613,7 @@ class VerificationRunner:
                 timeout=900,  # 15 minutes timeout
             )
 
-            end_time = datetime.now(timezone.utc)
+            end_time = datetime.now(UTC)
             duration_ms = int((end_time - start_time).total_seconds() * 1000)
 
             # Parse performance metrics from test output
@@ -731,7 +724,7 @@ class VerificationRunner:
             return None
 
         try:
-            with open(coverage_file, "r") as f:
+            with open(coverage_file) as f:
                 data = json.load(f)
 
             totals = data.get("totals", {})
@@ -784,7 +777,11 @@ class VerificationRunner:
         """Update verification record in database"""
         # Get the record for this check
         from sqlalchemy import select
-        from common.db.models import ReleaseVerificationRecord, ReleaseVerificationSummary
+
+        from common.db.models import (
+            ReleaseVerificationRecord,
+            ReleaseVerificationSummary,
+        )
 
         result = await db.execute(
             select(ReleaseVerificationRecord).where(
@@ -803,8 +800,8 @@ class VerificationRunner:
             record.details = details
             record.error_message = error_message
             record.duration_ms = duration_ms
-            record.executed_at = datetime.now(timezone.utc)
-            record.updated_at = datetime.now(timezone.utc)
+            record.executed_at = datetime.now(UTC)
+            record.updated_at = datetime.now(UTC)
 
             if old_status != status:
                 summary_result = await db.execute(
@@ -838,7 +835,7 @@ class VerificationRunner:
                         summary.overall_status = "passed"
                     else:
                         summary.overall_status = "pending"
-                    summary.updated_at = datetime.now(timezone.utc)
+                    summary.updated_at = datetime.now(UTC)
 
             logger.info(
                 f"Updated verification record: {check_type} -> {status}",
@@ -863,8 +860,6 @@ class VerificationRunner:
 
         # Separate core and additional checks
         core_checks = [r for r in check_results if r.get("check_category") == "core"]
-        additional_checks = [r for r in check_results if r.get("check_category") == "additional"]
-
         # Identify blocking failures
         blocking_failures = [
             r["check_name"] for r in check_results
@@ -975,7 +970,7 @@ class VerificationRunner:
         """Run pre-deployment health checks"""
         logger.info("Starting health checks...")
 
-        start_time = datetime.now(timezone.utc)
+        start_time = datetime.now(UTC)
         health_results = []
 
         try:
@@ -995,7 +990,7 @@ class VerificationRunner:
             deps_check = await self._check_external_dependencies()
             health_results.append(("external_deps", deps_check))
 
-            end_time = datetime.now(timezone.utc)
+            end_time = datetime.now(UTC)
             duration_ms = int((end_time - start_time).total_seconds() * 1000)
 
             # Overall health check result
@@ -1051,11 +1046,12 @@ class VerificationRunner:
         """Check database connectivity"""
         try:
             from sqlalchemy import text
+
             from common.db.session import get_engine
 
             engine = get_engine()
             async with engine.connect() as conn:
-                result = await conn.execute(text("SELECT 1"))
+                await conn.execute(text("SELECT 1"))
                 await conn.commit()
 
             return ("database", HealthCheckResult(
@@ -1101,7 +1097,6 @@ class VerificationRunner:
         """Check WebSocket capability"""
         try:
             # Check WebSocket handler can be imported and initialized
-            from common.websocket.base_handler import BaseWebSocketHandler
 
             return ("websocket", HealthCheckResult(
                 check_type="websocket",
@@ -1151,7 +1146,7 @@ class VerificationRunner:
         """Run security vulnerability checks"""
         logger.info("Starting security checks...")
 
-        start_time = datetime.now(timezone.utc)
+        start_time = datetime.now(UTC)
         security_results = []
 
         try:
@@ -1167,7 +1162,7 @@ class VerificationRunner:
             secrets_check = await self._run_secrets_scan()
             security_results.append(("secrets", secrets_check))
 
-            end_time = datetime.now(timezone.utc)
+            end_time = datetime.now(UTC)
             duration_ms = int((end_time - start_time).total_seconds() * 1000)
 
             # Aggregate results
@@ -1381,7 +1376,7 @@ class VerificationRunner:
 
             for file_path in source_files:
                 try:
-                    with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
+                    with open(file_path, encoding='utf-8', errors='ignore') as f:
                         content = f.read()
                         for pattern in secret_patterns:
                             if re.search(pattern, content, re.IGNORECASE):
@@ -1417,7 +1412,7 @@ class VerificationRunner:
         """Run documentation update validation checks"""
         logger.info("Starting documentation checks...")
 
-        start_time = datetime.now(timezone.utc)
+        start_time = datetime.now(UTC)
         doc_results = []
         missing_sections = []
 
@@ -1440,7 +1435,7 @@ class VerificationRunner:
             if not deploy_check.up_to_date:
                 missing_sections.extend(deploy_check.missing_sections)
 
-            end_time = datetime.now(timezone.utc)
+            end_time = datetime.now(UTC)
             duration_ms = int((end_time - start_time).total_seconds() * 1000)
 
             # Overall documentation check result

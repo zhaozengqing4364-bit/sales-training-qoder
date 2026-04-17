@@ -13,10 +13,10 @@ from pydantic import BaseModel, Field
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from common.api.server_error import build_server_error
 from common.analytics.analytics_service import analytics_service
 from common.analytics.history_service import history_service
 from common.analytics.leaderboard_service import leaderboard_service
+from common.api.server_error import build_server_error
 from common.auth.service import get_current_admin_user, get_current_user
 from common.db.models import User
 from common.db.session import get_db

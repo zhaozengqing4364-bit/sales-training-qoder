@@ -18,20 +18,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from common.auth.service import get_current_user
 from common.conversation.replay import ReplayService
 from common.conversation.schemas import (
-    ConversationMessagesSuccessResponse,
-    ConversationMessageListResponse,
-    ConversationMessageResponse,
-    ConversationMessageDetailResponse,
-    ConversationMessageSuccessResponse,
-    ReplayDataSuccessResponse,
-    ReplayDataResponse,
-    HighlightsSuccessResponse,
-    HighlightsResponse,
-    HighlightResponse,
     ConversationErrorResponse,
+    ConversationMessagesSuccessResponse,
+    ConversationMessageSuccessResponse,
+    HighlightsSuccessResponse,
+    ReplayDataSuccessResponse,
 )
-from common.db.session import get_db
 from common.db.models import PracticeSession, SessionAudioSegment, User
+from common.db.session import get_db
 from common.monitoring.logger import get_logger, get_trace_id
 
 logger = get_logger(__name__)

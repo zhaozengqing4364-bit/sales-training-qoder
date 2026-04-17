@@ -13,16 +13,15 @@ References:
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import Any, Literal
 
-from sqlalchemy import case, func, select, and_, or_
+from sqlalchemy import case, func, select
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from common.db.models import PracticeSession, Scenario
+from common.db.models import PracticeSession
 from common.error_handling.result import Result
-from sqlalchemy.exc import SQLAlchemyError
 
 logger = logging.getLogger(__name__)
 
@@ -132,11 +131,6 @@ class RuntimeMetricsService:
         """
         try:
             start_date = _get_time_range_start(time_range)
-
-            # Base query for sessions in time range
-            base_query = select(PracticeSession).where(
-                PracticeSession.start_time >= start_date
-            )
 
             # Total sessions
             total_result = await db.execute(

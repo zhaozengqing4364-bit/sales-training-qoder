@@ -13,13 +13,13 @@ import os
 from typing import Any
 
 from sqlalchemy import select
+from sqlalchemy.exc import SQLAlchemyError
 
 from common.ai.encryption import decrypt_api_key
 from common.ai.models import ModelConfig, ModelProvider, ModelType
 from common.db.session import AsyncSessionLocal
 from common.error_handling.result import Result
 from common.monitoring.logger import get_logger
-from sqlalchemy.exc import SQLAlchemyError
 
 logger = get_logger(__name__)
 
@@ -98,7 +98,7 @@ class ConfigManager:
         """
         try:
             async with AsyncSessionLocal() as db:
-                stmt = select(ModelConfig).where(ModelConfig.is_active == True)
+                stmt = select(ModelConfig).where(ModelConfig.is_active.is_(True))
                 result = await db.execute(stmt)
                 configs = result.scalars().all()
 

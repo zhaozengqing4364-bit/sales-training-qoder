@@ -8,7 +8,6 @@ Implements Constitution Principles:
 
 NEW-15: Refactored to inherit from BaseSalesHandler (common pipeline).
 """
-from datetime import datetime, timezone
 
 from sqlalchemy import select
 

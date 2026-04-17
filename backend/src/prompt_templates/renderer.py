@@ -12,13 +12,12 @@ Features:
 
 from __future__ import annotations
 
-import re
 from dataclasses import dataclass, field
 from typing import Any
 
 from jinja2 import BaseLoader, TemplateSyntaxError
-from jinja2.sandbox import SandboxedEnvironment
 from jinja2.runtime import Undefined
+from jinja2.sandbox import SandboxedEnvironment
 
 
 @dataclass
@@ -38,10 +37,10 @@ class SilentUndefined(Undefined):
     def __str__(self) -> str:
         return ""
 
-    def __getattr__(self, name: str) -> "SilentUndefined":
+    def __getattr__(self, name: str) -> SilentUndefined:
         return SilentUndefined(name=f"{self._undefined_name}.{name}")
 
-    def __getitem__(self, key: str) -> "SilentUndefined":
+    def __getitem__(self, key: str) -> SilentUndefined:
         return SilentUndefined(name=f"{self._undefined_name}[{key}]")
 
 

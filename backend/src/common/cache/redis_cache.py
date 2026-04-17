@@ -11,8 +11,9 @@ Requirements: P2-FIXES.md Issue #24
 """
 
 import json
+from collections.abc import Callable
 from functools import wraps
-from typing import Any, Callable, Optional
+from typing import Any
 
 from common.monitoring.logger import get_logger
 
@@ -45,7 +46,7 @@ class CacheManager:
 
     def __init__(self, default_ttl: int = 3600):
         self.default_ttl = default_ttl
-        self._redis: Optional[Any] = None
+        self._redis: Any | None = None
         self._memory_cache: dict = {}
         self._use_memory_fallback = True
 
@@ -62,7 +63,7 @@ class CacheManager:
             logger.warning(f"Redis connection failed, using memory fallback: {e}")
             self._redis = None
 
-    async def get(self, key: str) -> Optional[Any]:
+    async def get(self, key: str) -> Any | None:
         """Get value from cache"""
         try:
             if self._redis:
@@ -80,7 +81,7 @@ class CacheManager:
 
         return None
 
-    async def set(self, key: str, value: Any, ttl: Optional[int] = None):
+    async def set(self, key: str, value: Any, ttl: int | None = None):
         """Set value in cache"""
         try:
             if self._redis:
@@ -115,7 +116,6 @@ class CacheManager:
                 if keys:
                     await self._redis.delete(*keys)
             elif self._use_memory_fallback:
-                import time
 
                 keys_to_delete = [
                     k
@@ -139,7 +139,7 @@ class CacheManager:
 
 
 # Global cache instance
-_cache: Optional[CacheManager] = None
+_cache: CacheManager | None = None
 
 
 def get_cache() -> CacheManager:
@@ -156,7 +156,7 @@ async def init_cache(redis_url: str = "redis://localhost:6379"):
     await cache.connect(redis_url)
 
 
-def cached(key_prefix: str, ttl: int = 3600, key_builder: Optional[Callable] = None):
+def cached(key_prefix: str, ttl: int = 3600, key_builder: Callable | None = None):
     """
     Cache decorator for async functions
 

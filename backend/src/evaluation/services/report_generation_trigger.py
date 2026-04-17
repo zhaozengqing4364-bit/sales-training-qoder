@@ -9,9 +9,8 @@ Story 3.1: 会话结束自动生成训练报告
 
 from __future__ import annotations
 
-import asyncio
 from contextlib import asynccontextmanager
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy import select
@@ -23,14 +22,12 @@ from tenacity import (
     wait_exponential,
 )
 
+from common.conversation.session_evidence import SessionEvidenceService
 from common.db.models import PracticeSession, ReportGenerationStatus, SessionStatus
 from common.db.session import AsyncSessionLocal
 from common.error_handling.result import Result
 from common.monitoring.logger import get_logger
-from common.conversation.session_evidence import SessionEvidenceService
 from evaluation.services.comprehensive_report import ComprehensiveReportService
-from prompt_templates.service import PromptTemplateService
-from common.ai.llm_service import LLMService
 
 logger = get_logger(__name__)
 
@@ -73,8 +70,8 @@ class ReportGenerationTrigger:
     def _init_report_service(self) -> None:
         """Initialize report service if not provided."""
         if self.report_service is None:
-            from evaluation.services.staged_evaluation import StagedEvaluationService
             from common.ai.llm_service import LLMService
+            from evaluation.services.staged_evaluation import StagedEvaluationService
             from prompt_templates.service import PromptTemplateService
 
             prompt_service = PromptTemplateService(self.db)
@@ -325,7 +322,7 @@ class ReportGenerationTrigger:
 
         session.report_status = status.value
         if status == ReportGenerationStatus.COMPLETED:
-            session.report_generated_at = datetime.now(timezone.utc)
+            session.report_generated_at = datetime.now(UTC)
         if error:
             session.report_error = error
         elif status != ReportGenerationStatus.FAILED:

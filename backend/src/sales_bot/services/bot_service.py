@@ -10,7 +10,7 @@ Implements Constitution Principles:
 import logging
 import uuid
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
 
 from langchain_classic.chains import ConversationChain
@@ -96,12 +96,7 @@ class SalesBotService:
                 human_prefix="User"
             )
 
-            # Create conversation chain with persona
-            persona_prompt = self.persona_prompts.get(
-                persona,
-                self.persona_prompts[Persona.IMPATIENT_CEO]
-            )
-
+            # Create conversation chain
             chain = ConversationChain(
                 llm=get_llm_service().llm,
                 memory=memory,
@@ -159,7 +154,7 @@ class SalesBotService:
                 return Result.fail(fallback="[SESSION_NOT_FOUND]")
 
             session = self.active_sessions[session_id]
-            session["start_time"] = datetime.now(timezone.utc)
+            session["start_time"] = datetime.now(UTC)
 
             persona = session["persona"]
 

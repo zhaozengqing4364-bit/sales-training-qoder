@@ -13,7 +13,6 @@ import asyncio
 import time
 from collections import defaultdict
 from dataclasses import dataclass, field
-from typing import Dict, Optional, Tuple
 
 from common.monitoring.logger import get_logger
 
@@ -63,10 +62,10 @@ class SessionRateLimiter:
         self.cleanup_interval = cleanup_interval
 
         # user_id -> {session_id: timestamp}
-        self.user_sessions: Dict[str, Dict[str, float]] = defaultdict(dict)
+        self.user_sessions: dict[str, dict[str, float]] = defaultdict(dict)
         self.current_total = 0
 
-        self._cleanup_task: Optional[asyncio.Task] = None
+        self._cleanup_task: asyncio.Task | None = None
         self._running = False
 
     async def start(self):
@@ -91,7 +90,7 @@ class SessionRateLimiter:
 
         logger.info("Session rate limiter stopped")
 
-    async def check_limit(self, user_id: str) -> Tuple[bool, str]:
+    async def check_limit(self, user_id: str) -> tuple[bool, str]:
         """
         Check if user can create a new session
 
@@ -267,7 +266,7 @@ class SessionRateLimiter:
 
 
 # Global rate limiter instance
-_rate_limiter: Optional[SessionRateLimiter] = None
+_rate_limiter: SessionRateLimiter | None = None
 
 
 def get_session_rate_limiter() -> SessionRateLimiter:

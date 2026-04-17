@@ -3,7 +3,7 @@ Presentation Coach Service - Business logic for PPT coaching
 Handles coaching workflow, scoring, and session management
 """
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy import func, select, update
@@ -116,10 +116,10 @@ class PresentationCoachService:
     async def start_session(self, session_id: str) -> Result[bool]:
         """Start a practice session"""
         try:
-            result = await self.db.execute(
+            await self.db.execute(
                 update(PracticeSession)
                 .where(PracticeSession.session_id == session_id)
-                .values(status="in_progress", start_time=datetime.now(timezone.utc))
+                .values(status="in_progress", start_time=datetime.now(UTC))
             )
             await self.db.commit()
 
@@ -148,7 +148,7 @@ class PresentationCoachService:
                 return Result.fail("[SESSION_NOT_FOUND]")
 
             if session.end_time is None:
-                session.end_time = datetime.now(timezone.utc)
+                session.end_time = datetime.now(UTC)
 
             if session.status not in {"completed", "scoring"}:
                 session.status = "completed"
@@ -221,7 +221,7 @@ class PresentationCoachService:
             points_result = await self.db.execute(
                 select(RequiredTalkingPoint).where(
                     RequiredTalkingPoint.page_id == page.page_id,
-                    RequiredTalkingPoint.confirmed_by_admin == True,
+                    RequiredTalkingPoint.confirmed_by_admin.is_(True),
                 )
             )
             required_points = points_result.scalars().all()

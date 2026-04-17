@@ -10,7 +10,7 @@ References:
 """
 import enum
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import (
     CheckConstraint,
@@ -102,8 +102,8 @@ class KnowledgeBase(Base):
     chunking_preset_key = Column(String(100), nullable=True)
 
     # Audit
-    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
-    updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
+    updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC))
 
     __table_args__ = (
         CheckConstraint(
@@ -163,7 +163,7 @@ class KnowledgeDocument(Base):
     error_message = Column(Text, nullable=True)
 
     # Audit
-    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
 
     __table_args__ = (
         CheckConstraint(

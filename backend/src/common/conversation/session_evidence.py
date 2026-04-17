@@ -454,8 +454,6 @@ class SessionEvidenceService:
         if scenario_type != "sales":
             return None
 
-        snapshot = effectiveness_snapshot if isinstance(effectiveness_snapshot, dict) else {}
-
         # --- Per-source availability detection ---
         retrieval_facts = build_retrieval_facts(voice_policy_snapshot)
         retrieval_available = isinstance(retrieval_facts, dict) and retrieval_facts.get("status") == "hit"

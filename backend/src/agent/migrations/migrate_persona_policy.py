@@ -17,8 +17,11 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from agent.models import AgentVoicePolicy, AgentPersona, Persona
-from agent.services.persona_policy import resolve_persona_policy, sync_legacy_persona_fields
+from agent.models import AgentPersona, AgentVoicePolicy, Persona
+from agent.services.persona_policy import (
+    resolve_persona_policy,
+    sync_legacy_persona_fields,
+)
 from common.db.session import AsyncSessionLocal
 from common.monitoring.logger import get_logger
 

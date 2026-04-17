@@ -5,7 +5,6 @@ import time
 from collections.abc import Callable
 from typing import Any
 
-from common.error_handling.result import Result
 from common.knowledge_engine.answerability import KnowledgeAnswerabilityEvaluator
 from common.knowledge_engine.assembler import KnowledgeAnswerAssembler
 from common.knowledge_engine.audit_repo import KnowledgeAnswerAuditRepository
@@ -18,8 +17,11 @@ from common.knowledge_engine.haystack_adapter import (
 from common.knowledge_engine.intent_classifier import KnowledgeIntentClassifier
 from common.knowledge_engine.reranker import KnowledgeReranker
 from common.knowledge_engine.retrieval_planner import KnowledgeRetrievalPlanner
-from common.knowledge_engine.schemas import KnowledgeAnswerRequest, KnowledgeAnswerResult, KnowledgeAuditStep
-
+from common.knowledge_engine.schemas import (
+    KnowledgeAnswerRequest,
+    KnowledgeAnswerResult,
+    KnowledgeAuditStep,
+)
 
 HaystackPipelineFactory = Callable[[], Any | None]
 

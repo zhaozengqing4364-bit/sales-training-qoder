@@ -10,7 +10,6 @@ Requirements: P1-FIXES.md Issue #22
 """
 
 import re
-from typing import Dict, List, Optional, Set
 
 
 class HTMLSanitizer:
@@ -35,7 +34,7 @@ class HTMLSanitizer:
     """
 
     # Allowed HTML tags (whitelist approach)
-    ALLOWED_TAGS: Set[str] = {
+    ALLOWED_TAGS: set[str] = {
         "p",
         "br",
         "strong",
@@ -61,14 +60,14 @@ class HTMLSanitizer:
     }
 
     # Allowed attributes per tag
-    ALLOWED_ATTRIBUTES: Dict[str, Set[str]] = {
+    ALLOWED_ATTRIBUTES: dict[str, set[str]] = {
         "a": {"href", "title", "target"},
         "img": {"src", "alt", "title", "width", "height"},
         "*": {"class", "id"},
     }
 
     # Dangerous tags that should never be allowed
-    DANGEROUS_TAGS: Set[str] = {
+    DANGEROUS_TAGS: set[str] = {
         "script",
         "style",
         "iframe",
@@ -93,7 +92,7 @@ class HTMLSanitizer:
     }
 
     # Dangerous attributes that should never be allowed
-    DANGEROUS_ATTRIBUTES: Set[str] = {
+    DANGEROUS_ATTRIBUTES: set[str] = {
         "onerror",
         "onload",
         "onclick",
@@ -114,7 +113,7 @@ class HTMLSanitizer:
     }
 
     # Allowed URL schemes
-    ALLOWED_SCHEMES: Set[str] = {"http", "https", "mailto", "tel"}
+    ALLOWED_SCHEMES: set[str] = {"http", "https", "mailto", "tel"}
 
     @classmethod
     def sanitize(cls, html: str, strip: bool = False) -> str:
@@ -159,7 +158,7 @@ class HTMLSanitizer:
         return cls._strip_all_html(text)
 
     @classmethod
-    def validate_url(cls, url: str) -> Optional[str]:
+    def validate_url(cls, url: str) -> str | None:
         """
         Validate URL to prevent javascript: protocol attacks
 

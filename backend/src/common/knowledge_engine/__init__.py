@@ -12,9 +12,9 @@ from common.knowledge_engine.compat import (
     evaluate_answerability_from_rows,
 )
 from common.knowledge_engine.config_repo import (
+    KnowledgeAnswerabilityProfileConfig,
     KnowledgeAnswerConfigRepository,
     KnowledgeAnswerConfigSnapshot,
-    KnowledgeAnswerabilityProfileConfig,
     KnowledgeEntityAliasConfig,
     KnowledgeIntentRuleConfig,
     KnowledgeQueryProfileConfig,

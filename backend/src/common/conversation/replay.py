@@ -9,12 +9,11 @@ References:
 - Design: Section 12 (Replay Service)
 - API Contract: docs/api-contract/replay.md
 """
-from datetime import datetime
 from typing import Any
 
 from sqlalchemy import func, select
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
 
 from common.conversation.models import ConversationMessage
 from common.conversation.session_evidence import SessionEvidenceService
@@ -23,7 +22,6 @@ from common.db.models import PracticeSession, SessionStatus
 from common.db.voice_policy_snapshot import build_voice_policy_snapshot_ref_payload
 from common.error_handling.result import Result
 from common.monitoring.logger import get_logger
-from sqlalchemy.exc import SQLAlchemyError
 
 logger = get_logger(__name__)
 

@@ -14,10 +14,8 @@ Environment Variables:
 - AUDIO_BASE_URL: Base URL for audio file access (optional, for CDN)
 """
 import os
-import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Optional
 
 from common.monitoring.logger import get_logger
 
@@ -250,7 +248,7 @@ class AudioStorageService:
             Number of files deleted.
         """
         days = retention_days or AUDIO_RETENTION_DAYS
-        cutoff_date = datetime.now(timezone.utc) - timedelta(days=days)
+        cutoff_date = datetime.now(UTC) - timedelta(days=days)
         deleted_count = 0
 
         try:

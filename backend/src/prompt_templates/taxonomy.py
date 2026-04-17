@@ -9,9 +9,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from common.ai.llm_service import LEGACY_PROMPT_ENTRYPOINTS
-
-
 PROMPT_SOURCE_TAXONOMY_VERSION = "m021_s02_t02"
 
 

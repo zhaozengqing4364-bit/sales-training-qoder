@@ -20,8 +20,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.analytics.release_verification_service import (
     release_verification_service,
-    CheckStatus,
-    GoNoGoDecision,
 )
 from common.auth.service import get_current_admin_user
 from common.db.models import User
@@ -114,7 +112,9 @@ async def create_release_candidate(
 
     checks = None
     if request.checks:
-        from common.analytics.release_verification_service import VerificationCheckInput as CheckInput
+        from common.analytics.release_verification_service import (
+            VerificationCheckInput as CheckInput,
+        )
         checks = [
             CheckInput(
                 check_type=c.check_type,

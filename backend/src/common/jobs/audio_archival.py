@@ -11,11 +11,11 @@ import os
 from datetime import datetime, timedelta
 
 from sqlalchemy import select
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.db.models import PracticeSession
 from common.error_handling.result import Result
-from sqlalchemy.exc import SQLAlchemyError
 
 logger = logging.getLogger(__name__)
 

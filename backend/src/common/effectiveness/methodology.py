@@ -16,7 +16,6 @@ from .canonical import (
     get_surface_reader_plan,
 )
 
-
 SalesMethodologyRubricId = Literal[
     "discovery_qualification",
     "value_story",

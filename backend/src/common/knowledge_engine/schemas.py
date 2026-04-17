@@ -4,7 +4,6 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
-
 AnswerabilityType = Literal["sufficient", "partial", "insufficient", "blocked", "unanswered"]
 SourceStatusType = Literal["ready", "blocked", "not_run"]
 

@@ -418,25 +418,25 @@ def get_knowledge_vector_store() -> KnowledgeVectorStore:
 class VectorStore:
     """
     Legacy vector store for PPT presentations.
-    
+
     Provides backward-compatible API for ingestion_service.py
     """
-    
+
     def __init__(self, persist_dir: str | None = None):
         self.persist_dir = persist_dir or CHROMADB_PERSIST_DIR
         self.collection_name = "ppt_knowledge"
         self.client: chromadb.PersistentClient | None = None
         self.collection: chromadb.Collection | None = None
         self._initialized = False
-    
+
     def _ensure_initialized(self) -> bool:
         """Ensure ChromaDB client is initialized."""
         if self._initialized and self.client:
             return True
-        
+
         try:
             os.makedirs(self.persist_dir, exist_ok=True)
-            
+
             self.client = chromadb.PersistentClient(
                 path=self.persist_dir,
                 settings=Settings(
@@ -444,16 +444,16 @@ class VectorStore:
                     allow_reset=True
                 )
             )
-            
+
             self.collection = self.client.get_or_create_collection(
                 name=self.collection_name,
                 metadata={"hnsw:space": "cosine"}
             )
-            
+
             self._initialized = True
             logger.info(f"VectorStore initialized at {self.persist_dir}")
             return True
-            
+
         except (RuntimeError, ValueError, OSError) as e:
             logger.error(f"VectorStore initialization error: {e}")
             return False
@@ -467,7 +467,7 @@ class VectorStore:
             return None
 
         return self.collection
-    
+
     async def add_documents(
         self,
         texts: list[str],
@@ -489,7 +489,7 @@ class VectorStore:
         except Exception as e:
             logger.error(f"Failed to add documents: {e}")
             return Result.fail("[USE_KEYWORD_SEARCH]")
-    
+
     async def update_document(
         self,
         collection_name: str,
@@ -512,7 +512,7 @@ class VectorStore:
         except Exception as e:
             logger.error(f"Failed to update document: {e}")
             return Result.fail("[USE_KEYWORD_SEARCH]")
-    
+
     async def query(
         self,
         query_text: str,
@@ -541,7 +541,7 @@ class VectorStore:
                 where=where,
                 n_results=n_results
             )
-            
+
             formatted = []
             if results and results["documents"] and results["documents"][0]:
                 for i, doc in enumerate(results["documents"][0]):
@@ -552,12 +552,12 @@ class VectorStore:
                         "metadata": metadata,
                         "distance": distance
                     })
-            
+
             return Result.ok(formatted)
         except Exception as e:
             logger.error(f"Query failed: {e}")
             return Result.fail("[USE_KEYWORD_SEARCH]")
-    
+
     async def delete_by_metadata(
         self,
         collection_name: str,
@@ -576,14 +576,14 @@ class VectorStore:
         except Exception as e:
             logger.error(f"Delete failed: {e}")
             return Result.fail("[USE_KEYWORD_SEARCH]")
-    
+
     async def delete_presentation(self, presentation_id: str) -> Result[bool]:
         """Delete all documents for a presentation."""
         return await self.delete_by_metadata(
             self.collection_name,
             {"presentation_id": presentation_id}
         )
-    
+
     async def search_by_keyword(
         self,
         keyword: str,
@@ -598,7 +598,7 @@ class VectorStore:
         try:
             where = {"presentation_id": presentation_id}
             results = collection.get(where=where)
-            
+
             matches = []
             if results and results["documents"]:
                 for i, doc in enumerate(results["documents"]):
@@ -608,7 +608,7 @@ class VectorStore:
                             "content": doc,
                             "metadata": metadata
                         })
-            
+
             return matches
         except Exception as e:
             logger.error(f"Keyword search failed: {e}")

@@ -4,14 +4,13 @@ Constitution Principle I: No error popups, graceful degradation
 """
 import asyncio
 from collections.abc import Mapping
-from datetime import datetime, timezone
-from typing import Optional
+from datetime import UTC, datetime
 
 from fastapi import WebSocket, WebSocketDisconnect
 from starlette.websockets import WebSocketState
 
 from common.auth.service import JWTError, resolve_websocket_token
-from common.monitoring.logger import get_logger, set_trace_id, get_trace_id
+from common.monitoring.logger import get_logger, get_trace_id, set_trace_id
 from common.monitoring.trace_context import normalize_trace_id
 from common.websocket.session_state_service import (
     SessionStateSnapshot,
@@ -63,7 +62,7 @@ class ConnectionManager:
         # Send acknowledgment
         await self.send_json(websocket, {
             "type": "connected",
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
             "data": {"session_id": session_id}
         })
 
@@ -194,7 +193,7 @@ class BaseWebSocketHandler:
                     # Send heartbeat
                     await self.manager.send_json(websocket, {
                         "type": "heartbeat",
-                        "timestamp": datetime.now(timezone.utc).isoformat(),
+                        "timestamp": datetime.now(UTC).isoformat(),
                         "data": {}
                     })
 
@@ -266,7 +265,7 @@ class BaseWebSocketHandler:
         """
         await self.manager.send_json(websocket, {
             "type": "error",
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
             "data": {
                 "code": error_code,
                 "message": message,
@@ -322,7 +321,7 @@ class BaseWebSocketHandler:
             websocket,
             {
                 "type": "reconnected",
-                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "timestamp": datetime.now(UTC).isoformat(),
                 "data": {
                     "session_id": state.session_id,
                     "scenario": state.scenario,

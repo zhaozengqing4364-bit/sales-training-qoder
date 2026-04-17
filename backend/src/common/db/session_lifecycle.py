@@ -481,10 +481,10 @@ class SessionLifecycleService:
         Saves realtime scoring context before triggering report generation.
         """
         try:
+            from evaluation.services.realtime_scoring import RealtimeScoringService
             from evaluation.services.report_generation_trigger import (
                 trigger_report_generation,
             )
-            from evaluation.services.realtime_scoring import RealtimeScoringService
 
             # Save realtime scoring context for report generation (Track D-F integration)
             try:

@@ -13,24 +13,21 @@ References:
 
 from __future__ import annotations
 
-import logging
 import inspect
+import logging
 import uuid
-from dataclasses import dataclass, asdict, field
-from datetime import datetime, timezone
+from dataclasses import dataclass
+from datetime import UTC, datetime
 from typing import Any, Literal
 from unittest.mock import Mock
 
-from sqlalchemy import func, select, and_, or_
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
 from sqlalchemy.exc import SQLAlchemyError
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.db.models import (
     ReleaseVerificationRecord,
     ReleaseVerificationSummary,
-    VerificationCheckType,
-    VerificationStatus,
-    User,
 )
 from common.error_handling.result import Result
 
@@ -321,8 +318,8 @@ class ReleaseVerificationService:
             record.error_message = error_message
             record.duration_ms = duration_ms
             record.executed_by = executed_by
-            record.executed_at = datetime.now(timezone.utc)
-            record.updated_at = datetime.now(timezone.utc)
+            record.executed_at = datetime.now(UTC)
+            record.updated_at = datetime.now(UTC)
 
             # Update summary counts
             await self._update_summary_counts(db, record.release_candidate_id, old_status, status)
@@ -389,9 +386,9 @@ class ReleaseVerificationService:
 
             summary.go_no_go_decision = decision
             summary.decision_reason = reason
-            summary.finalized_at = datetime.now(timezone.utc)
+            summary.finalized_at = datetime.now(UTC)
             summary.finalized_by = finalized_by
-            summary.updated_at = datetime.now(timezone.utc)
+            summary.updated_at = datetime.now(UTC)
 
             # Set overall status based on decision
             if decision == "go":
@@ -611,7 +608,7 @@ class ReleaseVerificationService:
             elif summary.pending_checks == 0:
                 summary.overall_status = "passed"
 
-            summary.updated_at = datetime.now(timezone.utc)
+            summary.updated_at = datetime.now(UTC)
 
     def _generate_recommendations(
         self,
@@ -934,7 +931,7 @@ class ReleaseVerificationService:
             # Update summary with decision
             summary.go_no_go_decision = decision
             summary.decision_reason = reason
-            summary.finalized_at = datetime.now(timezone.utc)
+            summary.finalized_at = datetime.now(UTC)
             summary.finalized_by = finalized_by
 
             # Set overall status based on decision

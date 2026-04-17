@@ -14,7 +14,7 @@ import json
 import os
 import time
 from dataclasses import asdict, dataclass, field
-from typing import Any, Optional
+from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -33,12 +33,12 @@ class SessionStateSnapshot:
     session_id: str
     scenario: str  # 'presentation' or 'sales'
     turn_count: int = 0
-    current_page: Optional[int] = None
+    current_page: int | None = None
     session_status: str = "in_progress"
     ai_state: str = "idle"
     runtime_state: dict[str, Any] | None = None
     last_activity: float = field(default_factory=time.time)
-    user_id: Optional[str] = None
+    user_id: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary for JSON serialization"""
@@ -83,7 +83,7 @@ class SessionStateService:
         )
 
         self._lock = asyncio.Lock()
-        self._cleanup_task: Optional[asyncio.Task] = None
+        self._cleanup_task: asyncio.Task | None = None
         self._running = False
         self._redis: Any | None = None
         self.metrics = {
@@ -275,7 +275,7 @@ class SessionStateService:
             logger.error(f"Failed to save session state: {str(e)}")
             return Result.fail(f"[STATE_SAVE_FAILED] {str(e)}")
 
-    async def get_state(self, session_id: str) -> Result[Optional[SessionStateSnapshot]]:
+    async def get_state(self, session_id: str) -> Result[SessionStateSnapshot | None]:
         """
         Get session state snapshot.
 
@@ -430,7 +430,7 @@ class SessionStateService:
 
 
 # Global session state service instance
-_session_state_service: Optional[SessionStateService] = None
+_session_state_service: SessionStateService | None = None
 
 
 def get_session_state_service() -> SessionStateService:

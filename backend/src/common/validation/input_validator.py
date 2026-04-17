@@ -10,7 +10,6 @@ Requirements: P1-FIXES.md Issue #21
 """
 
 import re
-from typing import Optional, Set
 
 
 class InputValidator:
@@ -47,7 +46,7 @@ class InputValidator:
     )
 
     # SQL keywords that may indicate injection
-    SQL_KEYWORDS: Set[str] = {
+    SQL_KEYWORDS: set[str] = {
         "select",
         "insert",
         "update",
@@ -262,7 +261,7 @@ class InputValidator:
         return value
 
     @classmethod
-    def validate_sort_field(cls, field: str, allowed_fields: Set[str]) -> str:
+    def validate_sort_field(cls, field: str, allowed_fields: set[str]) -> str:
         """
         Validate sort field against allowed fields
 

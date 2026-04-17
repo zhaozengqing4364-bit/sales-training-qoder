@@ -23,7 +23,7 @@ logger = get_logger(__name__)
 class SalesStageCapability(BaseCapability):
     """
     销售阶段识别能力
-    
+
     识别5个销售阶段：
     1. opening - 开场破冰
     2. discovery - 需求挖掘

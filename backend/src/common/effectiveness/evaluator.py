@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from typing import Any, Iterable
+from collections.abc import Iterable
+from typing import Any
 
 from common.effectiveness.schemas import (
     ActionCard,
@@ -18,7 +19,6 @@ from common.effectiveness.schemas import (
     SalesStageContext,
     SalesStageKey,
 )
-
 
 RULE_VERSION = "rule_v1"
 

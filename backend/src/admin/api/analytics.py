@@ -1,7 +1,7 @@
 """
 Admin Analytics API - System-wide analytics endpoints for administrators
 
-Provides endpoints for system overview, trends, Agent statistics, 
+Provides endpoints for system overview, trends, Agent statistics,
 user leaderboard, and data export.
 
 References:
@@ -149,7 +149,7 @@ async def get_analytics_overview(
 ) -> dict[str, Any]:
     """
     Get system overview statistics
-    
+
     Returns aggregated statistics including:
     - Total users and active users
     - Total sessions and completion rate
@@ -180,7 +180,7 @@ async def get_analytics_overview(
     # Convert dataclass to dict
     from dataclasses import asdict
     data = asdict(result.value)
-    
+
     return success_response(data)
 
 
@@ -193,7 +193,7 @@ async def get_trends_data(
 ) -> dict[str, Any]:
     """
     Get trend data for charts
-    
+
     Returns:
     - Daily/weekly/monthly trend data (sessions, scores, active users)
     - Score distribution (excellent, good, fair, poor)
@@ -231,7 +231,7 @@ async def get_agent_stats(
 ) -> dict[str, Any]:
     """
     Get Agent and Persona usage statistics
-    
+
     Returns:
     - Agent usage ranking (by session count)
     - Persona usage ranking
@@ -270,7 +270,7 @@ async def get_leaderboard(
 ) -> dict[str, Any]:
     """
     Get user leaderboard
-    
+
     Returns users ranked by average score, including:
     - Rank, name, department
     - Total sessions and average/best score
@@ -361,8 +361,9 @@ async def get_runtime_metrics(
     - Completeness rate (NFR10: >=98%)
     - Session metrics and voice mode distribution
     """
-    from common.analytics.runtime_metrics_service import runtime_metrics_service
     from dataclasses import asdict
+
+    from common.analytics.runtime_metrics_service import runtime_metrics_service
 
     logger.info(
         "Getting runtime metrics",
@@ -398,8 +399,9 @@ async def get_policy_effectiveness(
 
     Returns metrics comparing different Agents and their policy effectiveness
     """
-    from common.analytics.runtime_metrics_service import runtime_metrics_service
     from dataclasses import asdict
+
+    from common.analytics.runtime_metrics_service import runtime_metrics_service
 
     logger.info(
         "Getting policy effectiveness",
@@ -438,8 +440,9 @@ async def get_voice_mode_comparison(
 
     Returns comparison metrics for different voice modes
     """
-    from common.analytics.runtime_metrics_service import runtime_metrics_service
     from dataclasses import asdict
+
+    from common.analytics.runtime_metrics_service import runtime_metrics_service
 
     logger.info(
         "Getting voice mode comparison",
@@ -476,8 +479,9 @@ async def get_fallback_metrics(
 
     Returns metrics about TTS/ASR/LLM fallbacks and browser TTS usage
     """
-    from common.analytics.runtime_metrics_service import runtime_metrics_service
     from dataclasses import asdict
+
+    from common.analytics.runtime_metrics_service import runtime_metrics_service
 
     logger.info(
         "Getting fallback metrics",
@@ -510,7 +514,7 @@ async def export_analytics(
 ) -> StreamingResponse:
     """
     Export analytics data as CSV
-    
+
     Exports overview, trends, and leaderboard data to a CSV file.
     """
     logger.info(
@@ -534,7 +538,7 @@ async def export_analytics(
     # Overview section
     writer.writerow(["=== 系统概览 ==="])
     writer.writerow(["指标", "数值"])
-    
+
     if overview_result.is_success:
         from dataclasses import asdict
         overview = asdict(overview_result.value)
@@ -552,7 +556,7 @@ async def export_analytics(
     # Score distribution
     writer.writerow(["=== 分数分布 ==="])
     writer.writerow(["等级", "数量"])
-    
+
     if trends_result.is_success:
         dist = trends_result.value.get("score_distribution", {})
         writer.writerow(["优秀 (90-100)", dist.get("excellent", 0)])
@@ -565,7 +569,7 @@ async def export_analytics(
     # Trends section
     writer.writerow(["=== 趋势数据 ==="])
     writer.writerow(["日期", "练习次数", "平均分", "活跃用户"])
-    
+
     if trends_result.is_success:
         for point in trends_result.value.get("trend_data", []):
             writer.writerow([
@@ -580,7 +584,7 @@ async def export_analytics(
     # Leaderboard section
     writer.writerow(["=== 用户排行榜 ==="])
     writer.writerow(["排名", "姓名", "部门", "练习次数", "平均分", "最高分", "总时长(分钟)"])
-    
+
     if leaderboard_result.is_success:
         for entry in leaderboard_result.value:
             writer.writerow([

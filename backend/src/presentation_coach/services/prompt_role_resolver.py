@@ -3,8 +3,6 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass, field
 from typing import Any
 
-from jinja2 import TemplateSyntaxError
-
 from prompt_templates.renderer import get_renderer
 
 

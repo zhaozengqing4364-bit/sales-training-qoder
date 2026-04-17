@@ -10,7 +10,8 @@ Requirements: P1-FIXES.md Issue #17
 """
 
 import re
-from typing import Any, Dict, Pattern
+from re import Pattern
+from typing import Any
 
 
 class LogSanitizer:
@@ -30,7 +31,7 @@ class LogSanitizer:
     """
 
     # Sensitive field patterns (regex)
-    SENSITIVE_PATTERNS: Dict[str, Pattern] = {
+    SENSITIVE_PATTERNS: dict[str, Pattern] = {
         "api_key": re.compile(
             r'(api[_-]?key["\s:=]+)([a-zA-Z0-9-_]{20,})', re.IGNORECASE
         ),
@@ -88,7 +89,7 @@ class LogSanitizer:
         return result
 
     @classmethod
-    def sanitize_dict(cls, data: Dict[str, Any]) -> Dict[str, Any]:
+    def sanitize_dict(cls, data: dict[str, Any]) -> dict[str, Any]:
         """
         Sanitize a dictionary by masking sensitive fields
 

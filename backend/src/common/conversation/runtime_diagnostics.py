@@ -15,7 +15,6 @@ from common.knowledge_engine.runtime_events import (
     merge_runtime_events,
 )
 
-
 DEFAULT_KB_LOCK_TIMEOUT_BUDGET_MS = 2200
 DEFAULT_KB_LOCK_MIN_PASS_SCORE = 0.62
 

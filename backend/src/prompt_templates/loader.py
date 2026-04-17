@@ -14,7 +14,6 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass, field
-from datetime import datetime
 from typing import TYPE_CHECKING
 from uuid import UUID
 
@@ -130,6 +129,7 @@ class PromptTemplateLoader:
             PromptTemplate or None
         """
         from sqlalchemy import select
+
         from common.db.models import PromptTemplate as PromptTemplateDB
 
         result = await db_session.execute(

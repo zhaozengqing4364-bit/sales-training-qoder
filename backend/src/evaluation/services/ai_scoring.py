@@ -5,7 +5,6 @@ AI-based Real-time Scoring Service
 from __future__ import annotations
 
 import json
-from typing import Any
 
 from common.ai.llm_service import LLMService
 from common.error_handling.result import Result

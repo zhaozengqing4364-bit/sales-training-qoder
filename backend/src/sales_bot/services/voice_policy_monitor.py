@@ -28,19 +28,19 @@ from __future__ import annotations
 import time
 import uuid
 from collections import defaultdict, deque
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime
 from enum import Enum
-from typing import Any, Callable
+from typing import Any
 
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.db.models import SystemLog
 from common.error_handling.result import Result
-from common.monitoring.latency_tracker import LatencyTracker, get_latency_tracker
+from common.monitoring.latency_tracker import get_latency_tracker
 from common.monitoring.logger import get_logger
-from common.resilience.circuit_breaker import CircuitBreaker, CircuitState
+from common.resilience.circuit_breaker import CircuitBreaker
 
 logger = get_logger(__name__)
 
@@ -162,7 +162,7 @@ class RollbackEvent:
     to_provider: str
     trigger_reason: str
     metrics_snapshot: dict[str, Any]
-    timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    timestamp: datetime = field(default_factory=lambda: datetime.now(UTC))
 
 
 class VoicePolicyMonitor:
@@ -267,7 +267,7 @@ class VoicePolicyMonitor:
         else:
             metrics.record_failure()
             logger.warning(
-                f"ASR failure recorded",
+                "ASR failure recorded",
                 extra={
                     "provider": provider,
                     "session_id": session_id,
@@ -319,7 +319,7 @@ class VoicePolicyMonitor:
         else:
             metrics.record_failure()
             logger.warning(
-                f"TTS failure recorded",
+                "TTS failure recorded",
                 extra={
                     "provider": provider,
                     "session_id": session_id,
@@ -696,7 +696,7 @@ class VoicePolicyMonitor:
             self._metrics[service_type].clear()
 
         logger.info(
-            f"Metrics reset",
+            "Metrics reset",
             extra={"service_type": service_type.value if service_type else "all"},
         )
 

@@ -10,19 +10,18 @@ Response Format:
 
 Requirements: 2.1, 2.2, 2.3, 2.4, 2.5
 """
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Literal
 
 from fastapi import APIRouter, Depends
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from common.auth.service import get_current_user
-from common.db.models import PracticeSession, Scenario, User
+from common.db.models import PracticeSession, User
 from common.db.session import get_db
 from common.monitoring.logger import get_logger, get_trace_id
-from sqlalchemy.exc import SQLAlchemyError
 
 logger = get_logger(__name__)
 
@@ -86,9 +85,9 @@ def calculate_trend_direction(current: float, previous: float) -> Literal["up", 
     """Calculate trend direction based on current and previous values"""
     if previous == 0:
         return "up" if current > 0 else "flat"
-    
+
     change_pct = ((current - previous) / previous) * 100
-    
+
     if change_pct > 5:
         return "up"
     elif change_pct < -5:
@@ -101,7 +100,7 @@ def calculate_trend_percentage(current: float, previous: float) -> float:
     """Calculate percentage change between current and previous values"""
     if previous == 0:
         return 100.0 if current > 0 else 0.0
-    
+
     return round(((current - previous) / previous) * 100, 1)
 
 
@@ -114,28 +113,28 @@ async def get_dashboard_stats(
 ):
     """
     Get dashboard statistics for current user
-    
+
     Returns:
     - weekly_activity: This week's practice statistics with trend comparison
     - last_session: Last session score with percentile ranking
-    
+
     Requirements: 2.1, 2.2, 2.3
     """
     try:
         user_id = str(current_user.user_id)
-        now = datetime.now(timezone.utc)
-        
+        now = datetime.now(UTC)
+
         # Calculate week boundaries
         # This week: from Monday 00:00 to now
         days_since_monday = now.weekday()
         this_week_start = (now - timedelta(days=days_since_monday)).replace(
             hour=0, minute=0, second=0, microsecond=0
         )
-        
+
         # Last week: previous Monday to previous Sunday
         last_week_start = this_week_start - timedelta(days=7)
         last_week_end = this_week_start
-        
+
         # ========== This Week Stats ==========
         this_week_stmt = select(
             func.count(PracticeSession.session_id).label("session_count"),
@@ -144,14 +143,14 @@ async def get_dashboard_stats(
             PracticeSession.user_id == user_id,
             PracticeSession.start_time >= this_week_start
         )
-        
+
         this_week_result = await db.execute(this_week_stmt)
         this_week_row = this_week_result.one()
-        
+
         this_week_sessions = this_week_row.session_count or 0
         this_week_seconds = this_week_row.total_seconds or 0
         this_week_minutes = this_week_seconds // 60
-        
+
         # ========== Last Week Stats ==========
         last_week_stmt = select(
             func.count(PracticeSession.session_id).label("session_count"),
@@ -161,56 +160,54 @@ async def get_dashboard_stats(
             PracticeSession.start_time >= last_week_start,
             PracticeSession.start_time < last_week_end
         )
-        
+
         last_week_result = await db.execute(last_week_stmt)
         last_week_row = last_week_result.one()
-        
+
         last_week_sessions = last_week_row.session_count or 0
-        last_week_minutes = (last_week_row.total_seconds or 0) // 60
-        
         # Calculate trends
         trend_direction = calculate_trend_direction(this_week_sessions, last_week_sessions)
         trend_percentage = abs(calculate_trend_percentage(this_week_sessions, last_week_sessions))
-        
+
         weekly_activity = WeeklyActivity(
             total_duration_minutes=this_week_minutes,
             session_count=this_week_sessions,
             trend_percentage=trend_percentage,
             trend_direction=trend_direction
         )
-        
+
         # ========== Last Session Score ==========
         last_session_stmt = select(PracticeSession).where(
             PracticeSession.user_id == user_id,
             PracticeSession.status == "completed"
         ).order_by(PracticeSession.end_time.desc()).limit(1)
-        
+
         last_session_result = await db.execute(last_session_stmt)
         last_session = last_session_result.scalar_one_or_none()
-        
+
         if last_session:
             # Calculate overall score
             logic = last_session.logic_score or 0
             accuracy = last_session.accuracy_score or 0
             completeness = last_session.completeness_score or 0
             last_score = round((logic + accuracy + completeness) / 3, 1)
-            
+
             # Get previous session for trend
             prev_session_stmt = select(PracticeSession).where(
                 PracticeSession.user_id == user_id,
                 PracticeSession.status == "completed",
                 PracticeSession.session_id != last_session.session_id
             ).order_by(PracticeSession.end_time.desc()).limit(1)
-            
+
             prev_session_result = await db.execute(prev_session_stmt)
             prev_session = prev_session_result.scalar_one_or_none()
-            
+
             if prev_session:
                 prev_logic = prev_session.logic_score or 0
                 prev_accuracy = prev_session.accuracy_score or 0
                 prev_completeness = prev_session.completeness_score or 0
                 prev_score = (prev_logic + prev_accuracy + prev_completeness) / 3
-                
+
                 if last_score > prev_score + 5:
                     score_trend = "up"
                 elif last_score < prev_score - 5:
@@ -219,7 +216,7 @@ async def get_dashboard_stats(
                     score_trend = "stable"
             else:
                 score_trend = "stable"
-            
+
             # Calculate percentile (simplified: based on all completed sessions)
             all_scores_stmt = select(
                 (func.coalesce(PracticeSession.logic_score, 0) +
@@ -228,17 +225,17 @@ async def get_dashboard_stats(
             ).where(
                 PracticeSession.status == "completed"
             )
-            
+
             scores_result = await db.execute(all_scores_stmt)
             all_scores = [row[0] for row in scores_result.all() if row[0] is not None]
-            
+
             if all_scores:
                 below_count = sum(1 for s in all_scores if s < last_score)
                 total_sessions = len(all_scores)
                 percentile = int((below_count / total_sessions) * 100) if total_sessions > 0 else 50
             else:
                 percentile = 50
-            
+
             last_session_info = LastSession(
                 score=last_score,
                 percentile=percentile,
@@ -250,7 +247,7 @@ async def get_dashboard_stats(
                 percentile=50,
                 trend="stable"
             )
-        
+
         stats = DashboardStats(
             weekly_activity=weekly_activity,
             last_session=last_session_info,
@@ -314,7 +311,7 @@ async def get_dashboard_stats(
             }
 
         return success_response(stats.model_dump())
-        
+
     except Exception as e:
         logger.error(f"Failed to get dashboard stats: {type(e).__name__}: {str(e)}")
         return error_response("[DASHBOARD_STATS_FAILED]", "获取仪表盘数据失败")
@@ -327,40 +324,40 @@ async def get_recommendation(
 ):
     """
     Get training recommendation for current user
-    
+
     Based on user's recent practice data, generates a personalized recommendation.
-    
+
     Returns:
     - title: Recommendation title
     - reason: Why this is recommended
     - action_label: Button text
     - target_path: Navigation path
-    
+
     Requirements: 2.4, 2.5
     """
     try:
         user_id = str(current_user.user_id)
-        now = datetime.now(timezone.utc)
+        now = datetime.now(UTC)
         week_ago = now - timedelta(days=7)
-        
+
         # Get recent sessions
         recent_sessions_stmt = select(PracticeSession).where(
             PracticeSession.user_id == user_id,
             PracticeSession.start_time >= week_ago
         ).order_by(PracticeSession.start_time.desc())
-        
+
         recent_result = await db.execute(recent_sessions_stmt)
         recent_sessions = recent_result.scalars().all()
-        
+
         # Get last completed session with scores
         last_completed_stmt = select(PracticeSession).where(
             PracticeSession.user_id == user_id,
             PracticeSession.status == "completed"
         ).order_by(PracticeSession.end_time.desc()).limit(1)
-        
+
         last_completed_result = await db.execute(last_completed_stmt)
         last_completed = last_completed_result.scalar_one_or_none()
-        
+
         # Generate recommendation based on user's practice patterns
         if len(recent_sessions) == 0:
             # No recent practice - encourage to start
@@ -375,16 +372,16 @@ async def get_recommendation(
             logic = last_completed.logic_score or 0
             accuracy = last_completed.accuracy_score or 0
             completeness = last_completed.completeness_score or 0
-            
+
             scores = {
                 "逻辑性": logic,
                 "准确性": accuracy,
                 "完整性": completeness
             }
-            
+
             weakest = min(scores, key=scores.get)
             weakest_score = scores[weakest]
-            
+
             if weakest_score < 60:
                 # Low score in an area - recommend focused practice
                 recommendation = Recommendation(
@@ -417,9 +414,9 @@ async def get_recommendation(
                 action_label="继续练习",
                 target_path="/history"
             )
-        
+
         return success_response(recommendation.model_dump())
-        
+
     except Exception as e:
         logger.error(f"Failed to get recommendation: {type(e).__name__}: {str(e)}")
         return error_response("[RECOMMENDATION_FAILED]", "获取推荐失败")

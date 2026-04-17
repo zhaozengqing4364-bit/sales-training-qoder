@@ -6,14 +6,11 @@ Implements Constitution Principles:
 - VI. Data Privacy - Session-based access control
 """
 
-import logging
-from uuid import UUID
 
 from fastapi import Request
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse
 
-from common.auth.service import get_current_user
 from common.monitoring.logger import get_logger
 
 logger = get_logger(__name__)
@@ -66,8 +63,6 @@ class AuthMiddleware(BaseHTTPMiddleware):
         auth_header = request.headers.get("Authorization", "")
         if not auth_header.startswith("Bearer "):
             return self._unauthorized_response("Missing or invalid Authorization header")
-
-        token = auth_header[7:]  # Remove "Bearer " prefix
 
         # Validate token (in real implementation, this would verify JWT)
         # For now, we'll pass through and let route handlers handle auth via Depends(get_current_user)

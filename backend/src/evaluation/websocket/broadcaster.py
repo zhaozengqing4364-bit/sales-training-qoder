@@ -15,15 +15,13 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime
 from typing import Any
 
-from fastapi import WebSocket
-
-from common.websocket.base_handler import get_connection_manager
-from evaluation.services.staged_evaluation import StageEvaluationResult
-from evaluation.services.comprehensive_report import ComprehensiveReport
 from common.monitoring.logger import get_logger
+from common.websocket.base_handler import get_connection_manager
+from evaluation.services.comprehensive_report import ComprehensiveReport
+from evaluation.services.staged_evaluation import StageEvaluationResult
 
 logger = get_logger(__name__)
 
@@ -87,7 +85,7 @@ class EvaluationBroadcaster:
         message = FeedbackMessage(
             type="stage_feedback",
             session_id=session_id,
-            timestamp=datetime.now(timezone.utc).isoformat(),
+            timestamp=datetime.now(UTC).isoformat(),
             data={
                 "stage_number": result.stage_number,
                 "start_turn": result.start_turn,
@@ -123,7 +121,7 @@ class EvaluationBroadcaster:
         feedback_msg = FeedbackMessage(
             type="milestone",
             session_id=session_id,
-            timestamp=datetime.now(timezone.utc).isoformat(),
+            timestamp=datetime.now(UTC).isoformat(),
             data={
                 "milestone_type": milestone_type,
                 "message": message,
@@ -150,7 +148,7 @@ class EvaluationBroadcaster:
         message = FeedbackMessage(
             type="comprehensive_report",
             session_id=session_id,
-            timestamp=datetime.now(timezone.utc).isoformat(),
+            timestamp=datetime.now(UTC).isoformat(),
             data={
                 "overall_score": report.overall_score,
                 "dimension_scores": [
@@ -174,7 +172,7 @@ class EvaluationBroadcaster:
     async def _check_rate_limit(self, session_id: str) -> bool:
         """Check if broadcast is allowed by rate limit."""
         async with self._lock:
-            now = datetime.now(timezone.utc)
+            now = datetime.now(UTC)
             last = self._last_broadcast.get(session_id)
 
             if last is None:

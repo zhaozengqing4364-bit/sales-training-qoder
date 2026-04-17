@@ -166,7 +166,7 @@ class CapabilityRunner:
 
     async def run_all(
         self,
-        context: "AgentContext",
+        context: AgentContext,
         input_data: Any,
     ) -> list[CapabilityResult]:
         """
@@ -202,7 +202,7 @@ class CapabilityRunner:
                     cap.execute(context, input_data),
                     timeout=CAPABILITY_TIMEOUT_SECONDS
                 )
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 logger.error(
                     f"Capability '{cap.capability_id}' timed out "
                     f"after {CAPABILITY_TIMEOUT_SECONDS}s",
@@ -253,7 +253,7 @@ class CapabilityRunner:
     async def run_one(
         self,
         capability_id: str,
-        context: "AgentContext",
+        context: AgentContext,
         input_data: Any,
     ) -> CapabilityResult | None:
         """
@@ -277,7 +277,7 @@ class CapabilityRunner:
                         cap.execute(context, input_data),
                         timeout=CAPABILITY_TIMEOUT_SECONDS
                     )
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     logger.error(
                         f"Capability '{capability_id}' timed out "
                         f"after {CAPABILITY_TIMEOUT_SECONDS}s",
@@ -307,7 +307,7 @@ class CapabilityRunner:
         )
         return None
 
-    async def on_session_start(self, context: "AgentContext") -> None:
+    async def on_session_start(self, context: AgentContext) -> None:
         """
         Call on_session_start for all capabilities.
 
@@ -334,7 +334,7 @@ class CapabilityRunner:
                     session_id=context.session_id,
                 )
 
-    async def on_session_end(self, context: "AgentContext") -> dict[str, Any]:
+    async def on_session_end(self, context: AgentContext) -> dict[str, Any]:
         """
         Call on_session_end for all capabilities and collect statistics.
 

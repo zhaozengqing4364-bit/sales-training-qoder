@@ -153,8 +153,6 @@ Provide actionable, specific talking points.""",
 
         Uses simple heuristics when LLM fails
         """
-        content_lower = page.content.lower()
-
         # Generate generic talking points
         required_points = [
             f"Explain the main topic: {page.title}",

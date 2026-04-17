@@ -5,7 +5,7 @@ Presentations API - CRUD operations for PPT presentations
 import os
 import tempfile
 import uuid
-from datetime import UTC, datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any, cast
 
@@ -700,7 +700,7 @@ async def replace_presentation(
             presentation.title = title.strip()
         presentation.file_url = str(file_path)
         presentation.file_size_bytes = len(content)
-        presentation.upload_date = datetime.now(timezone.utc)
+        presentation.upload_date = datetime.now(UTC)
         presentation.version_number = next_version
         presentation.status = "processing"
         presentation.ocr_progress = 0.0
@@ -934,7 +934,7 @@ async def get_talking_points(
     points_result = await db.execute(
         select(RequiredTalkingPoint).where(
             RequiredTalkingPoint.page_id == page.page_id,
-            RequiredTalkingPoint.confirmed_by_admin == True,
+            RequiredTalkingPoint.confirmed_by_admin.is_(True),
         )
     )
     points = points_result.scalars().all()
@@ -992,7 +992,7 @@ async def get_forbidden_words(
     result = await db.execute(
         select(ForbiddenWord).where(
             (ForbiddenWord.presentation_id == presentation_id)
-            | (ForbiddenWord.page_id == None)
+            | (ForbiddenWord.page_id.is_(None))
         )
     )
     words = result.scalars().all()

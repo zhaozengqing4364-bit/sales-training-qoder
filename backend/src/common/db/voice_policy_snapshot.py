@@ -6,8 +6,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from common.db.schemas import VoicePolicySnapshotReference
 from agent.services.industry_pack_contract import build_runtime_binding_summary
+from common.db.schemas import VoicePolicySnapshotReference
 
 
 def build_voice_policy_snapshot_ref_payload(snapshot: Any) -> dict[str, Any] | None:

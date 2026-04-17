@@ -10,7 +10,6 @@ Requirements: P1-FIXES.md Issue #19
 """
 
 import os
-from typing import Optional, Set, Tuple
 
 from fastapi import HTTPException, UploadFile
 
@@ -42,10 +41,10 @@ class FileValidator:
     DEFAULT_MAX_SIZE = 10 * 1024 * 1024
 
     # Allowed file extensions for presentations
-    ALLOWED_PRESENTATION_EXTENSIONS: Set[str] = {".ppt", ".pptx", ".pdf"}
+    ALLOWED_PRESENTATION_EXTENSIONS: set[str] = {".ppt", ".pptx", ".pdf"}
 
     # Allowed MIME types
-    ALLOWED_MIME_TYPES: Set[str] = {
+    ALLOWED_MIME_TYPES: set[str] = {
         "application/vnd.ms-powerpoint",
         "application/vnd.openxmlformats-officedocument.presentationml.presentation",
         "application/pdf",
@@ -53,7 +52,7 @@ class FileValidator:
     }
 
     # Dangerous extensions that should never be allowed
-    DANGEROUS_EXTENSIONS: Set[str] = {
+    DANGEROUS_EXTENSIONS: set[str] = {
         ".exe",
         ".dll",
         ".bat",
@@ -82,14 +81,14 @@ class FileValidator:
     def __init__(
         self,
         max_size: int = DEFAULT_MAX_SIZE,
-        allowed_extensions: Optional[Set[str]] = None,
+        allowed_extensions: set[str] | None = None,
     ):
         self.max_size = max_size
         self.allowed_extensions = (
             allowed_extensions or self.ALLOWED_PRESENTATION_EXTENSIONS
         )
 
-    async def validate(self, file: UploadFile) -> Tuple[bytes, str]:
+    async def validate(self, file: UploadFile) -> tuple[bytes, str]:
         """
         Validate uploaded file
 
@@ -201,7 +200,7 @@ def get_file_extension(filename: str) -> str:
     return os.path.splitext(filename)[1].lower()
 
 
-def is_allowed_extension(filename: str, allowed: Set[str]) -> bool:
+def is_allowed_extension(filename: str, allowed: set[str]) -> bool:
     """Check if file has allowed extension"""
     ext = get_file_extension(filename)
     return ext in allowed

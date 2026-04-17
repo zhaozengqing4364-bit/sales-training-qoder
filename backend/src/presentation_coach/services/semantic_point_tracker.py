@@ -3,10 +3,9 @@ Semantic Point Tracker - Advanced talking point detection using embeddings
 Provides semantic similarity matching beyond simple keyword matching
 """
 
-import asyncio
 import re
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime
 from typing import Any
 
 from common.ai.embedding_service import EmbeddingService

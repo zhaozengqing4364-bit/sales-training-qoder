@@ -5,7 +5,7 @@ All triggers must inherit from BaseTrigger and implement should_trigger method.
 """
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Any
 
 
 @dataclass
@@ -14,12 +14,12 @@ class TriggerContext:
     session_id: str
     turn_count: int
     messages: list[dict[str, Any]]
-    last_user_message: Optional[str] = None
-    last_bot_message: Optional[str] = None
+    last_user_message: str | None = None
+    last_bot_message: str | None = None
     turns_since_last_trigger: int = 0
-    current_stage: Optional[str] = None
-    previous_stage: Optional[str] = None
-    start_time: Optional[float] = None
+    current_stage: str | None = None
+    previous_stage: str | None = None
+    start_time: float | None = None
     metadata: dict[str, Any] = None
 
     def __post_init__(self):

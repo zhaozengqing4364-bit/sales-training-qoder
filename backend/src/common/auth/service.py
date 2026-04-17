@@ -11,11 +11,11 @@ from http.cookies import SimpleCookie
 from typing import Any, NoReturn
 from urllib.parse import urlencode
 
+import httpx
+import jwt
 from dotenv import load_dotenv
 from fastapi import Cookie, Depends, HTTPException, Request, Response
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-import httpx
-import jwt
 from jwt import InvalidTokenError as JWTError
 from passlib.context import CryptContext
 from sqlalchemy import cast, or_, select
@@ -758,7 +758,6 @@ async def get_current_user_optional(
     Optional authentication - returns None if not authenticated
     For development mode testing
     """
-    import os
 
     # Development mode: use dev user if no token provided
     if _current_environment() == "development":

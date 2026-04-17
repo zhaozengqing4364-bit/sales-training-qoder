@@ -21,7 +21,7 @@ import uuid
 from copy import deepcopy
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from fastapi import APIRouter, Depends, Query
 from fastapi.responses import JSONResponse
@@ -37,16 +37,20 @@ from common.conversation.runtime_diagnostics import (
     build_session_runtime_diagnostics,
     extract_voice_policy_snapshot,
 )
-from common.db.models import PracticeSession, Scenario, SessionAudioSegment, SessionStatus, User
+from common.db.models import (
+    PracticeSession,
+    Scenario,
+    SessionAudioSegment,
+    SessionStatus,
+    User,
+)
 from common.db.schemas import (
     SessionCreate,
     SessionDetail,
     SessionLifecycleRequest,
     SessionLifecycleResponse,
-    SessionReport,
     SessionResponse,
     SessionUpdate,
-    ScenarioType,
 )
 from common.db.session import get_db
 from common.db.session_lifecycle import (
@@ -61,7 +65,6 @@ from common.effectiveness import (
     evaluate_effectiveness_snapshot,
 )
 from common.monitoring.logger import get_logger, get_trace_id
-from common.oss.signing import OssConfigError
 from common.services.practice_service import (
     PracticeRuntimeDescriptorService,
     PracticeServiceError,
@@ -75,6 +78,9 @@ from sales_bot.services.summary_service import summary_service
 from sales_bot.websocket.components.stepfun_message_helpers import (
     normalize_score_snapshot,
 )
+
+if TYPE_CHECKING:
+    from common.db.schemas import AudioAuditPayloadSchema
 
 logger = get_logger(__name__)
 

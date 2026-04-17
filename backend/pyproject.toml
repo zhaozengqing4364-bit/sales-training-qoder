@@ -9,11 +9,13 @@ dependencies = [
 [tool.ruff]
 line-length = 88
 target-version = "py311"
-select = ["E", "F", "I", "N", "W", "UP"]
-ignore = ["E501", "N806", "N803"]
 src = ["src"]
 
-[tool.ruff.isort]
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W", "UP"]
+ignore = ["E501", "N806", "N803", "UP042", "N818"]
+
+[tool.ruff.lint.isort]
 known-first-party = ["src"]
 
 [tool.black]

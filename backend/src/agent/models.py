@@ -10,7 +10,7 @@ References:
 """
 import enum
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from sqlalchemy import (
     Boolean,
@@ -97,8 +97,8 @@ class Agent(Base):
 
     # Audit
     created_by = Column(String(36), ForeignKey("users.user_id"), nullable=True)
-    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
-    updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
+    updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC))
     published_at = Column(DateTime(timezone=True), nullable=True)
 
     __table_args__ = (
@@ -172,8 +172,8 @@ class Persona(Base):
 
     # Audit
     created_by = Column(String(36), ForeignKey("users.user_id"), nullable=True)
-    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
-    updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
+    updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC))
 
     __table_args__ = (
         CheckConstraint(
@@ -236,7 +236,7 @@ class AgentPersona(Base):
     override_config = Column(JSON, nullable=True)  # Override Persona configuration
 
     # Audit
-    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
 
     __table_args__ = (
         UniqueConstraint("agent_id", "persona_id", name="uq_agent_persona"),
@@ -280,8 +280,8 @@ class VoiceRuntimeProfile(Base):
     system_instruction_template = Column(Text, nullable=True)
     tool_policy = Column(JSON, default=dict)
 
-    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
-    updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
+    updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC))
 
     __table_args__ = (
         CheckConstraint(
@@ -337,8 +337,8 @@ class AgentVoicePolicy(Base):
     instructions_override = Column(Text, nullable=True)
     tool_policy_override = Column(JSON, default=dict)
 
-    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
-    updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
+    updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC))
 
     __table_args__ = (
         CheckConstraint(
@@ -380,12 +380,12 @@ class PresentationAIPolicy(Base):
     fallback_config = Column(JSON, nullable=False, default=dict)
 
     created_at = Column(
-        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
     )
     updated_at = Column(
         DateTime(timezone=True),
-        default=lambda: datetime.now(timezone.utc),
-        onupdate=lambda: datetime.now(timezone.utc),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
     )
     updated_by = Column(String(36), ForeignKey("users.user_id"), nullable=True)
 

@@ -6,10 +6,10 @@ Provides LLM, Embedding, ASR, and TTS services with dynamic configuration.
 
 Usage:
     from common.ai import get_llm_service, get_embedding_service
-    
+
     llm = get_llm_service()
     result = await llm.generate("Hello", session_id="123")
-    
+
     embedding = get_embedding_service()
     result = await embedding.embed("Hello world")
 """

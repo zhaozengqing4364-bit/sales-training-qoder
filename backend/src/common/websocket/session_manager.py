@@ -13,12 +13,15 @@ import asyncio
 import inspect
 import time
 from dataclasses import dataclass, field
-from typing import Dict, Optional
-from datetime import datetime, timezone
+from datetime import UTC, datetime
+from typing import TYPE_CHECKING
 
 from common.monitoring.logger import get_logger
 
 logger = get_logger(__name__)
+
+if TYPE_CHECKING:
+    from common.websocket.base_handler import BaseWebSocketHandler
 
 
 @dataclass
@@ -29,7 +32,7 @@ class SessionInfo:
     handler: "BaseWebSocketHandler"
     last_activity: float = field(default_factory=time.time)
     created_at: float = field(default_factory=time.time)
-    user_id: Optional[str] = None
+    user_id: str | None = None
 
 
 class SessionManager:
@@ -54,12 +57,12 @@ class SessionManager:
         heartbeat_interval: int = 30,  # 30 seconds
         cleanup_interval: int = 60,  # 60 seconds
     ):
-        self.sessions: Dict[str, SessionInfo] = {}
+        self.sessions: dict[str, SessionInfo] = {}
         self.timeout_seconds = timeout_seconds
         self.heartbeat_interval = heartbeat_interval
         self.cleanup_interval = cleanup_interval
-        self.cleanup_task: Optional[asyncio.Task] = None
-        self.heartbeat_task: Optional[asyncio.Task] = None
+        self.cleanup_task: asyncio.Task | None = None
+        self.heartbeat_task: asyncio.Task | None = None
         self._running = False
         self.metrics = {
             "registered_sessions": 0,
@@ -104,7 +107,7 @@ class SessionManager:
         self,
         session_id: str,
         handler: "BaseWebSocketHandler",
-        user_id: Optional[str] = None,
+        user_id: str | None = None,
     ):
         """Register a new session for monitoring"""
         self.sessions[session_id] = SessionInfo(
@@ -218,7 +221,7 @@ class SessionManager:
                 await info.handler.send_message(
                     {
                         "type": "session_timeout",
-                        "timestamp": datetime.now(timezone.utc).isoformat(),
+                        "timestamp": datetime.now(UTC).isoformat(),
                         "data": {
                             "message": "会话超时，请重新开始",
                             "inactive_duration": int(inactive_duration),
@@ -269,7 +272,7 @@ class SessionManager:
                 await info.handler.send_message(
                     {
                         "type": "heartbeat",
-                        "timestamp": datetime.now(timezone.utc).isoformat(),
+                        "timestamp": datetime.now(UTC).isoformat(),
                         "data": {
                             "timestamp": now,
                             "session_age": int(now - info.created_at),
@@ -367,7 +370,7 @@ class SessionManager:
 
 
 # Global session manager instance
-_session_manager: Optional[SessionManager] = None
+_session_manager: SessionManager | None = None
 
 
 def get_session_manager() -> SessionManager:

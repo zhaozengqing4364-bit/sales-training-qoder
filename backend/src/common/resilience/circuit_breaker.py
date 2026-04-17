@@ -10,9 +10,10 @@ Requirements: P0-FIXES.md Issue #11
 """
 
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from enum import Enum
-from typing import Callable, Optional, TypeVar, Generic
+from typing import TypeVar
 
 from common.monitoring.logger import get_logger
 
@@ -69,7 +70,7 @@ class CircuitBreaker:
         success_threshold: int = 3,
         timeout_seconds: int = 60,
         half_open_max_calls: int = 3,
-        on_state_change: Optional[Callable[[CircuitState, CircuitState], None]] = None,
+        on_state_change: Callable[[CircuitState, CircuitState], None] | None = None,
     ):
         self.name = name
         self.config = CircuitBreakerConfig(
@@ -250,7 +251,7 @@ class CircuitBreakerRegistry:
             )
         return self._breakers[name]
 
-    def get(self, name: str) -> Optional[CircuitBreaker]:
+    def get(self, name: str) -> CircuitBreaker | None:
         """Get circuit breaker by name"""
         return self._breakers.get(name)
 
@@ -260,7 +261,7 @@ class CircuitBreakerRegistry:
 
 
 # Global registry
-_circuit_registry: Optional[CircuitBreakerRegistry] = None
+_circuit_registry: CircuitBreakerRegistry | None = None
 
 
 def get_circuit_registry() -> CircuitBreakerRegistry:

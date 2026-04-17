@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from typing import Literal, TypedDict
 
-
 SalesStageKey = Literal["discovery", "objection", "closing"]
 SalesCoachingFocusType = Literal[
     "value_translation_gap",

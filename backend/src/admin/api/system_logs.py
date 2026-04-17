@@ -9,7 +9,7 @@ References:
 """
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -238,7 +238,7 @@ async def create_system_log(
         ip_address=ip_address,
         status=status,
         details=details,
-        created_at=datetime.now(timezone.utc),
+        created_at=datetime.now(UTC),
     )
 
     db.add(log)

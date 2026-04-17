@@ -24,10 +24,9 @@ import asyncio
 import base64
 import contextlib
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
-from fastapi import WebSocket
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -39,8 +38,8 @@ from common.ai.config_manager import get_config_manager
 from common.ai.llm_service import create_llm_service, get_llm_service
 from common.ai.models import ModelType
 from common.audio.asr_service import get_asr_service
-from common.db.models import PracticeSession
 from common.audio.tts_factory import get_tts_service_with_fallback
+from common.db.models import PracticeSession
 from common.db.session import AsyncSessionLocal
 from common.effectiveness import coerce_live_session_conclusion_summary
 from common.knowledge.kb_lock_guard import evaluate_kb_lock_decision
@@ -51,9 +50,9 @@ from common.websocket.session_state_service import SessionStateSnapshot
 from sales_bot.services.voice_instruction_compiler import VoiceInstructionCompiler
 from sales_bot.websocket.base_sales_handler import BaseSalesHandler
 from sales_bot.websocket.components import (
-    TTSComponent,
     CapabilityProcessor,
     MessagePersistence,
+    TTSComponent,
 )
 
 logger = get_logger(__name__)
@@ -206,7 +205,7 @@ class EnhancedSalesHandler(BaseSalesHandler):
             conversation_history=[],
             agent_config=self.agent_config,
             persona_config=self.persona_config,
-            start_time=datetime.now(timezone.utc),
+            start_time=datetime.now(UTC),
         )
 
         # Initialize CapabilityRunner
@@ -429,9 +428,13 @@ class EnhancedSalesHandler(BaseSalesHandler):
         try:
             async with AsyncSessionLocal() as db:
                 from common.ai.llm_service import LLMService
+                from evaluation.services.comprehensive_report import (
+                    ComprehensiveReportService,
+                )
+                from evaluation.services.staged_evaluation import (
+                    StagedEvaluationService,
+                )
                 from prompt_templates.service import PromptTemplateService
-                from evaluation.services.staged_evaluation import StagedEvaluationService
-                from evaluation.services.comprehensive_report import ComprehensiveReportService
 
                 llm_service = LLMService()
                 prompt_service = PromptTemplateService(db)
@@ -520,7 +523,7 @@ class EnhancedSalesHandler(BaseSalesHandler):
             self.websocket,
             {
                 "type": "interrupted",
-                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "timestamp": datetime.now(UTC).isoformat(),
                 "trace_id": trace_id,
                 "stream_id": interrupted_stream_id,
                 "data": {"reason": reason},
@@ -583,7 +586,7 @@ class EnhancedSalesHandler(BaseSalesHandler):
 
     async def _stop_streaming_asr(self):
         """Stop streaming ASR and process the final transcript.
-        
+
         CRITICAL FIX: _process_user_text is launched as a background task instead of
         being awaited inline. Previously, the LLM+TTS pipeline (~5-10s) blocked the
         message processing loop, causing subsequent recording messages (user_speaking,
@@ -700,7 +703,7 @@ class EnhancedSalesHandler(BaseSalesHandler):
 
     async def _process_user_text_safe(self, text: str):
         """Wrapper around _process_user_text that catches exceptions.
-        
+
         Used as a fire-and-forget background task. Without this wrapper,
         exceptions from _process_user_text would become unhandled task
         exceptions and log noisy warnings.
@@ -1022,7 +1025,7 @@ class EnhancedSalesHandler(BaseSalesHandler):
         """Send ASR transcript with trace_id."""
         await self.manager.send_json(self.websocket, {
             "type": "asr_transcript",
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
             "trace_id": self._get_trace_id(),
             "data": {"text": text, "is_final": is_final, "confidence": 0.95},
         })
@@ -1047,7 +1050,7 @@ class EnhancedSalesHandler(BaseSalesHandler):
         """Send status update with trace_id."""
         await self.manager.send_json(self.websocket, {
             "type": "status",
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
             "trace_id": self._get_trace_id(),
             "data": {
                 "session_status": self.session_status,
@@ -1059,7 +1062,7 @@ class EnhancedSalesHandler(BaseSalesHandler):
     async def _send_backpressure(self, action: str, queue_size: int):
         """Send backpressure signal to client."""
         payload = {
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
             "trace_id": self._get_trace_id(),
             "data": {
                 "action": action,
@@ -1082,7 +1085,7 @@ class EnhancedSalesHandler(BaseSalesHandler):
         """Send error with trace_id."""
         await self.manager.send_json(self.websocket, {
             "type": "error",
-            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
             "trace_id": self._get_trace_id(),
             "data": {"code": code, "message": message, "user_action": "请重试"},
         })

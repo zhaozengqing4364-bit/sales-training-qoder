@@ -10,7 +10,6 @@ from __future__ import annotations
 import hashlib
 from dataclasses import dataclass, field
 
-
 PROMPT_CONTRACT_VERSION = "m021_s02_t02"
 
 
