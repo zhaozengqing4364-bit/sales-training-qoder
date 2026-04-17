@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import UserDetailPage from "./page";
 import { ApiRequestError } from "@/lib/api/client";
 import { buildAdminUserDrillInHref } from "@/lib/admin/drill-in";
-import type { LinkedAssetChangeReference, SupportRuntimeFaultsResponse } from "@/lib/api/types";
+import type { LinkedAssetChangeReference, ManagerInterventionListResponse, SupportRuntimeFaultsResponse, UserProgressResponse, UserSessionsResponse } from "@/lib/api/types";
 
 const {
     pushMock,
@@ -388,9 +388,9 @@ describe("UserDetailPage", () => {
 
         useSearchParamsMock.mockReturnValue(new URLSearchParams());
         getUserStatsMock.mockResolvedValue(baseStatsResponse);
-        getUserSessionsMock.mockResolvedValue(baseSessionsResponse as any);
-        getUserProgressMock.mockResolvedValue(richProgressResponse as any);
-        listManagerInterventionsMock.mockResolvedValue(baseInterventionsResponse as any);
+        getUserSessionsMock.mockResolvedValue(baseSessionsResponse as unknown as UserSessionsResponse);
+        getUserProgressMock.mockResolvedValue(richProgressResponse as unknown as UserProgressResponse);
+        listManagerInterventionsMock.mockResolvedValue(baseInterventionsResponse as unknown as ManagerInterventionListResponse);
         getSupportRuntimeFaultsMock.mockResolvedValue(supportRuntimeFaultsResponse);
         createManagerInterventionMock.mockResolvedValue({
             intervention_id: "intervention-2",
@@ -462,7 +462,7 @@ describe("UserDetailPage", () => {
                 reason: "insufficient_evaluable_history",
                 summary: "最近完成的训练里仍有证据不足的会话，先补齐有效互动再判断是否切换重点。",
             },
-        } as any);
+        } as unknown as UserProgressResponse);
 
         render(<UserDetailPage />);
 
@@ -647,7 +647,7 @@ describe("UserDetailPage", () => {
                     next_goal: null,
                 },
             ],
-        } as any);
+        } as unknown as UserProgressResponse);
 
         render(<UserDetailPage />);
 
