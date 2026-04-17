@@ -220,13 +220,6 @@ export function SidebarContent({
 function SidebarUser({ isCollapsed, userInfo }: { isCollapsed: boolean; userInfo: UserInfo | null }) {
     const displayName = userInfo?.display_name || userInfo?.name || "用户";
     const department = userInfo?.department || "未设置部门";
-                        <span className="text-sm font-bold text-slate-800 truncate">{displayName}</span>
-                        <span className="text-[10px] text-slate-400 font-medium bg-slate-100 px-1.5 py-0.5 rounded-full w-fit truncate">{department}</span>
-                    </div>
-                ) : null}
-            </div>
-        );
-    }
 
     if (isCollapsed) {
         return (

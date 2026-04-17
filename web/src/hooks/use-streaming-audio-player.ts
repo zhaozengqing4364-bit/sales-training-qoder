@@ -135,6 +135,15 @@ function base64ToArrayBuffer(base64: string): ArrayBuffer {
     return bytes.buffer;
 }
 
+function applyPlaybackRateToActivePcmSources(
+    sources: Iterable<AudioBufferSourceNode>,
+    playbackRate: number,
+): void {
+    for (const source of sources) {
+        source.playbackRate.value = playbackRate;
+    }
+}
+
 
 /**
  * useStreamingAudioPlayer Hook
