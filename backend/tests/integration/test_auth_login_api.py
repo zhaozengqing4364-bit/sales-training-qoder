@@ -229,7 +229,7 @@ async def test_logout_requires_matching_csrf_header_for_cookie_session(
 
 
 @pytest.mark.asyncio
-async def test_global_csrf_rejects_cookie_unsafe_requests_without_matching_header(
+async def test_global_csrf_middleware_protects_cookie_backed_unsafe_requests(
     async_client,
     test_db: AsyncSession,
     monkeypatch: pytest.MonkeyPatch,
@@ -251,51 +251,43 @@ async def test_global_csrf_rejects_cookie_unsafe_requests_without_matching_heade
     csrf_token = async_client.cookies.get(AUTH_CSRF_COOKIE_NAME)
     assert csrf_token
 
-    missing_header_response = await async_client.post("/api/v1/auth/dev-login")
+    missing_header_response = await async_client.patch(
+        "/api/v1/users/me",
+        json={"department": "Revenue"},
+    )
     assert missing_header_response.status_code == 403
-    assert missing_header_response.json()["detail"]["error"] == "[CSRF_VALIDATION_FAILED]"
+    assert (
+        missing_header_response.json()["detail"]["error"]
+        == "[CSRF_VALIDATION_FAILED]"
+    )
 
-    mismatched_header_response = await async_client.post(
-        "/api/v1/auth/dev-login",
+    mismatched_header_response = await async_client.patch(
+        "/api/v1/users/me",
         headers={AUTH_CSRF_HEADER_NAME: "not-the-cookie-token"},
+        json={"department": "Revenue"},
     )
     assert mismatched_header_response.status_code == 403
-    assert mismatched_header_response.json()["detail"]["error"] == "[CSRF_VALIDATION_FAILED]"
+    assert (
+        mismatched_header_response.json()["detail"]["error"]
+        == "[CSRF_VALIDATION_FAILED]"
+    )
 
-    accepted_response = await async_client.post(
-        "/api/v1/auth/dev-login",
+    accepted_response = await async_client.patch(
+        "/api/v1/users/me",
         headers={AUTH_CSRF_HEADER_NAME: csrf_token},
+        json={"department": "Revenue"},
     )
     assert accepted_response.status_code == 200
+    assert accepted_response.json()["data"]["department"] == "Revenue"
 
-
-@pytest.mark.asyncio
-async def test_global_csrf_skips_bearer_unsafe_requests(
-    async_client,
-    test_db: AsyncSession,
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    monkeypatch.delenv("AUTH_USER_PASSWORDS_JSON", raising=False)
-    monkeypatch.setenv("AUTH_SHARED_PASSWORD", "Password123!")
-    user = await _create_user(
-        test_db,
-        email="auth-global-csrf-bearer@example.com",
-        role="user",
-        is_active=True,
+    bearer_token = login_response.json()["data"]["token"]
+    bearer_response = await async_client.patch(
+        "/api/v1/users/me",
+        headers={"Authorization": f"Bearer {bearer_token}"},
+        json={"department": "Enterprise"},
     )
-
-    login_response = await async_client.post(
-        "/api/v1/auth/login",
-        json={"email": user.email, "password": "Password123!"},
-    )
-    assert login_response.status_code == 200
-    token = login_response.json()["data"]["token"]
-
-    accepted_response = await async_client.post(
-        "/api/v1/auth/dev-login",
-        headers={"Authorization": f"Bearer {token}"},
-    )
-    assert accepted_response.status_code == 200
+    assert bearer_response.status_code == 200
+    assert bearer_response.json()["data"]["department"] == "Enterprise"
 
 
 @pytest.mark.asyncio

@@ -126,6 +126,19 @@ DEV_CORS_ALLOW_ORIGIN_REGEX = (
     r")(:\d+)?$"
 )
 
+CSRF_EXEMPT_PATHS = frozenset(
+    {
+        "/health",
+        "/metrics",
+        "/api/v1/auth/login",
+        "/api/v1/auth/dev-login",
+        "/api/v1/auth/forgot-password",
+        "/api/v1/auth/reset-password",
+        "/api/v1/auth/wecom/start",
+        "/api/v1/auth/wecom/callback",
+    }
+)
+
 
 def _resolve_cors_origins() -> list[str]:
     configured = os.getenv("CORS_ORIGINS", "")
@@ -340,13 +353,16 @@ app.exception_handler(Exception)(global_exception_handler)
 
 
 @app.middleware("http")
-async def enforce_cookie_session_csrf(request: Request, call_next):
-    """Reject unsafe cookie-backed requests unless they present a matching CSRF token."""
-    if should_enforce_csrf(request):
+async def enforce_cookie_csrf(request: Request, call_next):
+    """Protect cookie-backed unsafe requests with double-submit CSRF."""
+    if request.url.path not in CSRF_EXEMPT_PATHS and should_enforce_csrf(request):
         try:
             validate_csrf_request(request)
         except HTTPException as exc:
-            return await http_exception_handler(request, exc)
+            return JSONResponse(
+                status_code=exc.status_code,
+                content={"detail": exc.detail},
+            )
 
     return await call_next(request)
 
