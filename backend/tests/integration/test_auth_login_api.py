@@ -8,14 +8,14 @@ import json
 import uuid
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from urllib.parse import parse_qs, urlparse
 
-import agent.models  # noqa: F401  # ensure Agent/Persona tables are registered on Base metadata for sqlite tests
 import httpx
 import pytest
 from sqlalchemy import func, select, text
-from urllib.parse import parse_qs, urlparse
 from sqlalchemy.ext.asyncio import AsyncSession
 
+import agent.models  # noqa: F401  # ensure Agent/Persona tables are registered on Base metadata for sqlite tests
 from common.auth.api import AUTH_FORMALIZATION_SURFACE
 from common.auth.service import (
     AUTH_CSRF_COOKIE_NAME,
@@ -163,14 +163,21 @@ async def test_login_in_non_development_forces_secure_session_and_csrf_cookies(
     assert response.status_code == 200
     set_cookie_headers = response.headers.get_list("set-cookie")
     session_cookie_header = next(
-        header for header in set_cookie_headers if header.startswith(f"{AUTH_SESSION_COOKIE_NAME}=")
+        header
+        for header in set_cookie_headers
+        if header.startswith(f"{AUTH_SESSION_COOKIE_NAME}=")
     )
     csrf_cookie_header = next(
-        header for header in set_cookie_headers if header.startswith(f"{AUTH_CSRF_COOKIE_NAME}=")
+        header
+        for header in set_cookie_headers
+        if header.startswith(f"{AUTH_CSRF_COOKIE_NAME}=")
     )
     assert "Secure" in session_cookie_header
     assert "Secure" in csrf_cookie_header
-    assert "SameSite=lax" in session_cookie_header or "SameSite=Lax" in session_cookie_header
+    assert (
+        "SameSite=lax" in session_cookie_header
+        or "SameSite=Lax" in session_cookie_header
+    )
 
 
 @pytest.mark.asyncio
@@ -208,12 +215,99 @@ async def test_logout_requires_matching_csrf_header_for_cookie_session(
     assert logout_response.status_code == 200
     logout_cookie_headers = logout_response.headers.get_list("set-cookie")
     logout_cookie_header = next(
-        header for header in logout_cookie_headers if header.startswith(f"{AUTH_SESSION_COOKIE_NAME}=")
+        header
+        for header in logout_cookie_headers
+        if header.startswith(f"{AUTH_SESSION_COOKIE_NAME}=")
     )
-    assert "Max-Age=0" in logout_cookie_header or "expires=" in logout_cookie_header.lower()
+    assert (
+        "Max-Age=0" in logout_cookie_header
+        or "expires=" in logout_cookie_header.lower()
+    )
 
     me_response = await async_client.get("/api/v1/users/me")
     assert me_response.status_code == 401
+
+
+@pytest.mark.asyncio
+async def test_cookie_session_unsafe_write_requires_global_csrf_header(
+    async_client,
+    test_db: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("AUTH_USER_PASSWORDS_JSON", raising=False)
+    monkeypatch.setenv("AUTH_SHARED_PASSWORD", "Password123!")
+    user = await _create_user(
+        test_db,
+        email="auth-global-csrf@example.com",
+        role="user",
+        is_active=True,
+    )
+
+    login_response = await async_client.post(
+        "/api/v1/auth/login",
+        json={"email": user.email, "password": "Password123!"},
+    )
+    assert login_response.status_code == 200
+    csrf_token = async_client.cookies.get(AUTH_CSRF_COOKIE_NAME)
+    assert csrf_token
+
+    missing_csrf_response = await async_client.patch(
+        "/api/v1/users/me",
+        json={"department": "Sales Enablement"},
+    )
+    assert missing_csrf_response.status_code == 403
+    assert missing_csrf_response.json()["detail"]["error"] == "[CSRF_VALIDATION_FAILED]"
+
+    mismatched_csrf_response = await async_client.patch(
+        "/api/v1/users/me",
+        json={"department": "Sales Enablement"},
+        headers={AUTH_CSRF_HEADER_NAME: "wrong-token"},
+    )
+    assert mismatched_csrf_response.status_code == 403
+    assert (
+        mismatched_csrf_response.json()["detail"]["error"] == "[CSRF_VALIDATION_FAILED]"
+    )
+
+    accepted_response = await async_client.patch(
+        "/api/v1/users/me",
+        json={"department": "Sales Enablement"},
+        headers={AUTH_CSRF_HEADER_NAME: csrf_token},
+    )
+    assert accepted_response.status_code == 200
+    assert accepted_response.json()["data"]["department"] == "Sales Enablement"
+
+
+@pytest.mark.asyncio
+async def test_bearer_unsafe_write_skips_cookie_csrf_layer(
+    async_client,
+    test_db: AsyncSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.delenv("AUTH_USER_PASSWORDS_JSON", raising=False)
+    monkeypatch.setenv("AUTH_SHARED_PASSWORD", "Password123!")
+    user = await _create_user(
+        test_db,
+        email="auth-bearer-csrf-bypass@example.com",
+        role="user",
+        is_active=True,
+    )
+
+    login_response = await async_client.post(
+        "/api/v1/auth/login",
+        json={"email": user.email, "password": "Password123!"},
+    )
+    assert login_response.status_code == 200
+    token = login_response.json()["data"]["token"]
+    assert async_client.cookies.get(AUTH_SESSION_COOKIE_NAME)
+
+    response = await async_client.patch(
+        "/api/v1/users/me",
+        json={"department": "Bearer Sales"},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["data"]["department"] == "Bearer Sales"
 
 
 @pytest.mark.asyncio
@@ -351,7 +445,14 @@ async def test_auth_providers_report_explicit_dev_fallback_when_wecom_is_not_con
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setenv("ENVIRONMENT", "development")
-    for key in ("WECOM_CORP_ID", "WECOM_SECRET", "WECOM_AGENT_ID", "WECHAT_CORP_ID", "WECHAT_SECRET", "WECHAT_AGENT_ID"):
+    for key in (
+        "WECOM_CORP_ID",
+        "WECOM_SECRET",
+        "WECOM_AGENT_ID",
+        "WECHAT_CORP_ID",
+        "WECHAT_SECRET",
+        "WECHAT_AGENT_ID",
+    ):
         monkeypatch.delenv(key, raising=False)
 
     response = await async_client.get("/api/v1/auth/providers")
@@ -364,7 +465,9 @@ async def test_auth_providers_report_explicit_dev_fallback_when_wecom_is_not_con
     assert payload["data"]["wecom"]["configured"] is False
     assert "未配置" in payload["data"]["wecom"]["message"]
     assert payload["data"]["dev_fallback"]["enabled"] is True
-    assert payload["data"]["dev_fallback"]["login_url"].endswith("/api/v1/auth/dev-login")
+    assert payload["data"]["dev_fallback"]["login_url"].endswith(
+        "/api/v1/auth/dev-login"
+    )
     assert "development" in payload["data"]["dev_fallback"]["message"].lower()
 
 
@@ -387,19 +490,43 @@ async def test_wecom_callback_exchanges_code_sets_cookie_and_redirects_to_fronte
         if request.url.path == "/cgi-bin/gettoken":
             assert request.url.params["corpid"] == "corp-id"
             assert request.url.params["corpsecret"] == "corp-secret"
-            return httpx.Response(200, json={"errcode": 0, "errmsg": "ok", "access_token": "token-123", "expires_in": 7200})
+            return httpx.Response(
+                200,
+                json={
+                    "errcode": 0,
+                    "errmsg": "ok",
+                    "access_token": "token-123",
+                    "expires_in": 7200,
+                },
+            )
         if request.url.path == "/cgi-bin/auth/getuserinfo":
             assert request.url.params["code"] == "callback-code-1"
-            return httpx.Response(200, json={"errcode": 0, "errmsg": "ok", "userid": "wecom-user-1"})
+            return httpx.Response(
+                200, json={"errcode": 0, "errmsg": "ok", "userid": "wecom-user-1"}
+            )
         if request.url.path == "/cgi-bin/user/get":
             assert request.url.params["userid"] == "wecom-user-1"
-            return httpx.Response(200, json={"errcode": 0, "errmsg": "ok", "userid": "wecom-user-1", "name": "企业微信成员", "department": [42], "email": "wecom-user@example.com"})
-        raise AssertionError(f"unexpected WeCom request: {request.method} {request.url}")
+            return httpx.Response(
+                200,
+                json={
+                    "errcode": 0,
+                    "errmsg": "ok",
+                    "userid": "wecom-user-1",
+                    "name": "企业微信成员",
+                    "department": [42],
+                    "email": "wecom-user@example.com",
+                },
+            )
+        raise AssertionError(
+            f"unexpected WeCom request: {request.method} {request.url}"
+        )
 
     transport = httpx.MockTransport(handler)
     monkeypatch.setattr(
         "common.auth.service._create_wecom_http_client",
-        lambda: httpx.AsyncClient(transport=transport, base_url="https://qyapi.weixin.qq.com"),
+        lambda: httpx.AsyncClient(
+            transport=transport, base_url="https://qyapi.weixin.qq.com"
+        ),
     )
 
     start_response = await async_client.get(
@@ -424,7 +551,9 @@ async def test_wecom_callback_exchanges_code_sets_cookie_and_redirects_to_fronte
 
     set_cookie_headers = callback_response.headers.get_list("set-cookie")
     session_cookie_header = next(
-        header for header in set_cookie_headers if header.startswith(f"{AUTH_SESSION_COOKIE_NAME}=")
+        header
+        for header in set_cookie_headers
+        if header.startswith(f"{AUTH_SESSION_COOKIE_NAME}=")
     )
     assert "HttpOnly" in session_cookie_header
     session_token = callback_response.cookies.get(AUTH_SESSION_COOKIE_NAME)
@@ -629,7 +758,9 @@ async def test_forgot_password_success_includes_rate_limit_headers(
     assert response.status_code == 200
     assert response.headers["X-RateLimit-Limit"] == "1"
     assert response.headers["X-RateLimit-Remaining"] == "0"
-    assert int(response.headers["X-RateLimit-Reset"]) >= int(datetime.now(UTC).timestamp())
+    assert int(response.headers["X-RateLimit-Reset"]) >= int(
+        datetime.now(UTC).timestamp()
+    )
 
 
 @pytest.mark.asyncio
@@ -821,11 +952,13 @@ async def test_reset_password_success_sets_managed_password_and_rejects_reuse(
 def test_auth_recovery_request_path_keeps_runtime_ddl_out_of_handlers() -> None:
     repo_root = Path(__file__).resolve().parents[2]
     auth_api_source = (repo_root / "src/common/auth/api.py").read_text(encoding="utf-8")
-    password_reset_source = (repo_root / "src/common/services/password_reset.py").read_text(
-        encoding="utf-8"
-    )
+    password_reset_source = (
+        repo_root / "src/common/services/password_reset.py"
+    ).read_text(encoding="utf-8")
 
-    assert AUTH_FORMALIZATION_SURFACE["runtime_ddl_owner"] == "common.db.session.init_db"
+    assert (
+        AUTH_FORMALIZATION_SURFACE["runtime_ddl_owner"] == "common.db.session.init_db"
+    )
     assert "PasswordResetService" in auth_api_source
     for forbidden_snippet in ("create_all(", "CREATE TABLE", "create table"):
         assert forbidden_snippet not in auth_api_source
