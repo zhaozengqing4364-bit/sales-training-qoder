@@ -101,6 +101,29 @@ type AdminReportDomainDependencies = {
     request: ApiRequest;
 };
 
+type AudioSegmentUploadUrl = {
+    url: string;
+    object_key: string;
+    expires_at?: string;
+};
+
+type AudioSegment = {
+    id?: string;
+    segment_sequence: number;
+    upload_status: string;
+    object_key?: string;
+    size_bytes?: number;
+    duration_ms?: number | null;
+    error_message?: string | null;
+};
+
+type AudioSegmentFailureToken =
+    | "signing_failed"
+    | "oss_put_failed"
+    | "register_failed"
+    | "network_error"
+    | "unknown";
+
 export function createAuthDomain({ request }: AuthDomainDependencies) {
     return {
         login: async (credentials: { email: string; password: string }) => {
@@ -178,6 +201,40 @@ export function createPracticeDomain({ request }: PracticeDomainDependencies) {
         pauseSession: async (sessionId: string) => controlLifecycle(sessionId, "pause"),
         resumeSession: async (sessionId: string) => controlLifecycle(sessionId, "resume"),
         endSession: async (sessionId: string) => controlLifecycle(sessionId, "end"),
+        audioSegments: {
+            createUploadUrl: async (
+                sessionId: string,
+                payload: { segment_sequence: number; content_type: string },
+            ) => {
+                return request<AudioSegmentUploadUrl>(`/practice/sessions/${sessionId}/audio-upload-urls`, {
+                    method: "POST",
+                    body: JSON.stringify(payload),
+                });
+            },
+            register: async (
+                sessionId: string,
+                payload: {
+                    segment_sequence: number;
+                    object_key: string;
+                    size_bytes: number;
+                    duration_ms?: number;
+                },
+            ) => {
+                return request<AudioSegment>(`/practice/sessions/${sessionId}/audio-segments`, {
+                    method: "POST",
+                    body: JSON.stringify(payload),
+                });
+            },
+            registerFailure: async (
+                sessionId: string,
+                payload: { segment_sequence: number; error_token: AudioSegmentFailureToken },
+            ) => {
+                return request<AudioSegment>(`/practice/sessions/${sessionId}/audio-segments/failure`, {
+                    method: "POST",
+                    body: JSON.stringify(payload),
+                });
+            },
+        },
     };
 }
 
