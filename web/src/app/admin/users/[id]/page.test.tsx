@@ -417,7 +417,7 @@ describe("UserDetailPage", () => {
             reminder_id: "reminder-1",
             user_id: "user-1",
             intervention_id: "intervention-1",
-        });
+        } satisfies ManagerInterventionRemindResponse);
     });
 
     it("renders supervisor-readable progress summary with repeated blockers, next goal, and switch-focus guidance", async () => {
