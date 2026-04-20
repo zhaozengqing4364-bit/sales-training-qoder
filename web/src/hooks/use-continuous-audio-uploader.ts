@@ -152,11 +152,18 @@ export function useContinuousAudioUploader(
         pendingUploadCountRef.current += 1;
         setPendingUploads(pendingUploadCountRef.current);
 
-        const trackedPromise = uploadPromise.finally(() => {
-            pendingUploadPromisesRef.current.delete(trackedPromise);
-            pendingUploadCountRef.current = Math.max(0, pendingUploadCountRef.current - 1);
-            setPendingUploads(pendingUploadCountRef.current);
-        });
+        let trackedPromise: Promise<void>;
+        trackedPromise = uploadPromise
+            .catch((error) => {
+                const message = getUploadErrorMessage(error);
+                uploadErrorRef.current = message;
+                setLastError(message);
+            })
+            .finally(() => {
+                pendingUploadPromisesRef.current.delete(trackedPromise);
+                pendingUploadCountRef.current = Math.max(0, pendingUploadCountRef.current - 1);
+                setPendingUploads(pendingUploadCountRef.current);
+            });
 
         pendingUploadPromisesRef.current.add(trackedPromise);
     }, []);

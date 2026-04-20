@@ -421,7 +421,7 @@ export default function PracticeSessionPage() {
         handleEndSession,
         handleStartSession,
         handleTogglePauseResume,
-        audioEvidenceStatus,
+        audioEvidenceStatus = { status: "idle", message: null, error: null },
         isEndingSession,
         isSessionPaused,
         isSessionTerminal,
