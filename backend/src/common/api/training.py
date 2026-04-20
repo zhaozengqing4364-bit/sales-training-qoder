@@ -20,10 +20,11 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
+from common.api.response import error_response, success_response
 from common.auth.service import get_current_user
 from common.db.models import PracticeSession, User
 from common.db.session import get_db
-from common.monitoring.logger import get_logger, get_trace_id
+from common.monitoring.logger import get_logger
 
 logger = get_logger(__name__)
 
@@ -61,27 +62,6 @@ class PaginatedSessions(BaseModel):
     page: int
     page_size: int
     has_more: bool
-
-
-# ========== Helper Functions ==========
-
-def success_response(data, trace_id: str = None):
-    """Create unified success response"""
-    return {
-        "success": True,
-        "data": data if isinstance(data, (dict, list)) else data.model_dump() if hasattr(data, 'model_dump') else data,
-        "trace_id": trace_id or get_trace_id()
-    }
-
-
-def error_response(error_code: str, message: str = None, trace_id: str = None):
-    """Create unified error response"""
-    return {
-        "success": False,
-        "error": error_code,
-        "message": message or error_code,
-        "trace_id": trace_id or get_trace_id()
-    }
 
 
 # ========== Static Training Categories ==========
