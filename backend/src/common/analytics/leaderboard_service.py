@@ -737,6 +737,8 @@ class LeaderboardService:
         user_id: str | uuid.UUID,
         scenario_type: str | None = None,
         time_period: str = "all_time",
+        leaderboard_mode: str = "score",
+        issue_type: str | None = None,
     ) -> Result[dict]:
         """
         Get a user's rank and stats
@@ -746,10 +748,31 @@ class LeaderboardService:
         try:
             normalized_time_period = self._normalize_time_period(time_period)
             normalized_scenario_type = self._normalize_scenario_type(scenario_type)
+            normalized_leaderboard_mode = self._normalize_leaderboard_mode(
+                leaderboard_mode
+            )
             normalized_user_id = str(user_id)
             cutoff_time = datetime.now() - self.time_periods.get(
                 normalized_time_period, self.time_periods["all_time"]
             )
+
+            if normalized_leaderboard_mode == "improvement":
+                return await self._get_improvement_user_rank(
+                    db=db,
+                    user_id=normalized_user_id,
+                    scenario_type=normalized_scenario_type,
+                    time_period=normalized_time_period,
+                    cutoff_time=cutoff_time,
+                )
+            if normalized_leaderboard_mode == "issue_type":
+                return await self._get_issue_type_user_rank(
+                    db=db,
+                    user_id=normalized_user_id,
+                    scenario_type=normalized_scenario_type,
+                    time_period=normalized_time_period,
+                    cutoff_time=cutoff_time,
+                    issue_type=issue_type,
+                )
 
             score_expr = self._score_expr()
 
@@ -763,11 +786,7 @@ class LeaderboardService:
                 .where(PracticeSession.status == "completed")
                 .where(PracticeSession.start_time >= cutoff_time)
                 .where(self._evaluable_filter())
-                .where(
-                    (PracticeSession.logic_score.isnot(None))
-                    & (PracticeSession.accuracy_score.isnot(None))
-                    & (PracticeSession.completeness_score.isnot(None))
-                )
+                .where(self._score_fields_present_filter())
             )
 
             if normalized_scenario_type:
@@ -811,6 +830,7 @@ class LeaderboardService:
                         "total_sessions": 0,
                         "average_score": 0,
                         "score_basis": PROJECTION_SCORE_BASIS,
+                        "leaderboard_mode": "score",
                         "evaluable_sessions": 0,
                         "not_evaluable_sessions": user_not_evaluable_sessions,
                         "total_users": total_users,
@@ -842,6 +862,7 @@ class LeaderboardService:
                     "total_sessions": int(user_row.total_sessions or 0),
                     "average_score": round(user_row.average_score or 0, 2),
                     "score_basis": PROJECTION_SCORE_BASIS,
+                    "leaderboard_mode": "score",
                     "evaluable_sessions": int(user_row.total_sessions or 0),
                     "not_evaluable_sessions": user_not_evaluable_sessions,
                     "total_users": total_users,
@@ -855,7 +876,12 @@ class LeaderboardService:
         except (SQLAlchemyError, ValueError) as e:
             logger.error(
                 "Failed to get user rank",
-                extra={"user_id": str(user_id), "error": str(e)},
+                extra={
+                    "user_id": str(user_id),
+                    "leaderboard_mode": leaderboard_mode,
+                    "issue_type": issue_type,
+                    "error": str(e),
+                },
                 exc_info=True,
             )
             return Result.fail(fallback="[RANK_FAILED]")
