@@ -290,7 +290,9 @@ describe("AgentPersonaSelectPage", () => {
 
         await screen.findByText("标准路演教练");
 
-        expect(listPresentationsMock).toHaveBeenCalledWith({ limit: 100 });
+        await waitFor(() => {
+            expect(listPresentationsMock).toHaveBeenCalledWith({ limit: 100 });
+        });
         expect(await screen.findByRole("option", { name: /石犀标准路演（v3 · 可用 · 6 页）/i })).toBeTruthy();
         expect(await screen.findByRole("option", { name: /替换中的标准模板（v4 · 处理中 · 8 页）/i })).toBeTruthy();
         expect(screen.getByText(/当前版本：v3/i)).toBeTruthy();
